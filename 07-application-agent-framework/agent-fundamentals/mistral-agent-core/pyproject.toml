@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentcore"
+version = "0.1.0"
+description = "The smallest honest agent: a fake model, a tool, and the loop — with a one-line swap to Mistral."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []                      # the core library is standard-library only
+
+[project.optional-dependencies]
+mistral = ["mistralai>=1.0"]           # only needed to talk to a real Mistral model
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["agentcore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

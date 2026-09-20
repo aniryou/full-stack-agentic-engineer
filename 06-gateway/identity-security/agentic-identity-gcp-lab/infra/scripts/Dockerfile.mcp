@@ -1,0 +1,32 @@
+# Tickets MCP server image (src/agentsec/mcp/server.py behind `agentsec mcp-serve`).
+# Build from the repository root (the deploy script copies this file there for Cloud Build):
+#   docker build -f infra/scripts/Dockerfile.mcp -t <region>-docker.pkg.dev/<project>/agentsec/mcp-tickets:latest .
+#
+# Security posture of the image itself: slim base, non-root user, no secrets baked in (the
+# server reads AGENTSEC_* from the environment; anything sensitive comes from Secret Manager or
+# Auth Manager at runtime), single declared port.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install the package from the repo (pyproject.toml declares the runtime dependencies; the
+# `gcp` extra adds Cloud Logging / Secret Manager / Model Armor clients).
+COPY pyproject.toml README.md* ./
+COPY src ./src
+COPY policies ./policies
+# pyproject declares readme = "README.md"; keep the build working from a bare checkout.
+RUN [ -f README.md ] || echo "# agentsec" > README.md
+RUN pip install --upgrade pip && pip install ".[gcp]"
+
+RUN useradd --create-home --uid 10001 mcp && chown -R mcp:mcp /app
+USER mcp
+
+EXPOSE 8080
+
+# Cloud Run injects PORT; we bind explicitly to 8080 to match the Terraform container port.
+CMD ["python", "-m", "agentsec.cli", "mcp-serve", "--host", "0.0.0.0", "--port", "8080"]

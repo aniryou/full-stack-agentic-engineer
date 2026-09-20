@@ -1,0 +1,82 @@
+# RAG from scratch
+
+A hands-on companion to the RAG primer. You learn retrieval by **building it** —
+every core mechanism (cosine search, BM25, RRF, reranking, chunking, recall@k /
+MRR, an iterative multi-hop loop) is a short, plain-Python function you write
+yourself, then check against a self-grading `assert`.
+
+The heavy lifting nobody learns anything from — the embedding model — is a black
+box. Everything that teaches is ~40 lines you can read in one sitting.
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+The first embedding call downloads a ~90 MB model (`all-MiniLM-L6-v2`) and then
+runs offline on CPU. **Generation is optional:** with no API key, a deterministic
+*extractive* fallback answers straight from the retrieved text, so every notebook
+runs end to end offline. To use a real model instead, set `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` — it's picked up automatically, no code change.
+
+Open the notebooks with Jupyter (`pip install jupyterlab && jupyter lab`) or in
+VS Code / Cursor.
+
+## Learning path
+
+Work through `notebooks/` in order. Each has a short concept write-up, worked
+code you run, and `# YOUR CODE HERE` exercises with inline checks. Completed
+versions are in `solutions/`.
+
+| # | Notebook | What you build |
+|---|----------|----------------|
+| 00 | `setup_and_corpus` | Orientation: the corpus, the eval set, "embedding = vector" |
+| 01 | `minimal_rag` | The whole loop: embed → cosine search → grounded prompt → generate |
+| 02 | `chunking` | Fixed vs structure-aware vs small-to-big; why splitting decides retrieval |
+| 03 | `hybrid_search` | BM25 from scratch + dense, fused with Reciprocal Rank Fusion |
+| 04 | `reranking` | Cheap first-stage recall, then a cross-encoder for precision |
+| 05 | `evaluation` | Recall@k and MRR; score dense vs BM25 vs hybrid, by question type |
+| 06 | `iterative_rag` | *(advanced)* multi-hop questions and the loop behind agentic RAG |
+
+The self-checks test the **shape** of your implementation (sorted correctly,
+right length, correct maths) rather than which document a model happens to rank
+first — so they pass whether or not you've plugged in the real embedder, and a
+green notebook means your code is right.
+
+## What's in the box
+
+```
+ragkit/                 tiny support library (NOT the lesson — plumbing only)
+  corpus.py             load the docs + eval labels; the shared tokenizer
+  embed.py              wrapper over sentence-transformers (dense + cross-encoder)
+  llm.py                generation: real API if a key is set, else extractive
+  reference.py          reference implementations (the answer key; later
+                        notebooks import primitives earlier ones built)
+  data/corpus/          9 short Markdown docs for a fictional company, "Meridian"
+  data/eval/qrels.json  18 labelled questions (lexical / semantic / multi-hop)
+notebooks/              the course — practice versions with blanks
+solutions/              the same notebooks, filled in
+tests/                  correctness checks for the reference code + notebooks
+tools_make_data.py      regenerates the corpus + eval set
+tools_build_notebooks.py regenerates notebooks/ and solutions/ from one source
+```
+
+The corpus is deliberately small and adversarial: it has exact IDs and codes
+(`ERR_4290`, `SEC-011`, `DR-07`) that favour lexical search, paraphrasable facts
+that favour dense search, and cross-document questions that need more than one
+retrieval — so each notebook's lesson actually shows up when you measure it.
+
+## Verify the reference code
+
+```bash
+PYTHONPATH=. python tests/test_reference.py       # the from-scratch primitives
+PYTHONPATH=. python tests/test_notebooks_run.py   # every solution runs + asserts pass
+```
+
+## Where to go after 06
+
+Swap the notebook 06 planner for a real model, let it choose *which* retriever to
+call and *when to stop*, fine-tune the retriever/reranker on your own query logs,
+and evaluate whole trajectories rather than single answers. Parts III–IV of the
+primer map that territory.

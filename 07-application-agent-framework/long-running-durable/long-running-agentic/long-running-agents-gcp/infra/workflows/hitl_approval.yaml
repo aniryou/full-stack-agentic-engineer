@@ -1,0 +1,76 @@
+# Human-in-the-loop gate as a Cloud Workflows execution.
+#
+# Why Workflows here: the execution itself is the durable wait. It can sit on
+# a callback for days (execution limit is one year; await_callback defaults to
+# 12h, so set the timeout explicitly), costs nothing while waiting, and
+# retries/timeouts are declarative. The agent service never holds a thread.
+#
+#   1. create a callback endpoint unique to this execution
+#   2. tell the agent service to notify the approver with that URL
+#   3. wait up to 7 days for a POST to the callback
+#   4. resume the run with the decision — or expire it explicitly
+#
+# Deploy:  gcloud workflows deploy hitl-approval --source=hitl_approval.yaml --service-account=$WF_SA
+# Run:     gcloud workflows run hitl-approval --data='{"run_id":"run_x","proposal":{...},"approver":"cfo@example.com","service_url":"https://..."}'
+main:
+  params: [input]
+  steps:
+    - init:
+        assign:
+          - run_id: ${input.run_id}
+          - service_url: ${input.service_url}
+          - timeout_s: 604800            # 7 days
+    - create_callback:
+        call: events.create_callback_endpoint
+        args:
+          http_callback_method: "POST"
+        result: callback_details
+    - notify_approver:
+        call: http.post
+        args:
+          url: ${service_url + "/internal/notify"}
+          auth:
+            type: OIDC
+          body:
+            run_id: ${run_id}
+            proposal: ${input.proposal}
+            approver: ${input.approver}
+            approve_url: ${callback_details.url}
+    - wait_for_decision:
+        try:
+          call: events.await_callback
+          args:
+            callback: ${callback_details}
+            timeout: ${timeout_s}
+          result: callback_request
+        except:
+          as: e
+          steps:
+            - expire:
+                call: http.post
+                args:
+                  url: ${service_url + "/runs/" + run_id + "/expire"}
+                  auth:
+                    type: OIDC
+                  body:
+                    reason: "approval timed out"
+            - return_expired:
+                return:
+                  run_id: ${run_id}
+                  outcome: "expired"
+    - resume_run:
+        call: http.post
+        args:
+          url: ${service_url + "/runs/" + run_id + "/approve"}
+          auth:
+            type: OIDC
+          body:
+            token: ${callback_request.http_request.body.token}
+            approved: ${callback_request.http_request.body.approved}
+            approver: ${callback_request.http_request.body.approver}
+            comment: ${default(map.get(callback_request.http_request.body, "comment"), "")}
+        result: resume_result
+    - done:
+        return:
+          run_id: ${run_id}
+          outcome: ${resume_result.body.status}

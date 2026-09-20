@@ -1,0 +1,10 @@
+{"qid": "q01", "qtype": "paraphrase", "text": "how do i descale my coffee machine", "relevant": ["c03", "c05"]}
+{"qid": "q02", "qtype": "exact-id", "text": "what does error e-4417 mean", "relevant": ["c07"]}
+{"qid": "q03", "qtype": "negation", "text": "hiking trails that are not steep", "relevant": ["h02", "h06"]}
+{"qid": "q04", "qtype": "topical", "text": "best water temperature for brewing coffee", "relevant": ["c02"]}
+{"qid": "q05", "qtype": "topical", "text": "how should i store coffee beans", "relevant": ["c06"]}
+{"qid": "q06", "qtype": "topical", "text": "what to pack for a day hike", "relevant": ["h03"]}
+{"qid": "q07", "qtype": "topical", "text": "signs of altitude sickness", "relevant": ["h04"]}
+{"qid": "q08", "qtype": "paraphrase", "text": "model does great on training data but badly on new data", "relevant": ["m01", "m04"]}
+{"qid": "q09", "qtype": "topical", "text": "difference between precision and recall", "relevant": ["m02"]}
+{"qid": "q10", "qtype": "paraphrase", "text": "loss keeps jumping around during training", "relevant": ["m03", "m12"]}

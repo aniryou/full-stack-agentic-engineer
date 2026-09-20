@@ -1,0 +1,8 @@
+# Core — everything the notebooks need to run.
+numpy>=1.24
+sentence-transformers>=2.6      # pulls in torch + transformers; CPU is fine
+
+# Optional — only if you want real (non-extractive) generation in 01/06.
+# Set the matching API key in your environment and it's picked up automatically.
+# anthropic>=0.34               # uses ANTHROPIC_API_KEY
+# openai>=1.40                  # uses OPENAI_API_KEY

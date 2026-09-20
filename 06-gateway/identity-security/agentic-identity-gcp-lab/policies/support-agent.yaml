@@ -1,0 +1,99 @@
+# Tool policy for the reference support agent. Reviewed like IAM; default is DENY.
+#
+# principals: aliases for IAM-style members. Agent identities are SPIFFE-based principals;
+# principalSet selects every agent in a project (attribute.platformContainer) or on the platform.
+version: 1
+default: deny
+
+principals:
+  support_agents: principalSet://agents.global.org-123456789012.system.id.goog/attribute.platformContainer/aiplatform/projects/987654321098
+  support_agent:  principal://agents.global.org-123456789012.system.id.goog/resources/aiplatform/projects/987654321098/locations/us-central1/reasoningEngines/support-agent
+
+budgets:
+  max_tool_calls_per_invocation: 12
+  max_destructive_calls_per_invocation: 2
+
+tools:
+  lookup_customer:
+    tier: read
+    allow: [support_agents]
+    authority: delegated            # only ever on behalf of an authenticated user
+    required_scopes: [customers:read]
+    trust: internal
+    description: Look up a customer profile by email.
+
+  get_order:
+    tier: read
+    allow: [support_agents]
+    authority: delegated
+    required_scopes: [orders:read]
+    trust: internal
+
+  search_knowledge:
+    tier: read
+    allow: [support_agents]
+    authority: any                  # public knowledge base; agent's own authority is fine
+    trust: external                 # KB articles are user-generated content → untrusted
+
+  issue_refund:
+    tier: destructive
+    allow: [support_agent]          # only the named agent, not every agent in the project
+    authority: delegated
+    required_scopes: [payments:refund]
+    constraints:
+      amount: { min: 0.01, max: 500 }
+      currency: { enum: [USD, SGD] }
+      reason: { max_length: 200 }
+    confirmation:
+      required: true
+      unless: "args.amount <= 50 and args.currency == 'USD'"
+      hint: "Refund leaves the pre-approved envelope (≤ 50 USD). Approve?"
+
+  send_email:
+    tier: external
+    allow: [support_agents]
+    authority: delegated
+    required_scopes: [email:send]
+    constraints:
+      to: { pattern: "[^@\\s]+@(acme\\.example|customer\\.example)" }
+    confirmation:
+      required: true
+      hint: "Sending email outside the trust boundary. Approve?"
+
+  crm_lookup:
+    tier: read
+    allow: [support_agents]
+    authority: delegated            # credential comes from Auth Manager (3-legged OAuth) per user
+    required_scopes: [customers:read]
+    trust: external
+
+  fetch_url:
+    tier: external
+    allow: [support_agents]
+    authority: any
+    egress_hosts: ["docs.acme.example", ".googleapis.com"]
+    url_args: [url]
+
+  # Tools exposed by the tickets MCP server (McpToolset with tool_name_prefix="tickets").
+  tickets_get_ticket:
+    tier: read
+    allow: [support_agents]
+    authority: delegated
+    required_scopes: [tickets:read]
+    trust: internal
+  tickets_list_tickets:
+    tier: read
+    allow: [support_agents]
+    authority: delegated
+    required_scopes: [tickets:read]
+    trust: internal
+  tickets_refund_ticket:
+    tier: destructive
+    allow: [support_agent]
+    authority: delegated
+    required_scopes: [tickets:write]
+    constraints:
+      amount: { max: 500 }
+    confirmation:
+      required: true
+      unless: "args.amount <= 50"

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lragents"
+version = "0.1.0"
+description = "Long-running agentic workflow patterns with a Google Cloud implementation (durable loop, fan-out/fan-in, HITL, saga, scheduled, reflection, ADK 2 workflows)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "google-adk[db]>=2.6",
+  "google-genai>=1.30",
+  "google-cloud-firestore>=2.19",
+  "google-cloud-tasks>=2.16",
+  "google-cloud-pubsub>=2.23",
+  "google-auth>=2.30",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "nbformat>=5.10", "nbclient>=0.10", "nbconvert>=7.16", "ipykernel>=6.29", "jupyterlab>=4.2"]
+gcp = ["google-cloud-aiplatform[agent_engines,adk]>=1.110"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]

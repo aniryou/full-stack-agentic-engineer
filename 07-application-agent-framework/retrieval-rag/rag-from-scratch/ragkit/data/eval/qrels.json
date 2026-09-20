@@ -1,0 +1,167 @@
+[
+  {
+    "qid": "L1",
+    "kind": "lexical",
+    "question": "What does error ERR_4290 mean?",
+    "gold_docs": [
+      "vpn-setup"
+    ],
+    "gold_section": "Troubleshooting"
+  },
+  {
+    "qid": "L2",
+    "kind": "lexical",
+    "question": "What is policy SEC-011 about?",
+    "gold_docs": [
+      "security-access"
+    ],
+    "gold_section": "Scope"
+  },
+  {
+    "qid": "L3",
+    "kind": "lexical",
+    "question": "What retention periods does DR-07 define?",
+    "gold_docs": [
+      "data-retention"
+    ],
+    "gold_section": "Retention Periods"
+  },
+  {
+    "qid": "L4",
+    "kind": "lexical",
+    "question": "Which HTTP status code is returned when the rate limit is exceeded?",
+    "gold_docs": [
+      "api-rate-limits"
+    ],
+    "gold_section": "Exceeding the Limit"
+  },
+  {
+    "qid": "L5",
+    "kind": "lexical",
+    "question": "Which portal do I use to request time off?",
+    "gold_docs": [
+      "pto-policy"
+    ],
+    "gold_section": "Requesting Leave"
+  },
+  {
+    "qid": "L6",
+    "kind": "lexical",
+    "question": "Which application do I use to submit expense claims?",
+    "gold_docs": [
+      "expense-policy"
+    ],
+    "gold_section": "Submitting a Claim"
+  },
+  {
+    "qid": "L7",
+    "kind": "lexical",
+    "question": "How much is the home office stipend?",
+    "gold_docs": [
+      "remote-work"
+    ],
+    "gold_section": "Equipment and Connectivity"
+  },
+  {
+    "qid": "S1",
+    "kind": "semantic",
+    "question": "How much can I get reimbursed for food each day when travelling abroad?",
+    "gold_docs": [
+      "expense-policy"
+    ],
+    "gold_section": "Meal Limits"
+  },
+  {
+    "qid": "S2",
+    "kind": "semantic",
+    "question": "Am I allowed to work from home every day of the week?",
+    "gold_docs": [
+      "remote-work"
+    ],
+    "gold_section": "Default Arrangement"
+  },
+  {
+    "qid": "S3",
+    "kind": "semantic",
+    "question": "How many vacation days do I get each year?",
+    "gold_docs": [
+      "pto-policy"
+    ],
+    "gold_section": "Annual Leave"
+  },
+  {
+    "qid": "S4",
+    "kind": "semantic",
+    "question": "Is my personal information kept safe while it is stored?",
+    "gold_docs": [
+      "data-retention"
+    ],
+    "gold_section": "Protection at Rest"
+  },
+  {
+    "qid": "S5",
+    "kind": "semantic",
+    "question": "What happens to my information after I close my account?",
+    "gold_docs": [
+      "data-retention"
+    ],
+    "gold_section": "Account Deletion"
+  },
+  {
+    "qid": "S6",
+    "kind": "semantic",
+    "question": "How long after a trip do I have to hand in my receipts?",
+    "gold_docs": [
+      "expense-policy"
+    ],
+    "gold_section": "Submitting a Claim"
+  },
+  {
+    "qid": "S7",
+    "kind": "semantic",
+    "question": "During which hours am I expected to be reachable?",
+    "gold_docs": [
+      "remote-work"
+    ],
+    "gold_section": "Core Hours"
+  },
+  {
+    "qid": "S8",
+    "kind": "semantic",
+    "question": "Do I need a doctor's note when I am off sick?",
+    "gold_docs": [
+      "pto-policy"
+    ],
+    "gold_section": "Sick Leave"
+  },
+  {
+    "qid": "M1",
+    "kind": "multihop",
+    "question": "Which VPN client does the security policy require, and which operating systems does it support?",
+    "gold_docs": [
+      "security-access",
+      "vpn-setup"
+    ],
+    "gold_section": null
+  },
+  {
+    "qid": "M2",
+    "kind": "multihop",
+    "question": "For a customer-facing outage, who must be paged and how quickly, and how is production access to fix it granted?",
+    "gold_docs": [
+      "incident-response",
+      "security-access"
+    ],
+    "gold_section": null
+  },
+  {
+    "qid": "M3",
+    "kind": "multihop",
+    "question": "What per-minute request limit and what monthly price come with the Scale tier?",
+    "gold_docs": [
+      "api-rate-limits",
+      "billing-faq"
+    ],
+    "gold_section": null
+  }
+]

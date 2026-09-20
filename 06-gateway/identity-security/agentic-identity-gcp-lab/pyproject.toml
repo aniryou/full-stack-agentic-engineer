@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentsec"
+version = "0.1.0"
+description = "Identity & security reference implementation for agentic systems on Google Cloud (ADK + Agent Engine + MCP + A2A), runnable locally with fakes."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Anil" }]
+dependencies = [
+  "google-adk[agent-identity,mcp]>=2.8.0",
+  "mcp>=1.27,<2",
+  "a2a-sdk>=1.1",
+  "PyJWT[crypto]>=2.9",
+  "cryptography>=43",
+  "pydantic>=2.7",
+  "PyYAML>=6.0",
+  "httpx>=0.27",
+  "uvicorn>=0.30",
+  "starlette>=0.40",
+  "google-auth>=2.30",
+]
+
+[project.optional-dependencies]
+gcp = [
+  "google-cloud-aiplatform[agent_engines,adk]>=2.0",
+  "google-cloud-secret-manager>=2.20",
+  "google-cloud-modelarmor>=0.2",
+  "google-cloud-logging>=3.10",
+]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.6",
+  "nbformat>=5.10",
+  "nbconvert>=7.16",
+  "ipykernel>=6.29",
+  "python-hcl2>=4.3",
+]
+
+[project.scripts]
+agentsec = "agentsec.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::UserWarning", "ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "S105", "S106", "E501", "UP042"]
+per-file-ignores = { "tests/*" = ["S", "B017"], "notebooks/*" = ["S", "E402"] }

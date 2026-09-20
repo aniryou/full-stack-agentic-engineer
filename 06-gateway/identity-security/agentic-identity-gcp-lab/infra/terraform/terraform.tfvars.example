@@ -1,0 +1,52 @@
+# Copy to terraform.tfvars and fill in. Never commit terraform.tfvars (it is git-ignored).
+
+# --- required ---------------------------------------------------------------------------------
+project_id     = "my-agentsec-lab"
+project_number = "123456789012" # gcloud projects describe my-agentsec-lab --format='value(projectNumber)'
+
+# Secrets are passed through write-only arguments and never stored in state. Prefer
+# TF_VAR_crm_oauth_client_secret / TF_VAR_demo_secret_value environment variables over this file.
+crm_oauth_client_secret = "change-me"
+demo_secret_value       = "demo-secret-rotate-me"
+
+# --- strongly recommended --------------------------------------------------------------------
+org_id = "987654321098" # trust domain becomes agents.global.org-<ORG_ID>...; needed for org-level opt-ins
+region = "us-central1"
+
+# Keyless CI: only this GitHub repository may impersonate the deployer SA through WIF.
+github_repo = "your-org/agentic-identity-gcp-lab"
+
+# --- agent deployment path -------------------------------------------------------------------
+# Path A (default): deploy with infra/scripts/deploy_agent_engine.py, then paste the numeric
+# engine ID here and re-apply so IAM bindings resolve.
+deploy_agent_with_terraform = false
+agent_engine_id             = null # e.g. "1234567890123456789"
+
+# Path B: let Terraform deploy the engine from the archive built by build_agent_source.sh.
+# deploy_agent_with_terraform = true
+# agent_source_archive        = "../build/agent_source.tar.gz"
+
+# --- MCP server --------------------------------------------------------------------------------
+mcp_service_name = "agentsec-mcp-tickets"
+# mcp_server_image = "us-central1-docker.pkg.dev/my-agentsec-lab/agentsec/mcp-tickets:latest"
+mcp_ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY" # INGRESS_TRAFFIC_ALL only for a quick, IAM-gated smoke test
+
+# --- Auth Manager (3LO) --------------------------------------------------------------------------
+auth_provider_id      = "tickets-3lo"
+crm_oauth_client_id   = "acme-support-agent"
+crm_authorization_url = "https://idp.acme.example/o/oauth2/auth"
+crm_token_url         = "https://idp.acme.example/o/oauth2/token"
+crm_allowed_scopes    = ["https://crm.acme.example/auth/customers.read"]
+crm_continue_uri      = "https://app.acme.example/validateUserId"
+
+# --- Model Armor ---------------------------------------------------------------------------------
+model_armor_template_id             = "agentsec-strict"
+model_armor_floor_inspect_and_block = false # start in INSPECT_ONLY, flip after reviewing findings
+
+# --- governance opt-ins (each needs extra permissions; see README.md) ----------------------------
+enable_agent_gateway     = false
+enable_vpc_sc            = false
+access_policy_id         = null # "1122334455" — org-level Access Context Manager policy
+enable_org_policy        = false
+enable_pab               = false
+enable_agent_deny_policy = true

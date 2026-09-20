@@ -1,0 +1,166 @@
+# Cloud Workflows: the *declarative* way to run a long-running agentic flow.
+#
+# When to prefer this over the code engine (src/lra):
+#   - the control flow is known up front (a fixed DAG with a few branches)
+#   - you want managed durability with zero worker code: an execution can wait
+#     up to a year on a callback, retries/backoff are declared, and every step
+#     is logged in the console
+#   - the "agent" parts are Cloud Run / Vertex AI calls you can make idempotent
+# When NOT to: the model decides the next step at runtime (dynamic graphs),
+# you need per-run budgets, or steps mutate large shared state — that is what
+# the code engine is for. The two compose: a Workflows step can start an
+# engine run and await its completion callback.
+#
+# Deploy:  gcloud workflows deploy research-approval --source=workflows/research_approval.yaml \
+#            --location=$LRA_LOCATION --service-account=$WORKFLOW_SA
+# Run:     gcloud workflows run research-approval --data='{"goal":"...", "subtopics":["a","b","c"]}'
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - api_url: ${sys.get_env("LRA_API_URL")}
+          - goal: ${args.goal}
+          - subtopics: ${args.subtopics}
+          - findings: []
+          - post_id: null
+
+    # ---------------------------------------------------------------- fan-out
+    # `parallel` with a shared variable = orchestrator/worker without a queue.
+    # concurrency_limit protects model quota; each branch has its own retry.
+    - research_in_parallel:
+        parallel:
+          shared: [findings]
+          concurrency_limit: 4
+          for:
+            value: topic
+            in: ${subtopics}
+            steps:
+              - research_one:
+                  try:
+                    call: http.post
+                    args:
+                      url: ${api_url + "/tools/research"}
+                      auth:
+                        type: OIDC            # Workflows mints the token for the API's audience
+                      headers:
+                        Idempotency-Key: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + "-" + topic}
+                      body:
+                        goal: ${goal}
+                        topic: ${topic}
+                      timeout: 300
+                    result: r
+                  retry:
+                    predicate: ${http.default_retry_predicate}   # 429/5xx/connection errors
+                    max_retries: 4
+                    backoff:
+                      initial_delay: 2
+                      max_delay: 60
+                      multiplier: 2
+              - collect:
+                  assign:
+                    - findings: ${list.concat(findings, r.body)}
+
+    # -------------------------------------------------------------- synthesize
+    - synthesize:
+        call: http.post
+        args:
+          url: ${api_url + "/tools/synthesize"}
+          auth:
+            type: OIDC
+          body:
+            goal: ${goal}
+            findings: ${findings}
+          timeout: 600
+        result: draft
+
+    # ----------------------------------------------------- human-in-the-loop
+    # The execution *parks* here (no compute billed) until someone POSTs to the
+    # callback URL. Deliver the URL to the reviewer (e-mail, Slack, ticket).
+    - create_callback:
+        call: events.create_callback_endpoint
+        args:
+          http_callback_method: POST
+        result: callback
+
+    - notify_reviewer:
+        call: http.post
+        args:
+          url: ${api_url + "/tools/notify"}
+          auth:
+            type: OIDC
+          body:
+            summary: ${text.substring(draft.body.text, 0, 200)}
+            approve_url: ${callback.url}   # the URL is the capability; protect it like a token
+
+    - await_review:
+        try:
+          call: events.await_callback
+          args:
+            callback: ${callback}
+            timeout: 259200                  # 3 days, in seconds (max 31536000 = 1 year)
+          result: review
+        except:
+          as: e
+          steps:
+            - timed_out:
+                raise:
+                  code: 408
+                  message: "review timed out"
+
+    - check_decision:
+        switch:
+          - condition: ${review.http_request.body.decision != "approve"}
+            raise:
+              code: 403
+              message: ${"rejected by " + default(map.get(review.http_request.body, "by"), "unknown")}
+
+    # ------------------------------------------------------------------ saga
+    # try/except around the side-effecting tail; the except block compensates
+    # whatever completed. Same shape as Engine._fail_or_compensate.
+    - publish_and_notify:
+        try:
+          steps:
+            - publish:
+                call: http.post
+                args:
+                  url: ${api_url + "/tools/publish"}
+                  auth:
+                    type: OIDC
+                  headers:
+                    Idempotency-Key: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + "-publish"}
+                  body:
+                    draft: ${draft.body.text}
+                result: pub
+            - remember_post:
+                assign:
+                  - post_id: ${pub.body.post_id}
+            - notify_done:
+                call: http.post
+                args:
+                  url: ${api_url + "/tools/notify"}
+                  auth:
+                    type: OIDC
+                  body:
+                    message: ${"published " + post_id}
+        except:
+          as: e
+          steps:
+            - compensate:
+                switch:
+                  - condition: ${post_id != null}
+                    steps:
+                      - unpublish:
+                          call: http.delete
+                          args:
+                            url: ${api_url + "/tools/publish/" + post_id}
+                            auth:
+                              type: OIDC
+            - reraise:
+                raise: ${e}
+
+    - done:
+        return:
+          post_id: ${post_id}
+          reviewed_by: ${map.get(review.http_request.body, "by")}

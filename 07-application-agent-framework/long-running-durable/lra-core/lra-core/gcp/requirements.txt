@@ -1,0 +1,4 @@
+flask>=3.0
+gunicorn>=22
+google-cloud-firestore>=2.16
+google-cloud-tasks>=2.16

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentcore"
+version = "0.1.0"
+description = "The smallest honest agent: a fake model, a tool, and the loop. The starter for the agent-platform lab."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []                      # the library is standard-library only
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["agentcore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,1527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mistral Agentic Scaling Primer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F6F7F5; --surface:#FFFFFF; --surface-2:#EEF1EE; --surface-3:#E4E9E6;
+  --ink:#171C1F; --ink-2:#3D474C; --muted:#6B767C; --rule:#D7DDDA; --rule-strong:#B8C2BE;
+  --accent:#0B7A75; --accent-ink:#085B57; --accent-soft:#DDEFEC;
+  --warn:#B45309; --warn-soft:#FBEEDC; --bad:#B3261E; --bad-soft:#F9E3E1; --good:#2E7D32; --good-soft:#E3F1E4;
+  --code-bg:#EEF2EF; --code-ink:#1B2A2E; --kw:#0B5FA5; --str:#8A3B12; --com:#6B767C; --num:#6D28D9; --fn:#085B57;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --measure:70ch; --wide:980px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1417; --surface:#151B1F; --surface-2:#1C2429; --surface-3:#243037;
+    --ink:#E5EAEC; --ink-2:#B9C3C8; --muted:#86939A; --rule:#2A343A; --rule-strong:#3B4850;
+    --accent:#4FC1B8; --accent-ink:#7BD3CB; --accent-soft:#143A38;
+    --warn:#E9A23B; --warn-soft:#3A2A12; --bad:#F08A80; --bad-soft:#3D1F1C; --good:#7BC67E; --good-soft:#17301A;
+    --code-bg:#0B0F12; --code-ink:#D9E1E4; --kw:#7CB7EA; --str:#E0A374; --com:#7F8C93; --num:#C4A7F5; --fn:#7BD3CB;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1417; --surface:#151B1F; --surface-2:#1C2429; --surface-3:#243037;
+  --ink:#E5EAEC; --ink-2:#B9C3C8; --muted:#86939A; --rule:#2A343A; --rule-strong:#3B4850;
+  --accent:#4FC1B8; --accent-ink:#7BD3CB; --accent-soft:#143A38;
+  --warn:#E9A23B; --warn-soft:#3A2A12; --bad:#F08A80; --bad-soft:#3D1F1C; --good:#7BC67E; --good-soft:#17301A;
+  --code-bg:#0B0F12; --code-ink:#D9E1E4; --kw:#7CB7EA; --str:#E0A374; --com:#7F8C93; --num:#C4A7F5; --fn:#7BD3CB;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;font-variation-settings:"opsz" 16;-webkit-font-smoothing:antialiased}
+a{color:var(--accent-ink);text-decoration-color:color-mix(in srgb,var(--accent) 45%,transparent);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+strong{font-weight:650}
+em{font-style:italic}
+code,kbd{font-family:var(--mono);font-size:.86em;background:var(--code-bg);color:var(--code-ink);padding:.08em .35em;border-radius:3px}
+pre{margin:0;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.55;tab-size:4}
+pre code{background:none;padding:0;font-size:inherit;color:inherit}
+.line{display:inline;white-space:pre}
+.line .n{display:inline-block;width:2.6em;margin-right:1em;text-align:right;color:var(--muted);user-select:none;border-right:1px solid var(--rule);padding-right:.6em}
+.tok-kw{color:var(--kw);font-weight:500}.tok-str{color:var(--str)}.tok-com{color:var(--com);font-style:italic}.tok-num{color:var(--num)}.tok-fn{color:var(--fn)}.tok-dec{color:var(--num)}
+.shell{display:grid;grid-template-columns:272px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--rule);background:var(--surface);padding:28px 20px 40px}
+.rail .brand{font-family:var(--display);font-variation-settings:"wdth" 88;font-weight:700;font-size:15px;letter-spacing:.01em;color:var(--ink);margin:0 0 4px}
+.rail .brand-sub{font-family:var(--display);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 22px}
+.rail nav ol{list-style:none;margin:0;padding:0}
+.rail nav>ol>li{margin:0 0 10px}
+.rail nav a{display:block;text-decoration:none;color:var(--ink-2);font-family:var(--display);font-variation-settings:"wdth" 92;font-size:13.5px;line-height:1.35;padding:4px 8px;border-radius:4px;border-left:2px solid transparent}
+.rail nav>ol>li>a{font-weight:650;color:var(--ink)}
+.rail nav ol ol{margin:2px 0 0 6px}
+.rail nav ol ol a{font-weight:450;font-size:12.75px;padding:3px 8px;color:var(--muted)}
+.rail nav a:hover{background:var(--surface-2);color:var(--ink)}
+.rail nav a.active{border-left-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
+.rail .num{display:inline-block;min-width:2.1em;color:var(--muted);font-variant-numeric:tabular-nums}
+.content{padding:0 48px 96px;min-width:0}
+.masthead{padding:52px 0 36px;border-bottom:1px solid var(--rule);margin-bottom:40px;max-width:var(--wide)}
+.eyebrow{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);font-weight:650;margin:0 0 14px}
+h1{font-family:var(--display);font-variation-settings:"wdth" 86;font-weight:800;font-size:clamp(34px,4.6vw,50px);line-height:1.05;letter-spacing:-.015em;margin:0 0 18px;text-wrap:balance;color:var(--ink)}
+.standfirst{font-size:20px;line-height:1.5;color:var(--ink-2);max-width:var(--measure);margin:0 0 26px;font-variation-settings:"opsz" 20}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;max-width:var(--wide)}
+.legend div{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;background:var(--surface);font-size:14.5px;line-height:1.45}
+.legend .tag{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px}
+.legend .t-room{color:var(--accent-ink)}.legend .t-num{color:var(--ink)}.legend .t-verify{color:var(--warn)}.legend .t-bug{color:var(--bad)}
+.meta{font-family:var(--display);font-size:12.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
+section.part{max-width:var(--wide);padding-top:28px;margin-top:20px;border-top:1px solid var(--rule)}
+section.part:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.part-label{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:650;margin:0 0 6px}
+h2{font-family:var(--display);font-variation-settings:"wdth" 88;font-weight:750;font-size:31px;line-height:1.12;letter-spacing:-.01em;margin:0 0 18px;text-wrap:balance;scroll-margin-top:24px}
+h3{font-family:var(--display);font-variation-settings:"wdth" 92;font-weight:680;font-size:21.5px;line-height:1.25;margin:40px 0 12px;text-wrap:balance;scroll-margin-top:24px}
+h4{font-family:var(--display);font-weight:650;font-size:16px;line-height:1.3;margin:26px 0 8px;color:var(--ink)}
+.prose{max-width:var(--measure)}
+p{margin:0 0 16px}
+.prose ul,.prose ol{padding-left:1.3em;margin:0 0 16px}
+.prose li{margin:0 0 7px}
+.prose li::marker{color:var(--muted)}
+.lede{font-size:18.5px;color:var(--ink-2);font-variation-settings:"opsz" 18}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px 12px;border-radius:0 6px 6px 0;margin:22px 0;max-width:var(--measure);font-size:16px;line-height:1.55}
+.callout p:last-child{margin-bottom:0}
+.callout .label{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px;color:var(--accent-ink)}
+.callout.numbers{border-left-color:var(--ink-2);background:var(--surface-2)}
+.callout.numbers .label{color:var(--ink)}
+.callout.numbers table{font-size:14.5px}
+.callout.verify{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.verify .label{color:var(--warn)}
+.callout.pitfall{border-left-color:var(--bad);background:var(--bad-soft)}
+.callout.pitfall .label{color:var(--bad)}
+.callout ul,.callout ol{padding-left:1.2em;margin:0}
+.callout li{margin:0 0 5px}
+.table-wrap{overflow-x:auto;margin:18px 0 26px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.75px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--rule)}
+th{font-family:var(--display);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13.25px;white-space:nowrap}
+td code{white-space:nowrap}
+.wide{max-width:var(--wide)}
+figure{margin:26px 0 30px;max-width:var(--wide)}
+figure svg{max-width:100%;height:auto;display:block;color:var(--ink);font-family:var(--display);font-variation-settings:"wdth" 90}
+figcaption{font-family:var(--display);font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.45;max-width:var(--measure)}
+.codeblock{margin:16px 0 24px;max-width:var(--wide)}
+.codeblock .cap{font-family:var(--display);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:650;margin:0 0 6px}
+details{border:1px solid var(--rule);border-radius:6px;background:var(--surface);margin:14px 0 26px;max-width:var(--wide)}
+summary{cursor:pointer;padding:12px 16px;font-family:var(--display);font-weight:650;font-size:15px;color:var(--accent-ink);list-style:none;display:flex;align-items:center;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s;flex:0 0 auto}
+details[open] summary::before{transform:rotate(45deg)}
+details .body{padding:4px 18px 16px;border-top:1px solid var(--rule)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:15px;margin:0 0 16px}
+.kv dt{font-family:var(--display);font-weight:650;color:var(--ink-2);font-size:13.5px;padding-top:2px}
+.kv dd{margin:0}
+.twocol{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 28px;max-width:var(--wide)}
+.script{font-style:italic;color:var(--ink-2)}
+.smallcaps{font-family:var(--display);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:650}
+.footer{max-width:var(--wide);border-top:1px solid var(--rule);margin-top:56px;padding-top:24px;font-size:14.5px;color:var(--ink-2)}
+.footer ul{padding-left:1.2em}
+.footer li{margin-bottom:5px}
+.toc-mobile{display:none}
+@media (max-width:1100px){
+  .shell{grid-template-columns:1fr}
+  .rail{display:none}
+  .toc-mobile{display:block;max-width:var(--wide);margin:0 0 8px}
+  .toc-mobile summary{font-size:14px}
+  .toc-mobile nav ol{list-style:none;padding:0;margin:0}
+  .toc-mobile nav>ol>li{margin:0 0 8px}
+  .toc-mobile nav a{text-decoration:none;font-family:var(--display);font-size:14px;color:var(--ink)}
+  .toc-mobile nav ol ol{margin:4px 0 0 14px}
+  .toc-mobile nav ol ol a{color:var(--muted);font-size:13px}
+  .content{padding:0 22px 72px}
+  .masthead{padding-top:34px}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .content{padding:0 16px 64px}
+  h2{font-size:26px}
+  .kv{grid-template-columns:1fr;gap:2px 0}
+  .kv dd{margin-bottom:10px}
+}
+@media print{
+  .rail,.toc-mobile{display:none}
+  .shell{display:block}
+  .content{padding:0}
+  body{font-size:11.5pt;background:#fff;color:#000}
+  pre,figure,.callout,.table-wrap,details{break-inside:avoid}
+  details{border:0}
+  details:not([open])>*:not(summary){display:block}
+  a{color:inherit;text-decoration:none}
+  h2{break-before:page}
+  section.part:first-of-type h2{break-before:auto}
+}
+</style>
+<style>
+figure pre.mermaid{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;color:var(--ink)}
+.prose h4{margin-top:22px}
+.prose table{font-size:14.5px}
+.masthead .thesis{font-family:var(--display);font-variation-settings:"wdth" 90;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+:root{--accent:#B4540A;--accent-ink:#8A3F05;--accent-soft:#F8E7D8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--accent:#F0A35E;--accent-ink:#F7C591;--accent-soft:#3D2A17}}
+:root[data-theme="dark"]{--accent:#F0A35E;--accent-ink:#F7C591;--accent-soft:#3D2A17}
+</style>
+
+
+<style>body{margin:0;font-family:system-ui,sans-serif;font-size:14px;background:#fbfaf7}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="shell">
+<aside class="rail" aria-label="Contents">
+  <p class="brand">Mistral Agentic Scaling Primer</p>
+  <p class="brand-sub">Mistral API · vLLM on Kubernetes · partner deployment</p>
+  <nav id="toc">
+    <ol>
+      <li><a href="#p0"><span class="num">0</span>The thesis, and how the deployment conversation tests it</a>
+      </li>
+      <li><a href="#p1"><span class="num">1</span>What is different about scaling agents</a>
+        <ol>
+          <li><a href="#s1-1"><span class="num">1.1</span>The unit of work is a turn, not a request</a></li>
+          <li><a href="#s1-2"><span class="num">1.2</span>The binding constraint is model throughput — shared on the API, sized by you on a fleet</a></li>
+          <li><a href="#s1-3"><span class="num">1.3</span>Latency is a sum of sequential tails — and on your GPUs the time per token is the batch you run</a></li>
+          <li><a href="#s1-4"><span class="num">1.4</span>Cost scales with context, and context grows</a></li>
+          <li><a href="#s1-5"><span class="num">1.5</span>Side effects mean at-least-once, and at-least-once means idempotency</a></li>
+          <li><a href="#s1-6"><span class="num">1.6</span>The feedback loop that kills agent systems, in two forms</a></li>
+          <li><a href="#s1-7"><span class="num">1.7</span>Multi-agent multiplies everything</a></li>
+          <li><a href="#s1-8"><span class="num">1.8</span>Sovereignty is a scaling dimension</a></li>
+        </ol>
+      </li>
+      <li><a href="#p2"><span class="num">2</span>The dimensions of scale — a checklist for discovery</a>
+      </li>
+      <li><a href="#p3"><span class="num">3</span>The arithmetic, worked</a>
+        <ol>
+          <li><a href="#s3-1"><span class="num">3.1</span>Assumptions</a></li>
+          <li><a href="#s3-2"><span class="num">3.2</span>Rates and tokens</a></li>
+          <li><a href="#s3-3"><span class="num">3.3</span>Concurrency, from Little's law</a></li>
+          <li><a href="#s3-4"><span class="num">3.4</span>Hosted: cost per conversation, and the rate-limit request</a></li>
+          <li><a href="#s3-5"><span class="num">3.5</span>Self-hosted: the replica, then the fleet</a></li>
+          <li><a href="#s3-6"><span class="num">3.6</span>The break-even, and the six-second tension</a></li>
+          <li><a href="#s3-7"><span class="num">3.7</span>The rest of the estate</a></li>
+          <li><a href="#s3-8"><span class="num">3.8</span>What breaks first</a></li>
+        </ol>
+      </li>
+      <li><a href="#p4"><span class="num">4</span>The reference architecture</a>
+        <ol>
+          <li><a href="#s4-1"><span class="num">4.1</span>Why it is shaped this way</a></li>
+          <li><a href="#s4-2"><span class="num">4.2</span>Alternatives and when to choose them</a></li>
+        </ol>
+      </li>
+      <li><a href="#p5"><span class="num">5</span>The scaling mechanisms</a>
+        <ol>
+          <li><a href="#s5-1"><span class="num">5.1</span>Quota strategy on the API, capacity strategy on the fleet</a></li>
+          <li><a href="#s5-2"><span class="num">5.2</span>Retries, jitter, breakers, fallbacks, spill-over</a></li>
+          <li><a href="#s5-3"><span class="num">5.3</span>Admission control and graceful degradation</a></li>
+          <li><a href="#s5-4"><span class="num">5.4</span>Durable execution</a></li>
+          <li><a href="#s5-5"><span class="num">5.5</span>Context engineering for scale</a></li>
+          <li><a href="#s5-6"><span class="num">5.6</span>Tools at scale</a></li>
+          <li><a href="#s5-7"><span class="num">5.7</span>Streaming and connections</a></li>
+          <li><a href="#s5-8"><span class="num">5.8</span>vLLM and Kubernetes settings that matter</a></li>
+          <li><a href="#s5-9"><span class="num">5.9</span>State stores</a></li>
+          <li><a href="#s5-10"><span class="num">5.10</span>Observability and SLOs</a></li>
+          <li><a href="#s5-11"><span class="num">5.11</span>Multi-agent designs and budgets</a></li>
+          <li><a href="#s5-12"><span class="num">5.12</span>Tenancy, priority, regions</a></li>
+        </ol>
+      </li>
+      <li><a href="#p6"><span class="num">6</span>Failure catalogue</a>
+      </li>
+      <li><a href="#p7"><span class="num">7</span>The growth path</a>
+      </li>
+      <li><a href="#p8"><span class="num">8</span>The deployment conversation</a>
+        <ol>
+          <li><a href="#s8-1"><span class="num">8.1</span>The 45-minute flow for "size, cost and choose the path for this customer"</a></li>
+          <li><a href="#s8-2"><span class="num">8.2</span>Questions that change the design</a></li>
+          <li><a href="#s8-3"><span class="num">8.3</span>Anchors to keep in your head</a></li>
+          <li><a href="#s8-4"><span class="num">8.4</span>Two conversations, worked in outline</a></li>
+          <li><a href="#s8-5"><span class="num">8.5</span>Quick-fire</a></li>
+        </ol>
+      </li>
+      <li><a href="#p9"><span class="num">9</span>Mistral's stack and the customer's, mapped to the mechanisms</a>
+      </li>
+      <li><a href="#sources"><span class="num">§</span>Sources and verify list</a>
+      </li>
+    </ol>
+  </nav>
+</aside>
+
+<main class="content">
+<header class="masthead">
+  <p class="eyebrow">Scaling primer · Mistral models · hosted or self-hosted</p>
+  <h1>An agent is scaled by bounding tokens, not by adding servers — and with Mistral there are two ways to pay for them</h1>
+  <p class="standfirst">A study text for four questions any deployment has to answer: how does this agent behave at ten times the load, what does it cost on Mistral's API and on the customer's own GPUs, which of the two the data policy allows, and what breaks first. Worked end to end on a Singapore telco's support agent, with the arithmetic for both ways of paying, the mechanisms and a cloud-neutral Kubernetes reference architecture.</p>
+  <div class="legend">
+    <div><span class="tag t-num">Numbers</span>Anchors to keep in your head for sizing and pricing.</div>
+    <div><span class="tag t-verify">Verify</span>Facts that move: prices, model ids, limits, GPU rates. Re-check before relying on any of it.</div>
+    <div><span class="tag t-bug">Pitfall</span>What an experienced platform team hears as inexperience.</div>
+  </div>
+  <p class="meta">Facts last checked 19 September 2026 · Numbers computed by <code>python -m scalelab.capacity</code> and measured by the lab's load generator · Self-hosted throughput is a first-principles estimate · Sections numbered for cross-reference while drilling</p>
+</header>
+
+<details class="toc-mobile"><summary>Contents</summary>
+<nav><ol>
+<li><a href="#p0">0 The thesis, and how the deployment conversation tests it</a></li>
+<li><a href="#p1">1 What is different about scaling agents</a></li>
+<li><a href="#p2">2 The dimensions of scale — a checklist for discovery</a></li>
+<li><a href="#p3">3 The arithmetic, worked</a></li>
+<li><a href="#p4">4 The reference architecture</a></li>
+<li><a href="#p5">5 The scaling mechanisms</a></li>
+<li><a href="#p6">6 Failure catalogue</a></li>
+<li><a href="#p7">7 The growth path</a></li>
+<li><a href="#p8">8 The deployment conversation</a></li>
+<li><a href="#p9">9 Mistral's stack and the customer's, mapped to the mechanisms</a></li>
+<li><a href="#sources">§ Sources and verify list</a></li>
+</ol></nav>
+</details>
+
+<section class="part" id="p0">
+<p class="part-label">Part 0</p>
+<h2>The thesis, and how the deployment conversation tests it</h2>
+<div class="prose">
+<p class="lede">An agent system is scaled by bounding tokens, not by adding servers. Everything that looks like a classic capacity problem — pods, connections, queue depth, database throughput — is small and cheap next to one number: tokens per minute at the model. The design work is to make demand for that resource predictable (admission control, routing, caching, compaction), to degrade instead of collapse when it runs out (levels, shedding, fallbacks, spill-over), and to make every turn survive the failures a long, side-effecting unit of work invites (checkpoints, idempotency, at-least-once delivery).</p>
+<p>With Mistral there are two ways to pay for those tokens, and the choice is the spine of the conversation. On Mistral's API the constraint is a rate limit — requests per second, tokens per minute and tokens per month, per model, shared by the customer's whole organisation — and the price is per token: linear in volume, zero when idle. On the customer's own GPUs, or a partner's sovereign cloud, the constraint is a fleet you sized: open-weight models on vLLM, paid for by the GPU-hour whether busy or not, with a latency that depends on how hard you load them. The API is the default until sovereignty, latency control or customisation says otherwise, and Part 3 prices that "otherwise": for the anchor scenario — a Singapore operator at 100,000 conversations a day — the API costs about $40 k a month and a peak-sized fleet about $55 k on on-demand H100s or roughly the API's price on committed ones; the fleet wins on price only below about $4.95 a GPU-hour, so residency decides, not price.</p>
+<p>A deployment design has to answer four things: <em>estimation</em>, from "100,000 conversations a day" to tokens, in-flight turns, GPUs and dollars for both ways of paying; <em>trade-offs</em> between hosted, self-hosted and hybrid, models, and GPU terms; <em>robustness</em> — what breaks first and what the user sees; and <em>judgement</em> about which mechanisms this customer needs at their scale and where the delivery team's own assets slot in.</p>
+</div>
+</section>
+<section class="part" id="p1">
+<p class="part-label">Part 1</p>
+<h2>What is different about scaling agents</h2>
+<h3 id="s1-1">1.1 The unit of work is a turn, not a request</h3>
+<div class="prose">
+<p>A web request is stateless, short and homogeneous; you scale it by adding replicas until CPU is the limit. A turn of an agent is a <em>loop</em>: a model call that plans, tool calls that fetch or change something, another model call that answers, sometimes more. Its length is decided at run time by the model, its steps are sequential, its middle steps have side effects in systems you do not own, and its context grows as the conversation goes on.</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Web request</th>
+<th>ML inference request</th>
+<th>Agent turn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duration</td>
+<td>10–200 ms</td>
+<td>20–500 ms</td>
+<td>3–30 s, variable</td>
+</tr>
+<tr>
+<td>Steps</td>
+<td class="num">1</td>
+<td class="num">1</td>
+<td>2–8, decided at run time</td>
+</tr>
+<tr>
+<td>Binding resource</td>
+<td>CPU / DB connections</td>
+<td>GPU seconds</td>
+<td>tokens per minute at a shared pool — or the batch your own replicas can run at the latency you promised</td>
+</tr>
+<tr>
+<td>Cost driver</td>
+<td>requests</td>
+<td>requests</td>
+<td>tokens × steps × context length; or GPU-hours sized for the peak</td>
+</tr>
+<tr>
+<td>State</td>
+<td>none or a row</td>
+<td>none</td>
+<td>a growing transcript plus checkpoints</td>
+</tr>
+<tr>
+<td>Side effects</td>
+<td>in your DB</td>
+<td>none</td>
+<td>in the customer's CRM, billing, ticketing</td>
+</tr>
+<tr>
+<td>Failure unit</td>
+<td>retry the request</td>
+<td>retry the request</td>
+<td>resume the <em>step</em>, never repeat a write</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="s1-2">1.2 The binding constraint is model throughput — shared on the API, sized by you on a fleet</h3>
+<div class="prose">
+<p>On Mistral's API limits are enforced per model in three units — requests per second, tokens per minute counting input and output, and tokens per month — and scale with the organisation's cumulative billing; the paid tiers' numbers are shown only in the console, and above the top tier you write to support. A 429 means the limit was hit, and no <code>Retry-After</code> header is documented. The limit is shared (ask whether it scopes to the workspace or the organisation; the docs disagree), so another project in the same organisation can consume the headroom you planned on; and there is no self-service purchase: the capacity plan <em>is</em> the support request, and the Priority Tier (<code>service_tier="auto"</code>, 1.75× list) is where custom per-model limits and a documented SLA live.</p>
+<p>On your own GPUs the constraint is a fleet you sized: a vLLM replica has a KV-cache budget that bounds how many sequences it holds and an HBM bandwidth that sets how long each decode step takes. Nobody else's traffic is in it and nobody answers 429 — and nothing stops you overloading it: vLLM queues indefinitely by default, and the only sign of overload is that everyone gets slower.</p>
+</div>
+<aside class="callout numbers"><span class="label">Numbers</span><p>Free mode 1 RPS / 500 k TPM / 1 B tokens a month; paid tiers console-only, unlocked at $20 / $100 / $500 / $2,000 of cumulative billing; then support. Priority Tier ×1.75 with a 99.5 % SLA in the docs (99.9 % on the AI Cloud page — verify). One H100 running Ministral 3 14B delivers about 1,200 output tokens a second at 20 ms per token; 20 M TPM on the API is 333 k tokens a second.</p></aside>
+<h3 id="s1-3">1.3 Latency is a sum of sequential tails — and on your GPUs the time per token is the batch you run</h3>
+<div class="prose">
+<p>A turn with two tool calls has four segments on the critical path: plan call, tools, answer call, streaming. Because the segments are sequential, the turn's p95 is roughly the sum of their tails, so a tight target forces parallel tools, streaming, prefetching and a small planning model. Little's law couples latency to concurrency: at 20 turns a second, a 6-second turn is 125 turns in flight and a 10-second turn is 208. Slowdowns <em>are</em> capacity problems.</p>
+<p>On the API, TTFT and tokens per second are whatever Mistral's fleet gives you that minute. On your own replica they are arithmetic: each decode step streams the weights (15.7 GB for Ministral 3 14B in FP8) plus every running sequence's KV cache (160 KiB per token) through an H100's 3.35 TB/s — about 10 ms per token at batch 1, 20 ms at 24, 37 ms at 64, while aggregate throughput rises from 98 to 1,200 and 1,730 tokens a second. The latency you want is the batch you can afford.</p>
+</div>
+<h3 id="s1-4">1.4 Cost scales with context, and context grows</h3>
+<div class="prose">
+<p>The bill is tokens, and input dominates: a support turn sends 5 k tokens of prompt, tool schemas, customer context and history to receive 200 back. On Mistral Small 4 ($0.15 / $0.60 per million, cached input $0.015) the anchor call costs $0.000505 with the prefix cached, and the 2,300 uncached input tokens are 68 % of it; on Medium 3.5 ($1.50 / $7.50 / $0.15) the same call is $0.005355, 10.6 times more, so routing 10 % of calls to it makes 54 % of the planning mix's bill. Three levers change cost by integer factors — route, cache the stable prefix (10 % of the input price, 64-token blocks, <code>prompt_cache_key</code>), bound the context (compaction, tool-result truncation, output caps) — and the order matters, because each later percentage applies to the new baseline; on a fleet the same levers cut GPUs instead of dollars.</p>
+</div>
+<h3 id="s1-5">1.5 Side effects mean at-least-once, and at-least-once means idempotency</h3>
+<div class="prose">
+<p>Somewhere in a turn the agent opens a ticket or changes a plan. The process can die between doing that and recording it: Kubernetes sends SIGTERM and waits the termination grace period (30 s by default), a node drains, a spot node is reclaimed, the model call times out, the queue redelivers. RabbitMQ quorum queues give at-least-once delivery with manual acknowledgement and nothing stronger, so the loop must be <em>replayable</em>: checkpoint every step before acting on it, key every write by turn, step and arguments, and let redelivery find the checkpoint and skip what was done.</p>
+</div>
+<h3 id="s1-6">1.6 The feedback loop that kills agent systems, in two forms</h3>
+<div class="prose">
+<p>More load → the model slows or pushes back → retries and longer calls → longer turns → more turns in flight → the model slows further. Without a brake, the system slows for everyone until deadlines fire and users give up, having consumed the tokens anyway. On the API the loop announces itself as a 429 storm. On a fleet it is silent: vLLM never says no, the batch grows, the time per token grows with it, and nothing in the error logs changes while p50 doubles.</p>
+<p>The load generator (<code>scalelab/sim.py</code>, notebook 04) reproduces both. Against a simulated 3 M TPM API pool, 120 users with naive retries push the p95 turn to 39 s with 394 rate-limit responses and 35 failed turns; degrade levels alone bring it to 5.5 s by moving half the turns to Ministral 3 8B once the pool passes 80 %; degrade levels plus an in-flight cap of 26 derived from the pool's token budget give 3.3 s, zero 429s and 22 % of attempts shed with a <code>Retry-After</code>. Against two Ministral 3 14B replicas the same overload produces <em>zero errors and zero 429s</em>: the batch climbs to 60 per replica and the p50 turn goes from 5.7 s to 12.3 s, p95 15.3 s; a cap of 53 from the fleet's batch budget gives a p95 of 8.8 s with 17 % shed, and the hybrid — fleet first, API as spill-over, cap 79 — 6.5 s with 4 % shed and 30 % of calls on the API. Shedding fast is kinder than queueing slowly.</p>
+</div>
+<h3 id="s1-7">1.7 Multi-agent multiplies everything</h3>
+<div class="prose">
+<p>A coordinator with three specialists turns 2.2 model calls per turn into eight, cost by 3.6×, latency by 2× even with parallel specialists, and the probability that every hop succeeds from 0.95^2.2 ≈ 0.89 to 0.95^8 ≈ 0.66 at 95 % per hop. The multi-agent question is therefore never "how do I scale the coordinator"; it is "what measured problem justifies that multiple" — usually a tool set too large for one context, or permissions that must differ per step.</p>
+</div>
+<h3 id="s1-8">1.8 Sovereignty is a scaling dimension</h3>
+<div class="prose">
+<p>Mistral's global endpoint hosts data in the European Union by default; the regional endpoints <code>api.eu.mistral.ai</code> and <code>api.us.mistral.ai</code> (GA 11 August 2026, +10 %) pin it to Europe or the US and drop Agents, Batch and Files — and there is no APAC endpoint. The marketplaces fill part of the gap: on Amazon Bedrock, Large 3 and Ministral 3 (not Medium 3.5 or Small 4) are in Tokyo, Mumbai and Sydney but not Singapore in the tables fetched on 19 September 2026; the Azure Foundry rows fetched for Large 3 and Medium 3.5 list Americas regions only; IBM watsonx has them in Sydney. The routes that keep data in Singapore are the customer's own GPUs (AWS p5, GCP a3 or Azure ND H200 v5 in-region) and Singtel's RE:AI sovereign AI cloud (MOU with Mistral, 27 April 2026; data centres in Singapore, Johor and Batam — two of them outside the country).</p>
+<p>The licence is a second gate: Small 4, Large 3 and Ministral 3 are Apache 2.0; Medium 3.5's Modified MIT licence requires a commercial licence above $20 M of global monthly revenue — every telco in the region — so self-hosting it is a sales conversation. And in Singapore the driver is governance rather than law: there is no general localisation mandate; the MAS Guidelines on AI Risk Management (consulted November 2025 to January 2026) and the MAS AI Risk Management Toolkit (20 March 2026) push regulated firms toward model-risk controls, and the customer's own risk function turns "personal data stays in Singapore" into a requirement. Elsewhere the driver can be law (Indonesia and Vietnam localise certain data types; Korea's AI Basic Act took effect on 22 January 2026), which discovery must surface first.</p>
+</div>
+<aside class="callout pitfall"><span class="label">Pitfall</span><p>Two sentences that end a technical conversation early: "put it on Kubernetes with an HPA and autoscaling handles it" (a pod autoscaler cannot make tokens, and a GPU node takes three to eight minutes to arrive), and "GPUs are cheaper than the API at scale" said without the GPU price and the utilisation that make it true or false.</p></aside>
+<div class="prose">
+<hr />
+</div>
+</section>
+<section class="part" id="p2">
+<p class="part-label">Part 2</p>
+<h2>The dimensions of scale — a checklist for discovery</h2>
+<div class="prose">
+<p class="lede">Run down this list in the first fifteen minutes of discovery: the question that changes the design, the number you compute, the lever you would reach for.</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Ask</th>
+<th>Compute</th>
+<th>Lever</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deployment path</td>
+<td>Hosted global (EU-hosted)? Regional (EU/US, +10 %)? An APAC marketplace region? The customer's GPUs? A partner sovereign cloud? A hybrid?</td>
+<td>which paths the data policy permits; the cost of each</td>
+<td>the decision itself, then the spill-over rules</td>
+</tr>
+<tr>
+<td>Data policy</td>
+<td>Which data may leave the country or reach a shared API at all? Zero data retention? Which traffic carries no personal data?</td>
+<td>the share of traffic eligible for the API</td>
+<td>policy-gated spill-over; redaction; a fleet for the rest</td>
+</tr>
+<tr>
+<td>Volume and burstiness</td>
+<td>Conversations per day? Peak-to-average? What does an incident do?</td>
+<td>conv/s, turns/s, calls/s at average, peak, incident</td>
+<td>admission control; the rate-limit request or the fleet size; degrade for incidents</td>
+</tr>
+<tr>
+<td>Turn shape</td>
+<td>Turns, calls and tool calls per turn; tokens in and out; reasoning on or off</td>
+<td>tokens per turn; TPM; output tokens/s (what sizes GPUs)</td>
+<td>routing, caching, compaction, output caps, <code>reasoning_effort</code></td>
+</tr>
+<tr>
+<td>Latency budget</td>
+<td>What must the user see and when? Does 10 s with streamed progress beat 6 s?</td>
+<td>TTFT and turn p95; on a fleet, the batch that meets the target</td>
+<td>streaming, parallel tools, prefetch, batch target, speculative decoding</td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>Users at once? Conversation length?</td>
+<td>in-flight turns = turns/s × turn duration; sessions = conv/s × conversation duration</td>
+<td>in-flight cap, per-pod concurrency</td>
+</tr>
+<tr>
+<td>Model capacity</td>
+<td>Which tier is the org on? What limit will Mistral grant? Which GPUs exist in-region, at what price and term?</td>
+<td>demand vs limit; output tokens/s vs fleet; the GPU price against the break-even</td>
+<td>the support request, the Priority Tier, the fleet size and GPU term</td>
+</tr>
+<tr>
+<td>Model and licence</td>
+<td>Which model per step? Self-hostable (Apache 2.0 vs Modified MIT)? Fits one GPU?</td>
+<td>$/call by model; weights and KV per model</td>
+<td>Small 4 by default; Medium 3.5 for escalation; Ministral 3 on the fleet</td>
+</tr>
+<tr>
+<td>Tools and downstream</td>
+<td>Which systems, their QPS limits and p95? Which calls have side effects?</td>
+<td>tool calls/s per system vs its limit</td>
+<td>prefetch, caching, bulkheads, breakers, idempotency keys</td>
+</tr>
+<tr>
+<td>State</td>
+<td>What must survive a crash, a node loss, a region failure? Retention?</td>
+<td>writes/s, rows per turn, retention</td>
+<td>checkpoints in Postgres, hot state in Redis, TTLs</td>
+</tr>
+<tr>
+<td>Tenancy and fairness</td>
+<td>One brand or many? Priorities?</td>
+<td>per-tenant turns/min; priority classes</td>
+<td>per-tenant buckets, priority bypass, fairness ids at the inference gateway</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="part" id="p3">
+<p class="part-label">Part 3</p>
+<h2>The arithmetic, worked</h2>
+<div class="prose">
+<p class="lede">The anchor scenario is a fictional Singapore mobile operator, Meridian Mobile, with a support agent in its app. The assumptions are deliberately ordinary; the method has to produce a price for both ways of paying.</p>
+</div>
+<h3 id="s3-1">3.1 Assumptions</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Assumption</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conversations per day</td>
+<td class="num">100,000</td>
+</tr>
+<tr>
+<td>Peak hour vs daily average</td>
+<td class="num">3×</td>
+</tr>
+<tr>
+<td>Network-incident spike vs average</td>
+<td class="num">10× (an outage; 75 % of intents are "no signal")</td>
+</tr>
+<tr>
+<td>Turns per conversation</td>
+<td class="num">6</td>
+</tr>
+<tr>
+<td>Model calls per turn</td>
+<td class="num">2.2 (plan, answer, sometimes a third)</td>
+</tr>
+<tr>
+<td>Tool calls per turn</td>
+<td class="num">1.3 (0.7 CRM, 0.25 billing, the rest network status and knowledge base)</td>
+</tr>
+<tr>
+<td>Input tokens per model call</td>
+<td>5,000, of which 2,700 cached (a 3,000-token stable prefix hit 90 % of the time)</td>
+</tr>
+<tr>
+<td>Output tokens per model call</td>
+<td>200, reasoning off: ~60-token tool-call steps, ~300-token answers</td>
+</tr>
+<tr>
+<td>Turn duration (p50), hosted</td>
+<td>6 s, about 1 s of it tool time; users think for ~60 s between turns</td>
+</tr>
+<tr>
+<td>Hosted models</td>
+<td>Small 4 (<code>mistral-small-2603</code>) for 90 % of calls; Medium 3.5 (<code>mistral-medium-3-5</code>) for the 10 % that escalate; Ministral 3 8B as the degrade model</td>
+</tr>
+<tr>
+<td>Hosted limit</td>
+<td>20 M TPM and 60 RPS on Small 4, assumed granted (paid-tier numbers are console-only)</td>
+</tr>
+<tr>
+<td>Self-hosted model</td>
+<td>Ministral 3 14B (FP8, Apache 2.0) on vLLM 0.29, one H100 SXM 80 GB per replica, target 20 ms per output token, never fewer than two replicas</td>
+</tr>
+<tr>
+<td>GPU price</td>
+<td>AWS p5 on-demand $6.88 per GPU-hour (US list; Singapore's to be verified), committed and neocloud prices compared</td>
+</tr>
+<tr>
+<td>Downstream limits</td>
+<td>CRM 200 QPS; billing mainframe 40 QPS</td>
+</tr>
+<tr>
+<td>Residency</td>
+<td>customer personal data stays in Singapore (the customer's risk function, citing the MAS guidelines)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="s3-2">3.2 Rates and tokens</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Quantity</th>
+<th style="text-align: right;">Average</th>
+<th style="text-align: right;">Peak</th>
+<th style="text-align: right;">Incident</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conversations / s</td>
+<td class="num">1.16</td>
+<td class="num">3.47</td>
+<td class="num">11.6</td>
+</tr>
+<tr>
+<td>Turns / s</td>
+<td class="num">6.94</td>
+<td class="num">20.8</td>
+<td class="num">69.4</td>
+</tr>
+<tr>
+<td>Model calls / s</td>
+<td class="num">15.3</td>
+<td class="num">45.8</td>
+<td class="num">153</td>
+</tr>
+<tr>
+<td>Input tokens / min</td>
+<td class="num">4.58 M</td>
+<td class="num">13.75 M</td>
+<td class="num">45.8 M</td>
+</tr>
+<tr>
+<td>… of which uncached</td>
+<td class="num">2.11 M</td>
+<td class="num">6.33 M</td>
+<td class="num">21.1 M</td>
+</tr>
+<tr>
+<td>Output tokens / min</td>
+<td class="num">183 k</td>
+<td class="num">550 k</td>
+<td class="num">1.83 M</td>
+</tr>
+<tr>
+<td>Total TPM vs the assumed 20 M limit</td>
+<td class="num">0.24×</td>
+<td class="num">0.72×</td>
+<td class="num"><strong>2.38×</strong></td>
+</tr>
+<tr>
+<td>Calls / s vs the requested 60 RPS</td>
+<td class="num">0.25×</td>
+<td class="num">0.76×</td>
+<td class="num"><strong>2.55×</strong></td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>Out loud: 100,000 ÷ 86,400 ≈ 1.16 conversations a second; × 6 turns ≈ 7 a second; × 2.2 calls ≈ 15 a second; × 5,200 tokens × 60 ≈ 4.9 M tokens a minute. Peak is 14.3 M, inside a 20 M limit; an incident is 47.7 M, two and a half times the limit in tokens and in requests. Peak is a support ticket; the incident must be <em>shaped</em>, because no tier makes 48 M TPM appear in a minute and no fleet sized for the peak carries 2.3 times the peak.</p>
+</div>
+<aside class="callout verify"><span class="label">Verify</span><p>Whether cached tokens count at full weight against the TPM limit: the docs define it as input plus output and say nothing about cached tokens, so the lab counts them fully and treats relief as upside. Also the limit's scope (workspace or organisation) and the absence of a <code>Retry-After</code> header — trigger a 429 and read the headers.</p></aside>
+<h3 id="s3-3">3.3 Concurrency, from Little's law</h3>
+<div class="prose">
+<p>In-flight turns = turns/s × turn duration: 6.9 × 6 ≈ 42 at average, 125 at peak, 417 during an incident on the hosted path. Concurrent <em>sessions</em> are eleven times larger because users think between turns: a conversation lasts 6 × (6 + 60) ≈ 400 s, so 460 / 1,400 / 4,600 sessions.</p>
+<p>The token limit also caps concurrency: 20 M TPM ÷ 60 ≈ 333 k tokens/s; a turn consumes 2.2 × 5,200 ≈ 11.4 k tokens over 6 s ≈ 1.9 k tokens/s; so the limit sustains about 175 turns in flight, or 29 turns per second — the starting value for the admission controller's in-flight cap (<code>AdmissionConfig.max_inflight</code> in <code>scalelab/admission.py</code>), above peak demand and below the incident. On the self-hosted path the turn is longer (10 s at the batch chosen in 3.5), so in-flight turns are 69 / 208 / 692, and the cap comes from the fleet: 293 at peak.</p>
+</div>
+<h3 id="s3-4">3.4 Hosted: cost per conversation, and the rate-limit request</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th style="text-align: right;">Per model call</th>
+<th style="text-align: right;">Per conversation</th>
+<th style="text-align: right;">Per month</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All Small 4, no caching</td>
+<td class="num">$0.00087</td>
+<td class="num">$0.0115</td>
+<td class="num">$34.9 k</td>
+</tr>
+<tr>
+<td>All Small 4, prefix cached</td>
+<td class="num">$0.00051</td>
+<td class="num">$0.0067</td>
+<td class="num">$20.3 k</td>
+</tr>
+<tr>
+<td>Planning mix: 90 % Small 4 + 10 % Medium 3.5, cached</td>
+<td class="num">$0.00099</td>
+<td class="num"><strong>$0.0131</strong></td>
+<td class="num"><strong>$39.7 k</strong></td>
+</tr>
+<tr>
+<td>Planning mix on the Priority Tier (×1.75)</td>
+<td style="text-align: right;">—</td>
+<td class="num">$0.0229</td>
+<td class="num">$69.6 k</td>
+</tr>
+<tr>
+<td>Planning mix on an EU/US regional endpoint (×1.10)</td>
+<td style="text-align: right;">—</td>
+<td class="num">$0.0144</td>
+<td class="num">$43.7 k</td>
+</tr>
+<tr>
+<td>All Large 3, cached</td>
+<td class="num">$0.00159</td>
+<td class="num">$0.0209</td>
+<td class="num">$63.6 k</td>
+</tr>
+<tr>
+<td>All Medium 3.5, cached</td>
+<td class="num">$0.00536</td>
+<td class="num">$0.0707</td>
+<td class="num">$214.9 k</td>
+</tr>
+<tr>
+<td>All Ministral 3 14B, cached</td>
+<td class="num">$0.00055</td>
+<td class="num">$0.0073</td>
+<td class="num">$22.2 k</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>Working: a Small 4 call with 2,300 uncached input tokens at $0.15/M, 2,700 cached at $0.015/M and 200 output at $0.60/M costs $0.000345 + $0.00004 + $0.00012 ≈ $0.000505; thirteen calls a conversation ≈ $0.0067; one call in ten on Medium 3.5 at $0.005355 doubles it to $0.0131. Uncached input is two-thirds of a Small 4 call, so the prefix cache is worth more than any output cap; and the 10 % escalation share is 54 % of the mix, so the routing rule for Medium 3.5 is the most expensive line in the prompt.</p>
+<p>The other half of the hosted plan is the request: peak demand with 30 % headroom is <strong>60 requests per second, 19 M tokens per minute and 209 B tokens a month</strong> on Small 4, and that goes in the ticket to Mistral support with the model id and the daily curve. The free tier covers 10 % of the average TPM, and the paid tiers are console-only, so enable pay-as-you-go on the customer's org, read the limits and file the ticket before the pilot ends.</p>
+</div>
+<aside class="callout verify"><span class="label">Verify</span><p>List prices on 19 September 2026: Small 4 $0.15 / $0.60 / $0.015 cached; Large 3 $0.50 / $1.50 / $0.05; Medium 3.5 $1.50 / $7.50 / $0.15; Ministral 3 14B / 8B / 3B $0.20 / $0.15 / $0.10 flat; Batch −50 %; regional +10 %; Priority ×1.75. The id <code>mistral-medium-3-5</code> is the changelog's spelling — confirm with <code>GET /v1/models</code>. Cache-write price and cache lifetime are not published.</p></aside>
+<h3 id="s3-5">3.5 Self-hosted: the replica, then the fleet</h3>
+<div class="prose">
+<p>A vLLM replica is one copy of the weights across <code>tp</code> GPUs (<code>scalelab/serving.py</code>, estimates with explicit efficiency factors). <em>Memory decides concurrency</em>: an H100 at vLLM's default <code>gpu_memory_utilization</code> 0.92 gives 73.6 GB; minus 4 GB for activations and 15.7 GB of FP8 weights leaves 53.9 GB of KV cache, about 329 k tokens at 160 KiB each — with the 2,700-token prefix stored once, about 130 calls, so vLLM's default <code>max_num_seqs</code> of 128 binds. <em>Bandwidth decides the time per token</em>, as 1.3 showed. <em>Prefill decides TTFT</em>: 2,300 new tokens at two FLOPs per active parameter is 6.2 × 10¹³ FLOP, about 78 ms at 40 % of the H100's FP8 peak.</p>
+<p>The batch you run is the latency you deliver <em>and</em> the fleet you buy. Each row is Ministral 3 14B on one H100, a 5,200-token context, 200 output tokens, 2.2 calls plus a second of tools per turn, and a fleet sized for the peak with 30 % headroom:</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th style="text-align: right;">Batch per replica</th>
+<th style="text-align: right;">Time per token</th>
+<th style="text-align: right;">Tokens/s per replica</th>
+<th style="text-align: right;">Call</th>
+<th style="text-align: right;">Turn</th>
+<th style="text-align: right;">Replicas at peak</th>
+<th style="text-align: right;">$/month, AWS on-demand</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="num">1</td>
+<td class="num">10.2 ms</td>
+<td class="num">98</td>
+<td class="num">2.1 s</td>
+<td class="num">5.7 s</td>
+<td class="num">127</td>
+<td class="num">$638 k</td>
+</tr>
+<tr>
+<td class="num">4</td>
+<td class="num">11.5 ms</td>
+<td class="num">348</td>
+<td class="num">2.4 s</td>
+<td class="num">6.2 s</td>
+<td class="num">36</td>
+<td class="num">$181 k</td>
+</tr>
+<tr>
+<td class="num">16</td>
+<td class="num">16.6 ms</td>
+<td class="num">964</td>
+<td class="num">3.4 s</td>
+<td class="num">8.5 s</td>
+<td class="num">13</td>
+<td class="num">$65 k</td>
+</tr>
+<tr>
+<td class="num"><strong>24</strong></td>
+<td class="num"><strong>20.0 ms</strong></td>
+<td class="num"><strong>1,201</strong></td>
+<td class="num"><strong>4.1 s</strong></td>
+<td class="num"><strong>10.0 s</strong></td>
+<td class="num"><strong>11</strong></td>
+<td class="num"><strong>$55.2 k</strong></td>
+</tr>
+<tr>
+<td class="num">64</td>
+<td class="num">36.9 ms</td>
+<td class="num">1,733</td>
+<td class="num">7.5 s</td>
+<td class="num">17.4 s</td>
+<td class="num">7</td>
+<td class="num">$35 k</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>The plan's row is batch 24: 20 ms per token, 1,201 tokens a second per replica, a 4.1-second call and a 10-second turn against 6 s on the API. The fleet needs 4 / 11 / 34 replicas at average, peak and incident, one GPU each (<code>capacity.fleet()</code> takes the larger of the throughput-bound and the concurrency-bound count, adds the headroom, and never goes below two replicas, so a rollout or a node loss cannot take the fleet down). The peak-sized fleet costs <strong>$55,246 a month on AWS on-demand</strong>, $0.0182 per conversation, is 28 % utilised on average, spends 0.16 GPU-minutes on a conversation, can hold <strong>293 turns in flight</strong> — the self-hosted in-flight cap — and is 1.39× the hosted planning mix.</p>
+<p>The other open-weight models, also as estimates: Mistral Small 4 (119 B total, 6.5 B active, 121 GB FP8, tensor parallel 2 on the model card) on a pair of H100s has a 3.7 ms step at batch 1 and about 3,700 tokens a second at batch 128, so it needs 18 GPUs at the 20 ms target and 26 for a 6-second turn against 30–46 for Ministral, because a tight latency target rewards a low active-parameter count. Medium 3.5 (134 GB FP8) is an eight-GPU replica plus a commercial licence, Large 3 (682 GB FP8) is eight H200s at about 3,900 tokens a second per node, and the L40S's 864 GB/s makes a 14 B model's step 34 ms at batch 1, whatever its hourly price.</p>
+</div>
+<aside class="callout numbers"><span class="label">Numbers</span><p>KV per token, BF16: Ministral 3 14B 160 KiB; Small 4 22.5 KiB (MLA); Large 3 68.6 KiB (MLA); Medium 3.5 352 KiB; FP8 KV halves each. FP8 weights: Ministral 14B 15.7 GB; Small 4 121 GB; Medium 3.5 134 GB; Large 3 682 GB. H100 SXM 80 GB at 3.35 TB/s; H200 141 GB at 4.8 TB/s.</p></aside>
+<h3 id="s3-6">3.6 The break-even, and the six-second tension</h3>
+<div class="prose">
+<p>Both bills grow with volume — the API linearly at $0.0131 a conversation, the fleet in replica-sized steps as the peak grows — so the break-even is not a volume but a GPU price. At 28 % average utilisation the fleet spends 0.16 GPU-minutes on a conversation, so it beats the hosted planning mix whenever an H100-hour costs less than $0.0131 ÷ (0.16 ÷ 60) ≈ <strong>$4.95</strong>:</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>GPU price</th>
+<th style="text-align: right;">$ / GPU-hour</th>
+<th style="text-align: right;">Peak fleet, $ / month</th>
+<th style="text-align: right;">$ / conversation</th>
+<th style="text-align: right;">vs the hosted mix</th>
+<th style="text-align: right;">Floor: conversations / day to amortise two replicas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS on-demand</td>
+<td class="num">6.88</td>
+<td class="num">$55,246</td>
+<td class="num">$0.0182</td>
+<td class="num">1.39×</td>
+<td class="num">25 k</td>
+</tr>
+<tr>
+<td>AWS capacity block (Tokyo/Sydney/Mumbai)</td>
+<td class="num">4.72</td>
+<td class="num">$37,902</td>
+<td class="num">$0.0125</td>
+<td class="num">0.95×</td>
+<td class="num">17 k</td>
+</tr>
+<tr>
+<td>GCP 3-year commitment</td>
+<td class="num">4.86</td>
+<td class="num">$39,026</td>
+<td class="num">$0.0128</td>
+<td class="num">0.98×</td>
+<td class="num">18 k</td>
+</tr>
+<tr>
+<td>Azure 3-year reservation</td>
+<td class="num">5.40</td>
+<td class="num">$43,362</td>
+<td class="num">$0.0143</td>
+<td class="num">1.09×</td>
+<td class="num">20 k</td>
+</tr>
+<tr>
+<td>Neocloud</td>
+<td class="num">3.75</td>
+<td class="num">$30,112</td>
+<td class="num">$0.0099</td>
+<td class="num">0.76×</td>
+<td class="num">14 k</td>
+</tr>
+<tr>
+<td>GCP on-demand</td>
+<td class="num">11.06</td>
+<td class="num">$88,812</td>
+<td class="num">$0.0292</td>
+<td class="num">2.23×</td>
+<td class="num">41 k</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>So the fleet loses on on-demand H100s (about $15.5 k a month more than the API), is level on three-year commitments and APAC capacity blocks (the latter priced for Tokyo, Sydney and Mumbai, not Singapore), and wins on neocloud GPUs (about $9.6 k a month less). Volume only matters at the bottom: the fleet never runs fewer than two replicas, and that floor is amortised above about 14 k conversations a day at $3.75, 17 k at $4.72–4.86 and 25 k at $6.88; above it, the price of the GPU-hour decides, not the size of the customer. And because the fleet's cost does not fall when traffic does, the hybrid — a fleet for the base load, the API for the peak hours — is the self-hosted analogue of "provisioned throughput plus pay-as-you-go spill-over": it raises the fleet's utilisation, and with it the GPU price at which the fleet wins, provided the data policy lets the peak traffic leave.</p>
+<p>The second tension is latency. The hosted turn is 6 s; the plan's self-hosted turn is 10 s, because 20 ms times 200 tokens is four seconds a call. A 6-second turn on the fleet needs a step of about 11 ms, which this replica delivers only at a batch of three to five — 30–46 H100s at peak instead of 11, three to four times the GPUs and $150–230 k a month on-demand. The alternatives are speculative decoding (Mistral publishes EAGLE drafts for Small 4, Medium 3.5 and Large 3; on Ministral you would test n-gram or a draft model), a model with fewer active parameters (Small 4's 26 GPUs), or streaming and accepting ten seconds, which with progress events is often right.</p>
+</div>
+<h3 id="s3-7">3.7 The rest of the estate</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Resource</th>
+<th style="text-align: right;">Average</th>
+<th style="text-align: right;">Peak</th>
+<th style="text-align: right;">Incident</th>
+<th>Limit / note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Orchestrator pods (80 in-flight turns each, ×1.4 headroom, 6 s turns)</td>
+<td class="num">1</td>
+<td class="num">3</td>
+<td class="num">8</td>
+<td>2 / 4 / 13 at the fleet's 10 s turn; KEDA on queue depth</td>
+</tr>
+<tr>
+<td>Gateway pods (250 open streams each; a stream is open only during a turn)</td>
+<td class="num">2</td>
+<td class="num">2</td>
+<td class="num">3</td>
+<td>min 2 for warm capacity</td>
+</tr>
+<tr>
+<td>Postgres writes / s (≈ 6 per turn)</td>
+<td class="num">42</td>
+<td class="num">125</td>
+<td class="num">417</td>
+<td>a small HA instance does thousands; partition by day</td>
+</tr>
+<tr>
+<td>Redis ops / s (≈ 40 per turn)</td>
+<td class="num">280</td>
+<td class="num">830</td>
+<td class="num">2,800</td>
+<td>one node does over 100 k/s</td>
+</tr>
+<tr>
+<td>RabbitMQ messages / s</td>
+<td class="num">7</td>
+<td class="num">21</td>
+<td class="num">69</td>
+<td>5 KB each: trivial for a three-node quorum queue</td>
+</tr>
+<tr>
+<td>Billing mainframe QPS</td>
+<td class="num">1.7</td>
+<td class="num">5.2</td>
+<td class="num">17.4</td>
+<td>limit 40: fine, but cache invoices anyway</td>
+</tr>
+<tr>
+<td>CRM QPS</td>
+<td class="num">4.9</td>
+<td class="num">14.6</td>
+<td class="num">48.6</td>
+<td>limit 200: prefetch at session start, cache the profile</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>The non-GPU estate — a few dozen vCPUs of pods plus a small Postgres, Redis and RabbitMQ — is about 1 % of the model bill.</p>
+</div>
+<h3 id="s3-8">3.8 What breaks first</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Resource</th>
+<th style="text-align: right;">Demand vs limit</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Incident</td>
+<td>Hosted RPS limit (60)</td>
+<td class="num">2.55×</td>
+<td>shape demand (admission, degrade); ask for burst headroom</td>
+</tr>
+<tr>
+<td>Incident</td>
+<td>Hosted TPM limit (20 M)</td>
+<td class="num">2.38×</td>
+<td>shape demand; sibling model with its own limit; cut tokens per call</td>
+</tr>
+<tr>
+<td>Incident</td>
+<td>Self-hosted fleet sized for peak (13.2 k tokens/s)</td>
+<td class="num">2.31×</td>
+<td>shed at the cap; spill over what may leave; shorter answers</td>
+</tr>
+<tr>
+<td>Incident</td>
+<td>Billing mainframe</td>
+<td class="num">0.43×</td>
+<td>cache invoices for minutes; bulkhead; degrade to cached answers</td>
+</tr>
+<tr>
+<td>Incident</td>
+<td>CRM</td>
+<td class="num">0.24×</td>
+<td>prefetch at session start; 5-minute profile cache</td>
+</tr>
+<tr>
+<td>Incident</td>
+<td>Redis, Postgres, RabbitMQ, orchestrator pods</td>
+<td style="text-align: right;">&lt; 0.05×</td>
+<td>nothing</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>At peak everything fits (0.76× and 0.72× on the hosted limits, 0.69× on the fleet). Kubernetes and the orchestrator pods are not on the list on either path: the model breaks first, in both of its forms, and the billing system sized for humans breaks second.</p>
+<hr />
+</div>
+</section>
+<section class="part" id="p4">
+<p class="part-label">Part 4</p>
+<h2>The reference architecture</h2>
+<figure><pre class="mermaid">flowchart LR
+  U[App / web chat] --&gt; IN[Ingress / API gateway&lt;br/&gt;TLS · WAF · per-caller rate limits]
+  IN --&gt; GW[gateway · Deployment&lt;br/&gt;auth · admission · enqueue · SSE relay&lt;br/&gt;2..20 pods]
+  GW -- publish, routing key = session --&gt; MQ[(RabbitMQ quorum queue agent-turns&lt;br/&gt;manual ack · delivery-limit 5 · dead-letter exchange)]
+  MQ -- consume, prefetch 80 --&gt; OR[orchestrator · Deployment&lt;br/&gt;durable loop · budgets · checkpoints&lt;br/&gt;KEDA on queue depth]
+  OR --&gt; MG[model gateway library&lt;br/&gt;routing · buckets · retry · breaker · fallback · spill-over]
+  MG --&gt; VL[vLLM · GPU node pool in Singapore&lt;br/&gt;Ministral 3 14B · 1 × H100 per replica · 11 at peak&lt;br/&gt;static for peak · KEDA on waiting / KV for headroom]
+  MG -. spill-over, policy-gated .-&gt; API[Mistral API api.mistral.ai · EU-hosted&lt;br/&gt;Small 4 / Medium 3.5 · service_tier auto&lt;br/&gt;or a marketplace in an APAC region]
+  OR --&gt; TE[tool executor&lt;br/&gt;bulkhead · breaker · cache · idempotency]
+  TE --&gt; TS[tool services / MCP servers&lt;br/&gt;CRM · billing · network · KB]
+  OR &lt;--&gt; PG[(Postgres&lt;br/&gt;sessions · turns · steps · transcripts · TTL)]
+  OR --&gt; RS[(Redis&lt;br/&gt;streams · locks · buckets · idem · level)]
+  GW &lt;--&gt; RS
+  GW --&gt; PG
+  OR -.-&gt; OT[OpenTelemetry → Prometheus · Grafana · Tempo&lt;br/&gt;gen_ai.* spans · vllm:* metrics]
+  VL -.-&gt; OT
+</pre></figure>
+<div class="prose">
+<p class="lede">A turn, end to end: the ingress applies the WAF and a per-caller limit; the gateway authenticates, checks the tenant's bucket and the global in-flight cap, decides a degrade level, writes the turn row to Postgres, publishes to the <code>agent-turns</code> quorum queue with the session id as routing key, and relays the turn's event stream to the client over SSE from a Redis stream. An orchestrator pod consumes the message, takes the session lock, loads any checkpointed steps, and runs the loop under a budget: a model call through the model gateway — to the fleet, or to the API when the fleet is saturated and the policy allows it — with deltas streamed into Redis; a checkpoint; tool calls in parallel; a checkpoint; repeat; finish. It writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the message; compaction runs afterwards, still inside the pod.</p>
+</div>
+<h3 id="s4-1">4.1 Why it is shaped this way</h3>
+<div class="prose">
+<p><em>Gateway and orchestrator are separate Deployments</em> because they scale on different signals and fail differently: a streaming connection costs a coroutine and a few kilobytes, the loop costs tokens, tool calls and the memory of a full context.</p>
+<p><em>A queue sits between them even though the user is waiting</em> because it turns a burst into a backlog with one observable number — the age of the oldest unstarted turn — gives at-least-once execution with redelivery, and lets the token bucket or the fleet's batch, not the ingress, set the pace.</p>
+<p><em>Postgres holds the durable state and Redis the hot state</em> because their access patterns are opposite: a handful of row writes per turn that must survive anything, versus thousands of sub-millisecond operations per second that may be lost without harm.</p>
+<p><em>The model gateway is a library with two backends and a policy, not a service</em>: its state fits in Redis and vLLM's <code>/metrics</code>, and the fleet and the API are two entries in its routing table, which is what makes hosted, self-hosted and hybrid the same code with different configuration. It becomes a service when many agents share one fleet — the job of an inference gateway in front of the GPUs.</p>
+<p><em>The GPU node pool is static, sized for the peak, with autoscaling only for headroom</em>, because a GPU node takes three to eight minutes to join, pull the image and load weights, and the incident arrives faster; KEDA on <code>vllm:num_requests_waiting</code> and <code>vllm:kv_cache_usage_perc</code> is for the slow tail of a peak, not the cliff.</p>
+</div>
+<h3 id="s4-2">4.2 Alternatives and when to choose them</h3>
+<div class="prose">
+<p>Plain vLLM Deployments behind a Service (this design) are right up to about ten replicas of a single-GPU model, with every setting visible and the gateway doing admission; what they lack is cache-aware routing, a prefill/decode split and priority at the GPU. llm-d or KServe's <code>LLMInferenceService</code> with the Gateway API Inference Extension add those — KV-cache-aware routing, prefill/decode disaggregation, <code>InferencePool</code> and <code>InferenceObjective</code> priority, the Workload Variant Autoscaler — at the cost of more moving parts and an alpha flow-control feature (llm-d v0.9.0 and the extension's v1.5.0; release years inferred, verify). NVIDIA NIM containers suit a customer who wants a supported, profiled container under NVIDIA AI Enterprise ($1 per GPU-hour or $4,500 per GPU-year), though H100 is absent from Small 4's profile matrix and the Large 3 NIM is flagged end-of-support. Mistral's Agents &amp; Conversations API and the Temporal-based AI Studio Agent Runtime run the loop for you on the hosted path, with handoffs, built-in tools and MCP Connectors (public preview), but not on regional endpoints, under a <code>client.beta.*</code> label, without Ministral 3, and with less control over budgets and checkpoints. Kafka, NATS JetStream or a cloud's managed queue can replace RabbitMQ (Kafka has no per-message nack or dead-lettering, so you build the retry topic), and a single-cloud customer can swap the estate for that cloud's managed pieces. The <em>mechanisms</em> in Part 5 are the same in every case; only where they are configured differs, and the Kubernetes shape is the one a GSI can reuse across customers and clouds.</p>
+<hr />
+</div>
+</section>
+<section class="part" id="p5">
+<p class="part-label">Part 5</p>
+<h2>The scaling mechanisms</h2>
+<h3 id="s5-1">5.1 Quota strategy on the API, capacity strategy on the fleet</h3>
+<div class="prose">
+<p>On the API, demand is shaped before it reaches the limit, in three layers. An in-flight cap at the gateway (5.3) bounds how many turns are generating tokens at once. A token bucket per model in the model gateway (<code>TokenBucket</code> in <code>scalelab/resilience.py</code>), sized to <em>your share</em> of the granted limit, spreads calls within each second (the requests-per-second limit binds first at the incident); its capacity is about six seconds of refill, and it lives in Redis as a Lua script once there is more than one pod. And the endpoint and tier are chosen per call: the global endpoint unless the data policy says EU or US; the Priority Tier (<code>service_tier="auto"</code>, which falls back to standard when exhausted and reports <code>service_tier</code> in the response) for traffic that must not queue; the Batch API at half price with a 24-hour default <code>timeout_hours</code> for offline work only.</p>
+<p>The paperwork half belongs to the delivery team: tiers unlock on cumulative billing, so a customer's org starts in free mode at 1 RPS and climbs only by spending; the plan's request goes to support as soon as the pilot's shape is known, with a Priority Tier entitlement if the customer wants an SLA; and the workspace spending cap (none by default) is set above the plan with margin, because a cap that trips suspends the workspace's API access until the month ends.</p>
+<p>On the fleet the strategy inverts: capacity is bought in advance — eleven H100s for the peak, on committed terms if the customer can commit — because the 3–8-minute cold start is longer than an incident takes to arrive. KEDA on <code>vllm:num_requests_waiting</code> (about 5 per replica, <code>sum()</code> with an <code>AverageValue</code> target so the threshold grows with the fleet) and <code>vllm:kv_cache_usage_perc</code> (0.8) covers the slow tail of a peak, with a long cooldown and pre-scaling before known events. What flexes fast is the API: spill-over (5.2) is the fleet's burst capacity, bought by the token and bounded by policy.</p>
+</div>
+<aside class="callout numbers"><span class="label">Numbers</span><p>Prompt caching: 64-token blocks, 10 % of the input price, <code>prompt_cache_key</code>, hits in <code>usage.prompt_tokens_details.cached_tokens</code>, not guaranteed. Batch: −50 %, <code>timeout_hours</code> default 24, up to 1 M requests per file (100 k on the known-limitations page — the pages disagree). Cold start 3–8 min; a 121 GB Small 4 checkpoint streams in about a minute at 2 GiB/s, Large 3's 682 GB in about six.</p></aside>
+<h3 id="s5-2">5.2 Retries, jitter, breakers, fallbacks, spill-over</h3>
+<div class="prose">
+<p>The <code>mistralai</code> SDK (2.10.1, 15 September 2026) does <strong>not</strong> retry by default; with a <code>RetryConfig</code> it retries 429 and 5xx, and its default timeout is 300 s. Keep the SDK's retries off and retry in the model gateway (<code>call_with_retries</code> in <code>scalelab/resilience.py</code>), so one place decides: exponential backoff from 0.5 s to a cap of 8 s with <em>full</em> jitter — a uniform draw between zero and the backoff, because when a shared limit throttles, every client sees the 429 at the same moment and, without jitter, retries at the same moment; a <code>Retry-After</code> honoured with jitter on top when one arrives (Mistral documents none); at most four attempts; never past the turn's deadline. Set the per-call timeout to about 30 s; the 300-second default hides a hung stream for five minutes against a 45 s turn budget.</p>
+<p>Two kinds of pushback arrive and the gateway treats them alike (<code>RateLimited</code> and its subclass <code>ServerOverloaded</code> in <code>scalelab/model.py</code>): the API's <strong>429</strong> when the shared limit is hit, and vLLM's <strong>503</strong> when <code>--max-num-queued-reqs</code> or <code>--max-num-queued-tokens</code> is set and the queue is full — without those flags vLLM queues without limit and never says no. Both count toward the pushback ratio that drives the degrade level; a 400 that says the context overflowed goes to compaction, not to a retry.</p>
+<p>A circuit breaker per model and per tool (<code>CircuitBreaker</code>: five failures in a 30-second window open it for 15 s, then one probe) matters more for agents than for web services, because a sick dependency pins hundreds of coroutines <em>with their contexts in memory</em> until the deadline. When a breaker opens, or two consecutive pushbacks arrive, the gateway moves to a <em>sibling</em> with its own limit or pool: Small 4 to Ministral 3 8B on the API, Medium 3.5 escalations back to Small 4, the API itself on the fleet. Model ids live in configuration, never in code, which is also how you survive a deprecation — Magistral, Devstral, Pixtral and Medium 3.1 were deprecated together on 22 May 2026, with no published notice period.</p>
+<p>Spill-over is the fallback that is also a capacity strategy. The model gateway (<code>HybridBackend</code>) sends a call to the API when the fleet's saturation — running plus waiting sequences against the batch at which the fleet meets its latency target — passes 0.9, and records which backend served it (30 % of calls in the lab's hybrid overload run). The gate is policy: a turn is eligible when its traffic carries no personal data (the incident bulletin, a generic plan question, a knowledge-base lookup on redacted text); everything else waits for the fleet or is shed. That rule is what lets a fleet be sized for the base load in a residency-bound deployment, and the customer's risk function signs it, so write it with them.</p>
+</div>
+<aside class="callout pitfall"><span class="label">Pitfall</span><p>"We use the SDK's retries" without a deadline, or "vLLM will tell us when it's overloaded" without <code>--max-num-queued-reqs</code>. The first retries into a turn that has already timed out for the user; the second waits for a signal that never comes.</p></aside>
+<h3 id="s5-3">5.3 Admission control and graceful degradation</h3>
+<div class="prose">
+<p>Admission control is the brake on the feedback loop of 1.6, in both of its forms. It sits at the gateway, before a turn has cost anything, and asks three questions in order: is this tenant within its budget; what is the system's degrade level; and would admitting this turn exceed the in-flight cap. The cap starts at the number the capacity plan derived — 175 turns from the 20 M TPM limit, 293 from the eleven-replica fleet at batch 24 — and is tuned from load tests; priority classes (an agent-assist console, a VIP tier) bypass it.</p>
+<p>The degrade level (<code>AdmissionController.compute_level</code> in <code>scalelab/admission.py</code>) is computed from signals every pod can publish — in-flight turns, the age of the oldest queued turn, the share of model calls pushed back in the last minute, whether a breaker is open, and the backend's <em>saturation</em> — and is written to Redis so every pod degrades together. Saturation is the signal the fleet needs and the API does not: KV-cache usage plus the queue, the same two quantities the Gateway API Inference Extension's saturation detector reads with its defaults of a queue depth of 5 and KV utilisation of 0.8. Each level buys capacity by giving something up:</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Trigger</th>
+<th>What changes</th>
+<th>Effect in the lab's runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="num">0</td>
+<td>normal</td>
+<td>—</td>
+<td>Small 4 on the API; batch at or under the target on the fleet</td>
+</tr>
+<tr>
+<td class="num">1</td>
+<td>in-flight ≥ 80 % of cap, queue age ≥ 10 s, pushback ratio ≥ 5 %, or saturation ≥ 0.8</td>
+<td>Ministral 3 8B with a shorter cap on the API, shorter answers on the fleet; optional tools withheld</td>
+<td>hosted p95 from 39 s to 5.5 s</td>
+</tr>
+<tr>
+<td class="num">2</td>
+<td>a breaker open, pushback ratio ≥ 15 %, or saturation ≥ 1.0 (a queue exists)</td>
+<td>cheapest model; no writes and no slow tools (<code>get_invoice</code> withheld); canned incident answer</td>
+<td>the billing mainframe untouched during an outage</td>
+</tr>
+<tr>
+<td class="num">3</td>
+<td>in-flight ≥ cap, or queue age ≥ 30 s</td>
+<td>shed everything below priority 2 with 503 and a <code>Retry-After</code> that grows with the level (20 s at level 3)</td>
+<td>bounded latency for admitted turns: 3.3 s hosted, 8.8 s on two replicas</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>Two details separate a working implementation from a diagram: levels 1 and 2 need hysteresis (the lab holds a raised level for 15 s) or the level flaps, while level 3 follows the instantaneous cap because it must switch off the moment turns drain; and <code>Retry-After</code> must be jittered by the <em>client</em>, or every shed user returns together.</p>
+</div>
+<h3 id="s5-4">5.4 Durable execution</h3>
+<div class="prose">
+<p>The loop (<code>run_turn</code> in <code>scalelab/loop.py</code>) checkpoints every step in Postgres <em>before</em> acting on its result: the model's response after the model call, the compacted tool results after the tool step. On redelivery the orchestrator replays from the checkpoint; the tool executor keys every write by turn, step, call index and tool name (plus a hash of the arguments in production) and keeps the result under that key in Redis for a day, so a redelivered turn that already opened a ticket gets the same ticket back. The lab's crash test (notebook 02) kills the process right after the ticket is checkpointed and shows one ticket after redelivery.</p>
+<p>The queue contract is the other half. <code>agent-turns</code> is a quorum queue; consumers acknowledge manually, with prefetch set to the pod's concurrency (80). The orchestrator acknowledges every <em>terminal</em> outcome including graceful failure — a turn that ended with "a colleague will follow up" must not be redelivered into a second bill — and rejects with requeue only for transient infrastructure trouble. The delivery limit (<code>x-delivery-limit</code>, set to 5 explicitly; check your RabbitMQ version's default) sends a message that keeps failing to the dead-letter exchange, whose queue has its own alert and replay tooling. The consumer timeout (30 minutes by default) is the ceiling for one delivery; the 45 s turn budget sits far under it. Ordering per session comes from the routing key and from a session lock in Redis with the turn id as value and a TTL of the budget plus a margin. In Postgres, <code>steps</code> rows carry a unique constraint on (turn, index) so a replayed step is an idempotent insert.</p>
+</div>
+<h3 id="s5-5">5.5 Context engineering for scale</h3>
+<div class="prose">
+<p>The prompt is laid out for the cache: system instructions, policies and tool schemas first, byte-identical for every user and turn; then the prefetched profile; then a summary of older turns; then the last N messages verbatim; then the new message. On the API the same <code>prompt_cache_key</code> goes on every request sharing the prefix; caching works in 64-token blocks, a hit is billed at 10 % of the input price and reported in <code>usage.prompt_tokens_details.cached_tokens</code>, and the docs say a key raises the chance of a hit without guaranteeing one and publish neither the cache's lifetime nor a write price. So the prompt <em>version</em> is part of the key, and the ratio of cached to prompt tokens is a metric with an alert, because the anchor's 2,700 cached tokens are the difference between $0.0115 and $0.0067 a conversation. On the fleet, vLLM's prefix caching is on by default; the hit rate is <code>vllm:prefix_cache_hits_total</code> over <code>vllm:prefix_cache_queries_total</code>, and a replica only hits on prefixes it has seen, which is why cache-aware routing matters at more than a few replicas.</p>
+<p>Compaction keeps input bounded: when the pending history exceeds a token threshold, everything but the verbatim tail is summarised on the cheap model <em>after</em> the turn completes. The anchor's 5,000-token call assumes it; without it each turn adds 400 to 800 tokens, so the twelfth turn's call is two to three times the first's and cost drifts by the same factor, while on a fleet the KV per call grows and the batch shrinks. Output is capped per task and reasoning is set per task with <code>reasoning_effort</code>: off for routing, extraction and support answers, on only where a measured problem needs it, because reasoning tokens are billed as output at four to five times the input price, and on a fleet they are decode steps the whole batch pays for.</p>
+</div>
+<h3 id="s5-6">5.6 Tools at scale</h3>
+<div class="prose">
+<p>The tools are usually the real bottleneck, because the systems behind them were sized for humans. The executor (<code>execute_tool</code> and <code>Tools</code> in <code>scalelab/loop.py</code> and <code>scalelab/tools.py</code>) applies, in order: a bulkhead (a semaphore per tool per pod), a circuit breaker per tool, a result cache for pure reads (profile five minutes, invoice two, network status thirty seconds), the idempotency check for writes, a timeout, and one retry for idempotent reads only. Failures come back to the model as <em>structured data</em> — <code>{"error": "billing: rate limited"}</code> — never as exceptions that abort the turn; the model can usually answer around a missing fact, and an aborted turn is the most expensive outcome of all.</p>
+<p>Two habits remove most tool latency from the critical path: prefetch the customer's profile when the session starts, and let the model issue independent calls in one step so they run concurrently (<code>parallel_tool_calls</code> defaults to true on the API; vLLM needs <code>--enable-auto-tool-choice --tool-call-parser mistral</code>). Tool services run as their own Deployments with their own service accounts and network policies; an MCP server over the same tools standardises discovery — Mistral's Connectors (public preview) register any MCP server as a tool for Agents on the hosted path — at the cost of a hop. Mistral's built-in tools (web search $30 per thousand calls, code execution $30) live only on the Agents API, not on regional endpoints.</p>
+</div>
+<h3 id="s5-7">5.7 Streaming and connections</h3>
+<div class="prose">
+<p>SSE over HTTP/1.1 chunked transfer is the right transport for a chat agent behind a Kubernetes ingress: it passes every proxy and supports resume with <code>Last-Event-ID</code>. An ingress idle timeout (an NGINX ingress reads for 60 s by default, so the relay sends a keep-alive comment every 15 s) and a rolling deploy of the gateway both cut it, so clients reconnect with the last sequence id and the relay serves from the Redis stream, not from memory; Mistral's streaming idle timeout is ten minutes. Time-to-first-token as the user sees it arrives after plan → tools → answer — on the fleet the first answer token at about 2.5 s and the last at about 6.5 s — so a TTFT SLO of two seconds is only attainable by streaming <em>progress</em> events ("checking your invoice…") from the tool steps, which the event stream already carries.</p>
+</div>
+<h3 id="s5-8">5.8 vLLM and Kubernetes settings that matter</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value for the anchor</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--max-num-seqs</code></td>
+<td>32 on the Ministral 14B replica (default 128)</td>
+<td>caps the batch and therefore the time per token; above it, latency is traded away silently</td>
+</tr>
+<tr>
+<td><code>--max-model-len</code></td>
+<td class="num">32,768 (default 262,144)</td>
+<td>frees KV memory reserved for contexts that never occur</td>
+</tr>
+<tr>
+<td><code>--max-num-batched-tokens</code></td>
+<td class="num">16,384 (the API-server default since 0.28)</td>
+<td>the chunked-prefill budget per step: smaller favours inter-token latency, larger favours TTFT</td>
+</tr>
+<tr>
+<td><code>--gpu-memory-utilization</code></td>
+<td class="num">0.92 (default; Mistral's Small 4 and Medium 3.5 cards use 0.8)</td>
+<td>headroom for activations; too high and a long prompt takes the pod out</td>
+</tr>
+<tr>
+<td><code>--kv-cache-dtype fp8</code></td>
+<td>on, after an evaluation on the customer's transcripts</td>
+<td>halves KV bytes: double the resident sequences, a lighter step</td>
+</tr>
+<tr>
+<td><code>--max-num-queued-reqs</code> / <code>--max-num-queued-tokens</code></td>
+<td>about 2 × <code>max_num_seqs</code> / a few × 16 k</td>
+<td>new in 0.29: a 503 when the queue is full; both default to unlimited, which is the silent collapse</td>
+</tr>
+<tr>
+<td><code>--tensor-parallel-size</code></td>
+<td>1 for Ministral 3 14B; 2 for Small 4; 8 for Medium 3.5 and Large 3</td>
+<td>the replica's GPU count inside one node; a node loss takes the whole replica</td>
+</tr>
+<tr>
+<td><code>--speculative-config</code></td>
+<td>EAGLE drafts published for Small 4, Medium 3.5 and Large 3 (<code>num_speculative_tokens</code> 3); n-gram or a draft model to test on Ministral</td>
+<td>a lower time per token at the same batch — the route to a six-second turn without four times the GPUs</td>
+</tr>
+<tr>
+<td>Weight loading</td>
+<td><code>--load-format runai_streamer</code> or a node-local NVMe cache; <code>--kv-cache-memory-bytes</code> to skip profiling; the loading and tool-parser flags from each model card</td>
+<td>15.7 GB streams in about 30 s, 121 GB in about a minute at 2 GiB/s; the image pull is often the slowest part of the 3–8-minute cold start</td>
+</tr>
+<tr>
+<td>KEDA</td>
+<td>vLLM: <code>sum(vllm:num_requests_waiting)</code> at an <code>AverageValue</code> of 5 and <code>vllm:kv_cache_usage_perc</code> at 0.8, poll 15 s, cooldown 300–360 s, min = the peak fleet (11), max = the incident (34); orchestrator: queue length, about 40 messages per pod</td>
+<td>headroom only — static capacity carries the peak because a replica takes minutes to appear</td>
+</tr>
+<tr>
+<td>GPU node pool and pods</td>
+<td>static nodes for the peak on reserved or capacity-block terms; one replica per GPU with <code>nvidia.com/gpu</code> requests equal to limits; vLLM pods with 4–8 vCPU and memory at least the weights again; orchestrator 2 vCPU / 2 GiB at concurrency 80</td>
+<td>no time-slicing (no memory isolation) and no MIG (no slice holds a 14 B model with useful KV)</td>
+</tr>
+<tr>
+<td>PodDisruptionBudget, rollout, termination</td>
+<td>vLLM <code>minAvailable</code> = peak fleet − 1; <code>maxSurge</code> 1 needs a spare GPU; grace 60 s on the orchestrator, 30 s on vLLM with requests drained</td>
+<td>a drain must never take two replicas; an hour per rollout of eleven unless there is a spare</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p>The fleet's latency is set by <code>--max-num-seqs</code> and the replica count, not by a percentage on an autoscaler, and the values above come from the load test in notebook 04, to be re-derived from <code>vllm bench serve</code> on the real hardware.</p>
+</div>
+<h3 id="s5-9">5.9 State stores</h3>
+<div class="prose">
+<p>Postgres for the durable rows (sessions, turns, step checkpoints, transcripts): a small highly-available instance with a synchronous replica and point-in-time recovery, day-partitioned tables, a retention job that drops partitions. Redis for the hot state — streams for the event relay, session locks (<code>SET NX PX</code>), the Lua token buckets, idempotency markers (<code>SET NX EX</code>, 24 h), the degrade level and the in-flight gauge — where one node does over 100 k operations a second against 2,800 at the incident, and a failover costs some reconnects and loses no turn. RabbitMQ as a three-node quorum queue with the oldest message's age as its one dashboard number. Retrieval sits beside these — <code>pgvector</code> in the same Postgres, with Mistral Embed or a self-hosted embedding model when the knowledge base itself must not leave.</p>
+</div>
+<h3 id="s5-10">5.10 Observability and SLOs</h3>
+<div class="prose">
+<p>One trace per turn with a span per model call and tool call, attributes from the OpenTelemetry GenAI semantic conventions (<code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code> and <code>output_tokens</code>, <code>gen_ai.conversation.id</code>; still "Development" status, so centralise the names), plus the backend that served the call, the <code>service_tier</code> reported, cached tokens and the degrade level. Metrics with low-cardinality labels only (model, backend, tool, tenant, outcome, level; never session or turn ids): tokens by kind, cost, latency and TTFT histograms, pushback ratio, breaker state, in-flight turns, queue age, shed count by reason, spill-over share. The fleet adds vLLM's <code>/metrics</code>: <code>vllm:num_requests_running</code> and <code>vllm:num_requests_waiting</code>, <code>vllm:kv_cache_usage_perc</code>, the <code>vllm:time_to_first_token_seconds</code>, <code>vllm:inter_token_latency_seconds</code> and <code>vllm:e2e_request_latency_seconds</code> histograms, <code>vllm:prefix_cache_hits_total</code> and <code>vllm:num_preemptions_total</code>. GPU utilisation from DCGM is a poor signal — a replica at batch 2 reads as busy — so the dashboards use the queue and the KV usage; confirm the <code>_total</code> suffixes on a live scrape.</p>
+<p>SLIs: availability (turns that ended with an answer over turns admitted), shed rate, latency attainment (turns under 8 s on the API and 12 s on the fleet; first <em>progress</em> event under 2.5 s), cost per conversation on the API and tokens per GPU-hour on the fleet, and, in a residency-bound deployment, the API's share of calls, because a spill-over policy that leaks is a compliance incident. Alerts: queue oldest-message age above 30 s; dead-letter queue above zero; pushback ratio above 5 %; degrade level at 2 or higher for minutes; <code>vllm:num_requests_waiting</code> above 5 per replica or KV usage above 0.9 for five minutes; the cached-token share below 80 % of its baseline; the API share above the policy's ceiling; and cost per conversation more than 30 % above its seven-day baseline — the alert that catches the runaway loop before finance does.</p>
+</div>
+<h3 id="s5-11">5.11 Multi-agent designs and budgets</h3>
+<div class="prose">
+<p>Every turn carries a budget with four independent dimensions — steps, tokens, dollars and a wall-clock deadline (the lab's <code>Budget</code>: 6 steps, 40,000 tokens, $0.25, 45 s) — because each fails differently: tool thrash burns steps, a long transcript burns tokens, a Medium 3.5 escalation burns money, a slow mainframe burns time while the user watches a spinner. A turn that exhausts a budget ends <em>gracefully</em> with a message and a terminal event; it is not retried. In multi-agent topologies the budget is hierarchical — the coordinator's bounds the sum of the specialists' — and the specialists' calls go through the same gateway and buckets, so fan-out cannot escape admission control. Mistral's Agents API offers handoffs between agents, which is convenient and also a way to lose sight of the budget, so the coordinator's deadline and cost are still enforced by the caller. A specialist is justified by a measured problem, and the design should say which metric would trigger the split.</p>
+</div>
+<h3 id="s5-12">5.12 Tenancy, priority, regions</h3>
+<div class="prose">
+<p>Per-tenant buckets at the gateway, tenant labels on every metric and cost record, and a priority field on the turn that bypasses the in-flight cap for the classes that must never be shed. On a fleet fronted by the inference extension the same ideas exist at the GPU (a fairness id and an <code>InferenceObjective</code> priority).</p>
+<p>Regions are where the two halves differ most. The fleet lives in Singapore: node pools across two availability zones, and a replica count that leaves the peak covered when one replica is lost. A disaster-recovery site outside the country — Johor or Batam on a partner cloud, Sydney on a hyperscaler — is a data-policy decision before it is an infrastructure one. The API half is whatever the policy permits: the global endpoint for traffic without personal data; a regional endpoint only for customers whose policy says Europe or the US; a marketplace region for customers whose policy says "in the region" rather than "in the country" — Bedrock's Sydney, Tokyo and Mumbai for Large 3 and Ministral 3, watsonx in Sydney. And the API is not a substitute for availability engineering: the status page's 90-day uptime on 19 September 2026 showed the Completion API at 99.49 %, which is why the fleet-first hybrid is the shape for a three-nines target.</p>
+</div>
+<aside class="callout verify"><span class="label">Verify</span><p>Bedrock's region table for Mistral models (Singapore absent on 19 September 2026; cross-region inference profiles may change the picture), Azure Foundry's APAC rows for Large 3 and Medium 3.5 (Americas-only in the fetched table), watsonx regions, and the regional endpoints' model list (<code>models.list</code> against <code>api.eu.mistral.ai</code>).</p></aside>
+<div class="prose">
+<hr />
+</div>
+</section>
+<section class="part" id="p6">
+<p class="part-label">Part 6</p>
+<h2>Failure catalogue</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Symptom</th>
+<th>Mechanism that catches it</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>429 storm on the API</td>
+<td>pushback ratio climbs, turns lengthen, in-flight grows</td>
+<td>bucket waits, breaker, degrade level 1–2</td>
+<td>second-level smoothing, sibling model, the rate-limit ticket, shed at level 3</td>
+</tr>
+<tr>
+<td>Silent latency collapse on the fleet</td>
+<td>p50 from 6 s to 12 s, nothing "fails", batch at <code>max_num_seqs</code></td>
+<td>saturation signal, in-flight cap, <code>--max-num-queued-reqs</code> → 503</td>
+<td>cap the batch, shed fast, spill over what may leave</td>
+</tr>
+<tr>
+<td>KV preemption and recompute</td>
+<td><code>vllm:num_preemptions_total</code> rising, TTFT spikes</td>
+<td>KV usage alert</td>
+<td>lower <code>--max-num-seqs</code> or <code>--max-model-len</code>, FP8 KV, more tensor parallel</td>
+</tr>
+<tr>
+<td>A node loss takes a replica</td>
+<td>a TP=2 replica disappears with its node during a peak</td>
+<td>PodDisruptionBudget, N+1 sizing</td>
+<td>spare capacity in the peak count; nodes across zones; spill-over</td>
+</tr>
+<tr>
+<td>Cold start during a peak</td>
+<td>KEDA scales out; the replica arrives eight minutes later</td>
+<td>static capacity for the peak</td>
+<td>pre-scale before known events; weight streaming; never scale-to-zero the primary pool</td>
+</tr>
+<tr>
+<td>Spill-over leaks data it must not</td>
+<td>API share above the policy ceiling; a turn with personal data served by the API</td>
+<td>per-turn eligibility flag; API-share SLI; audit on the trace</td>
+<td>policy gate in the model gateway; redaction; the rule written with the risk function</td>
+</tr>
+<tr>
+<td>Model id deprecated</td>
+<td>4xx on a pinned id; a <code>-latest</code> alias changes behaviour</td>
+<td>model ids in config; sibling fallback</td>
+<td>pin dated ids; watch the changelog; no published notice period</td>
+</tr>
+<tr>
+<td>Regional endpoint feature gap</td>
+<td>Agents, Batch or Files fail on <code>api.eu.</code> / <code>api.us.</code>; a model missing regionally</td>
+<td>integration tests per endpoint</td>
+<td>function calling only on regional endpoints; run Batch and Agents against global with data that may go there</td>
+</tr>
+<tr>
+<td>Rate-limit ticket not granted before launch</td>
+<td>the production org sits at a lower tier than the pilot org</td>
+<td>launch checklist</td>
+<td>enable pay-as-you-go early, read the console limits, file the request early</td>
+</tr>
+<tr>
+<td>Tool thrash / runaway loop</td>
+<td>many steps, same tool, same arguments</td>
+<td>step and cost budgets</td>
+<td>structured tool errors; step cap; cost alert</td>
+</tr>
+<tr>
+<td>Context overflow</td>
+<td>tokens per call climb turn over turn; 400 from the model</td>
+<td>compaction threshold; output caps</td>
+<td>compaction; tool-result truncation</td>
+</tr>
+<tr>
+<td>Double side effect</td>
+<td>two tickets for one complaint</td>
+<td>idempotency keys on writes; checkpoint before act</td>
+<td>replay from checkpoint; marker store with 24 h TTL</td>
+</tr>
+<tr>
+<td>Incident mix shift</td>
+<td>75 % "no signal" intents; CRM hammered</td>
+<td>degrade level 2 with the cached incident answer</td>
+<td>prefetch, caches, canned bulletin, spill-over of the bulletin traffic</td>
+</tr>
+<tr>
+<td>GPU capacity unavailable in-region</td>
+<td>the node pool cannot reach its count</td>
+<td>capacity reservation; scale-out alert</td>
+<td>reserved capacity or capacity blocks; the API as the burst; a partner sovereign cloud as the second source</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="part" id="p7">
+<p class="part-label">Part 7</p>
+<h2>The growth path</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align: right;">Conversations/day</th>
+<th>What you need</th>
+<th>What you can skip</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pilot on the API</td>
+<td style="text-align: right;">≤ 1,000</td>
+<td>one service, a synchronous loop, budgets, structured tool errors, traces, <code>prompt_cache_key</code> and pinned model ids, pay-as-you-go on the customer's own org so the tiers start climbing</td>
+<td>queue, Redis, admission control, GPUs, the Priority Tier</td>
+</tr>
+<tr>
+<td>Production v1 on the API</td>
+<td style="text-align: right;">1,000–20,000</td>
+<td>the gateway/orchestrator split, RabbitMQ, Postgres checkpoints, idempotency, the SSE relay, per-turn budgets, dashboards, the rate-limit ticket</td>
+<td>the fleet (below the two-replica floor of 14–25 k a day it is not amortised), multi-region, per-tenant quotas</td>
+</tr>
+<tr>
+<td>Scale — the decision point</td>
+<td style="text-align: right;">20,000–200,000</td>
+<td>admission control with degrade levels, second-level smoothing, sibling fallbacks, compaction and caching; the hosted/self-hosted arithmetic on the customer's numbers (the fleet wins below about $4.95 per GPU-hour); then a negotiated limit plus the Priority Tier, or committed GPUs in-region with policy-gated spill-over</td>
+<td>llm-d or KServe until the fleet passes about ten replicas</td>
+</tr>
+<tr>
+<td>Sovereign and enterprise</td>
+<td style="text-align: right;">&gt; 200,000, multi-brand, hard residency</td>
+<td>a fleet sized for the peak in-country on committed terms, an inference gateway with cache-aware routing and priority, per-tenant quotas and cost allocation, a second availability zone, a custom model when the measured problem is quality in the customer's domain or languages</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p class="lede">The order of adoption matters: durability before admission control, admission control before any capacity purchase, a capacity purchase — the ticket or the GPUs — before a second region. Each stage is triggered by a measurement, and the design should name it: the queue when the peak-hour p95 crosses the budget; the rate-limit request when the pilot's traffic shape is stable; GPUs when the residency policy says the data may not leave, or when the customer's GPU price is under the break-even and the volume clears the two-replica floor; a second zone when the availability target says so. Custom models enter late and for a different reason: Forge (17 March 2026; TCS was its first GSI in Asia-Pacific) addresses quality — a Singapore agent that must handle Singlish, Malay and Tamil, or a domain vocabulary the base model gets wrong — and changes the fleet arithmetic only in that a custom model has to be self-hosted or run on Mistral's dedicated deployments, so its GPUs are in the plan from the start.</p>
+</div>
+</section>
+<section class="part" id="p8">
+<p class="part-label">Part 8</p>
+<h2>The deployment conversation</h2>
+<h3 id="s8-1">8.1 The 45-minute flow for "size, cost and choose the path for this customer"</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Minutes</th>
+<th>Move</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–3</td>
+<td>Restate the ask; name the unit of work (the turn), the binding constraint (tokens per minute) and the decision to make (which way to pay for them).</td>
+</tr>
+<tr>
+<td>3–12</td>
+<td>Discovery (Part 2), data policy first: what may leave the country, what may reach a shared API, what the risk function has signed. Then volume, peak ratio, incident behaviour, turn shape, latency target.</td>
+</tr>
+<tr>
+<td>12–20</td>
+<td>The arithmetic (Part 3): rates → tokens → Little's law → the rate-limit request → cost per conversation → the replica table → the fleet → the break-even GPU price. Both columns, side by side.</td>
+</tr>
+<tr>
+<td>20–28</td>
+<td>The path: hosted, self-hosted or hybrid with the monthly number next to each; the delivery team's assets (Kubernetes practice, GPU price and term, a sovereign-cloud relationship); the licence for the escalation model.</td>
+</tr>
+<tr>
+<td>28–36</td>
+<td>The architecture (Part 4) with the specifics in each box; which parts are boring and which are hard.</td>
+</tr>
+<tr>
+<td>36–41</td>
+<td>Two deep dives chosen by risk: usually admission and degradation with the spill-over policy, and either the vLLM and Kubernetes settings or durable execution.</td>
+</tr>
+<tr>
+<td>41–44</td>
+<td>Failure modes, the growth path, week-one measurements, the "not in v1" list.</td>
+</tr>
+<tr>
+<td>44–45</td>
+<td>The decision, its price, and the one thing to validate first — <code>vllm bench serve</code> on the customer's GPUs, or a load test against the granted limit — with a date.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="s8-2">8.2 Questions that change the design</h3>
+<div class="prose">
+<p>"Which data may leave Singapore, and which may reach a shared API at all?" (the path, and the spill-over rule). "Is ten seconds with progress events acceptable, or is six seconds a contract?" (the batch target, and three to four times the GPUs if it is). "What is the daily volume?" (the two-replica floor is amortised above 14–25 k a day; above that, the GPU price decides). "What does the customer pay for an H100-hour, and on what term?" (under about $4.95 the fleet beats the API; at $6.88 on-demand it costs $15.5 k a month more). "Do you want Medium 3.5 on your own GPUs?" (a commercial licence and an eight-GPU replica). "Which organisation holds the Mistral keys, and which tier is it on?" (the limit is shared and console-only). "Do you need an SLA?" (the Priority Tier at +75 %, or the fleet). "What happens to traffic during an outage?" (the incident factor, and the traffic that may spill). "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch). "What must never happen twice?" (idempotency scope).</p>
+</div>
+<h3 id="s8-3">8.3 Anchors to keep in your head</h3>
+<div class="prose">
+<p>The numbers to carry into a design review, all from <code>docs/03-capacity-plan.md</code>: 5 k tokens in (2.7 k cached) and 200 out per call; 15 / 46 / 153 calls a second and 4.9 / 14.3 / 47.7 M TPM at average, peak and incident; 42 / 125 / 417 turns in flight at 6 s (sessions are eleven times that); the request of 60 RPS, 19 M TPM and 209 B tokens a month; 175 turns in flight from a 20 M TPM limit; $0.0067 a conversation on cached Small 4 and $0.0131 for the planning mix ($39.7 k a month), with Medium 3.5 at 10.6× Small 4 per call so that 10 % of calls is 54 % of the bill; a Ministral 3 14B replica at 10 / 20 / 37 ms per token for batch 1 / 24 / 64 and 1,200 tokens a second at batch 24 (estimates); a fleet of 4 / 11 / 34 H100s, $55.2 k a month on-demand, 293 in flight, a 10 s turn, 28 % utilised, 0.16 GPU-minutes a conversation; the break-even GPU price of about $4.95 an hour (AWS on-demand $6.88 is 1.39× the API, capacity blocks and three-year commitments 0.95–1.09×, neoclouds 0.76×) and the two-replica floor of 14–25 k conversations a day; a six-second turn needing batch 3–5 and 30–46 GPUs, or EAGLE, or Small 4 at 26; vLLM 0.29's unlimited queueing unless <code>--max-num-queued-reqs</code> is set; the saturation thresholds of queue 5 and KV 0.8; the 3–8-minute cold start; <code>mistralai</code> 2.10.1 with retries off and a 300 s timeout; and the simulation regimes of 1.6 and sovereignty facts of 1.8.</p>
+</div>
+<h3 id="s8-4">8.4 Two conversations, worked in outline</h3>
+<div class="prose">
+<p><strong>A Singapore bank, through a GSI, with a hard residency requirement.</strong> The GSI's architect brings a retail-bank service agent at 30,000 conversations a day, "all customer data stays in Singapore" from the risk function citing the MAS guidelines, and a three-nines availability target. Settle the policy first: no personal data reaches a shared API, so the fleet is the design and the API half exists only for traffic that carries none. Then the arithmetic at 0.3× the anchor: 4.6 / 13.8 / 46 calls a second and 1.4 / 4.3 / 14.3 M TPM; the hosted mix would be $11.9 k a month. A Ministral 3 14B fleet at the 20 ms target needs 2 / 4 / 11 replicas — four H100s at peak, five with N+1 across two zones — at about $20 k a month on-demand and $14 k on a three-year commitment, 38 % utilised; the break-even price at this volume is about $4.08 a GPU-hour, so sovereignty costs the bank roughly $8 k a month on on-demand GPUs and about $2 k on committed ones, and that is the number the decision turns on. The GPUs sit in the bank's own cloud tenancy or on Singtel RE:AI, whose Johor and Batam sites the same policy rules out. Medium 3.5 on the bank's GPUs needs a commercial licence and an eight-GPU replica, so the escalation model is Small 4 on pairs of H100s under Apache 2.0 (three replicas, six GPUs at peak, about $30 k). The spill-over is the outage bulletin and knowledge-base traffic on redacted text, with the rule written with the risk function. The GSI runs the estate and the on-call; Mistral brings the models, the reference architecture, the benchmark and, later, the Forge conversation when the measured problem becomes Singlish and Malay quality. Validate first: <code>vllm bench serve</code> on the bank's GPU SKU, and the spill-over rule.</p>
+<p><strong>A regional retailer with no residency requirement.</strong> A boutique SI brings an e-commerce support agent across Singapore, Malaysia and Indonesia at 200,000 conversations a day; discovery finds that Indonesia localises certain data types by sector, so that market may carry a partial requirement — check before promising a single design. At 2× the anchor: 31 / 92 / 306 calls a second, a rate-limit request of 120 RPS and 38 M TPM, a hosted mix of $79.5 k a month against a peak fleet of 21 H100s at $105 k on-demand, $72–75 k on capacity blocks or three-year terms and $57 k on a neocloud — the break-even price at this volume is $5.19 an hour, so committed GPUs beat the API by $5–7 k a month and on-demand ones cost $26 k more. The recommendation is still API-first for the launch — Small 4 with <code>prompt_cache_key</code>, Medium 3.5 for escalations, sibling fallback to Ministral 3 8B, the ticket filed the week the pilot's shape is stable, no Priority Tier until a measured 429 rate justifies +75 % — with the fleet built in as a routing-table entry and a review once the SI can quote a committed GPU price. The failure to design for is the 429 storm at 306 calls a second against a 120 RPS limit: admission control, degrade levels, and a sale-day plan that pre-arranges burst headroom with Mistral.</p>
+</div>
+<h3 id="s8-5">8.5 Quick-fire</h3>
+<div class="prose">
+<p><em>Why not just add GPUs?</em> Because at on-demand prices a peak-sized fleet is 28 % utilised and costs 1.39× the API; add GPUs when residency says so or the customer's GPU price is under about $4.95 an hour and the volume clears the two-replica floor. <em>What does vLLM do when overloaded?</em> Queues forever and slows everyone down unless <code>--max-num-queued-reqs</code> is set; it never returns 429. <em>What limit do you ask Mistral for?</em> 60 RPS, 19 M TPM, 209 B tokens a month, before the pilot ends. <em>Can the customer self-host Medium 3.5?</em> Only with a commercial licence above $20 M of monthly revenue, on eight GPUs a replica. <em>Hosted or self-hosted?</em> Residency first, then the GPU price against the $4.95 break-even, then latency control and customisation; hybrid when the base load is steady and the policy lets some traffic leave. <em>When does Forge enter?</em> When the measured problem is quality in the customer's domain or languages, not capacity. <em>What do you measure in week one?</em> Pushback ratio, queue age, degrade-level minutes, p95 by step, cost per conversation, cached-token share, KV usage per replica, and the API's share of calls.</p>
+</div>
+<aside class="callout pitfall"><span class="label">Pitfall</span><p>Quoting a p95 without a step breakdown, a fleet size without the batch and time-per-token behind it, a GPU price without its term and region, a cost without the token shape behind it, or "we'll shed load" without saying what the user sees and when they can retry.</p></aside>
+<div class="prose">
+<hr />
+</div>
+</section>
+<section class="part" id="p9">
+<p class="part-label">Part 9</p>
+<h2>Mistral's stack and the customer's, mapped to the mechanisms</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>Hosted (Mistral API / marketplace)</th>
+<th>Self-hosted (vLLM on Kubernetes)</th>
+<th>The setting that matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model capacity</td>
+<td>per-model RPS, TPM and monthly limits by billing tier (console-only); the support request; Priority Tier via <code>service_tier="auto"</code> (×1.75, custom limits, SLA); marketplace quotas</td>
+<td>replicas × batch at the target time per token; a static GPU pool for the peak; KEDA for headroom</td>
+<td>the ticket (60 RPS, 19 M TPM) vs <code>--max-num-seqs</code> and the replica count</td>
+</tr>
+<tr>
+<td>Pushback</td>
+<td>429, no documented <code>Retry-After</code></td>
+<td>503 with <code>--max-num-queued-reqs</code>; silent queueing without it</td>
+<td>pushback ratio 5 % (level 1) and 15 % (level 2)</td>
+</tr>
+<tr>
+<td>Smoothing and fairness</td>
+<td>a Lua token bucket per model in Redis; per-tenant buckets</td>
+<td>the same, plus the inference extension's flow control (alpha) with fairness ids and priority</td>
+<td>rate = your share of the limit; capacity ≈ 6 s</td>
+</tr>
+<tr>
+<td>Caching</td>
+<td><code>prompt_cache_key</code>, 64-token blocks, cached input at 10 %, <code>usage.prompt_tokens_details.cached_tokens</code></td>
+<td>prefix caching on by default; cache-aware routing in llm-d / the inference extension</td>
+<td>the stable prefix first; the prompt version in the key</td>
+</tr>
+<tr>
+<td>SDK and client</td>
+<td><code>mistralai</code> 2.10.1 (<code>from mistralai.client import Mistral, errors</code>; <code>server="global"</code>, <code>"eu"</code>, <code>"us"</code>; retries off; 300 s timeout)</td>
+<td>OpenAI-compatible <code>/v1/chat/completions</code>; <code>--enable-auto-tool-choice --tool-call-parser mistral</code></td>
+<td>retries in the model gateway only; a 30 s per-call timeout</td>
+</tr>
+<tr>
+<td>Compute</td>
+<td>none for the model; the estate on any Kubernetes</td>
+<td>GPU node pools in-region (AWS p5, GCP a3, Azure ND H200 v5; Singtel RE:AI); vLLM, llm-d or KServe; NIM under NVIDIA AI Enterprise</td>
+<td>static peak capacity; PodDisruptionBudgets; a 3–8-minute cold start</td>
+</tr>
+<tr>
+<td>Governance</td>
+<td>Agents &amp; Conversations API (<code>client.beta.*</code>), Connectors for MCP (public preview), AI Studio's Agent Runtime and AI Registry, Moderation 2; SOC 2 Type II, ISO 27001/27701; ZDR on pay-as-you-go stateless endpoints only</td>
+<td>the customer's own registry and network policies; the weights' licence (Apache 2.0; Modified MIT on Medium 3.5)</td>
+<td>the ZDR scope; the licence gate</td>
+</tr>
+<tr>
+<td>Delivery and cost</td>
+<td>pinned dated model ids; the changelog; Batch at −50 %; the workspace spending cap</td>
+<td>canary per replica; <code>vllm bench serve</code> per release; the GPU term against the $4.95 break-even</td>
+<td>cost per conversation vs tokens per GPU-hour</td>
+</tr>
+<tr>
+<td>Sovereignty</td>
+<td>global endpoint EU-hosted; regional EU/US at +10 %; no APAC endpoint; Bedrock Tokyo/Mumbai/Sydney, watsonx Sydney</td>
+<td>in-country GPUs; a partner sovereign cloud (Singtel RE:AI); air-gapped patterns already in the region (HTX, MINDEF)</td>
+<td>which traffic may spill, in writing</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose">
+<p class="lede">For a delivery team on a specific cloud the mechanisms translate one to one: token buckets and breakers are yours to write anywhere; RabbitMQ ↔ SQS, Service Bus or Pub/Sub; Postgres and Redis ↔ their managed equivalents; the GPU node pool ↔ that cloud's accelerator instances or its Mistral marketplace listing; the Priority Tier ↔ provisioned throughput on a marketplace. The design is the customer's, not the vendor's — which is the point of an open-weight model.</p>
+</div>
+</section>
+<section class="part" id="sources">
+<p class="part-label">Appendix</p>
+<h2>Sources and verify list</h2>
+<div class="prose">
+<p class="lede">Official pages read on 19 September 2026: Mistral docs (models index and changelog, model pages, pricing, prompt caching, regional inference, the Priority Tier, Batch, known limitations, tier and usage-limit pages, the Agents API and Connectors, the chat endpoint reference, the Studio, AI Cloud and self-deployment pages), the Mistral help centre and status page, the <code>mistralai</code> SDK on PyPI and its source; Hugging Face model cards, configs and the Medium 3.5 licence; vLLM 0.29 release notes, source and docs and pull requests #49445, #56758 and #55812; the vLLM production-stack KEDA guide, llm-d releases, the Gateway API Inference Extension docs and the KServe 0.17 release notes; NVIDIA NIM, NGC, GPU and MIG pages and the Run:ai model-streamer post; AWS Bedrock model cards and pricing, EC2 Capacity Blocks pricing and the EKS machine-learning node-pool guidance; the Azure Retail Prices API and Foundry region table; Google Cloud accelerator pricing; Lambda, CoreWeave, RunPod and Nebius pricing; Snowflake Cortex regional availability; the ScaleOps cold-start article; press releases from Singtel, TCS, NTT DATA, Accenture and NCS; MAS on the AI risk-management guidelines and toolkit; the Pertama Partners APAC AI-regulation guide; the OpenTelemetry GenAI semantic conventions.</p>
+<p>Re-check before relying on any of it: list prices (the pricing page carries no date), the cached-input rule, cache-write price and cache lifetime; model ids — Medium 3.5's <code>mistral-medium-3-5</code> versus the <code>mistral-medium-2604</code> spelling seen on third-party sites, and what the <code>-latest</code> aliases resolve to; paid-tier RPS and TPM numbers in the console, the tier numbering and whether the limit scopes to the workspace or the organisation; the 429 response headers; Priority Tier status (GA or public preview), its SLA (99.5 % in the docs, 99.9 % on the AI Cloud page) and eligible models; the regional endpoints' feature gaps and model list; Batch limits (1 M or 100 k requests per file); the Agents API and Connectors labels; any deprecation notice period; Bedrock's region table (Singapore) and whether Medium 3.5 or Small 4 have arrived, and Foundry's APAC rows; vLLM flags and defaults after 0.29 (<code>--max-num-active-seqs</code> and <code>vllm:admission_rejections_total</code> were pending) and the <code>_total</code> suffix on counters; the release years of llm-d v0.9.0 and the inference extension v1.5.0; GPU prices — the break-even of $4.95 per GPU-hour makes the customer's actual H100 price the fact that decides the path — in particular AWS p5 on-demand in ap-southeast-1, Azure ND H100 v5's absence from Southeast Asia and capacity-block regions; Singtel RE:AI's capacity and terms; the final status of the MAS guidelines; the <code>mistralai</code> SDK's version and import paths.</p>
+</div>
+<div class="footer"><p>The Mistral edition of the <em>Agentic Scaling Primer</em>. The core concepts in code, the capacity and replica models and the four practice notebooks are in the <code>agentic-scaling-lab-mistral</code> repository; every number in this text is produced by <code>python -m scalelab.capacity</code> or by the lab's load generator, and the self-hosted throughput figures are first-principles estimates until <code>vllm bench serve</code> replaces them.</p></div>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+  // Line numbers + light Python highlighting for code blocks
+  var KW = /\b(def|class|return|if|elif|else|for|while|try|except|finally|raise|with|as|import|from|async|await|lambda|yield|pass|break|continue|not|and|or|in|is|None|True|False|global|nonlocal|del|assert)\b/g;
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function hl(line){
+    var out='', i=0, s=line;
+    // comments
+    var ci = s.indexOf('#');
+    var code = ci>=0 ? s.slice(0,ci) : s, com = ci>=0 ? s.slice(ci) : '';
+    // strings (simple: no escapes across quotes)
+    var parts = code.split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/);
+    for(i=0;i<parts.length;i++){
+      var p=parts[i];
+      if(i%2===1){ out+='<span class="tok-str">'+esc(p)+'</span>'; continue; }
+      var e=esc(p);
+      e=e.replace(/(^|\s)(@[A-Za-z_][\w.]*)/g,'$1<span class="tok-dec">$2</span>');
+      e=e.replace(KW,'<span class="tok-kw">$1</span>');
+      e=e.replace(/\b(\d+(?:\.\d+)?)\b/g,'<span class="tok-num">$1</span>');
+      e=e.replace(/\b([A-Za-z_]\w*)(?=\()/g,'<span class="tok-fn">$1</span>');
+      out+=e;
+    }
+    if(com) out+='<span class="tok-com">'+esc(com)+'</span>';
+    return out;
+  }
+  try{
+    document.querySelectorAll('pre code').forEach(function(c){
+      var py = c.classList.contains('py');
+      var numbered = c.classList.contains('num');
+      var lines = c.textContent.replace(/\n$/,'').split('\n');
+      var html = lines.map(function(l,idx){
+        var body = py ? hl(l) : esc(l);
+        return '<span class="line">'+(numbered?'<span class="n">'+(idx+1)+'</span>':'')+body+'</span>';
+      }).join('\n');
+      c.innerHTML = html;
+    });
+  }catch(e){}
+  // Active TOC highlighting: prefer the deepest visible subsection
+  try{
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {};
+    links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+    var targets = Object.keys(map).map(function(id){return document.getElementById(id);}).filter(Boolean);
+    var visible = {};
+    function pick(){
+      var subs = targets.filter(function(t){return visible[t.id] && t.tagName === 'H3';});
+      var parts = targets.filter(function(t){return visible[t.id] && t.tagName !== 'H3';});
+      var chosen = subs.length ? subs[subs.length-1] : (parts.length ? parts[parts.length-1] : null);
+      if(!chosen) return;
+      links.forEach(function(a){a.classList.remove('active');});
+      map[chosen.id].classList.add('active');
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ visible[en.target.id] = en.isIntersecting; });
+      pick();
+    },{rootMargin:'-5% 0px -70% 0px',threshold:0});
+    targets.forEach(function(t){io.observe(t);});
+  }catch(e){}
+})();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.15.0/mermaid.min.js"></script>
+<script>if(window.mermaid){mermaid.initialize({startOnLoad:true,theme:"neutral"});}</script>
+</body>
+</html>

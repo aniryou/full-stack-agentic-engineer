@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+.env
+sessions.db
+.paused.json
+.terraform/
+*.tfstate*

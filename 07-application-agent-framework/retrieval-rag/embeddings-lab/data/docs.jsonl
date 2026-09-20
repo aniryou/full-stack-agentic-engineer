@@ -1,0 +1,36 @@
+{"id": "c01", "title": "Dialing in grind size", "text": "Adjust the grinder finer if the shot runs fast and sour. Coarser grind slows extraction and reduces bitterness in espresso."}
+{"id": "c02", "title": "Water temperature for brewing", "text": "Brew coffee between 92 and 96 celsius. Water that is too hot scalds the grounds and water that is too cool under extracts."}
+{"id": "c03", "title": "Removing mineral buildup", "text": "Hard water leaves limescale inside the brewer boiler and the brew unit. Flush the system monthly with a citric solution to dissolve the mineral buildup and restore flow."}
+{"id": "c04", "title": "Steam wand care", "text": "Purge the steam wand after every use and wipe it with a damp cloth so milk residue does not clog the tip."}
+{"id": "c05", "title": "Descaling guide", "text": "To descale the espresso machine, run the descale program with descaling solution. Descaling removes limescale and mineral buildup from the boiler."}
+{"id": "c06", "title": "Storing coffee beans", "text": "Keep beans in an airtight opaque container away from heat and light. Do not refrigerate beans because moisture ruins the aroma."}
+{"id": "c07", "title": "Error E-4417 water sensor", "text": "The display shows error code E-4417 when the machine stops. Reseat the water tank firmly and restart the machine to clear the error code."}
+{"id": "c08", "title": "Error E-4471 pump fault", "text": "The display shows error code E-4471 when the machine stops. Power cycle the pump unit and restart the machine to clear the error code."}
+{"id": "c09", "title": "Milk frothing basics", "text": "Stretch the milk with the wand tip near the surface, then submerge to spin a whirlpool until the jug is hot to the touch."}
+{"id": "c10", "title": "Portafilter cleaning", "text": "Soak the portafilter and basket in cleaning powder weekly. Coffee oils build up and turn shots rancid if the basket is dirty."}
+{"id": "c11", "title": "Choosing a burr grinder", "text": "Flat burrs give clarity while conical burrs give body. For espresso a stepless burr grinder allows fine adjustment."}
+{"id": "c12", "title": "Pre infusion explained", "text": "Pre infusion wets the puck at low pressure before full pressure, reducing channeling and evening out extraction."}
+{"id": "h01", "title": "Steep ridge climb", "text": "The ridge trail is steep and exposed, gaining 900 meters over rocky switchbacks. Only experienced hikers should attempt this steep route in wet weather."}
+{"id": "h02", "title": "Gentle valley loop", "text": "The valley loop is a flat easy walk beside the river, suitable for families. The gentle path has shade, benches, and no significant climbing."}
+{"id": "h03", "title": "Day hike packing list", "text": "Carry water, snacks, a rain shell, sunscreen, a map, and a headlamp. Pack layers because mountain weather changes quickly on a day hike."}
+{"id": "h04", "title": "Altitude sickness symptoms", "text": "Above 2500 meters watch for headache, nausea, dizziness, and poor sleep. Altitude sickness improves by descending and resting."}
+{"id": "h05", "title": "Leave no trace", "text": "Pack out all rubbish, stay on marked trails, and keep distance from wildlife so the trail stays wild for others."}
+{"id": "h06", "title": "Waterfall boardwalk", "text": "A short boardwalk leads to the waterfall viewpoint. The path is flat and wheelchair accessible with railings the whole way."}
+{"id": "h07", "title": "Trail running shoes", "text": "Trail shoes need aggressive lugs for grip on mud and a rock plate to protect the foot on technical ground."}
+{"id": "h08", "title": "River crossing safety", "text": "Unbuckle your pack, face upstream, and use poles. Never cross a river above knee depth after heavy rain."}
+{"id": "h09", "title": "Sunrise summit tips", "text": "Start hiking two hours before dawn with a headlamp. The summit is cold before sunrise so bring an insulated jacket."}
+{"id": "h10", "title": "Camping permits", "text": "Overnight camping in the reserve requires a permit booked online. Rangers check permits at the trailhead on weekends."}
+{"id": "h11", "title": "Blister prevention", "text": "Tape hot spots early, wear wool socks, and lace the heel lock. Wet skin blisters faster so change socks at lunch."}
+{"id": "h12", "title": "Navigation basics", "text": "Orient the map to north with a compass and tick off features as you pass. GPS batteries die, paper does not."}
+{"id": "m01", "title": "What is overfitting", "text": "Overfitting is when a model memorizes training data and fails on new data. The training loss keeps falling while validation loss rises."}
+{"id": "m02", "title": "Precision versus recall", "text": "Precision is the fraction of predicted positives that are correct. Recall is the fraction of true positives that are found. Raising one usually lowers the other."}
+{"id": "m03", "title": "Learning rate too high", "text": "If the learning rate is too high the loss oscillates or diverges. Warmup and decay schedules keep optimization stable."}
+{"id": "m04", "title": "Regularization overview", "text": "Weight decay, dropout, and early stopping all limit model capacity to reduce overfitting and improve generalization."}
+{"id": "m05", "title": "Train test split", "text": "Hold out a test set that is never used for tuning. Leakage between splits inflates reported accuracy."}
+{"id": "m06", "title": "Batch size effects", "text": "Large batches give smoother gradients but may generalize worse. Small batches add noise that can act as regularization."}
+{"id": "m07", "title": "Cross validation", "text": "K fold cross validation rotates the held out fold so every example is tested once, giving a better estimate on small datasets."}
+{"id": "m08", "title": "Class imbalance", "text": "With rare positives, accuracy is misleading. Use precision, recall, and resampling or class weights instead."}
+{"id": "m09", "title": "Feature scaling", "text": "Standardize features to zero mean and unit variance so gradient descent converges faster and distances are comparable."}
+{"id": "m10", "title": "Confusion matrix", "text": "A confusion matrix counts true positives, false positives, true negatives, and false negatives for a classifier."}
+{"id": "m11", "title": "Early stopping", "text": "Stop training when validation loss stops improving for several epochs and keep the best checkpoint."}
+{"id": "m12", "title": "Gradient clipping", "text": "Clip the gradient norm to a threshold to prevent exploding gradients in recurrent networks and transformers."}

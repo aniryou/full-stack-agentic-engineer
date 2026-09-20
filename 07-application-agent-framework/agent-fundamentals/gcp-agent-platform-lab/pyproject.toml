@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentlab"
+version = "0.1.0"
+description = "Hands-on lab for agent platforms on Google Cloud: a small agent runtime, MCP/OAuth teaching implementations, evals, tracing, reliability, and practice notebooks."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "pydantic>=2.5",
+  "httpx>=0.25",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-asyncio>=0.23",
+  "nbformat>=5.9",
+  "nbclient>=0.9",
+  "ipykernel>=6.25",
+  "jupyterlab>=4.0",
+]
+gemini = [
+  "google-genai>=1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["agentlab*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "slow: executes notebooks end to end",
+]

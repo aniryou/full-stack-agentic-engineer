@@ -1,0 +1,18 @@
+# Runtime requirements for the agent on Agent Engine (Terraform path B `requirements_file`,
+# and the `requirements` list in deploy_agent_engine.py). Mirrors pyproject.toml + the `gcp`
+# extra; keep the two in sync. Versions per docs/sources.md (PyPI, 5 Sep 2026).
+google-cloud-aiplatform[agent_engines,adk]>=2.0
+google-adk[agent-identity,mcp]>=2.8.0
+mcp>=1.27,<2
+a2a-sdk>=1.1
+google-auth>=2.30
+google-cloud-secret-manager>=2.20
+google-cloud-modelarmor>=0.2
+google-cloud-logging>=3.10
+PyJWT[crypto]>=2.9
+cryptography>=43
+pydantic>=2.7
+PyYAML>=6.0
+httpx>=0.27
+starlette>=0.40
+uvicorn>=0.30

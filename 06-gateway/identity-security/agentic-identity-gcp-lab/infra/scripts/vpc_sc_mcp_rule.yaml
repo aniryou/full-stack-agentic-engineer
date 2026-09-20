@@ -1,0 +1,49 @@
+# VPC Service Controls egress rule: "every agent in this project may only call READ-ONLY tools
+# on the tickets MCP server" — the perimeter-level twin of the tool tiers in
+# policies/support-agent.yaml (primer §4.2, §8).
+#
+# Apply in dry-run first (the perimeter is created by infra/terraform/vpc_sc.tf):
+#   gcloud access-context-manager perimeters dry-run update agentsec_<PROJECT_NUMBER> \
+#       --policy=<ACCESS_POLICY_ID> --set-egress-policies=infra/scripts/vpc_sc_mcp_rule.yaml
+#   # ... inspect "dry run" violations in Cloud Logging, then enforce:
+#   gcloud access-context-manager perimeters dry-run enforce agentsec_<PROJECT_NUMBER> --policy=<ACCESS_POLICY_ID>
+#
+# Replace: ORG_ID, PROJECT_NUMBER (the agents' project), MCP_PROJECT_NUMBER (project hosting
+# the Cloud Run MCP server — may be the same number).
+#
+# Identity forms verified from the VPC-SC "Supported identities" page:
+#   principal://TRUST_DOMAIN/resources/aiplatform/projects/N/locations/L/reasoningEngines/ID   (one agent)
+#   principalSet://TRUST_DOMAIN/attribute.platformContainer/aiplatform/projects/N              (all agents in a project)
+#   principalSet://TRUST_DOMAIN/*                                                                (all agents in the trust domain)
+
+- title: agents-to-mcp-readonly-tools
+  egressFrom:
+    identities:
+      - principalSet://agents.global.org-ORG_ID.system.id.goog/attribute.platformContainer/aiplatform/projects/PROJECT_NUMBER
+  egressTo:
+    resources:
+      - projects/MCP_PROJECT_NUMBER
+    operations:
+      - serviceName: run.googleapis.com
+        methodSelectors:
+          - method: "*"
+  # ------------------------------------------------------------------------------------------
+  # VERIFY: MCP attribute conditions. The 27 Jun 2026 VPC-SC announcement adds conditional
+  # access on MCP attributes `mcp.toolName`, `mcp.method` and `mcp.tool.isReadOnly` for
+  # ingress/egress rules, but the rule-file syntax was not confirmable from the docs snapshot
+  # in docs/sources.md. Two candidate shapes, keep the one the current reference documents:
+  #
+  # (a) a CEL condition on the rule, attribute names as announced:
+  #   condition: >-
+  #     mcp.method == 'tools/call' && mcp.tool.isReadOnly == true
+  #
+  # (b) the IAM-conditions spelling used by "Control MCP use with IAM" (deny policies):
+  #   condition: >-
+  #     api.getAttribute('mcp.googleapis.com/tool.isReadOnly', false) == true
+  #     && api.getAttribute('mcp.googleapis.com/tool.name', '') in ['get_ticket', 'list_tickets']
+  #
+  # Either way the intent is: allow tools/call only for tools whose annotations say
+  # readOnlyHint = true (get_ticket, list_tickets); refund_ticket (destructiveHint) is NOT
+  # reachable from the perimeter no matter what the model decides. The server's annotations
+  # (src/agentsec/mcp/server.py) and the registry TOOL_SPEC (agent_registry.tf) must agree.
+  # ------------------------------------------------------------------------------------------

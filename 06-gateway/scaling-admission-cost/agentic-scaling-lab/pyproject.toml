@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scalelab"
+version = "0.2.0"
+description = "The core concepts of scaling agentic solutions, in a few hundred lines of Python, with practice notebooks."
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pandas>=2.2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "matplotlib>=3.8", "nbformat>=5.10", "nbconvert>=7.16", "ipykernel>=6.29"]
+gcp = ["google-genai>=2.20,<3"]
+
+[tool.setuptools]
+packages = ["scalelab"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

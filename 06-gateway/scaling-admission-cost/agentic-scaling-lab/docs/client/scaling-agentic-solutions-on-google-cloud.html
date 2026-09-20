@@ -1,0 +1,1346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scaling Agentic Solutions on Google Cloud</title>
+<meta name="description" content="A primer for architects and engineering leads on scaling agent systems on Google Cloud: capacity arithmetic, reference architecture, scaling mechanisms and failure modes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+
+:root{
+  --bg:#F6F7F5; --surface:#FFFFFF; --surface-2:#EEF1EE; --surface-3:#E4E9E6;
+  --ink:#171C1F; --ink-2:#3D474C; --muted:#6B767C; --rule:#D7DDDA; --rule-strong:#B8C2BE;
+  --accent:#0B7A75; --accent-ink:#085B57; --accent-soft:#DDEFEC;
+  --warn:#B45309; --warn-soft:#FBEEDC; --bad:#B3261E; --bad-soft:#F9E3E1; --good:#2E7D32; --good-soft:#E3F1E4;
+  --code-bg:#EEF2EF; --code-ink:#1B2A2E; --kw:#0B5FA5; --str:#8A3B12; --com:#6B767C; --num:#6D28D9; --fn:#085B57;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --measure:70ch; --wide:980px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1417; --surface:#151B1F; --surface-2:#1C2429; --surface-3:#243037;
+    --ink:#E5EAEC; --ink-2:#B9C3C8; --muted:#86939A; --rule:#2A343A; --rule-strong:#3B4850;
+    --accent:#4FC1B8; --accent-ink:#7BD3CB; --accent-soft:#143A38;
+    --warn:#E9A23B; --warn-soft:#3A2A12; --bad:#F08A80; --bad-soft:#3D1F1C; --good:#7BC67E; --good-soft:#17301A;
+    --code-bg:#0B0F12; --code-ink:#D9E1E4; --kw:#7CB7EA; --str:#E0A374; --com:#7F8C93; --num:#C4A7F5; --fn:#7BD3CB;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1417; --surface:#151B1F; --surface-2:#1C2429; --surface-3:#243037;
+  --ink:#E5EAEC; --ink-2:#B9C3C8; --muted:#86939A; --rule:#2A343A; --rule-strong:#3B4850;
+  --accent:#4FC1B8; --accent-ink:#7BD3CB; --accent-soft:#143A38;
+  --warn:#E9A23B; --warn-soft:#3A2A12; --bad:#F08A80; --bad-soft:#3D1F1C; --good:#7BC67E; --good-soft:#17301A;
+  --code-bg:#0B0F12; --code-ink:#D9E1E4; --kw:#7CB7EA; --str:#E0A374; --com:#7F8C93; --num:#C4A7F5; --fn:#7BD3CB;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;font-variation-settings:"opsz" 16;-webkit-font-smoothing:antialiased}
+a{color:var(--accent-ink);text-decoration-color:color-mix(in srgb,var(--accent) 45%,transparent);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+strong{font-weight:650}
+em{font-style:italic}
+code,kbd{font-family:var(--mono);font-size:.86em;background:var(--code-bg);color:var(--code-ink);padding:.08em .35em;border-radius:3px}
+pre{margin:0;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.55;tab-size:4}
+pre code{background:none;padding:0;font-size:inherit;color:inherit}
+.line{display:inline;white-space:pre}
+.line .n{display:inline-block;width:2.6em;margin-right:1em;text-align:right;color:var(--muted);user-select:none;border-right:1px solid var(--rule);padding-right:.6em}
+.tok-kw{color:var(--kw);font-weight:500}.tok-str{color:var(--str)}.tok-com{color:var(--com);font-style:italic}.tok-num{color:var(--num)}.tok-fn{color:var(--fn)}.tok-dec{color:var(--num)}
+.shell{display:grid;grid-template-columns:272px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--rule);background:var(--surface);padding:28px 20px 40px}
+.rail .brand{font-family:var(--display);font-variation-settings:"wdth" 88;font-weight:700;font-size:15px;letter-spacing:.01em;color:var(--ink);margin:0 0 4px}
+.rail .brand-sub{font-family:var(--display);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 22px}
+.rail nav ol{list-style:none;margin:0;padding:0}
+.rail nav>ol>li{margin:0 0 10px}
+.rail nav a{display:block;text-decoration:none;color:var(--ink-2);font-family:var(--display);font-variation-settings:"wdth" 92;font-size:13.5px;line-height:1.35;padding:4px 8px;border-radius:4px;border-left:2px solid transparent}
+.rail nav>ol>li>a{font-weight:650;color:var(--ink)}
+.rail nav ol ol{margin:2px 0 0 6px}
+.rail nav ol ol a{font-weight:450;font-size:12.75px;padding:3px 8px;color:var(--muted)}
+.rail nav a:hover{background:var(--surface-2);color:var(--ink)}
+.rail nav a.active{border-left-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
+.rail .num{display:inline-block;min-width:2.1em;color:var(--muted);font-variant-numeric:tabular-nums}
+.content{padding:0 48px 96px;min-width:0}
+.masthead{padding:52px 0 36px;border-bottom:1px solid var(--rule);margin-bottom:40px;max-width:var(--wide)}
+.eyebrow{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);font-weight:650;margin:0 0 14px}
+h1{font-family:var(--display);font-variation-settings:"wdth" 86;font-weight:800;font-size:clamp(34px,4.6vw,50px);line-height:1.05;letter-spacing:-.015em;margin:0 0 18px;text-wrap:balance;color:var(--ink)}
+.standfirst{font-size:20px;line-height:1.5;color:var(--ink-2);max-width:var(--measure);margin:0 0 26px;font-variation-settings:"opsz" 20}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;max-width:var(--wide)}
+.legend div{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;background:var(--surface);font-size:14.5px;line-height:1.45}
+.legend .tag{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px}
+.legend .t-room{color:var(--accent-ink)}.legend .t-num{color:var(--ink)}.legend .t-verify{color:var(--warn)}.legend .t-bug{color:var(--bad)}
+.meta{font-family:var(--display);font-size:12.5px;color:var(--muted);margin-top:20px;letter-spacing:.02em}
+section.part{max-width:var(--wide);padding-top:28px;margin-top:20px;border-top:1px solid var(--rule)}
+section.part:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.part-label{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:650;margin:0 0 6px}
+h2{font-family:var(--display);font-variation-settings:"wdth" 88;font-weight:750;font-size:31px;line-height:1.12;letter-spacing:-.01em;margin:0 0 18px;text-wrap:balance;scroll-margin-top:24px}
+h3{font-family:var(--display);font-variation-settings:"wdth" 92;font-weight:680;font-size:21.5px;line-height:1.25;margin:40px 0 12px;text-wrap:balance;scroll-margin-top:24px}
+h4{font-family:var(--display);font-weight:650;font-size:16px;line-height:1.3;margin:26px 0 8px;color:var(--ink)}
+.prose{max-width:var(--measure)}
+p{margin:0 0 16px}
+.prose ul,.prose ol{padding-left:1.3em;margin:0 0 16px}
+.prose li{margin:0 0 7px}
+.prose li::marker{color:var(--muted)}
+.lede{font-size:18.5px;color:var(--ink-2);font-variation-settings:"opsz" 18}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px 12px;border-radius:0 6px 6px 0;margin:22px 0;max-width:var(--measure);font-size:16px;line-height:1.55}
+.callout p:last-child{margin-bottom:0}
+.callout .label{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px;color:var(--accent-ink)}
+.callout.numbers{border-left-color:var(--ink-2);background:var(--surface-2)}
+.callout.numbers .label{color:var(--ink)}
+.callout.numbers table{font-size:14.5px}
+.callout.verify{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.verify .label{color:var(--warn)}
+.callout.pitfall{border-left-color:var(--bad);background:var(--bad-soft)}
+.callout.pitfall .label{color:var(--bad)}
+.callout ul,.callout ol{padding-left:1.2em;margin:0}
+.callout li{margin:0 0 5px}
+.table-wrap{overflow-x:auto;margin:18px 0 26px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.75px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--rule)}
+th{font-family:var(--display);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13.25px;white-space:nowrap}
+td code{white-space:nowrap}
+.wide{max-width:var(--wide)}
+figure{margin:26px 0 30px;max-width:var(--wide)}
+figure svg{max-width:100%;height:auto;display:block;color:var(--ink);font-family:var(--display);font-variation-settings:"wdth" 90}
+figcaption{font-family:var(--display);font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.45;max-width:var(--measure)}
+.codeblock{margin:16px 0 24px;max-width:var(--wide)}
+.codeblock .cap{font-family:var(--display);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:650;margin:0 0 6px}
+details{border:1px solid var(--rule);border-radius:6px;background:var(--surface);margin:14px 0 26px;max-width:var(--wide)}
+summary{cursor:pointer;padding:12px 16px;font-family:var(--display);font-weight:650;font-size:15px;color:var(--accent-ink);list-style:none;display:flex;align-items:center;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s;flex:0 0 auto}
+details[open] summary::before{transform:rotate(45deg)}
+details .body{padding:4px 18px 16px;border-top:1px solid var(--rule)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:15px;margin:0 0 16px}
+.kv dt{font-family:var(--display);font-weight:650;color:var(--ink-2);font-size:13.5px;padding-top:2px}
+.kv dd{margin:0}
+.twocol{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 28px;max-width:var(--wide)}
+.script{font-style:italic;color:var(--ink-2)}
+.smallcaps{font-family:var(--display);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:650}
+.footer{max-width:var(--wide);border-top:1px solid var(--rule);margin-top:56px;padding-top:24px;font-size:14.5px;color:var(--ink-2)}
+.footer ul{padding-left:1.2em}
+.footer li{margin-bottom:5px}
+.toc-mobile{display:none}
+@media (max-width:1100px){
+  .shell{grid-template-columns:1fr}
+  .rail{display:none}
+  .toc-mobile{display:block;max-width:var(--wide);margin:0 0 8px}
+  .toc-mobile summary{font-size:14px}
+  .toc-mobile nav ol{list-style:none;padding:0;margin:0}
+  .toc-mobile nav>ol>li{margin:0 0 8px}
+  .toc-mobile nav a{text-decoration:none;font-family:var(--display);font-size:14px;color:var(--ink)}
+  .toc-mobile nav ol ol{margin:4px 0 0 14px}
+  .toc-mobile nav ol ol a{color:var(--muted);font-size:13px}
+  .content{padding:0 22px 72px}
+  .masthead{padding-top:34px}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .content{padding:0 16px 64px}
+  h2{font-size:26px}
+  .kv{grid-template-columns:1fr;gap:2px 0}
+  .kv dd{margin-bottom:10px}
+}
+@media print{
+  .rail,.toc-mobile{display:none}
+  .shell{display:block}
+  .content{padding:0}
+  body{font-size:11.5pt;background:#fff;color:#000}
+  pre,figure,.callout,.table-wrap,details{break-inside:avoid}
+  details{border:0}
+  details:not([open])>*:not(summary){display:block}
+  a{color:inherit;text-decoration:none}
+  h2{break-before:page}
+  section.part:first-of-type h2{break-before:auto}
+}
+
+
+figure pre.mermaid{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;color:var(--ink)}
+.prose h4{margin-top:22px}
+.prose table{font-size:14.5px}
+.masthead .thesis{font-family:var(--display);font-variation-settings:"wdth" 90;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+
+</style>
+<style>
+
+.callout.scenario{border-left-color:var(--good);background:var(--good-soft)}
+.callout.scenario .label{color:var(--good)}
+.legend .t-scenario{color:var(--good)}
+.legend div{font-size:14px}
+figure.arch{margin:26px 0 34px}
+figure.arch .frame{border:1px solid var(--rule);border-radius:8px;background:var(--surface);padding:18px 16px}
+.prose h4{margin-top:22px}
+.prose table{font-size:14.5px}
+.masthead .thesis{font-family:var(--display);font-variation-settings:"wdth" 90;font-size:13px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.appendix .part-label{color:var(--accent-ink)}
+.kicker{font-family:var(--display);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);font-weight:650;margin:0 0 6px}
+
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="rail" aria-label="Contents">
+  <p class="brand">Scaling Agentic Solutions</p>
+  <p class="brand-sub">Google Cloud · Cloud Run · Gemini</p>
+  <nav id="toc">
+  <ol><li><a href="#p0"><span class="num">0</span>The core idea</a></li><li><a href="#p1"><span class="num">1</span>Why agent workloads scale differently</a><ol><li><a href="#s1-1"><span class="num">1.1</span>The unit of work is a turn, not a request</a></li><li><a href="#s1-2"><span class="num">1.2</span>The binding constraint is model throughput, and it is shared</a></li><li><a href="#s1-3"><span class="num">1.3</span>Latency is a sum of sequential tails</a></li><li><a href="#s1-4"><span class="num">1.4</span>Cost scales with context, and context grows</a></li><li><a href="#s1-5"><span class="num">1.5</span>Side effects mean at-least-once delivery, which means idempotency</a></li><li><a href="#s1-6"><span class="num">1.6</span>The feedback loop that brings agent systems down</a></li><li><a href="#s1-7"><span class="num">1.7</span>Multi-agent designs multiply everything</a></li></ol></li><li><a href="#p2"><span class="num">2</span>The dimensions of scale — a discovery checklist</a></li><li><a href="#p3"><span class="num">3</span>The arithmetic, worked</a><ol><li><a href="#s3-1"><span class="num">3.1</span>Assumptions</a></li><li><a href="#s3-2"><span class="num">3.2</span>Rates and tokens</a></li><li><a href="#s3-3"><span class="num">3.3</span>Concurrency, from Little&#x27;s law</a></li><li><a href="#s3-4"><span class="num">3.4</span>Cost per conversation</a></li><li><a href="#s3-5"><span class="num">3.5</span>Provisioned Throughput</a></li><li><a href="#s3-6"><span class="num">3.6</span>The rest of the estate</a></li><li><a href="#s3-7"><span class="num">3.7</span>What breaks first</a></li></ol></li><li><a href="#p4"><span class="num">4</span>The reference architecture</a><ol><li><a href="#s4-1"><span class="num">4.1</span>Why it is shaped this way</a></li><li><a href="#s4-2"><span class="num">4.2</span>Runtime alternatives</a></li></ol></li><li><a href="#p5"><span class="num">5</span>The scaling mechanisms</a><ol><li><a href="#s5-1"><span class="num">5.1</span>Quota strategy and traffic smoothing</a></li><li><a href="#s5-2"><span class="num">5.2</span>Retries, jitter, breakers and fallbacks</a></li><li><a href="#s5-3"><span class="num">5.3</span>Admission control and graceful degradation</a></li><li><a href="#s5-4"><span class="num">5.4</span>Durable execution</a></li><li><a href="#s5-5"><span class="num">5.5</span>Context engineering for scale</a></li><li><a href="#s5-6"><span class="num">5.6</span>Tools at scale</a></li><li><a href="#s5-7"><span class="num">5.7</span>Streaming and connections</a></li><li><a href="#s5-8"><span class="num">5.8</span>Budgets, multi-agent topologies and tenancy</a></li></ol></li><li><a href="#p6"><span class="num">6</span>Failure catalogue</a></li><li><a href="#p7"><span class="num">7</span>The growth path</a></li><li><a href="#p8"><span class="num">8</span>Running a capacity review</a><ol><li><a href="#s8-1"><span class="num">8.1</span>A workable sequence</a></li><li><a href="#s8-2"><span class="num">8.2</span>Questions that change the design</a></li><li><a href="#s8-3"><span class="num">8.3</span>Two worked situations</a></li><li><a href="#s8-4"><span class="num">8.4</span>Common questions, answered briefly</a></li></ol></li><li><a href="#aa"><span class="num">A</span>Cloud Run settings that matter</a></li><li><a href="#ab"><span class="num">B</span>State stores and their limits</a></li><li><a href="#ac"><span class="num">C</span>Observability, SLIs and alerts</a></li><li><a href="#ad"><span class="num">D</span>Google Cloud services, mapped to the mechanisms</a></li><li><a href="#ae"><span class="num">E</span>Reference figures</a></li><li><a href="#sources"><span class="num">§</span>Sources and currency</a></li></ol>
+  </nav>
+</aside>
+
+<main class="content">
+<header class="masthead">
+  <p class="eyebrow">Primer for architects and engineering leads</p>
+  <h1>An agent system is scaled by bounding tokens, not by adding servers</h1>
+  <p class="standfirst">Everything that looks like a classic capacity problem &mdash; instances,
+  connections, queue depth, database throughput &mdash; turns out to be small and cheap next to
+  one number: tokens per minute at the model. This primer works the consequences end to end on a
+  customer-service agent running on Cloud Run and Gemini: the arithmetic, the reference
+  architecture, the scaling mechanisms and the failure modes.</p>
+  <div class="legend">
+    <div><span class="tag t-room">In practice</span>How a principle shows up in a real build.</div>
+    <div><span class="tag t-scenario">Scenario</span>A concrete situation that makes the mechanism tangible.</div>
+    <div><span class="tag t-num">Key figures</span>Numbers worth keeping at hand.</div>
+    <div><span class="tag t-verify">Confirm before committing</span>Facts that move: prices, model ids, limits.</div>
+    <div><span class="tag t-bug">Common misstep</span>The mistake that shows up most often.</div>
+  </div>
+  <p class="meta">Platform facts verified September 2026 &middot; All figures in Part&nbsp;3 come
+  from a single capacity model, so the arithmetic is internally consistent &middot; Behavioural
+  findings are from load tests against a simulated model pool</p>
+</header>
+
+<details class="toc-mobile"><summary>Contents</summary>
+<nav><ol><li><a href="#p0">0 The core idea</a></li><li><a href="#p1">1 Why agent workloads scale differently</a></li><li><a href="#p2">2 The dimensions of scale — a discovery checklist</a></li><li><a href="#p3">3 The arithmetic, worked</a></li><li><a href="#p4">4 The reference architecture</a></li><li><a href="#p5">5 The scaling mechanisms</a></li><li><a href="#p6">6 Failure catalogue</a></li><li><a href="#p7">7 The growth path</a></li><li><a href="#p8">8 Running a capacity review</a></li><li><a href="#aa">A Cloud Run settings that matter</a></li><li><a href="#ab">B State stores and their limits</a></li><li><a href="#ac">C Observability, SLIs and alerts</a></li><li><a href="#ad">D Google Cloud services, mapped to the mechanisms</a></li><li><a href="#ae">E Reference figures</a></li><li><a href="#sources">§ Sources and currency</a></li></ol></nav>
+</details>
+
+<section class="part" id="p0">
+<p class="part-label">Part 0</p>
+<h2>The core idea</h2>
+<div class="prose"><p class="lede">Everything that looks like a classic capacity problem in an agent system — instances, connections, queue depth, database throughput — turns out to be small and cheap next to one number: <strong>tokens per minute at the model.</strong> That resource is shared across your whole organisation and cannot be bought by the instance.</p><p>The design work therefore has three parts:</p><ul>
+<li><strong>Make demand predictable</strong> — admission control, model routing, prompt caching, context compaction.</li>
+<li><strong>Make the system degrade rather than collapse</strong> when demand exceeds supply — degradation levels, load shedding, model fallbacks.</li>
+<li><strong>Make every turn survive failure</strong>, because a long, multi-step unit of work that writes to systems of record invites failure — checkpoints, idempotency keys, at-least-once delivery.</li>
+</ul></div>
+<aside class="callout"><span class="label">In practice</span><p>Open any capacity conversation with the unit of work and the binding constraint. "The unit of work is a <em>turn</em>. Each turn is two to three model calls of roughly five thousand tokens. So 100,000 conversations a day is about fourteen million input tokens a minute at peak, which is above our tier baseline — that is the constraint the design has to respect. Cloud Run is not going to be the problem." Saying this first reframes the whole discussion away from server counts.</p></aside>
+<div class="prose"><p>How to read this document. Part 1 explains why agent workloads scale differently from web or classic ML workloads. Part 2 is the discovery checklist that shapes the design. Part 3 is the arithmetic, worked on a concrete example. Part 4 is the reference architecture. Part 5 walks through each scaling mechanism with the numbers that justify it. Parts 6 and 7 cover failure modes and the staged growth path. Part 8 describes how to run a capacity review. The appendices hold the configuration detail, the Google Cloud service mapping and the reference figures.</p></div>
+</section>
+<section class="part" id="p1">
+<p class="part-label">Part 1</p>
+<h2>Why agent workloads scale differently</h2>
+<h3 id="s1-1">1.1 The unit of work is a turn, not a request</h3>
+<div class="prose"><p>A web request is stateless, short and homogeneous; you scale it by adding replicas until CPU becomes the limit. A <em>turn</em> of an agent is a loop: a model call that plans, tool calls that fetch or change something, another model call that answers, sometimes more. Its length is decided at run time by the model. Its steps are sequential, because each depends on the one before. Its middle steps have side effects in systems you may not own. And the loop's memory — the context — grows as the conversation goes on.</p></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Web request</th>
+<th>ML inference request</th>
+<th>Agent turn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duration</td>
+<td>10–200 ms</td>
+<td>20–500 ms</td>
+<td>3–30 s, variable</td>
+</tr>
+<tr>
+<td>Steps</td>
+<td>1</td>
+<td>1</td>
+<td>2–8, decided at run time</td>
+</tr>
+<tr>
+<td>Binding resource</td>
+<td>CPU / DB connections</td>
+<td>GPU seconds</td>
+<td>tokens per minute at a shared model pool</td>
+</tr>
+<tr>
+<td>Cost driver</td>
+<td>requests</td>
+<td>requests</td>
+<td>tokens × steps × context length</td>
+</tr>
+<tr>
+<td>State</td>
+<td>none, or a row</td>
+<td>none</td>
+<td>a growing transcript plus checkpoints</td>
+</tr>
+<tr>
+<td>Side effects</td>
+<td>in your own database</td>
+<td>none</td>
+<td>in the policy, claims and billing systems</td>
+</tr>
+<tr>
+<td>Failure unit</td>
+<td>retry the request</td>
+<td>retry the request</td>
+<td>resume the <em>step</em>, never repeat a write</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>Everything in the rest of this document follows from that last column.</p></div>
+<h3 id="s1-2">1.2 The binding constraint is model throughput, and it is shared</h3>
+<div class="prose"><p>On the Gemini Enterprise Agent Platform, the pay-as-you-go path ("Standard PayGo", successor to dynamic shared quota) has no fixed per-project quota. Your organisation receives a tokens-per-minute <em>baseline</em> per model family, based on rolling 30-day spend — for Flash and Flash-Lite, 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3; for Pro, 0.5 M, 1 M or 2 M — and can burst above it on a best-effort basis. A <code>429</code> response does not mean "you hit a number"; it means "there is contention on the shared pool right now". The documented response is exponential backoff, use of the global endpoint, and smoothing traffic within the minute. Guaranteed capacity is a separate purchase: Provisioned Throughput, sold in generative-scale units (GSUs) by the week, month, quarter or year, with pay-as-you-go spill-over enabled by default.</p><p>Two consequences shape every design. First, capacity planning is a <em>token</em> budget — you compute demand in tokens per minute before you compute anything else. Second, the pool is shared with every other team in the organisation, so the shape of your traffic affects your own error rate and everyone else's. Smoothing is a good-neighbour obligation as much as an optimisation.</p></div>
+<aside class="callout numbers"><span class="label">Key figures</span><p>Flash tiers 2 / 4 / 10 M TPM; Pro tiers 0.5 / 1 / 2 M TPM, set at organisation level by spend. One GSU of Gemini 3.5 Flash delivers 675 burndown tokens per second, where burndown weights input ×1, cached input ×0.1 and output ×6. Provisioned Throughput costs $7.14 / $3.70 / $3.29 / $2.74 per GSU-hour on 1-week / 1-month / 3-month / 1-year terms at the global endpoint; regional endpoints add 10 %.</p></aside>
+<h3 id="s1-3">1.3 Latency is a sum of sequential tails</h3>
+<div class="prose"><p>A turn with two tool calls has four segments on the critical path: the planning call, the tools, the answering call, and the streaming of the answer to the user. Model latency is time-to-first-token — which now includes <em>thinking</em> time — plus output tokens divided by tokens per second.</p><p>Because the segments are sequential, a turn's p95 is roughly the sum of the segments' tails, not the tail of their sums. A four-second p95 target therefore forces parallel tool execution, streaming, prefetching, and a Flash-class model on the planning step.</p><p>And because turns are long, Little's law couples latency to concurrency: at 20 turns per second, a six-second turn means 125 turns in flight; a twelve-second turn means 250, each holding memory, a session lock and an open client connection. <strong>Slowdowns are capacity problems</strong>, not just experience problems.</p></div>
+<h3 id="s1-4">1.4 Cost scales with context, and context grows</h3>
+<div class="prose"><p>The bill is tokens, and input dominates. A service turn sends 4,000–6,000 tokens of system instructions, tool schemas, customer context and conversation history in order to receive 300–400 back. Without compaction, the input grows by several hundred tokens every turn, so the tenth turn of a conversation costs a multiple of the first.</p><p>Three levers change cost by integer factors:</p><ul>
+<li><strong>Route</strong> routine calls to a Flash-Lite-class model — three to five times cheaper per token.</li>
+<li><strong>Cache</strong> the stable prefix — cached input is billed at 10 %.</li>
+<li><strong>Bound</strong> the context — compaction, tool-result truncation, output caps.</li>
+</ul><p>The order matters. Route and cache first, because every later percentage improvement applies to the new, lower baseline.</p></div>
+<aside class="callout scenario"><span class="label">Scenario</span><p>A policyholder opens a conversation to ask why a renewal premium rose, then asks about excess options, then about adding a named driver, then about paying monthly. By the tenth exchange, an uncompacted transcript has pushed each model call from under 2,000 tokens to over 7,000. Nothing has failed and no alert has fired; the only visible symptom is that cost per conversation has quietly tripled.</p></aside>
+<h3 id="s1-5">1.5 Side effects mean at-least-once delivery, which means idempotency</h3>
+<div class="prose"><p>Somewhere in a turn, the agent will do something real — register a notification of loss, open a service request, change a payment schedule. The process can die between doing that and recording that it did: Cloud Run allows ten seconds after <code>SIGTERM</code>, the model call can time out, the queue can redeliver.</p><p>Exactly-once delivery is not available on the push path you want for this design (Pub/Sub exactly-once semantics are pull-only and regional). So the loop has to be <strong>replayable</strong>: checkpoint every step before acting on its result, key every write by turn, step and arguments, and let redelivery find the checkpoint and skip what has already been done.</p></div>
+<aside class="callout scenario"><span class="label">Scenario</span><p>A customer reports storm damage to a roof. The agent calls the claims system, which creates the notification, and the orchestrator process is then evicted before it can record the result. Pub/Sub redelivers the turn. Without an idempotency key, the customer now has two open claims for one event, and a loss adjuster is dispatched twice. With one, the replayed call returns the original claim reference and the conversation continues as if nothing happened.</p></aside>
+<h3 id="s1-6">1.6 The feedback loop that brings agent systems down</h3>
+<div class="prose"><p>More load → more <code>429</code>s from the shared pool → retries and longer model calls → longer turns → more turns in flight (Little's law) → more memory, more queued model calls, more retries → more <code>429</code>s.</p><p>Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until turn deadlines fire and users give up — having consumed the tokens anyway. This is the most expensive failure mode there is, because you pay for all of it and satisfy nobody.</p><p>Load testing reproduces it in seconds. With 120 virtual users against a simulated 3 M TPM pool, retries alone take p95 turn latency from 5.8 s to roughly 40 s, with hundreds of rate-limited calls and a few dozen hard failures. Adding degradation levels and a circuit breaker, but no concurrency cap, converts that into 120 fast failures. Adding an in-flight cap of 30 — derived from the pool's token budget — produces a different outcome entirely: no turn fails, no call is rate-limited, admitted turns finish at a p95 of 3.6 s, and 17 % of attempts are shed immediately with a <code>Retry-After</code> header.</p><p><strong>Shedding quickly is kinder than queueing slowly</strong>, and it is the only way to keep the turns you do admit inside their latency budget.</p></div>
+<h3 id="s1-7">1.7 Multi-agent designs multiply everything</h3>
+<div class="prose"><p>A coordinator with three specialists turns 2.2 model calls per turn into about eight. Cost rises by roughly 3.6×; latency by about 2× even with specialists running in parallel; and the probability that every hop succeeds falls from 0.95^2.2 ≈ 0.89 to 0.95^8 ≈ 0.66 at 95 % reliability per hop.</p><p>The right question about a multi-agent topology is therefore never "how do we scale the coordinator". It is "what measured problem justifies paying that multiple?" The answer is usually one of two things: a tool set too large to fit sensibly in one context, or permissions that must genuinely differ per step — a claims-adjustment agent that can write to the claims system, say, alongside a general enquiry agent that cannot.</p></div>
+<aside class="callout pitfall"><span class="label">Common misstep</span><p>Describing scaling as "we put it on Cloud Run with max instances at 100 and autoscaling handles it". Cloud Run scales the <em>container</em>. It cannot scale the token budget, the policy administration system behind the tools, or the cost per conversation.</p></aside>
+</section>
+<section class="part" id="p2">
+<p class="part-label">Part 2</p>
+<h2>The dimensions of scale — a discovery checklist</h2>
+<div class="prose"><p>Work down this list early. For each dimension: the question that changes the design, the number it produces, and the lever it points to.</p></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Ask</th>
+<th>Compute</th>
+<th>Lever</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Volume and burstiness</td>
+<td>Conversations per day? Peak-to-average ratio? What does a major event do to traffic?</td>
+<td>conversations/s, turns/s, model calls/s at average, peak and event load</td>
+<td>admission control; Provisioned Throughput for the base; spill-over for peaks; degradation for events</td>
+</tr>
+<tr>
+<td>Turn shape</td>
+<td>Turns per conversation, model and tool calls per turn, tokens in and out</td>
+<td>tokens per turn; tokens per minute</td>
+<td>routing, caching, compaction, output caps</td>
+</tr>
+<tr>
+<td>Latency budget</td>
+<td>What must the user see, and when? First token, or whole answer?</td>
+<td>TTFT p95, turn p95, and their sum across the critical path</td>
+<td>streaming, parallel tools, prefetch, Flash on the planning step, thinking level</td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>How many users at once? How long is a conversation?</td>
+<td>in-flight turns = turns/s × turn duration; concurrent sessions = conversations/s × conversation duration</td>
+<td>in-flight cap, connection-cheap gateway, per-instance concurrency</td>
+</tr>
+<tr>
+<td>Model capacity</td>
+<td>Which tier is the organisation on? Is Provisioned Throughput already bought? Which region must the data stay in?</td>
+<td>demand TPM vs baseline; GSUs for base load; break-even utilisation</td>
+<td>Standard / Priority / Flex tiers; PT term; global vs regional endpoint</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>What does a human-handled contact cost today? What is the budget?</td>
+<td>$ per conversation, $ per month, and each lever's share</td>
+<td>route, cache, compact, batch offline work, per-turn budgets</td>
+</tr>
+<tr>
+<td>Tools and downstream</td>
+<td>Which systems, at what QPS ceiling and p95? Which calls have side effects?</td>
+<td>tool calls/s per system vs its limit</td>
+<td>prefetch, caching, bulkheads, circuit breakers, idempotency</td>
+</tr>
+<tr>
+<td>State</td>
+<td>What must survive a crash? A restart? A region failure? How long are transcripts retained?</td>
+<td>writes/s per collection and per document, document size, retention</td>
+<td>checkpoints in Firestore, hot state in Redis, TTLs, compaction</td>
+</tr>
+<tr>
+<td>Tenancy and fairness</td>
+<td>One brand or many? Which classes must never be shed — broker portal, adviser assist, VIP?</td>
+<td>turns/min per tenant; priority classes</td>
+<td>per-tenant buckets, priority bypass, separate quotas</td>
+</tr>
+<tr>
+<td>Geography and residency</td>
+<td>Which countries? Is in-region processing required?</td>
+<td>regional premium of 10 %; fewer models on regional endpoints</td>
+<td>global endpoint unless residency forbids it; multi-region services with failover</td>
+</tr>
+<tr>
+<td>Change</td>
+<td>How often do prompts, tools and models change? What are the model retirement dates?</td>
+<td>cache invalidations per change; models with 45-day retirement clocks</td>
+<td>prompt versions in cache keys, model ids in configuration, canary rollouts</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>What tells you it is working? What pages someone at 3 a.m.?</td>
+<td>SLIs: availability, latency attainment, shed rate, cost per conversation</td>
+<td>low-cardinality metric labels, one trace per turn, burn-rate alerts</td>
+</tr>
+</tbody>
+</table></div>
+<aside class="callout"><span class="label">In practice</span><p>Be explicit about the dimensions you are deliberately <em>not</em> designing for, and why. "Single tenant, single region, no residency requirement, so we use the global endpoint and skip per-tenant quotas in version one — and here is where they would go when the broker portal arrives." Naming the omissions is what makes the design reviewable.</p></aside>
+</section>
+<section class="part" id="p3">
+<p class="part-label">Part 3</p>
+<h2>The arithmetic, worked</h2>
+<div class="prose"><p>The worked example is a fictional mid-size insurer, Meridian Assurance, with a policyholder service agent in its mobile app and web portal. The agent answers coverage and billing questions, retrieves policy documents, quotes renewals and registers notifications of loss. The assumptions below are deliberately ordinary; the method is the point.</p><p>Every figure in this part is reproduced as a live model in the accompanying workbook, <code>agent-cost-capacity-calculator.xlsx</code>. All the assumptions sit on a single highlighted Inputs sheet, so the baseline, peak and incident scenarios recalculate against a client's own volumes, turn shape, prices and tier baseline.</p></div>
+<h3 id="s3-1">3.1 Assumptions</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Assumption</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conversations per day</td>
+<td>100,000</td>
+</tr>
+<tr>
+<td>Peak hour vs daily average</td>
+<td>3×</td>
+</tr>
+<tr>
+<td>Major-event spike vs average</td>
+<td>10× (a severe-weather event sends everyone to the chat at once, with 75 % of intents on "how do I report damage" and "am I covered")</td>
+</tr>
+<tr>
+<td>Turns per conversation</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Model calls per turn</td>
+<td>2.2 (plan, answer, sometimes a third)</td>
+</tr>
+<tr>
+<td>Tool calls per turn</td>
+<td>1.3</td>
+</tr>
+<tr>
+<td>Input tokens per model call</td>
+<td>5,000, of which 3,000 are the stable prefix (instructions, policy wording, tool schemas), cached 90 % of the time</td>
+</tr>
+<tr>
+<td>Output tokens per model call</td>
+<td>350, including thinking at the LOW level</td>
+</tr>
+<tr>
+<td>Turn duration (p50)</td>
+<td>6 s; users take roughly 60 s to read and reply</td>
+</tr>
+<tr>
+<td>Models</td>
+<td>Gemini 3.5 Flash as standard; 3.5 Flash-Lite for 35 % of calls (routing, short answers); 3.1 Pro Preview for rare hard cases</td>
+</tr>
+<tr>
+<td>Downstream ceilings</td>
+<td>Customer profile service 200 QPS; policy administration system 40 QPS</td>
+</tr>
+<tr>
+<td>Organisation tier</td>
+<td>Flash tier 3 — 10 M TPM baseline</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="s3-2">3.2 Rates and tokens</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Quantity</th>
+<th class="num">Average</th>
+<th class="num">Peak</th>
+<th class="num">Major event</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conversations / s</td>
+<td class="num">1.16</td>
+<td class="num">3.47</td>
+<td class="num">11.6</td>
+</tr>
+<tr>
+<td>Turns / s</td>
+<td class="num">6.94</td>
+<td class="num">20.8</td>
+<td class="num">69.4</td>
+</tr>
+<tr>
+<td>Model calls / s</td>
+<td class="num">15.3</td>
+<td class="num">45.8</td>
+<td class="num">153</td>
+</tr>
+<tr>
+<td>Tool calls / s</td>
+<td class="num">9.0</td>
+<td class="num">27.1</td>
+<td class="num">90.3</td>
+</tr>
+<tr>
+<td>Input tokens / min</td>
+<td class="num">4.58 M</td>
+<td class="num">13.75 M</td>
+<td class="num">45.8 M</td>
+</tr>
+<tr>
+<td>… of which uncached</td>
+<td class="num">2.11 M</td>
+<td class="num">6.33 M</td>
+<td class="num">21.1 M</td>
+</tr>
+<tr>
+<td>Output tokens / min</td>
+<td class="num">321 k</td>
+<td class="num">963 k</td>
+<td class="num">3.21 M</td>
+</tr>
+<tr>
+<td>Input TPM vs 10 M baseline</td>
+<td class="num">0.46×</td>
+<td class="num"><strong>1.38×</strong></td>
+<td class="num"><strong>4.58×</strong></td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>The working, in plain steps: 100,000 ÷ 86,400 ≈ 1.16 conversations a second; × 6 turns ≈ 7 turns a second; × 2.2 calls ≈ 15 model calls a second; × 5,000 tokens × 60 ≈ 4.6 M input tokens a minute. Peak is three times that — 13.75 M, already above the tier baseline. A major event is ten times average — 45.8 M, four and a half times the baseline.</p><p>The conclusion is not "buy more". It is that <strong>peak fits only if we cut tokens or buy capacity, and the event has to be shaped</strong>, because no purchase makes 46 M TPM appear within a minute.</p></div>
+<aside class="callout verify"><span class="label">Confirm before committing</span><p>Whether cached tokens count at full weight against the PayGo TPM baseline. They count at 0.1 against Provisioned Throughput, which is documented; the PayGo accounting is less clearly stated. Plan as though they count fully, and treat any relief as upside.</p></aside>
+<h3 id="s3-3">3.3 Concurrency, from Little's law</h3>
+<div class="prose"><p>In-flight turns are turns per second times turn duration: 6.9 × 6 ≈ <strong>42</strong> at average, <strong>125</strong> at peak, <strong>417</strong> during a major event.</p><p>Concurrent <em>sessions</em> are about eleven times larger, because users pause between turns: a conversation lasts 6 × (6 + 60) ≈ 400 seconds, so 1.16 × 400 ≈ <strong>460</strong> sessions at average and <strong>4,600</strong> during an event.</p><p>The two numbers size different things. In-flight turns size orchestrator memory, session locks and model concurrency. Concurrent sessions size open streaming connections at the gateway and hot session state in Redis. Conflating them is a common source of under-provisioned gateways.</p><p>The token budget also caps concurrency, and this is the number that matters most: 10 M TPM ÷ 60 ≈ 167,000 tokens per second. A turn consumes 2.2 × 5,350 ≈ 11,800 tokens over six seconds, or about 2,000 tokens per second. The baseline therefore sustains roughly <strong>85 turns in flight, or 14 turns per second</strong> — which is the starting value for the admission controller's in-flight cap, and is <em>below</em> peak demand. That gap is the whole story of this example.</p></div>
+<h3 id="s3-4">3.4 Cost per conversation</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th class="num">Per model call</th>
+<th class="num">Per conversation</th>
+<th class="num">Per month</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All Gemini 3.5 Flash, no caching</td>
+<td class="num">$0.0107</td>
+<td class="num">$0.141</td>
+<td class="num">$427 k</td>
+</tr>
+<tr>
+<td>All 3.5 Flash, prefix cached</td>
+<td class="num">$0.0070</td>
+<td class="num">$0.092</td>
+<td class="num">$281 k</td>
+</tr>
+<tr>
+<td>35 % of calls on 3.5 Flash-Lite, prefix cached</td>
+<td class="num">—</td>
+<td class="num"><strong>$0.068</strong></td>
+<td class="num"><strong>$206 k</strong></td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>The working: a 3.5 Flash call with 2,000 uncached input tokens at $1.50/M, 3,000 cached at $0.15/M and 350 output at $9/M costs $0.0030 + $0.00045 + $0.00315 ≈ $0.0070. Thirteen calls per conversation ≈ $0.092. Routing a third of them to Flash-Lite brings it to $0.068.</p><p>Against a human-handled contact at several dollars, all three rows are cheap. Against each other they differ by 2×, which at this volume is $220,000 a month — a number worth an afternoon of engineering.</p><p>Note that output tokens are the largest single line even though there are fourteen times fewer of them: output is six times the price of input on this model. <strong>Output caps and thinking levels are cost levers, not only latency levers.</strong></p></div>
+<aside class="callout verify"><span class="label">Confirm before committing</span><p>Prices are for the global endpoint as of September 2026: 3.5 Flash $1.50 / $9.00 per M tokens (cached input $0.15); 3.5 Flash-Lite $0.30 / $2.50; 3.1 Flash-Lite $0.25 / $1.50; 3.6–3.8 Flash $0.75 / $3.75 introductory until 31 December 2026, then $1.50 / $7.50; 3.1 Pro Preview $2 / $12, doubling above 200 k context. Regional endpoints add 10 %; the Priority tier is 1.8×; Flex and Batch are 0.5×.</p></aside>
+<h3 id="s3-5">3.5 Provisioned Throughput</h3>
+<div class="prose"><p>Provisioned Throughput is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 <em>burndown</em> tokens per second, where a call's burndown is uncached input ×1 + cached input ×0.1 + output ×6. A call in this example burns 4,400–4,700 tokens, so one GSU serves about 0.14 calls per second. Carrying the standard-model share — 65 % of calls — entirely on Provisioned Throughput needs 69 GSUs at average, 207 at peak and 688 during a major event.</p></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th class="num">$ per GSU-hour</th>
+<th class="num">$ per M burndown tokens at 100 % utilisation</th>
+<th class="num">Break-even utilisation vs PayGo at $1.50/M</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 week</td>
+<td class="num">7.14</td>
+<td class="num">2.94</td>
+<td class="num">196 % — never</td>
+</tr>
+<tr>
+<td>1 month</td>
+<td class="num">3.70</td>
+<td class="num">1.52</td>
+<td class="num">101 % — never</td>
+</tr>
+<tr>
+<td>3 months</td>
+<td class="num">3.29</td>
+<td class="num">1.35</td>
+<td class="num">90 %</td>
+</tr>
+<tr>
+<td>1 year</td>
+<td class="num">2.74</td>
+<td class="num">1.13</td>
+<td class="num">75 %</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>So Provisioned Throughput is not a discount unless you commit for a year <em>and</em> keep the units three-quarters busy. Sizing it for peak (207 GSUs) leaves it 33 % utilised on average and costs more than pay-as-you-go. Sizing it for the base (69 GSUs, about $138,000 a month on a one-year term) and letting peaks spill over to the Priority or Standard tiers is usually the right answer.</p><p>What Provisioned Throughput really buys is an SLA and immunity from contention on the shared pool for the traffic that matters most. That is why the request headers let you specify, per call, "dedicated only", "spill over to Priority" or "bypass PT entirely".</p></div>
+<aside class="callout"><span class="label">In practice</span><p>"Provisioned Throughput for the base load on a long term, spill-over for the peak, and traffic <em>shaping</em> for the major event. We would want to walk through the break-even utilisation before signing anything, because a one-month term is never cheaper than pay-as-you-go."</p></aside>
+<h3 id="s3-6">3.6 The rest of the estate</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Resource</th>
+<th class="num">Average</th>
+<th class="num">Peak</th>
+<th class="num">Major event</th>
+<th>Limit or note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Orchestrator instances (80 in-flight turns each, ×1.4 headroom)</td>
+<td class="num">1</td>
+<td class="num">3</td>
+<td class="num">8</td>
+<td>Cloud Run is not the constraint</td>
+</tr>
+<tr>
+<td>Gateway instances (250 open streams each)</td>
+<td class="num">2</td>
+<td class="num">2</td>
+<td class="num">3</td>
+<td>minimum 2 for warm capacity</td>
+</tr>
+<tr>
+<td>Firestore ops / s</td>
+<td class="num">42</td>
+<td class="num">125</td>
+<td class="num">417</td>
+<td>collection ramp 500 then +50 % every 5 min; ~1 write/s per document</td>
+</tr>
+<tr>
+<td>Redis ops / s</td>
+<td class="num">280</td>
+<td class="num">830</td>
+<td class="num">2,800</td>
+<td>one 2-vCPU Valkey node handles ≈ 120 k ops/s</td>
+</tr>
+<tr>
+<td>Pub/Sub messages / s</td>
+<td class="num">7</td>
+<td class="num">21</td>
+<td class="num">69</td>
+<td>5 KB each — trivial</td>
+</tr>
+<tr>
+<td>Policy administration QPS</td>
+<td class="num">1.7</td>
+<td class="num">5.2</td>
+<td class="num">17.4</td>
+<td>ceiling 40 — comfortable, but cache documents anyway</td>
+</tr>
+<tr>
+<td>Customer profile QPS</td>
+<td class="num">4.9</td>
+<td class="num">14.6</td>
+<td class="num">48.6</td>
+<td>ceiling 200 — prefetch at session start, cache the profile</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>The entire Cloud Run fleet for this system is a few dozen vCPUs — roughly <strong>0.1 % of the model bill</strong>. Capacity estimation for agent systems is really token estimation, and this table is the evidence for saying so.</p></div>
+<h3 id="s3-7">3.7 What breaks first</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Resource</th>
+<th class="num">Demand vs limit</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Major event</td>
+<td>Model TPM baseline</td>
+<td class="num">4.6×</td>
+<td>shape demand (admission, degradation); PT for the base; cut tokens per call</td>
+</tr>
+<tr>
+<td>Peak</td>
+<td>Model TPM baseline</td>
+<td class="num">1.4×</td>
+<td>PT or a custom tier; caching; compaction; more routing to Lite</td>
+</tr>
+<tr>
+<td>Major event</td>
+<td>Policy administration system</td>
+<td class="num">0.43×</td>
+<td>cache documents for minutes; bulkhead; degrade to cached answers</td>
+</tr>
+<tr>
+<td>Major event</td>
+<td>Customer profile service</td>
+<td class="num">0.24×</td>
+<td>prefetch at session start; five-minute profile cache</td>
+</tr>
+<tr>
+<td>Major event</td>
+<td>Redis</td>
+<td class="num">0.02×</td>
+<td>nothing needed</td>
+</tr>
+<tr>
+<td>Major event</td>
+<td>Firestore</td>
+<td class="num">0.08×</td>
+<td>pre-warm collections before launch day</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="part" id="p4">
+<p class="part-label">Part 4</p>
+<h2>The reference architecture</h2>
+<figure class="arch">
+<div class="frame"><svg aria-label="Reference architecture: client, load balancer, gateway, Pub/Sub, orchestrator, model gateway, Gemini, tool executor, tool services, Firestore and Memorystore." role="img" viewbox="0 0 890 642" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" markerheight="7" markerwidth="7" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10">
+<path d="M0,1 L9,5 L0,9 z" fill="var(--rule-strong)"></path>
+</marker>
+</defs>
+<rect fill="var(--accent-soft)" height="65" rx="7" stroke="var(--accent)" stroke-width="1" width="178" x="694" y="14"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="783" y="37">Gemini</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="52">global endpoint</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="65">PT + spill-over</text>
+<rect fill="var(--surface)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="178" x="694" y="106"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="783" y="129">model gateway</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="144">routing · token buckets</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="157">retry · breaker · fallback</text>
+<rect fill="var(--surface)" height="79" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="178" x="694" y="232"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="783" y="255">orchestrator · Cloud Run</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="270">durable loop · budgets</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="283">checkpoints · compaction</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="296">instance-based, conc 80</text>
+<rect fill="var(--surface)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="178" x="694" y="368"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="783" y="391">tool executor</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="406">bulkhead · breaker</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="419">cache · idempotency</text>
+<rect fill="var(--surface)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="178" x="694" y="466"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="783" y="489">tool services · Cloud Run</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="504">profile · policy admin</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="783" y="517">claims · documents · MCP</text>
+<rect fill="var(--surface)" height="39" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="106" x="8" y="250"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="61" y="273">App / portal</text>
+<rect fill="var(--surface)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="142" x="150" y="237"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="221" y="260">Global external ALB</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="221" y="275">Cloud Armor + WAF</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="221" y="288">IAP</text>
+<rect fill="var(--surface)" height="79" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="154" x="330" y="231"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="407" y="254">gateway · Cloud Run</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="407" y="269">auth · admission</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="407" y="282">enqueue · SSE relay</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="407" y="295">request-based, conc 250</text>
+<rect fill="var(--surface-2)" height="52" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="134" x="522" y="244"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="589" y="267">Pub/Sub agent-turns</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="589" y="282">ack 600 s · DLQ after 5</text>
+<rect fill="var(--surface-2)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="200" x="150" y="560"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="250" y="583">Firestore</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="250" y="598">sessions · turns · steps</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="250" y="611">TTL policies</text>
+<rect fill="var(--surface-2)" height="65" rx="7" stroke="var(--rule-strong)" stroke-width="1" width="210" x="390" y="560"></rect>
+<text fill="var(--ink)" font-size="12.5" font-weight="650" text-anchor="middle" x="495" y="583">Memorystore Valkey</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="495" y="598">streams · locks · buckets</text>
+<text fill="var(--muted)" font-size="10.5" text-anchor="middle" x="495" y="611">idempotency · level</text>
+<path d="M114,270 L146,270" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<path d="M292,270 L326,270" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<path d="M484,270 L518,270" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="middle" x="501" y="262">publish</text>
+<path d="M656,270 L690,270" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="middle" x="673" y="262">push</text>
+<path d="M783.0,232 L783.0,175" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="start" x="790" y="206">model calls</text>
+<path d="M783.0,106 L783.0,83" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<path d="M783.0,310.6 L783.0,364" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="start" x="790" y="345">tool calls</text>
+<path d="M783.0,433 L783.0,462" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<path d="M340,309.6 L340,556" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="end" x="334" y="430">turn record</text>
+<path d="M452,309.6 L452,556" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="start" x="458" y="430">admission · SSE</text>
+<path d="M694,292 L684,292 L684,524 L196,524 L196,556" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="start" x="250" y="516">checkpoints</text>
+<path d="M694,254 L670,254 L670,540 L548,540 L548,556" fill="none" marker-end="url(#ah)" stroke="var(--rule-strong)" stroke-width="1.4"></path>
+<text fill="var(--muted)" font-size="10" text-anchor="start" x="560" y="532">streams · locks</text>
+</svg></div>
+<figcaption>The gateway admits and enqueues; the orchestrator runs the durable loop; Firestore
+holds what must survive a crash and Memorystore holds what must be fast. Ordering key is the
+session id; Pub/Sub push carries an OIDC token. Every model call, including those made by
+specialist agents, passes through the same model gateway, so fan-out cannot escape admission
+control.</figcaption>
+</figure>
+<div class="prose"><p>A turn, end to end. The client posts a message. The gateway authenticates it, checks the tenant's token bucket and the global in-flight cap, decides the current degradation level, writes the turn to Firestore, publishes to Pub/Sub with the session id as ordering key, and begins relaying the turn's event stream to the client over server-sent events.</p><p>Pub/Sub pushes the message to the orchestrator with an OIDC token. The orchestrator takes the session lock in Redis, loads the session and any checkpointed steps, and runs the loop under a budget: model call through the model gateway (streaming deltas into the Redis stream), checkpoint the step in Firestore, execute tool calls in parallel through the tool executor, checkpoint again, repeat, finish. It writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the push. History compaction runs <em>after</em> the terminal event — which is why the orchestrator uses instance-based billing.</p></div>
+<h3 id="s4-1">4.1 Why it is shaped this way</h3>
+<div class="prose"><p><strong>Gateway and orchestrator are separate services</strong> because they scale on different signals and fail differently. Holding a streaming connection costs a coroutine and a few kilobytes, so the gateway runs at high concurrency on request-based billing and its instances are cheap. Running the loop costs model tokens, tool calls and the memory of a full context, so the orchestrator runs at moderate concurrency on instance-based billing — which also means background work is not CPU-throttled after the response is sent. The relevant per-instance limits differ too: a gateway instance is bounded by its 1,000-connection and 800-requests-per-second caps, an orchestrator instance by memory per in-flight turn.</p><p><strong>A queue sits between them even though the user is waiting</strong>, for three reasons. It turns a burst into a backlog with one observable number — the age of the oldest unstarted turn — instead of a pile of failed requests. It gives at-least-once execution with redelivery, which is what makes the loop durable. And it decouples the orchestrator's drain rate from the arrival rate, so the token bucket, not the load balancer, sets the pace. The cost is a few tens of milliseconds.</p><p><strong>Events travel through Redis Streams rather than a direct connection</strong> because the orchestrator instance running the turn is not the gateway instance holding the client. A stream with sequence numbers also gives resume-after-reconnect (<code>Last-Event-ID</code>) for free — which SSE clients need on Cloud Run, where every stream is a request subject to a 60-minute ceiling.</p><p><strong>Firestore holds durable state and Redis holds hot state</strong> because their access patterns are opposites: a handful of document writes per turn, under a roughly one-write-per-second-per-document rule and a 1 MiB document cap, versus thousands of sub-millisecond counter, lock and bucket operations per second. Collapsing them into one store is the single most common mistake in these designs.</p><p><strong>The model gateway is a library, not a service</strong>, because an extra network hop on the critical path costs latency, and the state it needs — buckets, breaker state, the rate-limited ratio — fits in Redis. It becomes a service when many agents share one quota and need central policy, which is the role Apigee or the platform's Agent Gateway play at enterprise scale.</p></div>
+<h3 id="s4-2">4.2 Runtime alternatives</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Choose when</th>
+<th>What you give up</th>
+<th>Scaling knobs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cloud Run</strong> (this design)</td>
+<td>You want every scaling mechanism visible and tunable; polyglot services; Cloud Run is already in the estate</td>
+<td>You operate the queue, the stores and the loop yourself</td>
+<td>concurrency, min/max instances, billing mode, CPU/memory, Direct VPC, timeouts</td>
+</tr>
+<tr>
+<td><strong>Agent Runtime</strong> (managed; formerly Agent Engine)</td>
+<td>Python agents on ADK; you want managed sessions, Memory Bank, sandboxed code execution and identity with the least infrastructure</td>
+<td>Less control: min instances 0–10, max up to 1,000, container concurrency default 9, 1–8 vCPU and up to 32 GiB; a default <strong>90 queries per minute</strong> quota that must be raised before any load test; cold latency ≈ 4.7 s versus ≈ 0.4 s warm</td>
+<td>min/max instances, container concurrency, resource limits, quotas</td>
+</tr>
+<tr>
+<td><strong>GKE Autopilot</strong></td>
+<td>Kubernetes is already the platform; GPUs for self-hosted models; queue-depth autoscaling with KEDA; service mesh</td>
+<td>The most operational surface; slower iteration</td>
+<td>HPA/KEDA on queue depth or custom metrics, pod resources, node pools</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>The honest summary: Agent Runtime is the sensible default for a Google-native team, and Cloud Run is the right choice when a platform team wants to own the compute or the agent is not Python-first. The <em>mechanisms</em> in Part 5 are the same in all three — only the place you configure them differs.</p></div>
+</section>
+<section class="part" id="p5">
+<p class="part-label">Part 5</p>
+<h2>The scaling mechanisms</h2>
+<h3 id="s5-1">5.1 Quota strategy and traffic smoothing</h3>
+<div class="prose"><p>Demand for the model must be shaped before it reaches the pool. Three layers do that work.</p><p>An <strong>in-flight cap at the gateway</strong> (see 5.3) bounds how many turns can be generating tokens at once. A <strong>token bucket per model</strong> in the model gateway, sized to your share of the tier baseline and refilled continuously, spreads calls evenly within each minute. And the <strong>choice of endpoint and tier</strong> decides what you are drawing on: the global endpoint unless residency forbids it, since it routes to the region with the most available capacity and is where the tiers apply; Priority PayGo for customer-facing traffic that must not queue; Flex for latency-tolerant background work at half price; Batch for anything that can wait a day.</p><p>The bucket's <em>capacity</em> is the burst you tolerate and its <em>rate</em> is the sustained tokens per second. A six-second burst allowance is a good default — smaller means smoother traffic and fewer rate-limit errors, but more client-side queueing. When the bucket cannot admit a call within a bounded wait, the gateway should treat that as a rate-limit signal in its own right, count it toward the degradation level, and try a sibling model with its own pool before failing. Once there is more than one orchestrator instance the bucket must live in Redis; a Lua-scripted Redis bucket is atomic and costs one round-trip per call.</p><p>Provisioned Throughput plugs into the same place. Per request you choose <em>dedicated</em> (PT only, <code>429</code> when exhausted), <em>spill-over</em> (PT first, then PayGo — the default) or <em>shared</em> (PayGo only), and which tier absorbs the spill. The response's <code>traffic_type</code> field tells you which pool served the call, and it belongs on your dashboard. PT enforcement windows are short at scale — one to five seconds above 50 GSUs — so bursts must be smoothed to second granularity, not minute granularity, to stay inside a commitment.</p></div>
+<aside class="callout numbers"><span class="label">Key figures</span><p>Documented guidance for <code>429</code>s: exponential backoff, the global endpoint, smoothing within the minute. Gemini 3.x context-cache minimum is 4,096 tokens (6,144 on 3.7/3.8 Flash and 3.1 Pro). Explicit cache default TTL is 60 minutes; storage costs $1.00 per M tokens per hour on Flash, $4.50 on 3.1 Pro.</p></aside>
+<h3 id="s5-2">5.2 Retries, jitter, breakers and fallbacks</h3>
+<div class="prose"><p>Retry with exponential backoff and <strong>full jitter</strong> — a uniform draw between zero and the backoff. When a shared pool throttles, every client sees the error at the same moment and, without jitter, retries at the same moment; the retry wave is then as large as the original. A simulation of 200 clients retrying against a pool with room for 40 per second finishes far sooner with jitter, and with a fraction of the secondary rate-limit errors. Honour <code>Retry-After</code> when it is sent, jitter a little on top of it, and never retry past the turn's deadline — a retry that cannot finish in time only spends tokens.</p><p>A <strong>circuit breaker per model and per tool</strong> converts repeated failures into fail-fast decisions for a cooling period, with a half-open probe to recover. Breakers matter more for agents than for web services, because a sick dependency does not merely slow one request: it pins hundreds of coroutines <em>with their contexts in memory</em> until their deadlines fire.</p><p>When a model's breaker opens, or two consecutive rate-limit errors arrive, the gateway should move to a <strong>sibling model</strong> — 3.5 Flash to 3.7 Flash to 3.5 Flash-Lite — because each family has its own pool, so a sibling's error rate is nearly independent. Model identifiers therefore belong in configuration, never in code. That is also how you survive the 45-day retirement clock on short-lived Flash releases.</p><p><strong>Hedging</strong> — issuing a second identical request when the first has not answered by a chosen delay, and keeping the winner — is a p99 tool for small, non-streaming, idempotent calls such as intent classification. It trades extra calls for tail latency: fired at roughly the p90, it typically cuts p99 by a third to a half for a few percent more calls; fired earlier it halves p99 again but nearly doubles the calls. It is wrong for streaming answers, since you cannot un-stream the loser, and wrong when the pool is already contended, since it adds load exactly when load is the problem. Gate it on the degradation level.</p></div>
+<h3 id="s5-3">5.3 Admission control and graceful degradation</h3>
+<div class="prose"><p>Admission control is the circuit breaker on the feedback loop described in 1.6. It sits at the gateway, before a turn has cost anything, and asks three questions in order: is this tenant within its budget (a token bucket per tenant, so one brand cannot consume the global pool); what is the system's current degradation level; and would admitting this turn exceed the in-flight cap?</p><p>The cap starts at the token-budget figure from 3.3 and is tuned from load tests. Priority classes — an adviser-assist console, a broker portal, a VIP segment — bypass it.</p><p>The degradation level is computed from signals every instance can publish: in-flight turns, the age of the oldest queued turn, the share of model calls rate-limited in the last minute, and whether any model breaker is open. It is written to Redis so every gateway and orchestrator degrades together. Each level buys capacity by giving something up.</p></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Trigger</th>
+<th>What changes</th>
+<th>Effect in the worked example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>normal</td>
+<td>—</td>
+<td>≈ $0.005 per turn on Flash</td>
+</tr>
+<tr>
+<td>1</td>
+<td>in-flight ≥ 80 % of cap, or queue age ≥ 10 s, or rate-limited ratio ≥ 5 %</td>
+<td>answers move to Flash-Lite with a shorter output cap; optional tools withheld</td>
+<td>about a quarter of the level-0 cost; turns roughly twice as fast</td>
+</tr>
+<tr>
+<td>2</td>
+<td>a model breaker open, or rate-limited ratio ≥ 15 %</td>
+<td>Flash-Lite with minimal thinking and a short cap; no writes and no slow tools; a prepared event bulletin where one applies</td>
+<td>about a fifth of the level-0 cost</td>
+</tr>
+<tr>
+<td>3</td>
+<td>in-flight ≥ cap, or queue age ≥ 30 s</td>
+<td>shed everything below priority 2 with a <code>503</code> and a <code>Retry-After</code> that grows with the level</td>
+<td>bounded latency for the traffic that is admitted</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>Two details separate a working implementation from a diagram. The level needs <strong>hysteresis</strong> — hold a raised level for ten to fifteen seconds before letting it drop — or it will flap between 1 and 3 on every crossing of the cap. And <code>Retry-After</code> must be <strong>jittered by the client</strong>, or every shed user returns together and is shed together.</p></div>
+<aside class="callout scenario"><span class="label">Scenario</span><p>A hailstorm crosses three counties on a Sunday afternoon. Traffic is ten times normal and 75 % of it is "how do I report damage" and "does my policy cover this". Level 2 answers exactly that intent from a prepared event bulletin plus cached policy wording, at a fifth of the cost and half the latency, and without touching the policy administration system — which is precisely the system you want protected while loss adjusters are being dispatched. Customers with unrelated billing questions see a slightly terser agent. Nobody sees a spinner for forty seconds.</p></aside>
+<h3 id="s5-4">5.4 Durable execution</h3>
+<div class="prose"><p>The loop checkpoints every step in Firestore <em>before</em> acting on its result: the model's response after a model call — including the parts the next call must echo back, such as Gemini 3's thought signatures — and the tool results, compacted, after a tool step.</p><p>On redelivery, the orchestrator replays the turn from its checkpoint, skipping completed steps. The tool executor keys every write by turn, step, call index and a hash of the arguments, and stores the result under that key for a day. So a redelivered turn that has already registered a notification of loss gets the same claim reference back rather than creating a second one. A crash test that kills the process immediately after the claim is checkpointed shows one claim after redelivery, with four of five steps resumed from the checkpoint.</p><p>The queue contract is the other half. Pub/Sub push acknowledges on any <code>2xx</code> and redelivers on anything else, with a push backoff growing from 100 ms to 60 s; the subscription's own retry policy adds a 10–600 s exponential backoff; after five attempts the message goes to a dead-letter topic with its own alert.</p><p>The orchestrator should return <code>503</code> only for transient infrastructure trouble, and <code>200</code> for every <em>terminal</em> outcome — including graceful failure. A turn that ended with "I could not complete that; a colleague will follow up" must not be retried into a second bill. The acknowledgement deadline (≤ 600 s) is the ceiling for one delivery; the turn budget (45 s) sits well below it. A session lock in Redis, with the turn id as its value, serialises turns per session even when a redelivery and a new turn overlap; the lock's TTL is the budget plus a margin, so a dead instance releases it automatically.</p><p>Firestore shapes the layout: a session document, bounded by compaction and well under 1 MiB; a turn document per user message with steps appended atomically (<code>ArrayUnion</code> is idempotent for identical elements, which is exactly what a replayed step needs); tool results truncated to a few kilobytes <em>in the checkpoint as well as the transcript</em>; an <code>expires_at</code> timestamp with a TTL policy; and no counters inside documents. A turn writes its document a handful of times over several seconds — comfortably inside the sustained one-write-per-second-per-document guidance.</p></div>
+<h3 id="s5-5">5.5 Context engineering for scale</h3>
+<div class="prose"><p>Lay the prompt out for the cache: system instructions, policy wording and tool schemas first, byte-identical for every user and every turn; then the customer's prefetched profile; then a summary of older turns; then the last N messages verbatim; then the new message.</p><p>Implicit prefix caching bills the identical prefix at 10 % once it clears the minimum — 4,096 tokens on Gemini 3.x, 6,144 on 3.7/3.8 Flash and 3.1 Pro — and an explicit cache with a TTL fronts it deterministically for large prefixes. The prompt <em>version</em> must be part of the cache key, so that a prompt change invalidates cleanly instead of silently halving the hit rate. The explicit-cache break-even is under one request per hour on Flash: storage is not the reason to hesitate, operational overhead (TTL refresh, versioning) is.</p><p><strong>Compaction</strong> keeps input bounded. When pending history exceeds a token threshold, everything but the verbatim tail is summarised on the Lite tier <em>after</em> the turn completes, off the critical path. Without compaction, the first model call of a twelve-turn conversation grows from under 2,000 to over 7,000 tokens; with it, the call stays near 2,400. Over twenty turns that is roughly 385,000 versus 184,000 input tokens — three times the cost.</p><p>Tool results are truncated before they enter the transcript: a 180-line policy schedule becomes 600 tokens rather than 3,600. Earlier turns' tool traffic is not replayed at all — the assistant's own answer already carries the facts. Output is capped per task and thinking is set per task: minimal for routing and extraction, low for answers, medium only for the rare hard case. Thinking tokens are billed as output, and 3.8 Flash at high effort uses about 30 % more of them than 3.7.</p></div>
+<h3 id="s5-6">5.6 Tools at scale</h3>
+<div class="prose"><p>The tools are usually the real bottleneck, because the systems behind them were sized for humans working at human pace. A claims or policy administration platform that comfortably serves 400 contact-centre agents can be saturated by a few hundred concurrent turns.</p><p>The tool executor applies, in order: a <strong>bulkhead</strong> (a semaphore per tool per instance, so slow policy-system calls cannot occupy every worker), a <strong>circuit breaker</strong> per tool, a <strong>result cache</strong> for pure reads (profile for five minutes, policy documents for two, event status for thirty seconds), the <strong>idempotency check</strong> for writes, a <strong>timeout</strong>, and <strong>one retry for idempotent reads only</strong>.</p><p>Failures should come back to the model as <em>structured data</em> — "policy system unavailable, retry in 10 s" — never as exceptions that abort the turn. The model can usually answer around a missing fact, and an aborted turn is the most expensive outcome of all: you have paid for every token and delivered nothing.</p><p>Two habits remove most tool latency from the critical path. <strong>Prefetch</strong> the customer's profile and active policies when the session starts, rather than letting one call sit inside the first turn's planning step. And let the model issue independent calls in a single step so they run concurrently — profile and event status together — which makes the turn's tool time the maximum, not the sum.</p><p>Tool services run as their own Cloud Run services with their own service accounts and invoker bindings, so they scale and fail independently. An MCP server over the same tools standardises discovery and lets Agent Registry and Agent Gateway see and police the calls, at the cost of one hop — so run it in the same region with keep-alive connections.</p></div>
+<h3 id="s5-7">5.7 Streaming and connections</h3>
+<div class="prose"><p>Server-sent events over HTTP/1.1 chunked transfer is the right transport for a chat agent on Cloud Run: it passes every proxy, supports resume natively through <code>Last-Event-ID</code>, and is a plain request — which means it counts against instance concurrency and is subject to the request timeout (default 5 minutes, maximum 60). Clients must therefore reconnect with the last sequence number, and the relay must serve from the stream rather than from memory. Responses without chunked encoding are capped at 32 MiB; streams are not. WebSockets work too, but need session affinity, which is best-effort, and cross-instance fan-out through Redis either way.</p><p>Time-to-first-token as the user experiences it arrives only after plan → tools → answer — about four seconds in load tests. A two-second TTFT target is attainable only by streaming <em>progress</em> events ("checking your policy documents…") from the tool steps, which the event stream already carries. This is worth designing deliberately: the perceived responsiveness of the agent is set by the first progress event, not the first token of the answer.</p></div>
+<h3 id="s5-8">5.8 Budgets, multi-agent topologies and tenancy</h3>
+<div class="prose"><p>Every turn should carry a budget with four independent dimensions — steps, model calls, tokens and dollars — plus a wall-clock deadline, because each fails differently. Tool thrash burns steps. A long transcript burns tokens. A Pro-model fallback burns money. A slow policy system burns time while the user watches a spinner. A turn that exhausts a budget ends <em>gracefully</em>, with a message and a terminal event, and is not retried.</p><p>In multi-agent topologies the budget is hierarchical: the coordinator's budget bounds the sum of its specialists'. Specialist calls go through the same model gateway and the same buckets, so fan-out cannot escape admission control. The arithmetic in 1.7 is the argument to keep at hand — a specialist should be justified by a measured problem (wrong-tool rate, context too large for one prompt, permissions that must differ), and the design should state which metric would trigger the split.</p><p>For tenancy: per-tenant token buckets at the gateway, tenant labels on every metric and cost record, and a priority field on the turn that bypasses the in-flight cap for classes that must never be shed. On regions: the global endpoint for the model unless residency forbids it — regional endpoints cost 10 % more and carry fewer models, since 3.1 Pro Preview and the newest Flash releases are global or multi-region only. Cloud Run multi-region services with Service Health failover cover the stateless tier; Firestore multi-region covers the durable tier; Redis is per region, with the event relay pinned to the region running the turn, which is what Pub/Sub push delivers by default.</p><p>Configuration detail for compute, state and observability is in Appendices A, B and C.</p></div>
+</section>
+<section class="part" id="p6">
+<p class="part-label">Part 6</p>
+<h2>Failure catalogue</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Symptom</th>
+<th>Mechanism that catches it</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rate-limit storm on the shared pool</td>
+<td>rate-limited ratio climbs, turns lengthen, in-flight grows</td>
+<td>bucket waits, breaker, degradation levels 1–2</td>
+<td>smoothing, sibling fallback, PT for the base, shed at level 3</td>
+</tr>
+<tr>
+<td>Retry synchronisation</td>
+<td>a secondary error wave as large as the first</td>
+<td>jittered backoff, deadline-bounded retries</td>
+<td>full jitter; honour and jitter <code>Retry-After</code></td>
+</tr>
+<tr>
+<td>Slow-motion collapse</td>
+<td>p50 goes from 6 s to 40 s and nothing technically "fails"</td>
+<td>in-flight cap, queue age</td>
+<td>admission control derived from the token budget; shed fast</td>
+</tr>
+<tr>
+<td>Tool thrash / runaway loop</td>
+<td>many steps, same tool, same arguments</td>
+<td>step and call budgets; duplicate-call detection</td>
+<td>structured tool errors; step cap; cost alert</td>
+</tr>
+<tr>
+<td>Context overflow</td>
+<td>tokens per call climb turn over turn; cost per conversation drifts up</td>
+<td>compaction threshold; output caps</td>
+<td>compaction; tool-result truncation; stop replaying old tool traffic</td>
+</tr>
+<tr>
+<td>Poison message</td>
+<td>one turn fails on every redelivery</td>
+<td>dead-letter after 5 attempts; DLQ alert</td>
+<td>acknowledge graceful failures; inspect the DLQ; build replay tooling</td>
+</tr>
+<tr>
+<td>Duplicate side effect</td>
+<td>two claims registered for one event</td>
+<td>idempotency keys on writes; checkpoint before acting</td>
+<td>replay from checkpoint; dedup store with 24 h TTL</td>
+</tr>
+<tr>
+<td>Hot document</td>
+<td>Firestore write contention on a session document</td>
+<td>the ~1 write/s/document rule</td>
+<td>per-turn documents; append steps rather than rewriting; no counters in documents</td>
+</tr>
+<tr>
+<td>Cold-start storm</td>
+<td>latency spike on scale-out; Direct VPC NIC creation</td>
+<td>minimum instances; startup CPU boost</td>
+<td>pre-scale before known peaks such as renewal runs; keep instances warm</td>
+</tr>
+<tr>
+<td>Noisy tenant</td>
+<td>one brand's spike degrades everyone</td>
+<td>per-tenant bucket</td>
+<td>tenant quotas; priority classes</td>
+</tr>
+<tr>
+<td>Model retirement</td>
+<td>a 45-day clock on short-lived Flash releases; the 2.5 line retires 20 October 2026</td>
+<td>model ids in configuration; fallbacks</td>
+<td>pin the 12-month models for production; canary the rest</td>
+</tr>
+<tr>
+<td>Prompt change</td>
+<td>cache hit rate halves overnight; cost rises</td>
+<td>prompt version in the cache key</td>
+<td>version prompts; roll out with a canary and watch the cached-token share</td>
+</tr>
+<tr>
+<td>Intent-mix shift</td>
+<td>75 % "how do I report damage"; policy system idle but profile service hammered</td>
+<td>degradation level 2 with a prepared bulletin</td>
+<td>prefetch, caches, event bulletin</td>
+</tr>
+<tr>
+<td>Cost runaway</td>
+<td>budget alert or cost-per-conversation drift</td>
+<td>per-turn dollar budget; drift alert</td>
+<td>budgets; spend caps; kill switch on max instances</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="part" id="p7">
+<p class="part-label">Part 7</p>
+<h2>The growth path</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Stage</th>
+<th class="num">Conversations/day</th>
+<th>What you need</th>
+<th>What you can safely skip</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pilot</td>
+<td class="num">≤ 1,000</td>
+<td>one service, synchronous loop, per-turn budgets, structured tool errors, traces</td>
+<td>queue, Redis, Provisioned Throughput, degradation levels</td>
+</tr>
+<tr>
+<td>Production v1</td>
+<td class="num">1,000–20,000</td>
+<td>gateway/orchestrator split, Pub/Sub, Firestore checkpoints, idempotency, SSE relay, per-turn budgets, dashboards</td>
+<td>PT (fits comfortably in tier 1–2), multi-region</td>
+</tr>
+<tr>
+<td>Scale</td>
+<td class="num">20,000–200,000</td>
+<td>admission control with degradation levels, client-side smoothing, sibling fallbacks, compaction and caching, PT for the base load, quarterly capacity reviews</td>
+<td>GKE</td>
+</tr>
+<tr>
+<td>Enterprise</td>
+<td class="num">&gt; 200,000, multi-brand</td>
+<td>per-tenant quotas and priorities, a negotiated custom PayGo tier, multi-region, Agent Gateway and Registry for governance, cost allocation per tenant</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>The order of adoption matters: durability (checkpoints, idempotency) before admission control; admission control before Provisioned Throughput; Provisioned Throughput before multi-region.</p><p>Each step should be triggered by a measurement, and the design should name it in advance. "We add the queue when p95 during the peak hour crosses the budget. We buy Provisioned Throughput when the rate-limited ratio stays above 5 % at peak for a week. We add a second region when a residency or availability requirement says so — not before."</p></div>
+</section>
+<section class="part" id="p8">
+<p class="part-label">Part 8</p>
+<h2>Running a capacity review</h2>
+<h3 id="s8-1">8.1 A workable sequence</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frame</td>
+<td>Restate the goal; name the unit of work (the turn) and the binding constraint (tokens per minute). Agree what "working" means.</td>
+</tr>
+<tr>
+<td>Discover</td>
+<td>Walk the dimension checklist in Part 2, offering defaults so the conversation can move: volume, peak ratio, event behaviour, turn shape, latency budget, residency, tenancy.</td>
+</tr>
+<tr>
+<td>Calculate</td>
+<td>Do the arithmetic from Part 3 in the open: rates → tokens → Little's law → TPM versus tier → cost per conversation → what breaks first.</td>
+</tr>
+<tr>
+<td>Design</td>
+<td>Walk the architecture with the specifics in each box, and say plainly which parts are routine and which are hard.</td>
+</tr>
+<tr>
+<td>Deep-dive</td>
+<td>Pick two areas by risk. Usually admission control and durable execution; sometimes quota strategy or context and cost.</td>
+</tr>
+<tr>
+<td>Close</td>
+<td>Failure modes, the growth path, what you will measure in week one, and an explicit "not in version one" list.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="s8-2">8.2 Questions that change the design</h3>
+<div class="prose"><p>Seven questions do most of the work:</p><ul>
+<li><strong>What happens to traffic during a major event?</strong> → the event factor, and the whole degradation design.</li>
+<li><strong>Is there a Provisioned Throughput commitment already, and on what term?</strong> → spill-over design and break-even.</li>
+<li><strong>Does the data have to stay in-country?</strong> → regional endpoint, model availability, and the 10 % premium.</li>
+<li><strong>Which downstream system has the lowest QPS ceiling?</strong> → bulkheads, caches, prefetching.</li>
+<li><strong>What does a human-handled contact cost today?</strong> → the ROI line that makes $0.07 per conversation obviously acceptable.</li>
+<li><strong>How many brands or tenants share this?</strong> → fairness and per-tenant quotas.</li>
+<li><strong>What must never happen twice?</strong> → the scope of idempotency.</li>
+</ul></div>
+<h3 id="s8-3">8.3 Two worked situations</h3>
+<div class="prose"><p><strong>"Take the service agent from 5,000 to 500,000 conversations a day."</strong></p><p>Do the arithmetic first. 500,000 a day is five times the worked example, so roughly 70 M input TPM at peak — seven times the tier-3 baseline. No tier fits, so the design is Provisioned Throughput for the base on a one-year term (around 350 GSUs of Flash — quote the monthly figure), a custom tier negotiated for spill-over, and a serious programme to cut tokens per call (explicit caches, compaction, Lite routing above 50 %).</p><p>Then concurrency: 625 in-flight turns at peak and about 2,000 during an event, which means 12–40 orchestrator instances — still small. Redis and Firestore are fine. But the policy administration system at 87 QPS during an event is <em>over</em> its 40 QPS ceiling, so a document cache and level-2 degradation become mandatory rather than optional.</p><p>Then the operational layer: per-tenant quotas if brands are involved, multi-region if residency or availability demands it, cost allocation per brand. Close with what you would validate first — a load test that reproduces the event intent mix, not just the event volume.</p><p><strong>"The agent costs $0.30 per turn and p95 is 20 seconds in the morning peak. Fix it."</strong></p><p>Look at the traces first and establish where tokens and seconds actually go, step by step. The usual findings, and their fixes, in the order worth applying them:</p><ol>
+<li>No caching, because the prefix is not stable or sits below the minimum → reorder and enlarge the prefix; add an explicit cache.</li>
+<li>Pro on every call → route to Flash, and Flash-Lite for routing and short answers.</li>
+<li>Context growing without compaction → compact, truncate tool results, stop replaying old tool traffic.</li>
+<li>Sequential tool calls → parallel calls and session-start prefetch.</li>
+<li>Retries without jitter and with a long deadline → full jitter, breaker, sibling fallback.</li>
+<li>No admission control, so the peak becomes a slow-motion collapse → an in-flight cap derived from the token budget, plus degradation levels.</li>
+</ol><p>Expected effect: cost down four to five times, p95 down to six to eight seconds, and a shed rate you can now <em>see</em> and make a deliberate decision about — instead of a latency nobody chose.</p></div>
+<h3 id="s8-4">8.4 Common questions, answered briefly</h3>
+<div class="prose"><p><strong>Why not simply raise max instances?</strong> Because instances do not make tokens. The pool is shared, and the real cap is the token budget.</p><p><strong>Why a queue if the user is waiting?</strong> It gives a backlog with one observable age, redelivery for durability, and a drain rate set by the token bucket rather than the load balancer.</p><p><strong>Can we get exactly-once execution?</strong> Not on the push path. Design for at-least-once with idempotency keys.</p><p><strong>Provisioned Throughput or pay-as-you-go?</strong> PT for the base load on a long term if utilisation clears the break-even; PayGo or Priority for peaks; shaping for events.</p><p><strong>Synchronous or queued?</strong> Synchronous for a single-step read with a sub-second budget; queued for anything with tools, side effects, or a deadline beyond a few seconds.</p><p><strong>What do we measure in week one?</strong> Rate-limited ratio, queue age, minutes spent at each degradation level, p95 by step, cost per conversation, shed rate, and cached-token share.</p><p><strong>When would we move to Agent Runtime?</strong> When the agent is Python-first on ADK and the team wants managed sessions, memory and identity rather than running the queue and stores — after raising the default quotas.</p></div>
+<aside class="callout pitfall"><span class="label">Common misstep</span><p>Quoting a p95 without a per-step breakdown, a cost without the token shape behind it, or "we will shed load" without saying what the user sees and when they can retry.</p></aside>
+</section>
+<section class="part appendix" id="aa">
+<p class="part-label">Appendix A</p>
+<h2>Cloud Run settings that matter</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Gateway</th>
+<th>Orchestrator</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Billing mode</td>
+<td>request-based (CPU during requests)</td>
+<td>instance-based (CPU always allocated)</td>
+<td>checkpoints, compaction and telemetry run after the response on the orchestrator</td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>250</td>
+<td>80</td>
+<td>I/O-bound coroutines; memory per in-flight turn is a few MB of context</td>
+</tr>
+<tr>
+<td>CPU / memory</td>
+<td>1 vCPU / 512 MiB</td>
+<td>2 vCPU / 2 GiB</td>
+<td>JSON and validation work per step; headroom for 80 contexts</td>
+</tr>
+<tr>
+<td>Minimum instances</td>
+<td>2</td>
+<td>2</td>
+<td>warm capacity; on-demand scale-out waits max(10 s, 3.5× predicted cold start)</td>
+</tr>
+<tr>
+<td>Maximum instances</td>
+<td>100</td>
+<td>50</td>
+<td>bounded by regional CPU/memory quota ÷ instance size, and by Direct VPC egress (~100–200 instances per revision)</td>
+</tr>
+<tr>
+<td>Timeout</td>
+<td>600 s</td>
+<td>600 s</td>
+<td>SSE budget plus queue plus slack; matches the Pub/Sub ack deadline</td>
+</tr>
+<tr>
+<td>Ingress</td>
+<td>internal + load balancer</td>
+<td>internal only</td>
+<td>Cloud Armor cannot be bypassed; Pub/Sub push from the project is internal</td>
+</tr>
+<tr>
+<td>Autoscaling</td>
+<td>60 % CPU over 1 min, or 60 % of max concurrency</td>
+<td>same</td>
+<td>whichever needs more instances; adaptive concurrency tuning lowers effective concurrency to keep CPU below 90 %</td>
+</tr>
+<tr>
+<td>Shutdown</td>
+<td><code>SIGTERM</code> + 10 s</td>
+<td>same</td>
+<td>checkpoint early; the queue redelivers</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>Two Cloud Run resource types are worth naming for agent workloads. <strong>Worker pools</strong> (GA, April 2026) pull from Pub/Sub and autoscale on queue depth through the external-metrics autoscaler — the right home for long-running turns that would outlive a push acknowledgement deadline. <strong>Instances</strong> (Preview, August 2026) are singleton, individually addressable, always-on workloads, suited to stateful agent loops.</p></div>
+</section>
+<section class="part appendix" id="ab">
+<p class="part-label">Appendix B</p>
+<h2>State stores and their limits</h2>
+<div class="prose"><p><strong>Firestore</strong> for durable documents (sessions, turns, checkpoints): regional 99.99 %, multi-region 99.999 %; point-in-time recovery; TTL policies; 1 MiB documents; roughly one sustained write per second per document; 500 writes per second to a collection with a sequential indexed field; ramp new collections at 500 ops/s then +50 % every five minutes.</p><p><strong>Memorystore for Valkey or Redis</strong> for hot state (event-relay streams, session locks, token buckets, idempotency markers, the degradation level): approximately 120,000 ops/s per 2-vCPU node; reached from Cloud Run over Direct VPC egress, which needs a /26 or larger subnet and roughly twice as many IP addresses as instances.</p><p><strong>Pub/Sub</strong> for the queue: 10 MB messages, 31-day retention, ordering keys at 1 MB/s per key, and a push quota an order of magnitude below pull.</p><p><strong>Long-term memory and retrieval</strong> — AlloyDB with ScaNN, Vertex AI Vector Search, or the platform's Memory Bank — sits alongside these and is sized by chunks × dimensions × bytes, which is a small number next to the token bill.</p></div>
+</section>
+<section class="part appendix" id="ac">
+<p class="part-label">Appendix C</p>
+<h2>Observability, SLIs and alerts</h2>
+<div class="prose"><p>One trace per turn, with a span per model call and tool call, using attributes from the OpenTelemetry GenAI semantic conventions (<code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code> and <code>output_tokens</code>, <code>gen_ai.conversation.id</code>). Those conventions are still at "Development" status, so centralise the names in one place — they will move.</p><p>Metrics with <strong>low-cardinality labels only</strong>: model, tool, tenant, outcome, degradation level — never session or turn ids. Cloud Monitoring accepts one point per five seconds per time series. Worth recording: tokens by kind, cost, latency and TTFT histograms, rate-limited ratio, bucket wait, breaker state, in-flight turns, queue age, shed count by reason, and degradation level.</p><p>SLIs worth defining: <strong>availability</strong> (turns that ended with an answer, over turns admitted); <strong>shed rate</strong> as an SLI in its own right; <strong>latency attainment</strong> (share of turns under 8 s, and separately first <em>progress</em> event under 2.5 s); and <strong>cost per conversation</strong>, which drifts silently whenever a prompt or model changes.</p><p>Alerts worth paging on: Pub/Sub oldest unacknowledged age above 30 s; dead-letter queue above zero; rate-limited ratio above 5 %; degradation level 2 or higher for more than a few minutes; p95 above 8 s; <code>5xx</code> ratio above 2 %; Redis memory above 80 %; and cost per conversation more than 30 % above its seven-day baseline. That last one is the alert that catches a runaway loop before finance does.</p></div>
+</section>
+<section class="part appendix" id="ad">
+<p class="part-label">Appendix D</p>
+<h2>Google Cloud services, mapped to the mechanisms</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>Google Cloud pieces (September 2026)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model capacity</td>
+<td>Gemini on the Gemini Enterprise Agent Platform: Standard PayGo tiers (organisation-level TPM baselines), Priority (1.8×) and Flex (0.5×, Preview) tiers via request headers, Provisioned Throughput in GSUs by term with spill-over control, global vs regional endpoints (+10 %), Batch API (0.5×, ~24 h)</td>
+</tr>
+<tr>
+<td>Caching</td>
+<td>implicit prefix caching (≥ 4,096 / 6,144 tokens), explicit caches with TTL, <code>usage_metadata.cached_content_token_count</code></td>
+</tr>
+<tr>
+<td>Thinking and output</td>
+<td><code>thinking_level</code> MINIMAL/LOW/MEDIUM/HIGH (3.7/3.8 Flash and 3.1 Pro reject MINIMAL); thought signatures must be echoed back; <code>max_output_tokens</code></td>
+</tr>
+<tr>
+<td>SDK</td>
+<td><code>google-genai</code> 2.22 (<code>genai.Client(enterprise=True, project=…, location="global")</code>; pin below 3.0; SDK retries are off by default — retry in your own gateway)</td>
+</tr>
+<tr>
+<td>Compute</td>
+<td>Cloud Run services (gateway, orchestrator, tools), worker pools (GA) for pull-based long turns, instances (Preview) for singleton agents, jobs for evaluations and batch work; Agent Runtime as the managed alternative; GKE with KEDA where Kubernetes is the platform</td>
+</tr>
+<tr>
+<td>Queue and durability</td>
+<td>Pub/Sub push with OIDC, ordering keys, retry policy, dead-letter topics; Cloud Tasks for rate-capped, scheduled, deduplicated tool work (500/s per queue, 30-minute dispatch deadline); Workflows for long-running approvals (512 KB state, callbacks)</td>
+</tr>
+<tr>
+<td>State</td>
+<td>Firestore (Standard/Enterprise; TTL, PITR), Memorystore for Valkey/Redis (streams, buckets, locks), AlloyDB + ScaNN or Vertex AI Vector Search for retrieval, Agent Runtime Sessions and Memory Bank on the managed path</td>
+</tr>
+<tr>
+<td>Edge</td>
+<td>Global external Application Load Balancer with serverless NEGs, Cloud Armor rate limiting (per header, cookie or IP key; throttle or ban) and WAF, IAP (native on Cloud Run since March 2026), Apigee for spike arrest and quotas on API-shaped tools</td>
+</tr>
+<tr>
+<td>Governance at scale</td>
+<td>Agent Registry, Agent Gateway (MCP/A2A-aware policy point, 5,000 registered resources per instance), Agent Identity (SPIFFE, mTLS + DPoP), Model Armor inline</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>Cloud Trace via OTLP (<code>telemetry.googleapis.com</code>), Cloud Monitoring custom metrics and SLOs with burn-rate alerts, log-based metrics, Managed Prometheus sidecar; Agent Observability and Evaluation on the managed path</td>
+</tr>
+<tr>
+<td>Delivery and cost</td>
+<td>Cloud Build, Cloud Deploy canaries for Cloud Run (10/50/100 with verification), budgets with Pub/Sub notifications (budgets do not cap spend — wire the notification to a kill switch), Cloud Run flexible CUDs (28 % / 46 %), Cloud Run budget spend caps (Preview)</td>
+</tr>
+</tbody>
+</table></div>
+<div class="prose"><p>If part of the estate is not on Google Cloud, the mechanisms translate almost one to one. Token buckets and circuit breakers are yours to implement anywhere. Pub/Sub maps to SQS or Service Bus; Firestore to DynamoDB or Cosmos DB; Memorystore to ElastiCache; Provisioned Throughput to provisioned throughput on Bedrock or PTUs on Azure OpenAI; Cloud Run to App Runner or Container Apps. The design is portable; only the product names change.</p></div>
+</section>
+<section class="part appendix" id="ae">
+<p class="part-label">Appendix E</p>
+<h2>Reference figures</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Figure</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tokens per call (service agent)</td>
+<td>4–6 k in, 300–400 out including thinking</td>
+</tr>
+<tr>
+<td>Little's law</td>
+<td>in-flight = rate × duration; sessions ≈ 11× in-flight turns when users pause for a minute</td>
+</tr>
+<tr>
+<td>Flash PayGo tiers</td>
+<td>2 / 4 / 10 M TPM; Pro 0.5 / 1 / 2 M</td>
+</tr>
+<tr>
+<td>What 10 M TPM sustains</td>
+<td>≈ 14 turns/s of this turn shape; ≈ 85 turns in flight</td>
+</tr>
+<tr>
+<td>Provisioned Throughput, 3.5 Flash</td>
+<td>675 burndown tokens/s per GSU; output ×6, cached ×0.1; break-even 75 % on a 1-year term, never on a 1-month term</td>
+</tr>
+<tr>
+<td>Cost per conversation</td>
+<td>$0.14 → $0.09 (caching) → $0.07 (routing + caching)</td>
+</tr>
+<tr>
+<td>Output price vs input price</td>
+<td>6× on 3.5 Flash — which makes output caps and thinking levels cost levers</td>
+</tr>
+<tr>
+<td>Minimum cacheable prefix</td>
+<td>4,096 tokens (3.x); 6,144 (3.7/3.8 Flash, 3.1 Pro)</td>
+</tr>
+<tr>
+<td>Cloud Run</td>
+<td>1,000 concurrency and 800 req/s per instance; 60-minute request ceiling; 10 s after <code>SIGTERM</code>; scale-out waits max(10 s, 3.5× cold start); Direct VPC ≈ 100–200 instances per revision</td>
+</tr>
+<tr>
+<td>Pub/Sub push</td>
+<td>ack ≤ 600 s; backoff 100 ms–60 s; dead-letter after 5–100 attempts; push quota ≈ 10× below pull</td>
+</tr>
+<tr>
+<td>Firestore</td>
+<td>1 MiB documents; ~1 write/s/document; 500 then +50 %/5 min ramp</td>
+</tr>
+<tr>
+<td>Valkey</td>
+<td>≈ 120 k ops/s per 2-vCPU node</td>
+</tr>
+<tr>
+<td>Agent Runtime</td>
+<td>90 queries/min default quota; concurrency 9 by default; cold ≈ 4.7 s versus warm 0.4 s</td>
+</tr>
+<tr>
+<td>Reliability compounding</td>
+<td>0.95⁵ ≈ 0.77; 0.95⁸ ≈ 0.66</td>
+</tr>
+<tr>
+<td>Cloud Run fleet vs model bill</td>
+<td>≈ 0.1 %</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="part" id="sources">
+<p class="part-label">Reference</p>
+<h2>Sources and currency</h2>
+<div class="prose"><p>Figures were taken from official Google Cloud documentation in September 2026, covering: Gemini Enterprise Agent Platform pricing, model pages and the lifecycle table; Standard, Priority and Flex PayGo; Provisioned Throughput and its supported-models table; context caching; batch inference; quotas; Cloud Run quotas, autoscaling, request timeouts, billing settings, Direct VPC egress and WebSockets, plus the "Host AI agents on Cloud Run" guidance; Agent Runtime deployment, optimisation and quotas; ADK 2.x; Pub/Sub quotas, push, dead-letter topics and subscription properties; Cloud Tasks and Workflows quotas; Firestore quotas and best practices; Memorystore for Valkey node specifications; Cloud Armor rate limiting; Cloud Monitoring quotas; the OpenTelemetry GenAI semantic conventions; and Cloud Deploy canary deployments. Third-party latency measurements are from Artificial Analysis.</p><p><strong>Re-confirm these before making a commitment</strong>, since they move on their own schedule: model identifiers and retirement dates (a new Flash release starts a 45-day clock for 3.6/3.7/3.8; the 2.5 line retires on 20 October 2026; 3.1 Pro may leave preview); Flash introductory pricing, which ends 31 December 2026; PayGo tier baselines, and whether cached tokens count against them; the status of Flex PayGo; the <code>google-genai</code> 3.0 breaking release; Cloud Run defaults and the Preview status of instances, scaling controls and spend caps; Agent Runtime quotas and its concurrency formula; and the OpenTelemetry GenAI attribute names.</p></div>
+</section>
+</main>
+</div>
+<script>
+(function(){
+  try{
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {}; links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+    var targets = Object.keys(map).map(function(id){return document.getElementById(id);}).filter(Boolean);
+    var visible = {};
+    function pick(){
+      var subs = targets.filter(function(t){return visible[t.id] && t.tagName === 'H3';});
+      var parts = targets.filter(function(t){return visible[t.id] && t.tagName !== 'H3';});
+      var chosen = subs.length ? subs[subs.length-1] : (parts.length ? parts[parts.length-1] : null);
+      if(!chosen) return;
+      links.forEach(function(a){a.classList.remove('active');});
+      if(map[chosen.id]) map[chosen.id].classList.add('active');
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ visible[en.target.id] = en.isIntersecting; });
+      pick();
+    },{rootMargin:'-5% 0px -70% 0px',threshold:0});
+    targets.forEach(function(t){io.observe(t);});
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

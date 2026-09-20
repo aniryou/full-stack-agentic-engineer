@@ -1,0 +1,11 @@
+# Terraform working files (init output, state, secrets-bearing tfvars)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/*.auto.tfvars
+terraform/crash.log
+# generated per-platform; run `terraform init` (or `terraform providers lock`) locally
+terraform/.terraform.lock.hcl
+# source archive produced by scripts/build_agent_source.sh
+build/

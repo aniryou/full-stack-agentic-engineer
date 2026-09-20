@@ -1,0 +1,755 @@
+<title>Agentic Identity & Security Primer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --ground: #F4F6F4;
+    --surface: #FFFFFF;
+    --ink: #16201D;
+    --muted: #5B6963;
+    --rule: #D3DBD7;
+    --accent: #0E7368;
+    --accent-ink: #0A5A51;
+    --accent-soft: #DDEFEA;
+    --deny: #A93A34;
+    --deny-soft: #F7E4E2;
+    --code-bg: #EAEFEC;
+    --shadow: 0 1px 2px rgba(22, 32, 29, 0.06);
+    --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --body: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+    --mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101615;
+      --surface: #161E1C;
+      --ink: #E4EAE7;
+      --muted: #97A59F;
+      --rule: #2B3633;
+      --accent: #4CC5B7;
+      --accent-ink: #7ADACF;
+      --accent-soft: #16302A;
+      --deny: #E68A83;
+      --deny-soft: #3A2220;
+      --code-bg: #1E2926;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #101615;
+    --surface: #161E1C;
+    --ink: #E4EAE7;
+    --muted: #97A59F;
+    --rule: #2B3633;
+    --accent: #4CC5B7;
+    --accent-ink: #7ADACF;
+    --accent-soft: #16302A;
+    --deny: #E68A83;
+    --deny-soft: #3A2220;
+    --code-bg: #1E2926;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
+  code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; line-height: 1.5; margin: 0 0 1.2rem; }
+  pre code { background: none; padding: 0; }
+
+  .page { display: grid; grid-template-columns: 1fr; gap: 0; max-width: 1240px; margin: 0 auto; padding: 0 20px 80px; }
+  @media (min-width: 1024px) {
+    .page { grid-template-columns: 250px minmax(0, 1fr); gap: 48px; }
+  }
+
+  /* ---- rail ---- */
+  .rail { display: none; }
+  @media (min-width: 1024px) {
+    .rail { display: block; position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 28px 0 40px; }
+  }
+  .rail .label { font-family: var(--display); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px 12px; }
+  .rail ol { list-style: none; margin: 0; padding: 0; }
+  .rail li a {
+    display: grid; grid-template-columns: 26px 1fr; gap: 6px; align-items: baseline;
+    padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted);
+    font-family: var(--display); font-size: 13.5px; font-weight: 500; line-height: 1.3;
+  }
+  .rail li a .n { font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rail li a:hover { color: var(--ink); background: var(--surface); }
+  .rail li a.current { color: var(--accent-ink); background: var(--accent-soft); }
+  .rail li a.current .n { color: var(--accent-ink); }
+  .rail .meta { margin: 22px 12px 0; font-size: 12.5px; color: var(--muted); font-family: var(--display); line-height: 1.45; }
+
+  /* ---- masthead ---- */
+  .masthead { padding: 44px 0 28px; border-bottom: 1px solid var(--rule); margin-bottom: 40px; }
+  .eyebrow { font-family: var(--display); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 14px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(34px, 4.6vw, 54px); line-height: 1.04; letter-spacing: -0.015em; margin: 0 0 18px; text-wrap: balance; max-width: 22ch; }
+  .lede { font-size: 20px; line-height: 1.5; max-width: 62ch; margin: 0 0 22px; color: var(--ink); }
+  .howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 8px; }
+  .howto div { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; font-family: var(--display); font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); }
+  .howto div b { display: block; color: var(--accent-ink); font-weight: 600; margin-bottom: 2px; }
+
+  /* ---- sections ---- */
+  main { min-width: 0; }
+  section { padding: 8px 0 34px; border-bottom: 1px solid var(--rule); margin-bottom: 34px; scroll-margin-top: 24px; }
+  section:last-of-type { border-bottom: none; }
+  .sec-head { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: start; margin: 0 0 18px; }
+  .sec-head .num { font-family: var(--mono); font-size: 13px; color: var(--accent-ink); padding-top: 12px; font-variant-numeric: tabular-nums; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: clamp(26px, 3vw, 34px); line-height: 1.12; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 19px; margin: 28px 0 10px; letter-spacing: -0.005em; }
+  p, ul, ol { max-width: 68ch; }
+  p { margin: 0 0 1.05rem; }
+  ul, ol { margin: 0 0 1.1rem; padding-left: 1.3rem; }
+  li { margin-bottom: 0.45rem; }
+  li::marker { color: var(--muted); }
+  strong { font-weight: 600; }
+
+  /* ---- key ideas (section 0) ---- */
+  .ideas { counter-reset: idea; list-style: none; padding: 0; max-width: none; display: grid; gap: 12px; }
+  .ideas li { counter-increment: idea; display: grid; grid-template-columns: 34px 1fr; gap: 12px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin: 0; box-shadow: var(--shadow); }
+  .ideas li::before { content: counter(idea); font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1; color: var(--accent); padding-top: 2px; }
+  .ideas li b { font-family: var(--display); font-weight: 600; display: block; margin-bottom: 3px; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 14px 0 22px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.45; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+  th { font-family: var(--display); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--ground); }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  td.id { font-family: var(--mono); font-size: 13px; white-space: nowrap; color: var(--accent-ink); }
+  .tablewrap.compact td, .tablewrap.compact th { padding: 8px 10px; font-size: 14px; }
+
+  /* ---- callouts ---- */
+  .say { margin: 26px 0 8px; padding: 16px 18px 16px 20px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; max-width: 72ch; }
+  .say .k { font-family: var(--display); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 6px; }
+  .say p { margin: 0; font-style: italic; }
+  .flag { margin: 18px 0; padding: 14px 18px; border-left: 3px solid var(--deny); background: var(--deny-soft); border-radius: 0 8px 8px 0; max-width: 72ch; }
+  .flag .k { font-family: var(--display); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--deny); margin: 0 0 6px; }
+  .flag p { margin: 0; }
+  .note { color: var(--muted); font-size: 15px; }
+
+  /* ---- figures ---- */
+  figure { margin: 22px 0 26px; }
+  figure svg { max-width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+  figcaption { font-family: var(--display); font-size: 13.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; max-width: 72ch; }
+  .diagram-wrap { overflow-x: auto; }
+
+  /* ---- drills ---- */
+  .drills { list-style: none; padding: 0; max-width: none; display: grid; gap: 12px; }
+  .drills li { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin: 0; box-shadow: var(--shadow); }
+  .drills li q { font-family: var(--display); font-weight: 600; display: block; margin-bottom: 6px; quotes: "“" "”"; }
+  .drills li .expect { font-size: 15px; color: var(--muted); }
+  .drills li .expect b { color: var(--ink); font-weight: 600; }
+
+  /* ---- glossary ---- */
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; max-width: none; margin: 0; }
+  dl.gloss dt { font-family: var(--mono); font-size: 13.5px; color: var(--accent-ink); padding-top: 2px; }
+  dl.gloss dd { margin: 0; font-size: 15.5px; }
+  @media (max-width: 600px) { dl.gloss { grid-template-columns: 1fr; gap: 2px 0; } dl.gloss dd { margin-bottom: 10px; } }
+
+  /* ---- verify list ---- */
+  .verify { list-style: none; padding: 0; max-width: none; display: grid; gap: 8px; }
+  .verify li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; margin: 0; font-size: 15px; }
+  .verify input { margin: 4px 0 0; accent-color: var(--accent); width: 16px; height: 16px; }
+  .verify label { cursor: pointer; }
+  .verify li.done label { color: var(--muted); text-decoration: line-through; }
+
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="page">
+  <aside class="rail" aria-label="Sections">
+    <p class="label">Drill by section</p>
+    <ol id="toc"></ol>
+    <p class="meta">Written 5 Sep 2026 against Google Cloud's agent platform. Product facts verified on that date — re-check §13 before relying on them.</p>
+  </aside>
+
+  <main id="main">
+    <header class="masthead">
+      <p class="eyebrow">Google Cloud · Identity &amp; security</p>
+      <h1>Identity &amp; Security for Agentic Systems</h1>
+      <p class="lede">A drillable primer on how agents break classical identity assumptions and what to do about it — threat model, identity plane, four policy enforcement points, secrets, MCP and A2A, tenancy, audit — mapped onto Google Cloud's 2026 agent stack and backed by the <code>agentic-identity-gcp-lab</code> reference implementation.</p>
+      <div class="howto">
+        <div><b>One section at a time</b>Each ends with the 30-second answer you would give in a design review.</div>
+        <div><b>Then open the notebook</b>Every section with code maps to <code>notebooks/01–09</code> in the repo: worked, practice, solutions.</div>
+        <div><b>Re-verify before the loop</b>Agent Identity, Auth Manager and Agent Gateway all went GA in 2026 — §13 lists what moves.</div>
+      </div>
+    </header>
+
+    <!-- 0 -->
+    <section id="s0" data-title="The mental model">
+      <div class="sec-head"><span class="num">§0</span><h2>The mental model in one page</h2></div>
+      <p>An agent is a <strong>workload that turns untrusted text into privileged actions</strong>. That single sentence generates every security problem in this primer:</p>
+      <ul>
+        <li><em>Untrusted text</em> — the model reads prompts, tool results, web pages, documents and messages from other agents, and it cannot reliably tell instructions from data. Anything the agent reads is an attack surface.</li>
+        <li><em>Privileged actions</em> — the agent holds credentials and calls tools. Its blast radius is the union of everything those credentials can do.</li>
+        <li><em>Workload</em> — it runs somewhere, under some identity, and it must be governable like any other production system: named, permissioned, observable, revocable.</li>
+      </ul>
+      <p>Five ideas carry most of the weight:</p>
+      <ol class="ideas">
+        <li><div><b>Every agent is a first-class principal.</b> Not a shared service account, not "the app". One agent, one cryptographic identity, its own IAM bindings, its own audit trail. On Google Cloud this is <strong>Agent Identity</strong> (SPIFFE-based, certificate-bound).</div></li>
+        <li><div><b>Two authorities, always distinguished.</b> An agent acts either under its <em>own authority</em> or <em>on behalf of a user</em> (delegated authority, the user's consent and permissions). Tokens, policy and logs must carry which one applies — and when delegated, both identities.</div></li>
+        <li><div><b>Least privilege per action, not per agent.</b> The credential used for a tool call should be scoped to that call: narrowest audience, narrowest scope, shortest lifetime, bound to the caller. Brokers and token exchange make this cheap.</div></li>
+        <li><div><b>Deterministic controls outrank probabilistic ones.</b> Prompt-level defenses (Model Armor, instructions, classifiers) reduce risk; IAM, network perimeters, allowlists and confirmation gates <em>bound</em> it. Design so a fully hijacked model still cannot exceed the deterministic envelope.</div></li>
+        <li><div><b>Observable by construction.</b> Every tool call is logged with user, agent, decision and trace ID; every credential use is attributable; anomalies are detectable; revocation is one policy change away.</div></li>
+      </ol>
+      <p>The reference implementation packages these as <strong>four policy enforcement points (PEPs)</strong> around the agent loop — the IAM/resource layer, the runtime callback layer (ADK plugin), the network/gateway layer (Agent Gateway + VPC Service Controls) and the model-side guardrail layer (Model Armor) — fed by one <strong>identity plane</strong> (Agent Identity + Auth Manager + token exchange).</p>
+    </section>
+
+    <!-- 1 -->
+    <section id="s1" data-title="Why agents break classical identity">
+      <div class="sec-head"><span class="num">§1</span><h2>Why agents break classical identity assumptions</h2></div>
+      <p>Classical IAM has two kinds of principals: <strong>humans</strong> (interactive, consenting, slow, MFA-protected) and <strong>workloads</strong> (non-interactive, deterministic, fixed code path, one service account per deployment). Agents fit neither bucket, and forcing them into one fails predictably.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Assumption in classical IAM</th><th>What agents do instead</th><th>Consequence</th></tr></thead>
+        <tbody>
+          <tr><td>A workload's behavior is fixed by its code</td><td>The model chooses which tools to call and with what arguments at runtime, influenced by untrusted input</td><td>You cannot enumerate what the workload "needs" — bound what it <em>may</em> do and gate what it <em>does</em></td></tr>
+          <tr><td>One identity per deployment is fine</td><td>Dozens of agents may share a runtime; an agent spawns sub-agents; one agent serves many users</td><td>Shared identities make attribution and revocation impossible; you need per-agent identity plus per-user delegation</td></tr>
+          <tr><td>Instructions come from the developer; data comes from users</td><td>Instructions and data arrive in the same channel — the context window — and the model cannot cryptographically distinguish them</td><td>Prompt injection is a property of the medium, not a bug to patch. Treat every input as untrusted and enforce policy outside the model</td></tr>
+          <tr><td>The caller of an API is the entity that decided to call it</td><td>The <em>model</em> decided; the <em>runtime</em> executed; the <em>user</em> asked for something else entirely</td><td>The confused deputy is the default state of an agent, not an edge case</td></tr>
+          <tr><td>Long-lived secrets, rotated occasionally, are acceptable</td><td>Agents run arbitrary reasoning over content crafted to exfiltrate secrets from their context or environment</td><td>Long-lived credentials in an agent's reach are leakable; issue short-lived, sender-constrained tokens just in time</td></tr>
+        </tbody>
+      </table></div>
+      <p>Two framings worth naming:</p>
+      <ul>
+        <li><strong>The lethal trifecta</strong> (Simon Willison): an agent with (a) access to private data, (b) exposure to untrusted content and (c) a way to communicate externally can be made to exfiltrate. Remove one leg or gate it deterministically.</li>
+        <li><strong>Google's three principles for secure agents</strong> (2025): agents must have <em>well-defined human controllers</em>; agent <em>powers must be limited</em>; agent <em>actions and planning must be observable</em>. Google pairs these with a hybrid defense — deterministic runtime policy enforcement plus reasoning-based defenses (model hardening, classifiers).</li>
+      </ul>
+      <div class="say"><p class="k">In one sentence</p><p>An agent is a workload whose behavior is chosen at runtime by a model reading untrusted input. So I stop trying to predict what it needs and instead bound what it may do: give it its own identity, scope each action's credential to that action, enforce policy outside the model, and log everything with both the user's and the agent's identity.</p></div>
+    </section>
+    <!-- 2 -->
+    <section id="s2" data-title="Threat model">
+      <div class="sec-head"><span class="num">§2</span><h2>Threat model</h2></div>
+      <p>Use the <strong>OWASP Top 10 for Agentic Applications (2026)</strong> as the shared vocabulary — customers and auditors increasingly know it — and map each risk to the control that bounds it.</p>
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>ID</th><th>Risk</th><th>Typical manifestation</th><th>Primary deterministic control</th><th>Supporting probabilistic control</th></tr></thead>
+        <tbody>
+          <tr><td class="id">ASI01</td><td>Agent Goal Hijack</td><td>Prompt injection via a web page, document, ticket or email redirects the agent's objective</td><td>Tool allowlist and confirmation gates outside the model; egress allowlist</td><td>Model Armor prompt-injection filter; instruction hierarchy</td></tr>
+          <tr><td class="id">ASI02</td><td>Tool Misuse &amp; Exploitation</td><td>Legitimate tool called with malicious arguments (<code>send_email</code> to attacker; <code>run_query</code> with <code>DROP</code>)</td><td>Argument schema validation; read/write/destructive tiers; per-tool scopes; VPC-SC <code>mcp.tool.isReadOnly</code></td><td>Output screening</td></tr>
+          <tr><td class="id">ASI03</td><td>Identity &amp; Privilege Abuse</td><td>Shared service account with broad roles; user token replayed by the agent for unrelated purposes</td><td>Per-agent identity; delegated tokens with audience + scope; deny policies; Principal Access Boundaries</td><td>—</td></tr>
+          <tr><td class="id">ASI04</td><td>Agentic Supply Chain</td><td>Malicious MCP server, poisoned tool description, compromised package</td><td>Agent Registry allowlist; gateway routes only to registered resources; pinned dependencies; signed agent cards</td><td>Tool-description scanning</td></tr>
+          <tr><td class="id">ASI05</td><td>Unexpected Code Execution</td><td>Model-generated code runs with the agent's credentials</td><td>Sandboxed execution (Agent Sandbox) with no ambient credentials; separate identity for executors</td><td>—</td></tr>
+          <tr><td class="id">ASI06</td><td>Memory &amp; Context Poisoning</td><td>Injected content persisted in session memory or a RAG index, replayed later</td><td>Provenance tags on stored content; per-user/per-tenant memory isolation; write-gating to memory</td><td>Screening before persistence</td></tr>
+          <tr><td class="id">ASI07</td><td>Insecure Inter-Agent Communication</td><td>Sub-agent trusts caller without auth; A2A over plain HTTP; tokens forwarded</td><td>mTLS/DPoP-bound tokens; A2A <code>securitySchemes</code>; audience validation; no token passthrough</td><td>—</td></tr>
+          <tr><td class="id">ASI08</td><td>Cascading Failures</td><td>One hijacked agent triggers a chain of tool calls across agents</td><td>Per-hop authorization; budgets and rate limits; circuit breakers; human checkpoints on high-impact chains</td><td>Anomaly detection</td></tr>
+          <tr><td class="id">ASI09</td><td>Human-Agent Trust Exploitation</td><td>Confident, wrong summaries lead a human to approve harm</td><td>Confirmation UIs that show <em>what will actually execute</em> (tool, args), not the model's summary</td><td>—</td></tr>
+          <tr><td class="id">ASI10</td><td>Rogue Agents</td><td>Agent keeps operating outside policy; orphaned deployments</td><td>Central registry; identity that cannot be shared or impersonated; kill switch via IAM deny / perimeter; anomaly &amp; threat detection</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+      <p>Two habits make a threat model credible when you whiteboard it:</p>
+      <ul>
+        <li><strong>Draw the trust boundaries, then the data flows crossing them.</strong> For a support agent: user ↔ front-end; front-end ↔ runtime; agent ↔ model endpoint; agent ↔ MCP servers/tools; agent ↔ peer agents; agent ↔ memory/session store; agent ↔ the open internet. Each crossing gets an identity, a policy and a log.</li>
+        <li><strong>Ask "what if the model is fully adversarial?"</strong> for each tool. If the answer is "it could do X and nothing outside the model would stop it", X is your risk. Then add the deterministic control.</li>
+      </ul>
+      <div class="say"><p class="k">In one sentence</p><p>I use OWASP's agentic top ten as the checklist, but the design question is always the same: assume the model has been hijacked — what's the worst it can do with the credentials and tools it holds, and which control outside the model stops it?</p></div>
+    </section>
+
+    <!-- 3 -->
+    <section id="s3" data-title="The identity model for agents">
+      <div class="sec-head"><span class="num">§3</span><h2>The identity model for agents</h2></div>
+      <h3>3.1 Principals</h3>
+      <p>An agentic system has more principals than a classical app, and you should name all of them:</p>
+      <ul>
+        <li><strong>User</strong> — the human controller, authenticated by an IdP, with consent for what the agent may do on their behalf.</li>
+        <li><strong>Agent</strong> — the workload running the agent loop. On Google Cloud: an <strong>Agent Identity</strong> SPIFFE ID such as <code>spiffe://agents.global.org-123.system.id.goog/resources/aiplatform/projects/987/locations/us-central1/reasoningEngines/support-agent</code>, expressed in IAM as <code>principal://agents.global.org-123.system.id.goog/resources/aiplatform/…</code>.</li>
+        <li><strong>Tool / resource server</strong> — an MCP server, an API, a database. It has its own identity and, crucially, is an OAuth <em>resource server</em> that validates tokens issued <em>for it</em>.</li>
+        <li><strong>Model endpoint</strong> — Gemini on the Agent Platform. The agent authenticates to it; Model Armor floor settings apply at this boundary.</li>
+        <li><strong>Peer agents</strong> — other agents called over A2A, each with their own identity and Agent Card.</li>
+        <li><strong>Operators / developers</strong> — humans with admin roles; a frequent blind spot (who can change the agent's instructions or tool list?).</li>
+      </ul>
+
+      <h3>3.2 Own authority vs delegated authority</h3>
+      <p>Every action the agent takes is under one of two authorities. Make this explicit in code, tokens and logs:</p>
+      <ul>
+        <li><strong>Own authority</strong> — the agent uses <em>its</em> identity and <em>its</em> IAM grants: writing traces, reading a shared knowledge base, calling a 2-legged-OAuth SaaS API with credentials the organization gave <em>the agent</em>. Audit logs show the agent's identity only.</li>
+        <li><strong>Delegated authority (on behalf of a user)</strong> — the agent acts with credentials <em>the user consented to</em>, typically 3-legged OAuth: reading the user's calendar, filing a ticket as the user, querying BigQuery with the user's own permissions. Audit logs must show <strong>both</strong> the agent and the user — Google's Agent Identity does exactly this when acting through Auth Manager.</li>
+      </ul>
+      <p>A very common design error is to give the agent's own identity broad permissions ("it needs to read everyone's tickets") when the correct design is delegated: the agent reads <em>this user's</em> tickets with <em>this user's</em> token. Delegation keeps the agent's own blast radius small and makes authorization the resource's problem — which already knows how to authorize users.</p>
+
+      <h3>3.3 What "agent identity" should mean — and how GCP implements it</h3>
+      <p>A good agent identity has these properties. Google Cloud's Agent Identity (generally available in 2026 — Agent Identity from April, Auth Manager and its APIs from August, per the IAM release notes) was designed against this list, so it doubles as product knowledge:</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Property</th><th>Why it matters</th><th>Google Cloud implementation</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Unique per agent, not shared</strong></td><td>Attribution and revocation</td><td>One SPIFFE ID per deployed agent resource; not shared between workloads by default</td></tr>
+          <tr><td><strong>Strongly attested</strong></td><td>The runtime, not a config file, proves which agent is calling</td><td>Per-agent X.509 certificate provisioned by the runtime, 24-hour validity, auto-renewed</td></tr>
+          <tr><td><strong>No long-lived secrets</strong></td><td>Nothing to leak from a container or repo</td><td>No service-account-style keys can be generated for agent identities</td></tr>
+          <tr><td><strong>Cannot be impersonated</strong></td><td>Prevents a compromised operator/SA from "becoming" the agent</td><td>Impersonation is not supported for agent identities</td></tr>
+          <tr><td><strong>Sender-constrained tokens</strong></td><td>A stolen token is useless outside the runtime</td><td>Access tokens bound to the certificate (mTLS); across Agent Gateway also DPoP (RFC 9449) → "double-bound". A default Google-managed Context-Aware Access policy rejects unbound use</td></tr>
+          <tr><td><strong>Governable as a group</strong></td><td>Policy at fleet scale</td><td><code>principalSet://…/attribute.platformContainer/aiplatform/projects/N</code> (all agents in a project), <code>…/attribute.platform/aiplatform</code> (all agents in the org)</td></tr>
+          <tr><td><strong>Usable in all policy types</strong></td><td>Same controls as any principal</td><td>IAM allow and deny policies, Principal Access Boundary policies, VPC-SC ingress/egress rules</td></tr>
+        </tbody>
+      </table></div>
+      <p>Supported runtimes today: <strong>Agent Runtime</strong> (Agent Engine, resource type <code>reasoningEngines</code>), <strong>Gemini Enterprise</strong> and <strong>Cloud Run</strong> (<code>gcloud beta run deploy … --functional-type=agent --identity-type=agent-identity</code>; MCP servers with <code>--functional-type=mcp-server</code>). With the Python SDK: <code>client.agent_engines.create(agent=AdkApp(agent), config={"identity_type": types.IdentityType.AGENT_IDENTITY, …})</code>; with ADK deploy: <code>.agent_engine_config.json</code> → <code>{"identity_type": "AGENT_IDENTITY"}</code>. Inside the agent, Application Default Credentials transparently obtain the certificate-bound token from the metadata server, so <code>google.auth.default()</code> just works with the agent identity.</p>
+      <div class="flag"><p class="k">Two things worth knowing</p><p><strong>Migration from a service account to an agent identity creates a new principal with no inherited permissions.</strong> Pre-grant roles (Policy Analyzer helps) before flipping <code>--identity-type</code>. Legacy bucket roles cannot be granted to agent identities. And <strong>the opt-out is a red flag:</strong> <code>GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False</code> disables token binding and is documented as strongly discouraged — in a customer's config, that is a finding.</p></div>
+
+      <h3>3.4 Where the older primitives still fit</h3>
+      <ul>
+        <li><strong>Service accounts</strong> remain the identity for non-agent infrastructure (build pipelines, the front-end, a Cloud SQL proxy) and for Cloud Run MCP servers that choose <code>--identity-type=service-account</code>.</li>
+        <li><strong>Workload Identity Federation</strong> brings external identities (GitHub Actions OIDC, AWS/Azure, on-prem SPIFFE) into IAM via STS token exchange without keys — the right way for CI to deploy agents.</li>
+        <li><strong>Short-lived impersonation</strong> (<code>generateAccessToken</code>, <code>generateIdToken</code>) and <strong>Credential Access Boundaries</strong> (downscoped tokens; Cloud Storage only) let a broker mint narrowly scoped, short-lived credentials for a specific tool call.</li>
+        <li><strong>IAM Conditions</strong> (CEL), <strong>deny policies</strong>, <strong>Principal Access Boundary policies</strong> and <strong>Org Policy custom constraints</strong> give you the "cannot exceed" envelope regardless of allow grants.</li>
+      </ul>
+
+      <h3>3.5 Delegation mechanics (standards you should be able to draw)</h3>
+      <figure>
+        <div class="diagram-wrap">
+        <svg viewBox="0 0 1030 250" role="img" aria-label="A user's token and the agent's certificate-bound actor token are exchanged at the STS for one delegated token naming the user as subject and the agent as actor, bound to the agent's certificate and scoped to one MCP server, which validates audience, scope and binding." style="color: var(--ink)">
+          <defs>
+            <marker id="arrD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+          </defs>
+          <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+            <!-- user -->
+            <rect x="24" y="40" width="170" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="109" y="64" text-anchor="middle" font-weight="600">User (front-end)</text>
+            <text x="109" y="84" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">id token · sub=u-ana</text>
+            <!-- agent -->
+            <rect x="24" y="150" width="170" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="109" y="174" text-anchor="middle" font-weight="600">Agent (runtime)</text>
+            <text x="109" y="194" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11">actor token · cnf=cert</text>
+            <!-- STS -->
+            <rect x="300" y="92" width="200" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="400" y="118" text-anchor="middle" font-weight="600">STS / Auth Manager</text>
+            <text x="400" y="138" text-anchor="middle" font-size="11.5">RFC 8693 token exchange</text>
+            <!-- token -->
+            <rect x="580" y="72" width="250" height="110" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="705" y="94" text-anchor="middle" font-weight="600">Delegated token</text>
+            <g font-family="JetBrains Mono, monospace" font-size="11">
+              <text x="596" y="114">sub: u-ana</text>
+              <text x="596" y="130">act: {sub: spiffe://…/agent}</text>
+              <text x="596" y="146">aud: https://tickets/mcp</text>
+              <text x="596" y="162">scope: tickets:read · cnf: cert</text>
+            </g>
+            <!-- resource server -->
+            <rect x="900" y="72" width="110" height="110" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="955" y="98" text-anchor="middle" font-weight="600">MCP server</text>
+            <text x="955" y="118" text-anchor="middle" font-size="11">verifies</text>
+            <g font-family="JetBrains Mono, monospace" font-size="11">
+              <text x="955" y="136" text-anchor="middle">aud ✓</text>
+              <text x="955" y="152" text-anchor="middle">scope ✓</text>
+              <text x="955" y="168" text-anchor="middle">cnf ✓</text>
+            </g>
+            <!-- arrows -->
+            <g stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#arrD)">
+              <path d="M194 72 C 250 72, 260 112, 300 112"/>
+              <path d="M194 182 C 250 182, 260 142, 300 142"/>
+              <line x1="500" y1="127" x2="580" y2="127"/>
+              <line x1="830" y1="127" x2="900" y2="127"/>
+            </g>
+            <g font-size="11" fill="var(--muted)">
+              <text x="238" y="60">subject_token</text>
+              <text x="238" y="205">actor_token</text>
+              <text x="540" y="116" text-anchor="middle">narrow aud + scope</text>
+              <text x="865" y="116" text-anchor="middle">over mTLS</text>
+            </g>
+          </g>
+        </svg>
+        </div>
+        <figcaption>Delegation as token exchange: the STS combines the user's subject token and the agent's certificate-bound actor token into one short-lived token that names both (<code>sub</code> + <code>act</code>), is scoped to one audience, and stays bound to the agent's certificate; the resource server checks all three. The lab's <code>TokenIssuer.exchange()</code> does exactly this.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>RFC 8693 token exchange</strong> — the standard way to represent "agent A acting for user U": the STS takes the user's <code>subject_token</code> and the agent's <code>actor_token</code> and issues a token whose <code>sub</code> is the user and whose <code>act</code> claim identifies the agent, scoped to an audience and scope. Nested <code>act.act</code> represents multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.</li>
+        <li><strong>RFC 9449 DPoP</strong> — the client proves possession of a private key on every request with a signed <code>DPoP</code> header (<code>htm</code>, <code>htu</code>, <code>iat</code>, <code>jti</code>, <code>ath</code>); the token carries <code>cnf.jkt</code>. A replayed bearer token without the key fails.</li>
+        <li><strong>RFC 8705 mTLS-bound tokens</strong> — the token carries <code>cnf.x5t#S256</code> (certificate thumbprint); the resource server checks the TLS client certificate matches. This is what "certificate-bound" means for Agent Identity.</li>
+        <li><strong>Credential Access Boundaries</strong> — a downscoped Google access token restricted to specific buckets/prefixes and permissions; the pattern for "give this tool call access to exactly one prefix for five minutes".</li>
+      </ul>
+      <p class="note">The reference implementation contains a small local STS that performs RFC 8693 exchange with an <code>act</code> claim, mints certificate-bound (<code>cnf.x5t#S256</code>) agent tokens and verifies DPoP proofs — so you can <em>show</em> replay failing rather than describe it (notebooks 01–02).</p>
+      <div class="say"><p class="k">In one sentence</p><p>Each agent gets its own SPIFFE identity with a runtime-attested certificate; its tokens are bound to that certificate so theft doesn't help. Then I separate the agent's own authority from delegated authority: the agent's identity gets narrow infrastructure roles, and anything user-specific happens with a user-delegated token that names both the user and the agent, so the resource authorizes the user and the log shows both.</p></div>
+    </section>
+    <!-- 4 -->
+    <section id="s4" data-title="Authorization patterns">
+      <div class="sec-head"><span class="num">§4</span><h2>Authorization patterns</h2></div>
+      <h3>4.1 Four policy enforcement points</h3>
+      <p>Design authorization as layers that fail closed independently:</p>
+      <ol>
+        <li><strong>Resource layer (IAM).</strong> The final arbiter. Bind the agent principal (or principalSet) to the narrowest roles on the narrowest resources; IAM Conditions for time-boxing and resource-name constraints; deny policies and PAB policies for "never, regardless of allows".</li>
+        <li><strong>Runtime layer (ADK callbacks / plugin).</strong> <code>before_tool_callback</code> sees the resolved tool name and arguments <em>before</em> execution; this is where you enforce tool allowlists, tiers, argument constraints, per-user scopes, budgets and human confirmation. Returning a result from the callback skips the tool. The lab's <code>SecurityPlugin</code> does this for every agent in the runner.</li>
+        <li><strong>Network layer (Agent Gateway + VPC Service Controls).</strong> The gateway is the single egress point for agent → tool/agent traffic; IAP enforces IAM per SPIFFE ID on resources registered in Agent Registry (unregistered destinations need <code>iap.resources.egressViaIAP</code>). VPC-SC perimeters accept agent identities in ingress/egress rules and can condition on MCP attributes — <code>mcp.toolName</code>, <code>mcp.method</code>, <code>mcp.tool.isReadOnly</code> — e.g. allow an agent to <em>read</em> from a Workspace MCP server but deny <code>send_email</code>.</li>
+        <li><strong>Model-side layer (Model Armor).</strong> Screening of prompts and responses (and, at the gateway, tool traffic) for prompt injection/jailbreak, sensitive data, malicious URLs and RAI categories. Apply as project <strong>floor settings</strong> (a baseline nobody can turn off) plus per-request <strong>templates</strong>; request-level template &gt; floor &gt; Gemini's built-in safety filters.</li>
+      </ol>
+      <p>The runtime layer is the one you control most as the agent developer; the resource and network layers are the ones that still hold if your code is wrong.</p>
+
+      <h3>4.2 Tool tiers and deny-by-default</h3>
+      <p>Classify every tool once, in policy, not in prose:</p>
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>Tier</th><th>Examples</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td><strong>READ</strong></td><td><code>get_ticket</code>, <code>search_docs</code></td><td>Allowed by default for agents bound to the policy; still scope-checked.</td></tr>
+          <tr><td><strong>WRITE</strong></td><td><code>add_comment</code>, <code>create_draft</code></td><td>Explicit allowlisting and, when acting for a user, the user's scope.</td></tr>
+          <tr><td><strong>DESTRUCTIVE / EXTERNAL</strong></td><td><code>issue_refund</code>, <code>send_email</code>, <code>fetch_url</code></td><td>Human confirmation unless a narrow pre-approved argument envelope is satisfied (e.g. refund ≤ $50 on the caller's own order); egress allowlist for anything that takes a URL.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Unknown tool → <strong>deny</strong>. Policy is evaluated against a request that carries agent principal, user, authority mode, tool, arguments and scopes. MCP tool annotations (<code>readOnlyHint</code>, <code>destructiveHint</code>) and VPC-SC's <code>mcp.tool.isReadOnly</code> express the same tiers at the protocol and network layers — keep them consistent.</p>
+<pre><code>issue_refund:
+  tier: destructive
+  allow: [support_agent]          # the named agent, not every agent in the project
+  authority: delegated
+  required_scopes: [payments:refund]
+  constraints:
+    amount:   { min: 0.01, max: 500 }
+    currency: { enum: [USD, SGD] }
+  confirmation:
+    required: true
+    unless: "args.amount &lt;= 50 and args.currency == 'USD'"</code></pre>
+
+      <h3>4.3 Scoped credential per tool call</h3>
+      <p>Do not let the agent hold one wide token. Pattern:</p>
+      <ol>
+        <li>The agent authenticates to a <strong>broker</strong> (Auth Manager, or your own STS) with its own identity.</li>
+        <li>The broker returns a credential scoped to <em>this</em> tool: right audience (the MCP server's canonical URI), minimal scope, short TTL and — for delegated calls — the user's identity with the agent as actor.</li>
+        <li>The resource server validates audience, scope, expiry and binding; it never accepts tokens meant for someone else.</li>
+      </ol>
+      <p>Google's <strong>Auth Manager</strong> is that broker for outbound tools: it vaults API keys, 2-legged OAuth client credentials and end-user 3-legged OAuth tokens as <em>auth providers</em> (<code>projects/P/locations/L/authProviders/NAME</code>), gated by IAM (<code>roles/agentidentity.user</code> on the provider, granted to the agent principal). In ADK you register <code>GcpAuthProvider()</code> once and attach a <code>GcpAuthProviderScheme(name=…, scopes=[…])</code> to an <code>McpToolset</code> or an <code>AuthenticatedFunctionTool</code>; ADK fetches the credential per call and injects it. Every access is attributable to the agent's SPIFFE ID and, for 3LO, to the user.</p>
+
+      <h3>4.4 Human-in-the-loop, done right</h3>
+      <p>Confirmation is only a control if the human sees <strong>what will execute</strong>, not what the model <em>says</em> it will do. Surface the tool name, the exact arguments, the authority (own vs on behalf of whom) and the policy reason. ADK supports this natively: <code>FunctionTool(require_confirmation=True)</code> or <code>tool_context.request_confirmation(hint=…, payload=…)</code> pauses the tool and emits an <code>adk_request_confirmation</code> function call; the client renders it and replies with a <code>ToolConfirmation(confirmed=True)</code>. Log the approval with the approver's identity — it is part of the delegation chain.</p>
+
+      <h3>4.5 Bounding the envelope: deny, PAB and org policy</h3>
+      <ul>
+        <li><strong>IAM deny policies</strong> — "the principalSet of all agents in project X may never call <code>storage.objects.delete</code> or create service-account keys", even if an allow slips through.</li>
+        <li><strong>Principal Access Boundary policies</strong> — limit which <em>resources</em> a set of principals can access at all (e.g. sandbox agents can only reach resources in the sandbox folder).</li>
+        <li><strong>Org Policy custom constraints</strong> — e.g. require <code>identity_type = AGENT_IDENTITY</code> on <code>reasoningEngines</code>, or require PKCE on Auth Manager providers. (Custom constraints for Agent Identity went GA in August 2026; exact resource fields belong on your Verify list.)</li>
+      </ul>
+      <div class="say"><p class="k">In one sentence</p><p>I put policy at four layers — IAM on the resource, a callback in the runtime that sees the actual tool call, the gateway/perimeter on the network, and Model Armor on the model boundary — and I classify tools into read, write and destructive so the runtime can deny by default and require confirmation where it matters. Each tool call gets a credential scoped to that call from a broker, never a standing wide token.</p></div>
+    </section>
+
+    <!-- 5 -->
+    <section id="s5" data-title="Secrets and credentials">
+      <div class="sec-head"><span class="num">§5</span><h2>Secrets and credential handling</h2></div>
+      <p><strong>Rules that survive every architecture:</strong></p>
+      <ol>
+        <li><strong>No secrets in prompts, instructions, tool descriptions or session state.</strong> The context window is readable by the model and therefore by anyone who can inject into it. ADK's <code>tool_context.state</code> is session state — treat it as semi-trusted; never park raw refresh tokens there in production.</li>
+        <li><strong>Prefer no secret at all.</strong> Agent Identity and Workload Identity Federation give you keyless auth to Google APIs and external providers. Every place you can replace a stored secret with a runtime-attested identity, do it.</li>
+        <li><strong>When a secret is unavoidable, vault it and broker it.</strong> API keys and OAuth client secrets live in <strong>Auth Manager</strong> (agent-facing) or <strong>Secret Manager</strong> (infrastructure-facing) with IAM on each secret, access logged, rotation scheduled. The agent's principal gets <code>roles/secretmanager.secretAccessor</code> on exactly the secrets it needs.</li>
+        <li><strong>Short-lived, audience-bound, sender-constrained.</strong> Minutes, not days; one audience; bound to the caller's certificate or DPoP key where the ecosystem supports it.</li>
+        <li><strong>Redact by default.</strong> Structured logs pass through a redactor; secret values are wrapped in types whose <code>repr</code> never prints them.</li>
+      </ol>
+      <h3>The two secret-handling paths (know this distinction cold)</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th></th><th>Direct path</th><th>Gateway path</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Mechanism</strong></td><td>ADK intercepts the tool call, asks Auth Manager for the credential, and the agent process attaches it to the outbound request</td><td>End-user credentials are encrypted by Auth Manager and decrypted only at <strong>Agent Gateway</strong>, which injects them into the egress request</td></tr>
+          <tr><td><strong>Who sees the raw credential</strong></td><td>The agent process, for the token's lifetime</td><td>Nobody in the agent's code; only the gateway</td></tr>
+          <tr><td><strong>Threat model</strong></td><td>A compromised runtime or a successful injection could read the token from memory</td><td>Compromised agent code cannot exfiltrate user credentials; blast radius is the gateway's policy</td></tr>
+          <tr><td><strong>Cost</strong></td><td>Simple, no extra hop</td><td>Gateway in the path; destinations must be registered</td></tr>
+        </tbody>
+      </table></div>
+      <p>Neither removes credential risk; they relocate it from a thousand config files into one well-defended box. Say that out loud — it is the honest framing.</p>
+      <div class="say"><p class="k">In one sentence</p><p>I design for no secrets first — agent identity and WIF — and vault what's left in Auth Manager or Secret Manager with per-secret IAM. Credentials are minted per call, short-lived and bound to the caller. And I decide explicitly whether the agent process may ever hold a raw user credential: if not, egress goes through Agent Gateway, which decrypts and injects at the edge.</p></div>
+    </section>
+
+    <!-- 6 -->
+    <section id="s6" data-title="Tool-call safety and injection">
+      <div class="sec-head"><span class="num">§6</span><h2>Tool-call safety and prompt injection</h2></div>
+      <h3>6.1 The untrusted-content boundary</h3>
+      <p>Everything that enters the context window from outside the developer's own instructions is data, not instructions. Operationally:</p>
+      <ul>
+        <li><strong>Screen on the way in and on the way out.</strong> Model Armor (or an equivalent) on user prompts and on model responses. Set project <strong>floor settings</strong> so every Gemini call in the project is screened even if a developer forgets; per-request templates for stricter surfaces. Start in <code>INSPECT_ONLY</code>, review findings, then move sensitive surfaces to <code>INSPECT_AND_BLOCK</code>.</li>
+        <li><strong>Tag provenance.</strong> Wrap tool results before they reach the model: source, trust level, timestamp. Keep the tag in the audit record so a later bad decision can be traced to the content that caused it.</li>
+        <li><strong>Sanitize tool output.</strong> Strip control characters and known instruction patterns from untrusted sources; never let a tool result be interpreted as a new system instruction.</li>
+        <li><strong>Validate arguments structurally.</strong> Tight schemas and enums; refuse free-form URLs/SQL where a constrained form will do; enforce an <strong>egress allowlist</strong> for any tool that takes a URL (SSRF and exfiltration are the same bug in an agent).</li>
+      </ul>
+      <h3>6.2 Code execution and sandboxes</h3>
+      <p>Model-generated code runs with <em>no ambient credentials</em>. Google's Agent Sandbox (and Workspaces) exist for this; if you must run code elsewhere, run it under a separate unprivileged identity, without the agent's metadata-server access, with network egress off by default. An "execute code" tool is DESTRUCTIVE-tier by definition.</p>
+      <h3>6.3 Plan → check → act</h3>
+      <p>For multi-step tasks, have the agent produce a plan (the list of tool calls it intends), run it through the same policy engine as a dry run, and only then execute step by step with per-step enforcement. Budgets (tokens, tool calls, spend) and loop detection are part of this layer — cascading failures (ASI08) are usually unbounded loops with valid credentials.</p>
+      <div class="say"><p class="k">In one sentence</p><p>Prompt injection is a property of the medium, so I don't rely on the model to resist it. I screen inputs and outputs with Model Armor floor settings, tag and sanitize everything that comes back from tools, constrain arguments structurally, allowlist egress and keep destructive actions behind confirmation. If a hijacked model can only call read-only tools and a confirmation-gated refund, the injection is contained.</p></div>
+    </section>
+
+    <!-- 7 -->
+    <section id="s7" data-title="MCP and A2A security">
+      <div class="sec-head"><span class="num">§7</span><h2>MCP and A2A security</h2></div>
+      <h3>7.1 MCP: the server is an OAuth 2.1 resource server</h3>
+      <p>The MCP authorization specification (revision 2025-11-25; the 2026-07-28 revision keeps the same model and deprecates Dynamic Client Registration in favor of Client ID Metadata Documents) fixes the roles: the <strong>MCP client</strong> is an OAuth 2.1 client, the <strong>MCP server</strong> is a <strong>resource server</strong>, and an <strong>authorization server</strong> issues tokens. The requirements you should be able to recite:</p>
+      <ul>
+        <li>Servers <strong>MUST</strong> implement <strong>Protected Resource Metadata</strong> (RFC 9728) and advertise it — <code>WWW-Authenticate: Bearer resource_metadata="…"</code> on 401 and/or <code>/.well-known/oauth-protected-resource[/path]</code>. Clients discover the authorization server from it (RFC 8414 or OIDC discovery).</li>
+        <li>Clients <strong>MUST</strong> use <strong>PKCE (S256)</strong> and refuse to proceed if the AS metadata lacks <code>code_challenge_methods_supported</code>.</li>
+        <li>Clients <strong>MUST</strong> send the <strong><code>resource</code> parameter</strong> (RFC 8707) — the canonical URI of the MCP server — in both authorization and token requests. Servers <strong>MUST</strong> validate that tokens were issued <em>for them</em> (audience).</li>
+        <li><strong>No token passthrough.</strong> A server must not accept tokens issued for other resources and must not forward the token it received to upstream APIs; if it calls upstream, it is a separate OAuth client with a separate token. This is the confused-deputy guard.</li>
+        <li>Tokens go in <code>Authorization: Bearer</code>, never in query strings; <code>403 insufficient_scope</code> with a <code>scope</code> challenge drives step-up authorization; redirect URIs are localhost or HTTPS; short-lived access tokens; refresh-token rotation for public clients.</li>
+      </ul>
+      <p>The reference MCP server implements exactly this with the <code>mcp</code> SDK's native auth (<code>TokenVerifier</code>, <code>AuthSettings(resource_server_url=…, required_scopes=…)</code>), maps scopes to tools (<code>tickets:read</code> vs <code>tickets:write</code>), publishes <code>readOnlyHint</code>/<code>destructiveHint</code> annotations and optionally enforces DPoP (notebook 06).</p>
+      <p>On Google Cloud, hosting an MCP server on Cloud Run with <code>--functional-type=mcp-server</code> registers it in <strong>Agent Registry</strong>; agents reach it through <strong>Agent Gateway</strong>, where IAP enforces IAM on the registered MCP server resource and VPC-SC can condition on <code>mcp.toolName</code> / <code>mcp.tool.isReadOnly</code>. Google-hosted MCP endpoints (e.g. BigQuery's) are consumed from ADK via <code>McpToolset</code> with a <code>GcpAuthProviderScheme</code> so Auth Manager brokers the user's 3-legged token.</p>
+      <h3>7.2 A2A: identity between agents</h3>
+      <p>The A2A protocol (v1.0) puts authentication in the <strong>Agent Card</strong>: <code>securitySchemes</code> (API key, HTTP bearer, OAuth 2, OpenID Connect, mutual TLS) and <code>security</code> requirements per skill; an <strong>authenticated extended card</strong> can expose more skills; tasks can enter <code>TASK_STATE_AUTH_REQUIRED</code> to request credentials mid-task; all bindings (JSON-RPC, gRPC, HTTP+JSON) require TLS; cards can be <strong>signed</strong> (<code>AgentCardSignature</code>, JWS) so a client can verify the card wasn't tampered with.</p>
+      <p>Design rules for multi-agent systems:</p>
+      <ul>
+        <li>Every hop is a fresh authorization decision. Sub-agent B validates the token it receives (issuer, audience = B, scope), and if it needs to call further it exchanges — never forwards — the token.</li>
+        <li>The delegation chain is explicit (<code>act</code> claims or equivalent) and logged at every hop; the user's consent propagates, the agent's own authority does not silently expand.</li>
+        <li>Cards and registries are the supply-chain control: only call agents whose cards are registered (Agent Registry) and, ideally, signed.</li>
+        <li>Budget and depth limits on agent-to-agent recursion.</li>
+      </ul>
+      <div class="say"><p class="k">In one sentence</p><p>An MCP server is just an OAuth 2.1 resource server: it publishes protected-resource metadata, the client uses PKCE and the resource parameter, and the server validates audience and never passes tokens through. For A2A, the card declares the security schemes, every hop re-authorizes, and delegation is exchanged rather than forwarded. On Google Cloud I put Agent Gateway in the path so IAM and VPC-SC can enforce this per tool.</p></div>
+    </section>
+    <!-- 8 -->
+    <section id="s8" data-title="Data, network and tenancy">
+      <div class="sec-head"><span class="num">§8</span><h2>Data boundaries, network and tenancy</h2></div>
+      <ul>
+        <li><strong>Perimeters.</strong> Put the Agent Platform, the MCP servers, Secret Manager, the Agent Identity services (<code>agentidentity.googleapis.com</code>, <code>agentidentitycredentials.googleapis.com</code>) and the data stores in a VPC-SC perimeter; ingress/egress rules with agent principals; Google APIs via the restricted VIP. Including Agent Platform in a perimeter automatically blocks the agents' public-internet access — the default you want; add explicit egress for the few legitimate destinations.</li>
+        <li><strong>Private connectivity.</strong> Agent Runtime supports PSC-interface network attachments and DNS peering for private tool endpoints; Cloud Run MCP servers use internal ingress and IAM invoker bindings for the agent principal.</li>
+        <li><strong>Encryption and residency.</strong> CMEK on Agent Engine (<code>encryption_spec.kms_key_name</code>), Secret Manager, logs and data stores; pick regions deliberately (Model Armor's Vertex integration and Agent Identity have region lists; Auth Manager vault residency is not uniform — Verify list for any regulated customer).</li>
+        <li><strong>Tenancy.</strong> Decide the isolation unit: per-tenant agent deployments (strongest, most cost) vs shared agents with per-user delegation and per-tenant memory/session partitioning. Sessions and Memory Bank keyed by user/tenant and never searchable across tenants; RAG retrieval must be ACL-aware — run under the user's delegated identity or filter by entitlements <em>before</em> content reaches the model.</li>
+        <li><strong>Logs are data too.</strong> Prompts and tool results often contain PII; apply Sensitive Data Protection to what you log and restrict log-bucket access.</li>
+      </ul>
+      <div class="say"><p class="k">In one sentence</p><p>Network is the safety net for when IAM and code are wrong: the agents live in a VPC-SC perimeter that cuts public egress by default, tools are reached privately through the gateway, and each tenant's sessions, memory and retrieval are partitioned by the user's identity rather than by hoping the model behaves.</p></div>
+    </section>
+
+    <!-- 9 -->
+    <section id="s9" data-title="Observability, audit, governance">
+      <div class="sec-head"><span class="num">§9</span><h2>Observability, audit and governance</h2></div>
+      <p>Minimum viable audit for an agent action — a single structured event with: trace ID, invocation ID, user (if delegated), agent SPIFFE ID, authority mode, tool, argument hash (or redacted arguments), policy decision and reasons, approver (if confirmed), result hash, latency and the provenance tags of the inputs that led here. Emit it from the runtime layer so it exists even when the tool fails.</p>
+      <p>On Google Cloud this joins native signals: Cloud Audit Logs (both identities when delegated), <strong>Agent Observability</strong> (traces of reasoning and tool calls), <strong>Agent Gateway</strong> telemetry to Cloud Logging/Trace, <strong>Agent Anomaly Detection</strong> and <strong>Agent Threat Detection</strong>, and the <strong>Agent Security Dashboard</strong> in Security Command Center. Propagate <code>traceparent</code> through MCP <code>_meta</code> and A2A calls so one trace spans user → agent → tool.</p>
+      <p><strong>Governance loop:</strong> <em>register</em> (Agent Registry as inventory and allowlist) → <em>permit</em> (IAM/PAB/VPC-SC on principals and principalSets) → <em>observe</em> (audit + anomaly detection) → <em>revoke</em> (a deny policy or perimeter rule removes an agent's reach instantly, without redeploying) → <em>evaluate</em> (Agent Evaluation/Simulation and red-team suites, including injection corpora, on every release). Treat instructions, tool lists and policies as versioned artifacts with review.</p>
+      <div class="say"><p class="k">In one sentence</p><p>I want every tool call to leave one event that answers who asked, which agent acted, under whose authority, what exactly ran, who approved it, and why the policy allowed it — then feed that into anomaly detection and keep a one-line kill switch: a deny policy on the agent's principal.</p></div>
+    </section>
+
+    <!-- 10 -->
+    <section id="s10" data-title="GCP reference architecture">
+      <div class="sec-head"><span class="num">§10</span><h2>GCP mapping and the reference architecture</h2></div>
+      <figure>
+        <div class="diagram-wrap">
+        <svg viewBox="0 0 1100 660" role="img" aria-label="Reference architecture: a user authenticates at the front-end and reaches an agent on Agent Runtime with its own Agent Identity and a runtime policy plugin; the agent calls Gemini behind Model Armor floor settings; Auth Manager brokers user-delegated credentials; all agent egress passes through Agent Gateway, which enforces IAM per SPIFFE ID, VPC-SC MCP conditions and Model Armor, before reaching an MCP server on Cloud Run, a peer agent over A2A, or Google MCP and SaaS APIs; the MCP server reaches data in a VPC-SC perimeter with its own upstream token; every layer emits audit events with both identities; a governance plane of Agent Registry, IAM, Org Policy, VPC-SC and Security Command Center spans the whole." style="color: var(--ink)">
+          <defs>
+            <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+            <marker id="arrM" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/></marker>
+          </defs>
+          <g font-family="Bricolage Grotesque, system-ui, sans-serif" font-size="12.5" fill="currentColor">
+            <!-- governance plane -->
+            <rect x="30" y="20" width="1040" height="46" rx="6" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="5 4"/>
+            <text x="550" y="41" text-anchor="middle" font-weight="600">Governance plane</text>
+            <text x="550" y="57" text-anchor="middle" font-size="11.5" fill="var(--muted)">Agent Registry · IAM allow / deny / Principal Access Boundary · Org Policy custom constraints · VPC Service Controls · Security Command Center agent dashboard</text>
+
+            <!-- row 1: user, front-end, runtime, gemini -->
+            <rect x="30" y="110" width="110" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="85" y="138" text-anchor="middle" font-weight="600">User</text>
+            <text x="85" y="156" text-anchor="middle" font-size="11" fill="var(--muted)">IdP login (OIDC)</text>
+
+            <rect x="190" y="110" width="140" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="260" y="138" text-anchor="middle" font-weight="600">Front-end</text>
+            <text x="260" y="156" text-anchor="middle" font-size="11" fill="var(--muted)">renders confirmations</text>
+
+            <rect x="430" y="92" width="270" height="100" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="565" y="116" text-anchor="middle" font-weight="600">Agent Runtime (Agent Engine)</text>
+            <g font-family="JetBrains Mono, monospace" font-size="11">
+              <text x="565" y="136" text-anchor="middle">identity_type = AGENT_IDENTITY</text>
+              <text x="565" y="152" text-anchor="middle">ADK loop · SecurityPlugin</text>
+            </g>
+            <text x="565" y="176" text-anchor="middle" font-size="11" fill="var(--accent-ink)">PEP: runtime — policy, confirmation, audit</text>
+
+            <rect x="820" y="110" width="250" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="945" y="134" text-anchor="middle" font-weight="600">Gemini · Model Armor floor</text>
+            <text x="945" y="152" text-anchor="middle" font-size="11" fill="var(--muted)">PEP: model — prompt &amp; response screening</text>
+
+            <!-- row 2: auth manager, gateway -->
+            <rect x="30" y="270" width="230" height="74" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="145" y="294" text-anchor="middle" font-weight="600">Auth Manager</text>
+            <text x="145" y="312" text-anchor="middle" font-size="11" fill="var(--muted)">vault + broker: 3LO · 2LO · API keys</text>
+            <text x="145" y="328" text-anchor="middle" font-size="11" fill="var(--muted)">IAM: roles/agentidentity.user per provider</text>
+
+            <rect x="430" y="262" width="270" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <text x="565" y="286" text-anchor="middle" font-weight="600">Agent Gateway</text>
+            <text x="565" y="304" text-anchor="middle" font-size="11" fill="var(--muted)">mTLS + DPoP · IAP/IAM per SPIFFE ID</text>
+            <text x="565" y="320" text-anchor="middle" font-size="11" fill="var(--muted)">VPC-SC mcp.toolName / isReadOnly · Model Armor</text>
+            <text x="565" y="338" text-anchor="middle" font-size="11" fill="var(--accent-ink)">PEP: network</text>
+
+            <!-- row 3: destinations -->
+            <rect x="170" y="430" width="272" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="306" y="452" text-anchor="middle" font-weight="600">MCP server (Cloud Run)</text>
+            <text x="306" y="470" text-anchor="middle" font-size="11" fill="var(--muted)">functional-type=mcp-server · in Agent Registry</text>
+            <text x="306" y="486" text-anchor="middle" font-size="11" fill="var(--muted)">OAuth 2.1 resource server: PRM · aud · scope→tool</text>
+            <text x="306" y="502" text-anchor="middle" font-size="11" fill="var(--muted)">readOnlyHint / destructiveHint</text>
+
+            <rect x="470" y="430" width="190" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="565" y="452" text-anchor="middle" font-weight="600">Peer agent (A2A)</text>
+            <text x="565" y="470" text-anchor="middle" font-size="11" fill="var(--muted)">signed Agent Card</text>
+            <text x="565" y="486" text-anchor="middle" font-size="11" fill="var(--muted)">re-authorizes every hop</text>
+
+            <rect x="700" y="430" width="230" height="84" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="815" y="452" text-anchor="middle" font-weight="600">Google MCP · SaaS APIs</text>
+            <text x="815" y="470" text-anchor="middle" font-size="11" fill="var(--muted)">BigQuery MCP, Jira, GitHub…</text>
+            <text x="815" y="486" text-anchor="middle" font-size="11" fill="var(--muted)">credentials via Auth Manager</text>
+
+            <!-- row 4: data + audit -->
+            <rect x="170" y="580" width="272" height="56" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="306" y="602" text-anchor="middle" font-weight="600">Data (BigQuery · GCS · DB)</text>
+            <text x="306" y="620" text-anchor="middle" font-size="11" fill="var(--muted)">inside the VPC-SC perimeter · CMEK</text>
+
+            <rect x="560" y="580" width="510" height="56" rx="6" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="5 4"/>
+            <text x="815" y="602" text-anchor="middle" font-weight="600">Audit</text>
+            <text x="815" y="620" text-anchor="middle" font-size="11" fill="var(--muted)">Cloud Audit Logs (agent + user) · Agent Observability · gateway telemetry · BigQuery sink</text>
+
+            <!-- arrows -->
+            <g stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#arrA)">
+              <line x1="140" y1="142" x2="190" y2="142"/>
+              <line x1="330" y1="142" x2="430" y2="142"/>
+              <line x1="700" y1="142" x2="820" y2="142"/>
+              <line x1="565" y1="192" x2="565" y2="262"/>
+              <line x1="260" y1="307" x2="430" y2="307"/>
+              <path d="M 480 352 L 480 400 L 306 400 L 306 430"/>
+              <line x1="565" y1="352" x2="565" y2="430"/>
+              <path d="M 650 352 L 650 400 L 815 400 L 815 430"/>
+              <line x1="306" y1="514" x2="306" y2="580"/>
+            </g>
+            <g stroke="var(--muted)" stroke-width="1" fill="none" stroke-dasharray="3 3" marker-end="url(#arrM)">
+              <path d="M 700 184 L 1050 184 L 1050 580"/>
+              <path d="M 145 270 L 145 214 L 260 214 L 260 174"/>
+            </g>
+            <path d="M 700 344 L 1050 344" stroke="var(--muted)" stroke-width="1" fill="none" stroke-dasharray="3 3"/>
+
+            <!-- arrow labels -->
+            <g font-size="11" fill="var(--muted)">
+              <text x="165" y="132" text-anchor="middle">id token</text>
+              <text x="380" y="132" text-anchor="middle">user + consent</text>
+              <text x="760" y="132" text-anchor="middle">prompts / responses</text>
+              <text x="575" y="232" text-anchor="start">own authority: cert-bound token</text>
+              <text x="575" y="246" text-anchor="start">delegated: user + agent (act)</text>
+              <text x="345" y="296" text-anchor="middle">delegated creds (3LO)</text>
+              <text x="152" y="238" text-anchor="start">consent redirect</text>
+              <text x="395" y="392" text-anchor="middle">token for this audience only</text>
+              <text x="735" y="392" text-anchor="middle">brokered credential</text>
+              <text x="316" y="552" text-anchor="start">separate upstream token</text>
+              <text x="316" y="566" text-anchor="start">(never forwarded)</text>
+              <text x="1044" y="470" text-anchor="end">audit (agent + user)</text>
+            </g>
+          </g>
+        </svg>
+        </div>
+        <figcaption>The reference architecture. Solid arrows are request paths and carry the credential that crosses each boundary; dotted arrows are audit and consent flows. Three of the four PEPs sit on this path (runtime, network, model); the fourth — IAM on the destination resource — is the governance plane at the top.</figcaption>
+      </figure>
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>Primer concept</th><th>Google Cloud control</th><th>In the repository</th></tr></thead>
+        <tbody>
+          <tr><td>Agent as first-class principal</td><td>Agent Identity (SPIFFE, cert-bound tokens)</td><td><code>identity/principals.py</code>, <code>certs.py</code>; Terraform <code>reasoning_engine.tf</code> (<code>identity_type = "AGENT_IDENTITY"</code>), <code>scripts/deploy_mcp_cloud_run.sh</code></td></tr>
+          <tr><td>Own vs delegated authority</td><td>ADC for own; Auth Manager 3LO for delegated; dual-identity audit logs</td><td><code>identity/delegation.py</code>, <code>identity/auth_manager.py</code> (<code>LocalAuthManager</code> ↔ ADK <code>GcpAuthProvider</code>)</td></tr>
+          <tr><td>Scoped credential per call</td><td>Auth Manager providers + IAM; STS/impersonation; Credential Access Boundaries</td><td><code>identity/tokens.py</code> (RFC 8693, DPoP), <code>identity/downscope.py</code></td></tr>
+          <tr><td>Runtime PEP</td><td>ADK plugin callbacks</td><td><code>policy/engine.py</code>, <code>policy/adk_plugin.py</code>, <code>policies/*.yaml</code></td></tr>
+          <tr><td>Human confirmation</td><td>ADK tool confirmation</td><td><code>agents/tools.py</code>, <code>runtime.py</code></td></tr>
+          <tr><td>Model-side screening</td><td>Model Armor templates + floor settings</td><td><code>guardrails/screening.py</code>; Terraform <code>model_armor.tf</code></td></tr>
+          <tr><td>Untrusted content boundary</td><td>Model Armor at gateway; provenance</td><td><code>guardrails/sanitize.py</code></td></tr>
+          <tr><td>Secrets</td><td>Auth Manager, Secret Manager, no SA keys</td><td><code>secrets/store.py</code>; Terraform <code>secrets.tf</code>, <code>auth_provider.tf</code></td></tr>
+          <tr><td>MCP as resource server</td><td>Cloud Run MCP server + Agent Registry + IAP</td><td><code>mcp/server.py</code>, <code>mcp/client.py</code>; Terraform <code>agent_registry.tf</code>, <code>cloudrun_mcp.tf</code></td></tr>
+          <tr><td>Gateway &amp; perimeter</td><td>Agent Gateway; VPC-SC with agent principals and <code>mcp.*</code> attributes</td><td>Terraform <code>agent_gateway.tf</code>, <code>vpc_sc.tf</code> (opt-in), <code>scripts/vpc_sc_mcp_rule.yaml</code></td></tr>
+          <tr><td>Envelope</td><td>Deny policies, PAB, custom constraints</td><td>Terraform <code>iam.tf</code>, <code>org_policy.tf</code> (opt-in)</td></tr>
+          <tr><td>Audit &amp; observability</td><td>Cloud Audit Logs, sinks, Agent Observability</td><td><code>audit/log.py</code>; Terraform <code>logging.tf</code></td></tr>
+          <tr><td>A2A</td><td>Agent Card securitySchemes, signatures</td><td><code>a2a/card.py</code>, <code>a2a/auth.py</code></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- 11 -->
+    <section id="s11" data-title="Design drills">
+      <div class="sec-head"><span class="num">§11</span><h2>Design drills</h2></div>
+      <h3>11.1 System-design prompts (talk through, 20 minutes each)</h3>
+      <ul class="drills">
+        <li><q>A bank wants a support agent that can read a customer's transactions and issue refunds up to $200. Design the identity and authorization model.</q><span class="expect"><b>Expect:</b> user authentication and delegated authority for reads; agent identity with minimal own roles; refund as DESTRUCTIVE with an argument envelope and confirmation above threshold; audit with both identities; kill switch; Model Armor floor.</span></li>
+        <li><q>We have 40 agents built by different teams calling 15 MCP servers. How do we govern this?</q><span class="expect"><b>Expect:</b> Agent Registry as inventory; principalSet-level policies; Agent Gateway as the chokepoint with IAP/IAM per SPIFFE ID; VPC-SC <code>mcp.*</code> conditions; per-server scopes; deny policies for the never-list; SCC dashboard.</span></li>
+        <li><q>An agent needs to call Jira and GitHub on behalf of employees.</q><span class="expect"><b>Expect:</b> Auth Manager 3LO providers per SaaS; consent flow (<code>adk_request_credential</code>); scopes minimized; the direct-vs-gateway secret-handling choice; revocation on offboarding.</span></li>
+        <li><q>Our RAG agent leaked another tenant's document.</q><span class="expect"><b>Expect:</b> ACL-aware retrieval under the user's identity; tenant-partitioned indexes and memory; provenance; tests.</span></li>
+        <li><q>How would you migrate a service-account-based agent to Agent Identity?</q><span class="expect"><b>Expect:</b> new principal, no inherited permissions; Policy Analyzer; pre-grant; <code>--no-traffic</code> revision; verify cert-bound tokens; remove SA keys.</span></li>
+      </ul>
+      <h3>11.2 Code-evaluation drills (spot the bug)</h3>
+      <p><code>notebooks/09_code_evaluation_drills.ipynb</code> holds eight deliberately flawed snippets: a tool that forwards the inbound bearer token upstream (token passthrough); a verifier that checks signature but not <code>aud</code>; a policy engine that allows unknown tools; a confirmation UI that displays the model's summary instead of the actual arguments; a secret stored in <code>tool_context.state</code>; an egress check that matches on substring instead of parsed host; a DPoP verifier that skips <code>jti</code> replay tracking; a <code>principalSet</code> matcher that prefix-matches the wrong segment.</p>
+      <h3>11.3 Trade-offs you should be ready to argue</h3>
+      <ul>
+        <li>Per-agent identity vs shared identity (attribution and revocation vs operational overhead).</li>
+        <li>Direct credential path vs gateway path (simplicity vs the runtime never holding user secrets).</li>
+        <li>Confirmation friction vs argument envelopes (safety vs user experience).</li>
+        <li><code>INSPECT_ONLY</code> vs <code>INSPECT_AND_BLOCK</code> (visibility first, then enforcement; false-positive cost).</li>
+        <li>Sandboxed execution vs capability (what an "analysis" agent loses when it cannot reach the network).</li>
+      </ul>
+    </section>
+
+    <!-- 12 -->
+    <section id="s12" data-title="Glossary">
+      <div class="sec-head"><span class="num">§12</span><h2>Glossary (fast recall)</h2></div>
+      <dl class="gloss">
+        <dt>Agent Identity</dt><dd>Google Cloud's SPIFFE-based, certificate-bound identity for agents.</dd>
+        <dt>Auth Manager</dt><dd>Google's vault/broker for agents' outbound credentials (API key, 2LO, 3LO).</dd>
+        <dt>Agent Gateway</dt><dd>Networking chokepoint for agent ingress/egress with mTLS, DPoP, IAP/IAM, Model Armor.</dd>
+        <dt>Agent Registry</dt><dd>Inventory of agents, MCP servers, endpoints; the allowlist the gateway enforces against.</dd>
+        <dt>Model Armor</dt><dd>Prompt/response screening: injection, sensitive data, malicious URI, RAI.</dd>
+        <dt>PEP</dt><dd>Policy enforcement point.</dd>
+        <dt>PRM</dt><dd>OAuth Protected Resource Metadata (RFC 9728).</dd>
+        <dt>resource indicator</dt><dd>RFC 8707 <code>resource</code> parameter binding a token to an audience.</dd>
+        <dt>DPoP</dt><dd>RFC 9449 proof-of-possession header.</dd>
+        <dt>cnf</dt><dd>The confirmation claim binding a token to a key or certificate.</dd>
+        <dt>RFC 8693</dt><dd>OAuth token exchange; <code>act</code> claim for delegation.</dd>
+        <dt>CIMD</dt><dd>Client ID Metadata Documents (an HTTPS URL as <code>client_id</code>).</dd>
+        <dt>PAB</dt><dd>Principal Access Boundary policy.</dd>
+        <dt>VPC-SC</dt><dd>VPC Service Controls perimeter.</dd>
+        <dt>CAB</dt><dd>Credential Access Boundary (downscoped token).</dd>
+        <dt>WIF</dt><dd>Workload Identity Federation.</dd>
+      </dl>
+    </section>
+
+    <!-- 13 -->
+    <section id="s13" data-title="Verify list">
+      <div class="sec-head"><span class="num">§13</span><h2>Verify list — re-check before relying on it</h2></div>
+      <p class="note">Ticks are remembered in this browser only.</p>
+      <ul class="verify" id="verify">
+        <li><input type="checkbox" id="v1"><label for="v1">GA/preview status and any renames of: Agent Identity, Auth Manager, Agent Gateway, Agent Registry, Agent Sandbox, Agent Anomaly/Threat Detection, IAP for agents.</label></li>
+        <li><input type="checkbox" id="v2"><label for="v2">Exact <code>gcloud</code> syntax for <code>agent-identity auth-providers create</code> and <code>run deploy --functional-type / --identity-type</code>.</label></li>
+        <li><input type="checkbox" id="v3"><label for="v3">Terraform provider support for <code>google_agent_identity_auth_provider</code>, <code>google_agent_registry_service</code>, <code>google_iap_agent_registry_mcp_server_iam_member</code>, <code>google_network_services_agent_gateway</code>, <code>google_vertex_ai_reasoning_engine.spec.identity_type</code> (present in provider 8.1.0 at time of writing).</label></li>
+        <li><input type="checkbox" id="v4"><label for="v4">VPC-SC MCP attributes (<code>mcp.toolName</code>, <code>mcp.method</code>, <code>mcp.tool.isReadOnly</code>) availability and syntax in ingress/egress rules.</label></li>
+        <li><input type="checkbox" id="v5"><label for="v5">Model Armor ↔ Vertex integration regions and file/PDF limitations; floor-setting enforcement modes.</label></li>
+        <li><input type="checkbox" id="v6"><label for="v6">Current MCP spec revision in force (2025-11-25 vs 2026-07-28) and whether the ADK / <code>mcp</code> SDK versions you cite support it; DCR deprecation.</label></li>
+        <li><input type="checkbox" id="v7"><label for="v7">A2A version pinned by the a2a-sdk release you cite (v1.0 spec at time of writing).</label></li>
+        <li><input type="checkbox" id="v8"><label for="v8">OWASP Agentic Top 10 wording (2026 edition, published December 2025).</label></li>
+        <li><input type="checkbox" id="v9"><label for="v9">Auth Manager regional/data-residency notes and pricing.</label></li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+    var toc = document.getElementById('toc');
+    sections.forEach(function (s) {
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + s.id;
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = '§' + s.id.slice(1);
+      var t = document.createElement('span'); t.textContent = s.getAttribute('data-title');
+      a.appendChild(n); a.appendChild(t); li.appendChild(a); toc.appendChild(li);
+    });
+    var links = toc.querySelectorAll('a');
+    function setCurrent(id) {
+      links.forEach(function (a) { a.classList.toggle('current', a.getAttribute('href') === '#' + id); });
+    }
+    if ('IntersectionObserver' in window) {
+      var visible = {};
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
+        var best = sections.filter(function (s) { return visible[s.id] > 0; })[0];
+        if (best) setCurrent(best.id);
+      }, { rootMargin: '-10% 0px -70% 0px', threshold: [0, 0.1, 0.5] });
+      sections.forEach(function (s) { io.observe(s); });
+    }
+    setCurrent('s0');
+
+    // Verify-list ticks: per-viewer convenience only.
+    var boxes = document.querySelectorAll('#verify input[type=checkbox]');
+    var KEY = 'agentsec-primer-verify';
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
+    boxes.forEach(function (b) {
+      if (saved[b.id]) { b.checked = true; b.parentElement.classList.add('done'); }
+      b.addEventListener('change', function () {
+        b.parentElement.classList.toggle('done', b.checked);
+        saved[b.id] = b.checked;
+        try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
+      });
+    });
+  })();
+</script>

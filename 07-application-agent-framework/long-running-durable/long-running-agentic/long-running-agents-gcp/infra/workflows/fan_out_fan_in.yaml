@@ -1,0 +1,60 @@
+# Fan-out / fan-in with Cloud Workflows doing the join.
+#
+# When the branch count is known up front, let Workflows own the counter:
+# `parallel` runs branches concurrently, waits for all of them, and the
+# per-branch `retry` block replaces hand-written back-off. Each worker call is
+# still at-least-once (retries!) so the worker endpoint must be idempotent on
+# (run_id, subtask_id).
+#
+# Deploy:  gcloud workflows deploy fan-out-fan-in --source=fan_out_fan_in.yaml --service-account=$WF_SA
+main:
+  params: [input]                       # {run_id, goal, subtasks: [...], service_url}
+  steps:
+    - init:
+        assign:
+          - results: {}
+    - fan_out:
+        parallel:
+          shared: [results]
+          concurrency_limit: 10
+          for:
+            value: task
+            index: i
+            in: ${input.subtasks}
+            steps:
+              - run_worker:
+                  try:
+                    call: http.post
+                    args:
+                      url: ${input.service_url + "/internal/worker"}
+                      auth:
+                        type: OIDC
+                      timeout: 1800     # up to 30 min per worker call
+                      body:
+                        run_id: ${input.run_id}
+                        subtask_id: ${i}
+                        task: ${task}
+                    result: r
+                  retry:
+                    predicate: ${http.default_retry_predicate}
+                    max_retries: 5
+                    backoff:
+                      initial_delay: 2
+                      max_delay: 60
+                      multiplier: 2
+              - collect:
+                  assign:
+                    - results[string(i)]: ${r.body}
+    - aggregate:
+        call: http.post
+        args:
+          url: ${input.service_url + "/internal/aggregate"}
+          auth:
+            type: OIDC
+          body:
+            run_id: ${input.run_id}
+            goal: ${input.goal}
+            results: ${results}
+        result: agg
+    - done:
+        return: ${agg.body}
