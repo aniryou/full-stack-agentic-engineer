@@ -125,6 +125,10 @@ Agent Identity does not replace the rest of Google Cloud IAM; you compose them:
 
 ### 3.5 Delegation mechanics (standards you should be able to draw)
 
+![Delegation as token exchange: the user's subject token and the agent's certificate-bound actor token become one delegated token naming both](delegation-token-exchange.svg)
+
+*Delegation as token exchange: the STS combines the user's subject token and the agent's certificate-bound actor token into one short-lived token that names both (`sub` + `act`), is scoped to one audience, and stays bound to the agent's certificate; the resource server checks all three. The lab's `TokenIssuer.exchange()` does exactly this.*
+
 - **RFC 8693 token exchange** — the standard way to represent "agent A acting for user U": the STS takes the user's `subject_token` and the agent's `actor_token` and issues a token whose `sub` is the user and whose `act` claim identifies the agent, scoped to an `audience` and `scope`. Chains (`act.act`) represent multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
 - **RFC 9449 DPoP** — the client proves possession of a private key on every request with a signed `DPoP` header (`htm`, `htu`, `iat`, `jti`, `ath`); the token carries `cnf.jkt`. A replayed bearer token without the key fails.
 - **RFC 8705 mTLS-bound tokens** — the token carries `cnf.x5t#S256` (certificate thumbprint); the resource server checks the TLS client certificate matches. This is what "certificate-bound" means for Agent Identity.
@@ -284,32 +288,9 @@ Governance loop: **register** (Agent Registry as the inventory and allowlist) �
 
 ## 10. GCP mapping and the reference architecture
 
-```
-                 ┌──────────────────────────── Governance plane ─────────────────────────────┐
-                 │ Agent Registry · IAM (allow/deny/PAB) · Org Policy · VPC-SC · SCC dashboard │
-                 └───────────────────────────────────────────────────────────────────────────┘
-   User ──IdP (OIDC)──▶ Front-end ──(user id, consent)──▶ ┌──────────────────────────────┐
-                                                        │  Agent Runtime (Agent Engine)  │
-        Model Armor floor ◀── Gemini ◀── ADK loop ◀───── │  identity_type=AGENT_IDENTITY  │
-                                                        │  SecurityPlugin (PEP: runtime) │
-                                                        └───────┬───────────────┬────────┘
-                                   own authority (ADC, cert-bound token)        │ delegated (3LO via Auth Manager)
-                                                                │               │
-                                                       ┌────────▼───────────────▼────────┐
-                                                       │   Agent Gateway (PEP: network)   │ mTLS + DPoP, IAP/IAM per SPIFFE ID,
-                                                       │   Model Armor on egress          │ VPC-SC mcp.* conditions
-                                                       └────┬──────────────┬─────────────┘
-                                                            │              │
-                                          ┌─────────────────▼───┐   ┌──────▼───────────────┐
-                                          │ MCP server (Cloud Run│   │ Peer agent (A2A) or  │
-                                          │ functional-type=mcp) │   │ Google MCP / SaaS API │
-                                          │ OAuth 2.1 RS, PRM,   │   │ signed Agent Card     │
-                                          │ scope→tool, readOnly │   └───────────────────────┘
-                                          └──────────┬──────────┘
-                                                     ▼
-                                          Data (BigQuery/GCS/DB) in VPC-SC perimeter, CMEK
-   Audit: Cloud Audit Logs (agent + user) · Agent Observability · Gateway telemetry · custom audit events → BigQuery sink
-```
+![Reference architecture: a user authenticates at the front-end and reaches an agent on Agent Runtime with its own Agent Identity; tool calls cross an Agent Gateway to MCP servers, with IAM, VPC-SC and Model Armor as the enforcement points](reference-architecture.svg)
+
+*The reference architecture. Solid arrows are request paths and carry the credential that crosses each boundary; dotted arrows are audit and consent flows. Three of the four PEPs sit on this path (runtime, network, model); the fourth, IAM on the destination resource, is the governance plane at the top.*
 
 | Primer concept | Google Cloud control | In this repository |
 |---|---|---|

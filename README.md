@@ -23,7 +23,7 @@ than one vendor stack (Google Cloud, Mistral) so the same concepts can be compar
 - **Exercises** live in `notebooks/` (or `exercises/`) with `# YOUR CODE HERE` and a check cell that
   prints ✅ when your answer is right; worked answers are in `solutions/`. To retry an exercise after
   editing it: `git restore <notebook>`.
-- **Primers** are the `*.md` (and `.html`) documents next to each lab. Read the primer first, then work
+- **Primers** are the `*.md` documents next to each lab. Read the primer first, then work
   the notebooks against the code.
 
 ## The stack
