@@ -25,24 +25,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC, EX, SOL = ROOT / "notebooks_src", ROOT / "notebooks", ROOT / "solutions"
 BEGIN, END = "### BEGIN SOLUTION", "### END SOLUTION"
 
-BOOTSTRAP = '''# bootstrap: Colab (private clone via GH_TOKEN) + local import of `agentcore` (auto-inserted)
+BOOTSTRAP = '''# bootstrap: Colab clone + local import of `agentcore` (auto-inserted)
 import sys, pathlib
 if "google.colab" in sys.modules:
     import os, subprocess
     _slug = "aniryou/full-stack-agentic-engineer"
     _repo = pathlib.Path("/content/full-stack-agentic-engineer")
     if not _repo.exists():
-        _tok = ""
-        try:
-            from google.colab import userdata
-            _tok = userdata.get("GH_TOKEN") or ""
-        except Exception:
-            _tok = ""
-        if not _tok:
-            print("WARNING: no 'GH_TOKEN' Colab secret; add a GitHub token (repo scope) as Colab secret 'GH_TOKEN', then re-run.")
-        _url = (f"https://{_tok}@github.com/{_slug}.git" if _tok else f"https://github.com/{_slug}.git")
-        subprocess.run(["git", "clone", "--depth", "1", _url, str(_repo)], check=True)
-        subprocess.run(["git", "-C", str(_repo), "remote", "set-url", "origin", f"https://github.com/{_slug}.git"])
+        subprocess.run(["git", "clone", "--depth", "1", f"https://github.com/{_slug}.git", str(_repo)], check=True)
     os.chdir(_repo / "07-application-agent-framework/agent-fundamentals/agent-core")
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", "."])
 _r = pathlib.Path.cwd().resolve()

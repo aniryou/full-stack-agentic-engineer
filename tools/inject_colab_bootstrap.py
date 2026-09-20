@@ -9,9 +9,8 @@ Usage (from the mono-repo root):
 REPLACES that cell instead of duplicating it, and never touches a lab's own
 cells. Outside Colab the cell is a no-op, so local runs are unchanged.
 
-The repo is PRIVATE, so on Colab the cell clones it using a token read from
-Colab Secrets (key 'GH_TOKEN'); it prints setup instructions if the secret is
-missing. Then it cd's into the notebook's dir and pip-installs the nearest lab.
+The repo is public, so on Colab the cell does a plain shallow `git clone`, then
+cd's into the notebook's dir and pip-installs the nearest lab.
 """
 import json, sys
 from pathlib import Path
@@ -27,20 +26,7 @@ if "google.colab" in sys.modules:
     _slug = "__REPO_SLUG__"
     _root = pathlib.Path("/content") / "__REPO_DIR__"
     if not _root.exists():
-        _tok = ""
-        try:
-            from google.colab import userdata
-            _tok = userdata.get("GH_TOKEN") or ""
-        except Exception:
-            _tok = ""
-        if not _tok:
-            print("WARNING: no 'GH_TOKEN' Colab secret found; cloning this PRIVATE repo will fail.\\n"
-                  "Add a GitHub token (repo scope) via the key icon (Secrets) as 'GH_TOKEN', then re-run.")
-        _url = (f"https://{_tok}@github.com/{_slug}.git" if _tok
-                else f"https://github.com/{_slug}.git")
-        subprocess.run(["git", "clone", "--depth", "1", _url, str(_root)], check=True)
-        subprocess.run(["git", "-C", str(_root), "remote", "set-url", "origin",
-                        f"https://github.com/{_slug}.git"])  # keep the token out of the saved remote
+        subprocess.run(["git", "clone", "--depth", "1", f"https://github.com/{_slug}.git", str(_root)], check=True)
     os.chdir(_root / "__NB_REL__")
     for _c in [pathlib.Path.cwd(), *pathlib.Path.cwd().parents]:
         if (_c / "pyproject.toml").exists() or (_c / "setup.py").exists():
