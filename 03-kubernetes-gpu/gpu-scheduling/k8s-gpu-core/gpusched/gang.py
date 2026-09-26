@@ -5,6 +5,9 @@ run close together (one NVLink domain, one sub-block, one block). A pod-at-a-tim
 hand half of a job its GPUs and deadlock the cluster; a gang scheduler reserves the whole group
 atomically and picks the smallest domain that holds it. The domain choice follows Kueue's
 Topology-Aware Scheduling: BestFit for required/preferred levels, LeastFreeCapacity otherwise.
+
+Simplifications: every pod of a gang has the same shape (no leader pod set, no slices, no
+balanced placement), and a domain's room is counted in whole pods from allocatable minus requests.
 """
 from __future__ import annotations
 
@@ -37,9 +40,14 @@ def best_fit(capacity: dict, n: int) -> dict | None:
 
 
 def least_free_capacity(capacity: dict, n: int) -> dict | None:
-    """Kueue TAS LeastFreeCapacity (its default for unconstrained pod sets): fill the smallest gaps."""
+    """Kueue TAS LeastFreeCapacity (its default for unconstrained pod sets): the tightest single
+    domain that holds all n; if none does, fill the smallest gaps first. None if they cannot hold n."""
+    pool = sorted((k for k, c in capacity.items() if c > 0), key=lambda k: (capacity[k], k))
+    single = next((k for k in pool if capacity[k] >= n), None)
+    if single is not None:
+        return {single: n}
     left, out = n, {}
-    for k in sorted((k for k, c in capacity.items() if c > 0), key=lambda k: (capacity[k], k)):
+    for k in pool:
         if left == 0:
             break
         out[k] = min(capacity[k], left)
@@ -52,37 +60,47 @@ def place_gang(cluster: Cluster, pods: list, required: str | None = None, prefer
     """{pod name: node name} for ALL pods, or None. Binds nothing.
 
     required="subblock": every pod inside one sub-block, or wait. preferred="subblock": try one
-    sub-block, then one block, then spread over the cluster. Neither: anywhere (unconstrained)."""
+    sub-block, then one block, then spread over the cluster. Neither: anywhere (unconstrained) -
+    Kueue then ranks all hosts as one flat list and never looks at the levels above.
+
+    Below the chosen domain Kueue goes down one level at a time and re-runs the algorithm over the
+    children of EVERY domain chosen so far, pooled, for the whole gang - so the host-level split
+    need not follow the sub-block split above it."""
     shape, n = pods[0], len(pods)
     fit = algorithm or (best_fit if (required or preferred) else least_free_capacity)
     room = {node.topology: pods_that_fit(shape, node) for node in cluster.nodes.values()}
     node_at = {node.topology: node.name for node in cluster.nodes.values()}
 
-    def capacity(depth: int, inside: tuple = ()) -> dict:
+    def capacity(depth: int, within=None) -> dict:
+        """Free pod slots per domain at `depth` (0 = the whole cluster), optionally only inside
+        the domains in `within`."""
         caps = defaultdict(int)
         for path, k in room.items():
-            if path[:len(inside)] == inside:
+            if within is None or path[:depth - 1] in within:
                 caps[path[:depth]] += k
         return caps
 
-    def split(domain: tuple, count: int) -> dict:      # push `count` pods down the tree, level by level
-        if len(domain) == len(cluster.levels):
-            return {node_at[domain]: count}
-        out = {}
-        for child, k in fit(capacity(len(domain) + 1, domain), count).items():
-            out.update(split(child, k))
-        return out
+    def assign(counts: dict) -> dict:
+        names = [node_at[path] for path, k in counts.items() for _ in range(k)]
+        return {p.name: name for p, name in zip(pods, names)}
 
     level = required or preferred
-    start = cluster.levels.index(level) + 1 if level else 0
-    for depth in ([start] if required else range(start, -1, -1)):   # preferred: widen until it fits
+    if not level:                                        # unconstrained: hosts only, flat
+        counts = fit(room, n)
+        return assign(counts) if counts else None
+
+    first = cluster.levels.index(level) + 1
+    for depth in ([first] if required else range(first, -1, -1)):   # preferred: widen until it fits
         caps = capacity(depth)
         fitting = [d for d, c in caps.items() if c >= n]
         if fitting:
-            domain = min(fitting, key=lambda d: (caps[d], d))       # one domain, the tightest that fits
-            names = [name for name, k in split(domain, n).items() for _ in range(k)]
-            return {p.name: name for p, name in zip(pods, names)}
-    return None
+            chosen = {min(fitting, key=lambda d: (caps[d], d)): n}     # one domain, the tightest that fits
+            break
+    else:
+        return None
+    for below in range(depth + 1, len(cluster.levels) + 1):         # descend, pooling the children
+        chosen = fit(capacity(below, within=chosen), n)
+    return assign(chosen)
 
 
 def bind_gang(cluster: Cluster, pods: list, placement: dict) -> None:

@@ -54,6 +54,20 @@ def test_tp_allreduce_cost():
     assert cross / per_gpu_compute > 5                                # TP across the NIC: don't
 
 
+def test_tp_across_nodes_is_hierarchical():
+    nv, ib = L["nvlink4"], L["ib-ndr"]
+    n = fabric.tp_allreduce_bytes(M70, 4096)
+    rails = fabric.tp_comm_time_across_nodes(M70, 4096, 8, 2, nv, ib)
+    # by hand: RS + AG in the node over NVLink, then n/8 across 2 nodes over each GPU's own NIC
+    per = 2 * (7 * 2e-6 + 7 / 8 * n / 450e9) + (2 * 5e-6 + n / 8 / 50e9)
+    assert rails == pytest.approx(160 * per) and rails * 1e3 == pytest.approx(74.7, abs=0.05)
+    one = fabric.tp_comm_time_across_nodes(M70, 4096, 8, 2, nv, ib, nics_per_node=1)
+    flat = fabric.tp_comm_time(M70, 4096, 16, ib)                         # every hop a NIC
+    assert one * 1e3 == pytest.approx(262.6, abs=0.05) and flat * 1e3 == pytest.approx(426.7, abs=0.05)
+    compute16 = llm.prefill(M70, specs.get("h100-sxm"), 4096).t_compute / 16
+    assert 1.9 < rails / compute16 < 2.1                                   # even on rails, 2x the compute
+
+
 def test_rails_let_every_gpu_use_its_own_nic():
     rails = fabric.hierarchical_allreduce_time(GIB, 8, 4, L["nvlink4"], L["ib-ndr"])
     one_nic = fabric.hierarchical_allreduce_time(GIB, 8, 4, L["nvlink4"], L["ib-ndr"], nics_per_node=1)

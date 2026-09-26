@@ -71,14 +71,16 @@ for n in (8, 64, 1024, 16384):
 # ## Checkpoint interval: Young/Daly
 # Checkpoint too often and you pay the write each time; too rarely and each failure throws away
 # more work. With checkpoint time δ and system MTBF M the waste is ≈ δ/τ + τ/(2M), minimised at
-# τ = √(2δM), where it equals √(2δ/M). Faster (asynchronous) checkpoints help as a square root.
+# τ = √(2δM), where it equals √(2δ/M). Faster (asynchronous) checkpoints help as a square root. Each
+# failure also costs a restart R (reschedule, reload, re-initialise): R/M on top, which τ cannot fix.
 
 # %%
 Ms = reliability.cluster_mtbf(M, 16384) * 3600
 for delta in (60, 10):
     tau = reliability.young_daly_interval(delta, Ms)
     print(f"16,384 GPUs, checkpoint {delta:2d} s: tau = {tau / 60:4.1f} min (Daly: {reliability.young_daly_interval(delta, Ms, True) / 60:.1f}), "
-          f"waste {reliability.wasted_fraction(tau, delta, Ms):.1%} vs {reliability.wasted_fraction(3600, delta, Ms):.1%} checkpointing hourly")
+          f"waste {reliability.wasted_fraction(tau, delta, Ms):.1%} vs {reliability.wasted_fraction(3600, delta, Ms):.1%} checkpointing hourly "
+          f"(R = 0); with an assumed 10-minute restart {reliability.wasted_fraction(tau, delta, Ms, 600):.1%}")
 
 # %% [markdown]
 # ## Inference: replicas are failure domains
@@ -95,15 +97,24 @@ for n in (8, 9, 10):
 # ## The cost of a token
 # Throughput from notebook 02's roofline (an upper bound, so these are lower bounds on cost), and
 # on-demand / Spot prices that you must check against today's list (`COMPUTE.md` at the repo root).
+# One rule picks every batch: the largest that meets a 10 ms ITL at 2K context and fits in HBM. A part
+# that cannot meet the SLO at any batch (the L4) is shown at its HBM limit and flagged — it is a slower product.
 
 # %%
 PRICES = {"L4 on-demand": 0.70, "H100 on-demand": 11.0, "H100 Spot": 3.7}   # $/GPU-hr, us-central1, Sep 2026 (verify)
+ITL_SLO = 0.010
 l4, h100 = specs.get("l4"), specs.get("h100-sxm")
-b_l4 = llm.max_batch_by_memory(m8, l4, 2048)
-thr = {"L4 on-demand": llm.decode(m8, l4, b_l4, 2048), "H100 on-demand": llm.decode(m8, h100, 64, 2048),
-       "H100 Spot": llm.decode(m8, h100, 64, 2048)}
+
+def at_slo(device):
+    b = llm.best_batch_under_itl(m8, device, 2048, ITL_SLO)
+    return llm.decode(m8, device, b or llm.max_batch_by_memory(m8, device, 2048), 2048), bool(b)
+
+thr, meets = {}, {}
+for name, dev in [("L4 on-demand", l4), ("H100 on-demand", h100), ("H100 Spot", h100)]:
+    thr[name], meets[name] = at_slo(dev)
 for name, st in thr.items():
-    print(f"{name:15s} batch {st.tokens:3d}: {st.tokens_per_s:6.0f} tok/s ({1 / st.time:5.1f} per user) -> "
+    print(f"{name:15s} batch {st.tokens:3d} ({'meets' if meets[name] else 'MISSES'} {ITL_SLO * 1e3:.0f} ms: ITL {st.time * 1e3:5.1f} ms): "
+          f"{st.tokens_per_s:6.0f} tok/s -> "
           f"${cost.cost_per_million_tokens(PRICES[name], st.tokens_per_s):.3f}/M output tokens at 100% utilisation")
 u = cost.utilisation([0.2] * 8 + [1.0] * 8 + [0.6] * 8)
 print(f"\na fleet sized for its peak, loaded 20% / 100% / 60% across the day: utilisation {u:.0%} "
@@ -226,10 +237,10 @@ table = {name: cost_per_mtok(PRICES[name], st.tokens_per_s, 0.6) for name, st in
 
 # %% check
 assert abs(cost_per_mtok(2.0, 1000) - 2 / 3.6) < 1e-12
-assert abs(table["L4 on-demand"] - 1.10) < 0.01 and abs(table["H100 on-demand"] - 0.765) < 0.01
-assert abs(table["H100 Spot"] - 0.257) < 0.01
-print("✅ at 60% busy: L4 $1.10, H100 on-demand $0.77, H100 Spot $0.26 per M tokens — the H100's bandwidth and "
-      "capacity (batch 64 vs 20) buy both the cheaper and the faster token here")
+assert abs(table["L4 on-demand"] - 1.10) < 0.01 and abs(table["H100 on-demand"] - 0.744) < 0.001
+assert abs(table["H100 Spot"] - 0.250) < 0.001
+print("✅ at 60% busy: L4 $1.10 (and it misses the 10 ms SLO), H100 on-demand $0.74, H100 Spot $0.25 per M tokens — "
+      "the H100's bandwidth and capacity buy both the cheaper and the faster token here")
 
 # %% [markdown]
 # ## Exercise 4.6 — rent or own?

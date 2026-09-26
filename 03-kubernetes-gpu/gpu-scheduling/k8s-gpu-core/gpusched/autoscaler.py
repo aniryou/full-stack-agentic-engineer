@@ -82,12 +82,13 @@ def expected_runtime_h(work_h: float, nodes: int, rate_per_node_hr: float, resta
     return work_h if lam == 0 else (math.exp(lam * work_h) - 1) * (1 / lam + restart_h)
 
 
-def startup_latency(node_s: float = 0, driver_s: float = 0, image_gb: float = 0, pull_gbps: float = 1,
-                    weights_gb: float = 0, load_gbps: float = 1, warmup_s: float = 0) -> dict:
+def startup_latency(node_s: float = 0, driver_s: float = 0, image_gb: float = 0, pull_GBps: float = 1,
+                    weights_gb: float = 0, load_GBps: float = 1, warmup_s: float = 0) -> dict:
     """Seconds from Pending to Ready as a sum of stages (inputs are yours to measure):
-    new node + driver + image pull + weights load + warm-up (graph capture, first requests)."""
-    stages = {"node": node_s, "driver": driver_s, "image": image_gb / pull_gbps,
-              "weights": weights_gb / load_gbps, "warmup": warmup_s}
+    new node + driver + image pull + weights load + warm-up (graph capture, first requests).
+    Sizes are in gigabytes and rates in gigaBYTES per second (GB/s, not Gb/s: divide Gbit/s by 8)."""
+    stages = {"node": node_s, "driver": driver_s, "image": image_gb / pull_GBps,
+              "weights": weights_gb / load_GBps, "warmup": warmup_s}
     return {**stages, "total": sum(stages.values())}
 
 
@@ -103,16 +104,20 @@ class Job:
 
 
 def simulate(pool: NodePool, jobs: list, until_s: int = 12 * 3600, tick_s: int = 30, unneeded_s: int = 600,
-             spot_rate_per_node_hr: float = 0.0, seed: int = 0) -> dict:
+             delay_after_add_s: int = 600, spot_rate_per_node_hr: float = 0.0, seed: int = 0) -> dict:
     """A cluster-autoscaler loop for one pool and FIFO gang jobs (simulated). Each tick: finish jobs;
     reclaim Spot nodes (losing one node restarts its whole gang); start the head job if enough idle
     Ready nodes exist; request the missing nodes (an ordinary pool asks for what fits under
     max_nodes, a queued pool for all or nothing); grant requests; remove nodes idle for unneeded_s
-    while nothing waits."""
+    (--scale-down-unneeded-time) while nothing waits and no scale-up happened in the last
+    delay_after_add_s (--scale-down-delay-after-add). Both default to the autoscaler's 10 minutes.
+    Not modelled: the utilisation threshold (a node with no job is idle), max-node-provision-time,
+    and several pools."""
     rng = random.Random(seed)
     nodes = [{"ready": 0, "job": None, "idle": 0} for _ in range(pool.min_nodes)]
     queue, running, log = sorted(jobs, key=lambda j: j.arrive_s), [], []
     want = granted = node_s = busy_s = 0
+    last_add = -delay_after_add_s                       # time of the last scale-up request
 
     def release(t):
         for n in nodes:
@@ -147,7 +152,7 @@ def simulate(pool: NodePool, jobs: list, until_s: int = 12 * 3600, tick_s: int =
         missing = sum(j.nodes for j in waiting) - sum(n["job"] is None for n in nodes) - want
         ask = min(missing, pool.max_nodes - len(nodes) - want)
         if ask > 0 and (ask == missing or not pool.queued):
-            want += ask
+            want, last_add = want + ask, t
             log.append((t, f"scale-up: {ask} node(s) requested"))
         elif missing > 0 and pool.queued and not any("cannot" in m for _, m in log[-1:]):
             log.append((t, f"queued request cannot be met: {missing} node(s) needed, max_nodes {pool.max_nodes}"))
@@ -158,7 +163,7 @@ def simulate(pool: NodePool, jobs: list, until_s: int = 12 * 3600, tick_s: int =
             want, granted = want - create, granted - create
             log.append((t, f"{create} node(s) created, Ready at {t + pool.boot_s}s"))
         for n in [n for n in nodes if n["job"] is None and n["ready"] <= t and t - n["idle"] >= unneeded_s]:
-            if not waiting and len(nodes) > pool.min_nodes:
+            if not waiting and len(nodes) > pool.min_nodes and t - last_add >= delay_after_add_s:
                 nodes.remove(n)
                 log.append((t, "idle node removed"))
         node_s += tick_s * len(nodes)

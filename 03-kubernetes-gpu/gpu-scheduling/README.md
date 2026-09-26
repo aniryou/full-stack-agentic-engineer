@@ -28,7 +28,7 @@ Read the primer section, then do the core notebook, then (optionally) the lab no
 | 3 | §4 Gangs · §5 Topology-aware placement | `03_gangs_and_topology` | `02_kind_with_fake_gpus_and_kueue` (T0 + Docker; simulator fallback) |
 | 4 | §6 Queues, quotas and multi-tenancy with Kueue | `04_queues_quotas_and_preemption` | `02_kind_with_fake_gpus_and_kueue` |
 | 5 | §7 Getting capacity · §8 Startup latency | `05_autoscaling_and_obtainability` | `04_gke_pools_dws_and_computeclasses` (T3; offline it plans and inspects) |
-| 6 | §9 Sharing GPUs at the cluster level · §10 Learning locally | (01 covers time-slicing replicas) | `deploy/kind` in the lab |
+| 6 | §9 Sharing GPUs at the cluster level · §10 Learning locally | `01_how_kubernetes_sees_a_gpu`, exercise 1.6 (time-slicing replicas) | `deploy/kind` in the lab |
 
 About 9 hours for the primer and the core, 5 more for the lab's T0 path.
 
@@ -53,6 +53,8 @@ course: [`CURRICULUM.md`](../../CURRICULUM.md).
   §4 and §7 (the parallelism menu; Kubernetes specifics in brief).
 * Layer 02 — [`cuda-and-nccl/PRIMER.md`](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §6 (how a
   container gets a GPU), §7 (MIG, time-slicing, MPS mechanics), §8 (health and DCGM).
-* Layer 05 — the orchestrator that scales LeaderWorkerSet groups and replicas on queue and SLO signals.
+* Layer 05 — [`serving-orchestration/PRIMER.md`](../../05-orchestrator/serving-orchestration/PRIMER.md) §4
+  (autoscaling replicas and LeaderWorkerSet groups on queue and SLO signals; cold-start anatomy), §5
+  (prefill/decode disaggregation).
 * Layer 06 — [`agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/): admission
   control and cost at the gateway, the same "shape demand to capacity" idea one layer up.

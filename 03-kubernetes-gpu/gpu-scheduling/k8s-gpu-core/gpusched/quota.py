@@ -7,7 +7,9 @@ When the owner of lent quota comes back, borrowers are preempted. Admission is a
 per job, which is also what makes Kueue a gang admitter.
 
 Simplifications: one resource group per ClusterQueue (all resources share a flavor), flat
-cohorts, classic preemption (not Fair Sharing), no admission checks.
+cohorts, classic preemption (not Fair Sharing), no admission checks, and a preemptor admitted in
+the same step its victims are evicted (real Kueue marks the victims Evicted and admits the
+preemptor in a later cycle, once their quota is released).
 """
 from __future__ import annotations
 

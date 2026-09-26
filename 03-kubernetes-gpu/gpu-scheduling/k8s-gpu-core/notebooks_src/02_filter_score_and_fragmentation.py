@@ -19,8 +19,8 @@
 # Primer: §3 *The scheduling cycle* in `../../PRIMER.md`.
 
 # %%
-from gpusched import (GPU, Cluster, Node, Pod, Scheduler, fit_error, fragmentation, gpu_node, gpu_pod,
-                      make_cluster, most_allocated, run_filters, select_victims, stranded_gpus)
+from gpusched import (GPU, Cluster, Node, Pod, Scheduler, Toleration, fit_error, fragmentation, gpu_node,
+                      gpu_pod, make_cluster, most_allocated, run_filters, select_victims, stranded_gpus)
 
 cluster = make_cluster(hosts=4)                          # 4 nodes x 8 GPUs, cpu 96 cores, 768 GiB each
 sched = Scheduler(cluster)                               # upstream defaults: LeastAllocated on cpu+memory
@@ -132,10 +132,13 @@ print("✅ spread cluster:", free_now, "-> stranded", stranded(free_now, 8), "of
 # %% [markdown]
 # ## Exercise 2.3 — pick the scoring strategy for a mixed GPU cluster
 #
-# A cluster of four 8-GPU nodes serves twelve 1-GPU inference replicas and must also start two
-# 8-GPU fine-tuning pods that arrive afterwards. Choose `strategy` (`"LeastAllocated"` or
-# `"MostAllocated"`) and the `resources` weights for `NodeResourcesFit`, and write one sentence in
-# `why`. The check replays the arrivals with your choice.
+# Four 8-GPU nodes (96 cores, 768 GiB each). Already running: on `h0` a CPU-heavy data-prep pod
+# (48 cores, 384 GiB, **no GPU**, tolerating the GPU taint); on `h1` and on `h2` a 4-GPU embedding
+# server each. Now eight 1-GPU inference replicas arrive (8 cores, 64 GiB each), then two 8-GPU
+# fine-tuning pods. Choose `strategy` (`"LeastAllocated"` or `"MostAllocated"`) and the `resources`
+# weights for `NodeResourcesFit`, and write one sentence in `why`. The check replays the arrivals
+# with your choice. Before you answer, work out where plain `MostAllocated` on cpu and memory sends
+# the first replica.
 
 # %% exercise
 # strategy = ...     "LeastAllocated" or "MostAllocated"
@@ -144,20 +147,32 @@ print("✅ spread cluster:", free_now, "-> stranded", stranded(free_now, 8), "of
 ### BEGIN SOLUTION
 strategy = "MostAllocated"
 resources = (("cpu", 1), ("memory", 1), (GPU, 5))
-why = ("Pack small GPU pods onto as few nodes as possible so whole nodes stay free for 8-GPU pods; "
-       "weight the GPU because it is the scarce resource and the default score ignores it.")
+why = ("Pack small GPU pods onto the nodes whose GPUs are already in use so whole nodes stay free for "
+       "8-GPU pods; weight the GPU above cpu and memory, or the CPU-heavy pod on h0 attracts them.")
 ### END SOLUTION
 
 # %% check
-mixed = make_cluster(hosts=4)
-m = Scheduler(mixed, strategy=strategy, resources=resources)
-m.submit(*[gpu_pod(f"infer-{i}", 1) for i in range(12)])
-m.run()
-placed = [m.schedule_one(gpu_pod(f"tune-{i}", 8)).node for i in range(2)]
+def replay(strategy, resources):
+    c = make_cluster(hosts=4)
+    c.bind(Pod("data-prep", {"cpu": 48000, "memory": 393216},
+               tolerations=[Toleration(GPU, "Exists", effect="NoSchedule")]), "b0-s0-h0")
+    c.bind(gpu_pod("embed-0", 4), "b0-s0-h1")
+    c.bind(gpu_pod("embed-1", 4), "b0-s0-h2")
+    s = Scheduler(c, strategy=strategy, resources=resources)
+    s.submit(*[gpu_pod(f"infer-{i}", 1) for i in range(8)])
+    s.run()
+    return c, [s.schedule_one(gpu_pod(f"tune-{i}", 8)).node for i in range(2)]
+
+mixed, placed = replay(strategy, resources)
 assert all(placed), f"a fine-tuning pod stayed Pending: {placed}\n{mixed.show()}"
+assert stranded_gpus(mixed, 8) == 0
 assert isinstance(why, str) and len(why) > 20
 print(mixed.show())
-print("✅ both 8-GPU pods placed; GPUs still stranded for 8-GPU pods:", stranded_gpus(mixed, 8))
+for label, strat, res in (("default LeastAllocated", "LeastAllocated", (("cpu", 1), ("memory", 1))),
+                          ("MostAllocated, cpu+memory only", "MostAllocated", (("cpu", 1), ("memory", 1))),
+                          ("MostAllocated, GPU weight 1", "MostAllocated", (("cpu", 1), ("memory", 1), (GPU, 1)))):
+    print(f"{label:<32} fine-tuning pods ->", replay(strat, res)[1])
+print("✅ both 8-GPU pods placed: only a score that weights the GPU keeps two whole nodes free")
 
 # %% [markdown]
 # Packing has a price, which belongs in the same review: replicas of one service pile onto one node
@@ -209,7 +224,9 @@ print("✅", actual)
 #
 # Pods carry a priority (from a `PriorityClass`). When no node passes the filters, the
 # `DefaultPreemption` plugin looks for nodes where evicting **lower-priority** pods would make room,
-# evicts as few and as unimportant pods as it can, and binds the preemptor there.
+# evicts as few and as unimportant pods as it can, and **nominates** that node
+# (`status.nominatedNodeName`); the preemptor binds in a later cycle, after the victims' graceful
+# termination. The simulator collapses this into one step and binds at once.
 
 # %%
 c = Cluster([gpu_node("a", 8), gpu_node("b", 8)])

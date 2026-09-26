@@ -114,11 +114,13 @@ spread = place_gang(fleet, [gpu_pod(f"u{i}", 8) for i in range(3)])            #
 print("unconstrained 3-node gang:", spread)
 
 # %% [markdown]
-# Unconstrained, Kueue fills the smallest gaps first (`LeastFreeCapacity`, good against
-# fragmentation) and the 3-node job straddles sub-blocks. With a topology constraint it uses
-# **BestFit**: among domains that can hold the whole gang, take the *tightest*; when a gang has to
-# be split across child domains, take the ones with the most room first and choose the last one as
-# the tightest that holds the remainder (that keeps big holes intact for big jobs).
+# Unconstrained, Kueue ranks all hosts as one flat list, tightest first (`LeastFreeCapacity`): it
+# takes the tightest single host that holds the whole gang, and when none does — here every free host
+# holds one 8-GPU pod — it fills the smallest gaps first, so the 3-node job straddles sub-blocks. With
+# a topology constraint it uses **BestFit**: among domains that can hold the whole gang, take the
+# *tightest*; when a gang has to be split across child domains, take the ones with the most room first
+# and choose the last one as the tightest that holds the remainder (that keeps big holes intact for big
+# jobs). Kueue then repeats the choice one level down over the children of *all* the domains it chose.
 #
 # ## Exercise 3.2 — Kueue's BestFit
 #
@@ -177,7 +179,9 @@ g5 = place_gang(fleet, [gpu_pod(f"k{i}", 8) for i in range(5)], preferred="subbl
 assert subblocks(g3) == {subblock_for_3} and subblocks(g2) == {subblock_for_2}
 assert {fleet.nodes[n].topology[0] for n in g5.values()} == {block_for_5}
 assert place_gang(fleet, [gpu_pod(f"r{i}", 8) for i in range(5)], required="subblock") is None
-print("✅ gang of 5 (preferred) ->", sorted(subblocks(g5)), "= 4 in the empty sub-block + 1 in the tightest")
+print("✅ gang of 5 (preferred) ->", sorted(fleet.nodes[n].name for n in g5.values()))
+print("   the sub-block pass picks 4 + 1, but the host pass re-runs BestFit over all six free hosts of both\n"
+      "   sub-blocks, which tie at one slot each and are taken in name order: 2 in b1-s0 + 3 in b1-s1")
 
 # %% [markdown]
 # ## Exercise 3.4 — choose a constraint per workload
@@ -236,5 +240,6 @@ print("✅", choices)
 # 2. *Required or preferred topology for a 2-node tensor-parallel serving group?* — Required at the
 #    smallest multi-node domain: a replica split across a slow link is slow for its whole life.
 # 3. *Why does Kueue use LeastFreeCapacity for unconstrained pod sets but BestFit otherwise?* —
-#    Without a constraint the goal is to fill small gaps and keep large domains whole for jobs that
-#    need them; with one, it is to find the tightest single domain that holds the gang.
+#    Without a constraint the goal is to use the tightest host, or fill small gaps, and keep large
+#    domains whole for jobs that need them; with one, it is to find the tightest single domain that
+#    holds the gang.

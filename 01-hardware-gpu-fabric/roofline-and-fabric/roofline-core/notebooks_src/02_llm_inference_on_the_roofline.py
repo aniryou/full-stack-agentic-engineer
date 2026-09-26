@@ -10,10 +10,12 @@
 # FLOPs grow with the tokens. So a step's arithmetic intensity is roughly **its token count**
 # (at 2-byte weights). A 2K-token prefill sits far right of the ridge: compute-bound, and TTFT
 # is FLOPs ÷ peak. A batch-1 decode step sits at ~1 FLOP/B: memory-bound, and time per token is
-# bytes ÷ bandwidth. Batching moves decode right — until each sequence's **KV-cache reads**,
-# which grow with context exactly as fast as its FLOPs, cap the intensity far below the ridge.
-# After this notebook you can say which bound applies, predict step time within the roofline,
-# and explain what quantization and MoE really change: **bytes**. Primer: `../PRIMER.md` §3.
+# bytes ÷ bandwidth. Batching moves decode's weight GEMMs right, toward the ridge — but each
+# sequence's **KV-cache reads**, which grow with context exactly as fast as its attention FLOPs,
+# keep attention at a few FLOP/B and come to dominate the step. After this notebook you can say
+# which bound applies (per step and per kernel), predict step time within the roofline, explain
+# what quantization and MoE really change — **bytes** — and why tiling and fusion win on the
+# memory hierarchy. Primer: `../PRIMER.md` §3–4.
 
 # %%
 from roofline import llm, specs
@@ -48,24 +50,28 @@ print(f"\n2K prompt: {st.flops:.3g} FLOPs -> ideal TTFT {st.t_compute * 1e3:.1f}
 # sequence also reads its own KV cache (128 KiB per cached token here), which does not amortize.
 
 # %%
+cap = llm.max_batch_by_memory(m8, h100, 2048)          # the sweep stops where HBM does
 print(f"{'batch':>5s} {'FLOP/B':>7s} {'step ms':>8s} {'agg tok/s':>9s} {'per user':>8s} {'KV share':>9s}")
-for b in (1, 8, 32, 64, 128, 256):
+for b in (1, 8, 32, 64, 128, cap):
     st = llm.decode(m8, h100, b, 2048)
     kv = b * 2049 * m8.kv_bytes_per_token() / st.bytes
-    print(f"{b:5d} {st.intensity:7.1f} {st.time * 1e3:8.2f} {st.tokens_per_s:9.0f} {1 / st.time:8.1f} {kv:9.0%}")
+    print(f"{b:5d} {st.intensity:7.1f} {st.time * 1e3:8.2f} {st.tokens_per_s:9.0f} {1 / st.time:8.1f} {kv:9.0%}"
+          + ("   <- HBM limit at 2K context (10% headroom)" if b == cap else ""))
 
 # %% [markdown]
 # ## KV reads cap decode intensity
-# As batch → ∞ the weight read amortizes away and intensity tends to
+# As batch → ∞ the weight read amortizes away and the step's average intensity tends to
 # `FLOPs per token ÷ KV bytes per token` — for this GQA model about 32 FLOP/B at 4K context.
-# Batching can never reach an H100's 295. The crossover batch exists only at very short context,
-# and the HBM capacity for KV runs out first anyway.
+# Treated as one kernel, the step can never reach an H100's 295 at 4K: the whole-step crossover
+# exists only at very short context, and HBM capacity for KV runs out first anyway. (Per kernel the
+# picture is sharper — see "Per kernel, not per step" after Exercise 2.2.)
 
 # %%
 for c in (0, 128, 256, 1024, 4096, 32768):
     print(f"context {c:6d}: intensity limit {llm.decode_intensity_limit(m8, c):9.1f} FLOP/B | "
-          f"compute-bound from batch {llm.decode_crossover_batch(m8, h100, c)}")
-print(f"decode can reach the ridge only below ~{llm.max_context_for_compute_bound(m8, h100):.0f} tokens of context")
+          f"whole step compute-bound from batch {llm.decode_crossover_batch(m8, h100, c)}")
+print(f"the whole step, as one kernel, can reach the ridge only below ~{llm.max_context_for_compute_bound(m8, h100):.0f} "
+      "tokens of context")
 print("memory cap at 4K context:", llm.max_batch_by_memory(m8, h100, 4096), "sequences (10% headroom)")
 
 # %% [markdown]
@@ -113,7 +119,8 @@ print(f"Qwen2.5-1.5B on T4: {st.bytes / 1e9:.2f} GB per token -> ceiling {st.tok
 # ## Exercise 2.1 — the decode step time
 # Write `decode_step_time(weight_bytes, kv_bytes_per_seq, flops_per_token, batch, device, precision)`:
 # the roofline time (seconds) of a step that streams the weights once, reads `kv_bytes_per_seq` for
-# each sequence, and does `flops_per_token` for each. The inputs for Llama-3.1-8B are computed for you.
+# each sequence, and does `flops_per_token` for each — the whole step treated as one kernel, as
+# `llm.decode()` does. The inputs for Llama-3.1-8B are computed for you.
 
 # %%
 W = llm.streamed_weight_bytes(m8, 1)
@@ -137,7 +144,7 @@ print(f"✅ decode step = max(B·F/peak, (W + B·KV)/BW) — batch 64 at 2K cont
       f"{decode_step_time(W, kv_seq(2048), f_tok(2048), 64, h100) * 1e3:.2f} ms")
 
 # %% [markdown]
-# ## Exercise 2.2 — the crossover batch, in closed form
+# ## Exercise 2.2 — the whole-step crossover batch, in closed form
 # Set `B·F/peak = (W + B·KV)/BW` and solve for B. Write `crossover(W, kv_bytes_per_seq, flops_per_token, ridge)`
 # returning the smallest integer batch that is compute-bound, or `None` when no batch ever is.
 # (Hint: divide through by BW; the ridge appears; the denominator can go negative.)
@@ -157,6 +164,29 @@ def crossover(weight_bytes, kv_bytes_per_seq, flops_per_token, ridge):
 for c in (0, 128, 256, 1024, 4096):
     assert crossover(W, kv_seq(c), f_tok(c), h100.ridge()) == llm.decode_crossover_batch(m8, h100, c), c
 print("✅ B* = ridge·W / (F − ridge·KV): 297 at c=0, 440 at c=128, None from c=1024 — KV reads never amortize")
+
+# %% [markdown]
+# ## Per kernel, not per step
+# `decode()` and your `decode_step_time` price the step as one kernel: max(ΣF/peak, ΣB/BW). That blends two
+# kernels with opposite shapes. The **weight GEMMs** multiply a `[batch × d]` activation by every weight
+# matrix: intensity ≈ batch × 2 / weight bytes at any context, compute-bound from batch ≈ ridge — the
+# capacity-planning rule is right for them. **Attention** reads each sequence's own KV cache: about
+# 2 × (heads / kv_heads) / kv_bytes = 4 FLOP/B here, whatever the batch — never compute-bound. An engine
+# runs the kernels one after another, so the tighter bound is the *sum* of per-kernel times
+# (`llm.decode_split`). The two agree while both kernels are memory-bound and part once the GEMMs cross
+# the ridge: past that point throughput stops rising and each extra sequence only adds KV time.
+
+# %%
+fp8 = llm.SCHEMES["fp8"]
+print(f"GEMM crossover (any context): batch {llm.gemm_crossover_batch(m8, h100)} in bf16, "
+      f"{llm.gemm_crossover_batch(m8, h100, **fp8)} in FP8 (half the bytes, twice the peak)")
+print(f"attention at 2K context: {llm.decode_split(m8, h100, 64, 2048).attention.intensity:.1f} FLOP/B (bf16 KV), "
+      f"{llm.decode_split(m8, h100, 64, 2048, **fp8).attention.intensity:.1f} (FP8 KV)\n")
+print(f"{'scheme':6s} {'batch':>5s} {'one kernel':>11s} {'GEMMs':>13s} {'attention':>14s} {'sum':>9s} {'tok/s':>7s}")
+for name, kw, b in [("bf16", {}, 64), ("bf16", {}, 208), ("fp8", fp8, 193), ("fp8", fp8, 400), ("fp8", fp8, 476)]:
+    one, sp = llm.decode(m8, h100, b, 2048, **kw), llm.decode_split(m8, h100, b, 2048, **kw)
+    print(f"{name:6s} {b:5d} {one.time * 1e3:8.2f} ms {sp.gemms.time * 1e3:6.2f} ms ({sp.gemms.bound[:3]}) "
+          f"{sp.attention.time * 1e3:6.2f} ms ({sp.attention.bound[:3]}) {sp.time * 1e3:6.2f} ms {b / sp.time:7.0f}")
 
 # %% [markdown]
 # ## Exercise 2.3 — predict a quantization speedup from bytes alone
@@ -233,19 +263,83 @@ print("✅ 90% of experts are streamed by batch 9 (8 experts, top-2) or 36 (128,
       "MoE decode is 'active-params cheap' only at small batch")
 
 # %% [markdown]
+# ## The memory hierarchy: tiles and fusion (primer §4)
+# Every level of the hierarchy has its own roofline. A GEMM computes each `Tm × Tn` output tile by
+# streaming a `Tm × k` panel of A and a `k × Tn` panel of B through shared memory: each k-step loads
+# `(Tm + Tn)` elements for `2·Tm·Tn` FLOPs, so bigger tiles reuse more — but the pipelined operand
+# buffers must fit in an SM's shared memory (228 KiB on an H100). Elementwise chains are the other
+# extreme: nothing to reuse, so the only lever is to stop round-tripping intermediates through HBM.
+
+# %%
+from roofline import roofline as rl
+for tm, tn in ((64, 64), (128, 128), (128, 256), (256, 256)):
+    print(f"tile {tm:3d}x{tn:<3d}: {rl.tile_intensity(tm, tn):5.1f} FLOP/B per byte staged; "
+          f"{rl.tile_smem_bytes(tm, tn, 64, 2, stages=4) / 1024:4.0f} KiB of SMEM at 4 stages of k = 64")
+n = 4096
+print(f"\n4096³ bf16 GEMM with 128x128 tiles and no reuse between tiles: {rl.tiled_gemm_bytes(n, n, n, 128, 128) / 1e9:.2f} GB "
+      f"from HBM vs {rl.gemm(n, n, n).bytes / 1e6:.0f} MB compulsory — the L2 must supply the rest")
+
+# %% [markdown]
+# ## Exercise 2.6 — pick a tile, then fuse a chain
+# **(a)** Write `pick_tile(candidates, smem_bytes, tile_k=64, stages=4, b=2)`: of the `(Tm, Tn)` candidates
+# whose pipelined A and B buffers fit in `smem_bytes`, return the one with the highest tile intensity.
+# Predict first: does the winner reach the H100's HBM ridge (295) on its own?
+#
+# **(b)** Write `chain_bytes(n, inputs_per_op, b, fused)`: HBM bytes for a chain of elementwise ops on `n`
+# elements, where `inputs_per_op[i]` is how many full-size tensors op *i* reads (the running tensor, plus a
+# second one for a residual add). Unfused, every op reads its inputs from HBM and writes its output back;
+# fused, one kernel reads every distinct input once and writes the result once.
+
+# %% exercise
+def pick_tile(candidates, smem_bytes, tile_k=64, stages=4, b=2):
+    ### BEGIN SOLUTION
+    fits = [(tm, tn) for tm, tn in candidates if stages * (tm + tn) * tile_k * b <= smem_bytes]
+    return max(fits, key=lambda t: 2 * t[0] * t[1] / ((t[0] + t[1]) * b))
+    ### END SOLUTION
+
+
+def chain_bytes(n, inputs_per_op, b=2, fused=True):
+    ### BEGIN SOLUTION
+    if fused:
+        return (1 + sum(k - 1 for k in inputs_per_op) + 1) * n * b
+    return sum(k + 1 for k in inputs_per_op) * n * b
+    ### END SOLUTION
+
+# %% check
+cands = [(64, 64), (128, 128), (128, 256), (256, 128), (256, 256)]
+best = pick_tile(cands, 228 * 1024)
+assert best in ((128, 256), (256, 128)), best
+assert rl.tile_intensity(*best) < h100.ridge()               # 85 < 295: reuse between tiles (L2) must do the rest
+assert pick_tile(cands, 228 * 1024, stages=6) == (128, 128)   # a deeper pipeline forces a smaller tile
+assert pick_tile(cands, 256 * 1024) == (256, 256)
+ne = 4096 * 8192
+chain = [1, 1, 1, 2]                                         # bias, GELU, dropout, residual add
+for fused in (False, True):
+    assert chain_bytes(ne, chain, fused=fused) == rl.fusion_bytes(ne, 4, 2, fused=fused, extra_inputs=1)
+    assert chain_bytes(ne, [2, 2], fused=fused) == rl.fusion_bytes(ne, 2, 2, fused=fused, extra_inputs=2)
+uf, f = chain_bytes(ne, chain, fused=False), chain_bytes(ne, chain, fused=True)
+print(f"✅ best tile {best}: {rl.tile_intensity(*best):.0f} FLOP/B, below the 295 ridge — tiling in SMEM is not enough "
+      f"on its own; fusing the chain: {uf / 1e6:.0f} → {f / 1e6:.0f} MB, "
+      f"{uf / h100.bandwidth() * 1e6:.0f} → {f / h100.bandwidth() * 1e6:.0f} µs on an H100 ({1 - f / uf:.0%} of the bytes gone)")
+
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "A decode step streams all the weights once and each sequence's
 # KV cache; a prefill step does the same reads but for thousands of tokens. So prefill is
 # compute-bound — TTFT is FLOPs over peak — and decode is memory-bound — time per token is bytes
-# over bandwidth. Batching amortizes the weight read, which is why throughput climbs with batch,
-# but KV reads grow with context as fast as FLOPs do, so at realistic contexts decode never
-# reaches the ridge; HBM capacity for KV caps the batch first. Quantization is a bytes lever:
-# FP8 weights and KV halve step time in that regime; weight-only INT4 helps little once KV dominates."
+# over bandwidth. Batching amortizes the weight read, which is why throughput climbs with batch, and
+# the weight GEMMs reach the ridge near batch ≈ ridge; but attention reads each sequence's KV cache at
+# ~4 FLOP/B whatever the batch, so at realistic contexts KV bytes dominate the step and HBM capacity
+# for KV caps the batch first. Quantization is a bytes lever: FP8 weights and KV halve step time in
+# that regime; weight-only INT4 helps little once KV dominates."
 #
 # **Drill.**
 # 1. *Would a B200's 2.3× bf16 FLOPs speed up our batch-32, 4K-context decode by 2.3×?* — No: it
 #    is memory-bound; the gain is the bandwidth ratio (8 vs 3.35 TB/s ≈ 2.4×), plus capacity for a bigger batch.
-# 2. *Why does TTFT grow linearly with prompt length but decode ITL barely moves with batch?* —
-#    prefill is compute-bound (FLOPs ∝ tokens); decode is dominated by the weight stream, shared across the batch.
+# 2. *How do TTFT and ITL grow — TTFT with prompt length, ITL with batch?* — TTFT is compute-bound:
+#    linear in tokens while the matmuls dominate, then superlinear as attention's quadratic term grows
+#    (an 8K prompt takes 4.4× the 2K time, not 4×). ITL is nearly flat while the shared weight stream
+#    dominates (small batch × short context), then grows roughly linearly with batch × context as KV
+#    reads take over: at 2K context 4.56 ms at batch 1, 9.61 ms at 64, 21.16 ms at 208.
 # 3. *We quantized to W4A16 and saw 1.5×, not 4×. Bug?* — no: at batch 64 × 2K context, KV is half
 #    the bytes and stayed bf16; quantize the KV cache (FP8) to move the rest.

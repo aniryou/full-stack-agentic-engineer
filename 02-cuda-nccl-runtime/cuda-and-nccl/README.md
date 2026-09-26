@@ -13,7 +13,7 @@ Every concept is learnable on a laptop (T0). Real GPUs and GCP are optional step
 | Path | What it is | Tier |
 |---|---|---|
 | [`PRIMER.md`](PRIMER.md) | the concept primer: 9 sections, a design-review walkthrough with 6 drills, glossary, sources, dated verify list | read |
-| [`cuda-nccl-core/`](cuda-nccl-core/) | **minimal** implementation, package `gpusim`: seven small numpy simulators (SIMT and memory, occupancy, tiling and launches, collectives, compatibility, sharing, health) and 5 fill-in notebooks. Every number in the primer is computed here | T0 |
+| [`cuda-nccl-core/`](cuda-nccl-core/) | **minimal** implementation, package `gpusim`: seven small numpy simulators (SIMT and memory, occupancy, tiling and launches, collectives, compatibility, sharing, health) and 5 fill-in notebooks. Every formula and worked number in the primer is computed here | T0 |
 | [`cuda-nccl-lab/`](cuda-nccl-lab/) | **detailed** implementation, package `gpurt`: CUDA kernels written in Numba (run in the CUDA simulator on CPU, or on a GPU), torch.distributed collectives with algbw/busbw exactly as nccl-tests computes them and an α-β fit, nccl-tests output parsing, CUDA Graphs vs eager, what a container sees of its GPU, DCGM parsing; deploy assets for any GPU box, GKE and Terraform | T0 fallbacks, then T1, T2, T3 |
 
 ## Order to work it

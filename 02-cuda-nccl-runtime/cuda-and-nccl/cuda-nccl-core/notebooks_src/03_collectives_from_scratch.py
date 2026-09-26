@@ -52,8 +52,12 @@ for op in ("broadcast", "reduce", "all_reduce", "reduce_scatter", "all_gather", 
 # Implement it with the rules a ring imposes: in every step, **each rank sends exactly one
 # chunk to its right neighbour** `(r + 1) % p`, which **adds** it into its own copy of that chunk.
 # All sends in a step happen at once, so compute every message from the state at the *start* of
-# the step. After the last step, rank r must own the fully reduced chunk r. Return the chunks and
-# the number of steps you used. (Hint: at step s, rank r sends chunk `(r - s - 1) % p`.)
+# the step. After the last step, rank r must own the fully reduced chunk r.
+#
+# Return the chunks and the **schedule**: one list per step of the `(src, dst, chunk)` messages
+# sent in that step. The check replays your schedule on fresh buffers, so the schedule, not only
+# the final answer, has to be right. (Hint: at step s = 0, 1, ..., p-2, rank r sends chunk
+# `(r - s - 1) % p`.)
 
 # %% exercise
 def ring_reduce_scatter(bufs):
@@ -61,56 +65,92 @@ def ring_reduce_scatter(bufs):
     work = [np.array(b, copy=True) for b in bufs]
     idx = np.array_split(np.arange(work[0].size), p)        # chunk c = work[r][idx[c]]
     ### BEGIN SOLUTION
+    schedule = []
     for s in range(p - 1):
-        msgs = [(r, (r - s - 1) % p) for r in range(p)]
-        payload = [(r, c, work[r][idx[c]].copy()) for r, c in msgs]
-        for r, c, data in payload:
-            work[(r + 1) % p][idx[c]] += data
-    return [work[r][idx[r]] for r in range(p)], p - 1
+        msgs = [(r, (r + 1) % p, (r - s - 1) % p) for r in range(p)]
+        payload = [(dst, c, work[src][idx[c]].copy()) for src, dst, c in msgs]
+        for dst, c, data in payload:
+            work[dst][idx[c]] += data
+        schedule.append(msgs)
+    return [work[r][idx[r]] for r in range(p)], schedule
     ### END SOLUTION
 
 # %% check
+def replay(bufs, schedule, op):
+    """Run a schedule of (src, dst, chunk) messages; each step's messages are computed from the
+    state at the start of the step. op="add" reduces into dst, op="copy" overwrites it."""
+    work = [np.array(b, copy=True) for b in bufs]
+    idx = np.array_split(np.arange(work[0].size), len(work))
+    for step in schedule:
+        payload = [(dst, c, work[src][idx[c]].copy()) for src, dst, c in step]
+        for dst, c, data in payload:
+            if op == "add":
+                work[dst][idx[c]] += data
+            else:
+                work[dst][idx[c]] = data
+    return work, idx
+
+def check_ring_schedule(schedule, p):
+    assert len(schedule) == p - 1, f"a ring phase takes p-1 = {p - 1} steps, not {len(schedule)}"
+    for s, step in enumerate(schedule):
+        assert sorted(src for src, _, _ in step) == list(range(p)), f"step {s}: every rank sends exactly once"
+        assert all(dst == (src + 1) % p for src, dst, _ in step), f"step {s}: a ring only sends to (r + 1) % p"
+
 rng = np.random.default_rng(0)
 for p_ in (2, 3, 4, 5, 8):
     b = [rng.integers(-99, 99, 3 * p_ + 1) for _ in range(p_)]
-    chunks, steps = ring_reduce_scatter(b)
-    assert steps == p_ - 1
-    assert all(np.array_equal(x, y) for x, y in zip(chunks, C.reference("reduce_scatter", b)))
-print("✅ ring reduce-scatter: p-1 steps, each rank sends p-1 chunks of S/p")
+    chunks, sched = ring_reduce_scatter(b)
+    check_ring_schedule(sched, p_)
+    want = C.reference("reduce_scatter", b)
+    work, idx = replay(b, sched, "add")
+    assert all(np.array_equal(work[r][idx[r]], want[r]) for r in range(p_)), "replaying your schedule does not leave chunk r's sum on rank r"
+    assert all(np.array_equal(x, y) for x, y in zip(chunks, want))
+    sent = [sum(idx[c].size for step in sched for src, _, c in step if src == r) for r in range(p_)]
+    assert all(abs(n - (p_ - 1) / p_ * b[0].size) < p_ for n in sent)       # (p-1)/p of the buffer each
+print("✅ ring reduce-scatter: p-1 steps, one S/p chunk per rank per step to its right neighbour")
 
 # %% [markdown]
 # ## Exercise 3.2: ring all-gather, and all-reduce as the composition
 #
 # Now each rank r starts with only its own finished chunk. Each step, every rank forwards one
 # chunk to its right neighbour, which *stores* it. After p-1 steps everyone has every chunk.
-# Write `ring_all_gather(chunks)` returning the full buffers and the step count, then
-# `ring_all_reduce(bufs)` built from the two.
+# Write `ring_all_gather(chunks)` returning the full buffers and its schedule, then
+# `ring_all_reduce(bufs)` built from the two, returning the full buffers and the combined
+# schedule (reduce-scatter steps first).
 
 # %% exercise
 def ring_all_gather(chunks):
     p = len(chunks)
     have = [{r: np.array(chunks[r], copy=True)} for r in range(p)]   # rank r's known chunks
     ### BEGIN SOLUTION
+    schedule = []
     for s in range(p - 1):
-        payload = [(r, (r - s) % p, have[r][(r - s) % p]) for r in range(p)]
-        for r, c, data in payload:
-            have[(r + 1) % p][c] = data.copy()
+        msgs = [(r, (r + 1) % p, (r - s) % p) for r in range(p)]
+        payload = [(dst, c, have[src][c]) for src, dst, c in msgs]
+        for dst, c, data in payload:
+            have[dst][c] = data.copy()
+        schedule.append(msgs)
     full = [np.concatenate([have[r][c] for c in range(p)]) for r in range(p)]
-    return full, p - 1
+    return full, schedule
     ### END SOLUTION
 
 def ring_all_reduce(bufs):
     ### BEGIN SOLUTION
-    chunks, s1 = ring_reduce_scatter(bufs)
-    full, s2 = ring_all_gather(chunks)
-    return full, s1 + s2
+    chunks, rs = ring_reduce_scatter(bufs)
+    full, ag = ring_all_gather(chunks)
+    return full, rs + ag
     ### END SOLUTION
 
 # %% check
 for p_ in (2, 3, 4, 6, 8):
     b = [rng.integers(-99, 99, 5 * p_ + 3) for _ in range(p_)]
-    full, steps = ring_all_reduce(b)
-    assert steps == 2 * (p_ - 1)
+    full, sched = ring_all_reduce(b)
+    assert len(sched) == 2 * (p_ - 1)
+    check_ring_schedule(sched[: p_ - 1], p_)
+    check_ring_schedule(sched[p_ - 1:], p_)
+    reduced, _ = replay(b, sched[: p_ - 1], "add")
+    gathered, _ = replay(reduced, sched[p_ - 1:], "copy")
+    assert all(np.array_equal(g, np.sum(b, axis=0)) for g in gathered), "replaying your schedule does not all-reduce"
     assert all(np.array_equal(x, np.sum(b, axis=0)) for x in full)
 print("✅ ring all-reduce = reduce-scatter + all-gather: 2(p-1) steps of S/p bytes")
 
@@ -244,14 +284,15 @@ for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
 #
 # Same model and TP=8, but a decode batch of **64** tokens. With the same assumed alpha and B,
 # compute `message_bytes`, `ring_ms_per_step` (all 160 all-reduces with a ring), and
-# `best_algo`, the fastest of `C.best_algorithm` for this message (use `chunks=1` so the switch
-# does not over-pipeline a small message).
+# `best_algo`, the fastest of `C.best_algorithm` for this message. (`best_algorithm` pipelines the
+# in-switch algorithm at its best depth for each size, `C.pipeline_chunks()`: for a 1 MiB message
+# that is a single chunk, because extra chunks only add alpha-steps.)
 
 # %% exercise
 ### BEGIN SOLUTION
 message_bytes = 64 * 8192 * 2
 ring_ms_per_step = 160 * C.model_time("all_reduce", "ring", message_bytes, 8, 2e-6, 450e9) * 1e3
-best_algo = C.best_algorithm("all_reduce", message_bytes, 8, 2e-6, 450e9, chunks=1)[0][1]
+best_algo = C.best_algorithm("all_reduce", message_bytes, 8, 2e-6, 450e9)[0][1]
 ### END SOLUTION
 
 # %% check
@@ -329,8 +370,9 @@ print("ring vs tree max |diff|    :", float(np.max(np.abs(ring_out[0] - tree_out
 # ## In a design review
 #
 # **The two-minute version.** "We serve with TP=8 inside one NVLink domain. Each layer
-# all-reduces twice, a message of tokens x hidden x 2 bytes. With the alpha and B we fitted from
-# nccl-tests (here 2 us and 450 GB/s), the crossover is about 7 MB (S* = p x alpha x B), so decode
+# all-reduces twice, a message of tokens x hidden x 2 bytes. With alpha and B fitted from our own
+# nccl-tests run (here the illustrative 2 us and 450 GB/s), the crossover is about 7 MB
+# (S* = p x alpha x B), so decode
 # all-reduces, at 0.5 to 1 MB, are
 # latency-bound. We use an algorithm with few steps (a one-/two-shot custom all-reduce, or NVLS
 # where the switch supports it) and capture it in the decode CUDA graph. Prefill messages are

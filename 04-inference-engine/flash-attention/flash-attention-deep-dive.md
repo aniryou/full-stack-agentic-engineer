@@ -2,7 +2,7 @@
 
 **Scope.** This is the second FlashAttention document in this folder. [The primer](flash-attention-primer.md) builds the idea from zero (what attention computes, why the naive schedule is slow, online softmax, the lineage). This page assumes you have read it, or can explain those ideas yourself, and goes to the depth needed to defend a kernel or backend choice in a design review: exact byte counts, the algebra with numerical safety, what each FlashAttention generation changed and why the hardware forced it, why decode needs a different kernel, how paged KV reaches the kernel in vLLM and FlashInfer, what each attention variant costs, numerics, how to measure honestly, and how to write the forward pass yourself in Triton.
 
-**Tier.** Everything here is learnable on a CPU (T0). The companion notebook [`flash_attention_deep_dive.ipynb`](flash_attention_deep_dive.ipynb) and the calculators in [`fa_calculators.py`](fa_calculators.py) (pinned by [`test_fa_calculators.py`](test_fa_calculators.py)) reproduce every derived number on this page with numpy. Running a real kernel (sections 10 and 11) is T1: one small GPU, such as a free Colab or Kaggle T4 or any rented 24 GB card; see [COMPUTE.md](../../COMPUTE.md) for where to get one. On a T4, note that FlashAttention-2 does not support Turing (section 7.4).
+**Tier.** Everything here is learnable on a CPU (T0). The derived numbers on this page are computed by the functions in [`fa_calculators.py`](fa_calculators.py) (pinned by [`test_fa_calculators.py`](test_fa_calculators.py)), and the companion notebook [`flash_attention_deep_dive.ipynb`](flash_attention_deep_dive.ipynb) prints them, reruns every algorithm against a naive reference in numpy, and has exercises; a few one-line products of numbers already on the page (a time from bytes and a bandwidth, say) are worked inline. The Triton kernel of section 11 is checked on a CPU in two ways, for correctness and not speed: its logic against a numpy stand-in for Triton ([`test_triton_kernel_emulated.py`](test_triton_kernel_emulated.py), runs here), and the real Triton front end through its interpreter (section 11.4, needs `torch` and `triton`). Timing a real kernel (sections 10 and 11) is T1: one small GPU, such as a free Colab or Kaggle T4 or any rented 24 GB card; see [COMPUTE.md](../../COMPUTE.md) for where to get one. On a T4, note that FlashAttention-2 does not support Turing (section 7.4).
 
 **Sources.** Grounded in the upstream code, fetched on 2026-09-26 (listed under Sources): the FlashAttention repo (FA2 CUDA kernels, FA3 Hopper kernels, FA4 CuTe-DSL kernels, the Triton version), vLLM's attention backends, and FlashInfer. The papers could not be fetched from this environment (arXiv is blocked), so figures quoted from them carry **(verify)**. Every other performance number is derived on this page from stated assumptions.
 
@@ -16,7 +16,7 @@
 - The schedule rests on one algebraic fact: a partial softmax-weighted sum can be stored as a triple `(m, l, o)` and any two triples merge exactly. That single operator gives you tiling (FA1/FA2), split-KV decode (Flash-Decoding), cascade attention over shared prefixes, and ring attention across GPUs.
 - FA1 tiled the computation; FA2 swapped the loops so each CTA owns a Q block, which keeps the output in registers, adds parallelism over the sequence, and removes inter-warp traffic; FA3 made the kernel asynchronous on Hopper (TMA, WGMMA, producer/consumer warpgroups, ping-pong) because the exponential unit had become a bottleneck; FA4 goes further on Blackwell, where the exponential unit now takes as long as the matrix multiplies.
 - Decode is a different problem: one query row against a long KV cache has no reuse, so it is purely bandwidth-bound; the kernel must split the KV sequence across CTAs and pack the query heads of a GQA group together. Decode attention time grows with batch × context × KV bytes per token.
-- Serving adds paging (block tables into the kernel), ragged batches, and a scheduler that picks a backend per GPU generation. In vLLM on CUDA that is FlashAttention (FA2 on Ampere/Ada, FA3 on Hopper) unless the GPU is a Blackwell part, where FlashInfer goes first for causal attention.
+- Serving adds paging (block tables into the kernel), ragged batches, and a scheduler that picks a backend per GPU generation. In vLLM on CUDA that is FlashAttention (FA2 on Ampere, Ada and SM 12.x Blackwell, FA3 on Hopper) unless the GPU is SM 10.x datacenter Blackwell (B200, GB200), where FlashInfer goes first for causal attention, or the KV cache is FP8 on a GPU without FA3 or FA4, where FlashInfer takes over.
 
 ---
 
@@ -68,7 +68,7 @@ Every kernel in the schedule is individually below the ridge, not just the softm
 | softmax | ≈ 5 FLOPs / 4 bytes ≈ 1.25 | pure streaming |
 | `PV` | `2N²d / ((N² + 2Nd)·b)` → `2d/b` = 128 | the `N×N` input read dominates |
 
-Ridge points (dense bf16 peak ÷ HBM bandwidth; datasheet values, **(verify)**): H100 SXM 989.4 TFLOP/s ÷ 3.35 TB/s = **295 FLOP/B**; L4 121 ÷ 0.30 = **403**; A100 80GB 312 ÷ 2.039 = **153**; B200 2,250 ÷ 8.0 = **281**. Naive attention at 64 FLOP/B sits 2.4× (A100) to 6.3× (L4) below them.
+Ridge points (dense bf16 peak ÷ HBM bandwidth; datasheet values, **(verify)**): H100 SXM 989.4 TFLOP/s ÷ 3.35 TB/s = **295 FLOP/B**; L4 121 ÷ 0.30 = **403**; A100 80GB 312 ÷ 2.039 = **153** (the 40 GB A100, at 1.555 TB/s, gives ≈ 200, which is the figure the primer quotes); B200 2,250 ÷ 8.0 = **281**. Naive attention at 64 FLOP/B sits 2.4× (A100 80GB) to 6.3× (L4) below them.
 
 ### 1.4 Worked numbers: N = 4k and 32k, d = 128, bf16, one head
 
@@ -240,7 +240,7 @@ Two things to notice, both of which FA2 changes: the output accumulator makes a 
 
 ### 3.2 Block sizes from SRAM
 
-With `M` elements of on-chip SRAM, the paper sets `B_c = ⌈M/(4d)⌉` and `B_r = min(⌈M/(4d)⌉, d)`: `K_j` and `V_j` take `2·B_c·d ≈ M/2`, `Q_i` and `O_i` at most as much, and the score tile `B_r·B_c ≤ d·M/(4d) = M/4`. Everything is `O(M)`, which is all the analysis needs; the constant factors are why real kernels tune tile sizes by hand. On an H100 (228 KB of SMEM per SM, 116,736 bf16 elements) with `d = 128`, that gives `B_c = 228` and `B_r = 128`.
+With `M` elements of on-chip SRAM, the paper sets `B_c = ⌈M/(4d)⌉` and `B_r = min(⌈M/(4d)⌉, d)`: `K_j` and `V_j` take `2·B_c·d ≈ M/2`, `Q_i` and `O_i` at most as much, and the score tile `B_r·B_c ≤ d·M/(4d) = M/4`. Everything is `O(M)`, which is all the analysis needs; the constant factors are why real kernels tune tile sizes by hand. On an H100 (228 KB of SMEM per SM, 116,736 bf16 elements) with `d = 128`, that gives `B_c = 228` and `B_r = 128` (`fa_calculators.fa1_block_sizes()`).
 
 Production kernels use the same reasoning with two refinements: tile sizes are rounded to shapes the MMA instructions like, and the score tile and the output accumulator live in *registers*, so SMEM holds only the Q, K and V tiles. FA2's H100/A100 configuration for `d = 128` is `B_r × B_c = 128 × 64`, which needs `(128 + 2·64)·128·2 B = 64 KB` of SMEM (section 4.5 has the full table from the source).
 
@@ -255,7 +255,16 @@ Proof sketch for the FlashAttention side:
 3. Each outer iteration streams all of `Q` and `O` through SRAM (read `Q`, read and write `O`): `Θ(Nd)`.
 4. Total: `Θ(Nd) + Θ(Nd/M)·Θ(Nd) = Θ(N²d²/M)`.
 
-Compared with the naive `Θ(N²)` (for `N ≫ d`), the ratio is about `M/d²`. For `d = 128`, `d² = 16,384` elements, which fits in every current SM, so FlashAttention always moves less; with `M = 116,736` the asymptotic saving is about 7× for `d = 128` and 28× for `d = 64`. The paper measured 40.3 GB versus 4.4 GB of HBM reads and writes for GPT-2-sized attention (`N = 1,024`, `d = 64`, forward plus backward on an A100) **(verify)**.
+Compared with the naive `Θ(N²)` (for `N ≫ d`), the ratio is of order `M/d²`. That is an order-of-magnitude statement: the `Θ` hides a factor of about 3, and plugging numbers into `M/d²` overstates the saving threefold. Keep the constants instead. The naive schedule moves about `4N²` elements (section 1.2). In the FA1 order, each of the `T_c = N/B_c` outer iterations reads `Q`, reads `O` and writes `O` back (`3Nd`), and with the paper's `B_c = M/(4d)`:
+
+```
+FA1 traffic ≈ 2Nd + (N/B_c)·3Nd = 2Nd + 12 N²d²/M        saving ≈ 4N² / (12 N²d²/M) = M / (3d²)
+FA2 order (no L2 reuse): K and V re-read once per Q block:  2N²d/B_r   saving ≈ 2B_r / d
+```
+
+With the H100's `M = 116,736` elements the FA1 saving is `M/(3d²)` ≈ **2.4× at `d = 128`** and **9.5× at `d = 64`**; counting bytes with the paper's block sizes at `N = 4,096` gives 59.9 MB against 138.4 MB (2.3×) and 15.8 MB against 136.3 MB (8.6×), the difference being the fp32 `m` and `l` round trips and the rounding of `N/B_c`. The FA2 order with `B_r = 128` saves `2B_r/d` = 2× at `d = 128` (the table in section 3.4). (`fa_calculators.io_saving()`, `flash_traffic()`.)
+
+So FlashAttention does not always move less: the FA1 order wins only when `M > 3d²`, which at `d = 128` is 49,152 bf16 elements, 96 KB of SRAM. A100, H100 and L4 have that (164, 228 and 100 KB per SM); a T4, with 64 KB, does not, and on it the FA1-order traffic model at `d = 128` comes out 1.5× *worse* than naive. What real kernels actually move is lower than any of these, because of the L2 (section 3.4). The paper measured 40.3 GB versus 4.4 GB of HBM reads and writes for GPT-2-sized attention (`N = 1,024`, `d = 64`, forward plus backward on an A100) **(verify)**, a 9.2× saving: the same order as the constant-aware estimate for `d = 64`, not the 28× that `M/d²` would suggest (the naive baseline there also pays the extra elementwise passes of section 1.2, so the agreement is only in order of magnitude).
 
 The lower bound (Proposition 3, **(verify)**): no exact attention algorithm can use `o(N²d²/M)` HBM accesses for all `M` in `[d, Nd]`. Argument: at `M = Θ(Nd)` such an algorithm would make `o(Nd)` accesses, but `Q, K, V` and `O` have `Θ(Nd)` elements that start in (or must end in) HBM. Contradiction.
 
@@ -267,6 +276,7 @@ The IO-complexity model assumes nothing is cached between SRAM and HBM. Counting
 |---|---|---|
 | Naive, three kernels | 138.4 MB / 62 | 8,623 MB / 64 |
 | FA1 order (outer K/V, `B_c = 128`) | 104.9 MB / 82 | 6,593 MB / 83 |
+| FA1 order, the paper's `B_c = 228` (section 3.3) | 59.9 MB / 143 | 3,716 MB / 148 |
 | FA2 order (outer Q, `B_r = 128`) | 69.2 MB / 124 | 4,312 MB / 127 |
 | FA2 order, causal | 36.7 MB / 117 | 2,173 MB / 127 |
 | Compulsory (`4Nd·b` + LSE) | 4.2 MB / 2,040 | 33.7 MB / 16,320 |
@@ -365,13 +375,13 @@ Why a few elementwise operations matter against 512 matmul FLOPs per score: the 
 | FP32 FMA instructions | 64 | 128 | 128 |
 | MUFU instructions (EX2) | 16 | 16 | 16 |
 
-Per score, with `d = 128`: `4d = 512` MMA FLOPs, one EX2, and about 5 FP32 instructions (FFMA for scale-and-subtract, max, add into `l`, the `O` rescale amortized as `d/B_c` = 2 FMULs at `B_c = 64`, and a conversion that handles two values per instruction). Clocks per score if each unit ran alone:
+Per score, with `d = 128`: `4d = 512` MMA FLOPs, one EX2, and about 5 FP32 instructions (FFMA for scale-and-subtract, max, add into `l`, the `O` rescale amortized as `d/B_c` = 2 FMULs at `B_c = 64`, and a conversion that handles two values per instruction). Clocks per score if each unit ran alone (`fa_calculators.clocks_per_score()`):
 
 | | A100 | H100 | B200 |
 |---|---|---|---|
 | tensor cores | 0.25 | 0.125 | 0.0625 |
 | EX2 on MUFU | 0.0625 (25% of MMA time) | 0.0625 (**50%**) | 0.0625 (**100%**) |
-| ≈ 5 FP32 instructions | 0.078 (31%) | 0.039 (31%) | 0.039 (63%) |
+| ≈ 5 FP32 instructions | 0.078 (31%) | 0.039 (31%) | 0.039 (62.5%) |
 
 Different units run concurrently when different warps feed them, so these do not simply add. But a kernel whose warps do MMA, then softmax, then MMA in lockstep pays these fractions as idle tensor-core time. This table is the motivation for FA3's overlap (the H100 column) and FA4's exponential emulation (the B200 column). The H100 row agrees with the FA3 paper's own framing: 989 TFLOP/s of matmul against about 3.9 TFLOP/s of special functions **(verify)**.
 
@@ -416,7 +426,7 @@ The main loop overlaps loads with compute using Ampere's asynchronous copies (`c
 
 ### 4.6 What FA2 achieved, and where it stopped
 
-About 2× over FA1 and 50–73% of the A100's peak in the forward pass, against 25–40% for FA1 (FA2 paper **(verify)**); 225 TFLOP/s per A100 (72% model FLOPs utilization) training GPT-style models end to end (the repository README). On an H100 the same kernel reaches only about 35% of peak (FA3 paper **(verify)**): it is written with Ampere's synchronous warp-level `mma.sync` and `cp.async`, while Hopper's full throughput needs asynchronous warpgroup MMAs and the TMA.
+About 2× over FA1 and 50–73% of the A100's peak in the forward pass, against 25–40% for FA1 (FA2 paper **(verify)**; the primer's "~70% of A100 peak" is the top of this range); 225 TFLOP/s per A100 (72% model FLOPs utilization) training GPT-style models end to end (the repository README). On an H100 the same kernel reaches only about 35% of peak (FA3 paper **(verify)**): it is written with Ampere's synchronous warp-level `mma.sync` and `cp.async`, while Hopper's full throughput needs asynchronous warpgroup MMAs and the TMA.
 
 ---
 
@@ -445,7 +455,7 @@ WG2  consumer    warpgroup_reg_alloc<240>      rows 64..127: the same
          consumer_wait(...) before using a stage, consumer_release(...) after
 ```
 
-The register numbers are the source's (`LoadRegisterRequirement` 24 and `MmaRegisterRequirement` 240 for two consumer warpgroups with TMA loads) and they are the whole point. A consumer thread holds its share of the fp32 score tile (`64 × 176 / 128` = 88 registers), the fp32 output accumulator (`64 × 128 / 128` = 64) and the bf16 probabilities (44), about 196 registers before addresses and statistics. The SM has 65,536 registers; `128 × 24 + 256 × 240 = 64,512`, so the producer's donation is what lets one CTA with two consumer warpgroups fit.
+The register numbers are the source's (`LoadRegisterRequirement` 24 and `MmaRegisterRequirement` 240 for two consumer warpgroups with TMA loads) and they are the whole point. A consumer thread holds its share of the fp32 score tile (`64 × 176 / 128` = 88 registers), the fp32 output accumulator (`64 × 128 / 128` = 64) and the bf16 probabilities (44), about 196 registers before addresses and statistics. The SM has 65,536 registers; `128 × 24 + 256 × 240 = 64,512`, so the producer's donation is what lets one CTA with two consumer warpgroups fit (`fa_calculators.fa3_registers()`).
 
 ### 5.3 Ping-pong between warpgroups
 
@@ -491,7 +501,7 @@ The price is register pressure (a score tile and a probability tile are live at 
 - **Layout constraints.** Hopper's FP8 WGMMA wants both operands K-major in SMEM, which `V` is not for `P·V`. FA3 transposes `V` tiles in SMEM in the producer warpgroup (`Transpose_V = Is_FP8 && !V_colmajor`, a separate `pipeline_vt`), and permutes the score registers so the fp32 accumulator layout matches the FP8 operand layout (`permute_Cregs_fp8`).
 - **Scales.** The interface takes `q_descale`, `k_descale`, `v_descale`; the main loop indexes them per (batch, KV head), folds `q_descale · k_descale` into the base-2 softmax scale, and applies `v_descale` to the output. vLLM passes them with shape `(num_sequences, num_kv_heads)`.
 - **Using the FP8 range for P.** Probabilities are at most 1, and e4m3 has only 3 mantissa bits with a smallest subnormal of `2^−9`. FA3's FP8 softmax multiplies them by `2^8` (`Max_offset = 8`: "For FP8, we might have scaled the output of exp by 2**8 so we need to divide sum by that amount"), which keeps small probabilities out of the flush-to-zero range; section 9 quantifies it.
-- **Block quantization and incoherent processing (paper, (verify)).** One scale per tile rather than per tensor, and a random orthogonal rotation `M` (a Hadamard transform with random signs) applied to `Q` and `K`: `(QM)(KM)ᵀ = QMMᵀKᵀ = QKᵀ`, while an outlier channel is spread across all `d` channels. Via the fast Walsh-Hadamard transform the rotation costs `O(d log d)` per row and can be fused with the rotary embedding. The paper reports 2.6× lower numerical error than a baseline FP8 attention on inputs with outliers **(verify)**; section 9.4 shows when the rotation helps and when it does not.
+- **Block quantization and incoherent processing (paper, (verify)).** One scale per tile rather than per tensor, and a random orthogonal rotation `M` (a Hadamard transform with random signs) applied to `Q` and `K`: `(QM)(KM)ᵀ = QMMᵀKᵀ = QKᵀ`, while an outlier channel is spread across all `d` channels. Via the fast Walsh-Hadamard transform the rotation costs `O(d log d)` per row and can be fused with the rotary embedding. The paper reports 2.6× lower numerical error than a baseline FP8 attention on inputs with outliers **(verify)**; section 9.4 shows when each half helps: for e4m3 the rotation pays when an outlier channel is large in both `Q` and `K`, and block scales pay when a few tokens are much larger than the rest, which matters far more for integer formats than for e4m3.
 - **Throughput (paper, (verify)).** bf16/fp16 forward up to 740 TFLOP/s (75% of 989), FP8 close to 1.2 PFLOP/s, 1.5–2.0× over FA2.
 
 ### 5.7 Blackwell and FlashAttention-4 **(verify)**
@@ -501,7 +511,7 @@ What changed in the hardware: MMAs (`tcgen05`) are issued by a single thread and
 What FA4 does about it, as visible in `flash_attn/cute/flash_fwd_sm100.py` and `flash_attn/cute/softmax.py`:
 
 - **More specialized warps.** Softmax warps 0–3 and 4–7 work on two Q tiles in a ping-pong (`q_stage = 2`); a separate *correction* warpgroup (warps 8–11) rescales the output in TMEM off the softmax's critical path; one warp (12) issues all MMAs; warp 13 runs the epilogue and warp 14 the loads.
-- **Exponentials partly on the FMA pipe.** A tuned fraction of `exp2` calls is computed by a polynomial (`ex2_emulation_2`) instead of the MUFU (`ex2_emu_freq` 10 to 32 depending on the configuration; 0 on SM103, which "has fast native exp2").
+- **Exponentials partly on the FMA pipe.** A tuned fraction of `exp2` calls is computed by a polynomial (`ex2_emulation_2`) instead of the MUFU (`ex2_emu_freq` 8 to 32 depending on dtype and configuration, 8 being the FP8 causal `d = 128` entry; 0 on SM103, which "has fast native exp2").
 - **Conditional rescaling** with `rescale_threshold = 8.0` (section 2.5).
 - `P` is fed to the second MMA from TMEM (`OperandSource.TMEM`); 2-CTA MMA instructions (`use_2cta_instrs`).
 - Written in CuTe-DSL (Python) and shipped as `flash-attn-4` (`from flash_attn.cute import flash_attn_func`, per the README).
@@ -526,13 +536,13 @@ Every one of those is one to two orders of magnitude below the ridge (295 on an 
 
 ### 6.2 Why the prefill kernel is the wrong shape
 
-Run the FA2 prefill kernel with `N_q = 1`:
+Take the prefill kernel (FA2's `flash_fwd_kernel`, one CTA per Q block, batch entry and head) and give it `N_q = 1`:
 
-- **Too few CTAs.** The grid is `ceil(1/B_r) × batch × heads`. With batch 1 and the 8 KV heads of a GQA model, that is 8 CTAs on a 132-SM H100: 94% of the SMs idle, and a handful of SMs cannot pull anywhere near full HBM bandwidth.
+- **Too few CTAs.** The grid is `ceil(N_q/B_r) × batch × heads`. With batch 1 and a Llama-3-8B-shaped layer that is 32 CTAs, one per query head, on a 132-SM H100 (76% of the SMs idle), or 8 CTAs once the 4 query heads of each GQA group are folded into one tile (section 6.4; 94% idle). Either way a handful of SMs cannot pull anywhere near full HBM bandwidth.
 - **Each CTA walks all of `L` serially**, `L/B_c` tiles one after another.
-- **A 128-row tile with 1 useful row** wastes 127/128 of every MMA. That is not the bottleneck when bandwidth-bound, but it shows the kernel is shaped for the wrong problem.
+- **A 128-row tile with 1 useful row** (4 with GQA packing) wastes almost all of every MMA. That is not the bottleneck when bandwidth-bound, but it shows the kernel is shaped for the wrong problem.
 
-What matters for decode is the number of SMs issuing loads and the bytes per useful FLOP.
+What matters for decode is the number of SMs issuing loads and the bytes per useful FLOP. The libraries know this and dispatch for you: FA2's `flash_attn_func` (`mha_fwd`) and `flash_attn_with_kvcache` both detect `seqlen_q = 1`, fold the GQA group into the sequence axis, and run the split-KV kernel below with a heuristic split count (`set_params_splitkv(..., num_splits = 0, ...)` in `flash_api.cpp`). Only a caller that passes `num_splits = 1` to `flash_attn_with_kvcache`, or a hand-written kernel such as the one in section 11, gets the shape above.
 
 ### 6.3 Flash-Decoding: split the KV sequence, then reduce
 
@@ -550,19 +560,28 @@ In FA2 this is `flash_fwd_splitkv_kernel`, launched on `dim3 grid(num_m_block, n
 1. If `batch × heads × query_blocks ≥ 0.8 × SMs`, do not split (the grid already fills the GPU). FA2 passes `2 × SMs` because two 128-thread CTAs fit per SM.
 2. Otherwise compute the wave efficiency of each split count, `waves / ceil(waves)` with `waves = CTAs × splits / SMs`, skipping split counts that produce the same partition as a smaller one, and return the **smallest** count within 85% of the best. More splits than necessary only add partial results to write and combine.
 
-FA3's version (`hopper/heuristics.h`) adds two rules: never split when there are 4 or fewer KV blocks, and split even when the GPU is full if one KV head is larger than a 50 MB L2 estimate, there are enough query blocks, and the mask is neither causal nor local.
+FA3's version (`hopper/heuristics.h`, `get_num_splits` in `hopper/flash_api.cpp`) differs in four ways: it does not double the SM count, it has no rule skipping split counts that give the same partition, it never splits when there are 4 or fewer KV blocks, and it splits even when the GPU is full if one KV head is larger than a 50 MB L2 estimate, there are enough query blocks, and the mask is neither causal nor local. For variable-length batches (which is how vLLM calls it) that static count is only an upper bound, computed as if the batch had one sequence; a small prepare kernel (`prepare_varlen_num_blocks` in `hopper/flash_prepare_scheduler.cu`) then picks each sequence's split count from the batch's total work:
 
-Worked examples, Llama-3-8B shapes (32 query heads, 8 KV heads packed as in section 6.4, `d = 128`, `B_c = 128` in the split kernel), from `fa_calculators.fa2_decode_splits()`:
+```
+blocks_per_sm = ceil(Σ_sequences KV blocks × 1.1 × H_kv / SMs)          (10% margin)
+splits        = clamp(ceil(KV blocks of this sequence / blocks_per_sm), 1, static bound)
+```
 
-| Batch × context | GPU | CTAs without split | Splits chosen | CTAs launched | KV blocks per split |
-|---|---|---|---|---|---|
-| 1 × 32k | H100 (132 SMs) | 8 | 29 | 232 | 9 |
-| 1 × 32k | A100 (108) | 8 | 24 | 192 | 11 |
-| 1 × 32k | L4 (58) | 8 | 13 | 104 | 20 |
-| 8 × 32k | H100 | 64 | 4 | 256 | 64 |
-| 64 × 4k | H100 | 512 | 1 | 512 | 32 |
+vLLM passes `num_splits = 0` ("0 means use FA3's heuristics") outside CUDA graphs and its CUDA-graph cap (`flash_attn_max_num_splits_for_cuda_graph`, 32 by default) inside them; either way the dynamic count decides in the cases below.
 
-The cost is small: at 1 × 32k on an H100 the fp32 partials are `29 × 8 × 4 × 128 × 4 B` = 475 KB written and read back, against 134 MB of K/V per layer (0.7%). The cost that matters is elsewhere: the split count depends on batch size and SM count, so the order of the final sum does too. Section 9.3 comes back to this.
+Worked examples, Llama-3-8B shapes (32 query heads, 8 KV heads packed as in section 6.4, `d = 128`). FA2 is what `flash_attn_with_kvcache` (or `flash_attn_func` with `seqlen_q = 1`) launches, `B_c = 128` in its split kernel (`fa_calculators.fa2_decode_splits()`). FA3 is what vLLM runs on an H100: with 16-token pages the paged path cannot use the TMA, so the key tile is 128 wide (`fa_calculators.fa3_decode_splits()`; vLLM builds FA3 from its fork `vllm-project/flash-attention`, whose split logic is the same as upstream for this case, **(verify)** on upgrade). A100 and L4 run FA2 in vLLM (section 7.4).
+
+| Batch × context | GPU | CTAs without split | FA2: splits → CTAs (KV blocks per split) | FA3 in vLLM: splits → CTAs |
+|---|---|---|---|---|
+| 1 × 32k | H100 (132 SMs) | 8 | 29 → 232 (9) | 15 → 120 |
+| 1 × 32k | A100 (108) | 8 | 24 → 192 (11) | n/a |
+| 1 × 32k | L4 (58) | 8 | 13 → 104 (20) | n/a |
+| 8 × 32k | H100 | 64 | 4 → 256 (64) | 2 → 128 |
+| 64 × 4k | H100 | 512 | 1 → 512 (32) | 1 → 512 |
+
+FA2 aims for two CTAs per SM (it passes `2 × SMs`); FA3's dynamic rule aims for about one wave of 132 CTAs. Both make the same point: with a small batch the split count is set by how many CTAs it takes to fill the machine, and it drops to 1 as soon as the batch does that on its own.
+
+The cost is small: at 1 × 32k on an H100 with FA2's 29 splits, the fp32 partial outputs are `29 × 8 × 4 × 128 × 4 B` = 475 KB (plus 3.7 KB of LSEs), written once and read back once: 0.96 MB against 134 MB of K/V per layer (0.7%). FA3's 15 splits halve it (`fa_calculators.split_partials_bytes()`). The cost that matters is elsewhere: the split count depends on batch size and SM count, so the order of the final sum does too. Section 9.3 comes back to this.
 
 ### 6.4 GQA packing
 
@@ -572,7 +591,7 @@ The `g` query heads that share a KV head need the same K and V. Treating them as
 - FA3 decides with `should_pack_gqa`: pack when the unpacked tile efficiency `seqlen_q / round_up(seqlen_q, B_r)` is below 0.9 × the packed one `(seqlen_q·g) / round_up(seqlen_q·g, B_r)`; always for variable-length batches.
 - FlashInfer's decode wrapper has `use_tensor_cores`: "Will be faster for large group size in grouped query attention."
 
-The extreme case is MLA (section 8.1), where 128 query heads share one latent vector per token: packing turns decode attention from bandwidth-bound into nearly compute-bound.
+The extreme case is MLA (section 8.1), where 128 query heads share one latent vector per token: packing lifts decode attention from 1 to 8 FLOP/B to within 20% of the H100's bf16 ridge, so it is tuned like a GEMM rather than like a copy.
 
 ### 6.5 Decode attention time is proportional to batch × context × KV bytes
 
@@ -653,22 +672,25 @@ The design point: the split decision depends only on the batch's lengths, so com
 
 ### 7.4 How vLLM picks a backend and builds attention metadata
 
-Read from `vllm/platforms/cuda.py`, `vllm/v1/attention/selector.py`, `vllm/v1/attention/backends/flash_attn.py` and `fa_utils.py` on `main`, fetched 2026-09-26; this code changes often.
+Read from `vllm/platforms/cuda.py`, `vllm/v1/attention/selector.py`, `vllm/v1/attention/backends/flash_attn.py` and `fa_utils.py` on `main`, fetched 2026-09-26; this code changes often. The engine-side wiring (the three backend classes, the per-GPU selection table, when cascade is enabled) is in [the vLLM internals primer, section 6](../vllm-internals/vllm-internals-primer.md#6-attention-backends); this section keeps the kernel-facing view: which kernel a layer gets, and what arrives at its arguments.
 
 **Selection.** For each attention layer vLLM walks a priority list and takes the first backend whose `validate_configuration()` accepts the layer (head size, dtype, KV-cache dtype, block size, compute capability, sinks, sliding window, MLA, ...). An explicit `attention_config.backend` overrides the list.
 
 ```
 non-MLA attention on CUDA
   SM 10.x (B200, GB200), causal:   FLASHINFER > FLASH_ATTN > TRITON_ATTN > FLEX_ATTENTION > TURBOQUANT
-  everything else:                 FLASH_ATTN > FLASHINFER > TRITON_ATTN > FLEX_ATTENTION > TURBOQUANT
+  everything else (incl. SM 12.x): FLASH_ATTN > FLASHINFER > TRITON_ATTN > FLEX_ATTENTION > TURBOQUANT
 MLA on SM 9.0:                     FLASH_ATTN_MLA > FLASHMLA > FLASHINFER_MLA > TRITON_MLA > sparse variants
 
-FlashAttention version:  SM 9.0 -> FA3;  SM 10.x -> FA4 if installed;  otherwise FA2;  ALiBi forces FA2
-FLASH_ATTN accepts:      fp16/bf16; KV cache auto/fp16/bf16/fp8/fp8_e4m3; block size multiple of 16;
+FlashAttention version:  SM 9.0 -> FA3;  SM 10.x -> FA4 if installed;  otherwise FA2 (SM 8.x, SM 12.x);
+                         ALiBi forces FA2
+FLASH_ATTN accepts:      fp16/bf16; KV cache auto/fp16/bf16, and fp8/fp8_e4m3 only with FA3 on SM 9.0
+                         or FA4 (SM 10.x, or SM 9.0 at head size 512); block size multiple of 16;
                          head size multiple of 8 and <= 256 (<= 512 with FA4); compute capability >= 8.0
+FLASHINFER accepts:      compute capability 8.0 to 12.1; KV cache incl. fp8/fp8_e4m3/fp8_e5m2
 ```
 
-On this repo's hardware tiers that means: a T4 (SM 7.5) gets `TRITON_ATTN`, because FlashAttention needs SM 8.0 and FlashInfer is currently floored at SM 8.0 in vLLM ("FlashInfer supports SM75+, but is currently broken on SM75 (Turing) ... Temporarily raise the floor to SM80"); an L4 (SM 8.9) gets `FLASH_ATTN` running FA2 kernels; an H100 gets `FLASH_ATTN` running FA3; a B200 gets `FLASHINFER` for causal decoder layers.
+On this repo's hardware tiers that means: a T4 (SM 7.5) gets `TRITON_ATTN`, because FlashAttention needs SM 8.0 and FlashInfer is currently floored at SM 8.0 in vLLM ("FlashInfer supports SM75+, but is currently broken on SM75 (Turing) ... Temporarily raise the floor to SM80"); an L4 (SM 8.9) gets `FLASH_ATTN` running FA2 kernels; an H100 gets `FLASH_ATTN` running FA3; a B200 gets `FLASHINFER` for causal decoder layers; an SM 12.x Blackwell card (RTX PRO 6000 Blackwell, RTX 50-series) gets `FLASH_ATTN` running FA2. The KV-cache dtype changes this. vLLM's FA2 path has no FP8 KV cache, so with `kv_cache_dtype=fp8` an L4 or an A100 fails `FLASH_ATTN`'s validation ("FP8 KV cache requires FA3 on SM90, FA4 with head_size=512 on SM90, or FA4 on SM100") and gets `FLASHINFER`, which vLLM's CUDA build ships as a dependency; an H100 keeps `FLASH_ATTN` with FA3.
 
 **Metadata.** Once per engine step, `FlashAttentionMetadataBuilder.build()` turns the scheduler's batch into what the kernel needs:
 
@@ -715,14 +737,14 @@ A production attention kernel is a family of template instantiations. Each varia
 | MQA / GQA | K/V head index = `bidh / h_h_k_ratio` | free in prefill; decode gains come from packing (section 6.4) | query heads must be a multiple of KV heads |
 | Head dim 64 / 128 / 256 | SMEM per tile ∝ `d`, accumulator registers ∝ `B_r·d` | larger `d` means smaller tiles and fewer CTAs per SM (FA2 on H100: 128 × 64 at `d = 128`, 64 × 64 at `d = 256`; FA3: 128 × 176 vs 128 × 80); the per-tile intensity `2B_r/b` does not depend on `d` | FA2 supports `d ≤ 256`; vLLM's FA backend `d % 8 == 0` |
 | Attention sinks | an extra learnable per-head logit in the denominator (gpt-oss) | one extra term in `l` per row | passed as `s_aux` in vLLM's FA call; vLLM requires SM 9.0+ for sinks with FA |
-| MLA | section 8.1 | turns decode compute-bound | FA3 `qv`, FlashMLA, FlashInfer MLA |
+| MLA | section 8.1 | brings decode to the ridge (242 FLOP/B in bf16 against 295 on an H100) | FA3 `qv`, FlashMLA, FlashInfer MLA |
 | Ragged batches | section 8.2 | no padding FLOPs; tile quantization remains | the varlen APIs |
 | Across GPUs | section 8.4 | communication to hide | ring attention, context parallelism |
 | Sparse masks | section 8.5 | tiles skipped by metadata | block-sparse kernels, FlexAttention |
 
 ### 8.1 MLA and the absorbed-weight decode trick
 
-Multi-head latent attention (DeepSeek-V2 and V3; dimensions below are DeepSeek-V3's, **(verify)**) caches, per token and layer, a latent `c ∈ R^512` and one rotary key `k_rope ∈ R^64` shared by all 128 heads: 576 values, 1,152 bytes in bf16. The equivalent multi-head cache (128 heads × (192 key + 128 value dims)) would be 80 KB per token per layer, 71× more. Each head reconstructs its key and value from the latent: `k_h = [W_UK^h c ; k_rope]` and `v_h = W_UV^h c`, with `W_UK^h, W_UV^h ∈ R^(128×512)`.
+Multi-head latent attention (DeepSeek-V2 and V3; dimensions below are DeepSeek-V3's, **(verify)**) caches, per token and layer, a latent `c ∈ R^512` and one rotary key `k_rope ∈ R^64` shared by all 128 heads: 576 values, 1,152 bytes in bf16. The equivalent multi-head cache (128 heads × (192 key + 128 value dims)) would be 80 KB per token per layer, 71× more (`fa_calculators.mla_cache_ratio()`). The ratio depends on counting the 64 rotary dims in each head's key: without them (128-dim keys, as wide as the values) it is 57×, the figure [the vLLM internals primer](../vllm-internals/vllm-internals-primer.md#64-gqa-and-mla-change-the-bytes-not-the-paging) uses; DeepSeek-V3's per-head key is 192 dims, so 71× is the like-for-like number. Each head reconstructs its key and value from the latent: `k_h = [W_UK^h c ; k_rope]` and `v_h = W_UV^h c`, with `W_UK^h, W_UV^h ∈ R^(128×512)`.
 
 Decode would reconstruct every cached token's K and V for every head, every step. The trick is to move the up-projections to the query and output side, where there is one token instead of `L`:
 
@@ -736,13 +758,15 @@ out_h     = Σ_j p_h,j (W_UV^h c_j) = W_UV^h ( Σ_j p_h,j c_j )          attend 
 
 Decode becomes multi-query attention with 128 query heads and a single shared "KV head" whose key is `[c ; k_rope]` (576-dim) and whose value is `c` itself (512-dim, the same memory as the first 512 key dimensions). FA3 expresses exactly this: `q` carries the 64 rotary dims, `qv` the 512 absorbed dims, `k` is `k_rope` and `v` is `c`, and the kernel adds a second GEMM into the score accumulator (`HasQv`: `S = q·kᵀ + qv·vᵀ`); `tile_size_fwd_sm90` has a dedicated entry for `headdim = 64, headdim_v = 512`. The default softmax scale when `qv` is passed is `(64 + 512)^(−1/2)`; model code passes its own scale.
 
-The arithmetic intensity is what makes MLA decode different: per cached token, `2·576·128` FLOPs for the scores plus `2·512·128` for the output, 278,528 FLOPs over 1,152 bytes, **242 FLOP/B in bf16** and 484 with an FP8 latent (`fa_calculators.mla_decode_intensity()`). That is at or above the H100's ridge: absorbed MLA decode is a compute-bound kernel, and FlashMLA and FA3's MLA path are tuned like GEMMs.
+The arithmetic intensity is what makes MLA decode different: per cached token, `2·576·128` FLOPs for the scores plus `2·512·128` for the output, 278,528 FLOPs over 1,152 bytes, **242 FLOP/B in bf16** and 484 with an FP8 latent and bf16 compute (`fa_calculators.mla_decode_intensity()`). Against the H100's bf16 ridge of 295, the bf16 case sits at 82% of the ridge, just on the memory side of it, and the FP8-latent case is above it (with FP8 matrix multiplies the ridge doubles as well, to about 590 at the dense FP8 peak, **(verify)**). Either way absorbed MLA decode sits at the ridge, not far below it like MHA or GQA decode (1 to 8 FLOP/B), so FlashMLA and FA3's MLA path are tuned like GEMMs, and their throughput is reported in TFLOP/s as well as GB/s (section 10.1).
 
-Prefill usually does not absorb. With `N` query tokens, attention in the latent space costs `576 + 512` dims per head for scores and outputs instead of `192 + 128`, 3.4× the quadratic FLOPs, while reconstructing K and V per head is linear in `N` and amortized over all queries.
+That intensity assumes all 128 heads run on one GPU. Tensor parallelism over heads divides it by the TP degree (TP = 8 leaves 16 heads per GPU: 30 FLOP/B), and because the latent is shared by all heads it cannot be split by head, so every TP rank also holds the whole latent cache. Both are reasons MLA models are commonly served with data-parallel attention, all heads on each GPU and different requests on different GPUs **(verify for a given engine)**.
+
+Prefill usually does not absorb. With `N` query tokens, attention in the latent space costs `576 + 512` dims per head for scores and outputs instead of `192 + 128`, 3.4× the quadratic FLOPs (`fa_calculators.mla_prefill_absorbed_ratio()`), while reconstructing K and V per head is linear in `N` and amortized over all queries.
 
 ### 8.2 Ragged batches (varlen)
 
-Serving batches have unequal lengths. Padding them to the longest wastes FLOPs quadratically: lengths `[100, 3,000, 500]` padded to 3,000 cost `3 × 3,000² = 27.0 M` score pairs against `100² + 3,000² + 500² = 9.26 M` actual, 2.9×. The varlen APIs pack sequences back to back and pass `cu_seqlens`. The grid is sized by the longest sequence; each CTA computes its sequence's real bounds and exits at once if its Q block is past the end (`if (m_block * kBlockM >= binfo.actual_seqlen_q) return;` in FA2). What remains is tile quantization: a 100-token sequence still occupies a 128-row tile, 78% useful. FA3 packs GQA groups for all varlen batches to improve exactly this (section 6.4).
+Serving batches have unequal lengths. Padding them to the longest wastes FLOPs quadratically: lengths `[100, 3,000, 500]` padded to 3,000 cost `3 × 3,000² = 27.0 M` score pairs against `100² + 3,000² + 500² = 9.26 M` actual, 2.9×. The varlen APIs pack sequences back to back and pass `cu_seqlens`. The grid is sized by the longest sequence; each CTA computes its sequence's real bounds and exits at once if its Q block is past the end (`if (m_block * kBlockM >= binfo.actual_seqlen_q) return;` in FA2). What remains is tile quantization: a 100-token sequence still occupies a 128-row tile, 78% useful (`fa_calculators.padding_waste()`). FA3 packs GQA groups for all varlen batches to improve exactly this (section 6.4).
 
 ### 8.3 Head dimension, briefly
 
@@ -762,7 +786,7 @@ For an H100 over NVLink (≈ 450 GB/s per direction, **(verify)**): `N/P ≥ 2,1
 
 **Block-sparse attention** skips tiles by a block mask. The FA1 paper's block-sparse variant has IO complexity `Θ(Nd + N²d²M⁻¹s)`, with `s` the fraction of non-zero blocks **(verify)**. The cost model is simple: tiles visited × cost per tile, plus the metadata to find them. Sparsity finer than a tile saves nothing, because the tile is loaded and multiplied anyway. FA4 has block-sparse paths in its CuTe kernels, FlashInfer has block-sparse and variable block-sparse attention, and vLLM has dedicated backends for DeepSeek-style sparse MLA (`FLASHMLA_SPARSE`, `FLASHINFER_MLA_SPARSE`).
 
-**FlexAttention** (PyTorch; Dong et al., 2024) removes the need for a new CUDA kernel per variant. You write a `score_mod(score, b, h, q_idx, kv_idx)` and/or a `mask_mod(b, h, q_idx, kv_idx)` in Python; `create_block_mask` evaluates the mask once per block and records, for each Q block, which K/V blocks are empty (skipped), partial (mask evaluated per element) and full (no mask code), the same three-way split as FA2's masked and unmasked loop phases, but driven by data; `torch.compile` inlines the functions into a Triton flash kernel. PyTorch reported forward performance around 85–90% of FlashAttention-2 **(verify)**. vLLM ships a `FLEX_ATTENTION` backend, and passes `mask_mod` functions to FA4 for masks the built-in flags cannot express (multimodal bidirectional prefixes, for example).
+**FlexAttention** (PyTorch; Dong et al., 2024) removes the need for a new CUDA kernel per variant. You write a `score_mod(score, b, h, q_idx, kv_idx)` and/or a `mask_mod(b, h, q_idx, kv_idx)` in Python; `create_block_mask` evaluates the mask once per block and records, for each Q block, which K/V blocks are empty (skipped), partial (mask evaluated per element) and full (no mask code), the same three-way split as FA2's masked and unmasked loop phases, but driven by data; `torch.compile` inlines the functions into a Triton flash kernel. PyTorch reported about 90% of FlashAttention-2's performance in the forward pass and 85% in the backward pass **(verify)**. vLLM ships a `FLEX_ATTENTION` backend, and passes `mask_mod` functions to FA4 for masks the built-in flags cannot express (multimodal bidirectional prefixes, for example).
 
 ---
 
@@ -793,9 +817,12 @@ The notebook's section 6 measures each source on synthetic data (seeded, numpy, 
 | Error source | Mechanism | Measured in the notebook | Mitigation |
 |---|---|---|---|
 | Mantissa rounding of Q, K, V | e4m3 keeps 3 mantissa bits: up to 6.25% relative error per element | `QKᵀ` relative error 3.6% with per-tensor scales (N = 256, d = 128) | none within FP8; keep the softmax, `l` and `O` in fp32; measure end-to-end quality |
-| Outliers under amax scaling | one large channel sets the scale; with integer formats every other value loses precision | one channel × 20 in K: INT8 6.0% → 1.3% and INT4 52% → 24% with a random Hadamard rotation; e4m3 3.6% → 3.7% (unchanged: a float format's relative precision does not depend on magnitude) | per-block or per-head scales; incoherent processing (rotation), which matters most for integer KV caches and coarse scales |
+| An outlier channel | one large channel sets a per-tensor scale, so with integer formats every other value loses precision; and in any format, a dot product dominated by one product inherits that product's full relative error | channel 7 × 20 in K only: INT8 6.1% → 1.3% and INT4 52% → 24% with a random Hadamard rotation; e4m3 3.6% → 3.7% (unchanged). The same channel × 20 in both Q and K: e4m3 3.6% → 0.46%, INT8 1.1% → 0.14%, INT4 17% → 2.4% | incoherent processing (rotate Q and K): for e4m3 it pays when the outlier channels of Q and K line up; for integer formats it pays either way |
+| A few outlier tokens | a few large rows set a per-tensor scale | 4 of 256 K rows × 50: INT8 error on the other rows' scores 33% with one scale per tensor, 1.3% with one scale per 64 rows; e4m3 3.7% → 3.8% (unchanged) | block quantization (one scale per tile, as in FA3) or per-head scales; decisive for integer formats, marginal for e4m3 unless the range exceeds its ~2^15 span of normal values |
 | Small probabilities in `P` | `P ≤ 1`; e4m3's smallest subnormal is `2^−9` | a 4,096-key row with N(0, 2²) scores: 61.9% of probabilities flush to zero and 2.7% of the probability mass is lost; with FA3's `2^8` offset, 0.7% flush and the output error drops from 2.2% to 1.6% | scale `P` by `2^8` before conversion (`Max_offset`), accumulate `l` in fp32 from unrounded values |
 | Scale choice | stale or per-tensor scales clip or waste range | not simulated | calibrated KV scales (vLLM `k_scale`, `v_scale`), per-(batch, head) descales as in FA3 |
+
+Why the rotation helps a float format only when outliers line up: the rounding error of each element is relative, so the error of `q·k = Σ q_i k_i` has variance proportional to `Σ q_i² k_i²`. With one channel large in both `q` and `k`, that sum is essentially one term and `q·k` carries the full relative error of one rounded product. The rotation leaves `q·k` unchanged but spreads the product over all `d` channels, whose independent rounding errors partly cancel (about 8× less error here, at `d = 128`). With the outlier in `K` alone, the products were already spread, and the rotation changes nothing. Whether real Q and K outliers line up is a property of the model: for rotary-embedding models, large values have been reported to concentrate in the same dimensions of Q and K **(verify)**, so measure it on the model's own activations before deciding.
 
 Two review points follow. First, "FP8 attention" can mean FP8 KV cache with bf16 compute (bandwidth win for decode, section 6.1) or FP8 matrix multiplies (compute win for prefill, section 5.6); they have different error budgets. Second, a kernel-level error metric is not a quality metric: accept FP8 attention on the basis of an end-to-end evaluation on the workload's own data.
 
@@ -806,11 +833,11 @@ Two review points follow. First, "FP8 attention" can mean FP8 KV cache with bf16
 ### 10.1 Count by a stated convention
 
 - **Prefill / training:** `4·N_q·N_k·d` FLOPs per head for the forward, halved for causal, ×2.5 for the backward, ×3.5 for forward plus backward (section 1.1; the Triton tutorial's `bench_flash_attention` uses exactly this). Softmax FLOPs are not counted. Some tools count causal attention at full cost or include softmax work; a number without its convention is not comparable.
-- **Decode:** report bandwidth. Bytes = K/V actually read (`2·L·d·b` per KV head per sequence) plus Q and O; divide by time; compare with the HBM peak. TFLOP/s for a decode kernel is a meaningless number (the intensity is 1 to 8 FLOP/B, section 6.1).
+- **Decode (MHA and GQA, group size up to 8):** report bandwidth. Bytes = K/V actually read (`2·L·d·b` per KV head per sequence) plus Q and O; divide by time; compare with the HBM peak. TFLOP/s for such a kernel says little (the intensity is 1 to 8 FLOP/B, section 6.1). Absorbed-MLA decode is the exception: at 242 to 484 FLOP/B it sits at the ridge (section 8.1), so report it on both axes, TFLOP/s against the dense peak and GB/s against HBM bandwidth.
 
 ### 10.2 Which side of the roofline to report
 
-A prefill kernel lives on the compute side, so the honest figure is TFLOP/s as a fraction of the dense peak for that dtype (989 bf16 on an H100, not the 1,979 sparse headline). A decode kernel lives on the bandwidth side, so the figure is GB/s as a fraction of HBM bandwidth. Split-KV and paged kernels should report both the bytes they had to read and the bytes they did read (partials, block tables, padding).
+A prefill kernel lives on the compute side, so the honest figure is TFLOP/s as a fraction of the dense peak for that dtype (989 bf16 on an H100, not the 1,979 sparse headline). An MHA or GQA decode kernel lives on the bandwidth side, so the figure is GB/s as a fraction of HBM bandwidth (absorbed MLA decode, at the ridge, gets both). Split-KV and paged kernels should report both the bytes they had to read and the bytes they did read (partials, block tables, padding).
 
 ### 10.3 Procedure
 
@@ -893,7 +920,9 @@ Both effects push long-context serving towards the same place: at 32k tokens and
 
 ### 11.1 The kernel
 
-**Tier T1; not executed in this repository** (no GPU here). Written against Triton 3.x block pointers (`tl.make_block_ptr`); inputs `(B, H, N, D)`, contiguous, fp16 or bf16.
+**Tier T1 for timing; T0 for correctness through Triton's interpreter (section 11.4).** Not executed on a GPU in this repository. [`test_triton_kernel_emulated.py`](test_triton_kernel_emulated.py) takes the code block below from this page and runs its body on a CPU, program instance by program instance, against a numpy stand-in for the `tl` operations it uses: `N` of 1, 64, 65, 200 and 300, ragged tails, `BLOCK_M` smaller and larger than `BLOCK_N`, causal and not, batch and head strides, fp16 inputs; the output must be within 5e-3 of an fp64 reference and the LSE within 1e-3, and three deliberately broken variants (a mask hiding the diagonal, a loop stopping one tile early, a missing rescale) must fail the same check. That checks the kernel's indexing, masking and algebra, not Triton's compiler; section 11.4 runs the real front end. Inputs `(B, H, N, D)`, contiguous, fp16 or bf16, `D` a power of two.
+
+Loads and stores use plain pointer arithmetic with masks, which every Triton 2.x and 3.x release and the interpreter accept. The block-pointer API (`tl.make_block_ptr`, `tl.advance`) that older versions of the tutorial used is deprecated in Triton 3.8 and removed on Triton's `main` branch (fetched 2026-09-26) in favour of tensor descriptors (`tl.make_tensor_descriptor`), which is how the upstream tutorial now reaches the TMA.
 
 ```python
 import math
@@ -904,60 +933,58 @@ import triton.language as tl
 @triton.jit
 def attn_fwd(Q, K, V, O, LSE, sm_scale, N_CTX,
              stride_b, stride_h, stride_n,                       # shared by Q, K, V, O; last dim contiguous
-             H: tl.constexpr, D: tl.constexpr,
+             H: tl.constexpr, D: tl.constexpr,                   # D a power of two (tl.arange)
              BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, CAUSAL: tl.constexpr):
     pid_m = tl.program_id(0)                                     # (1) which Q block
     pid_bh = tl.program_id(1)                                    # (2) which (batch, head)
     base = (pid_bh // H) * stride_b + (pid_bh % H) * stride_h
-    q_ptr = tl.make_block_ptr(Q + base, shape=(N_CTX, D), strides=(stride_n, 1),
-                              offsets=(pid_m * BLOCK_M, 0), block_shape=(BLOCK_M, D), order=(1, 0))
-    kt_ptr = tl.make_block_ptr(K + base, shape=(D, N_CTX), strides=(1, stride_n),   # K transposed view
-                               offsets=(0, 0), block_shape=(D, BLOCK_N), order=(0, 1))
-    v_ptr = tl.make_block_ptr(V + base, shape=(N_CTX, D), strides=(stride_n, 1),
-                              offsets=(0, 0), block_shape=(BLOCK_N, D), order=(1, 0))
-
     offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offs_n = tl.arange(0, BLOCK_N)
+    offs_d = tl.arange(0, D)
+    q = tl.load(Q + base + offs_m[:, None] * stride_n + offs_d[None, :],
+                mask=offs_m[:, None] < N_CTX, other=0.0)         # (3) Q block: loaded once, stays on chip
+
     m_i = tl.full([BLOCK_M], float("-inf"), tl.float32)          # (4) identity state
     l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
     acc = tl.zeros([BLOCK_M, D], dtype=tl.float32)
     qk_scale = sm_scale * 1.4426950408889634                     # (5) fold log2(e)
-    q = tl.load(q_ptr, boundary_check=(0,), padding_option="zero")          # (3) Q stays on chip
 
     hi = N_CTX
     if CAUSAL:
         hi = tl.minimum((pid_m + 1) * BLOCK_M, N_CTX)            # (6) stop at the diagonal
-    for start_n in range(0, hi, BLOCK_N):
-        kt = tl.load(kt_ptr, boundary_check=(1,), padding_option="zero")
-        s = tl.dot(q, kt) * qk_scale                              # (7) scores, fp32, log2 units
-        valid = (start_n + offs_n)[None, :] < N_CTX
+    for start_n in range(0, hi, BLOCK_N):                        # (7) walk the K/V tiles
+        offs_k = start_n + offs_n
+        kt = tl.load(K + base + offs_k[None, :] * stride_n + offs_d[:, None],    # K tile as (D, BLOCK_N)
+                     mask=offs_k[None, :] < N_CTX, other=0.0)
+        s = tl.dot(q, kt) * qk_scale                              # (8) scores, fp32, log2 units
+        valid = offs_k[None, :] < N_CTX
         if CAUSAL:
-            valid = valid & (offs_m[:, None] >= (start_n + offs_n)[None, :])
-        s = tl.where(valid, s, float("-inf"))                    # (8) ragged tail and diagonal
-        m_new = tl.maximum(m_i, tl.max(s, 1))                    # (9)
-        alpha = tl.math.exp2(m_i - m_new)                        # (10)
-        p = tl.math.exp2(s - m_new[:, None])                     # (11)
-        l_i = l_i * alpha + tl.sum(p, 1)                         # (12)
-        v = tl.load(v_ptr, boundary_check=(0,), padding_option="zero")
-        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v)    # (13) P rounded to the input dtype
+            valid = valid & (offs_m[:, None] >= offs_k[None, :])
+        s = tl.where(valid, s, float("-inf"))                    # (9) ragged tail and diagonal
+        m_new = tl.maximum(m_i, tl.max(s, 1))                    # (10)
+        alpha = tl.math.exp2(m_i - m_new)                        # (11)
+        p = tl.math.exp2(s - m_new[:, None])                     # (12)
+        l_i = l_i * alpha + tl.sum(p, 1)                         # (13)
+        v = tl.load(V + base + offs_k[:, None] * stride_n + offs_d[None, :],
+                    mask=offs_k[:, None] < N_CTX, other=0.0)
+        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v)    # (14) P rounded to the input dtype
         m_i = m_new
-        kt_ptr = tl.advance(kt_ptr, (0, BLOCK_N))                # (14)
-        v_ptr = tl.advance(v_ptr, (BLOCK_N, 0))
 
     acc = acc / l_i[:, None]                                     # (15) normalize once
     tl.store(LSE + pid_bh * N_CTX + offs_m, m_i + tl.math.log2(l_i), mask=offs_m < N_CTX)   # (16) base 2
-    o_ptr = tl.make_block_ptr(O + base, shape=(N_CTX, D), strides=(stride_n, 1),
-                              offsets=(pid_m * BLOCK_M, 0), block_shape=(BLOCK_M, D), order=(1, 0))
-    tl.store(o_ptr, acc.to(O.dtype.element_ty), boundary_check=(0,))
+    tl.store(O + base + offs_m[:, None] * stride_n + offs_d[None, :], acc.to(O.dtype.element_ty),
+             mask=offs_m[:, None] < N_CTX)
 
 
-def flash_attention(q, k, v, causal=True, block_m=128, block_n=64):
+def flash_attention(q, k, v, causal=True, block_m=128, block_n=64, num_stages=2):
     B, H, N, D = q.shape
+    assert q.stride() == k.stride() == v.stride() and q.stride(-1) == 1
     o = torch.empty_like(q)
     lse = torch.empty((B * H, N), device=q.device, dtype=torch.float32)
     grid = (triton.cdiv(N, block_m), B * H)                      # the FA2 grid: Q blocks x (batch, head)
     attn_fwd[grid](q, k, v, o, lse, 1.0 / math.sqrt(D), N, q.stride(0), q.stride(1), q.stride(2),
-                   H=H, D=D, BLOCK_M=block_m, BLOCK_N=block_n, CAUSAL=causal, num_warps=4, num_stages=2)
+                   H=H, D=D, BLOCK_M=block_m, BLOCK_N=block_n, CAUSAL=causal,
+                   num_warps=4, num_stages=num_stages)
     return o, lse
 ```
 
@@ -967,29 +994,29 @@ def flash_attention(q, k, v, causal=True, block_m=128, block_n=64):
 |---|---|---|---|
 | (1) `pid_m = tl.program_id(0)` | the outer loop over Q blocks becomes the grid | 4.1 | `for i in range(0, N, block_q)` |
 | (2) `pid_bh = tl.program_id(1)` | parallelism over batch and heads | 4.1 | one head only |
-| (3) `q = tl.load(q_ptr)` once | Q block loaded once, kept on chip | 4.1 | `Qi = Q[i:i + block_q]` |
+| (3) `q = tl.load(...)` once | Q block loaded once, kept on chip; rows past `N` masked to zero | 4.1 | `Qi = Q[i:i + block_q]` |
 | (4) `m_i, l_i, acc = −∞, 0, 0` | the merge identity | 2.3 | `mi`, `li`, `Oi` initialized |
 | (5) `qk_scale = sm_scale · log2 e` | scale folded into the exponent | 2.4, 9.2 | `scale` and `np.exp` |
 | (6) `hi` for `CAUSAL` | causal block skipping | 4.4 | `if causal and j > i + bq - 1: continue` |
-| (7) `s = tl.dot(q, kt) * qk_scale` | first GEMM, fp32 accumulate | 1.1, 9.1 | `Sij = (Qi @ Kj.T) * scale` |
-| (8) `tl.where(valid, s, −∞)` | diagonal tile mask and ragged tail | 4.4, 8.2 | `np.where(cols <= rows, Sij, -np.inf)` |
-| (9) `m_new = max(m_i, rowmax(s))` | new reference max | 2.2 | `m_new = np.maximum(mi, Sij.max(axis=1))` |
-| (10) `alpha = exp2(m_i − m_new)` | rescale factor for the old state | 2.2 | `alpha = np.exp(mi - m_new)` |
-| (11) `p = exp2(s − m_new)` | probabilities relative to the new max | 2.2, 2.4 | `Pij = np.exp(Sij - m_new[:, None])` |
-| (12) `l_i = l_i·alpha + rowsum(p)` | running denominator | 2.2 | `li = alpha * li + Pij.sum(axis=1)` |
-| (13) `acc = acc·alpha + dot(p.to(bf16), v)` | second GEMM; `P` stays in registers, rounded to the input dtype | 2.2, 4.2, 9.1 | `Oi = alpha[:, None] * Oi + Pij @ Vj` |
-| (14) `tl.advance(...)` | next K/V tile | 3.1 | `Kj, Vj = K[j:j + block_kv], V[j:j + block_kv]` |
+| (7) `for start_n in range(0, hi, BLOCK_N)` | walk the K/V tiles; `offs_k` moves the K and V pointers | 3.1 | `for j in range(0, N, block_kv)` |
+| (8) `s = tl.dot(q, kt) * qk_scale` | first GEMM, fp32 accumulate | 1.1, 9.1 | `Sij = (Qi @ Kj.T) * scale` |
+| (9) `tl.where(valid, s, −∞)` | diagonal tile mask and ragged tail | 4.4, 8.2 | `np.where(cols <= rows, Sij, -np.inf)` |
+| (10) `m_new = max(m_i, rowmax(s))` | new reference max | 2.2 | `m_new = np.maximum(mi, Sij.max(axis=1))` |
+| (11) `alpha = exp2(m_i − m_new)` | rescale factor for the old state | 2.2 | `alpha = np.exp(mi - m_new)` |
+| (12) `p = exp2(s − m_new)` | probabilities relative to the new max | 2.2, 2.4 | `Pij = np.exp(Sij - m_new[:, None])` |
+| (13) `l_i = l_i·alpha + rowsum(p)` | running denominator | 2.2 | `li = alpha * li + Pij.sum(axis=1)` |
+| (14) `acc = acc·alpha + dot(p.to(fp16/bf16), v)` | second GEMM; `P` stays in registers, rounded to the input dtype | 2.2, 4.2, 9.1 | `Oi = alpha[:, None] * Oi + Pij @ Vj` |
 | (15) `acc / l_i` | normalize once, at the end | 4.3 | `O[i:i + bq] = Oi / li[:, None]` |
 | (16) store `m_i + log2(l_i)` | LSE for the backward, base 2 | 2.4, 3.5 | `L[i:i + bq] = mi + np.log(li)` (natural log) |
 
 What the Triton version adds to the numpy one, and what it still leaves out:
 
-- **Masking of ragged tails** (the last Q and K/V blocks when `N` is not a multiple of the tile) through `boundary_check`, `padding_option` and the `valid` mask.
-- **No `−∞` guard is needed here**: the loop runs forward from key 0, which every row may see, so no row's first tile is fully masked. A kernel that walks backwards from the diagonal (FA2, section 4.4), uses a sliding window, or aligns the causal mask bottom-right with `N_q > N_k` needs the guard of section 2.5.
-- **Pipelining** comes from `num_stages`: the compiler double-buffers the K and V loads, the `cp.async` scheme of section 4.5.
+- **Masking of ragged tails** (the last Q and K/V blocks when `N` is not a multiple of the tile) through the `mask=`/`other=` arguments of the loads and the `valid` mask on the scores.
+- **No `−∞` guard is needed here**: the loop runs forward from key 0, which every row may see (including the padded rows past `N`, which are masked on the way out), so no row's first tile is fully masked. A kernel that walks backwards from the diagonal (FA2, section 4.4), uses a sliding window, or aligns the causal mask bottom-right with `N_q > N_k` needs the guard of section 2.5.
+- **Pipelining** comes from `num_stages`: on SM 8.0 and newer the compiler multi-buffers the K and V loads, the `cp.async` scheme of section 4.5.
 - **Left out**: the backward pass (the notebook's section 4 is the algorithm), variable-length batches, paged K/V, GQA packing, split-KV, FP8, warp specialization. Each is a section of this page.
 
-### 11.3 Testing it
+### 11.3 Testing it on a GPU (T1)
 
 Against an fp32 reference, with the criterion of section 9.1:
 
@@ -1003,7 +1030,35 @@ s = s.masked_fill(torch.ones(1000, 1000, dtype=torch.bool, device="cuda").triu(1
 assert torch.allclose(lse.view(2, 8, 1000) * math.log(2), torch.logsumexp(s, dim=-1), atol=1e-3)   # base 2 -> natural
 ```
 
-Then vary `block_m`/`block_n` (the result must not depend on them beyond rounding), `causal`, `N` (1, a tile multiple, a tile multiple plus one), and time it with the procedure of section 10.3. On a T4, use fp16 (it has no bf16 tensor cores) and check that Triton's `tl.dot` uses its tensor cores there **(verify)**.
+Then vary `block_m`/`block_n` (the result must not depend on them beyond rounding), `causal`, `N` (1, a tile multiple, a tile multiple plus one), and time it with the procedure of section 10.3.
+
+**Shared memory decides the tile on small GPUs.** The defaults (`BLOCK_M = 128`, `BLOCK_N = 64`, `D = 128`, two stages) stage about 96 KB of Q, K and V tiles (`fa_calculators.tile_smem_bytes(128, 64, 128, kv_stages=2)` = 98,304 B). A T4 allows 64 KB per block, so start it at `block_m=64, block_n=32, num_stages=1` (32 KB of tiles), in fp16 (it has no bf16 tensor cores), and check that `tl.dot` uses its tensor cores there **(verify)**; an L4 allows about 99 KB per block, a tight fit for the defaults. If Triton raises `OutOfResources` for shared memory, halve the tiles.
+
+### 11.4 Checking it on a CPU (T0) with Triton's interpreter
+
+With `TRITON_INTERPRET=1`, `@triton.jit` kernels run on CPU tensors through numpy: slow, no performance information, but the real Triton front end, masks and all. It needs `torch` and `triton` importable, which is the case on a Colab CPU runtime **(verify)**; otherwise `pip install torch triton`. Not executed in this repository (neither package is installable here).
+
+```python
+import os
+os.environ["TRITON_INTERPRET"] = "1"          # must be set before triton is imported
+import math, torch, triton, triton.language as tl
+# ... paste attn_fwd and flash_attention from section 11.1 here ...
+
+torch.manual_seed(0)
+for N in (1, 64, 65, 200):                    # 1, a tile multiple, a tile multiple plus one, ragged
+    for causal in (False, True):
+        q, k, v = (torch.randn(1, 2, N, 64, dtype=torch.float16) for _ in range(3))
+        o, lse = flash_attention(q, k, v, causal=causal, block_m=32, block_n=16)
+        s = (q.float() @ k.float().transpose(-1, -2)) / math.sqrt(64)
+        if causal:
+            s = s.masked_fill(torch.ones(N, N, dtype=torch.bool).triu(1), float("-inf"))
+        ref = torch.softmax(s, dim=-1) @ v.float()
+        assert (o.float() - ref).abs().max() < 5e-3                     # fp16 P and O rounding
+        assert torch.allclose(lse.view(1, 2, N) * math.log(2), torch.logsumexp(s, dim=-1), atol=1e-3)
+print("forward pass and LSE match the reference on CPU")
+```
+
+This catches indexing, masking and algebra errors; it says nothing about speed, shared-memory limits or register pressure, which only a GPU run (section 11.3) shows.
 
 ---
 
@@ -1017,7 +1072,7 @@ Then vary `block_m`/`block_n` (the result must not depend on them beyond roundin
 
 "Each generation then chased the next bottleneck. FA2 fixed work partitioning: queries in the outer loop, warps split by rows so nothing goes through shared memory, parallelism over sequence length. FA3 exists because on Hopper the exponential unit takes half as long as the matrix multiplies: it overlaps them with asynchronous tensor-core instructions, a producer warpgroup on the TMA and two consumer warpgroups in ping-pong. On Blackwell the exponential takes as long as the multiplies, so FA4 emulates some exponentials on the FMA units and skips most rescales.
 
-"Serving is a different regime. Decode has one query row per head against a long cache: no reuse, 1 to 8 FLOP per byte, so the kernel splits the cache across thread blocks, packs the query heads of a GQA group into one tile, and merges partial results with the same operator. Its time is batch × context × KV bytes over bandwidth. vLLM passes a block table and per-sequence lengths into one variable-length call per layer; on Hopper that runs FA3, on Blackwell FlashInfer goes first, on a T4 it falls back to Triton."
+"Serving is a different regime. Decode has one query row per head against a long cache: no reuse, 1 to 8 FLOP per byte, so the kernel splits the cache across thread blocks, packs the query heads of a GQA group into one tile, and merges partial results with the same operator. Its time is batch × context × KV bytes over bandwidth. vLLM passes a block table and per-sequence lengths into one variable-length call per layer; on Hopper that runs FA3, on SM 10.x datacenter Blackwell (B200, GB200) FlashInfer goes first, on a T4 it falls back to Triton, and an FP8 KV cache on an L4 or A100 moves it to FlashInfer."
 
 ### Drill questions
 
@@ -1036,14 +1091,14 @@ Loop order (one CTA per Q block, output in registers, written once), split-Q war
 **5. Our H100 runs FA2 at about 35% of peak. What changes with FA3, and why is it Hopper-specific?**
 Asynchronous warpgroup MMAs and TMA loads, a producer warpgroup that donates registers to two consumers, ping-pong so one warpgroup's softmax runs under the other's GEMMs, and a skewed loop inside each warpgroup. It is Hopper-specific because those instructions are; the reason it is needed is that at `d = 128` the exponentials take 50% as long as the MMAs on an H100 (16 EX2 per SM per clock against 4,096 tensor FLOPs).
 
-**6. The same attention call is fast in prefill and slow in decode. Why, and what should run instead?**
-With one query row, the prefill grid is batch × heads CTAs (8 for batch 1 on a GQA model) and each walks the whole cache alone, so most SMs idle and HBM is never saturated. Use split-KV (29 splits, 232 CTAs for batch 1 × 32k on an H100) with GQA packing, and a combine step over `(Ô, LSE)` partials that costs under 1% extra traffic.
+**6. A prefill-shaped attention kernel is fast in prefill and slow in decode. Why, and what should run instead?**
+Run with one query row, the prefill kernel's grid is batch × heads CTAs: 32 for batch 1 on a Llama-3-8B-shaped layer, 8 once the GQA group is packed into one tile. Each walks the whole cache alone, so most SMs idle and HBM is never saturated. Split the KV sequence across CTAs, pack the GQA group, and combine the `(Ô, LSE)` partials in a second step that costs under 1% extra traffic. For batch 1 × 32k on an H100, FA3 as vLLM runs it picks 15 splits (120 CTAs, about one wave); FA2's heuristic would pick 29 (232 CTAs, two per SM). You rarely call the prefill kernel by accident: FA2's `flash_attn_func` and `flash_attn_with_kvcache` detect `seqlen_q = 1` and switch to packing and split-KV themselves; a hand-written kernel does not.
 
 **7. How does vLLM pick the attention kernel on an L4, an H100, a B200 and a T4?**
-It walks a per-platform priority list and takes the first backend that validates the layer. Ampere, Ada and Hopper: FlashAttention first (FA2 kernels on the L4, FA3 on the H100). SM 10.x with causal attention: FlashInfer first. T4: FlashAttention needs SM 8.0 and FlashInfer is currently floored at SM 8.0 in vLLM, so Triton attention. ALiBi forces FA2.
+It walks a per-platform priority list and takes the first backend that validates the layer. Ampere, Ada and Hopper: FlashAttention first (FA2 kernels on the L4, FA3 on the H100). SM 10.x with causal attention: FlashInfer first. T4: FlashAttention needs SM 8.0 and FlashInfer is currently floored at SM 8.0 in vLLM, so Triton attention. ALiBi forces FA2. The KV-cache dtype can override the GPU: vLLM's FlashAttention path accepts an FP8 KV cache only with FA3 (SM 9.0) or FA4, so an L4 with `kv_cache_dtype=fp8` gets FlashInfer, not FA2.
 
 **8. We want FP8 attention for a 128k-context deployment. What can go wrong and how do we check?**
-Decide first whether it is an FP8 KV cache (decode bandwidth) or FP8 matrix multiplies (prefill compute). Error sources: 3-bit mantissa rounding (no fix within FP8), outliers under amax scaling (per-block scales, rotations; rotations matter most for integer formats), small probabilities flushing to zero (the `2^8` offset), stale scales (calibration). Check with the workload's end-to-end evaluation, not a kernel error metric, and include long-context cases.
+Decide first whether it is an FP8 KV cache (decode bandwidth) or FP8 matrix multiplies (prefill compute). Error sources: 3-bit mantissa rounding (no fix within FP8), outlier channels (a Hadamard rotation of Q and K; for e4m3 it pays when the outlier channels of Q and K line up, about 8× less `QKᵀ` error in section 9.4's simulation, and for integer formats it pays either way), outlier tokens (per-block or per-head scales, decisive for integer formats), small probabilities flushing to zero (the `2^8` offset), stale scales (calibration). On an L4 or A100, an FP8 KV cache also changes the backend vLLM picks (drill 7). Check with the workload's end-to-end evaluation, not a kernel error metric, and include long-context cases.
 
 ---
 
@@ -1105,12 +1160,13 @@ Decide first whether it is an FP8 KV cache (decode bandwidth) or FP8 matrix mult
 
 **Upstream code read for this page** (fetched 2026-09-26 from `raw.githubusercontent.com`, branch `main`; quotes in the text are from these files):
 
-- `Dao-AILab/flash-attention`: `README.md`; `flash_attn/flash_attn_interface.py`; `flash_attn/flash_attn_triton.py`; `csrc/flash_attn/flash_api.cpp`; `csrc/flash_attn/src/flash_fwd_kernel.h`, `softmax.h`, `flash_fwd_launch_template.h`, `flash_bwd_kernel.h`; `hopper/flash_attn_interface.py`, `flash_fwd_kernel_sm90.h`, `mainloop_fwd_sm90_tma_gmma_ws.hpp`, `softmax.h`, `tile_size.h`, `heuristics.h`, `tile_scheduler.hpp`; `flash_attn/cute/README.md`, `flash_fwd_sm100.py`, `softmax.py`. (`hopper/README.md` returned 404; FA3 installation notes are in the top-level README.)
-- `triton-lang/triton`: `python/tutorials/06-fused-attention.py`.
-- `vllm-project/vllm`: `vllm/v1/attention/backends/flash_attn.py`, `fa_utils.py`, `flashinfer.py`, `triton_attn.py`; `vllm/v1/attention/selector.py`; `vllm/platforms/cuda.py`; `vllm/v1/attention/ops/merge_attn_states.py`, `triton_merge_attn_states.py`.
+- `Dao-AILab/flash-attention`: `README.md`; `flash_attn/flash_attn_interface.py`; `flash_attn/flash_attn_triton.py`; `csrc/flash_attn/flash_api.cpp`; `csrc/flash_attn/src/flash_fwd_kernel.h`, `softmax.h`, `flash_fwd_launch_template.h`, `flash_bwd_kernel.h`; `hopper/flash_attn_interface.py`, `flash_api.cpp`, `flash_fwd_kernel_sm90.h`, `mainloop_fwd_sm90_tma_gmma_ws.hpp`, `softmax.h`, `tile_size.h`, `heuristics.h`, `tile_scheduler.hpp`, `flash_prepare_scheduler.cu`; `flash_attn/cute/README.md`, `flash_fwd_sm100.py`, `softmax.py`. (`hopper/README.md` returned 404; FA3 installation notes are in the top-level README.)
+- `vllm-project/flash-attention` (vLLM's fork, built as `vllm.vllm_flash_attn`): `hopper/flash_api.cpp`, `heuristics.h`, `tile_size.h`, `flash_prepare_scheduler.cu`.
+- `triton-lang/triton`: `python/tutorials/06-fused-attention.py`; `python/triton/language/core.py` and `python/triton/runtime/interpreter.py` on `main` and at `v3.8.0` (block pointers deprecated in 3.8, removed on `main`).
+- `vllm-project/vllm`: `vllm/v1/attention/backends/flash_attn.py`, `fa_utils.py`, `flashinfer.py`, `triton_attn.py`; `vllm/v1/attention/selector.py`; `vllm/platforms/cuda.py`; `vllm/config/attention.py`; `requirements/cuda.txt`; `vllm/v1/attention/ops/merge_attn_states.py`, `triton_merge_attn_states.py`.
 - `flashinfer-ai/flashinfer`: `README.md`, `flashinfer/decode.py`, `flashinfer/cascade.py`.
 
-**In this repository:** [the FlashAttention primer](flash-attention-primer.md), [`flash_attention_minimal.py`](flash_attention_minimal.py), [the practice notebook](flash_attention_practice.ipynb), [the paged-attention primer](../paged-attention/paged-attention-primer.md), [the KV-cache primer](../kv-cache/kv-cache-primer.md), [the transformer primer](../../00-foundations/transformers/docs/transformer-primer.md), [the GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md), [the roofline primer (01)](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [the CUDA primer (02)](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [the capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md).
+**In this repository:** [the FlashAttention primer](flash-attention-primer.md), [`flash_attention_minimal.py`](flash_attention_minimal.py), [`fa_calculators.py`](fa_calculators.py) and its tests, [`test_triton_kernel_emulated.py`](test_triton_kernel_emulated.py), [the companion notebook](flash_attention_deep_dive.ipynb), [the practice notebook](flash_attention_practice.ipynb), [the paged-attention primer](../paged-attention/paged-attention-primer.md), [the KV-cache primer](../kv-cache/kv-cache-primer.md), [the vLLM internals primer](../vllm-internals/vllm-internals-primer.md) (section 6, attention backends from the engine's side), [the transformer primer](../../00-foundations/transformers/docs/transformer-primer.md), [the GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md), [the roofline primer (01)](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [the CUDA primer (02)](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [the capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md).
 
 ---
 
@@ -1118,9 +1174,9 @@ Decide first whether it is an FP8 KV cache (decode bandwidth) or FP8 matrix mult
 
 Re-check these before quoting them; everything else on the page is derived from stated inputs or quoted from the files listed above.
 
-1. **Paper figures.** FA1: Theorem 2 and Proposition 3 as stated; 40.3 GB vs 4.4 GB HBM traffic (GPT-2-sized, A100); block-sparse IO bound. FA2: ≈ 2× over FA1; 50–73% of A100 peak forward vs 25–40% for FA1; FA1 parallelized over batch and heads only; backward at a lower fraction of peak. FA3: FA2 at ≈ 35% on H100; 740 TFLOP/s (75%) bf16; ≈ 1.2 PFLOP/s FP8; 1.5–2.0× over FA2; ping-pong 570 → 620–640 TFLOP/s; 3.9 TFLOP/s of special functions; 2.6× lower FP8 error; Hadamard fused with RoPE. FA4: 1,605 TFLOP/s (71%) on B200, 1.3× cuDNN 9.13, 2.7× Triton, and the paper's title. Flash-Decoding: up to 8×. FlexAttention: 85–90% of FA2.
-2. **Hardware.** Dense bf16 peaks and HBM bandwidth: H100 SXM 989.4 TFLOP/s, 3.35 TB/s, 132 SMs, 228 KB SMEM/SM, 50 MB L2; A100 80GB 312, 2.039 TB/s, 108 SMs; L4 121, 0.30 TB/s, 58 SMs, 48 MB L2; B200 2,250, 8.0 TB/s; T4 65 (fp16), 0.32 TB/s. Per-SM per-clock throughputs in section 4.3, especially the B200 column (≈ 8,192 tensor FLOPs, 128 FP32 FMA, 16 MUFU) and the Blackwell hardware description (tcgen05, TMEM, 2-CTA MMA). H100 NVLink ≈ 450 GB/s per direction.
-3. **Model shapes.** Llama-3-8B: 8.03 B parameters, 32 layers, 32 query and 8 KV heads of 128, MLP width 14,336. DeepSeek-V3 MLA: 128 heads, latent 512, rotary 64, no-PE key 128, value 128.
-4. **Moving code facts** (read on `main`, 2026-09-26): vLLM backend priority lists and FA version selection; vLLM's SM 8.0 floor for FlashInfer; FA2's `page_block_size` multiple of 256; FA3's arbitrary page size; FA3 tile sizes and register counts; FA4's `rescale_threshold = 8.0`, `ex2_emu_freq` values and warp roles; FlashInfer backends and `fixed_split_size`.
-5. **Tooling.** `triton.testing.do_bench` flushing L2 by default; PyTorch's flash SDPA backend requiring SM 8.0+; Triton `tl.dot` using tensor cores on a T4 in fp16.
+1. **Paper figures.** FA1: Theorem 2 and Proposition 3 as stated; 40.3 GB vs 4.4 GB HBM traffic (GPT-2-sized, A100); block-sparse IO bound. FA2: ≈ 2× over FA1; 50–73% of A100 peak forward vs 25–40% for FA1; FA1 parallelized over batch and heads only; backward at a lower fraction of peak. FA3: FA2 at ≈ 35% on H100; 740 TFLOP/s (75%) bf16; ≈ 1.2 PFLOP/s FP8; 1.5–2.0× over FA2; ping-pong 570 → 620–640 TFLOP/s; 3.9 TFLOP/s of special functions; 2.6× lower FP8 error; Hadamard fused with RoPE. FA4: 1,605 TFLOP/s (71%) on B200, 1.3× cuDNN 9.13, 2.7× Triton, and the paper's title. Flash-Decoding: up to 8×. FlexAttention: about 90% of FA2 forward, 85% backward.
+2. **Hardware.** Dense bf16 peaks and HBM bandwidth: H100 SXM 989.4 TFLOP/s, 3.35 TB/s, 132 SMs, 228 KB SMEM/SM, 50 MB L2; A100 80GB 312, 2.039 TB/s, 108 SMs; L4 121, 0.30 TB/s, 58 SMs, 48 MB L2; B200 2,250, 8.0 TB/s; T4 65 (fp16), 0.32 TB/s. Per-SM per-clock throughputs in section 4.3, especially the B200 column (≈ 8,192 tensor FLOPs, 128 FP32 FMA, 16 MUFU) and the Blackwell hardware description (tcgen05, TMEM, 2-CTA MMA). H100 NVLink ≈ 450 GB/s per direction. H100 dense FP8 peak ≈ 1,979 TFLOP/s (ridge ≈ 590).
+3. **Model shapes.** Llama-3-8B: 8.03 B parameters, 32 layers, 32 query and 8 KV heads of 128, MLP width 14,336. DeepSeek-V3 MLA: 128 heads, latent 512, rotary 64, no-PE key 128, value 128. That MLA models are commonly served with data-parallel attention, and that rotary models' Q and K outliers share dimensions.
+4. **Moving code facts** (read on `main`, 2026-09-26): vLLM backend priority lists and FA version selection; vLLM's FlashAttention backend accepting an FP8 KV cache only with FA3 on SM 9.0 or FA4, and the resulting fall-through to FlashInfer on SM 8.x; vLLM's SM 8.0 floor for FlashInfer; FA3's split heuristic, dynamic per-sequence split and vLLM's CUDA-graph split cap of 32, and vLLM's fork matching upstream on them; FA2's `page_block_size` multiple of 256; FA3's arbitrary page size; FA3 tile sizes and register counts; FA4's `rescale_threshold = 8.0`, `ex2_emu_freq` values and warp roles; FlashInfer backends and `fixed_split_size`.
+5. **Tooling.** `triton.testing.do_bench` flushing L2 by default; PyTorch's flash SDPA backend requiring SM 8.0+; Triton `tl.dot` using tensor cores on a T4 in fp16; the section 11 defaults fitting an L4's shared memory and the smaller tiles fitting a T4's; `torch` and `triton` importable on a Colab CPU runtime and the interpreter accepting the section 11.1 kernel (launch options such as `num_warps` included).
 6. **L4 expectation** in section 10.5 is an assumption, not a measurement: measure it.

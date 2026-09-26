@@ -28,9 +28,9 @@ the ridge while each sequence's **KV-cache reads**, which grow as fast as its at
 attention at a few FLOP/B and come to dominate the step. Quantization and MoE change **bytes**. Between
 GPUs every transfer costs **α + n/β**: decode's tensor-parallel all-reduces are latency-bound, prefill's
 are bandwidth-bound and do not shrink as the TP degree grows, and β per GPU falls ~9× from NVLink to a
-400 Gb/s NIC — so tensor parallelism stays inside the NVLink domain. Then three fleet numbers follow from the same arithmetic:
-cold start is **bytes ÷ the slowest tier**, failure rates **add** (checkpoint every √(2 δ M)), and
-**$/M tokens = $/GPU-hr ÷ (tokens/s × 3600 × utilisation) × 10⁶**.
+400 Gb/s NIC — so tensor parallelism stays inside the NVLink domain. Then three fleet numbers follow from
+the same arithmetic: cold start is **bytes ÷ the slowest tier**, failure rates **add** (checkpoint every
+√(2 δ M)), and **$/M tokens = $/GPU-hr ÷ (tokens/s × 3600 × utilisation) × 10⁶**.
 
 ---
 
@@ -47,11 +47,11 @@ A datasheet is a handful of numbers. Five of them carry almost every argument in
 | Network | bytes, not bits | a 400 Gb/s NIC moves 50 GB/s |
 
 Two more lines matter for planning. **TDP** (or TBP) is the board power the cooling and power delivery
-must sustain — 72 W for an L4, 700 W for an H100 SXM, 1,400 W for a GB300 (verify) — and under sustained tensor
-load clocks drop below boost to stay inside it, so a measured peak lands below the datasheet (measure it:
-`gpu-bench-lab` notebook `01_measure_your_roofline`). **Form factor** changes the part: an H100 PCIe card
-has fewer SMs, HBM2e at ~2 TB/s and a 350 W limit (verify), so "H100" alone is ambiguous — always name
-SXM, PCIe or NVL.
+must sustain — 72 W for an L4, 700 W for an H100 SXM, 1,400 W for a GB300 (verify) — and under sustained
+tensor load clocks drop below boost to stay inside it, so a measured peak lands below the datasheet
+(measure it: `gpu-bench-lab` notebook `01_measure_your_roofline`). **Form factor** changes the part: an
+H100 PCIe card has fewer SMs, HBM2e at ~2 TB/s and a 350 W limit (verify), so "H100" alone is ambiguous —
+always name SXM, PCIe or NVL.
 
 ### Where a peak comes from
 
@@ -136,10 +136,10 @@ does 1.1 × 10¹² FLOPs and cannot finish in less than 1.11 ms on an H100.
 
 It is a bound, not a prediction. Real kernels miss both ceilings: sustained clocks sit below boost, a
 kernel rarely overlaps loads and math perfectly, the last wave of thread blocks leaves SMs idle (wave
-quantization), and tiny kernels are dominated by launch latency (a 128³ GEMM is 4 MFLOP — a few
-nanoseconds at peak, microseconds in practice). It also assumes compulsory traffic; §4 shows how far a
-real tiling is from that. Use the model to decide *which* ceiling to attack, then measure how close you
-get (`gpu-bench-lab` fits a measured roofline to your device).
+quantization), and tiny kernels are dominated by launch latency (a 128³ GEMM is 4 MFLOP and 98 KB: 4 ns
+of math at peak, 29 ns on the roofline, microseconds in practice). It also assumes compulsory traffic; §4
+shows how far a real tiling is from that. Use the model to decide *which* ceiling to attack, then measure
+how close you get (`gpu-bench-lab` fits a measured roofline to your device).
 
 ---
 
@@ -200,7 +200,7 @@ reads its own KV cache:
 
 Throughput climbs with batch and per-user speed falls: the trade you tune against an ITL SLO. The table
 stops where HBM does: 208 sequences of 2K tokens fit beside the weights with 10% headroom
-(`max_batch_by_memory()`). Under a 20 ms ITL at 4K context the largest batch is 96
+(`max_batch_by_memory()`). At 4K context and a 20 ms ITL the largest batch is 96
 (`best_batch_under_itl()`); HBM capacity allows 104.
 
 ### 3.4 KV reads cap decode intensity
@@ -222,16 +222,15 @@ at c = 0, 440 at c = 128, 854 at c = 256 — and never beyond ~392 tokens
 weights with 10% headroom).
 
 **Per kernel, not per step.** That average blends two kernels with opposite shapes. The weight GEMMs
-multiply a [batch × d] activation by every weight matrix, so their intensity is ≈ batch × 2 / weight
-bytes at any context, and they turn compute-bound from batch 296 (`gemm_crossover_batch()`; FP8 halves the
-bytes and doubles the peak, so also 296). The planning rule "decode turns compute-bound around batch ≈
-ridge" in [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) is exactly right for
-them. Attention reads each sequence's own KV cache and does 2 × (heads / kv_heads) / kv_bytes = 4 FLOP/B
-(bf16 KV) whatever the batch: it is never compute-bound. An engine runs these kernels one after another,
-so the tighter bound is the **sum of per-kernel roofline times** (`decode_split()`), not
-max(ΣF ÷ peak, ΣB ÷ BW), which assumes the GEMMs' math overlaps attention's KV streaming perfectly. The two
-agree while both kernels are memory-bound — every decode row in §3.3–3.6 and §8 — and part once the GEMMs
-cross the ridge:
+multiply a [batch × d] activation by every weight matrix: intensity ≈ batch × 2 / weight bytes at any
+context, compute-bound from batch 296 (`gemm_crossover_batch()`; FP8 halves the bytes and doubles the
+peak, so also 296) — the planning rule "decode turns compute-bound around batch ≈ ridge" in
+[capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) is exactly right for them.
+Attention reads each sequence's own KV cache at 2 × (heads / kv_heads) / kv_bytes = 4 FLOP/B (bf16 KV)
+whatever the batch: never compute-bound. An engine runs the kernels one after another, so the tighter bound
+is the **sum of per-kernel roofline times** (`decode_split()`), not max(ΣF ÷ peak, ΣB ÷ BW), which assumes
+GEMM math overlaps KV streaming perfectly. They agree while both kernels are memory-bound — every decode
+row in §3.3–3.6 and §8 — and part once the GEMMs cross the ridge:
 
 ```
 Llama-3.1-8B, H100, FP8 weights and KV, 2K context, batch 400 (476 fit):
@@ -240,12 +239,11 @@ Llama-3.1-8B, H100, FP8 weights and KV, 2K context, batch 400 (476 fit):
 ```
 
 Past the GEMM crossover, throughput stops rising — 20,978 tokens/s here at any larger batch — and each
-extra sequence only adds KV time; at long context the KV reads are most of the step whatever the batch.
-That is what the KV-cache techniques in layer 04 fight
+extra sequence only adds KV time. That is what the KV-cache techniques in layer 04 fight
 ([KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md),
 [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md)): GQA/MQA/MLA and
 FP8 KV shrink the bytes; paging and prefix caching stop wasting them. It is also the argument for
-attention–FFN disaggregation, which runs the two on separate GPU pools so each can take its own batch.
+attention–FFN disaggregation: the two kernels on separate GPU pools, each at its own batch.
 
 ### 3.5 Quantization moves bytes
 
@@ -285,7 +283,8 @@ high batch the cost per token still falls because the full stream is shared. The
 FLOPs follow *active* parameters while the bytes approach *total* ones — each expert sees only B·k/E of
 the batch — so the batch at which the weight stream reaches the ridge scales with total ÷ active. At
 c = 0 on an H200 (ridge 206; `decode_crossover_batch()`): 207 for Llama-3.1-8B, 754 for Mixtral-8x7B
-(total/active 3.6) and 2,055 for Qwen3-30B-A3B (9.1). Serving large MoE models is therefore about big
+(total/active 3.6) and 2,055 for Qwen3-30B-A3B (9.1, or 9.9 without the input embedding, which is
+gathered, not streamed or multiplied). Serving large MoE models is therefore about big
 batches, and expert parallelism is how systems reach them: attention runs data-parallel on many GPUs and
 all their tokens meet at each expert (see [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md)
 for the sizing side, §5 for the all-to-all it implies).
@@ -409,15 +408,25 @@ decode, batch 1, TP=8 on H100 NVLink:
 prefill, 4,096 tokens, TP=8:
   message   = 4,096 × 8,192 × 2 B = 67 MB               (bandwidth-bound)
   compute   = 73.6 ms per GPU
-  comm/step = 46.2 ms over NVLink 4    vs    387.0 ms over one 400 Gb/s NIC per GPU
+  comm/step = 46.2 ms over NVLink 4    (387.0 ms if every ring hop crossed a 400 Gb/s NIC: 8 GPUs in 8 nodes)
+
+prefill, 4,096 tokens, TP=16 across two 8-GPU nodes      tp_comm_time_across_nodes()
+  compute   = 36.8 ms per GPU
+  comm/step = 74.7 ms with rails (8 NICs per node, each GPU sends its n/8 share over its own NIC)
+              262.6 ms with one NIC per node        426.7 ms as one flat ring through the NICs
 ```
 
 Two lessons. At decode, the count of collectives times the algorithm's latency is the cost — which is why
 engines ship latency-optimized all-reduce kernels and why TP's per-GPU efficiency falls as p grows (batch-1
-tokens per GPU-second: 23.3 at TP=2, 12.9 at TP=8 with a ring). At prefill, bandwidth is the cost, and
-crossing the node boundary multiplies it by the NVLink/NIC ratio: TP=16 across two 8-GPU nodes spends
-~427 ms per 4K-token step in all-reduce against ~37 ms of compute per GPU. Hence the rule from the
-[deployment primer §4](../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
+tokens per GPU-second: 23.3 at TP=2, 12.9 at TP=8 with a ring). At prefill, bandwidth is the cost, and it
+does not shrink with p (a ring's bandwidth term is ~2n/β whatever the degree) while each GPU's compute
+halves every time p doubles: TP=8 already spends 46 ms communicating per 74 ms of compute. Across nodes
+NCCL spreads the traffic over every rail, so each GPU's NIC carries roughly its n/8 share — yet TP=16
+over two nodes still spends ~75 ms per 4K-token step in all-reduce against ~37 ms of compute per GPU:
+111 ms per step against TP=8's 120 ms (no overlap), for 1.9× the GPU-seconds. Without a NIC per GPU it
+is far worse (263 ms with one NIC per node, 427 ms as a flat ring). Past the node the cost is set by its
+NIC aggregate (8 × 50 GB/s with rails) and a larger α, on links that also carry data-, pipeline- and
+expert-parallel traffic. Hence the rule from the [deployment primer §4](../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
 tensor (and expert) parallelism inside the NVLink domain, pipeline and data parallelism across it.
 Expert parallelism's all-to-all has busbw factor (p−1)/p and the same α-β shape.
 
@@ -524,13 +533,14 @@ With stage times assumed as provision 120 s, image 60 s, engine init 90 s (`cold
 | Scenario | Total | Largest stage |
 |---|---|---|
 | new node, one stream | 1,681 s | fetch weights, 84% |
-| new node, parallel + streamed weights | 281 s | provisioning, 43% |
-| warm node, checkpoint in page cache | 97 s | engine init, 93% |
+| new node, parallel + streamed weights | 281 s | provision node, 43% |
+| warm node, checkpoint in page cache | 97 s | engine init + warm-up, 93% |
 
 The lesson is the order of attack: first the weights (parallelism, streaming, a local or regional cache,
 smaller precision), then the node (warm pools, pre-pulled or streamed images — layer 03), then the engine
-(layer 04). A budget turns into a bandwidth requirement: a 70B replica ready in 120 s with 80 s of other
-stages needs 141.1 GB / 40 s = **3.53 GB/s** of fetch, i.e. 36 parallel streams at 0.1 GB/s. Cold start is
+(layer 04). A budget turns into a bandwidth requirement: a 70B replica that must be ready in 120 s on a
+warm node pool, with a 20 s image pull and 60 s of engine init (assumed), leaves 40 s for streamed weights:
+141.1 GB / 40 s = **3.53 GB/s** of fetch, i.e. 36 parallel streams at 0.1 GB/s. Cold start is
 also why autoscaling on LLM replicas needs headroom and scale-ahead signals (layer 05).
 
 ---
@@ -567,14 +577,20 @@ checkpointing and, per failure, about τ/2 of recomputed work plus a restart R (
 waste ≈ δ/τ + (τ/2 + R)/M        minimised at   τ* = √(2 δ M)   (Young, 1974)
 at τ*: waste = √(2δ/M) + R/M       Daly (2006) adds higher-order terms: young_daly_interval(..., higher_order=True)
 
-16,384 GPUs (M = 3.09 h = 11,135 s):
+restart cost R = 0 (ignored) — 16,384 GPUs (M = 3.09 h = 11,135 s):
    δ = 60 s → τ* = 19.3 min (Daly 18.6), waste 10.4%    (checkpointing hourly: 17.8%)
    δ = 10 s → τ* =  7.9 min,             waste  4.2%    (hourly: 16.4%)
 4,096 GPUs, δ = 30 s → τ* = 27.2 min, waste 3.7%
+
+with an assumed restart R = 10 min (reschedule, reload, re-initialise): R/M = 5.4% more
+   δ = 60 s → waste 15.8%        δ = 10 s → waste 9.6%
 ```
 
-Waste scales as √δ, so a 4× faster checkpoint halves it — the case for asynchronous checkpointing to
-host memory and local disk, then to storage in the background.
+Waste scales as √δ, so a 4× faster checkpoint halves that part — the case for asynchronous checkpointing to
+host memory and local disk, then to storage in the background. Restart time adds R/M on top and does not
+move τ*: at this failure rate a 10-minute restart (5.4%) costs more than everything a 10 s checkpoint
+wastes (4.2%), so fast restart — hot spare nodes, checkpoints replicated in peer memory, pre-initialised
+jobs — is a lever alongside fast checkpoints.
 
 ### 7.3 Inference: replicas are failure domains
 
@@ -608,20 +624,24 @@ $/M tokens = ($/GPU-hr × GPUs) / (tokens/s × 3600 × utilisation) × 10⁶    
 
 With decode throughput from §3 (an upper bound, so these are lower bounds on cost) and GCP list prices
 from the research snapshot — L4 ~$0.70/hr, H100 ~$11/GPU-hr on demand, ~$3.7/GPU-hr Spot, us-central1,
-September 2026 (verify; current prices in [`COMPUTE.md`](../../COMPUTE.md)) — Llama-3.1-8B at 2K context:
+September 2026 (verify; current prices in [`COMPUTE.md`](../../COMPUTE.md)) — Llama-3.1-8B at 2K context.
+One rule sets every batch: the largest that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
+HBM (`best_batch_under_itl()`):
 
-| Option | Batch | tok/s | Per user | $/M output tokens at 100% | at 60% |
-|---|---|---|---|---|---|
-| L4 on demand, bf16 | 20 (HBM-bound) | 294 | 14.7 | $0.660 | $1.10 |
-| H100 on demand, bf16 | 64 | 6,659 | 104 | $0.459 | $0.765 |
-| H100 Spot, bf16 | 64 | 6,659 | 104 | $0.154 | $0.257 |
-| H100 on demand, FP8 | 128 | 17,365 | 136 | $0.176 | $0.293 |
+| Option | Batch | ITL | tok/s | Per user | $/M output tokens at 100% | at 60% |
+|---|---|---|---|---|---|---|
+| H100 on demand, bf16 | 68 (ITL-bound) | 9.93 ms | 6,847 | 101 | $0.446 | $0.744 |
+| H100 Spot, bf16 | 68 (ITL-bound) | 9.93 ms | 6,847 | 101 | $0.150 | $0.250 |
+| H100 on demand, FP8 | 193 (ITL-bound) | 9.98 ms | 19,345 | 100 | $0.158 | $0.263 |
+| L4 on demand, bf16 — misses the SLO | 20 (HBM-bound) | 67.9 ms | 294 | 14.7 | $0.660 | $1.10 |
 
-The expensive GPU gives the cheaper token here because bandwidth and capacity (batch 64 vs 20) grow faster
-than price; FP8 cuts cost ~2.6× more by halving bytes and doubling the batch that fits. Prefill tokens are
-cheaper still: the same H100 ingests a 2K prompt at an ideal ~68,000 tokens/s, an order of magnitude
-above decode — the root of the input/output price asymmetry of hosted APIs, and of why prefix caching
-(skipping prefill) is a cost lever for agents.
+The L4 cannot meet the SLO at any batch — at batch 1 it needs 50.9 ms to stream the weights — so its row
+sits at its HBM limit, a slower product. Even so the H100 gives the cheaper token: its bandwidth and
+capacity together deliver 23× the L4's tokens/s for 15.7× the price. FP8 then cuts the H100's cost another
+2.8×: exactly 2.0× from halving every byte, and 1.4× more from the bigger batch (193 vs 68) that the same
+ITL allows. Prefill tokens are cheaper still: the same H100 ingests a 2K prompt at an ideal ~68,000
+tokens/s, an order of magnitude above decode — the root of the input/output price asymmetry of hosted APIs,
+and of why prefix caching (skipping prefill) is a cost lever for agents.
 
 ### 8.2 Utilisation
 
@@ -680,7 +700,10 @@ size of the domain in parentheses. Generated by `roofline.specs.table()`; **ever
 
 Derived entries: the RTX PRO 6000 tensor rates are halved down from its 4 PFLOPS sparse-FP4 headline;
 Ironwood's bf16 is assumed half its 4,614 TFLOPS fp8; B200 is the HGX board (192 GB physical, 180 GB
-usable); FP4 on the MI355X is MXFP4. The T4 has no bf16, tf32 or fp8 paths.
+usable); FP4 on the MI355X is MXFP4. The T4 has no bf16, tf32 or fp8 paths. Announced or ramping but
+not in the catalogue: NVIDIA Vera Rubin and AMD's MI400 series — see the
+[deployment primer §6](../gpu-deployment/gpu-deployment-primer.md#6-the-rack-is-the-new-unit-of-deployment)
+(verify).
 
 How to read it, for inference:
 
@@ -717,7 +740,8 @@ GPU families (September 2026, verify): **G2** (L4, e.g. `g2-standard-4` = 1 L4, 
 networking); **A3 Ultra** (H200) and **A4** (B200, NVLink 1.8 TB/s per GPU), **A4X** (GB200 NVL72) and
 **A4X Max** (GB300 NVL72), which use GPUDirect RDMA over ConnectX-7 NICs on a rail-aligned network; **G4**
 (RTX PRO 6000 Blackwell, 96 GB). **Cloud Run** offers L4 and RTX PRO 6000 GPUs with per-second billing and
-scale to zero. **TPUs** (v5e, v6e, TPU7x "Ironwood", GA April 2026) are used through GKE.
+scale to zero. **TPUs**: v5e and v6e as Cloud TPU VMs or through GKE; TPU7x "Ironwood" (GA April 2026)
+through GKE (verify).
 
 Obtainability matters as much as price. **On-demand** is simplest and scarcest for large parts. **Spot** is
 60–91% cheaper and can be preempted at any time — fine for benchmarks and stateless replicas with headroom.
@@ -746,14 +770,15 @@ monthly: the maintained list is [`COMPUTE.md`](../../COMPUTE.md); the learning o
 bandwidth and capacity, and the per-direction link bandwidth — and one ratio, the ridge: 295 FLOP per
 byte on an H100. An LLM step streams the weights once, so its intensity is about its token count. Prefill
 of a 2K prompt is compute-bound: TTFT is FLOPs over peak, ~30 ms ideal for an 8B model. Decode is
-memory-bound: time per token is bytes over bandwidth, 4.5 ms at batch 1. Batching amortizes the weights,
-but each sequence's KV reads grow with context as fast as its FLOPs, so at 4K context decode is capped
-near 32 FLOP/B and HBM capacity limits the batch first. So my levers are bytes: FP8 weights and KV,
-GQA, paging, prefix caching. Across GPUs I use α-β: TP makes 160 all-reduces per step for a 70B model,
-latency-bound at decode and bandwidth-bound at prefill, where one NIC is 9× slower than NVLink — so TP
-stays in the NVLink domain. Then the fleet: cold start is bytes over the slowest tier, failure rates add
-so large jobs checkpoint every √(2δM) and serving carries spare replicas, and $/M tokens is $/GPU-hr over
-tokens/s × utilisation."
+memory-bound: time per token is bytes over bandwidth, 4.5 ms at batch 1. Batching amortizes the weights —
+the GEMMs reach the ridge near batch 300 — but attention reads each sequence's KV cache at a few FLOP per
+byte, so at 4K context the whole step averages at most 32 FLOP/B and HBM capacity limits the batch first.
+So my levers are bytes: FP8 weights and KV, GQA, paging, prefix caching. Across GPUs I use α-β: TP makes
+160 all-reduces per step for a 70B model, latency-bound at decode and bandwidth-bound at prefill; that
+cost does not shrink as TP grows while each GPU's compute does, and past the node each GPU's share rides
+a NIC 9× slower than NVLink — so TP stays in the NVLink domain. Then the fleet: cold start is bytes over
+the slowest tier, failure rates add so large jobs checkpoint every √(2δM) and serving carries spare
+replicas, and $/M tokens is $/GPU-hr over tokens/s × utilisation."
 
 **Drill.**
 
@@ -761,9 +786,12 @@ tokens/s × utilisation."
    is memory-bound; idle tensor cores are expected. The B200's gain for decode is its bandwidth (8 vs 3.35 TB/s,
    2.4×) and capacity (bigger batch), not its 2.3× bf16 peak. Measure achieved HBM bandwidth (DCGM's
    DRAM-active, not the "GPU utilisation" counter) and compare $/M tokens.
-2. *Why not TP=16 across two 8-GPU nodes for a model that does not fit in one?* — The all-reduce then runs
-   at NIC speed: ~427 ms of communication per 4K-token prefill step against ~37 ms of compute per GPU. Fit
-   it in one NVLink domain (FP8, an H200/B200 node, an NVL72 rack) or use PP=2 × TP=8.
+2. *Why not TP=16 across two 8-GPU nodes for a model that does not fit in one?* — Communication then
+   outgrows compute. Priced for a 70B model: even on rails, with the traffic spread over every NIC, a
+   4K-token prefill step spends ~75 ms in all-reduce against ~37 ms of compute per GPU, so twice TP=8's
+   GPUs barely shorten the step; with one NIC per node it is 263 ms. Fit it in one NVLink domain (FP8, an
+   H200/B200 node, an NVL72 rack) or use PP=2 × TP=8, which keeps the all-reduces on NVLink and sends one
+   activation across the node per step.
 3. *Will FP8 double decode throughput?* — Only if every byte halves: FP8 weights *and* FP8 KV give exactly 2×
    in the memory-bound regime and roughly double the batch that fits. Weight-only 8-bit gives ~2× at batch 1
    but 1.3× at batch 64 × 2K context, where KV is half the bytes.
@@ -773,7 +801,8 @@ tokens/s × utilisation."
    engine init.
 5. *How often should a 16K-GPU job checkpoint, and what would make it cheaper?* — At the Llama 3 failure
    rate the job is interrupted every ~3.1 h; with a 60 s checkpoint, every √(2 × 60 × 11,135) s ≈ 19 min,
-   losing ~10%. Asynchronous checkpoints (10 s) cut the interval to ~8 min and the waste to ~4%.
+   losing ~10% plus R/M for restarts (~16% with a 10-minute restart). Asynchronous checkpoints (10 s) cut
+   the interval to ~8 min and the checkpoint waste to ~4%; then the restart dominates, so make it fast too.
 6. *We need 8 TP=8 replicas up at 99.9%. How many do we deploy, and could we need fewer GPUs?* — Ten
    (80 GPUs) at a 48 h MTTR. Smaller failure domains need fewer spares: if FP8 lets the model fit on TP=4,
    18 replicas (72 GPUs) deliver the same capacity at the same target.
@@ -849,8 +878,8 @@ tokens/s × utilisation."
 
 Product facts in this primer and in `roofline-core/roofline/specs.py`, as of September 2026:
 
-- Every entry of the §9 table: dense peaks per precision, memory capacity and bandwidth, scale-up bandwidth
-  and domain size, TDP. Especially the derived ones — RTX PRO 6000 tensor rates (from its sparse FP4
+- Every entry of the §9 table, and the status of the parts outside it (Vera Rubin, MI400 series): dense
+  peaks per precision, memory capacity and bandwidth, scale-up bandwidth and domain size, TDP. Especially the derived ones — RTX PRO 6000 tensor rates (from its sparse FP4
   headline), TPU7x bf16 (assumed half of fp8), B200 usable memory (180 of 192 GB), GB200 memory (186 GB),
   GB300 TDP, MI355X xGMI bandwidth — and the semantics of TPU ICI figures.
 - SM counts and boost clocks behind `peak_from_clock()` (T4 40 / 1.59 GHz, L4 58 / 2.04 GHz, A100 108 /
@@ -867,3 +896,5 @@ Product facts in this primer and in `roofline-core/roofline/specs.py`, as of Sep
   RunPod, Lambda, Modal offerings — maintained in `COMPUTE.md`.
 - The Run:ai Model Streamer as a vLLM load format; loader behaviour of safetensors.
 - The Llama 3 interruption figures (419 unexpected in 54 days on 16,384 GPUs; ~78% hardware).
+- Assumptions, not product facts (replace with your own): α values, storage tier bandwidths, cold-start
+  stage times, the 10-minute restart, the 48 h MTTR, the server price and opex.

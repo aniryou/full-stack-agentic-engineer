@@ -149,9 +149,11 @@ def tp_comm_time(model: ModelConfig, tokens: int, tp: int, link: Link,
 def tp_comm_time_across_nodes(model: ModelConfig, tokens: int, gpus_per_node: int, nodes: int,
                               intra: Link, inter: Link, nics_per_node: int | None = None,
                               act_bytes: float = 2) -> float:
-    """TP = gpus_per_node x nodes: every all-reduce runs hierarchically, as NCCL does.
+    """TP = gpus_per_node x nodes, each all-reduce modelled as hierarchical.
 
-    Reduce-scatter inside each node over `intra`, all-reduce each GPU's n/g share across
+    On rails NCCL spreads a cross-node all-reduce over every NIC (a ring channel per NIC,
+    or its tree algorithm), so each NIC carries about an n/g share; the model: reduce-scatter
+    inside each node over `intra`, all-reduce each GPU's n/g share across
     nodes over `inter` (its own NIC with rails; a shared one with fewer NICs), all-gather
     inside the node. 70B, 4K-token prefill, TP=16 over two H100 nodes with 8 x 400 Gb/s
     NICs each: ~75 ms per step, against ~37 ms of compute per GPU.

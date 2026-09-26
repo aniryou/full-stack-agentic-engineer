@@ -62,6 +62,8 @@ for gpu in ("T4", "A100", "L4", "H100", "B200", "RTX 5090"):
 # * SASS `sm_XY`: same major **and** device minor >= Y. With the `a` suffix: exactly X.Y.
 # * PTX `compute_XY`: device CC >= X.Y as a (major, minor) pair, across majors too. With `a`:
 #   exactly X.Y.
+# * `f` (family-specific, CUDA 12.9+; verify): SASS and PTX alike stay inside the family, the same
+#   major with device minor >= Y. `sm_100f` runs on 10.0 and 10.3, never on 12.0.
 
 # %% exercise
 def _parse(target):
@@ -83,18 +85,22 @@ def ptx_runs(target, cc):
     ### BEGIN SOLUTION
     (major, minor), suffix = _parse(target)
     dev = tuple(int(x) for x in cc.split("."))
-    return dev == (major, minor) if suffix == "a" else dev >= (major, minor)
+    if suffix == "a":
+        return dev == (major, minor)
+    if suffix == "f":
+        return dev[0] == major and dev[1] >= minor
+    return dev >= (major, minor)
     ### END SOLUTION
 
 # %% check
 ccs = ["7.0", "7.5", "8.0", "8.6", "8.9", "9.0", "10.0", "10.3", "12.0"]
-for t in ["sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_120"]:
+for t in ["sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_100f", "sm_120"]:
     for cc in ccs:
         assert sass_runs(t, cc) == compat.sass_runs_on(t, cc), (t, cc)
-for t in ["compute_75", "compute_80", "compute_90", "compute_90a", "compute_100", "compute_120"]:
+for t in ["compute_75", "compute_80", "compute_90", "compute_90a", "compute_100", "compute_100f", "compute_120"]:
     for cc in ccs:
         assert ptx_runs(t, cc) == compat.ptx_jits_to(t, cc), (t, cc)
-print("✅ SASS: within a major, upward only. PTX: upward across majors. 'a' targets: one exact GPU")
+print("✅ SASS: within a major, upward only. PTX: upward across majors. 'a': one exact GPU. 'f': one family")
 
 # %% [markdown]
 # ## Exercise 4.2: predict the verdict
@@ -102,6 +108,8 @@ print("✅ SASS: within a major, upward only. PTX: upward across majors. 'a' tar
 # For each scenario, predict `None` if it runs or the CUDA error **code** it fails with
 # (35 insufficient driver, 100 no device, 209 no kernel image, 222 unsupported PTX,
 # 803 driver mismatch, 804 forward compatibility on unsupported hardware). Reason it out first.
+# Forward compatibility also needs a kernel-driver branch the cuda-compat package supports:
+# `compat.COMPAT_BRANCHES` lists them (dated, verify).
 
 # %% exercise
 scenarios = {
@@ -112,6 +120,7 @@ scenarios = {
     "e": dict(app_cuda="12.8", driver="570.86.10", gpu="T4", targets="8.0 9.0+PTX"),
     "f": dict(app_cuda="13.0", driver="535.183.01", gpu="L4", targets="8.9", compat_cuda="13.0"),
     "g": dict(app_cuda="13.0", driver="535.183.01", gpu="RTX 4090", targets="8.9", compat_cuda="13.0"),
+    "h": dict(app_cuda="13.0", driver="560.35.03", gpu="H100", targets="9.0", compat_cuda="13.0"),
 }
 predicted = {k: "?" for k in scenarios}
 ### BEGIN SOLUTION
@@ -120,15 +129,16 @@ predicted.update(a=None,    # driver is new enough, sm_89 SASS
                  c=222,     # same, but PTX only: the 550 JIT cannot read 12.6's PTX
                  d=35,      # a new major on a 12.8 driver, without compat
                  e=209,     # T4 is 7.5: no sm_7x SASS, and compute_90 PTX cannot go down to 7.5
-                 f=None,    # forward compatibility on a data-center GPU
-                 g=804)     # forward compatibility on GeForce is refused
+                 f=None,    # forward compatibility on a data-center GPU; R535 is a supported branch
+                 g=804,     # forward compatibility on GeForce is refused
+                 h=803)     # R560 is not among the 13.0 compat package's branches
 ### END SOLUTION
 
 # %% check
 for k, sc in scenarios.items():
     v = compat.check(**sc)
     assert predicted[k] == v.code, f"scenario {k}: you said {predicted[k]}, the engine says {v.code}\n{v}"
-print("✅ all seven verdicts right. Scenario e is the classic: a wheel with no build for your GPU generation")
+print("✅ all eight verdicts right. Scenario e is the classic: a wheel with no build for your GPU generation")
 
 # %% [markdown]
 # ## Exercise 4.3: choose the CUDA version for a fleet's base image
@@ -203,7 +213,7 @@ diagnosis = {k: "?" for k in stories}
 ### BEGIN SOLUTION
 diagnosis.update({1: 100,    # no device injected
                   2: 803,    # user-mode driver in the image != host kernel module
-                  3: None,   # forward compat on a data-center GPU
+                  3: None,   # forward compat on a data-center GPU, over a supported branch (R535)
                   4: 804,    # forward compat refused on GeForce
                   5: None})  # sm_86 SASS runs on 8.9; 12.8 on a 12.2 driver by minor-version compat
 ### END SOLUTION

@@ -97,3 +97,55 @@ def test_preemption_counts_victims_before_summing_priorities():
     y = [Pod("y0", priority=0, started=3)]
     # plain sums would favour x (-5 < 0); the 2**31 offset makes the single victim on y cheaper
     assert pick_preemption_node({"x": x, "y": y}) == "y"
+
+
+def test_reprieve_goes_in_order_of_importance():
+    c = Cluster([gpu_node("x", 8)])
+    for name, g, prio in [("old-low", 4, 0), ("mid", 2, 50), ("new-low", 2, 0)]:
+        c.bind(gpu_pod(name, g, priority=prio), "x")
+    # all three removed; mid (priority 50) goes back first, then old-low (earlier start) does not fit
+    # back, then new-low does: the victim is old-low, not the newer pod of the same priority
+    assert [v.name for v in select_victims(gpu_pod("want", 4, priority=100), c.nodes["x"])] == ["old-low"]
+
+
+def test_preemption_tie_breaks_on_the_latest_start_of_the_top_victims():
+    c = Cluster([gpu_node("a", 8), gpu_node("b", 8)])
+    c.bind(gpu_pod("started-first", 8), "a")
+    c.bind(gpu_pod("started-later", 8), "b")
+    d = Scheduler(c).schedule_one(gpu_pod("urgent", 8, priority=10))
+    assert d.node == "b" and [v.name for v in d.victims] == ["started-later"]   # the younger pod loses less work
+
+
+def test_preemption_is_not_helpful_where_a_non_resource_filter_fails():
+    c = Cluster([gpu_node("g", 8)])
+    c.bind(gpu_pod("low", 8, priority=0), "g")
+    no_toleration = Pod("p", {GPU: 8, "cpu": 1000, "memory": 1024}, priority=100)
+    d = Scheduler(c).schedule_one(no_toleration)
+    assert d.node is None and d.message == (
+        "0/1 nodes are available: 1 node(s) had untolerated taint(s). "
+        "preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.")
+
+
+def test_stranded_gpus_are_the_remainder_per_node():
+    c = Cluster([gpu_node("a", 8), gpu_node("b", 8)])
+    c.bind(gpu_pod("two", 2), "a")                                 # a: 6 free -> one 4-GPU pod + 2 stranded
+    assert stranded_gpus(c, 4) == 2 + 0 and fragmentation(c, 4) == pytest.approx(2 / 14)
+
+
+def test_only_a_gpu_weighted_score_keeps_whole_nodes_free_when_cpu_points_elsewhere():
+    """Notebook 02, exercise 2.3: a CPU-heavy non-GPU pod on h0 pulls cpu/memory packing toward h0."""
+    def replay(strategy, resources):
+        c = make_cluster(hosts=4)
+        c.bind(Pod("data-prep", {"cpu": 48000, "memory": 393216},
+                   tolerations=[Toleration(GPU, "Exists", effect="NoSchedule")]), "b0-s0-h0")
+        c.bind(gpu_pod("embed-0", 4), "b0-s0-h1")
+        c.bind(gpu_pod("embed-1", 4), "b0-s0-h2")
+        s = Scheduler(c, strategy=strategy, resources=resources)
+        s.submit(*[gpu_pod(f"infer-{i}", 1) for i in range(8)])
+        s.run()
+        return [s.schedule_one(gpu_pod(f"tune-{i}", 8)).node for i in range(2)]
+    cpu_mem = (("cpu", 1), ("memory", 1))
+    assert replay("LeastAllocated", cpu_mem) == ["b0-s0-h0", None]
+    assert replay("MostAllocated", cpu_mem) == ["b0-s0-h3", None]
+    assert replay("MostAllocated", cpu_mem + ((GPU, 1),)) == ["b0-s0-h3", None]      # weight 1 is not enough
+    assert replay("MostAllocated", cpu_mem + ((GPU, 5),)) == ["b0-s0-h0", "b0-s0-h3"]

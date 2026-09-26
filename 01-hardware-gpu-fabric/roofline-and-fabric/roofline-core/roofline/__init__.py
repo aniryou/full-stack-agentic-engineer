@@ -8,8 +8,8 @@
     step.bound, step.time        # ('memory', 0.0045...)
 
 Seven small modules, standard library only. Read them in this order: specs,
-roofline, llm, fabric, storage, reliability, cost. Every number the topic's
-PRIMER.md quotes is computed by a function here and pinned by a test.
+roofline, llm, fabric, storage, reliability, cost. Every computed number the
+topic's PRIMER.md quotes comes from a function here and is pinned by a test.
 """
 from . import cost, fabric, llm, reliability, roofline, specs, storage
 from .roofline import attainable, ridge_point, time_kernel

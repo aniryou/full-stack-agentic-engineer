@@ -79,7 +79,9 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 #
 # One L4 node pool at zero nodes, a 1-hour inference job arrives at t = 0. The node takes 300 s
 # (illustrative) from creation to *allocatable GPUs*; the autoscaler removes a node after it has
-# been unneeded for 600 s (its default `--scale-down-unneeded-time`).
+# been unneeded for 600 s (its default `--scale-down-unneeded-time`), and not within 600 s of the last
+# scale-up (`--scale-down-delay-after-add`). `simulate()` models both; here the only scale-up is at
+# t = 0, so the unneeded time is what binds. (Not modelled: the utilisation threshold, several pools.)
 
 # %%
 l4 = NodePool("l4", gpus_per_node=1, max_nodes=4, boot_s=300, price_per_node_hr=0.70)   # illustrative price
@@ -101,7 +103,7 @@ print(f"billed {run['node_h']:.2f} node-h, busy {run['busy_node_h']:.2f} node-h,
 # predicted_node_h = ...      node-hours billed
 ### BEGIN SOLUTION
 predicted_start_s = 420                        # waits for the node to boot
-predicted_removed_s = 420 + 7200 + 600         # finish + unneeded time
+predicted_removed_s = 420 + 7200 + 600         # finish + unneeded time (the delay after the t=0 add is long over)
 predicted_node_h = predicted_removed_s / 3600  # billed from creation (t=0) to removal
 ### END SOLUTION
 
@@ -181,10 +183,14 @@ ordinary = provision(NodePool("a3", **kw), 16, tick_s=60, seed=0)
 queued = provision(NodePool("a3-queued", queued=True, **kw), 16, tick_s=60, seed=0)
 for name, p in (("ordinary", ordinary), ("queued", queued)):
     print(f"{name:>8}: gang starts at {p['gang_start_s'] / 3600:.2f} h, billed while waiting "
-          f"{p['waiting_node_h']:5.1f} node-h = {p['waiting_gpu_h']:6.1f} GPU-h")
+          f"{p['waiting_node_h']:5.1f} node-h = {p['waiting_gpu_h']:6.1f} GPU-h   (one run, seed 0)")
+runs = [provision(NodePool("a3", **kw), 16, tick_s=60, seed=seed) for seed in range(200)]
+print(f"ordinary, mean of 200 seeds: gang starts at {sum(r['gang_start_s'] for r in runs) / 200 / 3600:.2f} h, "
+      f"billed while waiting {sum(r['waiting_node_h'] for r in runs) / 200:.1f} node-h")
 
 # %% [markdown]
-# Same capacity, same start time in this model — the difference is who pays for the wait. There is
+# One run is one draw of a random process, so look at the mean too. Same capacity, same start time in
+# this model — the difference is who pays for the wait (the queued pool pays only the boot). There is
 # a second failure mode queued provisioning prevents: an ordinary pool whose `max_nodes` is below
 # the gang size scales up *part* of the gang, and those nodes idle forever.
 
@@ -253,8 +259,9 @@ print("✅", capacity)
 # shows where each shows up in node and pod events).
 
 # %%
-cold = startup_latency(node_s=150, driver_s=90, image_gb=12, pull_gbps=0.25, weights_gb=16, load_gbps=0.5, warmup_s=60)
-warm = startup_latency(image_gb=12, pull_gbps=2.0, weights_gb=16, load_gbps=4.0, warmup_s=60)
+# sizes in GB, rates in GB/s (gigabytes: a 10 Gbit/s link moves at most 1.25 GB/s)
+cold = startup_latency(node_s=150, driver_s=90, image_gb=12, pull_GBps=0.25, weights_gb=16, load_GBps=0.5, warmup_s=60)
+warm = startup_latency(image_gb=12, pull_GBps=2.0, weights_gb=16, load_GBps=4.0, warmup_s=60)
 for name, s in (("cold node, plain pull + download", cold), ("warm node, streamed image + fast weights", warm)):
     print(f"{name:<42}", {k: round(v) for k, v in s.items()})
 

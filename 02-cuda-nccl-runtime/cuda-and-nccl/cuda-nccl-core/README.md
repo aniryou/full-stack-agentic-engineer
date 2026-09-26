@@ -6,8 +6,8 @@ win, how ring, tree, two-shot and in-switch collectives move bytes (with their �
 busbw), whether a CUDA binary will run under a given driver and GPU, how MIG, MPS and time-slicing share a
 GPU, and why "GPU util" misleads. Five fill-in notebooks. **Tier T0**: no GPU, no network, no Docker.
 
-This is the minimal core of the [`cuda-and-nccl`](../README.md) topic, and every number in its
-[PRIMER](../PRIMER.md) is computed here. The detailed lab, [`cuda-nccl-lab`](../cuda-nccl-lab/), runs the same
+This is the minimal core of the [`cuda-and-nccl`](../README.md) topic, and every formula and worked number in its
+[PRIMER](../PRIMER.md) is computed here (product facts are dated and marked *verify*). The detailed lab, [`cuda-nccl-lab`](../cuda-nccl-lab/), runs the same
 ideas on real hardware: Numba kernels, torch.distributed and NCCL, nccl-tests, containers and DCGM on GKE.
 
 ## Quick start
@@ -15,7 +15,7 @@ ideas on real hardware: Numba kernels, torch.distributed and NCCL, nccl-tests, c
 ```bash
 cd cuda-nccl-core
 python3 -m pip install -r requirements.txt   # numpy + the notebook/test tools
-python3 -m pytest -q                          # 111 tests, well under a second
+python3 -m pytest -q                          # 128 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -39,12 +39,12 @@ print(compat.check("12.4", "535.183.01", gpu="H100", targets="8.0+PTX"))  # fail
 | `gpusim/simt.py` | ~120 | a warp is the unit: sectors per request (coalescing), bank conflicts, divergence cost |
 | `gpusim/occupancy.py` | ~130 | resident warps per SM and what limits them (the `cuda_occupancy.h` rules); waves; Little's law |
 | `gpusim/tiling.py` | ~120 | bytes and launches: tiled GEMM traffic (with a simulated tiled kernel), fused and online softmax, CUDA Graphs vs eager |
-| `gpusim/collectives.py` | ~390 | ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces; α-β costs; algbw/busbw; TP and EP message sizes; finding the call that hangs |
-| `gpusim/compat.py` | ~230 | driver ↔ CUDA runtime ↔ compute capability: SASS vs PTX, minor-version and forward compatibility, the error each failure produces, what a container gets from the host |
+| `gpusim/collectives.py` | ~420 | ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces; α-β costs; algbw/busbw; TP and EP message sizes; finding the call that hangs |
+| `gpusim/compat.py` | ~270 | driver ↔ CUDA runtime ↔ compute capability: SASS vs PTX, minor-version and forward compatibility (with the kernel-driver branches each `cuda-compat` supports), the error each failure produces, what a container gets from the host |
 | `gpusim/sharing.py` | ~150 | MIG profile placement (a packer and a first-fit that fragments), time-slicing latency, MPS vs MIG vs turns |
 | `gpusim/health.py` | ~130 | GPU util vs SM active, clock-event (throttle) bits, XID triage by owner, alert severities |
 
-About 850 lines of code; the rest is docstrings. Each module opens with the one idea it teaches. Version
+About 900 lines of code; the rest is docstrings and comments. Each module opens with the one idea it teaches. Version
 tables, per-SM limits and MIG profiles are dated September 2026 and marked *verify* in the code and in the
 primer's Verify list. Every output is **simulated**: a model of documented NVIDIA behaviour, not a measurement.
 
@@ -58,7 +58,8 @@ Solutions are in `solutions/`.
    pick the padding that fixes a transpose, and measure SIMT efficiency of ragged loops.
 2. **`02_tiling_fusion_and_occupancy`**: the tiled-GEMM traffic formula, the register limit by hand, choosing a
    GEMM tile for an L4, online softmax, and when a decode step is launch-bound (CUDA Graphs).
-3. **`03_collectives_from_scratch`**: write ring reduce-scatter and all-gather yourself, the α-β time and
+3. **`03_collectives_from_scratch`**: write ring reduce-scatter and all-gather yourself (the check replays your
+   message schedule), the α-β time and
    crossover, busbw like nccl-tests, the tensor-parallel decode all-reduce you would ship, and finding a hang.
 4. **`04_compatibility_and_containers`**: SASS/PTX rules, predicting error codes, choosing a fleet's CUDA
    version, and five container failure stories.

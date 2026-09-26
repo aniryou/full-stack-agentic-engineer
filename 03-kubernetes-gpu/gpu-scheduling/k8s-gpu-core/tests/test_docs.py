@@ -5,11 +5,14 @@ import re
 import pytest
 
 from gpusched import (GPU, ClusterQueue, Job, Kueue, NodePool, Quota, Scheduler, best_fit, expected_runtime_h,
-                      gang_survival, gpu_node, gpu_pod, least_allocated, least_free_capacity, make_cluster,
-                      most_allocated, provision, simulate, startup_latency, stranded_gpus)
+                      gang_survival, gpu_node, gpu_pod, interleave, least_allocated, least_free_capacity,
+                      make_cluster, most_allocated, place_gang, provision, simulate, startup_latency, stranded_gpus)
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PRIMER = (ROOT.parent / "PRIMER.md").read_text(encoding="utf-8")
+PRIMER_PATH = ROOT.parent / "PRIMER.md"
+if not PRIMER_PATH.exists():          # the core copied out of the repo: skip the doc checks, run the rest
+    pytest.skip(f"{PRIMER_PATH} not found (these tests check the primer next to this core)", allow_module_level=True)
+PRIMER = PRIMER_PATH.read_text(encoding="utf-8")
 SOURCES = [PRIMER] + [p.read_text(encoding="utf-8") for p in sorted((ROOT / "notebooks_src").glob("*.py"))]
 
 # apiVersion/kind pairs checked against upstream types and FACTS.md on 2026-09-26
@@ -59,6 +62,27 @@ def test_primer_numbers_are_the_simulators_numbers():
     rack = {"n1": 3, "n2": 3, "n3": 2, "n4": 1}
     assert list(best_fit(rack, 7).values()) == [3, 3, 1] and list(least_free_capacity(rack, 7).values()) == [1, 2, 3, 1]
 
+    deadlock = make_cluster(hosts=3, gpus=4)
+    s = Scheduler(deadlock)
+    s.submit(*interleave([gpu_pod(f"a{i}", 2) for i in range(4)], [gpu_pod(f"b{i}", 2) for i in range(4)]))
+    s.run()
+    layout = "   ".join(f"{n.name[-2:]}: " + " ".join(p.name for p in n.pods) for n in deadlock.nodes.values())
+    assert layout in PRIMER                                            # 4.1's diagram
+
+    fleet = make_cluster(blocks=2, subblocks=2, hosts=4)               # 5.2's worked placement
+    for host, g in {"b0-s0-h0": 8, "b0-s0-h1": 8, "b0-s0-h2": 8, "b0-s1-h0": 8, "b1-s0-h0": 8, "b1-s0-h1": 1}.items():
+        fleet.bind(gpu_pod(f"x-{host}", g), host)
+
+    def per_subblock(placement):
+        counts = {}
+        for node in placement.values():
+            sb = fleet.nodes[node].topology[1]
+            counts[sb] = counts.get(sb, 0) + 1
+        return " + ".join(f"{k} in {sb}" for sb, k in sorted(counts.items()))
+    five = place_gang(fleet, [gpu_pod(f"k{i}", 8) for i in range(5)], preferred="subblock")
+    three = place_gang(fleet, [gpu_pod(f"u{i}", 8) for i in range(3)])
+    assert f"gives {per_subblock(five)} |" in PRIMER and f"so {per_subblock(three)} —" in PRIMER
+
     def pair(a_borrow=None, b_lend=None):
         a = ClusterQueue("a", {"f": {"cpu": Quota(9, borrowing_limit=a_borrow)}}, cohort="ab")
         b = ClusterQueue("b", {"f": {"cpu": Quota(12, lending_limit=b_lend)}}, cohort="ab")
@@ -78,7 +102,12 @@ def test_primer_numbers_are_the_simulators_numbers():
     assert f"{ordinary['gang_start_s'] / 3600:.2f} h" in PRIMER
     assert f"**{ordinary['waiting_node_h']:.1f} node-hours ({ordinary['waiting_gpu_h']:.0f} GPU-hours)**" in PRIMER
     assert f"**{queued['waiting_node_h']:.1f}**" in PRIMER
+    runs = [provision(NodePool("a", **kw), 16, tick_s=60, seed=seed) for seed in range(200)]
+    mean_node_h = sum(r["waiting_node_h"] for r in runs) / len(runs)
+    mean_start_h = sum(r["gang_start_s"] for r in runs) / len(runs) / 3600
+    assert f"over 200 seeds the ordinary pool averages **{mean_node_h:.1f} node-hours** and a" in PRIMER
+    assert f"{mean_start_h:.2f} h start" in PRIMER
 
-    cold = startup_latency(node_s=150, driver_s=90, image_gb=12, pull_gbps=0.25, weights_gb=16, load_gbps=0.5, warmup_s=60)
-    warm = startup_latency(image_gb=12, pull_gbps=2.0, weights_gb=16, load_gbps=4.0, warmup_s=60)
+    cold = startup_latency(node_s=150, driver_s=90, image_gb=12, pull_GBps=0.25, weights_gb=16, load_GBps=0.5, warmup_s=60)
+    warm = startup_latency(image_gb=12, pull_GBps=2.0, weights_gb=16, load_GBps=4.0, warmup_s=60)
     assert f"**{cold['total']:.0f} s**" in PRIMER and f"**{warm['total']:.0f} s**" in PRIMER

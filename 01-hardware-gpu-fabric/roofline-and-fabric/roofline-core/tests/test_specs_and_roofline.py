@@ -46,6 +46,11 @@ def test_get_by_fragment_and_table():
     with pytest.raises(KeyError):
         specs.get("a100")                                        # ambiguous: 40GB and 80GB
     assert "| NVIDIA H100 SXM | 80 | 3.35 | 989 | 1,979 | – | 295 |" in specs.table()
+    fp8 = specs.table(precision="fp8")                                     # falls back where there is no fp8
+    assert "| NVIDIA H100 SXM | 80 | 3.35 | 1,979 | 1,979 | – | 591 |" in fp8
+    assert "| Google TPU v5e | 16 | 0.819 | 197 | – | – | 241 |" in fp8   # bf16: no fp8, no fp16
+    assert "| NVIDIA T4 | 16 | 0.32 | 65 | – | – | 203 |" in fp8           # fp16: no fp8, no bf16
+    assert "| Google TPU v6e (Trillium) | 32 | 1.64 | 918 |" in specs.table(precision="fp16")
 
 
 # -- roofline ------------------------------------------------------------------------
@@ -95,6 +100,9 @@ def test_fusion_divides_traffic_by_the_number_of_ops():
     n = 4096 * 8192
     assert rl.fusion_bytes(n, 4, 2, fused=False) == 4 * rl.fusion_bytes(n, 4, 2, fused=True)
     assert rl.fusion_bytes(n, 4, 2, fused=True) == 2 * n * 2               # 134 MB
+    # a residual add reads a second full tensor, fused or not: 9 passes vs 3, fusion saves 2/3
+    assert rl.fusion_bytes(n, 4, 2, fused=False, extra_inputs=1) == 9 * n * 2
+    assert rl.fusion_bytes(n, 4, 2, fused=True, extra_inputs=1) == 3 * n * 2
 
 
 def test_ascii_roofline_renders_every_kernel():

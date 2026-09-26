@@ -35,10 +35,14 @@ class AdmissionError(RuntimeError):
 
 
 class DevicePlugin:
-    """The node-local plugin. replicas > 1 models time-slicing: each GPU is advertised N times."""
+    """The node-local plugin. replicas > 1 models time-slicing: each GPU is advertised N times, and
+    the replicas are handed out without regard to which physical GPU they belong to.
+    fail_requests_greater_than_one mirrors the NVIDIA plugin's `failRequestsGreaterThanOne`."""
 
-    def __init__(self, devices: list, resource: str = GPU, replicas: int = 1):
+    def __init__(self, devices: list, resource: str = GPU, replicas: int = 1,
+                 fail_requests_greater_than_one: bool = False):
         self.devices, self.resource, self.replicas = devices, resource, replicas
+        self.fail_requests_greater_than_one = fail_requests_greater_than_one
 
     def register_request(self) -> dict:
         """What the plugin sends to the kubelet's Registration service on KUBELET_SOCKET."""
@@ -70,7 +74,12 @@ class DevicePlugin:
     def allocate(self, ids: list) -> dict:
         """ContainerAllocateResponse. With the NVIDIA plugin's default `envvar` strategy it is one
         environment variable; the NVIDIA Container Toolkit then injects device nodes and driver
-        libraries when the container is created (see layer 02, section 6)."""
+        libraries when the container is created (see layer 02, section 6). Raises ValueError, as the
+        plugin's gRPC error, when a shared (time-sliced) request asks for more than one replica and
+        fail_requests_greater_than_one is set."""
+        if self.replicas > 1 and self.fail_requests_greater_than_one and len(ids) > 1:
+            raise ValueError(f"request for '{self.resource}: {len(ids)}' too large: "
+                             "maximum request size for shared resources is 1")
         uuids = sorted({i.split("::")[0] for i in ids})
         return {"envs": {"NVIDIA_VISIBLE_DEVICES": ",".join(uuids)}, "mounts": [], "devices": []}
 
@@ -102,5 +111,10 @@ class Kubelet:
             raise AdmissionError(f"Allocate failed due to requested number of devices unavailable for "
                                  f"{self.plugin.resource}. Requested: {count}, Available: {len(free)}, which is unexpected")
         ids = self.plugin.get_preferred_allocation(free, [], count)
+        try:
+            response = self.plugin.allocate(ids)
+        except ValueError as e:                          # the plugin's Allocate returned an error
+            raise AdmissionError(f"Allocate failed due to rpc error: code = Unknown desc = {e}, "
+                                 "which is unexpected") from None
         self.assigned[pod] = ids
-        return self.plugin.allocate(ids)
+        return response

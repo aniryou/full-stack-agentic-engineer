@@ -1,6 +1,7 @@
 """Gangs, topology-aware placement (Kueue TAS) and Kueue quota semantics, pinned to upstream examples."""
-from gpusched import (GPU, ClusterQueue, Kueue, Quota, Scheduler, Workload, admit_gangs, best_fit, gpu_pod,
+from gpusched import (GPU, ClusterQueue, Kueue, Quota, Scheduler, Taint, Workload, admit_gangs, best_fit, gpu_pod,
                       interleave, least_free_capacity, make_cluster, place_gang, running)
+from gpusched.gang import pods_that_fit
 
 
 def _gangs():
@@ -16,6 +17,8 @@ def test_pod_by_pod_scheduling_deadlocks_two_gangs():
     s.run()
     assert c.free() == 0 and not running(a) and not running(b)
     assert sorted(p.name for p in s.pending) == ["a3", "b3"]   # 12 GPUs held, zero jobs running
+    assert {n.name[-2:]: [p.name for p in n.pods] for n in c.nodes.values()} == \
+        {"h0": ["a0", "b1"], "h1": ["b0", "a2"], "h2": ["a1", "b2"]}  # the layout drawn in PRIMER 4.1
 
 
 def test_all_or_nothing_admission_runs_one_gang_and_holds_nothing_for_the_other():
@@ -30,6 +33,54 @@ def test_tas_algorithms_match_the_kep_example():
     assert best_fit(caps, 7) == {"n1": 3, "n2": 3, "n4": 1}      # most room first, tightest last
     assert least_free_capacity(caps, 7) == {"n4": 1, "n3": 2, "n1": 3, "n2": 1}
     assert best_fit(caps, 10) is None
+
+
+def test_least_free_capacity_first_takes_the_tightest_single_domain_that_holds_everything():
+    caps = {"n1": 3, "n2": 3, "n3": 2, "n4": 1}
+    assert least_free_capacity(caps, 2) == {"n3": 2}               # not 1 on n4 + 1 on n3
+    assert least_free_capacity(caps, 3) == {"n1": 3}
+    assert least_free_capacity(caps, 4) == {"n4": 1, "n3": 2, "n1": 1}   # no single node: smallest gaps first
+    c = make_cluster(hosts=2)
+    c.bind(gpu_pod("x", 4), "b0-s0-h0")                            # h0 has room for one 4-GPU pod, h1 for two
+    assert place_gang(c, [gpu_pod("u0", 4), gpu_pod("u1", 4)]) == {"u0": "b0-s0-h1", "u1": "b0-s0-h1"}
+
+
+def test_unconstrained_ranks_hosts_as_one_flat_list():
+    c = make_cluster(blocks=2, hosts=2)                            # b0: h0 h1   b1: h0 h1
+    c.bind(gpu_pod("x", 6), "b0-s0-h0")                            # b0-s0-h0 holds one more 2-GPU pod
+    c.bind(gpu_pod("y", 2), "b1-s0-h0")                            # b1-s0-h0 holds three
+    c.bind(gpu_pod("z", 4), "b0-s0-h1")                            # b0-s0-h1 holds two
+    placed = place_gang(c, [gpu_pod(f"u{i}", 2) for i in range(3)])
+    assert placed == {"u0": "b1-s0-h0", "u1": "b1-s0-h0", "u2": "b1-s0-h0"}   # the tightest single host
+    placed = place_gang(c, [gpu_pod(f"v{i}", 2) for i in range(5)])        # no single host: 1 + 2 + 2
+    assert sorted(placed.values()) == ["b0-s0-h0", "b0-s0-h1", "b0-s0-h1", "b1-s0-h0", "b1-s0-h0"]
+
+
+def test_preferred_descent_pools_the_children_of_every_chosen_domain():
+    c = _busy_fleet()
+    placement = place_gang(c, [gpu_pod(f"k{i}", 8) for i in range(5)], preferred="subblock")
+    per_subblock = {}
+    for node in placement.values():
+        per_subblock[c.nodes[node].topology[1]] = per_subblock.get(c.nodes[node].topology[1], 0) + 1
+    # block b1 is chosen (2 + 4 slots); the sub-block pass says 4 + 1, but Kueue re-runs BestFit over
+    # all six hosts of both sub-blocks, which ranks b1-s0's hosts first by name: 2 + 3
+    assert per_subblock == {"b1-s0": 2, "b1-s1": 3}
+
+
+def test_hosts_rejected_by_a_non_resource_filter_have_no_room():
+    c = make_cluster(hosts=2)
+    c.nodes["b0-s0-h0"].taints.append(Taint("dedicated", "inference", "NoSchedule"))
+    c.nodes["b0-s0-h1"].unschedulable = True
+    assert [pods_that_fit(gpu_pod("p", 1), n) for n in c.nodes.values()] == [0, 0]
+    assert place_gang(c, [gpu_pod("u0", 8)]) is None
+
+
+def _busy_fleet():                                                # notebook 03 and PRIMER 5.2
+    c = make_cluster(blocks=2, subblocks=2, hosts=4)
+    busy = {"b0-s0-h0": 8, "b0-s0-h1": 8, "b0-s0-h2": 8, "b0-s1-h0": 8, "b1-s0-h0": 8, "b1-s0-h1": 1}
+    for host, gpus in busy.items():
+        c.bind(gpu_pod(f"x-{host}", gpus), host)
+    return c
 
 
 def _busy_cluster():
@@ -75,6 +126,45 @@ def test_borrowers_are_reclaimed_newest_first_when_reclaim_is_enabled():
     assert [e[4] for e in k.schedule()] == ["", "", "borrowing"]
     k.submit(Workload("a1", "team-a/gpus", {GPU: 16}))
     assert k.schedule() == [("preempted", "b3", "team-b-cq", "a1"), ("admitted", "a1", "team-a-cq", "h100", "")]
+
+
+def test_reclaim_takes_only_from_queues_that_are_still_borrowing():
+    a = ClusterQueue("a", {"f": {GPU: Quota(8)}}, cohort="c", reclaim_within_cohort="Any")
+    b = ClusterQueue("b", {"f": {GPU: Quota(8)}}, cohort="c")
+    c = ClusterQueue("c", {"f": {GPU: Quota(8)}}, cohort="c")
+    k = Kueue([a, b, c])
+    k.submit(Workload("b1", "b", {GPU: 8}), Workload("b2", "b", {GPU: 4}))
+    k.schedule()                                                   # b borrows 4 of a's idle quota
+    k.submit(Workload("c1", "c", {GPU: 8}))
+    k.schedule()                                                   # c1 is the newest, but c is within nominal
+    k.submit(Workload("a1", "a", {GPU: 8}))
+    events = k.schedule()
+    assert events == [("preempted", "b2", "b", "a1"), ("admitted", "a1", "a", "f", "")]
+    assert "c1" in [w.name for w in k.running]
+
+
+def test_reclaim_minimises_the_targets_in_reverse():
+    a = ClusterQueue("a", {"f": {GPU: Quota(12)}}, cohort="c", reclaim_within_cohort="Any")
+    b = ClusterQueue("b", {"f": {GPU: Quota(4)}}, cohort="c")
+    k = Kueue([a, b])
+    k.submit(Workload("b-big", "b", {GPU: 8}, priority=5))
+    k.schedule()
+    k.submit(Workload("b-small", "b", {GPU: 2}, priority=0))
+    k.schedule()                                                   # b uses 10 of its 4: 6 borrowed
+    k.submit(Workload("a1", "a", {GPU: 10}))
+    # greedy: b-small (lowest priority) then b-big; in reverse, b-small is given back (a still fits)
+    assert k.schedule() == [("preempted", "b-big", "b", "a1"), ("admitted", "a1", "a", "f", "")]
+
+
+def test_workloads_that_fit_without_borrowing_are_admitted_first():
+    x = ClusterQueue("x", {"f": {GPU: Quota(8)}}, cohort="c")
+    y = ClusterQueue("y", {"f": {GPU: Quota(8)}}, cohort="c")
+    k = Kueue([x, y])
+    k.submit(Workload("x-run", "x", {GPU: 8}))
+    k.schedule()
+    k.submit(Workload("x-old", "x", {GPU: 8}), Workload("y-new", "y", {GPU: 8}))   # x-old must borrow y's 8
+    assert [e[:2] for e in k.schedule()] == [("admitted", "y-new")]
+    assert [w.name for w in k.pending] == ["x-old"]
 
 
 def test_nominal_quota_is_not_a_guarantee_without_reclaim():

@@ -68,6 +68,53 @@ def test_fa1_and_fa2_schedule_traffic_no_l2_model():
     assert fc.flash_traffic(4096, 128, 128, 64, causal=True)["bytes"] == 36_716_544
 
 
+def test_fa1_causal_streams_only_the_q_blocks_below_the_diagonal():
+    # K/V block j is touched by Q blocks j..31 (B_r = B_c = 128): 128 * (32 + 31 + ... + 1) rows
+    rows = 128 * sum(range(1, 33))
+    assert rows == 67_584
+    t = fc.flash_traffic(4096, 128, 128, 128, schedule="fa1", causal=True)
+    assert t["bytes"] == 2 * 4096 * 128 * 2 + rows * (3 * 128 * 2 + 16) == 55_083_008
+    # half the FLOPs and about half the bytes: the intensity stays close to the non-causal 82
+    assert t["intensity"] == pytest.approx(77.97, abs=0.01)
+    assert fc.flash_traffic(4096, 128, 128, 128, schedule="fa1")["intensity"] == pytest.approx(81.92)
+
+
+def test_io_saving_keeps_the_constants_the_theta_hides():
+    # the paper's block sizes on an H100 (228 KB = 116,736 bf16 elements)
+    assert fc.fa1_block_sizes(116_736, 128) == (228, 128)
+    assert fc.fa1_block_sizes(116_736, 64) == (456, 64)
+    # M / (3 d^2), not M / d^2 (which would claim 7x and 28x)
+    assert fc.io_saving(128, "fa1", smem_elems=116_736) == pytest.approx(2.375)
+    assert fc.io_saving(64, "fa1", smem_elems=116_736) == pytest.approx(9.5)
+    assert fc.io_saving(128, "fa2", block_m=128) == 2.0
+    # counting bytes with those block sizes agrees (the ceil and the fp32 m, l cost a little)
+    naive, fa1 = fc.naive_traffic(4096, 128)["bytes"], fc.flash_traffic(4096, 128, 128, 228, schedule="fa1")
+    assert fa1["bytes"] == 2_097_152 + 18 * 3_211_264 == 59_899_904
+    assert naive / fa1["bytes"] == pytest.approx(2.31, abs=0.01)
+    naive64 = fc.naive_traffic(4096, 64)["bytes"]
+    fa1_64 = fc.flash_traffic(4096, 64, 64, 456, schedule="fa1")["bytes"]
+    assert (naive64, fa1_64) == (136_314_880, 15_794_176)
+    assert naive64 / fa1_64 == pytest.approx(8.63, abs=0.01)
+    # FA1 order moves less than naive only if M > 3 d^2: 96 KB of bf16 at d = 128 (a T4 has 64 KB)
+    assert 3 * 128 * 128 * 2 == 96 * 1024
+    assert fc.io_saving(128, "fa1", smem_elems=64 * 1024 // 2) < 1
+
+
+def test_clocks_per_score_table():
+    a, h, b = (fc.clocks_per_score(dev) for dev in ("A100", "H100", "B200"))
+    assert (a["mma"], h["mma"], b["mma"]) == (0.25, 0.125, 0.0625)
+    assert a["ex2"] == h["ex2"] == b["ex2"] == 0.0625
+    assert (a["ex2_vs_mma"], h["ex2_vs_mma"], b["ex2_vs_mma"]) == (0.25, 0.5, 1.0)
+    assert (a["fp32"], h["fp32"]) == (0.078125, 0.0390625)
+    assert (a["fp32_vs_mma"], h["fp32_vs_mma"], b["fp32_vs_mma"]) == (0.3125, 0.3125, 0.625)
+
+
+def test_fa3_register_budget():
+    r = fc.fa3_registers()
+    assert (r["scores"], r["out_acc"], r["probs_16bit"], r["consumer_live"]) == (88, 64, 44, 196)
+    assert r["sm_total"] == 128 * 24 + 256 * 240 == 64_512 <= r["register_file"]
+
+
 def test_smem_footprints_match_fa2_source_comments():
     assert fc.tile_smem_bytes(128, 64, 128) == 64 * 1024     # A100/H100 d=128
     assert fc.tile_smem_bytes(128, 32, 128) == 48 * 1024     # sm86/89: "128 x 32 (48 KB smem)"
@@ -115,12 +162,74 @@ def test_fa2_decode_splits_worked_examples():
     assert fc.fa2_decode_splits(64, 32, 8, 4096, 128, 132)["splits"] == 1
 
 
+def test_fa3_heuristic_differs_from_fa2():
+    # the upstream comment example holds for FA3's version too
+    assert fc.fa3_num_splits_heuristic(48, 108, 64, 1, 0, False) == 2
+    # never split 4 or fewer KV blocks ("we never split for hdim = 128 and seqlen_k = 512")
+    assert fc.fa3_num_splits_heuristic(8, 132, 4, 1, 0, True) == 1
+    # a full GPU splits only when one KV head exceeds the 50 MB L2 estimate, non-causal, many Q blocks
+    assert fc.fa3_num_splits_heuristic(200, 132, 64, 300, 120 * 1024 * 1024, False) == 3
+    assert fc.fa3_num_splits_heuristic(200, 132, 64, 300, 120 * 1024 * 1024, True) == 1
+
+
+def test_fa3_decode_splits_as_vllm_runs_them_on_h100():
+    one = fc.fa3_decode_splits(1, 32, 8, 32768, 128, 132)
+    # 8 CTAs; 128-key tiles (paged, no TMA) -> 256 KV blocks; 8 * 15 = 120 CTAs fill 91% of a wave
+    assert (one["ctas_without_split"], one["n_blocks"], one["static_splits"]) == (8, 256, 15)
+    assert (one["splits"], one["ctas"], one["blocks_per_split"]) == (15, 120, 18)
+    # the dynamic split: blocks_per_sm = ceil(256 * 1.1 * 8 / 132) = 18 -> ceil(256 / 18) = 15
+    assert math.ceil(256 / math.ceil(256 * 1.1 * 8 / 132)) == 15
+    eight = fc.fa3_decode_splits(8, 32, 8, 32768, 128, 132)
+    assert (eight["static_splits"], eight["splits"], eight["ctas"]) == (15, 2, 128)
+    assert fc.fa3_decode_splits(64, 32, 8, 4096, 128, 132)["splits"] == 1
+    # under a full CUDA graph vLLM passes its cap (32) as the static bound: same dynamic result
+    assert fc.fa3_decode_splits(1, 32, 8, 32768, 128, 132, max_splits=32)["splits"] == 15
+    # FA2's heuristic on the same case would pick 29 (it doubles the SM count)
+    assert fc.fa2_decode_splits(1, 32, 8, 32768, 128, 132)["splits"] == 29
+
+
+def test_split_partials_are_small_next_to_the_kv_read():
+    p = fc.split_partials_bytes(29, 1, 8, 4, 128)
+    assert (p["o_bytes"], p["lse_bytes"]) == (475_136, 3_712)
+    kv = fc.decode_attention_bytes(32768, 1, 8, 128)            # one layer
+    assert kv == 134_217_728
+    assert p["traffic"] / kv == pytest.approx(0.0071, abs=1e-4)
+    assert fc.split_partials_bytes(15, 1, 8, 4, 128)["o_bytes"] == 245_760
+
+
 def test_decode_bytes_and_intensity():
     assert fc.kv_bytes_per_token(32, 8, 128) == 131_072                   # Llama-3-8B-like, bf16
     assert fc.decode_attention_bytes(32 * 8192, 32, 8, 128) == 34_359_738_368
     assert [fc.decode_intensity(g) for g in (1, 4, 8)] == [1.0, 4.0, 8.0]
     assert fc.mla_decode_intensity() == pytest.approx(241.78, abs=0.01)
     assert fc.mla_decode_intensity(b=1) == pytest.approx(483.56, abs=0.01)
+
+
+def test_mla_decode_sits_near_the_ridge_and_head_sharding_divides_it():
+    ridge = fc.DEVICES["H100"].ridge
+    # bf16 latent: below the bf16 ridge (82% of it), not above it
+    assert fc.mla_decode_intensity() < ridge
+    assert fc.mla_decode_intensity() / ridge == pytest.approx(0.82, abs=0.005)
+    # FP8 latent with bf16 compute: above the bf16 ridge
+    assert fc.mla_decode_intensity(b=1) > ridge
+    # tensor parallelism over heads (TP = 8: 16 heads per GPU) divides the intensity by 8
+    assert fc.mla_decode_intensity(n_heads=16) == pytest.approx(30.22, abs=0.01)
+
+
+def test_mla_cache_ratio_and_prefill_cost():
+    r = fc.mla_cache_ratio()
+    assert (r["mha_bytes"], r["mla_bytes"]) == (81_920, 1_152)          # 80 KB vs 1,152 B per layer
+    assert r["ratio"] == pytest.approx(71.1, abs=0.05)
+    # counting the key at 128 dims (no rotary part) gives the 57x some pages quote
+    assert fc.mla_cache_ratio(count_rope_in_key=False)["ratio"] == pytest.approx(56.9, abs=0.05)
+    assert fc.mla_prefill_absorbed_ratio() == pytest.approx(3.4)
+
+
+def test_padding_waste():
+    w = fc.padding_waste([100, 3000, 500])
+    assert (w["padded_pairs"], w["actual_pairs"]) == (27_000_000, 9_260_000)
+    assert w["waste"] == pytest.approx(2.92, abs=0.005)
+    assert w["tile_utilisation"][0] == pytest.approx(0.78, abs=0.005)
 
 
 def test_prefill_share_and_ring_threshold():
@@ -202,3 +311,30 @@ def test_hadamard_rotation_preserves_scores():
     np.testing.assert_allclose((q @ m) @ (k @ m).T, q @ k.T, atol=1e-10)
     with pytest.raises(ValueError):
         fc.hadamard(48)
+
+
+def _qk_fp8_error(outlier_in_q: bool, rotate: bool) -> float:
+    rng = np.random.default_rng(0)                      # the notebook's section 6 setup
+    q, k = rng.normal(size=(256, 128)), rng.normal(size=(256, 128))
+    k[:, 7] *= 20.0
+    if outlier_in_q:
+        q[:, 7] *= 20.0
+    ref = q @ k.T
+    if rotate:
+        m = fc.random_hadamard(128, seed=0)
+        q, k = q @ m, k @ m
+    got = fc.quantize_fp8(q)[0] @ fc.quantize_fp8(k)[0].T
+    return float(np.linalg.norm(got - ref) / np.linalg.norm(ref))
+
+
+def test_rotation_and_fp8_depends_on_whether_outliers_align():
+    # outlier channel in K only: e4m3's error is mantissa rounding and the rotation does not move it
+    k_only = (_qk_fp8_error(False, False), _qk_fp8_error(False, True))
+    assert k_only[0] == pytest.approx(0.0357, abs=5e-4)
+    assert abs(k_only[1] - k_only[0]) < 0.005
+    # the same channel large in Q and K: q.k is one dominant product, its relative error is the
+    # per-element error; rotated, it is a sum of d products whose rounding errors partly cancel
+    shared = (_qk_fp8_error(True, False), _qk_fp8_error(True, True))
+    assert shared[0] == pytest.approx(0.0360, abs=5e-4)
+    assert shared[1] == pytest.approx(0.0046, abs=5e-4)
+    assert shared[0] / shared[1] > 7

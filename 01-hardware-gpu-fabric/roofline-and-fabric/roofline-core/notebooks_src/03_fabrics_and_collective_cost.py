@@ -11,9 +11,11 @@
 # tensor-parallel all-reduces are tiny (one token × d_model × 2 bytes = 16 KiB for a 70B model),
 # so they are **latency-bound**: what matters is how many collectives a step makes and the
 # algorithm's α-count. A prefill step's all-reduces are tens of MB, so they are
-# **bandwidth-bound**: what matters is β, which falls ~9× from NVLink to a 400 Gb/s NIC. That is the
-# quantitative reason tensor parallelism stays inside the NVLink domain, why clusters give every
-# GPU its own NIC (rails), and what `nvidia-smi topo -m` is telling you. Primer: `../PRIMER.md` §5.
+# **bandwidth-bound**: what matters is β, and the ring's bandwidth term (~2n/β) does not shrink as
+# the TP degree grows while each GPU's compute does. Past the node, β per GPU falls ~9× from NVLink
+# to a 400 Gb/s NIC. That is the quantitative reason tensor parallelism stays inside the NVLink
+# domain, why clusters give every GPU its own NIC (rails) and run collectives hierarchically, and
+# what `nvidia-smi topo -m` is telling you. Primer: `../PRIMER.md` §5.
 
 # %%
 from roofline import fabric, llm, specs
@@ -64,8 +66,23 @@ for algo in ("ring", "recursive-doubling"):
 pf = llm.prefill(m70, h100, 4096)
 print(f"\nTP=8 prefill of 4,096 tokens: per-GPU compute {pf.t_compute / 8 * 1e3:.1f} ms; "
       f"all-reduce {fabric.tp_allreduce_bytes(m70, 4096) / 1e6:.0f} MB each")
-for key in ("nvlink4", "ib-ndr"):
-    print(f"   communication per step over {L[key].name}: {fabric.tp_comm_time(m70, 4096, 8, L[key]) * 1e3:.1f} ms")
+print(f"   communication per step over NVLink 4: {fabric.tp_comm_time(m70, 4096, 8, L['nvlink4']) * 1e3:.1f} ms")
+print(f"   if every ring hop crossed a 400 Gb/s NIC (8 GPUs in 8 nodes): {fabric.tp_comm_time(m70, 4096, 8, L['ib-ndr']) * 1e3:.1f} ms")
+
+# %% [markdown]
+# ## TP=16 across two nodes
+# NCCL does not squeeze a cross-node all-reduce through one NIC: on a rail-optimized cluster it spreads
+# the traffic over every rail (a ring channel per NIC, or its tree algorithm). The core models that as a
+# hierarchical all-reduce — reduce-scatter inside each node over NVLink, all-reduce each GPU's `n/8` share
+# across nodes over its own NIC, all-gather inside the node (`fabric.tp_comm_time_across_nodes`). Even so,
+# communication outgrows compute — and without a NIC per GPU it is far worse.
+
+# %%
+print(f"TP=16 prefill of 4,096 tokens: per-GPU compute {pf.t_compute / 16 * 1e3:.1f} ms")
+for label, t in [("rails, 8 NICs per node", fabric.tp_comm_time_across_nodes(m70, 4096, 8, 2, L["nvlink4"], L["ib-ndr"])),
+                 ("1 NIC per node", fabric.tp_comm_time_across_nodes(m70, 4096, 8, 2, L["nvlink4"], L["ib-ndr"], 1)),
+                 ("one flat ring through the NICs", fabric.tp_comm_time(m70, 4096, 16, L["ib-ndr"]))]:
+    print(f"   all-reduce per step, {label:32s}: {t * 1e3:6.1f} ms")
 
 # %% [markdown]
 # ## Rails: every GPU gets its own NIC
@@ -104,24 +121,58 @@ print(f"1 GiB, host-staged store-and-forward [PCIe5, IB NDR, PCIe5]: {fabric.sta
 print(f"1 GiB, GPUDirect RDMA pipelined in 1 MiB chunks:        {fabric.staged_transfer_time(GIB, [63, 50, 63], 1 << 20) * 1e3:.1f} ms")
 
 # %% [markdown]
-# ## Exercise 3.1 — the ring all-reduce
-# Write `ring_allreduce(n, p, alpha, beta)` in seconds (α in s, β in bytes/s). A ring does a
-# reduce-scatter then an all-gather: `2(p−1)` steps, each moving `n/p` bytes per rank.
+# ## Exercise 3.1 — the ring all-reduce, by running one
+# Each of `p` ranks holds a vector cut into `p` chunks (`vectors[r][j]` is chunk `j` on rank `r`). In one
+# synchronous **step** every rank sends one chunk to its right neighbour `(r + 1) % p`. Phase 1
+# (reduce-scatter): the receiver *adds* the chunk into its own copy; when it ends, each rank holds one
+# chunk that is the sum over all ranks. Phase 2 (all-gather): the finished chunks travel the same ring and
+# the receiver *overwrites* its copy. Write `simulate_ring_allreduce(vectors)` returning
+# `(result, steps)`, working out yourself which chunk each rank sends at each step. Then write
+# `ring_allreduce(n, p, alpha, beta)` in seconds (α in s, β in bytes/s) from what the simulation tells you:
+# how many steps, and how many bytes each message carries.
 
 # %% exercise
+def simulate_ring_allreduce(vectors):
+    ### BEGIN SOLUTION
+    p = len(vectors)
+    buf = [list(v) for v in vectors]
+    steps = 0
+    for s in range(p - 1):                                   # reduce-scatter
+        sends = [(r, (r - s) % p, buf[r][(r - s) % p]) for r in range(p)]
+        for r, j, val in sends:
+            buf[(r + 1) % p][j] += val
+        steps += 1
+    for s in range(p - 1):                                   # all-gather
+        sends = [(r, (r + 1 - s) % p, buf[r][(r + 1 - s) % p]) for r in range(p)]
+        for r, j, val in sends:
+            buf[(r + 1) % p][j] = val
+        steps += 1
+    return buf, steps
+    ### END SOLUTION
+
+
 def ring_allreduce(n, p, alpha, beta):
     ### BEGIN SOLUTION
     if p == 1:
         return 0.0
-    return 2 * (p - 1) * alpha + 2 * (p - 1) / p * n / beta
+    _, steps = simulate_ring_allreduce([[0] * p for _ in range(p)])
+    return steps * (alpha + n / p / beta)                    # each message is one chunk: n/p bytes
     ### END SOLUTION
 
 # %% check
+import random
+random.seed(0)
+for p in (2, 3, 4, 8):
+    vecs = [[random.randint(-9, 9) for _ in range(p)] for _ in range(p)]
+    result, steps = simulate_ring_allreduce(vecs)
+    total = [sum(v[j] for v in vecs) for j in range(p)]
+    assert all(row == total for row in result), (p, result, total)
+    assert steps == 2 * (p - 1), (p, steps)
 for key in ("nvlink4", "ib-ndr", "pcie4x16"):
     lk = L[key]
     for n, p in [(16384, 8), (64 << 20, 8), (1 << 30, 16), (1000, 1)]:
         assert abs(ring_allreduce(n, p, lk.alpha, lk.beta) - fabric.ring_allreduce_time(n, p, lk)) < 1e-12
-print("✅ ring all-reduce: 2(p−1)α + 2(p−1)/p · n/β")
+print("✅ every rank ends with the full sum after 2(p−1) steps of one n/p chunk: 2(p−1)α + 2(p−1)/p · n/β")
 
 # %% [markdown]
 # ## Exercise 3.2 — read a busbw sweep
@@ -153,32 +204,44 @@ print(f"✅ latency-bound up to {lb[-1] / 2**20:.0f} MiB — just below p·α·�
       "a 16 KiB TP message is ~440x smaller than that")
 
 # %% [markdown]
-# ## Exercise 3.3 — choose a TP degree for latency
-# Batch-1 decode latency with TP = p is roughly: each GPU streams `1/p` of the bytes, plus the
-# step's all-reduces. Write `decode_latency(model, device, tp, link, algo)` using
-# `llm.decode(...).t_memory` (batch 1, context 1024) and `fabric.tp_comm_time`, then
-# `best_tp(model, device, link, algo, choices)` returning the degree with the lowest latency.
+# ## Exercise 3.3 — choose a TP degree against an ITL SLO
+# Batch-1 decode latency with TP = p is roughly: each GPU streams `1/p` of the bytes, plus the step's
+# all-reduces. Nodes hold 8 GPUs on NVLink 4, with one 400 Gb/s NIC per GPU. Write
+# `decode_latency(model, device, tp, algo)`: use `llm.decode(...).t_memory` (batch 1, context 1024); for
+# `tp ≤ 8` the all-reduces run inside a node (`fabric.tp_comm_time` over NVLink 4 with `algo`); for
+# `tp > 8` they run hierarchically across `tp // 8` nodes (`fabric.tp_comm_time_across_nodes`, which is
+# ring-based whatever `algo` says). Then write `choose_tp(model, device, itl_s, algo, choices)`: the
+# **fewest GPUs** whose latency meets `itl_s`, or `None`. Predict first: what does a faster all-reduce
+# algorithm do to the answer for a tight SLO?
 
 # %% exercise
-def decode_latency(model, device, tp, link, algo="ring"):
+def decode_latency(model, device, tp, algo="ring"):
     ### BEGIN SOLUTION
-    return llm.decode(model, device, 1, 1024).t_memory / tp + fabric.tp_comm_time(model, 1, tp, link, algo=algo)
+    weights = llm.decode(model, device, 1, 1024).t_memory / tp
+    if tp <= 8:
+        return weights + fabric.tp_comm_time(model, 1, tp, L["nvlink4"], algo=algo)
+    return weights + fabric.tp_comm_time_across_nodes(model, 1, 8, tp // 8, L["nvlink4"], L["ib-ndr"])
     ### END SOLUTION
 
 
-def best_tp(model, device, link, algo="ring", choices=(2, 4, 8)):
+def choose_tp(model, device, itl_s, algo="ring", choices=(2, 4, 8, 16)):
     ### BEGIN SOLUTION
-    return min(choices, key=lambda p: decode_latency(model, device, p, link, algo))
+    ok = [p for p in sorted(choices) if decode_latency(model, device, p, algo) <= itl_s]
+    return ok[0] if ok else None
     ### END SOLUTION
 
 # %% check
-assert abs(decode_latency(m70, h100, 8, L["nvlink4"]) * 1e3 - 9.69) < 0.01
-assert abs(decode_latency(m70, h100, 8, L["nvlink4"], "recursive-doubling") * 1e3 - 6.18) < 0.01
-assert best_tp(m70, h100, L["nvlink4"]) == 8 and best_tp(m70, h100, L["nvlink4"], "recursive-doubling") == 8
-per_gpu = {p: 1 / (decode_latency(m70, h100, p, L["nvlink4"]) * p) for p in (2, 4, 8)}
-assert per_gpu[2] > per_gpu[4] > per_gpu[8]
-print(f"✅ TP=8 is fastest per token (9.7 ms ring, 6.2 ms latency-optimal), but tokens per GPU-second "
-      f"fall from {per_gpu[2]:.1f} (TP=2) to {per_gpu[8]:.1f} (TP=8): latency costs efficiency")
+assert abs(decode_latency(m70, h100, 8) * 1e3 - 9.69) < 0.01
+assert abs(decode_latency(m70, h100, 8, "recursive-doubling") * 1e3 - 6.18) < 0.01
+assert abs(decode_latency(m70, h100, 16) * 1e3 - 8.70) < 0.01
+assert choose_tp(m70, h100, 0.015) == 4 and choose_tp(m70, h100, 0.010) == 8
+assert choose_tp(m70, h100, 0.009) == 16                          # the ring forces a second node...
+assert choose_tp(m70, h100, 0.009, "recursive-doubling") == 8     # ...a latency-optimal all-reduce does not
+assert choose_tp(m70, h100, 0.005) is None
+per_gpu = {p: 1 / (decode_latency(m70, h100, p) * p) for p in (2, 4, 8, 16)}
+assert per_gpu[2] > per_gpu[4] > per_gpu[8] > per_gpu[16]
+print(f"✅ 15 ms → TP=4, 10 ms → TP=8, 9 ms → TP=16 across nodes with a ring but TP=8 with a latency-optimal "
+      f"all-reduce; tokens per GPU-second fall from {per_gpu[2]:.1f} (TP=2) to {per_gpu[16]:.1f} (TP=16)")
 
 # %% [markdown]
 # ## Exercise 3.4 — size a two-tier fabric
@@ -248,15 +311,19 @@ print("✅ put a 2-GPU TP job on GPU0+GPU1 (NV12), never GPU1+GPU2 (SYS: across 
 # **The two-minute version.** "Every transfer is α + n/β. Tensor parallelism makes two
 # all-reduces per layer per step — 160 for a 70B model. At decode they are 16 KiB each, so they are
 # latency-bound: the count × the algorithm's latency is the cost, which is why engines use
-# latency-optimal all-reduce kernels. At prefill they are tens of MB and bandwidth-bound: 46 ms
-# per 4K-token step over NVLink versus 387 ms over a 400 Gb/s NIC, five times the compute. So TP
-# stays inside the NVLink domain; across nodes I use pipeline or data parallelism, one NIC per GPU
-# on a rail-optimized, non-blocking fabric, and I check `nvidia-smi topo -m` before placing ranks."
+# latency-optimal all-reduce kernels. At prefill they are tens of MB and bandwidth-bound, and that
+# cost does not shrink as TP grows: 46 ms per 4K-token step at TP=8 on NVLink against 74 ms of
+# compute per GPU; at TP=16 across two nodes, even with a NIC per GPU and the traffic spread over all of
+# them, 75 ms against 37 ms. So TP stays inside the NVLink domain; across nodes I use pipeline or data
+# parallelism, one NIC per GPU on a rail-optimized, non-blocking fabric, and I check
+# `nvidia-smi topo -m` before placing ranks."
 #
 # **Drill.**
-# 1. *Why not TP=16 across two 8-GPU H100 nodes?* — the ring then runs at NIC speed (50 GB/s vs 450):
-#    a 4K-token prefill step spends ~427 ms in all-reduce against ~37 ms of compute per GPU
-#    (TP=8 on NVLink: 46 ms vs 74 ms). Use PP=2 × TP=8, FP8 to fit in one node, or a bigger NVLink domain.
+# 1. *Why not TP=16 across two 8-GPU H100 nodes?* — communication outgrows compute. With rails (traffic
+#    spread over every NIC) a 4K-token prefill step spends ~75 ms in all-reduce against ~37 ms of
+#    compute per GPU (TP=8 on NVLink: 46 ms vs 74 ms), so the step is barely faster for twice the GPUs;
+#    with one NIC per node it is ~263 ms, and as a flat ring through the NICs ~427 ms. Use PP=2 × TP=8,
+#    FP8 to fit in one node, or a bigger NVLink domain.
 # 2. *nccl-tests shows busbw of 20 GB/s at 64 KB. Is the fabric broken?* — no: at 64 KB the collective is
 #    latency-bound (below p·α·β); judge the fabric on the large-message plateau.
 # 3. *Is a 3:1 oversubscribed fabric fine for inference?* — often, for independent replicas (mostly

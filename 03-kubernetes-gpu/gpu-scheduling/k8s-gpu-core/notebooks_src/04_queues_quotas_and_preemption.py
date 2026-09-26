@@ -3,7 +3,11 @@
 #
 # **Tier:** T0 — a Kueue-style quota simulator using Kueue's field names and admission rules. Real
 # Kueue v0.19 objects (ResourceFlavor, ClusterQueue, LocalQueue, WorkloadPriorityClass) are applied
-# to a kind cluster in lab notebook `02_kind_with_fake_gpus_and_kueue`.
+# to a kind cluster in lab notebook `02_kind_with_fake_gpus_and_kueue`. What the simulator leaves out:
+# one resource group per ClusterQueue, flat cohorts (no Cohort objects), classic preemption only (no
+# Fair Sharing), no admission checks, and a preemptor admitted in the same step its victims are
+# evicted — real Kueue marks the victims Evicted and admits the preemptor in a later cycle, once their
+# quota is released.
 #
 # ## The one-minute version
 #
@@ -214,7 +218,57 @@ print("✅ serving keeps 8 GPUs at home, recalls its loan at once, and batch sor
 # ClusterQueue; jobs opt in with the label `kueue.x-k8s.io/queue-name` and get a priority from
 # `kueue.x-k8s.io/priority-class` (a `WorkloadPriorityClass`), which orders and preempts queued
 # workloads without changing the pods' own scheduling priority.
+
+# %% [markdown]
+# ## Exercise 4.5 — predict a reclaim
 #
+# Two ClusterQueues in one cohort, one flavor `f`. Team A: nominal **12** GPUs,
+# `reclaimWithinCohort: Any`, idle. Team B: nominal **4**, running `b-big` (8 GPUs, priority 5,
+# admitted first) and `b-small` (2 GPUs, priority 0) — it borrows 6 of A's GPUs. Team A submits a
+# **10**-GPU job. Use the rules from exercise 4.2 and the note after it: which candidates, in which
+# order, does the greedy pass remove until A's job fits, and which does the reverse pass give back?
+# Then a second cohort: queues `a`, `b`, `c` with nominal 8 each; `a` reclaims with `Any`; `b` runs
+# `b1` (8) and `b2` (4, borrowing); `c` runs `c1` (8), admitted last. `a` submits 8. Which workload
+# is preempted?
+
+# %% exercise
+# preempted_first = [...]    names preempted for team A's 10-GPU job
+# preempted_second = [...]   names preempted for a's 8-GPU job
+### BEGIN SOLUTION
+preempted_first = ["b-big"]     # greedy: b-small (lowest priority) then b-big; in reverse b-small fits back
+preempted_second = ["b2"]       # c1 is the newest, but c is not borrowing, so it is never a target
+### END SOLUTION
+
+# %% check
+def reclaim_events():
+    a = ClusterQueue("a", {"f": {GPU: Quota(12)}}, cohort="c", reclaim_within_cohort="Any")
+    b = ClusterQueue("b", {"f": {GPU: Quota(4)}}, cohort="c")
+    k = Kueue([a, b])
+    k.submit(Workload("b-big", "b", {GPU: 8}, priority=5))
+    k.schedule()
+    k.submit(Workload("b-small", "b", {GPU: 2}, priority=0))
+    k.schedule()
+    k.submit(Workload("a1", "a", {GPU: 10}))
+    return k.schedule()
+
+def three_queue_events():
+    qs = [ClusterQueue(n, {"f": {GPU: Quota(8)}}, cohort="c", **kw)
+          for n, kw in (("a", {"reclaim_within_cohort": "Any"}), ("b", {}), ("c", {}))]
+    k = Kueue(qs)
+    k.submit(Workload("b1", "b", {GPU: 8}), Workload("b2", "b", {GPU: 4}))
+    k.schedule()
+    k.submit(Workload("c1", "c", {GPU: 8}))
+    k.schedule()
+    k.submit(Workload("a1", "a", {GPU: 8}))
+    return k.schedule()
+
+first, second = reclaim_events(), three_queue_events()
+print(first, second, sep="\n")
+assert sorted(preempted_first) == sorted(e[1] for e in first if e[0] == "preempted")
+assert sorted(preempted_second) == sorted(e[1] for e in second if e[0] == "preempted")
+print("✅ reclaim takes only from borrowers, cheapest first, then gives back what it did not need")
+
+# %% [markdown]
 # ## In a design review
 #
 # **Two-minute version.** "Every team gets a LocalQueue pointing at its ClusterQueue, with nominal

@@ -35,6 +35,20 @@ def test_time_slicing_multiplies_the_advertised_count_not_the_gpus():
     assert env == "GPU-fake-0000"                             # two "GPUs", one physical device
 
 
+def test_fail_requests_greater_than_one_rejects_multi_replica_requests_at_admission():
+    plugin, kubelet = DevicePlugin(make_gpus(8), replicas=10, fail_requests_greater_than_one=True), Kubelet()
+    kubelet.register(plugin)
+    # the event text in the NVIDIA k8s-device-plugin README
+    with pytest.raises(AdmissionError, match=r"^Allocate failed due to rpc error: code = Unknown desc = request for "
+                       r"'nvidia.com/gpu: 2' too large: maximum request size for shared resources is 1, which is unexpected$"):
+        kubelet.admit("two-slices", 2)
+    assert "two-slices" not in kubelet.assigned
+    assert kubelet.admit("one-slice", 1)["envs"]["NVIDIA_VISIBLE_DEVICES"] == "GPU-fake-0000"
+    exclusive = DevicePlugin(make_gpus(8), fail_requests_greater_than_one=True)   # no sharing: no limit
+    assert exclusive.allocate(["GPU-fake-0000", "GPU-fake-0001"])["envs"]["NVIDIA_VISIBLE_DEVICES"] == \
+        "GPU-fake-0000,GPU-fake-0001"
+
+
 def test_preferred_allocation_keeps_a_container_on_one_nvlink_island():
     plugin, kubelet = DevicePlugin(make_gpus(8, island_size=2)), Kubelet()
     kubelet.register(plugin)
@@ -72,6 +86,19 @@ def test_spot_gang_math_pinned_and_checked_by_monte_carlo():
     assert expected_runtime_h(10, 16, 0.01) == pytest.approx(24.706, abs=1e-3)      # 4x the gang, 2x the time
 
 
+def test_restart_overhead_term_checked_by_monte_carlo():
+    with_r = expected_runtime_h(10, 4, 0.01, 2.0)                                # (e^0.4 - 1) * (25 + 2)
+    assert with_r == pytest.approx((math.exp(0.4) - 1) * 27, abs=1e-9) == pytest.approx(13.2793, abs=1e-3)
+    rng, total = random.Random(1), 0.0
+    for _ in range(40000):                                                       # each failure costs R as well
+        t = 0.0
+        while (x := rng.expovariate(0.04)) < 10:
+            t += x + 2.0
+        total += t + 10
+    assert total / 40000 == pytest.approx(with_r, rel=0.02)                      # R = 0 would be 7% low
+    assert expected_runtime_h(24, 16, 0.005, 0.25) == pytest.approx(74.217, abs=1e-3)  # the primer's 16-node row
+
+
 def test_queued_provisioning_does_not_bill_the_partial_gang():
     kw = dict(gpus_per_node=8, boot_s=300, stockout=0.9)
     inc = provision(NodePool("inc", **kw), 8, seed=4)
@@ -89,6 +116,17 @@ def test_scale_from_zero_then_scale_down_after_unneeded_time():
     assert r["node_h"] == pytest.approx(1.25) and r["cost"] == pytest.approx(1.25)
 
 
+def test_scale_down_waits_for_the_delay_after_the_last_scale_up():
+    jobs = lambda: [Job("a", 1, 0.25), Job("b", 2, 0.5, arrive_s=1150)]
+    pool = NodePool("l4", 1, max_nodes=4, boot_s=300)
+    # b asks for 2 new nodes at 1170 s just before a frees its node; one new node is left over, idle
+    # from 1470 s. With a 60 s unneeded time it could go at 1530 s; the delay after add holds it to 1770 s.
+    held = simulate(pool, jobs(), until_s=3 * 3600, unneeded_s=60)
+    free = simulate(pool, jobs(), until_s=3 * 3600, unneeded_s=60, delay_after_add_s=0)
+    first_removal = lambda r: min(t for t, what in r["log"] if what == "idle node removed")
+    assert (first_removal(free), first_removal(held)) == (1530, 1170 + 600)
+
+
 def test_an_ordinary_pool_scales_up_a_gang_it_cannot_finish():
     job = [Job("train", 4, 1.0)]
     ordinary = simulate(NodePool("a3", 8, max_nodes=3, boot_s=300), job, until_s=7200)
@@ -98,5 +136,5 @@ def test_an_ordinary_pool_scales_up_a_gang_it_cannot_finish():
 
 
 def test_startup_latency_is_a_sum_of_stages():
-    s = startup_latency(node_s=240, driver_s=60, image_gb=10, pull_gbps=0.5, weights_gb=16, load_gbps=1)
+    s = startup_latency(node_s=240, driver_s=60, image_gb=10, pull_GBps=0.5, weights_gb=16, load_GBps=1)
     assert s["image"] == 20 and s["weights"] == 16 and s["total"] == 336

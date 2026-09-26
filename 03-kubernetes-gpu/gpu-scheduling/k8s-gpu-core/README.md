@@ -9,7 +9,7 @@ notebooks.
 
 **Tier: T0.** Everything runs on a laptop, Colab CPU or CI — no cluster, no GPU, no network. The
 concepts are the whole point; the detailed lab next door, [`../k8s-gpu-lab`](../k8s-gpu-lab), takes
-the same ideas to real manifests, a kind cluster with fake GPUs and Kueue, and GKE (T1–T3). The
+the same ideas to real manifests, a kind cluster with fake GPUs and Kueue (T0 + Docker), and GKE (T3). The
 concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 
 ## Quick start
@@ -17,7 +17,7 @@ concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 33 tests, well under a second
+python3 -m pytest -q                          # 48 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -52,9 +52,12 @@ print(stranded_gpus(cluster, 8))                     # 16 free GPUs, none usable
 | `gpusched/autoscaler.py` | bin-packing estimate, least-waste expander, scale-from-zero and scale-down, Spot reclaim and gang restarts, atomic queued provisioning, startup latency |
 
 Read them in that order. Each module opens with the one idea it teaches. Where the simulator
-simplifies the real system, the docstring says so (for example: preemption binds immediately
-instead of nominating a node; Kueue is modelled with one resource group, flat cohorts and classic
-preemption).
+simplifies the real system, the docstring says so, and the notebook that uses it repeats it:
+preemption binds immediately instead of nominating a node; Kueue is modelled with one resource
+group, flat cohorts, classic preemption, no admission checks, and a preemptor admitted in the same
+step its victims are evicted; gangs have one pod shape (no leader, no slices); the least-waste
+expander ranks idle GPUs rather than CPU and memory; `simulate()` is one pool with no utilisation
+threshold.
 
 ## The notebooks
 
@@ -62,10 +65,10 @@ Each has worked examples, then exercises with `# YOUR CODE HERE` and a check cel
 Solutions are in `solutions/`. Every notebook ends with **In a design review**: the two-minute
 explanation and drill questions.
 
-1. **`01_how_kubernetes_sees_a_gpu`** — device plugin → kubelet → node status; taints and tolerations; the integer rules; labels; a GPU failing under running pods; NVLink-aware allocation.
+1. **`01_how_kubernetes_sees_a_gpu`** — device plugin → kubelet → node status; taints and tolerations; the integer rules; labels; a GPU failing under running pods; NVLink-aware allocation; time-slicing replicas and `failRequestsGreaterThanOne`.
 2. **`02_filter_score_and_fragmentation`** — the cycle; scores by hand; spread vs pack and stranded GPUs; reading `FailedScheduling`; preemption victims.
 3. **`03_gangs_and_topology`** — the partial-placement deadlock; all-or-nothing; Kueue TAS BestFit; required vs preferred topology per workload.
-4. **`04_queues_quotas_and_preemption`** — quota arithmetic with borrowing and lending; reclaim; preemption order; FIFO strategies; writing ClusterQueues for a serving/batch split.
+4. **`04_queues_quotas_and_preemption`** — quota arithmetic with borrowing and lending; reclaim; preemption order; FIFO strategies; writing ClusterQueues for a serving/batch split; predicting a reclaim (borrowers only, minimised in reverse).
 5. **`05_autoscaling_and_obtainability`** — bin-packing estimate; scale-from-zero and the idle tail; Spot and gang restarts; queued provisioning; choosing a capacity type; startup latency.
 
 ## Regenerating notebooks
@@ -84,9 +87,12 @@ To redo an exercise, `git restore notebooks/<name>.ipynb` returns it to the comm
 
 ## Where the numbers come from
 
-Every number in the notebooks and in `../PRIMER.md` is computed by this package, with inputs
-stated next to it. Durations, prices, stockout and preemption rates are **illustrative inputs**
-(prices and obtainability: [`../../../COMPUTE.md`](../../../COMPUTE.md)); outputs are
-**simulated**. Formulas and reason strings are pinned to upstream sources in `tests/`.
+Every worked number in the notebooks and in `../PRIMER.md` is computed by this package, with inputs
+stated next to it; product facts (defaults, versions, discounts, MIG profiles) are cited in the
+primer's Sources and Verify list instead. Durations, prices, stockout and preemption rates are
+**illustrative inputs** (prices and obtainability: [`../../../COMPUTE.md`](../../../COMPUTE.md));
+outputs are **simulated**. Formulas and reason strings are pinned to upstream sources in `tests/`;
+`tests/test_docs.py` also validates the primer's DRA manifest with `kubernetes-validate` (installed by
+`requirements.txt` and the `dev` extra; the test skips without it).
 
 MIT licensed.

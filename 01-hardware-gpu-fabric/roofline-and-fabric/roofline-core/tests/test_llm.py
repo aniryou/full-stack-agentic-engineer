@@ -48,10 +48,15 @@ def test_decode_batch_one_is_a_weight_stream():
 
 
 def test_batching_amortizes_weights_until_kv_dominates():
-    sweep = {b: llm.decode(M8, H100, b, 2048) for b in (1, 64, 256)}
+    cap = llm.max_batch_by_memory(M8, H100, 2048)
+    assert cap == 208                                                      # (72e9 - 16.06e9) / (2048 x 131072)
+    sweep = {b: llm.decode(M8, H100, b, 2048) for b in (1, 64, cap)}
     assert round(sweep[64].tokens_per_s) == 6659 and sweep[64].time * 1e3 == pytest.approx(9.61, abs=0.01)
-    assert sweep[256].intensity == pytest.approx(49.2, abs=0.1)
+    assert sweep[cap].intensity == pytest.approx(47.2, abs=0.1)
     assert all(s.bound == "memory" for s in sweep.values())
+    # KV share of bytes rises from 2% to ~80% across the sweep
+    kv = lambda b: b * 2049 * M8.kv_bytes_per_token() / sweep[b].bytes
+    assert kv(1) < 0.03 and kv(cap) == pytest.approx(0.79, abs=0.005)
 
 
 def test_kv_reads_cap_decode_intensity():
@@ -60,6 +65,34 @@ def test_kv_reads_cap_decode_intensity():
     assert llm.decode_crossover_batch(M8, H100, 0) == 297                  # ~ the ridge
     assert llm.decode_crossover_batch(M8, H100, 128) == 440
     assert llm.decode_crossover_batch(M8, H100, 1024) is None              # never compute-bound
+
+
+def test_decode_split_is_the_same_work_priced_per_kernel():
+    one, sp = llm.decode(M8, H100, 64, 2048), llm.decode_split(M8, H100, 64, 2048)
+    assert sp.gemms.flops + sp.attention.flops == pytest.approx(one.flops)
+    assert sp.gemms.bytes + sp.attention.bytes == pytest.approx(one.bytes)
+    assert sp.time == pytest.approx(one.time)                              # both kernels memory-bound: they agree
+    # GEMM intensity ~ batch (x 2 / weight bytes); attention ~ 2 x group / kv_bytes, whatever the batch
+    assert sp.gemms.intensity == pytest.approx(64, rel=0.01)
+    assert sp.attention.intensity == pytest.approx(2 * (32 / 8) / 2, rel=0.01)                  # 4 FLOP/B
+    assert llm.decode_split(M8, H100, 1024, 2048).attention.intensity == pytest.approx(4, rel=0.01)
+    fp8 = llm.SCHEMES["fp8"]
+    big, blended = llm.decode_split(M8, H100, 400, 2048, **fp8), llm.decode(M8, H100, 400, 2048, **fp8)
+    assert big.gemms.bound == "compute" and big.attention.bound == "memory" and blended.bound == "memory"
+    assert big.gemms.time * 1e3 == pytest.approx(3.03, abs=0.01) and big.attention.time * 1e3 == pytest.approx(16.03, abs=0.01)
+    assert big.time * 1e3 == pytest.approx(19.07, abs=0.01) and blended.time * 1e3 == pytest.approx(18.27, abs=0.01)
+    # max of sums <= sum of maxes, always
+    for b, c in [(1, 0), (64, 2048), (400, 2048), (4096, 128)]:
+        assert llm.decode(M8, H100, b, c).time <= llm.decode_split(M8, H100, b, c).time * (1 + 1e-12)
+
+
+def test_gemm_crossover_is_the_ridge_at_any_context():
+    assert llm.gemm_crossover_batch(M8, H100) == 296                       # ~ ridge 295
+    assert llm.gemm_crossover_batch(M8, H100, **llm.SCHEMES["fp8"]) == 296 # half the bytes, twice the peak
+    assert llm.gemm_crossover_batch(M8, H100, **llm.SCHEMES["w4a16"]) == 74
+    for c in (0, 2048, 32768):                                             # context does not move it
+        assert llm.decode_split(M8, H100, 296, c).gemms.bound == "compute"
+        assert llm.decode_split(M8, H100, 295, c).gemms.bound == "memory"
 
 
 def test_memory_capacity_caps_the_batch_first():

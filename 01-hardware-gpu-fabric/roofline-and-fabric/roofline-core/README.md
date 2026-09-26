@@ -5,8 +5,8 @@ of an LLM step, the α-β cost of a collective, cold start, failure rates and th
 small standard-library modules plus four fill-in notebooks. Tier **T0**: runs on a laptop, Colab CPU or
 CI, no GPU, no network.
 
-This is the *minimal* core of the topic. The concepts are in [`../PRIMER.md`](../PRIMER.md) — every number
-it quotes is computed here and pinned by `tests/test_primer_numbers.py`. The *detailed* lab,
+This is the *minimal* core of the topic. The concepts are in [`../PRIMER.md`](../PRIMER.md) — every computed
+number it quotes comes from here and is pinned by `tests/test_primer_numbers.py`. The *detailed* lab,
 [`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same quantities on the hardware you have.
 
 ## Quick start
@@ -14,7 +14,7 @@ it quotes is computed here and pinned by `tests/test_primer_numbers.py`. The *de
 ```bash
 cd roofline-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 54 tests, well under a second
+python3 -m pytest -q                          # 57 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -29,8 +29,11 @@ m = llm.PRESETS["llama-3.1-8b"]
 llm.prefill(m, h100, 2048).bound              # 'compute'  (intensity ~1,941 FLOP/B, ridge 295)
 step = llm.decode(m, h100, batch=1, context=1024)
 step.bound, round(step.time * 1e3, 2)         # ('memory', 4.52)
-llm.decode_intensity_limit(m, 4096)           # ~32 FLOP/B: KV reads cap decode, whatever the batch
-fabric.tp_comm_time(llm.PRESETS["llama-3.1-70b"], 4096, 8, fabric.LINKS["ib-ndr"])   # 0.387 s per prefill step
+llm.decode_intensity_limit(m, 4096)           # ~32 FLOP/B: KV reads cap the step's average, whatever the batch
+llm.gemm_crossover_batch(m, h100)             # 296: per kernel, the weight GEMMs still reach the ridge
+m70, nv, ib = llm.PRESETS["llama-3.1-70b"], fabric.LINKS["nvlink4"], fabric.LINKS["ib-ndr"]
+fabric.tp_comm_time(m70, 4096, 8, nv)                       # 0.046 s of all-reduce per 4K prefill, TP=8 in a node
+fabric.tp_comm_time_across_nodes(m70, 4096, 8, 2, nv, ib)   # 0.075 s at TP=16 over two nodes with rails
 ```
 
 ## The whole library (seven files)
@@ -38,9 +41,9 @@ fabric.tp_comm_time(llm.PRESETS["llama-3.1-70b"], 4096, 8, fabric.LINKS["ib-ndr"
 | File | What it teaches |
 |------|-----------------|
 | `roofline/specs.py` | spec-sheet literacy: a dated (Sep 2026, verify) catalogue of 16 accelerators with **dense** peaks, per-direction links, `peak_from_clock`, `from_sparse` |
-| `roofline/roofline.py` | `attainable = min(peak, I × BW)`, the ridge, kernel byte counts (elementwise, reduction, GEMM), tiling and fusion traffic, a text roofline chart |
-| `roofline/llm.py` | one engine step from a model config: prefill vs decode FLOPs and bytes, KV reads that cap decode, the crossover batch, memory-bound batch limits, quantization schemes, MoE experts touched |
-| `roofline/fabric.py` | the link ladder, α-β, ring and recursive-doubling all-reduce, algbw/busbw, tensor-parallel cost per step, rails and hierarchical all-reduce, leaf-spine sizing, oversubscription, bisection, staged vs GPUDirect copies, `nvidia-smi topo -m` codes |
+| `roofline/roofline.py` | `attainable = min(peak, I × BW)`, the ridge, kernel byte counts (elementwise, reduction, GEMM), tiling and fusion traffic (with extra inputs such as a residual), a text roofline chart |
+| `roofline/llm.py` | one engine step from a model config: prefill vs decode FLOPs and bytes, the step as one kernel and split per kernel (weight GEMMs vs attention), KV reads that cap decode, crossover batches, memory-bound batch limits, quantization schemes, MoE experts touched |
+| `roofline/fabric.py` | the link ladder, α-β, ring and recursive-doubling all-reduce, algbw/busbw, tensor-parallel cost per step in a node and across nodes, rails and hierarchical all-reduce, leaf-spine sizing, oversubscription, bisection, staged vs GPUDirect copies, `nvidia-smi topo -m` codes |
 | `roofline/storage.py` | checkpoint bytes, tier bandwidths (assumptions), parallel and streamed loading, a cold-start breakdown |
 | `roofline/reliability.py` | failure rates add, cluster MTBF from the Llama 3 data, Young/Daly checkpoint interval and waste, replicas as failure domains |
 | `roofline/cost.py` | $/GPU-hr → $/M tokens, utilisation, rent vs own break-even |
@@ -57,10 +60,12 @@ explanation and drill questions). Solutions are in `solutions/`.
    bytes), build the roofline, find when a GEMM becomes compute-bound, and why a kernel that saturates a T4
    can starve an H100. Primer §1–2.
 2. **`02_llm_inference_on_the_roofline`** — prefill vs decode, the batch sweep, the KV ceiling on decode
-   intensity, the closed-form crossover batch, predicting a quantization speedup from bytes, picking a batch
-   under an ITL SLO, MoE expert streaming. Primer §3–4.
-3. **`03_fabrics_and_collective_cost`** — α-β and the ring all-reduce, reading a busbw sweep, choosing a TP
-   degree for latency, sizing a two-tier fabric, reading `nvidia-smi topo -m`. Primer §5.
+   intensity, the closed-form crossover batch, the step per kernel (GEMMs vs attention), predicting a
+   quantization speedup from bytes, picking a batch under an ITL SLO, MoE expert streaming, picking a GEMM
+   tile that fits shared memory and fusing an elementwise chain. Primer §3–4.
+3. **`03_fabrics_and_collective_cost`** — α-β, simulating a ring all-reduce, reading a busbw sweep, choosing
+   a TP degree against an ITL SLO in or across nodes, sizing a two-tier fabric, reading `nvidia-smi topo -m`.
+   Primer §5.
 4. **`04_loading_reliability_and_cost`** — streamed loading, a cold-start budget, the Young/Daly interval,
    spares and failure-domain size, $/M tokens, rent vs own. Primer §6–8.
 

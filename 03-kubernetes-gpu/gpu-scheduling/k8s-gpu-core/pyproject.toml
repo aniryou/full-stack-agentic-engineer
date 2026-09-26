@@ -12,7 +12,8 @@ license = { text = "MIT" }
 dependencies = []                      # the library is standard-library only
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0",
+       "pyyaml>=6.0", "kubernetes-validate>=1.34"]   # the last two: the primer's DRA manifest test
 
 [tool.setuptools.packages.find]
 include = ["gpusched*"]

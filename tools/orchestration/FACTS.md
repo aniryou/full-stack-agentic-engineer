@@ -51,7 +51,7 @@ docs.vllm.ai, kubernetes.io, llm-d.ai, download.pytorch.org, registry.terraform.
 - T4 (N1): ~$0.35–0.55/hr. L4 (G2, g2-standard-4): ~$0.70/hr. Spot: 60–91% off. A100 40GB (a2-highgpu-1g) ~$3.7/hr; 80GB (a2-ultragpu-1g) ~$5/hr.
 - H100: on-demand only as `a3-highgpu-8g` ≈ $88/hr (~$11/GPU-hr); Spot ≈ $3.7/GPU-hr; 1g/2g/4g A3 shapes only via Spot/flex-start (verify).
 - A3 Mega (H100, GPUDirect-TCPXO), A3 Ultra (H200, RDMA), A4 (B200, 8 GPUs, NVLink 1.8 TB/s/GPU), A4X (GB200 NVL72), A4X Max (GB300 NVL72): reservation / DWS / calendar-mode oriented.
-  A4X Max/A4X/A4/A3 Ultra use GPUDirect RDMA via MRDMA NICs (ConnectX-7) on a 4-way rail-aligned network.
+  A4X Max/A4X/A4/A3 Ultra use GPUDirect RDMA via MRDMA NICs on a 4-way rail-aligned network (ConnectX-7 on A3 Ultra/A4; GB300-class A4X Max most likely ConnectX-8 — verify per machine type).
 - G4 = NVIDIA RTX PRO 6000 Blackwell (96 GB), GA.
 - Cloud Run GPUs (GA since June 2025): NVIDIA L4 (24 GB; min 4 vCPU/16 GiB) and RTX PRO 6000 Blackwell (96 GB; min 20 vCPU/80 GiB); per-second billing; scale to zero.
 - TPU v7 "Ironwood" (TPU7x) GA 2026-04-22: 192 GB HBM/chip, ~4.6 PFLOPS FP8/chip, 9,216-chip superpod; used via GKE. v6e Trillium, v5e/v5p exist. vLLM has a TPU backend (verify current name/status).
