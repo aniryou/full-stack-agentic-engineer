@@ -5,7 +5,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 
 | Layer / item | Paths | State | Next step |
 |---|---|---|---|
-| 01 roofline-and-fabric | `01-hardware-gpu-fabric/roofline-and-fabric/` (PRIMER, `roofline-core`, `gpu-bench-lab`) | PRIMER+core REVIEWED ✓ (25 findings, 58 tests); lab REVIEWED ✓ (40 findings, 89 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l01 → PR → merge to main |
+| 01 roofline-and-fabric | `01-hardware-gpu-fabric/roofline-and-fabric/` (PRIMER, `roofline-core`, `gpu-bench-lab`) | MERGED to main (PR #2, f36a55f) | readability pass rides the -l03 PR |
 | 02 cuda-and-nccl | `02-cuda-nccl-runtime/cuda-and-nccl/` (PRIMER, `cuda-nccl-core`, `cuda-nccl-lab`) | PRIMER+core REVIEWED ✓ (23 findings fixed, 128 tests); lab built (92 tests, 6/6 nbs, TF valid), review running | both reviews pass → integrate layer README → merge layer 02 to main |
 | 03 gpu-scheduling | `03-kubernetes-gpu/gpu-scheduling/` (PRIMER, `k8s-gpu-core`, `k8s-gpu-lab`) | PRIMER+core REVIEWED ✓ (27 findings, 49 tests); lab REVIEWED ✓ (34 findings, 118 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l03 (stacked on -l01) → PR → merge |
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | PRIMER+core REVIEWED ✓ (29 findings incl. 1 blocking fixed; 67 tests); lab built (58 tests, 6/6 nbs, TF valid), review running | lab review passes → integrate (04 README incl. vllm-internals + FA deep dive) → merge layer 04 |
