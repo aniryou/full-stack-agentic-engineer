@@ -47,7 +47,7 @@ versions are in `solutions/`.
 | 02 | `chunking` | Fixed vs structure-aware vs small-to-big; why splitting decides retrieval |
 | 03 | `hybrid_search` | BM25 from scratch + dense, fused with Reciprocal Rank Fusion |
 | 04 | `reranking` | Cheap first-stage recall, then a cross-encoder for precision |
-| 05 | `evaluation` | Recall@k and MRR; score dense vs BM25 vs hybrid, by question type |
+| 05 | `evaluation` | Hit@k, Recall@k (all gold docs) and MRR; score dense vs BM25 vs hybrid, by question type |
 | 06 | `iterative_rag` | *(advanced)* multi-hop questions and the loop behind agentic RAG |
 
 The self-checks test the **shape** of your implementation (sorted correctly,
