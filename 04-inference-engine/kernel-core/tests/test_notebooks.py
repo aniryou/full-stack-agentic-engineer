@@ -42,7 +42,7 @@ def test_worked_notebook_is_committed_executed_and_matches_kerncore():
     for tokens, batch in ((8192, 1), (128_000, 1), (8192, 32)):
         assert kv.fmt_bytes(kv.kv_cache_bytes(32, 8, 128, tokens, batch)) in out
     assert "131,072 bytes = 128 KiB" in out and "at most 59" in out and "at most 119" in out
-    assert "cached does ~135x less token work" in out
+    assert "cached:    271 token-passes" in out and "cached does ~136x less token work" in out
     assert any("image/png" in o.get("data", {}) for c in code for o in c["outputs"]), "the cost plot is missing"
 
 
@@ -53,6 +53,9 @@ def test_practice_notebook_is_committed_blank_and_every_blank_stops():
     names = re.findall(r'NotImplementedError\("BLANK ([A-D]):', "\n".join(src(c) for c in blanks))
     assert sorted(names) == ["A", "B", "C", "D"]
     assert all("# YOUR CODE HERE" in src(c) for c in blanks)
+    # Blank C: recomputing the whole sequence gives the same output, so Test 1 must also check the cached path
+    test1 = next(src(c) for c in code if "Test 1" in src(c))
+    assert "all(n == 1 for n, _ in decode)" in test1 and "range(len(prompt), len(prompt) + 31)" in test1
 
 
 @pytest.mark.parametrize("path", [WORKED, PRACTICE], ids=lambda p: p.name)
