@@ -550,6 +550,10 @@ core's FP8 KV emulation costs 2e-5 nats of KL and 1% of top-1 agreement on the t
 metric — in notebook 06 an INT8 model with 99.8% top-1 agreement diverges from the full-precision greedy text after
 13 tokens, because one flipped near-tie changes everything after it.
 
+**Deep dive:** [quantization](../quantization/PRIMER.md) (module 04.9) — the formats down to their bit patterns,
+GPTQ, AWQ and SmoothQuant, what each scheme runs as per GPU generation, KV-cache quantization, producing a checkpoint
+with llm-compressor and measuring the accuracy you pay.
+
 ## 9. Parallelism inside the engine
 
 When a model does not fit one GPU, or one GPU is too slow, the engine spans several. The menu and the rule — tensor
@@ -578,7 +582,9 @@ hold the model.
 
 **Expert parallelism (EP)** places a MoE layer's experts on different GPUs; tokens are dispatched to their experts
 and the results combined — two **all-to-alls** per MoE layer, sensitive to load imbalance between experts. Large MoE
-deployments combine data-parallel attention with expert-parallel MoE layers ("wide EP", layer 05).
+deployments combine data-parallel attention with expert-parallel MoE layers ("wide EP", layer 05). Dispatch and
+combine, the slowest rank and TP vs EP for experts are worked in
+[MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus).
 
 **Data parallelism (DP)** is replication: independent engine replicas, each with its own KV cache. Throughput scales
 linearly; what matters is routing requests to the replica that holds their prefix and is least loaded — layer 05.
@@ -647,7 +653,8 @@ TPOT SLO, SIMULATED).
 - **Realistic lengths.** Input and output length distributions (and their tails) decide everything: TTFT scales with
   prompts, KV pressure with prompt + output, ITL with batch and context. Shared prefixes change the answer entirely
   — benchmark agent traffic with its real system prompts and multi-turn histories (the lab's shared-prefix
-  workload).
+  workload). Thinking models are the extreme case: thousands of heavy-tailed output tokens hold their KV for the
+  whole generation ([RL and thinking-models §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
 - **Hold everything else fixed** — model, dtype, engine version, flags, GPU clocks — and change one knob at a time.
 
 **The knobs and what each trades.**

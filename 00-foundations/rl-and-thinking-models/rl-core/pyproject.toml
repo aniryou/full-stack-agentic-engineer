@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlcore"
+version = "0.1.0"
+description = "Reinforcement learning and thinking models on toy tasks: policy gradients, DPO, GRPO, test-time compute and the serving workload. The T0 core of 00-foundations/rl-and-thinking-models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # the library is standard library + numpy
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+plot = ["matplotlib>=3.8"]             # optional: the notebooks print text charts without it
+
+[tool.setuptools.packages.find]
+include = ["rlcore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

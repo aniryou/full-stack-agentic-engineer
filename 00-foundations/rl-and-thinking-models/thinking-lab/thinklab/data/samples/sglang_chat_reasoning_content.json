@@ -1,0 +1,22 @@
+{
+  "_thinklab_note": "sample output in the documented format (illustrative): SGLang --reasoning-parser qwen3 (field name reasoning_content, as the DeepSeek API)",
+  "id": "4b8f2e0c1a9d47f0",
+  "object": "chat.completion",
+  "created": 1790406010,
+  "model": "Qwen/Qwen3-0.6B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The answer is \\boxed{291}.",
+        "reasoning_content": "17 * 23 = 391. 391 - 100 = 291.",
+        "tool_calls": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "matched_stop": 151645
+    }
+  ],
+  "usage": {"prompt_tokens": 38, "total_tokens": 71, "completion_tokens": 33}
+}

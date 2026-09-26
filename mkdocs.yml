@@ -103,9 +103,86 @@ nav:
                   - "01 · Capacity practice": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice.ipynb"
                   - "Solutions":
                       - "01 · Capacity practice solved": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb"
+          - "mixture-of-experts":
+              - "layers/00-foundations/mixture-of-experts/index.md"
+              - "Primer": "layers/00-foundations/mixture-of-experts/PRIMER.md"
+              - "moe-core":
+                  - "layers/00-foundations/mixture-of-experts/moe-core/index.md"
+                  - "Notebooks":
+                      - "01 · The MoE layer": "layers/00-foundations/mixture-of-experts/moe-core/notebooks/01_the_moe_layer.ipynb"
+                      - "02 · Routing and load balance": "layers/00-foundations/mixture-of-experts/moe-core/notebooks/02_routing_and_load_balance.ipynb"
+                      - "03 · Which experts a batch touches": "layers/00-foundations/mixture-of-experts/moe-core/notebooks/03_which_experts_a_batch_touches.ipynb"
+                      - "04 · Expert parallelism and all to all": "layers/00-foundations/mixture-of-experts/moe-core/notebooks/04_expert_parallelism_and_all_to_all.ipynb"
+                      - "05 · Sizing and cost": "layers/00-foundations/mixture-of-experts/moe-core/notebooks/05_sizing_and_cost.ipynb"
+                  - "Solutions":
+                      - "01 · The MoE layer": "layers/00-foundations/mixture-of-experts/moe-core/solutions/01_the_moe_layer.ipynb"
+                      - "02 · Routing and load balance": "layers/00-foundations/mixture-of-experts/moe-core/solutions/02_routing_and_load_balance.ipynb"
+                      - "03 · Which experts a batch touches": "layers/00-foundations/mixture-of-experts/moe-core/solutions/03_which_experts_a_batch_touches.ipynb"
+                      - "04 · Expert parallelism and all to all": "layers/00-foundations/mixture-of-experts/moe-core/solutions/04_expert_parallelism_and_all_to_all.ipynb"
+                      - "05 · Sizing and cost": "layers/00-foundations/mixture-of-experts/moe-core/solutions/05_sizing_and_cost.ipynb"
+              - "moe-lab":
+                  - "layers/00-foundations/mixture-of-experts/moe-lab/index.md"
+                  - "moelab":
+                      - "fixtures":
+                          - "layers/00-foundations/mixture-of-experts/moe-lab/moelab/fixtures/index.md"
+                  - "Notebooks":
+                      - "01 · A tiny MoE in torch": "layers/00-foundations/mixture-of-experts/moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb"
+                      - "02 · Watch the router": "layers/00-foundations/mixture-of-experts/moe-lab/notebooks/02_watch_the_router.ipynb"
+                      - "03 · Batch vs weight stream": "layers/00-foundations/mixture-of-experts/moe-lab/notebooks/03_batch_vs_weight_stream.ipynb"
+                      - "04 · Expert parallelism on two GPUs": "layers/00-foundations/mixture-of-experts/moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb"
+                      - "05 · MoE on a small GPU": "layers/00-foundations/mixture-of-experts/moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb"
+                  - "Solutions":
+                      - "01 · A tiny MoE in torch": "layers/00-foundations/mixture-of-experts/moe-lab/solutions/01_a_tiny_moe_in_torch.ipynb"
+                      - "02 · Watch the router": "layers/00-foundations/mixture-of-experts/moe-lab/solutions/02_watch_the_router.ipynb"
+                      - "03 · Batch vs weight stream": "layers/00-foundations/mixture-of-experts/moe-lab/solutions/03_batch_vs_weight_stream.ipynb"
+                      - "04 · Expert parallelism on two GPUs": "layers/00-foundations/mixture-of-experts/moe-lab/solutions/04_expert_parallelism_on_two_gpus.ipynb"
+                      - "05 · MoE on a small GPU": "layers/00-foundations/mixture-of-experts/moe-lab/solutions/05_moe_on_a_small_gpu.ipynb"
+                  - "Deploy":
+                      - "layers/00-foundations/mixture-of-experts/moe-lab/deploy/index.md"
+                      - "any-gpu":
+                          - "layers/00-foundations/mixture-of-experts/moe-lab/deploy/any-gpu/index.md"
+                      - "gke":
+                          - "layers/00-foundations/mixture-of-experts/moe-lab/deploy/gke/index.md"
           - "model-landscape":
               - "Mistral Primer — Applied Exercises": "layers/00-foundations/model-landscape/mistral-primer-exercises.md"
               - "Open-Weight LLMs: A Primer": "layers/00-foundations/model-landscape/open-weight-llms-primer.md"
+          - "rl-and-thinking-models":
+              - "layers/00-foundations/rl-and-thinking-models/index.md"
+              - "Primer": "layers/00-foundations/rl-and-thinking-models/PRIMER.md"
+              - "rl-core":
+                  - "layers/00-foundations/rl-and-thinking-models/rl-core/index.md"
+                  - "Notebooks":
+                      - "01 · Policy gradients on a toy task": "layers/00-foundations/rl-and-thinking-models/rl-core/notebooks/01_policy_gradients_on_a_toy_task.ipynb"
+                      - "02 · Preferences reward models and dpo": "layers/00-foundations/rl-and-thinking-models/rl-core/notebooks/02_preferences_reward_models_and_dpo.ipynb"
+                      - "03 · Grpo with verifiable rewards": "layers/00-foundations/rl-and-thinking-models/rl-core/notebooks/03_grpo_with_verifiable_rewards.ipynb"
+                      - "04 · Test time compute": "layers/00-foundations/rl-and-thinking-models/rl-core/notebooks/04_test_time_compute.ipynb"
+                      - "05 · Thinking models and the serving workload": "layers/00-foundations/rl-and-thinking-models/rl-core/notebooks/05_thinking_models_and_the_serving_workload.ipynb"
+                  - "Solutions":
+                      - "01 · Policy gradients on a toy task": "layers/00-foundations/rl-and-thinking-models/rl-core/solutions/01_policy_gradients_on_a_toy_task.ipynb"
+                      - "02 · Preferences reward models and dpo": "layers/00-foundations/rl-and-thinking-models/rl-core/solutions/02_preferences_reward_models_and_dpo.ipynb"
+                      - "03 · Grpo with verifiable rewards": "layers/00-foundations/rl-and-thinking-models/rl-core/solutions/03_grpo_with_verifiable_rewards.ipynb"
+                      - "04 · Test time compute": "layers/00-foundations/rl-and-thinking-models/rl-core/solutions/04_test_time_compute.ipynb"
+                      - "05 · Thinking models and the serving workload": "layers/00-foundations/rl-and-thinking-models/rl-core/solutions/05_thinking_models_and_the_serving_workload.ipynb"
+              - "thinking-lab":
+                  - "layers/00-foundations/rl-and-thinking-models/thinking-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Grpo on a tiny transformer": "layers/00-foundations/rl-and-thinking-models/thinking-lab/notebooks/01_grpo_on_a_tiny_transformer.ipynb"
+                      - "02 · A thinking model on one GPU": "layers/00-foundations/rl-and-thinking-models/thinking-lab/notebooks/02_a_thinking_model_on_one_gpu.ipynb"
+                      - "03 · Test time compute for real": "layers/00-foundations/rl-and-thinking-models/thinking-lab/notebooks/03_test_time_compute_for_real.ipynb"
+                      - "04 · Serving thinking models": "layers/00-foundations/rl-and-thinking-models/thinking-lab/notebooks/04_serving_thinking_models.ipynb"
+                      - "05 · Rl rollouts with an engine": "layers/00-foundations/rl-and-thinking-models/thinking-lab/notebooks/05_rl_rollouts_with_an_engine.ipynb"
+                  - "Solutions":
+                      - "01 · Grpo on a tiny transformer": "layers/00-foundations/rl-and-thinking-models/thinking-lab/solutions/01_grpo_on_a_tiny_transformer.ipynb"
+                      - "02 · A thinking model on one GPU": "layers/00-foundations/rl-and-thinking-models/thinking-lab/solutions/02_a_thinking_model_on_one_gpu.ipynb"
+                      - "03 · Test time compute for real": "layers/00-foundations/rl-and-thinking-models/thinking-lab/solutions/03_test_time_compute_for_real.ipynb"
+                      - "04 · Serving thinking models": "layers/00-foundations/rl-and-thinking-models/thinking-lab/solutions/04_serving_thinking_models.ipynb"
+                      - "05 · Rl rollouts with an engine": "layers/00-foundations/rl-and-thinking-models/thinking-lab/solutions/05_rl_rollouts_with_an_engine.ipynb"
+                  - "Deploy":
+                      - "layers/00-foundations/rl-and-thinking-models/thinking-lab/deploy/index.md"
+                      - "any-gpu":
+                          - "layers/00-foundations/rl-and-thinking-models/thinking-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "layers/00-foundations/rl-and-thinking-models/thinking-lab/deploy/gcp/index.md"
           - "transformers":
               - "layers/00-foundations/transformers/index.md"
               - "Docs":
@@ -256,6 +333,43 @@ nav:
           - "paged-attention":
               - "PagedAttention: A Primer": "layers/04-inference-engine/paged-attention/paged-attention-primer.md"
               - "Paged attention practice": "layers/04-inference-engine/paged-attention/paged_attention_practice.ipynb"
+          - "quantization":
+              - "layers/04-inference-engine/quantization/index.md"
+              - "Primer": "layers/04-inference-engine/quantization/PRIMER.md"
+              - "quant-core":
+                  - "layers/04-inference-engine/quantization/quant-core/index.md"
+                  - "Notebooks":
+                      - "01 · Number formats and error": "layers/04-inference-engine/quantization/quant-core/notebooks/01_number_formats_and_error.ipynb"
+                      - "02 · Granularity and outliers": "layers/04-inference-engine/quantization/quant-core/notebooks/02_granularity_and_outliers.ipynb"
+                      - "03 · Gptq awq and smoothquant from scratch": "layers/04-inference-engine/quantization/quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb"
+                      - "04 · Activation and KV cache quantization": "layers/04-inference-engine/quantization/quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb"
+                      - "05 · Choosing a scheme": "layers/04-inference-engine/quantization/quant-core/notebooks/05_choosing_a_scheme.ipynb"
+                  - "Solutions":
+                      - "01 · Number formats and error": "layers/04-inference-engine/quantization/quant-core/solutions/01_number_formats_and_error.ipynb"
+                      - "02 · Granularity and outliers": "layers/04-inference-engine/quantization/quant-core/solutions/02_granularity_and_outliers.ipynb"
+                      - "03 · Gptq awq and smoothquant from scratch": "layers/04-inference-engine/quantization/quant-core/solutions/03_gptq_awq_and_smoothquant_from_scratch.ipynb"
+                      - "04 · Activation and KV cache quantization": "layers/04-inference-engine/quantization/quant-core/solutions/04_activation_and_kv_cache_quantization.ipynb"
+                      - "05 · Choosing a scheme": "layers/04-inference-engine/quantization/quant-core/solutions/05_choosing_a_scheme.ipynb"
+              - "quant-lab":
+                  - "layers/04-inference-engine/quantization/quant-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Quantize a checkpoint": "layers/04-inference-engine/quantization/quant-lab/notebooks/01_quantize_a_checkpoint.ipynb"
+                      - "02 · Serve and compare schemes": "layers/04-inference-engine/quantization/quant-lab/notebooks/02_serve_and_compare_schemes.ipynb"
+                      - "03 · Measure the accuracy cost": "layers/04-inference-engine/quantization/quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb"
+                      - "04 · KV cache quantization in vLLM": "layers/04-inference-engine/quantization/quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb"
+                      - "05 · Fp4 and the blackwell path": "layers/04-inference-engine/quantization/quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb"
+                  - "Solutions":
+                      - "01 · Quantize a checkpoint": "layers/04-inference-engine/quantization/quant-lab/solutions/01_quantize_a_checkpoint.ipynb"
+                      - "02 · Serve and compare schemes": "layers/04-inference-engine/quantization/quant-lab/solutions/02_serve_and_compare_schemes.ipynb"
+                      - "03 · Measure the accuracy cost": "layers/04-inference-engine/quantization/quant-lab/solutions/03_measure_the_accuracy_cost.ipynb"
+                      - "04 · KV cache quantization in vLLM": "layers/04-inference-engine/quantization/quant-lab/solutions/04_kv_cache_quantization_in_vllm.ipynb"
+                      - "05 · Fp4 and the blackwell path": "layers/04-inference-engine/quantization/quant-lab/solutions/05_fp4_and_the_blackwell_path.ipynb"
+                  - "Deploy":
+                      - "layers/04-inference-engine/quantization/quant-lab/deploy/index.md"
+                      - "any-gpu":
+                          - "layers/04-inference-engine/quantization/quant-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "layers/04-inference-engine/quantization/quant-lab/deploy/gcp/index.md"
           - "serving-engine":
               - "layers/04-inference-engine/serving-engine/index.md"
               - "Primer": "layers/04-inference-engine/serving-engine/PRIMER.md"
@@ -628,4 +742,45 @@ nav:
                   - "layers/07-application-agent-framework/retrieval-rag/vector_stores/index.md"
                   - "minigraphrag":
                       - "layers/07-application-agent-framework/retrieval-rag/vector_stores/minigraphrag/index.md"
+          - "sandboxed-execution":
+              - "layers/07-application-agent-framework/sandboxed-execution/index.md"
+              - "Primer": "layers/07-application-agent-framework/sandboxed-execution/PRIMER.md"
+              - "sandbox-core":
+                  - "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/index.md"
+                  - "Notebooks":
+                      - "01 · The threat model": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/01_the_threat_model.ipynb"
+                      - "02 · A process sandbox": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/02_a_process_sandbox.ipynb"
+                      - "03 · The execution contract and policies": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/03_the_execution_contract_and_policies.ipynb"
+                      - "04 · Egress and secrets": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/04_egress_and_secrets.ipynb"
+                      - "05 · Pools latency and cost": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/05_pools_latency_and_cost.ipynb"
+                  - "Solutions":
+                      - "01 · The threat model": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/01_the_threat_model.ipynb"
+                      - "02 · A process sandbox": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/02_a_process_sandbox.ipynb"
+                      - "03 · The execution contract and policies": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/03_the_execution_contract_and_policies.ipynb"
+                      - "04 · Egress and secrets": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/04_egress_and_secrets.ipynb"
+                      - "05 · Pools latency and cost": "layers/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/05_pools_latency_and_cost.ipynb"
+              - "sandbox-lab":
+                  - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Hardened containers": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/01_hardened_containers.ipynb"
+                      - "02 · Pod per execution on kind": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/02_pod_per_execution_on_kind.ipynb"
+                      - "03 · Egress proxy and secret brokering": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/03_egress_proxy_and_secret_brokering.ipynb"
+                      - "04 · An agent with a sandbox tool": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/04_an_agent_with_a_sandbox_tool.ipynb"
+                      - "05 · GKE sandbox with gvisor": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/05_gke_sandbox_with_gvisor.ipynb"
+                  - "Solutions":
+                      - "01 · Hardened containers": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/01_hardened_containers.ipynb"
+                      - "02 · Pod per execution on kind": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/02_pod_per_execution_on_kind.ipynb"
+                      - "03 · Egress proxy and secret brokering": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/03_egress_proxy_and_secret_brokering.ipynb"
+                      - "04 · An agent with a sandbox tool": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/04_an_agent_with_a_sandbox_tool.ipynb"
+                      - "05 · GKE sandbox with gvisor": "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/05_gke_sandbox_with_gvisor.ipynb"
+                  - "Deploy":
+                      - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/index.md"
+                      - "docker":
+                          - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/docker/index.md"
+                      - "gcp":
+                          - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/index.md"
+                      - "gke":
+                          - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gke/index.md"
+                      - "kind":
+                          - "layers/07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/kind/index.md"
   # nav-layers:end

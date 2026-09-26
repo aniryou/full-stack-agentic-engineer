@@ -754,6 +754,10 @@ pods the `nvidia.com/gpu` Exists/NoSchedule toleration yourself, or enable the p
 Kueue admits and preempts against real quota, TAS reads your topology labels — and containers get no device,
 because no device plugin answers `Allocate`. Lab notebook `02_kind_with_fake_gpus_and_kueue` scripts this
 (and falls back to a bundled simulator when Docker is absent).
+The same kind setup teaches sandbox pods for model-generated code — a RuntimeClass, Pod Security *restricted*,
+a default-deny NetworkPolicy and an admission policy — in
+[07-application-agent-framework/sandboxed-execution](../../07-application-agent-framework/sandboxed-execution/README.md)
+(kind cannot run gVisor; that topic's GKE Sandbox node pool can).
 
 ### 10.2 KWOK and fake-gpu-operator
 

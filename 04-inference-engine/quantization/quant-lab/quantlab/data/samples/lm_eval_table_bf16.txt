@@ -1,0 +1,7 @@
+# Sample output in the documented format (illustrative): the table `lm_eval` prints (lm-eval 0.4.13,
+# utils.make_table), same made-up values as lm_eval_bf16.json. Not a measurement.
+vllm (pretrained=Qwen/Qwen2.5-0.5B-Instruct,add_bos_token=True,gpu_memory_utilization=0.8), gen_kwargs: (None), limit: 250.0, num_fewshot: None, batch_size: auto
+|Tasks|Version|     Filter     |n-shot|  Metric   |   |Value|   |Stderr|
+|-----|------:|----------------|-----:|-----------|---|----:|---|-----:|
+|gsm8k|      3|flexible-extract|     5|exact_match|↑  |0.316|±  |0.0295|
+|     |       |strict-match    |     5|exact_match|↑  |0.300|±  |0.0290|

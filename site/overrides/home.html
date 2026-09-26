@@ -39,14 +39,14 @@
     <section aria-labelledby="fse-stack-title">
       <h2 id="fse-stack-title" class="fse-h2">The stack</h2>
       {% set layers = [
-        ("07-application-agent-framework", "07", "Agents", "the agent loop, tools, state, durable execution, evals, retrieval"),
+        ("07-application-agent-framework", "07", "Agents", "the agent loop, tools, sandboxes, state, durable execution, evals, retrieval"),
         ("06-gateway", "06", "Gateway", "identity and policy, rate limits, admission control, cost"),
         ("05-orchestrator", "05", "Orchestrator", "routing across replicas, autoscaling, prefill/decode disaggregation"),
-        ("04-inference-engine", "04", "Inference engine", "the step loop, batching, the KV cache, attention kernels"),
+        ("04-inference-engine", "04", "Inference engine", "the step loop, batching, the KV cache, attention kernels, quantization"),
         ("03-kubernetes-gpu", "03", "Kubernetes and GPU scheduling", "device plugins, gangs, topology, Kueue quotas"),
         ("02-cuda-nccl-runtime", "02", "CUDA, NCCL and runtime", "the execution model, collectives, containers, GPU sharing"),
         ("01-hardware-gpu-fabric", "01", "Hardware and fabric", "spec sheets, the roofline, fabrics, the cost of a token"),
-        ("00-foundations", "00", "Foundations", "transformer internals, capacity planning, the model landscape"),
+        ("00-foundations", "00", "Foundations", "transformer internals, capacity planning, the model landscape, MoE, RL and thinking models"),
       ] %}
       <ol class="fse-stack" aria-label="Layers 07 to 01: a request enters at the agent and goes down to the GPUs">
         {% for folder, num, name, what in layers if num != '00' %}

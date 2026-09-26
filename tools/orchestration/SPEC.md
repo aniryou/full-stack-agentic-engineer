@@ -1,4 +1,4 @@
-# SPEC — filling layers 01–05 of full-stack-agentic-engineer
+# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, four more topics: §6b)
 
 Repo: `/home/user/full-stack-agentic-engineer` (read its `CLAUDE.md`; you already have it). Scratch: `$SP` (see FACTS.md).
 Read `$SP/FACTS.md` before writing anything product-specific. This file is the contract every builder and reviewer follows.
@@ -35,7 +35,11 @@ output is labelled "simulated"; sample tool output used as fixtures is labelled 
 | 03 | `03-kubernetes-gpu/gpu-scheduling` | `k8s-gpu-core` (`gpusched`) | `k8s-gpu-lab` (`k8sgpu`) |
 | 04 | `04-inference-engine/serving-engine` | `mini-engine-core` (`minengine`) | `vllm-serving-lab` (`servelab`) |
 | 05 | `05-orchestrator/serving-orchestration` | `orchestrator-core` (`fleetsim`) | `inference-gateway-lab` (`igwlab`) |
-Root `CURRICULUM.md` and `COMPUTE.md` will be written by the integrator; you may link to them (from a topic dir:
+| 00 | `00-foundations/rl-and-thinking-models` | `rl-core` (`rlcore`) | `thinking-lab` (`thinklab`) |
+| 00 | `00-foundations/mixture-of-experts` | `moe-core` (`moecore`) | `moe-lab` (`moelab`) |
+| 04 | `04-inference-engine/quantization` | `quant-core` (`quantcore`) | `quant-lab` (`quantlab`) |
+| 07 | `07-application-agent-framework/sandboxed-execution` | `sandbox-core` (`sandboxcore`) | `sandbox-lab` (`sandboxlab`) |
+Root `CURRICULUM.md` and `COMPUTE.md` exist (the integrator updates them); you may link to them (from a topic dir:
 `../../CURRICULUM.md`, `../../COMPUTE.md`; from a core/lab dir: `../../../COMPUTE.md`) — the link checker may flag only those two.
 
 ## 3. Conventions (mirror `07-application-agent-framework/agent-fundamentals/agent-core` — read its README, pyproject, Makefile, tools/, notebooks_src/01, tests)
@@ -246,3 +250,222 @@ TESTS: <pytest one-liner>   NOTEBOOKS: <solutions x/y passed; blanks x/y stopped
 DEVIATIONS: <anything that differs from SPEC and why>
 OPEN: <VERIFY items, things you could not validate here (GPU/Docker/cloud), follow-ups>
 ```
+
+## 6b. Four more topics (September 2026): the same contract, one block each
+
+Everything in §0–§5 applies unchanged. Differences for these four builds:
+- **Existing material is a hard prerequisite, not a competitor.** Each block names the sections and functions already in the repo
+  that the new primer must cite and reuse; duplicating them is a *major* review finding. Cores stay standalone packages (no cross-lab
+  imports), but where a formula already has a home (`roofline.llm.experts_touched`, `capacity.py`, `minengine.quant`, `servelab.sizing`)
+  the new code must reproduce its numbers in a test that says so.
+- **Torch is installed here (CPU, `torch 2.14`)**, so torch code paths *can* be validated on CPU at T0 in this environment. Still import it
+  lazily and skip cleanly when absent — every T0 notebook must also run with torch missing (the numpy/stdlib path carries the concept).
+  Never `pip install torch` (it is already here); never install vllm/triton/flash-attn (no GPU).
+- **No network in tests or solutions.** Model weights are never downloaded at T0: tiny models are trained in the notebook or bundled as
+  small arrays; real checkpoints (0.5–2B) are T1 paths with `(verify)` model ids.
+- **Labs in `00-foundations` have no Terraform** (GCP is optional everywhere): `deploy/any-gpu/` plus a documented pointer to an existing
+  lab's GCP deploy (the 04 serving lab's Cloud Run/GKE, the 02 lab's `l4x2` pool). The 07 sandbox lab *does* carry Terraform (GKE Sandbox).
+- **Docker and kind are not runnable here**: notebooks that need them detect absence, print the exact commands, and use bundled sample
+  output labelled "sample output in the documented format (illustrative)". Manifests are validated offline (`kubernetes-validate`).
+- Facts: `$SP/FACTS.md` plus the per-topic research file `$SP/facts-<topic>.md` (written by the research agent before the builders start);
+  upstream sources are cloned under `$SP/ref/` (read them instead of guessing; the docs web sites are blocked, `git clone` and
+  `raw.githubusercontent.com` work). Anything not in those files is `(verify)`.
+
+### 00 · rl-and-thinking-models — "Reinforcement learning and thinking models: how post-training teaches a model to reason, and what that does to serving"
+Primer sections: 1 From pretraining to post-training (pretrain → SFT → preference/RL; what each stage changes; RL for LLMs as
+"sample, score, reweight"; where the compute goes — rollouts dominate; the rollout generator is an inference engine, link 04 serving-engine) ·
+2 Policy gradients over token sequences (the model as a policy; completions as trajectories; REINFORCE, variance, baselines and advantages;
+the KL penalty to a reference model and why it exists; reward hacking and length bias — every claim worked on the core's toy tasks) ·
+3 Learning from preferences (Bradley–Terry reward models; RLHF with PPO in brief — clipped ratio, value model, GAE; DPO: the closed form
+that turns the KL-regularised objective into a classification loss, the implicit reward β·log(π/π_ref), what it loses; IPO/KTO/ORPO one line each) ·
+4 RL with verifiable rewards and GRPO (verifiers for math/code/format; GRPO: G samples per prompt, group-normalised advantages, no critic,
+the clipped objective, the k3 KL estimator; DAPO/Dr.GRPO fixes — clip-higher, token-level loss, dropping the std normalisation, length bias;
+compute: G× generation, the reference and old-policy copies; TRL's `GRPOTrainer` loss options as the concrete reference) ·
+5 Thinking models (long chain-of-thought as a behaviour learned under RLVR; the DeepSeek-R1 recipe — R1-Zero → cold start → RL → rejection-sampling
+SFT → RL; length growth and "aha"; hybrid thinking modes and chat-template switches (Qwen3 `enable_thinking`), thinking budgets and
+`reasoning_effort`; distillation of traces into small models; a thinking token is billed as an output token) ·
+6 Test-time compute (sequential: think longer; parallel: best-of-n with a verifier or reward model, majority vote / self-consistency;
+pass@k vs pass^k and the unbiased pass@k estimator 1 − C(n−c,k)/C(n,k); search with process reward models in brief; compute-optimal
+allocation — when a smaller model with more samples wins; diminishing returns and over-thinking) ·
+7 What thinking does to serving (output-heavy → decode-dominant; heavy-tailed thinking-length distributions; KV working set per request
+grows 5–20×; ITL is the binding SLO, TTFT less so; the capacity primer's formulas with long outputs — cite `00-foundations/gpu-capacity-planning/PRIMER.md`
+and `capacity.py`; thinking is dropped from history by chat templates → prefix-cache implications (link 04 §5); streaming `reasoning_content`
+and vLLM's `--reasoning-parser`; budget enforcement (max_tokens vs budget forcing); cost per *correct* answer; routing by effort at the gateway,
+link 06; speculative decoding on long outputs, link 04 §7) ·
+8 The RL training stack in brief (rollouts with vLLM/SGLang inside the trainer, weight sync, async/off-policy RL; verl/TRL/OpenRLHF; why
+serving skills transfer; agentic RL — multi-turn with tools, environments and sandboxes, link 07 sandboxed-execution; reward design and evals, link 07.2) ·
+9 Where to run it (T0 toy policies and the workload model; Colab/Kaggle T4: tiny-transformer GRPO in torch and a 0.6B thinking model in vLLM;
+a rented 24 GB GPU: 1.7–4B thinking models; GCP via the 04 lab's deploys with a thinking model; link `COMPUTE.md`).
+Core `rlcore` (numpy): `tasks.py` — two verifiable toy environments: `SeqTask` (token-level: emit a short sequence over a tiny vocab that a verifier
+checks, e.g. balanced brackets or a sorted run; deterministic verifier) and `ThinkTask` (the policy picks a thinking length L then answers; P(correct | L)
+= 1 − e0·(1−q)^L so longer thinking really helps, with a per-token cost — the toy that shows RL discovering longer thinking and budgets vs accuracy);
+`policy.py` (small softmax policies with explicit reference copies, seeded sampling, per-token logprobs, closed-form gradients); `pg.py` (REINFORCE,
+baselines, advantages, KL penalty, entropy); `pref.py` (Bradley–Terry fit; DPO loss and gradient; implicit reward; a length-biased "annotator" to show
+reward hacking); `grpo.py` (group sampling, group-normalised advantages, clipped objective, k3 KL, DAPO-style flags); `ttc.py` (best-of-n, majority
+vote, unbiased pass@k, sequential thinking-length curves, compute-optimal n×L under a token budget); `workload.py` (thinking-length distributions →
+tokens per request, KV working set, decode-bound step time with a roofline-style model, cost per correct answer; reproduces the capacity primer's
+numbers for a no-thinking baseline in a test).
+Core notebooks: `01_policy_gradients_on_a_toy_task`, `02_preferences_reward_models_and_dpo`, `03_grpo_with_verifiable_rewards`, `04_test_time_compute`,
+`05_thinking_models_and_the_serving_workload`.
+Lab `thinklab`: `tinyrl/` (torch, lazy: a tiny decoder-only transformer trained from scratch on a scratchpad arithmetic task — SFT warm-up on a mix of
+with/without-scratchpad demonstrations, then GRPO with the verifier; reward and response-length curves; must finish in < 10 min on a laptop CPU, and
+the notebook must show the curves it actually got — bundled sample curves labelled illustrative are the no-torch fallback); `thinking/` (an
+OpenAI-compatible client: thinking on/off via chat-template kwargs, `reasoning_content` parsing, budget enforcement, best-of-n and majority vote,
+a built-in generated eval set of verifiable arithmetic/logic problems — no download); `fakeserver.py` (a T0 OpenAI-compatible server that emits
+`reasoning_content` and heavy-tailed output lengths with vLLM-named metrics, timing simulated from a roofline model — say so); `workload.py`
+(measure output-length distributions from a server and derive the serving shape; drive open-loop load with long outputs; compare no-thinking vs
+thinking vs budget); `parsers.py` (reasoning-block parsers for the common templates); `report.py`.
+Lab notebooks: `01_grpo_on_a_tiny_transformer` (T0 with torch; T1 faster), `02_a_thinking_model_on_one_gpu` (T1: Qwen3-0.6B/1.7B in vLLM with
+`--reasoning-parser`, thinking on vs off, accuracy vs budget; T0: bundled recorded outputs, illustrative), `03_test_time_compute_for_real` (T1: best-of-n
+and majority vote on the real model, cost per correct answer; T0: the bundled outputs), `04_serving_thinking_models` (T0 fake server; T1 real vLLM:
+ITL, KV usage, preemptions under long outputs; `max_model_len` and budget knobs; prefix caching across turns when thinking is dropped),
+`05_rl_rollouts_with_an_engine` (T1: vLLM as the rollout generator for one GRPO step on a 0.5B model with TRL optional; T0: the rollout bookkeeping on the toy task).
+Deploy: `deploy/any-gpu/` (docker run vLLM with a thinking model and `--reasoning-parser`; Colab/Kaggle T4 recipe with `--dtype half`; RunPod/Vast
+notes) and a pointer to `04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/` with a thinking model — no new Terraform.
+Must cite/reuse: capacity primer + `capacity.py` (§7), serving-engine PRIMER §5 (prefix caching), §7 (speculation), §11 (measuring), vllm-internals
+§9; `06-gateway/scaling-admission-cost` (cost per conversation, routing); `07-.../gcp-agent-platform-lab` notebook 08 (evals).
+
+### 00 · mixture-of-experts — "Mixture-of-experts models: the router, the experts, and what sparsity does to serving"
+Primer sections: 1 Why sparsity (parameters vs compute per token; the scaling-law view; memory by total, FLOPs by active — cite the capacity primer's
+Mistral Large 3 section; what MoE does not change: attention and the KV cache) · 2 The MoE layer (E expert MLPs; the router — linear scores, softmax
+or sigmoid, top-k, renormalisation, weighted combine; shared experts; fine-grained experts (DeepSeek-V3: 256 routed + 1 shared, top-8) vs coarse
+(Mixtral 8, top-2); expert size and granularity; counting total and active parameters from a config, worked for Mixtral-8x7B, DeepSeek-V3,
+Qwen3-30B-A3B, gpt-oss-120b and Llama 4 Maverick — read the model code under `$SP/ref/transformers`) · 3 Routing and load balance (router collapse;
+the Switch auxiliary loss α·E·Σ f_e·P_e; router z-loss; capacity factor and token dropping vs dropless (MegaBlocks); auxiliary-loss-free balancing
+with per-expert bias (DeepSeek-V3) and its sequence-level complement; expert-choice routing; node/group-limited routing for EP; balance at inference:
+hot experts and domain skew) · 4 Training MoE in brief (EP all-to-all in forward and backward; loss terms; upcycling from dense; MoE + MLA vs MoE + GQA
+— the attention side, link the transformer primer §9) · 5 MoE at inference: which experts a step touches (**cite and reuse** roofline PRIMER §3.6 and
+`roofline.llm.experts_touched` — reproduce its Mixtral/Qwen3 table in a test; skewed (Zipf) vs uniform routing; the decode crossover batch; why MoE
+wants big batches; KV unchanged so the KV/weights ratio shifts; prefix caching unchanged) · 6 Running MoE on GPUs (fused MoE kernels: sort/permute
+tokens by expert, grouped GEMM, vLLM's Triton `fused_moe` and its tuned configs; expert parallelism: dispatch/combine all-to-alls with
+bytes = tokens × k × hidden × bytes per GPU — link 02 PRIMER §5 and DeepEP; TP vs EP for experts and the hybrid; data-parallel attention + EP (wide-EP,
+link 05 PRIMER §8); expert offloading to CPU for small GPUs (vLLM `--cpu-offload-gb`, llama.cpp); quantized experts (MXFP4 in gpt-oss; link 04 quantization)) ·
+7 Sizing and cost (memory by total + KV; prefill FLOPs by active; decode step time by bytes streamed at the batch; GPUs and EP degree for a target;
+cost per token vs a dense model of similar quality (verify); a table of MoE families with E, k, shared, total/active (verify, dated)) ·
+8 In a design review: failure modes (MoE at batch 1; EP across a slow fabric; hot experts; MoE on one 24 GB GPU; long context where KV dominates;
+quantizing experts; dense vs MoE for a workload) · 9 Where to run it (T0 numpy; Colab/Kaggle T4 or a rented 24 GB GPU: a small open MoE with router
+hooks — candidates `(verify)`: OLMoE-1B-7B, Qwen1.5-MoE-A2.7B INT4, Qwen3-30B-A3B INT4 on 24 GB, granite-3 MoE; Kaggle 2×T4 for EP=2; GCP: the 02 lab's
+`l4x2` pool with `--enable-expert-parallel`; link `COMPUTE.md`).
+Core `moecore` (numpy): `moe.py` (the layer: experts, router softmax/sigmoid, top-k, renormalisation, shared experts, combine; dense equivalence
+when E=1; total/active parameter counting from a config), `routing.py` (aux loss, z-loss, capacity factor and token dropping, dropless, bias-based
+balancing, expert-choice; utilisation stats), `train.py` (a small numpy trainer with manual gradients for linear/one-hidden-layer experts and a linear
+router on a toy task — collapse without balancing, balance with it; keep it small and fast), `touched.py` (experts touched: closed form and Monte Carlo
+with Zipf skew; weight-stream bytes per step vs batch; decode crossover with a small roofline helper), `ep.py` (EP dispatch/combine across ranks:
+bytes, imbalance, the slowest rank sets the step; TP vs EP; the wide-EP layout), `sizing.py` (deployment sizing and cost; `MODELS` catalogue with
+E, k, shared, hidden, total/active, verify-marked).
+Core notebooks: `01_the_moe_layer`, `02_routing_and_load_balance`, `03_which_experts_a_batch_touches`, `04_expert_parallelism_and_all_to_all`, `05_sizing_and_cost`.
+Lab `moelab`: `tinymoe/` (torch, lazy: a tiny MoE transformer trained on a toy task; router collapse without balancing; expert specialisation; CPU minutes
+at T0 with torch, bundled curves labelled illustrative without), `hooks.py` (router-logit hooks for HF MoE models → per-token expert selection,
+utilisation histograms, hot experts by domain), `stream.py` (decode step time vs batch for a MoE vs a dense model with vLLM; compared with
+`moecore.touched`), `ep.py` (`--enable-expert-parallel` vs TP on 2 GPUs; parse throughput), `offload.py` (what fits on 16/24 GB with CPU offload and
+INT4 experts; measured cost), `fixtures/` (bundled sample router traces and benchmark outputs, labelled illustrative), `report.py`.
+Lab notebooks: `01_a_tiny_moe_in_torch` (T0 with torch), `02_watch_the_router` (T1; T0 bundled traces), `03_batch_vs_weight_stream` (T1; T0 simulated),
+`04_expert_parallelism_on_two_gpus` (T2 Kaggle 2×T4; T0 simulated), `05_moe_on_a_small_gpu` (T1 offloading and INT4 experts; T0 sizing).
+Deploy: `deploy/any-gpu/` (docker run vLLM with a small MoE, EP=2 on two GPUs, offload flags; Colab/Kaggle recipes), `deploy/gke/` (a vLLM Deployment
+with EP=2 on the 02 lab's `l4x2` pool — manifests only, link `02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform/`; no new Terraform).
+Must cite/reuse: transformer primer §9 row, capacity primer, roofline PRIMER §3.6 + `roofline.llm`, 02 PRIMER §5 (all-to-all), 04 serving-engine
+PRIMER §9 (EP), 05 PRIMER §8 (wide-EP), the open-weight primer §4 (families).
+
+### 04 · quantization — "Quantization for inference: number formats, calibration, kernels and the accuracy you pay"
+Primer sections: 1 Why quantize, and what it can and cannot speed up (the roofline argument — weight bytes per decode step, KV bytes per token,
+tensor-core throughput by precision, cite 01 PRIMER §1–3; weight-only helps decode, W8A8/FP8 helps prefill too; the accuracy budget; where
+serving-engine PRIMER §8 and `minengine.quant` stop and this primer starts — link, do not repeat) · 2 Number formats (INT8/INT4 with scale and
+zero point, symmetric vs asymmetric; FP8 E4M3 vs E5M2 — range vs precision, subnormals; FP4 E2M1; block formats MXFP4 (E8M0 shared scale per 32) and
+NVFP4 (E4M3 scale per 16 + an FP32 tensor scale); BF16/FP16 baselines; the uniform-quantization error model and ~6 dB per bit; outliers and why
+they dominate) · 3 Granularity and the bits-per-weight budget (per-tensor / channel / group (32, 128) / token / block; static vs dynamic activation
+scales; bpw accounting with scales and zero points — INT4-g128 ≈ 4.16 bpw) · 4 Weight-only post-training quantization (RTN; GPTQ — the OBS
+error-compensation update column by column with a damped Hessian from calibration activations; AWQ — activation-aware per-channel scaling and the
+search; SmoothQuant — migrating activation outliers into weights; what calibration data does and does not do; rotations (QuaRot/SpinQuant) in brief;
+kernels: dequantize-on-the-fly (Marlin, Machete, ExLlama) and why W4A16 is fast for decode and slower for prefill) · 5 Weight-and-activation quantization
+(INT8 W8A8 with SmoothQuant; FP8 W8A8 per-tensor vs per-block scales (DeepSeek-V3's 128×128) and dynamic per-token activation scales; FP4 W4A4 on
+Blackwell with NVFP4; accumulators; which layers stay in high precision — embeddings, LM head, norms, attention softmax — and why) ·
+6 KV-cache quantization (FP8 E4M3/E5M2 KV, per-token/per-head scales; INT4 KV with per-channel keys and per-token values (KIVI); what it buys — 2×
+sessions, faster long-context decode — and its kernel conditions, cite the FlashAttention deep dive §9 and vllm-internals §6.3; prefix caching with
+quantized KV) · 7 Quantization-aware training and QLoRA in brief (fake quantization with a straight-through estimator; QAT for FP8/INT4; QLoRA's NF4
+base + LoRA is a training recipe, not a serving format; distillation to recover accuracy; link 00 rl-and-thinking-models §1) · 8 Measuring the accuracy
+you pay (perplexity vs task accuracy vs logit KL / argmax agreement; lm-evaluation-harness; long-generation evals for thinking models; failure modes:
+small models, MoE experts, long context, multilingual, tool calling; setting a budget) · 9 Producing a checkpoint (llm-compressor recipes — FP8 dynamic,
+W4A16 GPTQ/AWQ, W8A8 INT8, NVFP4 — read `$SP/ref/llm-compressor`; the compressed-tensors config in `config.json` and safetensors layout, ignored modules;
+GPTQModel/AutoAWQ; pre-quantized hubs; vLLM's loader and kernel selection — `--quantization`, auto-detection, Marlin/Machete/cutlass FP8, minimum
+compute capability per kernel: T4 sm75, A100 sm80, L4/4090 sm89, H100 sm90, B200 sm100; `--kv-cache-dtype`; llama.cpp GGUF k-quants as the CPU/consumer path) ·
+10 Choosing a scheme (a decision table by GPU generation, model size, workload (prefill- vs decode-heavy), accuracy budget and memory target; cost per
+token, cite 01 PRIMER §8; consistency with the serving-engine §8 knob table).
+Core `quantcore` (numpy): `formats.py` (encode/decode INT8/INT4 sym/asym, FP8 E4M3/E5M2, FP4 E2M1, MXFP4 and NVFP4 block formats; representable grids;
+bits per weight), `granularity.py` (per-tensor/channel/group/token/block scales; error metrics: relative error, SQNR, argmax agreement), `gptq.py`
+(Hessian from calibration activations, damping, OBS column updates; RTN baseline), `awq.py` (activation-aware scale search), `smoothquant.py`, `w8a8.py`
+(fake-quant matmul with static/dynamic activation scales), `kvquant.py` (FP8 and KIVI-style KV; attention-output error), `tinymodel.py` (a small
+deterministic transformer or MLP stack with synthetic outlier-heavy activations so calibration matters — no download), `cost.py` (roofline-style speed
+and memory model per scheme per GPU; the decision table; reproduces `minengine.quant`/serving-engine §8 numbers in a test), `eval.py` (a built-in eval:
+logit KL, argmax agreement, toy-task accuracy).
+Core notebooks: `01_number_formats_and_error`, `02_granularity_and_outliers`, `03_gptq_awq_and_smoothquant_from_scratch`,
+`04_activation_and_kv_cache_quantization`, `05_choosing_a_scheme`.
+Lab `quantlab`: `compress.py` (real checkpoints with llm-compressor or GPTQModel when installed (lazy) — FP8 dynamic and W4A16 on a tiny HF model at T1;
+at T0 the same recipes applied with the lab's own numpy/torch code to a bundled tiny model, written as a compressed-tensors-style safetensors file that the
+lab's loader reads back and checks), `serve.py` (vLLM flags per scheme and GPU generation; recipes), `bench.py` (TTFT/ITL/throughput per scheme against
+a fake or real server — the bundled fake server models bytes-per-weight speedups, labelled simulated), `evalharness.py` (an lm-eval CLI wrapper plus the
+offline mini-eval), `kv.py` (`--kv-cache-dtype` sizing and concurrency, reproducing `servelab.sizing` numbers in a test), `fp4.py` (NVFP4/MXFP4 layout
+calculators and a Blackwell throughput model, verify-marked), `report.py`.
+Lab notebooks: `01_quantize_a_checkpoint` (T0 tiny model; T1 llm-compressor on a 0.5B model), `02_serve_and_compare_schemes` (T1: FP16 vs INT4 vs FP8 on a
+24 GB GPU; the T4 path is INT4 only with fp16; T0: fake server, simulated), `03_measure_the_accuracy_cost` (T1 lm-eval subset; T0 offline mini-eval and
+logit KL), `04_kv_cache_quantization_in_vllm` (T1 on Ada or newer; T0 sizing and simulated ITL), `05_fp4_and_the_blackwell_path` (T0 calculators; verify-marked).
+Deploy: `deploy/any-gpu/` (docker run recipes per GPU generation and scheme; Colab/Kaggle T4 INT4 recipe; RunPod/Vast 4090/L4 for FP8) and a pointer to
+`04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/` with quantized-model variables — no new Terraform.
+Must cite/reuse: 01 PRIMER §1–3, §8; serving-engine PRIMER §8 and `minengine.quant`; `servelab.sizing`; vllm-internals §6.3 and its quantization tables;
+FlashAttention deep dive §9; the vllm-serving-lab notebook 05.
+
+### 07 · sandboxed-execution — "Sandboxed execution: running model-generated code and tool calls without ambient authority"
+Primer sections: 1 Why a sandbox, and the threat model (model-generated code and tool calls are untrusted input; prompt injection → code execution →
+exfiltration, lateral movement with the agent's credentials, resource abuse; the OWASP agentic risks — cite the identity primer
+`06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md` §6.2 rather than restating; the invariant "no ambient authority": no credentials,
+no network by default, no persistent filesystem; blast radius) · 2 The isolation ladder (in-process restrictions are not a boundary; subprocess with
+rlimits/seccomp/namespaces; containers — namespaces, cgroups, capabilities, seccomp, no-new-privileges, read-only rootfs, non-root, pids limit; user-space
+kernels — gVisor's Sentry/Gofer, syscall interception, its cost; microVMs — Firecracker, Kata, boot times, memory, snapshot/restore; full VMs; a table of what
+each isolates, which escapes it defends against, and its overhead) · 3 The execution contract (request: code or tool call + inputs + budgets — CPU time,
+wall time, memory, pids, disk, output bytes — + policy; response: truncated stdout/stderr, artifacts, exit reason, usage; idempotency keys and safe
+re-execution; ephemeral workspace; sessions vs one-shot; timeouts and cancellation) · 4 Network and secrets (deny-by-default egress; allowlists; an egress
+proxy that injects credentials for allowed hosts so the sandbox never holds keys — link the identity primer's token exchange; DNS; exfiltration channels;
+package installation inside sandboxes; secrets in prompts vs in tools) · 5 Sandboxes on Kubernetes (link 03 PRIMER §1 and §3: pod-per-execution vs
+warm pools with exec; Jobs with `activeDeadlineSeconds` and `ttlSecondsAfterFinished`; `securityContext` — runAsNonRoot, readOnlyRootFilesystem, drop ALL,
+seccompProfile RuntimeDefault, allowPrivilegeEscalation false; Pod Security Standards restricted; RuntimeClass — gVisor `runsc`, Kata; NetworkPolicy
+default-deny with egress only to the proxy; ResourceQuota/LimitRange; emptyDir sizeLimit; ValidatingAdmissionPolicy (CEL) rejecting non-conforming
+sandbox pods; dedicated tainted node pools; GKE Sandbox and Autopilot; what kind can and cannot reproduce — no gVisor in kind) · 6 Latency, throughput and
+cost per action (cold start by isolation level, verify-marked: fork/exec ms, container 100–500 ms, gVisor more, Firecracker ~125 ms boot, VM 10 s+;
+warm pools and snapshot/restore; the queueing model — arrival rate × execution time → pool size; cost per execution on GKE / Cloud Run jobs / managed
+sandboxes; actions per turn × cost per action, link `06-gateway/scaling-admission-cost` §1) · 7 Browser, computer-use and GPU sandboxes in brief
+(headless browsers: profiles, downloads, egress; screenshot-to-action loops; GPU jobs an agent launches — same policies plus device plugins, link 03) ·
+8 Observability, audit and abuse detection (every execution logged with principal, policy decision, budgets used, exit reason — link the identity primer's
+audit event; metrics: p50/p95 startup and run time, kill reasons; detecting fork bombs, miners, egress attempts; incident response) · 9 Where to run it
+(laptop: the process sandbox and Docker hardening, gVisor if installed; kind: the pod-per-execution runner with policies; GCP: a GKE Sandbox node pool via
+Terraform, Cloud Run jobs; managed sandbox services — E2B, Modal, Daytona, Vertex Agent Sandbox — in a verify-marked table; link `COMPUTE.md`).
+Core `sandboxcore` (standard library only — `subprocess`, `resource`, `tempfile`, `socket`, `http.server`, `json`): `threats.py` (a scripted "LLM" that
+emits attack payloads — read env secrets, read a fake `~/.ssh`, an egress attempt to a local listener, a fork bomb, a disk fill, an infinite loop, huge
+output — each a probe with an expected verdict, every probe harmless by construction: stand-in secrets in a temp dir, bounded limits), `executor.py`
+(the unsandboxed executor for contrast and `ProcessSandbox`: clean env, temp workspace, rlimits — CPU, AS, NPROC, FSIZE, NOFILE — wall timeout with
+process-group kill, output truncation, exit reasons; states plainly what it cannot stop — the network — and the macOS caveats), `contract.py`
+(ExecutionRequest/ExecutionResult dataclasses, budgets, idempotency keys, result hashing), `policy.py` (policy as data: egress allowlist, filesystem
+policy, budgets; an evaluator; `render_k8s()` emitting Pod/Job/NetworkPolicy/RuntimeClass/ResourceQuota/LimitRange/ValidatingAdmissionPolicy YAML from a
+policy — validated with `kubernetes-validate --strict -k 1.34.0`), `proxy.py` (a tiny allowlisting HTTP egress proxy that injects a credential header for
+allowed hosts — tested against a local upstream), `pool.py` (a discrete-event model of warm pools: cold-start latency vs pool size vs arrival rate; cost per
+execution), `audit.py` (structured audit events), `agent.py` (a ~60-line agent loop that dispatches a `run_code` tool through the sandbox with budgets and
+audit; scripted LLM; injection scenarios).
+Core notebooks: `01_the_threat_model` (run the probes through the unsandboxed executor — safely, against stand-ins — and see what leaks),
+`02_a_process_sandbox` (rlimits, timeouts, truncation; what is and is not stopped), `03_the_execution_contract_and_policies` (the contract, policy as data,
+rendered manifests), `04_egress_and_secrets` (the proxy: no key in the sandbox), `05_pools_latency_and_cost`.
+Lab `sandboxlab`: `docker.py` (a hardened `docker run` builder — `--network none`, `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges`,
+a seccomp profile, `--pids-limit`, `--memory`, `--cpus`, tmpfs workspace, non-root user, `--runtime runsc` when gVisor is present; runs the core's probes
+and reports verdicts; without Docker prints the commands and uses bundled sample verdicts (illustrative)), `k8s/` (manifests via `render_k8s` plus a
+`Runner` that creates a Job per execution with kubectl, waits, collects logs; a warm-pool variant using `kubectl exec`; the ValidatingAdmissionPolicy
+rejecting pods without the sandbox securityContext/RuntimeClass; startup-latency measurement), `proxy/` (the egress proxy as a deployable container plus
+the NetworkPolicy allowing egress only to it), `agent/` (a 07.1-style loop with `run_code` and `fetch_url` tools routed through the sandbox and proxy;
+injection scenarios that must fail closed), `bench.py` (startup and run-time latency by isolation level; T0 measures the process sandbox; Docker/kind/GKE
+when reachable), `report.py`.
+Deploy: `deploy/docker/` (the hardened run script, seccomp profile, gVisor install notes), `deploy/kind/` (cluster script: a namespace with restricted PSS
+labels, default-deny NetworkPolicy, the egress proxy, ResourceQuota/LimitRange, the runner Job, the ValidatingAdmissionPolicy; says plainly that gVisor
+is unavailable in kind), `deploy/gcp/terraform/` (zonal GKE Standard, system pool, a **GKE Sandbox (gVisor) node pool** — `node_config.sandbox_config
+{ type = "gvisor" }` (verified in the provider schema; look up the rest with `$SP/tfattrs.py`) — tainted, Spot, autoscaling 0→N; no Cloud NAT by
+default (no egress); Artifact Registry for the sandbox image; managed Prometheus; cheapest defaults), `deploy/gke/` (RuntimeClass `gvisor`, the
+namespace, NetworkPolicy, the runner Job with `runtimeClassName: gvisor`, the admission policy, the proxy Deployment).
+Lab notebooks: `01_hardened_containers` (T0 + Docker), `02_pod_per_execution_on_kind` (T0 + Docker; predicts without), `03_egress_proxy_and_secret_brokering` (T0),
+`04_an_agent_with_a_sandbox_tool` (T0), `05_gke_sandbox_with_gvisor` (T3; T0 inspects and validates manifests).
+Must cite/reuse: identity primer §6.2 and its audit section, `06-gateway/scaling-admission-cost` §1 and §5 (admission, cost), 03 PRIMER §1, §3, §9,
+`03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab` (`k8sgpu.manifests` style, kind deploy script style), agent-core (07.1) tool contracts.

@@ -1,0 +1,15 @@
+# Sample output in the documented format (illustrative): a `vllm serve` startup log, line wording of
+# vLLM v0.30.0 (verify). Values are made up but consistent with quantlab.kv.size() for an FP8_DYNAMIC
+# (compressed-tensors) Llama-3.1-8B-Instruct with --kv-cache-dtype fp8, --max-model-len 16384,
+# --gpu-memory-utilization 0.92 on an L4. Not a measurement.
+INFO 09-26 11:00:01 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-26 11:00:03 [model.py:547] Resolved architecture: LlamaForCausalLM
+INFO 09-26 11:00:03 [model.py:1510] Using max model len 16384
+INFO 09-26 11:00:03 [cache.py:201] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+INFO 09-26 11:00:05 [cuda.py:412] Using FLASHINFER attention backend out of potential backends: ['FLASHINFER', 'TRITON_ATTN']
+INFO 09-26 11:00:06 [__init__.py:759] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+INFO 09-26 11:00:41 [gpu_model_runner.py:2602] Model loading took 8.46 GiB memory and 34.816021 seconds
+INFO 09-26 11:00:58 [gpu_worker.py:298] Available KV cache memory: 11.12 GiB
+INFO 09-26 11:00:58 [kv_cache_utils.py:1087] GPU KV cache size: 182,128 tokens, Maximum concurrency for 16,384 tokens per request: 11.12x
+INFO 09-26 11:01:19 [core.py:210] init engine (profile, create kv cache, warmup model) took 37.90 s
+INFO 09-26 11:01:20 [api_server.py:1634] Starting vLLM API server 0 on http://0.0.0.0:8000

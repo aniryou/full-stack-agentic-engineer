@@ -1,0 +1,106 @@
+# Qwen1.5-MoE-A2.7B (14.3 B parameters, 28.6 GB in bf16: more than one 24 GB L4) served by vLLM with
+# expert parallelism over the two L4s of layer 02's `l4x2` pool (g2-standard-24, PCIe, no NVLink).
+#   --tensor-parallel-size 2 --enable-expert-parallel: attention split in two, each GPU holds 30 of
+#   the 60 experts whole (EP size = TP x DP = 2); `./run.sh layout tp|tp_ep|dp_ep` switches layouts.
+# Cluster: 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform (no new Terraform here).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-moe
+  namespace: moe-lab
+  labels:
+    app: vllm-moe
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                               # one 2-GPU node: never run two copies side by side
+  selector:
+    matchLabels:
+      app: vllm-moe
+  template:
+    metadata:
+      labels:
+        app: vllm-moe
+    spec:
+      nodeSelector:                              # the l4x2 pool of layer 02's cluster
+        cloud.google.com/gke-accelerator: nvidia-l4
+        node.kubernetes.io/instance-type: g2-standard-24
+      tolerations:
+        - key: nvidia.com/gpu                    # GKE taints GPU nodes (verify: nvidia.com/gpu=present:NoSchedule)
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 25          # Spot VMs get ~30 s notice before preemption
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.30.0        # ENTRYPOINT is `vllm serve`; a CUDA 13 build (driver 580+, verify)
+          args:
+            - Qwen/Qwen1.5-MoE-A2.7B-Chat
+            - --port=8000
+            - --max-model-len=4096
+            - --gpu-memory-utilization=0.92
+            - --tensor-parallel-size=2
+            - --enable-expert-parallel
+            - --enable-return-routed-experts     # per-token expert ids for notebook 02
+          env:
+            - name: HF_TOKEN                     # only needed for gated models
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "16"
+              memory: 64Gi
+              nvidia.com/gpu: "2"                # = TP x DP; extended resource: requests == limits
+            limits:
+              memory: 80Gi
+              nvidia.com/gpu: "2"
+          startupProbe:                          # 28.6 GB download + load + KV allocation + CUDA graphs
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 180                # 30 minutes
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: dshm                             # NCCL between the two GPUs goes through shared memory on PCIe
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: hf-cache                         # node-local (the pool's 100 GB disk); lost with the node
+          emptyDir:
+            sizeLimit: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-moe
+  namespace: moe-lab
+  labels:
+    app: vllm-moe
+spec:
+  selector:
+    app: vllm-moe
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

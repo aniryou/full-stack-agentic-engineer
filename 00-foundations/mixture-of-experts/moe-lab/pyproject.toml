@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moelab"
+version = "0.1.0"
+description = "Watch a mixture-of-experts model route, stream, split and squeeze: a tiny MoE in torch, router hooks, decode step time vs batch, expert parallelism on two GPUs, and MoE on one small GPU."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# The library needs numpy only; torch (T0 on CPU) and vLLM/transformers (T1) are optional and imported lazily.
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "pyyaml>=6.0",
+       "kubernetes-validate>=1.30"]
+# T0 with torch: the tiny MoE trains on a CPU (the CPU wheel is enough; see pytorch.org for the index URL).
+torch = ["torch>=2.4"]
+# T1: a real MoE through transformers + hooks (downloads weights; needs a GPU for anything but the smallest).
+hf = ["torch>=2.4", "transformers>=5.0", "accelerate>=1.0"]
+# T1/T2: the real engine. Needs an NVIDIA GPU (compute capability 7.5+) and a CUDA-matched wheel.
+gpu = ["vllm==0.30.0"]
+
+[project.scripts]
+moelab = "moelab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["moelab*"]
+
+[tool.setuptools.package-data]
+moelab = ["fixtures/*.json", "fixtures/*.txt", "fixtures/*.log", "fixtures/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

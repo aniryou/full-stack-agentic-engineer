@@ -1,0 +1,12 @@
+# The library (T0): standard library + PyYAML (manifest rendering).
+pyyaml>=6.0
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+kubernetes-validate>=1.34
+# Optional: evaluate the admission policy's CEL offline in the tests.
+#   pip install cel-python   (or: pip install --no-deps cel-python lark jmespath pendulum google-re2)
+# T0 + Docker / T1 / T3 need no Python extras: docker, kind, kubectl, gcloud and terraform are CLIs.

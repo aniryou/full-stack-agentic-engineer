@@ -1,0 +1,23 @@
+{
+  "_thinklab_note": "sample output in the documented format (illustrative): the same request with chat_template_kwargs {\"enable_thinking\": false}",
+  "id": "chatcmpl-8a02b6f1d4e94d3e",
+  "object": "chat.completion",
+  "created": 1790406002,
+  "model": "Qwen/Qwen3-0.6B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "17 × 23 − 100 = 391 − 100 = 281.\n\n\\boxed{281}", "reasoning": null, "tool_calls": []},
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 44,
+    "total_tokens": 71,
+    "completion_tokens": 27,
+    "completion_tokens_details": {"reasoning_tokens": 0},
+    "prompt_tokens_details": {"cached_tokens": 32}
+  }
+}

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thinklab"
+version = "0.1.0"
+description = "Thinking models and RL post-training, hands on: GRPO on a tiny transformer, a thinking model on one GPU, test-time compute, and the serving shape of long outputs — with a fake vLLM for offline work."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Runtime: the async HTTP client/server (load generator and fake server). Everything else is standard library.
+dependencies = ["aiohttp>=3.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "pyyaml>=6.0",
+       "matplotlib>=3.7"]
+# The tiny-transformer RL (notebooks 01 and 05): the CPU build of torch is enough.
+torch = ["torch>=2.2"]
+# T1 only (a GPU box): the real engine, and the RL libraries for notebook 05.
+gpu = ["vllm==0.30.0", "transformers>=4.56.2", "trl==1.14.0"]
+
+[project.scripts]
+thinklab = "thinklab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["thinklab*"]
+
+[tool.setuptools.package-data]
+thinklab = ["data/*.json", "data/samples/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: the full tiny-transformer GRPO run (~40 s on a CPU); runs by default, deselect with -m 'not slow'"]

@@ -1,0 +1,13 @@
+# The library (T0): numpy only.
+numpy>=1.24
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+pyyaml>=6.0
+kubernetes-validate>=1.30
+# Optional at T0: torch (CPU is enough) trains the tiny MoE in notebook 01; without it the notebook
+# reads curves this code recorded.   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# T1 only (GPU box):  pip install "vllm==0.30.0"   and/or   pip install "transformers>=5" accelerate

@@ -1,6 +1,7 @@
-# FACTS — verified on 2026-09-26 (session research). Treat as the source of truth; mark anything not here `(verify)`.
+# FACTS — verified on 2026-09-26 (session research, refreshed for the §6b build the same day). Treat as the source of truth; mark anything not here `(verify)`.
+Per-topic fact sheets written by the research agents are kept in the repo under [`facts/`](facts/) (see the last section).
 
-Scratch dir: `$SP=/tmp/claude-0/-home-user-full-stack-agentic-engineer/4b9a43de-09d5-5f71-ab43-1b2252b82aa6/scratchpad`
+Scratch dir: `$SP=/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad`
 Reference files downloaded from upstream repos (read them instead of guessing): `$SP/ref/`
 - `inference.networking.k8s.io_inferencepools.yaml` — InferencePool CRD (v1)
 - `llmd-llm-d.ai_inferenceobjectives.yaml`, `llmd-inferenceobjective_types.go` — InferenceObjective CRD
@@ -72,3 +73,24 @@ docs.vllm.ai, kubernetes.io, llm-d.ai, download.pytorch.org, registry.terraform.
   Lambda/GCP give VMs.
 - Environment here: no GPU, no Docker daemon, Python 3.11, PyPI reachable, torch NOT installable (download.pytorch.org blocked; PyPI torch pulls ~2.5 GB of CUDA wheels — do not install).
   numba installs from PyPI (use `NUMBA_ENABLE_CUDASIM=1` to run CUDA kernels on CPU).
+
+## Environment for the §6b build (2026-09-26, this session)
+- Python 3.11.15; installed system-wide: numpy 2.4, pytest 9.1, nbformat, nbclient, ipykernel (kernel `python3` registered), matplotlib, pyyaml, aiohttp, httpx, requests,
+  kubernetes-validate 1.36 (`kubernetes-validate --strict -k 1.34.0 <yaml>`), **torch 2.14.0 (CPU build; `torch.cuda.is_available()` is False)** — import it lazily, skip cleanly when absent.
+- No GPU, no Docker daemon (`docker` binary only), no kind/kubectl/helm. 4 CPUs, 15 GB RAM: keep tests < 60 s and notebook runs < 10 min each.
+- Terraform 1.13.3 + offline provider mirror (google/google-beta 8.4.0, kubernetes 3.2.1, helm 3.3.0, random 3.7.2, null 3.2.4):
+  `export ORCH_SCRATCH=/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad TF_CLI_CONFIG_FILE=/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/tf/terraformrc TERRAFORM_BIN=/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/tf/bin/terraform; /tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/tfcheck.sh <terraform-dir>`.
+  Attribute lookups: `TF_SCHEMA_JSON=/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/tf/schema.json python3 /tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/tfattrs.py google_container_node_pool sandbox` → `node_config.sandbox_config.type` (required) — GKE Sandbox is `sandbox_config { type = "gvisor" }`.
+- Installs: `/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/pipi <pkgs>` only (serialized pip). Never install torch (present), vllm, triton, flash-attn, transformers-with-models that download weights.
+- Network: `git clone https://github.com/<org>/<repo>` and `https://raw.githubusercontent.com/...` work; github.com web pages, api.github.com, codeload, docs sites (docs.vllm.ai, kubernetes.io, gvisor.dev, cloud docs), arxiv.org, huggingface.co and download.pytorch.org are blocked. PyPI works.
+- Upstream sources already cloned (shallow, some sparse) under `/tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/ref/`: vllm (docs/, vllm/reasoning, vllm/model_executor/layers/quantization, .../fused_moe, vllm/engine, vllm/entrypoints/openai, vllm/config, vllm/v1/core, vllm/distributed, examples/), llm-compressor (full), compressed-tensors, trl (docs/source, trl/trainer, examples/scripts), transformers (models: qwen3_moe, qwen2_moe, mixtral, deepseek_v3, llama4, gpt_oss, olmoe, granitemoe; docs/source/en/quantization; integrations), gvisor (g3doc), k8s-website (concepts/security, containers, reference/access-authn-authz, workloads/controllers, services-networking, tasks/configure-pod-container, policy, scheduling-eviction, tasks/administer-cluster), firecracker (docs), kata (docs), kind (site docs), e2b, deepseek-v3 (README + inference/ incl. configs and model.py), deepseek-r1, deepep, dapo, verl (docs), gpt-oss, llama-models (models/llama4), kimi-k2, olmoe, qwen3, megablocks, gptq, marlin, llm-awq, smoothquant, kivi, gptqmodel, lm-eval (docs, gsm8k/mmlu tasks), modelopt (docs, examples/llm_ptq), tf-google (website/docs/r), sglang (docs).
+  Use `grep -rn` over these instead of guessing; cite the file path in the fact sheet. Missing repo? `flock /tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/ref/.lock git clone --depth 1 https://github.com/<org>/<repo> /tmp/claude-0/-home-user-full-stack-agentic-engineer/ba870d1c-654f-5a6d-8ced-c7c74aaf3b6e/scratchpad/ref/<name>`.
+- Repo facts that the new topics must stay consistent with: vLLM pinned at 0.30.0 / main@5840d95 (verify); Kueue v0.19.6; K8s 1.34; the roofline core's model catalogue (`01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/roofline/llm.py`: Mixtral-8x7B 46.7 B total / 12.9 B active, Qwen3-30B-A3B 30.5 B / 3.35 B); the capacity primer's Mistral Large 3 (675 B MoE, 41 B active); `minengine.quant` formats (int8 per-channel, int4 group-wise, fp8-e4m3 emulation); `servelab.sizing` (KV blocks from config.json + gpu_memory_utilization).
+
+## Per-topic fact sheets for the four §6b topics (2026-09-26)
+Written by the research agents from the cloned upstream sources before the builders started; each fact names the file it was read
+from, and the unverified items are listed at the end of each sheet. They are the verification record behind those four primers.
+- [`facts/mixture-of-experts.md`](facts/mixture-of-experts.md) — model architectures computed from configs, router code per family, load-balance and capacity code, experts touched, EP bytes, vLLM v0.30.0 MoE flags, small-GPU fits.
+- [`facts/rl-and-thinking-models.md`](facts/rl-and-thinking-models.md) — vLLM reasoning parsers and fields, Qwen3 and DeepSeek-R1 templates and settings, TRL GRPO/DPO defaults, DAPO, verl, pass@k, T4 sizing predictions.
+- [`facts/quantization.md`](facts/quantization.md) — vLLM quantization schemes and kernel minimum capabilities, the compressed-tensors format, llm-compressor recipes, GPTQ/AWQ/SmoothQuant/KIVI as code, FP8/FP4 formats, lm-eval.
+- [`facts/sandboxed-execution.md`](facts/sandboxed-execution.md) — gVisor, Pod Security Standards, RuntimeClass, ValidatingAdmissionPolicy, NetworkPolicy, Jobs, Firecracker and Kata, kind's NetworkPolicy enforcement, GKE Sandbox in Terraform (`sandbox_config.type = "GVISOR"`), rlimit and subprocess pitfalls.

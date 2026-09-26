@@ -1,0 +1,94 @@
+# A thinking model (Qwen3-4B, reasoning parser on) on one L4 in GKE: a Deployment and a ClusterIP Service.
+# Runs on the 04 serving lab's cluster (its deploy/gcp/gke/cluster.sh creates an L4 Spot pool that
+# autoscales 0..2) or on the Terraform clusters of layers 03 and 05. Scrape config: podmonitoring-thinking.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-thinking
+  labels:
+    app: vllm-thinking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-thinking
+  template:
+    metadata:
+      labels:
+        app: vllm-thinking
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+        cloud.google.com/gke-spot: "true"          # remove to run on an on-demand pool
+      tolerations:
+        - key: nvidia.com/gpu                      # GKE taints GPU nodes (verify: nvidia.com/gpu=present:NoSchedule)
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 25            # Spot VMs get ~30 s notice before preemption
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.30.0          # ENTRYPOINT is `vllm serve`
+          args:
+            - Qwen/Qwen3-4B
+            - --port=8000
+            - --max-model-len=16384
+            - --gpu-memory-utilization=0.92
+            - --max-num-seqs=32
+            - --reasoning-parser=qwen3
+            - --enable-prompt-tokens-details
+            - '--reasoning-config={"reasoning_start_str": "<think>", "reasoning_end_str": "I have to give the solution based on the reasoning directly now.</think>"}'
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "6"
+              memory: 20Gi
+              nvidia.com/gpu: "1"                  # extended resource: requests == limits
+            limits:
+              memory: 26Gi
+              nvidia.com/gpu: "1"
+          startupProbe:                            # download + load + KV allocation + CUDA graphs
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90                   # 15 minutes
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        - name: hf-cache
+          emptyDir:
+            sizeLimit: 30Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-thinking
+  labels:
+    app: vllm-thinking
+spec:
+  selector:
+    app: vllm-thinking
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

@@ -1,0 +1,390 @@
+{
+ "_label": "sample output in the documented format (illustrative)",
+ "_source": "Written from the documented behaviour of each flag (docker run reference; gVisor user guide: networking, filesystem, compatibility) with the lab's default budgets (cpu 2 s, wall 5 s, memory 256 MiB, file 8 MiB, output 64 KiB/1 MiB). Not measured here. Measure your own with `python3 -m sandboxlab probes --level docker:runc` (or docker:runsc, docker:default).",
+ "runs": {
+  "docker:default": [
+   {
+    "probe": "env_secret",
+    "isolation": "docker:default",
+    "verdict": "CONTAINED",
+    "evidence": "not found (docker run does not pass the host environment)",
+    "exit_reason": "ok",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "ssh_key",
+    "isolation": "docker:default",
+    "verdict": "CONTAINED",
+    "evidence": "FileNotFoundError,FileNotFoundError (the host's files are not mounted)",
+    "exit_reason": "ok",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "proc_environ",
+    "isolation": "docker:default",
+    "verdict": "CONTAINED",
+    "evidence": "no readable environ held the canary (PID namespace: only the container's processes)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "write_outside",
+    "isolation": "docker:default",
+    "verdict": "CONTAINED",
+    "evidence": "FileNotFoundError (the host directory does not exist in the container)",
+    "exit_reason": "ok",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "egress",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "listener received the canary via host.docker.internal (bridge network)",
+    "exit_reason": "ok",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "metadata",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "reached the stand-in metadata endpoint via host.docker.internal (real one not probed)",
+    "exit_reason": "ok",
+    "wall_s": 0.52,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "fork_bomb",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "forked all 64 (no pids limit)",
+    "exit_reason": "ok",
+    "wall_s": 0.21,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "wrote all 16 MiB (the container's writable layer, on the host disk)",
+    "exit_reason": "ok",
+    "wall_s": 0.09,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill_many",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "wrote all 16 MiB",
+    "exit_reason": "ok",
+    "wall_s": 0.1,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "memory_hog",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "allocated 512 MiB (no memory limit)",
+    "exit_reason": "ok",
+    "wall_s": 0.35,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "infinite_loop",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "no budget: ran until the harness killed it",
+    "exit_reason": "harness_timeout",
+    "wall_s": 3.0,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "sleep_forever",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "no budget: ran until the harness killed it",
+    "exit_reason": "harness_timeout",
+    "wall_s": 3.0,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "huge_output",
+    "isolation": "docker:default",
+    "verdict": "LEAKED",
+    "evidence": "all 4194304 bytes reached the caller",
+    "exit_reason": "ok",
+    "wall_s": 0.12,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "escape_session",
+    "isolation": "docker:default",
+    "verdict": "CONTAINED",
+    "evidence": "nothing outlived the execution (PID 1 exited, so the kernel killed the PID namespace)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   }
+  ],
+  "docker:runc": [
+   {
+    "probe": "env_secret",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "not found",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "ssh_key",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "FileNotFoundError,FileNotFoundError",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "proc_environ",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "no readable environ held the canary",
+    "exit_reason": "ok",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "write_outside",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "OSError (read-only file system)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "egress",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror",
+    "exit_reason": "ok",
+    "wall_s": 0.06,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "metadata",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror (stand-in metadata endpoint)",
+    "exit_reason": "ok",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "fork_bomb",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped after 60 forks: BlockingIOError: Resource temporarily unavailable (--pids-limit 64 counts every task in the container)",
+    "exit_reason": "ok",
+    "wall_s": 0.12,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped at 8 MiB: OSError: File too large",
+    "exit_reason": "ok",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill_many",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped at 15 MiB: OSError: No space left on device (tmpfs size=16m)",
+    "exit_reason": "ok",
+    "wall_s": 0.06,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "memory_hog",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason memory",
+    "exit_reason": "memory",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "infinite_loop",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason cpu_time after 2.02 s",
+    "exit_reason": "cpu_time",
+    "wall_s": 2.02,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "sleep_forever",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason wall_timeout after 5.00 s",
+    "exit_reason": "wall_timeout",
+    "wall_s": 5.0,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "huge_output",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "65536 bytes kept, exit reason output_limit",
+    "exit_reason": "output_limit",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "escape_session",
+    "isolation": "docker:runc",
+    "verdict": "CONTAINED",
+    "evidence": "nothing outlived the execution (the container and its PID namespace end with the run)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   }
+  ],
+  "docker:runsc": [
+   {
+    "probe": "env_secret",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "not found",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "ssh_key",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "FileNotFoundError,FileNotFoundError",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "proc_environ",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "no readable environ held the canary",
+    "exit_reason": "ok",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "write_outside",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "OSError (read-only file system)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "egress",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror",
+    "exit_reason": "ok",
+    "wall_s": 0.06,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "metadata",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror (stand-in metadata endpoint)",
+    "exit_reason": "ok",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "fork_bomb",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped after 31 forks: BlockingIOError: Resource temporarily unavailable (RLIMIT_NPROC inside the gVisor kernel; the host pids cgroup sees the Sentry's threads (verify))",
+    "exit_reason": "ok",
+    "wall_s": 0.12,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped at 8 MiB: OSError: File too large",
+    "exit_reason": "ok",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "disk_fill_many",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "stopped at 15 MiB: OSError: No space left on device (tmpfs size=16m)",
+    "exit_reason": "ok",
+    "wall_s": 0.06,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "memory_hog",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason memory",
+    "exit_reason": "memory",
+    "wall_s": 0.05,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "infinite_loop",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason cpu_time after 2.02 s",
+    "exit_reason": "cpu_time",
+    "wall_s": 2.02,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "sleep_forever",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "exit reason wall_timeout after 5.00 s",
+    "exit_reason": "wall_timeout",
+    "wall_s": 5.0,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "huge_output",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "65536 bytes kept, exit reason output_limit",
+    "exit_reason": "output_limit",
+    "wall_s": 0.03,
+    "label": "sample output in the documented format (illustrative)"
+   },
+   {
+    "probe": "escape_session",
+    "isolation": "docker:runsc",
+    "verdict": "CONTAINED",
+    "evidence": "nothing outlived the execution (the container and its PID namespace end with the run)",
+    "exit_reason": "ok",
+    "wall_s": 0.04,
+    "label": "sample output in the documented format (illustrative)"
+   }
+  ]
+ }
+}

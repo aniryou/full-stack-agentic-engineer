@@ -1,0 +1,36 @@
+# `vllm bench serve` against the in-cluster Service: a CPU-only client, so it lands on the system pool
+# and costs no GPU time (verify that the benchmark client starts without a GPU in your image version).
+#   ./run.sh bench 16    -> out/bench_<layout>_c16.txt  ->  python -m moelab bench-parse out/bench_<layout>_c16.txt
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: moe-bench
+  namespace: moe-lab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: moe-bench
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bench
+          image: vllm/vllm-openai:v0.30.0
+          command: ["vllm", "bench", "serve"]
+          args:
+            - --base-url=http://vllm-moe.moe-lab.svc.cluster.local:8000
+            - --model=Qwen/Qwen1.5-MoE-A2.7B-Chat
+            - --dataset-name=random
+            - --random-input-len=256
+            - --random-output-len=128
+            - --num-prompts=128
+            - --max-concurrency=16
+            - --ignore-eos
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              memory: 8Gi

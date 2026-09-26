@@ -480,7 +480,8 @@ a reduce-scatter and an all-gather (the same bytes) so that norms run on 1/p of 
 experts and an all-to-all **combine** back, each `tokens × top_k × hidden × bytes` per GPU. For a Mixtral-like
 layer (hidden 4,096, top-2) with 256 tokens per GPU that is 4 MiB per direction: 22 µs pairwise or 10 µs
 direct in the model (`model_time("all_to_all", ...)`). Specialised kernels (DeepEP) have low-latency modes for decode and high-throughput modes
-for prefill. **Pipeline parallelism** sends one activation per stage boundary (send/recv), which is small
+for prefill; the MoE side of the exchange — placement, the slowest rank, TP vs EP and wide-EP — is
+[MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus). **Pipeline parallelism** sends one activation per stage boundary (send/recv), which is small
 enough to cross the scale-out network. **Data parallelism** (replicas) needs no collectives at inference. The
 rule from the [deployment primer §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu)
 follows: TP and EP inside the NVLink domain, PP and DP across it.

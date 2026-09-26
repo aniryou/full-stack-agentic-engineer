@@ -172,7 +172,7 @@ Scaling laws (Kaplan et al., 2020; Hoffmann et al., "Chinchilla", 2022) showed t
 
 ### 6.3 Post-training is not architecture
 
-Instruction following, chat behavior, refusals, tool use — none of it is architectural. It comes from further training of the same network: supervised fine-tuning on curated examples, then preference optimization (RLHF, DPO, and successors), and increasingly reinforcement learning on tasks with checkable answers. The pretrained model is a document-continuation engine; post-training shapes what it continues into. Keep the two separate in your head; much of the confusion about what a model "knows" versus what it "does" dissolves when you do.
+Instruction following, chat behavior, refusals, tool use — none of it is architectural. It comes from further training of the same network: supervised fine-tuning on curated examples, then preference optimization (RLHF, DPO, and successors), and increasingly reinforcement learning on tasks with checkable answers. The pretrained model is a document-continuation engine; post-training shapes what it continues into. Keep the two separate in your head; much of the confusion about what a model "knows" versus what it "does" dissolves when you do. How those post-training steps work — policy gradients, reward models and DPO, GRPO with verifiable rewards — is §1–4 of the [RL and thinking-models primer](../../rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training).
 
 ## 7. Inference: where practitioner intuition matters most
 
@@ -267,7 +267,7 @@ The 2017 design is still recognizable in every frontier model. What changed is a
 | No bias terms | Biases everywhere | Slightly more stable at scale, fewer parameters, no measurable loss |
 | Grouped-query attention (GQA) | One K/V pair per head | Several query heads share one K/V head; cuts the KV cache 4–8× at small quality cost. Multi-query (MQA) is the extreme: one K/V for all heads |
 | FlashAttention | Naive attention kernel | Identical math; tiled to avoid materializing the n × n matrix; large speed and memory wins |
-| Mixture of Experts (MoE) | One MLP per block | E MLPs per block and a router that sends each token to the top-k; parameters grow ~E× while compute per token barely moves. More knowledge per FLOP, at the cost of memory and serving complexity |
+| Mixture of Experts (MoE) | One MLP per block | E MLPs per block and a router that sends each token to the top-k; parameters grow ~E× while compute per token barely moves. More knowledge per FLOP, at the cost of memory and serving complexity; worked in depth in [mixture-of-experts](../../mixture-of-experts/PRIMER.md) |
 | Sliding-window attention | Full attention in every layer | Some layers attend only to the last w tokens, often interleaved with full-attention layers; bounds cost on long inputs |
 | Latent / compressed K/V (e.g. multi-head latent attention) | Standard K/V | Project K and V through a low-rank bottleneck; further KV cache reduction |
 

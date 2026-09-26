@@ -223,6 +223,8 @@ Everything that enters the context window from outside the developer's own instr
 
 Model-generated code runs with *no ambient credentials*. Google's Agent Sandbox (and Workspaces) exist for this; if you must run code elsewhere, run it under a separate, unprivileged identity, without the agent's metadata-server access, with network egress off by default. An "execute code" tool is DESTRUCTIVE-tier by definition.
 
+This control is built out in [07-application-agent-framework/sandboxed-execution](../../../../07-application-agent-framework/sandboxed-execution/README.md): the isolation ladder from a process to gVisor and a microVM, the execution contract, an egress proxy that injects credentials the sandbox never holds, and the Kubernetes objects that enforce it.
+
 ### 6.3 Plan → check → act
 
 For multi-step tasks, have the agent produce a plan (the list of tool calls it intends), run it through the same policy engine as a dry run, and only then execute step by step with per-step enforcement. Budgets (tokens, tool calls, spend) and loop detection are part of this layer — cascading failures (ASI08) are usually unbounded loops with valid credentials.

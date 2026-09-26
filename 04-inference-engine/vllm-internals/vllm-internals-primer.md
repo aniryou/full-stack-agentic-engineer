@@ -1172,7 +1172,8 @@ LoadConfig.load_format ("auto")                                   vllm/config/lo
 Other `load_format`s: `runai_streamer` (object storage), `tensorizer`, `sharded_state` (pre-sharded per TP rank),
 `instanttensor`, `ipc_cache` (map already-quantized weights from a local daemon started with `vllm preload`),
 `modelexpress`, `mistral`, `npcache`, `dummy`, and plugins; GGUF and bitsandbytes are not in the registry at
-this commit `(verify: where they are handled now)`. `--safetensors-load-strategy` defaults to lazy memory
+this commit because both moved to out-of-tree plugins, `vllm-gguf-plugin` and `vllm-bnb-plugin` (the
+[quantization primer](../quantization/PRIMER.md#verify-list)'s Verify list; `(verify, 2026-09-26)`). `--safetensors-load-strategy` defaults to lazy memory
 mapping and enables prefetch automatically on NFS when the checkpoint fits in 90% of RAM (`LoadConfig`).
 Cold start in the logs: "Loading weights took X seconds" (I/O and copies), "Model loading took X GiB memory and
 Y seconds", compile ("Compiling a graph for compile range … takes X s" or a cache hit), "Graph capturing
@@ -1215,6 +1216,13 @@ case, so large `--limit-mm-per-prompt` values shrink the KV pool.
 
 **Hybrid and sliding-window models**: Section 4.8. Whether a hybrid model can use Model Runner V2 or prefix
 caching is decided at startup and logged.
+
+**MoE models**: fused MoE kernels, `--enable-expert-parallel`, the all-to-all backends and EPLB are worked in
+[MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus).
+
+**Thinking models**: `--reasoning-parser` splits the output into `reasoning` and `content`, and
+`thinking_token_budget` caps the reasoning; both, and what long outputs do to the KV pool, are in
+[RL and thinking-models §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving).
 
 ---
 
@@ -1680,7 +1688,7 @@ cache built from scratch), [`../serving-engine/vllm-serving-lab/servelab/sizing.
 | Same-step prefix hits | blocks are hashed at allocation, so a later request in the same `schedule()` may hit them | inferred from `allocate_slots`; confirm with a test |
 | DeepSeek-V3 MLA shape | 61 layers, latent 512 + RoPE 64 | model config not fetched here |
 | NIXL proxy convention | prefill request sent with `max_tokens = 1` and `do_remote_decode` | proxy and router implementations differ |
-| GGUF and bitsandbytes loading | not in the loader registry at this commit | locate the current path before relying on it |
+| GGUF and bitsandbytes loading | not in the loader registry at this commit: out-of-tree plugins `vllm-gguf-plugin` 0.0.5 and `vllm-bnb-plugin` 0.0.3 (read by the quantization topic, 2026-09-26) | plugin versions, and whether either returns in-tree |
 | `--enforce-eager` ITL cost | larger on small models than large ones | measure in the serving lab |
 | SGLang and TensorRT-LLM specifics marked `(verify)` | from READMEs and the SGLang paper only | check their docs and code before a decision |
 | Orchestrator support | llm-d, Dynamo and KServe integrate vLLM | from FACTS.md (Dynamo) and project descriptions; check each support matrix |

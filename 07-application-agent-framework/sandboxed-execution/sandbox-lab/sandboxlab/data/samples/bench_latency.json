@@ -1,0 +1,60 @@
+{
+ "_label": "sample output in the documented format (illustrative)",
+ "_note": "Rows for levels this machine cannot run. Each row names where its number comes from; none was measured here. Replace them with your own: python3 -m sandboxlab bench.",
+ "rows": [
+  {
+   "level": "docker:runc",
+   "n": 20,
+   "p50_ms": 420.0,
+   "p95_ms": 610.0,
+   "mean_ms": 450.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "container start is 100-500 ms per the lab's fact sheet (verify); Docker itself dominates (gVisor performance guide)"
+  },
+  {
+   "level": "docker:runsc",
+   "n": 20,
+   "p50_ms": 560.0,
+   "p95_ms": 800.0,
+   "mean_ms": 590.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "runc plus tens to hundreds of ms for the Sentry and Gofer (verify: gVisor publishes a graph, no number)"
+  },
+  {
+   "level": "firecracker:boot",
+   "n": 1,
+   "p50_ms": 137.0,
+   "p95_ms": 137.0,
+   "mean_ms": 137.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "Firecracker SPECIFICATION.md: VMM ~12 ms typical + <= 125 ms InstanceStart to /sbin/init (a spec bound, not a measurement)"
+  },
+  {
+   "level": "k8s:job(kind, image cached)",
+   "n": 10,
+   "p50_ms": 1800.0,
+   "p95_ms": 2600.0,
+   "mean_ms": 1900.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "API, scheduling, pod sandbox, container start and status polling on a laptop kind cluster (verify with `python3 -m sandboxlab bench --level k8s:job`)"
+  },
+  {
+   "level": "k8s:warm(exec)",
+   "n": 10,
+   "p50_ms": 250.0,
+   "p95_ms": 400.0,
+   "mean_ms": 270.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "kubectl exec round trip into a running pod; agent-sandbox reports warm adoption as sub-second (docs/performance-tuning.md)"
+  },
+  {
+   "level": "gke:gvisor-pod(burst)",
+   "n": 75,
+   "p50_ms": 46000.0,
+   "p95_ms": 60000.0,
+   "mean_ms": 47000.0,
+   "label": "sample output in the documented format (illustrative)",
+   "source": "agent-sandbox docs/performance-tuning.md: cold pod start ~42-50 s p50 in a 75-claim burst on a 20-node GKE cluster (p95 here illustrative)"
+  }
+ ]
+}

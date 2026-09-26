@@ -1,0 +1,156 @@
+{
+ "_source": "kubernetes-sigs/agent-sandbox k8s/crds/*.yaml at 68db683 (2026-09-25), spec-level fields only; pod templates are checked as Pods with kubernetes-validate",
+ "kinds": {
+  "agents.x-k8s.io/v1beta1/Sandbox": {
+   "required": [
+    "podTemplate"
+   ],
+   "fields": {
+    "operatingMode": {
+     "enum": [
+      "Running",
+      "Suspended"
+     ],
+     "properties": []
+    },
+    "podTemplate": {
+     "enum": null,
+     "properties": [
+      "metadata",
+      "spec"
+     ]
+    },
+    "service": {
+     "enum": null,
+     "properties": []
+    },
+    "shutdownPolicy": {
+     "enum": [
+      "Delete",
+      "Retain"
+     ],
+     "properties": []
+    },
+    "shutdownTime": {
+     "enum": null,
+     "properties": []
+    },
+    "volumeClaimTemplates": {
+     "enum": null,
+     "properties": []
+    }
+   }
+  },
+  "extensions.agents.x-k8s.io/v1beta1/SandboxTemplate": {
+   "required": [
+    "podTemplate"
+   ],
+   "fields": {
+    "envVarsInjectionPolicy": {
+     "enum": [
+      "Allowed",
+      "Overrides",
+      "Disallowed"
+     ],
+     "properties": []
+    },
+    "networkPolicy": {
+     "enum": null,
+     "properties": [
+      "egress",
+      "ingress"
+     ]
+    },
+    "networkPolicyManagement": {
+     "enum": [
+      "Managed",
+      "Unmanaged"
+     ],
+     "properties": []
+    },
+    "podTemplate": {
+     "enum": null,
+     "properties": [
+      "metadata",
+      "spec"
+     ]
+    },
+    "service": {
+     "enum": null,
+     "properties": []
+    },
+    "volumeClaimTemplates": {
+     "enum": null,
+     "properties": []
+    },
+    "volumeClaimTemplatesPolicy": {
+     "enum": [
+      "Disallowed",
+      "Allowed",
+      "Overrides"
+     ],
+     "properties": []
+    }
+   }
+  },
+  "extensions.agents.x-k8s.io/v1beta1/SandboxWarmPool": {
+   "required": [
+    "sandboxTemplateRef"
+   ],
+   "fields": {
+    "replicas": {
+     "enum": null,
+     "properties": []
+    },
+    "sandboxTemplateRef": {
+     "enum": null,
+     "properties": [
+      "name"
+     ]
+    },
+    "updateStrategy": {
+     "enum": null,
+     "properties": [
+      "type"
+     ]
+    }
+   }
+  },
+  "extensions.agents.x-k8s.io/v1beta1/SandboxClaim": {
+   "required": [
+    "warmPoolRef"
+   ],
+   "fields": {
+    "additionalPodMetadata": {
+     "enum": null,
+     "properties": [
+      "annotations",
+      "labels"
+     ]
+    },
+    "env": {
+     "enum": null,
+     "properties": []
+    },
+    "lifecycle": {
+     "enum": null,
+     "properties": [
+      "shutdownPolicy",
+      "shutdownTime",
+      "ttlSecondsAfterFinished"
+     ]
+    },
+    "volumeClaimTemplates": {
+     "enum": null,
+     "properties": []
+    },
+    "warmPoolRef": {
+     "enum": null,
+     "properties": [
+      "name"
+     ]
+    }
+   }
+  }
+ }
+}
