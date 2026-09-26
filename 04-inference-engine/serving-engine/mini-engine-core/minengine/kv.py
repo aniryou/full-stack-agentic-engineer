@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 def hash_block(parent: bytes | None, tokens, extra=None) -> bytes:
     """A full block's name: sha256 over (parent's name, this block's tokens, extra keys)."""
-    return hashlib.sha256(repr((parent, tuple(tokens), extra)).encode()).digest()
+    return hashlib.sha256(repr((parent, tuple(int(t) for t in tokens), extra)).encode()).digest()
 
 
 def block_hashes(tokens, block_size: int, extra=None, hash_fn=hash_block) -> list[bytes]:

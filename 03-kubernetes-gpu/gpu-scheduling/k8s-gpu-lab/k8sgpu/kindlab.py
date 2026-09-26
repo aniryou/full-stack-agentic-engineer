@@ -64,8 +64,8 @@ def cluster_status(context: str = KUBE_CONTEXT) -> tuple[bool, str]:
     if not shutil.which("kubectl"):
         return False, "kubectl not found: running the T0 path (predictions + commands)"
     k = Kubectl(context, echo=lambda s: None)
-    try:
-        nodes = k.get_json("nodes").get("items", [])
+    try:   # a short timeout: a stopped Docker must not hang a notebook
+        nodes = json.loads(k.run("get", "nodes", "-o", "json", "--request-timeout=10s", quiet=True)).get("items", [])
     except Exception as e:  # noqa: BLE001 - any failure means "not usable"
         return False, f"context {context!r} not reachable ({str(e)[:120]})"
     gpus = sum(int((n.get("status") or {}).get("allocatable", {}).get(m.GPU, 0) or 0) for n in nodes)

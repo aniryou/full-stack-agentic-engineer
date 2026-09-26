@@ -21,7 +21,7 @@ The concepts come first in the serving-engine topic; this topic is the "now read
 3. **The code**: [`source-map.md`](source-map.md), a concept → file → symbol index with line numbers at `5840d95`
    and a three-hour reading order.
 4. **Re-implement one piece**: [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb)
-   rebuilds vLLM's block-hash chain, free-block queue and eviction order in about 60 lines of standard-library
+   rebuilds vLLM's block-hash chain, free-block queue and eviction order in about 100 lines of standard-library
    Python and checks the behaviours the primer describes.
 5. **Watch it run**: [`../serving-engine/vllm-serving-lab/`](../serving-engine/vllm-serving-lab/) serves a real
    model, scrapes `/metrics`, and sweeps the flags from section 11.

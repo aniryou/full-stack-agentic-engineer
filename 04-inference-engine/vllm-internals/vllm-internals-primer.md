@@ -107,7 +107,8 @@ says "[Experimental]", but `VllmConfig.use_v2_model_runner` (`vllm/config/vllm.p
 default** when Triton is available and nothing unsupported is requested; it falls back to MRV1 for, among
 others, the `ngram`, `draft_model`, `suffix` and `medusa` speculative methods, stock `torch.compile`, and
 sequence parallelism (`_get_v2_model_runner_unsupported_features`). `VLLM_USE_V2_MODEL_RUNNER=0|1` forces
-the choice, and the startup log says which you got. Section 5 covers both.
+the choice; the worker logs "Using V2 Model Runner" (`vllm/v1/worker/gpu_worker.py`) or the config logs the fallback
+reason. Section 5 covers both.
 
 ---
 
@@ -343,7 +344,8 @@ The engine's queue is unbounded; bounds live in the API server (`--max-num-queue
 
 When a running request needs a block and none is free, `Scheduler._preempt_request` runs on a victim:
 `running[-1]` under FCFS (the most recently admitted or resumed) or the maximum `(priority, arrival_time)`
-under priority scheduling (whose tokens and blocks this step are returned to the budget). It frees all the
+under priority scheduling (if that victim was already scheduled this step, its tokens go back to the budget).
+It frees all the
 victim's blocks and encoder-cache entries, sets `status = PREEMPTED` and `num_computed_tokens = 0`, drops
 drafts, increments `num_preemptions`, records a `PREEMPTED` event, and **prepends** it to `waiting`.
 
@@ -368,8 +370,8 @@ concurrent sequences, shorter `max_model_len`, more GPUs) or headroom (`--waterm
 
 ### 3.8 Async scheduling and the batch queue
 
-With async scheduling (the default when compatible; `VllmConfig` turns it off by default for pooling models,
-for speculative methods outside the EAGLE/MTP family, `ngram_gpu`, `draft_model`, DFlash and DSpark, and for
+With async scheduling (the default when compatible; `VllmConfig` leaves it off for pooling models, for
+speculative methods other than the EAGLE/MTP family, `ngram_gpu`, `draft_model`, DFlash and DSpark, and for
 executors that do not support it), `SchedulerConfig.get_scheduler_cls` returns `AsyncScheduler` and
 `VllmConfig.max_concurrent_batches` is 2 (V1 runner, PP=1) or `pp_size + 1` (V2 runner), so EngineCore uses
 `step_with_batch_queue` instead of `step` (`vllm/v1/engine/core.py: EngineCore.__init__`):
@@ -1147,7 +1149,7 @@ rate `rate(vllm:num_preemptions_total[5m])`.
 | Line | Source | Tells you |
 |---|---|---|
 | `Initializing a V1 LLM engine (v…) with config: …` | `EngineCore.__init__` | the resolved config |
-| `Model Runner V2 does not yet support …; using the V1 model runner instead` | `VllmConfig.use_v2_model_runner` | which runner |
+| `Using V2 Model Runner`, or `Model Runner V2 does not yet support …; using the V1 model runner instead` | `Worker`, `VllmConfig.use_v2_model_runner` | which runner |
 | `Using … attention backend out of potential backends: …` (`Using … backend.` when forced) | `CudaPlatformBase.get_attn_backend_cls` | attention backend |
 | `Chunked prefill is enabled with max_num_batched_tokens=…` | `SchedulerConfig.__post_init__` | step budget |
 | `Loading weights took … seconds`, `Model loading took … GiB memory and … seconds` | loader, V1 runner | cold-start split |
@@ -1186,8 +1188,8 @@ out = llm.generate(["The capital of France is"], SamplingParams(max_tokens=8, te
 print(out[0].outputs[0].text)
 ```
 
-`LLMEngine.from_engine_args` passes `multiprocess_mode = envs.VLLM_ENABLE_V1_MULTIPROCESSING` to
-`EngineCoreClient.make_client`, which returns an `InprocClient` when it is false (`vllm/v1/engine/llm_engine.py`,
+`LLMEngine.from_engine_args` turns multiprocessing on only when `VLLM_ENABLE_V1_MULTIPROCESSING` is set, and
+`EngineCoreClient.make_client` otherwise returns an `InprocClient` (`vllm/v1/engine/llm_engine.py`,
 `core_client.py`). The server path cannot do this ("Running EngineCore in asyncio without multiprocessing is not
 currently supported", `make_client`), so debug the server with logs and profiles and the engine with this script.
 

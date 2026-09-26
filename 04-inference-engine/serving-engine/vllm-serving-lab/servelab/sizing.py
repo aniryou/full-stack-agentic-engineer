@@ -39,9 +39,11 @@ INT4_GROUP_OVERHEAD = 2.5 / 128
 
 @dataclass(frozen=True)
 class GPU:
-    """Datasheet numbers (dense, no sparsity). ``memory_gib`` is what the driver reports as
-    total memory (``nvidia-smi --query-gpu=memory.total``), which is what vLLM multiplies by
-    ``gpu_memory_utilization``. All values (verify) against the vendor datasheet."""
+    """Datasheet numbers (dense, no sparsity). ``memory_gib`` is the total the driver reports
+    (``nvidia-smi --query-gpu=memory.total``). vLLM multiplies the total seen by CUDA
+    (``torch.cuda.mem_get_info()[1]``) by ``gpu_memory_utilization``; the two can differ by a few
+    hundred MiB, so for exact planning pass ``gpu_memory_bytes=`` measured on your GPU.
+    All values (verify) against the vendor datasheet."""
     name: str
     memory_gib: float
     mem_bw_gbs: float          # GB/s (10^9 bytes/s)

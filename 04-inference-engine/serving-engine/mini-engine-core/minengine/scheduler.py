@@ -54,7 +54,7 @@ class Request:
     fsm_state: object = None
 
     def __post_init__(self):
-        self.token_ids = list(self.token_ids)
+        self.token_ids = [int(t) for t in self.token_ids]
         if self.num_prompt_tokens < 0:
             self.num_prompt_tokens = len(self.token_ids)
 

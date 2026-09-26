@@ -30,3 +30,4 @@ servelab = ["data/configs/*.json", "data/samples/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

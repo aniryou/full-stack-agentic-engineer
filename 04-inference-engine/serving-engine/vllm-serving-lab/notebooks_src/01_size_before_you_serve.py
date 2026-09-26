@@ -116,14 +116,17 @@ print("✅ kv_capacity reproduces vLLM's 'GPU KV cache size / Maximum concurrenc
 #
 # You serve `llama-3.1-8b-instruct` in bf16 on one L4 with the default utilization, and the design
 # requirement is: vLLM must start, and **at least 4 requests of the maximum length** must fit at
-# once. Set `chosen_len` to the largest multiple of 1,024 that satisfies it. Use `size()` (or
+# once. Return from `choose_max_model_len()` the largest multiple of 1,024 that satisfies it. Use `size()` (or
 # `sizing.max_model_len_for`) — and then read the answer as a product decision: is that context
 # length enough for your workload, or is it time for FP8, a bigger GPU, or TP=2?
 
 # %% exercise
-### BEGIN SOLUTION
-chosen_len = (sizing.max_model_len_for("llama-3.1-8b-instruct", "L4", concurrency=4) // 1024) * 1024
-### END SOLUTION
+def choose_max_model_len() -> int:
+    ### BEGIN SOLUTION
+    return (sizing.max_model_len_for("llama-3.1-8b-instruct", "L4", concurrency=4) // 1024) * 1024
+    ### END SOLUTION
+
+chosen_len = choose_max_model_len()
 print("chosen max_model_len:", chosen_len)
 
 # %% check

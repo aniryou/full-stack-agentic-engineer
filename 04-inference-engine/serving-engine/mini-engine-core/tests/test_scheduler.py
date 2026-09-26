@@ -120,3 +120,14 @@ def test_limits_are_enforced_up_front():
         sched.add_request(Request("big", [1] * 16))            # a prompt must leave room for one token
     with pytest.raises(ValueError):
         Scheduler(SchedulerConfig(max_model_len=64), KVCacheManager(8, 4))   # 64 tokens > a 32-token cache
+
+
+def test_preemption_does_not_change_seeded_sampling_either():
+    model = TinyLM()
+    prompts = ["The engine runs a loop. Each step", "When memory runs out, the", "A request that finishes"]
+    params = [SamplingParams(max_tokens=14, temperature=0.9, top_p=0.95, seed=s) for s in range(3)]
+    roomy = Engine(model, num_blocks=64, block_size=4).generate(prompts, params)
+    tight = Engine(model, num_blocks=16, block_size=4, max_num_batched_tokens=16, admit_whole_prompt=False)
+    outs = tight.generate(prompts, params)
+    assert tight.scheduler.num_preemptions > 0
+    assert [o.token_ids for o in outs] == [o.token_ids for o in roomy]   # one draw per sampled token, same logits

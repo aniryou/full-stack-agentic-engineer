@@ -145,12 +145,16 @@ print(f"✅ [{LABEL}] the repeated request hit {hit_rate(s0, s1):.1%} of its pro
 # is appended after every turn). Same content, three layouts (see `agent_sessions`):
 # `"stable"` (shared system prompt and tool list, append-only history), `"shuffled_tools"` (each
 # session lists the tools in its own order), `"timestamp_first"` (a fresh timestamp on the first
-# line of every request). Put the layouts in `ranking`, from highest to lowest expected hit rate.
+# line of every request). Return the three layout names from `predict_ranking()`, highest expected
+# hit rate first.
 
 # %% exercise
-### BEGIN SOLUTION
-ranking = ["stable", "shuffled_tools", "timestamp_first"]
-### END SOLUTION
+def predict_ranking() -> list:
+    ### BEGIN SOLUTION
+    return ["stable", "shuffled_tools", "timestamp_first"]
+    ### END SOLUTION
+
+ranking = predict_ranking()
 
 # %% check
 rates, ttft = {}, {}

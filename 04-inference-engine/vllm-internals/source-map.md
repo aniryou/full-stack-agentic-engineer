@@ -95,12 +95,12 @@ checkout 5840d95`.
 
 ## Every file read for the primer
 
-125 files of the vLLM repository (read in full or in the sections the primer cites), plus two external READMEs.
+126 files of the vLLM repository (read in full or in the sections the primer cites), plus two external READMEs.
 
-- **Engine and API (17):** `vllm/v1/engine/{__init__,core,core_client,async_llm,llm_engine,input_processor,output_processor,detokenizer,parallel_sampling}.py`;
+- **Engine and API (18):** `vllm/v1/engine/{__init__,core,core_client,async_llm,llm_engine,input_processor,output_processor,detokenizer,parallel_sampling}.py`;
   `vllm/entrypoints/openai/api_server.py`; `vllm/entrypoints/openai/chat_completion/{api_router,serving,protocol}.py`;
   `vllm/entrypoints/launchers/api_server/entry.py`; `vllm/entrypoints/cli/serve.py`;
-  `vllm/entrypoints/serve/{profile,lora}/api_router.py`.
+  `vllm/entrypoints/serve/{profile,lora}/api_router.py`; `vllm/renderers/online_renderer.py`.
 - **Scheduling and requests (9):** `vllm/v1/core/sched/{scheduler,async_scheduler,output,request_queue,utils,interface}.py`;
   `vllm/v1/request.py`; `vllm/v1/outputs.py`; `vllm/sampling_params.py`.
 - **KV cache (9):** `vllm/v1/core/{kv_cache_manager,block_pool,kv_cache_utils,single_type_kv_cache_manager,kv_cache_coordinator,encoder_cache_manager}.py`;

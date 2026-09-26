@@ -11,7 +11,7 @@ this topic is the engine itself.
 | Path | What it is | Tier |
 |---|---|---|
 | [`PRIMER.md`](PRIMER.md) | the concepts in twelve numbered sections — anatomy, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, multi-LoRA, measurement, engines and where to run them — each formula with a worked number and the core function that computes it; then "In a design review", glossary, sources and a dated Verify list | reading |
-| [`mini-engine-core/`](mini-engine-core/) | the minimal implementation: `minengine`, a numpy "nano-vLLM" (~920 lines) — a tiny model reading K/V through block tables, the KV cache manager with prefix caching, the scheduler, the sampler, speculative decoding, quantization and a roofline simulator — with six notebooks and 57 tests | T0 |
+| [`mini-engine-core/`](mini-engine-core/) | the minimal implementation: `minengine`, a numpy "nano-vLLM" (~930 lines) — a tiny model reading K/V through block tables, the KV cache manager with prefix caching, the scheduler, the sampler, speculative decoding, quantization and a roofline simulator — with six notebooks and 59 tests | T0 |
 | [`vllm-serving-lab/`](vllm-serving-lab/) | the detailed implementation: `servelab` — size a model before serving it, an open/closed-loop load generator with streaming TTFT/ITL capture, a `/metrics` parser, knob sweeps against an SLO, an OpenAI-compatible fake server for T0, and deploy targets (any GPU box, Cloud Run GPU, GKE) | T0 → T1 → T3 |
 
 ## Before you start

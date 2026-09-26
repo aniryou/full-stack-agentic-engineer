@@ -4,7 +4,7 @@ The inside of an inference engine, small enough to read in a sitting: **a numpy 
 loop, continuous batching, a paged KV cache, hash-chained prefix caching, chunked prefill, preemption by
 recompute, a full sampler with structured-output masks, exact speculative decoding, quantization, and a
 roofline performance model that drives the real scheduler to produce **simulated** TTFT and ITL under load.
-About 920 lines of library code (1,370 with docstrings), standard library + numpy, six fill-in notebooks.
+About 930 lines of library code (1,390 with docstrings), standard library + numpy, six fill-in notebooks.
 
 **Tier: T0.** Laptop, Colab CPU or CI; no GPU, no network. This is where the concepts of
 [`../PRIMER.md`](../PRIMER.md) are learned. The step-up is [`../vllm-serving-lab/`](../vllm-serving-lab/): the
@@ -15,7 +15,7 @@ same ideas measured on a real vLLM server (T1 on one GPU, T3 on Cloud Run or GKE
 ```bash
 cd mini-engine-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 57 tests, ~7 s
+python3 -m pytest -q                           # 59 tests, ~10 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -45,15 +45,16 @@ Read the modules in this order; each opens with a docstring stating the one idea
 | [`minengine/engine.py`](minengine/engine.py) | ~170 | the loop: schedule → build the flat batch (tokens, positions, slot mapping, block tables) → one forward pass → sample → update; `add_request`, `step`, `generate`, traces |
 | [`minengine/spec.py`](minengine/spec.py) | ~120 | speculative decoding: exact accept/recover/bonus rejection sampling, α, expected tokens per pass, speed-up and best k, n-gram prompt lookup |
 | [`minengine/quant.py`](minengine/quant.py) | ~80 | INT8 per-tensor/per-channel, INT4 group-wise, FP8-E4M3 emulation, SmoothQuant scales, error metrics, bits per weight |
-| [`minengine/perf.py`](minengine/perf.py) | ~220 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models, KV capacity, and `simulate()`: this package's scheduler on a virtual clock under Poisson load — every output labelled SIMULATED |
+| [`minengine/perf.py`](minengine/perf.py) | ~230 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models, KV capacity, and `simulate()`: this package's scheduler on a virtual clock under Poisson load — every output labelled SIMULATED |
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (57, offline, ~7 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (59, offline, ~10 s). The ones that carry the correctness claims:
 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10; the engine's greedy tokens equal `generate_dense` — including under
-  preemption and with prefix-cache hits (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
+  preemption and with prefix-cache hits — and seeded sampled outputs do not change under preemption either
+  (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
 - **The prefix cache never serves a block computed under a different prefix.** An oracle records the full token
   prefix behind every block and checks every hit over hundreds of random prompts; the same harness shows that
   a block name *without* the parent does serve wrong K/V (`test_kv.py`).

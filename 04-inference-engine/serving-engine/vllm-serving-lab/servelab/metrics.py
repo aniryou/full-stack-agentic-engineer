@@ -289,19 +289,23 @@ class EngineSnapshot:
         def f(v, unit=""):
             if v is None or (isinstance(v, float) and math.isnan(v)):
                 return "n/a"
-            return f"{v * 1000:.1f} ms" if unit == "ms" else (f"{v:.1%}" if unit == "%" else f"{v:,.2f}")
-        rows = [("requests running / waiting", f"{f(self.running)} / {f(self.waiting)}"),
+            if unit == "ms":
+                return f"{v * 1000:.1f} ms"
+            if unit == "%":
+                return f"{v:.1%}"
+            return f"{v:,.0f}" if unit == "n" else f"{v:,.2f}"
+        rows = [("requests running / waiting", f"{f(self.running, 'n')} / {f(self.waiting, 'n')}"),
                 ("KV cache usage", f(self.kv_cache_usage, "%")),
-                ("prefix cache hit rate", f"{f(self.prefix_hit_rate, '%')}  ({f(self.prefix_cache_hits)} of "
-                                          f"{f(self.prefix_cache_queries)} tokens)"),
-                ("preemptions", f(self.preemptions)),
-                ("requests finished", f(self.requests_finished)),
+                ("prefix cache hit rate", f"{f(self.prefix_hit_rate, '%')}  ({f(self.prefix_cache_hits, 'n')} of "
+                                          f"{f(self.prefix_cache_queries, 'n')} tokens)"),
+                ("preemptions", f(self.preemptions, "n")),
+                ("requests finished", f(self.requests_finished, "n")),
                 ("TTFT mean | p50 / p99", f"{f(self.ttft_mean, 'ms')} | {f(self.ttft_p50, 'ms')} / {f(self.ttft_p99, 'ms')}"),
                 ("ITL  mean | p50 / p99", f"{f(self.itl_mean, 'ms')} | {f(self.itl_p50, 'ms')} / {f(self.itl_p99, 'ms')}"),
                 ("queue mean | p50 / p99", f"{f(self.queue_mean, 'ms')} | {f(self.queue_p50, 'ms')} / {f(self.queue_p99, 'ms')}"),
                 ("E2E  mean | p50", f"{f(self.e2e_mean, 'ms')} | {f(self.e2e_p50, 'ms')}")]
         if self.generation_tps is not None:
-            rows.append(("generation tokens/s", f(self.generation_tps)))
+            rows.append(("generation tokens/s", f(self.generation_tps, "n")))
         if self.spec_acceptance_rate is not None:
             rows.append(("spec acceptance rate / mean length",
                          f"{f(self.spec_acceptance_rate, '%')} / {f(self.spec_mean_acceptance_length)}"))

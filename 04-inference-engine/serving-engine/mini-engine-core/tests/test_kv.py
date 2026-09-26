@@ -1,6 +1,8 @@
 """Block pool, refcounts, LRU eviction and the hash-chained prefix cache."""
 import random
 
+import numpy as np
+
 from minengine.kv import KVCacheManager, block_hashes, hash_block
 
 
@@ -18,6 +20,7 @@ def test_block_names_chain_through_the_parent():
     assert ha[1] != hb[1] and ha[2] != hb[2]                 # a name commits to everything before it
     assert block_hashes(a + [7], 2) == ha                     # a partial last block has no name
     assert block_hashes(a, 2, extra="lora-A") != ha           # an adapter id changes every name
+    assert block_hashes(np.array(a), 2) == ha                 # numpy ints name blocks like Python ints
 
 
 def test_lookup_never_covers_the_last_token():

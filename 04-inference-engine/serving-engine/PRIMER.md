@@ -124,11 +124,11 @@ and above. Policy `fcfs` (default) or `priority` (lower value first; the victim 
 important, newest request).
 
 **What really caps concurrency is KV memory.** A request with a P-token prompt that generates O tokens holds at most
-`⌈(P + O − 1) / B⌉` blocks — the last sampled token is never fed back, so it never gets a slot (notebook 01).
-Llama-3.1-8B on a 24 GB L4 at 90% utilisation leaves 2,164 blocks of 16 tokens (`perf.kv_cache_blocks()`); chat
-requests of 1,000 + 200 tokens need 75 blocks each → **28 concurrent requests**. The same arithmetic, plus Little's
-law (concurrency = arrival rate × time in system), sizes a fleet — [capacity planning, formulas 2 and
-5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
+`⌈(P + O − 1) / B⌉` blocks — the last sampled token is never fed back, so it never gets a slot
+(`KVCacheManager.blocks_needed(P + O − 1)`, notebook 01). Llama-3.1-8B on a 24 GB L4 at 90% utilisation leaves 2,164
+blocks of 16 tokens (`perf.kv_cache_blocks()`); chat requests of 1,000 + 200 tokens need 75 blocks each → **28
+concurrent requests**. The same arithmetic, plus Little's law (concurrency = arrival rate × time in system), sizes a
+fleet — [capacity planning, formulas 2 and 5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
 
 ## 3. Chunked prefill and prefill/decode interference
 
@@ -227,13 +227,13 @@ that needs ~4,000 blocks on an H100 runs with 0 preemptions and a 176 ms p99 TTF
 shows up as errors** — alert on `vllm:num_preemptions`.
 
 **Recompute or swap?** Swapping copies the victim's blocks to host memory and back: for 2,000 tokens of Llama-3.1-8B
-that is 262 MB each way — about 5 ms per direction at ~50 GB/s effective over PCIe Gen5 x16 (verify), twice that on
-Gen4. Recomputing is a 2,000-token prefill: ~51 ms on an H100 (SIMULATED) — but it needs no host memory, no transfer
-bookkeeping, and with prefix caching the victim's own blocks are often still cached when it returns (notebook 02: a
-preempted request restarted at token 20, not 0). vLLM V1 preempts by recompute only; swap was a V0 mode, and V1's
-CPU offloading (`kv_offloading_size`) is a cache tier rather than a preemption mode (verify). Either way, preemption
-is a symptom: the fixes are more KV memory (§8's FP8 KV, a smaller model, higher utilisation), fewer concurrent
-sequences, or more replicas (05).
+that is 262 MB each way (2,000 × `perf.LLM.kv_bytes_per_token`) — about 5 ms per direction at ~50 GB/s effective
+over PCIe Gen5 x16 (verify), twice that on Gen4. Recomputing is a 2,000-token prefill: ~51 ms on an H100 (SIMULATED)
+— but it needs no host memory, no transfer bookkeeping, and with prefix caching the victim's own blocks are often
+still cached when it returns (notebook 02: a preempted request restarted at token 20, not 0). vLLM V1 preempts by
+recompute only; swap was a V0 mode, and V1's CPU offloading (`kv_offloading_size`) is a cache tier rather than a
+preemption mode (verify). Either way, preemption is a symptom: the fixes are more KV memory (§8's FP8 KV, a smaller
+model, higher utilisation), fewer concurrent sequences, or more replicas (05).
 
 **Invariants worth testing** in any block manager — the core's `KVCacheManager.check()` runs after every step in its
 tests: a block's refcount equals the number of block tables that hold it; a block is in the free queue iff its

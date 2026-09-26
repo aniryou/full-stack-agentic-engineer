@@ -225,7 +225,7 @@ print(f"[SIMULATED] closed loop, 4 users: {cs.request_throughput:.2f} req/s, TTF
 # `max_num_seqs` requests running, each taking `mean_e2e_s`, the engine completes at most
 # `capacity_rps = max_num_seqs / mean_e2e_s` requests per second. Implement it, then predict: if we
 # now send the *same* requests **open-loop at twice that capacity**, which run shows the larger TTFT
-# p99 — `"open"` or `"closed"`? Set `worse_tail` accordingly.
+# p99? Return `"open"` or `"closed"` from `predict_worse_tail()`.
 
 # %% exercise
 def capacity_rps(max_num_seqs: int, mean_e2e_s: float) -> float:
@@ -233,9 +233,12 @@ def capacity_rps(max_num_seqs: int, mean_e2e_s: float) -> float:
     return max_num_seqs / mean_e2e_s
     ### END SOLUTION
 
-### BEGIN SOLUTION
-worse_tail = "open"
-### END SOLUTION
+def predict_worse_tail() -> str:
+    ### BEGIN SOLUTION
+    return "open"
+    ### END SOLUTION
+
+worse_tail = predict_worse_tail()
 
 # %% check
 cap = capacity_rps(4, cs.e2el.mean / 1000)

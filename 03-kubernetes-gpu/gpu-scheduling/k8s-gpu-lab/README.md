@@ -31,7 +31,7 @@ pods, but there is no device plugin, no `/dev/nvidia*`, no CUDA — the pods pri
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                               # 98 tests, ~5 s, offline
+python3 -m pytest -q                               # 97 tests, ~5 s, offline
 python3 -m k8sgpu kind predict s2                  # what Kueue + the scheduler will do
 python3 -m k8sgpu lint deploy/gke/40-serving-vllm-gcsfuse.yaml --machine g2-standard-4 --load-seconds 120
 python3 -m k8sgpu pending --list                   # 17 Pending-pod fixtures; --fixture NAME to diagnose one
