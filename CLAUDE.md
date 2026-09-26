@@ -77,6 +77,10 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
   - All other notebooks: `python3 tools/inject_colab_bootstrap.py <lab-dir> …` (stdlib-only, idempotent —
     re-running replaces the cell, never duplicates it, never touches a lab's own cells).
   - After any change, regenerate: `python3 tools/gen_colab_index.py` (rewrites each layer README's Colab-links section, between `<!-- colab-links -->` markers, plus the `COLAB.md` setup guide).
+- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the notebook rebuilds (they
+  must be no-ops), the Colab-link and site generators and the link check on every push and pull request;
+  `tools/ci/run_local.sh <lab-id>|--notebooks|--docs|--colab-index` runs the same thing locally. A new lab with tests must be
+  added to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies), or the "lab list complete" job goes red.
 - **Redo an exercise:** `git restore <notebook>` returns it to the committed blank; for percent-source
   labs, re-run `python3 tools/build_notebooks.py`. (This is why exercises are committed blank.)
 
@@ -86,7 +90,8 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
 3. **Propose the mapping to the user; confirm anything ambiguous.**
 4. `mkdir -p` layer/topic folders; **`mv -n`** items in (whole folders, so nothing is half-moved).
 5. Strip any per-item `.git` and build junk the drop brought in (it's a mono-repo).
-6. Make notebooks Colab-ready (injector or build-script) and regenerate the per-layer Colab links (`tools/gen_colab_index.py`).
+6. Make notebooks Colab-ready (injector or build-script) and regenerate the per-layer Colab links (`tools/gen_colab_index.py`);
+   add any lab with tests to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies).
 7. Update affected layer `README.md`s, this file's decisions log, root `README.md`.
 8. `git add -A && git commit` and `git push`. Verify `raw/` holds only `.DS_Store` + `README.md`.
 

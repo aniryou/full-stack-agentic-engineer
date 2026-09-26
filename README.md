@@ -167,3 +167,6 @@ New material arrives in [`raw/`](raw/README.md) and is moved, never copied, into
 belongs to; [`raw/README.md`](raw/README.md) says what a good drop looks like. [`CLAUDE.md`](CLAUDE.md) holds the
 maintainer and agent instructions: the layer rules, the reorganisation checklist and a log of decisions.
 Corrections are welcome as [GitHub issues](https://github.com/aniryou/full-stack-agentic-engineer/issues).
+
+CI (`.github/workflows/tests.yml`) runs every lab's T0 tests, the notebook rebuilds (which must be no-ops), the Colab-link and
+site generators and the link check on every push and pull request; `tools/ci/run_local.sh` runs the same checks locally.
