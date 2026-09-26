@@ -100,3 +100,41 @@ def test_no_nested_workflows():
     nested = [p for p in subprocess.run(["git", "ls-files", "*/.github/workflows/*"], cwd=REPO, capture_output=True,
                                         text=True, check=True).stdout.splitlines()]
     assert nested == []
+
+
+def test_bootstrap_status_same_format_stale():
+    make_cell = ci.injector().make_cell
+    nb = REPO / "tools" / "ci" / "tests" / "_tmp_bootstrap.ipynb"
+    rel = nb.parent.relative_to(REPO).as_posix()
+
+    def write(first):
+        body = {"cells": [first, {"cell_type": "markdown", "id": "m", "metadata": {}, "source": ["hi"]}],
+                "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+        nb.write_text(json.dumps(body, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    try:
+        write(make_cell(rel))
+        assert ci.bootstrap_status(nb, make_cell) == "same"
+        executed = dict(sorted(make_cell(rel).items()))          # re-saved by Jupyter: sorted keys, a count
+        executed["execution_count"] = 1
+        write(executed)
+        assert ci.bootstrap_status(nb, make_cell) == "format"
+        old = make_cell(rel)
+        old["source"] = old["source"][:-1]                        # an older template
+        write(old)
+        assert ci.bootstrap_status(nb, make_cell) == "stale"
+        elsewhere = make_cell("some/other/folder")                # copied from another folder: wrong chdir
+        write(elsewhere)
+        assert ci.bootstrap_status(nb, make_cell) == "stale"
+        untagged = make_cell(rel)
+        untagged["metadata"] = {}
+        write(untagged)
+        assert ci.bootstrap_status(nb, make_cell) == "stale"
+    finally:
+        nb.unlink(missing_ok=True)
+
+
+def test_every_injected_notebook_is_current():
+    r = subprocess.run([sys.executable, str(REPO / "tools/ci/ci.py"), "bootstrap-check"], capture_output=True,
+                       text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

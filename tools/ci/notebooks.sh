@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The notebooks job: every notebook builder, then the Colab injector over the notebooks it owns.
-# Both must be no-ops against the committed tree. Needs: pip install -r tools/ci/embeddings-lab-build.txt
+# The notebooks job: every notebook builder must be a no-op against the committed tree, and the Colab
+# injector must have nothing to change in the setup cell of the notebooks it owns. Needs: pip install -r tools/ci/embeddings-lab-build.txt
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -28,11 +28,8 @@ if dirty; then
   exit 1
 fi
 
-python tools/ci/ci.py bootstrap-targets > "${TMPDIR:-/tmp}/bootstrap-targets.txt"
-xargs -d '\n' python tools/inject_colab_bootstrap.py < "${TMPDIR:-/tmp}/bootstrap-targets.txt"
-if dirty; then
-  echo "::error::tools/inject_colab_bootstrap.py changed notebooks: re-run it on them and commit" >&2
-  git status --short >&2
-  exit 1
-fi
-echo "notebooks: every rebuild and the injector are no-ops"
+# The Colab injector over the notebooks it owns (first cell tagged colab-bootstrap) must change nothing a
+# reader runs; percent-source labs write their own setup cell, and a notebook with neither fails here.
+python tools/ci/ci.py bootstrap-targets > /dev/null
+python tools/ci/ci.py bootstrap-check
+echo "notebooks: every rebuild is a no-op and every Colab setup cell is current"

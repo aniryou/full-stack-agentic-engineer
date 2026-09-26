@@ -6,6 +6,7 @@
     python3 tools/ci/ci.py check                  # every directory with tests is in labs.json, and each exists
     python3 tools/ci/ci.py builders               # every notebook builder, one path per line
     python3 tools/ci/ci.py bootstrap-targets      # notebooks the Colab injector owns (first cell tagged)
+    python3 tools/ci/ci.py bootstrap-check        # the injector would not change what their setup cell does
 
 The lab list and the commands live in tools/ci/labs.json, so CI and a laptop run the same thing.
 """
@@ -134,8 +135,50 @@ def cmd_bootstrap_targets(argv: list[str]) -> int:
     return 1 if orphans else 0
 
 
+def injector():
+    spec = importlib.util.spec_from_file_location("inject_colab_bootstrap", REPO / "tools" / "inject_colab_bootstrap.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def bootstrap_status(nb_path: Path, make_cell) -> str:
+    """'same': re-running the injector leaves the file byte for byte; 'format': it would only rewrite the cell's
+    id, execution_count or key order (the notebook was executed or re-saved after injection); 'stale': the setup
+    cell's code or tags differ from what the injector writes today, or there is none."""
+    raw = nb_path.read_text(encoding="utf-8")
+    d = json.loads(raw)
+    cells = d.get("cells") or [{}]
+    if TAG not in (cells[0].get("metadata", {}).get("tags") or []):
+        return "stale"
+    want = make_cell(nb_path.resolve().parent.relative_to(REPO).as_posix())
+    have = cells[0]
+    src = lambda c: "".join(c["source"]) if isinstance(c.get("source"), list) else c.get("source", "")
+    if src(have) != src(want) or have.get("metadata") != want["metadata"] or have.get("outputs"):
+        return "stale"
+    cells[0] = want
+    return "same" if json.dumps(d, indent=1, ensure_ascii=False) + "\n" == raw else "format"
+
+
+def cmd_bootstrap_check(argv: list[str]) -> int:
+    """The injector's no-op check: every notebook it owns already carries today's setup cell."""
+    make_cell = injector().make_cell
+    targets = [nb for nb in tracked("*.ipynb") if first_cell_tagged(REPO / nb)]
+    status = {nb: bootstrap_status(REPO / nb, make_cell) for nb in targets}
+    stale = [nb for nb, s in status.items() if s == "stale"]
+    fmt = [nb for nb, s in status.items() if s == "format"]
+    for nb in fmt:
+        print(f"::warning file={nb}::setup cell is current; re-running tools/inject_colab_bootstrap.py would only "
+              "rewrite its id, execution_count or key order")
+    for nb in stale:
+        print(f"::error file={nb}::the Colab setup cell is out of date: python3 tools/inject_colab_bootstrap.py {nb}")
+    print(f"{len(targets)} notebooks with the injector's setup cell: {len(targets) - len(stale) - len(fmt)} unchanged "
+          f"by a re-run, {len(fmt)} formatting only, {len(stale)} stale")
+    return 1 if stale else 0
+
+
 COMMANDS = {"matrix": cmd_matrix, "run": cmd_run, "check": cmd_check, "builders": cmd_builders,
-            "bootstrap-targets": cmd_bootstrap_targets}
+            "bootstrap-targets": cmd_bootstrap_targets, "bootstrap-check": cmd_bootstrap_check}
 
 
 def main(argv: list[str]) -> int:
