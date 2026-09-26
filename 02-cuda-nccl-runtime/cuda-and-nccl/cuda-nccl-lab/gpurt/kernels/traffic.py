@@ -13,6 +13,7 @@ datasheet before quoting a number.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 
@@ -23,20 +24,31 @@ class GpuSpec:
     fp32_tflops: float  # peak non-tensor FP32, TFLOP/s
     cc: tuple[int, int]  # compute capability
     memory_gb: int
+    match: tuple[str, ...] = ()  # tokens that identify it in a device name ("NVIDIA A100-SXM4-80GB")
 
 
 # Datasheet peaks, Sep 2026 snapshot (verify each against the vendor datasheet before quoting).
 GPUS: dict[str, GpuSpec] = {g.name: g for g in (
-    GpuSpec("T4", 320, 8.1, (7, 5), 16),
-    GpuSpec("P100", 732, 9.3, (6, 0), 16),
-    GpuSpec("L4", 300, 30.3, (8, 9), 24),
-    GpuSpec("A10", 600, 31.2, (8, 6), 24),
-    GpuSpec("RTX 4090", 1008, 82.6, (8, 9), 24),
-    GpuSpec("A100 40GB SXM", 1555, 19.5, (8, 0), 40),
-    GpuSpec("A100 80GB SXM", 2039, 19.5, (8, 0), 80),
-    GpuSpec("H100 SXM", 3350, 67.0, (9, 0), 80),
-    GpuSpec("H200 SXM", 4800, 67.0, (9, 0), 141),
+    GpuSpec("T4", 320, 8.1, (7, 5), 16, ("T4",)),
+    GpuSpec("P100", 732, 9.3, (6, 0), 16, ("P100",)),
+    GpuSpec("L4", 300, 30.3, (8, 9), 24, ("L4",)),
+    GpuSpec("A10", 600, 31.2, (8, 6), 24, ("A10", "A10G")),
+    GpuSpec("RTX 4090", 1008, 82.6, (8, 9), 24, ("4090",)),
+    GpuSpec("A100 40GB SXM", 1555, 19.5, (8, 0), 40, ("A100",)),
+    GpuSpec("A100 80GB SXM", 2039, 19.5, (8, 0), 80, ("A100",)),
+    GpuSpec("H100 SXM", 3350, 67.0, (9, 0), 80, ("H100",)),
+    GpuSpec("H200 SXM", 4800, 67.0, (9, 0), 141, ("H200",)),
 )}
+
+
+def spec_for(device_name: str) -> GpuSpec | None:
+    """The catalogue entry for a CUDA device name (e.g. from ``nvidia-smi -L``), or None. Matches whole
+    tokens, so an A100 is not mistaken for an A10; the memory size breaks ties (A100 40GB vs 80GB)."""
+    tokens = set(re.split(r"[\s\-_]+", device_name.upper()))
+    found = [g for g in GPUS.values() if tokens & set(g.match)]
+    if len(found) > 1:
+        found = [g for g in found if f"{g.memory_gb}GB" in tokens] or found
+    return found[0] if found else None
 
 # (reads, writes) of the full vector per element
 ELEMENTWISE = {"copy": (1, 1), "vec_add": (2, 1), "saxpy": (2, 1)}

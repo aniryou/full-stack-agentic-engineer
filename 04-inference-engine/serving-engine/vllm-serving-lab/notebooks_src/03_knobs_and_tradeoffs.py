@@ -202,6 +202,7 @@ def max_rate(measure, lo: float, hi: float, target: float = 0.9, iters: int = 4)
 # %% check
 knee = 11.0
 r = max_rate(lambda x: 1.0 if x <= knee else 0.0, 1.0, 64.0, iters=10)
+assert math.isclose(r, max_rate_under_slo(lambda x: 1.0 if x <= knee else 0.0, 1.0, 64.0, iters=10)[0])
 assert knee / 1.01 <= r <= knee and math.isnan(max_rate(lambda x: 0.0, 1.0, 2.0)) and max_rate(lambda x: 1.0, 1.0, 2.0) == 2.0
 small = backend()
 SMALL = small.start({"max_num_seqs": 8})

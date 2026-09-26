@@ -22,7 +22,7 @@
 # assets are in `deploy/gcp/cloud-run/` (Terraform and `gcloud`). Prices: `COMPUTE.md` at the repo root.
 
 # %%
-import os, re, shutil, subprocess
+import os, shutil, subprocess
 from pathlib import Path
 import servelab
 from servelab import env, sizing

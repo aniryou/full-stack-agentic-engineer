@@ -22,6 +22,7 @@ import json
 import socket
 import threading
 import time
+import traceback
 import uuid
 
 from aiohttp import web
@@ -235,6 +236,8 @@ class FakeServer:
                 text = []
                 while True:
                     texts, finished = await q.get()
+                    if texts is None:
+                        return _error(500, "fake engine failed; see the server's stderr")
                     text += texts
                     if finished:
                         break
@@ -250,6 +253,9 @@ class FakeServer:
             first = True
             while True:
                 texts, finished = await q.get()
+                if texts is None:                  # the engine loop died: end the stream visibly
+                    await resp.write(b'data: {"error": "fake engine failed"}\n\n')
+                    break
                 reason = seq.finish_reason if finished else None
                 if chat:
                     if first:  # vLLM's first chat chunk carries the role, at the first token
@@ -278,6 +284,17 @@ class FakeServer:
 
     # -- the engine loop ---------------------------------------------------------------------------
     async def _engine_loop(self):
+        try:
+            await self._run_engine()
+        except asyncio.CancelledError:
+            raise
+        except Exception:                          # a bug must be loud, not a silent hang
+            traceback.print_exc()
+            for q in list(self._streams.values()):
+                q.put_nowait((None, True))
+            raise
+
+    async def _run_engine(self):
         e = self.engine
         while True:
             if not e.has_work():

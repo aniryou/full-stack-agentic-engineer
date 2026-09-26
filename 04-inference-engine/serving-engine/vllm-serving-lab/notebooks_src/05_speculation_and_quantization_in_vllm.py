@@ -27,7 +27,7 @@
 import math
 from servelab import env, metrics as M, sizing
 from servelab.bench import Lengths, random_requests, run_closed_loop
-from servelab.fake_engine import EngineConfig, FakeEngine, build_profile, profile as engine_profile, simulate, tiny_profile
+from servelab.fake_engine import EngineConfig, FakeEngine, build_profile, simulate, tiny_profile
 from servelab.tune import FakeBackend, sweep, to_cli_flags, trials_table
 
 print(env.describe())
@@ -101,7 +101,6 @@ print(spec_trial.snapshot.table())
 
 # %%
 from servelab.fakeserver import FakeServer
-from servelab.bench import run_open_loop
 srv = FakeServer("t4-qwen2.5-0.5b", EngineConfig(num_speculative_tokens=4, spec_acceptance=0.7))
 URL = srv.start()
 before = M.scrape(URL)

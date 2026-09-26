@@ -41,7 +41,7 @@ HAVE_GPU = (not SIMULATOR) and cuda.is_available()
 print(env.describe())
 if HAVE_GPU:
     DEV = bench.device_info()
-    SPEC = next((g for k, g in traffic.GPUS.items() if k.split()[0] in DEV["name"]), None)
+    SPEC = traffic.spec_for(DEV["name"]) or traffic.GPUS["T4"]  # unknown GPU: compare with a T4, say so below
     print(f"T1 path: measuring on {DEV['name']} (cc {DEV['cc']}, {DEV['sms']} SMs); datasheet spec: {SPEC}")
 else:
     SPEC = traffic.GPUS["T4"]

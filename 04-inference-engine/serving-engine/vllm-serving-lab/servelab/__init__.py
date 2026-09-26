@@ -18,4 +18,6 @@ DATA_DIR = Path(__file__).parent / "data"
 # Illustrative samples in vLLM's formats (a /metrics page at two times, a startup log): not measurements.
 SAMPLES_DIR = DATA_DIR / "samples"
 
-from . import env, metrics, sizing  # noqa: F401  (light modules; bench/fakeserver import aiohttp)
+from . import env, metrics, sizing  # light modules; bench/fakeserver/tune import aiohttp on demand
+
+__all__ = ["env", "metrics", "sizing", "DATA_DIR", "SAMPLES_DIR", "__version__"]

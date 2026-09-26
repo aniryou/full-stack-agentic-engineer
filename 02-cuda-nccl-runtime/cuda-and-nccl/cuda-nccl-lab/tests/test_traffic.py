@@ -27,3 +27,15 @@ def test_softmax_fusion_halves_traffic_and_bandwidth_math():
     assert t.softmax_bytes(4096, 4096, "fused") == 201_326_592  # 12 B per element
     assert t.effective_gbps(12e6, 1e-3) == pytest.approx(12.0)
     assert t.predicted_seconds(320e9 * 0.8, t.GPUS["T4"], efficiency=0.8) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("name,spec", [
+    ("Tesla T4", "T4"), ("NVIDIA L4", "L4"), ("NVIDIA A10G", "A10"), ("NVIDIA A100-SXM4-40GB", "A100 40GB SXM"),
+    ("NVIDIA A100-SXM4-80GB", "A100 80GB SXM"), ("NVIDIA GeForce RTX 4090", "RTX 4090"), ("NVIDIA H100 80GB HBM3", "H100 SXM"),
+])
+def test_device_names_map_to_specs(name, spec):
+    assert t.spec_for(name).name == spec
+
+
+def test_unknown_device_has_no_spec():
+    assert t.spec_for("SIMULATOR") is None
