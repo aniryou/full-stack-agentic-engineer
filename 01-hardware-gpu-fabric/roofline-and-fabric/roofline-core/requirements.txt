@@ -1,5 +1,8 @@
 # The library needs nothing. This is all the tests need (tier T0: any CPU, a few MB):
-# pytest, plus nbformat because tests/test_notebook_tooling.py rebuilds the notebooks.
+# pytest, plus the notebook tooling (nbformat, nbclient, ipykernel; ~15 MB) because
+# tests/test_notebook_tooling.py rebuilds the notebooks and runs one under --expect-fail.
 pytest>=7.4
 nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
 # To do the notebooks locally as well: pip install -r requirements-notebooks.txt
