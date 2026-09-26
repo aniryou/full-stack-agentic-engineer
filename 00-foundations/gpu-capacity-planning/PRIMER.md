@@ -58,7 +58,7 @@ FLOPs ≈ 2 × params × prompt_tokens        TTFT = FLOPs ÷ (peak_FLOPS × MFU
 RAG and agents are prefill-dominated, so **prefix caching** (shared system
 prompts, repeated documents) is the biggest single win there.
 
-**5. Workload → GPUs.** Get from the customer: **peak concurrent users** (not
+**5. Workload → GPUs.** Pin down the workload first: **peak concurrent users** (not
 headcount), avg input/output tokens, TTFT + TPOT targets, availability, growth.
 ```
 concurrency = RPS × request_duration        (Little's Law)
@@ -87,8 +87,8 @@ Avg 1,500 in / 300 out. Target ≥25 tok/s/user (TPOT ≤ 40 ms).
 - **Cost check**: $/M tokens = GPU-hour price ÷ tokens/hour (1,500 tok/s ≈ 5.4M/hr).
 
 > The two sizing paths — memory (~sessions/GPU) and throughput (tok/s/GPU) —
-> should roughly agree. Say that out loud; it shows you know
-> both constraints bind.
+> should roughly agree. Show both in a design review; if they disagree by
+> much, one of the inputs is wrong.
 
 ---
 
@@ -141,7 +141,7 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 
 - **Dense vs MoE** for the workload (quality needed vs hardware you can get).
 - **FP8 by default** on Hopper+; **INT4 only where quality was validated on the
-  customer's own evals.**
+  workload's own evals.**
 - **Prefix caching** for RAG/agents; **speculative decoding** for latency at low batch.
 - **Thinking models** change the output length, not the formulas: with 2,700 thinking tokens before a 300-token
   answer, the bank example needs about 18× the GPUs for KV memory at the SLO's TPOT
@@ -149,6 +149,6 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 - **Chunked prefill** (interleave long prompts with decode) vs **disaggregated
   prefill/decode pools** (separate GPU fleets, each sized for its bottleneck)
   once you're past a few nodes.
-- For an APAC partner deployment the real constraint is usually **data residency +
-  in-country GPU availability** → "which Mistral model gives the quality you need
-  on the hardware you can actually get?"
+- When data must stay in one country, the binding constraint is usually **in-country
+  GPU availability** → "which model gives the quality you need on the hardware you
+  can actually get there?"

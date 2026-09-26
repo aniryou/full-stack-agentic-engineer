@@ -69,7 +69,7 @@ print()
 print("=" * 68)
 print("B. SINGAPORE BANK — internal assistant, on-prem (data residency)")
 print("=" * 68)
-# Inputs you must extract from the customer:
+# The workload's inputs (state them before sizing anything):
 STAFF        = 10_000
 PEAK_ACTIVE  = 0.10          # fraction active at peak
 REQ_PER_MIN  = 0.5           # each active user: ~1 request / 2 min

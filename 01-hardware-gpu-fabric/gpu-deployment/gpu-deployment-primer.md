@@ -184,7 +184,7 @@ Current landscape as of mid-2026:
 
 - **Hopper (H100 80 GB, H200 141 GB)** — still ubiquitous, still the price/performance workhorse for most enterprise workloads.
 - **Blackwell Ultra (B300 / GB300 NVL72)** — 288 GB HBM3e at 8 TB/s, ~1,400 W per GPU. The volume production part.
-- **Vera Rubin (R100 / VR200)** — entered production June 2026, partner availability H2 2026. 288 GB of HBM4 at 22 TB/s, NVLink 6 at 3.6 TB/s per GPU. Availability is constrained by TSMC 3nm and HBM4 supply.
+- **Vera Rubin (R100 / VR200)** — entered production June 2026, available from OEMs and clouds in H2 2026 (verify). 288 GB of HBM4 at 22 TB/s, NVLink 6 at 3.6 TB/s per GPU. Availability is constrained by TSMC 3nm and HBM4 supply.
 - **AMD** — MI300X/MI325X mature in production; MI400/MI450 ramping. Credible, especially on memory capacity per GPU, with ROCm as the software risk.
 - **Custom silicon** — Google TPU, AWS Trainium/Inferentia, Microsoft Maia, Meta MTIA. Large volumes, mostly captive to internal hyperscaler workloads.
 
