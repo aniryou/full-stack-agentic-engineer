@@ -9,8 +9,9 @@ seed. Every notebook starts with the repo's Colab setup cell, exactly as
 tools/inject_colab_bootstrap.py writes it and in the injector's JSON layout, so
 rebuilding unchanged sources (with the versions in
 tools/ci/embeddings-lab-build.txt, which CI installs) rewrites the committed
-notebooks byte for byte and running the injector afterwards is a no-op."""
-import hashlib, importlib.util, json, os, sys, pathlib
+notebooks byte for byte (on any x86-64 machine: see _ENV) and running the injector afterwards is a
+no-op."""
+import hashlib, importlib.util, json, os, platform, sys, pathlib
 import jupytext, nbformat
 from nbclient import NotebookClient
 
@@ -21,9 +22,13 @@ _spec = importlib.util.spec_from_file_location("inject_colab_bootstrap",
 _inject = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_inject)
 
-# The kernel inherits this environment: same numbers and the same output on every run.
-for _k, _v in {"PYTHONHASHSEED": "0", "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
-               "MKL_NUM_THREADS": "1"}.items():
+# The kernel inherits this environment: same numbers and the same output on every run, and on every
+# x86-64 machine: one BLAS thread, OpenBLAS's AVX2 (Haswell) kernels and numpy without its AVX-512 loops,
+# whatever the CPU offers (AVX-512 kernels round differently, so plots and printed digits would drift).
+_ENV = {"PYTHONHASHSEED": "0", "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+if platform.machine().lower() in ("x86_64", "amd64"):
+    _ENV.update(OPENBLAS_CORETYPE="Haswell", NPY_DISABLE_CPU_FEATURES="X86_V4 AVX512_ICL AVX512_SPR")
+for _k, _v in _ENV.items():
     os.environ.setdefault(_k, _v)
 
 def strip_solutions(text):
