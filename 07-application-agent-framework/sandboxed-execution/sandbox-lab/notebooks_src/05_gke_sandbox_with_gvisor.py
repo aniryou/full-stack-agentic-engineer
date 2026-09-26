@@ -82,22 +82,40 @@ for n in sorted(ok):
     print("   -", n)
 
 # %% [markdown]
-# ## Exercise 5.2 — `type = "GVISOR"` is case-sensitive (a pitfall)
+# ## Exercise 5.2 — predict what `terraform validate` says (a case-sensitive pitfall)
 #
-# The provider validates `node_config.sandbox_config.type` against exactly `"GVISOR"`; the lowercase
-# `"gvisor"` (which is what `gcloud`'s `--sandbox type=gvisor` uses) fails `terraform validate`.
-# Read `node_pools.tf` and confirm the upper-case value is present and the lowercase one is not.
+# One product, three spellings: `gcloud container node-pools create --sandbox type=gvisor`, a pod's
+# `runtimeClassName: gvisor`, and the Terraform field `node_config.sandbox_config.type`, which the google
+# provider (8.4.0) checks with `validation.StringInSlice([]string{"GVISOR"}, false)` — the `false` is
+# `ignoreCase`. **Predict**, for each candidate value, whether `terraform validate` accepts it. Then write
+# `sandbox_types_in(tf_text)`, returning every value assigned to `type` inside a `sandbox_config { … }`
+# block, so a review can check the real file rather than trust a comment.
 
 # %% exercise
-def gvisor_value_is_upper_case() -> bool:
-    tf = (render.LAB_ROOT / "deploy/gcp/terraform/node_pools.tf").read_text()
+import re
+
+accepted = {"GVISOR": None, "gvisor": None, "gVisor": None, "runsc": None}
+### BEGIN SOLUTION
+accepted = {"GVISOR": True, "gvisor": False, "gVisor": False, "runsc": False}
+### END SOLUTION
+
+
+def sandbox_types_in(tf_text: str) -> list:
     ### BEGIN SOLUTION
-    return 'type = "GVISOR"' in tf and 'type = "gvisor"' not in tf
+    return re.findall(r'sandbox_config\s*\{[^}]*?\btype\s*=\s*"([^"]*)"', tf_text)
     ### END SOLUTION
 
 # %% check
-assert gvisor_value_is_upper_case()
-print('✅ node_config.sandbox_config.type = "GVISOR" (the provider is case-sensitive; gcloud uses lowercase)')
+import hashlib
+assert None not in accepted.values(), "predict every spelling"
+assert hashlib.sha256(repr(sorted(accepted.items())).encode()).hexdigest()[:12] == "6e1c6426b924", (
+    "not quite: StringInSlice with ignoreCase=false accepts exactly the listed string, nothing else")
+assert sandbox_types_in('sandbox_config {\n  type = "gvisor"\n}\n') == ["gvisor"]
+assert sandbox_types_in('guest_accelerator {\n  type = "nvidia-l4"\n}\n') == []   # another block's `type`
+found = sandbox_types_in((render.LAB_ROOT / "deploy/gcp/terraform/node_pools.tf").read_text())
+assert found and all(accepted.get(v) for v in found), found
+print(f'✅ node_pools.tf sets sandbox_config.type = {found} — the only spelling the provider accepts')
+print("   (gcloud's --sandbox type=gvisor and the pod's runtimeClassName: gvisor are lower-case)")
 
 # %% [markdown]
 # ## Exercise 5.3 — the metadata server is not a NetworkPolicy problem

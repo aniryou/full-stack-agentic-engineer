@@ -3,7 +3,7 @@
  "model": "allenai/OLMoE-1B-7B-0924-Instruct",
  "num_experts": 64,
  "top_k": 8,
- "server": "vllm serve allenai/OLMoE-1B-7B-0924-Instruct --dtype half --max-model-len 4096 --cpu-offload-gb 6 --cpu-offload-params experts --enable-return-routed-experts   # on a 16 GB T4",
+ "server": "vllm serve allenai/OLMoE-1B-7B-0924-Instruct --dtype half --max-model-len 4096 --cpu-offload-gb 3 --cpu-offload-params experts --enable-return-routed-experts   # on a 16 GB T4",
  "request_extra": {
   "routed_experts_prompt_start": 0
  },

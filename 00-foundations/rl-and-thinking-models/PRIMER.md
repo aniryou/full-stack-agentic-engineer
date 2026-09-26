@@ -154,8 +154,8 @@ balanced. The SFT reference passes it 72.7% of the time and is right 29.7%. Afte
 | β = 0.3 | 0.959 | 0.354 | 0.25 | 0.20 |
 
 At depth 0, `)` is an instant pass from every state, so gradient ascent finds it. The KL-regularised optimum
-multiplies every passing string by the same exp(1/β), so it keeps the reference's honest-to-hacked ratio: 40.9% as
-β → 0 (notebook 01, exercise 1.6). The penalty is a leash, not a fix. The fixes are the verifier and evals of the
+multiplies every passing string by the same exp(1/β), so it keeps the reference's share of honest strings among
+those that pass: 40.9% as β → 0 (notebook 01, exercise 1.6). The penalty is a leash, not a fix. The fixes are the verifier and evals of the
 true objective. DeepSeek-R1 used rule-based rewards and avoided neural reward models partly for this reason (verify).
 
 **Length bias.** RL also lengthens whatever the reward does not charge for. In `ThinkTask` the policy emits "think"
@@ -277,7 +277,7 @@ where they exist, and evals on the true objective.
 | Task | Verifier | Watch for |
 |---|---|---|
 | math | extract the final answer (R1: a `\boxed{}` answer), check equivalence (TRL `accuracy_reward` uses `math-verify`) | extraction failures scored as wrong; answers that game the parser |
-| code | run the tests in a sandbox | exit-code and harness loopholes (§2); run untrusted code isolated (`07-application-agent-framework/sandboxed-execution`) |
+| code | run the tests in a sandbox | exit-code and harness loopholes (§2); run untrusted code isolated ([sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md)) |
 | format | a regex, e.g. TRL's `think_format_reward` `^<think>(?!.*<think>)(.*?)</think>.*$` | the format becoming the goal |
 
 DeepSeek-R1-Zero used exactly two rule-based rewards, accuracy and format, and no neural reward model (verify). DAPO
@@ -285,7 +285,9 @@ scores +1 / −1 by answer equivalence. Rewards are sparse — one number per co
 makes GRPO's group statistics work.
 
 **GRPO.** For each prompt, sample a group of G completions from π_old, score them, and give every token of
-completion i the same advantage (DeepSeekMath; R1 eq. 1–3; TRL's `GRPOTrainer`):
+completion i the same advantage (DeepSeekMath's GRPO, which R1 adopted; TRL's `GRPOTrainer`). DeepSeekMath writes the
+ratio per token and averages each completion's tokens (1/|o_i|); the R1 paper's eq. 1 writes one ratio per whole
+completion, π_θ(o_i)/π_old(o_i), averaged over the group (1/G):
 
 ```
 A_i = (r_i − mean(r)) / (std(r) + 1e-4)          std with Bessel's correction      grpo.group_advantages()
@@ -314,9 +316,12 @@ exploration — are capped hardest, so symmetric clipping drives entropy down; D
 0.2 from ε_high = 0.28. The toy shows the collapse itself: GRPO on the bracket task (μ = 4, `grpo.train_grpo()`)
 takes P(correct) from 0.297 to 0.995 while the effective number of distinct correct answers, exp(entropy) over
 them, falls from 13.9 to 2.4. Clip-higher's effect on real models' entropy is DAPO's measurement; the table policy
-collapses with or without it. The other lever is an entropy bonus, −c·log π(y) added to the reward
-(`pg.reinforce_grad(entropy_coef=…)`; TRL's `entropy_coef`, default 0.0, verify): 300 REINFORCE steps keep 12.8
-effective correct answers with c = 0.05 against 6.5 without, at P(correct) 0.959 against 0.975.
+collapses with or without it. The other lever is an entropy bonus. The core adds a sequence-level −c·log π(y) to
+the reward (`pg.reinforce_grad(entropy_coef=…)`), so it is baselined along with the reward: 300 REINFORCE steps keep
+12.8 effective correct answers with c = 0.05 against 6.5 without, at P(correct) 0.959 against 0.975. TRL's
+`entropy_coef` (default 0.0, verify) has the same intent but adds the mean per-token entropy of the full next-token
+distribution to the loss, with no baseline and no loss-type rescaling: a different estimator on a different scale,
+so c = 0.05 here is not a TRL setting.
 
 **How the loss is averaged: the length bias.** TRL's `loss_type` decides what one token is worth
 (`grpo.token_weights()`); for completions of 10 and 50 tokens in a group of two, with `max_len` 100:
@@ -366,7 +371,7 @@ forward + backward pass of the policy. In memory: the policy with gradients and 
 | `max_completion_length` | 512 | DAPO 20,480 |
 | `beta` | 0.0 (no reference model) | R1 0.001; DAPO 0 |
 | `epsilon` / `epsilon_high` | 0.2 / None (= epsilon) | DAPO 0.2 / 0.28 |
-| `loss_type` | `"dapo"` | R1 `"grpo"`; Dr. GRPO `"dr_grpo"` |
+| `loss_type` | `"dapo"` | DeepSeekMath (and R1) `"grpo"`; Dr. GRPO `"dr_grpo"` |
 | `scale_rewards` | `"group"` | Dr. GRPO `"none"` |
 | `num_iterations` (μ) | 1 | — |
 | `mask_truncated_completions` | False | DAPO True |
@@ -383,7 +388,9 @@ rule-based accuracy and format rewards and a template asking for reasoning insid
 rose from 15.6% to 71.0% (86.7% with majority voting) over thousands of RL steps, and the responses grew from
 hundreds to thousands of reasoning tokens; reflection ("wait…") emerged on its own — the paper's "aha moment". It
 also produced endless repetition, poor readability and language mixing (verify). Nobody rewarded length: longer
-thinking raised the reward, so RL lengthened it — §2's ThinkTask in miniature (1.0 → 11.1 tokens).
+thinking raised the reward, so RL lengthened it — §2's ThinkTask in miniature (1.0 → 11.1 tokens). Not all growth
+is capability, though: per-sequence loss averaging lengthens wrong answers too (§4; Dr. GRPO argues part of
+R1-Zero-like length growth is this artefact), so check accuracy by length before crediting longer traces.
 
 **The DeepSeek-R1 recipe** (two SFT stages, two RL stages; R1 is 671B total / 37B activated, verify):
 
@@ -460,19 +467,23 @@ And a fixed budget over-thinks: if a model stopped when it cracked a question, 4
 be spent after the answer was already found (notebook 04, exercise 4.6) — the case for adaptive budgets.
 
 **Parallel: best-of-n, verifiers and votes.** With a perfect verifier, n samples give 1 − (1 − p)^n. A reward model
-sees correctness through noise (`ttc.best_of_n_accuracy()`, p = 0.3): at n = 16, 0.996 with a verifier, 0.934 with
-noise 0.5, 0.702 with noise 1.0 — more samples, more chances to be fooled; a *biased* scorer (§3) selects for its
+sees correctness through noise (`ttc.best_of_n_accuracy()`, Monte Carlo, 20,000 trials; p = 0.3): at n = 16,
+0.997 with a verifier (exactly 1 − 0.7^16), 0.934 with noise 0.5, 0.702 with noise 1.0 — more samples, more
+chances to be fooled; a *biased* scorer (§3) selects for its
 bias. **Majority vote** (self-consistency) needs no checker, only that the right answer be the most common
 (`ttc.majority_accuracy()`, exact). One question, a sample right with p = 0.4:
 
 | Where the wrong 60% goes | n = 1 | n = 15 | n = 31 |
 |---|---|---|---|
-| one common misconception (0.42 / 0.18) | 0.400 | 0.449 | 0.447 |
+| one dominant misconception (0.5 / 0.1) | 0.400 | 0.340 | 0.278 |
+| a narrow misconception (0.42 / 0.18) | 0.400 | 0.449 | 0.447 |
 | two equal wrong answers (0.3 / 0.3) | 0.400 | 0.534 | 0.621 |
 | four scattered wrong answers (0.15 each) | 0.400 | 0.780 | 0.925 |
 
-As n → ∞ the vote is right iff p exceeds every wrong answer's share. lm-eval's GSM8K self-consistency task reports
-maj@64 from 64 samples at temperature 0.2 (verify).
+As n → ∞ the vote is right iff p exceeds every wrong answer's share, but the limit can be slow: against a narrow
+misconception the vote still helps at 15 votes and drops below one sample's accuracy only past about 130. A
+dominant one makes every extra vote cost accuracy. lm-eval's GSM8K self-consistency task reports maj@64 from 64
+samples at temperature 0.2 (verify).
 
 **pass@k vs pass^k, and the unbiased estimator.** pass@k — at least one of k samples correct — must be estimated from
 n ≥ k samples with c correct (Chen et al. 2021):
@@ -618,9 +629,10 @@ with what it has (right 30% of the time when uncracked, e0 = 0.7):
 | thinking budget (limit − 300): accuracy | 0.693 | 0.876 | 0.966 | 0.994 |
 | mean output tokens (either) | 1,559 | 2,136 | 2,526 | 2,705 |
 
-Same tokens, different outcome: at 4K one request in six gets no answer under `max_tokens`. Set `max_tokens` and
-`max_model_len` for the tail — 17,408 (a multiple of 1,024) keeps truncation at or below 1% with 1,500-token prompts
-(notebook 05, exercise 5.3) — and enforce cost with a budget.
+Same tokens, different outcome: at 4K one request in six gets no answer under `max_tokens`. Size `max_model_len`
+for the tail — prompt + p99 thinking + answer, 17,408 (a multiple of 1,024) with 1,500-token prompts, keeps
+truncation at or below 1% (notebook 05, exercise 5.3) — leave `max_tokens` at `max_model_len` minus the prompt
+(15,908 here), since it counts output only, and enforce cost with a budget.
 
 **Cost per *correct* answer, and routing by effort.** Wrong answers are paid for too: cost per correct = cost per
 request / accuracy (`workload.cost_per_correct()`). With the §5 prices ($0.007005 per call without thinking,
@@ -669,8 +681,8 @@ per prompt), prefix sharing (the G samples share their prompt), batching and the
 loading, and the metrics of the serving-engine primer §11.
 
 **Agentic RL.** Multi-turn rollouts with tools make each trajectory a loop of generate → tool call → observation →
-generate: environments must be reset and isolated per rollout (code execution belongs in a sandbox —
-`07-application-agent-framework/sandboxed-execution`), tool latency adds its own tail to the step, and credit
+generate: environments must be reset and isolated per rollout (code execution belongs in a sandbox — the
+[sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md)), tool latency adds its own tail to the step, and credit
 assignment spans turns. Reward design and evals are the same discipline as 07's platform lab
 ([`08_evals_trajectory_judge_gates`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/08_evals_trajectory_judge_gates.py):
 golden sets, run-to-run noise, Wilson intervals, release gates): the training reward is a proxy and the eval is how
@@ -829,7 +841,7 @@ Code and documentation (read 2026-09-26):
   [`vllm-serving-lab`](../../04-inference-engine/serving-engine/vllm-serving-lab/) (`servelab.sizing`, bench, fake
   server); [agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md);
   the 07 [platform lab](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/) (evals);
-  `07-application-agent-framework/sandboxed-execution` (sandboxing tool calls and code).
+  the 07 [sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md) (sandboxing tool calls and code).
 
 ## Verify list
 

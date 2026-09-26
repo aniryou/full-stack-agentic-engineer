@@ -21,6 +21,18 @@ def test_every_probe_is_documented():
         assert "169.254.169.254" not in p.body                                 # the real metadata address only via P
 
 
+def test_core_probe_name_map_covers_every_lab_probe():
+    from sandboxlab.probes import CORE_PROBE_NAMES
+    assert set(CORE_PROBE_NAMES) == set(BY_NAME)
+    mapped = [v for v in CORE_PROBE_NAMES.values() if v]
+    assert len(mapped) == len(set(mapped)) == 9          # all nine core probes have a lab counterpart
+    try:                                                 # the lab never imports the core; check it only if present
+        from sandboxcore import PROBES_BY_NAME as CORE
+    except ImportError:
+        pytest.skip("sandboxcore not installed")
+    assert set(mapped) == set(CORE)
+
+
 def test_standin_host_holds_only_canaries():
     with standin_host() as h:
         assert h.canary.startswith("LABCANARY-") and h.canary in h.key_path.read_text()

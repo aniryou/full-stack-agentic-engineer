@@ -371,6 +371,15 @@ PROBES: list[Probe] = [
           'print(json.dumps({"spawned": pid}))\n', _judge_escape),
 ]
 BY_NAME = {p.name: p for p in PROBES}
+# The same attacks in the core's probe set (``sandboxcore.threats``) go by other names; None = lab only
+# (it separates containers from processes, or needs more than the core's stand-ins). The exit reasons are
+# one vocabulary in both (PRIMER §3), so a verdict row reads the same either side of this map.
+CORE_PROBE_NAMES: dict[str, str | None] = {
+    "env_secret": "read_env_secret", "ssh_key": "read_ssh_key", "proc_environ": None,
+    "write_outside": None, "egress": "egress_connect", "metadata": None, "fork_bomb": "fork_bomb",
+    "disk_fill": "disk_fill", "disk_fill_many": None, "memory_hog": None, "infinite_loop": "cpu_spin",
+    "sleep_forever": "sleep_forever", "huge_output": "output_flood", "escape_session": "escape_session",
+}
 QUICK = ["env_secret", "ssh_key", "proc_environ", "write_outside", "egress", "fork_bomb", "disk_fill",
          "memory_hog", "huge_output"]
 

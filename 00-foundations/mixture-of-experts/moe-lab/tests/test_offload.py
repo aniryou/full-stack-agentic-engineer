@@ -51,9 +51,11 @@ def test_parse_startup_log_fixtures():
     t4 = offload.parse_startup_log((FIX / "vllm_startup_olmoe_t4_offload.log").read_text())
     assert t4["moe_default_config"] and t4["moe_config_file"] is None
     assert t4["max_model_len"] == 4096 and t4["kv_cache_tokens"] > 0
-    pred = offload.fit(OLMOE, T4, "fp16", offload_gib=6)
+    off = offload.min_offload_gib(OLMOE, T4, "fp16", kv_tokens=4 * 4096)    # the log is the recommended offload
+    pred = offload.fit(OLMOE, T4, "fp16", offload_gib=off)
     cmp_ = offload.compare_with_log(pred, t4)
-    assert abs(cmp_["kv_error_gib"]) < 0.01 and cmp_["log_weights_gib"] == pytest.approx(pred.weights_gib - 6, abs=0.01)
+    assert abs(cmp_["kv_error_gib"]) < 0.01 and cmp_["log_weights_gib"] == pytest.approx(pred.weights_gib - off, abs=0.01)
+    assert f"--cpu-offload-gb {off:g} " in (FIX / "vllm_startup_olmoe_t4_offload.log").read_text()
 
 
 def test_parse_startup_log_tuned_config_line():

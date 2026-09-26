@@ -137,22 +137,29 @@ def grpo_step(policy: Policy, task, rng, cfg: GRPOConfig, prompts=(0,), ref: Pol
     weights = token_weights([t.length for t, _ in batch], cfg.loss_type, max_len)
     old_lp = [old.token_logprobs(t) for t, _ in batch]
     ref_lp = [ref.token_logprobs(t) for t, _ in batch] if (ref is not None and cfg.beta > 0) else None
-    clipped = total = 0
+    clipped = 0
     for _ in range(cfg.num_iterations):
-        grad = np.zeros_like(policy.theta)
-        for k, ((t, a), w) in enumerate(zip(batch, weights)):
-            lp = policy.token_logprobs(t)
-            ratio = np.exp(lp - old_lp[k])
-            _, dobj = clipped_surrogate(ratio, a, cfg.epsilon, cfg.epsilon_high)
-            coef = dobj * ratio                       # d(ρA)/dθ = A·ρ·∇log π where unclipped
-            if ref_lp is not None:                    # d(β·k3)/dθ = β(1 − π_ref/π)·∇log π, subtracted (it is a loss)
-                coef = coef - cfg.beta * (1.0 - np.exp(ref_lp[k] - lp))
-            grad += policy.grad_logprob(t, coef * w)
-            clipped += int(((dobj == 0) & (a != 0)).sum())
-            total += t.length
+        grad, c = surrogate_grad(policy, batch, weights, old_lp, ref_lp, cfg)
+        clipped += c
         policy.step(grad, cfg.lr)
-    stats["clipped"] = clipped / max(total, 1)
+    stats["clipped"] = clipped / max(cfg.num_iterations * sum(t.length for t, _ in batch), 1)
     return stats
+
+
+def surrogate_grad(policy: Policy, batch, weights, old_lp, ref_lp, cfg: GRPOConfig):
+    """∇θ of Σ_i Σ_t w_it·[min(ρA_i, clip(ρ)·A_i) − β·k3], the objective grpo_step ascends, and how many
+    tokens the clip stopped. Per token the weight on ∇log π is dObj/dρ·ρ − β·(1 − π_ref/π)."""
+    grad, clipped = np.zeros_like(policy.theta), 0
+    for k, ((t, a), w) in enumerate(zip(batch, weights)):
+        lp = policy.token_logprobs(t)
+        ratio = np.exp(lp - old_lp[k])
+        _, dobj = clipped_surrogate(ratio, a, cfg.epsilon, cfg.epsilon_high)
+        coef = dobj * ratio                           # d(ρA)/dθ = A·ρ·∇log π where unclipped
+        if ref_lp is not None:                        # d(β·k3)/dθ = β(1 − π_ref/π)·∇log π, subtracted (a loss)
+            coef = coef - cfg.beta * (1.0 - np.exp(ref_lp[k] - lp))
+        grad += policy.grad_logprob(t, coef * w)
+        clipped += int(((dobj == 0) & (a != 0)).sum())
+    return grad, clipped
 
 
 def train_grpo(policy: Policy, task, rng, cfg: GRPOConfig, steps: int = 200, prompts=(0,),

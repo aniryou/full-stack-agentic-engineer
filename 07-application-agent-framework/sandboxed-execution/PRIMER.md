@@ -75,7 +75,10 @@ listener the harness owns and sends bytes (the exfiltration leg); `fork_bomb`, `
 `setsid()` and leaves a file behind, so something outlives the call. Run through
 `sandboxcore.UnsafeExecutor`, the secret, key, egress and escape probes **leak** — you watch the token come
 back, the key print, the connection succeed, the escapee write after the call returned. That demonstration
-(notebook 01) is the whole motivation.
+(notebook 01) is the whole motivation. The lab's suite (`sandboxlab.probes`) adds the probes that separate a
+container from a process — reading other processes' `/proc/<pid>/environ`, writing outside the workspace,
+reaching a (stand-in) metadata endpoint, a memory hog — and names a few differently;
+`sandboxlab.probes.CORE_PROBE_NAMES` maps one set to the other.
 
 **Map each risk to the control that bounds it.** The design question, for every tool, is the identity
 primer's: *assume the model is fully hijacked — what is the worst this code can do, and which control outside
@@ -108,7 +111,8 @@ report says whether it could (`uid_dropped`, `filesystem_isolated`, `escapes_swe
    inherited.
 2. **No network by default.** Egress is denied unless an allowlist and a proxy permit a specific host.
 3. **No persistent filesystem.** The workspace is ephemeral and thrown away; the code runs as a UID that
-   cannot open your files, and whatever that UID leaves elsewhere (in `/tmp`) is swept after the run.
+   cannot open your files, and whatever that UID leaves elsewhere (in `/tmp`) is swept after the run — with
+   a per-execution UID; without one, a file written to `/tmp` stays (a container's filesystem avoids this).
 4. **Only** what the caller deliberately passes for this one execution (the inputs and budget of §3).
 
 A code tool that meets all four still lets a hijacked model *compute* — but computation with no authority is
@@ -411,9 +415,10 @@ policy (`policyTypes: [Egress]`, no rules) and one that opens egress to the prox
 and nothing else, not DNS. The pod finds the proxy without a resolver: `dnsPolicy: None`, and `hostAliases`
 maps the proxy's name to its Service's pinned ClusterIP (the rendered Service), so there is no DNS channel to
 exfiltrate through. The traps: a NetworkPolicy needs a plugin that enforces it (GKE Dataplane V2, Calico,
-Cilium; current kindnetd enforces standard policy through kube-network-policies with **`FailOpen: true`** —
-that the lab's pinned kind v0.33.0 ships it is `(verify)`, and the lab's `run-examples.sh` has a must-fail
-step that checks it on your cluster), it never blocks traffic to the pod's own **node** (so deny cloud
+Cilium; kind's kindnetd enforces standard policy through kube-network-policies — its source at the lab's
+pinned kind v0.33.0 builds that controller, v0.23.0's did not — but with **`FailOpen: true`**, and if the
+controller cannot start it logs and carries on without policies, so the lab's `run-examples.sh` has a
+must-fail step that checks enforcement on your cluster), it never blocks traffic to the pod's own **node** (so deny cloud
 metadata with `automountServiceAccountToken: false` and a Workload-Identity KSA that has no IAM, not with
 NetworkPolicy), and a pod created before the policy is handled "may be started unprotected" — apply policies
 first, gate the first runner on a readiness check.
@@ -498,9 +503,9 @@ a = 25:
 `pool.slots_for_wait_target(5, 2, 3, 0.2)` returns **31** (35 for 5%). A reuse pool at the same rate has
 a = λ·t_exec = 10 and needs 14 (P(wait) 0.174; c = 12 gives 0.449) — the FACTS §12 table. Erlang C assumes
 exponential hold times; a fixed cold start varies less, so the real P(wait) comes out a little lower. The
-discrete-event `pool.simulate()` checks this (SIMULATED, labelled so): replace-after-use at 25 slots — 91%
-wait, 6.8 s on average; at 31 — 14% wait, 0.06 s; cold-on-demand at 31 — every request waits at least the
-3 s cold start.
+discrete-event `pool.simulate()` checks this (SIMULATED; seed 1, 30,000 arrivals — notebook 05's worked
+example 4, pinned in `tests/test_pool.py`): replace-after-use at 25 slots — 91% wait, 6.8 s on average; at
+31 — 14% wait, 0.06 s; cold-on-demand at 31 — every request waits at least the 3 s cold start.
 
 **Where the arrival rate comes from.** The workload, via the scaling primer's §3.2 arithmetic: **27.1 tool
 calls/s at peak**; if a fifth are `run_code`, λ ≈ **5.4/s** (27.1 × 0.2 = 5.42) — a mean occupancy of 27.1
@@ -585,10 +590,10 @@ manifests (validated offline). As a non-root user it cannot switch UID, and says
 per-execution UID. The lab's `docker.py` adds a hardened `docker run` (and `--runtime=runsc` if
 gVisor is installed) where Docker is available. This is where you learn everything.
 
-**kind (T0 + Docker).** A kind cluster runs the real scheduler, Pod Security, NetworkPolicy (current kindnetd
-enforces standard policy but **fails open**, and whether kind v0.33.0 ships it is `(verify)` — the lab's
-must-fail egress step checks it on your cluster; if it fails, create the cluster with
-`networking.disableDefaultCNI: true` and install Calico) and the ValidatingAdmissionPolicy;
+**kind (T0 + Docker).** A kind cluster runs the real scheduler, Pod Security, NetworkPolicy (kindnetd at
+kind v0.33.0 enforces standard policy but **fails open** — a broken policy controller means no policies,
+silently — so the lab's must-fail egress step checks it on your cluster; if it fails, create the cluster
+with `networking.disableDefaultCNI: true` and install Calico) and the ValidatingAdmissionPolicy;
 the lab's `deploy/kind` creates the restricted namespace, the default-deny NetworkPolicy, the egress proxy,
 the quota and the runner Job. **kind cannot run gVisor**, so the runtime-class path is inspected, not
 executed, here.
@@ -598,8 +603,9 @@ installed, real gVisor; a nested-virt or bare-metal host runs Firecracker/Kata (
 on Colab and most laptops' Docker).
 
 **GCP (T3).** The lab's Terraform builds a zonal GKE Standard cluster with a **GKE Sandbox (gVisor)** node
-pool (`sandbox_config { type = "GVISOR" }`, tainted, Spot, autoscale-from-zero), no Cloud NAT (no egress by
-default), Artifact Registry for the sandbox image, and managed Prometheus; `deploy/gke` has the RuntimeClass,
+pool (`sandbox_config { type = "GVISOR" }`, tainted, Spot, autoscale-from-zero), no Cloud NAT (no *internet*
+egress by default — Google APIs stay reachable over Private Google Access until the NetworkPolicy closes
+them, §5), Artifact Registry for the sandbox image, and managed Prometheus; `deploy/gke` has the RuntimeClass,
 namespace, NetworkPolicy, runner Job and admission policy. Cloud Run **jobs** are the serverless option:
 the first-generation execution environment is gVisor-based and the second a microVM-based full Linux
 `(verify)`; set `max_retries: 0` for non-idempotent code (the default is 3); and mind that **Cloud Run egress
@@ -696,7 +702,7 @@ the exit reason, and I detect abuse from the exit-reason histogram and shed code
 | Firecracker / Kata / microVM | Lightweight VMs with their own guest kernel; a hardware isolation boundary; need `/dev/kvm`. |
 | RuntimeClass | A Kubernetes object naming a CRI handler (`runsc`, a Kata shim); pods select it with `runtimeClassName`. |
 | Pod Security *restricted* | The strictest built-in Pod Security Standard: non-root, no privilege escalation, drop ALL caps, seccomp RuntimeDefault, limited volumes. |
-| NetworkPolicy (default-deny egress) | A policy that drops all egress; you re-open only the proxy and DNS. Needs an enforcing CNI. |
+| NetworkPolicy (default-deny egress) | A policy that drops all egress; you re-open only the proxy — not DNS, which would be an exfiltration channel. Needs an enforcing CNI. |
 | ValidatingAdmissionPolicy | CEL-based admission control (stable 1.30) that rejects non-conforming pods; the deterministic backstop. |
 | Little's law | in-flight = arrival rate × time held; gives a pool's *mean* occupancy (busy + warming), the floor below any workable size. |
 | Erlang C | The M/M/c formula for the fraction of requests that wait; turns a wait target into a slot count. |
@@ -747,7 +753,7 @@ Dated 26 September 2026. Re-check before relying on any of these.
 | GKE pod cold start ~42–50 s p50 (burst, a self-run 20-node e2-standard-16 cluster, k8s 1.36.2); warm adoption sub-second | agent-sandbox `docs/performance-tuning.md` — not a managed service's figure |
 | Terraform `sandbox_config.type = "GVISOR"` (case-sensitive; `"gvisor"` fails validate) | provider 8.4.0 source `tf-node_config.go` |
 | Kubernetes: PSA `enforce` applies to Pods not workloads; `RLIMIT_NPROC` root/UID behaviour; emptyDir sizeLimit; no per-pod PID field | K8s docs / CPython docs / measured (FACTS §10) |
-| kindnetd enforces NetworkPolicy (kube-network-policies) with `FailOpen: true`; the first kind release with it is v0.24.0 (release notes not read), so the pinned v0.33.0 should have it; kind cannot run gVisor | kindnetd source; the release is `(verify)` — the lab's must-fail egress step checks it on your cluster (fallback: `disableDefaultCNI` + Calico) |
+| kindnetd enforces NetworkPolicy (kube-network-policies) with `FailOpen: true`; kind cannot run gVisor | kindnetd `main.go` at tags v0.33.0 and v0.24.0 builds the policy controller, v0.23.0 does not (read 2026-09-26); that the pinned node image bundles that kindnetd is `(verify)` — the lab's must-fail egress step checks it on your cluster (fallback: `disableDefaultCNI` + Calico) |
 | GKE creates RuntimeClass `gvisor` (handler `gvisor`, scheduling + toleration for sandbox nodes) | `(verify)` — `kubectl get runtimeclass gvisor -o yaml` |
 | Cloud Run egress open by default; closing it needs Direct VPC egress `ALL_TRAFFIC` + firewall | `(verify)`, docs blocked |
 | Snapshot/restore start-up saving (Firecracker, `runsc checkpoint/restore`) | `(verify)`: no number here; the one-restore-per-tenant rule is from Firecracker's snapshot docs |

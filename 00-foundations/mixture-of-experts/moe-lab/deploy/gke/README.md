@@ -34,7 +34,8 @@ python -m moelab bench-parse out/bench_tp_c16.txt
 ```
 
 To read the router from inside the cluster, `kubectl -n moe-lab port-forward svc/vllm-moe 8000:8000`
-and run notebook 02 with `MOELAB_URL=http://127.0.0.1:8000 MOELAB_EXPERTS=60 MOELAB_TOPK=4`.
+and run notebook 02 with `MOELAB_URL=http://127.0.0.1:8000`: it finds Qwen1.5-MoE-A2.7B's 60 experts,
+top-4, in `moelab.configs` by the served model id.
 
 **What to look for.** `./run.sh logs` shows the memory each GPU loaded, the KV cache it got, and
 *"Using default MoE config. Performance might be sub-optimal!"* — vLLM has no tuned fused-MoE config

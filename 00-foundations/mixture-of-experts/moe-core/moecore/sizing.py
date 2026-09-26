@@ -20,9 +20,7 @@ could not be read from a source reproduce the published totals and are marked "(
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from .ep import Link, decode_on, wide_ep_weights
 from .moe import MoEConfig, gqa_params, mla_params

@@ -286,7 +286,10 @@ print("✅ parsed; with a real run this table is the measurement that decides be
 # %% [markdown]
 # ## On two GPUs (T2): run the three layouts and benchmark each
 #
-# Kaggle: Settings → Accelerator → **GPU T4 x2** (not P100). One server at a time (each takes both
+# Kaggle: Settings → Accelerator → **GPU T4 x2** (not P100). Kaggle has no Colab bootstrap, so make the
+# first cell of an imported copy of this notebook the checkout from
+# [`deploy/any-gpu/`](../deploy/any-gpu/README.md#colab-or-kaggle-free-t4)
+# (`git clone`, `%cd .../moe-lab`, `pip install -e .`). One server at a time (each takes both
 # GPUs); OLMoE in fp16 fits two T4s in every layout (Exercise 4.3). The same flags work on the
 # `l4x2` GKE pool ([`deploy/gke/`](../deploy/gke/)) and on a rented pair.
 #

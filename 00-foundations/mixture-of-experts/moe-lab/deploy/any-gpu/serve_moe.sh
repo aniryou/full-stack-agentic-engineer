@@ -11,7 +11,7 @@
 # Env (defaults in brackets): MODEL [allenai/OLMoE-1B-7B-0924-Instruct], PORT [8000], MODE [auto|docker|pip],
 # IMAGE [vllm/vllm-openai:v0.30.0], LAYOUT [single|tp|tp_ep|dp_ep], DTYPE [auto; "half" below compute
 # capability 8.0 (T4: no bf16)], MAX_MODEL_LEN [4096], GPU_MEM_UTIL [0.92, v0.30.0's default],
-# OFFLOAD_GB [auto: 6 on a single GPU with < 20 GB when MODEL is the default OLMoE, else 0],
+# OFFLOAD_GB [auto: 3 on a single GPU with < 20 GB when MODEL is the default OLMoE, else 0],
 # ROUTED [0], EPLB [0], API_KEY [unset; SET IT on any machine reachable from the internet],
 # HF_TOKEN [unset], EXTRA_ARGS [unset].
 set -euo pipefail
@@ -93,7 +93,10 @@ if [[ "${OFFLOAD_GB}" == "auto" ]]; then
   OFFLOAD_GB=0
   if [[ "${LAYOUT}" == "single" && "${MODEL}" == "allenai/OLMoE-1B-7B-0924-Instruct" && "${MEM_MIB:-0}" =~ ^[0-9]+$ ]] &&
     ((MEM_MIB > 0 && MEM_MIB < 20000)); then
-    OFFLOAD_GB=6 # 13.8 GB of 16-bit weights leave no KV room on 16 GB (python -m moelab fit --gpu T4)
+    # 13.8 GB of 16-bit weights leave no KV room on 16 GB; 3 GiB is the smallest offload that holds
+    # 4 x 4096 tokens of KV (python -m moelab fit --gpu T4). Each extra GiB adds ~89 ms per step at
+    # ~12 GB/s (PCIe Gen3, verify) and ~8K tokens of KV: raise it only for more sequences.
+    OFFLOAD_GB=3
   fi
 fi
 if [[ "${OFFLOAD_GB}" != "0" ]]; then

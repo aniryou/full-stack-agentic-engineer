@@ -14,7 +14,7 @@ checked against that release's `vllm/engine/arg_utils.py` and `vllm/config/{para
 | [`bench_layouts.sh`](bench_layouts.sh) | on two GPUs, serves the model as TP, TP+EP and DP+EP in turn and runs `vllm bench serve` at each concurrency; results for notebook 04 |
 
 ```bash
-./serve_moe.sh                                        # OLMoE-1B-7B, one GPU (6 GiB of experts offloaded on a T4)
+./serve_moe.sh                                        # OLMoE-1B-7B, one GPU (3 GiB of experts offloaded on a T4)
 ROUTED=1 ./serve_moe.sh                               # + per-token expert ids in every response (notebook 02)
 LAYOUT=tp_ep ./serve_moe.sh                           # two GPUs, experts split whole across them
 ./bench_layouts.sh                                    # two GPUs: all three layouts, vllm bench serve each
@@ -54,25 +54,46 @@ sub-optimal!"* in the log. Generate one with vLLM's `benchmarks/kernels/benchmar
 
 ## Colab or Kaggle (free T4)
 
-Runtime → change runtime type → T4 GPU. On Kaggle: Settings → Accelerator → **GPU T4 x2** (not
-"GPU P100": compute capability 6.0 is below vLLM's minimum). Check the GPU and the driver first
-(vLLM v0.30.0 is a CUDA 13 build; drivers from the 580 series or newer, verify):
+**Get the lab onto the machine first.** On Colab, open a notebook through the Colab links in the layer
+README: its first cell clones the repo and installs `moelab`. That cell acts only on Colab, so on
+**Kaggle** (and on any rented GPU or VM) start with the checkout yourself. Kaggle: *File → Import
+Notebook* with the lab's [`notebooks/04_expert_parallelism_on_two_gpus.ipynb`](../../notebooks/04_expert_parallelism_on_two_gpus.ipynb)
+(or 02, 03, 05; verify the current menu), *Settings → Accelerator → **GPU T4 x2*** (not "GPU P100":
+compute capability 6.0 is below vLLM's minimum) and *Internet* on (needs a verified phone number —
+verify current rules). Then add this as the first cell:
+
+```python
+!git clone --depth 1 https://github.com/aniryou/full-stack-agentic-engineer.git
+%cd full-stack-agentic-engineer/00-foundations/mixture-of-experts/moe-lab
+!pip install -q -e .
+```
+
+The notebook's own bootstrap cell then finds `moelab/` from the lab directory and every cell below runs
+as it does locally. On a rented machine the same three lines in a shell (`cd` for `%cd`), then
+`jupyter lab notebooks/`. On Colab: *Runtime → Change runtime type → T4 GPU*.
+
+Check the GPU and the driver (vLLM v0.30.0 is a CUDA 13 build; drivers from the 580 series or newer,
+verify), install vLLM and start a server:
 
 ```python
 !nvidia-smi --query-gpu=name,compute_cap,memory.total,driver_version --format=csv
 !pip install -q "vllm==0.30.0"      # several minutes; restart the runtime if pip replaces torch (verify)
 import subprocess, os
 subprocess.Popen("vllm serve allenai/OLMoE-1B-7B-0924-Instruct --dtype half --max-model-len 4096 "
-                 "--cpu-offload-gb 6 --cpu-offload-params experts --enable-return-routed-experts "
+                 "--cpu-offload-gb 3 --cpu-offload-params experts --enable-return-routed-experts "
                  "--port 8000 > vllm.log 2>&1", shell=True)
-from moelab.env import wait_healthy
+from moelab.env import wait_healthy     # needs the checkout above (Kaggle, rented) or the Colab bootstrap
 assert wait_healthy("http://127.0.0.1:8000", timeout_s=1200), open("vllm.log").read()[-3000:]
 os.environ["MOELAB_URL"] = "http://127.0.0.1:8000"    # notebooks 02, 03 and 05 now measure this server
 ```
 
+`--cpu-offload-gb 3` is the smallest offload that leaves a 16 GB T4 room for four 4K-token sequences
+(`python -m moelab fit --model olmoe-1b-7b --gpu T4`); each extra GiB costs ~89 ms per step over PCIe
+Gen3 (verify).
+
 Offloading pins host memory: Colab's free runtime has roughly 12 GB of RAM (verify), so keep
-`--cpu-offload-gb` well below it. On Kaggle's two T4s, `./bench_layouts.sh` (or the cell at the end
-of notebook 04) runs the TP versus EP comparison; OLMoE in fp16 needs about 6.5 GiB per GPU there
+`--cpu-offload-gb` well below it. On Kaggle's two T4s, `!bash deploy/any-gpu/bench_layouts.sh` from the lab directory
+(or the cell at the end of notebook 04) runs the TP versus EP comparison; OLMoE in fp16 needs about 6.5 GiB per GPU there
 and needs no offload.
 
 ## Rented GPUs (RunPod, Vast.ai, Lambda)

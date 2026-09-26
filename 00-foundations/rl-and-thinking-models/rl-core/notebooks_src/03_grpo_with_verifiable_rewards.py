@@ -112,8 +112,9 @@ for ec in (0.0, 0.05):                               # the other lever: pay for 
 # %% [markdown]
 # Success goes to ~100% within a few dozen steps; after that almost every group is all-correct, advantages are
 # zero and learning stops — and the policy has concentrated on a few of the 14 correct strings. RL sharpens:
-# pass@1 up, diversity down. An entropy bonus (−c·log π(y) added to the reward; TRL's `entropy_coef`) buys
-# diversity back for a little accuracy. In this toy the collapse happens with or without clip-higher; DAPO
+# pass@1 up, diversity down. An entropy bonus buys diversity back for a little accuracy. Here it is a
+# sequence-level −c·log π(y) added to the reward, so it is baselined with the reward; TRL's `entropy_coef` adds
+# the mean per-token entropy to the loss instead, so the two coefficients are not interchangeable. In this toy the collapse happens with or without clip-higher; DAPO
 # reports clip-higher's entropy effect on real models (primer §4).
 #
 # ## Worked example 5 — the length bias of averaging per sequence
@@ -299,8 +300,8 @@ print("✅ a graded penalty inside the last 20 tokens, so 'nearly too long' is a
 # ## Exercise 3.6 — write the configs
 # Fill two `GRPOConfig`s. `dapo_cfg`: DAPO's recipe — clip-higher (0.2/0.28), token-level loss, no KL,
 # overlong filtering, soft overlong punishment with a cache of 4,096, dynamic sampling, G = 16.
-# `r1_cfg`: GRPO as the DeepSeek-R1 paper wrote it — per-sequence mean, group std scaling, ε = 0.2 both sides,
-# β = 0.001. (TRL spells DAPO's overlong filtering `mask_truncated_completions`.)
+# `r1_cfg`: GRPO as DeepSeekMath defined it and R1 used it — per-sequence mean, group std scaling, ε = 0.2 both
+# sides, β = 0.001 (the R1 paper itself writes one ratio per whole completion, primer §4). (TRL spells DAPO's overlong filtering `mask_truncated_completions`.)
 
 # %% exercise
 ### BEGIN SOLUTION

@@ -47,6 +47,13 @@ timing is labelled *simulated*; a verdict you measured says *measured on this ma
 | **T0 + Docker** | a laptop with Docker | the hardened container, gVisor if installed, kind | `deploy/docker/`, `deploy/kind/` |
 | **T3** | GCP | a GKE Sandbox (gVisor) node pool via Terraform | `deploy/gcp/terraform/`, `deploy/gke/` |
 
+The probe suite is a superset of the core's: it adds the probes that separate a container from a process
+(`proc_environ`, `write_outside`, `metadata`, `memory_hog`, `disk_fill_many`) and names four differently —
+`infinite_loop` is the core's `cpu_spin`, `huge_output` its `output_flood`, `egress` its `egress_connect`,
+`env_secret`/`ssh_key` its `read_env_secret`/`read_ssh_key` (`sandboxlab.probes.CORE_PROBE_NAMES`). Exit
+reasons are one vocabulary in both packages (PRIMER §3: `cpu_time`, `wall_timeout`, `memory`, `pids`,
+`output_limit`, …), plus `harness_timeout` for the deliberately unbudgeted contrast executor.
+
 ## Run it
 
 ```bash

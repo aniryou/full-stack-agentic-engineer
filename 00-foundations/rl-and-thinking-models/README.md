@@ -73,7 +73,7 @@ Prices, free tiers and how to obtain GPUs on GCP and elsewhere: [`COMPUTE.md`](.
 | before | [`transformers`](../transformers/) (primer §6 training, §7 inference); [`gpu-capacity-planning`](../gpu-capacity-planning/PRIMER.md) | the training objective and what post-training is; weights, KV bytes, TTFT and TPOT, which §7 reuses and reproduces |
 | beside | [`04 serving-engine`](../../04-inference-engine/serving-engine/README.md) primer §5, §6, §7, §11; [`vllm-internals`](../../04-inference-engine/vllm-internals/README.md) §9 | prefix caching, sampling, speculative decoding and measurement — the engine a rollout generator and a thinking model both run on; LoRA adapters in flight |
 | after | [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) | cost per conversation, output pricing and routing by effort at the gateway |
-| after | [`07-application-agent-framework`](../../07-application-agent-framework/) — the platform lab's evals notebook, and `07-application-agent-framework/sandboxed-execution` | evals with intervals for the true objective; running model-generated code and tool calls for agentic RL rollouts |
+| after | [`07-application-agent-framework`](../../07-application-agent-framework/) — the platform lab's evals notebook, and [`sandboxed-execution`](../../07-application-agent-framework/sandboxed-execution/README.md) | evals with intervals for the true objective; running model-generated code and tool calls for agentic RL rollouts |
 
 ## Caveats
 

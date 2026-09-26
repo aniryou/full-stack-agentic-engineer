@@ -140,7 +140,7 @@ DAPO's hyper-parameters. Still to verify on real hardware:
   `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`, `Qwen/Qwen2.5-0.5B-Instruct`.
 
 The RL-training material also connects to agentic RL, where rollouts are multi-turn tool use in a
-sandbox. That is the sandboxed-execution topic, `07-application-agent-framework/sandboxed-execution`.
+sandbox. That is the [sandboxed-execution topic](../../../07-application-agent-framework/sandboxed-execution/README.md).
 Reward design and release gates for those agents are the evals of the 07 agent lab's
 [notebook 08](../../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/08_evals_trajectory_judge_gates.py).
 

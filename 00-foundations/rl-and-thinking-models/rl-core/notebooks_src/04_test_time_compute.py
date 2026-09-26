@@ -50,16 +50,19 @@ print("n=16, c=4, k=4: pass@4", round(ttc.pass_at_k(16, 4, 4), 6), " pass^4", ro
 # One question; a sample is right with p = 0.4. Where the wrong 60% goes decides everything.
 
 # %%
-cases = {"one common misconception [0.42, 0.18]": [0.42, 0.18], "two equal wrong answers [0.3, 0.3]": [0.3, 0.3],
-         "four scattered wrong answers [0.15]*4": [0.15] * 4}
+cases = {"one dominant misconception [0.5, 0.1]": [0.5, 0.1], "a narrow misconception [0.42, 0.18]": [0.42, 0.18],
+         "two equal wrong answers [0.3, 0.3]": [0.3, 0.3], "four scattered wrong answers [0.15]*4": [0.15] * 4}
 for name, wrong in cases.items():
-    print(f"{name:40}", [round(ttc.majority_accuracy(0.4, wrong, n), 3) for n in (1, 5, 15, 31)])
-print("(columns: n = 1, 5, 15, 31 votes)")
+    print(f"{name:40}", [round(ttc.majority_accuracy(0.4, wrong, n), 3) for n in (1, 5, 15, 31, 101)])
+print("(columns: n = 1, 5, 15, 31, 101 votes)")
 
 # %% [markdown]
-# With scattered mistakes, voting turns a 40% sampler into a ~90% answerer; with one popular wrong answer that
-# out-polls the right one, voting converges on the *wrong* answer. Self-consistency works on math because wrong
-# derivations rarely agree on the same wrong number.
+# With scattered mistakes, voting turns a 40% sampler into a ~90% answerer. When one wrong answer out-polls the
+# right one, voting converges on the *wrong* answer: at 50% against 40% accuracy falls from 0.400 to 0.278 by 31
+# votes and 0.144 by 101 — worse than one sample at every n above 1. A *narrow* misconception (42% against 40%)
+# shows why this is easy to miss: at small n the right answer often beats the split-up remainder, so the vote
+# still helps (0.449 at 15 votes); it falls below one sample only past about 130 votes, and to 0 in the limit
+# (exercise 4.4). Self-consistency works on math because wrong derivations rarely agree on the same wrong number.
 #
 # ## Worked example 3 — best-of-n: a verifier vs a reward model
 # Pick the highest-scoring of n samples. A perfect verifier gives 1 − (1 − p)^n. A reward model sees correctness
@@ -68,8 +71,11 @@ print("(columns: n = 1, 5, 15, 31 votes)")
 # %%
 rng = np.random.default_rng(0)
 print(f"{'scorer':>22}", "  ".join(f"n={n:<3}" for n in (1, 4, 16, 64)))
+print(f"{'verifier, exact':>22}", "  ".join(f"{1 - 0.7 ** n:.3f}" for n in (1, 4, 16, 64)))
 for noise, name in ((0.0, "verifier"), (0.5, "RM, noise 0.5"), (1.0, "RM, noise 1.0")):
     print(f"{name:>22}", "  ".join(f"{ttc.best_of_n_accuracy(0.3, n, noise, rng):.3f}" for n in (1, 4, 16, 64)))
+print("(the last three rows are Monte Carlo estimates, 20,000 trials each: the verifier row sits within ~0.003 "
+      "of the exact line)")
 
 # %% [markdown]
 # A noisy scorer turns "more samples" into "more chances to be fooled": gains flatten well below the verifier's
@@ -198,7 +204,8 @@ for p, wrong in [(0.3, [0.2] * 3 + [0.1]), (0.4, [0.42, 0.18]), (0.25, [0.5, 0.2
     big_n = ttc.majority_accuracy(p, wrong, 41) if len(wrong) <= 2 else ttc.accuracy(
         {"a": np.ones(1), "q": np.zeros(1), "e0": 1 - p}, 0, 41, "vote", wrong=[w / (1 - p) for w in wrong], trials=4000)
     assert (big_n > 0.5) == wins_in_the_limit(p, wrong), (p, wrong, big_n)
-print("✅ a 30% answer wins a vote against scattered 20% mistakes; a 40% answer loses to one 42% mistake")
+print("✅ in the limit a 30% answer wins against scattered 20% mistakes and a 40% answer loses to one 42% mistake "
+      f"(at 41 votes it is still right {ttc.majority_accuracy(0.4, [0.42, 0.18], 41):.2f} of the time: the limit is slow)")
 
 # %% [markdown]
 # ## Exercise 4.5 — spend a budget

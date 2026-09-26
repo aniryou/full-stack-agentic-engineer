@@ -9,9 +9,11 @@ experts, and each way has a different price per decode step:
 * **vLLM UVA offload** (``--cpu-offload-gb N --cpu-offload-params experts``): N GiB of weights live
   in pinned CPU memory and are read over PCIe *in every forward pass*, whichever experts the
   router picks — it adds N GiB / PCIe-bandwidth to every step.
-* **llama.cpp ``--n-cpu-moe`` / ``--cpu-moe``**: expert tensors stay in CPU RAM and are *computed on
-  the CPU*; only activations cross PCIe, and only the touched experts are read — cheap at batch 1,
-  bound by CPU FLOP/s as the batch grows (inferred from the buffer-type override; verify).
+* **llama.cpp ``--n-cpu-moe`` / ``--cpu-moe``**: expert tensors stay in CPU RAM; in small-batch decode
+  they are *computed on the CPU*, so mostly activations cross PCIe and only the touched experts are
+  read — cheap at batch 1, bound by CPU FLOP/s as the batch grows. For large prompt batches llama.cpp
+  by default copies them to the GPU and computes there (``--op-offload``; ``--no-op-offload`` keeps the
+  work on the CPU). Inferred from ``common/arg.cpp`` and the buffer-type override; verify.
 
 Everything left over after weights is KV cache; MoE did not shrink it. ``fit`` and the step costs are
 arithmetic (**simulated**); ``parse_startup_log`` reads the lines vLLM prints at start-up, and

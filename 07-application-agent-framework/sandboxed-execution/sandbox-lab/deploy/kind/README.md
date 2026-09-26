@@ -42,11 +42,15 @@ deploy/kind/down.sh
 | Real on kind | Not real on kind |
 |---|---|
 | Pod Security Admission, the ValidatingAdmissionPolicies, RuntimeClass scheduling merge | **gVisor or any VM isolation**: every sandbox pod runs under runc on your host kernel |
-| NetworkPolicy — current kindnetd enforces it through kube-network-policies; that the pinned kind v0.33.0 ships it is `(verify)`, so step 6 of `run-examples.sh` proves it on your cluster | NetworkPolicy *as a security boundary*: kindnetd's policy dataplane fails **open** — if its controller cannot start it logs and carries on, and every policy here silently stops applying |
+| NetworkPolicy — kindnetd enforces it through kube-network-policies (its `main.go` at kind v0.33.0 builds that controller; v0.23.0's did not); that your node image bundles that kindnetd is `(verify)`, so step 6 of `run-examples.sh` proves it on your cluster | NetworkPolicy *as a security boundary*: kindnetd's policy dataplane fails **open** — if its controller cannot start it logs and carries on, and every policy here silently stops applying |
 | Jobs, deadlines, TTLs, quotas, `podPidsLimit`, emptyDir `sizeLimit` eviction | node pools, autoscaling from zero, Spot, the GKE metadata server |
 | the egress proxy, hostAliases instead of DNS, credential injection | private nodes and the absence of a route to the internet |
 
 kind is a place to learn the objects and watch the admission chain work, not a sandbox for untrusted code.
+**Do not assume the NetworkPolicies are enforced until step 6 has passed on your cluster**: an older kind,
+another CNI without policy support, or a kindnetd whose policy controller failed to start enforces **none**
+of them — not the default-deny egress, not egress-only-to-the-proxy, not the api-stub's ingress rule — and
+nothing else in the cluster tells you so.
 
 **Which policies step 6 shows enforced.** A pass means: the sandbox namespace's default-deny egress (the
 kube-dns target has no ingress policy of its own, so only the sandbox's egress policy can drop it) and the

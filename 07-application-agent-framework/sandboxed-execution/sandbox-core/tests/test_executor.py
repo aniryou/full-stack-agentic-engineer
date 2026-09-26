@@ -160,6 +160,26 @@ def test_peak_memory_is_measured_per_execution():
     assert r.exit_reason == "ok" and r.usage.max_rss_mb >= 100
 
 
+@pytest.mark.skipif(not hasattr(os, "waitid") or not hasattr(os, "WNOWAIT"), reason="needs waitid(WNOWAIT)")
+def test_reaping_the_leader_keeps_its_rusage():
+    # Popen.poll() reaps with waitpid and drops the rusage; the executor's non-blocking wait4 must keep it.
+    import subprocess
+    from sandboxcore import executor
+    p = subprocess.Popen([sys.executable, "-c", "x = bytearray(40 * 2**20)"])
+    os.waitid(os.P_PID, p.pid, os.WEXITED | os.WNOWAIT)     # wait for the exit without reaping it
+    exited, ru = executor._try_reap(p)
+    assert exited and p.returncode == 0
+    assert ru is not None and executor._rss_mb(ru) >= 40
+
+
+def test_usage_survives_a_child_that_writes_until_it_exits():
+    # the child exits while the parent is busy reading: its CPU and peak memory must still be recorded
+    code = "import sys\nx = bytearray(50 * 2**20)\nfor i in range(3000):\n    sys.stdout.write('y' * 200 + '\\n')\n"
+    for _ in range(12):
+        r = run(code, wall_s=5)
+        assert r.exit_reason == "ok" and r.usage.cpu_s > 0 and r.usage.max_rss_mb >= 50, r.usage
+
+
 def test_rlimits_cpu_soft_below_hard():
     lims = {name: (soft, hard) for name, soft, hard in rlimits_for(Budgets(cpu_s=2), nproc=16)}
     assert lims["RLIMIT_CPU"] == (2, 3)

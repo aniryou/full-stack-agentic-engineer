@@ -27,8 +27,13 @@ def test_majority_vote_exact():
     assert np.isclose(ttc.majority_accuracy(0.4, [0.42, 0.18], 1), 0.4)
     # n = 3, one wrong answer: right iff ≥ 2 of 3 right
     assert np.isclose(ttc.majority_accuracy(0.6, [0.4], 3), 0.6 ** 3 + 3 * 0.6 ** 2 * 0.4)
-    # a common misconception out-polls the right answer; spread-out mistakes do not
+    # a dominant misconception out-polls the right answer: more votes, lower accuracy, at every n > 1
+    dominant = [ttc.majority_accuracy(0.4, [0.5, 0.1], n) for n in (1, 5, 15, 31)]
+    assert [round(x, 3) for x in dominant] == [0.4, 0.389, 0.34, 0.278] and dominant == sorted(dominant, reverse=True)
+    # a narrow one (0.42 vs 0.40) still helps at small n and loses only in the long run (past ~130 votes)
     assert round(ttc.majority_accuracy(0.4, [0.42, 0.18], 15), 3) == 0.449
+    assert ttc.majority_accuracy(0.4, [0.42, 0.18], 131) > 0.4 > ttc.majority_accuracy(0.4, [0.42, 0.18], 133)
+    # spread-out mistakes: the vote climbs toward 1
     assert round(ttc.majority_accuracy(0.4, [0.15] * 4, 15), 3) == 0.780
 
 

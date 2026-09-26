@@ -89,3 +89,40 @@ def test_mu_one_never_clips_and_zero_std_groups_are_counted():
     cfg = grpo.GRPOConfig(num_generations=8, num_iterations=4, lr=50.0)
     s = grpo.grpo_step(Policy.for_task(task), task, np.random.default_rng(1), cfg, prompts=(1, 1))
     assert s["clipped"] > 0                                                 # μ > 1: the ratio moves, the clip binds
+
+
+def test_grpo_gradient_matches_finite_differences():
+    """grpo_step ascends Σ w·[min(ρA, clip(ρ)·A) − β·k3] with a hand-derived gradient (surrogate_grad).
+    Check it against central differences of that objective, computed independently, with π_old and π_ref
+    away from π so the clip binds on some tokens and β > 0 — for every loss_type's token weights."""
+    task = ThinkTask(e0=0.8, q=0.15, max_think=8)
+    rng = np.random.default_rng(3)
+    shape = (task.n_states, task.n_actions)
+    pol = Policy.for_task(task, rng.normal(0, 0.5, shape))
+    old = Policy.for_task(task, pol.theta + rng.normal(0, 0.4, shape))
+    ref = Policy.for_task(task, pol.theta + rng.normal(0, 0.4, shape))
+    trajs = old.sample(task, rng, 8)
+    batch = list(zip(trajs, rng.normal(0, 1, len(trajs))))           # any advantages: the gradient is linear in A
+    old_lp, ref_lp = [old.token_logprobs(t) for t in trajs], [ref.token_logprobs(t) for t in trajs]
+    for lt in ("grpo", "dapo", "dr_grpo"):
+        cfg = grpo.GRPOConfig(beta=0.3, epsilon=0.1, epsilon_high=0.15, loss_type=lt)
+        weights = grpo.token_weights([t.length for t in trajs], lt, task.max_think)
+
+        def objective(theta):
+            p = Policy.for_task(task, theta)
+            total = 0.0
+            for (t, a), w, o, r in zip(batch, weights, old_lp, ref_lp):
+                lp = p.token_logprobs(t)
+                obj, _ = grpo.clipped_surrogate(np.exp(lp - o), a, cfg.epsilon, cfg.epsilon_high)
+                total += float((w * (obj - cfg.beta * grpo.k3(lp, r))).sum())
+            return total
+
+        g, clipped = grpo.surrogate_grad(pol, batch, weights, old_lp, ref_lp, cfg)
+        fd, eps = np.zeros_like(pol.theta), 1e-6
+        for idx in np.ndindex(*shape):
+            up, dn = pol.theta.copy(), pol.theta.copy()
+            up[idx] += eps
+            dn[idx] -= eps
+            fd[idx] = (objective(up) - objective(dn)) / (2 * eps)
+        assert clipped > 0 and np.abs(g).max() > 1e-3                 # the clip binds somewhere; not a zero test
+        assert np.allclose(g, fd, atol=1e-8, rtol=1e-6), (lt, np.abs(g - fd).max())

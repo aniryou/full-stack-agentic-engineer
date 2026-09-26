@@ -292,7 +292,8 @@ class ProcessSandbox:
                         if per_exec else
                         "No UID drop here (not root, or disabled): the code runs as YOUR UID, so it can read "
                         "your files by absolute path, RLIMIT_NPROC is shared with your processes (or ignored "
-                        "as root), and a process that calls setsid() can outlive the call.")),
+                        "as root), a process that calls setsid() can outlive the call, and files it writes "
+                        "outside the workspace (e.g. in /tmp) stay behind.")),
         }
 
     def run(self, req: ExecutionRequest) -> ExecutionResult:
@@ -398,13 +399,16 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
     sel.register(proc.stdout, selectors.EVENT_READ, out)
     sel.register(proc.stderr, selectors.EVENT_READ, err)
     exited_at = None
+    leader_ru = None
     while sel.get_map():
         now = time.monotonic()
         if now >= deadline:
             preset = "wall_timeout"
             break
-        if exited_at is None and proc.poll() is not None:
-            exited_at = now
+        if exited_at is None:
+            exited, leader_ru = _try_reap(proc)
+            if exited:
+                exited_at = now
         if exited_at is not None and now - exited_at > 0.2:
             notes.append("a background process held the output pipes after the main process exited")
             break
@@ -419,7 +423,7 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
             break
     sel.close()
     _kill_group(proc)            # the leader on timeout/limit, and anything still in its group either way
-    ru = _reap(proc)
+    ru = leader_ru if proc.returncode is not None else _reap(proc)
     wall = time.monotonic() - start
     for f in (proc.stdout, proc.stderr):
         f.close()
@@ -444,6 +448,26 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
     return ExecutionResult(reason, rc, out.text(), err.text(), out.truncated or err.truncated, usage,
                            artifacts=_artifacts(work), over_budget=over, isolation=isolation or {},
                            reason_source=source, swept=swept, notes=notes)
+
+
+def _try_reap(proc: subprocess.Popen):
+    """(exited, rusage): a non-blocking ``wait4`` that keeps the leader's rusage.
+
+    ``Popen.poll()`` would reap the leader with ``waitpid`` and throw its rusage away, and a later
+    ``wait4`` would then find nothing: the run's CPU and peak memory would silently read 0.
+    """
+    if proc.returncode is not None:
+        return True, None
+    if not hasattr(os, "wait4"):
+        return proc.poll() is not None, None
+    try:
+        pid, status, ru = os.wait4(proc.pid, os.WNOHANG)
+    except ChildProcessError:
+        return True, None
+    if pid:
+        proc.returncode = os.waitstatus_to_exitcode(status)
+        return True, ru
+    return False, None
 
 
 def _reap(proc: subprocess.Popen):
@@ -482,7 +506,8 @@ def _kill_group(proc: subprocess.Popen) -> None:
 
     The child is a session leader (``start_new_session``), so its process-group id equals its pid, and the
     kill reaches every descendant that stayed in the group — not one that called ``setsid()`` itself.
-    Sent before the leader is reaped, so the pgid cannot have been reused.
+    If the leader has already been reaped, POSIX still does not reuse a process-group ID while the group
+    has members, so the kill cannot hit a stranger's group.
     """
     if IS_POSIX:
         try:

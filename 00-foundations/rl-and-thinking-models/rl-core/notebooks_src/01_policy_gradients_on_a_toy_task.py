@@ -144,8 +144,9 @@ print(f"closed-form π* for the buggy reward at β = 0.3: truly balanced {pi_b @
 # The reward went *up* while correctness went *down*: at depth 0, `)` is an instant pass, so every state
 # learns it. With β = 0 every policy that always passes is optimal, and gradient ascent reaches the one that is
 # easiest to reach — the loophole. The KL-regularised optimum multiplies *every* passing string by the same
-# exp(1/β), so it keeps the reference's ratio of honest to hacked outputs; RL with β = 0.3 heads there. A leash,
-# not a fix: the fix is the verifier (and evals that measure the true objective, not the training reward).
+# exp(1/β), so it keeps the reference's share of honest strings among those that pass; RL with β = 0.3 heads
+# there. A leash, not a fix: the fix is the verifier (and evals that measure the true objective, not the training
+# reward).
 # R1's authors kept rewards rule-based for exactly this reason — a learned reward model is a bigger loophole
 # (notebook 02).
 #
@@ -292,7 +293,7 @@ fix = "fix the verifier"
 
 # %% check
 assert abs(limit_true - pg.kl_optimal(ref_p, Rb, 0.01)[0] @ R) < 1e-6 and fix == "fix the verifier"
-print(f"✅ π* keeps {limit_true:.1%} honest as β → 0 — the reference's ratio; unregularised RL drifted to 4.9% "
+print(f"✅ π* keeps {limit_true:.1%} of the passing mass honest as β → 0 — the reference's share; unregularised RL drifted to 4.9% "
       "because the loophole is the easiest pass to reach. KL bounds the damage; only the checker removes it.")
 
 # %% [markdown]

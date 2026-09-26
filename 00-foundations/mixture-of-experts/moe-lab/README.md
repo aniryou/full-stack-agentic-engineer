@@ -47,7 +47,7 @@ Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 ```bash
 cd moe-lab
 python3 -m pip install -e ".[dev]"             # numpy + notebook/test tooling (torch optional: ".[torch]")
-python3 -m pytest -q                           # 112 tests, ~6 s, offline; torch tests skip without torch
+python3 -m pytest -q                           # 117 tests, ~15 s with torch (it trains the toy), offline; torch tests skip without
 python3 -m moelab models                       # total / active (two conventions) / KV per token, ten models
 python3 -m moelab touched --experts 64 --top-k 8 --batch 1 8 64 256
 python3 -m moelab stream --model olmoe-1b-7b --dense qwen2.5-1.5b --gpu L4    # ITL vs batch [simulated]
@@ -68,9 +68,9 @@ numpy-only path (what a machine without torch sees).
 
 | Module | Lines | The idea |
 |---|---:|---|
-| `configs.py` | ~240 | ten models as literal config fields (Mixtral, Qwen3-30B-A3B, OLMoE, granite-3.0 MoE ×2, Qwen1.5-MoE, gpt-oss ×2, two dense references) → total, active under three embedding conventions, KV per token, checkpoint bytes for fp16/fp8/INT4/INT4-experts/MXFP4; GPU datasheet table |
+| `configs.py` | ~260 | ten models as literal config fields (Mixtral, Qwen3-30B-A3B, OLMoE, granite-3.0 MoE ×2, Qwen1.5-MoE, gpt-oss ×2, two dense references) → total, active under three embedding conventions, KV per token, checkpoint bytes for fp16/fp8/INT4/INT4-experts/MXFP4; GPU datasheet table; a served model id → its entry |
 | `stream.py` | ~290 | experts touched (closed form, Zipf Monte Carlo, Gumbel top-k), bytes and FLOPs of a decode step and the crossover batch (layer 01's `roofline.llm`, re-implemented and reproduced), vLLM's `moe_align_block_size` layout, simulated ITL and its calibration, a closed-loop streaming client that measures ITL |
-| `hooks.py` | ~275 | vLLM's `routed_experts` wire format, utilisation / balancedness / hot experts / domain divergence, EP placement and per-rank load, `RouterRecorder` (forward hooks for the HF v5 router layouts), T1 capture through transformers or vLLM |
+| `hooks.py` | ~300 | vLLM's `routed_experts` wire format, utilisation / balancedness / hot experts / domain divergence, EP placement and per-rank load, `RouterRecorder` (forward hooks for the HF v5 router layouts), T1 capture through transformers or vLLM (the expert count from the served model's catalogue entry, k from the data) |
 | `ep.py` | ~260 | the three two-GPU layouts and their vLLM flags, all-to-all bytes, alpha-beta collectives, per-GPU weights, a per-GPU per-layer step model (the slowest GPU of each layer), `vllm bench serve` command and parser |
 | `offload.py` | ~150 | what fits (KV room, sessions), capability rules (bf16, FP8, MXFP4), the smallest `--cpu-offload-gb`, UVA toll vs CPU experts, the start-up log parser |
 | `tinymoe/` | ~470 | the toy task (numpy), `TinyTopKRouter`/`TinyMoE`/`TinyMoETransformer` (torch, HF-shaped), Switch loss, z-loss, the choose-only bias, a trainer that records load and specialisation, statistics for the bundled curves |
@@ -127,7 +127,7 @@ olmoe repos):
 
 * vLLM flags: `--enable-expert-parallel`/`-ep`, `--data-parallel-size`, `--all2all-backend` (default
   `allgather_reducescatter`; `pplx`/`naive` removed; no `VLLM_ALL2ALL_BACKEND`), `--expert-placement-strategy`
-  (`linear` default; `round_robin` honoured only for grouped models — checked on main `a4eb3f2`), `--enable-eplb`
+  (`linear` default; `round_robin` honoured only for grouped models with no redundant experts and EPLB off — v0.30.0 and main `a4eb3f2`), `--enable-eplb`
   (window 1000, step interval 3000), `--cpu-offload-gb`, `--cpu-offload-params`, `--enable-return-routed-experts`
   (base64 `.npy`, `(tokens − 1, layers, top_k)`, request field `routed_experts_prompt_start`).
 * With DP = 1, `--enable-expert-parallel` runs no all-to-all kernels (`use_all2all_kernels` requires DP > 1; the

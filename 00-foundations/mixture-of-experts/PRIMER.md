@@ -505,8 +505,9 @@ TP × DP group. `--all2all-backend` picks the exchange (default `allgather_reduc
 decode and `deepep_high_throughput` for prefill across nodes; `pplx` and `naive` were removed; there is no
 `VLLM_ALL2ALL_BACKEND` environment variable) (verify against your version).
 
-**What vLLM actually puts on the wire.** All-to-all kernels run only with EP and DP > 1
-(`FusedMoEParallelConfig.use_all2all_kernels`, `fused_moe/config.py`, v0.30.0), which leaves three cases:
+**What vLLM actually puts on the wire.** All-to-all kernels run only with EP and DP > 1 (or prefill context or
+sequence parallelism; `FusedMoEParallelConfig.use_all2all_kernels`, `fused_moe/config.py`, v0.30.0), which leaves
+three cases:
 
 - **TP × EP with DP = 1** (`--tensor-parallel-size 2 --enable-expert-parallel`): after attention every GPU already
   holds every token, so there is no all-to-all at all. Each GPU runs its own experts on the tokens routed to them

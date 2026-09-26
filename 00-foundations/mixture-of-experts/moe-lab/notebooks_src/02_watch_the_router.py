@@ -34,8 +34,8 @@ SOURCE = None
 if env.server_url():                                          # T1: a vllm server with routed experts
     url, hdr = env.server_url(), env.auth_headers()
     mid = env.served_model(url, hdr)
-    E, K = int(os.environ.get("MOELAB_EXPERTS", 64)), int(os.environ.get("MOELAB_TOPK", 8))
-    ts = hooks.capture_vllm(url, mid, E, K, headers=hdr)
+    # experts per layer from the catalogue entry the served id names (else MOELAB_EXPERTS); k from the data
+    ts = hooks.capture_vllm(url, mid, headers=hdr)
     SOURCE = f"MEASURED: vLLM at {url} ({mid})"
 elif os.environ.get("MOELAB_HF_MODEL") and env.has_gpu() and env.has_transformers():   # T1: HF + hooks
     ts = hooks.capture_hf(os.environ["MOELAB_HF_MODEL"])
@@ -299,9 +299,13 @@ else:
 #
 # ```bash
 # vllm serve allenai/OLMoE-1B-7B-0924-Instruct --dtype half --max-model-len 4096 \
-#     --cpu-offload-gb 6 --cpu-offload-params experts --enable-return-routed-experts   # T4: offload to fit
-# MOELAB_URL=http://127.0.0.1:8000 MOELAB_EXPERTS=64 MOELAB_TOPK=8 jupyter lab ...
+#     --cpu-offload-gb 3 --cpu-offload-params experts --enable-return-routed-experts   # T4: offload to fit
+# MOELAB_URL=http://127.0.0.1:8000 jupyter lab ...
 # ```
+#
+# The notebook looks the served model up in `moelab.configs` (`hooks.expert_layout`) for its expert
+# count and reads k from the returned arrays; for a model outside the catalogue set `MOELAB_EXPERTS`
+# (and `MOELAB_TOPK`) from its `config.json`, or the capture stops with an error rather than guess.
 #
 # Then write your own prompts per domain (`hooks.capture_vllm(..., prompts={...})`) — a few hundred
 # tokens per domain at least, and more before drawing conclusions (Exercise 2.3's baseline tells you

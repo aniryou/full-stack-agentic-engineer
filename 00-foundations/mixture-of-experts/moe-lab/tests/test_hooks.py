@@ -1,4 +1,8 @@
 """Router traces: vLLM's wire format, the analysis, placement, and the hook adapters for each router family."""
+import http.server
+import json
+import threading
+
 import numpy as np
 import pytest
 
@@ -117,3 +121,62 @@ def test_text_histogram():
     h = hooks.text_histogram(np.array([6, 2, 0, 0]), width=6).splitlines()
     assert h[0].startswith("expert   0 ######") and "75.0%" in h[0] and "3.0x fair" in h[0]
     assert len(hooks.text_histogram(np.arange(10), top=3).splitlines()) == 3
+
+
+def test_served_ids_resolve_to_the_catalogue():
+    from moelab import configs
+    for served, key in (("allenai/OLMoE-1B-7B-0924-Instruct", "olmoe-1b-7b"), ("allenai/OLMoE-1B-7B-0924", "olmoe-1b-7b"),
+                        ("Qwen/Qwen1.5-MoE-A2.7B-Chat", "qwen1.5-moe-a2.7b"),
+                        ("Qwen/Qwen1.5-MoE-A2.7B-Chat-GPTQ-Int4", "qwen1.5-moe-a2.7b"),
+                        ("Qwen/Qwen3-30B-A3B-FP8", "qwen3-30b-a3b")):
+        assert configs.by_hf_id(served) is configs.get(key)
+    assert configs.by_hf_id("my-served-name") is None
+
+
+def test_expert_layout_comes_from_the_catalogue_or_fails_loudly(monkeypatch):
+    monkeypatch.delenv("MOELAB_EXPERTS", raising=False)
+    monkeypatch.delenv("MOELAB_TOPK", raising=False)
+    assert hooks.expert_layout("Qwen/Qwen1.5-MoE-A2.7B-Chat") == (60, 4)     # the lab's GKE model, not OLMoE's 64
+    with pytest.raises(ValueError, match="MOELAB_EXPERTS"):
+        hooks.expert_layout("my-served-name")
+    with pytest.raises(ValueError, match="not an MoE"):
+        hooks.expert_layout("Qwen/Qwen2.5-1.5B-Instruct")                      # a dense model has no router
+    monkeypatch.setenv("MOELAB_EXPERTS", "32")
+    assert hooks.expert_layout("my-served-name") == (32, None)
+
+
+class _Routed(http.server.BaseHTTPRequestHandler):
+    """A stand-in `vllm serve --enable-return-routed-experts`: every chat choice carries a top-4 routing
+    over 60 experts (Qwen1.5-MoE-A2.7B's layout), 24 layers, 9 tokens."""
+    IDS = np.random.default_rng(0).integers(0, 60, (9, 24, 4)).astype(np.uint8)
+
+    def do_POST(self):  # noqa: N802
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert body["routed_experts_prompt_start"] == 0
+        out = json.dumps({"choices": [{"message": {"content": "x"},
+                                       "routed_experts": hooks.encode_routed_experts(self.IDS)}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    def log_message(self, *a):
+        pass
+
+
+def test_capture_vllm_infers_the_layout_from_the_served_model(monkeypatch):
+    monkeypatch.delenv("MOELAB_EXPERTS", raising=False)
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Routed)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        ts = hooks.capture_vllm(url, "Qwen/Qwen1.5-MoE-A2.7B-Chat", prompts={"code": ["a", "b"]})
+        with pytest.raises(ValueError, match="top-"):
+            hooks.capture_vllm(url, "Qwen/Qwen1.5-MoE-A2.7B-Chat", 60, 8, prompts={"code": ["a"]})
+        with pytest.raises(ValueError, match="MOELAB_EXPERTS"):
+            hooks.capture_vllm(url, "my-served-name", prompts={"code": ["a"]})
+    finally:
+        srv.shutdown()
+    assert (ts.n_experts, ts.top_k, len(ts.traces)) == (60, 4, 2) and ts.label == env.MEASURED
+    assert hooks.utilisation(ts.stacked(), ts.n_experts).shape == (24, 60)      # no phantom experts 60-63

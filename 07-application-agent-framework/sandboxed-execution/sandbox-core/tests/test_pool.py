@@ -81,6 +81,16 @@ def test_simulated_replace_after_use_needs_more_than_the_mean_occupancy():
     assert 0.08 <= sized.frac_waited <= pool.erlang_c(25, 31) + 0.02  # fixed cold start: at or below Erlang C
 
 
+def test_primer_section_6_simulated_figures():
+    # PRIMER §6 quotes these (SIMULATED, seed 1, n = 30,000 — notebook 05's worked example 4)
+    at_mean = pool.simulate(5, 2, 3, 25, n=30000, mode="replace_after_use", seed=1)
+    sized = pool.simulate(5, 2, 3, 31, n=30000, mode="replace_after_use", seed=1)
+    cold = pool.simulate(5, 2, 3, 31, n=30000, mode="cold_on_demand", seed=1)
+    assert round(at_mean.frac_waited, 2) == 0.91 and round(at_mean.mean_wait_s, 1) == 6.8
+    assert round(sized.frac_waited, 2) == 0.14 and round(sized.mean_wait_s, 2) == 0.06
+    assert cold.frac_waited == 1.0 and cold.mean_wait_s >= 3.0
+
+
 def test_simulated_cold_on_demand_pays_the_cold_start_on_every_request():
     sim = pool.simulate(5, 2, 3, 31, n=20000, mode="cold_on_demand", seed=1)
     assert sim.cold_on_path == 20000 and sim.frac_waited == 1.0

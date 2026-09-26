@@ -24,13 +24,14 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
-from . import env
+from . import configs, env
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -254,12 +255,32 @@ def capture_hf(model_id: str, prompts: dict | None = None, dtype: str = "float16
     return ts
 
 
-def capture_vllm(url: str, model: str, n_experts: int, top_k: int, prompts: dict | None = None,
-                 max_tokens: int = 32, headers: dict | None = None) -> TraceSet:
+def expert_layout(model_id: str) -> tuple[int, int | None]:
+    """(experts per layer, top-k or None) for a served MoE: the catalogue entry its id names
+    (``configs.by_hf_id``), else ``MOELAB_EXPERTS`` (and ``MOELAB_TOPK``) from the environment. Fails
+    loudly rather than guess: a wrong expert count adds never-used experts to every histogram and
+    moves the uniform baseline everything is judged against."""
+    m = configs.by_hf_id(model_id)
+    if m is not None and m.is_moe:
+        return m.n_experts, m.top_k
+    e, k = os.environ.get("MOELAB_EXPERTS"), os.environ.get("MOELAB_TOPK")
+    if e:
+        return int(e), (int(k) if k else None)
+    raise ValueError(f"{model_id!r} is not an MoE in moelab.configs: set MOELAB_EXPERTS (and MOELAB_TOPK) to its "
+                     "config.json's num_experts (num_local_experts, n_routed_experts) and num_experts_per_tok")
+
+
+def capture_vllm(url: str, model: str, n_experts: int | None = None, top_k: int | None = None,
+                 prompts: dict | None = None, max_tokens: int = 32, headers: dict | None = None) -> TraceSet:
     """T1: ask a ``vllm serve --enable-return-routed-experts`` server; each response carries the
-    routing of the prompt and the generated tokens (all but the last)."""
+    routing of the prompt and the generated tokens (all but the last). ``n_experts`` and ``top_k``
+    default to ``expert_layout(model)``; k is read from the arrays themselves and both are checked
+    against what the server returned."""
     import urllib.request  # noqa: PLC0415
-    ts = TraceSet(model, n_experts, top_k, label=env.MEASURED)
+    if n_experts is None:
+        n_experts, known_k = expert_layout(model)
+        top_k = top_k or known_k
+    traces = []
     for dom, texts in (prompts or DOMAIN_PROMPTS).items():
         for text in texts:
             body = {"model": model, "messages": [{"role": "user", "content": text}], "max_tokens": max_tokens,
@@ -270,5 +291,11 @@ def capture_vllm(url: str, model: str, n_experts: int, top_k: int, prompts: dict
                 choice = json.loads(r.read())["choices"][0]
             if not choice.get("routed_experts"):
                 raise RuntimeError("no routed_experts in the response: start vllm with --enable-return-routed-experts")
-            ts.traces.append(Trace(decode_routed_experts(choice["routed_experts"]), dom, env.MEASURED))
-    return ts
+            traces.append(Trace(decode_routed_experts(choice["routed_experts"]), dom, env.MEASURED))
+    ks = {t.ids.shape[-1] for t in traces}
+    if len(ks) != 1 or (top_k is not None and ks != {top_k}):
+        raise ValueError(f"{model}: the server returned top-{sorted(ks)} routing, expected top-{top_k}")
+    hi = max(int(t.ids.max()) for t in traces)
+    if hi >= n_experts:
+        raise ValueError(f"{model}: expert id {hi} returned, but n_experts = {n_experts}")
+    return TraceSet(model, n_experts, ks.pop(), traces, label=env.MEASURED)

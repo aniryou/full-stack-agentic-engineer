@@ -158,6 +158,25 @@ def get(name: str) -> Model:
         raise KeyError(f"unknown model {name!r}; known: {', '.join(MODELS)}") from None
 
 
+_ID_SUFFIXES = ("-instruct", "-chat", "-base", "-gptq-int4", "-gptq-int8", "-awq", "-fp8", "-int4", "-mxfp4", "-gguf")
+
+
+def _id_stem(model_id: str) -> str:
+    stem = model_id.strip().rstrip("/").split("/")[-1].lower()
+    while any(stem.endswith(s) for s in _ID_SUFFIXES):
+        stem = next(stem[: -len(s)] for s in _ID_SUFFIXES if stem.endswith(s))
+    return stem
+
+
+def by_hf_id(model_id: str) -> Model | None:
+    """The catalogue entry a served model id names: what vLLM's ``/v1/models`` reports (the Hub id,
+    unless ``--served-model-name`` renamed it). Case, the organisation, and -Instruct / -Chat / -Base
+    and quantization suffixes are ignored, so ``Qwen/Qwen1.5-MoE-A2.7B-Chat-GPTQ-Int4`` finds
+    Qwen1.5-MoE-A2.7B. None when the id names no catalogue model."""
+    stem = _id_stem(model_id)
+    return next((m for m in MODELS.values() if _id_stem(m.hf_id) == stem), None)
+
+
 # ---- precision: what a byte of weights costs ------------------------------------------------
 # name -> (bits for attention/router/shared/dense weights, bits for routed-expert matmuls).
 # Embeddings and LM head stay 16-bit in every quantized checkpoint considered here (GPTQ, AWQ,

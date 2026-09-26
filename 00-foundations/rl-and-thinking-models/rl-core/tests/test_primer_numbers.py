@@ -241,9 +241,14 @@ def test_s6_test_time_compute_numbers():
     for noise in (0.0, 0.5, 1.0):
         vals = [ttc.best_of_n_accuracy(0.3, n, noise, rng) for n in (1, 4, 16, 64)]
         bon[noise] = vals[2]
-    present(f"at n = 16, {bon[0.0]:.3f} with a verifier, {bon[0.5]:.3f} with noise 0.5, {bon[1.0]:.3f} with noise 1.0")
-    for wrong in ([0.42, 0.18], [0.3, 0.3], [0.15] * 4):
+    assert abs(bon[0.0] - (1 - 0.7 ** 16)) < 0.003                  # the Monte Carlo verifier row vs the closed form
+    present(f"{1 - 0.7 ** 16:.3f} with a verifier (exactly 1 − 0.7^16), {bon[0.5]:.3f} with noise 0.5, "
+            f"{bon[1.0]:.3f} with noise 1.0")
+    for wrong in ([0.5, 0.1], [0.42, 0.18], [0.3, 0.3], [0.15] * 4):
         present("| " + " | ".join(f"{ttc.majority_accuracy(0.4, wrong, n):.3f}" for n in (1, 15, 31)) + " |")
+    first_loss = next(n for n in range(1, 400, 2) if ttc.majority_accuracy(0.4, [0.42, 0.18], n) < 0.4)
+    assert 120 <= first_loss <= 140                                   # "only past about 130"
+    present("drops below one sample's accuracy only past about 130")
     present(f"pass@5 = {ttc.pass_at_k(10, 3, 5):.6f}", f"pass@8 = {ttc.pass_at_k(64, 16, 8):.6f}",
             f"its expectation is {ttc.expected_estimate(ttc.plugin_pass_at_k, 10, 5, 0.1):.4f} against a truth of "
             f"{1 - 0.9 ** 5:.4f}", f"pass@4 = {ttc.pass_at_k(16, 4, 4):.6f} but pass^4 = {ttc.pass_hat_k(16, 4, 4):.6f}")
@@ -308,7 +313,9 @@ def test_s7_serving_numbers():
             "| mean output tokens (either) | " + " | ".join(f"{b['tokens']:,.0f}" for _, b in cells.values()) + " |",
             f"({cells[4096][0]['truncated']:.1%} at a 4K cap")
     need = 1500 + w.lognormal_quantile(1500, 1.0, 0.99) + 300
-    present(f"{int(math.ceil(need / 1024) * 1024):,} (a multiple of 1,024)")
+    mml = int(math.ceil(need / 1024) * 1024)
+    present(f"{mml:,} (a multiple of 1,024)", f"({mml - 1500:,} here)")
+    assert w.budget_outcome(1500, 1.0, 300, max_tokens=mml - 1500)["truncated"] <= 0.01
     off, on = w.api_cost(5000, 350, 2700), w.api_cost(5000, 3500, 2700)
     acc = {"easy": {"off": 0.95, "on": 0.97}, "hard": {"off": 0.30, "on": 0.85}}
     share = {"easy": 0.7, "hard": 0.3}
