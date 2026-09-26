@@ -50,7 +50,7 @@ def main(argv: list[str]) -> int:
         t0 = time.time()
         ok, ename, msg = run(p)
         dt = time.time() - t0
-        env = ename in ENV_ERRORS or "'ellipsis'" in msg
+        env = ename in ENV_ERRORS or "ellipsis" in msg.lower()
         status = "PASS" if ok else "FAIL(env)" if env else "FAIL"
         if expect_fail:
             status = ("FAIL(ran to completion?)" if ok else "FAIL(env)" if env

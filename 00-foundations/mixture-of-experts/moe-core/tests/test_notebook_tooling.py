@@ -144,6 +144,9 @@ CASES = {  # name: (cells, what --expect-fail must report)
     "c_leftover_ellipsis": (["x = 1", "# YOUR CODE HERE\ny = ...\ny.shape"], "env"),
     "c_leftover_ellipsis_arithmetic": (["x = 1", "# YOUR CODE HERE\ny = ...\nz = y + 1"], "env"),
     "c_leftover_ellipsis_len": (["x = 1", "# YOUR CODE HERE\ny = ...\nlen(y)"], "env"),
+    "c_leftover_ellipsis_format": (["x = 1", "# YOUR CODE HERE\ny = ...\nprint(f'{y:.2f}')"], "env"),
+    "c_leftover_ellipsis_round": (["x = 1", "# YOUR CODE HERE\ny = ...\nround(y, 2)"], "env"),
+    "c_leftover_ellipsis_math": (["import math", "# YOUR CODE HERE\ny = ...\nmath.sqrt(y)"], "env"),
     "d_error_before_exercise": (["1 / 0", "# YOUR CODE HERE\nraise NotImplementedError('your turn')"], "fail"),
     "e_runs_clean": (["x = 1", "# YOUR CODE HERE\nx = 2", "assert x == 2"], "fail"),
 }
