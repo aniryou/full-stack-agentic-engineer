@@ -1,5 +1,15 @@
 # gpubench on GCP (T3): one Spot L4 VM, report to a bucket, auto-stop
 
+**What it does.** Terraform creates one Spot `g2-standard-4` VM (1× L4) that runs the whole suite on boot, uploads
+the JSON + Markdown report to a private bucket and powers itself off. `bench-on-gcp.sh` wraps the whole cycle: apply,
+wait, download, destroy.
+
+**Cost.** Roughly $0.07–0.28/hr on Spot for the VM (us-central1, September 2026 — verify), plus cents for the disk; a
+quick run is done in well under an hour. Details under [Cost](#cost-approximate-us-central1-september-2026--verify).
+
+**Clean up.** `bench-on-gcp.sh` destroys everything for you. By hand, run `terraform destroy`: a VM that powered
+itself off stops GPU billing, but the stopped VM and its boot disk stay until you destroy them.
+
 What it creates ([`terraform/`](terraform/), split by concern):
 
 | File | Resources |

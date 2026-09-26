@@ -9,6 +9,9 @@ compare round-robin with the llm-d default weights, read the engines' own prefix
 and feed live `vllm:num_requests_waiting` / `vllm:num_requests_running` scrapes to the HPA
 recommender. Every number those cells print is **measured on your GPU**.
 
+**Cost:** Colab/Kaggle free; a rented RTX 4090 ≈ $0.3–0.4/h (verify). **Cleanup:** `./down.sh`,
+then *terminate* the rented machine — it bills until you do, not until vLLM stops.
+
 | File | What it does |
 |---|---|
 | `serve.sh` | starts `REPLICAS` (default 2) × `vllm serve` from pip, one after the other, on ports 8001, 8002, …; replica *i* on GPU *i* mod #GPUs; prints `IGW_BACKENDS` and the router command. `DRY_RUN=1` prints only |
@@ -62,6 +65,3 @@ one GPU also compete for its compute, which the fake backend never models: a pre
 replica slows the other's decode. Treat a shared-GPU run as a routing experiment (hit rate,
 per-replica split, relative TTFT), and a one-replica-per-GPU run (Kaggle 2 × T4, T2) as the fair
 capacity picture.
-
-**Cost:** Colab/Kaggle free; a rented RTX 4090 ≈ $0.3–0.4/h (verify). **Cleanup:** `./down.sh`,
-then *terminate* the rented machine — it bills until you do, not until vLLM stops.
