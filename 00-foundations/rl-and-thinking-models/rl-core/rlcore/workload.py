@@ -42,17 +42,19 @@ MISTRAL_SMALL = Model("Mistral Small 3 (24B dense)", 24, 40, 8, 128)
 QWEN3_0_6B = Model("Qwen3-0.6B", 0.596, 28, 8, 128)
 
 
-# -- the capacity primer's formulas, same units (weights in 1e9 bytes, KV in KB/1024², as capacity.py) --
+# -- the capacity primer's formulas, same units as capacity.py: every memory quantity in GB = 1e9 bytes --
 def weight_gb(model: Model, dtype: str = "bf16") -> float:
     return model.params_b * BYTES[dtype]
 
 
 def kv_per_token_kb(model: Model, dtype: str = "bf16") -> float:
-    return 2 * model.layers * model.kv_heads * model.head_dim * BYTES[dtype] / 1024
+    """kB = 1e3 bytes."""
+    return 2 * model.layers * model.kv_heads * model.head_dim * BYTES[dtype] / 1e3
 
 
 def kv_per_session_gb(model: Model, context_tokens: float, dtype: str = "bf16") -> float:
-    return kv_per_token_kb(model, dtype) * context_tokens / (1024 * 1024)
+    """GB = 1e9 bytes, the same GB as the weights and the HBM it is subtracted from."""
+    return kv_per_token_kb(model, dtype) * context_tokens / 1e6
 
 
 def _tflops(gpu: GPU, dtype: str) -> float:

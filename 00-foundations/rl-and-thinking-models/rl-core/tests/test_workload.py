@@ -31,15 +31,16 @@ def _load(rel, name):
 
 
 def test_reproduces_the_capacity_primers_bank_example():
-    """worked_example.py B: 8.33 RPS, 12.07 s, 100.6 live, 95.3 / 381.3 sessions per GPU, 9,156 and 20,615 tok/s."""
+    """worked_example.py B: 8.33 RPS, 12.07 s, 100.6 live, 88.8 / 355.1 sessions per GPU, 8,929 and 20,615 tok/s.
+    Every memory quantity in GB = 1e9 bytes (KV too), as capacity.py."""
     p = w.plan(SMALL, H100, RPS, 1500, 300, tpot_ms=40, dtype="fp8")
     assert round(RPS, 2) == 8.33 and round(p["duration_s"], 2) == 12.07 and round(p["concurrency"], 1) == 100.6
     assert p["avg_ctx"] == 1650 and round(w.ttft_s(24, 1500, H100), 4) == 0.0728
-    assert round(w.sessions_per_gpu(SMALL, H100, 1650, "bf16"), 1) == 95.3
-    assert round(w.sessions_per_gpu(SMALL, H100, 1650, "fp8"), 1) == 381.3
-    assert round(w.decode_tok_s(SMALL, H100, 100, 1650, "fp8")) == 9156 == round(p["decode_tok_s_per_gpu"])
+    assert round(w.sessions_per_gpu(SMALL, H100, 1650, "bf16"), 1) == 88.8
+    assert round(w.sessions_per_gpu(SMALL, H100, 1650, "fp8"), 1) == 355.1
+    assert round(w.decode_tok_s(SMALL, H100, 100, 1650, "fp8")) == 8929 == round(p["decode_tok_s_per_gpu"])
     assert round(w.prefill_tok_s(24, H100)) == 20615
-    assert round(p["gpus"]["memory"], 3) == 0.264 and p["gpus_needed"] == 1
+    assert round(p["gpus"]["memory"], 3) == 0.283 and p["gpus_needed"] == 1
 
 
 def test_matches_capacity_py_function_by_function():
@@ -58,26 +59,26 @@ def test_matches_capacity_py_function_by_function():
 
 
 def test_thinking_multiplies_memory_not_just_tokens():
-    """10× the output (2,700 thinking + 300 answer): 120.07 s, 1,000.6 live, 209.7 sessions/GPU → 4.77 GPUs
-    for memory, 18× the baseline's 0.264; decode_aggregate alone would have put all 1,000 on one GPU."""
+    """10× the output (2,700 thinking + 300 answer): 120.07 s, 1,000.6 live, 195.3 sessions/GPU → 5.12 GPUs
+    for memory, 18× the baseline's 0.283; decode_aggregate alone would have put all 1,000 on one GPU."""
     t = w.plan(SMALL, H100, RPS, 1500, 3000, tpot_ms=40, dtype="fp8")
     assert round(t["duration_s"], 2) == 120.07 and round(t["concurrency"], 1) == 1000.6 and t["avg_ctx"] == 3000
-    assert round(t["sessions_per_gpu"], 1) == 209.7 and round(t["gpus"]["memory"], 2) == 4.77
-    assert t["binding"] == "memory" and t["gpus_needed"] == 5 and t["batch"] == 209
-    assert round(t["gpus"]["memory"] / 0.2638, 0) == 18
+    assert round(t["sessions_per_gpu"], 1) == 195.3 and round(t["gpus"]["memory"], 2) == 5.12
+    assert t["binding"] == "memory" and t["gpus_needed"] == 6 and t["batch"] == 195
+    assert round(t["gpus"]["memory"] / 0.2833, 0) == 18
     assert 1000 * w.kv_per_session_gb(SMALL, 3000, "fp8") > 80           # the uncapped batch cannot exist
 
 
 def test_a_tight_itl_slo_binds_before_hbm():
     t = w.plan(SMALL, H100, RPS, 1500, 3000, tpot_ms=20, dtype="fp8")
-    assert t["itl_batch"] == 187 < t["sessions_per_gpu"] and t["binding"] == "itl_slots"
-    assert w.decode_step_s(SMALL, H100, 187, 3000, "fp8") <= 0.020 < w.decode_step_s(SMALL, H100, 188, 3000, "fp8")
+    assert t["itl_batch"] == 174 < t["sessions_per_gpu"] and t["binding"] == "itl_slots"
+    assert w.decode_step_s(SMALL, H100, 174, 3000, "fp8") <= 0.020 < w.decode_step_s(SMALL, H100, 175, 3000, "fp8")
 
 
 def test_steady_plan_closes_littles_law_on_the_step_the_fleet_runs_at():
-    """plan() prices every token at the SLO's TPOT, so a 20 ms SLO needs fewer GPUs (3) than a 40 ms one (5).
-    At 3 GPUs the fleet settles at 139.1 per GPU and 16.7 ms a step — under both SLOs — so both need 3, and the
-    tight SLO's need is the larger. By hand (memory-bound step, FP8): c = rps·(TTFT + 3000·(24 + 0.2289·c/N)/3350)."""
+    """plan() prices every token at the SLO's TPOT, so a 20 ms SLO needs fewer GPUs (3) than a 40 ms one (6).
+    At 3 GPUs the fleet settles at 154.1 per GPU and 18.5 ms a step — under both SLOs — so both need 3, and the
+    tight SLO's need is the larger. By hand (memory-bound step, FP8): c = rps·(TTFT + 3000·(24 + 0.24576·c/N)/3350)."""
     loose = w.plan_steady(SMALL, H100, RPS, 1500, 3000, tpot_ms=40)
     tight = w.plan_steady(SMALL, H100, RPS, 1500, 3000, tpot_ms=20)
     assert loose["gpus_needed"] == tight["gpus_needed"] == 3
@@ -85,8 +86,8 @@ def test_steady_plan_closes_littles_law_on_the_step_the_fleet_runs_at():
     kv, ttft = w.kv_per_session_gb(SMALL, 3000, "fp8"), w.ttft_s(24, 1500, H100)
     a, slope = RPS * (ttft + 3000 * 24 / 3350), RPS * 3000 * kv / 3350
     c = a / (1 - slope / 3)                                              # the fixed point, solved by hand
-    assert loose["concurrency"] == pytest.approx(c, rel=1e-6) and round(c, 1) == 417.3
-    assert loose["step_s"] == pytest.approx((24 + kv * c / 3) / 3350, rel=1e-6) and round(loose["step_s"] * 1e3, 1) == 16.7
+    assert loose["concurrency"] == pytest.approx(c, rel=1e-6) and round(c, 1) == 462.4
+    assert loose["step_s"] == pytest.approx((24 + kv * c / 3) / 3350, rel=1e-6) and round(loose["step_s"] * 1e3, 1) == 18.5
     assert slope / 2 < 1 and a / (1 - slope / 2) / 2 > loose["sessions_per_gpu"]  # 2 GPUs settle past HBM: infeasible
     for b in (50, 100, 150, 200):                                        # N(b) falls as b grows
         assert w.gpus_for_batch(SMALL, H100, RPS, 1500, 3000, b) > w.gpus_for_batch(SMALL, H100, RPS, 1500, 3000, b + 1)
