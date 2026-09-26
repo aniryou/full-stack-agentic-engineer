@@ -142,6 +142,8 @@ CASES = {  # name: (cells, what --expect-fail must report)
     "a_stops_at_exercise": (["x = 1", "# YOUR CODE HERE\nraise NotImplementedError('your turn')", "assert x == 2"], "stop"),
     "b_missing_module": (["import nonexistent_module_xyz", "# YOUR CODE HERE\nraise NotImplementedError('your turn')"], "env"),
     "c_leftover_ellipsis": (["x = 1", "# YOUR CODE HERE\ny = ...\ny.shape"], "env"),
+    "c_leftover_ellipsis_arithmetic": (["x = 1", "# YOUR CODE HERE\ny = ...\nz = y + 1"], "env"),
+    "c_leftover_ellipsis_len": (["x = 1", "# YOUR CODE HERE\ny = ...\nlen(y)"], "env"),
     "d_error_before_exercise": (["1 / 0", "# YOUR CODE HERE\nraise NotImplementedError('your turn')"], "fail"),
     "e_runs_clean": (["x = 1", "# YOUR CODE HERE\nx = 2", "assert x == 2"], "fail"),
 }

@@ -39,7 +39,7 @@ def run(path: Path):
         msg = f"{e.ename}: {str(e.evalue)[:200]}"
         exercise = first_cell(nb, lambda c: "# YOUR CODE HERE" in c.source)
         failed = first_cell(nb, lambda c: any(o.get("output_type") == "error" for o in c.get("outputs", [])))
-        env = e.ename in ENV_ERRORS or "'ellipsis' object" in msg
+        env = e.ename in ENV_ERRORS or "'ellipsis'" in msg
         return False, env, None not in (exercise, failed) and failed >= exercise, msg
 
 
