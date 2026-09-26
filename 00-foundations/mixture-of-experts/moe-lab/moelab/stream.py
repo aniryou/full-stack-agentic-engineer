@@ -8,8 +8,9 @@ streams) until the step turns compute-bound at a batch that scales with total/ac
 
 This module re-implements, standalone, the formulas of layer 01's ``roofline.llm``
 (``experts_touched``, ``streamed_weight_bytes``, ``decode``, ``decode_crossover_batch``) generalised
-to shared experts, and the tests reproduce its PRIMER §3.6 table (Mixtral-8x7B on an H200: 25.6 GB
-and 5.34 ms at batch 1, 754 and 2,055 crossovers) digit for digit. On top of that:
+to shared experts — the same closed form this topic's ``moecore.touched`` predicts with — and the
+tests reproduce layer 01's PRIMER §3.6 table (Mixtral-8x7B on an H200: 25.6 GB and 5.34 ms at batch 1,
+754 and 2,055 crossovers) digit for digit. On top of that:
 
 * ``touched_mc`` — Monte Carlo with skewed (Zipf) routing: fewer experts touched, a hotter hottest one;
 * ``align_block_size`` — how vLLM's fused MoE kernel lays tokens out (sorted by expert, each

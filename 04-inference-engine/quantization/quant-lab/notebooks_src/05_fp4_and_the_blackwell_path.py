@@ -179,7 +179,7 @@ print("✅ Llama-3.1-8B:", {k: f"{v:.2f} GB" for k, v in sizes.items()},
 
 # %%
 for M in (1, 64, 512, 4096):
-    t = {s: B.gemm_time(M, 14336, 4096, "B200", s) * 1e6 for s in ("bf16", "fp8", "w4a4-nvfp4", "w4a16-nvfp4")}
+    t = {s: v * 1e6 for s, v in fp4.gemm_times(M, 14336, 4096, "B200").items()}
     print(f"  B200, M={M:5d}: " + "  ".join(f"{s} {v:7.1f} us" for s, v in t.items()) + "   [SIMULATED, 100% of peak]")
 print(f"B200 BF16 ridge: {serve.gpu('B200').peak('bf16') / 8e12:.0f} FLOP/byte; RTX PRO 6000: "
       f"{serve.gpu('RTXPRO6000').peak('bf16') / 1.6e12:.0f}")
@@ -215,6 +215,7 @@ def slower_from(K, N, gpu, eff):
 m70 = slower_from(14336, 4096, "B200", 0.7)
 m90 = slower_from(14336, 4096, "B200", 0.9)
 assert slower_from(14336, 4096, "B200", 1.0) is None and 150 < m70 < m90 < 300
+assert m70 == fp4.weight_only_slower_from(14336, 4096, "B200", 0.7)
 print(f"✅ on a B200 a W4A16 kernel at 70% of the BF16 GEMM's efficiency loses from {m70} tokens per step "
       f"({m90} at 90%) — every prefill chunk; W4A4 on FP4 tensor cores has no such cliff [SIMULATED]")
 

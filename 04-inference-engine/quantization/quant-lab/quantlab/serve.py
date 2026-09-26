@@ -58,7 +58,7 @@ GPUS = {
     "H100-80GB": GPU("H100-80GB", 9.0, 79.65, 3350, {"bf16": 989.4, "fp16": 989.4, "fp8": 1978.9, "int8": 1978.9},
                      "Hopper"),
     "B200": GPU("B200", 10.0, 179.0, 8000, {"bf16": 2250, "fp16": 2250, "fp8": 4500, "fp4": 9000, "int8": 4500},
-                "Blackwell"),
+                "Blackwell"),                  # memory: ~180 GB usable in HGX, as the driver reports it (verify)
     "RTXPRO6000": GPU("RTXPRO6000", 12.0, 95.0, 1600, {"bf16": 500, "fp16": 500, "fp8": 1000, "fp4": 2000},
                       "Blackwell"),
 }

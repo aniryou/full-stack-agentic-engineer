@@ -24,7 +24,7 @@
 #   exist. And the weight sync is every parameter, every step, unless only deltas are sent.
 
 # %%
-import json, math, random, statistics
+import json, math, statistics
 from importlib import resources
 from thinklab import engine, env
 from thinklab.report import table

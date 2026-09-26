@@ -4,3 +4,5 @@
 ``curves`` loads a recorded run for machines without torch.
 """
 from .task import DigitSum, Problem, parse, render, reward  # noqa: F401
+
+__all__ = ["DigitSum", "Problem", "parse", "render", "reward"]

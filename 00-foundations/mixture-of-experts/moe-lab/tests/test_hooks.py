@@ -111,3 +111,9 @@ def test_unknown_router_layout_is_an_error():
             return x
     with pytest.raises(TypeError, match="unknown router output layout"):
         hooks.indices_from_output(OddRouter(), torch.zeros(2))
+
+
+def test_text_histogram():
+    h = hooks.text_histogram(np.array([6, 2, 0, 0]), width=6).splitlines()
+    assert h[0].startswith("expert   0 ######") and "75.0%" in h[0] and "3.0x fair" in h[0]
+    assert len(hooks.text_histogram(np.arange(10), top=3).splitlines()) == 3

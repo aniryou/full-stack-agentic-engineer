@@ -55,21 +55,24 @@ def load() -> list:
 
 
 def collect(client, problems: list, samples: int = 8, budgets: tuple = (), budget_samples: int = 4,
-            max_tokens: int = 8192, concurrency: int = 8) -> list:
-    """T1: the same table from a real server (answers checked by the verifier; no reward model — ``rm_scores``
-    are left empty). ``n=samples`` asks the server for several choices per request."""
+            max_tokens: int | None = None) -> list:
+    """T1: the same table from a real server. One request per (problem, mode) with ``n`` choices, so vLLM
+    prefills once and decodes the samples together. Answers are checked by the verifier; there is no
+    reward model (``rm_scores`` stay empty). vLLM reports ``usage`` per request, so each choice's token
+    counts are the request's divided by ``n`` — exact on average, not per sample. ``max_tokens=None`` lets
+    the server allow up to ``max_model_len`` minus the prompt."""
     rows = []
     for p in problems:
         plan = [("off", None, samples), ("on", None, samples)] + [("budget", b, budget_samples) for b in budgets]
         for mode, b, k in plan:
             comps = client.chat(p.messages(), n=k, max_tokens=max_tokens, thinking=mode != "off", budget=b)
             comps = comps if isinstance(comps, list) else [comps]
-            per_choice = [c.reasoning_tokens for c in comps]
+            n = max(1, len(comps))
+            r_tok = (comps[0].reasoning_tokens or 0) // n
+            a_tok = comps[0].completion_tokens // n - r_tok
             rows.append({"id": p.id, "kind": p.kind, "difficulty": p.difficulty, "truth": p.answer, "mode": mode,
                          "budget": b, "answers": [c.answer for c in comps], "correct": [verify(p, c.content) for c in comps],
-                         "reasoning_tokens": [len((c.reasoning or "").split()) for c in comps] if None in per_choice else
-                         [x // max(1, len(comps)) for x in per_choice],
-                         "answer_tokens": [len((c.content or "").split()) for c in comps],
+                         "reasoning_tokens": [r_tok] * n, "answer_tokens": [a_tok] * n,
                          "finish": [c.finish_reason for c in comps], "rm_scores": []})
     return rows
 

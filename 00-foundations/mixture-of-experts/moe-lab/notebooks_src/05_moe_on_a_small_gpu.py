@@ -270,6 +270,25 @@ else:
     print("T0: no MOELAB_URL and no local GPU + vLLM (MOELAB_START_VLLM=1); every number above is simulated or illustrative.")
 
 # %% [markdown]
+# ## Worked example: a report for the review
+#
+# `moelab.report` writes what you found with its provenance on every section, so a table pasted into
+# a design document says whether it was measured, simulated or illustrative (`.save()` writes
+# Markdown and JSON to `results/`; here it is only printed).
+
+# %%
+from moelab.report import Report
+
+rep = Report(f"OLMoE-1B-7B on one {GPU.name}")
+rep.add("What fits", env.SIMULATED, "\n".join(offload.fit(olmoe, GPU, s).line() for s in ("fp16", "int4")))
+rep.add("Offload toll vs CPU experts, per step", env.SIMULATED,
+        "\n".join(f"batch {b:3d}: UVA {offload_ms(3.0, GPU.pcie_gbs):6.1f} ms, CPU experts {cpu_experts_ms(olmoe, b):6.1f} ms"
+                  for b in (1, 16, 64)), crossover_batch=uva_wins_from(olmoe, GPU, 3.0))
+rep.add("Start-up log", env.MEASURED if url else env.ILLUSTRATIVE,
+        (FIX / "vllm_startup_olmoe_t4_offload.log").read_text().splitlines()[5] if not url else "see vllm-offload.log")
+print(rep.to_markdown())
+
+# %% [markdown]
 # ## In a design review
 #
 # **Two minutes:** "The MoE's memory bill is its total parameter count, so a 7B-total MoE is a 14 GB

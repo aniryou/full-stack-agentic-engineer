@@ -117,6 +117,14 @@ print(f"✅ {allids.shape[0]} tokens x {ts.top_k} slots per layer; the hottest e
       f"{U.max(1).mean() / U.sum(1).mean():.1%} on average vs a fair {1 / ts.n_experts:.1%}")
 
 # %% [markdown]
+# The utilisation histogram of the last layer, busiest experts first (the ten hottest and the rest
+# summarised):
+
+# %%
+print(hooks.text_histogram(U[-1], top=10))
+print(f"... {ts.n_experts - 10} more experts share the remaining {1 - np.sort(U[-1])[-10:].sum() / U[-1].sum():.0%}")
+
+# %% [markdown]
 # ## Exercise 2.3 — is that skew real, or a small sample?
 #
 # vLLM's EPLB logs **balancedness** = mean tokens per expert / max tokens per expert (1.0 perfect).
@@ -196,7 +204,8 @@ print(f"✅ first quarter of layers {div[:L // 4].mean():.3f}, last quarter {div
 #
 # With `--enable-expert-parallel` and vLLM's default `--expert-placement-strategy linear`, EP rank r
 # holds experts `[r·E/ep, (r+1)·E/ep)` (`round_robin`, expert e on rank e mod ep, is only honoured
-# for models with expert groups, like DeepSeek-V3 — vLLM falls back to linear otherwise). Write
+# for models with expert groups, like DeepSeek-V3 — vLLM falls back to linear otherwise; checked on
+# vLLM main, Sep 2026, verify for your version). Write
 # `rank_loads(counts, ep)` → `[layers, ep]` assignments per rank under linear placement, then the
 # **imbalance** max/mean per layer.
 
@@ -220,7 +229,7 @@ print("✅ the same routing costs more as EP grows: fewer experts per GPU averag
 # EPLB (`--enable-eplb`, optionally `--eplb-config '{"num_redundant_experts": 32}'` at large scale)
 # re-places experts every `step_interval` steps from the load it observed over `window_size` steps
 # (v0.30.0 defaults 3000 and 1000) and can keep extra copies of hot experts — each copy costs HBM on
-# its rank (layer 02's and 05's primers price it; PRIMER §6 has the formula).
+# its rank (PRIMER §6.3: ~2.4 GiB per redundant expert per rank for DeepSeek-V3 in FP8).
 #
 # ## Worked example: the adapters behind `RouterRecorder`
 #

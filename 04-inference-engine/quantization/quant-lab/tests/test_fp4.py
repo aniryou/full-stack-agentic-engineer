@@ -54,3 +54,12 @@ def test_bits_and_layouts():
     lay = fp4.layout(4096, 4096, "nvfp4")
     assert lay["weight_packed"][:2] == ("U8", (4096, 2048)) and lay["weight_scale"][:2] == ("F8_E4M3", (4096, 256))
     assert fp4.layer_bytes(4096, 4096, "nvfp4") * 8 / (4096 * 4096) == pytest.approx(4.5, abs=1e-5)
+
+
+def test_blackwell_model():
+    t = fp4.gemm_times(4096, 14336, 4096, "B200")
+    assert t["bf16"] / t["w4a4-nvfp4"] == pytest.approx(4.0, rel=0.01)          # FP4 tensor cores: 4x BF16 FLOP/s
+    assert t["w4a16-nvfp4"] == pytest.approx(t["bf16"])                            # weight-only: BF16 math
+    assert "w4a4-nvfp4" not in fp4.gemm_times(4096, 14336, 4096, "H100-80GB")
+    assert fp4.weight_only_slower_from(14336, 4096, "B200", 1.0) is None
+    assert 150 < fp4.weight_only_slower_from(14336, 4096, "B200", 0.7) < 300

@@ -96,17 +96,6 @@ def has_docker() -> bool:
         return False
 
 
-def has_kubectl_cluster() -> bool:
-    """kubectl installed *and* a cluster answering (``kubectl version --request-timeout=5s``)."""
-    if not shutil.which("kubectl"):
-        return False
-    try:
-        return subprocess.run(["kubectl", "get", "--raw", "/readyz", "--request-timeout=5s"],
-                              capture_output=True, timeout=15).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
 def on_colab() -> bool:
     return "google.colab" in sys.modules
 

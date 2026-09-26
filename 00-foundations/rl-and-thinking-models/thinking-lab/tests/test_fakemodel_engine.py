@@ -1,6 +1,5 @@
 """The simulated model's behaviour and the engine emulator's arithmetic, pinned to hand-computed values."""
 import math
-import random
 
 import pytest
 
@@ -68,3 +67,14 @@ def test_max_model_len_is_enforced():
 def test_itl_grows_with_context_not_just_batch():
     p = E.profile("t4-qwen3-0.6b")
     assert p.decode_step_s(64, 64 * 3000) > 3 * p.decode_step_s(64, 64 * 200)
+
+
+def test_long_recompute_after_preemption_is_readmitted_and_abort_frees_blocks():
+    prof = E.profile("tiny", num_blocks=600)                     # 2,400 slots; budget 2,048 tokens per step
+    eng = E.simulate(prof, [(0.0, 10, 2300, 2000), (0.0, 10, 2300, 0)])
+    assert len(eng.finished) == 2 and eng.preemptions >= 1     # the preempted one re-prefills > 2,048 tokens alone
+    e2 = E.Engine(prof)
+    r = e2.add(10, 50, 0.0)
+    e2.commit(e2.schedule(0.0), 0.01)
+    e2.abort(r, 0.02)
+    assert e2.free == prof.num_blocks and not e2.has_work() and r.state == "aborted"

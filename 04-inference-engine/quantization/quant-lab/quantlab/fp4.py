@@ -201,3 +201,32 @@ def layout(out_features: int, in_features: int, fmt: str) -> dict:
 
 def layer_bytes(out_features: int, in_features: int, fmt: str) -> int:
     return sum(b for _, _, b in layout(out_features, in_features, fmt).values())
+
+
+# ---------------------------------------------------------------------------------------------
+# The Blackwell throughput model (roofline; peaks from datasheets, verify)
+# ---------------------------------------------------------------------------------------------
+def gemm_times(M: int, K: int, N: int, gpu="B200", weight_only_eff: float = 1.0) -> dict:
+    """Seconds for one ``[M, K] x [K, N]`` GEMM per path: BF16, FP8 W8A8, NVFP4 W4A4 (FP4 tensor cores on
+    sm_100+) and NVFP4 weight-only (FP4 bytes, BF16 math at ``weight_only_eff`` of the BF16 GEMM's rate).
+    SIMULATED: 100% of peak unless an efficiency is given; B200 2,250 / 4,500 / 9,000 dense TFLOP/s, 8 TB/s (verify)."""
+    from . import bench
+    from .serve import gpu as _gpu
+    g = _gpu(gpu)
+    out = {"bf16": bench.gemm_time(M, K, N, g, "bf16"), "fp8": bench.gemm_time(M, K, N, g, "fp8")}
+    if "fp4" in g.tflops:
+        out["w4a4-nvfp4"] = bench.gemm_time(M, K, N, g, "w4a4-nvfp4")
+    w, a, _ = bench.GEMM_PATH["w4a16-nvfp4"]
+    out["w4a16-nvfp4"] = max(2.0 * M * K * N / (g.peak("bf16") * weight_only_eff),
+                             (K * N * w + M * K * a + M * N * 2) / (g.mem_bw_gbs * 1e9))
+    return out
+
+
+def weight_only_slower_from(K: int, N: int, gpu="B200", weight_only_eff: float = 0.7, max_m: int = 1 << 15):
+    """Smallest tokens-per-step ``M`` at which NVFP4 weight-only loses to BF16, or None (never at eff >= 1).
+    On a B200 at 70% efficiency: ~210 tokens — every prefill chunk (SIMULATED)."""
+    for m in range(1, max_m):
+        t = gemm_times(m, K, N, gpu, weight_only_eff)
+        if t["w4a16-nvfp4"] > t["bf16"]:
+            return m
+    return None

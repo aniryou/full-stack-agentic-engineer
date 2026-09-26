@@ -100,8 +100,8 @@ for op, algo in (("all_reduce", "ring"), ("all_gather", "ring"), ("all_to_all", 
     assert np.isclose(ab_time(op, 12345, 2, 20e-6, 8, algo), ep.collective_time(op, 12345, 2, LINK, algo))
 S = 32 * MOE.d_model * 2
 t = ab_time("all_reduce", S, 2, LINK.alpha_s, LINK.bw_gbs)
-print(f"✅ decode, 32 tokens: one all-reduce of {S // 1024} KiB on 2 x T4 = {t * 1e6:.0f} us, of which "
-      f"{2 * LINK.alpha_s / t:.0%} is latency (alpha) — count collectives, not bytes")
+print(f"✅ decode, 32 tokens: one all-reduce of {S // 1024} KiB on 2 x T4 = {t * 1e6:.0f} us with the assumed link, "
+      f"of which {2 * LINK.alpha_s / t:.0%} is latency (alpha) — count collectives, not bytes")
 
 # %% [markdown]
 # ## Worked example: what each GPU holds and what it sends, per layout

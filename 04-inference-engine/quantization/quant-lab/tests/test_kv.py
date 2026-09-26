@@ -1,6 +1,6 @@
 """KV sizing reproduces the serving lab (servelab.sizing); backend rules follow vLLM's source."""
-import importlib.util
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -42,13 +42,13 @@ def test_live_cross_check_with_servelab_when_the_repo_has_it():
     path = Path(__file__).resolve().parents[3] / "serving-engine/vllm-serving-lab/servelab/sizing.py"
     if not path.exists():
         pytest.skip("serving lab not in this checkout")
-    spec = importlib.util.spec_from_file_location("servelab_sizing_crosscheck", path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod                       # dataclasses look their module up here
+    mod = types.ModuleType("servelab_sizing_crosscheck")   # compiled from source: no bytecode written there
+    mod.__file__ = str(path)
+    sys.modules[mod.__name__] = mod                        # dataclasses look their module up here
     try:
-        spec.loader.exec_module(mod)
+        exec(compile(path.read_text(), str(path), "exec"), mod.__dict__)  # noqa: S102 — the repo's own file
     finally:
-        sys.modules.pop(spec.name, None)
+        sys.modules.pop(mod.__name__, None)
     qmap = {"bf16": None, "fp8": "fp8", "w4a16": "int4"}
     for model in ("llama-3.1-8b-instruct", "qwen2.5-1.5b-instruct", "qwen2.5-0.5b-instruct"):
         for gpu in ("T4", "L4", "H100-80GB"):

@@ -15,8 +15,10 @@ empty — the policy vLLM V1 uses. :mod:`thinklab.fakeserver` runs it in real ti
 OpenAI-compatible API; :func:`simulate` runs it in virtual time (instantly) for what-if analysis.
 
 Everything it produces is **simulated**. Simplifications: attention FLOPs ignored, prefill of a
-prompt is one chunk, no CUDA-graph padding, no prefix cache inside the block pool (the fake server
-keeps a separate prefix index), all blocks usable. The profiles' block counts are the 04 lab's
+prompt is one chunk (a prefill larger than the per-step token budget, e.g. a long request recomputed
+after preemption, runs alone as one long step where vLLM would chunk it over several), no CUDA-graph
+padding, no prefix cache inside the block pool (the fake server keeps a separate prefix index), all
+blocks usable. The profiles' block counts are the 04 lab's
 sizing predictions (``servelab.sizing.size``; reproduced in ``tests/test_reuse.py``); the
 efficiencies (mfu 0.5, 80% of peak bandwidth, 4 ms overhead) are that lab's defaults — assumptions.
 """
@@ -188,8 +190,8 @@ class Engine:
             r = self.waiting[0]
             todo = r.context - (r.cached_tokens if r.preemptions == 0 else 0)   # a preempted request recomputes everything
             need = self._blocks_for(r.context + 1)
-            if todo > budget or need > self.free:
-                break
+            if (todo > budget and prefill) or need > self.free:
+                break                                  # an oversized prefill is admitted alone (see the docstring)
             self.waiting.popleft()
             self.free -= need
             r.blocks, r.state = need, "running"
@@ -199,6 +201,16 @@ class Engine:
             prefill.append((r, todo))
             self.running.append(r)
         return {"decode": decode, "prefill": prefill}
+
+    def abort(self, r: Req, now: float) -> None:
+        """The client went away: drop the request and free its blocks (vLLM aborts it the same way)."""
+        if r in self.running:
+            self.running.remove(r)
+            self.free += r.blocks
+            r.blocks = 0
+        elif r in self.waiting:
+            self.waiting.remove(r)
+        r.state, r.finished_at = "aborted", now
 
     def _preempt(self, r: Req) -> None:
         self.running.remove(r)

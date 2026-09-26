@@ -26,7 +26,7 @@
 # sampling knobs in the 04 serving-engine PRIMER §6 "Sampling and structured output".
 
 # %%
-import json, math
+import json
 from importlib import resources
 from thinklab import env, parsers
 from thinklab.report import table

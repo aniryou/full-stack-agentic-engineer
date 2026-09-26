@@ -63,7 +63,8 @@ def router_traces(path: Path = OUT / "router_traces_olmoe.json") -> None:
                 "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
                           "total_tokens": prompt_tokens + completion_tokens}}})
     doc = {"_label": LABEL, "model": m.hf_id, "num_experts": m.n_experts, "top_k": m.top_k,
-           "server": f"vllm serve {m.hf_id} --dtype half --enable-return-routed-experts",
+           "server": (f"vllm serve {m.hf_id} --dtype half --max-model-len 4096 --cpu-offload-gb 6 "
+                      "--cpu-offload-params experts --enable-return-routed-experts   # on a 16 GB T4"),
            "request_extra": {"routed_experts_prompt_start": 0}, "responses": responses}
     path.write_text(json.dumps(doc, indent=1))
 
@@ -107,7 +108,7 @@ def bench_block(model: str, concurrency: int, n_prompts: int, input_len: int, ou
     return "\n".join(lines) + "\n"
 
 
-def bench_outputs() -> None:
+def bench_outputs(out: Path = OUT) -> None:
     m, g, link = configs.get("olmoe-1b-7b"), configs.gpu("T4"), ep.LINKS["pcie-2xT4"]
     rng = np.random.default_rng(3)
     for lay in ep.LAYOUTS:
@@ -116,7 +117,7 @@ def bench_outputs() -> None:
             itl = st.time * 1e3 * rng.uniform(0.97, 1.05)
             ttft = itl * (3 + 0.2 * c)
             text = bench_block(m.hf_id, c, 8 * c if c > 1 else 16, 256, 128, itl, ttft, rng)
-            (OUT / f"bench_serve_olmoe_2xT4_{lay}_c{c}.txt").write_text(text)
+            (out / f"bench_serve_olmoe_2xT4_{lay}_c{c}.txt").write_text(text)
 
 
 # ---- vLLM start-up logs ---------------------------------------------------------------------------------------------
@@ -143,13 +144,13 @@ INFO 09-26 10:01:10 [api_server.py:1634] Starting vLLM API server 0 on http://0.
     path.write_text(text)
 
 
-def main() -> int:
-    OUT.mkdir(parents=True, exist_ok=True)
-    router_traces()
-    bench_outputs()
-    startup_log("olmoe-1b-7b", "T4", "Tesla_T4", 6, 4096, OUT / "vllm_startup_olmoe_t4_offload.log")
-    startup_log("olmoe-1b-7b", "L4", "NVIDIA_L4", 0, 4096, OUT / "vllm_startup_olmoe_l4.log")
-    for p in sorted(OUT.iterdir()):
+def main(out: Path = OUT) -> int:
+    out.mkdir(parents=True, exist_ok=True)
+    router_traces(out / "router_traces_olmoe.json")
+    bench_outputs(out)
+    startup_log("olmoe-1b-7b", "T4", "Tesla_T4", 6, 4096, out / "vllm_startup_olmoe_t4_offload.log")
+    startup_log("olmoe-1b-7b", "L4", "NVIDIA_L4", 0, 4096, out / "vllm_startup_olmoe_l4.log")
+    for p in sorted(out.iterdir()):
         print(f"{p.stat().st_size:>8,}  {p.name}")
     return 0
 

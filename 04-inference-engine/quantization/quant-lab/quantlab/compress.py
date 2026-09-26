@@ -595,7 +595,9 @@ def llmcompressor_script(recipe: Recipe, model_id: str = "Qwen/Qwen2.5-0.5B-Inst
         imports.append("from llmcompressor.modifiers.transform.smoothquant import SmoothQuantModifier")
     needs_data = recipe.needs_calibration
     ds, n, seqlen = LLMC_DATA.get(recipe.scheme, ("ultrachat_200k", 256, 1024))
-    call = [f'oneshot(model=model, recipe=recipe, dataset="{ds}", splits="train_sft[:{n}]",',
+    call = [f"# calibration: {n} samples x {seqlen} tokens (the llm-compressor examples use up to 512 x 2,048;",
+            "# fewer is faster on a small GPU — check the accuracy, verify the dataset split name)",
+            f'oneshot(model=model, recipe=recipe, dataset="{ds}", splits="train_sft[:{n}]",',
             f"        num_calibration_samples={n}, max_seq_length={seqlen})"] if needs_data else \
         ["oneshot(model=model, recipe=recipe)          # no calibration data needed"]
     lines = ["# llm-compressor 0.14 (verify): pip install llmcompressor  -- in an environment without vLLM",

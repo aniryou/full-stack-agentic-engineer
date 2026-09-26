@@ -24,7 +24,8 @@
 # ([`PRIMER.md`](../../PRIMER.md)). The formulas are layer 01's
 # ([roofline PRIMER §3.6](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md),
 # `roofline.llm.experts_touched`, `streamed_weight_bytes`, `decode`, `decode_crossover_batch`),
-# re-implemented in `moelab.stream` and reproduced digit for digit below.
+# re-implemented in `moelab.stream` and reproduced digit for digit below (this topic's `moe-core`
+# notebook 03 predicts the same curves; this notebook adds the measurement).
 
 # %%
 import os

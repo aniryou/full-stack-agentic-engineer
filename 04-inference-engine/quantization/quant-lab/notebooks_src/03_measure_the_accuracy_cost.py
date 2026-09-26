@@ -176,6 +176,29 @@ print(f"✅ cheapest scheme within 0.5 points and 1e-3 nats on every task: {pick
       "round-to-nearest at the same bits fails the budget")
 
 # %% [markdown]
+# ## Worked example: one decision, four kinds of numbers — and a label on each
+#
+# A recommendation mixes numbers of very different standing: bytes counted from files (exact), step
+# times from the emulator (simulated), task accuracy on the tiny model (a T0 measurement, not your
+# model) and lm-eval figures copied from a documented format (sample). `report.Report` refuses a
+# section without a source and prints the label next to every table.
+
+# %%
+import pathlib, tempfile
+from quantlab import bench as B, report
+rep = report.Report("W4A16 GPTQ vs FP8 vs BF16 for an 8B model on L4s")
+rep.add("Checkpoint size", "exact", [{"scheme": k, "bits per weight": BITS[k]} for k in ("FP8_DYNAMIC", "W4A16 g128 (gptq)")])
+rep.add("Serving speed, Llama-3.1-8B on an L4, 8 users", "simulated",
+        [{k: r[k] for k in ("scheme", "ttft_ms_mean", "tpot_ms_mean", "output_tok_s")}
+         for r in B.compare(["bf16", "fp8", "w4a16"], users=8, n_requests=16)])
+rep.add("Accuracy on the tiny model", "t0-eval",
+        [{"scheme": k, "add": results[k]["add"]["accuracy"], "add KL": results[k]["add"]["kl"]} for k in
+         ("FP8_DYNAMIC", "W4A16 g128 (rtn)", "W4A16 g128 (gptq)")])
+rep.add("gsm8k (lm-eval)", "sample", [{k: c[k] for k in ("filter", "base", "test", "delta", "verdict")} for c in cmp])
+md, js = rep.save(pathlib.Path(tempfile.mkdtemp(prefix="quantlab-03-")) / "decision")
+print(md.read_text())
+
+# %% [markdown]
 # ## Worked example: long generations compound small damage
 #
 # If each generated token independently diverges with probability `e`, a generation of `L` tokens

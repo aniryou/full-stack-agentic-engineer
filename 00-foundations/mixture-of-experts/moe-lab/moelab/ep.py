@@ -18,8 +18,11 @@ fused_moe/config.py, v0.30.0). With DP = 2 the default ``--all2all-backend`` is
 PRIMER §5.6 is what dedicated all-to-all kernels (DeepEP, SM90+ with NVLink/RDMA — never on T4/L4)
 move; on two PCIe GPUs the collectives above are what you get.
 
-Whatever the layout, a step ends when the slowest GPU finishes: under EP the GPU holding the hot
-experts streams and computes more (imbalance), under TP both halves are equal by construction.
+Whatever the layout, every layer ends in a collective, so each layer waits for its slowest GPU. Under
+EP that is the GPU with the most *touched* experts (bytes, what memory-bound decode waits for) or
+the most *tokens* routed to its experts (FLOPs, what prefill waits for); under TP both halves are
+equal by construction. Under DP an idle rank still runs a dummy forward pass, so both GPUs stream
+the replicated attention weights even for a single request.
 The step model here is the roofline plus stated efficiencies (**simulated**, see ``stream.SimParams``)
 and an alpha-beta link (``Link``: assumed until you fit your own with layer 02's cuda-nccl-lab).
 ``parse_bench_serve`` reads what ``vllm bench serve`` prints, so a real run replaces the prediction.

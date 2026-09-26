@@ -99,3 +99,10 @@ def test_metrics_use_vllm_names_and_move(server):
               "vllm:num_preemptions_total", "vllm:prefix_cache_hits_total"):
         assert n in names, n
     assert not any("reason" in n for n in names)          # v0.30.0 has no reasoning-specific metric
+
+
+def test_collect_builds_the_records_table_from_a_server(client):
+    from thinklab.thinking.recorded import collect
+    rows = collect(client, PROBS[:2], samples=3, budgets=(64,), budget_samples=2)
+    assert [(r["mode"], r["budget"], len(r["correct"])) for r in rows[:3]] == [("off", None, 3), ("on", None, 3), ("budget", 64, 2)]
+    assert rows[0]["reasoning_tokens"] == [0, 0, 0] and rows[1]["reasoning_tokens"][0] > 0 and rows[0]["rm_scores"] == []

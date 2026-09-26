@@ -108,6 +108,8 @@ class _Choice:
         return r, c
 
     def generated_text(self) -> str:
+        if self.parser is None:
+            return "".join(t for _, t in self.pieces) + f"{templates.IM_END}\n"
         r, c = self.split()
         think = f"<think>\n{r}\n</think>\n\n" if any(k == "start" for k, _ in self.pieces) else ""
         return f"{think}{c or ''}{templates.IM_END}\n"
@@ -326,6 +328,11 @@ class FakeServer:
             await resp.write(b"data: [DONE]\n\n")
             await resp.write_eof()
             return resp
+        except (ConnectionResetError, asyncio.CancelledError):
+            for req, _, _ in queues:               # the client went away: free its KV blocks
+                if req.state in ("waiting", "running"):
+                    self.engine.abort(req, self._v)
+            raise
         finally:
             for req, _, _ in queues:
                 self._streams.pop(req.rid, None)

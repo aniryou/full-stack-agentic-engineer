@@ -25,11 +25,11 @@
 #   *together*. This is the smallest honest version of what DeepSeek-R1-Zero saw at scale (PRIMER §5 "Thinking models").
 
 # %%
-import math, random, statistics
+import math, random
 from thinklab import env
-from thinklab.report import curve, plot, table
+from thinklab.report import plot, table
 from thinklab.rollout import aggregate as ref_aggregate, group_advantages as ref_advantages, k3 as ref_k3
-from thinklab.tinyrl.task import EOS, END_THINK, THINK, DigitSum, parse, render, reward
+from thinklab.tinyrl.task import EOS, END_THINK, THINK, DigitSum, render, reward
 from thinklab.tinyrl.curves import load_recorded, show
 
 print(env.describe())

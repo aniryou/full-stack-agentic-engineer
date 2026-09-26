@@ -12,7 +12,7 @@ on a laptop, then with llm-compressor, `vllm serve` and lm-evaluation-harness on
    look for in vLLM's log, and the command.
 2. Open [`notebooks/01_quantize_a_checkpoint.ipynb`](notebooks/01_quantize_a_checkpoint.ipynb) (T0):
    quantize the bundled model with FP8_DYNAMIC and GPTQ, write a compressed-tensors checkpoint, read it back.
-3. `python3 -m quantlab eval` — the accuracy cost of each scheme on the bundled model in ~5 seconds;
+3. `python3 -m quantlab eval` — the accuracy cost of each scheme on the bundled model in ~10 seconds;
    notebook 03 explains why round-to-nearest INT4 fails where GPTQ at the same 4.125 bits does not.
 
 ## What you get
@@ -46,7 +46,7 @@ Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 ```bash
 cd quant-lab
 python3 -m pip install -e ".[dev]"            # numpy; dev: pytest, jupyter, pyyaml
-python3 -m pytest -q                          # ~70 tests, ~10 s, offline, no GPU
+python3 -m pytest -q                          # 73 tests (one needs Terraform), ~6 s, offline, no GPU
 python3 -m quantlab plan --gpu L4             # every scheme on an L4: runs? kernel? flags?
 python3 -m quantlab compress --scheme W4A16 --algo gptq --out out/tiny-W4A16   # a compressed-tensors checkpoint
 python3 -m quantlab kv --model llama-3.1-8b-instruct --gpu L4                   # blocks and sessions per weight/KV dtype

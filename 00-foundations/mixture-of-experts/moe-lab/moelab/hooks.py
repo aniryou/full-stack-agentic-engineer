@@ -9,7 +9,8 @@ worth replicating (EPLB) or keeping on the GPU when others are offloaded. Captur
   (``MixtralTopKRouter``, ``Qwen2MoeTopKRouter``, ``Qwen3MoeTopKRouter``, ``OlmoeTopKRouter``,
   ``GptOssTopKRouter``, ``DeepseekV3TopkRouter``) return ``(logits, scores, indices)``;
   ``GraniteMoeTopKRouter`` returns ``(indices, weights, logits)``; ``Llama4Router`` returns
-  ``(scores, logits)`` with -inf-masked scores. ``output_router_logits=True`` gives only the logits.
+  ``(scores, logits)``, the scores being sigmoid(top-k logits) and 0 elsewhere.
+  ``output_router_logits=True`` gives only the logits.
 * **vLLM**: ``vllm serve ... --enable-return-routed-experts``; each chat/completion choice then
   carries ``routed_experts``, a base64 ``.npy`` of shape ``(num_tokens - 1, num_layers, top_k)``.
 * **the tiny MoE** in ``moelab.tinymoe`` (T0, torch on CPU): its router returns the HF layout.
@@ -111,6 +112,19 @@ def hot_experts(counts: np.ndarray, top: int = 4) -> list[list[tuple[int, float]
     return out
 
 
+def text_histogram(counts, width: int = 40, top: int | None = None) -> str:
+    """One line per expert, busiest first: a bar proportional to its assignments, its share, and that
+    share as a multiple of the fair 1/E."""
+    c = np.asarray(counts, float)
+    order = np.argsort(-c, kind="stable")[: top or len(c)]
+    fair = c.sum() / len(c)
+    out = []
+    for e in order:
+        bar = "#" * int(round(width * c[e] / c.max())) if c.max() else ""
+        out.append(f"expert {e:3d} {bar:<{width}s} {c[e] / c.sum():6.1%}  {c[e] / fair:4.1f}x fair")
+    return "\n".join(out)
+
+
 def js_divergence(p: np.ndarray, q: np.ndarray) -> float:
     """Jensen-Shannon divergence in bits between two distributions (0 = same, 1 = disjoint)."""
     p, q = np.asarray(p, float) / np.sum(p), np.asarray(q, float) / np.sum(q)
@@ -161,7 +175,7 @@ def indices_from_output(module, output, top_k: int | None = None):
     name = type(module).__name__
     if name.startswith("GraniteMoe"):                    # (indices, weights, logits)
         return output[0]
-    if name == "Llama4Router":                           # (scores with -inf outside top-k, logits)
+    if name == "Llama4Router":                           # (scores, zero outside the top-k; logits)
         k = top_k or getattr(module, "top_k", 1)
         return torch.topk(output[1], k, dim=-1).indices
     if isinstance(output, tuple) and len(output) == 3:   # (logits, scores, indices): HF v5 routers, tinymoe
