@@ -13,7 +13,7 @@ machinery. Learn it here first.
 ```bash
 cd agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 11 tests, ~0.1s
+python3 -m pytest -q                          # 14 tests, ~0.1s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -38,7 +38,7 @@ print(result.transcript())  # see every step the loop took
 | File | Lines | What it teaches |
 |------|-------|-----------------|
 | `agentcore/fake_llm.py` | ~110 | a tool-calling model returns *text* or *tool calls*; drive it with a script or a policy |
-| `agentcore/tools.py` | ~90 | a tool is a contract: schema from the signature, arguments validated, results structured |
+| `agentcore/tools.py` | ~130 | a tool is a contract: schema from the signature, arguments validated, results structured |
 | `agentcore/agent.py` | ~90 | the loop: call the model → run tools → append results → repeat, with a step budget and a human-approval gate |
 
 Read them in that order. There is no async, no pydantic, no framework — just the shape.
