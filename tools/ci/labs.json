@@ -259,7 +259,8 @@
    "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
    "python": "3.12",
    "install": "python -m pip install -e \".[dev,services,mistral]\"",
-   "test": "python -m pytest -q -p no:warnings"
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/run_notebooks.py solutions/05_tool_loop_and_mistral.ipynb && python scripts/run_notebooks.py notebooks/05_tool_loop_and_mistral.ipynb --expect-fail"
   },
   {
    "id": "rag-from-scratch",

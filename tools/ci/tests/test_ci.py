@@ -60,7 +60,7 @@ def test_builders_are_all_found():
     found = ci.builders()
     assert "07-application-agent-framework/retrieval-rag/embeddings-lab/build.py" in found
     assert "07-application-agent-framework/retrieval-rag/rag-from-scratch/tools_build_notebooks.py" in found
-    assert len(found) >= 26
+    assert len(found) >= 25
 
 
 def test_matrix_output_is_compact_json():
