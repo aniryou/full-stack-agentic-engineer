@@ -6,9 +6,12 @@ of multi-turn agent sessions?
     fetch beats recompute when  tier bandwidth > KV bytes per token x prefill tokens per s   (breakeven_gb_s)
     working set  = concurrent sessions x context tokens x KV bytes per token
 
-A tier is only worth its hit rate, so TieredKV keeps exclusive LRU tiers of whole-session KV (HBM -> DRAM -> disk,
-demote on evict — the shape of vLLM's OffloadingConnector, LMCache, Mooncake Store, SGLang HiCache), and
+A tier is only worth its hit rate, so TieredKV keeps LRU tiers of whole-session KV (HBM -> DRAM -> disk) and
 simulate_sessions() replays agent sessions over per-replica tiers plus an optional shared (cross-replica) tier.
+The tiers are EXCLUSIVE with demote-on-evict, a simplification: real offload paths (vLLM's OffloadingConnector,
+LMCache, Mooncake Store, SGLang HiCache) store a copy in the lower tier as KV is computed, so the tiers are
+roughly inclusive and the effective capacity is about the lower tier alone, not HBM + lower tier. With a few GB of
+HBM against tens of GB of DRAM (notebook 05) the difference is small.
 """
 from __future__ import annotations
 
@@ -46,8 +49,9 @@ def working_set_gb(sessions, context_tokens, kv_bytes_per_token) -> float:
 
 
 class TieredKV:
-    """Exclusive LRU tiers of whole-session KV. put() lands in tier 0; each eviction demotes the LRU session one
-    tier down; the last tier drops it. lookup() says where a session lives and how many tokens are stored."""
+    """Exclusive LRU tiers of whole-session KV (see the module docstring for how real offload differs). put()
+    lands in tier 0; each eviction demotes the LRU session one tier down; the last tier drops it. lookup() says
+    where a session lives and how many tokens are stored."""
 
     def __init__(self, tiers, kv_bytes_per_token):
         self.tiers, self.kvb = list(tiers), kv_bytes_per_token

@@ -164,10 +164,8 @@ def filesystem_type(path) -> str | None:
             continue
         mnt = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[4])   # \040 is a space
         inside = target == mnt or mnt == "/" or target.startswith(mnt.rstrip("/") + "/")
-        if inside and len(mnt) > best:            # later mounts over the same point win (>=)
+        if inside and len(mnt) >= best:           # deepest mount point; a later mount over it wins
             best, fstype = len(mnt), right.split()[0]
-        elif inside and len(mnt) == best:
-            fstype = right.split()[0]
     return fstype
 
 

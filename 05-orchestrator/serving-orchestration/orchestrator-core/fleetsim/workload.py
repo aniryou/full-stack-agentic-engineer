@@ -1,8 +1,9 @@
 """Workloads: when requests arrive, how big they are, and which KV blocks they could reuse.
 
-The one idea: an LLM request is not a unit of work. Its cost is set by its prompt and output lengths (a
-4,000-token RAG prompt is ~20x the prefill of a chat turn) and its *reuse* by which earlier token streams
-it shares a prefix with. So a Request carries its lengths plus the chain hashes of its full KV blocks — the
+The one idea: an LLM request is not a unit of work. Its cost is set by its prompt and output lengths (with the
+defaults below a ~4,000-token RAG prompt is ~3.4x the prefill of a 1,200-token chat turn, and ~20x the chat turn's
+uncached part once its system prompt is cached) and its *reuse* by which earlier token streams it shares a
+prefix with. So a Request carries its lengths plus the chain hashes of its full KV blocks — the
 identity vLLM's prefix cache matches on — and nothing else.
 
     arrivals(rate, duration, rng)    Poisson times; `rate` may be a list of (t_start, req/s) steps (bursts)
@@ -82,6 +83,7 @@ class Request:
     turn: int = 0
     lora: str | None = None
     think: float = 0.0               # delay before this session's next turn arrives (tool or user time)
+    priority: int = 0                # InferenceObjective priority: higher is dispatched first under flow control
     next: "Request | None" = field(default=None, repr=False)
     # written by the simulator
     t_dispatch: float | None = None
@@ -90,6 +92,7 @@ class Request:
     replica: int = -1
     cached: int = 0                  # prompt tokens served from the prefix cache at first admission
     preempted: int = 0
+    shed: bool = False               # rejected by flow control (TTL or a full queue): never served
 
     @property
     def pblocks(self) -> int:

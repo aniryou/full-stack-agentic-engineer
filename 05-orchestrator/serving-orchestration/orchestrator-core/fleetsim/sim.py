@@ -73,7 +73,7 @@ class Fleet:
         if flow_control and flow_control.max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
         self.p, self.router = profile, router or RoundRobin()
-        self.fc, self.queue = flow_control, []         # the router's own queue: (-priority, arrival, rid, request)
+        self.fc, self.queue = flow_control, []         # the router's own queue: (-priority, arrival, seq, request)
         self.prefill_router = prefill_router or LeastOutstanding()
         self.autoscaler, self.cold_start_s, self.metrics_age = autoscaler, cold_start_s, metrics_age
         self.link_gbps, self.link_latency_s, self.pd_threshold = link_gbps, link_latency_s, pd_threshold
@@ -118,7 +118,7 @@ class Fleet:
             if not decode:                             # every endpoint at its cap: wait in the router
                 if self.fc.max_queue is not None and len(self.queue) >= self.fc.max_queue:
                     return self._shed(req)
-                heapq.heappush(self.queue, (-req.priority, req.arrival, req.rid, req))
+                heapq.heappush(self.queue, (-req.priority, req.arrival, next(self._seq), req))
                 return
         self._dispatch(t, req, pool, decode)
 

@@ -6,6 +6,7 @@
     goodput = requests/s meeting BOTH the TTFT and the TPOT SLO (DistServe's definition)
     hit rate = prompt tokens served from the prefix cache / prompt tokens (vllm prefix_cache_hits / queries)
     imbalance = max / mean tokens computed per replica (1.0 = perfectly even)
+    shed = requests rejected by flow control; they count against SLO attainment
 
 Percentiles interpolate linearly between closest ranks (numpy's default). Every table is labelled simulated.
 """
@@ -32,6 +33,7 @@ def imbalance(values) -> float:
 def summarize(res, ttft_slo: float = 2.0, tpot_slo: float = 0.15) -> dict:
     """The one-line scorecard of a run (simulated)."""
     done = [r for r in res.requests if r.t_done is not None]
+    shed = sum(1 for r in res.requests if r.shed)
     ttft = [r.t_first - r.arrival for r in done]
     tpot = [r.tpot for r in done if r.output > 1]
     good = sum(1 for r in done if r.t_first - r.arrival <= ttft_slo and (r.output <= 1 or r.tpot <= tpot_slo))
@@ -44,10 +46,12 @@ def summarize(res, ttft_slo: float = 2.0, tpot_slo: float = 0.15) -> dict:
         "tpot_p50": percentile(tpot, 50), "tpot_p95": percentile(tpot, 95),
         "e2e_p50": percentile([r.t_done - r.arrival for r in done], 50),
         "goodput_rps": good / res.duration if res.duration else 0.0,
-        "slo_attainment": good / len(done) if done else 0.0,
+        "slo_attainment": good / (len(done) + shed) if done or shed else 0.0,
+        "shed": shed,
         "hit_rate": sum(r.cached for r in done) / prompt if prompt else 0.0,
         "imbalance": imbalance([r.stats["tokens"] for r in served]) if served else float("nan"),
         "preemptions": sum(r.stats["preempted"] for r in res.replicas),
+        "lora_loads": sum(r.stats["lora_loads"] for r in res.replicas),
         "gpu_hours": sum(r.died - r.born for r in res.replicas) / 3600,
         "out_tok_s": sum(r.output for r in done) / res.duration if res.duration else 0.0,
     }
