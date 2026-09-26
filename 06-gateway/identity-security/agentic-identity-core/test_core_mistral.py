@@ -1,8 +1,10 @@
 """Each test is one sentence you could say in a design review, made checkable.
 
-Offline by default. The live-shape tests drive `MistralModel` / `MistralModeration` with a fake
-client that returns the SDK's own response types, so the function-calling and moderation code
-paths are exercised without an API key. `test_live_*` runs only when MISTRAL_API_KEY is set.
+Offline by default: the five moves come from agentsec_core.py, so these tests also check that the
+import-not-copy wiring holds. The live-shape tests drive `MistralModel` / `MistralModeration` with a
+fake client that returns the SDK's own response types, so the function-calling and moderation code
+paths are exercised without an API key; they need the optional client (requirements-mistral.txt)
+and skip without it. `test_live_*` runs only when MISTRAL_API_KEY is set.
 """
 
 import os
@@ -174,7 +176,7 @@ class _FakeClient:
     """Returns real `mistralai.client.models` objects, like the API would."""
 
     def __init__(self, turns, scores):
-        from mistralai.client import models as M
+        M = pytest.importorskip("mistralai.client.models")
 
         self.M, self._turns, self._scores, self.calls = M, list(turns), scores, []
         self.chat, self.classifiers = self, self
@@ -237,3 +239,23 @@ def test_offline_screener_matches_the_moderation_contract():
     assert s.blocked("card 4111 1111 1111 1111", role="assistant") == "pii"
     assert s.blocked("please refund T-2", role="user") is None
     assert jwt.__name__ == "jwt" and isinstance(AuditLog().events, list) and isinstance(Agent, type) and PLAN
+
+
+def test_the_five_moves_are_the_cores_not_copies():
+    import agentsec_core
+    import agentsec_core_mistral as m
+
+    for name in ("Issuer", "Policy", "Rule", "ToolServer", "AuditLog", "Authority", "TokenError", "fence", "TICKETS"):
+        assert getattr(m, name) is getattr(agentsec_core, name), name
+    assert issubclass(m.AgentIdentity, agentsec_core.AgentIdentity)
+
+
+def test_live_path_without_a_key_is_a_labelled_stop(monkeypatch):
+    from agentsec_core_mistral import MistralUnavailable, mistral_client
+
+    for var in ("MISTRAL_API_KEY", "MISTRAL_API_KEY_SUPPORT_AGENT"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(MistralUnavailable, match="MISTRAL_API_KEY"):
+        mistral_client(AgentIdentity("support-agent"))
+    with pytest.raises(MistralUnavailable):
+        build_demo(live=True)

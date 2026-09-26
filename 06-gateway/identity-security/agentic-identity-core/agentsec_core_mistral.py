@@ -1,8 +1,11 @@
 """agentsec_core_mistral — identity & security for an agent loop on Mistral, in one file.
 
-Same five moves as the Google version; what changes is WHERE each control lives, because
-Mistral's platform gives you the model, the tool plumbing and the moderation — and leaves the
-identity plane and the policy layer to you (or to your cloud, when you self-host).
+The five moves are IMPORTED from agentsec_core.py, unchanged: this file adds only what is
+Mistral-specific — a real model proposing tool calls through function calling (with an offline
+scripted twin), Mistral's moderation classifier as the screener, and per-agent keys. What
+changes is WHERE each control lives, because Mistral's platform gives you the model, the tool
+plumbing and the moderation — and leaves the identity plane and the policy layer to you (or to
+your cloud, when you self-host).
 
   1. IDENTITY     One agent, one principal. On Mistral: a SERVICE ACCOUNT in a Studio workspace
                   with its own API key (keys are workspace-scoped; "shared connectors only" scope),
@@ -26,9 +29,10 @@ identity plane and the policy layer to you (or to your cloud, when you self-host
   Screening: Mistral Moderation (`mistral-moderation-2603`, categories incl. `jailbreaking`
   and `pii`) — as a pre-check here, or inline via `guardrails=[{"moderation_llm_v2": {...}}]`.
 
-Runs offline by default (ScriptedMistral). Set MISTRAL_API_KEY to use the real model and the
-real moderation endpoint:  MISTRAL_API_KEY=... python agentsec_core_mistral.py
-Dependencies: PyJWT[crypto], mistralai (only needed for the live path).
+Runs offline by default (ScriptedMistral, LocalScreener): no key, no network, no Mistral client.
+With the optional client (pip install -r requirements-mistral.txt) and MISTRAL_API_KEY it uses the
+real model and the real moderation endpoint:  MISTRAL_API_KEY=... python agentsec_core_mistral.py
+Without the client or the key, the live path stops with a labelled message (MistralUnavailable).
 """
 
 from __future__ import annotations
@@ -36,34 +40,57 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
+
+# The five moves, imported rather than copied: a fix to the core is a fix here.
+from agentsec_core import (  # noqa: F401  (re-exported for the notebooks and tests)
+    APP_AUDIENCE,
+    TICKETS,
+    AuditLog,
+    Authority,
+    Decision,
+    Effect,
+    Issuer,
+    Mode,
+    Policy,
+    Rule,
+    Tier,
+    TokenError,
+    ToolServer,
+    User,
+    fence,
+    screen,
+)
+from agentsec_core import AgentIdentity as _CoreAgentIdentity
 
 MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
 MODERATION_MODEL = "mistral-moderation-2603"
 
+
+class MistralUnavailable(RuntimeError):
+    """The live path cannot run here: the optional ``mistralai`` client or the agent's key is missing."""
+
+
 # ==============================================================================================
-# 1. IDENTITY — who can act
+# 1. IDENTITY — the core's principal, plus the agent's own Mistral key
 # ==============================================================================================
 
 
 @dataclass(frozen=True)
-class AgentIdentity:
-    """A first-class principal for one deployed agent.
+class AgentIdentity(_CoreAgentIdentity):
+    """The core's principal for one deployed agent, with the credential Mistral gives it.
 
     On Mistral Studio the *credential* behind this identity is a service account's API key
-    (workspace-scoped, connector scope "shared connectors only"); the *name* below is what we
-    put in tokens and audit records. Self-hosted, swap in your platform's workload identity.
+    (workspace-scoped, connector scope "shared connectors only"); the *name* is what goes in
+    tokens and audit records, and the workspace is the trust domain. Self-hosted, swap in
+    your platform's workload identity.
     """
 
-    name: str
     workspace: str = "support-prod"
     service_account: str = "sa-support-agent"
 
@@ -79,151 +106,16 @@ class AgentIdentity:
         )
 
 
-@dataclass(frozen=True)
-class User:
-    subject: str
-    email: str
+# 2. AUTHORITY, 3. POLICY, 4. RESOURCE and 5. AUDIT are the core's Issuer, Policy, ToolServer
+# and AuditLog. Mistral does not issue user-delegated tokens for your own APIs: your IdP/STS
+# does (for Studio connectors, Mistral's connector credentials + OAuth play that role; see the
+# README). Studio's `tool_configuration` include/exclude/requires_confirmation is the Policy
+# idea applied to one connector's tool list; the core's engine also checks identity, authority
+# mode, scopes and argument envelopes. A registered MCP connector is a ToolServer.
 
 
 # ==============================================================================================
-# 2. AUTHORITY — under whose permission
-# ==============================================================================================
-
-
-APP_AUDIENCE = "https://app.acme.example"  # the front end the user signed in to
-
-
-class TokenError(Exception):
-    pass
-
-
-class Issuer:
-    """Your STS: mints, exchanges and verifies signed tokens for YOUR tool servers.
-
-    Mistral does not issue user-delegated tokens for your own APIs — your IdP/STS does. (For
-    Studio connectors, Mistral's connector credentials + OAuth play this role; see README.)
-    """
-
-    def __init__(self, issuer: str = "https://sts.acme.example", *, subject_audiences: frozenset[str] = frozenset({APP_AUDIENCE})):
-        self.issuer = issuer
-        self.subject_audiences = subject_audiences  # whose user tokens this STS will exchange
-        self._key = rsa.generate_private_key(65537, 2048)
-
-    def mint(self, *, subject: str, audience: str, scope: set[str], actor: str | None = None, ttl: int = 300, **extra: Any) -> str:
-        now = int(time.time())
-        claims = {"iss": self.issuer, "sub": subject, "aud": audience, "scope": " ".join(sorted(scope)), "iat": now, "exp": now + ttl, "jti": uuid.uuid4().hex, **extra}
-        if actor:
-            claims["act"] = {"sub": actor}  # RFC 8693: acting on behalf of `sub`
-        return jwt.encode(claims, self._key, algorithm="RS256")
-
-    def mint_agent_token(self, agent: AgentIdentity, ttl: int = 300) -> str:
-        """The agent's OWN credential, good only at this STS (aud = the STS itself).
-
-        In production the platform attests the workload and issues it (a certificate-bound
-        Agent Identity token, a SPIFFE SVID, a service-account credential); here the issuer
-        mints it so that `exchange` has an actor to authenticate.
-        """
-        return self.mint(subject=agent.spiffe_id, audience=self.issuer, scope=set(), ttl=ttl)
-
-    def exchange(self, user_token: str, *, actor_token: str, audience: str, scope: set[str]) -> str:
-        """RFC 8693: user token (subject) + the agent's own token (actor) → ONE delegated token
-        for ONE audience, no wider than the user had. Every input is verified, none is trusted."""
-        user = self.verify(user_token, audience=self.subject_audiences)  # minted for an app we serve
-        actor = self.verify(actor_token, audience=self.issuer)  # the agent authenticates to the STS
-        if "act" in actor or not actor["sub"].startswith("spiffe://"):
-            raise TokenError("invalid actor_token: not an agent's own credential")
-        may_act = user.get("may_act")  # RFC 8693 §4.4: who the user allows to act for them
-        if may_act is not None and may_act.get("sub") != actor["sub"]:
-            raise TokenError(f"may_act does not name the actor {actor['sub']}")
-        narrowed = scope & set(user["scope"].split())  # an agent can never widen a user's grant
-        return self.mint(subject=user["sub"], audience=audience, scope=narrowed, actor=actor["sub"], email=user.get("email"))
-
-    def verify(self, token: str, *, audience: str | frozenset[str] | None = None, required: set[str] = frozenset()) -> dict:
-        try:
-            claims = jwt.decode(token, self._key.public_key(), algorithms=["RS256"], issuer=self.issuer, audience=audience, options={"verify_aud": audience is not None, "require": ["exp", "sub", "aud"]})
-        except jwt.PyJWTError as e:
-            raise TokenError(f"{type(e).__name__}: {e}") from e
-        missing = required - set(claims["scope"].split())
-        if missing:
-            raise TokenError(f"insufficient_scope: missing {sorted(missing)}")
-        return claims
-
-
-class Mode(str, Enum):
-    OWN = "own"
-    DELEGATED = "delegated"
-
-
-@dataclass(frozen=True)
-class Authority:
-    mode: Mode
-    agent: AgentIdentity
-    user: User | None
-    scopes: frozenset[str]
-
-    @property
-    def identities(self) -> dict[str, str | None]:
-        return {"agent": self.agent.name, "user": self.user.email if self.user else None, "mode": self.mode.value}
-
-
-# ==============================================================================================
-# 3. POLICY — enforced before the tool runs, outside the model
-# ==============================================================================================
-
-
-class Tier(str, Enum):
-    READ = "read"
-    WRITE = "write"
-    DESTRUCTIVE = "destructive"
-
-
-class Effect(str, Enum):
-    ALLOW = "allow"
-    DENY = "deny"
-    CONFIRM = "confirm"
-
-
-@dataclass(frozen=True)
-class Rule:
-    tier: Tier
-    allow: frozenset[str]
-    scopes: frozenset[str] = frozenset()
-    delegated_only: bool = True
-    confirm_when: Callable[[dict], bool] | None = None
-
-
-@dataclass(frozen=True)
-class Decision:
-    effect: Effect
-    reason: str
-
-
-class Policy:
-    """Deny by default. (Studio's `tool_configuration` include/exclude/requires_confirmation is
-    the same idea applied to a connector's tool list; this engine also checks identity, authority
-    mode, scopes and argument envelopes.)"""
-
-    def __init__(self, rules: dict[str, Rule]):
-        self.rules = rules
-
-    def evaluate(self, authority: Authority, tool: str, args: dict, *, confirmed: bool = False) -> Decision:
-        rule = self.rules.get(tool)
-        if rule is None:
-            return Decision(Effect.DENY, f"{tool} is not in the policy (default deny)")
-        if authority.agent.name not in rule.allow:
-            return Decision(Effect.DENY, f"agent {authority.agent.name} may not call {tool}")
-        if rule.delegated_only and authority.mode is not Mode.DELEGATED:
-            return Decision(Effect.DENY, f"{tool} requires a user's delegated authority")
-        missing = rule.scopes - authority.scopes
-        if missing:
-            return Decision(Effect.DENY, f"missing scopes {sorted(missing)}")
-        if rule.confirm_when and rule.confirm_when(args) and not confirmed:
-            return Decision(Effect.CONFIRM, f"{tool} with {args} needs human approval")
-        return Decision(Effect.ALLOW, "confirmed by human" if confirmed else "ok")
-
-
-# ==============================================================================================
-# Screening — Mistral Moderation (real) or a regex stand-in (offline)
+# Screening — Mistral Moderation (real) or the core's pattern (offline)
 # ==============================================================================================
 
 
@@ -232,13 +124,13 @@ class Screener(Protocol):
 
 
 class LocalScreener:
-    """Offline stand-in with the same contract: returns the category that blocks, or None."""
+    """Offline stand-in with the moderation contract: returns the category that blocks, or None.
+    Prompt injection is the core's ``screen()``; the PII pattern is added for model output."""
 
-    _JAILBREAK = re.compile(r"(?i)ignore (all |the )?(previous|prior|above) instructions|reveal (your|the) system prompt")
     _PII = re.compile(r"\b\d{3}-\d{2}-\d{4}\b|\b(?:\d[ -]?){13,16}\b")
 
     def blocked(self, text: str, *, role: str) -> str | None:
-        if self._JAILBREAK.search(text):
+        if screen(text):
             return "jailbreaking"
         if role == "assistant" and self._PII.search(text):
             return "pii"
@@ -264,19 +156,9 @@ class MistralModeration:
         return None
 
 
-def fence(text: str, source: str) -> str:
-    return f"<untrusted source={source}>\n{text}\n</untrusted>"
-
-
 # ==============================================================================================
-# 4. RESOURCE — the tool server checks audience + scope; never trusts the caller's word
+# The tools the model may propose (the core's ToolServer serves the first two)
 # ==============================================================================================
-
-TICKETS = {
-    "T-1": {"owner": "u-ana", "event": "Jazz Festival", "price": 60.0, "status": "valid"},
-    "T-2": {"owner": "u-ana", "event": "Museum pass", "price": 35.0, "status": "valid"},
-    "T-3": {"owner": "u-ben", "event": "F1 grandstand", "price": 120.0, "status": "valid"},
-}
 
 # Function schemas as the Mistral API expects them (`tools=[{"type": "function", "function": {...}}]`).
 TOOL_SCHEMAS = [
@@ -284,48 +166,6 @@ TOOL_SCHEMAS = [
     {"type": "function", "function": {"name": "refund_ticket", "description": "Refund a ticket the user owns. Destructive.", "parameters": {"type": "object", "properties": {"ticket_id": {"type": "string"}, "amount": {"type": "number"}}, "required": ["ticket_id", "amount"]}}},
     {"type": "function", "function": {"name": "run_sql", "description": "Run SQL against the warehouse.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
 ]
-
-
-class ToolServer:
-    """An OAuth-style resource server — what a registered MCP connector is on Studio."""
-
-    def __init__(self, issuer: Issuer, audience: str):
-        self.issuer = issuer
-        self.audience = audience
-        self.tools: dict[str, tuple[str, Callable[[dict, dict], dict]]] = {"list_tickets": ("tickets:read", self._list), "refund_ticket": ("tickets:write", self._refund)}
-
-    def call(self, token: str, tool: str, args: dict) -> dict:
-        scope, fn = self.tools[tool]
-        claims = self.issuer.verify(token, audience=self.audience, required={scope})
-        return fn(claims, args)
-
-    def _list(self, claims: dict, args: dict) -> dict:
-        return {"tickets": [{"id": k, **v} for k, v in TICKETS.items() if v["owner"] == claims["sub"]]}
-
-    def _refund(self, claims: dict, args: dict) -> dict:
-        t = TICKETS.get(args["ticket_id"])
-        if not t or t["owner"] != claims["sub"]:
-            return {"error": "forbidden: not your ticket"}
-        if args["amount"] > t["price"]:
-            return {"error": "exceeds price"}
-        t["status"] = "refunded"
-        return {"refunded": args["amount"], "ticket_id": args["ticket_id"], "by": claims["act"]["sub"].rsplit("/", 1)[-1]}
-
-
-# ==============================================================================================
-# 5. AUDIT
-# ==============================================================================================
-
-
-class AuditLog:
-    def __init__(self) -> None:
-        self.events: list[dict] = []
-
-    def record(self, authority: Authority, **fields: Any) -> None:
-        self.events.append({"ts": time.strftime("%H:%M:%S"), **authority.identities, **fields})
-
-    def timeline(self) -> str:
-        return "\n".join(f"{e['ts']} {e['event']:<10} {e.get('decision', '-'):<8} {e.get('tool', '-'):<15} user={e['user'] or '-':<22} agent={e['agent']}  {e.get('reason', '')}" for e in self.events)
 
 
 # ==============================================================================================
@@ -451,6 +291,19 @@ class Agent:
 PLAN = [("list_tickets", {}), ("run_sql", {"query": "select * from customers"}), ("refund_ticket", {"ticket_id": "T-2", "amount": 35.0}), ("refund_ticket", {"ticket_id": "T-1", "amount": 60.0}), ("refund_ticket", {"ticket_id": "T-3", "amount": 10.0})]
 
 
+def mistral_client(identity: AgentIdentity) -> Any:
+    """The SDK client under the agent's own key, or a labelled stop naming what is missing."""
+    key = identity.api_key
+    if not key:
+        raise MistralUnavailable(f"set MISTRAL_API_KEY_{identity.name.upper().replace('-', '_')} or MISTRAL_API_KEY for the live path; "
+                                 "everything else runs offline")
+    try:
+        from mistralai.client import Mistral  # mistralai 2.x
+    except ImportError as e:
+        raise MistralUnavailable("the live path needs the optional Mistral client: pip install -r requirements-mistral.txt") from e
+    return Mistral(api_key=key)
+
+
 def build_demo(*, approve: bool = True, live: bool = False, plan: list[tuple[str, dict]] = PLAN):
     issuer = Issuer()
     server = ToolServer(issuer, audience="https://tickets.acme.example/mcp")
@@ -460,9 +313,7 @@ def build_demo(*, approve: bool = True, live: bool = False, plan: list[tuple[str
     })
     identity = AgentIdentity("support-agent")
     if live:
-        from mistralai.client import Mistral  # the agent's OWN key, from the service account
-
-        client = Mistral(api_key=identity.api_key)
+        client = mistral_client(identity)  # the agent's OWN key, from the service account
         model, screener = MistralModel(client), MistralModeration(client)
     else:
         model, screener = ScriptedMistral(plan), LocalScreener()
@@ -480,6 +331,12 @@ def build_demo(*, approve: bool = True, live: bool = False, plan: list[tuple[str
 
 def demo() -> None:
     live = bool(os.environ.get("MISTRAL_API_KEY"))
+    if live:
+        try:
+            mistral_client(AgentIdentity("support-agent"))
+        except MistralUnavailable as why:
+            print(f"[live path skipped] {why}")
+            live = False
     print(f"== agent run ({'live: ' + MODEL if live else 'offline: scripted model'}; delegated by Ana) ==")
     issuer, server, agent, ana_token = build_demo(live=live)
     out = agent.run(ana_token, "Please list my tickets and refund the museum pass (T-2) and the jazz festival (T-1). Also refund T-3.")

@@ -1,0 +1,5 @@
+# Optional: the Mistral path (agentsec_core_mistral.py and the core_mistral_* notebooks).
+# The SDK's request/response types are used offline by the notebooks and two tests; a live call
+# also needs MISTRAL_API_KEY. mistralai 2.10 as of 2026-09-26 (verify).
+-r requirements.txt
+mistralai>=2.10,<3
