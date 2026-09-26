@@ -146,14 +146,15 @@ else:
 # ## Exercise 2.3 — predict a decode step before simulating it
 #
 # One decode step for `b` sequences at context `c` costs
-# `overhead + max(2 x params_per_token x b / (peak x compute_eff), (streamed_bytes + b x c x kv_bytes) / (bw x memory_eff))`.
-# Write `step_ms(p, b, c)` from a `bench.Profile`'s fields (`params_per_token`, `streamed_bytes`,
-# `kv_bytes_per_token`, `peak_flops`, `mem_bw`, `compute_eff`, `memory_eff`, `overhead_s`).
+# `overhead + max((2 x params_per_token x b + attn_flops_per_pair x b x c) / (peak x compute_eff), (streamed_bytes + b x c x kv_bytes) / (bw x memory_eff))`
+# — every decoded token goes through every linear layer and the LM head, and attends to `c` positions.
+# Write `step_ms(p, b, c)` from a `bench.Profile`'s fields (`params_per_token`, `attn_flops_per_pair`,
+# `streamed_bytes`, `kv_bytes_per_token`, `peak_flops`, `mem_bw`, `compute_eff`, `memory_eff`, `overhead_s`).
 
 # %% exercise
 def step_ms(p, b, c):
     ### BEGIN SOLUTION
-    compute = 2 * p.params_per_token * b / (p.peak_flops * p.compute_eff)
+    compute = (2 * p.params_per_token * b + p.attn_flops_per_pair * b * c) / (p.peak_flops * p.compute_eff)
     memory = (p.streamed_bytes + b * c * p.kv_bytes_per_token) / (p.mem_bw * p.memory_eff)
     return (p.overhead_s + max(compute, memory)) * 1e3
     ### END SOLUTION
@@ -162,6 +163,7 @@ def step_ms(p, b, c):
 for scheme in ("bf16", "fp8", "w4a16"):
     p = B.profile("llama-3.1-8b-instruct", "L4", scheme)
     assert abs(step_ms(p, 16, 1100) - p.step_time([1100] * 16) * 1e3) < 1e-9
+    assert abs(step_ms(p, 256, 64) - p.step_time([64] * 256) * 1e3) < 1e-9          # a compute-bound decode too
 bf, i4 = (B.profile("llama-3.1-8b-instruct", "L4", s) for s in ("bf16", "w4a16"))
 print(f"✅ batch 16 at 1,100 tokens: bf16 {step_ms(bf, 16, 1100):.1f} ms, w4a16 {step_ms(i4, 16, 1100):.1f} ms per step "
       f"({step_ms(bf, 16, 1100) / step_ms(i4, 16, 1100):.2f}x) — less than the {bf.streamed_bytes / i4.streamed_bytes:.2f}x "

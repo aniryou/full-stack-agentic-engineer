@@ -11,8 +11,8 @@ outputs do to ITL, KV capacity and cost, first on a laptop and then on a free T4
    to always thinking, and its reward and completion length rise together. Without torch it prints a
    recorded run.
 2. Open [`notebooks/01_grpo_on_a_tiny_transformer.ipynb`](notebooks/01_grpo_on_a_tiny_transformer.ipynb)
-   on your laptop for the same run explained: the verifier, group-relative advantages, and the curves your
-   machine produced.
+   on your laptop for the same run explained: the verifier, the GRPO loss you write in torch and then train
+   with, and the curves your machine produced (with a check that says whether this run learned).
 3. On any GPU (a free Colab T4 is enough), start a real thinking model with
    [`deploy/any-gpu/serve.sh`](deploy/any-gpu/serve.sh), `export THINKLAB_URL=http://127.0.0.1:8000`, and
    notebooks 02–04 measure it instead of the simulator.
@@ -28,11 +28,11 @@ function, predict a number, pick a setting) each followed by a check that prints
 
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
-| 01 | [`grpo_on_a_tiny_transformer`](notebooks/01_grpo_on_a_tiny_transformer.ipynb) | T0 with torch (T1 faster) | why a scratchpad adds serial computation; an outcome verifier; group-relative advantages exactly as TRL computes them; the reward-and-length curves of a real (tiny) GRPO run; the `grpo` / `dr_grpo` / `dapo` normalisations and their length bias; the k3 KL estimator; why `clip_frac` is 0 at `num_iterations=1` | §2, §4, §5 | ~2 h |
-| 02 | [`a_thinking_model_on_one_gpu`](notebooks/02_a_thinking_model_on_one_gpu.ipynb) | T1 (T0: bundled samples + fake server) | sizing Qwen3 on a T4 (an 8K trace is 0.94 GB of KV); `reasoning` vs `reasoning_content`; parsing R1-style output; when the answer starts in a stream; the three switches (`enable_thinking`, `thinking_token_budget`, `reasoning_effort`); the `max_tokens` trap; choosing a budget from an accuracy curve | §5, §7 | ~2 h |
-| 03 | [`test_time_compute_for_real`](notebooks/03_test_time_compute_for_real.ipynb) | T1 (T0: bundled simulated records) | unbiased pass@k; pass^k; majority vote and when it hurts; best-of-n with a verifier vs a noisy reward model; cost per correct answer; the most accurate option for a token budget | §6 | ~1.5 h |
-| 04 | [`serving_thinking_models`](notebooks/04_serving_thinking_models.ipynb) | T0 fake server + emulator / T1 real vLLM | heavy-tailed output lengths; KV × time growing as P·L + L²/2; the capacity primer's numbers with 10× outputs (≈18× the GPUs for KV); the batch the KV pool allows and the ITL it gives; budgets vs `max_model_len`; why the prefix cache stops at the last assistant header; routing by effort | §7 | ~2.5 h |
-| 05 | [`rl_rollouts_with_an_engine`](notebooks/05_rl_rollouts_with_an_engine.ipynb) | T1 (T0: the tiny model's rollouts) | the rollout as an inference workload; advantages and dynamic sampling; the train–inference log-prob mismatch and TRL's `sequence_mask` correction; DAPO's overlong penalty; straggler idle time in a synchronous rollout batch; weight-sync bytes | §4, §8 | ~2 h |
+| 01 | [`grpo_on_a_tiny_transformer`](notebooks/01_grpo_on_a_tiny_transformer.ipynb) | T0 with torch (T1 faster) | why a scratchpad adds serial computation; an outcome verifier; the reward-and-length curves of a real (tiny) GRPO run and whether it learned; the GRPO loss in torch (clip, β·k3, the `grpo` / `dr_grpo` / `dapo` aggregations), trained with; why `clip_frac` is 0 at `num_iterations=1` and binds at 2; why the logged k3 KL spikes | [§2 Policy gradients over token sequences](../PRIMER.md#2-policy-gradients-over-token-sequences); [§4 RL with verifiable rewards and GRPO](../PRIMER.md#4-rl-with-verifiable-rewards-and-grpo); [§5 Thinking models](../PRIMER.md#5-thinking-models) | ~2 h |
+| 02 | [`a_thinking_model_on_one_gpu`](notebooks/02_a_thinking_model_on_one_gpu.ipynb) | T1 (T0: bundled samples + fake server) | sizing Qwen3 on a T4 (an 8K trace is 0.94 GB of KV); `reasoning` vs `reasoning_content`; parsing R1-style output; when the answer starts in a stream; the three switches (`enable_thinking`, `thinking_token_budget`, `reasoning_effort`); the `max_tokens` trap; choosing a budget from an accuracy curve | [§5 Thinking models](../PRIMER.md#5-thinking-models); [§7 What thinking does to serving](../PRIMER.md#7-what-thinking-does-to-serving) | ~2 h |
+| 03 | [`test_time_compute_for_real`](notebooks/03_test_time_compute_for_real.ipynb) | T1 (T0: bundled simulated records) | pass@k from recorded samples and how much the plug-in shortcut understates it; pass^k against the independence shortcut; majority vote and when it hurts; best-of-n with a verifier vs a noisy reward model; cost per correct answer; the most accurate option for a token budget | [§6 Test-time compute](../PRIMER.md#6-test-time-compute) | ~1.5 h |
+| 04 | [`serving_thinking_models`](notebooks/04_serving_thinking_models.ipynb) | T0 fake server + emulator / T1 real vLLM | heavy-tailed output lengths; KV × time from measured lengths, and how much of it the tail holds; the capacity primer's numbers with 10× outputs (≈18× the GPUs for KV); the batch the KV pool allows and the ITL it gives; budgets vs `max_model_len`; why the prefix cache stops at the last assistant header; routing by effort | [§7 What thinking does to serving](../PRIMER.md#7-what-thinking-does-to-serving) | ~2.5 h |
+| 05 | [`rl_rollouts_with_an_engine`](notebooks/05_rl_rollouts_with_an_engine.ipynb) | T1 (T0: the tiny model's rollouts) | the rollout as an inference workload; advantages and dynamic sampling; the train–inference log-prob mismatch and TRL's `sequence_mask` correction; choosing a generation cap under DAPO's overlong penalty; straggler idle time in a synchronous rollout batch; weight-sync bytes | [§4 RL with verifiable rewards and GRPO](../PRIMER.md#4-rl-with-verifiable-rewards-and-grpo); [§8 The RL training stack in brief](../PRIMER.md#8-the-rl-training-stack-in-brief) | ~2 h |
 
 | Tier | Where | What runs | In this lab |
 |---|---|---|---|
@@ -47,7 +47,7 @@ function, predict a number, pick a setting) each followed by a check that prints
 cd thinking-lab
 python3 -m pip install -e ".[dev]"             # aiohttp; dev: pytest, jupyter, pyyaml, matplotlib
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu   # optional: notebooks 01/05 train for real
-python3 -m pytest -q                           # 87 tests, ~10 s, offline, no GPU
+python3 -m pytest -q                           # 91 tests, offline, no GPU: ~50 s with torch (one full GRPO run; -m 'not slow' skips it), ~10 s without
 python3 -m thinklab tinyrl                     # SFT + GRPO on the tiny transformer (~1 min on a CPU)
 python3 -m thinklab fake --port 8000 &         # a fake vLLM serving a simulated Qwen3-0.6B on a T4
 THINKLAB_URL=http://127.0.0.1:8000 python3 -m thinklab ask "What is 47 * 23 - 318?"
@@ -67,7 +67,7 @@ installed.
 
 | Module | Lines | The idea |
 |---|---:|---|
-| `tinyrl/` | ~540 | the scratchpad task and its verifier (pure Python); a tiny decoder-only transformer mirroring `00-foundations/transformers/lessons/03_tiny_gpt.py`; SFT warm-up then GRPO with TRL's names and defaults; rollouts from a bf16 "engine" copy re-scored by an fp32 "trainer" copy; a recorded run for machines without torch |
+| `tinyrl/` | ~540 | the scratchpad task and its verifier (pure Python); a tiny decoder-only transformer mirroring `00-foundations/transformers/lessons/03_tiny_gpt.py`; SFT warm-up then GRPO with TRL's names and defaults, a pluggable loss and `grpo_from` for experiments from one SFT model; rollouts from a bf16 "engine" copy re-scored by an fp32 "trainer" copy; a recorded run for machines without torch |
 | `thinking/` | ~680 | an OpenAI-compatible client that reads `reasoning` *and* `reasoning_content` and times the answer's start; request bodies for the thinking switch, budgets and effort; budget strategies (truncate, native, Qwen's two-call recipe); pass@k, pass^k, majority vote, best-of-n, cost per correct answer; a generated eval set of verifiable problems; recorded simulated outcomes |
 | `parsers.py` | ~180 | vLLM's `deepseek_r1` and `qwen3` semantics, gpt-oss Harmony channels, a streaming splitter that holds back split tags, answer extraction |
 | `templates.py` | ~110 | Qwen3's history rendering (reasoning dropped before the last user message) and the cached-prefix arithmetic that follows |

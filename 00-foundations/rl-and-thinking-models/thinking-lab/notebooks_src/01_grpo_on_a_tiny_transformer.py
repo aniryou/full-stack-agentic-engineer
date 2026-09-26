@@ -2,9 +2,9 @@
 # # 01 · GRPO on a tiny transformer: a model discovers that thinking pays
 #
 # **Tier:** T0 with torch on a laptop CPU (the training run takes about a minute; this notebook was
-# checked on a shared 4-core container at ~40 s for the run and ~1.5 min in all). T1 (any GPU) runs the
-# same code faster, which this model does not need. Without torch the notebook still runs: the
-# training cells show a recorded run, labelled illustrative, and the torch exercises say they were skipped.
+# checked on a shared 4-core container: ~40 s for the run, under a minute in all). T1 (any GPU) runs
+# the same code faster, which this model does not need. Without torch the notebook still runs: the
+# training cells show a recorded run, labelled illustrative, and the torch checks say they were skipped.
 #
 # ## The one-minute version
 #
@@ -29,11 +29,10 @@
 #   KL curve that explains its spikes.
 
 # %%
-import math, random
+import math, random, statistics
+from dataclasses import replace
 from thinklab import env
 from thinklab.report import plot, table
-import statistics
-from dataclasses import replace
 from thinklab.rollout import k3
 from thinklab.tinyrl.task import EOS, END_THINK, THINK, DigitSum, render, reward
 from thinklab.tinyrl.curves import load_recorded, show

@@ -8,7 +8,7 @@ choose between thinking longer and sampling more, and size and operate a serving
 
 1. Read [PRIMER.md](PRIMER.md): "The one-minute version", then §1 From pretraining to post-training and §2 Policy
    gradients over token sequences (40 min).
-2. `cd rl-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 54 tests in about 30 s; then
+2. `cd rl-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 57 tests in about 30 s; then
    open [`01_policy_gradients_on_a_toy_task`](rl-core/notebooks/01_policy_gradients_on_a_toy_task.ipynb) and watch
    RL exploit a buggy verifier.
 3. With any GPU (a free Colab T4 is enough), serve a real thinking model and switch its thinking on and off:
@@ -46,12 +46,12 @@ design-review section covers the whole topic.
 ```bash
 cd rl-core
 python3 -m pip install -r requirements.txt     # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 54 tests, ~30 s
+python3 -m pytest -q                           # 57 tests, ~30 s
 python3 -m jupyterlab notebooks                # the exercises; finished versions are in solutions/
 
 cd ../thinking-lab
 python3 -m pip install -e ".[dev]"
-python3 -m pytest -q                           # offline; torch paths are skipped without torch
+python3 -m pytest -q                           # offline; ~50 s with torch (a full GRPO run), ~10 s without
 python3 -m jupyterlab notebooks
 ```
 

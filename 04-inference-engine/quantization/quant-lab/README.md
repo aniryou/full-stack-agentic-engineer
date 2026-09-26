@@ -47,7 +47,7 @@ Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 ```bash
 cd quant-lab
 python3 -m pip install -e ".[dev]"            # numpy; dev: pytest, jupyter, pyyaml
-python3 -m pytest -q                          # 80 tests (one needs Terraform), ~6 s, offline, no GPU
+python3 -m pytest -q                          # 86 tests (one needs Terraform), ~11 s, offline, no GPU
 python3 -m quantlab plan --gpu L4             # every scheme on an L4: runs? kernel? flags?
 python3 -m quantlab compress --scheme W4A16 --algo gptq --out out/tiny-W4A16   # a compressed-tensors checkpoint
 python3 -m quantlab kv --model llama-3.1-8b-instruct --gpu L4                   # blocks and sessions per weight/KV dtype
@@ -64,7 +64,7 @@ and the notebooks measure the real server (`QUANTLAB_RUN_T1=1` lets notebooks 01
 llm-compressor and lm-eval themselves; `QUANTLAB_VLLM_LOG=vllm.log` lets notebook 04 read a real startup
 log back).
 
-## The library (`quantlab/`, ~3,100 lines)
+## The library (`quantlab/`, ~3,200 lines)
 
 | Module | The idea |
 |---|---|

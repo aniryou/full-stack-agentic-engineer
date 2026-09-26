@@ -3,9 +3,10 @@
 One idea: a scheme changes two numbers — the bytes a step must read and the FLOP/s its GEMMs run
 at — and everything a user feels follows from where each step sits on the roofline. One decode
 step reads (nearly) all the weights plus every running sequence's KV; one prefill chunk does
-``2 x linear params x tokens`` FLOPs (plus attention, plus the LM head once per sequence it samples). So weight-only INT4 cuts decode time (bytes) but not prefill time
-(it still multiplies in 16-bit, and the dequantization is not free), FP8 W8A8 halves both on GPUs
-with FP8 tensor cores, and FP8 KV cuts the per-sequence part of every decode step:
+``2 x linear params x tokens`` FLOPs (plus attention, plus the LM head once per sequence it
+samples). So weight-only INT4 cuts decode time (bytes) but not prefill time (it still multiplies
+in 16-bit, and the dequantization is not free), FP8 W8A8 halves both on GPUs with FP8 tensor
+cores, and FP8 KV cuts the per-sequence part of every decode step:
 
     step_time = overhead + max(FLOPs / (peak x compute_eff), bytes / (bandwidth x memory_eff))
 

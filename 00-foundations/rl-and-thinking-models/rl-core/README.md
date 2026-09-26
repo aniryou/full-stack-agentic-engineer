@@ -10,7 +10,7 @@ for the network so every expectation can also be computed exactly.
 
 1. Read [`../PRIMER.md`](../PRIMER.md): "The one-minute version", then §1 From pretraining to post-training and
    §2 Policy gradients over token sequences.
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 54 tests in about 30 s, including "DPO
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 57 tests in about 30 s, including "DPO
    lands on the closed-form optimum π_ref·exp(r/β)" and "the capacity primer's bank example, number for number".
 3. Open [`notebooks/01_policy_gradients_on_a_toy_task.ipynb`](notebooks/01_policy_gradients_on_a_toy_task.ipynb)
    and watch RL find a verifier's bug.
@@ -37,7 +37,7 @@ the primer.
 ```bash
 cd rl-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 54 tests, ~30 s
+python3 -m pytest -q                           # 57 tests, ~30 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -64,17 +64,19 @@ Read the modules in this order; each opens with a docstring stating the one idea
 | [`rlcore/policy.py`](rlcore/policy.py) | ~85 | a policy as a table of softmaxes: seeded token-by-token sampling, per-token log-probabilities, the closed-form gradient `onehot − π`, explicit reference/old-policy copies, exact sequence probabilities |
 | [`rlcore/pg.py`](rlcore/pg.py) | ~105 | REINFORCE; baselines (none, mean, leave-one-out) and gradient variance; the KL penalty as reward shaping; an entropy bonus; SFT; exact expectations and KL by enumeration; the KL-regularised optimum π_ref·exp(R/β)/Z |
 | [`rlcore/pref.py`](rlcore/pref.py) | ~140 | Bradley–Terry fitting; the DPO loss, its gradient and TRL's metric names; IPO; the implicit reward; GAE; a response catalogue and a length-biased annotator |
-| [`rlcore/grpo.py`](rlcore/grpo.py) | ~180 | TRL's group advantages (Bessel, +1e-4), k1 and k3, the clipped surrogate and its gradient mask, the three loss normalisers, DAPO's soft overlong penalty, `GRPOConfig` with TRL's field names, a GRPO step with μ iterations, KL, masking and dynamic sampling, and the averaged update used to measure the length bias |
+| [`rlcore/grpo.py`](rlcore/grpo.py) | ~180 | TRL's group advantages (Bessel, +1e-4), k1 and k3, the clipped surrogate and its gradient mask, the three loss normalisers, DAPO's soft overlong penalty, `GRPOConfig` with TRL's field names, a GRPO step with μ iterations, KL, masking and dynamic sampling (its gradient in `surrogate_grad`), and the averaged update used to measure the length bias |
 | [`rlcore/ttc.py`](rlcore/ttc.py) | ~110 | the unbiased pass@k (HumanEval's product form), pass^k, the biased plug-in and its exact expectation; exact majority vote; best-of-n with a noisy scorer; a question population with two kinds of difficulty; budget allocation |
 | [`rlcore/workload.py`](rlcore/workload.py) | ~225 | the capacity primer's formulas restated (weights, KV per token and session, TTFT, request lifetime, sessions per GPU, decode and prefill throughput); a roofline decode step; batches capped by HBM and ITL; `plan()` (every token at the SLO's TPOT, as the capacity primer does) and `plan_steady()` (at the step the fleet runs at); KV-token-steps; lognormal lengths; `max_tokens` vs budget forcing; prefix reuse across turns; API cost, cost per correct answer; the time split of one synchronous RL step |
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (54, offline, ~30 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (57, offline, ~30 s). The ones that carry the correctness claims:
 
 - **The gradients are right.** `grad_logprob` matches finite differences; the mean of 400 REINFORCE estimates
   correlates above 0.95 with the exact gradient of P(correct) computed by enumeration; DPO's step matches finite
-  differences of its loss (`test_tasks_policy.py`, `test_pg.py`, `test_pref.py`).
+  differences of its loss; GRPO's hand-derived gradient (clipped surrogate plus β·k3, every `loss_type`, with the
+  clip binding) matches finite differences of the objective (`test_tasks_policy.py`, `test_pg.py`, `test_pref.py`,
+  `test_grpo.py`).
 - **The closed forms hold.** `kl_optimal` beats other policies on E[R] − β·KL and its KL equals E[R]/β − log Z;
   DPO on 4,096 Bradley–Terry pairs lands within 0.02 nats of π* and its implicit reward recovers the true gap of 3
   within 0.15 (`test_pg.py`, `test_pref.py`).
@@ -86,6 +88,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 - **Formulas pinned to hand-computed and reference values:** TRL's advantages (±0.865875; 1.4997/−0.4999), k3 at
   ±0.1 and 0.5, the clip's gradient mask, the three normalisers, DAPO's overlong penalty (0, −0.5, −1.0, −1), the
   DPO loss 0.598139, GAE, the unbiased pass@k (0.916667, 0.728022, 0.914746) and pass^k, exact majority votes
+  (a dominant misconception makes every extra vote cost accuracy; a narrow one only past ~130 votes)
   (`test_grpo.py`, `test_pref.py`, `test_ttc.py`).
 - **Existing repo numbers reproduced.** The capacity primer's bank example — 12.07 s, 100.6 live, 95.3 and 381.3
   sessions per GPU, 9,156 and 20,615 tokens/s — both as constants and against `capacity.py` function by function,

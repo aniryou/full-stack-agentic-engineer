@@ -10,7 +10,7 @@ checkpoint.
 1. Read [PRIMER.md](PRIMER.md): "The one-minute version", then §1 *Why quantize, and what it can and cannot speed
    up* (15 min). It deepens [serving-engine PRIMER §8](../serving-engine/PRIMER.md#8-quantization); read that
    first if you have not.
-2. `cd quant-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 71 tests in about 5 s;
+2. `cd quant-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 78 tests in about 7 s;
    then open [`01_number_formats_and_error`](quant-core/notebooks/01_number_formats_and_error.ipynb).
 3. The fastest win, under a second on a laptop:
    `cd quant-core && python3 -c "from quantcore import cost; print(cost.supported(cost.GPUS['A100-80GB'], 'w8a8-fp8'))"`
@@ -49,7 +49,7 @@ design-review section covers the whole topic.
 ```bash
 cd quant-core
 python3 -m pip install -r requirements.txt     # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 71 tests, ~5 s
+python3 -m pytest -q                           # 78 tests, ~7 s
 python3 -m jupyterlab notebooks                # the exercises; finished versions are in solutions/
 
 cd ../quant-lab
