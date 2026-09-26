@@ -11,7 +11,10 @@ in the cache). Each step hands out a token budget, max_num_batched_tokens:
   2. WAITING requests in FCFS order - only if nobody was preempted this step - while budget,
      max_num_seqs and free blocks allow. A prefix-cache hit starts a request part-way computed.
 A request samples a token only in the step where its computed tokens reach the end of its
-sequence; a prefill chunk that stops short samples nothing.
+sequence; a prefill chunk that stops short samples nothing. Full blocks are published to the prefix
+cache at scheduling time: running requests' once the running pass is final (a request preempted
+later in that pass never publishes blocks it will not compute), each admitted request's right after
+its admission - so the next waiting request can hit them in the same step, as in vLLM.
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ class Status(str, Enum):
     RUNNING = "running"
     PREEMPTED = "preempted"
     FINISHED_STOPPED = "finished_stopped"        # EOS, a stop token or a stop string
-    FINISHED_LENGTH = "finished_length"          # max_tokens or max_model_len
+    FINISHED_LENGTH_CAPPED = "finished_length_capped"   # max_tokens or max_model_len
     FINISHED_ABORTED = "finished_aborted"
 
     @property
@@ -142,6 +145,8 @@ class Scheduler:
             scheduled.append((req, n))
             budget -= n
             i += 1
+        for req, n in scheduled:                            # final now: publish the blocks this step fills
+            kv.cache_blocks(req.request_id, req.token_ids, req.num_computed_tokens + n, req.cache_extra)
         # 2) waiting requests, FCFS, only if memory was not just short
         while not preempted and self.waiting and budget > 0 and len(self.running) < cfg.max_num_seqs:
             req = self.waiting[0]
@@ -153,8 +158,10 @@ class Scheduler:
             n = min(n, budget)
             if kv.allocate_slots(req.request_id, req.token_ids, num_cached, n, hits,
                                  reserve=cfg.watermark_blocks if self.running else 0,
-                                 admit_whole_prompt=cfg.admit_whole_prompt) is None:
+                                 admit_whole_prompt=cfg.admit_whole_prompt,
+                                 preempted=req.num_preemptions > 0) is None:
                 break                                       # head-of-line waits for memory
+            kv.cache_blocks(req.request_id, req.token_ids, num_cached + n, req.cache_extra)   # hittable now
             self.waiting.popleft()
             req.num_computed_tokens = num_cached
             if req.num_preemptions == 0:
@@ -175,12 +182,11 @@ class Scheduler:
         self.waiting.appendleft(req)
 
     def update(self, out: SchedulerOutput, sampled: dict) -> list[Request]:
-        """After the forward pass: advance computed tokens, publish full blocks, append sampled
-        tokens, finish requests that hit a stop condition. Returns the requests that finished."""
+        """After the forward pass: advance computed tokens, append sampled tokens, finish requests
+        that hit a stop condition. Returns the requests that finished."""
         finished = []
         for req, n in out.scheduled:
             req.num_computed_tokens += n
-            self.kv.cache_blocks(req.request_id, req.token_ids, req.num_computed_tokens, req.cache_extra)
             if req.request_id not in sampled:
                 continue                                    # a prefill chunk that stopped short
             tok = sampled[req.request_id]
@@ -196,7 +202,7 @@ class Scheduler:
         if (tok == req.eos_token_id and not p.ignore_eos) or tok in p.stop_token_ids:
             return Status.FINISHED_STOPPED
         if len(req.output_token_ids) >= p.max_tokens or req.num_tokens >= self.cfg.max_model_len:
-            return Status.FINISHED_LENGTH
+            return Status.FINISHED_LENGTH_CAPPED
         return None
 
     def finish(self, req: Request, status: Status):

@@ -11,7 +11,7 @@ def test_batched_paged_engine_matches_dense_greedy():
     eng = Engine(MODEL, num_blocks=64, block_size=4, max_num_batched_tokens=16, max_num_seqs=2)
     outs = eng.generate(PROMPTS, SamplingParams(max_tokens=12, temperature=0))
     assert [o.token_ids for o in outs] == [MODEL.generate_dense(encode(p), 12) for p in PROMPTS]
-    assert all(o.finish_reason == "finished_length" for o in outs)
+    assert all(o.finish_reason == "finished_length_capped" for o in outs)
     assert eng.kv.num_free_blocks == 64
 
 

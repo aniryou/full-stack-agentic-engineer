@@ -7,21 +7,27 @@ combined by a *weighted sum*:
     total(e) = sum_s weight_s * clamp(score_s(e), 0, 1)  --picker--> endpoint
 
 Every class here mirrors an llm-d-router plugin of the same `TYPE` and parameter names
-(Sep 2026, v0.10), so a config that only uses these plugins can be pasted into the real EPP.
-Semantics worth knowing by heart (all pinned in tests/test_plugins.py):
+(llm-d-router v0.10.0, the release the deploy/ paths pin), so a config that only uses these
+plugins can be pasted into the real EPP. Semantics worth knowing by heart (pinned in
+tests/test_plugins.py):
 
 * `prefix-cache-scorer`      w*min(1, matched_tokens/scale)^2 + (1-w)*match_blocks/total_blocks
-* `queue-scorer`             (maxQ - q)/(maxQ - minQ); all equal -> 1.0; unscraped endpoints unscored
-* `kv-cache-utilization-scorer`  1 - kv_usage; unscraped endpoints unscored
+* `queue-scorer`             (maxQ - q)/(maxQ - minQ); all equal -> 1.0. Reads the endpoint's current
+                             metrics with no freshness check, as upstream does: a never-scraped
+                             endpoint has all-zero metrics, so it looks *idle* and scores the maximum
+* `kv-cache-utilization-scorer`  1 - kv_usage (never scraped -> 1.0, same reason)
 * `running-requests-size-scorer` like queue-scorer on running requests
 * `active-request-scorer`    <= idleThreshold -> 1.0 else (max - n)/max * maxBusyScore  (router-local counts)
-* `token-load-scorer`        1 - min(1, inflight_uncached_tokens / queueThresholdTokens)
+* `token-load-scorer`        1 - min(1, (inflight_uncached_tokens + this request's uncached tokens on
+                             the endpoint) / queueThresholdTokens) -- prefix-aware: the same request
+                             costs fewer tokens where more of its prefix is cached
 * `lora-affinity-scorer`     1.0 adapter active | 0.8 room for one more | 0.6 adapter waiting | 0.0
-* `max-score-picker`         highest total; a tie tier is rotated by a per-request counter. Here the
-                             candidates are name-sorted first, so with *no* scorers the lab router is
-                             exact round-robin. Upstream rotates the same way, but its candidate list
-                             comes from a Go map (random order), so in the real EPP ties land
-                             effectively at random — even on average, not strictly alternating.
+* `max-score-picker`         highest total. Ties, lab: the candidates are name-sorted and each tie
+                             tier is rotated by a per-request counter, so with *no* scorers the lab
+                             router is exact round-robin (a deliberate lab choice). Ties, llm-d-router
+                             v0.10.0: the candidates are shuffled at random and then stable-sorted by
+                             score, so ties are broken uniformly at random (main, after v0.10.0,
+                             rotates a per-request counter over a map-ordered list instead).
 """
 from __future__ import annotations
 
@@ -32,7 +38,7 @@ from dataclasses import dataclass, field
 from .prefix import (DEFAULT_LRU_CAPACITY_PER_SERVER, DEFAULT_MAX_PREFIX_BLOCKS, DEFAULT_MAX_PREFIX_TOKENS,
                      PrefixIndex, PrefixMatch, block_hashes, effective_block_size, max_blocks_for)
 
-__all__ = ["RequestCtx", "InFlightLoad", "Plugin", "REGISTRY", "make_plugin", "clamp"]
+__all__ = ["RequestCtx", "InFlightLoad", "Plugin", "REGISTRY", "make_plugin", "clamp", "uncached_input_tokens"]
 
 
 def clamp(x: float) -> float:
@@ -55,8 +61,21 @@ class RequestCtx:
 
 @dataclass(frozen=True)
 class InFlightLoad:
-    requests: int
-    tokens: int
+    """What `inflight-load-producer` writes per endpoint for one request."""
+    requests: int                 # requests the router has in flight there
+    tokens: int                   # their uncached prompt tokens not yet prefilled
+    request_tokens: int = 0       # THIS request's uncached prompt tokens if it went there
+
+
+def uncached_input_tokens(pm, n_tokens: int) -> int:
+    """Prompt tokens an endpoint must still compute for this request (upstream
+    `uncachedInputTokens`): (total_blocks - match_blocks) x block_size for the indexed part --
+    a partial last block counts as a whole block -- plus any tail beyond the index cap.
+    Without prefix information: every token."""
+    if pm is None or pm.block_size <= 0:
+        return max(0, n_tokens)
+    indexed = pm.total_blocks * pm.block_size
+    return max(0, indexed - pm.match_blocks * pm.block_size) + max(0, n_tokens - indexed)
 
 
 class Plugin:
@@ -136,18 +155,23 @@ class ApproxPrefixCacheProducer(Producer):
 
 class InFlightLoadProducer(Producer):
     """Router-local load: requests (released at completion) and *uncached* prompt tokens
-    (released at the first streamed chunk, when prefill is over)."""
+    (released at the first streamed chunk, when prefill is over). For every candidate it also
+    records what THIS request would add there (its uncached tokens on that endpoint), which
+    `token-load-scorer` adds to the backlog, as upstream does."""
     TYPE = "inflight-load-producer"
     PARAMS = {"prefixMatchInfoProducerName": None}
 
+    def _prefix(self, ctx, ep):
+        pname = self.params["prefixMatchInfoProducerName"] or ApproxPrefixCacheProducer.TYPE
+        return ctx.data.get(pname, {}).get(ep.name)
+
     def produce(self, ctx, endpoints):
-        ctx.data[self.name] = {e.name: InFlightLoad(e.inflight_requests, e.inflight_tokens) for e in endpoints}
+        ctx.data[self.name] = {e.name: InFlightLoad(e.inflight_requests, e.inflight_tokens,
+                                                    uncached_input_tokens(self._prefix(ctx, e), len(ctx.tokens)))
+                               for e in endpoints}
 
     def pre_request(self, ctx, ep):
-        pname = self.params["prefixMatchInfoProducerName"] or ApproxPrefixCacheProducer.TYPE
-        pm = ctx.data.get(pname, {}).get(ep.name)
-        cached = min(pm.matched_tokens, len(ctx.tokens)) if pm else 0
-        uncached = max(0, len(ctx.tokens) - cached)
+        uncached = uncached_input_tokens(self._prefix(ctx, ep), len(ctx.tokens))
         ctx.state[self.name] = uncached
         ep.inflight_tokens += uncached
 
@@ -302,24 +326,26 @@ def _minmax_scores(values: dict) -> dict:
 
 
 class QueueScorer(Scorer):
+    """Min-max over every candidate's current `waiting` (no freshness check, as upstream: an
+    endpoint that has never been scraped reports 0 and looks idle)."""
     TYPE = "queue-scorer"
 
     def score(self, ctx, endpoints):
-        return _minmax_scores({e.name: e.metrics.waiting for e in endpoints if e.metrics.fresh})
+        return _minmax_scores({e.name: e.metrics.waiting for e in endpoints})
 
 
 class RunningRequestsSizeScorer(Scorer):
     TYPE = "running-requests-size-scorer"
 
     def score(self, ctx, endpoints):
-        return _minmax_scores({e.name: e.metrics.running for e in endpoints if e.metrics.fresh})
+        return _minmax_scores({e.name: e.metrics.running for e in endpoints})
 
 
 class KVCacheUtilizationScorer(Scorer):
     TYPE = "kv-cache-utilization-scorer"
 
     def score(self, ctx, endpoints):
-        return {e.name: 1.0 - e.metrics.kv_usage for e in endpoints if e.metrics.fresh}
+        return {e.name: 1.0 - e.metrics.kv_usage for e in endpoints}
 
 
 class ActiveRequestScorer(Scorer):
@@ -345,7 +371,11 @@ class TokenLoadScorer(Scorer):
 
     def score(self, ctx, endpoints):
         t = self.params["queueThresholdTokens"]
-        return {e.name: 1.0 - min(1.0, (_inflight(ctx, e) or InFlightLoad(0, 0)).tokens / t) for e in endpoints}
+        out = {}
+        for e in endpoints:
+            load = _inflight(ctx, e) or InFlightLoad(0, 0)
+            out[e.name] = 1.0 - min(1.0, (load.tokens + load.request_tokens) / t)
+        return out
 
 
 class LoraAffinityScorer(Scorer):
@@ -382,7 +412,9 @@ class Picker(Plugin):
 
 class MaxScorePicker(Picker):
     """Sort by score (desc, then name — the lab's deterministic base order) and rotate each tie
-    tier by a per-request counter (upstream: same rotation over a map-ordered, i.e. random, list)."""
+    tier by a per-request counter, so equal totals take turns (no scorers = exact round-robin).
+    llm-d-router v0.10.0 instead shuffles the candidates at random before a stable sort by score:
+    its ties are broken uniformly at random."""
     TYPE = "max-score-picker"
 
     def validate(self):
