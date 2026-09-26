@@ -66,9 +66,16 @@ IMAGE_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
 NOTEBOOK_DIRS = {"notebooks": "Notebooks", "exercises": "Exercises", "practice": "Practice",
                  "lessons": "Lessons"}
 # Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
-# name like 01_x_solution(s), 01_x_solved, 01_x_worked, 01_worked. Kept identical to tools/gen_colab_index.py.
+# name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
+# is an answer key only when an exercise twin sits beside it: 01_x_worked next to 01_x_practice (or 01_x), or the
+# same number next to a *_practice/*_exercise notebook. Without a twin it is a worked lesson (kv-cache's
+# 01_kv_cache_worked comes before 02_kv_cache_practice) and stays an ordinary notebook.
+# Kept identical to tools/gen_colab_index.py.
+ROOT = REPO
 SOLUTION_DIRS = {"solutions", "worked"}
-SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved|worked)(?:$|[_\-.])", re.I)
+SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved)(?:$|[_\-.])", re.I)
+WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
+EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
 # Folders that are plumbing, not lessons: their Markdown still becomes pages (the lab READMEs link them), but they
 # are left out of the navigation and listed under `not_in_nav:` in mkdocs.yml.
 PLUMBING_DIRS = ("client", "deploy", "fixtures", "infra", "notebooks_src")
@@ -97,12 +104,52 @@ pages: dict[str, str] = {}       # repo path (posix) -> site path of a Markdown 
 notebooks: dict[str, str] = {}   # repo path -> site path of a notebook page
 images: dict[str, str] = {}      # repo path -> site path of a copied image
 
+def _stem(path: str) -> str:
+    return path.replace(os.sep, "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
-def is_solution(repo_path: str) -> bool:
-    """True for a notebook with the answers in it (see SOLUTION_DIRS / SOLUTION_STEM)."""
-    parts = repo_path.split("/")
+
+def _folder(path: str) -> str:
+    path = path.replace(os.sep, "/")
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def _base(stem: str, token: re.Pattern) -> str:
+    """The stem with a worked/practice token taken out: 01_kv_cache_worked -> 01_kv_cache."""
+    return re.sub(r"^[_\-.]+|[_\-.]+$", "", token.sub("_", stem))
+
+
+def _number(stem: str) -> str | None:
+    m = re.match(r"^\d+", stem)
+    return m.group(0) if m else None
+
+
+def has_exercise_twin(path: str, siblings=None) -> bool:
+    """True when a `*_worked` notebook has an exercise version in the same folder (see the rule above).
+    `siblings` is any iterable of notebook paths; by default the folder is listed on disk."""
+    folder = _folder(path)
+    if siblings is None:
+        d = ROOT / folder
+        siblings = [f"{folder}/{n}" for n in os.listdir(d) if n.endswith(".ipynb")] if d.is_dir() else []
+    base = _base(_stem(path), WORKED_STEM)
+    for other in siblings:
+        s = _stem(other)
+        if _folder(other) != folder or SOLUTION_STEM.search(s) or WORKED_STEM.search(s):
+            continue
+        exercise = bool(EXERCISE_STEM.search(s))
+        if s == base or (exercise and _base(s, EXERCISE_STEM) == base):
+            return True
+        if exercise and _number(base) and _number(s) == _number(base):
+            return True
+    return False
+
+
+def is_solution(path: str, siblings=None) -> bool:
+    """True for a notebook with the answers in it (see the rule above SOLUTION_DIRS)."""
+    parts = path.replace(os.sep, "/").split("/")
     stem = parts[-1].rsplit(".", 1)[0]
-    return bool(SOLUTION_DIRS & set(parts[:-1])) or bool(SOLUTION_STEM.search(stem))
+    if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
+        return True
+    return bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
 
 
 def is_plumbing(repo_path: str) -> bool:
@@ -721,8 +768,8 @@ def nav_for_dir(repo_dir: str) -> list:
     items += leaves([(md_title(rp), pages[rp], rp) for rp in here_md])
     here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)
     in_solutions_dir = posixpath.basename(repo_dir) in SOLUTION_DIRS
-    blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp)]
-    sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp)]
+    blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp, here_nb)]
+    sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp, here_nb)]
     subdirs = sorted({rp[len(repo_dir) + 1:].split("/")[0] for rp in list(pages) + list(notebooks)
                       if rp.startswith(repo_dir + "/") and "/" in rp[len(repo_dir) + 1:]}, key=dir_rank)
     subdirs = [d for d in subdirs if d not in PLUMBING_DIRS]
@@ -748,7 +795,9 @@ def nav_for_dir(repo_dir: str) -> list:
     items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in blanks])
     for d in [d for d in subdirs if dir_rank(d)[0] >= 5]:
         add_dir(d)
-    if sols:
+    if len(sols) == 1:                                         # one answer key: a page (its title says so)
+        items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])
+    elif sols:
         worked_only = all("worked" in posixpath.basename(rp).lower() for rp in sols)
         items.append({"Worked" if worked_only else "Solutions":
                       leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])})

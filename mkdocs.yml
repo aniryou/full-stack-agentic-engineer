@@ -116,8 +116,7 @@ nav:
               - "LLM GPU Capacity Planning primer": "layers/00-foundations/gpu-capacity-planning/PRIMER.md"
               - "Notebooks":
                   - "01 · LLM GPU Capacity — Practice": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice.ipynb"
-                  - "Solutions":
-                      - "01 · LLM GPU Capacity — Practice (solution)": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb"
+                  - "01 · LLM GPU Capacity — Practice (solution)": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb"
           - "Mixture of experts":
               - "layers/00-foundations/mixture-of-experts/index.md"
               - "Mixture of experts primer": "layers/00-foundations/mixture-of-experts/PRIMER.md"
@@ -191,8 +190,7 @@ nav:
                   - "02 · The Original Transformer — Exercises": "layers/00-foundations/transformers/notebooks/02_transformer_exercises.ipynb"
               - "Practice":
                   - "Attention practice": "layers/00-foundations/transformers/practice/attention_practice.ipynb"
-                  - "Solutions":
-                      - "Attention practice — solutions": "layers/00-foundations/transformers/practice/attention_solutions.ipynb"
+                  - "Attention practice — solutions": "layers/00-foundations/transformers/practice/attention_solutions.ipynb"
       - "01 · Hardware & fabric":
           - "layers/01-hardware-gpu-fabric/index.md"
           - "GPU deployment":
@@ -303,9 +301,8 @@ nav:
               - "FlashAttention — practice": "layers/04-inference-engine/flash-attention/flash_attention_practice.ipynb"
           - "KV cache":
               - "KV Cache on GPUs — A Primer": "layers/04-inference-engine/kv-cache/kv-cache-primer.md"
+              - "01 · KV Cache from Scratch — Worked Notebook": "layers/04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
               - "02 · KV Cache from Scratch — Practice": "layers/04-inference-engine/kv-cache/02_kv_cache_practice.ipynb"
-              - "Worked":
-                  - "01 · KV Cache from Scratch — Worked Notebook": "layers/04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
           - "Paged attention":
               - "PagedAttention: A Primer": "layers/04-inference-engine/paged-attention/paged-attention-primer.md"
               - "PagedAttention — practice notebook": "layers/04-inference-engine/paged-attention/paged_attention_practice.ipynb"
@@ -420,14 +417,12 @@ nav:
                   - "layers/06-gateway/identity-security/agentic-identity-core/index.md"
                   - "Identity & security for an agent loop — PRACTICE": "layers/06-gateway/identity-security/agentic-identity-core/core_practice.ipynb"
                   - "Identity & security for an agent loop — the core concept": "layers/06-gateway/identity-security/agentic-identity-core/core_walkthrough.ipynb"
-                  - "Solutions":
-                      - "Identity & security for an agent loop — the core concept (solution)": "layers/06-gateway/identity-security/agentic-identity-core/core_solution.ipynb"
+                  - "Identity & security for an agent loop — the core concept (solution)": "layers/06-gateway/identity-security/agentic-identity-core/core_solution.ipynb"
               - "Agentic identity core Mistral":
                   - "layers/06-gateway/identity-security/agentic-identity-core-mistral/index.md"
                   - "Core Mistral practice": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_practice.ipynb"
                   - "Core Mistral walkthrough": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_walkthrough.ipynb"
-                  - "Solutions":
-                      - "Identity & security for an agent loop — on Mistral (solution)": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_solution.ipynb"
+                  - "Identity & security for an agent loop — on Mistral (solution)": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_solution.ipynb"
               - "Agentic identity GCP lab":
                   - "layers/06-gateway/identity-security/agentic-identity-gcp-lab/index.md"
                   - "Docs":
@@ -576,9 +571,8 @@ nav:
               - "Long-running agents":
                   - "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/index.md"
                   - "Notebooks":
+                      - "01 · Long-running agents — the core idea, worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/01_worked.ipynb"
                       - "02 · Long-running agents — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/02_practice.ipynb"
-                      - "Worked":
-                          - "01 · Long-running agents — the core idea, worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/01_worked.ipynb"
               - "LRA core":
                   - "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/index.md"
                   - "LRA core primer": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/PRIMER.md"
@@ -611,9 +605,8 @@ nav:
               - "Long-running agents (Mistral)":
                   - "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/index.md"
                   - "Notebooks":
+                      - "01 · Long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/01_worked.ipynb"
                       - "02 · Long-running agents — practice (Mistral edition)": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/02_practice.ipynb"
-                      - "Worked":
-                          - "01 · Long-running agents (worked)": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/01_worked.ipynb"
               - "LRA":
                   - "LRA primer": "layers/07-application-agent-framework/long-running-durable/lra/primer.md"
                   - "Long-Running Agents on Google Cloud (lra)":

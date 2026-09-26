@@ -39,9 +39,12 @@ exist is dropped, and the summary line counts it (`SITE_VERBOSE=1` lists every o
 
 Notebooks: exercise notebooks get an "Open in Colab" button, using the same URL as `tools/gen_colab_index.py`.
 Notebooks with the answers filled in, in any of the repo's conventions (a `solutions/` or `worked/` folder, or a
-name with `_solution`, `_solutions`, `_solved` or `_worked`; `is_solution`, kept identical to
-`tools/gen_colab_index.py`), get a "worked answers" line instead, a "(solution)" or "(worked)" suffix in the
-navigation, and are left out of search. Notebooks are shown as committed, minus the Colab setup cell at the top (it
+name with `_solution`, `_solutions` or `_solved`; `is_solution`, kept identical to `tools/gen_colab_index.py`), get
+a "worked answers" line instead, a "(solution)" or "(worked)" suffix in the navigation, and are left out of search.
+A name with `_worked` counts only beside its exercise twin in the same folder (`01_x_worked` next to
+`01_x_practice` or `01_x`, or the same number next to a `*_practice` notebook); without one, as kv-cache's
+`01_kv_cache_worked` before `02_kv_cache_practice`, it is a worked lesson and is treated like any other notebook.
+A single answer key sits beside its exercise instead of in a one-entry "Solutions" section. Notebooks are shown as committed, minus the Colab setup cell at the top (it
 only runs on Colab); the site never runs them. Inline TeX in notebook Markdown written as `$...$` is rewritten to
 `\(...\)`, the only inline delimiter the site's MathJax accepts, so dollar amounts stay text.
 

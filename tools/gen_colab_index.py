@@ -13,22 +13,70 @@ BRANCH, REPO = "main", "aniryou/full-stack-agentic-engineer"
 BADGE = "https://colab.research.google.com/assets/colab-badge.svg"
 START, END = "<!-- colab-links:start -->", "<!-- colab-links:end -->"
 # Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
-# name like 01_x_solution(s), 01_x_solved, 01_x_worked, 01_worked. Kept identical to tools/site/build_site_content.py.
+# name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
+# is an answer key only when an exercise twin sits beside it: 01_x_worked next to 01_x_practice (or 01_x), or the
+# same number next to a *_practice/*_exercise notebook. Without a twin it is a worked lesson (kv-cache's
+# 01_kv_cache_worked comes before 02_kv_cache_practice) and stays an ordinary notebook.
+# Kept identical to tools/site/build_site_content.py.
+ROOT = Path(__file__).resolve().parents[1]
 SOLUTION_DIRS = {"solutions", "worked"}
-SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved|worked)(?:$|[_\-.])", re.I)
+SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved)(?:$|[_\-.])", re.I)
+WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
+EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
 INTRO = ("One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Notebooks are listed by folder; "
-         "*worked answers* marks a notebook with the answers filled in (a `solutions/` or `worked/` folder, "
-         "or a name ending in `_solution`, `_solved` or `_worked`): try the exercise version first.")
+         "*worked answers* marks the answer key of an exercise (in a `solutions/` or `worked/` folder, named "
+         "`*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin): try the exercise "
+         "first. A `*_worked` notebook with no exercise twin is a walkthrough lesson.")
 
 
 def colab(p): return f"https://colab.research.google.com/github/{REPO}/blob/{BRANCH}/{p}"
 
+def _stem(path):
+    return path.replace(os.sep, "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
-def is_solution(path):
-    """True for a notebook with the answers in it (see SOLUTION_DIRS / SOLUTION_STEM)."""
+
+def _folder(path):
+    path = path.replace(os.sep, "/")
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def _base(stem, token):
+    """The stem with a worked/practice token taken out: 01_kv_cache_worked -> 01_kv_cache."""
+    return re.sub(r"^[_\-.]+|[_\-.]+$", "", token.sub("_", stem))
+
+
+def _number(stem):
+    m = re.match(r"^\d+", stem)
+    return m.group(0) if m else None
+
+
+def has_exercise_twin(path, siblings=None):
+    """True when a `*_worked` notebook has an exercise version in the same folder (see the rule above).
+    `siblings` is any iterable of notebook paths; by default the folder is listed on disk."""
+    folder = _folder(path)
+    if siblings is None:
+        d = ROOT / folder
+        siblings = [f"{folder}/{n}" for n in os.listdir(d) if n.endswith(".ipynb")] if d.is_dir() else []
+    base = _base(_stem(path), WORKED_STEM)
+    for other in siblings:
+        s = _stem(other)
+        if _folder(other) != folder or SOLUTION_STEM.search(s) or WORKED_STEM.search(s):
+            continue
+        exercise = bool(EXERCISE_STEM.search(s))
+        if s == base or (exercise and _base(s, EXERCISE_STEM) == base):
+            return True
+        if exercise and _number(base) and _number(s) == _number(base):
+            return True
+    return False
+
+
+def is_solution(path, siblings=None):
+    """True for a notebook with the answers in it (see the rule above SOLUTION_DIRS)."""
     parts = path.replace(os.sep, "/").split("/")
     stem = parts[-1].rsplit(".", 1)[0]
-    return bool(SOLUTION_DIRS & set(parts[:-1])) or bool(SOLUTION_STEM.search(stem))
+    if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
+        return True
+    return bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
 
 
 def layer_section(layer, nbs):
@@ -42,7 +90,7 @@ def layer_section(layer, nbs):
         for rel, items in groups.items():
             body.append(f"**`{rel}/`**" if rel != '.' else "**(layer root)**")
             for nb in items:
-                note = " — *worked answers*" if is_solution(nb) else ""
+                note = " — *worked answers*" if is_solution(nb, nbs) else ""
                 body.append(f"- [![Open In Colab]({BADGE})]({colab(nb)}) `{os.path.basename(nb)}`{note}")
             body.append("")
     return START + "\n" + "\n".join(body).rstrip() + "\n" + END

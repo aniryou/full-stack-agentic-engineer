@@ -20,8 +20,6 @@ import build_site_content as b  # noqa: E402
     "07-x/lab/solutions/01_tools.ipynb",                          # solutions/
     "06-x/lab/notebooks/solutions/01_scaling_math_solutions.ipynb",  # notebooks/solutions/
     "07-x/lra-gcp/notebooks/worked/00_core_idea.ipynb",           # worked/
-    "04-x/kv-cache/01_kv_cache_worked.ipynb",                     # _worked
-    "07-x/core/notebooks/01_worked.ipynb",                        # NN_worked
     "00-x/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb",  # _solved
     "06-x/agentic-identity-core/core_solution.ipynb",             # *_solution*
     "00-x/transformers/practice/attention_solutions.ipynb",
@@ -43,6 +41,43 @@ def test_is_solution_leaves_exercises_alone(path):
     assert not b.is_solution(path)
 
 
+# A *_worked notebook is an answer key only beside its exercise twin; without one it is a worked lesson.
+GCP = "07-x/long-running-agents-gcp/notebooks/"
+KV = "04-x/kv-cache/"
+CORE = "07-x/long-running-agents-core/notebooks/"
+FOLDERS = {
+    GCP: ["01_durable_loop_practice", "01_durable_loop_worked", "03_hitl_saga_practice", "03_hitl_saga_scheduled_worked"],
+    KV: ["01_kv_cache_worked", "02_kv_cache_practice"],
+    CORE: ["01_worked", "02_practice"],
+    "a/": ["01_x", "01_x_worked"],
+}
+SIBLINGS = [f"{d}{n}.ipynb" for d, names in FOLDERS.items() for n in names]
+
+
+@pytest.mark.parametrize("path, answers", [
+    (GCP + "01_durable_loop_worked.ipynb", True),         # same stem as 01_durable_loop_practice
+    (GCP + "03_hitl_saga_scheduled_worked.ipynb", True),  # same number as 03_hitl_saga_practice
+    ("a/01_x_worked.ipynb", True),                         # the exercise is plain 01_x
+    (KV + "01_kv_cache_worked.ipynb", False),             # lesson 01; the exercise is a different notebook, 02
+    (CORE + "01_worked.ipynb", False),                    # lesson 01 before 02_practice
+    ("b/01_y_worked.ipynb", False),                        # alone in its folder
+])
+def test_worked_is_an_answer_key_only_beside_its_exercise(path, answers):
+    assert b.is_solution(path, SIBLINGS) is answers
+
+
+def test_worked_rule_reads_the_folder_on_disk_by_default():
+    """With no sibling list the folder is listed; the repo's own notebooks are the fixture."""
+    root = Path(b.ROOT)
+    kv = "04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
+    gcp = ("07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/"
+           "notebooks/01_durable_loop_worked.ipynb")
+    if not ((root / kv).exists() and (root / gcp).exists()):
+        pytest.skip("repo notebooks moved")
+    assert not b.is_solution(kv)
+    assert b.is_solution(gcp)
+
+
 def test_colab_index_uses_the_same_rule():
     """tools/gen_colab_index.py labels the same notebooks as worked answers as the site does."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -51,6 +86,10 @@ def test_colab_index_uses_the_same_rule():
                  "a/core_solution.ipynb", "a/notebooks/01_x.ipynb", "a/practice/01_x.ipynb",
                  "a/01_resolution.ipynb"):
         assert g.is_solution(path) == b.is_solution(path), path
+    for path in SIBLINGS + ["b/01_y_worked.ipynb"]:
+        assert g.is_solution(path, SIBLINGS) == b.is_solution(path, SIBLINGS), path
+    assert (g.SOLUTION_DIRS, g.SOLUTION_STEM.pattern, g.WORKED_STEM.pattern, g.EXERCISE_STEM.pattern) == \
+        (b.SOLUTION_DIRS, b.SOLUTION_STEM.pattern, b.WORKED_STEM.pattern, b.EXERCISE_STEM.pattern)
 
 
 # ---------------------------------------------------------------- math
@@ -221,8 +260,10 @@ def test_colab_index_marks_worked_answers_and_describes_every_layout():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     import gen_colab_index as g
     out = g.layer_section("07-x", ["07-x/a/notebooks/01_x.ipynb", "07-x/a/notebooks/01_x_worked.ipynb",
-                                   "07-x/a/solutions/01_x.ipynb"])
+                                   "07-x/a/solutions/01_x.ipynb", "07-x/kv/01_kv_worked.ipynb",
+                                   "07-x/kv/02_kv_practice.ipynb"])
     lines = out.splitlines()
+    assert any(ln.endswith("`01_kv_worked.ipynb`") for ln in lines)   # a worked lesson: a plain Colab link
     assert any(ln.endswith("`01_x.ipynb`") and "/notebooks/" in ln for ln in lines)
     assert any(ln.endswith("`01_x_worked.ipynb` — *worked answers*") for ln in lines)
     assert any(ln.endswith("`01_x.ipynb` — *worked answers*") and "/solutions/" in ln for ln in lines)
