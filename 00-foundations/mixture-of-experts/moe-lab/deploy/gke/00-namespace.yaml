@@ -1,0 +1,7 @@
+# Everything this lab runs on GKE lives in one namespace: `kubectl delete namespace moe-lab` removes it all.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: moe-lab
+  labels:
+    app.kubernetes.io/part-of: moe-lab

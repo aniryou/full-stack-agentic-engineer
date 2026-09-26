@@ -153,6 +153,7 @@ class KVReport:
     block_size: int
     max_model_len: int
     notes: list = field(default_factory=list)
+    backend: str | None = None       # the attention backend vLLM would pick; None = no backend reads this KV dtype
 
     @property
     def kv_tokens(self) -> int:
@@ -163,7 +164,8 @@ class KVReport:
         return self.num_blocks / math.ceil(tokens_per_session / self.block_size)
 
     def row(self, typical_len: int = 2000) -> str:
-        return (f"| {self.weights} | {self.kv_cache_dtype} | {self.weight_bytes / 1e9:.2f} GB | "
+        kvd = self.kv_cache_dtype if self.backend else f"{self.kv_cache_dtype} (no backend on {self.gpu})"
+        return (f"| {self.weights} | {kvd} | {self.weight_bytes / 1e9:.2f} GB | "
                 f"{self.kv_bytes_per_token:,.0f} B | {self.num_blocks:,} | {self.sessions(typical_len):.1f} |")
 
 
@@ -182,7 +184,7 @@ def size(model, gpu_name, *, weights: str = "bf16", kv_cache_dtype: str = "auto"
     if be.error:
         notes.append(be.error)
     return KVReport(m.name, g.name, weights, kv_cache_dtype, wb, int(budget), per_tok, blocks, block_size,
-                    int(max_model_len or m.max_position_embeddings), notes)
+                    int(max_model_len or m.max_position_embeddings), notes, be.backend)
 
 
 def table(model="llama-3.1-8b-instruct", gpu_name="L4", typical_len: int = 2000,

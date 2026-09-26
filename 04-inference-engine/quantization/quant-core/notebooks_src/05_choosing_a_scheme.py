@@ -70,8 +70,8 @@ for g in (L4, H100):
 # A weight-only kernel does BF16 math on dequantized weights, so its advantage is the byte ratio and it ends where
 # the BF16 math becomes the ceiling: ~120 tokens per step on an L4, ~85 on an H100. Above that — every prefill
 # chunk, and decode batches past ~100 — INT4 buys memory, not speed; real kernels also pay for dequantization
-# (NVIDIA's ModelOpt measured weight-only NVFP4 slower than BF16 in 10 of 12 shapes on Blackwell, facts sheet §5,
-# verify). FP8 W8A8 halves both ceilings and helps at every M.
+# (NVIDIA's ModelOpt measured weight-only NVFP4 slower than BF16 in 10 of 12 shapes on Blackwell, its QAD note of
+# 2026-09-16, verify). FP8 W8A8 halves both ceilings and helps at every M.
 #
 # ## Worked example 3 — what a checkpoint runs as, per GPU generation
 
@@ -85,8 +85,9 @@ for g in C.GPUS.values():
 # Read down the FP8 W8A8 column: an FP8 checkpoint loads everywhere from Turing up, but below Ada it is a
 # weight-only model (Marlin FP8) with BF16 math — a memory win only. NVFP4 is W4A4 only on Blackwell (SM100/SM120,
 # CUDA ≥ 12.8); elsewhere it runs as weight-only 4-bit. INT8 W8A8 is the Turing/Ampere prefill lever and is not
-# supported from compute capability 10.0. A T4 has no FP8 KV cache in any vLLM backend. (vLLM 0.30.0 / main,
-# facts sheet §2 and §7; verify on your version — the log line `Selected <kernel> for <module>` is the truth.)
+# supported from compute capability 10.0. A T4 has no FP8 KV cache in any vLLM backend. (vLLM 0.30.0 and main,
+# from the kernels' capability checks; verify on your version — the log line `Selected <kernel> for <module>` is the
+# truth.)
 #
 # ## Worked example 4 — three deployments
 

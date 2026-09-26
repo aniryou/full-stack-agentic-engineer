@@ -70,11 +70,6 @@ class Policy:
         np.add.at(g, traj.states, rows)
         return g
 
-    def entropy(self, states=None) -> np.ndarray:
-        """Per-state entropy in nats (all states, or the ones given)."""
-        P = self.probs() if states is None else self.probs()[states]
-        return -(P * np.log(P)).sum(axis=-1)
-
     # -- whole-space views for small tasks ------------------------------------------------------------
     def sequence_probs(self, task, seqs=None, prompt: int = 0) -> np.ndarray:
         """π(y) for every sequence of a SeqTask (or the ones given): exact, by enumeration."""

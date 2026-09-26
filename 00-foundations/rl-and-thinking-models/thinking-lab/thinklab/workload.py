@@ -312,3 +312,32 @@ def simulate_modes(prof: Profile, questions: list, modes: dict, rate: float, pro
                      "preemptions": eng.preemptions,
                      "tokens/correct": round(out_tokens / acc) if acc else math.inf})
     return rows
+
+
+def run_with_gauges(url: str, requests: list, rate: float, interval_s: float = 0.05, headers: dict | None = None,
+                    **kw) -> tuple:
+    """:func:`run_open_loop` while a thread scrapes ``/metrics`` every ``interval_s``: returns
+    ``(run, samples)`` with samples = [(t, kv_usage, running, waiting)] — the gauges a dashboard would plot."""
+    import threading
+
+    from . import metrics as M
+    samples, stop = [], threading.Event()
+
+    def poll():
+        t0 = time.perf_counter()
+        while not stop.is_set():
+            try:
+                s = M.scrape(url, headers=headers, timeout=5)
+                samples.append((time.perf_counter() - t0, M.value(s, M.KV_USAGE), M.value(s, M.RUNNING), M.value(s, M.WAITING)))
+            except Exception:  # noqa: BLE001 — a missed scrape is not a failed run
+                pass
+            stop.wait(interval_s)
+
+    th = threading.Thread(target=poll, daemon=True)
+    th.start()
+    try:
+        run = run_open_loop(url, requests, rate, headers=headers, **kw)
+    finally:
+        stop.set()
+        th.join(timeout=10)
+    return run, samples

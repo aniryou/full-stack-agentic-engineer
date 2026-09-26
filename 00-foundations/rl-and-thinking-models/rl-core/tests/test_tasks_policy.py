@@ -9,7 +9,7 @@ from rlcore import ANSWER, THINK, Policy, SeqTask, ThinkTask, Trajectory
 def test_random_bracket_success_is_catalan_over_2_to_the_n():
     task = SeqTask("brackets", 8)
     assert task.random_success_rate() == 14 / 256 == math.comb(8, 4) / 5 / 256   # Catalan(4) = 14
-    assert SeqTask("sorted", 4, vocab=4).random_success_rate() == math.comb(7, 4) / 4 ** 4   # 35 / 256
+    assert SeqTask("brackets", 6).random_success_rate() == 5 / 64                   # Catalan(3) = 5
 
 
 def test_buggy_verifier_passes_what_the_true_one_rejects():

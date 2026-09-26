@@ -61,7 +61,7 @@ ACCURACY_ORDER = ["bf16", "w8a16-fp8", "w8a8-fp8", "w8a8-int8", "w4a16", "w4a4-n
 
 
 def supported(gpu: GPU, scheme: str, kv_bits: int = 16) -> dict:
-    """What `scheme` runs as on `gpu` (vLLM's rules at 0.30.0/main, facts sheet section 7; verify):
+    """What `scheme` runs as on `gpu` (vLLM 0.30.0/main: kernels' get_min_capability and dispatch; verify):
     {'runs_as': scheme name or None, 'kernel': str, 'note': str, 'kv': bool}."""
     s, cc = SCHEMES[scheme], gpu.cc
     runs, kernel, note = scheme, s.kernel, ""

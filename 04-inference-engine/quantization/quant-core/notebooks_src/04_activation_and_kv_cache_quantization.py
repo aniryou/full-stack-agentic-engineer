@@ -96,7 +96,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
 # INT8 is more precise than any FP8 (7 bits against 3). Block scales earn their place when ranges are extreme — in
 # training, and for models whose weights and activations span more than FP8's range — and because a kernel that
 # already tiles by 128 can apply a per-tile scale for free (DeepGEMM, CUTLASS block-scaled GEMMs on SM90+; there
-# is no CUTLASS block-FP8 kernel for SM89, facts sheet §2).
+# is no CUTLASS block-FP8 kernel for SM89 in vLLM's `scaled_mm_entry.cu`, verify).
 #
 # ## Worked example 4 — which layers stay in high precision
 # Recipes quantize the transformer blocks' linears and `ignore=["lm_head"]`. Quantize the tiny model's head too:
@@ -161,7 +161,8 @@ for label, b in (("bf16 KV", 16), ("FP8 KV", 8), ("4-bit KIVI (5 bits/elem)", 5)
 # %% [markdown]
 # FP8 KV doubles the sessions; 4-bit KIVI gives 3.2×, 2-bit 5.3× — at 1.2% and 7% attention-output error on this
 # head. vLLM's sub-8-bit KV dtypes at this snapshot are per-token-head (`int4_per_token_head`, dynamic scales),
-# not KIVI (facts sheet §2, verify): the per-channel key trick is the reason to check which one a system implements.
+# not KIVI (vLLM's `CacheDType`, verify): the per-channel key trick is the reason to check which one a system
+# implements.
 #
 # **Prefix caching with a quantized cache.** A cached block is reused as stored: its tokens are hashed as usual
 # (serving-engine §5) and the block holds FP8 values. That works because the scales are static per layer (or

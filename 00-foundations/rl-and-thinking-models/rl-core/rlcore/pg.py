@@ -1,10 +1,9 @@
 """Policy gradients over token sequences: sample, score, reweight.
 
-The one idea: ∇ E_π[R] = E_π[(R − b) ∇ log π(y)] for any baseline b that does not depend on y (REINFORCE).
-Push up the log-probability of completions that scored above the baseline, push down those below. The
-baseline changes the variance, never the expectation. A KL penalty to a frozen reference, R − β·log(π/π_ref),
-turns the objective into E[R] − β·KL(π ‖ π_ref), whose optimum has a closed form, π* ∝ π_ref · exp(R/β)
-(`kl_optimal()`): RL reweights what the reference already does; it does not invent from nothing.
+The one idea: ∇ E_π[R] = E_π[(R − b)·∇log π(y)] for any baseline b that does not depend on y (REINFORCE):
+push up completions that scored above the baseline, push down the rest. The baseline changes the variance,
+never the expectation. A KL penalty to a frozen reference makes the objective E[R] − β·KL(π ‖ π_ref), whose
+optimum is π* ∝ π_ref·exp(R/β) (`kl_optimal()`): RL reweights what the reference already does.
 """
 from __future__ import annotations
 
@@ -22,8 +21,7 @@ def advantages(rewards, baseline: str = "mean") -> np.ndarray:
     if baseline == "mean":
         return r - r.mean()
     if baseline == "loo":
-        n = len(r)
-        return r - (r.sum() - r) / (n - 1)
+        return r - (r.sum() - r) / (len(r) - 1)
     raise ValueError(baseline)
 
 
@@ -57,7 +55,8 @@ def grad_variance(policy: Policy, task, rng, baseline: str, batch: int = 8, tria
 
 
 def train_reinforce(policy: Policy, task, rng, steps: int = 200, batch: int = 16, lr: float = 1.0,
-                    baseline: str = "mean", ref: Policy | None = None, beta: float = 0.0, log_every: int = 10):
+                    baseline: str = "mean", ref: Policy | None = None, beta: float = 0.0, log_every: int = 10,
+                    entropy_coef: float = 0.0):
     """Plain on-policy REINFORCE; returns a history of (step, mean reward, P(correct), mean length)."""
     hist = []
     for step in range(steps):
@@ -65,7 +64,7 @@ def train_reinforce(policy: Policy, task, rng, steps: int = 200, batch: int = 16
         if step % log_every == 0 or step == steps - 1:
             hist.append((step, np.mean([t.reward for t in trajs]), np.mean([t.info["correct"] for t in trajs]),
                          np.mean([t.info["length"] for t in trajs])))
-        policy.step(reinforce_grad(policy, trajs, baseline, ref, beta), lr)
+        policy.step(reinforce_grad(policy, trajs, baseline, ref, beta, entropy_coef), lr)
     return hist
 
 

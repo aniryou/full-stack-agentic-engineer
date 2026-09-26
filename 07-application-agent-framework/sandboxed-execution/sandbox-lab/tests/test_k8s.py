@@ -27,7 +27,7 @@ def all_objects():
 def sandbox_pod_specs():
     for f, o in all_objects():
         for _, t in m.iter_pod_templates(o):
-            if (o["metadata"].get("namespace") == P.SANDBOX_NS) and "sandbox" in (t.get("metadata", {}).get("labels") or {}).get(
+            if "rejected" not in f and (o["metadata"].get("namespace") == P.SANDBOX_NS) and "sandbox" in (t.get("metadata", {}).get("labels") or {}).get(
                     "app.kubernetes.io/name", ""):
                 yield f, t["spec"]
 
@@ -83,7 +83,7 @@ def test_agent_sandbox_objects_match_the_pinned_crds():
 
 def test_every_sandbox_pod_has_no_ambient_authority():
     specs = list(sandbox_pod_specs())
-    assert len(specs) >= 6
+    assert len(specs) == 5          # Job + warm pool on kind and on GKE, and the agent-sandbox template
     for f, s in specs:
         assert s["automountServiceAccountToken"] is False and s["enableServiceLinks"] is False, f
         assert s["serviceAccountName"] == "sandbox-exec" and s["dnsPolicy"] == "None", f

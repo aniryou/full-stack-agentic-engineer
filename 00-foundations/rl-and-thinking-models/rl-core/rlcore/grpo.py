@@ -1,12 +1,11 @@
 """GRPO: G samples per prompt, rewards normalised within the group, no critic — plus the DAPO fixes.
 
-The one idea: the group *is* the baseline. For each prompt sample G completions, score them with a
-verifier, and use A_i = (r_i − mean(r)) / (std(r) + 1e-4) for every token of completion i; a group that is all
-right or all wrong teaches nothing (A = 0). Each token's loss is PPO's clipped surrogate
-−min(ρA, clip(ρ, 1−ε_low, 1+ε_high)·A) with ρ = π/π_old, plus β·k3, the low-variance KL estimator
-π_ref/π − log(π_ref/π) − 1. How per-token losses are averaged (`loss_type`) decides whether long completions
-are under-weighted — the length bias DAPO and Dr. GRPO remove. The names and defaults follow TRL's
-`GRPOConfig` (v1.14.0) so a setting here maps one-to-one onto a real run.
+The one idea: the group *is* the baseline. Sample G completions per prompt, score them with a verifier, and
+give every token of completion i A_i = (r_i − mean(r)) / (std(r) + 1e-4); an all-right or all-wrong group
+teaches nothing. Each token's loss is PPO's clipped surrogate −min(ρA, clip(ρ, 1−ε_low, 1+ε_high)·A),
+ρ = π/π_old, plus β·k3 = β·(π_ref/π − log(π_ref/π) − 1). How per-token losses are averaged (`loss_type`)
+decides whether long completions are under-weighted — the length bias DAPO and Dr. GRPO remove. Names and
+defaults follow TRL's `GRPOConfig` (v1.14.0), so a setting here maps onto a real run.
 """
 from __future__ import annotations
 
@@ -127,20 +126,13 @@ def grpo_step(policy: Policy, task, rng, cfg: GRPOConfig, prompts=(0,), ref: Pol
         groups.append(trajs)
         rewards.append(r)
     flat = [t for g, _ in seen for t in g]
-    stats = {"reward": float(np.mean([t.reward for t in flat])),
-             "correct": float(np.mean([t.info["correct"] for t in flat])),
-             "length": float(np.mean([t.info["length"] for t in flat])),
-             "truncated": float(np.mean([t.info["truncated"] for t in flat])),
-             "frac_reward_zero_std": float(np.mean([r.std() == 0 for _, r in seen])),
-             "groups_generated": generated}
-    if not groups:
-        stats["clipped"] = 0.0
-        return stats
-    A = group_advantages(np.array(rewards), cfg.scale_rewards)
+    stats = {k: float(np.mean([t.info[k] for t in flat])) for k in ("correct", "length", "truncated")}
+    stats.update(reward=float(np.mean([t.reward for t in flat])), groups_generated=generated, clipped=0.0,
+                 frac_reward_zero_std=float(np.mean([r.std() == 0 for _, r in seen])))
+    A = group_advantages(np.array(rewards), cfg.scale_rewards) if groups else None
     batch = [(t, A[i, j]) for i, g in enumerate(groups) for j, t in enumerate(g)
              if not (cfg.mask_truncated_completions and t.info["truncated"])]
     if not batch:
-        stats["clipped"] = 0.0
         return stats
     weights = token_weights([t.length for t, _ in batch], cfg.loss_type, max_len)
     old_lp = [old.token_logprobs(t) for t, _ in batch]

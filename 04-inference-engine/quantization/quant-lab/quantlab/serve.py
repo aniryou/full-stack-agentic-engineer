@@ -102,7 +102,7 @@ SCHEMES = {
                     "Qwen/Qwen2.5-1.5B-Instruct-AWQ"),
     "w8a8-int8": Scheme("w8a8-int8", "INT8 W8A8 (SmoothQuant + GPTQ, dynamic per-token activations)", 8, "int8",
                         "llm-compressor [SmoothQuantModifier, GPTQModifier(scheme=\"W8A8\")]",
-                        "./Qwen2.5-1.5B-Instruct-W8A8"),
+                        "./Qwen2.5-1.5B-Instruct-W8A8-smoothquant-gptq"),
     "nvfp4": Scheme("nvfp4", "NVFP4 W4A4 (E2M1, E4M3 scale per 16, FP32 per tensor)", 4.5, "fp4",
                     "llm-compressor QuantizationModifier(scheme=\"NVFP4\"), 20 calibration samples",
                     "./Qwen2.5-1.5B-Instruct-NVFP4"),

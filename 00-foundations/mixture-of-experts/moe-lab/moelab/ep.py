@@ -124,19 +124,25 @@ def per_gpu_weight_bytes(model: Model, layout: str, p: int = 2, weight_bytes: fl
 class EPStep:
     layout: str
     batch: int
-    rank_s: list = field(default_factory=list)       # compute/memory time of each GPU (before comm)
-    rank_bytes: list = field(default_factory=list)
+    layer_s: list = field(default_factory=list)      # [layers][gpus]: each GPU's time for each layer
+    head_s: list = field(default_factory=list)       # [gpus]: the LM head
+    rank_bytes: list = field(default_factory=list)   # [gpus]: bytes each GPU streams in the step
     comm_s: float = 0.0
     overhead_s: float = 0.0
 
     @property
+    def compute_s(self) -> float:
+        """Every layer ends in a collective, so the GPUs meet once per layer: sum of per-layer maxima."""
+        return float(np.max(self.layer_s, axis=1).sum() + np.max(self.head_s))
+
+    @property
     def time(self) -> float:
-        return self.overhead_s + max(self.rank_s) + self.comm_s
+        return self.overhead_s + self.compute_s + self.comm_s
 
     @property
     def imbalance(self) -> float:
-        """Slowest GPU over the mean GPU (1.0 = balanced)."""
-        return max(self.rank_s) / (sum(self.rank_s) / len(self.rank_s))
+        """Sum over layers of the slowest GPU / sum of the mean GPU (1.0 = balanced)."""
+        return float(np.max(self.layer_s, axis=1).sum() / np.mean(self.layer_s, axis=1).sum())
 
 
 def routes(model: Model, batch: int, s: float = 0.0, seed: int = 0) -> np.ndarray:
@@ -149,7 +155,8 @@ def routes(model: Model, batch: int, s: float = 0.0, seed: int = 0) -> np.ndarra
 def ep_decode_step(model: Model, gpu: GPU, layout: str, batch: int, context: int, link: Link, *,
                    ids: np.ndarray | None = None, p: int = 2, weight_bytes: float = 2, kv_bytes: float = 2,
                    params: SimParams = SimParams(), strategy: str = "linear") -> EPStep:
-    """Per-GPU roofline time for one decode step of ``batch`` sequences (**simulated**), then comm.
+    """Per-GPU, per-layer roofline time of one decode step of ``batch`` sequences (**simulated**),
+    then the link. A layer ends when its slowest GPU does (the collective waits for it).
 
     ``ids`` ``[batch, layers, k]`` are the routing decisions (default: uniform, ``routes()``); pass a
     captured trace to see what real skew does to the EP ranks."""
@@ -157,32 +164,40 @@ def ep_decode_step(model: Model, gpu: GPU, layout: str, batch: int, context: int
     L, d = model.layers, model.d_model
     where = placement(model.n_experts, p, strategy)
     e_bytes, e_flops = model.expert_params() * weight_bytes, 2 * model.expert_params()
-    kv_tok = model.kv_bytes_per_token(kv_bytes) * (context + 1)
-    attn_flops_tok = 2 * model.attn_params() + 4 * model.n_heads * model.head_dim * (context + 1)
+    kv_layer = 2 * model.n_kv_heads * model.head_dim * kv_bytes * (context + 1)      # one layer, one sequence
+    attn_flops = 2 * model.attn_params() + 4 * model.n_heads * model.head_dim * (context + 1)
+    fixed = model.attn_params() + model.shared_params() + model.router_params()
     head = model.vocab * d
-    rank_bytes, rank_flops = np.zeros(p), np.zeros(p)
+    if layout in ("tp", "tp_ep"):                       # every GPU: 1/p of attention and KV heads, all tokens
+        seqs = np.full(p, batch / p)
+        f_bytes = np.full(p, (model.attn_params() + model.shared_params()) * weight_bytes / p
+                          + model.router_params() * weight_bytes) + seqs * kv_layer
+        f_flops = batch * (attn_flops + 2 * (model.shared_params() + model.router_params())) / p * np.ones(p)
+        h_bytes, h_flops = np.full(p, head * weight_bytes / p), np.full(p, 2 * batch * head / p)
+    elif layout == "dp_ep":                             # every GPU: all of attention for its own sequences
+        seqs = np.array([len(c) for c in np.array_split(np.arange(batch), p)], dtype=float)
+        f_bytes = fixed * weight_bytes + seqs * kv_layer
+        f_flops = seqs * (attn_flops + 2 * (model.shared_params() + model.router_params()))
+        h_bytes, h_flops = np.full(p, head * weight_bytes), 2 * seqs * head
+    else:
+        raise ValueError(layout)
+    bw, peak = gpu.mem_bw_gbs * 1e9 * params.mem_eff, gpu.tflops_16 * 1e12 * params.compute_eff
+    layer_s, total_bytes = np.zeros((L, p)), np.zeros(p)
     for l in range(L):
         counts = np.bincount(ids[:, l, :].ravel(), minlength=model.n_experts)
         touched = counts > 0
-        if layout == "tp":                                   # every GPU: half of each touched expert
-            rank_bytes += touched.sum() * e_bytes / p
-            rank_flops += counts.sum() * e_flops / p
-        else:                                                # whole experts on their home GPU
-            rank_bytes += np.bincount(where, weights=touched * e_bytes, minlength=p)
-            rank_flops += np.bincount(where, weights=counts * e_flops, minlength=p)
-    shared_router = L * (model.shared_params() + model.router_params())
-    if layout in ("tp", "tp_ep"):
-        rank_bytes += (L * model.attn_params() + head) * weight_bytes / p + batch * kv_tok / p
-        rank_bytes += L * model.router_params() * weight_bytes + L * model.shared_params() * weight_bytes / p
-        rank_flops += batch * (L * attn_flops_tok + 2 * shared_router + 2 * head) / p
-    else:                                                    # dp_ep: each GPU its own batch/p sequences
-        mine = np.array([len(c) for c in np.array_split(np.arange(batch), p)])
-        rank_bytes += (L * model.attn_params() + shared_router + head) * weight_bytes + mine * kv_tok
-        rank_flops += mine * (L * attn_flops_tok + 2 * shared_router + 2 * head)
-    t_mem = rank_bytes / (gpu.mem_bw_gbs * 1e9 * params.mem_eff)
-    t_cmp = rank_flops / (gpu.tflops_16 * 1e12 * params.compute_eff)
+        if layout == "tp":                              # half of every touched expert, half of every GEMM
+            eb, ef = np.full(p, touched.sum() * e_bytes / p), np.full(p, counts.sum() * e_flops / p)
+        else:                                           # whole experts on their home GPU
+            eb = np.bincount(where, weights=touched * e_bytes, minlength=p)
+            ef = np.bincount(where, weights=counts * e_flops, minlength=p)
+        b, f = f_bytes + eb, f_flops + ef
+        layer_s[l] = np.maximum(b / bw, f / peak)
+        total_bytes += b
+    head_s = np.maximum(h_bytes / bw, h_flops / peak)
     comm = L * moe_layer_comm(layout, batch, d, link, p)
-    return EPStep(layout, batch, np.maximum(t_mem, t_cmp).tolist(), rank_bytes.tolist(), comm, params.overhead_s)
+    return EPStep(layout, batch, layer_s.tolist(), head_s.tolist(), (total_bytes + h_bytes).tolist(), comm,
+                  params.overhead_s)
 
 
 def compare_layouts(model: Model, gpu: GPU, link: Link, batches=(1, 8, 32, 128), context: int = 512,

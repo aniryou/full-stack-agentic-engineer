@@ -19,8 +19,10 @@ the engine — you need a server that does all of it without a GPU. This one ans
 
 *What* it says comes from :mod:`thinklab.fakemodel` (a simulated model that knows the answers to the
 generated eval questions and gets them right with a probability that grows with its thinking);
-*when* it says it comes from :mod:`thinklab.engine` run in real time (``time_scale`` < 1 runs faster;
-latency metrics are then in simulated seconds). A prefix index over rendered prompts reports
+*when* it says it comes from :mod:`thinklab.engine` paced in real time (``time_scale`` < 1 runs faster).
+``/metrics`` latencies are in simulated seconds on the engine's own clock, which advances by exactly
+each step's modelled duration; client-side wall-clock timings include this process's overhead and,
+with ``time_scale`` < 1, are compressed. A prefix index over rendered prompts reports
 ``cached_tokens`` so the multi-turn prefix-cache effect of dropped thinking is visible (it is not
 tied to the block pool — a simplification). Everything it reports is **simulated**; every response
 carries ``x-thinklab-simulated: true``. The upstream tool with the same purpose (no reasoning
@@ -151,14 +153,22 @@ class FakeServer:
         self._loop = self._thread = self._stopping = self._runner = None
         self._ready = threading.Event()
         self._last_preemptions = 0
+        self._v = 0.0                                  # the engine's clock, simulated seconds
+        self._idle_since = time.perf_counter()
 
     @property
     def url(self) -> str:
         return f"http://{self.host}:{self.port}"
 
     def vnow(self) -> float:
-        """The engine's clock in simulated seconds (real seconds when time_scale == 1)."""
-        return time.perf_counter() / self.time_scale
+        """The engine's clock in simulated seconds. While busy it advances by exactly each step's
+        simulated duration (host overhead of this Python process is not counted, as it would not be
+        on a GPU); while idle it follows the wall clock divided by ``time_scale``."""
+        if not self.engine.has_work():
+            now = time.perf_counter()
+            self._v += (now - self._idle_since) / self.time_scale
+            self._idle_since = now
+        return self._v
 
     # -- HTTP -----------------------------------------------------------------------------------
     def app(self) -> web.Application:
@@ -312,17 +322,21 @@ class FakeServer:
         e = self.engine
         while True:
             if not e.has_work():
+                self._idle_since = time.perf_counter()
                 self._wake.clear()
                 await self._wake.wait()
                 continue
-            plan = e.schedule(self.vnow())
+            plan = e.schedule(self._v)
             if not plan["decode"] and not plan["prefill"]:
                 await asyncio.sleep(0.001)
                 continue
             dt = e.step_time(plan)
             await asyncio.sleep(dt * self.time_scale)
-            events = e.commit(plan, self.vnow())
+            self._v += dt
+            events = e.commit(plan, self._v)
             self._on_step(events)
+            if not e.has_work():
+                self._idle_since = time.perf_counter()
 
     def _on_step(self, events) -> None:
         e, reg = self.engine, self.reg

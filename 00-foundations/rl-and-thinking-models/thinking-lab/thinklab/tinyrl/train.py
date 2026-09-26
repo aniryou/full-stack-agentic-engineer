@@ -61,10 +61,23 @@ class TinyRLConfig:
     eval_prompts: int = 256
     seed: int = 0
     threads: int = 2                # torch CPU threads (the machine may be shared)
+    device: str = "auto"            # "auto" = cuda when available (T1), else cpu (T0)
+
+
+_DEVICE = "cpu"
 
 
 def _tensor(rows):
-    return torch.tensor(rows, dtype=torch.long)
+    return torch.tensor(rows, dtype=torch.long, device=_DEVICE)
+
+
+def _setup(cfg: TinyRLConfig):
+    """Pick the device (module-wide, so every tensor lands on it) and seed everything."""
+    global _DEVICE
+    _DEVICE = ("cuda" if torch.cuda.is_available() else "cpu") if cfg.device == "auto" else cfg.device
+    torch.set_num_threads(cfg.threads)
+    torch.manual_seed(cfg.seed)
+    return random.Random(cfg.seed), torch.Generator(device=_DEVICE).manual_seed(cfg.seed)
 
 
 def sft(model: TinyGPT, task: DigitSum, cfg: TinyRLConfig, rng: random.Random, log=print) -> list:
@@ -163,7 +176,7 @@ def grpo(model: TinyGPT, ref: TinyGPT, task: DigitSum, cfg: TinyRLConfig, gen: t
         comps, old_lp, mask = sample(model, prompts, task.max_completion, cfg.temperature, gen)   # 1. rollout
         rewards = torch.tensor([reward(p, c) for p, c in                                          # 2. verify
                                 zip([p for p in probs for _ in range(G)], comps.tolist())])
-        adv = group_advantages(rewards, B, cfg.scale_rewards)                                     # 3. advantages
+        adv = group_advantages(rewards.to(_DEVICE), B, cfg.scale_rewards)                                     # 3. advantages
         zero_std = (rewards.view(B, G).std(1) == 0).float().mean().item()
         with torch.no_grad():
             ref_lp = token_logprobs(ref, prompts, comps)
@@ -187,11 +200,9 @@ def grpo(model: TinyGPT, ref: TinyGPT, task: DigitSum, cfg: TinyRLConfig, gen: t
 def run(cfg: TinyRLConfig | None = None, log=print) -> dict:
     """SFT warm-up → evaluate → GRPO → evaluate. Returns everything measured (JSON-serialisable)."""
     cfg = cfg or TinyRLConfig()
-    torch.set_num_threads(cfg.threads)
-    torch.manual_seed(cfg.seed)
-    rng, gen = random.Random(cfg.seed), torch.Generator().manual_seed(cfg.seed)
+    rng, gen = _setup(cfg)
     task = DigitSum(cfg.k, cfg.base)
-    model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len)
+    model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len).to(_DEVICE)
     t0 = time.perf_counter()
     log(f"tiny transformer: {model.num_params():,} parameters; task: last digit of a {cfg.k}-digit sum")
     sft_curve = sft(model, task, cfg, rng, log)
@@ -204,21 +215,22 @@ def run(cfg: TinyRLConfig | None = None, log=print) -> dict:
     rl_curve = grpo(model, ref, task, cfg, gen, rng, log)
     t2 = time.perf_counter()
     after = evaluate(model, task, cfg.eval_prompts, gen, random.Random(cfg.seed + 1), cfg.temperature)
+    model.cpu()
     log(f"after GRPO: accuracy {after['accuracy']:.3f}, mean completion {after['mean_length']:.2f} tokens")
     return {"source": "measured", "config": asdict(cfg), "params": model.num_params(),
             "sft": sft_curve, "rl": rl_curve, "before": before, "after": after,
             "timing_s": {"sft": round(t1 - t0, 1), "rl": round(t2 - t1, 1)},
-            "machine": f"{platform.machine()} / torch {torch.__version__} / {cfg.threads} CPU threads"}
+            "machine": (f"{torch.cuda.get_device_name(0)} / torch {torch.__version__}" if _DEVICE == "cuda" else
+                        f"{platform.machine()} CPU / torch {torch.__version__} / {cfg.threads} threads")}
 
 
 def warm_start(cfg: TinyRLConfig | None = None, log=print):
     """Only the SFT warm-up: returns ``(model, task)`` — the starting policy for rollout experiments."""
     cfg = cfg or TinyRLConfig()
-    torch.set_num_threads(cfg.threads)
-    torch.manual_seed(cfg.seed)
+    rng, _ = _setup(cfg)
     task = DigitSum(cfg.k, cfg.base)
-    model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len)
-    sft(model, task, cfg, random.Random(cfg.seed), log)
+    model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len).to(_DEVICE)
+    sft(model, task, cfg, rng, log)
     return model, task
 
 
@@ -228,7 +240,7 @@ def make_rollouts(model: TinyGPT, task: DigitSum, prompts: int = 8, generations:
     ``sampler_dtype`` (bfloat16, as serving kernels do) and reports its log-probs; the *trainer*
     recomputes them in float32. The two disagree slightly — the train–inference mismatch that
     importance-sampling corrections exist for. Returns JSON-ready dicts."""
-    rng, gen = random.Random(seed), torch.Generator().manual_seed(seed)
+    rng, gen = random.Random(seed), torch.Generator(device=_DEVICE).manual_seed(seed)
     engine = copy.deepcopy(model).to(sampler_dtype).eval()
     probs = [task.sample(rng) for _ in range(prompts)]
     P = _tensor([p.prompt for p in probs for _ in range(generations)])

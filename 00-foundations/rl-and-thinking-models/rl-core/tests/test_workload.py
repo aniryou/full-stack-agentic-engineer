@@ -22,7 +22,11 @@ def _load(rel, name):
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod                                     # dataclasses look their module up here
-    spec.loader.exec_module(mod)
+    saved, sys.dont_write_bytecode = sys.dont_write_bytecode, True   # leave no cache in the other topic's dir
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = saved
     return mod
 
 
@@ -109,7 +113,7 @@ def test_reproduces_the_scaling_labs_cost_per_call():
 
 def test_rollouts_wait_for_the_longest_completion():
     lengths = [100] * 63 + [1000]
-    r = w.rl_step_time(w.QWEN3_8B, H100, 1, 200, lengths)
+    r = w.rl_step_time(SMALL, H100, 1, 200, lengths)
     assert r["batch_occupancy"] < 0.2                                 # 63 finish at step 100; one runs to 1,000
-    even = w.rl_step_time(w.QWEN3_8B, H100, 1, 200, [int(sum(lengths) / 64)] * 64)
+    even = w.rl_step_time(SMALL, H100, 1, 200, [int(sum(lengths) / 64)] * 64)
     assert even["generate_s"] < r["generate_s"] / 2 and math.isclose(even["train_s"], r["train_s"], rel_tol=1e-3)

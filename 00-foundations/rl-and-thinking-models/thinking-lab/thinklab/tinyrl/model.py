@@ -89,17 +89,17 @@ def sample(model: TinyGPT, prompts: torch.Tensor, max_new: int, temperature: flo
     model.eval()
     B = prompts.shape[0]
     seq = prompts.clone()
-    done = torch.zeros(B, dtype=torch.bool)
+    done = torch.zeros(B, dtype=torch.bool, device=prompts.device)
     toks, lps, mask = [], [], []
     for _ in range(max_new):
         logits = model(seq)[:, -1] / max(temperature, 1e-6)
         logp = F.log_softmax(logits, dim=-1)
-        nxt = torch.multinomial(logp.exp(), 1, generator=generator).squeeze(1)
+        nxt = torch.multinomial(logp.float().exp(), 1, generator=generator).squeeze(1)
         lp = logp.gather(1, nxt[:, None]).squeeze(1)
         live = ~done
         nxt = torch.where(live, nxt, torch.full_like(nxt, PAD))
         toks.append(nxt)
-        lps.append(torch.where(live, lp, torch.zeros_like(lp)))
+        lps.append(torch.where(live, lp.float(), torch.zeros_like(lp.float())))
         mask.append(live.float())
         done = done | (nxt == EOS)
         seq = torch.cat([seq, nxt[:, None]], dim=1)

@@ -72,3 +72,18 @@ def test_rl_lengthens_thinking_and_a_token_cost_stops_it():
         pg.train_reinforce(pol, task, np.random.default_rng(0), steps=300, batch=16, lr=2.0)
         lengths[name] = task.expected(pol.stop_probs(task))["length"]
     assert Policy.for_task(free) and lengths["free"] > 9 > lengths["costly"] > 5
+
+
+def test_an_entropy_bonus_keeps_correct_answers_diverse(brackets, sft_ref):
+    seqs = brackets.all_sequences()
+    ok = np.array([brackets.verify(s) for s in seqs])
+
+    def effective_answers(pol):
+        p = pol.sequence_probs(brackets, seqs)[ok > 0]
+        p = p / p.sum()
+        return float(np.exp(-(p * np.log(p)).sum()))
+    plain, bonus = sft_ref.copy(), sft_ref.copy()
+    pg.train_reinforce(plain, brackets, np.random.default_rng(0), steps=300, batch=16, lr=0.5)
+    pg.train_reinforce(bonus, brackets, np.random.default_rng(0), steps=300, batch=16, lr=0.5, entropy_coef=0.05)
+    assert effective_answers(bonus) > 10 > 8 > effective_answers(plain)
+    assert pg.expected(bonus, brackets, brackets.verify) > 0.93

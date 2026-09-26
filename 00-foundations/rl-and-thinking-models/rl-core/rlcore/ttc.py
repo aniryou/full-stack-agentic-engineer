@@ -1,13 +1,10 @@
 """Test-time compute: spend more inference per question — think longer (sequential) or sample more (parallel).
 
 The one idea: P(correct | L) = 1 − e0·(1 − q)^L reads as "each thinking token cracks the problem with
-probability q; an uncracked answer is a guess, right with probability 1 − e0". Questions are hard in two
-ways: an attempt may start down an approach that cannot work (thinking longer does not help; another sample
-might), or the right approach may simply take many tokens (more samples do not help; thinking longer does).
-Sampling n times pays only if something picks the right sample out — a verifier, or a vote when the right
-answer is the most common one.
-Measure with the unbiased pass@k = 1 − C(n−c, k)/C(n, k), never 1 − (1 − c/n)^k, and report pass^k (all k
-succeed) when reliability is the requirement.
+probability q; an uncracked answer is a guess, right with probability 1 − e0". An attempt may also start on an
+approach that cannot work: thinking longer fixes slowness, another sample fixes dead ends — and sampling pays
+only if a verifier, or a vote the right answer wins, picks the right sample. Measure with the unbiased
+pass@k = 1 − C(n−c, k)/C(n, k), never 1 − (1 − c/n)^k, and with pass^k (all k succeed) for reliability.
 """
 from __future__ import annotations
 

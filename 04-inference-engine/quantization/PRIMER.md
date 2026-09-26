@@ -22,10 +22,10 @@ loaded by vLLM, and how to choose a scheme. Everything is learnable at tier T0 w
 
 Quantization stores numbers on a coarser **grid** with a **scale**: `x ≈ code × scale`. It speeds up only what is
 bound by the bytes or FLOPs it removes. **Decode** streams every weight each step, so fewer weight bytes are faster
-tokens: weight-only INT4 (**W4A16**) is ~3× faster at batch 1. **Prefill** is compute-bound. Weight-only kernels do
-16-bit math on dequantized weights, so only formats the tensor cores multiply natively make it faster: **FP8 W8A8**
-on Ada, Hopper and Blackwell, **INT8 W8A8** on Turing to Hopper, **FP4 W4A4** on Blackwell. The **KV cache** is
-the third lever: FP8 KV halves it and doubles the sessions per GPU.
+tokens: weight-only INT4 (**W4A16**) decodes an 8B model ~3× faster at batch 1. **Prefill** is compute-bound.
+Weight-only kernels do 16-bit math on dequantized weights, so only formats the tensor cores multiply natively make
+it faster: **FP8 W8A8** on Ada, Hopper and Blackwell, **INT8 W8A8** on Turing to Hopper, **FP4 W4A4** on
+Blackwell. The **KV cache** is the third lever: FP8 KV halves it and doubles the sessions per GPU.
 
 Accuracy is decided by **granularity** and **outliers**. A scale is set by the largest value that shares it, so
 INT4 needs groups of 32–128 plus a calibration method. **GPTQ** lets later columns absorb each column's rounding
@@ -111,7 +111,7 @@ torch's `float8_e4m3fn` and `float8_e5m2` casts (notebook 01).
 | FP8 **E4M3** (`fn`) | 1-4-3, 7 | **448** | 2⁻⁶ | 2⁻⁹ | 6.25% | 2^14.8 |
 | FP8 **E5M2** | 1-5-2, 15 | **57,344** | 2⁻¹⁴ | 2⁻¹⁶ | 12.5% | 2^29.8 |
 | FP4 **E2M1** | 1-2-1, 1 | 6 | 1 | 0.5 | — (8 magnitudes) | 2^2.6 |
-| BF16 | 1-8-7 | ~3.4 × 10³⁸ | 2⁻¹²⁶ | — | 0.39% | fp32's |
+| BF16 | 1-8-7 | ~3.4 × 10³⁸ | 2⁻¹²⁶ | 2⁻¹³³ | 0.39% | fp32's |
 | FP16 | 1-5-10 | 65,504 | 2⁻¹⁴ | 2⁻²⁴ | 0.05% | 2^30 |
 
 E4M3 has no infinities: S.1111.111 is NaN, so its top value is 1.75 × 2⁸ = 448. That leaves 254 finite codes and
@@ -235,8 +235,8 @@ the tiny model, INT8 is free, INT4 g32 costs 5.5 points (90.3% → 84.8%) and IN
 Larger models tolerate RTN better. The GPTQ paper's LLaMA-7B goes from 5.68 to 6.29 WikiText-2 perplexity at 4-bit
 RTN and to 25.5 at 3-bit (README, verify).
 
-**GPTQ** minimises each layer's output error, `‖X Wᵀ − X Qᵀ‖²` over calibration tokens X, not the weight error. The
-curvature of that objective is the Hessian (`gptq.hessian()`):
+**GPTQ** minimises each layer's output error, `‖X Wᵀ − X Qᵀ‖²` over calibration tokens X, not the weight error.
+The curvature of that objective is the Hessian (`gptq.hessian()`):
 
 ```
 H = 2/n · Σ_t x_t x_tᵀ                                    (in × in, from calibration activations)
@@ -303,9 +303,9 @@ them to FP16/BF16 **in registers**, and feeds the ordinary 16-bit tensor-core MM
 ([vllm-internals §8.1](../vllm-internals/vllm-internals-primer.md#81-how-a-quantization-method-is-chosen)). It moves
 a quarter of the bytes and does exactly the BF16 math:
 
-- **Marlin**. FP16×INT4, "close to ideal (4x) speedups up to batchsizes of 16-32 tokens". The ideal is 16/4.125 =
-  **3.87×** with g128 scales (Marlin README). vLLM's port runs from SM75, though the original README says SM80
-  (verify).
+- **Marlin**. FP16×INT4, "close to ideal (4x) speedups up to batchsizes of 16-32 tokens". With g128 scales the
+  byte ratio is 16/4.125 = **3.88×** (the README's "optimal 3.87x"). vLLM's port runs from SM75, though the
+  original README says SM80 (verify).
 - **Machete**. vLLM's CUTLASS mixed-input GEMM, Hopper only.
 - **ExLlama**. SM60+ (verify).
 
@@ -323,8 +323,8 @@ the sum, so they are applied once per output (`w8a8.w8a8_matmul()`):
 y[t, j] = s_x[t] · s_w[j] · Σ_k qx[t, k] · qw[j, k]          INT8: INT32 accumulator; FP8: FP32
 ```
 
-Emulated with integer codes and integer accumulation, it equals the fake-quantized product to 4 × 10⁻¹⁵ (notebook
-04). Three consequences follow:
+Emulated with integer codes and integer accumulation, it equals the fake-quantized product to within 10⁻¹⁴
+(notebook 04). Three consequences follow:
 
 - The activation scale may vary per token and the weight scale per output channel, but **neither may vary along
   k**, the reduction axis. That is why SmoothQuant must move per-input-channel variation into the weights rather
@@ -418,12 +418,13 @@ are averaged. An uncalibrated scale is harmless for values of order 1 and wrong 
 (a scale and minimum per channel per group of tokens) and **values per token** (per group of channels). Both are
 asymmetric. The newest tokens stay 16-bit until a group fills. On the same head, with groups of 32
 (`kvquant.kivi()`), 4-bit keys per channel give 1.16% error against 2.31% per token, and 2-bit 6.9% against 9.5%.
-The KIVI paper reports 2.6× less peak memory and up to 4× larger batches (verify). vLLM's sub-8-bit KV types at
+The KIVI README reports 2.6× less peak memory and up to 4× larger batches (verify). vLLM's sub-8-bit KV types at
 this snapshot are per token-head with dynamic scales, not KIVI's per-channel keys (verify): check which one a
 system implements before you trust its keys at 4 bits.
 
 **Kernel conditions** decide whether you can use it at all. They are worked out in
-[vllm-internals §6.3](../vllm-internals/vllm-internals-primer.md#63-how-a-backend-is-chosen) and the facts sheet:
+[vllm-internals §6.3](../vllm-internals/vllm-internals-primer.md#63-how-a-backend-is-chosen) and in each attention
+backend's checks (`vllm/v1/attention/backends/`):
 
 - **T4.** No FP8 KV cache in any backend: Triton's FP8 path needs SM89, FlashInfer SM80, FlashAttention SM80.
 - **A100 and L4.** `--kv-cache-dtype fp8` moves attention from FlashAttention 2 to FlashInfer. A throughput change
@@ -439,23 +440,23 @@ sharing.
 ## 7. Quantization-aware training and QLoRA in brief
 
 **QAT.** Training can see the quantizer. The forward pass uses the fake-quantized weight `Q(w)` (and activations).
-The backward pass treats rounding as the identity inside the clipping range, the **straight-through estimator**,
-so the weights learn to sit where rounding hurts least. It recovers most of what PTQ loses at 4 bits and below, at
-the cost of a training run. Quantization-aware distillation (QAD) trains the quantized model to match the
-full-precision model's outputs rather than labels. NVIDIA's NVFP4 W4A4 note reports 500 QAD iterations recovering
-an instruction-following benchmark that lost 2.6 points after PTQ, with a 67 → 22 GiB checkpoint (ModelOpt,
-2026-09-16, verify). This is the same "cheap post-training step on top of a big model" economics as the
+The backward pass treats rounding as the identity inside the clipping range, the **straight-through estimator**, so
+the weights learn to sit where rounding hurts least. It can recover much of what PTQ loses at 4 bits and below, at
+the cost of a training run (measure it per model). Quantization-aware distillation (QAD) trains the quantized model
+to match the full-precision model's outputs rather than labels. NVIDIA's NVFP4 W4A4 note reports 500 QAD iterations
+recovering an instruction-following benchmark that lost 2.6 points after PTQ, with a 67 → 22 GiB checkpoint
+(ModelOpt, 2026-09-16, verify). This is the same "cheap post-training step on top of a big model" economics as the
 post-training stages in [`00-foundations/rl-and-thinking-models/`](../../00-foundations/rl-and-thinking-models/)
 (its §1).
 
 **QLoRA is a training recipe, not a serving format.** It freezes the base model in **NF4**, a 4-bit format whose
 16 levels are normal-distribution quantiles, with a scale per block of 64 (QLoRA paper, verify). It trains LoRA
 adapters in BF16 on top. NF4 with an FP32 scale per 64 costs 4.5 bits per weight. With "double quantization" —
-8-bit block scales with one FP32 per 256 blocks — it costs 4.127 (`formats.bits_per_weight(4, 64, scale_bits=…)`). transformers loads it
-with `BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)`. To
-serve the result, merge the adapter into BF16 weights and quantize with a serving scheme (§9). vLLM serves
-bitsandbytes only through the out-of-tree `vllm-bnb-plugin` at this snapshot (verify), and its NF4 dequantization
-is not a fast serving path.
+8-bit block scales with one FP32 per 256 blocks — it costs 4.127 (`formats.bits_per_weight(4, 64, scale_bits=…)`).
+transformers loads it with `BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+bnb_4bit_use_double_quant=True)`. To serve the result, merge the adapter into BF16 weights and quantize with a
+serving scheme (§9). vLLM serves bitsandbytes checkpoints only through the out-of-tree `vllm-bnb-plugin` at this
+snapshot (verify).
 
 ## 8. Measuring the accuracy you pay
 
@@ -573,22 +574,22 @@ before relying on it).
 - **Detection.** vLLM reads `quantization_config.quant_method` and picks the method. A `--quantization` that
   disagrees with the checkpoint raises an error, so omit the flag for pre-quantized models.
 - **Online FP8.** To quantize a BF16 checkpoint at load time use `--quantization fp8_per_tensor`. Plain
-  `--quantization fp8` still does it at v0.30.0 but raises at `main` (facts sheet pitfall 1; the serving lab's
+  `--quantization fp8` still does it at v0.30.0 but raises at `main` (vLLM's `Fp8Config`; the serving lab's
   notebook 05 uses the old form).
 - **Minimum capability.** The load fails when the GPU is below the method's minimum ("Minimum capability: …").
 
 | Kernel / path | Minimum | T4 (7.5) | A100 (8.0) | L4, 4090 (8.9) | H100 (9.0) | B200 (10.0) |
 |---|---|---|---|---|---|---|
 | W4A16 Marlin (GPTQ, AWQ, compressed-tensors) | SM75 | yes | yes | yes | Machete | yes (Machete is SM90-only) |
-| FP8 weight-only (Marlin FP8) | SM75 | yes | yes | — | — | — |
+| FP8 weight-only (Marlin FP8) | SM75 | yes | yes | native FP8 instead | native FP8 instead | native FP8 instead |
 | FP8 W8A8 (CUTLASS; SM89 needs CUDA ≥ 12.4) | SM89 | runs W8A16 | runs W8A16 | yes (no block-FP8 CUTLASS) | yes + block, DeepGEMM | yes |
 | INT8 W8A8 (CUTLASS) | SM75, < SM100 | yes | yes | yes | yes | **no** |
 | NVFP4 W4A4 (CUTLASS/FlashInfer, CUDA ≥ 12.8) | SM100 | W4A16 | W4A16 | W4A16 | W4A16 | yes |
 | FP8 KV cache | SM80 backends | **no** | FlashInfer | FlashInfer | FA3 | yes |
 
-`quantcore.cost.supported()` encodes this table (vLLM 0.30.0 / `main`, facts sheet §2 and §7, verify on your
-version); vLLM's docs table disagrees with the code on the INT4 floor, so trust the code and the log line. A T4
-needs `--dtype half`.
+`quantcore.cost.supported()` encodes this table (vLLM 0.30.0 and `main`, from each kernel's `get_min_capability`
+and the scheme dispatch in `compressed_tensors.py`; verify on your version); vLLM's docs table disagrees with the
+code on the INT4 floor, so trust the code and the log line. A T4 needs `--dtype half`.
 
 **The CPU and consumer path: llama.cpp GGUF.** Block formats with an fp16 scale per 32 (`q4_0` 18 B per 32 = 4.5
 bits, `q8_0` 8.5 — `formats.bits_per_weight(4, 32)` and `(8, 32)`), and "k-quants" with 256-value super-blocks.
@@ -688,10 +689,10 @@ and on task evals with their standard errors, against a budget we wrote down fir
    error on well-scaled heads. With the default scale 1.0, values far below 1 flush to subnormals (5% error in our
    example) and values above 448 saturate. Calibrate `k_scale`/`v_scale`, check the backend (none on a T4), and
    run a long-context eval.
-6. *Leadership wants the 70B model on one H100. Options?* — BF16 (141 GB) does not fit and FP8 (72.7 GB) leaves no
-   room for a single 4K session. INT4 W4A16 (39.5 GB) fits with 48 such sessions and FP8 KV. It costs accuracy to
-   be measured, and prefill runs at BF16 speed. The alternatives are two H100s with tensor parallelism in FP8, or
-   an H200 (141 GB).
+6. *We need the 70B model on one H100. What are the options?* — BF16 (141 GB) does not fit and FP8 (72.7 GB)
+   leaves no room for a single 4K session. INT4 W4A16 (39.5 GB) fits with 48 such sessions and FP8 KV. It costs
+   accuracy to be measured, and prefill runs at BF16 speed. The alternatives are two H100s with tensor parallelism
+   in FP8, or an H200 (141 GB).
 
 ---
 
@@ -744,7 +745,8 @@ Papers:
   `inference/kernel.py`.
 - Frantar et al., *Marlin* (IST-DASLab/marlin README).
 
-Code and docs, read at the commits in the facts sheet:
+Code and docs, read on 2026-09-26 (vLLM v0.30.0 and `main@a4eb3f25`, llm-compressor `c6fb66c`,
+compressed-tensors `47f7d42`, lm-eval `d6de816`, GPTQModel `3b2e435`):
 
 - vllm-project/vllm: `vllm/model_executor/layers/quantization/`, `kernels/linear/`, `config/model.py`,
   `config/cache.py`, `v1/attention/backends/`, `docs/features/quantization/`; v0.30.0 and `main`.
@@ -765,7 +767,7 @@ In this repo:
 
 ## Verify list
 
-Dated 2026-09-26; each item was read from the sources above or the research facts sheet, and can change.
+Dated 2026-09-26; each item was read from the sources above, and can change.
 
 - vLLM **0.30.0** (PyPI) and `main@a4eb3f25`: the `QuantizationMethods` list; `--quantization fp8` quantizes a BF16
   checkpoint online at 0.30.0 but raises at `main` (use `fp8_per_tensor`); bitsandbytes and GGUF are out-of-tree

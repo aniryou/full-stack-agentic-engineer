@@ -122,9 +122,9 @@ def bench_outputs() -> None:
 # ---- vLLM start-up logs ---------------------------------------------------------------------------------------------
 def startup_log(model_key: str, gpu_key: str, device_name: str, offload_gib: float, max_len: int, path: Path) -> None:
     m, g = configs.get(model_key), configs.gpu(gpu_key)
-    f = offload.fit(m, g, "fp16", max_model_len=max_len, offload_gib=offload_gib)
+    f = offload.fit(m, g, "bf16" if g.bf16 else "fp16", max_model_len=max_len, offload_gib=offload_gib)
     loaded = f.weights_gib - offload_gib
-    flags = f"--dtype half --max-model-len {max_len}" + (
+    flags = ("--dtype half " if not g.bf16 else "") + f"--max-model-len {max_len}" + (
         f" --cpu-offload-gb {offload_gib:g} --cpu-offload-params experts" if offload_gib else "")
     cfg = f"/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/" \
           f"E={m.n_experts},N={m.expert_ff},device_name={device_name}.json"

@@ -1,12 +1,10 @@
 """Learning from preferences: Bradley–Terry reward models, PPO's pieces in brief, and DPO.
 
 The one idea: a preference "A over B" is a noisy comparison of rewards, P(A ≻ B) = σ(r(A) − r(B))
-(Bradley–Terry), so a reward model is a logistic regression on pairs. Maximising E[r] − β·KL(π‖π_ref) has the
-closed-form optimum π* ∝ π_ref·exp(r/β); invert it and r = β·log(π*/π_ref) + const. Substitute that into the
-Bradley–Terry likelihood and the constant cancels: DPO trains the policy directly on pairs with the loss
-−log σ(β[(log π(y⁺) − log π_ref(y⁺)) − (log π(y⁻) − log π_ref(y⁻))]). No reward model, no sampling — and so
-nothing is learned outside the pairs' support. An annotator who likes long answers teaches the reward model
-to like length, and a policy optimised against it pads (`length_biased_prefs`).
+(Bradley–Terry), so a reward model is logistic regression on pairs. The KL-regularised optimum
+π* ∝ π_ref·exp(r/β) inverts to r = β·log(π*/π_ref) + const; in the Bradley–Terry likelihood the constant
+cancels, so DPO trains the policy directly on pairs — no reward model, no sampling, and nothing learned outside
+the pairs. An annotator who likes long answers teaches a reward model to like length (`length_biased_prefs`).
 """
 from __future__ import annotations
 

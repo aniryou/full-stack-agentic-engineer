@@ -1,16 +1,13 @@
 """Two verifiable toy environments: a checker says right or wrong, so no reward model is needed.
 
 The one idea: RL with verifiable rewards needs only a *verifier* — a program that scores a completion — and
-the verifier is the whole specification. `SeqTask` is token-level (emit a short sequence; a deterministic
-check says whether it is balanced brackets or a sorted run). `ThinkTask` is the thinking-model toy: the
-policy emits "think" tokens until it chooses to answer, and a longer think really helps,
-P(correct | L) = 1 − e0·(1 − q)^L, while every token costs. A buggy verifier (`verifier="buggy"`) shows what
-RL does to a loophole: it finds it.
+the verifier is the whole specification, loopholes included (`verifier="buggy"`). `SeqTask` is token-level:
+emit brackets, and a deterministic check says whether they balance. `ThinkTask` is the thinking-model toy:
+emit "think" tokens until answering; P(correct | L) = 1 − e0·(1 − q)^L, and every token may cost.
 
-Both tasks expose the same interface to a policy: `n_states`, `n_actions`, `state(prompt, prefix)`,
-`done(prompt, prefix)` and `score(prompt, actions, rng) -> (reward, info)`. States are chosen so that the
-reward depends only on the final state: the "broken" state below makes that true for SeqTask, which is
-what lets a table of per-state softmaxes represent the KL-optimal policy exactly (pg.kl_optimal()).
+Both expose one interface: `n_states`, `n_actions`, `state(prompt, prefix)`, `done(prompt, prefix)` and
+`score(prompt, actions, rng) -> (reward, info)`. The reward depends only on the final state (SeqTask's
+"broken" state makes it so), so a table of per-state softmaxes can represent the KL-optimal policy exactly.
 """
 from __future__ import annotations
 
@@ -38,70 +35,50 @@ class Trajectory:
 
 
 class SeqTask:
-    """Emit `length` tokens that a deterministic verifier accepts.
+    """Emit `length` brackets, "(" (token 0) or ")" (token 1); correct iff the string is balanced — never below
+    zero depth, ending at zero.
 
-    kind="brackets": tokens "(" and ")"; correct iff the string is balanced (never below zero depth, ends at 0).
-    kind="sorted":   tokens 0..vocab-1; correct iff the run is non-decreasing.
     verifier="buggy" scores with a checker that has a loophole (see `buggy_verify`); reward_fn(seq) replaces the
     verifier altogether (a reward model). `info["correct"]` always reports the true verifier, so the gap between
     reward and correctness stays visible.
     """
 
-    def __init__(self, kind: str = "brackets", length: int = 8, vocab: int = 4, verifier: str = "true",
-                 reward_fn=None):
-        assert kind in ("brackets", "sorted") and verifier in ("true", "buggy")
-        self.kind, self.length, self.verifier, self.reward_fn = kind, length, verifier, reward_fn
-        self.n_actions = 2 if kind == "brackets" else vocab
-        # per position: brackets track depth 0..length plus "broken" (went below zero);
-        # sorted tracks the last token (or none yet) plus "broken" (a descent happened)
-        self.width = (length + 2) if kind == "brackets" else (vocab + 2)
+    def __init__(self, kind: str = "brackets", length: int = 8, verifier: str = "true", reward_fn=None):
+        assert kind == "brackets" and verifier in ("true", "buggy")
+        self.length, self.verifier, self.reward_fn = length, verifier, reward_fn
+        self.n_actions, self.n_prompts = 2, 1
+        self.width = length + 2                  # per position: depth 0..length, plus "broken" (went below zero)
         self.n_states = length * self.width
-        self.n_prompts = 1
 
-    # -- the state a policy conditions on ---------------------------------------------------------
-    def _walk(self, prefix) -> int:
-        """Compressed history: depth (or last token), or -1 once the prefix can no longer be correct."""
-        if self.kind == "brackets":
-            d = 0
-            for a in prefix:
-                d += 1 if a == 0 else -1
-                if d < 0:
-                    return -1
-            return d
-        last = -1 if not prefix else prefix[0]
-        for a, b in zip(prefix, prefix[1:]):
-            if b < a:
-                return -2
-            last = b
-        return last
+    def _depth(self, prefix) -> int:
+        """The compressed history the verifier cares about: the depth, or −1 once the prefix went below zero."""
+        d = 0
+        for a in prefix:
+            d += 1 if a == 0 else -1
+            if d < 0:
+                return -1
+        return d
 
     def state(self, prompt: int, prefix) -> int:
-        w = self._walk(prefix)
-        col = (w if w >= 0 else self.width - 1) if self.kind == "brackets" else (w + 1 if w >= -1 else self.width - 1)
-        return len(prefix) * self.width + col
+        d = self._depth(prefix)
+        return len(prefix) * self.width + (d if d >= 0 else self.width - 1)
 
     def done(self, prompt: int, prefix) -> bool:
         return len(prefix) >= self.length
 
-    # -- verifiers ----------------------------------------------------------------------------------
     def verify(self, seq) -> float:
         """The true check."""
-        if self.kind == "brackets":
-            return float(self._walk(seq) == 0)
-        return float(all(a <= b for a, b in zip(seq, seq[1:])))
+        return float(self._depth(seq) == 0)
 
     def buggy_verify(self, seq) -> float:
-        """A checker with a loophole. Brackets: it returns early with *pass* the moment depth goes negative
-        (think of a test harness that counts an early `sys.exit(0)` as success). Sorted: an off-by-one
-        that never compares the last pair."""
-        if self.kind == "brackets":
-            d = 0
-            for a in seq:
-                d += 1 if a == 0 else -1
-                if d < 0:
-                    return 1.0                      # the bug: meant to be `return 0.0`
-            return float(d == 0)
-        return float(all(a <= b for a, b in zip(seq[:-1], seq[1:-1])))
+        """A checker with a loophole: it returns early with *pass* the moment depth goes negative (think of a
+        test harness that counts an early `sys.exit(0)` as success)."""
+        d = 0
+        for a in seq:
+            d += 1 if a == 0 else -1
+            if d < 0:
+                return 1.0                          # the bug: meant to be `return 0.0`
+        return float(d == 0)
 
     def score(self, prompt: int, actions, rng=None):
         correct = self.verify(actions)
@@ -109,7 +86,7 @@ class SeqTask:
         reward = self.reward_fn(actions) if self.reward_fn else reward
         return reward, {"correct": correct, "length": len(actions), "truncated": False}
 
-    # -- enumeration (the space is small enough to compute every expectation exactly) ----------------
+    # -- the space is small enough to compute every expectation exactly ------------------------------
     def all_sequences(self):
         return [list(s) for s in itertools.product(range(self.n_actions), repeat=self.length)]
 
@@ -118,10 +95,10 @@ class SeqTask:
         return Trajectory(0, [self.state(0, seq[:t]) for t in range(len(seq))], list(seq), reward)
 
     def render(self, seq) -> str:
-        return "".join("()"[a] for a in seq) if self.kind == "brackets" else " ".join(map(str, seq))
+        return "".join("()"[a] for a in seq)
 
     def random_success_rate(self) -> float:
-        """Exact P(correct) for a uniformly random policy — for brackets, Catalan(n) / 2^(2n)."""
+        """Exact P(correct) for a uniformly random policy: Catalan(n) / 2^(2n)."""
         seqs = self.all_sequences()
         return sum(self.verify(s) for s in seqs) / len(seqs)
 

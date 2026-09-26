@@ -1,30 +1,24 @@
 """What thinking does to serving: output-heavy, decode-bound, heavy-tailed and hungry for KV cache.
 
-The one idea: a request that thinks for L tokens holds its KV for L decode steps while it grows, so its
-KV-token-steps are P·L + L(L+1)/2 — quadratic in output. Ten times the output is ~10× the concurrency (Little's
-law) *and* ~2× the KV per session, so memory, not FLOPs, sets the GPU count, and the ITL SLO caps the batch
-before HBM does once the SLO is tight. The sizing formulas are the capacity primer's
-(00-foundations/gpu-capacity-planning/capacity.py), restated here so this package stands alone;
-tests/test_workload.py reproduces that primer's numbers. What is added: a batch capped by HBM and by the ITL
-SLO (capacity.decode_aggregate caps neither), heavy-tailed thinking lengths, budgets, prefix reuse across
-turns when templates drop old thinking, and cost per *correct* answer.
+The one idea: a request that thinks for L tokens holds a growing KV for L decode steps — P·L + L(L+1)/2
+KV-token-steps, quadratic in output — so ten times the output is ~10× the concurrency *and* ~2× the KV per
+session: memory, not FLOPs, sets the GPU count, and a tight ITL SLO caps the batch before HBM does. The sizing
+formulas are the capacity primer's (00-foundations/gpu-capacity-planning/capacity.py), restated so this
+package stands alone; tests/test_workload.py reproduces that primer's numbers. Added: the batch capped by HBM
+and ITL (capacity.decode_aggregate caps neither), heavy tails, budgets, prefix reuse, cost per correct answer.
 """
 from __future__ import annotations
 
 import itertools
 import math
+import statistics
+from collections import namedtuple
 from dataclasses import dataclass
 
 BYTES = {"bf16": 2.0, "fp16": 2.0, "fp8": 1.0, "int8": 1.0, "int4": 0.5}
 
 
-@dataclass
-class GPU:
-    name: str
-    hbm_gb: float
-    bw_tb_s: float
-    bf16_tflops: float
-    fp8_tflops: float
+GPU = namedtuple("GPU", "name hbm_gb bw_tb_s bf16_tflops fp8_tflops")   # GB, TB/s, dense TFLOP/s
 
 
 @dataclass
@@ -45,7 +39,6 @@ GPUS = {"H100": GPU("H100", 80, 3.35, 990, 1979), "L4": GPU("L4", 24, 0.30, 121,
         "T4": GPU("T4", 16, 0.32, 65, 65)}
 MISTRAL_SMALL = Model("Mistral Small 3 (24B dense)", 24, 40, 8, 128)
 QWEN3_0_6B = Model("Qwen3-0.6B", 0.596, 28, 8, 128)
-QWEN3_8B = Model("Qwen3-8B", 8.19, 36, 8, 128)
 
 
 # -- the capacity primer's formulas, same units (weights in 1e9 bytes, KV in KB/1024², as capacity.py) --
@@ -150,16 +143,11 @@ def kv_token_steps(prompt_tokens: int, out_tokens: int) -> int:
     return prompt_tokens * out_tokens + out_tokens * (out_tokens + 1) // 2
 
 
-def _phi(x):
-    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+_N = statistics.NormalDist()
 
 
 def lognormal_quantile(median: float, sigma: float, p: float) -> float:
-    lo, hi = -10.0, 10.0                               # invert the normal CDF by bisection (stdlib only)
-    for _ in range(80):
-        mid = (lo + hi) / 2
-        lo, hi = (mid, hi) if _phi(mid) < p else (lo, mid)
-    return median * math.exp(sigma * lo)
+    return median * math.exp(sigma * _N.inv_cdf(p))
 
 
 def lognormal_mean(median: float, sigma: float) -> float:
@@ -175,8 +163,8 @@ def budget_outcome(median: float, sigma: float, answer_tokens: int = 300, e0: fl
     cut = budget if budget is not None else (max_tokens - answer_tokens if max_tokens is not None else None)
     if cut is None:
         return {"accuracy": 1.0, "tokens": lognormal_mean(median, sigma) + answer_tokens, "truncated": 0.0}
-    done = _phi((math.log(cut) - mu) / sigma)          # P(L_req ≤ cut)
-    think = lognormal_mean(median, sigma) * _phi((math.log(cut) - mu - sigma ** 2) / sigma) + cut * (1 - done)
+    done = _N.cdf((math.log(cut) - mu) / sigma)          # P(L_req ≤ cut)
+    think = lognormal_mean(median, sigma) * _N.cdf((math.log(cut) - mu - sigma ** 2) / sigma) + cut * (1 - done)
     if budget is not None:                            # forced: think min(L_req, budget), then answer
         return {"accuracy": done + (1 - e0) * (1 - done), "tokens": think + answer_tokens, "truncated": 0.0}
     # truncated requests think on through all of max_tokens (= cut + answer_tokens), so the mean is the same

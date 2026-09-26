@@ -104,12 +104,17 @@ for h in hist:
           f"clipped tokens {h['clipped']:.2f}")
 print("reference: P(correct) %.3f, %.1f effective correct answers" % diversity(ref))
 print("after GRPO: P(correct) %.3f, %.1f effective correct answers" % diversity(pol))
+for ec in (0.0, 0.05):                               # the other lever: pay for entropy in the reward
+    p_ec = ref.copy()
+    pg.train_reinforce(p_ec, task, np.random.default_rng(0), steps=300, batch=16, lr=0.5, entropy_coef=ec)
+    print(f"REINFORCE, entropy bonus {ec}: P(correct) %.3f, %.1f effective correct answers" % diversity(p_ec))
 
 # %% [markdown]
 # Success goes to ~100% within a few dozen steps; after that almost every group is all-correct, advantages are
 # zero and learning stops — and the policy has concentrated on a few of the 14 correct strings. RL sharpens:
-# pass@1 up, diversity down (pass@k at large k barely moves, notebook 04). In this toy the collapse happens with
-# or without clip-higher; DAPO reports the entropy effect on real models (primer §4).
+# pass@1 up, diversity down. An entropy bonus (−c·log π(y) added to the reward; TRL's `entropy_coef`) buys
+# diversity back for a little accuracy. In this toy the collapse happens with or without clip-higher; DAPO
+# reports clip-higher's entropy effect on real models (primer §4).
 #
 # ## Worked example 5 — the length bias of averaging per sequence
 # A thinking policy that answers with probability 0.1 per step; completions that reach 16 thinking tokens are

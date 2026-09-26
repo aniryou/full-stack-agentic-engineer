@@ -86,8 +86,8 @@ try:
         print(f"torch {dt}: identical to formats.to_float on 100,000 values: {same}")
     print("overflow:", torch.tensor([500.0]).to(torch.float8_e4m3fn).item(), "(E4M3, this torch build)",
           torch.tensor([70000.0]).to(torch.float8_e5m2).item(), "(E5M2 has inf)")
-except ImportError:
-    print("torch not installed - skipping the cross-check (the numpy grid is the reference here)")
+except (ImportError, AttributeError):
+    print("torch (2.1+) not installed - skipping the cross-check (the numpy grid is the reference here)")
 
 # %% [markdown]
 # A cast is not a quantizer: kernels divide by a scale and clamp to ±448 before casting (vLLM's

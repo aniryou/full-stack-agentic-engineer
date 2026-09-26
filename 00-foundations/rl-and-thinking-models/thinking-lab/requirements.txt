@@ -1,0 +1,13 @@
+# The library (T0): an async HTTP client/server; the rest is standard library.
+aiohttp>=3.9
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+pyyaml>=6.0
+matplotlib>=3.7
+# Notebooks 01 and 05 train a tiny transformer: the CPU build of torch is enough (without it they show a recorded run).
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# T1 only (GPU box, not needed for T0):  pip install "vllm==0.30.0" "transformers>=4.56.2" "trl==1.14.0"
