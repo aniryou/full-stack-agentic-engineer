@@ -50,7 +50,7 @@ Each lab has its own environment and its own README; the commands below are the 
 
 ```bash
 cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q        # 22 tests
-cd ../gcp-agent-platform-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                   # 170 tests (147 unit, 15 notebook runs, 8 notebook-tooling), ~75 s
+cd ../gcp-agent-platform-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                   # 172 tests (149 unit, 15 notebook runs, 8 notebook-tooling), ~70 s
 cd ../../sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q      # 89 tests, ~50 s
 cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                              # 120 tests, ~60 s, offline
 python3 -m sandboxlab env                                                                                    # which isolation levels this machine can run
