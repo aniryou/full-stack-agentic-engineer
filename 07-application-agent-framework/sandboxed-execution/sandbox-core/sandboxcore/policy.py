@@ -155,7 +155,9 @@ class SandboxPolicy:
                          ]}}
 
     def _proxy_service(self) -> dict:
-        # The proxy's Service at a pinned ClusterIP, so hostAliases can name it without DNS.
+        # The proxy's Service at a pinned ClusterIP, so hostAliases can name it without DNS. Its pods run in
+        # this namespace (the Service and the egress rule select them here), so they meet Pod Security
+        # restricted and the admission policy too; the lab instead gives the proxy its own namespace.
         return {"apiVersion": "v1", "kind": "Service",
                 "metadata": self._meta(self.proxy_service),
                 "spec": {"clusterIP": self.proxy_cluster_ip,

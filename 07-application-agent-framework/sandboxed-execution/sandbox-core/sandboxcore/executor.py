@@ -123,8 +123,9 @@ def _world_executable(path: str) -> bool:
         return False
 
 
-def _uid_pids(uid: int) -> list[int] | None:
-    """Live (non-zombie) processes whose real UID is ``uid``, from ``/proc``; None where there is none."""
+def _uid_pids(uid: int, *, zombies: bool = False) -> list[int] | None:
+    """Processes whose real UID is ``uid`` (live ones; zombies too if asked), from ``/proc``; None where
+    there is no ``/proc``."""
     if not os.path.isdir("/proc/self"):
         return None
     out = []
@@ -134,7 +135,7 @@ def _uid_pids(uid: int) -> list[int] | None:
         try:
             with open(f"/proc/{pid}/status") as f:
                 fields = dict(line.split(":", 1) for line in f if ":" in line)
-            if int(fields["Uid"].split()[0]) == uid and fields["State"].split()[0] != "Z":
+            if int(fields["Uid"].split()[0]) == uid and (zombies or fields["State"].split()[0] != "Z"):
                 out.append(int(pid))
         except (OSError, KeyError, ValueError, IndexError):
             continue
@@ -142,11 +143,16 @@ def _uid_pids(uid: int) -> list[int] | None:
 
 
 def _next_uid() -> int:
-    """A per-execution UID in [UID_BASE, UID_BASE + UID_SPAN) with no live process right now."""
+    """A per-execution UID in [UID_BASE, UID_BASE + UID_SPAN) with no process at all right now.
+
+    Zombies count: a killed escapee re-parented to a PID 1 that does not reap (some containers) stays a
+    zombie of that UID, and zombies still count toward ``RLIMIT_NPROC`` — reusing its UID would start the
+    next run with part of its process budget gone.
+    """
     start = (os.getpid() * 7 + next(_uid_counter)) % UID_SPAN
     for i in range(UID_SPAN):
         uid = UID_BASE + (start + i) % UID_SPAN
-        if not _uid_pids(uid):
+        if not _uid_pids(uid, zombies=True):
             return uid
     return UID_BASE + start
 

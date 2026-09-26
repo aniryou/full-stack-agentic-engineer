@@ -41,11 +41,38 @@ def test_simulation_orders_the_schemes():
     assert all(r["source"].startswith("SIMULATED") for r in rows.values())
 
 
+def test_prefill_flops_count_the_lm_head_once_per_sampled_sequence():
+    """2 x linear x tokens + 2 x vocab x d per sampled sequence + 4 L H hd per attended pair
+    (the same accounting as quantcore.cost.step_cost; vLLM computes logits only where it samples)."""
+    p = B.profile("llama-3.1-8b-instruct", "L4", "bf16", overhead_s=0.0)
+    linear, head = 6_979_321_856, 128_256 * 4_096                        # Llama-3.1-8B, untied
+    assert (p.params_per_token - p.head_params, p.head_params, p.attn_flops_per_pair) == (linear, head, 4 * 32 * 32 * 128)
+    n = 1800
+    flops = 2 * linear * n + 2 * head * 1 + 4 * 32 * 32 * 128 * n * (n + 1) / 2
+    assert p.step_time([], n) == pytest.approx(flops / (p.peak_flops * p.compute_eff))      # compute-bound
+    mid_prompt = p.step_time([], n, sampled=0)                                                # a chunk that samples nothing
+    assert mid_prompt == pytest.approx((flops - 2 * head) / (p.peak_flops * p.compute_eff))
+    engine = B.Engine(p, max_num_batched_tokens=512)
+    engine.add(B.Seq(0, 0.0, 1024, 4))
+    first, second = engine.schedule(), None
+    engine.commit(first, first.time)
+    second = engine.schedule()
+    assert first.time == pytest.approx(p.step_time([], 512, 0, sampled=0))                  # chunk 1 of 2: no logits
+    assert second.time == pytest.approx(p.step_time([], 512, 512, sampled=1))               # chunk 2 samples one token
+
+
 def test_fake_server_matches_the_emulator_over_http():
+    """Deterministic quantities exactly; wall-clock TPOT only one-sided, because a busy CPU can only
+    make the fake server's sleeps longer, never shorter."""
     prof = B.profile("qwen2.5-0.5b-instruct", "L4", "w4a16")
     with FakeServer(prof) as url:
-        assert B.is_simulated(url)
+        assert B.is_simulated(url) and B.server_kind(url) == "simulated"
         live = B.run_http(url, "quantlab-fake", users=2, n_requests=4, prompt_len=64, output_len=12)
     sim = B.summarize(B.from_seqs(B.closed_loop(2, 4, 64, 12, prof)), "sim")
     assert live["source"].startswith("SIMULATED") and live["requests"] == 4
-    assert live["tpot_ms_mean"] == pytest.approx(sim["tpot_ms_mean"], rel=0.5)
+    assert 0.8 * sim["tpot_ms_mean"] <= live["tpot_ms_mean"] < 5 * sim["tpot_ms_mean"]
+
+
+def test_an_unidentified_server_is_not_labelled_simulated_or_vllm():
+    assert B.server_kind("http://127.0.0.1:9/") is None                   # nothing listens on the discard port
+    assert not B.is_simulated("https://127.0.0.1:9/")

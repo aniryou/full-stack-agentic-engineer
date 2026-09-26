@@ -58,28 +58,46 @@ for mode, b in (("off", None), ("on", None), ("budget", 128), ("budget", 256), (
 print(table(rows, title=f"[{LABEL}] one sample, by mode"))
 
 # %% [markdown]
-# ## Exercise 3.1 — the unbiased pass@k estimator
+# ## Exercise 3.1 — pass@k from recorded samples, and what the shortcut would have said
 #
-# Given n samples with c correct, return the probability that a random subset of k of them
-# contains at least one correct sample: `1 − C(n−c, k) / C(n, k)`. Use the numerically stable
-# product form from the HumanEval code, `1 − Π_{i=n−c+1..n} (1 − k/i)`. When `n − c < k` every
-# subset contains a correct sample and the answer is 1.
+# The unbiased estimator `1 − C(n−c, k)/C(n, k)` is derived and implemented in rl-core notebook 04
+# (exercise 4.1); here it is `ref_pass_at_k`. Apply it to the records. `pass_at_k_both(sel, k)`
+# returns `(unbiased, plugin)`: the mean over the problems in `sel` of `ref_pass_at_k(n, c, k)` and
+# of the plug-in `1 − (1 − c/n)^k`, where each problem has n samples of which c are correct. Then
+# set `gap_comes_from` to the kind of problem that produces all of the difference between the two:
+# `"all right"`, `"all wrong"` or `"some right"`.
 
 # %% exercise
-def my_pass_at_k(n: int, c: int, k: int) -> float:
+def pass_at_k_both(sel: list, k: int) -> tuple:
     ### BEGIN SOLUTION
-    if n - c < k:
-        return 1.0
-    return 1.0 - math.prod(1.0 - k / i for i in range(n - c + 1, n + 1))
+    nc = [(len(r["correct"]), sum(r["correct"])) for r in sel]
+    return (statistics.fmean(ref_pass_at_k(n, c, k) for n, c in nc),
+            statistics.fmean(1 - (1 - c / n) ** k for n, c in nc))
     ### END SOLUTION
 
+gap_comes_from = None
+### BEGIN SOLUTION
+gap_comes_from = "some right"      # c = 0: both are 0; c = n: both are 1
+### END SOLUTION
+
 # %% check
-assert abs(my_pass_at_k(10, 3, 1) - 0.3) < 1e-12 and abs(my_pass_at_k(10, 3, 5) - 0.916667) < 1e-6
-assert my_pass_at_k(10, 3, 8) == 1.0 and abs(my_pass_at_k(16, 4, 4) - 0.728022) < 1e-6
-assert abs(my_pass_at_k(64, 16, 8) - 0.914746) < 1e-6
-assert all(abs(my_pass_at_k(n, c, k) - ref_pass_at_k(n, c, k)) < 1e-12 for n in (5, 8, 16) for c in range(n + 1) for k in range(1, n + 1))
-naive = 1 - (1 - 3 / 10) ** 5
-print(f"✅ n=10, c=3: pass@5 = {my_pass_at_k(10, 3, 5):.4f}; the naive 1-(1-c/n)^k says {naive:.4f} (biased)")
+toy = [{"correct": [1, 0, 0, 0]}, {"correct": [1, 1, 1, 1]}, {"correct": [0, 0, 0, 0]}]
+ub, pl = pass_at_k_both(toy, 2)
+assert abs(ub - (0.5 + 1 + 0) / 3) < 1e-12 and abs(pl - (1 - 0.75 ** 2 + 1) / 3) < 1e-12
+assert gap_comes_from == "some right"
+rows = []
+for mode in ("off", "on"):
+    sel = by(mode)
+    assert abs(pass_at_k_both(sel, 1)[0] - pass_at_k_both(sel, 1)[1]) < 1e-12        # k = 1: the same
+    few = sum(0 < sum(r["correct"]) <= 2 for r in sel)
+    for k in (2, 4, 8):
+        ub, pl = pass_at_k_both(sel, k)
+        assert ub >= pl - 1e-12                              # drawing without replacement misses less
+        rows.append({"thinking": mode, "k": k, "pass@k unbiased": round(ub, 3), "plug-in": round(pl, 3),
+                     "understated by": round(ub - pl, 3), "problems with 1-2 of 8 right": few})
+print(table(rows, title=f"[{LABEL}] pass@k two ways, from the same samples"))
+print("✅ the plug-in understates pass@k, and only through problems the model sometimes gets right; "
+      "it is worst where few samples are right, the slice where extra samples matter most")
 
 # %% [markdown]
 # ## Exercise 3.2 — majority vote
@@ -143,22 +161,42 @@ for mode in ("off", "on"):
 # that every one of k attempts succeeds is what an agent running the same step many times sees.
 # Thinking lifts every column, and each thinking sample costs roughly ten times the tokens.
 #
-# ## Exercise 3.3 — pass^k, the reliability metric
+# ## Exercise 3.3 — pass^k on the records, and the independence shortcut
 #
-# Return the probability that k samples drawn without replacement from n (c correct) are *all*
-# correct: `C(c, k) / C(n, k)`, as τ-bench computes it.
+# pass^k, the chance that k samples of the *same* problem are all right, is `C(c, k)/C(n, k)`
+# (τ-bench; rl-core notebook 04, exercise 4.2; here `ref_pass_hat_k`). A common shortcut is to raise
+# pass@1 to the k-th power, as if every attempt were an independent coin with the eval set's average
+# accuracy. `reliability(sel, k)` returns `(pass_hat, shortcut)`: the mean over problems of
+# `ref_pass_hat_k(n, c, k)`, and (mean accuracy over all samples)^k. Then set `shortcut_is` to
+# `"optimistic"` or `"pessimistic"` for these records, and say why in a comment.
 
 # %% exercise
-def my_pass_hat_k(n: int, c: int, k: int) -> float:
+def reliability(sel: list, k: int) -> tuple:
     ### BEGIN SOLUTION
-    return math.comb(c, k) / math.comb(n, k)
+    nc = [(len(r["correct"]), sum(r["correct"])) for r in sel]
+    acc = sum(c for _, c in nc) / sum(n for n, _ in nc)
+    return statistics.fmean(ref_pass_hat_k(n, c, k) for n, c in nc), acc ** k
     ### END SOLUTION
 
+shortcut_is = None
+### BEGIN SOLUTION
+shortcut_is = "pessimistic"   # failures concentrate on the hard problems: easy ones succeed every time
+### END SOLUTION
+
 # %% check
-assert my_pass_hat_k(10, 3, 5) == 0.0 and abs(my_pass_hat_k(16, 4, 4) - 0.000549) < 1e-6
-assert my_pass_hat_k(8, 8, 8) == 1.0 and abs(my_pass_hat_k(10, 9, 2) - 0.8) < 1e-12
-print(f"✅ a step that succeeds 90% of the time twice in a row: pass^2 = {my_pass_hat_k(10, 9, 2):.2f}; "
-      f"4 of 16: pass^4 = {my_pass_hat_k(16, 4, 4):.6f} while pass@4 = {ref_pass_at_k(16, 4, 4):.3f}")
+ph, sc = reliability([{"correct": [1, 1, 1, 1]}, {"correct": [0, 0, 0, 0]}], 2)
+assert ph == 0.5 and sc == 0.25                            # half the problems always work: pass^2 = 0.5, not 0.25
+out = []
+for mode in ("off", "on"):
+    for k in (2, 4, 8):
+        ph, sc = reliability(by(mode), k)
+        out.append({"thinking": mode, "k": k, "pass^k": round(ph, 3), "accuracy^k": round(sc, 3)})
+        if not LABEL.startswith("MEASURED"):
+            assert (ph > sc) == (shortcut_is == "pessimistic")
+print(table(out, title=f"[{LABEL}] repeating the same problem k times"))
+print("✅ averaged over problems of mixed difficulty, pass^k is higher than accuracy^k: the easy problems "
+      "succeed every time and the hard ones fail every time. For one hard problem it is far lower, so report "
+      "pass^k per slice, not one number")
 
 # %% [markdown]
 # ## Exercise 3.4 — cost per correct answer

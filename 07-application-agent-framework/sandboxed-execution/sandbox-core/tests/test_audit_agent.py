@@ -49,6 +49,15 @@ def test_declared_exfiltration_is_denied_before_running():
     assert ag.audit.events[0].decision == "deny"
 
 
+def test_the_declared_scenario_only_ever_reaches_the_loopback_trap():
+    # harmless by construction: even a policy that allows attacker.example sends it only to our listener
+    pol = SandboxPolicy(egress_allowlist=("attacker.example",))
+    with LoopbackTrap() as trap:
+        ag = SandboxAgent(injection_scenarios(pol, trap=(trap.host, trap.port))["exfiltrate_declared"], pol)
+        ex = ag.run("look this up online").executions[0]
+        assert ex.exit_reason != "denied" and trap.hit is True
+
+
 def test_undeclared_exfiltration_leaks_through_a_process_sandbox():
     # The honest result: the model simply does not declare its egress and opens a raw socket. The process
     # sandbox has no network control (network_blocked=False), so the bytes arrive and the audit says allow.

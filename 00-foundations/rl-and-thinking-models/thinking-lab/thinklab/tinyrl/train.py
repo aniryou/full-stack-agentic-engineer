@@ -121,8 +121,18 @@ def group_advantages(rewards: torch.Tensor, groups: int, scale: str = "group") -
     return adv.reshape(-1)
 
 
+def loss_stats(logp, old_logp, ref_logp, adv, mask, cfg: TinyRLConfig) -> dict:
+    """What TRL logs beside the loss: the mean k3 KL to the reference over live tokens, and the share of live
+    tokens whose ratio sits past the clip in the direction its advantage pushes (``clip_ratio``)."""
+    with torch.no_grad():
+        ratio, a, d = torch.exp(logp - old_logp), adv[:, None], ref_logp - logp
+        kl = torch.exp(d) - d - 1
+        past = ((ratio < 1 - cfg.epsilon) & (a < 0)) | ((ratio > 1 + cfg.epsilon_high) & (a > 0))
+        return {"kl": ((kl * mask).sum() / mask.sum()).item(), "clip_frac": (past.float() * mask).sum().item() / mask.sum().item()}
+
+
 def grpo_loss(logp, old_logp, ref_logp, adv, mask, cfg: TinyRLConfig, max_len: int):
-    """The per-token clipped surrogate (+ β·k3) and the three aggregations TRL names."""
+    """The per-token clipped surrogate (+ β·k3) and the three aggregations TRL names; returns (loss, stats)."""
     ratio = torch.exp(logp - old_logp)
     a = adv[:, None]
     clipped = torch.clamp(ratio, 1 - cfg.epsilon, 1 + cfg.epsilon_high)
@@ -139,10 +149,7 @@ def grpo_loss(logp, old_logp, ref_logp, adv, mask, cfg: TinyRLConfig, max_len: i
         loss = (per_token * mask).sum() / mask.sum().clamp(min=1)
     else:
         raise ValueError(cfg.loss_type)
-    stats = {"kl": ((kl * mask).sum() / mask.sum()).item(),
-             "clip_frac": ((((ratio < 1 - cfg.epsilon) & (a < 0)) | ((ratio > 1 + cfg.epsilon_high) & (a > 0)))
-                           .float() * mask).sum().item() / mask.sum().item()}
-    return loss, stats
+    return loss, loss_stats(logp, old_logp, ref_logp, adv, mask, cfg)
 
 
 @torch.no_grad()
@@ -167,7 +174,9 @@ def evaluate(model: TinyGPT, task: DigitSum, n: int, gen: torch.Generator, rng: 
 
 
 def grpo(model: TinyGPT, ref: TinyGPT, task: DigitSum, cfg: TinyRLConfig, gen: torch.Generator,
-         rng: random.Random, log=print) -> list:
+         rng: random.Random, log=print, loss_fn=None) -> list:
+    """The RL loop. ``loss_fn(logp, old_logp, ref_logp, adv, mask, cfg, max_len)`` returns the scalar loss to
+    minimise; None uses :func:`grpo_loss`. The logged kl and clip_frac come from :func:`loss_stats` either way."""
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.rl_lr)
     curve, G, B = [], cfg.num_generations, cfg.prompts_per_step
     for step in range(cfg.rl_steps + 1):
@@ -183,7 +192,11 @@ def grpo(model: TinyGPT, ref: TinyGPT, task: DigitSum, cfg: TinyRLConfig, gen: t
         model.train()
         for _ in range(cfg.num_iterations):                                                      # 4-5. update
             lp = token_logprobs(model, prompts, comps)
-            loss, st = grpo_loss(lp, old_lp, ref_lp, adv, mask, cfg, task.max_completion)
+            if loss_fn is None:
+                loss, st = grpo_loss(lp, old_lp, ref_lp, adv, mask, cfg, task.max_completion)
+            else:
+                loss = loss_fn(lp, old_lp, ref_lp, adv, mask, cfg, task.max_completion)
+                st = loss_stats(lp, old_lp, ref_lp, adv, mask, cfg)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -206,6 +219,7 @@ def run(cfg: TinyRLConfig | None = None, log=print) -> dict:
     t0 = time.perf_counter()
     log(f"tiny transformer: {model.num_params():,} parameters; task: last digit of a {cfg.k}-digit sum")
     sft_curve = sft(model, task, cfg, rng, log)
+    _SFT_CACHE[_sft_key(cfg)] = copy.deepcopy(model.state_dict())
     t1 = time.perf_counter()
     before = evaluate(model, task, cfg.eval_prompts, gen, random.Random(cfg.seed + 1), cfg.temperature)
     log(f"after SFT: accuracy {before['accuracy']:.3f}, mean completion {before['mean_length']:.2f} tokens")
@@ -224,14 +238,45 @@ def run(cfg: TinyRLConfig | None = None, log=print) -> dict:
                         f"{platform.machine()} CPU / torch {torch.__version__} / {cfg.threads} threads")}
 
 
+_SFT_CACHE: dict = {}    # SFT settings → weights after the warm-up (it is deterministic; this only saves time)
+
+
+def _sft_key(cfg: TinyRLConfig) -> tuple:
+    return (cfg.k, cfg.base, cfg.d, cfg.n_layers, cfg.n_heads, cfg.sft_mix, cfg.sft_steps, cfg.sft_batch,
+            cfg.sft_lr, cfg.seed, cfg.threads, cfg.device)
+
+
 def warm_start(cfg: TinyRLConfig | None = None, log=print):
-    """Only the SFT warm-up: returns ``(model, task)`` — the starting policy for rollout experiments."""
+    """Only the SFT warm-up: returns ``(model, task)`` — the starting policy for rollout experiments. The
+    warm-up is seeded, so the model equals the one :func:`run` trained with the same SFT settings; if ``run``
+    already trained it in this process its weights are reused instead of training again."""
     cfg = cfg or TinyRLConfig()
     rng, _ = _setup(cfg)
     task = DigitSum(cfg.k, cfg.base)
     model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len).to(_DEVICE)
-    sft(model, task, cfg, rng, log)
+    if _sft_key(cfg) in _SFT_CACHE:
+        model.load_state_dict(copy.deepcopy(_SFT_CACHE[_sft_key(cfg)]))
+        log("SFT warm-up: reusing the weights trained earlier in this process")
+    else:
+        sft(model, task, cfg, rng, log)
+        _SFT_CACHE[_sft_key(cfg)] = copy.deepcopy(model.state_dict())
     return model, task
+
+
+def grpo_from(model: TinyGPT, task: DigitSum, cfg: TinyRLConfig, loss_fn=None, log=print) -> dict:
+    """GRPO on a *copy* of ``model`` (e.g. from :func:`warm_start`), frozen copy as the reference, seeded from
+    ``cfg.seed``: for experiments that vary the RL settings or the loss from one SFT model. Returns the curve
+    and the evaluation after RL, labelled measured."""
+    rng, gen = _setup(cfg)
+    policy = copy.deepcopy(model).to(_DEVICE)
+    ref = copy.deepcopy(model).to(_DEVICE).eval()
+    for p in ref.parameters():
+        p.requires_grad_(False)
+    t0 = time.perf_counter()
+    curve = grpo(policy, ref, task, cfg, gen, rng, log, loss_fn)
+    after = evaluate(policy, task, cfg.eval_prompts, gen, random.Random(cfg.seed + 1), cfg.temperature)
+    return {"source": "measured", "config": asdict(cfg), "rl": curve, "after": after,
+            "timing_s": {"rl": round(time.perf_counter() - t0, 1)}}
 
 
 def make_rollouts(model: TinyGPT, task: DigitSum, prompts: int = 8, generations: int = 8, seed: int = 0,

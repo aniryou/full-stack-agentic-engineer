@@ -148,11 +148,56 @@ for k, q in runs.items():
     print(f"{k:20s} add {q.model().accuracy('add', 500):.1%}   reverse {q.model().accuracy('reverse', 500):.1%}")
 
 # %% [markdown]
-# Two things to notice. Smaller groups (g32) barely help the projections whose inputs have the
-# outlier channels (q/k/v, gate/up): a group is a run of *inputs within one output row*, and the
-# shrunken outlier columns are small relative to their neighbours in every group. The fix is
-# per-*input-channel*: GPTQ (error compensation) or AWQ (scale the salient columns up before
-# rounding, fold the inverse into the norm).
+# Two things to notice. Per layer, g32 lowers RTN's error only a little on the projections whose inputs
+# carry the outlier channels (q/k/v, gate/up): a group is a run of *inputs within one output row*, and
+# the two shrunken columns are 18-24x smaller than their neighbours in every group, so they round to
+# zero at any group size. End to end, g32 is even *worse* than g128 here — the opposite of the usual
+# rule (finer groups cost bits and buy accuracy; PRIMER §3). The next cell finds out why.
+#
+# ## Worked example: why finer groups lost accuracy on this model
+#
+# Two experiments on the outlier-meeting columns of q/k/v/gate/up: put their bf16 weights back
+# ("restored"), or force every code there to zero ("forced to 0"). And a count: how many of those
+# codes are *not* zero.
+
+# %%
+out_ch = tm.outlier_channels(model)
+hot = [n for n in model.linear_names() if n.split(".")[-1] in ("q_proj", "k_proj", "v_proj", "gate_proj", "up_proj")]
+
+def outlier_columns(q, restore):
+    """The quantized model with the outlier-meeting columns restored to bf16 (True) or forced to zero (False)."""
+    w = dict(q.model().weights)
+    for n in hot:
+        W = w[n + ".weight"].copy()
+        W[:, out_ch] = model.weights[n + ".weight"][:, out_ch] if restore else 0.0
+        w[n + ".weight"] = W
+    return tm.TinyLM(model.config, w)
+
+acc = lambda m: "   ".join(f"{t} {m.accuracy(t, 500):6.1%}" for t in tm.TASKS)  # noqa: E731
+for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
+    q = runs[key]
+    nz = sum(int((q.layers[n].codes[:, out_ch] != 0).sum()) for n in hot)
+    total = sum(q.layers[n].codes[:, out_ch].size for n in hot)
+    print(f"{key:16s} non-zero codes in those columns: {nz}/{total}")
+    print(f"    as quantized  {acc(q.model())}\n    forced to 0   {acc(outlier_columns(q, False))}"
+          f"\n    restored      {acc(outlier_columns(q, True))}")
+
+# %% [markdown]
+# Restoring two columns out of 128 makes RTN INT4 lossless at either group size: **all** of RTN's loss
+# on this model is those two columns being rounded to zero, i.e. two channels of the residual stream
+# deleted from every attention and MLP input. Finer groups do lower the error of the ordinary columns
+# (per layer, above), but that was never the problem. At g32 a handful of the small weights sit just
+# above half a step of their (smaller) group scale and round *up* to one step instead of down to zero.
+# Each is still ~90% wrong — now with the opposite sign to the deleted weights around it — and it
+# multiplies an input ~24x the typical one inside q/k, whose error goes through the softmax. Force
+# those few codes back to zero and g32 matches g128 exactly.
+#
+# So the ranking is an artefact of the planted construction: a real model's massive-activation
+# columns are not 24x smaller than their neighbours (they are usually ordinary — PRIMER §3,
+# "Activation outliers are a different problem"). The lesson that transfers: when the damage sits in
+# a few input channels, group size is the wrong knob. The fix is per-*input-channel*: GPTQ (error
+# compensation onto the other columns) or AWQ (scale the salient columns up before rounding, fold the
+# inverse into the norm) — both recover nearly all of it at g128 (the table above).
 #
 # ## Exercise 1.3 — the symmetric INT4 group quantizer
 #
@@ -259,6 +304,10 @@ if env.t1_allowed() and env.has("llmcompressor"):
     print("MEASURED: wrote a real checkpoint;", serve.vllm_scheme(real["quantization_config"]))
 else:
     print("T0: llm-compressor not run here (needs a GPU, `pip install llmcompressor==0.14.0` and QUANTLAB_RUN_T1=1).")
+if (OUT / "Qwen2.5-0.5B-Instruct-FP8_DYNAMIC").exists():
+    print(f"the real checkpoint is in {OUT}; serve it from there, then delete the directory")
+else:
+    C.clean(OUT)                                     # the tiny checkpoints above lived in a temporary directory
 
 # %% [markdown]
 # ## In a design review

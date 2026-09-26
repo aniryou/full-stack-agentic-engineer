@@ -111,6 +111,25 @@ def test_per_execution_uid_sweeps_escapees_and_leftover_files():
 
 
 @needs_root
+@pytest.mark.skipif(not hasattr(os, "waitid") or not os.path.isdir("/proc/self"), reason="needs waitid and /proc")
+def test_a_uid_still_holding_a_zombie_is_not_reused(monkeypatch):
+    # zombies count toward RLIMIT_NPROC, so a UID with one would start the next run short of processes
+    import itertools
+    import subprocess
+    from sandboxcore import executor
+    monkeypatch.setattr(executor, "_uid_counter", itertools.count(0))
+    uid = executor._next_uid()
+    p = subprocess.Popen(["true"], user=uid, group=uid, extra_groups=[])
+    os.waitid(os.P_PID, p.pid, os.WEXITED | os.WNOWAIT)          # exited, not reaped: a zombie of uid
+    try:
+        assert executor._uid_pids(uid) == [] and executor._uid_pids(uid, zombies=True) == [p.pid]
+        monkeypatch.setattr(executor, "_uid_counter", itertools.count(0))
+        assert executor._next_uid() != uid
+    finally:
+        p.wait()
+
+
+@needs_root
 def test_a_different_uid_is_what_protects_your_files():
     victim = tempfile.mkdtemp(prefix="victim-")                # 0700, owned by us
     key = os.path.join(victim, "id_ed25519")

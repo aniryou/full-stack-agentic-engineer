@@ -24,8 +24,8 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | explain quantization for inference in ten sections — §1 why quantize · §2 number formats · §3 granularity and the bits-per-weight budget · §4 weight-only PTQ (GPTQ, AWQ, kernels) · §5 weight-and-activation quantization · §6 KV-cache quantization · §7 QAT and QLoRA in brief · §8 measuring the accuracy you pay · §9 producing a checkpoint · §10 choosing a scheme — each formula with a worked number and the core function that computes it; then "In a design review", a glossary, sources and a dated Verify list | ~2 h, read alongside the core | — |
-| [`quant-core/`](quant-core/) | implement it in `quantcore` (numpy, ~620 lines of code): FP8/FP4/MX/NV grids from their bits, scale granularity, GPTQ, AWQ, SmoothQuant, W8A8 epilogues, FP8 and KIVI KV caches, a tiny model with LLM-like outliers, an eval with error bars, and a per-GPU cost and decision model; five fill-in notebooks | ~10 h with the primer | T0 |
-| [`quant-lab/`](quant-lab/) | produce real checkpoints with llm-compressor (FP8 dynamic, W4A16), serve FP16 vs INT4 vs FP8 in vLLM, measure the accuracy cost with lm-eval, turn on an FP8 KV cache, and work through the NVFP4/MXFP4 layouts; every notebook has a T0 path (a bundled tiny model and a fake server, labelled simulated) | ~10 h | T0 → T1 (T3 optional) |
+| [`quant-core/`](quant-core/) | implement it in `quantcore` (numpy, ~640 lines of code): FP8/FP4/MX/NV grids from their bits, scale granularity, GPTQ, AWQ, SmoothQuant, W8A8 epilogues, FP8 and KIVI KV caches, a tiny model with LLM-like outliers, an eval with error bars, and a per-GPU cost and decision model; five fill-in notebooks | ~10 h with the primer | T0 |
+| [`quant-lab/`](quant-lab/) | produce real checkpoints with llm-compressor (FP8 dynamic, W4A16), serve FP16 vs INT4 vs FP8 in vLLM, measure the accuracy cost with lm-eval, turn on an FP8 KV cache, and work through the NVFP4/MXFP4 layouts; every notebook has a T0 path (a bundled tiny model and a fake server, labelled simulated) | ~9 h | T0 → T1 (T3 optional) |
 
 ### Work it in this order
 
@@ -35,11 +35,11 @@ serving-engine (04.1–04.7).
 
 | Step | Primer | Core notebook (T0) | Lab notebook (`quant-lab/notebooks/`) | Tier |
 |---|---|---|---|---|
-| 1. Formats and their error | §1 Why quantize · §2 Number formats | [`01_number_formats_and_error`](quant-core/notebooks/01_number_formats_and_error.ipynb) | `05_fp4_and_the_blackwell_path` | T0 |
-| 2. Granularity and outliers | §3 Granularity and the bits-per-weight budget | [`02_granularity_and_outliers`](quant-core/notebooks/02_granularity_and_outliers.ipynb) | `01_quantize_a_checkpoint` | T0 → T1 |
-| 3. Calibration algorithms | §4 Weight-only post-training quantization · §5 Weight-and-activation quantization | [`03_gptq_awq_and_smoothquant_from_scratch`](quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | `01_quantize_a_checkpoint`, `03_measure_the_accuracy_cost` | T0 → T1 |
-| 4. Activations and the KV cache | §5 · §6 KV-cache quantization | [`04_activation_and_kv_cache_quantization`](quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) | `04_kv_cache_quantization_in_vllm` | T0 → T1 (Ada or newer) |
-| 5. Choosing and shipping | §7 QAT and QLoRA · §8 Measuring the accuracy you pay · §9 Producing a checkpoint · §10 Choosing a scheme | [`05_choosing_a_scheme`](quant-core/notebooks/05_choosing_a_scheme.ipynb) | `02_serve_and_compare_schemes`, `03_measure_the_accuracy_cost` | T0 → T1 |
+| 1. Formats and their error | §1 Why quantize · §2 Number formats | [`01_number_formats_and_error`](quant-core/notebooks/01_number_formats_and_error.ipynb) | — (lab 05's exercises 5.1–5.3 on E2M1, MXFP4 and NVFP4 fit here if you want them early) | T0 |
+| 2. Granularity and outliers | §3 Granularity and the bits-per-weight budget | [`02_granularity_and_outliers`](quant-core/notebooks/02_granularity_and_outliers.ipynb) | [`01_quantize_a_checkpoint`](quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) | T0 → T1 |
+| 3. Calibration algorithms | §4 Weight-only post-training quantization · §5 Weight-and-activation quantization | [`03_gptq_awq_and_smoothquant_from_scratch`](quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | [`01_quantize_a_checkpoint`](quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) (RTN vs GPTQ vs AWQ), [`03_measure_the_accuracy_cost`](quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) | T0 → T1 |
+| 4. Activations and the KV cache | §5 · §6 KV-cache quantization | [`04_activation_and_kv_cache_quantization`](quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) | [`04_kv_cache_quantization_in_vllm`](quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) | T0 → T1 (Ada or newer) |
+| 5. Choosing and shipping | §7 QAT and QLoRA · §8 Measuring the accuracy you pay · §9 Producing a checkpoint · §10 Choosing a scheme | [`05_choosing_a_scheme`](quant-core/notebooks/05_choosing_a_scheme.ipynb) | [`02_serve_and_compare_schemes`](quant-lab/notebooks/02_serve_and_compare_schemes.ipynb), [`03_measure_the_accuracy_cost`](quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb), then [`05_fp4_and_the_blackwell_path`](quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) (it builds on §5's W4A4 and SmoothQuant and on lab 02's GEMM roofline) | T0 → T1 (Blackwell for 05) |
 
 Each notebook ends with "In a design review": the two-minute explanation and its drills. The primer's own
 design-review section covers the whole topic.
@@ -64,7 +64,7 @@ On Colab, every notebook's first cell clones the repo and installs its package; 
 | Tier | What you run in this topic | Hardware and cost |
 |---|---|---|
 | **T0** | every core notebook; every lab notebook's T0 path (a bundled tiny model written as a compressed-tensors-style checkpoint, a fake server, the offline mini-eval); all latencies are **simulated** | laptop, Colab CPU or CI — $0 |
-| **T1** | llm-compressor on a 0.5B model; vLLM serving FP16, INT4 and FP8 checkpoints; lm-eval subsets; FP8 KV cache (Ada or newer) | Colab/Kaggle T4 (free: INT4 with fp16 and INT8 W8A8, no FP8 math, no FP8 KV); an RTX 4090 or L4 for FP8 (~$0.3–0.7/hr, verify) |
+| **T1** | llm-compressor on a 0.5B model; vLLM serving FP16, INT4 and FP8 checkpoints; lm-eval subsets; FP8 KV cache (Ada or newer); NVFP4 W4A4 (Blackwell) | Colab/Kaggle T4 (free: INT4 with fp16 and INT8 W8A8, no FP8 math, no FP8 KV); an RTX 4090 or L4 for FP8 (~$0.3–0.7/hr, verify); one rented B200 or RTX PRO 6000 for NVFP4 (verify) |
 | **T3** | the serving lab's Cloud Run GPU or GKE deploy with a quantized model (no new Terraform here) | GCP, pay per use; see [`vllm-serving-lab/deploy/`](../serving-engine/vllm-serving-lab/deploy/) for cleanup |
 
 Prices, free tiers and how to obtain GPUs on GCP and elsewhere: [`COMPUTE.md`](../../COMPUTE.md).
@@ -78,7 +78,7 @@ Prices, free tiers and how to obtain GPUs on GCP and elsewhere: [`COMPUTE.md`](.
 | before | [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) | bytes per parameter, KV bytes, sessions |
 | beside | [`vllm-internals`](../vllm-internals/README.md) §6.3 and §8; the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) §9 | how vLLM picks a quantization method, kernel and attention backend; FP8 attention's error sources |
 | beside | [`vllm-serving-lab`](../serving-engine/vllm-serving-lab/) (`servelab.sizing`, notebook 05, `deploy/`) | the sizing, benchmarking and deploys the lab reuses |
-| after | [`00-foundations/mixture-of-experts/`](../../00-foundations/mixture-of-experts/) | quantized experts (MXFP4 in gpt-oss), routers kept 16-bit |
+| after | [mixture-of-experts §6.7 *Quantized experts*](../../00-foundations/mixture-of-experts/PRIMER.md#67-quantized-experts) | quantized experts (MXFP4 in gpt-oss), routers kept 16-bit |
 | after | [`05-orchestrator`](../../05-orchestrator/README.md); [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) | fleets of quantized replicas; cost per conversation |
 
 ## Caveats

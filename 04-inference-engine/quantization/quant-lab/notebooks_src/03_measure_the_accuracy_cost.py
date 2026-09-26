@@ -43,11 +43,33 @@ print("measured on the bundled tiny model (T0), 1,000 held-out problems per task
 print(E.table(results))
 
 # %% [markdown]
-# Read the table three ways. KL spans nine orders of magnitude while accuracy moves by a few
-# points; the two W8A8 rows tie on accuracy (100%) but SmoothQuant cuts KL by orders of magnitude —
-# the distance metric sees headroom the task does not yet need. RTN INT4 loses points; GPTQ and AWQ
-# get them back at the same 4.125 bits. And W4A4 with FP4 *activations* collapses: the two
-# massive-activation channels set every block scale of their token (notebook 05).
+# Read the table three ways. The distance metric sees what accuracy does not: the two W8A8 rows tie on
+# accuracy (100%), but SmoothQuant cuts KL by orders of magnitude. RTN INT4 loses points, and GPTQ and
+# AWQ get them back at the same 4.125 bits; RTN at g32 is *worse* than at g128, which notebook 01 traced
+# to the two outlier-meeting columns, not to group size. And W4A4 with FP4 *activations* collapses: the
+# two massive-activation channels set every block scale of their token (notebook 05).
+#
+# One warning before reading a *ranking* off it. How sure is the reference of its answers?
+
+# %%
+for task in tm.TASKS:
+    p, a = tm.make_task(task, 1000, 1000)
+    z = ref.answer_logits(p, a)
+    z = z - z.max(-1, keepdims=True)
+    top = (np.exp(z) / np.exp(z).sum(-1, keepdims=True)).max(-1)
+    print(f"{task:8s} reference top-1 probability: median {np.median(top):.6f}; above 0.999 at "
+          f"{np.mean(top > 0.999):.1%} of answer positions")
+
+# %% [markdown]
+# Saturated: the reference is all but certain at every position, so a small logit error barely moves
+# the softmax, and KL values of 1e-8 against 1e-9 mean nothing. The model is also easy to compensate:
+# its inputs come from a 16-token vocabulary through 128-wide layers, so they are low-rank and GPTQ can
+# move nearly all of each column's rounding error onto the others. That is why INT4 GPTQ looks as close
+# to BF16 as FP8 or W8A8 here. On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant within a
+# fraction of a point, INT4 GPTQ/AWQ behind them and INT4 RTN last — the starting order of PRIMER §10's
+# `cost.choose()` — and measure it on your model. What transfers from this table is the mechanisms
+# (RTN's outlier loss, what calibration recovers, FP4 activations collapsing), not the order of the
+# schemes that pass.
 #
 # ## Exercise 3.1 — the mean KL between two models
 #
@@ -173,7 +195,7 @@ assert not passes(results["W4A16 g128 (rtn)"], results["bf16 (reference)"])
 assert not passes(results["NVFP4 W4A4"], results["bf16 (reference)"])
 assert passes(results["FP8_DYNAMIC"], results["bf16 (reference)"])
 print(f"✅ cheapest scheme within 0.5 points and 1e-3 nats on every task: {pick} ({BITS[pick]} bits per weight); "
-      "round-to-nearest at the same bits fails the budget")
+      "round-to-nearest at the same bits fails the budget (on this saturated toy: run the same gate on your eval)")
 
 # %% [markdown]
 # ## Worked example: one decision, four kinds of numbers — and a label on each
@@ -195,8 +217,10 @@ rep.add("Accuracy on the tiny model", "t0-eval",
         [{"scheme": k, "add": results[k]["add"]["accuracy"], "add KL": results[k]["add"]["kl"]} for k in
          ("FP8_DYNAMIC", "W4A16 g128 (rtn)", "W4A16 g128 (gptq)")])
 rep.add("gsm8k (lm-eval)", "sample", [{k: c[k] for k in ("filter", "base", "test", "delta", "verdict")} for c in cmp])
-md, js = rep.save(pathlib.Path(tempfile.mkdtemp(prefix="quantlab-03-")) / "decision")
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="quantlab-03-"))
+md, js = rep.save(tmp / "decision")
 print(md.read_text())
+C.clean(tmp)
 
 # %% [markdown]
 # ## Worked example: long generations compound small damage
@@ -246,7 +270,9 @@ else:
 # gsm8k has — so we compare paired flips. KL is sensitive long before accuracy moves; it tells us how
 # much headroom we have for inputs our eval does not cover, and it matters most for long generations,
 # where small per-token divergences compound. On the lab's model, round-to-nearest INT4 fails that
-# budget, GPTQ at the same 4.125 bits passes it, and FP4 activations fail badly."
+# budget, GPTQ at the same 4.125 bits passes it, and FP4 activations fail badly — though that toy is
+# saturated and easy to compensate, so on our model we expect INT4 GPTQ to cost more than FP8, and we
+# measure it."
 #
 # **Drill 1.** *Perplexity went from 6.14 to 6.26 after W8A8 (the SmoothQuant README's Llama-3-8B numbers).
 # Ship?* — Not on perplexity alone: run the

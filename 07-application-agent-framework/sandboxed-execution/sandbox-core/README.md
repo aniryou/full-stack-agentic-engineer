@@ -10,7 +10,7 @@ about 2,000 lines you can read in an afternoon, plus five fill-in notebooks.
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (why a code tool is the most dangerous tool; the isolation ladder).
-2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 75 tests, ~30 s, including "with its own
+2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 78 tests, ~30 s, including "with its own
    UID every probe is contained except egress", "an undeclared exfiltration leaks through a process
    sandbox" and "the rendered manifests validate against Kubernetes 1.34".
 3. Open [`notebooks/01_the_threat_model.ipynb`](notebooks/01_the_threat_model.ipynb) and watch a secret leak
@@ -36,7 +36,7 @@ About 4 hours with the primer (module 07.5).
 ```bash
 cd sandbox-core
 python3 -m pip install -e ".[dev]"     # the library is stdlib only; dev adds pytest, jupyter, pyyaml, kubernetes-validate
-python3 -m pytest -q                    # 75 tests, ~30 s
+python3 -m pytest -q                    # 78 tests, ~30 s
 python3 tools/build_notebooks.py        # rebuild notebooks/ and solutions/
 python3 -m jupyterlab notebooks         # do the exercises
 ```
@@ -58,7 +58,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 | File | Lines | What it teaches |
 |------|------:|-----------------|
 | [`threats.py`](sandboxcore/threats.py) | ~320 | the scripted adversary: nine harmless probes (read a secret, read a key by absolute path, phone home, fork bomb, disk fill, CPU spin, hang, flood, outlive the call), each with an expected verdict; a loopback trap and `run_probe` that judges containment by the real effect, not the exit code |
-| [`executor.py`](sandboxcore/executor.py) | ~530 | `UnsafeExecutor` (for contrast) and `ProcessSandbox`: clean env, a 0700 workspace, a UID per execution when root, rlimits lowered by the child itself (no `preexec_fn`), a wall-clock deadline, output read as it streams and capped, a process-group kill plus a sweep by UID, exit reasons with their source, and an honest `isolation_report()` |
+| [`executor.py`](sandboxcore/executor.py) | ~550 | `UnsafeExecutor` (for contrast) and `ProcessSandbox`: clean env, a 0700 workspace, a UID per execution when root, rlimits lowered by the child itself (no `preexec_fn`), a wall-clock deadline, output read as it streams and capped, a process-group kill plus a sweep by UID, exit reasons with their source, and an honest `isolation_report()` |
 | [`contract.py`](sandboxcore/contract.py) | ~170 | `ExecutionRequest`/`ExecutionResult`/`Budgets`, the exit-reason vocabulary and where each reason came from, the agent-core tool-result shape, the idempotency key and a `ResultStore` that claims a key before running (and says what it does not guarantee) |
 | [`policy.py`](sandboxcore/policy.py) | ~330 | policy as data (tiers, egress allowlist, budget ceiling) with deny-by-default `evaluate` and `clamp`; `render_k8s()` → Namespace, RuntimeClass, NetworkPolicy×2 (proxy only, no DNS), the proxy Service, ResourceQuota, LimitRange, Pod, Job, ValidatingAdmissionPolicy + binding, validated against K8s 1.34 |
 | [`proxy.py`](sandboxcore/proxy.py) | ~175 | the allowlisting egress proxy that injects a credential the sandbox never holds; no redirect following, caller credentials dropped, echoes redacted; refuses CONNECT and says why; logs the header name, never its value |
@@ -68,7 +68,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (75, offline, ~30 s):
+`tests/` has one focused test per concept (78, offline, ~30 s):
 
 - **What the process sandbox contains depends on its UID, and egress is never contained.**
   `test_threats.py` runs every probe: with a per-execution UID (as root) all are contained except
@@ -79,7 +79,8 @@ Read the modules in this order; each opens with a docstring stating the one idea
   planted secret, a wall-clock kill stops a sleeper and its grandchild, a `setsid()` escapee cannot hold the
   call open and is swept by UID, a flood ends as `output_limit` within wall_s + 1 s without growing the
   parent's memory, a key opens by absolute path unless the UID differs, the workspace is 0700, a forged
-  `MemoryError` is labelled `reason_source: code`, and peak memory is measured per execution.
+  `MemoryError` is labelled `reason_source: code`, and CPU and peak memory are measured per execution (with
+  `wait4`, so a child that exits while the parent is still reading does not lose them).
 - **The rendered manifests validate against Kubernetes 1.34 and would be admitted** (`test_manifests.py`):
   restricted Pod Security labels, the RuntimeClass, a non-retrying Job whose deadline allows for a cold start
   while `timeout` enforces the wall budget in the pod, every request ≤ its limit, `automountServiceAccountToken:
@@ -87,8 +88,8 @@ Read the modules in this order; each opens with a docstring stating the one idea
   ClusterIP), and an admission policy with `validationActions: [Deny]`.
 - **The pool arithmetic** (`test_pool.py`): Little's law gives 25 slots on average, which Erlang C shows is
   unstable; 31 slots for P(wait) ≤ 0.2 (the §6 table), 34 at the scaling primer's 5.42/s, a simulator that
-  agrees in all three modes, Erlang C stable at 160+ Erlangs, and cost per execution that charges the cold
-  start (5 sandbox-seconds; 6.2 with the fleet's headroom).
+  agrees in all three modes (the primer's simulated figures are pinned), Erlang C stable at 160+ Erlangs, and
+  cost per execution that charges the cold start (5 sandbox-seconds; 6.2 with the fleet's headroom).
 - **The proxy against real loopback upstreams** (`test_proxy.py`): injection for allowed hosts, 403 before
   any request for others, a 302 to an off-allowlist host not followed (the credential never reaches it),
   caller credentials and hop-by-hop headers stripped, an echoed secret redacted, CONNECT refused with 405, and

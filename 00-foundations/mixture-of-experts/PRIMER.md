@@ -650,13 +650,13 @@ reports (no configs here: numbers cited, not recomputed, all verify):
 | gpt-oss-20b / 120b | 32 / 128 | 4 | 0 | 2,880 | 20.91B / 3.61B; 116.83B / 5.13B (head only) | reference code; 20b's 24 layers derived (verify, 2026-09-26) |
 | Llama 4 Scout / Maverick | 16 / 128 | 1 | 1 | 5,120 | 107.77B / 17.17B; 400.71B / 17.18B (text) | Scout: config; Maverick: card 17B / 400B, MoE interleave and dense width 16,384 derived (verify, 2026-09-26) |
 | DeepSeek-V3 | 256 | 8 | 1 | 7,168 | 671.03B / 37.55B | config |
-| Kimi K2 | 384 | 8 | 1 | 7,168 | 1.04T / 32.6B | report (README: 1T / 32B) |
-| Mistral Large 3 | — | — | — | — | 675B / 41B | capacity and open-weight primers (verify) |
-| DeepSeek V4-Pro / V4-Flash | — | — | — | — | 1.6T / ~49B; 284B / ~13B | open-weight primer (verify) |
-| Qwen3.8-2.4T-A95B | 512 | 10 | 1 | — | 2.4T / ~95B | open-weight primer (verify) |
-| Kimi K3 | 896 | 16 | yes | — | 2.8T / 104B | open-weight primer (verify) |
-| MiniMax M3; Nemotron 3 Nano / Super / Ultra | — | — | — | — | 428B / ~23B; ~31.6B / 3.2B, ~120B / 12B, ~550B / ~55B | open-weight primer (verify) |
-| Gemma 4 26B MoE | — | — | — | — | 26B / ~4B | open-weight primer (verify) |
+| Kimi K2 | 384 | 8 | 1 | 7,168 | 1.04T / 32.6B | report (README: 1T / 32B); not recomputed (verify, 2026-09-26) |
+| Mistral Large 3 | — | — | — | — | 675B / 41B | capacity and open-weight primers (verify, 2026-09-26) |
+| DeepSeek V4-Pro / V4-Flash | — | — | — | — | 1.6T / ~49B; 284B / ~13B | open-weight primer (verify, 2026-09-26) |
+| Qwen3.8-2.4T-A95B | 512 | 10 | 1 | — | 2.4T / ~95B | open-weight primer (verify, 2026-09-26) |
+| Kimi K3 | 896 | 16 | yes | — | 2.8T / 104B | open-weight primer (verify, 2026-09-26) |
+| MiniMax M3; Nemotron 3 Nano / Super / Ultra | — | — | — | — | 428B / ~23B; ~31.6B / 3.2B, ~120B / 12B, ~550B / ~55B | open-weight primer (verify, 2026-09-26) |
+| Gemma 4 26B MoE | — | — | — | — | 26B / ~4B | open-weight primer (verify, 2026-09-26) |
 
 ---
 

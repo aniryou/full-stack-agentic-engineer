@@ -4,9 +4,9 @@
 # **Tier:** T0 — calculators and emulation only: the E2M1 grid, NVFP4 and MXFP4 quantizers written
 # the way compressed-tensors and vLLM write them, checkpoint layouts, a roofline throughput model for
 # Blackwell (**simulated**; peak numbers from datasheets, verify) and the accuracy of FP4 weights and
-# activations on the bundled tiny model. T1/T2 needs a Blackwell GPU (B200, RTX PRO 6000, GB200/GB300;
-# Cloud Run offers the RTX PRO 6000 — verify) with CUDA 12.8+; everything product-specific here is
-# `(verify)`.
+# activations on the bundled tiny model. T1 needs one Blackwell GPU — rented, and not a small one
+# (B200, RTX PRO 6000; Cloud Run offers the RTX PRO 6000 — verify) — with CUDA 12.8+; everything
+# product-specific here is `(verify)`.
 #
 # ## The one-minute version
 #
@@ -71,6 +71,11 @@ print("✅ E2M1 rounding matches vLLM's reference thresholds")
 # compressed-tensors rounds each block's `amax` to a power of two `2^e` — down, unless the mantissa
 # of `amax` is at least 1.75, then up — and stores `127 + e - 2` as an unsigned byte (E8M0; the `2`
 # puts the block max in E2M1's top binade). Write `mx_code(amax)` for an array of block maxima.
+#
+# This is what an llm-compressor MXFP4 checkpoint stores. The OCP MX spec's reference rule is plain
+# `floor(log2(amax)) - 2`, which puts the block max in [4, 8): a block whose max is 7.5 then clips to 6,
+# where compressed-tensors' rounding gives it the next exponent (PRIMER §2; `quantcore.formats.mxfp4`
+# implements both, `rule="ocp"` and `rule="compressed-tensors"`).
 
 # %% exercise
 def mx_code(amax):
@@ -85,8 +90,10 @@ def mx_code(amax):
 blocks = np.array([1.0, 1.7, 1.75, 6.0, 7.9, 0.01, 300.0])
 assert mx_code(blocks).tolist() == fp4.mxfp4_scale_exponent(blocks).tolist()
 ratio = blocks / 2.0 ** (mx_code(blocks).astype(int) - 127)
+ocp = np.floor(np.log2(blocks)) - 2
 print(f"✅ codes {mx_code(blocks).tolist()}; block max / scale lands in [3.5, 7): {np.round(ratio, 2).tolist()} "
-      "(above 6 saturates: MX trades a little clipping for scales that are pure exponents)")
+      "(above 6 saturates: MX trades a little clipping for scales that are pure exponents). The OCP floor rule "
+      f"would give {np.round(blocks / 2.0 ** ocp, 2).tolist()}: never below 4, up to 8")
 
 # %% [markdown]
 # ## Exercise 5.3 — NVFP4's two-level scale
@@ -220,7 +227,7 @@ print(f"✅ on a B200 a W4A16 kernel at 70% of the BF16 GEMM's efficiency loses 
       f"({m90} at 90%) — every prefill chunk; W4A4 on FP4 tensor cores has no such cliff [SIMULATED]")
 
 # %% [markdown]
-# ## On Blackwell (T1/T2, verify)
+# ## On Blackwell (T1, one rented GPU, verify)
 #
 # llm-compressor's `NVFP4` recipe needs 20 calibration samples (only the activations' global scales use
 # data); vLLM serves the result with no flag. Below sm_100 the same checkpoint loads weight-only.

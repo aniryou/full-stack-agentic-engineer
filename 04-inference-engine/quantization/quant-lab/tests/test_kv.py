@@ -80,3 +80,17 @@ def test_kv_quantizers_on_a_tensor():
     tiny = kv.kv_quantizer("fp8", k_scale=1e-3)("k", 0, x)                         # a stale scale saturates at 448e-3
     assert np.abs(tiny).max() <= 0.448 + 1e-9
     assert kv.kv_quantizer("auto") is None
+
+
+def test_llama_70b_on_one_h100_at_vllm_defaults():
+    """PRIMER §10 and drill 6: FP8 Llama-3.1-70B fits one H100 with room for only 2 (BF16 KV) or 4 (FP8 KV)
+    sessions of 4,000 tokens at vLLM's defaults (0.92 of the 79.65 GiB the driver reports); INT4 + FP8 KV
+    fits 54. quant-core's round inputs (0.9 x 80e9 B - 1 GB) leave 0 for FP8 (its test_primer_numbers)."""
+    cfg = {"model_type": "llama", "num_hidden_layers": 80, "hidden_size": 8192, "num_attention_heads": 64,
+           "num_key_value_heads": 8, "head_dim": 128, "intermediate_size": 28672, "vocab_size": 128256,
+           "max_position_embeddings": 131072, "tie_word_embeddings": False}
+    assert kv.params(kv.load_shape(cfg)).total == 70_553_706_496
+    got = {(w, d): kv.size(cfg, "H100-80GB", weights=w, kv_cache_dtype=d).num_blocks
+           for w, d in (("fp8", "auto"), ("fp8", "fp8"), ("w4a16", "fp8"))}
+    assert got == {("fp8", "auto"): 523, ("fp8", "fp8"): 1047, ("w4a16", "fp8"): 13593}
+    assert [b * 16 // 4000 for b in got.values()] == [2, 4, 54]

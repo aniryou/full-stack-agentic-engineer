@@ -10,6 +10,7 @@ labels its numbers simulated.
     QUANTLAB_MODEL=<served model name>    the model id that server expects (default: ask /v1/models)
     QUANTLAB_API_KEY=...                  sent as "Authorization: Bearer ..."
     QUANTLAB_RUN_T1=1                     allow notebooks to run llm-compressor / lm-eval on a local GPU
+    QUANTLAB_VLLM_LOG=/path/vllm.log      a real `vllm serve` startup log for notebook 04 to read back
 """
 from __future__ import annotations
 
@@ -90,6 +91,13 @@ def served_model(url: str) -> str:
     req = urllib.request.Request(url.rstrip("/") + "/v1/models", headers=auth_headers())
     with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310
         return json.loads(r.read())["data"][0]["id"]
+
+
+def get_text(url: str, path: str, timeout: float = 10) -> str:
+    """GET ``url + path`` (with ``QUANTLAB_API_KEY`` if set) as text, e.g. a server's ``/metrics``."""
+    req = urllib.request.Request(url.rstrip("/") + path, headers=auth_headers())
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+        return r.read().decode()
 
 
 def t1_allowed() -> bool:

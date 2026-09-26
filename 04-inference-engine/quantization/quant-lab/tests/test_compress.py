@@ -74,6 +74,35 @@ def test_gptq_beats_rtn_where_it_matters(model, calib):
     assert gptq.layers[n].out_err < rtn.layers[n].out_err / 3
 
 
+def test_rtn_loss_on_the_tiny_model_is_the_two_outlier_columns(model, calib):
+    """Notebook 01's diagnosis: RTN rounds the two outlier-meeting columns (24x smaller weights) to zero at
+    g128; restoring them makes RTN INT4 lossless. At g32 three of their codes round up to one step instead,
+    and that - not the ordinary columns - is why g32 lands below g128; zeroing them gives g128's result."""
+    out = tm.outlier_channels(model)
+    hot = [n for n in model.linear_names() if n.split(".")[-1] in ("q_proj", "k_proj", "v_proj", "gate_proj", "up_proj")]
+    runs = {g: C.quantize_model(model, C.Recipe("W4A16", group_size=g), calib) for g in (128, 32)}
+
+    def cols(q, restore):
+        w = dict(q.model().weights)
+        for n in hot:
+            W = w[n + ".weight"].copy()
+            W[:, out] = model.weights[n + ".weight"][:, out] if restore else 0.0
+            w[n + ".weight"] = W
+        return tm.TinyLM(model.config, w)
+
+    acc = lambda m: tuple(m.accuracy(t, 500) for t in tm.TASKS)  # noqa: E731
+    nz = {g: sum(int((q.layers[n].codes[:, out] != 0).sum()) for n in hot) for g, q in runs.items()}
+    assert nz == {128: 0, 32: 3}
+    for q in runs.values():
+        assert min(acc(cols(q, True))) >= 0.998
+    assert acc(cols(runs[32], False)) == acc(runs[128].model())
+    assert acc(runs[32].model())[1] < acc(runs[128].model())[1] - 0.02                    # reverse: 95.0% vs 98.8%
+    for n in hot:                                                                           # the ordinary columns: finer is better
+        ordinary = np.setdiff1d(np.arange(model.weights[n + ".weight"].shape[1]), out)
+        err = {g: np.linalg.norm((q.layers[n].w_hat - model.weights[n + ".weight"])[:, ordinary]) for g, q in runs.items()}
+        assert err[32] < err[128], n
+
+
 def test_transforms_preserve_the_function(model, calib):
     ids = tm.make_task("add", 8, 1000)[0]
     ref = model.forward(ids)

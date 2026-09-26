@@ -3,9 +3,10 @@
 #
 # **Tier:** T0 — sizing reproduces the serving lab's memory model exactly; per-step times come from
 # the roofline emulator (**simulated**); the accuracy side is measured on the bundled tiny model with
-# each KV dtype emulated. T1 (Ada or newer: L4, RTX 4090, H100) — `vllm serve ... --kv-cache-dtype fp8`
-# and read the capacity and backend back from its startup log (a sample log in vLLM's format is
-# parsed here: **sample output in the documented format (illustrative)**).
+# each KV dtype emulated. T1 (Ada or newer: L4, RTX 4090, H100) — `vllm serve ... --kv-cache-dtype fp8`;
+# with `QUANTLAB_VLLM_LOG` and `QUANTLAB_URL` set, the last code cell reads the capacity and backend
+# back from its startup log and `/metrics` and measures decode at two context lengths. Without them it
+# parses a bundled log: **sample output in the documented format (illustrative)**.
 #
 # ## The one-minute version
 #
@@ -234,19 +235,43 @@ print(f"✅ layer-0 K: amax {amax:.1f}, rms {rms:.2f} ->", {f"{s:g}": v for s, v
 # %% [markdown]
 # ## On a real GPU (T1): turn it on and read it back
 #
-# On an L4 or H100 (not a T4): add `--kv-cache-dtype fp8`, then check three startup-log lines — the
-# KV dtype, the attention backend, and the capacity — against the prediction.
+# On an L4 or H100 (not a T4): start `vllm serve` with `--kv-cache-dtype fp8` (the command below),
+# keep its log (`... 2>&1 | tee vllm.log`), then set `QUANTLAB_VLLM_LOG=vllm.log` and
+# `QUANTLAB_URL=http://127.0.0.1:8000` and run this cell. It checks three things against the
+# prediction: the KV dtype and capacity (from the log, and from `/metrics`' `vllm:cache_config_info`),
+# the attention backend, and decode speed at a short and a long context. Run it once with the flag and
+# once without: the pair is the measurement. With neither variable set it parses a bundled sample log.
 
 # %%
+import os, pathlib
 p = serve.plan("fp8-online", "L4", kv_cache_dtype="fp8", model="meta-llama/Llama-3.1-8B-Instruct", max_model_len=16384)
-print(p.command())
+print(p.command(), "2>&1 | tee vllm.log")
 print(serve.plan("w4a16", "T4", kv_cache_dtype="fp8").notes[-1])
-log = (E.SAMPLES.parent / "samples/vllm_startup_fp8_fp8kv_l4.log").read_text()
-got = serve.parse_startup_log(log)
 pred = kv.size("llama-3.1-8b-instruct", "L4", weights="fp8", kv_cache_dtype="fp8", max_model_len=16384)
-print("[sample output in the documented format (illustrative)]", got)
-print(f"predicted: {pred.kv_tokens:,} KV tokens, backend {pred.backend}; the log says {got['kv_cache_tokens']:,} tokens, "
-      f"backend {got['attention_backend']}")
+log_path = os.environ.get("QUANTLAB_VLLM_LOG")
+if log_path:
+    got, label = serve.parse_startup_log(pathlib.Path(log_path).read_text()), f"MEASURED (startup log {log_path})"
+else:
+    got = serve.parse_startup_log((E.SAMPLES / "vllm_startup_fp8_fp8kv_l4.log").read_text())
+    label = "[sample output in the documented format (illustrative)]"
+print(label, got)
+print(f"predicted for Llama-3.1-8B, FP8 weights + FP8 KV on an L4: {pred.kv_tokens:,} KV tokens, backend {pred.backend}; "
+      f"the log says {got.get('kv_cache_tokens', 0):,} tokens, backend {got.get('attention_backend')}")
+url = env.server_url()
+if url:
+    kind = B.server_kind(url, env.auth_headers())
+    info = serve.parse_cache_config_info(env.get_text(url, "/metrics"))
+    print(f"/metrics vllm:cache_config_info ({kind or 'unidentified'} server):",
+          {k: info.get(k) for k in ("cache_dtype", "block_size", "num_gpu_blocks")})
+    model_id = env.served_model(url)
+    for ctx in (512, 4096):          # the KV read grows with context; the weight read does not
+        r = B.run_http(url, model_id, users=8, n_requests=16, prompt_len=ctx, output_len=64, headers=env.auth_headers())
+        print(f"  context {ctx:5d}: TPOT {r['tpot_ms_mean']:6.1f} ms, TTFT {r['ttft_ms_mean']:7.1f} ms   [{r['source']}]")
+    print("Restart the server without --kv-cache-dtype fp8 and run this cell again: the TPOT gap at 4,096 is "
+          "the FP8 KV win (plus the FlashAttention -> FlashInfer switch on an L4).")
+else:
+    print("T0: no server measured. Set QUANTLAB_URL (and QUANTLAB_VLLM_LOG) after starting the command above on an "
+          "L4, RTX 4090 or H100.")
 
 # %% [markdown]
 # ## In a design review

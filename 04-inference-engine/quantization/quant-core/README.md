@@ -4,7 +4,7 @@ After this you can pick a quantization scheme for a model and a GPU and defend i
 each format's grid is, which outliers each granularity survives, and what GPTQ, AWQ and SmoothQuant do to the
 codes. You will know what an FP8 or 4-bit KV cache costs in accuracy and buys in sessions, and what a checkpoint
 runs as on each GPU generation. You get there by filling in the code yourself in `quantcore`, a numpy package
-small enough to read in a sitting (~620 lines of code, ~1,070 with docstrings).
+small enough to read in a sitting (~640 lines of code, ~1,130 with docstrings).
 
 ## Start here
 

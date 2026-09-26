@@ -47,7 +47,7 @@ Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 ```bash
 cd moe-lab
 python3 -m pip install -e ".[dev]"             # numpy + notebook/test tooling (torch optional: ".[torch]")
-python3 -m pytest -q                           # 117 tests, ~15 s with torch (it trains the toy), offline; torch tests skip without
+python3 -m pytest -q                           # 118 tests, ~15 s with torch (it trains the toy), offline; torch tests skip without
 python3 -m moelab models                       # total / active (two conventions) / KV per token, ten models
 python3 -m moelab touched --experts 64 --top-k 8 --batch 1 8 64 256
 python3 -m moelab stream --model olmoe-1b-7b --dense qwen2.5-1.5b --gpu L4    # ITL vs batch [simulated]

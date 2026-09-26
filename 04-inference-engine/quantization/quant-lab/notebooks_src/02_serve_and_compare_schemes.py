@@ -187,7 +187,7 @@ def pick(gpu, prompt_len, output_len):
 chat_t4 = pick("T4", 256, 512)            # short prompts, long answers: decode-bound
 rag_l4 = pick("L4", 4096, 32)              # long prompts, short answers: prefill-bound
 b200 = pick("B200", 2048, 256)
-assert chat_t4 in ("w4a16", "nvfp4"), chat_t4           # 4-bit weights win decode on a T4
+assert chat_t4 == "w4a16", chat_t4                      # 4-bit weights win decode on a T4; NVFP4 is 4.5 bits there
 assert rag_l4 in ("fp8", "w8a8-int8"), rag_l4           # only W8A8 halves prefill FLOP time
 assert b200 == "nvfp4", b200                            # W4A4 on FP4 tensor cores
 print(f"✅ T4 chat: {chat_t4}; L4 long-prompt RAG: {rag_l4}; B200: {b200} [SIMULATED speeds — gate each on an eval]")
@@ -214,8 +214,8 @@ print("then: QUANTLAB_URL=http://127.0.0.1:8000 jupyter lab notebooks/   (or pyt
 #
 # **Two minutes:** "Quantization buys bytes or FLOPs, and which one decides where it helps. On our
 # L4s, INT4 weight-only makes decode 2-3x faster per step for an 8B model but does nothing for
-# a long prompt's TTFT — its GEMMs still run in 16-bit, and past ~120 tokens per step the dequantizing
-# kernel is compute-bound. FP8 W8A8 halves both on the L4's FP8 tensor cores. On T4s the same FP8
+# a long prompt's TTFT — its GEMMs still run in 16-bit: past ~120 tokens per step the dequantizing
+# kernel is compute-bound, and by ~460 it is no faster than BF16. FP8 W8A8 halves both on the L4's FP8 tensor cores. On T4s the same FP8
 # checkpoint would run weight-only through Marlin, so there INT4 is the speed lever. We confirm the
 # kernel in vLLM's startup log, benchmark with the same client against the real server, and only then
 # look at cost."
@@ -225,8 +225,10 @@ print("then: QUANTLAB_URL=http://127.0.0.1:8000 jupyter lab notebooks/   (or pyt
 # memory halves, math stays 16-bit, plus dequantization).
 #
 # **Drill 2.** *INT4 decode is 3x faster at batch 1 but only 1.5x at batch 64 — measurement error?* — No:
-# at batch 64 each step carries 64 tokens per weight read and the KV read grows with the batch; the
-# kernel approaches its compute ceiling (~120 tokens on an L4) where W4A16 has no advantage.
+# the step still reads the weights once, but it also reads 64 sequences' KV cache, which INT4 weights do
+# not shrink — at typical contexts about half the bytes (layer 01 PRIMER §3.5: 3.80x at batch 1, 1.54x at
+# batch 64 for Llama-3.1-8B on an H100). The GEMMs are not compute-bound yet (that starts at ~120 tokens
+# per step on an L4); past it W4A16's edge shrinks, and by ~460 it is gone.
 #
 # **Drill 3.** *Can we run INT8 W8A8 on B200s?* — vLLM refuses it on compute capability >= 10.0; use FP8
 # or NVFP4 there.

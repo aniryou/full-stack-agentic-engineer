@@ -5,7 +5,8 @@ import sys
 
 import pytest
 
-from sandboxcore import PROBES, PROBES_BY_NAME, ProcessSandbox, SandboxConfig, UnsafeExecutor, run_probe, running_as_root
+from sandboxcore import (PROBES, PROBES_BY_NAME, ExecutionRequest, ProcessSandbox, SandboxConfig, UnsafeExecutor,
+                         run_probe, running_as_root)
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX rlimits only")
 UID_DEPENDENT = {"read_ssh_key", "fork_bomb", "escape_session"}   # contained only with a per-execution UID
@@ -17,7 +18,7 @@ def test_probes_are_harmless_by_construction():
         for literal in re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", p.code):
             assert ipaddress.ip_address(literal).is_loopback, f"{p.name} names {literal}"
         assert "http://" not in p.code and "https://" not in p.code, p.name
-        assert "expanduser('~')" not in p.code.replace(" ", "")      # never the bare real home
+        assert "expanduser" not in p.code and "pwd" not in p.code, p.name   # no probe looks up a real home
         assert p.contained_as in {"ok", "cpu_time", "wall_timeout", "file_too_large", "pids"}
     # every loop that could run away unsandboxed is bounded in the program itself...
     assert "while n < 500" in PROBES_BY_NAME["fork_bomb"].code
@@ -41,6 +42,23 @@ def test_process_sandbox_with_its_own_uid_contains_everything_except_egress():
             continue                                     # not root: see the next test for the honest verdict
         assert v.contained, f"{name}: {v.detail}"
         assert not v.leaked, f"{name} leaked: {v.detail}"
+
+
+def test_the_key_probe_never_opens_a_real_home(monkeypatch, tmp_path):
+    # Even when the executor passes the parent's HOME through (isolate_home=False), the probe must not
+    # read it: stand in a "real" home with a planted key and check it never shows up.
+    real_home = tmp_path / "real-home"
+    (real_home / ".ssh").mkdir(parents=True)
+    (real_home / ".ssh" / "id_ed25519").write_text("REAL-HOME-KEY")
+    monkeypatch.setenv("HOME", str(real_home))
+    req = ExecutionRequest(code=PROBES_BY_NAME["read_ssh_key"].code,
+                           files={"victim.txt": "/nonexistent/stand-in/.ssh/id_ed25519"})
+    for sb in (ProcessSandbox(SandboxConfig(isolate_home=False)),
+               ProcessSandbox(SandboxConfig(drop_to_uid=None, drop_to_gid=None, isolate_home=False)),
+               UnsafeExecutor()):
+        r = sb.run(req)
+        assert r.exit_reason == "ok", r.stderr
+        assert "REAL-HOME-KEY" not in r.stdout and str(real_home) not in r.stdout, r.stdout
 
 
 def test_without_a_uid_drop_the_key_and_the_escape_get_through():

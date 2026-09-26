@@ -47,8 +47,9 @@ timing is labelled *simulated*; a verdict you measured says *measured on this ma
 | **T0 + Docker** | a laptop with Docker | the hardened container, gVisor if installed, kind | `deploy/docker/`, `deploy/kind/` |
 | **T3** | GCP | a GKE Sandbox (gVisor) node pool via Terraform | `deploy/gcp/terraform/`, `deploy/gke/` |
 
-The probe suite is a superset of the core's: it adds the probes that separate a container from a process
-(`proc_environ`, `write_outside`, `metadata`, `memory_hog`, `disk_fill_many`) and names four differently —
+The probe suite is a superset of the core's: it adds five the core lacks (`proc_environ` and
+`write_outside`, which separate a container from a process; `metadata`, a stand-in cloud metadata endpoint;
+`memory_hog`; `disk_fill_many`) and names four differently —
 `infinite_loop` is the core's `cpu_spin`, `huge_output` its `output_flood`, `egress` its `egress_connect`,
 `env_secret`/`ssh_key` its `read_env_secret`/`read_ssh_key` (`sandboxlab.probes.CORE_PROBE_NAMES`). Exit
 reasons are one vocabulary in both packages (PRIMER §3: `cpu_time`, `wall_timeout`, `memory`, `pids`,
@@ -59,7 +60,7 @@ reasons are one vocabulary in both packages (PRIMER §3: `cpu_time`, `wall_timeo
 ```bash
 cd sandbox-lab
 python3 -m pip install -e ".[dev]"                 # PyYAML + kubernetes-validate; the sandbox itself is stdlib
-python3 -m pytest -q                               # 105 tests, ~25 s, offline, no GPU
+python3 -m pytest -q                               # 111 tests, ~25 s, offline, no GPU
 python3 -m sandboxlab env                          # which isolation levels are measurable here
 python3 -m sandboxlab probes --level process+netns # the attack probes through a process sandbox
 python3 -m sandboxlab probes --level docker:runc    # measured with Docker; else the command + sample verdicts
@@ -83,7 +84,7 @@ contract (the `run_code` tool returns the same result shape), the
 door, [`../sandbox-core/`](../sandbox-core/), is the minimal from-scratch version; this lab never imports
 it. Prices and where to get compute: [`COMPUTE.md`](../../../COMPUTE.md).
 
-## The library (`sandboxlab/`, ~4,700 lines, standard library + PyYAML)
+## The library (`sandboxlab/`, ~4,800 lines, standard library + PyYAML)
 
 | Module | Lines | The idea |
 |---|---:|---|

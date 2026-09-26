@@ -35,7 +35,8 @@ class Probe:
 
 
 # Each probe reads its target from a file the harness writes into the workspace (inputs survive the
-# clean-environment scrub), so every target is a harmless stand-in the harness owns:
+# clean-environment scrub), so every target is a harmless stand-in the harness owns — the key probe opens
+# ``$HOME`` only when HOME is the harness's stand-in home or the workspace, never a real home directory:
 #   target.txt   "host port" of a loopback listener (the exfiltration target)
 #   victim.txt   the absolute path of a stand-in private key in a 0700 "victim home"
 #   marker.txt   a path in a harness-owned temp directory the escape probe tries to write after the call
@@ -58,8 +59,14 @@ PROBES: list[Probe] = [
         description="Read a private key, by $HOME and by its absolute path (HOME is not a boundary).",
         code=(
             "import os\n"
-            "victim = open(os.path.join(os.environ['SANDBOX_WORKDIR'], 'victim.txt')).read().strip()\n"
-            "for p in (os.path.expanduser('~/.ssh/id_ed25519'), victim):\n"
+            "work = os.environ['SANDBOX_WORKDIR']\n"
+            "victim = open(os.path.join(work, 'victim.txt')).read().strip()\n"
+            "stand_in_home = os.path.dirname(os.path.dirname(victim))\n"
+            "home = os.environ.get('HOME', '')\n"
+            "paths = [victim]\n"
+            "if home in (stand_in_home, work):     # a harness-owned HOME only: never a real home directory\n"
+            "    paths.insert(0, os.path.join(home, '.ssh', 'id_ed25519'))\n"
+            "for p in paths:\n"
             "    try:\n"
             "        print(open(p).read())\n"
             "    except OSError as e:\n"

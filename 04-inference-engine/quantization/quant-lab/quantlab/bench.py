@@ -3,7 +3,7 @@
 One idea: a scheme changes two numbers — the bytes a step must read and the FLOP/s its GEMMs run
 at — and everything a user feels follows from where each step sits on the roofline. One decode
 step reads (nearly) all the weights plus every running sequence's KV; one prefill chunk does
-``2 x params x tokens`` FLOPs. So weight-only INT4 cuts decode time (bytes) but not prefill time
+``2 x linear params x tokens`` FLOPs (plus attention, plus the LM head once per sequence it samples). So weight-only INT4 cuts decode time (bytes) but not prefill time
 (it still multiplies in 16-bit, and the dequantization is not free), FP8 W8A8 halves both on GPUs
 with FP8 tensor cores, and FP8 KV cuts the per-sequence part of every decode step:
 
@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import kv as K
-from .serve import GPU, gpu as _gpu
+from .serve import GPU, gpu as _gpu, scheme_key
 
 
 # ---------------------------------------------------------------------------------------------
@@ -82,7 +82,7 @@ class Profile:
     name: str
     scheme: str
     kv_cache_dtype: str
-    params_per_token: float        # matmul parameters one token multiplies through (linear + lm_head)
+    params_per_token: float        # matmul parameters one *decoded* token multiplies through (linear + lm_head)
     weight_bytes: float            # resident weights
     streamed_bytes: float          # weights read by one decode step (all but the input-embedding gather)
     kv_bytes_per_token: float
@@ -94,14 +94,30 @@ class Profile:
     memory_eff: float = 0.8
     overhead_s: float = 0.002      # per step: launches, scheduling, sampling (assumption)
     notes: list = field(default_factory=list)
+    head_params: float = 0.0       # the LM head (vocab x hidden): run only where a token is sampled
+    attn_flops_per_pair: float = 0.0   # 4 x layers x heads x head_dim: QK^T and PV per (query, key) pair
 
-    def step_time(self, decode_contexts, prefill_tokens: int = 0, prefill_context: int = 0) -> float:
-        """One engine step: ``decode_contexts`` is the context length of each decoding sequence."""
+    def step_time(self, decode_contexts, prefill_tokens: int = 0, prefill_context: int = 0, *,
+                  sampled: int | None = None, prefill_pairs: float | None = None) -> float:
+        """One engine step: ``decode_contexts`` is the context length of each decoding sequence;
+        ``prefill_tokens`` new prompt tokens on top of ``prefill_context`` already-cached ones.
+
+        FLOPs: ``2 x linear params x tokens`` for the projections, ``2 x head_params`` per *sampled*
+        sequence (vLLM computes logits only where it samples: every decode, and the last chunk of a
+        prompt - quantcore.cost.step_cost counts it the same way), and ``attn_flops_per_pair`` per
+        (query, key) pair. ``sampled`` defaults to the decodes plus one if there is prefill;
+        ``prefill_pairs`` to one chunk's ``n x context + n (n + 1) / 2``. The Engine passes both exactly."""
         n_dec = len(decode_contexts)
         tokens = n_dec + prefill_tokens
         if tokens == 0:
             return 0.0
-        flops = 2.0 * self.params_per_token * tokens
+        if sampled is None:
+            sampled = n_dec + (1 if prefill_tokens else 0)
+        if prefill_pairs is None:
+            prefill_pairs = prefill_tokens * prefill_context + prefill_tokens * (prefill_tokens + 1) / 2
+        linear = self.params_per_token - self.head_params
+        flops = (2.0 * linear * tokens + 2.0 * self.head_params * sampled
+                 + self.attn_flops_per_pair * (sum(decode_contexts) + prefill_pairs))
         kv_read = (sum(decode_contexts) + prefill_context) * self.kv_bytes_per_token
         byts = self.streamed_bytes + kv_read
         return self.overhead_s + max(flops / (self.peak_flops * self.compute_eff), byts / (self.mem_bw * self.memory_eff))
@@ -134,6 +150,7 @@ def profile(model: str = "llama-3.1-8b-instruct", gpu_name="L4", scheme: str = "
             weight_only_eff: float = 1.0, gpu_memory_utilization: float = 0.92) -> Profile:
     """``weight_only_eff`` scales the compute ceiling of dequantizing kernels (W4A16, weight-only FP8/FP4)
     relative to a plain 16-bit GEMM: 1.0 is the pure roofline; below 1 models the dequantization cost."""
+    scheme = scheme_key(scheme)
     m, g = K.load_shape(model), _gpu(gpu_name)
     p = K.params(m)
     wb = K.weight_bytes(m, SCHEME_WEIGHTS[scheme])
@@ -151,7 +168,8 @@ def profile(model: str = "llama-3.1-8b-instruct", gpu_name="L4", scheme: str = "
     notes += rep.notes
     return Profile(f"{m.name} on {g.name}", scheme, kv_cache_dtype, p.linear + lm_head, wb, wb - input_embed,
                    K.kv_bytes_per_token(m, kv_cache_dtype), peak, g.mem_bw_gbs * 1e9, rep.num_blocks,
-                   compute_eff=compute_eff, memory_eff=memory_eff, overhead_s=overhead_s, notes=notes)
+                   compute_eff=compute_eff, memory_eff=memory_eff, overhead_s=overhead_s, notes=notes,
+                   head_params=lm_head, attn_flops_per_pair=4.0 * m.num_layers * m.num_heads * m.head_dim)
 
 
 def decode_floor_ms(model: str, gpu_name, scheme: str) -> float:
@@ -229,8 +247,11 @@ class Engine:
             n = min(budget, s.prompt_len)
             prefill.append((s, n))
             budget -= n
+        finishing = sum(1 for s, n in prefill if s.prefilled + n == s.prompt_len)   # these sample a token
+        pairs = sum(n * s.prefilled + n * (n + 1) / 2 for s, n in prefill)
         t = self.p.step_time([s.context for s in decode], sum(n for _, n in prefill),
-                             sum(s.prefilled for s, _ in prefill))
+                             sum(s.prefilled for s, _ in prefill), sampled=len(decode) + finishing,
+                             prefill_pairs=pairs)
         return Plan(decode, prefill, t)
 
     def commit(self, plan: Plan, now: float) -> list:
@@ -358,8 +379,7 @@ def stream_completion(url: str, model: str, prompt: str, max_tokens: int, header
                       timeout: float = 600) -> Result:
     """One streaming ``/v1/completions`` request; chunk arrival times give TTFT and ITL."""
     u = urllib.parse.urlparse(url)
-    conn = (http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection)(
-        u.hostname, u.port or (443 if u.scheme == "https" else 80), timeout=timeout)
+    conn = _connect(u, timeout)
     body = json.dumps({"model": model, "prompt": prompt, "max_tokens": max_tokens, "stream": True,
                        "ignore_eos": True, "temperature": 0.0, "stream_options": {"include_usage": True}})
     t0 = time.perf_counter()
@@ -390,15 +410,31 @@ def stream_completion(url: str, model: str, prompt: str, max_tokens: int, header
                   t0, t_end)
 
 
-def is_simulated(url: str) -> bool:
-    """The fake server says so on ``/version``; a real vLLM answers ``{"version": ...}`` only."""
+def _connect(u, timeout: float):
+    https = u.scheme == "https"
+    return (http.client.HTTPSConnection if https else http.client.HTTPConnection)(
+        u.hostname, u.port or (443 if https else 80), timeout=timeout)
+
+
+def server_kind(url: str, headers: dict | None = None) -> str | None:
+    """Ask ``/version``: ``"simulated"`` (the fake server sets ``"simulated": true``), ``"vllm"`` (a
+    ``{"version": ...}`` answer without that flag), or ``None`` when the probe fails - then nobody knows."""
     try:
         u = urllib.parse.urlparse(url)
-        c = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)
-        c.request("GET", "/version")
-        return bool(json.loads(c.getresponse().read() or b"{}").get("simulated"))
+        c = _connect(u, 5)
+        c.request("GET", (u.path.rstrip("/") or "") + "/version", headers=headers or {})
+        obj = json.loads(c.getresponse().read() or b"{}")
+        c.close()
     except Exception:  # noqa: BLE001
-        return False
+        return None
+    if obj.get("simulated"):
+        return "simulated"
+    return "vllm" if "version" in obj else None
+
+
+def is_simulated(url: str, headers: dict | None = None) -> bool:
+    """True only when the server says it is the fake one (same scheme, port and auth as the benchmark)."""
+    return server_kind(url, headers) == "simulated"
 
 
 def run_http(url: str, model: str, *, users: int = 4, n_requests: int = 16, prompt_len: int = 256,
@@ -421,5 +457,7 @@ def run_http(url: str, model: str, *, users: int = 4, n_requests: int = 16, prom
         t.start()
     for t in ths:
         t.join()
-    label = f"SIMULATED (fake server at {url})" if is_simulated(url) else f"MEASURED ({url})"
+    kind = server_kind(url, headers)
+    label = {"simulated": f"SIMULATED (fake server at {url})", "vllm": f"MEASURED ({url})"}.get(
+        kind, f"MEASURED (unverified server at {url}: /version did not identify it)")
     return summarize(results, label, time.perf_counter() - t0)

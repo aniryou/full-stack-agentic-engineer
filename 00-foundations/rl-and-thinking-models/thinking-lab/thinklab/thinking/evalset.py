@@ -15,7 +15,7 @@ Five kinds, each with a difficulty knob (1 = one step, 4 = several dependent ste
 
 The prompt suffix follows DeepSeek-R1's usage recommendation for math ("Please reason step by
 step, and put your final answer within \\boxed{}."; no system prompt). The set is small on
-purpose — accuracy on 60 problems carries a ±10-point interval, which the notebooks report
+purpose — accuracy on 60 problems near 50% carries a ±12-point 95% interval, which the notebooks report
 (``thinklab.thinking.ttc.wilson_interval``; the same statistic as the 07 agent lab's eval gates).
 """
 from __future__ import annotations

@@ -75,9 +75,9 @@ listener the harness owns and sends bytes (the exfiltration leg); `fork_bomb`, `
 `setsid()` and leaves a file behind, so something outlives the call. Run through
 `sandboxcore.UnsafeExecutor`, the secret, key, egress and escape probes **leak** — you watch the token come
 back, the key print, the connection succeed, the escapee write after the call returned. That demonstration
-(notebook 01) is the whole motivation. The lab's suite (`sandboxlab.probes`) adds the probes that separate a
-container from a process — reading other processes' `/proc/<pid>/environ`, writing outside the workspace,
-reaching a (stand-in) metadata endpoint, a memory hog — and names a few differently;
+(notebook 01) is the whole motivation. The lab's suite (`sandboxlab.probes`) adds probes the core lacks —
+reading other processes' `/proc/<pid>/environ` and writing outside the workspace (which separate a container
+from a process), reaching a stand-in cloud metadata endpoint, a memory hog — and names a few differently;
 `sandboxlab.probes.CORE_PROBE_NAMES` maps one set to the other.
 
 **Map each risk to the control that bounds it.** The design question, for every tool, is the identity
@@ -691,10 +691,10 @@ the exit reason, and I detect abuse from the exit-reason histogram and shed code
 | Term | Meaning |
 |---|---|
 | Ambient authority | Credentials, network and files a process holds by default (inherited env, home, metadata server). A sandbox removes it. |
-| Isolation ladder | in-process → process+rlimits → container → gVisor → microVM → VM, increasing defence and cost. |
+| Isolation ladder | in-process → process+rlimits → process+namespaces/seccomp → container → gVisor → microVM → VM, increasing defence and cost. |
 | rlimit | A POSIX per-process resource limit (`setrlimit`): CPU seconds, address space, processes, file size, open files. |
 | `RLIMIT_CPU` / `RLIMIT_AS` / `RLIMIT_NPROC` / `RLIMIT_FSIZE` | CPU seconds / virtual memory / processes per real UID / largest single file. |
-| Process group / `setsid` | A set of processes killed together; the sandbox puts the child in its own session so a timeout kills grandchildren too. |
+| Process group / `setsid` | A set of processes killed together; the sandbox puts the child in its own session so a timeout kills grandchildren too — but code can call `setsid()` itself and leave the group, so only a per-execution UID (or a cgroup / PID namespace) finds that process. |
 | Exit reason | The fixed vocabulary a sandbox returns (`ok`, `error`, `wall_timeout`, `cpu_time`, `memory`, `file_too_large`, `pids`, `open_files`, `output_limit`, `disk_limit`, `killed`, `denied`, `sandbox_error`) so the model can recover; its source (`parent`/`signal`/`code`) says how far to trust it. |
 | Idempotency key | turn + step + call index + args hash; lets an at-least-once redelivery return a stored result (scaling primer §5.4). |
 | Egress proxy | An allowlisting forward proxy inside the boundary that injects credentials outbound; the sandbox holds no keys. |

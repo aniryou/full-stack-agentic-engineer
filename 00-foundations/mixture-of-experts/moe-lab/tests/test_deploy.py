@@ -52,6 +52,21 @@ def test_serve_dry_run_prints_the_layout_flags(layout, flags):
         assert " ".join(ep.vllm_flags(layout)) in cmd
 
 
+def test_serve_offloads_what_fit_recommends_on_a_16_gb_t4(tmp_path):
+    """A stub nvidia-smi reporting one 15,360 MiB T4: the script's automatic --cpu-offload-gb must be the
+    smallest offload that holds 4 x 4096 tokens of KV, as `python -m moelab fit --gpu T4` prints it."""
+    stub = tmp_path / "nvidia-smi"
+    stub.write_text("#!/usr/bin/env bash\ncase \"$*\" in\n  *name,compute_cap*) echo 'Tesla T4, 7.5, 15360 MiB, 580.1';;\n"
+                    "  *memory.total*) echo 15360;;\n  *compute_cap*) echo 7.5;;\n  *) echo 'Tesla T4';;\nesac\n")
+    stub.chmod(0o755)
+    out = _dry(DEPLOY / "any-gpu/serve_moe.sh", PATH=f"{tmp_path}:{os.environ['PATH']}")
+    assert out.returncode == 0, out.stderr
+    cmd = [l for l in out.stdout.splitlines() if l.startswith("+ vllm serve")][0]
+    from moelab import configs, offload
+    want = offload.min_offload_gib(configs.get("olmoe-1b-7b"), configs.gpu("T4"), "fp16", kv_tokens=4 * 4096)
+    assert f"--cpu-offload-gb {want:g} --cpu-offload-params experts" in cmd and "--dtype half" in cmd
+
+
 def test_serve_rejects_unknown_layout():
     assert _dry(DEPLOY / "any-gpu/serve_moe.sh", LAYOUT="pp").returncode == 2
 

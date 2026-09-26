@@ -64,10 +64,14 @@ GPUS = {
 }
 
 
+GPU_ALIASES = {"H100-SXM": "H100-80GB", "RTX-PRO-6000": "RTXPRO6000", "RTX-4090": "RTX4090"}   # quantcore.cost's keys
+
+
 def gpu(name) -> GPU:
     if isinstance(name, GPU):
         return name
     key = str(name).upper().replace(" ", "").replace("_", "-")
+    key = GPU_ALIASES.get(key, key).upper()
     for k, v in GPUS.items():
         if k.upper() == key or k.upper().split("-")[0] == key:
             return v
@@ -109,6 +113,21 @@ SCHEMES = {
 }
 
 
+# quantcore.cost names schemes by what the GEMM does; this lab names them by the checkpoint you serve.
+SCHEME_ALIASES = {"w8a8-fp8": "fp8", "w4a4-nvfp4": "nvfp4"}
+
+
+def scheme_key(name: str) -> str:
+    """This lab's scheme key for ``name``, accepting quantcore.cost's spellings where one maps exactly."""
+    key = SCHEME_ALIASES.get(name, name)
+    if key == "w8a16-fp8":
+        raise KeyError("quantcore's 'w8a16-fp8' (FP8 weight-only) is not a checkpoint you serve: it is what an "
+                       "'fp8' checkpoint runs as below sm_89 (serve.plan('fp8', 'A100') says so)")
+    if key not in SCHEMES:
+        raise KeyError(f"unknown scheme {name!r}; known: {', '.join(SCHEMES)} (or quantcore's {', '.join(SCHEME_ALIASES)})")
+    return key
+
+
 @dataclass
 class ServePlan:
     scheme: str
@@ -142,6 +161,7 @@ def plan(scheme: str, gpu_name, *, model: str | None = None, kv_cache_dtype: str
          max_model_len: int = 4096, gpu_memory_utilization: float = 0.92) -> ServePlan:
     """The serving decision for ``scheme`` on ``gpu_name``: supported or not, the compute path,
     the kernel vLLM should pick, the flags. Rules from vLLM v0.30.0 / main source (verify)."""
+    scheme = scheme_key(scheme)
     s, g = SCHEMES[scheme], gpu(gpu_name)
     sm, notes = g.sm, []
     flags = list(s.flags) + ["--max-model-len", str(max_model_len), "--gpu-memory-utilization", str(gpu_memory_utilization)]
@@ -159,7 +179,7 @@ def plan(scheme: str, gpu_name, *, model: str | None = None, kv_cache_dtype: str
             compute = "FP8 x FP8 tensor cores (W8A8); activations quantized per token at run time"
             kernel = "CutlassFP8ScaledMMLinearKernel or FlashInferFP8ScaledMMLinearKernel"
             if sm == 89:
-                notes.append("CUTLASS FP8 on sm_89 needs CUDA >= 12.4 (vLLM's image ships CUDA 13)")
+                notes.append("CUTLASS FP8 on sm_89 needs CUDA >= 12.4 (verify the CUDA version of your vLLM image)")
         else:
             compute = "weight-only FP8 (W8A16): Marlin dequantizes to 16-bit; memory win only"
             kernel = "MarlinFP8ScaledMMLinearKernel"
@@ -290,6 +310,21 @@ _LOG = {
     "kv_cache_tokens": r"GPU KV cache size: ([\d,]+) tokens",
     "max_concurrency": r"Maximum concurrency for [\d,]+ tokens per request: ([\d.]+)x",
 }
+
+
+def parse_cache_config_info(metrics_text: str) -> dict:
+    """The labels of ``vllm:cache_config_info`` from a ``/metrics`` page: vLLM exports its whole CacheConfig
+    there (``block_size``, ``cache_dtype``, ``num_gpu_blocks``, ...; ``CacheConfig.metrics_info``, verify).
+    ``num_gpu_blocks`` and ``block_size`` come back as ints; ``{}`` when the metric is absent."""
+    import re
+    m = re.search(r"^vllm:cache_config_info\{(.*)\}\s", metrics_text, re.M)
+    if not m:
+        return {}
+    out = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+    for k in ("num_gpu_blocks", "block_size"):
+        if out.get(k, "").isdigit():
+            out[k] = int(out[k])
+    return out
 
 
 def parse_startup_log(text: str) -> dict:
