@@ -1,0 +1,8 @@
+# The notebooks, locally: JupyterLab (~250 MB) plus what `make check` uses to execute them.
+# Not needed on Colab, which has Jupyter already; not needed for the tests (requirements.txt).
+-r requirements.txt
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# optional: matplotlib>=3.8 draws the roofline charts; without it the notebooks print text charts

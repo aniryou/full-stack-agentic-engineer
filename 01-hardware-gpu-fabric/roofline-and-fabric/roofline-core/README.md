@@ -22,10 +22,14 @@ quantities on the hardware you have.
 
 ```bash
 cd roofline-core
-python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
+python3 -m pip install -r requirements.txt   # pytest only: enough for the tests
 python3 -m pytest -q                          # 58 tests, well under a second
+python3 -m pip install -r requirements-notebooks.txt   # JupyterLab (~250 MB), to do the notebooks locally
 python3 -m jupyterlab notebooks               # do the exercises
 ```
+
+`make setup test` and `make setup-notebooks lab` do the same. On Colab you need neither file: the notebooks' first
+cell clones the repo and installs the library, and Colab already has Jupyter.
 
 The library itself needs nothing installed:
 
