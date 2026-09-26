@@ -134,5 +134,4 @@ Go to [`../vllm-serving-lab/`](../vllm-serving-lab/) to size a real model before
 open-loop load generator, read its `/metrics`, sweep the same knobs against an SLO, and deploy it on Cloud Run
 GPU or GKE; read the real scheduler and block pool in [`../../vllm-internals/`](../../vllm-internals/README.md). For
 many replicas — routing, autoscaling, disaggregation — continue to
-[`05-orchestrator`](../../../05-orchestrator/README.md). Where each tier runs and what it costs: `COMPUTE.md` at the
-repo root. MIT licensed.
+[`05-orchestrator`](../../../05-orchestrator/README.md). Where each tier runs and what it costs: [`COMPUTE.md`](../../../COMPUTE.md). MIT licensed.

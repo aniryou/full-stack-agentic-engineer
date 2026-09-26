@@ -27,7 +27,7 @@ The concepts are in the topic primer, [`../PRIMER.md`](../PRIMER.md); this lab c
 
 Every concept is learnable at T0; T1/T2 adds the real device plugin on any provider, and GKE
 (T3) is one production target, never a prerequisite. Where GPUs come from and what they cost
-across providers: `COMPUTE.md` at the repo root. RunPod and Vast.ai rent
+across providers: [`COMPUTE.md`](../../../COMPUTE.md). RunPod and Vast.ai rent
 containers, not VMs, so the T1 path needs a VM provider (Lambda, GCP, others).
 
 **What is real and what is simulated on kind** (primer §10): the scheduler, Kueue's quota,

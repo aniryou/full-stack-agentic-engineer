@@ -29,7 +29,7 @@ at all; the GPU steps are optional and progressive.
 | **T3** | GCP via Terraform ([`deploy/gcp/`](deploy/gcp/)) | the whole suite on a fresh Spot L4 VM; JSON + Markdown report uploaded to a bucket; auto-stop | ~$0.1–0.3/hr on Spot (verify) |
 
 The notebooks detect what they have: no GPU means the T0 path runs and the cell prints what to run
-on real hardware. Prices and where to get GPUs: `COMPUTE.md` at the repo root.
+on real hardware. Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## Run it (T0)
 

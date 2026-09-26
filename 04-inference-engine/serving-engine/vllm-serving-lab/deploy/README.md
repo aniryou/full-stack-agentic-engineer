@@ -16,5 +16,5 @@ installation, Spot, managed Prometheus) is provisioned in layer 03's [`k8s-gpu-l
 and layer 05's [`inference-gateway-lab`](../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/), and `gcp/gke/`'s
 manifests run on either.
 
-Prices and GPU availability move; the dated table is `COMPUTE.md` at the repo root.
+Prices and GPU availability move; the dated table is [`COMPUTE.md`](../../../../COMPUTE.md).
 Scaling several replicas behind a router, and autoscaling on queue depth or KV usage, is layer 05.

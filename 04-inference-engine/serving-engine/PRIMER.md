@@ -590,7 +590,7 @@ exercise 6.3) fits one GPU. vLLM's flags:
 `--tensor-parallel-size`, `--pipeline-parallel-size`, `--data-parallel-size`, `--enable-expert-parallel` (verify).
 The split itself is learnable at T0 (exercise 1.6); to measure it you need two GPUs (tier T2): the lab's exercise
 3.6 predicts TP = 2 on Kaggle's free 2×T4 and measures it there over PCIe; a rented NVLink pair shows the speed
-(prices in `COMPUTE.md` at the repo root).
+(prices in [`COMPUTE.md`](../../COMPUTE.md)).
 
 ## 10. Multi-LoRA serving
 
@@ -687,8 +687,7 @@ The concepts in this primer are engine-independent; the flags and metric names d
 lab because its scheduler and KV manager are readable Python and its metrics are the ones layer 05's routers
 consume.
 
-**Where to run it** — concept by concept, on GCP and elsewhere (prices and obtainability in `COMPUTE.md` at the
-repo root):
+**Where to run it** — concept by concept, on GCP and elsewhere (prices and obtainability in [`COMPUTE.md`](../../COMPUTE.md)):
 
 | To learn | T0 (laptop / Colab CPU) | Non-GCP GPU (T1/T2) | GCP (T3) |
 |---|---|---|---|
@@ -886,5 +885,5 @@ main branch source on that date — re-check them against the release you pin.
 - **Where to run:** Cloud Run GPU types (L4; RTX PRO 6000 Blackwell), per-second billing and scale to zero (FACTS);
   Vertex AI Model Garden's vLLM-based serving; TPU v7 "Ironwood" GA 2026-04-22 (FACTS) and vLLM's TPU backend name
   and status; T4 lacks bf16 and FP8, L4 and H100 have FP8; Colab/Kaggle/RunPod/Vast.ai/Lambda offerings and prices
-  (maintained in `COMPUTE.md` at the repo root).
+  (maintained in [`COMPUTE.md`](../../COMPUTE.md)).
 - **Engine summaries in §12:** SGLang, TensorRT-LLM and llama.cpp feature claims.

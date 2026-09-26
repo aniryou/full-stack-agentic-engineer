@@ -1387,7 +1387,7 @@ Preemptions means the pool is too small for the admitted mix.
 
 ### 13.1 Where to run this
 
-| Tier | What | Where (prices and obtainability: `COMPUTE.md` at the repo root) |
+| Tier | What | Where (prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md)) |
 |---|---|---|
 | T0 | this primer, `source-map.md`, the notebook | any laptop or a Colab/Kaggle CPU runtime |
 | T1 | the one-process recipe below, the serving lab, metrics, preemption, spec-decode acceptance | a free Colab or Kaggle T4 (16 GB, SM 7.5: `--dtype auto` falls back to FP16, attention runs on Triton, no FP8 path; Section 13.6); any rented 24 GB card (L4, RTX 4090 on RunPod or Vast.ai); a GCP `g2-standard-4` L4 on Spot |

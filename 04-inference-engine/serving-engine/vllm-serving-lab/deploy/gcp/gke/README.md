@@ -3,7 +3,7 @@
 **Tier:** T3 (GCP). One vLLM replica on a Spot L4 node that the autoscaler creates on demand, and a
 `PodMonitoring` so the same `vllm:*` series this lab parses locally land in Cloud Monitoring.
 Routing across replicas and autoscaling on engine signals are the next layer:
-`05-orchestrator/serving-orchestration/` (see [`05-orchestrator/`](../../../../../../05-orchestrator/)).
+[`05-orchestrator/serving-orchestration/`](../../../../../../05-orchestrator/serving-orchestration/).
 
 This directory is the minimal **gcloud** path: one script and two manifests keep the engine the
 subject. The same kind of cluster as **Terraform** — zonal GKE Standard, an L4 Spot pool that scales
@@ -47,7 +47,7 @@ autoscaler should use (layer 05) — GPU utilization is not.
 ## Cost and cleanup
 
 A `g2-standard-8` (1 × L4, 8 vCPU, 32 GB) on Spot costs a fraction of the ~$0.7-1/hr on-demand
-L4 VM price (Spot is 60-91% off; verify current prices in `COMPUTE.md` at the repo root),
+L4 VM price (Spot is 60-91% off; verify current prices in [`COMPUTE.md`](../../../../../../COMPUTE.md)),
 plus the cluster: one `e2-standard-4` system node and the GKE cluster fee (the free tier covers
 one zonal cluster per billing account; verify). The L4 pool scales back to zero ~10 minutes after
 the Deployment is gone; the cluster keeps billing until you delete it:

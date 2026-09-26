@@ -103,7 +103,7 @@ below names the primer section it measures; each notebook links its sections at 
 * **Cost.** T1 is free on Colab or Kaggle; an hour on a rented NVLink box is roughly $2–25 (verify). Idle,
   the GKE cluster costs one e2-standard-4 system node, a few dollars a day (its management fee is covered for
   one zonal cluster by GKE's free-tier credit; verify), and its GPU pools cost nothing until a pod asks for a
-  GPU; `terraform destroy` after each session. Prices and obtainability: `COMPUTE.md` at the repo root.
+  GPU; `terraform destroy` after each session. Prices and obtainability: [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## The library
 

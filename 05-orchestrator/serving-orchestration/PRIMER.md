@@ -6,7 +6,7 @@
 labelled **simulated**: they come from an engine model built from spec-sheet arithmetic, not from a GPU.*
 
 One inference engine (vLLM, SGLang, TensorRT-LLM) turns a GPU into a token server; layer 04 (the `serving-engine`
-topic, `04-inference-engine/serving-engine/`) is about what happens inside it. This layer is about many of them:
+topic, [`04-inference-engine/serving-engine/`](../../04-inference-engine/serving-engine/)) is about what happens inside it. This layer is about many of them:
 which replica gets a request, how many replicas exist, and whether one request's prefill and decode should even run
 on the same GPU. It covers routing signals and algorithms, flow
 control, autoscaling, prefill/decode disaggregation, KV-cache tiers beyond HBM, multi-model and LoRA routing, and
@@ -676,7 +676,7 @@ autoscaling (HPA/KEDA, a planner) sizes pools.
 | the whole stack | kind + llm-d Router standalone + `llm-d-inference-sim` (no GPU) | Docker compose with real vLLM | the lab's Terraform + manifests |
 
 Cheap and free GPUs (Colab, Kaggle, RunPod, Vast, Lambda) and GCP obtainability are in
-`COMPUTE.md` at the repo root; the order to work the material is in `CURRICULUM.md` (repo root). The
+[`COMPUTE.md`](../../COMPUTE.md); the order to work the material is in [`CURRICULUM.md`](../../CURRICULUM.md). The
 [`inference-gateway-lab`](inference-gateway-lab/) carries these concepts to real servers.
 
 ---
