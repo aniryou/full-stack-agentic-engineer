@@ -79,7 +79,7 @@ for f in inventory.health(inv):
 print("✅ GPU 5 runs at x8: half the host↔device bandwidth of its neighbours")
 
 # %% [markdown]
-# ## 2 · Reading `nvidia-smi topo -m`
+# ## 2 · Reading nvidia-smi topo -m
 #
 # Every cell names the path between two devices, best to worst:
 #

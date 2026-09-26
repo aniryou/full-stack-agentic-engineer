@@ -271,7 +271,7 @@ assert (ref.leaves, ref.spines) == (leaves, spines)
 print("✅ 1:1 needs 48 switches (32 leaves + 16 spines); 3:1 needs 28 but keeps a third of the bisection")
 
 # %% [markdown]
-# ## Exercise 3.5 — read `nvidia-smi topo -m`
+# ## Exercise 3.5 — read nvidia-smi topo -m
 # Here is a topology matrix in the documented format for a hypothetical 2-socket, 4-GPU,
 # 2-NIC server (**illustrative, not captured from a machine**). Write `best_pair(matrix)` — the GPU pair with
 # the best connection (use `fabric.topo_rank`, lower is better) — and `closest_nic(matrix, gpu)`.
