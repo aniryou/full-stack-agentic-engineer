@@ -14,6 +14,9 @@
 -#}
 {% extends "main.html" %}
 
+{#- The page title is the site name: without this, Material prints "<page title> - <site name>", the same words twice. -#}
+{% block htmltitle %}<title>{{ config.site_name }}</title>{% endblock %}
+
 {% block extrahead %}
   {{ super() }}
   <link rel="preconnect" href="https://fonts.googleapis.com">

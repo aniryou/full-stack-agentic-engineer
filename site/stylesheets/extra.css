@@ -74,6 +74,8 @@
  * Tables: Material makes the table its own horizontal scroller but keeps desktop cell padding (0.94em 1.25em), so
  * on a 360px screen a prose column collapses to one or two words a line and the columns to its right are clipped.
  * Tighter padding and a floor on column width keep each column readable; the table scrolls sideways instead.
+ * The floor is for prose: columns whose every cell is short (hours, tiers, step numbers) are marked .fse-narrow by
+ * site/javascripts/tables.js and take only the width they need, so the prose columns start on screen.
  * Notebooks: mkdocs-jupyter keeps JupyterLab's "In [ ]:" prompt column (~80px) and cell padding, leaving code about
  * 210px of a 360px screen; the prompts carry no information on a rendered, unexecuted page. */
 @media screen and (max-width: 44.9375em) {
@@ -86,6 +88,10 @@
   }
   .md-typeset table:not([class]) :is(th, td):first-child {
     min-width: 6em;
+  }
+  .md-typeset table:not([class]) :is(th, td).fse-narrow {
+    min-width: 0;
+    white-space: nowrap;
   }
   .jupyter-wrapper :is(.jp-InputPrompt, .jp-OutputPrompt, .jp-OutputArea-prompt) {
     display: none !important;
