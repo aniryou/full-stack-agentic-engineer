@@ -33,4 +33,5 @@ size:
 	$(PY) -m servelab size --model qwen2.5-0.5b-instruct --gpu T4 --max-model-len 4096
 
 clean:
-	rm -rf .pytest_cache **/__pycache__ */*/__pycache__ **/.ipynb_checkpoints _run_outputs *.egg-info
+	rm -rf .pytest_cache _run_outputs *.egg-info build dist
+	find . \( -name __pycache__ -o -name .ipynb_checkpoints -o -name '.terraform*' \) -prune -exec rm -rf {} +
