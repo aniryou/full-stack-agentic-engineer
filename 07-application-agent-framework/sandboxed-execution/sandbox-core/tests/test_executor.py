@@ -280,31 +280,38 @@ def test_a_venv_the_sandbox_uid_cannot_reach_falls_back_to_a_system_python():
 needs_proc = pytest.mark.skipif(not os.path.isdir("/proc/self") or not hasattr(resource, "RLIMIT_NPROC"),
                                 reason="counts tasks from /proc (Linux)")
 THREAD_HOG = ("import sys, threading, time\n"          # another process of the same UID holding many threads,
-              "for _ in range(int(sys.argv[1])):\n"      # like a CI agent or a browser
-              "    threading.Thread(target=time.sleep, args=(120,), daemon=True).start()\n"
+              "def more(n):\n"                           # like a CI agent or a browser, and starting more of them
+              "    for _ in range(n):\n"                 # (argv[2]) 0.2 s into the run
+              "        threading.Thread(target=time.sleep, args=(120,), daemon=True).start()\n"
+              "more(int(sys.argv[1]))\n"
               "print('up', flush=True)\n"
+              "time.sleep(0.2); more(int(sys.argv[2]))\n"
               "time.sleep(120)\n")
 AS_ME_SCENARIOS = r'''
 import json, subprocess, sys
 from sandboxcore import Budgets, ExecutionRequest, ProcessSandbox, SandboxConfig
-hog = subprocess.Popen([sys.executable, "-c", sys.argv[1], sys.argv[2]], stdout=subprocess.PIPE, text=True)
+hog = subprocess.Popen([sys.executable, "-c", sys.argv[1], *sys.argv[2].split()], stdout=subprocess.PIPE, text=True)
 try:
     assert hog.stdout.readline().strip() == "up"
     sb = ProcessSandbox(SandboxConfig(drop_to_uid=None, drop_to_gid=None))
+    from sandboxcore import executor
     out = [sb.isolation_report().get("pids_scope")]
-    for code, budgets in json.loads(sys.argv[3]):
+    for code, budgets, *poll in json.loads(sys.argv[3]):
+        if poll:
+            executor.TREE_POLL_S = poll[0]
         r = sb.run(ExecutionRequest(code=code, budgets=Budgets(**budgets)))
-        out.append([r.exit_reason, r.reason_source, r.usage.wall_s, r.stderr[-300:]])
+        out.append([r.exit_reason, r.reason_source, r.usage.wall_s, r.stderr[-300:], r.stdout, r.notes])
 finally:
     hog.kill()
 print(json.dumps(out))
 '''
 
 
-def run_as_an_unprivileged_user(scenarios, hog_threads):
+def run_as_an_unprivileged_user(scenarios, hog_threads, hog_grows_by=0):
     """Run ``scenarios`` through ``ProcessSandbox`` without a UID switch, as a non-root user, while another
-    process of that same user holds ``hog_threads`` threads. As root the helper runs as a free UID from the
-    per-execution range (what CI's unprivileged runner user is); otherwise as us."""
+    process of that same user holds ``hog_threads`` threads (and starts ``hog_grows_by`` more 0.2 s after the
+    first run starts). As root the helper runs as a free UID from the per-execution range (what CI's
+    unprivileged runner user is); otherwise as us."""
     import json
     import shutil
     import subprocess
@@ -328,7 +335,7 @@ def run_as_an_unprivileged_user(scenarios, hog_threads):
             uid = executor._next_uid()
             kwargs = {"user": uid, "group": uid, "extra_groups": []}
         p = subprocess.run([python, "-I", "-c", f"import sys; sys.path.insert(0, {base!r})\n" + AS_ME_SCENARIOS,
-                            THREAD_HOG, str(hog_threads), json.dumps(scenarios)],
+                            THREAD_HOG, f"{hog_threads} {hog_grows_by}", json.dumps(scenarios)],
                            cwd=base, capture_output=True, text=True, timeout=60, **kwargs)
         assert p.returncode == 0, p.stderr
         return json.loads(p.stdout)
@@ -355,7 +362,7 @@ def test_the_pid_budget_ignores_other_threads_of_the_same_user():
     scope, *verdicts = run_as_an_unprivileged_user(
         [[SLEEPER_AND_GRANDCHILD, {"cpu_s": 5, "wall_s": 1}], [SETSID_ESCAPE, {"cpu_s": 2, "wall_s": 1}]],
         hog_threads=64)
-    for reason, source, wall, stderr in verdicts:
+    for reason, source, wall, stderr, *_ in verdicts:
         assert (reason, source) == ("wall_timeout", "parent"), stderr
         assert wall < 3
     assert scope == "tree"
@@ -402,10 +409,103 @@ def test_the_tree_count_covers_threads_the_group_and_a_setsid_child():
         p.wait()
 
 
+@needs_proc
+def test_a_fork_burst_between_two_counts_is_stopped_by_the_backstop_and_reported():
+    # The tree is counted every TREE_POLL_S, so forks faster than that run on until RLIMIT_NPROC — set to
+    # what the UID held + the budget + NPROC_BACKSTOP_SLACK — makes fork fail. The parent's last count still
+    # sees the burst (its children are in the run's group) and reports it as pids. The poll is stretched to
+    # 60 s here so the whole burst falls between two counts, as it would for any fork loop faster than 50 ms.
+    import re
+    from sandboxcore.executor import NPROC_BACKSTOP_SLACK
+    burst = ("import os, time\n"
+             "n = 0\n"
+             "while n < 500:\n"
+             "    try:\n"
+             "        pid = os.fork()\n"
+             "    except OSError:\n"
+             "        break\n"
+             "    if pid == 0:\n"
+             "        os.closerange(0, 3); time.sleep(3); os._exit(0)\n"
+             "    n += 1\n"
+             "print(n)\n")
+    scope, (reason, source, _wall, stderr, stdout, notes) = run_as_an_unprivileged_user(
+        [[burst, {"pids": 8, "wall_s": 4}, 60]], hog_threads=64)
+    forked = int(stdout.strip())
+    # a fresh UID holds nothing else that could exit mid-run; as a user, others may free a few slots
+    tolerance = 0 if running_as_root() else 8
+    assert 8 < 1 + forked <= 8 + NPROC_BACKSTOP_SLACK + tolerance, (forked, stderr)
+    assert (reason, source) == ("pids", "parent"), (reason, source, stderr)
+    held = re.search(r"process tree held (\d+) tasks \(budget 8\); a burst between two counts", notes[-1])
+    assert held and int(held.group(1)) in (forked, 1 + forked), notes      # the leader may be reaped already
+    assert scope == "tree"
+
+
+@needs_proc
+def test_the_backstop_leaves_room_for_the_users_other_processes_to_grow():
+    # RLIMIT_NPROC is set from what the UID held when the run started; if the user's other processes start 24
+    # more threads during the run, a run well inside its budget must still be able to fork.
+    two_children = ("import subprocess, sys, time\n"
+                    "time.sleep(1.0)\n"
+                    "kids = [subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']) "
+                    "for _ in range(2)]\n"
+                    "print('forked', flush=True)\n"
+                    "time.sleep(30)")
+    scope, (reason, source, _wall, stderr, stdout, _notes) = run_as_an_unprivileged_user(
+        [[two_children, {"pids": 16, "wall_s": 2.5, "cpu_s": 4}]], hog_threads=16, hog_grows_by=24)
+    assert stdout.strip() == "forked", stderr
+    assert (reason, source) == ("wall_timeout", "parent"), stderr
+    assert scope == "tree"
+
+
+def test_without_a_uid_switch_the_nproc_backstop_is_what_the_uid_holds_plus_budget_plus_slack(monkeypatch):
+    if not hasattr(resource, "RLIMIT_NPROC"):
+        pytest.skip("no RLIMIT_NPROC here")
+    from sandboxcore import executor
+    seen = {}
+
+    def fake_spawn(cmd, *a, tree_budget=None, **kw):
+        import json
+        seen["nproc"] = dict((name, soft) for name, soft, _hard in json.loads(cmd[4])).get("RLIMIT_NPROC")
+        seen["tree_budget"] = tree_budget
+        return "spawned"
+
+    monkeypatch.setattr(executor, "running_as_root", lambda: False)
+    monkeypatch.setattr(executor, "_uid_tasks", lambda uid: 100)
+    monkeypatch.setattr(executor, "_spawn", fake_spawn)
+    sb = ProcessSandbox(SandboxConfig(drop_to_uid=None, drop_to_gid=None))
+    assert sb.run(ExecutionRequest(code="pass", budgets=Budgets(pids=5))) == "spawned"
+    assert seen == {"nproc": 100 + 5 + executor.NPROC_BACKSTOP_SLACK, "tree_budget": 5}
+    assert 16 <= executor.NPROC_BACKSTOP_SLACK <= 64       # room for the UID's threads, yet a bounded overshoot
+
+
 def test_parent_verdicts_have_a_fixed_order():
     from sandboxcore.executor import PARENT_VERDICT_ORDER, _parent_verdict
     assert PARENT_VERDICT_ORDER == ("wall_timeout", "pids", "output_limit")
-    assert _parent_verdict(True, True, True) == "wall_timeout"     # past the deadline the run is over
-    assert _parent_verdict(False, True, True) == "pids"
-    assert _parent_verdict(False, False, True) == "output_limit"
-    assert _parent_verdict(False, False, False) is None
+    every = dict(wall_timeout=True, pids=True, output_limit=True)
+    assert _parent_verdict(**every) == "wall_timeout"               # past the deadline the run is over
+    assert _parent_verdict(**{**every, "wall_timeout": False}) == "pids"
+    assert _parent_verdict(output_limit=True, pids=False) == "output_limit"
+    assert _parent_verdict(wall_timeout=False, pids=False, output_limit=False) is None
+    with pytest.raises(ValueError):
+        _parent_verdict(memory=True)                                # the exit status's reasons are not the parent's
+
+
+def test_the_docs_give_the_tree_counts_period_and_the_backstops_slack():
+    # PRIMER §2 rung 1 and §3's budget table, the README and the Budgets comment quote both numbers
+    from pathlib import Path
+
+    from sandboxcore import executor
+    lab = Path(__file__).resolve().parents[1]
+    ms, slack = f"{executor.TREE_POLL_S * 1000:.0f} ms", executor.NPROC_BACKSTOP_SLACK
+    assert (ms, slack) == ("50 ms", 32)
+    readme = (lab / "README.md").read_text()
+    assert f"every {ms} instead" in readme and f"backstop {slack} tasks past the budget" in readme
+    assert f"counts stops at `RLIMIT_NPROC` {slack} tasks past the budget" in readme
+    contract = (lab / "sandboxcore" / "contract.py").read_text()
+    assert f"tree every {ms} (a fork burst can pass it by up to {slack}" in contract
+    primer = lab.parent / "PRIMER.md"
+    if not primer.is_file():
+        pytest.skip("PRIMER.md is outside this copy of the lab")
+    text = primer.read_text()
+    assert f"process tree every {ms}" in text and f"`RLIMIT_NPROC`, set {slack} tasks past the budget" in text
+    assert f"a {ms} count of the run's tree, `RLIMIT_NPROC` at +{slack} as a backstop" in text

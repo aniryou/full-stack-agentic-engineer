@@ -17,7 +17,9 @@ This module has two runners on purpose:
 
 Without root, ``RLIMIT_NPROC`` is shared with every process of your UID, so it can only be a backstop:
 the process budget is then the run's own — the parent counts the tasks in the run's process tree (its group,
-its session and every descendant still linked to it) and ends the run as ``pids`` past the budget.
+its session and every descendant still linked to it) and ends the run as ``pids`` past the budget. That
+count is sampled (every ``TREE_POLL_S``, and once more when the run ends), so a burst of forks between two
+counts runs on until the backstop — ``NPROC_BACKSTOP_SLACK`` tasks past the budget — makes ``fork`` fail.
 
 What it does not stop, stated in ``isolation_report()``: the **network** (rlimits never touch sockets), the
 **host kernel** (every syscall reaches it), and — without root — your files and a ``setsid`` escape.
@@ -373,8 +375,9 @@ class ProcessSandbox:
                         if per_exec else
                         "No UID drop here (not root, or disabled): the code runs as YOUR UID, so it can read "
                         "your files by absolute path, RLIMIT_NPROC is shared with your processes (the parent "
-                        "counts the run's own process tree instead) or ignored as root, a process that calls "
-                        "setsid() can outlive the call, and files it writes "
+                        f"counts the run's own process tree instead, every {TREE_POLL_S * 1000:.0f} ms, so a "
+                        f"burst of forks can pass the budget by up to {NPROC_BACKSTOP_SLACK} tasks) or ignored "
+                        "as root, a process that calls setsid() can outlive the call, and files it writes "
                         "outside the workspace (e.g. in /tmp) stay behind.")),
         }
 
@@ -475,17 +478,18 @@ def _classify(rc: int, err_text: str, cpu_s: float, budgets: Budgets) -> tuple[s
 PARENT_VERDICT_ORDER = ("wall_timeout", "pids", "output_limit")
 
 
-def _parent_verdict(past_deadline: bool, tree_over: bool, output_over: bool) -> str | None:
-    """The parent's own verdict at one poll, checked in ``PARENT_VERDICT_ORDER``; the first that holds ends
-    the run. Past the deadline the run is over whatever else it did, so ``wall_timeout`` comes first; then a
-    process tree over its ``pids`` budget; then the output cap. A parent verdict always wins over a reason
-    read from the exit status: a fork that failed with ``EAGAIN`` is reported as ``pids`` (source ``code``)
-    only if the child exited before the deadline — if it caught the error and slept on, it is ``wall_timeout``.
+def _parent_verdict(**holds: bool) -> str | None:
+    """The parent's own verdict at one check, by name (``wall_timeout=``, ``pids=``, ``output_limit=``), taken
+    in ``PARENT_VERDICT_ORDER``; the first that holds ends the run. Past the deadline the run is over whatever
+    else it did, so ``wall_timeout`` comes first; then a process tree over its ``pids`` budget; then the
+    output cap. A parent verdict always wins over a reason read from the exit status: a fork that failed with
+    ``EAGAIN`` is reported as ``pids`` (source ``code``) only if the child exited before the deadline and the
+    parent's count never saw the tree over budget — if it caught the error and slept on, it is ``wall_timeout``.
     """
-    for reason, holds in zip(PARENT_VERDICT_ORDER, (past_deadline, tree_over, output_over)):
-        if holds:
-            return reason
-    return None
+    unknown = set(holds) - set(PARENT_VERDICT_ORDER)
+    if unknown:
+        raise ValueError(f"not a parent verdict: {sorted(unknown)}")
+    return next((reason for reason in PARENT_VERDICT_ORDER if holds.get(reason)), None)
 
 
 def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sweep_uid=None,
@@ -514,11 +518,10 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
         if tree_budget is not None and exited_at is None and now >= next_count:
             tree_peak = max(tree_peak, _tree_tasks(proc.pid) or 0)
             next_count = now + TREE_POLL_S
-        preset = _parent_verdict(now >= deadline, tree_budget is not None and tree_peak > tree_budget,
-                                 out.total + err.total > budgets.output_kill_bytes)
+        preset = _parent_verdict(wall_timeout=now >= deadline,
+                                 pids=tree_budget is not None and tree_peak > tree_budget,
+                                 output_limit=out.total + err.total > budgets.output_kill_bytes)
         if preset:
-            if preset == "pids":
-                notes.append(f"the run's process tree held {tree_peak} tasks (budget {tree_budget})")
             break
         if exited_at is None:
             exited, leader_ru = _try_reap(proc)
@@ -533,10 +536,24 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
                 sel.unregister(key.fileobj)
                 continue
             key.data.feed(chunk)                       # keeps output_bytes, counts the rest
-        if out.total + err.total > budgets.output_kill_bytes:
-            preset = "output_limit"
+        preset = _parent_verdict(wall_timeout=time.monotonic() >= deadline,
+                                 output_limit=out.total + err.total > budgets.output_kill_bytes)
+        if preset:
             break
     sel.close()
+    burst = False
+    if tree_budget is not None and not preset:
+        # One last count before the group kill: a burst of forks between two counts ran on until the shared
+        # RLIMIT_NPROC backstop stopped it; its processes are still in the run's group, so the parent sees it.
+        final = _tree_tasks(proc.pid) or 0
+        burst = final > tree_budget and final > tree_peak
+        tree_peak = max(tree_peak, final)
+        preset = _parent_verdict(pids=tree_peak > tree_budget)
+    if preset == "pids":
+        notes.append(f"the run's process tree held {tree_peak} tasks (budget {tree_budget})"
+                     + (f"; a burst between two counts ({TREE_POLL_S * 1000:.0f} ms apart) ran on until the "
+                        f"shared RLIMIT_NPROC backstop (the budget plus {NPROC_BACKSTOP_SLACK} tasks of slack) "
+                        "stopped it" if burst else ""))
     _kill_group(proc)            # the leader on timeout/limit, and anything still in its group either way
     ru = leader_ru if proc.returncode is not None else _reap(proc)
     wall = time.monotonic() - start

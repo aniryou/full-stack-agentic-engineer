@@ -35,7 +35,8 @@ class Budgets:
     wall_s: float = 5.0         # wall clock, enforced from outside: stops sleepers and hung I/O
     memory_mb: int = 256        # address space (RLIMIT_AS); below ~256 MiB `import numpy` fails
     pids: int = 16              # the run's tasks (processes and threads), the main one included:
-                                # RLIMIT_NPROC under its own UID, else the parent's count of its tree
+                                # RLIMIT_NPROC under its own UID (exact), else the parent's count of its
+                                # tree every 50 ms (a fork burst can pass it by up to 32: executor.py)
     file_mb: int = 8            # the largest single file (RLIMIT_FSIZE): not a disk quota
     disk_mb: int = 16           # the workspace in total, measured after the run
     output_bytes: int = 16_384  # kept per stream; the rest is counted and dropped as it streams
