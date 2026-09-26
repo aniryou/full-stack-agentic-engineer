@@ -29,6 +29,8 @@ jobs:
           cache-dependency-path: requirements-site.txt
       - name: Install site dependencies
         run: python -m pip install -r requirements-site.txt
+      - name: Test the site generator and hooks
+        run: python -m pytest -q tools/site/tests
       - name: Generate layer and guide pages
         run: python tools/site/build_site_content.py
       - name: Build (strict)

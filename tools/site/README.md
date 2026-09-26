@@ -13,8 +13,8 @@ mkdocs serve                                 # http://127.0.0.1:8000/full-stack-
 ```
 
 `mkdocs build --strict` is what CI runs; it must finish with no warnings. The first build renders every notebook and
-takes a few minutes (mkdocs-jupyter caches the result in `.cache/`, gitignored). The generator and the hooks have tests:
-`python3 -m pip install pytest && python3 -m pytest tools/site/tests`.
+takes a few minutes (mkdocs-jupyter caches the result in `.cache/`, gitignored). The generator and the hooks have tests, which CI runs before
+the build: `python3 -m pytest tools/site/tests` (pytest is in `requirements-site.txt`).
 
 ## What is where
 
