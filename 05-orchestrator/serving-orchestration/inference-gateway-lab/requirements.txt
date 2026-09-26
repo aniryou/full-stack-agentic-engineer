@@ -1,0 +1,11 @@
+# The library needs aiohttp + PyYAML (also declared in pyproject.toml).
+aiohttp>=3.9
+pyyaml>=6.0
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# Optional: validate core Kubernetes manifests offline (tests skip it when absent).
+kubernetes-validate>=1.31

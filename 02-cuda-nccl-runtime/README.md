@@ -57,7 +57,7 @@ Or open any notebook below in Colab: its first cell clones the repo and installs
   [roofline-and-fabric](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2, §4 and §5.
 - **Leads to** layer 03 (`03-kubernetes-gpu/`: the device plugin, MIG and time-sharing per node pool),
   layer 04 ([`04-inference-engine`](../04-inference-engine/README.md): kernels, CUDA Graphs and TP
-  all-reduces inside an engine) and layer 05 (`05-orchestrator/`: KV transfer over the same fabrics).
+  all-reduces inside an engine) and layer 05 ([`05-orchestrator`](../05-orchestrator/README.md): KV transfer over the same fabrics).
 
 ## Going further / caveats
 

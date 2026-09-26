@@ -1,0 +1,65 @@
+# Helm values for the llm-d Router *gateway* chart on GKE (Gateway mode).
+#   helm install vllm-qwen oci://ghcr.io/llm-d/charts/llm-d-router-gateway --version v0.10.0 -f epp-values.yaml
+# The chart creates: the EPP Deployment/Service (vllm-qwen-epp, ext-proc :9002), the InferencePool
+# `vllm-qwen` and the InferenceObjectives below (see rendered/ for exactly what), plus GKE's
+# HealthCheckPolicy and GCPBackendPolicy (provider.name=gke) and a PodMonitoring for EPP metrics.
+provider:
+  name: gke
+httpRoute:
+  create: false                    # gateway.yaml defines the HTTPRoute
+router:
+  modelServers:
+    matchLabels:
+      app: vllm-qwen
+    targetPorts:
+      - number: 8000
+    type: vllm
+    protocol: http
+  inferencePool:
+    create: true
+    failureMode: FailClose         # CRD enum: FailOpen | FailClose (the chart README's "FailClosed" is rejected)
+  inferenceObjectives:             # selected per request with the header x-llm-d-inference-objective
+    - name: premium
+      priority: 100
+    - name: standard
+      priority: 0
+    - name: batch
+      priority: -10                # sheddable: rejected (429) while the pool is saturated
+  epp:
+    image:
+      registry: ghcr.io/llm-d
+      repository: llm-d-router-endpoint-picker
+      tag: v0.10.0                 # (verify) release tag; the chart default is the moving `main`
+      pullPolicy: IfNotPresent
+    resources:                     # chart default requests 8 CPU / 8 GiB; one small system node is enough here
+      requests:
+        cpu: "1"
+        memory: 1Gi
+      limits:
+        memory: 4Gi
+    pluginsConfigFile: igw-lab.yaml
+    pluginsCustomConfig:
+      # The lab preset `default-weighted` (igwlab/configs/default-weighted.yaml), verbatim.
+      igw-lab.yaml: |
+        # The llm-d router Helm chart's default-plugins.yaml (routerlib/_config.yaml, v0.10):
+        # prefix affinity weighted 3 against two load signals weighted 2 each.
+        apiVersion: llm-d.ai/v1
+        kind: EndpointPickerConfig
+        plugins:
+        - type: queue-scorer
+        - type: kv-cache-utilization-scorer
+        - type: prefix-cache-scorer
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: queue-scorer
+            weight: 2
+          - pluginRef: kv-cache-utilization-scorer
+            weight: 2
+          - pluginRef: prefix-cache-scorer
+            weight: 3
+  monitoring:
+    provider:
+      name: gmp
+    prometheus:
+      enabled: true

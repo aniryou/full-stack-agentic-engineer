@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "igwlab"
+version = "0.1.0"
+description = "Inference-gateway lab: the llm-d endpoint-picker logic as a readable async router, vLLM-shaped fake backends, the exact Kubernetes HPA recommender, and local/kind/GKE deploys."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["aiohttp>=3.9", "pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0",
+       "kubernetes-validate>=1.31"]
+
+[project.scripts]
+igw-router = "igwlab.router.__main__:main"
+igw-fakebackend = "igwlab.fakebackend:main"
+
+[tool.setuptools.packages.find]
+include = ["igwlab*"]
+
+[tool.setuptools.package-data]
+igwlab = ["configs/*.yaml", "crds/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

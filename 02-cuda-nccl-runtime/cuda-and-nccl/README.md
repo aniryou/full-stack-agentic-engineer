@@ -79,7 +79,7 @@ On Colab, each notebook's first cell clones the repo and installs its lab; the b
   cluster level), layer 04 (`04-inference-engine/serving-engine/`: these kernels, CUDA Graphs and TP
   all-reduces inside an engine; also the [FlashAttention](../../04-inference-engine/flash-attention/flash-attention-primer.md)
   and [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md) primers) and
-  layer 05 (`05-orchestrator/serving-orchestration/`: KV transfer between prefill and decode workers over
+  layer 05 ([`serving-orchestration`](../../05-orchestrator/serving-orchestration/README.md): KV transfer between prefill and decode workers over
   the same fabrics).
 
 ## Going further / caveats

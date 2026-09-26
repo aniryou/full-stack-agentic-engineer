@@ -1,0 +1,31 @@
+# What the gateway chart renders from router.inferenceObjectives in ../epp-values.yaml
+# (routerlib/_inferenceobjective.yaml, v0.10). Helm applies them — reference only.
+apiVersion: llm-d.ai/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: premium
+spec:
+  priority: 100
+  poolRef:
+    group: inference.networking.k8s.io
+    name: vllm-qwen
+---
+apiVersion: llm-d.ai/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: standard
+spec:
+  priority: 0
+  poolRef:
+    group: inference.networking.k8s.io
+    name: vllm-qwen
+---
+apiVersion: llm-d.ai/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: batch
+spec:
+  priority: -10
+  poolRef:
+    group: inference.networking.k8s.io
+    name: vllm-qwen

@@ -1,0 +1,81 @@
+# Three llm-d-inference-sim replicas: OpenAI-compatible, vLLM metric names, emulated timing and
+# prefix cache. The InferencePool the router chart creates selects them by `app: vllm-sim`.
+# The plain Service is for comparison only: kube-proxy spreads connections without looking at
+# prefixes or queues (try the smoke test against it and against the router).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-sim
+  labels:
+    app: vllm-sim
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-sim
+  template:
+    metadata:
+      labels:
+        app: vllm-sim
+        llm-d.ai/engine-type: vllm          # tells the EPP's metrics extractor which metric names to read
+    spec:
+      containers:
+        - name: sim
+          image: ghcr.io/llm-d/llm-d-inference-sim:v0.11.2      # (verify) latest release tag, Sep 2026
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model=lab/llm
+            - --port=8000
+            - --max-num-seqs=8
+            - --max-model-len=65536
+            - --latency-calculator=per-token
+            - --prefill-overhead=2ms
+            - --prefill-time-per-token=50us
+            - --inter-token-latency=4ms
+            - --time-factor-under-load=1.14            # ITL (and prefill) x1.14 at a full batch, like the fake's ITL slope
+            - --enable-kvcache=true
+            - --kv-cache-size=2048
+            - --block-size=16
+          env:
+            - name: POD_NAME                 # echoed back as the x-inference-pod response header
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP                   # required by --enable-kvcache (ZMQ topic)
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-sim
+  labels:
+    app: vllm-sim
+spec:
+  selector:
+    app: vllm-sim
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP

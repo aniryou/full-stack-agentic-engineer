@@ -1,0 +1,12 @@
+# Router-local in-flight request counts (inflight-load-producer is injected automatically):
+# updated the instant a request is dispatched, so bursts spread, but blind to traffic from
+# any other router replica.
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: active-request-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: active-request-scorer
+    weight: 1
