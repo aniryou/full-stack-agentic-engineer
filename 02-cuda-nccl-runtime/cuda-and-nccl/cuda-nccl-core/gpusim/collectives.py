@@ -78,7 +78,7 @@ class Trace:
         for i, (st, ph) in enumerate(zip(self.steps, self.phases), 1):
             sends = "  ".join(f"{name(s.src)}->{name(s.dst)}:{s.tag}{'+' if s.op == 'add' else ''}"
                               for s in st)
-            rows.append(f"  step {i:>2} {ph:<15} {sends}")
+            rows.append(f"  step {i:>2} {ph:<16} {sends}")
         return "\n".join(rows)
 
 
@@ -316,7 +316,7 @@ def crossover_bytes(op: str, algo: str, p: int, alpha: float, bw: float, chunks:
     """The message size where latency and bandwidth terms are equal. Below it the collective is
     latency-bound; above it, bandwidth-bound. Ring all-reduce: S* = p*alpha*B."""
     a, c = cost_terms(op, algo, p, chunks)
-    return a * alpha * bw / c
+    return a * alpha * bw / c if c else float("inf")
 
 
 BUSBW_FACTOR = {   # nccl-tests doc/PERFORMANCE.md

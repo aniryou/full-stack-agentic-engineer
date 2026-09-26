@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import random
+import zlib
 from dataclasses import dataclass, field
 
 from ..textgen import synthetic_text
@@ -133,8 +134,9 @@ class AgentSession:
 
     def system(self, turn: int) -> str:
         body = "\n".join(self.system_parts)
-        if self.timestamp_first:
-            return f"Current time: 2026-09-26T10:{turn:02d}:{random.Random(hash((self.sid, turn))).random():.9f}\n{body}"
+        if self.timestamp_first:  # unique per request, like datetime.now() rendered into a template
+            frac = zlib.crc32(f"{self.sid}:{turn}".encode()) / 2**32
+            return f"Current time: 2026-09-26T10:{turn:02d}:{frac:.9f}\n{body}"
         return body
 
 

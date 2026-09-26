@@ -69,7 +69,7 @@ def test_spot_gang_math_pinned_and_checked_by_monte_carlo():
             t += x
         total += t + 10
     assert total / 20000 == pytest.approx(expected, rel=0.03)
-    assert expected_runtime_h(10, 16, 0.01) > 3 * expected_runtime_h(10, 4, 0.01)  # hazard grows with gang size
+    assert expected_runtime_h(10, 16, 0.01) == pytest.approx(24.706, abs=1e-3)      # 4x the gang, 2x the time
 
 
 def test_queued_provisioning_does_not_bill_the_partial_gang():

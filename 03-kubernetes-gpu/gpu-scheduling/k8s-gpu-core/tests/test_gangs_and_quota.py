@@ -118,10 +118,12 @@ def test_borrow_within_cohort_respects_the_priority_threshold():
         a = ClusterQueue("a", {"f": {GPU: Quota(8)}}, cohort="c", reclaim_within_cohort="LowerPriority",
                          borrow_within_cohort="LowerPriority", max_priority_threshold=threshold)
         b = ClusterQueue("b", {"f": {GPU: Quota(8)}}, cohort="c")
-        k = Kueue([a, b])
+        idle = ClusterQueue("idle", {"f": {GPU: Quota(8)}}, cohort="c")
+        k = Kueue([a, b, idle])
         k.submit(Workload("b-old", "b", {GPU: 8}, priority=50), Workload("b-new", "b", {GPU: 8}, priority=0))
-        k.schedule()                                                    # b borrows all of a's idle quota
-        k.submit(Workload("a-big", "a", {GPU: 16}, priority=100))     # needs to borrow itself
+        k.schedule()                                                    # b-new borrows idle's quota
+        k.submit(Workload("a-big", "a", {GPU: 12}, priority=100))     # must borrow 4 itself
         return k.schedule()
     assert run(None)[0] == ("preempted", "b-new", "b", "a-big")
+    assert run(0)[0] == ("preempted", "b-new", "b", "a-big")          # priority 0 <= threshold 0
     assert run(-1) == []                                                # nothing at or below the threshold
