@@ -31,7 +31,7 @@ print(touched.experts_touched(8, 2, 1), round(touched.experts_touched(8, 2, 16),
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | explain the concepts, §1–9: why sparsity, the MoE layer, routing and load balance, training in brief, which experts a step touches, running MoE on GPUs (fused kernels, EP, wide-EP, offload, quantized experts), sizing and cost, failure modes, where to run it; then a design-review walkthrough and six drills. Every computed number comes from the core | ~2 h, read alongside the core | — |
 | [`moe-core/`](moe-core/README.md) | **predict**: package `moecore`, six numpy modules (`moe`, `routing`, `train`, `touched`, `ep`, `sizing`) and five fill-in notebooks; reproduces layer 01's MoE table and layer 02's all-to-all numbers | ~7 h with the primer | T0 |
-| [`moe-lab/`](moe-lab/README.md) | **measure**: package `moelab` — a tiny MoE in torch, router hooks on real MoE models, decode step time vs batch in vLLM, `--enable-expert-parallel` on two GPUs, offload and 4-bit experts on a 16–24 GB GPU; `deploy/any-gpu/` and GKE manifests for the 02 lab's `l4x2` pool. Every notebook falls back to a labelled T0 path | ~6 h | T0 → T3 |
+| [`moe-lab/`](moe-lab/README.md) | **measure**: package `moelab` — a tiny MoE in torch, router hooks on real MoE models, decode step time vs batch in vLLM, `--enable-expert-parallel` on two GPUs, offload and 4-bit experts on a 16–24 GB GPU; `deploy/any-gpu/` and GKE manifests for the 02 lab's `l4x2` pool. Every notebook falls back to a labelled T0 path | ~8.5 h | T0 → T3 |
 
 ### Work it in this order
 

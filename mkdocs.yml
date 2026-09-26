@@ -336,7 +336,6 @@ nav:
           - "quantization":
               - "layers/04-inference-engine/quantization/index.md"
               - "Primer": "layers/04-inference-engine/quantization/PRIMER.md"
-              - "Running notebooks in Google Colab": "layers/04-inference-engine/quantization/COLAB.md"
               - "quant-core":
                   - "layers/04-inference-engine/quantization/quant-core/index.md"
                   - "Notebooks":

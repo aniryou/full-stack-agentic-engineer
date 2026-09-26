@@ -1,5 +1,5 @@
 // Review workflow for one topic's deliverables (primer + core + lab). Nested from build_topic.js or run directly.
-// args = { layer, title, topicDir, dirs: [...], specBlock, notes, sp, repo }
+// args = { topic, layer, title, topicDir, dirs: [...], specBlock, notes, sp, repo }
 // Shape: 3 adversarial reviewers with distinct lenses (barrier: the fixer needs every finding) → a fixer that
 // must VERIFY each finding before acting → an independent validator that re-runs everything and audits the
 // fixer's rejections. All agents run on Opus.
