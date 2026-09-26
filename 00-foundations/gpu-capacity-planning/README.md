@@ -8,6 +8,8 @@ Mistral Small 3 (24B dense) and Mistral Large 3 (675B MoE).
 - Two SLOs: **TTFT** (prefill, compute-bound) and **TPOT** (decode, bandwidth-bound).
 - GPU count = max over each constraint, then add utilisation headroom + N+1.
 
+**Time and tier:** ~2 h with the primer; module 00.2 in [`CURRICULUM.md`](../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: standard library only, no GPU, no key.
+
 ## Files
 | File | What it is |
 |---|---|

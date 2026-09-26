@@ -5,19 +5,21 @@ a durable-execution engine (Firestore + Cloud Tasks + Cloud Run + Pub/Sub + Gemi
 the same flow, and an ADK 2 `Workflow` for Vertex AI Agent Engine. Everything runs locally on in-memory adapters
 with the same semantics, so the crash/resume/timeout behaviour is testable in seconds.
 
-**Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/worked/00_core_idea.ipynb` → the rest.
+**Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/practice/00_core_idea.ipynb` → the rest (answers in `notebooks/worked/`).
+
+**Time and tier:** ~8 h after `lra-core` (rough); module 07.3 in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: in-memory adapters with the same semantics, no key, no cloud project. A Google Cloud project adds the optional T3 deploy (Terraform in `infra/terraform/`), billed per use; the `adk` extra adds the ADK 2 workflow.
 
 ## Quick start (no GCP needed)
 
 ```bash
 pip install -e ".[dev,services]"
-make test          # 34 pass, 5 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
+make test          # 40 pass, 7 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
 make demo          # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback, narrated
 make notebooks     # executes the worked notebooks headlessly
 ```
 
 The four GCP adapter tests (Cloud Tasks, Pub/Sub, Gemini, Firestore) drive fake clients but import the real Google
-libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (38 pass; the
+libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (44 pass; the
 ADK test still skips until the `adk` extra below is installed). No credentials are needed for either.
 
 Optional managed path (`pip install -e ".[adk]"`): `make adk-demo` runs the ADK 2 workflow, pauses at the review gate,
@@ -96,7 +98,7 @@ enabled in your project and set real prices in `GeminiLLM` before trusting `cost
 
 ## Status and caveats
 
-- Engine, adapters, services, patterns, examples, notebooks: tested locally (39 tests, 4 executed notebooks).
+- Engine, adapters, services, patterns, examples, notebooks: tested locally (47 tests, 4 executed notebooks).
 - GCP adapters are unit-tested against fake clients; Terraform is written but not applied here — review names, quotas and
   org policies before `terraform apply`.
 - ADK/Agent Engine code was verified against `google-adk 2.8` and `vertexai 2.1`; the Agent Engine deploy surface moves

@@ -7,8 +7,8 @@ caching, sampling, speculation, quantization — and then size, measure and tune
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md): "The one-minute version", then §1 Anatomy of an engine and §2 Continuous batching.
-2. `cd mini-engine-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about
-   5 s; then open [`01_the_step_loop_and_continuous_batching`](mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb).
+2. `cd mini-engine-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 75 tests in about
+   50 s; then open [`01_the_step_loop_and_continuous_batching`](mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb).
 3. Size a real model before serving it, still on a laptop:
    [`vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb`](vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb).
 
@@ -46,12 +46,12 @@ design-review section covers the whole topic.
 ```bash
 cd mini-engine-core
 python3 -m pip install -r requirements.txt     # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 67 tests, ~5 s
+python3 -m pytest -q                           # 75 tests, ~50 s
 python3 -m jupyterlab notebooks                # the exercises; finished versions are in solutions/
 
 cd ../vllm-serving-lab
 python3 -m pip install -e ".[dev]"
-python3 -m pytest -q                           # 66 tests, a few seconds, offline
+python3 -m pytest -q                           # 74 tests, ~30 s, offline
 python3 -m jupyterlab notebooks
 ```
 

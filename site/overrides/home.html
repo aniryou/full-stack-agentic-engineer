@@ -31,9 +31,10 @@
   <section class="fse-intro" aria-labelledby="fse-title">
     <h1 id="fse-title" class="fse-title">Full-stack agentic engineer</h1>
     <p>
-      A learning repository for the LLM serving stack, from the GPU and its fabric to the agent application,
-      organised as eight layers and, within each layer, by topic. Each topic has a primer, a small from-scratch
-      implementation and a fuller lab, with notebooks for both. This site is a readable copy of the
+      A learning repository for the LLM serving stack, from the GPU and its fabric to agents and applications,
+      organised as eight layers and, within each layer, by topic. Nine topics come as a primer, a small from-scratch
+      implementation and a fuller lab, with notebooks for both; the others are a primer with written exercises, a
+      primer with practice notebooks, or a lab of their own. This site is a readable copy of the
       <a href="{{ repo }}">repository</a>; code files open on GitHub.
     </p>
   </section>
@@ -42,7 +43,7 @@
     <section aria-labelledby="fse-stack-title">
       <h2 id="fse-stack-title" class="fse-h2">The stack</h2>
       {% set layers = [
-        ("07-application-agent-framework", "07", "Agents", "the agent loop, tools, sandboxes, state, durable execution, evals, retrieval"),
+        ("07-application-agent-framework", "07", "Agents and applications", "the agent loop, tools, sandboxes, state, durable execution, evals, retrieval"),
         ("06-gateway", "06", "Gateway", "identity and policy, rate limits, admission control, cost"),
         ("05-orchestrator", "05", "Orchestrator", "routing across replicas, autoscaling, prefill/decode disaggregation"),
         ("04-inference-engine", "04", "Inference engine", "the step loop, batching, the KV cache, attention kernels, quantization"),

@@ -6,6 +6,8 @@ conversations a day on Cloud Run and Gemini.
 
 Nothing here needs cloud credentials; simulations run 50× faster than real time.
 
+**Time and tier:** ~6 h; module 06.1–06.4 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: no GPU, no key, no cloud account; nothing is deployed. A Gemini key only swaps the fake model for the real call in `scalelab/model.py`.
+
 ## What is in the box
 
 | Path | What it is |

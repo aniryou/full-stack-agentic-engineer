@@ -8,6 +8,8 @@ yourself, then check against a self-grading `assert`.
 The heavy lifting nobody learns anything from — the embedding model — is a black
 box. Everything that teaches is ~40 lines you can read in one sitting.
 
+**Time and tier:** ~8 h (rough); module 07.4, with the other retrieval labs and primers (~28 h in all) in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: numpy only, with a hashing embedder (table below). T0 + torch or Colab adds the real embedding and reranking models.
+
 ## Setup
 
 ```bash

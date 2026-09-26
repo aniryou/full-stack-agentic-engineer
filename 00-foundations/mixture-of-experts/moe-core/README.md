@@ -7,7 +7,7 @@ deployment — with `moecore`, a standard-library + numpy package small enough t
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) "The one-minute version", then §1–§2 (why sparsity, the MoE layer).
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about 7 s, including "the
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 75 tests in about 30 s, including "the
    sparse forward equals every expert on every token" and "layer 01's MoE table, reproduced to the byte".
 3. Open [`notebooks/01_the_moe_layer.ipynb`](notebooks/01_the_moe_layer.ipynb) and route six tokens.
 
@@ -44,7 +44,7 @@ with "In a design review". Finished versions are in [`solutions/`](solutions/). 
 ```bash
 cd moe-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 67 tests, ~7 s
+python3 -m pytest -q                           # 75 tests, ~30 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -63,7 +63,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (67, offline, ~7 s). The ones that carry the claims:
+`tests/` has one focused test per concept (67, plus 8 notebook-tooling checks; offline, ~30 s in all). The ones that carry the claims:
 
 - **Sparse == dense.** For all five router families, the grouped forward equals every expert on every token
   (weighted by a dense gate) to 10⁻¹²; with E = k = 1 the layer is the dense MLP; unchosen experts run on no rows

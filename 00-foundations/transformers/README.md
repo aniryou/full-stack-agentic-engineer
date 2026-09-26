@@ -7,6 +7,8 @@ The core concept, in one line: **attention moves information between positions; 
 position; a Transformer is that pair, stacked.** Every file below exists to make one part of that sentence visible
 in printed numbers.
 
+**Time and tier:** ~5 h with the primer; module 00.1 in [`CURRICULUM.md`](../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: lessons 1–2 and the practice notebook need only numpy; lesson 3 and the two notebooks in `notebooks/` need CPU PyTorch (T0 + torch; Colab has it). No GPU, no key.
+
 ## Setup
 
 ```bash

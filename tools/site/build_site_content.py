@@ -47,15 +47,16 @@ def colab(p: str) -> str:
     return f"https://colab.research.google.com/github/{REPO_SLUG}/blob/{BRANCH}/{p}"
 
 
+# One name per layer, used everywhere; kept identical to LAYER_NAMES in tools/gen_colab_index.py.
 LAYER_TITLES = {
     "00": "00 · Foundations",
-    "01": "01 · Hardware & fabric",
-    "02": "02 · CUDA, NCCL & runtime",
-    "03": "03 · Kubernetes & GPUs",
+    "01": "01 · Hardware and fabric",
+    "02": "02 · CUDA, NCCL and runtime",
+    "03": "03 · Kubernetes and GPU scheduling",
     "04": "04 · Inference engine",
     "05": "05 · Orchestrator",
     "06": "06 · Gateway",
-    "07": "07 · Agents & applications",
+    "07": "07 · Agents and applications",
 }
 GUIDE_PAGES = {"CURRICULUM.md": "guide/curriculum.md", "COMPUTE.md": "guide/compute.md",
                "COLAB.md": "guide/colab.md"}

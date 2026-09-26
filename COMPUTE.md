@@ -364,7 +364,7 @@ No GPU is needed anywhere in this lab: its tiers are T0, T0 + Docker and T3.
 
 | Labs | Tier | Notes |
 |---|---|---|
-| 00 transformers, capacity planning, model landscape; 01 gpu-primer and gpu-deployment exercises; 04 kv-cache, paged-attention, flash-attention (practice and deep-dive notebooks) | T0 | numpy and matplotlib; the transformer walkthrough notebooks use CPU PyTorch (preinstalled on Colab) |
+| 00 transformers, capacity planning, model landscape; 01 gpu-primer and gpu-deployment exercises; 04 kv-cache, paged-attention, flash-attention (practice and deep-dive notebooks) | T0 | numpy and matplotlib; the transformer walkthrough notebooks and both kv-cache notebooks use CPU PyTorch (preinstalled on Colab) |
 | 06 identity labs, scaling labs | T0 | `agentic-identity-gcp-lab`'s Terraform is an optional T3 step; the Mistral variants run fully offline on scripted or fake clients; a `MISTRAL_API_KEY` only switches on live calls (per-token cost, no GPU) and un-skips one test |
 | 07 agent labs, long-running labs, retrieval labs | T0 | Gemini, Mistral, Anthropic or OpenAI keys are optional; `rag-from-scratch` embeds with a hashing embedder at T0 (labelled; not semantic, so its retrieval numbers are illustrative) and, with torch installed (T0 + torch, or Colab), with the ~90 MB `all-MiniLM-L6-v2` model on CPU — `sentence-transformers` pulls in torch, a multi-GB install; the long-running labs' GCP deploys are optional T3 steps |
 

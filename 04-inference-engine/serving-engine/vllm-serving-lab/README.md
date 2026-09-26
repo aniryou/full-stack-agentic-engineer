@@ -51,7 +51,7 @@ to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 ```bash
 cd vllm-serving-lab
 python3 -m pip install -e ".[dev]"             # aiohttp + prometheus_client; dev: pytest, jupyter, numpy, pyyaml
-python3 -m pytest -q                           # 66 tests, a few seconds, offline
+python3 -m pytest -q                           # 74 tests, ~30 s, offline
 python3 -m servelab fake --port 8000 &         # a fake vLLM (simulated T4 + Qwen2.5-0.5B)
 python3 -m servelab bench --url http://127.0.0.1:8000 --rate 5 -n 60 --slo-ttft-ms 300 --slo-tpot-ms 30
 python3 -m servelab metrics --url http://127.0.0.1:8000

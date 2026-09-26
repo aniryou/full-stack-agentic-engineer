@@ -58,6 +58,8 @@ A 13B FP16 model costs ~800 KB of KV cache per token, so ~1.6 GB per 2K-token se
 
 Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023 (arXiv:2309.06180) — the primary source, and unusually readable. Yu et al., "Orca," OSDI 2022, for continuous batching. Zheng et al., "SGLang" (arXiv:2312.07104) for RadixAttention. Prabhu et al., "vAttention" (arXiv:2405.04437) for the counter-argument. Dao et al., FlashAttention 1/2, for the compute-side complement.
 
+**Code and tests.** [`kernel-core`](../kernel-core/README.md) packages [`paged_attention_minimal.py`](paged_attention_minimal.py) as `kerncore.paged` (a pool object with refcounts, copy-on-write and the blockwise online softmax) and checks the two agree in `kernel-core/tests/test_paged.py`; `kernel-core/tests/test_primer_numbers.py` recomputes this page's per-token and per-sequence sizes. Both run in about a second on any CPU.
+
 ## Verify list (dated 2026-09-26)
 
 Paper and product facts this primer states; nothing here was re-measured.

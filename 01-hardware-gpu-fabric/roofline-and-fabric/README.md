@@ -7,8 +7,8 @@ numbers you can defend in a design review.
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md) "The one-minute version", then §1–§2: spec-sheet literacy and the roofline.
-2. `cd roofline-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 58 tests, well under a
-   second; then open [`01_spec_sheets_and_the_roofline`](roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb).
+2. `cd roofline-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 66 tests, ~30
+   s; then open [`01_spec_sheets_and_the_roofline`](roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb).
 3. Measure the real thing with [`gpu-bench-lab/notebooks/01_measure_your_roofline`](gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb):
    on a laptop it measures your CPU's roofline; on any GPU (even a free Colab T4) it measures the GPU's.
 
