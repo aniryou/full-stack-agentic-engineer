@@ -1,7 +1,7 @@
 # Build status — layers 01–05 (+ deep primers) and the four §6b topics
 
 Legend: `building` (agents writing) → `built` (builder validation passed) → `reviewed` (adversarial review + fixes passed) → `merged` (on `main`).
-WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed layers are merged to `main` through their own branch/PR.
+Everything below is on `main`. Each layer or topic was built on a WIP branch, reviewed there, and merged through its own branch/PR. The 2026-09-26 adversarial review of the whole repo and the packages fixing its findings are tracked in [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md).
 
 | Layer / item | Paths | State | Next step |
 |---|---|---|---|
@@ -12,20 +12,20 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | MERGED to main (PR #3, fb09cfc) | — |
 | vLLM internals primer | `04-inference-engine/vllm-internals/` (primer, source-map, 1 notebook) | MERGED to main (PR #6) | — |
 | FlashAttention deep dive | `04-inference-engine/flash-attention/` (deep-dive.md, fa_calculators.py + 49 tests, deep_dive notebook; practice notebook repaired) | MERGED to main (PR #6) | — |
-| Root docs | `CURRICULUM.md`, `COMPUTE.md` | reconciled with the tree; on `claude/gifted-johnson-9gjwzc-final` (PR pending) | open the PR and merge |
-| Integration | layer READMEs, root README, `CLAUDE.md` decisions log, Colab links (`tools/gen_colab_index.py`) | final pass done on `claude/gifted-johnson-9gjwzc-final` (PR pending): root docs linked everywhere, cross-layer links, 267 notebooks, link check clean (one false positive: inline code in `README-STYLE.md`) | merge with the root docs |
-| Site | GitHub Pages: `mkdocs.yml`, `tools/site/`, `.github/workflows/pages.yml` | pending merge (separate branch/PR) | merge after the root docs so the nav includes them |
-| 00 mixture-of-experts (00.4) | `00-foundations/mixture-of-experts/` (PRIMER, `moe-core` 67 tests, `moe-lab` 118 tests; 5 + 5 notebooks) | REVIEWED (30 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
-| 00 rl-and-thinking-models (00.5) | `00-foundations/rl-and-thinking-models/` (PRIMER, `rl-core` 57 tests, `thinking-lab` 91 tests; 5 + 5 notebooks) | REVIEWED (28 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
-| 04 quantization (04.9) | `04-inference-engine/quantization/` (PRIMER, `quant-core` 78 tests, `quant-lab` 86 tests incl. one Terraform check; 5 + 5 notebooks) | REVIEWED (33 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
-| 07 sandboxed-execution (07.5) | `07-application-agent-framework/sandboxed-execution/` (PRIMER, `sandbox-core` 81 tests, `sandbox-lab` 112 tests; 5 + 5 notebooks; GKE Sandbox Terraform) | REVIEWED (58 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
-| Integration (four topics) | layer READMEs 00/04/07 (00 restyled), cross-links from existing primers, `CURRICULUM.md` (00.4, 00.5, 04.9, 07.5; drills 12–15), `COMPUTE.md` (§5.4, §6, §7, §9), root README, `CLAUDE.md` log, site landing text, Colab links | done on `claude/four-new-topics` and independently verified (the verifier added the `FACTS.md` pointer to `facts/` and removed a stray generated `04-inference-engine/quantization/COLAB.md`): 347 notebooks, link check clean (one false positive: inline code in `README-STYLE.md`), site generator 0 missing targets | commit, PR, `mkdocs build --strict`, merge |
+| Root docs | `CURRICULUM.md`, `COMPUTE.md` | MERGED to main (PR #7, 1699dbe) | — |
+| Integration | layer READMEs, root README, `CLAUDE.md` decisions log, Colab links (`tools/gen_colab_index.py`) | MERGED to main (PR #7): root docs linked everywhere, cross-layer links, 267 notebooks at the time | — |
+| Site | GitHub Pages: `mkdocs.yml`, `tools/site/`, `.github/workflows/pages.yml` | MERGED to main (PRs #8–#11) | — |
+| 00 mixture-of-experts (00.4) | `00-foundations/mixture-of-experts/` (PRIMER, `moe-core` 67 tests, `moe-lab` 118 tests; 5 + 5 notebooks) | REVIEWED (30 findings fixed, validator pass) → MERGED to main (PR #12, 2c9f667) | — |
+| 00 rl-and-thinking-models (00.5) | `00-foundations/rl-and-thinking-models/` (PRIMER, `rl-core` 57 tests, `thinking-lab` 91 tests; 5 + 5 notebooks) | REVIEWED (28 findings fixed, validator pass) → MERGED to main (PR #12, 2c9f667) | — |
+| 04 quantization (04.9) | `04-inference-engine/quantization/` (PRIMER, `quant-core` 78 tests, `quant-lab` 86 tests incl. one Terraform check; 5 + 5 notebooks) | REVIEWED (33 findings fixed, validator pass) → MERGED to main (PR #12, 2c9f667) | — |
+| 07 sandboxed-execution (07.5) | `07-application-agent-framework/sandboxed-execution/` (PRIMER, `sandbox-core` 81 tests, `sandbox-lab` 112 tests; 5 + 5 notebooks; GKE Sandbox Terraform) | REVIEWED (58 findings fixed, validator pass) → MERGED to main (PR #12, 2c9f667) | — |
+| Integration (four topics) | layer READMEs 00/04/07 (00 restyled), cross-links from existing primers, `CURRICULUM.md` (00.4, 00.5, 04.9, 07.5; drills 12–15), `COMPUTE.md` (§5.4, §6, §7, §9), root README, `CLAUDE.md` log, site landing text, Colab links | MERGED to main (PR #12): 347 notebooks, link check clean (one false positive: inline code in `README-STYLE.md`), site generator 0 missing targets; verified independently (the verifier added the `FACTS.md` pointer to `facts/` and removed a stray generated `04-inference-engine/quantization/COLAB.md`) | — |
 
 The four §6b topics were built with `build_topic.js` (research → builders A ∥ B → nested `review_workflow.js`) on
 `claude/four-new-topics`; the integration checklist they followed is [`INTEGRATION.md`](INTEGRATION.md).
 
 ## Resuming after an interruption
-1. `git checkout claude/gifted-johnson-9gjwzc && git pull` — the latest WIP snapshot.
+1. `git checkout main && git pull`; for the review-fix packages read [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md) (branch names, wave order, what is merged).
 2. Read this file, then `SPEC.md` §7 for the report format builders/reviewers use.
 3. For any layer still `building`: run its validation (SPEC §4) to see what state the tree is in; finish or re-launch a builder with the SPEC §6 block for that layer.
 4. For `built` layers: run the review workflow (two adversarial reviewers — concepts and runnability — then a fixer), then integrate and merge.

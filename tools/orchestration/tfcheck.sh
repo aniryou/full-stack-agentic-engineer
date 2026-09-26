@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: tfcheck.sh <terraform-dir>   — copies to scratch, runs fmt -check, init (local mirror), validate
 set -euo pipefail
-SP=${ORCH_SCRATCH:-/tmp/claude-0/orch}   # local mirror + terraform binary live here (see README)
+SP=${ORCH_SCRATCH:-/tmp/orch}   # local mirror + terraform binary live here (see README)
 src=$(cd "$1" && pwd)
 work=$(mktemp -d -p "$SP")
 cp -r "$src"/. "$work"/
