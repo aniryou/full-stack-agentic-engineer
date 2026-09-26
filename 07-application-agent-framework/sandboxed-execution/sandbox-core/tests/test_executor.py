@@ -220,8 +220,10 @@ def test_nproc_caveat_matches_the_uid():
         per_exec = ProcessSandbox().isolation_report()
         assert per_exec["nproc_enforced"] is True and per_exec["nproc_shared"] is False
         assert per_exec["escapes_swept"] is (os.path.isdir("/proc/self"))
+        assert rep["pids_scope"] == "none" and per_exec["pids_scope"] == "uid"
     else:
         assert rep["uid_dropped"] is False and rep["nproc_shared"] is True
+        assert rep["pids_scope"] == ("tree" if os.path.isdir("/proc/self") else "none")
 
 
 def test_workspace_permissions_constant():
@@ -231,3 +233,179 @@ def test_workspace_permissions_constant():
         assert stat.S_IMODE(os.stat(d).st_mode) == 0o700
     finally:
         os.rmdir(d)
+
+
+def test_an_interpreter_behind_a_private_directory_is_not_world_executable():
+    # A venv's bin/python is a symlink to a system interpreter, but a sandbox UID starts it by the link's
+    # path: a venv under a 0700 directory (/root, a private scratch dir) cannot be used by it.
+    from sandboxcore import executor
+    base = tempfile.mkdtemp()
+    try:
+        os.chmod(base, 0o755)
+        target = os.path.join(base, "python3")
+        with open(target, "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(target, 0o755)
+        if not executor._world_executable(target):
+            pytest.skip("the temp directory itself is not world-traversable here")
+        private = os.path.join(base, "private")
+        os.mkdir(private, 0o700)
+        link = os.path.join(private, "python")
+        os.symlink(target, link)
+        assert executor._world_executable(link) is False
+        os.chmod(private, 0o755)
+        assert executor._world_executable(link) is True
+    finally:
+        import shutil
+        shutil.rmtree(base, ignore_errors=True)
+
+
+@needs_root
+def test_a_venv_the_sandbox_uid_cannot_reach_falls_back_to_a_system_python():
+    base = tempfile.mkdtemp()                                   # 0700: like /root or a private scratch dir
+    link = os.path.join(base, "python")
+    os.symlink(os.path.realpath(sys.executable), link)
+    try:
+        r = run("print('hello')", SandboxConfig(python=link), wall_s=5)
+    finally:
+        import shutil
+        shutil.rmtree(base, ignore_errors=True)
+    if r.notes and "no world-executable python3" in r.notes[0]:
+        assert r.exit_reason == "ok" and r.isolation["uid_dropped"] is False   # ran as us, and said so
+    else:
+        assert r.exit_reason == "ok" and r.stdout.strip() == "hello", (r.exit_reason, r.stderr)
+
+
+# ---- the process budget without a UID switch: the run's own tree, not everything the UID holds ----------
+needs_proc = pytest.mark.skipif(not os.path.isdir("/proc/self") or not hasattr(resource, "RLIMIT_NPROC"),
+                                reason="counts tasks from /proc (Linux)")
+THREAD_HOG = ("import sys, threading, time\n"          # another process of the same UID holding many threads,
+              "for _ in range(int(sys.argv[1])):\n"      # like a CI agent or a browser
+              "    threading.Thread(target=time.sleep, args=(120,), daemon=True).start()\n"
+              "print('up', flush=True)\n"
+              "time.sleep(120)\n")
+AS_ME_SCENARIOS = r'''
+import json, subprocess, sys
+from sandboxcore import Budgets, ExecutionRequest, ProcessSandbox, SandboxConfig
+hog = subprocess.Popen([sys.executable, "-c", sys.argv[1], sys.argv[2]], stdout=subprocess.PIPE, text=True)
+try:
+    assert hog.stdout.readline().strip() == "up"
+    sb = ProcessSandbox(SandboxConfig(drop_to_uid=None, drop_to_gid=None))
+    out = [sb.isolation_report().get("pids_scope")]
+    for code, budgets in json.loads(sys.argv[3]):
+        r = sb.run(ExecutionRequest(code=code, budgets=Budgets(**budgets)))
+        out.append([r.exit_reason, r.reason_source, r.usage.wall_s, r.stderr[-300:]])
+finally:
+    hog.kill()
+print(json.dumps(out))
+'''
+
+
+def run_as_an_unprivileged_user(scenarios, hog_threads):
+    """Run ``scenarios`` through ``ProcessSandbox`` without a UID switch, as a non-root user, while another
+    process of that same user holds ``hog_threads`` threads. As root the helper runs as a free UID from the
+    per-execution range (what CI's unprivileged runner user is); otherwise as us."""
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from sandboxcore import executor
+    base = tempfile.mkdtemp()
+    kwargs, uid = {}, None
+    try:
+        os.chmod(base, 0o755)
+        shutil.copytree(Path(executor.__file__).parent, os.path.join(base, "sandboxcore"),
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        for root_dir, dirs, files in os.walk(base):
+            for n in dirs + files:
+                os.chmod(os.path.join(root_dir, n), 0o755)
+        python = sys.executable
+        if running_as_root():
+            python = ProcessSandbox()._python(True)
+            if python is None or not executor._world_executable(base):
+                pytest.skip("no interpreter or temp directory an unprivileged UID can reach")
+            uid = executor._next_uid()
+            kwargs = {"user": uid, "group": uid, "extra_groups": []}
+        p = subprocess.run([python, "-I", "-c", f"import sys; sys.path.insert(0, {base!r})\n" + AS_ME_SCENARIOS,
+                            THREAD_HOG, str(hog_threads), json.dumps(scenarios)],
+                           cwd=base, capture_output=True, text=True, timeout=60, **kwargs)
+        assert p.returncode == 0, p.stderr
+        return json.loads(p.stdout)
+    finally:
+        if uid is not None:
+            executor._kill_uid(uid)
+        shutil.rmtree(base, ignore_errors=True)
+
+
+SLEEPER_AND_GRANDCHILD = ("import subprocess, sys; "
+                          "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
+                          "import time; time.sleep(30)")
+SETSID_ESCAPE = ("import os, time\n"
+                 "if os.fork() == 0:\n"
+                 "    os.setsid(); time.sleep(8); os._exit(0)\n"
+                 "time.sleep(30)")
+
+
+@needs_proc
+def test_the_pid_budget_ignores_other_threads_of_the_same_user():
+    # The CI failure: the unprivileged runner user holds dozens of threads (the runner agent), the old
+    # headroom counted processes, not tasks, and the run's first fork failed with EAGAIN ('pids') long
+    # before its wall clock ran out. 64 threads is four times the default budget.
+    scope, *verdicts = run_as_an_unprivileged_user(
+        [[SLEEPER_AND_GRANDCHILD, {"cpu_s": 5, "wall_s": 1}], [SETSID_ESCAPE, {"cpu_s": 2, "wall_s": 1}]],
+        hog_threads=64)
+    for reason, source, wall, stderr in verdicts:
+        assert (reason, source) == ("wall_timeout", "parent"), stderr
+        assert wall < 3
+    assert scope == "tree"
+
+
+@needs_proc
+def test_the_pid_budget_is_the_process_trees_own():
+    # Ten sleeping children against a budget of 6: the parent counts the run's tree (not the user's other
+    # 64 threads, which would be over any small budget) and ends the run as pids before its wall clock.
+    ten_children = ("import subprocess, sys, time\n"
+                    "kids = [subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']) "
+                    "for _ in range(10)]\n"
+                    "time.sleep(30)")
+    one_task = "import time; time.sleep(30)"
+    scope, over, under = run_as_an_unprivileged_user(
+        [[ten_children, {"pids": 6, "wall_s": 4, "cpu_s": 4}], [one_task, {"pids": 2, "wall_s": 1}]],
+        hog_threads=64)
+    assert over[:2] == ["pids", "parent"] and over[2] < 4, over
+    assert under[:2] == ["wall_timeout", "parent"], under
+    assert scope == "tree"
+
+
+@needs_proc
+def test_the_tree_count_covers_threads_the_group_and_a_setsid_child():
+    import subprocess
+    from sandboxcore import executor
+    code = ("import os, threading, time\n"
+            "for _ in range(5): threading.Thread(target=time.sleep, args=(30,), daemon=True).start()\n"
+            "if os.fork() == 0:\n"
+            "    os.setsid(); print('up', flush=True); time.sleep(30); os._exit(0)\n"
+            "time.sleep(30)")
+    p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, start_new_session=True)
+    escapee = []
+    try:
+        assert p.stdout.readline().strip() == "up"
+        escapee = [q for q in executor._uid_pids(os.getuid()) or [] if (executor._proc_stat(str(q)) or [0])[0] == p.pid]
+        assert len(escapee) == 1 and executor._proc_stat(str(escapee[0]))[2] == escapee[0]    # its own session
+        # the leader, its 5 threads and the setsid child — and nothing else of this UID, however busy
+        assert executor._tree_tasks(p.pid) == 1 + 5 + 1
+    finally:
+        os.killpg(p.pid, 9)
+        for q in escapee:
+            os.kill(q, 9)                                     # it left the group: the group kill missed it
+        p.wait()
+
+
+def test_parent_verdicts_have_a_fixed_order():
+    from sandboxcore.executor import PARENT_VERDICT_ORDER, _parent_verdict
+    assert PARENT_VERDICT_ORDER == ("wall_timeout", "pids", "output_limit")
+    assert _parent_verdict(True, True, True) == "wall_timeout"     # past the deadline the run is over
+    assert _parent_verdict(False, True, True) == "pids"
+    assert _parent_verdict(False, False, True) == "output_limit"
+    assert _parent_verdict(False, False, False) is None
