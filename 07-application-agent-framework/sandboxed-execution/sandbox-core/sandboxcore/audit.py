@@ -47,6 +47,7 @@ class AuditEvent:
     # ---- fields the sandbox adds ----
     budgets_used: dict[str, Any] = field(default_factory=dict)   # cpu_s, wall_s, max_rss_mb, disk, output
     exit_reason: str | None = None                               # contract.EXIT_REASONS
+    exit_reason_source: str | None = None   # parent | signal | code — "code" reasons are the program's say-so
     policy_decision: str | None = None                           # the policy Effect that let it run
     isolation: dict[str, Any] = field(default_factory=dict)      # what boundary actually ran it
 
@@ -76,10 +77,16 @@ class AuditLog:
                         f"{'; '.join(e.reasons)[:60]}")
         return "\n".join(rows)
 
-    def counts(self) -> dict[str, int]:
-        """Exit-reason histogram, for the abuse-detection view (kill reasons over time)."""
+    def counts(self, *, trusted_only: bool = False) -> dict[str, int]:
+        """Exit-reason histogram, for the abuse-detection view (kill reasons over time).
+
+        ``trusted_only`` drops reasons the untrusted program reported about itself (source ``code``: an exit
+        status or stderr text it can forge), keeping what the parent measured or the kernel signalled.
+        """
         out: dict[str, int] = {}
         for e in self.events:
+            if trusted_only and e.exit_reason_source == "code" and e.exit_reason not in (None, "ok"):
+                continue
             key = e.exit_reason or e.decision or "?"
             out[key] = out.get(key, 0) + 1
         return out

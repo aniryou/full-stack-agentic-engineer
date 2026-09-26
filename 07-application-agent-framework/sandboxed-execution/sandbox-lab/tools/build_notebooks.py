@@ -14,6 +14,7 @@ kept). A bootstrap cell makes ``import sandboxlab`` work from a fresh checkout.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -104,6 +105,8 @@ def build(path: Path):
             else:
                 nb.cells.append(new_code_cell(keep_solution(src)))
         out_dir.mkdir(parents=True, exist_ok=True)
+        for i, cell in enumerate(nb.cells):   # stable ids: rebuilding unchanged sources is a no-op
+            cell.id = hashlib.sha1(f"{path.stem}/{i}".encode()).hexdigest()[:12]
         nbformat.write(nb, out_dir / f"{path.stem}.ipynb")
     print("built", path.stem)
 

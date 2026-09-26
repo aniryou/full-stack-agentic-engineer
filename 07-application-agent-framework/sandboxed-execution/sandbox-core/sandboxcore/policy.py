@@ -5,13 +5,19 @@ small data object you can read, diff and enforce twice — once in the executor 
 in the cluster (Pod Security, NetworkPolicy, RuntimeClass, quotas). ``SandboxPolicy`` holds the tool tiers
 (the identity primer's READ/WRITE/DESTRUCTIVE/EXTERNAL, §4.2), the egress allowlist, the filesystem rule and
 the budget ceiling; ``evaluate()`` is the deny-by-default gate; ``render_k8s()`` turns the same policy into
-a Namespace, a per-execution Job, a default-deny-egress NetworkPolicy that opens only the proxy, a
-RuntimeClass reference, a ResourceQuota, a LimitRange and a ValidatingAdmissionPolicy. The YAML is built as
-plain dicts (like ``k8sgpu.manifests``) and validates against the Kubernetes 1.34 schemas.
+a Namespace, the RuntimeClass, a default-deny-egress NetworkPolicy plus one that opens only the egress proxy
+(no DNS: the pod finds the proxy through ``hostAliases`` and a pinned ClusterIP), the proxy's Service, a
+ResourceQuota, a LimitRange, a per-execution Pod and Job, and a ValidatingAdmissionPolicy. The YAML is built
+as plain dicts (like ``k8sgpu.manifests``) and validates against the Kubernetes 1.34 schemas; a test also
+checks what the schema cannot (every request ≤ its limit).
+
+``evaluate()`` reads ``ExecutionRequest.egress`` — the hosts the *model says* its code needs. That is a
+policy-review input and an audit signal, never enforcement: code that does not declare a host is not
+stopped by it. The network layer (the NetworkPolicy rendered here) is what enforces egress.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -55,12 +61,17 @@ class SandboxPolicy:
     max_budgets: Budgets = field(default_factory=Budgets)   # the ceiling; a request may ask for less
     # Kubernetes rendering knobs
     namespace: str = "sandbox"
-    runtime_class: str = "gvisor"          # RuntimeClass handle; the lab wires runsc / GKE Sandbox
+    runtime_class: str = "gvisor"          # RuntimeClass name the pods select
+    runtime_handler: str = "runsc"         # CRI handler for a self-managed gVisor node
+    render_runtime_class: bool = True      # False on GKE: GKE creates RuntimeClass "gvisor" itself (verify)
     run_as_uid: int = 65534                # numeric, so the kubelet can verify runAsNonRoot
     proxy_service: str = "egress-proxy"    # the only egress destination the NetworkPolicy opens
     proxy_port: int = 8080
+    proxy_cluster_ip: str = "10.96.0.200"  # pinned in the Service; pods reach it via hostAliases (no DNS)
     image: str = "python:3.12-slim"        # (verify tag/digest) the run_code image
     pod_pids_limit: int = 128              # kubelet KubeletConfiguration; there is no per-pod PID field
+    startup_allowance_s: int = 120         # scheduling + node scale-up + image pull, before the code runs
+    log_headroom_mb: int = 48              # container ephemeral-storage on top of the workspace: logs, layer
 
     def evaluate(self, req: ExecutionRequest) -> Decision:
         """Deny by default. Check the principal, the budget ceiling, the egress allowlist, then confirm."""
@@ -81,9 +92,7 @@ class SandboxPolicy:
     def clamp(self, req: ExecutionRequest) -> ExecutionRequest:
         """Lower any budget field that exceeds the ceiling, so a request can never widen the envelope."""
         b, cap = req.budgets, self.max_budgets
-        clamped = Budgets(**{k: min(getattr(b, k), getattr(cap, k))
-                             for k in ("cpu_s", "wall_s", "memory_mb", "pids", "file_mb",
-                                       "disk_mb", "output_bytes", "open_files")})
+        clamped = Budgets(**{k: min(getattr(b, k), getattr(cap, k)) for k in asdict(b)})
         req.budgets = clamped
         return req
 
@@ -91,12 +100,14 @@ class SandboxPolicy:
     def render_k8s(self) -> list[dict]:
         """The manifests that make a namespace only able to run conforming sandbox pods.
 
-        Order: Namespace (with restricted Pod Security labels) → default-deny-egress NetworkPolicy →
-        an egress-to-proxy-and-DNS NetworkPolicy → ResourceQuota → LimitRange → the per-execution Job →
-        the ValidatingAdmissionPolicy and its binding. Each is a plain dict; ``to_yaml`` serialises them.
+        Order: Namespace (restricted Pod Security labels) → RuntimeClass (unless the platform creates it) →
+        default-deny-egress NetworkPolicy → egress-to-the-proxy-only NetworkPolicy → the proxy's Service at
+        a pinned ClusterIP → ResourceQuota → LimitRange → a per-execution Pod and Job → the
+        ValidatingAdmissionPolicy and its binding. Each is a plain dict; ``to_yaml`` serialises them.
         """
-        return [self._namespace(), self._deny_egress(), self._allow_proxy_egress(),
-                self._resource_quota(), self._limit_range(), self.job(),
+        return [self._namespace(), *([self.runtime_class_obj()] if self.render_runtime_class else []),
+                self._deny_egress(), self._allow_proxy_egress(), self._proxy_service(),
+                self._resource_quota(), self._limit_range(), self.pod(), self.job(),
                 *self._admission_policy()]
 
     def _meta(self, name: str, **extra) -> dict:
@@ -113,15 +124,27 @@ class SandboxPolicy:
         return {"apiVersion": "v1", "kind": "Namespace",
                 "metadata": {"name": self.namespace, "labels": labels}}
 
+    def runtime_class_obj(self) -> dict:
+        """The RuntimeClass the pods select: the object that ties the policy to its isolation rung.
+
+        Self-managed gVisor: handler ``runsc`` (the containerd runtime name). GKE creates ``gvisor`` itself
+        with the first GKE Sandbox node pool (``render_runtime_class=False`` there). Kata would name a Kata
+        shim and set ``overhead.podFixed`` so the scheduler and quota count the VMM.
+        """
+        return {"apiVersion": "node.k8s.io/v1", "kind": "RuntimeClass",
+                "metadata": {"name": self.runtime_class}, "handler": self.runtime_handler}
+
     def _deny_egress(self) -> dict:
-        # A default-deny egress policy also blocks DNS (FACTS §3); the next policy re-opens DNS + proxy only.
+        # A default-deny egress policy also blocks DNS (FACTS §3) — and that is kept: no DNS for sandboxes.
         return {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
                 "metadata": self._meta("sandbox-default-deny-egress"),
                 "spec": {"podSelector": {"matchLabels": {"app": "sandbox-run"}},
                          "policyTypes": ["Egress"]}}
 
     def _allow_proxy_egress(self) -> dict:
-        # The sandbox pod may reach ONLY the egress proxy (and DNS). Everything else is dropped.
+        # The sandbox pod may reach ONLY the egress proxy. No DNS rule: resolving names would re-open a
+        # DNS-exfiltration channel (data in query names), so the pod finds the proxy through hostAliases
+        # and the proxy resolves the allowlisted names itself (PRIMER §4).
         return {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
                 "metadata": self._meta("sandbox-egress-to-proxy"),
                 "spec": {"podSelector": {"matchLabels": {"app": "sandbox-run"}},
@@ -129,10 +152,16 @@ class SandboxPolicy:
                          "egress": [
                              {"to": [{"podSelector": {"matchLabels": {"app": self.proxy_service}}}],
                               "ports": [{"protocol": "TCP", "port": self.proxy_port}]},
-                             {"to": [{"namespaceSelector": {}}],
-                              "ports": [{"protocol": "UDP", "port": 53},
-                                        {"protocol": "TCP", "port": 53}]},
                          ]}}
+
+    def _proxy_service(self) -> dict:
+        # The proxy's Service at a pinned ClusterIP, so hostAliases can name it without DNS.
+        return {"apiVersion": "v1", "kind": "Service",
+                "metadata": self._meta(self.proxy_service),
+                "spec": {"clusterIP": self.proxy_cluster_ip,
+                         "selector": {"app": self.proxy_service},
+                         "ports": [{"name": "http", "port": self.proxy_port, "targetPort": self.proxy_port,
+                                    "protocol": "TCP"}]}}
 
     def _resource_quota(self) -> dict:
         return {"apiVersion": "v1", "kind": "ResourceQuota",
@@ -162,49 +191,74 @@ class SandboxPolicy:
                   "seccompProfile": {"type": "RuntimeDefault"}}
         return pod_sc, ctr_sc
 
-    def job(self, name: str = "sandbox-run", *, code: str | None = None) -> dict:
-        """One Job per execution: bounded, non-retrying, self-deleting, restricted, egress-gated.
+    def pod_spec(self, code: str | None = None) -> dict:
+        """The sandbox pod: restricted, egress only to the proxy by hostAliases, no token, sized volumes.
 
-        activeDeadlineSeconds bounds the whole Job and takes precedence over backoffLimit; backoffLimit=0
-        and restartPolicy=Never stop non-idempotent code from re-running; ttlSecondsAfterFinished cleans
-        up (collect logs first — the TTL deletes the Pod and its logs). See FACTS §3 and pitfalls 17-18.
+        The code runs under coreutils ``timeout -s KILL <wall_s>``: the wall budget is enforced *inside*
+        the pod, because every Kubernetes deadline also counts scheduling and the image pull.
         """
         pod_sc, ctr_sc = self.security_context()
+        b = self.max_budgets
+        ephemeral = f"{b.disk_mb + self.log_headroom_mb}Mi"   # the workspace emptyDir counts toward it too
         container = {
             "name": "run",
             "image": self.image,
-            "command": ["python3", "-I", "-c", code or "print('hello from the sandbox')"],
+            "command": ["timeout", "-s", "KILL", f"{int(b.wall_s)}",
+                        "python3", "-I", "-c", code or "print('hello from the sandbox')"],
             "env": [{"name": "HOME", "value": "/work"},
                     {"name": "OPENBLAS_NUM_THREADS", "value": "1"},
-                    {"name": "HTTP_PROXY", "value": f"http://{self.proxy_service}:{self.proxy_port}"},
-                    {"name": "HTTPS_PROXY", "value": f"http://{self.proxy_service}:{self.proxy_port}"}],
-            "resources": {"requests": {"cpu": "250m", "memory": "128Mi", "ephemeral-storage": "256Mi"},
-                          "limits": {"cpu": "1", "memory": f"{self.max_budgets.memory_mb}Mi",
-                                     "ephemeral-storage": f"{self.max_budgets.disk_mb}Mi"}},
+                    # advisory only (the NetworkPolicy enforces); no HTTPS_PROXY: the proxy refuses CONNECT
+                    {"name": "HTTP_PROXY", "value": f"http://{self.proxy_service}:{self.proxy_port}"}],
+            # requests <= limits for every resource (the API server rejects a request above its limit)
+            "resources": {"requests": {"cpu": "250m", "memory": f"{min(128, b.memory_mb)}Mi",
+                                       "ephemeral-storage": ephemeral},
+                          "limits": {"cpu": "1", "memory": f"{b.memory_mb}Mi",
+                                     "ephemeral-storage": ephemeral}},
             "securityContext": ctr_sc,
             "volumeMounts": [{"name": "work", "mountPath": "/work"},
                              {"name": "tmp", "mountPath": "/tmp"}],
         }
-        pod_spec = {
+        return {
             "restartPolicy": "Never",
             "automountServiceAccountToken": False,     # no cloud credentials via the KSA token (FACTS §3)
+            "enableServiceLinks": False,               # no *_SERVICE_HOST variables advertising the cluster
             "runtimeClassName": self.runtime_class,     # gVisor / Kata handle
-            "activeDeadlineSeconds": int(self.max_budgets.wall_s) + 5,
+            "dnsPolicy": "None",                        # no cluster DNS: nothing to exfiltrate through
+            "dnsConfig": {"nameservers": ["127.0.0.1"]},
+            "hostAliases": [{"ip": self.proxy_cluster_ip, "hostnames": [self.proxy_service]}],
             "securityContext": pod_sc,
             "containers": [container],
             "volumes": [
-                {"name": "work", "emptyDir": {"sizeLimit": f"{self.max_budgets.disk_mb}Mi"}},
-                {"name": "tmp", "emptyDir": {"medium": "Memory",
-                                             "sizeLimit": f"{self.max_budgets.memory_mb}Mi"}},
+                {"name": "work", "emptyDir": {"sizeLimit": f"{b.disk_mb}Mi"}},
+                {"name": "tmp", "emptyDir": {"medium": "Memory", "sizeLimit": f"{b.memory_mb}Mi"}},
             ],
         }
+
+    def pod(self, name: str = "sandbox-run-pod", *, code: str | None = None) -> dict:
+        """One execution as a bare Pod (what a warm-pool or custom runner creates). Its deadline counts
+        from the kubelet admitting it — before the image pull — so it gets the startup allowance too."""
+        spec = self.pod_spec(code)
+        spec["activeDeadlineSeconds"] = self.startup_allowance_s + int(self.max_budgets.wall_s)
+        return {"apiVersion": "v1", "kind": "Pod",
+                "metadata": self._meta(name, labels={"app": "sandbox-run"}), "spec": spec}
+
+    def job(self, name: str = "sandbox-run", *, code: str | None = None) -> dict:
+        """One Job per execution: bounded, non-retrying, self-deleting, restricted, egress-gated.
+
+        ``activeDeadlineSeconds`` bounds the *whole* Job from its start — scheduling, node scale-up and
+        image pull included — and takes precedence over ``backoffLimit``; so it is the startup allowance
+        plus the wall budget, and the wall budget itself is enforced inside the pod (``timeout``).
+        ``backoffLimit=0`` and ``restartPolicy=Never`` stop non-idempotent code from re-running;
+        ``ttlSecondsAfterFinished`` cleans up (collect logs first — the TTL deletes the Pod and its logs).
+        See FACTS §3 and pitfalls 17-18.
+        """
         return {"apiVersion": "batch/v1", "kind": "Job",
                 "metadata": self._meta(name, labels={"app": "sandbox-run"}),
                 "spec": {"backoffLimit": 0, "completions": 1, "parallelism": 1,
-                         "activeDeadlineSeconds": int(self.max_budgets.wall_s) + 10,
+                         "activeDeadlineSeconds": self.startup_allowance_s + int(self.max_budgets.wall_s),
                          "ttlSecondsAfterFinished": 300,
                          "template": {"metadata": {"labels": {"app": "sandbox-run"}},
-                                      "spec": pod_spec}}}
+                                      "spec": self.pod_spec(code)}}}
 
     def _admission_policy(self) -> list[dict]:
         """A ValidatingAdmissionPolicy (stable since 1.30) that rejects sandbox pods missing the controls.

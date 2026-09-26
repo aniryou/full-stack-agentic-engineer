@@ -11,7 +11,8 @@ fewer experts at a given batch but loads the hottest one more.
 The decode step below is the same one-kernel roofline as `roofline.llm.decode()`:
   bytes = weights streamed (attention + touched experts + shared + router per layer, LM head,
           one embedding row per token) + KV read and written
-  FLOPs = batch x (2 x active matmul params + 2 x LM head + 4 L h dh (context + 1))
+  FLOPs = batch x (2 x active matmul params + 2 x LM head + L x attention FLOPs per position x (context + 1))
+          (4 h dh per position for MHA/GQA, `MoEConfig.attn_flops_per_position()`)
   time  = max(FLOPs / peak, bytes / bandwidth)          (bounds, not predictions)
 """
 from __future__ import annotations
@@ -62,11 +63,13 @@ def touched_mc(n_experts: int, top_k: int, tokens: int, s: float = 0.0, trials: 
 
 @dataclass(frozen=True)
 class Device:
-    """The three spec-sheet numbers a decode step needs (dense peaks; Sep 2026, verify)."""
+    """The three spec-sheet numbers a decode step needs (dense peaks; Sep 2026, verify), plus the
+    memory the driver reports, which is what vLLM budgets from (`sizing.kv_room_gib()`)."""
     name: str
     tflops: dict          # dense peak by precision, TFLOP/s
     tbs: float            # memory bandwidth, TB/s
-    memory_gb: float
+    memory_gb: float      # nominal, decimal GB (the spec sheet)
+    reported_gib: float = 0.0   # total the driver reports, GiB (0: nominal GB in GiB)
 
     def peak(self, precision: str = "bf16") -> float:
         return self.tflops[precision] * 1e12
@@ -77,10 +80,13 @@ class Device:
     def ridge(self, precision: str = "bf16") -> float:
         return self.peak(precision) / self.bandwidth()
 
+    def memory_gib(self) -> float:
+        return self.reported_gib or self.memory_gb * 1e9 / 2 ** 30
 
-DEVICES = {   # the same values as layer 01's roofline.specs (verify)
-    "t4": Device("NVIDIA T4", {"fp16": 65}, 0.32, 16),
-    "l4": Device("NVIDIA L4", {"bf16": 121, "fp16": 121, "fp8": 242.5}, 0.30, 24),
+
+DEVICES = {   # the same values as layer 01's roofline.specs; reported GiB as layer 04's servelab and moelab use (verify)
+    "t4": Device("NVIDIA T4", {"fp16": 65}, 0.32, 16, reported_gib=15.0),
+    "l4": Device("NVIDIA L4", {"bf16": 121, "fp16": 121, "fp8": 242.5}, 0.30, 24, reported_gib=22.49),
     "a100-80gb": Device("NVIDIA A100 SXM 80GB", {"bf16": 312, "fp16": 312}, 2.039, 80),
     "h100-sxm": Device("NVIDIA H100 SXM", {"bf16": 989.4, "fp8": 1978.9}, 3.35, 80),
     "h200": Device("NVIDIA H200 SXM", {"bf16": 989.4, "fp8": 1978.9}, 4.8, 141),
@@ -117,7 +123,7 @@ def decode_step(cfg: MoEConfig, device: Device, batch: int, context: int, weight
                 kv_bytes: float = 2, precision: str = "bf16", touched: float | None = None) -> Step:
     """One decode step for `batch` sequences with `context` cached tokens each (one-kernel roofline)."""
     per_token = (2 * cfg.matmul_active() + 2 * cfg.vocab * cfg.d_model
-                 + 4 * cfg.layers * cfg.heads * cfg.head_dim * (context + 1))
+                 + cfg.layers * cfg.attn_flops_per_position() * (context + 1))
     kv = batch * (context + 1) * cfg.kv_bytes_per_token(kv_bytes)
     b = streamed_weight_bytes(cfg, batch, weight_bytes, touched) + kv
     f = batch * per_token

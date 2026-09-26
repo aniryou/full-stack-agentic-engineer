@@ -1,5 +1,10 @@
 """The execution contract: budgets, idempotency, run-once, and the tool-result shape."""
-from sandboxcore import Budgets, ExecutionResult, ResultStore, Usage, digest, idempotency_key
+import threading
+
+import pytest
+
+from sandboxcore import (EXIT_REASONS, Budgets, ExecutionResult, InFlight, ResultStore, Usage, digest,
+                         idempotency_key)
 from sandboxcore.contract import HINTS
 
 
@@ -42,6 +47,44 @@ def test_result_store_runs_at_most_once():
     assert r1 is r2
 
 
+def test_result_store_refuses_a_concurrent_second_delivery():
+    # the key is claimed BEFORE the code runs, so a redelivery while the first is in flight does not run it
+    store = ResultStore()
+    started, release = threading.Event(), threading.Event()
+    calls = {"n": 0}
+
+    def slow():
+        calls["n"] += 1
+        started.set()
+        release.wait(5)
+        return ExecutionResult("ok", 0, "", "", False, Usage())
+
+    t = threading.Thread(target=store.run_once, args=("k", slow))
+    t.start()
+    started.wait(5)
+    with pytest.raises(InFlight):
+        store.run_once("k", slow)
+    release.set()
+    t.join(5)
+    assert calls["n"] == 1 and store.run_once("k", slow)[1] is True
+
+
+def test_result_store_forgets_a_run_that_crashed():
+    store = ResultStore()
+
+    def boom():
+        raise RuntimeError("worker died")
+
+    with pytest.raises(RuntimeError):
+        store.run_once("k", boom)
+    assert "k" not in store.results             # nothing stored: a later delivery may run it (at least once)
+
+
+def test_every_hint_is_for_a_known_exit_reason():
+    assert set(HINTS) <= set(EXIT_REASONS)
+    assert {"output_limit", "sandbox_error", "disk_limit"} <= set(EXIT_REASONS)
+
+
 def test_tool_result_shape_matches_agent_core():
     ok = ExecutionResult("ok", 0, "out", "", False, Usage()).as_tool_result()
     assert ok["ok"] is True and ok["data"]["stdout"] == "out"
@@ -53,3 +96,4 @@ def test_tool_result_shape_matches_agent_core():
 def test_over_budget_makes_result_not_ok():
     r = ExecutionResult("ok", 0, "", "", False, Usage(), over_budget=["disk_mb"])
     assert r.ok is False and r.as_tool_result()["ok"] is False
+    assert r.as_tool_result()["error"] == "disk_limit"

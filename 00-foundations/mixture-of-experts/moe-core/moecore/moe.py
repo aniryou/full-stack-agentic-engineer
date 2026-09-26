@@ -10,7 +10,10 @@ Routers differ in details that change the numbers; `route()` exposes them as opt
 the models that use them (transformers and reference code, Sep 2026):
 
   mixtral      softmax over E, top-k, renormalise the k weights to sum to 1
-  qwen3/olmoe  softmax over E, top-k, renormalise only if `norm_topk_prob` (HF default False)
+  olmoe        softmax over E, top-k, raw probabilities: `norm_topk_prob` False, OLMoE's value and the
+               transformers default for Qwen2-MoE and Qwen3-MoE too
+  qwen3-moe    the same with `norm_topk_prob` True, which the released Qwen3 MoE configs are reported
+               to set (verify) -- numerically Mixtral's router
   deepseek-v3  sigmoid scores; a per-expert bias *chooses* experts but never weights them;
                group-limited top-k; renormalise the k sigmoid scores, then x route_scale 2.5
   gpt-oss      router with a bias; top-k on the logits, softmax over just those k
@@ -114,7 +117,8 @@ def route(logits: np.ndarray, k: int, score: str = "softmax", norm: bool = True,
 
 ROUTERS = {   # route() options per family (see the module docstring)
     "mixtral": dict(score="softmax", norm=True),
-    "qwen3": dict(score="softmax", norm=False),
+    "olmoe": dict(score="softmax", norm=False),
+    "qwen3-moe": dict(score="softmax", norm=True),         # released configs' norm_topk_prob (verify)
     "deepseek-v3": dict(score="sigmoid", norm=True, scale=2.5),
     "gpt-oss": dict(score="topk_softmax"),
     "llama4": dict(score="sigmoid", norm=False),
@@ -221,6 +225,7 @@ class MoEConfig:
     expert_extra: int = 0     # per-expert extras (gpt-oss biases)
     router_extra: int = 0     # per-MoE-layer extras (router bias, shared-expert gate)
     kv_elems: int = 0         # KV elements per token per layer when not 2 x kv_heads x head_dim
+    attn_flops_pos: int = 0   # decode attention FLOPs per layer per cached position, when not 4 x heads x head_dim
     note: str = ""
 
     @property
@@ -264,6 +269,12 @@ class MoEConfig:
         "head" (LM head only: OpenAI's 5.1B for gpt-oss-120b), "none" (matmuls in the layers)."""
         head = self.vocab * self.d_model
         return self.matmul_active() + {"both": head * (1 if self.tied else 2), "head": head, "none": 0}[embeddings]
+
+    def attn_flops_per_position(self) -> int:
+        """FLOPs one new token spends per layer on each cached position. MHA/GQA: 2 x head_dim for
+        q.k and 2 x head_dim for the weighted sum of V, per query head. Absorbed MLA (DeepSeek-V3)
+        scores against the 576-wide latent and sums the 512-wide one: 2 x (576 + 512) per head."""
+        return self.attn_flops_pos or 4 * self.heads * self.head_dim
 
     def kv_bytes_per_token(self, kv_bytes: float = 2) -> float:
         """KV follows attention, not experts: an MoE caches exactly what its attention caches."""

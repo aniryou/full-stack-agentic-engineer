@@ -8,6 +8,11 @@ large batch (touched.py). So pick the GPU count (= the EP degree, with data-para
 that holds weights plus the batch's KV, check the step time against the ITL target, then divide
 the GPU-hours by the tokens. Every number is a roofline bound (simulated), not a measurement.
 
+Two memory budgets. `sessions()` is the round one layer 01 uses for fleet sizing: nominal GB with 10%
+headroom. For one small GPU the margin is the whole question, so `kv_room_gib()` budgets the way vLLM
+v0.30.0 does and the lab's `moelab.offload.fit` models it: 0.92 of the memory the driver reports,
+minus ~1.5 GiB of activations and CUDA graphs (verify: calibrate from your start-up log).
+
 MODELS: configs as literal data, from each model's config / reference code in the upstream repos
 (transformers, deepseek-v3, gpt-oss, llama-models, olmoe) as of 2026-09-26; entries whose fields
 could not be read from a source reproduce the published totals and are marked "(verify)".
@@ -16,6 +21,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+
+from dataclasses import replace
 
 from .ep import Link, decode_on, wide_ep_weights
 from .moe import MoEConfig, gqa_params, mla_params
@@ -36,8 +43,8 @@ MODELS = {
                            note="configuration_qwen2_moe.py defaults; sigmoid-gated shared expert = 4 routed"),
     "deepseek-v3": C("DeepSeek-V3", 61, 7168, 129_280, 128, 1, 128, 256, 8, 2048, shared_ff=2048, n_shared=1,
                      dense_layers=3, dense_ff=18_432, attn=mla_params(7168, 128, 1536, 512, 128, 64, 128),
-                     router_extra=256, kv_elems=512 + 64,
-                     note="deepseek-v3 config_671B.json; MLA (KV = 576-wide latent); +14B MTP not counted"),
+                     router_extra=256, kv_elems=512 + 64, attn_flops_pos=128 * 2 * (512 + 64 + 512),
+                     note="deepseek-v3 config_671B.json; MLA (KV = 576-wide latent, absorbed at decode); +14B MTP not counted"),
     "gpt-oss-120b": C("gpt-oss-120b", 36, 2880, 201_088, 64, 8, 64, 128, 4, 2880,
                       attn=gqa_params(2880, 64, 8, 64, qkv_bias=True, o_bias=True, sinks=True),
                       expert_extra=2 * 2880 + 2880, router_extra=128,
@@ -69,6 +76,17 @@ def weight_bytes(cfg: MoEConfig, bits: float = 16, expert_bits: float | None = N
     return routed * eb / 8 + (cfg.total() - routed) * bits / 8
 
 
+def dense_equivalent(cfg: MoEConfig) -> MoEConfig:
+    """A dense model of the MoE's active size: the same attention, embeddings and depth, with one
+    MLP as wide as the k routed experts plus the shared ones. Its parameters equal the MoE's active
+    count minus the routers (Mixtral: 12.88B - 1.0M). For all-MoE models (no dense layers)."""
+    if cfg.dense_layers:
+        raise ValueError("dense_equivalent() is defined for models whose layers are all MoE")
+    return replace(cfg, name=f"dense, {cfg.name}'s active size", n_experts=0, top_k=0,
+                   expert_ff=cfg.top_k * cfg.expert_ff + cfg.shared_ff, shared_ff=0, n_shared=0,
+                   expert_extra=0, router_extra=0, note="dense_equivalent()")
+
+
 def kv_gb(cfg: MoEConfig, tokens: int, kv_bytes: float = 2) -> float:
     return tokens * cfg.kv_bytes_per_token(kv_bytes) / 1e9
 
@@ -85,6 +103,31 @@ def sessions(cfg: MoEConfig, device: Device, n_gpus: int, context: int, bits: fl
         return n_gpus * max(0, math.floor((device.memory_gb * 1e9 * (1 - reserve) - mine) / per_token))
     free = n_gpus * device.memory_gb * 1e9 * (1 - reserve) - weight_bytes(cfg, bits, expert_bits)
     return max(0, math.floor(free / per_token))
+
+
+VLLM_UTIL = 0.92            # vLLM v0.30.0's --gpu-memory-utilization default
+VLLM_OVERHEAD_GIB = 1.5     # activations + CUDA graphs + non-torch memory, 1-30B model (moelab's value; verify)
+
+
+def kv_room_gib(cfg: MoEConfig, device: Device, bits: float = 16, expert_bits: float | None = None,
+                offload_gib: float = 0.0, util: float = VLLM_UTIL, overhead_gib: float = VLLM_OVERHEAD_GIB) -> float:
+    """GiB left for KV on one GPU as vLLM budgets it (the lab's `moelab.offload.fit`):
+    util x the memory the driver reports - overhead - (weights - what `--cpu-offload-gb` moved out)."""
+    return util * device.memory_gib() - overhead_gib - (weight_bytes(cfg, bits, expert_bits) / 2 ** 30 - offload_gib)
+
+
+def kv_tokens(cfg: MoEConfig, device: Device, bits: float = 16, expert_bits: float | None = None,
+              offload_gib: float = 0.0, kv_bytes: float = 2, **budget) -> int:
+    """Tokens of KV cache that fit beside the weights (vLLM's "KV cache size: N tokens"); 0 if none."""
+    room = kv_room_gib(cfg, device, bits, expert_bits, offload_gib, **budget)
+    return int(room * 2 ** 30 // cfg.kv_bytes_per_token(kv_bytes)) if room > 0 else 0
+
+
+def min_offload_gib(cfg: MoEConfig, device: Device, tokens: int, bits: float = 16, expert_bits: float | None = None,
+                    kv_bytes: float = 2, step: float = 0.5, **budget) -> float:
+    """The smallest `--cpu-offload-gb` (GiB, rounded up to `step`) that leaves `tokens` of KV room."""
+    short = tokens * cfg.kv_bytes_per_token(kv_bytes) / 2 ** 30 - kv_room_gib(cfg, device, bits, expert_bits, **budget)
+    return max(0.0, math.ceil(short / step) * step)
 
 
 def prefill_flops(active_params: float, tokens: int) -> float:
@@ -113,14 +156,15 @@ class Plan:
 
 def plan(cfg: MoEConfig, device: Device, batch: int, context: int, itl_ms: float, link: Link | None = None,
          bits: float = 16, kv_bytes: float = 2, usd_per_gpu_hr: float | None = None, layout: str = "ep",
-         options=(1, 2, 4, 8, 16, 32, 64), precision: str = "bf16") -> Plan | None:
+         options=(1, 2, 4, 8, 16, 32, 64), precision: str = "bf16", **comm) -> Plan | None:
     """Smallest GPU count that holds the weights plus `batch` sequences of KV and decodes one step
-    within `itl_ms` in this layout ("ep" = DP attention + EP; "tp" = everything sharded). None if none does."""
+    within `itl_ms` in this layout ("ep" = DP attention + EP; "tp" = everything sharded). None if none does.
+    `comm` goes to `ep.decode_on` (e.g. exchange="agrs", or dispatch_elem=1, scale_block=128 for FP8)."""
     for n in options:
         fit = sessions(cfg, device, n, context, bits, kv_bytes=kv_bytes, layout=layout)
         if fit < batch:
             continue
-        st = decode_on(cfg, device, batch, context, n, layout, link, bits / 8, kv_bytes, precision)
+        st = decode_on(cfg, device, batch, context, n, layout, link, bits / 8, kv_bytes, precision, **comm)
         if st["time"] * 1e3 <= itl_ms:
             tok_s = batch / st["time"]
             usd = usd_per_mtok(n, usd_per_gpu_hr, tok_s) if usd_per_gpu_hr else None
@@ -128,7 +172,8 @@ def plan(cfg: MoEConfig, device: Device, batch: int, context: int, itl_ms: float
     return None
 
 
-def offload_step_s(offload_gb: float, pcie_gbs: float = 25) -> float:
+def offload_step_s(offload_gib: float, pcie_gbs: float = 25) -> float:
     """vLLM --cpu-offload-gb streams the offloaded weights over PCIe in *every* forward pass,
-    touched or not: 4 GiB at ~25 GB/s effective (verify) adds ~172 ms per step."""
-    return offload_gb * 2 ** 30 / (pcie_gbs * 1e9)
+    touched or not: 4 GiB at ~25 GB/s effective (Gen4 x16, verify) adds ~172 ms per step; a T4's
+    Gen3 link manages ~12 GB/s (verify)."""
+    return offload_gib * 2 ** 30 / (pcie_gbs * 1e9)
