@@ -3,7 +3,7 @@
 install:            ## editable install with dev extras
 	pip install -e ".[dev]"
 
-test:               ## run the offline test suite (~2s)
+test:               ## run the offline test suite: 38 tests, 2 skip (~6 s)
 	python -m pytest tests -q
 
 build-notebooks:    ## regenerate notebooks from tools/build_notebooks.py (clears outputs)

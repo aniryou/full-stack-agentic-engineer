@@ -110,13 +110,14 @@ def test_kv_s5_s6_reservation_waste_gqa_and_fp8():
     present(KV_PRIMER, "Store the cache in fp8 or int8 instead of fp16 — 2× smaller")
 
 
-# --- paged-attention primer (it writes KB/GB for KiB/GiB) --------------------------------------------
+# --- paged-attention primer (binary units, GB in brackets, as in the kv-cache primer) ---------------------
 def test_paged_llama13b_per_token_and_per_sequence():
     per_tok = kv.kv_bytes_per_token(40, 40, 128, 2)
     assert per_tok / KiB == 800
     seq = 2048 * per_tok
-    assert round(seq / GiB, 1) == 1.6
-    present(PAGED_PRIMER, "roughly 800 KB per token", "a single 2,048-token sequence occupies about 1.6 GB")
+    assert kv.fmt_bytes(seq) == "1.56 GiB (1.68 GB)"
+    present(PAGED_PRIMER, "works out to 800 KiB per token", "a single 2,048-token sequence occupies about 1.56 GiB (1.68 GB)",
+            "costs 800 KiB of KV cache per token, so ~1.56 GiB (1.68 GB) per 2K-token sequence")
     fit = kv.sessions_per_gpu(40 * GB, 26 * GB, 2048, per_tok)
     assert fit == 8                                                    # "only a handful"
     present(PAGED_PRIMER, "the FP16 weights already take 26 GB, leaving room for only a handful of max-length sequences")

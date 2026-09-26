@@ -109,9 +109,16 @@ def test_step_cost_grows_with_the_cache_not_the_prefix(run, small):
     assert np.all(np.diff(reads) == 2 * cfg["n_kv_heads"] * cfg["head_dim"] * 8 * cfg["n_layers"])
 
 
-def test_token_passes_of_the_worked_notebook():
+def test_token_passes_of_the_worked_notebook(small):
     naive, cached = kv.token_passes(16, 256)
-    assert (naive, cached) == (36_736, 272) and round(naive / cached) == 135
+    assert (naive, cached) == (36_736, 271) and round(naive / cached) == 136
+    # regression: the cached count was P + N, one too many -- the prefill already yields the first new token.
+    # The formula must count exactly the tokens the two generators feed the model.
+    for prompt_len, n_new in ((16, 1), (16, 24), (5, 7)):
+        prompt = PROMPT[:prompt_len]
+        fed = tuple(sum(c["tokens_in"] for c in gen(small, prompt, n_new)[2])
+                    for gen in (kv.generate_naive, kv.generate_cached))
+        assert kv.token_passes(prompt_len, n_new) == fed
 
 
 def test_max_len_is_enforced():
