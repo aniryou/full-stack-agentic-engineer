@@ -25,6 +25,7 @@
 
   /* type scale (Material's rem: 20px on phones and laptops, larger on wide screens) */
   --fse-step--1: 0.65rem;
+  --fse-step-small: 0.72rem;
   --fse-step-0: 0.8rem;
   --fse-step-1: 0.95rem;
   --fse-step-2: clamp(1.1rem, 0.9rem + 0.8vw, 1.35rem);
@@ -36,6 +37,7 @@
   --fse-space-4: 2rem;
   --fse-space-5: 3.2rem;
   --fse-radius: 4px;
+  --fse-badge: 1.8rem;          /* the number column on the landing page */
 }
 
 [data-md-color-scheme="slate"] {
@@ -173,98 +175,158 @@
   align-items: start;
 }
 
-/* stack map: a list of bands; the copper rule on the right is the request going down 07 -> 01 */
+/* stack map: one row per layer (badge | name over description), hairlines between rows. A thin copper rule runs
+ * down the badge column behind the badges and ends in an arrowhead under 01: a request going down 07 -> 01.
+ * 00 sits beneath the arrow with an outlined badge. Each row is one link, at least 44px tall. */
 .md-typeset .fse-home ol.fse-stack {
   list-style: none;
-  margin: 0 0 var(--fse-space-2);
-  padding: 0 1.1rem 0 0;
-  display: grid;
-  gap: 0.35rem;
+  margin: 0;
+  padding: 0 0 0.9rem;
   position: relative;
-}
-.md-typeset .fse-home ol.fse-stack::after {
-  content: "";
-  position: absolute;
-  right: 0.35rem;
-  top: 0.3rem;
-  bottom: 0.5rem;
-  border-right: 2px solid var(--fse-copper);
 }
 .md-typeset .fse-home ol.fse-stack::before {
   content: "";
   position: absolute;
-  right: 0.07rem;
+  left: calc(var(--fse-badge) / 2);
+  top: 1.2rem;
+  bottom: 0.35rem;
+  border-left: 1px solid var(--fse-copper);
+  opacity: 0.6;
+}
+.md-typeset .fse-home ol.fse-stack::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--fse-badge) / 2 - 0.25rem);
   bottom: 0;
-  border: 0.32rem solid transparent;
-  border-top: 0.45rem solid var(--fse-copper);
+  border: 0.25rem solid transparent;
+  border-bottom: 0;
+  border-top: 0.35rem solid var(--fse-copper);
+  opacity: 0.8;
 }
 .md-typeset .fse-home ol.fse-stack > li {
   margin: 0;
+  padding: 0;
 }
-.md-typeset .fse-home .fse-base {
-  margin: 0 1.1rem var(--fse-space-2) 0;
-}
-.md-typeset .fse-home a.fse-band {
+.md-typeset .fse-home a.fse-layer {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  column-gap: var(--fse-space-1);
-  row-gap: 0.1rem;
-  min-height: 2.4rem;
-  padding: 0.5rem 0.7rem;
-  box-sizing: border-box;
-  background: var(--fse-surface);
-  border: 1px solid var(--fse-rule);
-  border-radius: var(--fse-radius);
+  grid-template-columns: var(--fse-badge) minmax(0, 1fr);
+  column-gap: var(--fse-space-2);
+  align-items: start;
+  min-height: 2.2rem;
   color: var(--fse-ink);
+  -webkit-tap-highlight-color: transparent;
 }
-.md-typeset .fse-home a.fse-band--base {
-  background: transparent;
-  border-style: dashed;
-}
-.md-typeset .fse-home a.fse-band:hover {
-  border-color: var(--fse-cobalt);
-  background: var(--fse-cobalt-soft);
-  color: var(--fse-ink);
-}
-.fse-band__num {
-  grid-row: 1 / span 2;
+.fse-layer__num {
+  position: relative;          /* above the copper rule */
+  margin-top: 0.7rem;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
   font-family: var(--fse-font-mono);
   font-weight: 500;
-  font-size: var(--fse-step-0);
+  font-size: var(--fse-step--1);
+  font-variant-numeric: tabular-nums;
+  border-radius: 3px;
+  background: var(--fse-cobalt-soft);
   color: var(--fse-cobalt);
 }
-.fse-band__name {
-  font-family: var(--fse-font-display);
-  font-stretch: 112%;
-  font-weight: 600;
-  font-size: var(--fse-step-0);
+.fse-layer__text {
+  display: grid;
+  gap: 0.15rem;
+  padding-block: 0.7rem;
+  border-bottom: 1px solid var(--fse-rule);
 }
-.fse-band__what {
+.md-typeset .fse-home ol.fse-stack > li:first-child .fse-layer__text {
+  border-top: 1px solid var(--fse-rule);
+}
+.fse-layer__name {
+  font-weight: 700;
   font-size: var(--fse-step-0);
+  line-height: 1.3;
+  color: var(--fse-cobalt);
+}
+.fse-layer__what {
+  font-size: var(--fse-step-small);
+  line-height: 1.45;
   color: var(--fse-muted);
 }
+.md-typeset .fse-home a.fse-layer:hover .fse-layer__name,
+.md-typeset .fse-home a.fse-layer:focus-visible .fse-layer__name {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.md-typeset .fse-home a.fse-layer:hover .fse-layer__num {
+  background: var(--fse-cobalt);
+  color: var(--fse-surface);
+}
+.md-typeset .fse-home a.fse-layer--base {
+  margin-top: var(--fse-space-1);
+}
+.fse-layer--base .fse-layer__num {
+  background: transparent;
+  border: 1px dashed var(--fse-muted);
+  color: var(--fse-muted);
+}
+.fse-layer--base .fse-layer__text {
+  border-bottom: 0;
+}
+.md-typeset .fse-home .fse-more {
+  margin: var(--fse-space-3) 0 0;
+  padding-left: calc(var(--fse-badge) + var(--fse-space-2));
+  font-size: var(--fse-step-0);
+  font-weight: 500;
+}
 
-/* how to use it */
+/* how to use it: numbered steps (mono numerals in the badge column), then the tiers */
 .md-typeset .fse-home ol.fse-use {
+  list-style: none;
+  counter-reset: fse-step;
   margin: 0;
-  padding-left: 1.3em;
+  padding: 0;
+  display: grid;
+  gap: var(--fse-space-2);
 }
 .md-typeset .fse-home ol.fse-use > li {
-  margin: 0 0 var(--fse-space-1);
+  counter-increment: fse-step;
+  display: grid;
+  grid-template-columns: var(--fse-badge) minmax(0, 1fr);
+  column-gap: var(--fse-space-2);
+  margin: 0;
+  line-height: 1.55;
+}
+.md-typeset .fse-home ol.fse-use > li::before {
+  content: counter(fse-step);
+  font-family: var(--fse-font-mono);
+  font-weight: 500;
+  font-size: var(--fse-step--1);
+  color: var(--fse-muted);
+  text-align: center;
+  padding-top: 0.2em;
 }
 .md-typeset .fse-home dl.fse-tiers {
-  margin: 0 0 var(--fse-space-2);
+  margin: var(--fse-space-2) 0 var(--fse-space-3);
   display: grid;
-  gap: var(--fse-space-1);
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--fse-space-2) var(--fse-space-3);
 }
 .md-typeset .fse-home dl.fse-tiers > div {
   display: grid;
-  grid-template-columns: 2.4rem minmax(0, 1fr);
-  gap: var(--fse-space-1);
+  grid-template-columns: var(--fse-badge) minmax(0, 1fr);
+  column-gap: var(--fse-space-2);
   align-items: baseline;
 }
 .md-typeset .fse-home dl.fse-tiers :is(dt, dd) {
   margin: 0;
+}
+.md-typeset .fse-home dl.fse-tiers dt {
+  text-align: center;
+}
+.md-typeset .fse-home dl.fse-tiers dd {
+  font-size: var(--fse-step-small);
+  line-height: 1.5;
+}
+.fse-home .fse-tier {
+  font-size: var(--fse-step--1);
 }
 
 /* closing line */
@@ -287,7 +349,30 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .md-typeset .fse-home a.fse-band {
-    transition: background-color 120ms ease, border-color 120ms ease;
+  .fse-layer__num {
+    transition: background-color 120ms ease, color 120ms ease;
   }
+}
+
+/* "View on GitHub" above every content page (site/overrides/main.html) */
+.md-typeset .fse-source {
+  margin: 0 0 0.6rem;
+  font-size: 0.64rem;
+  line-height: 1;
+}
+.md-typeset .fse-source a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  min-height: 1.6rem;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset .fse-source a:hover {
+  color: var(--md-accent-fg-color);
+}
+.fse-source__icon svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: currentColor;
+  display: block;
 }

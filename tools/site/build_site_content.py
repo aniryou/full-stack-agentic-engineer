@@ -337,6 +337,12 @@ def write(site_path: str, content: str) -> None:
     p.write_text(content, encoding="utf-8")
 
 
+def front_matter(**meta: str) -> str:
+    """YAML front matter for a generated page. site/overrides/main.html turns `source_path` (a repo path) or
+    `source_url` into the "View on GitHub" link at the top of the page. JSON strings are valid YAML scalars."""
+    return "---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in meta.items()) + "---\n\n"
+
+
 def md_cells(nb: dict):
     for c in nb.get("cells", []):
         if c.get("cell_type") == "markdown":
@@ -376,7 +382,7 @@ def build_pages() -> None:
         shutil.copyfile(REPO / rp, dst)
         stats["images"] += 1
     for rp, t in texts.items():
-        write(pages[rp], rewrite_markdown(t, rp, pages[rp]))
+        write(pages[rp], front_matter(source_path=rp) + rewrite_markdown(t, rp, pages[rp]))
         stats["pages"] += 1
     for rp, nb in nbs.items():
         site_path = notebooks[rp]
@@ -456,7 +462,7 @@ def build_layers_index(layers: list[str]) -> None:
         stack_diagram(), "",
         *rows,
     ]
-    write("layers/index.md", "\n".join(body))
+    write("layers/index.md", front_matter(source_url=f"{GITHUB}/tree/{BRANCH}") + "\n".join(body))
 
 
 ACRONYMS = {w.lower(): w for w in (
