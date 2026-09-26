@@ -140,46 +140,57 @@ a number is off. To browse the same tree:
 
 ---
 
-## How to read the code: three sittings of about two hours
+## How to read the code: four sittings of about two hours
 
 Keep the primer open beside the code; each block names the primer section it pairs with. Read with a question in
 mind rather than top to bottom. Pace: dense engine code that you trace with the primer open goes at roughly 8–12
-lines a minute, so each slot below names line ranges (at `5840d95`) and the branches to step over on a first read;
-most of `Scheduler.schedule`'s 960 lines are guarded blocks for connectors, encoders, Mamba and data parallelism.
-The runner slots read **Model Runner V2**, the default (primer 1.4); MRV1 is optional contrast at the end.
+lines a minute, so each slot below names line ranges (at `5840d95`), the branches to step over on a first read, and
+the number of lines that leaves; no slot asks for more than 12 lines a minute. Most of `Scheduler.schedule`'s 960
+lines are guarded blocks for connectors, encoders, Mamba and data parallelism. The runner slots read **Model Runner
+V2**, the default (primer 1.4); MRV1 is optional contrast at the end. Reading takes about 8 h 35 min in all, plus
+about 1.5 h for the notebook.
 
-**Sitting 1: the engine loop and the scheduler.**
+**Sitting 1: the engine loop and the scheduler (2 h 10 min).**
 
-| Time | Read | Question to answer | Primer |
-|---|---|---|---|
-| 0:00–0:20 | the message dataclasses only: `vllm/v1/engine/__init__.py` (`EngineCoreRequest` 109, `EngineCoreOutputs` 256), `vllm/v1/request.py` (`Request` 60, `RequestStatus` 370), `vllm/v1/core/sched/output.py` (`SchedulerOutput` 232) | What crosses each process boundary? | 2.3 |
-| 0:20–0:45 | `vllm/v1/engine/core.py`: `step` (633), `step_with_batch_queue` (673), `EngineCoreProc.run_busy_loop` (1473), `process_input_sockets` (1757), `process_output_sockets` (1859) | What does one engine iteration do, and what runs on which thread? | 1.3, 2.1, 3.8 |
-| 0:45–1:25 | `vllm/v1/core/sched/scheduler.py`: `schedule` lines 557–866 only, the budget setup (557–623) and the running pass (624–857) with its preemption loop around `allocate_slots` (743); step over the `defer_prefills` (653), `ec_connector` (660), Mamba-alignment (691), encoder (696) and `_reserve_prefill_lookahead` (716) branches. Then `_preempt_request` (1539–1583) | When is a running request skipped (`continue`) and when does the pass stop (`break`)? Who is the victim? | 3.3, 3.7 |
-| 1:25–2:00 | the waiting pass, 868–1344: head and blocked-status checks (872–909), the LoRA check (911–922), the local prefix lookup (931–940), the token count (1073–1130), the `allocate_slots` call (1214–1227) and the admission bookkeeping (1257–1330); step over the connector block (941–1013) and the Mamba and encoder branches (1132–1170) | Replay the §3.5 table by hand, then the §3.7 table: why is R2 refused with its blocks still cached? | 3.3–3.7, 9 |
+| Time | Lines | Read | Question to answer | Primer |
+|---|---|---|---|---|
+| 0:00–0:30 | 318 | the message classes: `vllm/v1/engine/__init__.py` (`EngineCoreRequest` 109–169, `EngineCoreOutputs` 256–284), `vllm/v1/request.py` (`Request.__init__` 84–185, the attributes down to `num_computed_tokens`; `RequestStatus` 370–397), `vllm/v1/core/sched/output.py` (`SchedulerOutput` 232–329) | What crosses each process boundary? | 2.3 |
+| 0:30–0:55 | 210 | `vllm/v1/engine/core.py`: `step` (633–662), `EngineCoreProc.run_busy_loop` (1473–1484), `process_input_sockets` (1757–1857), `process_output_sockets` (1859–1925); `step_with_batch_queue` waits for sitting 3 | What does one engine iteration do, and what runs on which thread? | 1.3, 2.1, 3.8 |
+| 0:55–1:35 | 302 | `vllm/v1/core/sched/scheduler.py`: `schedule` lines 557–866 only, the budget setup (557–623) and the running pass (624–857) with its preemption loop around `allocate_slots` (743); step over the `defer_prefills` and `ec_connector` branches (653–674) and the Mamba-alignment, encoder and `_reserve_prefill_lookahead` branches (690–719). Then `_preempt_request` (1539–1582) | When is a running request skipped (`continue`) and when does the pass stop (`break`)? Who is the victim? | 3.3, 3.7 |
+| 1:35–2:10 | 206 | the waiting pass, 868–1344: head and blocked-status checks (872–909), the LoRA check (911–922), the local prefix lookup (931–940), the token count (1073–1130), the `allocate_slots` call (1214–1227) and the admission bookkeeping (1257–1330); step over the connector block (941–1013) and the Mamba and encoder branches (1132–1170) | Replay the §3.5 table by hand, then the §3.7 table: why is R2 refused with its blocks still cached? | 3.3–3.7, 9 |
 
-**Sitting 2: the KV cache and the step's aftermath.**
+**Sitting 2: the KV cache (1 h 50 min), then the notebook (about 1.5 h).**
 
-| Time | Read | Question to answer | Primer |
-|---|---|---|---|
-| 0:00–0:40 | `vllm/v1/core/kv_cache_manager.py`: `allocate_slots` (371; the docstring's layout first, then the full-sequence check 515–531 and the per-step check after it), `get_computed_blocks` (264), `record_prefix_cache_stats` (253); `single_type_kv_cache_manager.py`: `get_num_blocks_to_allocate` (180–266), `free` (578), `FullAttentionManager.find_longest_cache_hit` (745; phase 1 only, phase 2 applies only when the hash block is smaller than the cache block) | Where exactly do the 150 blocks of §3.7 come from? | 3.6, 4.4, 4.5 |
-| 0:40–1:10 | `vllm/v1/core/block_pool.py`: `BlockHashToBlockMap` (34, its NOTE #1), `cache_full_blocks` (225), `get_new_blocks` (668), `_maybe_evict_cached_block` (731), `touch` (754), `free_blocks` (776), `get_usage` (879); `kv_cache_utils.py`: `KVCacheBlock` (177), `FreeKVCacheBlockQueue` (247; `popleft_n` 338, `remove` 372, `prepend_n` 417, `append_n` 438), `generate_block_hash_extra_keys` (611), `hash_block_tokens` (650), `get_request_block_hasher` (827). Then do the notebook | Trace the eviction order of §4.6 | 4.2–4.6 |
-| 1:10–1:55 | `scheduler.py: update_from_output` (1967–2412, some 445 lines; read the per-request loop and step over the connector, pooling and stats branches), `_update_request_with_output` (2413), `_free_request` (2628); `vllm/v1/core/sched/utils.py: check_stop` (98); `async_scheduler.py` (all 78 lines) | What changes when a draft is rejected, and when are a request's blocks freed? | 3.8, 3.9 |
-| 1:55–2:15 | `vllm/v1/worker/gpu_worker.py: determine_available_memory` (571); `kv_cache_utils.py: _check_enough_kv_cache_memory` (889), `get_kv_cache_config_from_groups` (1658), a skim of `get_kv_cache_configs` (2650); `core.py: _initialize_kv_caches` (258) | Reproduce the §4.7 budget for your GPU | 4.7 |
+| Time | Lines | Read | Question to answer | Primer |
+|---|---|---|---|---|
+| 0:00–0:40 | 460 | `vllm/v1/core/kv_cache_manager.py`: `allocate_slots` (371–608; the docstring's layout first, then the full-sequence check 515–531 and the per-step check after it), `get_computed_blocks` (264–321), `record_prefix_cache_stats` (253–262); `single_type_kv_cache_manager.py`: `get_num_blocks_to_allocate` (180–265), `free` (578–586), `FullAttentionManager.find_longest_cache_hit` phase 1 (745–803; phase 2 applies only when the hash block is smaller than the cache block) | Where exactly do the 150 blocks of §3.7 come from? | 3.6, 4.4, 4.5 |
+| 0:40–1:10 | 336 | `vllm/v1/core/block_pool.py`: `BlockHashToBlockMap` (34–132, its NOTE #1), `cache_full_blocks` (225–343), `get_new_blocks` (668–702), `_maybe_evict_cached_block` (731–752), `touch` (754–770), `free_blocks` (776–807), `get_usage` (879–890) | Which block does `get_new_blocks` hand out, and what happens to its hash? | 4.2–4.6 |
+| 1:10–1:50 | 442 | `vllm/v1/core/kv_cache_utils.py`: `KVCacheBlock` (177–239), `FreeKVCacheBlockQueue` (247–497; `popleft_n` 338, `remove` 372, `prepend_n` 417, `append_n` 438), `generate_block_hash_extra_keys` (611–647), `hash_block_tokens` (650–680), `get_request_block_hasher` (827–886). Then do the notebook | Trace the eviction order of §4.6 | 4.2–4.6 |
 
-**Sitting 3: the GPU side (MRV2) and the front end.**
+**Sitting 3: the step's aftermath, the memory budget and the attention backend (2 h 15 min).**
 
-| Time | Read | Question to answer | Primer |
-|---|---|---|---|
-| 0:00–0:50 | `vllm/v1/worker/gpu/model_runner.py`: `execute_model` (1616–1980, the `not dummy_run` path only; step over the DP, micro-batch, PCP, EPLB and connector branches), `prepare_inputs` (1259–1458), `prepare_attn` (1460); `gpu/block_table.py: compute_slot_mappings` (190) and its kernel (276) — about 500 lines. Leave the request-state updates (`finish_requests`/`add_requests`/`update_requests`, 1082–1205) and the `gpu/input_batch.py` kernels (307–545) for a later session | Compute one token's slot by hand; what crosses from the host each step? | 5.3 |
-| 0:50–1:20 | `sample_tokens` (1982–2165), `sample` (1496), `postprocess_sampled` (1576); `gpu/sample/sampler.py`: `__call__` (134), `apply_sampling_params` (223), `sample` (275); `gpu/sample/gumbel.py: gumbel_noised_argmax` (165); skim `gpu/spec_decode/rejection_sampler_utils.py: _rejection_kernel` (485) | How does a sampled token become the next step's input without a host sync, and where does the randomness come from? | 7.1, 7.2, 7.4 |
-| 1:20–1:40 | `vllm/v1/attention/backends/flash_attn.py: FlashAttentionImpl.forward` (1105+); `vllm/platforms/cuda.py: CudaPlatformBase.get_attn_backend_cls` and `_get_backend_priorities` | Which backend does your GPU get, and why? | 6 |
-| 1:40–2:00 | `async_llm.py`: `generate` (666), `_run_output_handler` (793); `output_processor.py: process_outputs` (641); `detokenizer.py: update` (96); `arg_utils.py: get_batch_defaults` (2823); `metrics/loggers.py` (skim the metric definitions) | Where is TTFT measured, where are stop strings caught, which defaults did your GPU get? | 2.4, 11, 12 |
+| Time | Lines | Read | Question to answer | Primer |
+|---|---|---|---|---|
+| 0:00–0:45 | 507 | `scheduler.py: update_from_output`, the per-request loop and the removal of stopped requests (2015–2238; step over the connector, pooling and stats branches inside the loop), `_update_request_with_output` (2413–2430), `_free_request` (2628–2657); `vllm/v1/core/sched/utils.py: check_stop` (98–140); `async_scheduler.py` (all 78 lines); `core.py: step_with_batch_queue` (673–786) | What changes when a draft is rejected, and when are a request's blocks freed? | 3.8, 3.9 |
+| 0:45–1:30 | 498 | `vllm/v1/worker/gpu_worker.py: determine_available_memory` (571–740); `kv_cache_utils.py`: `_check_enough_kv_cache_memory` (889–926), `get_kv_cache_config_from_groups` (1658–1817); `core.py: _initialize_kv_caches` (258–387) | Reproduce the §4.7 budget for your GPU | 4.7 |
+| 1:30–2:15 | 475 | `vllm/v1/attention/backends/flash_attn.py: FlashAttentionImpl.forward` (1230–1508); `vllm/platforms/cuda.py`: `CudaPlatformBase.get_attn_backend_cls` (438–536) and `_get_backend_priorities` (83–179) | Which backend does your GPU get, and why? | 6 |
 
-Left over from sitting 3, about 40 minutes: MRV2's request-state updates (`finish_requests`/`add_requests`/`update_requests`,
-1082–1205) and the `gpu/input_batch.py` kernels (307–545) that apply them on the GPU.
+**Sitting 4: the GPU side (MRV2) and the front end (2 h 20 min).**
 
-Optional contrast, about an hour: MRV1's `vllm/v1/worker/gpu_model_runner.py`, `_update_states` (1192) and
-`_prepare_inputs` (1951), some 700 lines together, against the MRV1-versus-MRV2 table in primer 5.4.
+| Time | Lines | Read | Question to answer | Primer |
+|---|---|---|---|---|
+| 0:00–0:50 | 555 | `vllm/v1/worker/gpu/model_runner.py`: `execute_model` (1616–1978, the `not dummy_run` path only; step over the encoder-decoder 1669–1691, dummy-run 1727–1760, DCP 1761–1777, micro-batch 1778–1787, non-first-PP 1855–1872, EPLB 1873–1890 and non-last-PP 1952–1970 branches), `prepare_inputs` (1259–1458), `prepare_attn` (1460–1478); `gpu/block_table.py: compute_slot_mappings` (190–221) and its kernel (276–355) | Compute one token's slot by hand; what crosses from the host each step? | 5.3 |
+| 0:50–1:35 | 520 | `sample_tokens` (1982–2165), `sample` (1496–1574), `postprocess_sampled` (1576–1604); `gpu/sample/sampler.py`: `__call__` (134–221), `apply_sampling_params` (223–273), `sample` (275–322); `gpu/sample/gumbel.py: gumbel_noised_argmax` (165–205) | How does a sampled token become the next step's input without a host sync, and where does the randomness come from? | 7.1, 7.2, 7.4 |
+| 1:35–2:20 | 477 | `vllm/v1/engine/async_llm.py`: `generate` (666–791), `_run_output_handler` (793–874); `output_processor.py: process_outputs` (641–770); `detokenizer.py: BaseIncrementalDetokenizer.update` (96–142); `vllm/engine/arg_utils.py: get_batch_defaults` (2823–2914) | Where is TTFT measured, where are stop strings caught, which defaults did your GPU get? | 2.4, 11, 12 |
+
+Left over, at the same pace: MRV2's request-state updates (`finish_requests`/`add_requests`/`update_requests`,
+1082–1204) and the `gpu/input_batch.py` kernels that apply them on the GPU (307–545), some 360 lines, about 35
+minutes; the rejection sampler's `_rejection_kernel` (`gpu/spec_decode/rejection_sampler_utils.py`, 485–693, about
+20 minutes, §7.4); `kv_cache_utils.py: get_kv_cache_configs` (2650–2800, about 15 minutes, §4.7); and the metric
+definitions in `vllm/v1/metrics/loggers.py` (`PrometheusStatLogger.__init__`, 463–1001, a 45-minute skim, §12).
+
+Optional contrast, about an hour: MRV1's `vllm/v1/worker/gpu_model_runner.py`, `_update_states` (1192–1562) and
+`_prepare_inputs` (1951–2275), some 700 lines together, against the MRV1-versus-MRV2 table in primer 5.4.
 
 Next sessions, by interest: compilation and graphs (`vllm/compilation/`, `vllm/config/compilation.py`,
 `vllm/config/vllm.py: _set_cudagraph_sizes` 2360, §5.5); executors and Ray (`vllm/v1/executor/`, §5.1); KV connectors

@@ -16,7 +16,7 @@ build. Paths were checked at that commit; anything not confirmed in source is ma
 
 **Conventions.** `(path: Class.method)` means "read it there"; paths are relative to the vLLM repository
 root. [`source-map.md`](source-map.md) lists the same files with line numbers at `5840d95` and a reading
-plan in three sittings of about two hours. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
+plan in four sittings of about two hours. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
 (metrics, log lines, preemptions) is **T1** in the serving lab.
 
 ---
