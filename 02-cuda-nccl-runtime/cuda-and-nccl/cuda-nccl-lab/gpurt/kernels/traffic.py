@@ -25,9 +25,12 @@ class GpuSpec:
     cc: tuple[int, int]  # compute capability
     memory_gb: int
     match: tuple[str, ...] = ()  # tokens that identify it in a device name ("NVIDIA A100-SXM4-80GB")
+    form: str = ""  # "PCIE" / "NVL" for those variants; "" for SXM or single-variant GPUs
 
 
-# Datasheet peaks, Sep 2026 snapshot (verify each against the vendor datasheet before quoting).
+# Datasheet peaks, Sep 2026 snapshot (verify each against the vendor datasheet before quoting). The
+# A100/H100 PCIe and NVL cards have less bandwidth than the SXM parts of the same name — the same figures
+# as layer 01's gpubench.specs (A100 80GB PCIe 1,935 GB/s, H100 PCIe 2,000 GB/s; H100 NVL 3,900 GB/s, verify).
 GPUS: dict[str, GpuSpec] = {g.name: g for g in (
     GpuSpec("T4", 320, 8.1, (7, 5), 16, ("T4",)),
     GpuSpec("P100", 732, 9.3, (6, 0), 16, ("P100",)),
@@ -36,16 +39,24 @@ GPUS: dict[str, GpuSpec] = {g.name: g for g in (
     GpuSpec("RTX 4090", 1008, 82.6, (8, 9), 24, ("4090",)),
     GpuSpec("A100 40GB SXM", 1555, 19.5, (8, 0), 40, ("A100",)),
     GpuSpec("A100 80GB SXM", 2039, 19.5, (8, 0), 80, ("A100",)),
+    GpuSpec("A100 40GB PCIe", 1555, 19.5, (8, 0), 40, ("A100",), "PCIE"),
+    GpuSpec("A100 80GB PCIe", 1935, 19.5, (8, 0), 80, ("A100",), "PCIE"),
     GpuSpec("H100 SXM", 3350, 67.0, (9, 0), 80, ("H100",)),
+    GpuSpec("H100 PCIe", 2000, 51.2, (9, 0), 80, ("H100",), "PCIE"),
+    GpuSpec("H100 NVL", 3900, 60.0, (9, 0), 94, ("H100",), "NVL"),
     GpuSpec("H200 SXM", 4800, 67.0, (9, 0), 141, ("H200",)),
 )}
 
 
 def spec_for(device_name: str) -> GpuSpec | None:
     """The catalogue entry for a CUDA device name (e.g. from ``nvidia-smi -L``), or None. Matches whole
-    tokens, so an A100 is not mistaken for an A10; the memory size breaks ties (A100 40GB vs 80GB)."""
+    tokens, so an A100 is not mistaken for an A10; a PCIE or NVL token picks that form factor (an H100
+    PCIe has 60 % of an SXM's bandwidth), anything else the SXM entry; the memory size breaks ties
+    (A100 40GB vs 80GB)."""
     tokens = set(re.split(r"[\s\-_]+", device_name.upper()))
     found = [g for g in GPUS.values() if tokens & set(g.match)]
+    form = "PCIE" if "PCIE" in tokens else ("NVL" if "NVL" in tokens else "")
+    found = [g for g in found if g.form == form] or found
     if len(found) > 1:
         found = [g for g in found if f"{g.memory_gb}GB" in tokens] or found
     return found[0] if found else None

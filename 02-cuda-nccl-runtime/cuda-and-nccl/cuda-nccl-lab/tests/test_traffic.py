@@ -32,6 +32,8 @@ def test_softmax_fusion_halves_traffic_and_bandwidth_math():
 @pytest.mark.parametrize("name,spec", [
     ("Tesla T4", "T4"), ("NVIDIA L4", "L4"), ("NVIDIA A10G", "A10"), ("NVIDIA A100-SXM4-40GB", "A100 40GB SXM"),
     ("NVIDIA A100-SXM4-80GB", "A100 80GB SXM"), ("NVIDIA GeForce RTX 4090", "RTX 4090"), ("NVIDIA H100 80GB HBM3", "H100 SXM"),
+    ("NVIDIA H100 PCIe", "H100 PCIe"), ("NVIDIA H100 NVL", "H100 NVL"), ("NVIDIA A100 80GB PCIe", "A100 80GB PCIe"),
+    ("NVIDIA A100-PCIE-40GB", "A100 40GB PCIe"), ("NVIDIA A10", "A10"),
 ])
 def test_device_names_map_to_specs(name, spec):
     assert t.spec_for(name).name == spec
@@ -39,3 +41,8 @@ def test_device_names_map_to_specs(name, spec):
 
 def test_unknown_device_has_no_spec():
     assert t.spec_for("SIMULATOR") is None
+
+
+def test_a_pcie_h100_is_judged_against_its_own_peak():
+    assert t.spec_for("NVIDIA H100 PCIe").mem_gbps == 2000 and t.spec_for("NVIDIA H100 80GB HBM3").mem_gbps == 3350
+    assert t.effective_gbps(1.8e12, 1.0) / t.spec_for("NVIDIA H100 PCIe").mem_gbps == pytest.approx(0.9)

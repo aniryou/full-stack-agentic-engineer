@@ -19,6 +19,8 @@ def test_cloud_run_terraform_defaults_are_the_cheap_ones():
     assert re.search(r'variable "max_instances"[^}]*default\s*=\s*1', tf, re.S)
     assert 'path = "/health"' in tf and "container_port = 8000" in tf
     assert "allUsers" not in tf                                                     # never public
+    assert re.search(r'variable "weights_bucket"[^}]*validation', tf, re.S)            # gcs needs a bucket, at plan time
+    assert 'name  = "HF_HUB_ENABLE_HF_TRANSFER"' not in tf                          # deprecated, a no-op
     assert (DEPLOY / "gcp/cloud-run/terraform/terraform.tfvars.example").exists()
 
 

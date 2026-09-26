@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 04 · Prefill/decode disaggregation
 #
-# **Tier:** T0 — CPU only, about 20 seconds, no network. Every number below is **simulated** by `fleetsim`.
+# **Tier:** T0 — CPU only, about 15 seconds, no network. Every number below is **simulated** by `fleetsim`.
 #
 # ## The one-minute version
 # Prefill is compute-bound and bursty; decode is memory-bound and steady. On a shared engine, one 2,048-token prefill

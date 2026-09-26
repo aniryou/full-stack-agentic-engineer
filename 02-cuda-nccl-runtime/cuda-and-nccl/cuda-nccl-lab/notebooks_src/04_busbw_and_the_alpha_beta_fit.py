@@ -191,7 +191,9 @@ print("✅ below the link? NCCL_DEBUG=INFO shows the transport (P2P, SHM, NET); 
 #
 # The same parser reads the tables `gpurt.dist` prints. Here is a quick sweep of this machine's CPU
 # transport (the notebook 03 backend) — measured, and a very different fabric: the fit tells you its α
-# and B, and the fit error tells you how well a straight line describes it.
+# and B, and the fit error tells you how well a straight line describes it. Then every nccl-tests or
+# `gpurt.dist` log you brought back from a GPU box — into the lab's `out/` (`deploy/any-gpu`) or
+# `deploy/gke/out/` (`run.sh nccl`) — is parsed and summarised the same way.
 
 # %%
 from gpurt import env  # noqa: E402
@@ -204,9 +206,10 @@ mine = nccltests.parse(format_table(rows))
 print(format_table(rows).splitlines()[1])
 print(ab.fit_rows(rows), f"(backend {backend}, measured on this machine)")
 print("recheck:", nccltests.recheck(mine) or "consistent")
-for log in sorted(Path("..").glob("deploy/*/out/*.log")):  # logs you brought back from a GPU box
+# logs you brought back from a GPU box: out/ (deploy/any-gpu recipes) or deploy/gke/out/ (run.sh)
+for log in sorted(Path("..").glob("out/*.log")) + sorted(Path("..").glob("deploy/*/out/*.log")):
     for run_ in nccltests.parse_many(log.read_text()):
-        print(log.name, nccltests.summarize(run_))
+        print(log.name, "(measured)", nccltests.summarize(run_))
 
 # %% [markdown]
 # ## In a design review

@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: setup test notebooks check lab gpu-bench dist-bench fixtures k8s-validate tf-validate clean
+.PHONY: setup test notebooks check lab gpu-bench dist-bench fixtures ptx-check k8s-validate tf-validate clean
 
 setup:
 	$(PY) -m pip install -r requirements.txt
@@ -28,6 +28,9 @@ dist-bench:  ## T0 by default (a ring over OS pipes); BACKEND=gloo|nccl NRANKS=2
 
 fixtures:  ## regenerate the illustrative nccl-tests samples in gpurt/fixtures/
 	$(PY) tools/make_fixtures.py
+
+ptx-check:  ## compile every kernel to PTX for sm_75/sm_89 (needs numba-cuda, not a GPU); exit 2 = skipped
+	$(PY) tools/check_ptx.py
 
 k8s-validate:
 	kubernetes-validate --strict -k 1.34.0 deploy/gke/0*.yaml

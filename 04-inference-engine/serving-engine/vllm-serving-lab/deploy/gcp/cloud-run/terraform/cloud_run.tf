@@ -88,8 +88,12 @@ resource "google_cloud_run_v2_service" "vllm" {
         }
       }
 
+      # huggingface_hub 1.x (vLLM v0.30.0 requires >= 1.31) downloads through hf-xet; this opts into
+      # its high-throughput mode, which uses more CPU and memory while downloading. # VERIFY: the
+      # variable in the image's huggingface_hub. HF_HUB_ENABLE_HF_TRANSFER is deprecated: hf_transfer
+      # is no longer used and the variable only triggers a warning.
       env {
-        name  = "HF_HUB_ENABLE_HF_TRANSFER" # parallel download when hf_transfer is in the image (verify)
+        name  = "HF_XET_HIGH_PERFORMANCE"
         value = "1"
       }
 
@@ -129,10 +133,5 @@ resource "google_cloud_run_v2_service" "vllm" {
 
   depends_on = [google_project_service.apis]
 
-  lifecycle {
-    precondition {
-      condition     = var.model_source == "hf" || var.weights_bucket != null
-      error_message = "model_source = \"gcs\" needs weights_bucket."
-    }
-  }
+  # (var.weights_bucket is validated against var.model_source in variables.tf)
 }

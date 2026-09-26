@@ -229,8 +229,9 @@ print("✅ a hot prefix melts pure prefix hashing; the EPP spreads it and keeps 
 # ## Exercise 2.6 — how stale is an approximate index?
 # The EPP above never *sees* a replica's cache: its approximate index records the blocks of every request it sends
 # and forgets them LRU-first. Write `phantom_share(believed, actual)`: the fraction of blocks the router believes are
-# cached (`believed`, a set) that the replica no longer holds (`actual`, a set). Then measure it for an index sized
-# 15x too large for an L4's KV pool — a plausible misconfiguration when defaults are sized for bigger GPUs.
+# cached (`believed`, a set) that the replica no longer holds (`actual`, a set). The check measures it for an index
+# sized 15x too large for an L4's KV pool — a plausible misconfiguration when defaults are sized for bigger GPUs.
+# **Predict** first: does the oversized index cost this workload more than 0.05 of hit rate (`True` or `False`)?
 
 # %% exercise
 def phantom_share(believed, actual):
@@ -238,17 +239,26 @@ def phantom_share(believed, actual):
     return len(believed - actual) / len(believed) if believed else 0.0
     ### END SOLUTION
 
+
+loses_hit_rate = None     # True or False
+### BEGIN SOLUTION
+loses_hit_rate = False    # agent turns come back within seconds: the entries the router queries are still fresh
+### END SOLUTION
+
 # %% check
 from fleetsim import ApproxPrefixIndex, KVCacheUtilizationScorer, PrefixCacheScorer, QueueScorer, WeightedScorer
 
 assert phantom_share({1, 2, 3, 4}, {1, 2}) == 0.5 and phantom_share(set(), {1}) == 0.0
+hits = {}
 for label, size in (("sized to the pool", p.kv_blocks), ("15x too large", 15 * p.kv_blocks)):
     ix = ApproxPrefixIndex(size)
     fleet = Fleet(p, 4, WeightedScorer([(PrefixCacheScorer(ix), 3), (QueueScorer(), 2), (KVCacheUtilizationScorer(), 2)]))
     s = fleet.run(agents()).summary(ttft_slo=1.0)
+    hits[label] = s["hit_rate"]
     ph = sum(phantom_share(set(ix.lru[r.rid]), set(r.pool.cached)) for r in fleet.all) / len(fleet.all)
     print(f"index {label:17s}: {ph:.0%} phantom blocks, hit rate {s['hit_rate']:.2f}, p95 TTFT {s['ttft_p95']:.2f} s")
-print("✅ phantom_share works")
+assert loses_hit_rate == (hits["sized to the pool"] - hits["15x too large"] > 0.05), hits
+print("✅ phantom_share works, and your prediction held")
 
 # %% [markdown]
 # A mostly-phantom index barely hurts *this* workload: agent turns come back within seconds, so the entries the router

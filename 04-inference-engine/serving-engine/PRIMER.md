@@ -426,9 +426,10 @@ The formula assumes every position is accepted independently with one α; real a
 **What vLLM measures.** vLLM's draft models draft **greedily** by default (`draft_sample_method="greedy"`, verify):
 x is the draft's argmax and the rejection sampler treats q as one-hot. The rule is still exact — accept x with
 probability p(x), otherwise resample from p with x removed — but the acceptance rate is then p(x), not Σ min(p, q);
-`"probabilistic"` samples x ~ q and uses the full q. Exactness also holds only for the `standard` rejection method:
-vLLM's `synthetic` method accepts with a calibrated probability to benchmark speed and does not preserve the
-distribution (verify).
+`"probabilistic"` samples x ~ q and uses the full q. Exactness holds for the `standard` rejection method and for
+`block` (block verification, Sun et al. 2024: the k drafts are verified jointly, still distribution-preserving, and
+at least as many tokens accepted in expectation); vLLM's `synthetic` method accepts with a calibrated probability to benchmark speed and
+does not preserve the distribution (verify).
 
 **Proposers** (vLLM's methods include `ngram`, `suffix`, `draft_model`, `eagle`, `eagle3`, `medusa`,
 `mlp_speculator` and model-specific MTP, verify):

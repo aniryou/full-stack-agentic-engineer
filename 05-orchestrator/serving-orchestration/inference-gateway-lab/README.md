@@ -25,7 +25,7 @@ both: nothing here imports the core.
 ```bash
 cd inference-gateway-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                     # 75 tests, a few seconds, offline
+python3 -m pytest -q                     # 76 tests, a few seconds, offline
 python3 -m jupyterlab notebooks          # exercises; worked answers in solutions/
 ```
 

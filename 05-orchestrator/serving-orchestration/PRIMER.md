@@ -203,8 +203,9 @@ llm-d *optimized baseline* ships a different composition — `prefix-cache-affin
 weighted prefix scorer with a max-score picker hot-spots popular prefixes, while a filter with an explicit load gate
 states the trade-off in one number, in TTFT seconds. Two details matter. The load scorer after the filter counts
 this request's *uncached* tokens on each endpoint, so cache warmth lowers the cost of a warm endpoint in the units
-of the load it is compared with: with 2,097,152 tokens in flight on both, a fully warm endpoint scores exactly 0.5
-and a cold one slightly less (`TokenLoadScorer`, tested). And the gate sees only the **prefill backlog** — in-flight
+of the load it is compared with: a fully warm endpoint with 2,097,152 tokens in flight scores exactly 0.5, and a cold
+one with 100 fewer in flight scores less, because this 160-token request's uncached tokens count against it
+(`TokenLoadScorer`, tested). And the gate sees only the **prefill backlog** — in-flight
 uncached tokens ÷ `peakPrefillThroughput` — so it is built for prefill-bound traffic (upstream pairs the filter with
 `active-request-scorer` for decode-bound traffic). The `peakPrefillThroughput` default, 15,928 tokens/s, was measured
 for Qwen3-32B on two H100s (TP=2); it is hardware-specific and has to be recalibrated elsewhere.
@@ -331,10 +332,12 @@ Worked (`pods_metric_replicas()`): 3 pods at 200m against a 100m target → 6; 4
 1. **Pods without a sample.** For a Pods metric other than CPU the controller sorts pods by phase, not readiness: a
    *Pending* pod (scheduling, image pull) counts as 0 on a scale-up and is dropped on a scale-down; a *Running* pod
    with no sample yet (a vLLM still loading weights exports no `/metrics`) is *missing* — 0 on a scale-up, the target
-   on a scale-down. (The Ready condition is checked only for CPU.) These fill-ins never raise the answer — it is
-   `ceil(sum of the samples ÷ target)` either way — they only make a change that lands inside the band, or flips
-   direction, be skipped. Two ready pods with 10 queued each (target 2) ask for ceil(20 ÷ 2) = 10, not the 50 that
-   10 current replicas × a ratio of 5 would suggest: the ratio multiplies the pods that *reported*. With 8 Pending,
+   on a scale-down. (The Ready condition is checked only for CPU.) On a scale-down the target fill-ins make it more
+   cautious: two pods at half the target with two missing give ceil(0.75 × 4) = 3, not 1. On a scale-up the zeros
+   never raise the answer — it is `ceil(sum of the samples ÷ target)` either way — they only make a change that
+   lands inside the band, or flips direction, be skipped. Two ready pods with 10 queued each (target 2) ask for
+   ceil(20 ÷ 2) = 10, not the 50 that 10 current replicas × a ratio of 5 would suggest: the ratio multiplies the pods
+   that *reported*. With 8 Pending,
    `(10 + 10 + 0 × 8) ÷ 10 ÷ 2 = 1.0` holds at 10; at 10.5 each (1.05) it still holds, where ignoring the Pending pods
    would say 11. The flip side: a capped metric grows the fleet at most cap/target-fold per cold start (§4.2).
    `fleetsim` treats a starting replica as Pending for its whole cold start (the same on a scale-up).
@@ -436,13 +439,13 @@ hardware variants by cost, is deprecated in favour of the KEDA + EPP paths.
 
 ### 5.1 What it removes
 
-A prefill chunk and the decodes batched with it share one step. With a 2,048-token budget on the L4 model, a
-decode step of ~65 ms becomes a 545 ms step whenever a long prompt is being prefilled: on four aggregated replicas
-serving ~6,000-token RAG prompts, ITL p50 was 64 ms and ITL p99 545 ms (simulated, notebook 04). Moving prefill to its
-own pool leaves decode steps uninterrupted (ITL p99 about 72 ms for every split searched in §5.3), and lets each pool be batched and
-parallelised for its own bottleneck — or run on different hardware. The mechanism is layer 01's
-[deployment primer §8](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md); the systems papers
-are DistServe and Splitwise.
+A prefill chunk and the decodes batched with it share one step. With a 2,048-token budget on the L4 model, a decode
+step of ~65 ms becomes a 545 ms step whenever a long prompt is being prefilled: on four aggregated replicas serving
+~6,000-token RAG prompts, ITL p50 was 64 ms and ITL p99 545 ms (simulated, notebook 04). Moving prefill to its own
+pool leaves decode steps uninterrupted (ITL p99 about 72 ms for every split searched in §5.3), and lets each pool be
+batched and parallelised for its own bottleneck — or run on different hardware. The mechanism is layer 01's
+[deployment primer §8](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md); the systems papers are
+DistServe and Splitwise.
 
 ### 5.2 What it costs: the KV transfer
 
@@ -488,8 +491,8 @@ exercise): the KV pool caps it at 2,193 ÷ 387 = 5, while the ITL SLO alone woul
 - **Before tuning the chunk budget.** With `max_num_batched_tokens` 256 instead of 2,048, the eight aggregated L4s
   reached 0.94 SLO attainment and an ITL p99 of 71 ms — as good as the best split, with one pool. (The simulator has
   no per-chunk efficiency loss and no attention FLOPs, so this is the optimistic end; bigger models shorten decode
-  steps relative to a chunk, which is where splitting wins.) The llm-d guide recommends P/D for medium-large models and long inputs
-  ("10k ISL | 1k OSL, not 200 ISL | 200 OSL").
+  steps relative to a chunk, which is where splitting wins.) The llm-d guide recommends P/D for medium-large models
+  and long inputs ("10k ISL | 1k OSL, not 200 ISL | 200 OSL").
 
 ### 5.5 The implementations
 
@@ -497,8 +500,9 @@ exercise): the KV pool caps it at 2,193 ÷ 387 = 5, while the ITL SLO alone woul
   `kv_consumer`. `NixlConnector` (NVIDIA's NIXL transfer library over UCX, RDMA or TCP) is llm-d's default and
   supports different TP on the two sides; `MooncakeConnector` requires equal TP.
 - **llm-d**: the EPP's `disagg-profile-handler` runs a decode profile, then (if the P/D decider says so) a prefill
-  profile; a sidecar next to each decode server orchestrates prefill → KV pull → decode. Its guide deploys `gpt-oss-120b` as 8 TP=1 prefill + 2 TP=4 decode
-  instances — heterogeneous parallelism, **xPyD** with x = 8, y = 2 — and tunes the x:y ratio to the ISL/OSL mix.
+  profile; a sidecar next to each decode server orchestrates prefill → KV pull → decode. Its guide deploys
+  `gpt-oss-120b` as 8 TP=1 prefill + 2 TP=4 decode instances — heterogeneous parallelism, **xPyD** with x = 8, y = 2 —
+  and tunes the x:y ratio to the ISL/OSL mix.
 - **NVIDIA Dynamo** (1.0 GA March 2026): disaggregated serving across vLLM, SGLang and TensorRT-LLM, NIXL transfers,
   the KV-aware router of §2.4 and the Planner of §4.5.
 

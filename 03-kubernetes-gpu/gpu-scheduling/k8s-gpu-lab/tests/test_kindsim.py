@@ -119,3 +119,18 @@ def test_victim_order_puts_evicting_workloads_first():
         m.job("hi", "team-a", scenarios.lab_template(4))), 99)
     victims = sim._find_victims(w, sim.cfg.cqs["team-a-cq"])
     assert victims == [older]                                          # not the newer low-1
+
+
+def test_max_capacity_check_is_per_pod_set_group():
+    # Kueue v0.19 fitsMaxCapacity runs on the group's summed request, with one status for every member.
+    ann = {m.TAS_REQUIRED: m.TOPOLOGY_SUBBLOCK, m.TAS_GROUP: "g"}
+    for tmpl, expect in ((scenarios.lab_template(4), ["tail: insufficient quota for nvidia.com/gpu in flavor "
+                          "gpu-l4, previously considered podsets requests (8) + current podset request (8) > maximum capacity (12)"]),
+                         (scenarios.lab_template(4, annotations=ann), [f"{n}: insufficient quota for nvidia.com/gpu in flavor "
+                          "gpu-l4, previously considered podsets requests (0) + current podset request (16) > maximum capacity (12)"
+                          for n in ("head", "tail")])):
+        sim = kindsim.new_sim()
+        sim.apply(m.jobset("big", "team-a", [m.replicated_job("head", tmpl, parallelism=2),
+                                             m.replicated_job("tail", tmpl, parallelism=2)], queue="gpu-queue"))
+        msg = sim.workloads["JobSet/team-a/big"].message
+        assert msg == "; ".join(f"couldn't assign flavors to pod set {e}" for e in expect)

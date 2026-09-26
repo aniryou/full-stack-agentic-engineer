@@ -174,3 +174,22 @@ def test_terraform_has_the_cost_conscious_shape():
                    "location = var.zone"):
         assert needle in tf, needle
     assert (DEPLOY / "gcp/terraform/terraform.tfvars.example").exists()
+
+
+def test_gpu_and_teardown_scripts_dry_run_to_the_right_commands():
+    env = {"DRY_RUN": "1", "PATH": "/usr/bin:/bin"}
+    gpu = subprocess.run(["bash", str(DEPLOY / "any-gpu/serve.sh")], env={**env, "REPLICAS": "3"},
+                         capture_output=True, text=True, check=True).stdout
+    assert gpu.count("vllm serve") == 3 and "--enable-prompt-tokens-details" in gpu and "--max-num-seqs 16" in gpu
+    assert "IGW_BACKENDS=r0=http://127.0.0.1:8001,r1=http://127.0.0.1:8002,r2=http://127.0.0.1:8003" in gpu
+    down = subprocess.run(["bash", str(DEPLOY / "gke/uninstall.sh")], env={**env, "PROJECT_ID": "p"},
+                          capture_output=True, text=True, check=True).stdout
+    install = subprocess.run(["bash", str(DEPLOY / "gke/install.sh")], env={**env, "PROJECT_ID": "p"},
+                             capture_output=True, text=True, check=True).stdout
+    adapter = re.search(r"kubectl apply -f (\S+adapter\S+)", install).group(1)
+    assert "/master/" not in adapter and f"kubectl delete --ignore-not-found -f {adapter}" in down   # pinned, and removed
+    assert "remove-iam-policy-binding" in down and "add-iam-policy-binding" in install
+    compose = yaml.safe_load((DEPLOY / "any-gpu/docker-compose.yaml").read_text())
+    for name in ("vllm-a", "vllm-b"):
+        cmd = compose["services"][name]["command"]
+        assert "--enable-prompt-tokens-details" in cmd and cmd[cmd.index("--max-num-seqs") + 1] == "16"

@@ -11,7 +11,8 @@ that a benchmark alone cannot. Two rules make the numbers honest:
   (:func:`histogram_quantile`, the same algorithm as PromQL's ``histogram_quantile``), so it is
   only as precise as the bucket edges around it.
 
-Metric names are from ``vllm/v1/metrics/loggers.py`` (vLLM main, Sep 2026). The Prometheus
+Metric names are from ``vllm/v1/metrics/loggers.py`` and ``v1/spec_decode/metrics.py`` (vLLM v0.30.0;
+same on main, Sep 2026). The Prometheus
 client exposes counters with a ``_total`` suffix; this parser accepts either spelling.
 """
 from __future__ import annotations

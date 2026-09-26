@@ -10,5 +10,12 @@ the URL changes. Start at T0 (the fake server, no deploy at all), then move up.
 | [`gcp/cloud-run/`](gcp/cloud-run/) | T3 | Cloud Run service with one L4, scale to zero; Terraform or `gcloud run deploy` | per second while an instance exists | `terraform destroy` / `./deploy.sh delete` |
 | [`gcp/gke/`](gcp/gke/) | T3 | GKE Deployment on an L4 Spot node pool (0..2) + `PodMonitoring` for `/metrics` | Spot L4 node + small cluster | `./cluster.sh delete` |
 
+Terraform: the Cloud Run service is [`gcp/cloud-run/terraform/`](gcp/cloud-run/terraform/). GKE here
+is a `gcloud` script plus manifests; the GKE cluster as Terraform (GPU node pools, driver
+installation, Spot, managed Prometheus) is provisioned in layer 03's
+[`k8s-gpu-lab`](../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) and layer 05's
+[`inference-gateway-lab`](../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/),
+and `gcp/gke/`'s manifests run on either.
+
 Prices and GPU availability move; the dated table is [`COMPUTE.md`](../../../../COMPUTE.md).
 Scaling several replicas behind a router, and autoscaling on queue depth or KV usage, is layer 05.

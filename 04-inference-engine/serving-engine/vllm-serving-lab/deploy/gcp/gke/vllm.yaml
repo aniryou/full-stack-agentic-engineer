@@ -27,7 +27,7 @@ spec:
       terminationGracePeriodSeconds: 25            # Spot VMs get ~30 s notice before preemption
       containers:
         - name: vllm
-          image: vllm/vllm-openai:v0.30.0          # ENTRYPOINT is `vllm serve` (verify tag)
+          image: vllm/vllm-openai:v0.30.0          # ENTRYPOINT is `vllm serve`; tag on Docker Hub since 2026-09-22
           args:
             - Qwen/Qwen2.5-1.5B-Instruct
             - --port=8000

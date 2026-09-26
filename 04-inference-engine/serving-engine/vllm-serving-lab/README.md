@@ -17,16 +17,19 @@ GPU) or at Cloud Run / GKE, and the numbers become measurements.
 |---|---|---|---|
 | **T0** | laptop, Colab CPU, CI | fake vLLM + all analysis | every notebook, all tests |
 | **T1** | one GPU: Colab/Kaggle T4 (free), any 24 GB card | `vllm serve` with a 0.5-1.5B model | `SERVELAB_URL=...`, [`deploy/any-gpu/`](deploy/any-gpu/) |
+| **T2** | two GPUs: Kaggle "GPU T4 x2" (free, PCIe) or a rented pair | `vllm serve --tensor-parallel-size 2` | notebook 03 exercise 3.6 (predicted at T0, measured with `SERVELAB_START_VLLM=1`), [`deploy/any-gpu/`](deploy/any-gpu/) |
 | **T3** | GCP | vLLM on Cloud Run (L4, scale to zero) or GKE (L4 Spot) | [`deploy/gcp/cloud-run/`](deploy/gcp/cloud-run/), [`deploy/gcp/gke/`](deploy/gcp/gke/) |
 
-(T2, multi-GPU, belongs to layers 01-02; prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).)
+vLLM v0.30.0 needs compute capability 7.5 or newer: a T4 works, Kaggle's P100 does not. Collective
+bandwidth and multi-GPU topology themselves are layers 01-02; prices and where to get GPUs:
+[`COMPUTE.md`](../../../COMPUTE.md).
 
 ## Quick start (T0, no GPU)
 
 ```bash
 cd vllm-serving-lab
 python3 -m pip install -e ".[dev]"             # aiohttp + prometheus_client; dev: pytest, jupyter, numpy, pyyaml
-python3 -m pytest -q                           # ~60 tests, a few seconds, offline
+python3 -m pytest -q                           # ~65 tests, a few seconds, offline
 python3 -m servelab fake --port 8000 &         # a fake vLLM (simulated T4 + Qwen2.5-0.5B)
 python3 -m servelab bench --url http://127.0.0.1:8000 --rate 5 -n 60 --slo-ttft-ms 300 --slo-tpot-ms 30
 python3 -m servelab metrics --url http://127.0.0.1:8000
@@ -37,7 +40,8 @@ python3 -m jupyterlab notebooks                # the exercises; answers in solut
 Measure a real engine instead (T1/T3): start one ([`deploy/any-gpu/`](deploy/any-gpu/) has a
 Colab/Kaggle T4 recipe), then `export SERVELAB_URL=http://127.0.0.1:8000` (plus
 `SERVELAB_API_KEY`, or `SERVELAB_BEARER=$(gcloud auth print-identity-token)` for a private Cloud Run
-service). The notebooks detect it and measure it; with a GPU, vLLM installed and
+service). The notebooks detect it and measure it — a `servelab fake` server in `SERVELAB_URL` is
+recognised by its `/version` and stays labelled simulated; with a GPU, vLLM installed and
 `SERVELAB_START_VLLM=1`, notebook 03's sweeps restart a real `vllm serve` per configuration.
 
 ## The notebooks
@@ -48,12 +52,12 @@ and closes with *in a design review*: a two-minute walkthrough and drill questio
 
 | # | Notebook | Tier | You will be able to explain | Primer |
 |---|---|---|---|---|
-| 01 | `size_before_you_serve` | T0 (+T1 log) | KV bytes per token from `config.json`; blocks and "Maximum concurrency"; why an 8B model's 128K context does not start on an L4; what FP8 buys; calibrating from the startup log | §4 |
-| 02 | `serve_and_measure` | T0 / T1 / T3 | TTFT, ITL, TPOT, E2E, throughput and goodput exactly as `vllm bench serve` defines them; histogram quantiles; open vs closed loop; Little's law against the engine's gauges | §11 |
-| 03 | `knobs_and_tradeoffs` | T0 / T1 | why batching is nearly free; the latency-throughput knee; `max-num-batched-tokens` as a TTFT-versus-ITL-tail trade; choosing `max-num-seqs` by goodput; capacity at an SLO; KV blocks and preemption | §2, §3, §11 |
-| 04 | `prefix_caching_for_agents` | T0 / T1 | block-hash chains; the hit accounting rules; hit rate from `/metrics`; prompt layouts that keep (or kill) the cache for agents; what a hit is worth in TTFT | §5 |
-| 05 | `speculation_and_quantization_in_vllm` | T0 (+T1 flags) | tokens per verify step `(1-a^(k+1))/(1-a)`; acceptance from vLLM's counters; why speculation fades at high batch; what INT4 vs FP8 buys for prefill vs decode | §7, §8 |
-| 06 | `deploy_on_cloud_run_gpu` | T3 (plannable at T0) | cold-start anatomy; setting Cloud Run `concurrency` from a measurement; cost per million tokens; scale-to-zero vs warm | §12 |
+| 01 | `size_before_you_serve` | T0 (+T1 log) | KV bytes per token from `config.json`; blocks and "Maximum concurrency"; ~18 concurrent 2K-token sessions of an 8B model on an L4, and every assumption behind that number; why its 128K context does not start; what FP8 buys; calibrating from the startup log | §4 |
+| 02 | `serve_and_measure` | T0 / T1 / T3 | TTFT, ITL, TPOT, E2E, throughput and goodput as `vllm bench serve` defines them (one stated difference); histogram quantiles; open vs closed loop and the backlog an open loop builds; Little's law against the engine's gauges; warm-up, burstiness and long-tailed lengths | §11 |
+| 03 | `knobs_and_tradeoffs` | T0 / T1 (+T2) | why batching is nearly free; the latency-throughput knee; `max-num-batched-tokens` as a TTFT-versus-ITL-tail trade; choosing `max-num-seqs` by goodput; capacity at an SLO; KV blocks and preemption; tensor parallelism on two T4s | §2, §3, §9, §11 |
+| 04 | `prefix_caching_for_agents` | T0 / T1 | block-hash chains; the hit accounting rules; hit rate from `/metrics`, predicted from the prompt layout before it is measured; prompt layouts that keep (or kill) the cache for agents; what a hit is worth in TTFT | §5 |
+| 05 | `speculation_and_quantization_in_vllm` | T0 (+T1 flags) | tokens per verify step `(1-a^(k+1))/(1-a)`; acceptance from vLLM's counters; why speculation fades at high batch and short context; what INT4 vs FP8 buys for prefill vs decode | §7, §8 |
+| 06 | `deploy_on_cloud_run_gpu` | T3 (plannable at T0) | cold-start anatomy and the startup-probe budget; setting Cloud Run `concurrency` from a measurement, and what happens above `max-num-seqs`; cost per million tokens; scale-to-zero vs warm | §12 |
 
 ## The library (`servelab/`, ~3,000 lines)
 
@@ -67,8 +71,9 @@ and closes with *in a design review*: a two-minute walkthrough and drill questio
 | `fakeserver.py` | ~360 | the fake vLLM over HTTP (aiohttp): `/v1/completions`, `/v1/chat/completions` (streaming, usage, cached tokens), `/v1/models`, `/health`, `/metrics` with vLLM's names and bucket edges |
 | `env.py`, `textgen.py`, `__main__.py` | ~360 | tier detection (`SERVELAB_URL`, GPU, vLLM), a toy tokenizer shared by client and server, the CLI |
 
-Metric names and histogram buckets are those of `vllm/v1/metrics/loggers.py` and `buckets.py` on
-vLLM main (Sep 2026): `vllm:num_requests_running`, `vllm:num_requests_waiting`,
+Metric names and histogram buckets are those of `vllm/v1/metrics/loggers.py`, `buckets.py` and
+`vllm/v1/spec_decode/metrics.py` in
+vLLM v0.30.0 and main (Sep 2026): `vllm:num_requests_running`, `vllm:num_requests_waiting`,
 `vllm:kv_cache_usage_perc`, `vllm:prefix_cache_queries`/`_hits`, `vllm:num_preemptions`,
 `vllm:prompt_tokens`, `vllm:generation_tokens`, `vllm:time_to_first_token_seconds`,
 `vllm:inter_token_latency_seconds`, `vllm:request_time_per_output_token_seconds`,
@@ -78,17 +83,23 @@ vLLM main (Sep 2026): `vllm:num_requests_running`, `vllm:num_requests_waiting`,
 
 ## Measurement hygiene (what the code does for you, and why)
 
-* **Definitions match `vllm bench serve`** — TTFT to the first token chunk, ITL between chunks,
-  TPOT = (E2E − TTFT)/(n − 1), throughput over the run's wall time, goodput = requests meeting every
-  SLO per second. The one deliberate difference: chat role-only chunks are not counted as tokens.
+* **Definitions match `vllm bench serve`** — TTFT to the first token-carrying chunk, ITL between
+  token-carrying chunks, TPOT = (E2E − TTFT)/(n − 1) with n from `usage`, throughput over the run's
+  wall time, goodput = requests meeting every SLO per second. The one deliberate difference: the
+  chat role-only chunk vLLM sends just before the first token is skipped. `vllm bench serve` counts
+  it as a chunk (it sets TTFT and adds one ~0 ms ITL gap per chat request); here TTFT is the same
+  and chat ITL lists have one fewer, near-zero entry. Completions are identical.
 * **Open loop for capacity**, closed loop only for "N users" questions; stagger closed-loop users
   (`ramp_s`) so they do not start as one synchronized burst.
 * **Warm-up with different prompts** than the measured ones, and **before** the "before" scrape —
   otherwise warm-up leaks prefix-cache hits and requests into the window.
-* **Same seeded workload** for every configuration you compare; lengths fixed with `ignore_eos`.
+* **Same seeded workload** for every configuration you compare; lengths fixed with `ignore_eos`;
+  fresh prompts per run (a replayed prompt hits the prefix cache); and say which arrival process
+  (Poisson or `burstiness`) and length distribution (fixed, lognormal) a capacity number assumes.
 * **Histogram percentiles are interpolations** inside vLLM's bucket edges; `_sum/_count` means are
   exact; counters only mean something as differences between two scrapes.
-* **Label the source**: every report says SIMULATED (fake server) or measured-on-URL.
+* **Label the source**: every report says SIMULATED (fake server) or measured-on-URL, and the fake
+  server says so on `/version` even when it is reached through `SERVELAB_URL`.
 
 The fake server's upstream counterpart is [`llm-d-inference-sim`](https://github.com/llm-d/llm-d-inference-sim)
 (Go, OpenAI-compatible, vLLM metrics, fixed or per-token latency parameters), used by llm-d for
@@ -101,7 +112,11 @@ KV cache and a roofline, so the flags have their real effects.
 T4 recipe, RunPod/Vast notes), `gcp/cloud-run/` (Terraform `google_cloud_run_v2_service` with one
 L4, scale to zero, weights from Hugging Face or a GCS mount, HF token from Secret Manager; plus the
 `gcloud run deploy` equivalent), `gcp/gke/` (Deployment on an L4 Spot pool, `PodMonitoring` for
-Managed Prometheus). Each has a README with cost and cleanup.
+Managed Prometheus). Each has a README with cost and cleanup. This lab's Terraform is the Cloud Run
+service (`deploy/gcp/cloud-run/terraform/`); GKE here is a `gcloud` script plus manifests, and the
+cluster as Terraform lives in layer 03's
+[`k8s-gpu-lab`](../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) and layer 05's
+[`inference-gateway-lab`](../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/).
 
 ## Regenerating notebooks
 
@@ -117,13 +132,40 @@ make check                                              # all of the above + tes
 
 ## Verify list (facts dated Sep 2026 that move)
 
-* vLLM **0.30.0** is the latest release (PyPI, 2026-09-22); image tag `vllm/vllm-openai:v0.30.0` (verify it exists).
-* vLLM main defaults: `gpu_memory_utilization` **0.92** (0.9 in older releases), `block_size` 16,
-  prefix caching and chunked prefill on; for `vllm serve` on GPUs under 70 GiB
-  `max_num_batched_tokens` 2048 and `max_num_seqs` 256 (8192/1024 on H100-class, 16384/1024 at >= 160 GiB).
-* `--enable-prompt-tokens-details` adds `usage.prompt_tokens_details.cached_tokens`; `--max-model-len -1` auto-fits.
+Checked against the vLLM **v0.30.0** source and Docker Hub on 2026-09-26 (re-check when you move
+the pin):
+
+* vLLM **0.30.0** is the latest release (PyPI, 2026-09-22); image `vllm/vllm-openai:v0.30.0` exists
+  (amd64 and arm64), built on CUDA 13.0.3 with `ENTRYPOINT ["vllm", "serve"]`.
+* Defaults: `gpu_memory_utilization` **0.92** (0.9 in older releases), `block_size` 16, prefix
+  caching and chunked prefill on; for `vllm serve`, `max_num_batched_tokens` / `max_num_seqs` are
+  2048 / 256 below 70 GiB or on A100, 8192 / 1024 on other GPUs from 70 GiB, 16384 / 1024 from 160 GiB.
+* KV budget = `util × total − (weights + profiled activation peak + non-torch) − CUDA-graph
+  estimate` (CUDA-graph profiling on by default since v0.21.0); one block is reserved as the null block.
+* `--enable-prompt-tokens-details` adds `usage.prompt_tokens_details.cached_tokens`;
+  `--max-model-len -1` auto-fits; `--attention-backend` replaces `VLLM_ATTENTION_BACKEND`, and
+  `VLLM_USE_V1` is gone; `VLLM_BATCH_INVARIANT=1` turns on batch-invariant mode.
+* On compute capability 7.5 (T4) the attention backend is `TRITON_ATTN` (FlashAttention and
+  FlashInfer need sm_80+ in this release); `bfloat16` is refused below sm_80; kernels are built for
+  sm_75 and newer only (no P100/V100).
+* Startup-log lines parsed by `sizing.parse_startup_log` ("Model loading took", "Available KV cache
+  memory", "GPU KV cache size ... Maximum concurrency", "init engine ... took", "The current
+  --gpu-memory-utilization=").
+* Prefix-cache counters exclude re-admitted preempted requests (they go to separate `preempted_*`
+  stats); `speculative_config` methods `ngram`, `draft_model`, `eagle3`; the synthetic
+  rejection-sampling mode for load tests.
+
+Still to verify (not checkable from source here):
+
+* CUDA 13's minimum driver (580 series) and the drivers Colab and Kaggle ship; the last vLLM release
+  built for CUDA 12.
+* How far CUDA's reported total memory sits below nvidia-smi's on each GPU (it moves sizing by ~1
+  session on an L4).
 * Cloud Run GPU: L4 (24 GB, min 4 vCPU / 16 GiB), GA since June 2025; flag names `--gpu`,
-  `--gpu-type`, `--no-gpu-zonal-redundancy`; regions, quota names and prices (verify).
+  `--gpu-type`, `--no-gpu-zonal-redundancy`; regions, quota names, prices, CPU-always-allocated for
+  GPU services, startup-probe limits and whether probing starts after the image pull.
+* GKE: GPU node taint `nvidia.com/gpu=present:NoSchedule`; `HF_XET_HIGH_PERFORMANCE` in the image's
+  `huggingface_hub`.
 * GPU datasheet numbers in `sizing.GPUS` (memory as reported by the driver, dense TFLOPS, bandwidth).
 
 MIT licensed.

@@ -5,6 +5,15 @@
 Routing across replicas and autoscaling on engine signals are the next layer:
 `05-orchestrator/serving-orchestration/` (see [`05-orchestrator/`](../../../../../../05-orchestrator/)).
 
+This directory is the minimal **gcloud** path: one script and two manifests keep the engine the
+subject. The same kind of cluster as **Terraform** — zonal GKE Standard, an L4 Spot pool that scales
+from zero with a GKE-installed driver, managed Prometheus — lives in layer 03's lab,
+[`k8s-gpu-lab/deploy/gcp/terraform/`](../../../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/)
+(plus DWS flex-start and GCS FUSE), and in layer 05's lab,
+[`inference-gateway-lab/deploy/gcp/terraform/`](../../../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/)
+(plus the Gateway API and a proxy-only subnet); this lab's own Terraform is the Cloud Run service in
+[`../cloud-run/terraform/`](../cloud-run/terraform/). The manifests here apply to either cluster.
+
 | File | What it is |
 |---|---|
 | `cluster.sh` | zonal GKE Standard cluster + L4 **Spot** pool autoscaling **0..2** (driver installed by GKE), then applies the manifests. `DRY_RUN=1` prints the commands |

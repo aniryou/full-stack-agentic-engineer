@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 01 · Why LLM load balancing is different
 #
-# **Tier:** T0 — CPU only, a few seconds, no network. Every number below is **simulated** by `fleetsim` (an engine
+# **Tier:** T0 — CPU only, about 10 seconds, no network. Every number below is **simulated** by `fleetsim` (an engine
 # model built from spec-sheet arithmetic), not measured on a GPU.
 #
 # ## The one-minute version

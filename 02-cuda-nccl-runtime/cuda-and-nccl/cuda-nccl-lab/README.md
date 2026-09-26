@@ -17,8 +17,8 @@ notebook runs on a laptop (T0); a GPU, two GPUs or a GKE cluster make the same n
 |---|---|---|
 | **T0** | laptop, Colab CPU, CI ($0) | kernels in the CUDA simulator (correctness, thread indexing, shared memory, barriers, and per-warp memory requests traced from the kernel itself); collectives over a real multi-process ring (`pipes`) or gloo; nccl-tests, probe and DCGM samples; every model prediction labelled as such |
 | **T1** | one GPU (Colab/Kaggle T4, L4, rented 24 GB GPU) | kernel timings with CUDA events, effective bandwidth vs peak, launch overhead, CUDA Graphs vs eager (torch), the live container probe with the driver API |
-| **T2** | 2+ GPUs (Kaggle 2×T4 free; a rented NVLink box) | NCCL sweeps via `torchrun`, nccl-tests against the same NCCL, busbw vs the link |
-| **T3** | GKE via Terraform (optional) | smoke + probe Job, CUDA sample, 2-GPU nccl-tests Job on `g2-standard-24`, time-sharing and MIG pools, DCGM metrics and alert rules in Managed Prometheus |
+| **T2** | 2+ GPUs (Kaggle 2×T4 free, PCIe only; a rented NVLink box) | NCCL sweeps via `torchrun`, nccl-tests (pinned v2.20.0) against the same NCCL, busbw vs the link; on a GPU VM: dcgm-exporter in Docker, MIG and MPS by hand |
+| **T3** | GKE via Terraform (optional) | smoke + probe Job, CUDA sample, 2-GPU nccl-tests Job on `g2-standard-24`, time-sharing and MIG pools, DCGM metrics in Managed Prometheus, alert rules as `ClusterRules` routed by its Alertmanager |
 
 Prices and obtainability: [COMPUTE.md](../../../COMPUTE.md).
 
@@ -27,7 +27,7 @@ Prices and obtainability: [COMPUTE.md](../../../COMPUTE.md).
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab
 python3 -m pip install -r requirements.txt      # numpy, numba, pyyaml + notebook/test tooling
-python3 -m pytest -q                            # ~90 tests, ~25 s, simulator only
+python3 -m pytest -q                            # ~125 tests, ~30 s, simulator only
 python3 -m gpurt.env                            # tier, GPUs, numba mode
 python3 -m gpurt.container                      # how this process sees a GPU (on a laptop: it doesn't — and why)
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M   # a real ring all-reduce over pipes
@@ -44,7 +44,7 @@ GKE: [`deploy/gcp`](deploy/gcp/README.md) then [`deploy/gke`](deploy/gke/README.
 
 | Module | The one idea | Primer |
 |---|---|---|
-| `gpurt/env.py` | Numba chooses simulator vs GPU once, at import: decide first, without initialising CUDA | §1 |
+| `gpurt/env.py` | Numba chooses simulator vs GPU once, at import: decide first, without initialising CUDA — and fall back to the simulator, saying why, when a GPU is visible but Numba cannot use it | §1 |
 | `gpurt/kernels/elementwise.py` | a kernel is a loop body; bounds checks; grid-stride loops | §2 |
 | `gpurt/kernels/reduction.py` | shared memory + barriers; two-pass (deterministic) vs atomic | §2, §3 |
 | `gpurt/kernels/matmul.py` | tiling: `tile`× fewer global loads through shared memory | §3 |
@@ -55,18 +55,20 @@ GKE: [`deploy/gcp`](deploy/gcp/README.md) then [`deploy/gke`](deploy/gke/README.
 | `gpurt/kernels/bench.py` | measure the kernel, not the plumbing: device data, CUDA events, warm-up (T1) | §2–§4 |
 | `gpurt/kernels/triton_kernels.py` | the same ideas in Triton, block-level programming (optional, T1) | §1, §3 |
 | `gpurt/launch.py` | launch-bound steps and CUDA Graphs: model (T0) and measurement (T1, torch) | §4 |
-| `gpurt/dist/busbw.py` | algbw vs busbw and buffer sizing exactly as nccl-tests defines them | §5 |
+| `gpurt/dist/busbw.py` | algbw vs busbw and buffer sizing (16-byte per-rank chunks) exactly as nccl-tests v2.20.0 defines them | §5 |
 | `gpurt/dist/alphabeta.py` | `t = α + S/B`, the half-bandwidth size, ring costs | §5 |
-| `gpurt/dist/semantics.py` | what each collective computes; the ring schedule | §5 |
+| `gpurt/dist/semantics.py` | what each collective computes; the ring schedule (numbered as in primer §5.2) and a NumPy executor that checks any schedule | §5 |
 | `gpurt/dist/sweep.py` | one benchmark loop for every backend: size, check, warm up, time, average, report | §5 |
 | `gpurt/dist/pipes.py` | a real ring all-reduce across OS processes (T0, no torch) | §5 |
 | `gpurt/dist/bench.py` | torch.distributed: gloo on CPU, NCCL on GPUs; spawn or `torchrun` | §5 |
-| `gpurt/nccltests.py` | parse `*_perf` output (current and older layouts), re-check it, fit it | §5 |
-| `gpurt/container.py` | device nodes, injected driver files (toolkit vs GKE), versions → compat verdicts | §1, §6 |
-| `gpurt/dcgm.py` | DCGM text → SM active vs GPU util, clock events, XID owners, alert rules | §8 |
+| `gpurt/nccltests.py` | parse `*_perf` output (v2.20.0 and older layouts, per-iteration columns), re-check it, fit it | §5 |
+| `gpurt/container.py` | device nodes, injected driver files (toolkit vs GKE), versions → compat verdicts (the core's driver table) | §1, §6 |
+| `gpurt/dcgm.py` | DCGM text → SM active vs GPU util, clock events, XID owners, alert rules — and which rules your exporter's fields let fire | §8 |
 
-The same kernel source serves both tiers: the tests run it in the simulator, and it compiles to PTX for
-`sm_75` and `sm_89` with numba-cuda (checked while building this lab; running it on a GPU is left to you).
+The same kernel source serves both tiers: the tests run it in the simulator, and `tools/check_ptx.py`
+(`make ptx-check`, and `tests/test_ptx.py` when numba-cuda is installed — skipped otherwise) compiles every
+kernel to PTX for `sm_75` and `sm_89` and rejects float64 arithmetic; no GPU is needed for that, but
+running the kernels on one is left to you.
 One simulator detail worth knowing: Numba's simulator creates a block's shared array lazily without a lock,
 which can very occasionally hand two threads different arrays; `gpurt.kernels` serialises that allocation
 when it runs in simulator mode.
@@ -81,13 +83,15 @@ with drill questions. Exercises are in `notebooks/`, worked answers in `solution
 2. **`02_memory_bound_kernels_on_a_real_gpu`** (T1; T0 model path) — effective bandwidth, the latency
    floor, transpose and fusion on real hardware, atomics and determinism, launch overhead and CUDA Graphs.
 3. **`03_collectives_with_torch_distributed`** (T0 gloo/pipes; T2 NCCL) — semantics, all-reduce =
-   reduce-scatter + all-gather, the ring schedule, the busbw factor by counting, TP message sizes.
+   reduce-scatter + all-gather, the ring schedule you write and run, the busbw factor it implies, TP
+   message sizes.
 4. **`04_busbw_and_the_alpha_beta_fit`** (T0 on samples; your T1/T2 logs) — recompute nccl-tests, fit α-β,
    S½ two ways, what TP costs a decode step, whether the plateau is at the link.
 5. **`05_how_a_container_sees_a_gpu`** (T0 live + samples; T1/T3 logs) — mountinfo, the toolkit vs GKE's
    device plugin, the driver/runtime and kernel-image gates, error numbers.
-6. **`06_gpu_sharing_and_dcgm_on_gke`** (T0; T3) — node pools → advertised GPUs → selectors, the
-   utilisation paradox, clock-event bits in PromQL, routing alerts by owner.
+6. **`06_gpu_sharing_and_dcgm_on_gke`** (T0; T1/T2 on a GPU VM; T3) — node pools → advertised GPUs →
+   selectors, the utilisation paradox, clock-event bits in PromQL, routing alerts by owner, and which
+   rules an exporter's fields let fire.
 
 ## Numbers in this lab
 
@@ -107,6 +111,7 @@ python3 tools/build_notebooks.py                        # notebooks_src/*.py -> 
 python3 tools/run_notebooks.py solutions                # solutions must run clean (CPU, offline)
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 python3 tools/make_fixtures.py                          # the illustrative nccl-tests samples
+python3 tools/check_ptx.py                              # PTX for sm_75/sm_89 (needs numba-cuda; exit 2 = skipped)
 kubernetes-validate --strict -k 1.34.0 deploy/gke/0*.yaml
 make check                                              # tests + both notebook runs
 ```

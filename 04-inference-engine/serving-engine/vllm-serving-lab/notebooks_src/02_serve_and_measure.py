@@ -364,7 +364,9 @@ target.stop()
 # between chunks, TPOT per request as (E2E − TTFT)/(n − 1), throughput over the run's wall time —
 # the definitions of `vllm bench serve`, so our numbers compare with anyone's. We report goodput:
 # requests that met both the TTFT and the TPOT target per second. We drive the engine open-loop at
-# a rate, because a closed loop slows down with the server and hides the queue. We cross-check
+# a rate, because a closed loop slows down with the server and hides the queue, after a warm-up
+# with different prompts, and we state the arrival process and length distribution, because bursts
+# and long prompts move the tail at the same mean rate. We cross-check
 # with the engine's `/metrics`: the running and waiting gauges must agree with Little's law from the
 # client side, and we treat histogram percentiles as bucket interpolations — the exact numbers
 # there are the means."

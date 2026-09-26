@@ -28,7 +28,7 @@ variable "labels" {
 # What runs: the engine image, the model and the engine flags
 # ------------------------------------------------------------------------------------------
 variable "image" {
-  description = "vLLM OpenAI-compatible server image (ENTRYPOINT is `vllm serve`). Pin a version. # VERIFY: tag exists on Docker Hub."
+  description = "vLLM OpenAI-compatible server image (ENTRYPOINT is `vllm serve`). Pin a version: v0.30.0 is on Docker Hub (checked 2026-09-26)."
   type        = string
   default     = "vllm/vllm-openai:v0.30.0"
 }
@@ -66,6 +66,12 @@ variable "weights_bucket" {
   description = "Bucket with model weights (model_source = \"gcs\"). Created here when create_weights_bucket = true."
   type        = string
   default     = null
+
+  # Checked at plan time, before any resource (the bucket IAM grant included) is evaluated.
+  validation {
+    condition     = var.model_source == "hf" || var.weights_bucket != null
+    error_message = "model_source = \"gcs\" needs weights_bucket (an existing bucket, or one to create with create_weights_bucket = true)."
+  }
 }
 
 variable "create_weights_bucket" {

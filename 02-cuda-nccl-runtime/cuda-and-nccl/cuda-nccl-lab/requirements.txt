@@ -8,4 +8,7 @@ nbformat>=5.9
 nbclient>=0.9
 ipykernel>=6.25
 jupyterlab>=4.0
+kubernetes-validate>=1.30   # schema-checks deploy/gke/0*.yaml (tests skip it if missing)
+promql-parser>=0.10         # parses the DCGM alert rules' PromQL (tests skip it if missing)
 # On a GPU box (T1/T2) also:  pip install "numba-cuda[cu12]"  and a CUDA build of torch (see README).
+# numba-cuda also lets tests/test_ptx.py compile every kernel to PTX (no GPU needed).

@@ -86,3 +86,13 @@ def test_block_sizes_must_be_powers_of_two():
         red.make_block_sum(96)
     with pytest.raises(ValueError):
         sm.make_softmax_fused(100)
+
+
+def test_triton_kernels_are_optional_and_lazy():
+    import importlib.util
+
+    from gpurt.kernels import triton_kernels
+
+    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("triton") is None:
+        assert triton_kernels.available() is False  # notebook 02 then prints what it would run
+    assert "triton" not in triton_kernels.__dict__ and callable(triton_kernels.softmax)  # nothing imported yet

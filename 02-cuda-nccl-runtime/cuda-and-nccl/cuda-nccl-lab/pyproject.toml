@@ -12,7 +12,8 @@ license = { text = "MIT" }
 dependencies = ["numpy>=1.24", "numba>=0.59", "pyyaml>=6.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "kubernetes-validate>=1.30"]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "kubernetes-validate>=1.30",
+       "promql-parser>=0.10"]
 gpu = ["numba-cuda[cu12]>=0.20"]      # NVIDIA's CUDA target for Numba — real GPUs (T1/T2)
 torch = ["torch>=2.4"]                 # gloo/NCCL sweeps and CUDA Graphs; install the CUDA build matching your driver
 triton = ["triton>=3.0"]               # optional Triton kernels (T1)

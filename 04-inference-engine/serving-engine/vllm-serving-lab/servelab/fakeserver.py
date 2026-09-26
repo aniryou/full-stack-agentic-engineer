@@ -33,7 +33,7 @@ from . import metrics as M
 from .fake_engine import EngineConfig, EngineProfile, FakeEngine, profile as named_profile
 from .textgen import chat_tokens, tokenize
 
-# Histogram bucket edges, copied from vllm/v1/metrics/buckets.py (vLLM main, Sep 2026).
+# Histogram bucket edges, copied from vllm/v1/metrics/buckets.py (vLLM v0.30.0; same on main, Sep 2026).
 BUCKETS = {
     "request_latency": [0.3, 0.5, 0.8, 1.0, 1.5, 2.0, 2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, 60.0,
                         120.0, 240.0, 480.0, 960.0, 1920.0, 7680.0],

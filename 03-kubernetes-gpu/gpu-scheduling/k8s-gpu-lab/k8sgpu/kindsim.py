@@ -427,12 +427,15 @@ class Sim:
                     w.message = self._quota_message(w, f"flavor {cq.flavor} doesn't match node affinity")
                     return False
         maxcap, assumed = self.max_capacity(cq), 0
+        groups: dict[str, list[PodSet]] = {}      # same grouping as _unused_quota_message
         for ps in w.podsets:
-            req = ps.count * ps.gpus
+            groups.setdefault(ps.group or f"#{ps.name}", []).append(ps)
+        for members in groups.values():
+            req = sum(p.count * p.gpus for p in members)
             if assumed + req > maxcap:
-                w.message = (f"couldn't assign flavors to pod set {ps.name}: insufficient quota for {m.GPU} in flavor "
-                             f"{cq.flavor}, previously considered podsets requests ({assumed}) + current podset request "
-                             f"({req}) > maximum capacity ({maxcap})")
+                text = (f"insufficient quota for {m.GPU} in flavor {cq.flavor}, previously considered podsets "
+                        f"requests ({assumed}) + current podset request ({req}) > maximum capacity ({maxcap})")
+                w.message = "; ".join(f"couldn't assign flavors to pod set {p.name}: {text}" for p in members)
                 return False
             assumed += req
         victims: list[Workload] = []

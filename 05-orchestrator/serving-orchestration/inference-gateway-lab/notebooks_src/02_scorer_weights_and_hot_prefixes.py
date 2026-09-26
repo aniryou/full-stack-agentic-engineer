@@ -185,7 +185,8 @@ print("✅ predictions match: scraped signals herd, local counters spread (but a
 # %% [markdown]
 # Neither is right on its own. The scraped view herds all 12 onto **a**, which has 6 slots: half the
 # burst waits for the first half to finish. The local view spreads 4/4/4 and sends 8 requests to b
-# and c, which have 3 free slots each: one request on each waits behind the external jobs. Combine
+# and c, which have 3 free slots each: on each, one request finds every slot taken and waits for one
+# to free. Combine
 # them: `running-requests-size-scorer` (scraped: knows about the foreign load on b and c, but frozen)
 # plus `active-request-scorer` (local: instant, but partial). The *ratio* of their weights decides
 # whether freshness or knowledge wins:
