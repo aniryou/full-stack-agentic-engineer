@@ -83,6 +83,7 @@ prefill/decode, speculative decoding, quantization, FP8, tensor parallel, tokens
 One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `notebooks/` / `exercises/`; worked answers under `solutions/`.
 
 **`flash-attention/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_deep_dive.ipynb) `flash_attention_deep_dive.ipynb`
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_practice.ipynb) `flash_attention_practice.ipynb`
 
 **`kv-cache/`**
@@ -91,4 +92,39 @@ One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `no
 
 **`paged-attention/`**
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/paged-attention/paged_attention_practice.ipynb) `paged_attention_practice.ipynb`
+
+**`serving-engine/mini-engine-core/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb) `01_the_step_loop_and_continuous_batching.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/02_chunked_prefill_and_the_token_budget.ipynb) `02_chunked_prefill_and_the_token_budget.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb) `03_prefix_caching.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/04_sampling_and_structured_output.ipynb) `04_sampling_and_structured_output.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/05_speculative_decoding.ipynb) `05_speculative_decoding.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/06_quantization.ipynb) `06_quantization.ipynb`
+
+**`serving-engine/mini-engine-core/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/01_the_step_loop_and_continuous_batching.ipynb) `01_the_step_loop_and_continuous_batching.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/02_chunked_prefill_and_the_token_budget.ipynb) `02_chunked_prefill_and_the_token_budget.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/03_prefix_caching.ipynb) `03_prefix_caching.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/04_sampling_and_structured_output.ipynb) `04_sampling_and_structured_output.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/05_speculative_decoding.ipynb) `05_speculative_decoding.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/06_quantization.ipynb) `06_quantization.ipynb`
+
+**`serving-engine/vllm-serving-lab/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb) `01_size_before_you_serve.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/02_serve_and_measure.ipynb) `02_serve_and_measure.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/03_knobs_and_tradeoffs.ipynb) `03_knobs_and_tradeoffs.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb) `04_prefix_caching_for_agents.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/05_speculation_and_quantization_in_vllm.ipynb) `05_speculation_and_quantization_in_vllm.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb) `06_deploy_on_cloud_run_gpu.ipynb`
+
+**`serving-engine/vllm-serving-lab/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/01_size_before_you_serve.ipynb) `01_size_before_you_serve.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/02_serve_and_measure.ipynb) `02_serve_and_measure.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/03_knobs_and_tradeoffs.ipynb) `03_knobs_and_tradeoffs.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/04_prefix_caching_for_agents.ipynb) `04_prefix_caching_for_agents.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/05_speculation_and_quantization_in_vllm.ipynb) `05_speculation_and_quantization_in_vllm.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/06_deploy_on_cloud_run_gpu.ipynb) `06_deploy_on_cloud_run_gpu.ipynb`
+
+**`vllm-internals/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) `01_block_hashes_and_eviction.ipynb`
 <!-- colab-links:end -->
