@@ -1,6 +1,6 @@
 {
  "description": "5 GPUs in one pod; the largest node has 4 (kind lab, s6).",
- "source": "pod/node JSON trimmed to the fields that matter; the FailedScheduling message is what k8sgpu.kindsim computes for the kind lab cluster in the kube-scheduler's format (sample output in the documented format (illustrative))",
+ "source": "pod/node JSON trimmed to the fields that matter; the FailedScheduling message is simulated by k8sgpu.kindsim for the kind lab cluster, in the kube-scheduler's format - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kube-scheduler",
   "category": "too-big"
@@ -65,11 +65,11 @@
      "resources": {
       "requests": {
        "cpu": "100m",
-       "memory": "64Mi",
+       "memory": "320Mi",
        "nvidia.com/gpu": 5
       },
       "limits": {
-       "memory": "64Mi",
+       "memory": "320Mi",
        "nvidia.com/gpu": 5
       }
      },
@@ -433,11 +433,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -526,11 +526,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -619,11 +619,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -712,11 +712,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -804,11 +804,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 5
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 5
        }
       },

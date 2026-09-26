@@ -70,8 +70,12 @@ def bits_per_weight(bits: float, group_size: int | None = None, scale_bits: int 
     return bits + (scale_bits / group_size if group_size else 0.0)
 
 
-def weight_gb(params: float, bits: float, group_size: int | None = None, scale_bits: int = 16) -> float:
-    return params * bits_per_weight(bits, group_size, scale_bits) / 8 / 1e9
+def weight_gb(params: float, bits: float, group_size: int | None = None, scale_bits: int = 16,
+              keep16_params: float = 0.0) -> float:
+    """Weights in GB: `params` at bits_per_weight, except `keep16_params` of them kept in 16-bit - the
+    embedding table and LM head, which GPTQ/AWQ/FP8 checkpoints do not quantize."""
+    low = (params - keep16_params) * bits_per_weight(bits, group_size, scale_bits)
+    return (low + keep16_params * 16) / 8 / 1e9
 
 
 def compare_logits(ref, test) -> dict:

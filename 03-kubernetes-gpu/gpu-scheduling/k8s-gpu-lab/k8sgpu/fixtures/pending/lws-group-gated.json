@@ -1,6 +1,6 @@
 {
  "description": "Scaling a LeaderWorkerSet to 2 groups: group 1's pods exist but are gated until Kueue admits the whole group (s3).",
- "source": "Workload trimmed to the fields that matter; condition text in the format of Kueue v0.19's flavor assigner/TAS as predicted by k8sgpu.kindsim for the kind lab (sample output in the documented format (illustrative))",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kueue",
   "category": "waiting-for-quota"
@@ -21,7 +21,7 @@
    "annotations": {
     "kueue.x-k8s.io/podset-required-topology": "cloud.google.com/gce-topology-subblock",
     "kueue.x-k8s.io/podset-group-name": "llm",
-    "kueue.x-k8s.io/workload": "leaderworkerset-llm-multihost-1-7b2c1"
+    "kueue.x-k8s.io/prebuilt-workload-name": "leaderworkerset-llm-multihost-1-7b2c1"
    }
   },
   "spec": {
@@ -62,11 +62,11 @@
      "resources": {
       "requests": {
        "cpu": "100m",
-       "memory": "64Mi",
+       "memory": "320Mi",
        "nvidia.com/gpu": 4
       },
       "limits": {
-       "memory": "64Mi",
+       "memory": "320Mi",
        "nvidia.com/gpu": 4
       }
      },

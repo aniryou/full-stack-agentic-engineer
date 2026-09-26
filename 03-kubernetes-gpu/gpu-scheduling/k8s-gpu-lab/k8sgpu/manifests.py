@@ -53,6 +53,7 @@ TOPOLOGY_SUBBLOCK = "cloud.google.com/gce-topology-subblock"
 TOPOLOGY_HOST = "cloud.google.com/gce-topology-host"
 HOSTNAME = "kubernetes.io/hostname"
 GKE_TOPOLOGY_LEVELS = [TOPOLOGY_BLOCK, TOPOLOGY_SUBBLOCK, TOPOLOGY_HOST, HOSTNAME]
+GPU_TAINT = {"key": GPU, "value": "present", "effect": "NoSchedule"}   # GKE's GPU node taint (verify); the kind lab copies it
 
 QUEUE_LABEL = "kueue.x-k8s.io/queue-name"
 PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
@@ -63,6 +64,26 @@ TAS_GROUP = "kueue.x-k8s.io/podset-group-name"
 PROVREQ_PREFIX = "provreq.kueue.x-k8s.io/"             # job annotations passed to the ProvisioningRequest
 
 DEFAULT_IMAGE = "busybox:1.38.0"
+
+
+def toleration_tolerates(toleration: dict, taint: dict) -> bool:
+    """Kubernetes' ``Toleration.ToleratesTaint`` (k8s.io/api core/v1 toleration.go, v1.34):
+    a named effect must match; a named key must match (an empty key needs ``Exists`` and matches
+    every key); then ``Exists`` matches any value and ``Equal`` (the default operator) needs the
+    same value. An unknown operator matches nothing."""
+    if toleration.get("effect") and toleration["effect"] != taint.get("effect"):
+        return False
+    if toleration.get("key") and toleration["key"] != taint.get("key"):
+        return False
+    op = toleration.get("operator") or "Equal"
+    if op == "Equal":
+        return (toleration.get("value") or "") == (taint.get("value") or "")
+    return op == "Exists"
+
+
+def tolerates(taint: dict, tolerations: list[dict]) -> bool:
+    """Does any toleration in the list tolerate this taint?"""
+    return any(toleration_tolerates(t, taint) for t in tolerations or [])
 
 
 def _meta(name: str, namespace: str | None = None, labels: dict | None = None,
@@ -168,8 +189,12 @@ def pod_spec(containers: list[GPUContainer | dict], *, accelerator: str | None =
              priority_class: str | None = None, volumes: list[dict] | None = None,
              shm_size: str | None = None, service_account: str | None = None,
              init_containers: list[dict] | None = None, resource_claims: list[dict] | None = None,
-             tolerations: list[dict] | None = None) -> dict:
-    """A pod spec with the GPU plumbing in place: toleration, accelerator selector, /dev/shm."""
+             tolerations: list[dict] | None = None, runtime_class: str | None = None,
+             affinity: dict | None = None) -> dict:
+    """A pod spec with the GPU plumbing in place: toleration, accelerator selector, /dev/shm.
+
+    ``runtime_class`` selects a RuntimeClass (k3s registers ``nvidia`` when it finds the NVIDIA
+    container runtime and keeps runc as the default, so GPU pods there must ask for it)."""
     cs = [c.to_dict() if isinstance(c, GPUContainer) else dict(c) for c in containers]
     spec: dict[str, Any] = {}
     if restart_policy:
@@ -180,11 +205,15 @@ def pod_spec(containers: list[GPUContainer | dict], *, accelerator: str | None =
         spec["priorityClassName"] = priority_class
     if service_account:
         spec["serviceAccountName"] = service_account
+    if runtime_class:
+        spec["runtimeClassName"] = runtime_class
     selector = dict(node_selector or {})
     if accelerator:
         selector.setdefault(GKE_ACCELERATOR, accelerator)
     if selector:
         spec["nodeSelector"] = selector
+    if affinity:
+        spec["affinity"] = affinity
     tols = [dict(GPU_TOLERATION)] if tolerate_gpu else []
     tols += list(tolerations or [])
     if tols:
@@ -441,10 +470,16 @@ def resource_claim_template(name: str, namespace: str, *, device_class: str = "g
 
 def compute_class_priority(*, machine_type: str | None = None, machine_family: str | None = None,
                            gpu_type: str | None = None, gpu_count: int | None = None,
-                           spot: bool | None = None, flex_start: bool = False,
+                           gpu_driver_version: str | None = None, spot: bool | None = None, flex_start: bool = False,
                            reservation: str | None = None, capacity_check_wait_s: int | None = None,
                            node_recycling_lead_s: int | None = None) -> dict:
-    """One rung of a GKE ComputeClass fallback ladder (field names: verify against your cluster's CRD)."""
+    """One rung of a GKE ComputeClass fallback ladder (field names: verify against your cluster's CRD).
+
+    ``gpu_driver_version`` (``default`` | ``latest``) sets the driver GKE installs on the node pools
+    this rung auto-creates; without it they get GKE's *default* driver branch, whatever the pools
+    you made with Terraform use. Field name as in Google's own examples
+    (GoogleCloudPlatform/accelerated-platforms, ``gpu.driverVersion: latest``); verify with
+    ``kubectl explain computeclass.spec.priorities.gpu``."""
     p: dict[str, Any] = {}
     if machine_family:
         p["machineFamily"] = machine_family
@@ -452,6 +487,8 @@ def compute_class_priority(*, machine_type: str | None = None, machine_family: s
         p["machineType"] = machine_type
     if gpu_type:
         p["gpu"] = {"type": gpu_type, "count": gpu_count or 1}
+        if gpu_driver_version:
+            p["gpu"]["driverVersion"] = gpu_driver_version
     if spot is not None:
         p["spot"] = spot
     if flex_start:

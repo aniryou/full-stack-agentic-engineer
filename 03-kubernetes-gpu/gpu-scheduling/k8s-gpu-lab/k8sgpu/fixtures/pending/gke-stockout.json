@@ -1,6 +1,6 @@
 {
  "description": "Scale-up from zero fails: the zone has no L4 capacity right now.",
- "source": "GKE event/condition text in the documented format (sample output in the documented format (illustrative); verify against your cluster)",
+ "source": "GKE event/condition text written in the documented format - sample output in the documented format (illustrative); verify against your cluster",
  "expect": {
   "gate": "cluster-autoscaler",
   "category": "stockout"

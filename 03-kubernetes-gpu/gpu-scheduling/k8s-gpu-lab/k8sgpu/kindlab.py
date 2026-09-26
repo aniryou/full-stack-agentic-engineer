@@ -31,6 +31,10 @@ POD_OWNER_LABELS = {"Job": "batch.kubernetes.io/job-name", "JobSet": "jobset.sig
 LWS_GROUP_LABEL = "leaderworkerset.sigs.k8s.io/group-index"
 
 
+class KubectlMissing(RuntimeError):
+    """No kubectl on PATH: the live path cannot run (the T0 path still can)."""
+
+
 @dataclass
 class Kubectl:
     context: str = KUBE_CONTEXT
@@ -49,6 +53,9 @@ class Kubectl:
             self.echo(f"$ {line}")
         if self.dry_run:
             return ""
+        if shutil.which(self.binary) is None:
+            raise KubectlMissing(f"{self.binary} not found: install kubectl and create the cluster "
+                                 "(deploy/kind/up.sh), or use the T0 path (`k8sgpu kind predict`, dry runs)")
         p = subprocess.run(self.argv(*args), input=stdin, capture_output=True, text=True, timeout=120)
         if check and p.returncode != 0:
             raise RuntimeError(f"{line} failed: {p.stderr.strip()}")

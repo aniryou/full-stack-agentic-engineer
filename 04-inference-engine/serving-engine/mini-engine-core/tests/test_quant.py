@@ -39,6 +39,9 @@ def test_int4_groups_beat_int4_per_channel():
 def test_bits_per_weight_and_weight_gb_hand_computed():
     assert bits_per_weight(4, 128) == 4.125 and bits_per_weight(4, 32) == 4.5 and bits_per_weight(8) == 8
     assert np.isclose(weight_gb(8e9, 4, 128), 4.125) and np.isclose(weight_gb(8e9, 16), 16.0)
+    embed = 2 * 128256 * 4096                                        # Llama-3.1-8B: untied embedding + LM head
+    assert np.isclose(weight_gb(8.03e9, 4, 128, keep16_params=embed), (8.03e9 - embed) * 4.125 / 8e9 + embed * 2 / 1e9)
+    assert round(weight_gb(8.03e9, 4, 128, keep16_params=embed), 2) == 5.70   # not 4.14: the 16-bit tables stay
 
 
 def test_smoothquant_keeps_the_product_and_tames_activation_outliers():

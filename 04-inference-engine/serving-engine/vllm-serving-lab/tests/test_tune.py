@@ -47,6 +47,15 @@ def test_fake_backend_rejects_knobs_it_does_not_model():
     prof, cfg = FakeBackend("tiny", spec_acceptance=0.5).build(
         {"max_num_seqs": 4, "speculative_config": {"method": "eagle", "num_speculative_tokens": 3}})
     assert cfg.max_num_seqs == 4 and cfg.num_speculative_tokens == 3 and cfg.spec_acceptance == 0.5
+    with pytest.raises(ValueError, match="spec_acceptance"):     # not a vLLM SpeculativeConfig field
+        FakeBackend("tiny").build({"speculative_config": {"method": "ngram", "num_speculative_tokens": 4,
+                                                          "acceptance": 0.7}})
+
+
+def test_num_gpu_blocks_override_sets_the_block_pool():
+    prof, _ = FakeBackend("tiny").build({"num_gpu_blocks_override": 96})
+    assert prof.num_blocks == 96
+    assert to_cli_flags({"num_gpu_blocks_override": 96}) == ["--num-gpu-blocks-override", "96"]
 
 
 def test_sweep_on_the_fake_backend():

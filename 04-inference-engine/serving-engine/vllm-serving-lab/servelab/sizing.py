@@ -41,8 +41,10 @@ INT4_GROUP_OVERHEAD = 2.5 / 128
 class GPU:
     """Datasheet numbers (dense, no sparsity). ``memory_gib`` is the total the driver reports
     (``nvidia-smi --query-gpu=memory.total``). vLLM multiplies the total seen by CUDA
-    (``torch.cuda.mem_get_info()[1]``) by ``gpu_memory_utilization``; the two can differ by a few
-    hundred MiB, so for exact planning pass ``gpu_memory_bytes=`` measured on your GPU.
+    (``torch.cuda.mem_get_info()[1]``) by ``gpu_memory_utilization``; that total is typically a
+    few hundred MiB below nvidia-smi's (verify on your GPU), which on a 24 GB card is worth ~1
+    concurrent 2K-token session of an 8B model — so for exact planning pass ``gpu_memory_bytes=``
+    measured on your GPU, or calibrate from the startup log (:func:`calibrate`).
     All values (verify) against the vendor datasheet."""
     name: str
     memory_gib: float
@@ -245,6 +247,8 @@ class SizingReport:
     typical_len: int | None = None
     concurrency_at_typical_len: float | None = None
     notes: list = field(default_factory=list)
+    max_num_batched_tokens: int | None = None   # what the activation estimate assumed
+    max_num_seqs: int | None = None
 
     @property
     def kv_capacity_tokens(self) -> int:
@@ -296,6 +300,20 @@ class SizingReport:
         return d
 
 
+def serve_scheduler_defaults(g: GPU | None = None, total_bytes: float | None = None) -> tuple:
+    """``(max_num_batched_tokens, max_num_seqs)`` that ``vllm serve`` picks when you set neither,
+    as in vLLM v0.30.0 ``EngineArgs`` (verified against the source, 2026-09-26): device memory
+    >= 160 GiB -> 16384 / 1024; >= 70 GiB and not an A100 -> 8192 / 1024; otherwise (and on
+    A100-80GB) 2048 / 256. vLLM reads the memory as CUDA reports it; this uses ``memory_gib``."""
+    mem = total_bytes if total_bytes is not None else (g.memory_gib * GiB if g is not None else 0)
+    name = (g.name if g is not None else "").lower()
+    if mem >= 160 * GiB:
+        return 16384, 1024
+    if mem >= 70 * GiB and "a100" not in name:
+        return 8192, 1024
+    return 2048, 256
+
+
 def overhead_estimate(m: ModelConfig, *, dtype: str = "auto", max_num_batched_tokens: int = 2048,
                       max_num_seqs: int = 256, tensor_parallel_size: int = 1,
                       enforce_eager: bool = False) -> dict:
@@ -317,16 +335,20 @@ def overhead_estimate(m: ModelConfig, *, dtype: str = "auto", max_num_batched_to
 
 def size(model, gpu_name=None, *, gpu_memory_utilization: float = 0.92, max_model_len: int | None = None,
          block_size: int = 16, dtype: str = "auto", quantization: str | None = None,
-         kv_cache_dtype: str = "auto", tensor_parallel_size: int = 1, max_num_batched_tokens: int = 2048,
-         max_num_seqs: int = 256, enforce_eager: bool = False, gpu_memory_bytes: int | None = None,
+         kv_cache_dtype: str = "auto", tensor_parallel_size: int = 1, max_num_batched_tokens: int | None = None,
+         max_num_seqs: int | None = None, enforce_eager: bool = False, gpu_memory_bytes: int | None = None,
          overhead_bytes: dict | None = None, kv_budget_bytes: int | None = None,
          typical_len: int | None = None) -> SizingReport:
     """Predict what ``vllm serve`` will report for this model/GPU/flags combination.
 
-    Defaults follow vLLM main as of Sep 2026 (verify): ``gpu_memory_utilization`` 0.92 (0.9 in
-    older releases), ``block_size`` 16, ``max_num_batched_tokens`` 2048 and ``max_num_seqs`` 256
-    for ``vllm serve`` on GPUs under 70 GiB. ``kv_budget_bytes`` bypasses the memory model (useful
-    to pin the block arithmetic, or to replay vLLM's logged "Available KV cache memory")."""
+    Defaults are those of vLLM v0.30.0 (verified against its source, 2026-09-26):
+    ``gpu_memory_utilization`` 0.92 (0.9 in older releases), ``block_size`` 16, and
+    ``max_num_batched_tokens`` / ``max_num_seqs`` left unset resolve per GPU exactly as
+    ``vllm serve`` does (:func:`serve_scheduler_defaults`). The memory model mirrors v0.30.0's
+    worker: KV budget = ``util × total − weights − profiled activation peak − non-torch memory −
+    CUDA-graph estimate``; the last three are *estimates* here. ``kv_budget_bytes`` bypasses the
+    memory model (useful to pin the block arithmetic, or to replay vLLM's logged "Available KV
+    cache memory")."""
     m = load_config(model)
     g = gpu(gpu_name) if gpu_name is not None else None
     if g is None and gpu_memory_bytes is None:
@@ -334,6 +356,9 @@ def size(model, gpu_name=None, *, gpu_memory_utilization: float = 0.92, max_mode
     total = int(gpu_memory_bytes if gpu_memory_bytes is not None else g.memory_gib * GiB)
     max_len = int(max_model_len or m.max_position_embeddings)
     requested = math.ceil(total * gpu_memory_utilization)
+    d_tokens, d_seqs = serve_scheduler_defaults(g, total)
+    max_num_batched_tokens = max_num_batched_tokens or d_tokens
+    max_num_seqs = max_num_seqs or d_seqs
     w = int(weight_bytes(m, dtype, quantization, tensor_parallel_size))
     over = overhead_bytes if overhead_bytes is not None else overhead_estimate(
         m, dtype=dtype, max_num_batched_tokens=max_num_batched_tokens, max_num_seqs=max_num_seqs,
@@ -363,7 +388,7 @@ def size(model, gpu_name=None, *, gpu_memory_utilization: float = 0.92, max_mode
         estimated_max_model_len=min(blocks * block_size, m.max_position_embeddings or blocks * block_size),
         typical_len=typical_len,
         concurrency_at_typical_len=(blocks / math.ceil(typical_len / block_size)) if typical_len else None,
-        notes=notes,
+        notes=notes, max_num_batched_tokens=max_num_batched_tokens, max_num_seqs=max_num_seqs,
     )
 
 
@@ -384,11 +409,15 @@ _LOG_PATTERNS = {
     "max_concurrency": r"Maximum concurrency for [\d,]+ tokens per request: ([\d.]+)x",
     "max_model_len": r"Maximum concurrency for ([\d,]+) tokens per request",
     "init_engine_s": r"init engine \(profile, create kv cache, warmup model\) took ([\d.]+) s",
+    # logged at INFO when CUDA-graph memory profiling is on (the default since v0.21.0)
+    "gpu_memory_utilization": r"The current --gpu-memory-utilization=([\d.]+)",
 }
 
 
 def parse_startup_log(text: str) -> dict:
-    """Pull the capacity lines out of a ``vllm serve`` log (vLLM >= 0.10 wording; verify)."""
+    """Pull the capacity lines out of a ``vllm serve`` log. The wording is that of vLLM v0.30.0
+    (``gpu_model_runner.py``, ``gpu_worker.py``, ``kv_cache_utils.py``, ``core.py``; verified
+    against the source, 2026-09-26); other releases may word them differently (verify)."""
     out = {}
     for key, pat in _LOG_PATTERNS.items():
         mt = re.search(pat, text)
@@ -398,17 +427,25 @@ def parse_startup_log(text: str) -> dict:
     return out
 
 
-def calibrate(report: SizingReport, log: dict) -> dict:
+def calibrate(report: SizingReport, log: dict, gpu_memory_utilization: float | None = None) -> dict:
     """Compare a prediction with a parsed log; return the overhead vLLM actually charged.
 
-    ``implied_overhead = requested - logged_weights - logged_available_kv``: plug it back in as
-    ``overhead_bytes={"measured": ...}`` and the next prediction for this GPU/model is exact."""
-    res = {"predicted_kv_gib": report.kv_budget_bytes / GiB, "predicted_kv_tokens": report.kv_cache_tokens}
+    ``implied_overhead = util × total - logged_weights - logged_available_kv``: plug it back in as
+    ``overhead_bytes={"measured": ...}`` and the next prediction for this GPU/model is exact.
+    ``util`` must be the one the *logged* server ran with — ``gpu_memory_utilization=``, else the
+    value the log states, else the report's. A server started at 0.85 but calibrated against a
+    0.92 prediction would silently add 0.07 × total to the "overhead"."""
+    util = gpu_memory_utilization or log.get("gpu_memory_utilization") or report.gpu_memory_utilization
+    requested = math.ceil(report.total_bytes * util)
+    res = {"predicted_kv_gib": report.kv_budget_bytes / GiB, "predicted_kv_tokens": report.kv_cache_tokens,
+           "gpu_memory_utilization": util}
+    if util != report.gpu_memory_utilization:
+        res["predicted_kv_gib"] = (report.kv_budget_bytes + requested - report.requested_bytes) / GiB
     if "available_kv_gib" in log:
         res["logged_kv_gib"] = log["available_kv_gib"]
         res["kv_error_gib"] = res["predicted_kv_gib"] - log["available_kv_gib"]
         weights = log.get("model_loading_gib", report.weights_bytes / GiB)
-        res["implied_overhead_gib"] = report.requested_bytes / GiB - weights - log["available_kv_gib"]
+        res["implied_overhead_gib"] = requested / GiB - weights - log["available_kv_gib"]
     if "kv_cache_tokens" in log:
         res["logged_kv_tokens"] = log["kv_cache_tokens"]
     return res

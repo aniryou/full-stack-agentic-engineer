@@ -2,7 +2,8 @@
 
 One idea: a notebook that must run anywhere *detects* instead of assuming. A server URL in
 ``SERVELAB_URL`` (vLLM on this box, a tunnel to Colab, a Cloud Run URL) means real measurements
-(T1/T3). A GPU with vLLM installed and ``SERVELAB_START_VLLM=1`` means start one here (T1).
+(T1/T3) — unless that server's ``/version`` says it is this lab's fake one, which stays labelled
+*simulated*. A GPU with vLLM installed and ``SERVELAB_START_VLLM=1`` means start one here (T1).
 Otherwise the fake server starts and every number is labelled *simulated* (T0).
 
     SERVELAB_URL=http://127.0.0.1:8000      a running OpenAI-compatible server to measure
@@ -13,6 +14,7 @@ Otherwise the fake server starts and every number is labelled *simulated* (T0).
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -73,6 +75,17 @@ def describe() -> str:
             f"gcloud: {has_gcloud()} | Colab: {on_colab()} | SERVELAB_URL: {server_url() or 'unset'}")
 
 
+def is_simulated(url: str, headers: dict | None = None, timeout_s: float = 5) -> bool:
+    """True when ``url`` is this lab's fake server: its ``/version`` says ``"simulated": true``.
+    A real vLLM answers ``/version`` with ``{"version": ...}`` only, so anything else is real."""
+    try:
+        req = urllib.request.Request(url.rstrip("/") + "/version", headers=headers or {})
+        with urllib.request.urlopen(req, timeout=timeout_s) as r:  # noqa: S310
+            return bool(json.loads(r.read().decode("utf-8") or "{}").get("simulated"))
+    except Exception:  # noqa: BLE001 — no /version, not JSON: not ours
+        return False
+
+
 def wait_healthy(url: str, timeout_s: float = 900, headers: dict | None = None) -> bool:
     """Poll ``/health`` (vLLM returns 200 once the engine is ready) until ``timeout_s``."""
     deadline = time.time() + timeout_s
@@ -108,11 +121,16 @@ class Target:
 
 def connect(profile: str = "t4-qwen2.5-0.5b", config=None, vllm_model: str = "Qwen/Qwen2.5-0.5B-Instruct",
             vllm_flags: dict | None = None, **fake_kw) -> Target:
-    """The best target available: ``SERVELAB_URL`` > local vLLM (opt-in) > the fake server."""
+    """The best target available: ``SERVELAB_URL`` > local vLLM (opt-in) > the fake server.
+
+    A URL is only *assumed* real after asking it: ``python -m servelab fake`` started by hand and
+    put in ``SERVELAB_URL`` is still the fake server, and its numbers stay labelled simulated."""
     url = server_url()
     if url:
         if not wait_healthy(url, timeout_s=30, headers=auth_headers()):
             raise RuntimeError(f"SERVELAB_URL={url} is not healthy (GET /health)")
+        if is_simulated(url, headers=auth_headers()):
+            return Target(url, True, "T0", "fake vLLM at SERVELAB_URL (simulated)", headers=auth_headers())
         return Target(url, False, "T1/T3", "real server from SERVELAB_URL", headers=auth_headers())
     if os.environ.get("SERVELAB_START_VLLM") == "1" and has_gpu() and has_vllm():
         from .tune import VLLMBackend

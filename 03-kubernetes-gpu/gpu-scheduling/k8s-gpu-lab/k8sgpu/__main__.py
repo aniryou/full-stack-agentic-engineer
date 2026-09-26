@@ -30,10 +30,17 @@ def _pending(a) -> int:
             print(f"{n:28} {pending.load_fixture(n)['description']}")
         return 0
     if a.fixture:
-        print(pending.diagnose(pending.load_fixture(a.fixture)))
+        bundle = pending.load_fixture(a.fixture)
+        print(pending.fixture_label(bundle))
+        print(pending.diagnose(bundle))
         return 0
     if a.live:
-        print(pending.diagnose_live(a.live, a.namespace))
+        from .kindlab import KubectlMissing
+        try:
+            print(pending.diagnose_live(a.live, a.namespace))
+        except (KubectlMissing, RuntimeError) as e:
+            print(f"cannot read the live pod: {e}", file=sys.stderr)
+            return 2
         return 0
     if not a.pod:
         print("give --fixture, --live or a pod JSON file", file=sys.stderr)
@@ -61,8 +68,20 @@ def _kind(a) -> int:
         print(("ready: " if ok else "not ready: ") + msg)
         return 0 if ok else 1
     if a.action == "predict":
-        print(kindsim.describe(kindsim.predict(a.scenario, upto=a.step)))
+        from .scenarios import scenario
+        sc = scenario(a.scenario)
+        steps = kindsim.predict_all_steps(a.scenario)[: a.step or len(sc.steps)]
+        print(f"== {sc.id}: {sc.title} - predicted by k8sgpu.kindsim (simulated, not observed)")
+        for i, (st, out) in enumerate(zip(sc.steps, steps), start=1):
+            print(f"\n-- after step {i}/{len(sc.steps)}: {st.action} {st.file or st.target}"
+                  + (f" - {st.note}" if st.note else ""))
+            print(kindsim.describe(out))
         return 0
+    if a.action in ("reset", "observe") and not a.dry_run:
+        ok, msg = kindlab.cluster_status()
+        if not ok:
+            print(f"no usable cluster ({msg}); `k8sgpu kind predict {a.scenario}` is the T0 path", file=sys.stderr)
+            return 2
     if a.action == "reset":
         kindlab.reset(kindlab.Kubectl(dry_run=a.dry_run))
         return 0

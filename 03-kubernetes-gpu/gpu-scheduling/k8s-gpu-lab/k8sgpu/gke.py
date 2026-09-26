@@ -9,6 +9,21 @@ the helpers read ``deploy/gcp/terraform`` offline so notebook 04 can plan withou
 
 GKE-specific names (node-pool labels, the queued-provisioning taint and class, the
 provisioning-request node label, ComputeClass fields) are marked (verify).
+
+No Topology-Aware Scheduling here, on purpose. The GCE placement labels TAS reads
+(``cloud.google.com/gce-topology-{block,subblock,host}``) are what Google's own Kueue TAS
+examples use for the accelerator-optimized A3/A4/A4X families (GoogleCloudPlatform/cluster-toolkit,
+``examples/gke-a3-*``, ``gke-a4``, ``gke-a4x``); nothing shows them on G2/L4 nodes, so the lab's L4
+flavors are plain quota (verify on yours: ``kubectl get nodes -L cloud.google.com/gce-topology-host``).
+The kind lab puts the same labels on fake L4 nodes only to teach TAS.
+
+The serving image is a CUDA 13 build: ``vllm/vllm-openai:v0.30.0`` (amd64) has
+``CUDA_VERSION=13.0.2`` and ``VLLM_ENABLE_CUDA_COMPATIBILITY=0`` in its image config (registry
+manifest, read 2026-09-26), and CUDA 13.0 needs an R580+ driver (NVIDIA release notes:
+>= 580.65.06 on Linux; layer 02 primer §1.2). The ComputeClass rungs therefore ask GKE for its
+``latest`` driver on the pools they create — without it they get GKE's *default* branch, which
+may be older than R580 (verify the branches for your GKE version) — and the Terraform pools use
+``LATEST`` for the same reason.
 """
 from __future__ import annotations
 
@@ -21,9 +36,15 @@ from . import manifests as m
 LAB_ROOT = Path(__file__).resolve().parents[1]
 TF_DIR = LAB_ROOT / "deploy" / "gcp" / "terraform"
 
-SYSTEM_POOL, SPOT_POOL, FLEX_POOL = "system", "l4-spot", "l4-flex"
+SYSTEM_POOL, SPOT_POOL, FLEX_POOL, SHARED_POOL = "system", "l4-spot", "l4-flex", "l4-shared"
 CUDA_IMAGE = "nvidia/cuda:12.9.1-base-ubuntu24.04"      # nvidia-smi comes from the host driver mount
-VLLM_IMAGE = "vllm/vllm-openai:v0.30.0"                  # (verify the CUDA build against the node driver)
+VLLM_IMAGE = "vllm/vllm-openai:v0.30.0"                  # CUDA 13.0.2 build: needs a driver >= 580 (see above)
+VLLM_CUDA = "13.0.2"
+VLLM_MIN_DRIVER = "580.65.06"
+GPU_DRIVER = "latest"                                    # ComputeClass gpu.driverVersion: default | latest (verify)
+SHARED_CLIENTS = 4                                       # time-sharing: pods per physical L4 (primer §9)
+GKE_SHARING_STRATEGY = "cloud.google.com/gke-gpu-sharing-strategy"      # node labels on sharing pools
+GKE_MAX_SHARED_CLIENTS = "cloud.google.com/gke-max-shared-clients-per-gpu"
 QUEUED_TAINT_KEY = "cloud.google.com/gke-queued"         # (verify) taint on queued-provisioning nodes
 PROVREQ_NODE_LABEL = "autoscaling.gke.io/provisioning-request"   # (verify)
 COMPUTE_CLASS = "l4-spot-first"
@@ -66,11 +87,11 @@ def gke_manifests() -> dict[str, tuple[str, list[dict]]]:
         annotations={m.PROVREQ_PREFIX + "maxRunDurationSeconds": "3600"})
 
     # 30: capacity as code — Spot, then on-demand, then flex-start, for the same L4 shape
+    l4 = dict(machine_type="g2-standard-4", gpu_type="nvidia-l4", gpu_count=1, gpu_driver_version=GPU_DRIVER)
     cc = m.compute_class(COMPUTE_CLASS, [
-        m.compute_class_priority(machine_type="g2-standard-4", gpu_type="nvidia-l4", gpu_count=1, spot=True),
-        m.compute_class_priority(machine_type="g2-standard-4", gpu_type="nvidia-l4", gpu_count=1, spot=False),
-        m.compute_class_priority(machine_type="g2-standard-4", gpu_type="nvidia-l4", gpu_count=1,
-                                 flex_start=True, node_recycling_lead_s=3600),
+        m.compute_class_priority(**l4, spot=True),
+        m.compute_class_priority(**l4, spot=False),
+        m.compute_class_priority(**l4, flex_start=True, node_recycling_lead_s=3600),
     ])
 
     # 40: a vLLM server that reads weights from GCS through the FUSE CSI driver
@@ -110,6 +131,14 @@ def gke_manifests() -> dict[str, tuple[str, list[dict]]]:
     svc = m.obj("Service", "vllm-l4", "serving", spec={
         "selector": {"app": "vllm-l4"}, "ports": [{"name": "http", "port": 8000, "targetPort": 8000}]})
 
+    # 50: time-sharing - four pods on one physical L4 (the optional l4-shared pool)
+    shared = m.job("shared-l4", "default", m.pod_template(m.pod_spec(
+        [m.GPUContainer(name="smi", image=CUDA_IMAGE, command=["bash", "-c", "nvidia-smi -L && sleep 120"],
+                        cpu="500m", memory="512Mi")],
+        accelerator="nvidia-l4", termination_grace_s=None,
+        node_selector={GKE_SHARING_STRATEGY: "time-sharing", GKE_MAX_SHARED_CLIENTS: str(SHARED_CLIENTS)})),
+        parallelism=SHARED_CLIENTS, active_deadline_s=1800, ttl_after_finished_s=600)
+
     return {
         "00-smoke-l4.yaml": (
             "Smoke test for the Spot L4 pool: the pod forces a scale-up from zero, runs nvidia-smi\n"
@@ -119,7 +148,12 @@ def gke_manifests() -> dict[str, tuple[str, list[dict]]]:
             "Kueue on GKE: two flavors backed by two node pools. l4-spot is plain quota; l4-flex sits\n"
             "behind the dws-prov AdmissionCheck, so Kueue files a ProvisioningRequest\n"
             "(queued-provisioning.gke.io) and admits only when DWS has provisioned every node.\n"
-            "Requires Kueue installed (deploy/gke/install-addons.sh) and enable_flex_start_pool = true.",
+            "Admission on l4-spot means only 'the quota is yours': the pods then wait for the autoscaler,\n"
+            "and a gang caught half-provisioned is evicted and requeued by Kueue's waitForPodsReady\n"
+            "(on by default in v0.19: 30 min timeout). No topologyName: Google's TAS examples use the GCE\n"
+            "topology labels on A3/A4/A4X nodes, not G2/L4 (verify: kubectl get nodes -L\n"
+            "cloud.google.com/gce-topology-host). Requires Kueue installed (deploy/gke/install-addons.sh)\n"
+            "and enable_flex_start_pool = true.",
             [ml, spot, flex, prc, ac, cq, lq]),
         "20-dws-sample-job.yaml": (
             "A 2-pod gang pinned to the flex-start pool, so Kueue picks the l4-flex flavor and the\n"
@@ -128,14 +162,25 @@ def gke_manifests() -> dict[str, tuple[str, list[dict]]]:
             "A custom ComputeClass: GKE creates node pools on demand and tries the rungs in order -\n"
             "Spot, then on-demand, then flex-start - for the same L4 shape. Pods opt in with a\n"
             "nodeSelector on cloud.google.com/compute-class. Field names: verify against\n"
-            "`kubectl explain computeclass.spec` on your cluster. For latency-critical serving put\n"
-            "on-demand (or a reservation) first and Spot last.", [cc]),
+            "`kubectl explain computeclass.spec` on your cluster. gpu.driverVersion: latest because the\n"
+            "vLLM image in 40 is a CUDA 13 build (driver >= 580); the auto-created pools would otherwise\n"
+            "get GKE's default driver. Spot first is a cost choice for a lab: for latency-critical\n"
+            "serving put on-demand (or a reservation) first and Spot last.", [cc]),
         "40-serving-vllm-gcsfuse.yaml": (
             "vLLM on one L4 via the ComputeClass, weights mounted read-only from GCS by the Cloud\n"
             "Storage FUSE CSI driver (the pod's KSA gets objectViewer through Workload Identity; see\n"
             "deploy/gcp/terraform/storage.tf). apply-examples.sh substitutes ${WEIGHTS_BUCKET}.\n"
-            "The startup probe allows 10 minutes for the weight load before liveness takes over.",
+            "The startup probe allows 10 minutes for the weight load before liveness takes over.\n"
+            "The image is CUDA 13.0.2: its node needs driver >= 580 (the ComputeClass asks for latest).\n"
+            "Lab choices, not production ones: one replica with maxSurge 0 / maxUnavailable 1 means\n"
+            "every rollout is an outage for a whole cold start, and the Spot-first class can reclaim\n"
+            "the only replica. Production: >= 2 replicas on an on-demand-first class, or surge headroom.",
             [serving, ksa, deploy, svc]),
+        "50-time-sharing-l4.yaml": (
+            f"Time-sharing (primer §9): with enable_time_sharing_pool = true the l4-shared pool advertises\n"
+            f"{SHARED_CLIENTS} nvidia.com/gpu per physical L4, so these {SHARED_CLIENTS} one-GPU pods run together on one\n"
+            f"g2-standard-4 and nvidia-smi -L shows each of them the same GPU. No memory or fault isolation;\n"
+            f"a container may request at most 1 shared GPU. Node labels: verify on your cluster.", [shared]),
     }
 
 
@@ -211,6 +256,10 @@ def plan_summary(v: dict[str, object]) -> str:
         flex = capacity.ON_DEMAND_USD_H.get(str(v["flex_machine_type"]), 0.0) * capacity.OPTIONS["flex-start"].price_multiplier
         lines.append(f"pool     {FLEX_POOL:8} 0..{v['flex_max_nodes']} x {v['flex_machine_type']} "
                      f"(DWS flex-start, queued provisioning)  ~${flex:.2f}/h per node while provisioned")
+    if v.get("enable_time_sharing_pool"):
+        clients = int(v.get("max_shared_clients_per_gpu", SHARED_CLIENTS))
+        lines.append(f"pool     {SHARED_POOL:8} 0..1 x {gpu_mt} (Spot, time-sharing: {clients} clients per GPU -> "
+                     f"allocatable nvidia.com/gpu {v['gpu_count']} x {clients})  ~${gpu_node:.2f}/h while busy")
     idle = sys_cost + capacity.GKE_CLUSTER_FEE_USD_H
     lines.append(f"idle     ~${idle:.2f}/h (system pool + cluster fee before free-tier credit); "
                  f"one busy GPU node adds ~${gpu_node:.2f}/h   (all prices: verify)")
@@ -239,4 +288,13 @@ def gcloud_equivalents(v: dict[str, object]) -> list[str]:
             f"--flex-start --enable-queued-provisioning --enable-autoscaling --num-nodes=0 "
             f"--total-max-nodes={v['flex_max_nodes']} --location-policy=ANY --reservation-affinity=none "
             f"--no-enable-autorepair")
+    if v.get("enable_time_sharing_pool"):
+        cmds.append(
+            f"gcloud container node-pools create {SHARED_POOL} --cluster={c} --location={z} "
+            f"--machine-type={v['gpu_machine_type']} "
+            f"--accelerator=type={v['gpu_type']},count={v['gpu_count']},gpu-sharing-strategy=time-sharing,"
+            f"max-shared-clients-per-gpu={v.get('max_shared_clients_per_gpu', SHARED_CLIENTS)},"
+            f"gpu-driver-version={str(v['gpu_driver_version']).lower()} "
+            f"--spot --enable-autoscaling --min-nodes=0 --max-nodes=1 --num-nodes=0 "
+            f"--node-taints=nvidia.com/gpu=present:NoSchedule")
     return cmds

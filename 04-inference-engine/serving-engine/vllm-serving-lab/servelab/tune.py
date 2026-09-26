@@ -64,11 +64,17 @@ _ENGINE_KNOBS = {"max_num_seqs", "max_num_batched_tokens", "enable_prefix_cachin
                  "long_prefill_token_threshold"}
 # Draft time per proposed token, as a fraction of the target's weight-read time (assumptions).
 DRAFT_COST = {"ngram": 0.0, "suffix": 0.0, "eagle": 0.05, "eagle3": 0.05, "mtp": 0.05, "draft_model": 0.15}
+# ``speculative_config`` keys the fake backend reads or tolerates: all are real vLLM
+# ``SpeculativeConfig`` fields (v0.30.0), so a config that runs here also runs on ``vllm serve``.
+_SPEC_KEYS = {"method", "model", "num_speculative_tokens", "prompt_lookup_max", "prompt_lookup_min",
+              "draft_tensor_parallel_size", "quantization", "max_model_len", "revision"}
 
 
 class FakeBackend:
     """The fake server with vLLM-named knobs. Speculation needs an acceptance rate, which in real
-    life is a property of the workload and the draft method — here it is an explicit assumption."""
+    life is a property of the workload and the draft method — here it is an explicit assumption
+    passed as ``FakeBackend(spec_acceptance=...)``, never smuggled into ``speculative_config``
+    (vLLM would reject an unknown key there)."""
     simulated = True
 
     def __init__(self, profile: str = "t4-qwen2.5-0.5b", spec_acceptance: float = 0.6, time_scale: float = 1.0,
@@ -87,9 +93,13 @@ class FakeBackend:
         prof = named_profile(self.profile_name, **{**self.profile_overrides, **knobs})
         ecfg = EngineConfig(**{k: v for k, v in config.items() if k in _ENGINE_KNOBS})
         spec = config.get("speculative_config")
+        if spec and set(spec) - _SPEC_KEYS:
+            raise ValueError(f"speculative_config keys {sorted(set(spec) - _SPEC_KEYS)} are not vLLM "
+                             "SpeculativeConfig fields this backend models; pass the acceptance assumption "
+                             "as FakeBackend(spec_acceptance=...)")
         if spec:
             ecfg.num_speculative_tokens = int(spec.get("num_speculative_tokens", 0))
-            ecfg.spec_acceptance = float(spec.get("acceptance", self.spec_acceptance))
+            ecfg.spec_acceptance = float(self.spec_acceptance)
             ecfg.spec_draft_cost = DRAFT_COST.get(spec.get("method", "ngram"), 0.1)
         return prof, ecfg
 

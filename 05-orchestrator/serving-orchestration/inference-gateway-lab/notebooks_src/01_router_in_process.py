@@ -130,33 +130,38 @@ for args in [(10, 16, 64, 0.3, 4096), (16, 16, 64, 1.0, 512), (1, 40, 64, 0.0, 8
 print("✅ prefix_score matches the prefix-cache-scorer formula")
 
 # %% [markdown]
-# ## Exercise 1.2 — the queue score
+# ## Exercise 1.2 — the queue score, and the replica nobody has scraped yet
 #
 # `queue-scorer` turns the scraped `vllm:num_requests_waiting` of each endpoint into a score with a
-# min-max normalization: `(maxQ - q) / (maxQ - minQ)`. Two details matter:
-#
-# * if every scraped endpoint has the same queue, they all get the neutral score **1.0**;
-# * an endpoint that has never been scraped (`None` here) is **left unscored** — omitted from the
-#   result (it then contributes 0 to the weighted total) and excluded from the min/max.
+# min-max normalization: `(maxQ - q) / (maxQ - minQ)`; if every endpoint has the same queue, they all
+# get the neutral score **1.0**. The detail that bites in production: the scorer reads each
+# endpoint's *current* metrics with no freshness check (llm-d-router v0.10.0 does the same), and an
+# endpoint that has never been scraped — a pod that became ready a moment ago, `None` here — has
+# all-zero metrics. Implement `queue_scores(waiting)` with exactly that behaviour, then answer: what
+# does a freshly started replica score, and what does that do to the next burst?
 
 # %% exercise
 def queue_scores(waiting: dict) -> dict:
     ### BEGIN SOLUTION
-    known = {k: v for k, v in waiting.items() if v is not None}
-    if not known:
+    q = {k: (0 if v is None else v) for k, v in waiting.items()}     # never scraped -> metrics are 0
+    if not q:
         return {}
-    hi, lo = max(known.values()), min(known.values())
+    hi, lo = max(q.values()), min(q.values())
     if hi == lo:
-        return {k: 1.0 for k in known}
-    return {k: (hi - v) / (hi - lo) for k, v in known.items()}
+        return {k: 1.0 for k in q}
+    return {k: (hi - v) / (hi - lo) for k, v in q.items()}
     ### END SOLUTION
 
 # %% check
+from igwlab.router import Endpoint, EndpointMetrics
+from igwlab.router.plugins import QueueScorer, RequestCtx
 assert queue_scores({"a": 0, "b": 5, "c": 10}) == {"a": 1.0, "b": 0.5, "c": 0.0}
 assert queue_scores({"a": 3, "b": 3}) == {"a": 1.0, "b": 1.0}
-assert queue_scores({"a": 4, "b": None, "c": 8}) == {"a": 1.0, "c": 0.0}
-assert queue_scores({"a": None}) == {}
-print("✅ queue_scores normalizes like queue-scorer")
+assert queue_scores({"a": 4, "b": None, "c": 8}) == {"a": 0.5, "b": 1.0, "c": 0.0}
+eps = [Endpoint(n, "http://unused", metrics=EndpointMetrics(waiting=w or 0, update_time=0.0 if w is None else 1.0))
+       for n, w in (("a", 4), ("b", None), ("c", 8))]
+assert queue_scores({"a": 4, "b": None, "c": 8}) == QueueScorer().score(RequestCtx("r", "m", []), eps)
+print("✅ a never-scraped replica scores 1.0: it looks idle, so until its first scrape it attracts traffic")
 
 # %% [markdown]
 # ## Exercise 1.3 — the weighted pick
@@ -164,8 +169,8 @@ print("✅ queue_scores normalizes like queue-scorer")
 # The scheduler adds, for each endpoint, `weight × clamp(score, 0, 1)` over all scorers (an
 # unscored endpoint contributes 0 for that scorer) and the `max-score-picker` takes the highest
 # total. Implement `pick(scores, weights)` → the winning endpoint name; break exact ties by the
-# alphabetically smallest name (the lab's picker rotates ties round-robin; in the real EPP the
-# candidate order is randomized, so ties there land effectively at random).
+# alphabetically smallest name (the lab's picker rotates ties round-robin; llm-d-router v0.10.0
+# shuffles the candidates at random before a stable sort by score, so its ties land at random).
 
 # %% exercise
 def pick(scores: dict, weights: dict) -> str:
@@ -190,10 +195,11 @@ print("✅ pick reproduces the weighted-sum scheduler")
 # %% [markdown]
 # ## Round-robin versus the weighted scorer on an agentic workload
 #
-# 18 agent sessions × 5 turns. Each session belongs to one of 4 agent "programs" (a ~7 KB system
+# 18 agent sessions × 5 turns. Each session belongs to one of 4 agent "programs" (a ~8 KB system
 # prompt + 3 tool schemas it re-sends on every call) and every turn re-sends the whole history plus
-# a new ~2 KB tool result. Sessions start over the first 0.5 s and run closed-loop (next turn after
-# the previous reply + 0–20 ms of tool time). We run the same sessions against two fresh stacks:
+# a new ~3 KB tool result (the cell prints the exact sizes). Sessions start over the first 0.5 s and
+# run closed-loop (next turn after the previous reply + 0–20 ms of tool time). We run the same
+# sessions against two fresh stacks:
 #
 # * `round-robin` — the preset with no scorers (every total ties at 0; the picker rotates);
 # * `default-weighted` — the llm-d Helm chart's default: `prefix-cache-scorer` ×3,
@@ -206,6 +212,8 @@ from igwlab.bench import agentic_sessions, ascii_bars, compare
 
 stack.stop()
 sessions = agentic_sessions(n_sessions=18, turns=5, n_agents=4, system_words=1200, tool_words=400, seed=0)
+print(f"system prompt {len(sessions[0].agent.system.encode()):,} B, tool schemas "
+      f"{len(json.dumps(sessions[0].agent.tools)):,} B, one tool result {len(sessions[0].tool_outputs[0].encode()):,} B")
 results = {}
 for cfg in ("round-robin", "default-weighted"):
     with LocalStack(3, cfg) as s:
@@ -218,8 +226,11 @@ print(ascii_bars({k: r.summary()["ttft_p50_ms"] for k, r in results.items()}))
 # Two things to notice. The weighted router's **hit rate** is higher because each session's next
 # turn goes back to the replica that holds its history (round-robin re-prefills the history ~2/3
 # of the time). And **TTFT** falls further than the hit rate suggests, because every avoided
-# prefill also shortens the queue of prefills in front of everyone else on that replica. The
-# price is imbalance: requests follow the cache, not an even split.
+# prefill also shortens the queue of prefills in front of everyone else on that replica — the fake
+# backend runs one prefill at a time per replica, like an engine whose prefills contend for the GPU.
+# (`llm-d-inference-sim` does not queue prefills, so on the notebook-04 stacks the TTFT gap is
+# smaller while the hit-rate gap stays.) The price is imbalance: requests follow the cache, not an
+# even split.
 #
 # ## Exercise 1.4 — hit rate from the engines' own counters
 #
@@ -291,7 +302,7 @@ print("✅ decisive_scorer explains a decision")
 # block to, and turns that into a prefix score per replica. It also scrapes every replica's vLLM
 # metrics every 50 ms — waiting queue and KV-cache usage — and scores those. The total is a
 # weighted sum (the llm-d default is prefix 3, queue 2, KV 2), the highest total wins, and ties
-# rotate. We stream the bytes back untouched. On a multi-turn agent workload that keeps each
+# are broken at random. We stream the bytes back untouched. On a multi-turn agent workload that keeps each
 # session on the replica that holds its history: fewer prefilled tokens, shorter prefill queues,
 # lower TTFT; the cost is an uneven split, which the load scores bound."
 #

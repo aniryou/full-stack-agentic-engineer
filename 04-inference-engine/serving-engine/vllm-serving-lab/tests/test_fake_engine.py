@@ -98,3 +98,20 @@ def test_speculative_decoding_matches_the_formula():
     (s,) = simulate(e, [(0.0, prompt(8), 6000)])
     per_step = (len(s.output) - 1) / (len(s.emit_times) - 1)            # tokens per verify step
     assert per_step == pytest.approx((1 - a ** (k + 1)) / (1 - a), rel=0.03)
+
+
+def test_prefix_counters_exclude_readmitted_preempted_requests():
+    """vLLM records a preempted request's re-admission in preempted_* stats, not in
+    vllm:prefix_cache_queries/hits (v1/core/kv_cache_manager.py, v1/metrics/stats.py)."""
+    e = FakeEngine(tiny_profile(num_blocks=16, block_size=4), EngineConfig(max_num_batched_tokens=64))
+    for s in range(5):
+        e.add_request(prompt(20, s), 20, 0.0)
+    t, queries, hits, pre_q = 0.0, 0, 0, 0
+    while e.has_work():
+        plan = e.schedule(t)
+        queries, hits, pre_q = queries + plan.prefix_queries, hits + plan.prefix_hits, pre_q + plan.preempted_prefix_queries
+        t += e.step_time(plan)
+        e.commit(plan, t)
+    assert e.total_preemptions > 0 and pre_q > 0
+    assert queries == 5 * 20                     # each request's first admission, once
+    assert hits == 0                             # distinct prompts: nothing to share on first admission

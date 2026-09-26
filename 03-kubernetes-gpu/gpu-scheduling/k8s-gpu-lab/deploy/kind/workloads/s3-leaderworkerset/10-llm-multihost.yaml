@@ -46,10 +46,10 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 64Mi
+                memory: 320Mi
                 nvidia.com/gpu: 4
               limits:
-                memory: 64Mi
+                memory: 320Mi
                 nvidia.com/gpu: 4
             volumeMounts:
               - name: dshm
@@ -92,10 +92,10 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 64Mi
+                memory: 320Mi
                 nvidia.com/gpu: 4
               limits:
-                memory: 64Mi
+                memory: 320Mi
                 nvidia.com/gpu: 4
             volumeMounts:
               - name: dshm

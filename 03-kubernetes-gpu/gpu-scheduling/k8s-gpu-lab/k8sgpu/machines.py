@@ -5,6 +5,13 @@ The one idea: a GPU node is a bundle — N GPUs *plus* a fixed amount of CPU and
 of CPU before it runs out of GPUs, and the remaining GPUs are *stranded*: paid for, idle, and
 unschedulable. ``per_gpu_share`` and ``stranded_gpus`` make that arithmetic explicit.
 
+One formula covers both ways GPUs strand. For a pod shape, the pods that still fit a node are
+``min over resources of floor(free_r / request_r)``, and the stranded GPUs are the node's free
+GPUs minus ``k x`` that. When only GPUs bind it reduces to the topic primer's §3.4 count,
+``free mod k`` (GPU-count fragmentation); when CPU or memory binds first it is the bundle effect
+this module is about. DaemonSets and injected sidecars take from the same bundle
+(``allocatable(daemonset_cpu=..., daemonset_mem_gib=...)``).
+
 The allocatable formula is GKE's published node-reservation schedule (verify for your
 version); machine shapes are dated Sep 2026 (verify). Other clouds and kubeadm clusters
 reserve differently — the stranding arithmetic is the same.
@@ -112,6 +119,16 @@ def stranded_gpus(alloc: Allocatable, *, pod_cpu: float, pod_mem_gib: float, pod
     """GPUs left idle on a node packed with these pods because CPU or memory ran out first."""
     n = pods_per_node(alloc, pod_cpu=pod_cpu, pod_mem_gib=pod_mem_gib, pod_gpus=pod_gpus)
     return alloc.gpus - n * pod_gpus
+
+
+def time_shared_allocatable(machine: Machine | str, max_shared_clients_per_gpu: int) -> int:
+    """``nvidia.com/gpu`` a GKE time-sharing node advertises: every physical GPU becomes
+    ``max_shared_clients_per_gpu`` schedulable units (primer §9; verify for your GKE version).
+    Each container may request at most one of them."""
+    m = CATALOG[machine] if isinstance(machine, str) else machine
+    if max_shared_clients_per_gpu < 1:
+        raise ValueError("max_shared_clients_per_gpu must be >= 1")
+    return m.gpus * max_shared_clients_per_gpu
 
 
 def parse_cpu(q: str | int | float) -> float:

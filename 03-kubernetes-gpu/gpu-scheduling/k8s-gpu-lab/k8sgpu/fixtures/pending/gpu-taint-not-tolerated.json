@@ -1,6 +1,6 @@
 {
  "description": "1-GPU pod without a toleration for the nvidia.com/gpu taint (kind lab, scenario s6).",
- "source": "pod/node JSON trimmed to the fields that matter; the FailedScheduling message is what k8sgpu.kindsim computes for the kind lab cluster in the kube-scheduler's format (sample output in the documented format (illustrative))",
+ "source": "pod/node JSON trimmed to the fields that matter; the FailedScheduling message is simulated by k8sgpu.kindsim for the kind lab cluster, in the kube-scheduler's format - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kube-scheduler",
   "category": "gpu-taint"
@@ -411,11 +411,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -504,11 +504,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -597,11 +597,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },
@@ -690,11 +690,11 @@
       "resources": {
        "requests": {
         "cpu": "100m",
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        },
        "limits": {
-        "memory": "64Mi",
+        "memory": "320Mi",
         "nvidia.com/gpu": 3
        }
       },

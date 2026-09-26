@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 from . import machines
-from .manifests import (GKE_ACCELERATOR, GKE_COMPUTE_CLASS, GKE_NODEPOOL, GPU, QUEUE_LABEL,
-                        iter_pod_templates, load_all)
+from .manifests import (GKE_ACCELERATOR, GKE_COMPUTE_CLASS, GKE_NODEPOOL, GPU, GPU_TAINT, QUEUE_LABEL,
+                        iter_pod_templates, load_all, tolerates)
 
 # Node labels that pin a pod to a GPU model or pool (GKE, GPU Feature Discovery, instance type).
 ACCELERATOR_KEYS = (GKE_ACCELERATOR, GKE_NODEPOOL, GKE_COMPUTE_CLASS, "nvidia.com/gpu.product",
@@ -205,12 +205,23 @@ def gpu_on_sidecar(ctx: Context):
 
 @rule
 def gpu_toleration(ctx: Context):
+    """Checked against the taint GKE puts on GPU nodes (``nvidia.com/gpu=present:NoSchedule``,
+    verify), with Kubernetes' own matching rule: ``Exists`` on the key (or an empty key) matches
+    any value; ``Equal`` (the default operator) matches only the same value."""
     if not ctx.pod_gpus:
         return
-    for t in ctx.spec.get("tolerations") or []:
-        if (t.get("key") == GPU or (not t.get("key") and t.get("operator") == "Exists")) \
-                and t.get("effect") in (None, "", "NoSchedule"):
-            return
+    tols = ctx.spec.get("tolerations") or []
+    if tolerates(GPU_TAINT, tols):
+        return
+    same_key = [t for t in tols if t.get("key") == GPU]
+    if same_key:
+        t = same_key[0]
+        yield Finding("gpu-toleration", "warning", ctx.where("tolerations"),
+                      f"the `{GPU}` toleration (operator {t.get('operator') or 'Equal'}, value "
+                      f"{t.get('value', '')!r}, effect {t.get('effect') or 'any'}) does not match the taint "
+                      f"`{GPU}={GPU_TAINT['value']}:NoSchedule`: Equal needs the same value, a named effect the same effect",
+                      f"tolerations: [{{key: {GPU}, operator: Exists, effect: NoSchedule}}] (matches any value)")
+        return
     yield Finding("gpu-toleration", "warning", ctx.where("tolerations"),
                   f"no toleration for the `{GPU}` taint: Pending on clusters that taint GPU nodes "
                   "unless an admission plugin (ExtendedResourceToleration) or a Kueue ResourceFlavor adds it",
@@ -290,14 +301,31 @@ def cpu_memory_requests(ctx: Context):
                           "drop the CPU limit, keep the request")
 
 
-@rule
-def strands_gpus(ctx: Context):
-    if not ctx.machine or not ctx.pod_gpus:
-        return
+GCSFUSE_SIDECAR = ("gke-gcsfuse/cpu-request", "gke-gcsfuse/memory-request")   # GKE-injected sidecar (verify)
+
+
+def pod_requests(ctx: Context) -> tuple[float, float]:
+    """CPU (cores) and memory (GiB) the scheduler reserves for one pod: the app containers, plus the
+    GCS FUSE sidecar GKE injects when the pod template asks for it with its annotations. (Native
+    sidecars and init containers follow the effective-request rule; this counts app containers.)"""
     cpu = sum(machines.parse_cpu(((c.get("resources") or {}).get("requests") or {}).get("cpu", 0))
               for _, c in ctx.containers())
     mem = sum(machines.parse_memory_gib(((c.get("resources") or {}).get("requests") or {}).get("memory", 0))
               for _, c in ctx.containers())
+    ann = (ctx.template.get("metadata") or {}).get("annotations") or {}
+    if str(ann.get("gke-gcsfuse/volumes", "")).lower() == "true":
+        cpu += machines.parse_cpu(ann.get(GCSFUSE_SIDECAR[0], 0))
+        mem += machines.parse_memory_gib(ann.get(GCSFUSE_SIDECAR[1], 0))
+    return cpu, mem
+
+
+@rule
+def strands_gpus(ctx: Context):
+    """Resource-bundle stranding: GPUs left idle on a node because its CPU or memory ran out
+    first. (Primer §3.4's `Σ (free mod k)` is the special case where only GPUs bind.)"""
+    if not ctx.machine or not ctx.pod_gpus:
+        return
+    cpu, mem = pod_requests(ctx)
     alloc = machines.allocatable(ctx.machine)
     n = machines.pods_per_node(alloc, pod_cpu=cpu, pod_mem_gib=mem, pod_gpus=ctx.pod_gpus)
     if n == 0:
@@ -310,9 +338,11 @@ def strands_gpus(ctx: Context):
     if stranded:
         share = machines.per_gpu_share(ctx.machine)
         yield Finding("strands-gpus", "warning", ctx.where(),
-                      f"{n} such pod(s) fit a {ctx.machine.name}; {stranded} of {alloc.gpus} GPUs stay idle "
-                      f"(per-GPU share is cpu {share.cpu:.2f}, memory {share.memory_gib:.1f} GiB)",
-                      "size cpu/memory requests to at most the per-GPU share")
+                      f"{n} such pod(s) fit a {ctx.machine.name}; {stranded} of {alloc.gpus} GPUs stay idle because "
+                      f"CPU or memory runs out first (per-GPU share is cpu {share.cpu:.2f}, memory "
+                      f"{share.memory_gib:.1f} GiB before DaemonSets and sidecars)",
+                      "size cpu/memory requests (sidecars included) to at most the per-GPU share, "
+                      "minus what DaemonSets reserve on the node")
 
 
 @rule
@@ -329,7 +359,37 @@ def shm_size(ctx: Context):
     yield Finding("shm-size", "warning", ctx.where("volumes"),
                   "multi-GPU / multi-pod workload without a memory-backed /dev/shm: NCCL and PyTorch "
                   "workers exhaust the 64 MiB default",
-                  "emptyDir {medium: Memory, sizeLimit: 2Gi} mounted at /dev/shm")
+                  "emptyDir {medium: Memory, sizeLimit: 2Gi} mounted at /dev/shm, and a memory limit above that size")
+
+
+def _memory_limit_gib(ctx: Context) -> float | None:
+    """The pod's summed container memory limit, or None when a container has none (unbounded)."""
+    total = 0.0
+    for _, c in ctx.containers():
+        lim = ((c.get("resources") or {}).get("limits") or {}).get("memory")
+        if lim is None:
+            return None
+        total += machines.parse_memory_gib(lim)
+    return total
+
+
+@rule
+def shm_memory_limit(ctx: Context):
+    """A memory-backed emptyDir is tmpfs: every byte written counts against the pod's memory
+    cgroup, and the kubelet sizes it to at most the pod's memory limit. A /dev/shm sizeLimit above
+    the memory limit is a promise the pod cannot keep: NCCL fills it and the container is OOM-killed."""
+    limit = _memory_limit_gib(ctx)
+    if limit is None:
+        return
+    for v in ctx.spec.get("volumes") or []:
+        ed = v.get("emptyDir") or {}
+        if ed.get("medium") == "Memory" and ed.get("sizeLimit"):
+            size = machines.parse_memory_gib(ed["sizeLimit"])
+            if size > limit:
+                yield Finding("shm-memory-limit", "warning", ctx.where("volumes"),
+                              f"memory-backed volume {v.get('name')!r} may grow to {ed['sizeLimit']} but the pod's "
+                              f"memory limit is {limit:.3g} GiB: tmpfs pages count against that limit",
+                              "raise the containers' memory limit above the /dev/shm size (plus what the process needs)")
 
 
 @rule

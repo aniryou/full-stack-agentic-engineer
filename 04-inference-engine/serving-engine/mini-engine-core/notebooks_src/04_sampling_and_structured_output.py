@@ -11,12 +11,16 @@
 # **min-p**, **top-k**, **top-p** → draw, with the request's **own seeded generator**. None of this changes the
 # model; it reshapes one distribution per step. **Structured output** is the same mechanism with a grammar behind
 # it: a finite-state machine says which tokens are legal next, the rest get `-inf`. The model never learns the
-# schema; it is fenced in — which guarantees *syntax*, not *sense*.
+# schema; it is fenced in — which guarantees *syntax*, not *sense*. With real, multi-character tokens, computing
+# that mask per grammar state is the expensive part; you will build one.
 #
 # Primer: §6 *Sampling and structured output* (`../../PRIMER.md`); background:
 # `00-foundations/transformers/docs/transformer-primer.md` §7.4.
 
 # %%
+import json
+import re
+
 import numpy as np
 
 from minengine import ChoiceFSM, Engine, SamplingParams, TinyLM, decode, encode
@@ -103,7 +107,7 @@ eng = Engine(model, num_blocks=64, block_size=16)
 outs = eng.generate(["Is the engine running? "] * 4, [SamplingParams(max_tokens=40, fsm=fsm, seed=s) for s in range(4)])
 for o in outs:
     forced = sum(lp for lp, _ in o.logprobs)
-    print(f"{o.text!r:22} {o.finish_reason:17} model's own log-probability of this text: {forced:7.1f}")
+    print(f"{o.text!r:22} {o.finish_reason:22} model's own log-probability of this text: {forced:7.1f}")
 
 # %% [markdown]
 # Every output is valid — and the model's own log-probability of it is astronomically low: it would never have
@@ -111,6 +115,44 @@ for o in outs:
 # answer, the grammar makes it say `"yes"` or `"no"` anyway. Real engines compile JSON schemas or regexes into
 # token-level automata (xgrammar, llguidance, outlines — verify current vLLM backends); with a BPE vocabulary each
 # token spans several characters, so computing the mask per step over ~100k tokens is the engineering problem.
+#
+# ## Worked example 6 — a grammar over characters, a vocabulary of multi-character tokens
+# Take the JSON schema `{"type": "object", "properties": {"n": {"type": "integer", "minimum": 0}},
+# "required": ["n"]}` with no optional whitespace. The legal outputs are `{"n": 0}`, `{"n": 7}`, `{"n": 2026}`, …
+# (JSON forbids leading zeros). A structured-output backend compiles the schema into an automaton over
+# **characters** — written out by hand below — while the vocabulary, like any BPE tokenizer's, mixes single
+# characters with merges such as `{"n": ` or `1}` that cross several automaton states in one token.
+
+# %%
+PREFIX = '{"n": '
+
+
+def char_step(state, ch):
+    """Character-level DFA for {"n": 0|[1-9][0-9]*}: the next state, or None if `ch` is illegal here."""
+    if state < len(PREFIX):                                  # states 0-5: inside the fixed prefix
+        return state + 1 if ch == PREFIX[state] else None
+    if state == 6:                                           # 6: the number's first digit
+        return 7 if ch in "123456789" else (8 if ch == "0" else None)
+    if state == 7:                                           # 7: more digits, or close
+        return 7 if ch.isdigit() else (9 if ch == "}" else None)
+    if state == 8:                                           # 8: after a lone 0 only "}" may follow
+        return 9 if ch == "}" else None
+    return None                                              # 9: accepting; nothing may follow
+
+
+STATES, ACCEPT = range(10), 9
+VOCAB_TXT = list('{}":, ') + list("0123456789") + list("anxy") + [
+    '{"', '":', '": ', '"n', 'n"', '{"n": ', '"}', '12', '42', '2026', '00', '07', '1}', '0}', ', "', 'yes']
+state = 0
+for ch in PREFIX:
+    state = char_step(state, ch)
+print(f"{len(VOCAB_TXT)} tokens; the single token {PREFIX!r} takes the DFA from state 0 to state {state}")
+print("in state 6, a quote ->", char_step(6, '"'), "(illegal: a number must come next)")
+
+# %% [markdown]
+# A token is legal in a state only if **every** character of it is legal in turn, starting from that state — so
+# the mask depends on the state, and one token can move the automaton several states at once. Exercise 4.6
+# precomputes the whole table.
 #
 # ## Exercise 4.1 — top-p (nucleus) filtering
 # Keep the smallest set of highest-probability tokens whose total probability reaches `p`; set the rest to `-inf`.
@@ -246,15 +288,78 @@ for name, p in settings.items():
 print("✅ only argmax-equivalent settings are seed-independent for every distribution")
 
 # %% [markdown]
+# ## Exercise 4.6 — compile the token mask table
+# Using worked example 6's `char_step`, `STATES` and `VOCAB_TXT`: for every automaton state `s` and every token
+# `t`, precompute the state after feeding **all** of `t`'s characters from `s`, or `None` if any character is
+# illegal. Return `table[s]`, a list aligned with the vocabulary. The engine's mask in state `s` is then
+# `table[s][t] is not None`, and advancing after a sampled token is one lookup. Doing this ahead of time for
+# ~100k tokens and thousands of states — and for the rest, fast enough to overlap the GPU's forward pass — is
+# what xgrammar and llguidance are built for.
+
+# %% exercise
+def compile_token_table(vocab, states, step):
+    ### BEGIN SOLUTION
+    table = {}
+    for s in states:
+        row = []
+        for tok in vocab:
+            q = s
+            for ch in tok:
+                q = step(q, ch)
+                if q is None:
+                    break
+            row.append(q)
+        table[s] = row
+    return table
+    ### END SOLUTION
+
+# %% check
+table = compile_token_table(VOCAB_TXT, STATES, char_step)
+allowed = lambda s: {VOCAB_TXT[t] for t, q in enumerate(table[s]) if q is not None}
+assert allowed(0) == {"{", '{"', '{"n": '} and table[0][VOCAB_TXT.index('{"n": ')] == 6
+assert table[6][VOCAB_TXT.index("1}")] == ACCEPT                          # one token: a digit AND the close
+assert "07" in allowed(7) and "07" not in allowed(6)                      # same token, legal in one state only
+assert not any('"}' in allowed(s) for s in STATES)                        # looks like JSON, never legal here
+print("tokens allowed per state:", {s: len(allowed(s)) for s in STATES}, f"(of {len(VOCAB_TXT)})")
+rng, runs = np.random.default_rng(0), []
+for _ in range(300):                                  # a "model" with no opinion: uniform over the legal tokens
+    state, toks = 0, []
+    while state != ACCEPT and len(toks) < 40:
+        t = int(rng.choice([t for t, q in enumerate(table[state]) if q is not None]))
+        toks.append(t)
+        state = table[state][t]
+    runs.append((tuple(toks), state == ACCEPT))
+texts = ["".join(VOCAB_TXT[t] for t in toks) for toks, done in runs if done]
+assert len(texts) >= 290 and all(re.fullmatch(r'\{"n": (0|[1-9][0-9]*)\}', x) for x in texts)
+assert all(isinstance(json.loads(x)["n"], int) for x in texts)
+spellings = {}
+for toks, done in runs:
+    spellings.setdefault("".join(VOCAB_TXT[t] for t in toks), set()).add(toks)
+top = max(spellings, key=lambda x: len(spellings[x]))
+print(f"✅ {len(texts)} of 300 constrained outputs parse as the schema; {300 - len(texts)} hit the 40-token cap "
+      "mid-number")
+print(f"   {top!r} came out as {len(spellings[top])} different token sequences, e.g.",
+      " / ".join("|".join(VOCAB_TXT[t] for t in seq) for seq in sorted(spellings[top], key=len)[:2]))
+
+# %% [markdown]
+# Three things real backends handle that this toy already shows. **The mask is per state**: `07` is legal after
+# `{"n": 1` and illegal right after `{"n": `, so the engine needs the automaton's state for every request, every
+# step. **One text, many token sequences**: the grammar allows all of them, so a constrained model can be pushed
+# into tokenizations it rarely saw in training, and a client that re-tokenizes the returned text gets different
+# ids — different block names in the prefix cache (primer §5). **A length cap can cut a legal prefix**: grammar
+# masking guarantees the output *so far* is legal, not that it finishes — check `finish_reason` before parsing.
+#
 # ## In a design review
 # **The two-minute version.** "The engine's sampler is a pipeline over logits: grammar mask, penalties, then greedy
 # or temperature, min-p, top-k, top-p, and a draw from the request's own seeded generator. It reshapes the model's
 # distribution per step; it never changes the model. For production we default to temperature with top-p or min-p
 # because they adapt to the model's confidence, we fix seeds when we need replayable outputs, and we log raw
 # logprobs because they show what the model believed. For machine-readable output we use structured output: the
-# engine compiles the JSON schema into an automaton and masks illegal tokens, so the output always parses. That
-# guarantees syntax, not correctness — a model that does not know the answer will still produce a well-formed one,
-# so we validate semantics downstream and watch the logprobs of constrained fields."
+# engine compiles the JSON schema into a character automaton, precomputes which of the vocabulary's multi-character
+# tokens are legal in each state, and masks the rest, so an output that finishes always parses (one cut by
+# max_tokens does not — we check finish_reason). That guarantees syntax, not correctness — a model that does not
+# know the answer will still produce a well-formed one, so we validate semantics downstream and watch the
+# logprobs of constrained fields."
 #
 # **Drill questions**
 # 1. *Why prefer top-p or min-p over top-k?* — They adapt to the distribution: few tokens when the model is sure,

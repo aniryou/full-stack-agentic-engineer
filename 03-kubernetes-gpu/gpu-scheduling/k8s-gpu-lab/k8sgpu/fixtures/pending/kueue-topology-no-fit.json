@@ -1,6 +1,6 @@
 {
  "description": "A 4-pod gang that must share a subblock; quota is fine but no subblock has 4 free GPUs (s2, gang-waits).",
- "source": "Workload trimmed to the fields that matter; condition text in the format of Kueue v0.19's flavor assigner/TAS as predicted by k8sgpu.kindsim for the kind lab (sample output in the documented format (illustrative))",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kueue",
   "category": "topology"

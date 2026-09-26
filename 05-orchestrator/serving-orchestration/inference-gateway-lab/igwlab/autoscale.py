@@ -15,9 +15,11 @@ average, the special cases for missing and not-yet-ready pods, both normalizatio
 (`behavior` unset -> legacy 2x/4-pod limit; `behavior` set -> policies), the recommendation
 and scale-event history. Time is passed in explicitly, so you can replay a trace.
 
-What to scale an LLM server on: a *demand* signal the engine exposes — `vllm:num_requests_waiting`
-(queue per pod), KV-cache usage, or router-side in-flight/queued requests — not GPU utilization,
-which reads ~100% as soon as a continuous-batching engine has any work.
+What to scale an LLM server on: demand signals the engine exposes — `vllm:num_requests_waiting`
+(queue per pod) for bursts *together with* `vllm:num_requests_running` (occupied batch slots), KV
+usage, or router-side in-flight/queued requests — not GPU utilization, which reads ~100% as soon
+as a continuous-batching engine has any work. The queue alone drains to 0 once capacity catches
+up and then proposes the minimum at full load (see `simulate`).
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 __all__ = ["Tolerances", "ScalingPolicy", "ScalingRules", "Behavior", "DEFAULT_BEHAVIOR", "PodSample",
            "MetricError", "milli", "plain_metric_replicas", "usage_ratio_replicas", "external_per_pod_replicas",
            "pods_from_scrapes", "recommend_from_scrapes", "HPARecommender", "Step", "hpa_manifest", "FluidPool",
-           "simulate"]
+           "simulate", "waiting_target"]
 
 SYNC_PERIOD_S = 15                   # --horizontal-pod-autoscaler-sync-period
 DOWNSCALE_STABILIZATION_S = 300      # --horizontal-pod-autoscaler-downscale-stabilization
@@ -340,18 +342,30 @@ class HPARecommender:
         return step
 
 
+def waiting_target(budget_s: float, service_s: float, slots: int) -> int:
+    """A `vllm:num_requests_waiting` target from a queueing budget (Little's law).
+
+    A request that finds N requests waiting needs about N more batch slots to free before it is
+    admitted; with `slots` slots each held for `service_s` seconds, slots free at slots/service_s
+    per second, so it waits ~ N x service_s / slots. Keep that under `budget_s`:
+    N <= floor(budget_s x slots / service_s), never below 1. (Worked: 0.5 s, 3 s, 32 slots -> 5.)"""
+    return max(1, math.floor(budget_s * slots / service_s + 1e-9))
+
+
 # ------------------------------------------------------------------ manifests
 def hpa_manifest(name: str, deployment: str, metric: str, target_average_value, min_replicas: int = 1,
                  max_replicas: int = 4, behavior: Behavior | None = None, namespace: str | None = None,
-                 metric_type: str = "Pods") -> dict:
-    """An autoscaling/v2 HorizontalPodAutoscaler scaling `deployment` on a per-pod metric."""
-    target = {"type": "AverageValue", "averageValue": str(target_average_value)}
-    if metric_type == "Pods":
-        metrics = [{"type": "Pods", "pods": {"metric": {"name": metric}, "target": target}}]
-    elif metric_type == "External":
-        metrics = [{"type": "External", "external": {"metric": {"name": metric}, "target": target}}]
-    else:
+                 metric_type: str = "Pods", extra_metrics: dict | None = None) -> dict:
+    """An autoscaling/v2 HorizontalPodAutoscaler scaling `deployment` on a per-pod metric, plus
+    optional `extra_metrics` ({name: AverageValue}) of the same type -- the controller takes the
+    largest proposal over all of them."""
+    if metric_type not in ("Pods", "External"):
         raise ValueError("metric_type must be Pods or External")
+    key = metric_type.lower()
+    metrics = []
+    for m, tv in {metric: target_average_value, **(extra_metrics or {})}.items():
+        target = {"type": "AverageValue", "averageValue": str(tv)}
+        metrics.append({"type": metric_type, key: {"metric": {"name": m}, "target": target}})
     spec = {"scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": deployment},
             "minReplicas": min_replicas, "maxReplicas": max_replicas, "metrics": metrics}
     if behavior is not None:

@@ -6,7 +6,7 @@
     print(res.summary())              # every number is SIMULATED — a model of an engine, not a measurement
 
 Pure standard library and deterministic under the seeds you pass. Read the modules in this order: workload.py,
-replica.py, routers.py, sim.py, metrics.py, autoscale.py, disagg.py, kvtier.py. The lab next door
+replica.py, routers.py, sim.py (with FlowControl), metrics.py, autoscale.py, disagg.py, kvtier.py. The lab next door
 (../inference-gateway-lab) puts the same decisions in front of real OpenAI-compatible servers.
 """
 from .autoscale import HPA, Autoscaler, ColdStart, Policy, Rules, external_metric_replicas, pods_metric_replicas
@@ -18,7 +18,7 @@ from .routers import (ApproxPrefixIndex, ConsistentHashBoundedLoad, HashRing, KV
                       LeastOutstanding, LoraAffinityFilter, PowerOfTwo, PrefixAffinityFilter, PrefixCacheScorer,
                       PrefixHash, PreciseIndex, QueueScorer, RoundRobin, Router, TokenLoadScorer, WeightedScorer,
                       epp, sticky_until_saturated)
-from .sim import Fleet, Result
+from .sim import Fleet, FlowControl, Result
 from .workload import HashChain, Request, agentic, arrivals, burst, chat, expand, mix, mix64, rag
 
 __all__ = [
@@ -30,6 +30,6 @@ __all__ = [
     "ApproxPrefixIndex", "ConsistentHashBoundedLoad", "HashRing", "KVCacheUtilizationScorer", "LeastOutstanding",
     "LoraAffinityFilter", "PowerOfTwo", "PrefixAffinityFilter", "PrefixCacheScorer", "PrefixHash", "PreciseIndex",
     "QueueScorer", "RoundRobin", "Router", "TokenLoadScorer", "WeightedScorer", "epp", "sticky_until_saturated",
-    "Fleet", "Result",
+    "Fleet", "FlowControl", "Result",
     "HashChain", "Request", "agentic", "arrivals", "burst", "chat", "expand", "mix", "mix64", "rag",
 ]

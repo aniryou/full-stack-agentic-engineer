@@ -4,7 +4,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from minengine import perf
+from minengine import perf, spec
 
 H100, L4 = perf.GPUS["H100-SXM"], perf.GPUS["L4"]
 LLAMA, QWEN = perf.LLMS["llama-3.1-8b"], perf.LLMS["qwen2.5-0.5b"]
@@ -35,6 +35,39 @@ def test_knee_tokens_hand_computed():
 
 def test_kv_cache_blocks_hand_computed():
     assert perf.kv_cache_blocks(L4, LLAMA) == int((24e9 * 0.9 - 16.06e9 - 1e9) // (16 * 131072))   # 2164
+
+
+def test_quantized_weights_keep_the_embedding_and_lm_head_in_16bit():
+    embed = 128256 * 4096
+    matmul = 8.03e9 - 2 * embed
+    int4 = replace(LLAMA, bytes_per_param=4.125 / 8)
+    assert np.isclose(int4.weight_bytes, matmul * 4.125 / 8 + 2 * embed * 2)          # 3.60 + 2.10 = 5.70 GB
+    assert np.isclose(int4.streamed_bytes, matmul * 4.125 / 8 + embed * 2)            # the LM head is read every step
+    assert np.isclose(LLAMA.weight_bytes, 8.03e9 * 2) and np.isclose(LLAMA.streamed_bytes, (8.03e9 - embed) * 2)
+
+
+def test_verify_pass_needs_logits_at_every_position():
+    one = perf.step_cost(H100, LLAMA, [(1000, 5)], **EXACT)
+    five = perf.step_cost(H100, LLAMA, [(1000, 5, 5)], **EXACT)
+    assert np.isclose(five["flops"] - one["flops"], 4 * 2 * 128256 * 4096)           # 4 more LM-head rows
+
+
+def test_speculation_cost_model_matches_the_formula_at_batch_1_and_stops_paying_at_high_load():
+    draft = perf.LLMS["llama-3.2-1b"]
+    c = perf.step_time(H100, draft, [(200, 1)], overhead_s=0.0005) / perf.step_time(H100, LLAMA, [(200, 1)])
+    one = perf.spec_speedup(H100, LLAMA, draft, 1, 200, 0.7, 4)
+    assert abs(one - spec.speedup(0.7, 4, c)) < 0.02                  # batch 1: verify ~ one target step
+    assert 1.5 < one < 1.7 and 0.18 < c < 0.2                         # ~1.6x with a 0.19 draft (SIMULATED)
+    assert perf.spec_speedup(H100, LLAMA, draft, 128, 200, 0.7, 4) < 1 < perf.spec_speedup(H100, LLAMA, draft, 64, 200, 0.7, 4)
+    assert perf.spec_speedup(H100, LLAMA, draft, 128, 2000, 0.7, 4) > 1.3   # long context: KV-bound, keeps paying
+
+
+def test_goodput_counts_only_requests_that_meet_both_slos():
+    r = perf.SimResult("hand", ttft=np.array([0.1, 0.3, 0.1, 2.0]), tpot=np.array([0.02, 0.02, 0.09, 0.02]),
+                       itl=np.array([0.02]), e2e=np.zeros(4), duration=2.0, output_tokens=400, steps=1,
+                       preemptions=0, hit_rate=0.0, peak_kv_usage=0.0)
+    assert r.goodput(ttft_slo=0.5, tpot_slo=0.05) == 2 / 2.0                           # requests 0 and 1 of 4
+    assert r.throughput == 200.0
 
 
 def test_fp8_compute_needs_fp8_hardware():

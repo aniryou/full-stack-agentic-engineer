@@ -28,7 +28,7 @@ on real hardware. Prices and where to get GPUs: [`../../../COMPUTE.md`](../../..
 ```bash
 cd 01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                      # ~60 tests, a few seconds, no GPU
+python3 -m pytest -q                      # ~90 tests, a few seconds, no GPU
 python3 -m gpubench info                  # what is this machine?
 python3 -m gpubench run --out results     # the suite: results/gpubench-<host>-<backend>-<time>.{json,md}
 python3 -m jupyterlab notebooks           # the four fill-in notebooks (answers in solutions/)
@@ -44,7 +44,8 @@ changes into this directory and installs the lab.
 | Label | Meaning | Where |
 |---|---|---|
 | *measured* | produced by this run on this machine; every table the suite and the notebooks print | `Measurement` records, reports |
-| *model* / *theoretical* | computed from a formula: P2P from topology, PCIe line rate, cold-start budgets | `p2p.predict`, `specs.pcie_gbs`, `loading.load_time` |
+| *model* / *theoretical* | computed from a formula: P2P from topology (labelled `direct`, `staged` or `upper-bound` by what it assumes about peer access), PCIe line rate, cold-start budgets | `p2p.predict`, `specs.pcie_gbs`, `loading.load_time` |
+| *assumed* | an input the lab could not measure here, named as such: a cold-start stage time, a PCIe link when `nvidia-smi` is absent | notebook 04, `transfer.host_link` |
 | *spec* | a vendor datasheet's **dense** peak, dated 2026-09 — verify before relying on it | `gpubench/specs.py` |
 | *sample output (illustrative)* | bundled `nvidia-smi` output in the documented format, for parsing practice — not a measurement | `gpubench/fixtures/` |
 
@@ -58,6 +59,10 @@ Byte counts follow one convention per kind of operation, pinned by tests (primer
 
 Every timing reports **best** (what the machine can do) and **median** (what you typically see) over
 several samples, after warm-up; GPU work is timed with CUDA events or with every device synchronised.
+Copies are timed two ways on a GPU: back to back (the α-β fit's α is then a per-copy *issue* cost,
+because asynchronous copies overlap) and one synchronised copy per sample (α is the *latency* a
+dependent step pays). "Cold" disk reads are only reported when the page cache can really be dropped —
+not for a file on tmpfs — and a `--tiny` report says in bold that it is a plumbing check.
 
 ## The library
 
@@ -81,18 +86,25 @@ several samples, after warm-up; GPU work is timed with CUDA events or with every
 
 ## The notebooks
 
-Each has worked examples, exercises with `# YOUR CODE HERE` and a check that prints ✅, and ends with
-"In a design review" (a two-minute explanation and drill questions). Answers are in `solutions/`.
+Each opens by naming the roofline-core notebook that *predicted* what it measures, has worked
+examples, exercises with `# YOUR CODE HERE` and a check that prints ✅ — most of them read or predict
+this machine's measurements — and ends with "In a design review" (a two-minute explanation and drill
+questions). Answers are in `solutions/`.
 
 1. **`01_measure_your_roofline`** (T0 → T1) — count a GEMM, time it honestly, sweep sizes and dtypes,
-   build your roofline, compare with the spec, and compute the decode batch at which an H100 turns
-   compute-bound (≈ 320 at d = 8192).
-2. **`02_memory_bandwidth_and_transfers`** (T0 → T1) — STREAM's rules, threads and Little's law,
-   write-allocate, fusion, the cache ladder, α-β of a copy, pinned vs pageable over PCIe.
+   build your roofline from the measurements, infer what your peak says about the hardware, then
+   predict and measure a decode projection across batch sizes. The H100 crossover for d = 8192 comes
+   out as 296 with activations on chip (primer §3.4) and 319 for a standalone GEMM that also moves its
+   activations — the notebook shows why both are right.
+2. **`02_memory_bandwidth_and_transfers`** (T0 → T1) — STREAM's rules, Little's law read off your
+   thread-scaling curve, write-allocate, fusion and its measured gap, the cache ladder, α-β of a copy
+   (and which α), a copy predicted from your fit and then measured, pinned vs pageable over PCIe.
 3. **`03_multi_gpu_topology_and_p2p`** (T0 → T2) — read the inventory and topology, choose TP groups,
-   NICs and cores, predict then measure P2P, and price the TP all-reduce per token.
-4. **`04_weights_loading_and_cold_start`** (T0 → T1/T3) — safetensors from scratch, cold vs warm reads,
-   Little's law for storage, pipelined loading to the GPU, the cold-start budget.
+   NICs and cores, predict P2P (and what the prediction assumes about peer access), explain a
+   measured P2P number, and price the TP all-reduce with the right measured α.
+4. **`04_weights_loading_and_cold_start`** (T0 → T1/T3) — safetensors from scratch, cold vs warm reads
+   and whether a "cold" number is a disk number, which measured rate belongs in the pipelined model,
+   picking a loader for this disk, the cold-start budget with its assumptions labelled.
 
 ## Command line
 
@@ -126,15 +138,23 @@ make check                                              # all of the above plus 
 
 Tests (`tests/`) run offline on the numpy backend and bundled fixtures; they pin every FLOP and byte
 formula to hand-computed values. The torch backend is imported lazily and is not needed to install,
-test or run T0.
+test or run T0; `tests/test_torch_backend_fake.py` drives it with a stand-in `torch` module, so the
+GPU ops' accounting (GEMM by dtype including FP8, STREAM, transfers, P2P), the TF32 switch and the
+`torch._scaled_mm` call convention are pinned without a GPU. What still needs real hardware to
+confirm — CUDA-event timing, stream overlap, driver behaviour — is in the verify list below.
 
 ## Verify list (as of 2026-09)
 
 * GPU spec figures in `gpubench/specs.py` (dense peaks, bandwidths, TDPs) — vendor datasheets.
 * PyTorch APIs used on GPUs: `torch.set_float32_matmul_precision`, `torch._scaled_mm` (private; its
-  signature has changed between releases), `torch.cuda.can_device_access_peer`.
+  signature has changed between releases — checked against `native_functions.yaml` on main, 2026-09),
+  `torch.cuda.can_device_access_peer`. PyPI's PyTorch is a CUDA 13 build from 2.11 on and needs an
+  R580+ driver; `cu126` builds run on R525+ but have no Blackwell kernels.
 * GCP: Deep Learning VM image family names, `install-nvidia-driver` metadata, disk types per machine
   series, L4/A100 Spot availability per zone — see [`deploy/gcp/README.md`](deploy/gcp/README.md).
-* Docker base image tag `pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime` and its driver requirement.
+* Docker base image tag `pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime` (exists on Docker Hub,
+  2026-09) and its driver requirement; Blackwell GPUs need the `cuda13.0` variant (R580+ driver).
+* Behaviour only a GPU can confirm: CUDA-event timing, the bidirectional P2P streams overlapping,
+  the double-buffered disk → GPU pipeline overlapping, `max_run_duration` not acting on a stopped VM.
 
 MIT licensed.

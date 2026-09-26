@@ -28,14 +28,17 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: vllm
-          image: vllm/vllm-openai:v0.29.0           # (verify) latest vLLM release, Sep 2026
+          image: vllm/vllm-openai:v0.30.0           # (verify) vLLM 0.30.0, released 2026-09-22; same pin as layer 04
           args:
             - --model=Qwen/Qwen2.5-1.5B-Instruct       # (verify) small, ungated; no HF token needed
             - --served-model-name=qwen
             - --port=8000
             - --max-model-len=8192
             - --gpu-memory-utilization=0.90
+            - --max-num-seqs=32                       # batch slots, set explicitly: hpa.yaml's targets are derived from it
+                                                      # (vLLM's own default is much larger, e.g. 256 -- verify)
             - --enable-prefix-caching                 # the default in vLLM V1; stated for clarity
+            - --enable-prompt-tokens-details          # usage.prompt_tokens_details.cached_tokens -> per-request hit rates
           env:
             - name: HF_TOKEN                          # only for gated models
               valueFrom:

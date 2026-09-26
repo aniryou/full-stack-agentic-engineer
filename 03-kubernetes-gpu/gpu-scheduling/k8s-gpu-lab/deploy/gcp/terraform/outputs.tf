@@ -15,7 +15,11 @@ output "get_credentials" {
 
 output "gpu_pools" {
   description = "GPU node pools (cloud.google.com/gke-nodepool label values)."
-  value       = concat([google_container_node_pool.gpu_spot.name], [for p in google_container_node_pool.gpu_flex : p.name])
+  value = concat(
+    [google_container_node_pool.gpu_spot.name],
+    [for p in google_container_node_pool.gpu_flex : p.name],
+    [for p in google_container_node_pool.gpu_shared : p.name],
+  )
 }
 
 output "weights_bucket" {
@@ -36,6 +40,7 @@ output "next_steps" {
     deploy/gke/install-addons.sh                # JobSet + Kueue + the GKE queues (DWS needs enable_flex_start_pool)
     deploy/gke/apply-examples.sh dws
     WEIGHTS_BUCKET=<weights_bucket> deploy/gke/apply-examples.sh serving
+    deploy/gke/apply-examples.sh sharing        # needs enable_time_sharing_pool = true
     terraform destroy                           # when you are done: nothing keeps billing
   EOT
 }

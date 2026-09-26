@@ -2,8 +2,8 @@
 
 The one idea: every scenario is a sequence of small, deliberate steps (apply one object, wait
 for the control plane to settle, look) whose outcome you can predict *before* running it.
-``tools/render_kind_manifests.py`` writes the YAML under ``deploy/kind/`` from the builders
-here; ``kindsim.predict`` computes what Kueue and the kube-scheduler should do with those
+``tools/render_manifests.py`` (or ``python -m k8sgpu render``) writes the YAML under
+``deploy/kind/`` from the builders here; ``kindsim.predict`` computes what Kueue and the kube-scheduler should do with those
 files; ``kindlab.run`` applies them to a real kind cluster and compares. ``EXPECTED`` is the
 hand-written answer key, and a test keeps all three in agreement.
 
@@ -32,8 +32,12 @@ sleep 3600
 """
 
 
-def lab_container(gpus: int, name: str = "worker") -> m.GPUContainer:
-    return m.GPUContainer(name=name, gpus=gpus, command=["sh", "-c", POD_SCRIPT],
+SHM_SIZE = "256Mi"          # the lab pods' memory-backed /dev/shm
+SHM_POD_MEMORY = "320Mi"    # memory limit for pods that mount it: tmpfs pages count against the limit
+
+
+def lab_container(gpus: int, name: str = "worker", memory: str = "64Mi") -> m.GPUContainer:
+    return m.GPUContainer(name=name, gpus=gpus, command=["sh", "-c", POD_SCRIPT], memory=memory,
                           env={"GPUS": str(gpus)}, env_from_field={"NODE_NAME": "spec.nodeName"})
 
 
@@ -43,12 +47,13 @@ def lab_template(gpus: int, *, annotations: dict | None = None, node_selector: d
                  restart_policy: str | None = "Never") -> dict:
     """Pod template for lab pods. Jobs need restartPolicy Never/OnFailure; anything run by a
     StatefulSet (LeaderWorkerSet groups) needs Always, i.e. ``restart_policy=None``.
-    Multi-GPU pods and gang members get a memory-backed /dev/shm, as real ones would."""
+    Multi-GPU pods and gang members get a memory-backed /dev/shm, as real ones would, and a memory
+    limit that covers it (a tmpfs write counts against the pod's memory cgroup)."""
     if shm is None:
         shm = gpus > 1
-    spec = m.pod_spec([lab_container(gpus)], accelerator=accelerator, tolerate_gpu=tolerate_gpu,
-                      node_selector=node_selector, tolerations=tolerations, restart_policy=restart_policy,
-                      shm_size="256Mi" if shm else None)
+    spec = m.pod_spec([lab_container(gpus, memory=SHM_POD_MEMORY if shm else "64Mi")], accelerator=accelerator,
+                      tolerate_gpu=tolerate_gpu, node_selector=node_selector, tolerations=tolerations,
+                      restart_policy=restart_policy, shm_size=SHM_SIZE if shm else None)
     return m.pod_template(spec, annotations=annotations)
 
 

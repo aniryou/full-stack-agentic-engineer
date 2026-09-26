@@ -46,7 +46,7 @@ print("emitted frequencies:", (emitted / n).round(3), "vs p", p, "| accepted", a
 # re-assigns the mass to tokens 0 and 1, which the draft under-proposed. The emitted distribution is `p`.
 #
 # ## Worked example 2 — a real draft/target pair
-# The target is `TinyLM()`; the draft is a model six times smaller, with the same tokenizer (a requirement) and
+# The target is `TinyLM()`; the draft is a model ten times smaller, with the same tokenizer (a requirement) and
 # similar "training data".
 
 # %%
@@ -66,10 +66,13 @@ out, st = spec.speculative_generate(spec.lm_probs(target, 0), prompt, 40, k=4, d
 print("greedy speculation == greedy decoding:", out == target.generate_dense(prompt, 40), f"({st.passes} passes)")
 
 # %% [markdown]
-# Two things to notice. The measured tokens per pass track the formula, within the noise of a few dozen passes.
-# And greedy speculation is not "close to"
-# greedy decoding — it is identical, token for token, because with temperature 0 both distributions are one-hot and
-# the rule reduces to "accept iff the draft's argmax equals the target's".
+# Two things to notice. The measured tokens per pass match the formula at k = 1 and 2, within the noise of ~50
+# passes, but fall short of it at k = 4. That is not only noise: `(1 − α^(k+1)) / (1 − α)` assumes every position is accepted independently with the same
+# α, while real acceptance varies by position (p10 to p90 above) and is correlated — a stretch the draft finds hard
+# rejects early and often — so the formula over-predicts deep speculation. Measure acceptance per position (vLLM
+# exports `vllm:spec_decode_num_accepted_tokens_per_pos`) before choosing k. And greedy speculation is not "close
+# to" greedy decoding — it is identical, token for token, because with temperature 0 both distributions are
+# one-hot and the rule reduces to "accept iff the draft's argmax equals the target's".
 #
 # ## Worked example 3 — prompt lookup: free drafts when the output copies the context
 # N-gram (prompt-lookup) drafting proposes the tokens that followed the last occurrence of the current n-gram in
@@ -99,39 +102,49 @@ print(f"babbling target: {decode(out)!r:28} acceptance {st.acceptance:.2f}, {st.
 
 # %% [markdown]
 # ## Worked example 4 — when does it pay? (SIMULATED)
-# Llama-3.1-8B target, Llama-3.2-1B draft (same tokenizer) on an H100, `α = 0.7`, `k = 4`. One round costs `k`
-# draft steps plus one verify step of `k + 1` tokens per request; plain decoding costs one step per token.
-# Batches whose KV cache would not fit in memory are marked `--`.
+# Llama-3.1-8B target, Llama-3.2-1B draft (same tokenizer) on an H100, `α = 0.7`, `k = 4`. Plain decoding costs
+# one engine step per token. One speculative round is **one** engine step, so it pays the step's fixed overhead
+# (2 ms here) once, plus `k` draft forwards — each a CUDA-graph replay and a draft sample, assumed to cost 0.5 ms
+# of overhead on top of its roofline time — plus one target verify pass of `k + 1` tokens per request with logits
+# at all `k + 1` positions (`perf.spec_speedup`). Batches whose KV cache would not fit are marked `--`.
 
 # %%
 G, T, D = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"], perf.LLMS["llama-3.2-1b"]
 kv_tokens = perf.kv_cache_blocks(G, T) * 16
 
 
-def spec_speedup(B, ctx, alpha=0.7, k=4):
-    base = perf.step_time(G, T, [(ctx, 1)] * B)
-    rnd = k * perf.step_time(G, D, [(ctx, 1)] * B) + perf.step_time(G, T, [(ctx, k + 1)] * B)
-    return spec.expected_tokens(alpha, k) * base / rnd
+def spec_speedup(B, ctx, alpha=0.7, k=4, draft_overhead_s=0.0005):
+    base = perf.step_time(G, T, [(ctx, 1)] * B)                                  # one token per request
+    drafts = sum(perf.step_time(G, D, [(ctx + j, 1)] * B, overhead_s=draft_overhead_s) for j in range(k))
+    verify = perf.step_time(G, T, [(ctx, k + 1, k + 1)] * B)                     # (start, tokens, logit rows)
+    return spec.expected_tokens(alpha, k) * base / (drafts + verify)
 
 
+assert abs(spec_speedup(16, 200) - perf.spec_speedup(G, T, D, 16, 200, 0.7, 4)) < 1e-12   # same model as the library
 for ctx in [200, 2000, 8000]:
     cells = [f"B={B}: " + (f"{spec_speedup(B, ctx):.2f}x" if B * (ctx + 5) <= kv_tokens else "--")
              for B in [1, 16, 64, 128, 256, 512]]
     print(f"context {ctx:5d}  " + "  ".join(cells), " (SIMULATED)")
-c_draft = perf.step_time(G, D, [(1000, 1)]) / perf.step_time(G, T, [(1000, 1)])
-print(f"draft cost c = {c_draft:.2f} of a target step; an EAGLE-like head with c = 0.05 would give "
-      f"{spec.speedup(0.7, 4, 0.05):.2f}x at batch 1")
+for ov in [0.0, 0.0005, 0.002]:
+    c = perf.step_time(G, D, [(1000, 1)], overhead_s=ov) / perf.step_time(G, T, [(1000, 1)])
+    print(f"per-draft-forward overhead {1e3 * ov:3.1f} ms: draft cost c = {c:.2f} of a target step, "
+          f"batch 1 at context 200 -> {spec_speedup(1, 200, draft_overhead_s=ov):.2f}x")
+print(f"an EAGLE-like head with c = 0.05 would give {spec.speedup(0.7, 4, 0.05):.2f}x at batch 1")
 
 # %% [markdown]
-# Even at batch 1 the gain is only ~1.1×, and the draft is why: four steps of a 1B model (plus a fixed per-step
-# overhead each) cost about 38% of an 8B step apiece, so `c ≈ 0.38`. Draft heads that ride on the target's own
-# hidden states (EAGLE, MTP) cost a few percent of a target step: with `c = 0.05` the same `α` and `k` give the
-# 2.31× printed above — which is why they, not separate draft models, dominate in practice.
+# At batch 1 the gain is ~1.6× with these assumptions, and the draft's cost is why it is not more: four forwards of
+# a 1B model, each about 19% of an 8B step (`c ≈ 0.19`: its weight read is ~17% of the target's, plus the assumed
+# 0.5 ms). The sensitivity rows show how much that rests on the overhead assumption: 1.9× if a draft forward cost
+# only its roofline time, 1.1× if each paid a full engine step's 2 ms — measure it before quoting a number. Draft
+# heads that ride on the target's own hidden states (EAGLE, MTP) cost a few percent of a target step: with
+# `c = 0.05` the same `α` and `k` give the 2.31× printed above — which is why they, not separate draft models,
+# dominate in practice.
 #
-# At short contexts the verify pass (`B × 5` tokens) crosses the compute knee as the batch grows, and speculation
-# becomes a **slow-down** past ~100 requests: the "free" positions are no longer free. At long contexts decode
-# stays memory-bound on the KV read, so speculation keeps paying — and memory caps the batch before compute does.
-# In production that is why speculation is usually tuned per workload (or switched off above a load threshold).
+# The robust conclusion is the shape. At short contexts the verify pass (`B × 5` tokens) crosses the compute knee
+# as the batch grows, and speculation becomes a **slow-down** past ~100–250 requests (depending on the overhead):
+# the "free" positions are no longer free. At long contexts decode stays memory-bound on the KV read, so
+# speculation keeps paying — and memory caps the batch before compute does. In production that is why
+# speculation is usually tuned per workload (or switched off above a load threshold).
 #
 # ## Exercise 5.1 — one position of verification
 # Implement the rule for a single draft token `x` drawn from `q`: return `(True, x)` if accepted, else

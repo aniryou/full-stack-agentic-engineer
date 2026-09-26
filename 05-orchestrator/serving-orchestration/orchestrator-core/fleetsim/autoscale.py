@@ -136,43 +136,54 @@ class HPA:
 
 
 class Autoscaler:
-    """An HPA bound to one fleet signal.
+    """An HPA bound to one fleet signal, or several (`also=[(metric, target, kind), ...]`): the controller computes
+    a replica count per metric and takes the largest.
 
     metric: 'waiting' (vllm:num_requests_waiting), 'running', 'inflight' (waiting + running), 'kv'
     (vllm:kv_cache_usage_perc), 'gpu_util' (fraction of time a kernel ran — what nvidia-smi calls utilisation) or
-    'backlog_s' (seconds of prefill work in flight: the router's uncached in-flight tokens / prefill tokens/s — the
-    llm-d token-aware path's EPP in-flight tokens / peakPrefillThroughput; it counts work, not requests).
+    'backlog_s' (seconds of prefill work owed: the replica's uncached prompt tokens not yet prefilled / prefill
+    tokens/s — llm-d's token-aware path computes it as EPP in-flight tokens / peakPrefillThroughput and pairs it
+    with KV occupancy for decode). 'backlog_s' counts work, not requests; the others count requests or memory.
     kind='pods' averages per ready pod; kind='external' scales on the pool total including requests held at the
     gateway or in the router's queue (the KEDA pattern) — the only kind that may scale to zero."""
 
     METRICS = ("waiting", "running", "inflight", "kv", "gpu_util", "backlog_s")
 
-    def __init__(self, hpa: HPA, metric="waiting", target=4.0, kind="pods"):
-        if metric not in self.METRICS or kind not in ("pods", "external"):
-            raise ValueError(f"metric must be one of {self.METRICS}; kind 'pods' or 'external'")
-        if hpa.min_replicas == 0 and kind != "external":
-            raise ValueError("minReplicas: 0 needs an Object or External metric (the API server rejects it)")
+    def __init__(self, hpa: HPA, metric="waiting", target=4.0, kind="pods", also=()):
         self.hpa, self.metric, self.target, self.kind = hpa, metric, target, kind
+        self.specs = [(metric, target, kind)] + list(also)
+        for m, _, k in self.specs:
+            if m not in self.METRICS or k not in ("pods", "external"):
+                raise ValueError(f"metric must be one of {self.METRICS}; kind 'pods' or 'external'")
+            if hpa.min_replicas == 0 and k != "external":
+                raise ValueError("minReplicas: 0 needs an Object or External metric (the API server rejects it)")
 
-    def value(self, r, util: float, router=None) -> float:
-        """This replica's sample of the metric (`util` = its busy fraction over the last sync period)."""
-        if self.metric == "backlog_s":
-            return router.inflight_tokens[r.rid] / r.p.compute_tok_s
+    @staticmethod
+    def value(r, util: float, metric: str) -> float:
+        """One replica's sample of `metric` (`util` = its busy fraction over the last sync period)."""
+        if metric == "backlog_s":
+            return r.prefill_backlog() / r.p.compute_tok_s
         return {"waiting": len(r.waiting), "running": len(r.running), "inflight": len(r.waiting) + len(r.running),
-                "kv": r.pool.usage(), "gpu_util": util}[self.metric]
+                "kv": r.pool.usage(), "gpu_util": util}[metric]
 
-    def held(self, reqs, profile) -> float:
+    @staticmethod
+    def held(reqs, profile, metric: str) -> float:
         """What requests not yet on any replica add to an External metric's pool total."""
-        if self.metric == "backlog_s":
+        if metric == "backlog_s":
             return sum(q.prompt for q in reqs) / profile.compute_tok_s
-        return len(reqs) if self.metric in ("waiting", "inflight") else 0.0
+        return len(reqs) if metric in ("waiting", "inflight") else 0.0
 
-    def decide(self, now, current, values, unready, pool_total) -> int:
+    def decide(self, now, current, ready, util, unready, held_reqs, profile) -> int:
+        """One sync: a recommendation per metric, the largest wins, then stabilization and policies."""
         tol = dict(tol_up=self.hpa.up.tolerance, tol_down=self.hpa.down.tolerance)
-        if self.kind == "external":
-            desired = external_metric_replicas(pool_total, self.target, current, **tol)
-        else:
-            desired = pods_metric_replicas(values, self.target, current, unready=unready, **tol)
+        desired = 0
+        for metric, target, kind in self.specs:
+            vals = [self.value(r, util[r.rid], metric) for r in ready]
+            if kind == "external":
+                total = sum(vals) + self.held(held_reqs, profile, metric)
+                desired = max(desired, external_metric_replicas(total, target, current, **tol))
+            else:
+                desired = max(desired, pods_metric_replicas(vals, target, current, unready=unready, **tol))
         return self.hpa.step(now, current, desired)
 
 

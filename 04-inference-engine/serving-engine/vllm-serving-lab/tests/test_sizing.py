@@ -1,6 +1,7 @@
 """Sizing: the per-token KV formula, block arithmetic, fit check and log calibration, pinned by hand."""
 import importlib.util
 import math
+import sys
 from pathlib import Path
 
 import pytest
@@ -82,7 +83,11 @@ def test_agrees_with_capacity_planning_formulas():
         pytest.skip("00-foundations/gpu-capacity-planning not in this checkout")
     spec = importlib.util.spec_from_file_location("capacity", path)
     cap = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cap)
+    dont_write, sys.dont_write_bytecode = sys.dont_write_bytecode, True   # leave layer 00's tree untouched
+    try:
+        spec.loader.exec_module(cap)
+    finally:
+        sys.dont_write_bytecode = dont_write
     m = load_config("mistral-small-24b-instruct-2501")
     assert kv_bytes_per_token(m) == cap.kv_per_token_kb(cap.MISTRAL_SMALL) * 1024 == 163_840
     assert kv_bytes_per_token(m, kv_cache_dtype="fp8") == cap.kv_per_token_kb(cap.MISTRAL_SMALL, "fp8") * 1024
@@ -96,7 +101,8 @@ def test_agrees_with_capacity_planning_formulas():
 def test_parse_startup_log_and_calibrate():
     log = sizing.parse_startup_log((FIX / "vllm_startup_log.txt").read_text())
     assert log == {"model_loading_gib": 0.93, "available_kv_gib": 11.84, "kv_cache_tokens": 1_034_592,
-                   "max_concurrency": 252.59, "max_model_len": 4096, "init_engine_s": 21.07}
+                   "max_concurrency": 252.59, "max_model_len": 4096, "init_engine_s": 21.07,
+                   "gpu_memory_utilization": 0.92}
     # replaying the logged KV budget through the block arithmetic reproduces the logged capacity
     replay = size("qwen2.5-0.5b-instruct", "T4", dtype="half", max_model_len=4096,
                   kv_budget_bytes=int(round(log["available_kv_gib"] * GiB)))
@@ -104,3 +110,40 @@ def test_parse_startup_log_and_calibrate():
     pred = size("qwen2.5-0.5b-instruct", "T4", dtype="half", max_model_len=4096)
     cal = sizing.calibrate(pred, log)
     assert cal["implied_overhead_gib"] == pytest.approx(pred.requested_bytes / GiB - 0.93 - 11.84)
+
+
+def test_calibrate_uses_the_utilization_the_server_ran_with():
+    # a Colab server started at 0.85, calibrated against a default (0.92) prediction
+    log = {"model_loading_gib": 0.93, "available_kv_gib": 10.79}
+    pred = size("qwen2.5-0.5b-instruct", "T4", dtype="half", max_model_len=4096)
+    assert pred.gpu_memory_utilization == 0.92
+    right = sizing.calibrate(pred, log, gpu_memory_utilization=0.85)
+    assert right["implied_overhead_gib"] == pytest.approx(math.ceil(15.0 * GiB * 0.85) / GiB - 0.93 - 10.79)
+    wrong = sizing.calibrate(pred, log)                                  # silently charges 0.07 x 15 GiB
+    assert wrong["implied_overhead_gib"] - right["implied_overhead_gib"] == pytest.approx(0.07 * 15.0, abs=1e-6)
+    stated = sizing.calibrate(pred, {**log, "gpu_memory_utilization": 0.85})  # the log's own statement wins
+    assert stated["implied_overhead_gib"] == pytest.approx(right["implied_overhead_gib"])
+
+
+def test_serve_scheduler_defaults_follow_vllm_by_gpu():
+    # vLLM v0.30.0 EngineArgs: >= 160 GiB -> 16384/1024; >= 70 GiB and not A100 -> 8192/1024; else 2048/256
+    assert sizing.serve_scheduler_defaults(sizing.gpu("L4")) == (2048, 256)
+    assert sizing.serve_scheduler_defaults(sizing.gpu("A100-80GB")) == (2048, 256)
+    assert sizing.serve_scheduler_defaults(sizing.gpu("H100-80GB")) == (8192, 1024)
+    assert sizing.serve_scheduler_defaults(None, 180 * GiB) == (16384, 1024)
+    h = size("llama-3.1-8b-instruct", "H100-80GB", max_model_len=32768)
+    assert (h.max_num_batched_tokens, h.max_num_seqs) == (8192, 1024)
+    small = size("llama-3.1-8b-instruct", "H100-80GB", max_model_len=32768, max_num_batched_tokens=2048,
+                 max_num_seqs=256)
+    assert h.num_blocks < small.num_blocks          # the bigger profiling pass leaves fewer KV blocks
+
+
+def test_eight_b_on_an_l4_headline_number():
+    # the figure notebook 01 states, with its assumptions: 0.92 x 22.49 GiB - 14.96 GiB weights - ~1.12 GiB
+    r = size("llama-3.1-8b-instruct", "L4", max_model_len=2048, typical_len=2000)
+    assert r.weights_bytes == 8_030_261_248 * 2 and r.bytes_per_block == 2 * 1024**2
+    assert r.num_blocks == 2363 and round(r.max_concurrency, 2) == 18.46 and round(r.concurrency_at_typical_len, 1) == 18.9
+    # the core/primer assumptions (24e9 B x 0.9 - 1e9 B reserve) give 2,164 blocks: the formulas agree, the inputs differ
+    core = size("llama-3.1-8b-instruct", gpu_memory_bytes=int(24e9), gpu_memory_utilization=0.9,
+                overhead_bytes={"reserve": int(1e9)}, max_model_len=2048, typical_len=2000)
+    assert core.num_blocks == 2164 and round(core.concurrency_at_typical_len, 1) == 17.3

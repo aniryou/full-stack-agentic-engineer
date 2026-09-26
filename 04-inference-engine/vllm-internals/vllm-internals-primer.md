@@ -844,8 +844,9 @@ With `max_num_seqs = 256` and no speculation: `min(2048, min(512, 512)) = 512`, 
 `k` drafts the token grid is **not** rescaled: vLLM appends `n × q` for a request-count grid
 `n ∈ {1, 2, 4, 8, 16, …}` wherever `n × q` fits under the ceiling, because a uniform decode batch can only replay a
 graph whose size is an exact multiple of `q` (the source's example: at `q = 17` a captured 560 is useless, since the
-batch would need 561). With `k = 2` (`q = 3`) that adds 3, 6, 12, 24, 48, …; with dynamic speculation each tier's `q`
-gets its own list (`_set_cudagraph_sizes`). A batch of
+batch would need 561). With `k = 2` (`q = 3`) the appended sizes are 3, 6, 12, 24, 48, …, 504, of which nine are new
+(3, 6, 12, 264, 312, 360, 408, 456, 504), giving 60 sizes; with `k = 3` every `n × 4` already lies on the grid. With
+dynamic speculation each tier's `q` gets its own list (`_set_cudagraph_sizes`). A batch of
 *n* tokens replays the next captured size up (a 3-token decode replays size 4); larger batches run without
 graphs; `--performance-mode interactivity` captures every size 1–32 to cut padding. Optimization levels
 (`vllm/config/vllm.py: OptimizationLevel`): `-O0` no compilation or graphs, `-O1` compilation plus piecewise
@@ -1113,7 +1114,7 @@ group scales: 4.16 bits per weight). Peaks from `roofline.specs` in
 | M (tokens in the step) | BF16 | W4A16 (Marlin) | W8A8 FP8 | bound |
 |---|---|---|---|---|
 | 1 (one decode) | 392 µs | 102 µs | 196 µs | memory, all three |
-| 256 (a full decode batch) | 423 µs | 249 µs | 215 µs | BF16 and FP8 memory; W4A16 compute (BF16 math) |
+| 256 (a full decode batch) | 423 µs | 248 µs | 215 µs | BF16 and FP8 memory; W4A16 compute (BF16 math) |
 | 2,048 (a prefill chunk) | 1,988 µs | 1,988 µs | 992 µs | compute, all three |
 
 W4A16's advantage is the byte ratio (3.85× at M = 1) and disappears once the step carries more than about 120
@@ -1166,8 +1167,10 @@ this commit `(verify: where they are handled now)`. `--safetensors-load-strategy
 mapping and enables prefetch automatically on NFS when the checkpoint fits in 90% of RAM (`LoadConfig`).
 Cold start in the logs: "Loading weights took X seconds" (I/O and copies), "Model loading took X GiB memory and
 Y seconds", compile ("Compiling a graph for compile range … takes X s" or a cache hit), "Graph capturing
-finished in N secs", "init engine (…) took N s". The I/O floor for 16 GB at 2 GB/s is 8 s; storage-side cold
-start is covered under [`../../01-hardware-gpu-fabric/`](../../01-hardware-gpu-fabric/).
+finished in N secs", "init engine (…) took N s". The I/O floor is bytes over read bandwidth: 16 GB at an
+*assumed* 2 GB/s (one fast NVMe drive or a good network volume; measure yours) is 8 s. Storage tiers and cold
+start are covered in section 6 of
+[`../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md).
 
 ---
 
@@ -1176,9 +1179,14 @@ start is covered under [`../../01-hardware-gpu-fabric/`](../../01-hardware-gpu-f
 **Multi-LoRA.** `LoRAConfig` (`vllm/config/lora.py`): `--enable-lora`, `--max-loras` (default **1** adapter per
 batch), `--max-lora-rank` (16), `--max-cpu-loras` (host cache), `--fully-sharded-loras`, `--lora-target-modules`.
 Requests carry `LoRARequest(lora_name, lora_int_id, lora_path)`, where `lora_int_id` "must be globally unique
-... This is currently not enforced" (`vllm/lora/request.py`). The waiting pass parks requests whose adapter would
-exceed `max_loras` distinct adapters in a step (Section 3.3): with the default of 1, two tenants on different
-adapters alternate steps, a common surprise. `LRUCacheLoRAModelManager` keeps `max_loras` adapters in GPU slots
+... This is currently not enforced" (`vllm/lora/request.py`). The cap is enforced **only when admitting**: after
+the running pass, `scheduled_loras` collects the adapters of the running requests, and the waiting pass parks a
+request whose adapter would exceed `max_loras` in `skipped_waiting` with `continue`, not `break`
+(`Scheduler.schedule`); running requests are never parked for it. With the default of 1, once adapter A's requests
+are running, a request for adapter B is not admitted until **no** A request is running, while newer A requests
+behind it keep being admitted. B waits whole A generations, can starve under a steady A stream, and shows up as
+`deferred` in `vllm:num_requests_waiting_by_reason`. Size `--max-loras` to the number of adapters that must be
+served concurrently. `LRUCacheLoRAModelManager` keeps `max_loras` adapters in GPU slots
 and more on the host (`vllm/lora/model_manager.py`, `worker_manager.py`); the base GEMM runs once per batch and
 Triton `lora_shrink`/`lora_expand` kernels add per-token deltas by adapter slot
 (`vllm/lora/punica_wrapper/punica_gpu.py: PunicaWrapperGPU`); `cudagraph_specialize_lora` (default True) captures
@@ -1254,11 +1262,17 @@ Llama-3.1-8B, a 4,000-token prompt, BF16 KV:
 ```
 KV to move       = 4,000 × 131,072 B = 524 MB (500 MiB)
 prefill compute  ≈ 2 × 8.03e9 × 4,000 = 64 TFLOP ≈ 107 ms at an assumed 600 TFLOP/s (H100)
-transfer: 100 GB/s (NVLink-class) 5.2 ms | 50 GB/s (400 Gb/s RDMA) 10.5 ms | 12.5 GB/s (100 Gb/s) 41.9 ms | 1.25 GB/s (10 Gb/s TCP) 419 ms
+transfer at link peak:
+  450 GB/s  H100 NVLink 4, one direction (900 GB/s is both directions) (verify)     1.2 ms
+   50 GB/s  one 400 Gb/s RDMA NIC                                                   10.5 ms
+ 12.5 GB/s  100 Gb/s                                                                41.9 ms
+ 1.25 GB/s  10 Gb/s TCP                                                              419 ms
 ```
 
-Over RDMA the transfer is a tenth of the prefill and overlaps other work; over commodity TCP it is four times
-the prefill it saves. FP8 KV halves every transfer.
+These are peak link rates; achieved copy bandwidth is lower and must be measured (the 01 layer's
+[`PRIMER.md`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) section 5 covers links and the α-β
+model). Inside an NVLink node the transfer is about 1% of the prefill; over RDMA it is a tenth and overlaps other
+work; over commodity TCP it is four times the prefill it saves. FP8 KV halves every transfer.
 
 ---
 
@@ -1280,7 +1294,7 @@ Defaults for `vllm serve` at `5840d95`; "GPU-dependent" follows `EngineArgs.get_
 | `--prefix-caching-hash-algo` | `sha256` | hash function | — | — | xxhash faster | — |
 | `--block-size` | 16 (backend may choose) | tokens per block | hit granularity | — | — | waste ≤ 15 tokens/request; may exclude backends |
 | `--kv-cache-dtype` | `auto` (model dtype) | `fp8` halves KV bytes | — | ↓ slightly | ↑ (2× blocks) | ↓; check accuracy |
-| `--dtype` | `auto` (BF16; FP16 where unsupported) | weights/activations dtype | — | — | — | — |
+| `--dtype` | `auto`: the checkpoint's dtype; FP32 checkpoints drop to the platform's preferred 16-bit type; FP16 where BF16 is unsupported (`_resolve_auto_dtype`) | weights/activations dtype | — | — | — | — |
 | `--quantization` | from checkpoint | weight format and kernels (Section 8) | ↓ with FP8 | ↓ | ↑ | ↓ weights → ↑ KV |
 | `--tensor-parallel-size` | 1 | shard layers; 2 all-reduces/layer | ↓ | ↓ on fast links | per GPU ↓ | weights and KV split |
 | `--pipeline-parallel-size` | 1 | layer stages, `pp_size` batches in flight | ↑ | ↑ | ↑ | weights split |
@@ -1288,7 +1302,7 @@ Defaults for `vllm serve` at `5840d95`; "GPU-dependent" follows `EngineArgs.get_
 | `--async-scheduling` | on when compatible | overlap CPU scheduling and GPU (Section 3.8) | ↓ | ↓ | ↑ | — |
 | `--scheduling-policy` | `fcfs` | `priority` orders and preempts by `priority` | per class | per class | — | — |
 | `--watermark` | 0.0 | free-block headroom at admission | ↑ queueing | ↓ preemption churn | ≈ | — |
-| `--scheduler-reserve-full-isl` | true | admit only if the whole prompt fits | ↑ slightly | ↓ thrash | ≈ | — |
+| `--scheduler-reserve-full-isl` | true | admit only if the whole current sequence fits (prompt, plus outputs for a resumed request) | ↑ slightly | ↓ mid-prefill preemption | ≈ | — |
 | `--enforce-eager` / `-O` | off / `-O2` | no compile, no graphs | startup ↓↓ | ↑ launch overhead | ↓ | ↓ graph memory |
 | `--cudagraph-capture-sizes`, `--max-cudagraph-capture-size` | formula (5.5) | batch sizes that replay graphs | — | ↓ inside range | — | ↑ memory, startup |
 | `--performance-mode` | `balanced` | `throughput` doubles batch defaults; `interactivity` graphs 1–32 | — | `interactivity` ↓ | `throughput` ↑ | — |
@@ -1319,7 +1333,7 @@ Defined in `vllm/v1/metrics/loggers.py: PrometheusStatLogger` (names match `FACT
 | `vllm:num_requests_running` | gauge | requests in model execution batches | occupancy vs `max_num_seqs` |
 | `vllm:num_requests_waiting` (+ `_by_reason`: `capacity`/`deferred`) | gauge | waiting + skipped-waiting; deferred = LoRA budget, KV transfer, blocked status | saturation vs blocked; autoscaling |
 | `vllm:kv_cache_usage_perc` | gauge 0–1 | `BlockPool.get_usage`: referenced blocks only | headroom, not cache fullness (4.6) |
-| `vllm:prefix_cache_queries`, `vllm:prefix_cache_hits` | counters (tokens) | token-weighted lookups and hits at admission | hit rate |
+| `vllm:prefix_cache_queries`, `vllm:prefix_cache_hits` | counters (tokens) | token-weighted lookups and hits at first admission (re-admissions after preemption are not counted, 4.4) | hit rate |
 | `vllm:external_prefix_cache_queries/_hits` | counters (tokens) | hits served through a KV connector | offload value |
 | `vllm:num_preemptions` | counter | cumulative preemptions | KV pressure (3.7) |
 | `vllm:prompt_tokens`, `vllm:generation_tokens`, `vllm:prompt_tokens_by_source`, `vllm:prompt_tokens_cached` | counters | prefill and generated tokens; prompt tokens by computed/local-cache/external | throughput, effective prefill work |
@@ -1344,7 +1358,7 @@ rate `rate(vllm:num_preemptions_total[5m])`.
 | `Using V2 Model Runner`, or `Model Runner V2 does not yet support …; using the V1 model runner instead` | `Worker`, `VllmConfig.use_v2_model_runner` | which runner |
 | `Using … attention backend out of potential backends: …` (`Using … backend.` when forced) | `CudaPlatformBase.get_attn_backend_cls` | attention backend |
 | `Chunked prefill is enabled with max_num_batched_tokens=…` | `SchedulerConfig.__post_init__` | step budget |
-| `Loading weights took … seconds`, `Model loading took … GiB memory and … seconds` | loader, V1 runner | cold-start split |
+| `Loading weights took … seconds`, `Model loading took … GiB memory and … seconds` | loader, `GPUModelRunner.load_model` (both runners) | cold-start split |
 | `Compiling a graph for compile range … takes … s` / `Directly load the compiled graph(s) …` | `vllm/compilation/backends.py` | compile cost, cache hit |
 | `Available KV cache memory: … GiB` | `Worker.determine_available_memory` | the number Section 4.7 predicts |
 | `GPU KV cache size: … tokens, Maximum concurrency for … tokens per request: …x` | `update_kv_cache_capacity` | capacity |
@@ -1362,7 +1376,15 @@ Preemptions means the pool is too small for the admitted mix.
 
 ## 13. Reading and debugging vLLM
 
-### 13.1 Put everything in one process
+### 13.1 Where to run this
+
+| Tier | What | Where (prices and obtainability: [`../../COMPUTE.md`](../../COMPUTE.md)) |
+|---|---|---|
+| T0 | this primer, `source-map.md`, the notebook | any laptop or a Colab/Kaggle CPU runtime |
+| T1 | the one-process recipe below, the serving lab, metrics, preemption, spec-decode acceptance | a free Colab or Kaggle T4 (16 GB, SM 7.5: `--dtype auto` falls back to FP16, attention runs on Triton, no FP8 path; Section 13.6); any rented 24 GB card (L4, RTX 4090 on RunPod or Vast.ai); a GCP `g2-standard-4` L4 on Spot |
+| T2 | tensor/pipeline parallelism (5.6), P/D disaggregation (10) | Kaggle's free 2×T4 (PCIe, no NVLink) for the mechanics; a RunPod/Vast/Lambda 2–8× A100/H100 NVLink box, or GCP A3, for realistic numbers |
+
+### 13.2 Put everything in one process
 
 The fastest way to understand a mechanism is to stop inside it. Three settings collapse vLLM into one debuggable
 process (T1: needs a GPU; a 0.6B model fits anywhere):
@@ -1380,28 +1402,33 @@ out = llm.generate(["The capital of France is"], SamplingParams(max_tokens=8, te
 print(out[0].outputs[0].text)
 ```
 
-`LLMEngine.from_engine_args` turns multiprocessing on only when `VLLM_ENABLE_V1_MULTIPROCESSING` is set, and
-`EngineCoreClient.make_client` otherwise returns an `InprocClient` (`vllm/v1/engine/llm_engine.py`,
-`core_client.py`). The server path cannot do this ("Running EngineCore in asyncio without multiprocessing is not
-currently supported", `make_client`), so debug the server with logs and profiles and the engine with this script.
+Multiprocessing is on by default (`VLLM_ENABLE_V1_MULTIPROCESSING` defaults to 1); with it set to 0,
+`LLMEngine.from_engine_args` passes `multiprocess_mode=False` and `EngineCoreClient.make_client` returns an
+`InprocClient` (`vllm/v1/engine/llm_engine.py`, `core_client.py`). The server path cannot do this ("Running
+EngineCore in asyncio without multiprocessing is not currently supported", `make_client`), so debug the server with
+logs and profiles and the engine with this script. The recipe runs the default runner, MRV2, whose input
+preparation is Triton kernels: you inspect the resulting tensors rather than step through the arithmetic. To step
+through input building line by line in NumPy, add `os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"` and use the MRV1
+breakpoints below.
 
-### 13.2 Where to put breakpoints
+### 13.3 Where to put breakpoints
 
 | Question | Breakpoint |
 |---|---|
 | Why is my request still waiting? | `Scheduler.schedule` (waiting loop), `KVCacheManager.allocate_slots` returning `None`, `Scheduler._try_promote_blocked_waiting_request` |
 | What did the prefix cache find, and what got evicted? | `KVCacheManager.get_computed_blocks`, `FullAttentionManager.find_longest_cache_hit`, `BlockPool.get_new_blocks` → `_maybe_evict_cached_block` |
 | Who got preempted? | `Scheduler._preempt_request` |
-| What exactly goes to the GPU? | `GPUModelRunner._prepare_inputs`, `_build_attention_metadata`, `BlockTable.compute_slot_mapping` |
+| What exactly goes to the GPU? | MRV2 (default): `GPUModelRunner.execute_model` after `prepare_inputs` and `prepare_attn` return (inspect `input_batch.positions`, `input_batch.logits_indices`, `slot_mappings`); `BlockTables.compute_slot_mappings`. MRV1 (`VLLM_USE_V2_MODEL_RUNNER=0`): `GPUModelRunner._prepare_inputs`, `_build_attention_metadata`, `BlockTable.compute_slot_mapping` |
+| What did the sampler do? | MRV2: `GPUModelRunner.sample`, `vllm/v1/worker/gpu/sample/sampler.py: Sampler.__call__`, `RejectionSampler.__call__` (`vllm/v1/worker/gpu/spec_decode/`). MRV1: `vllm/v1/sample/sampler.py: Sampler.forward` |
 | Which attention or GEMM kernel? | `CudaPlatformBase.get_attn_backend_cls`, `choose_mp_linear_kernel` |
-| Why did generation stop, or why is a token masked? | `check_stop`, `IncrementalDetokenizer.update`; `apply_grammar_bitmask` |
+| Why did generation stop, or why is a token masked? | `check_stop`, `IncrementalDetokenizer.update`; `Scheduler.get_grammar_bitmask`, then `StructuredOutputsWorker.apply_grammar_bitmask` (MRV2) or `structured_output/utils.py: apply_grammar_bitmask` (MRV1) |
 | Where did startup memory go? | `Worker.determine_available_memory`, `get_kv_cache_configs` |
 
 Two cautions: long pauses in a multi-process setup can trip `VLLM_ENGINE_ITERATION_TIMEOUT_S` (default 60); and
 code inside compiled, graph-captured regions runs at capture and then replays, so breakpoints there fire during
 warm-up, not serving.
 
-### 13.3 Environment variables that matter (and ones that no longer exist)
+### 13.4 Environment variables that matter (and ones that no longer exist)
 
 | Variable | Effect (`vllm/envs.py`) |
 |---|---|
@@ -1416,7 +1443,7 @@ warm-up, not serving.
 | `CUDA_LAUNCH_BLOCKING=1` | CUDA, not vLLM: synchronous launches so errors name the right kernel (pair with `--enforce-eager`) |
 | `VLLM_USE_V1`, `VLLM_ATTENTION_BACKEND`, `VLLM_TORCH_PROFILER_DIR` | **gone**: V1 is the only engine; use `--attention-backend`; use `--profiler-config` |
 
-### 13.4 Profiling
+### 13.5 Profiling
 
 `vllm serve MODEL --profiler-config '{"profiler": "torch", "torch_profiler_dir": "/abs/path"}'`, then `curl -X POST
 localhost:8000/start_profile`, send load, `curl -X POST localhost:8000/stop_profile`: traces are written for the API
@@ -1426,7 +1453,7 @@ gaps between GPU kernels (host overhead) and the `execute_model`/`sample_tokens`
 `--enable-layerwise-nvtx-tracing` (per-layer NVTX ranges, `GPUModelRunner._register_layerwise_nvtx_hooks`) and run
 under `nsys profile -t cuda,nvtx`; `profiler: "cuda"` and `"proton"` are the other options.
 
-### 13.5 Common errors
+### 13.6 Common errors
 
 | Symptom | Cause | Fix | Message source |
 |---|---|---|---|
@@ -1460,9 +1487,33 @@ primer; SGLang and TensorRT-LLM facts from their READMEs (`sgl-project/sglang`, 
 | Hardware | NVIDIA, AMD, TPU, CPU, XPU, platform plugins | NVIDIA, AMD, Intel Xeon, Google TPU, Ascend (README) | NVIDIA only |
 | Serving entry | `vllm serve` (OpenAI-compatible) | OpenAI-compatible server | `trtllm-serve`; integrates with Dynamo and Triton Inference Server (README) |
 
+What the rows mean mechanically:
+
+- **Prefix reuse: hash chain versus radix tree.** vLLM hashes each full 16-token block once, as tokens arrive (in
+  the EngineCore input thread), and a lookup is one dictionary probe per block until the first miss: cost
+  proportional to the prompt's block count, reuse in whole blocks, and the last partial block always recomputed
+  (Section 4.4). The radix tree of the SGLang paper (arXiv:2312.07104) matches token by token along its edges, so
+  reuse is exact to the token and the sharing structure is explicit: every child shares its parent's prefix. Its
+  cost is a tree walk and node splits on insert on the scheduler's CPU path; eviction is LRU over leaves, which
+  gives the same "tail before root" order vLLM gets by freeing each chain in reverse onto an LRU queue. Whether
+  current SGLang still pages at one token is `(verify)`.
+- **Structured output: overlap versus skipping.** vLLM's lever is overlap: the bitmask is computed on the CPU while
+  the GPU runs the forward (Section 7.3), so a grammar costs almost nothing per step if the mask is ready in time.
+  The compressed-FSM idea from the SGLang paper adds skipping: where the grammar allows only one continuation
+  (a fixed key name, a bracket), several tokens are appended without a model step. Current SGLang backends and
+  whether they still jump forward are `(verify)`.
+- **Execution: JIT versus ahead-of-time.** vLLM compiles with `torch.compile` at startup and caches the result
+  (Section 5.5). TensorRT-LLM historically built a TensorRT engine per model, parallel layout and GPU ahead of time:
+  fast fused kernels, a long build, a rebuild on any change. Its README now leads with a PyTorch-based
+  architecture; how much of the engine-build path remains in a typical deployment is `(verify)`.
+- **Disaggregation: where the transfer hooks live.** In vLLM the KV transfer is a plugin with a scheduler half and a
+  worker half (Section 10.1), so the same engine binary serves prefill, decode or both by configuration. The
+  equivalent seams in SGLang and TensorRT-LLM are `(verify)`.
+
 As a design argument, not a benchmark claim: choose **vLLM** for breadth (models, hardware, a stable OpenAI
 surface, integration points for routers and caches such as KV events, connectors and metrics) and a codebase you
-can read and patch in Python; most orchestration layers (llm-d, Dynamo, KServe) support it first. Choose
+can read and patch in Python; llm-d, Dynamo and KServe all integrate it `(verify: each project's current support
+matrix)`. Choose
 **SGLang** when requests share structure heavily (agents, multi-turn, tree search, many structured calls), where
 a radix tree makes partial-prefix reuse natural; it is also widely used for RL rollouts (README). Choose
 **TensorRT-LLM** on an NVIDIA-only fleet when the last increment of per-GPU performance is worth a vendor-tied
@@ -1486,8 +1537,10 @@ cached prefix, check the whole prompt fits in free blocks, then schedule as many
 chunked prefill: no phases, just requests catching up to their length.
 
 "If a running request needs a block and none is free, we preempt the most recently admitted request, free its blocks
-and put it back at the head of the queue. Freed blocks keep their hashes in an LRU free list, tail of each chain
-first, so a preempted or repeated request usually finds its blocks again.
+and put it back at the head of the queue. It comes back only when its whole sequence fits again, and until then
+nothing queued behind it is admitted. Freed blocks keep their hashes in an LRU free list, tail of each chain first
+in line for reuse, so a repeated prompt finds its blocks again, and a preempted request finds whatever the
+survivors did not reuse in the meantime.
 
 "The GPU side gets only a diff: new requests, new tokens, new block ids. It builds positions and a slot mapping,
 runs a compiled model that replays CUDA graphs (full graphs for pure-decode batches, piecewise around attention
@@ -1496,7 +1549,7 @@ CPU can build grammar masks during the forward. The scheduler appends tokens and
 server detokenizes, checks stop strings and streams SSE.
 
 "Capacity is gpu_memory_utilization times memory, minus weights, activations and graphs, divided by bytes per
-block: about 2,169 blocks, 35k tokens, for an 8B BF16 model on an L4. Latency shape is the token budget;
+block: about 2,360 blocks, 38k tokens, for an 8B BF16 model on an L4. Latency shape is the token budget;
 concurrency is max_num_seqs bounded by that capacity."
 
 ### Drill questions
@@ -1510,19 +1563,26 @@ concurrency is max_num_seqs bounded by that capacity."
    free. The hit rate fell because traffic spreads over more caches, each seeing fewer repeats. The fix is
    prefix-aware routing, not memory.
 3. **Estimate KV capacity for Llama-3.1-8B BF16 on an L4 at defaults.** 2 × 32 × 8 × 128 × 2 B = 128 KiB per token,
-   2 MiB per block. 22.5 GiB × 0.92 = 20.7 GiB, minus 15.0 GiB weights and ~1.5 GiB activations and graphs,
-   leaves ~4.2 GiB: ~2,169 blocks, ~35k tokens. The 131k default context needs 16 GiB for one request, so the
-   engine refuses to start until `--max-model-len` drops (16k gives 2.1× concurrency).
-4. **Why recompute on preemption instead of swapping?** V1's scheduler has no swap path; recompute is one prefill
-   pass, and the victim's full blocks keep their hashes in the free queue, so re-admission usually recomputes one
-   block. A CPU tier exists as a connector (`--kv-offloading-size`), not as preemption.
+   2 MiB per block. 22.5 GiB × 0.92 = 20.7 GiB, minus 15.0 GiB weights and ~1.1 GiB of activations, graphs and
+   non-torch memory (the lab's estimate), leaves ~4.6 GiB: ~2,363 blocks, ~38k tokens. The 131k default context
+   needs 16 GiB for one request, so the engine refuses to start until `--max-model-len` drops (16k gives 2.3×
+   concurrency). The log line `Available KV cache memory` replaces the estimate.
+4. **Why recompute on preemption instead of swapping, and how much does it cost?** V1's scheduler has no swap
+   path; a CPU tier exists as a connector (`--kv-offloading-size`), not as preemption. The victim keeps its token
+   ids, and its full blocks go to the free queue with their hashes, tail first in line. But re-admission needs its
+   whole current sequence to fit, counting its own cached blocks as needed capacity, so under the pressure that
+   caused the preemption it usually waits at the head of the queue (blocking every admission behind it) while the
+   running requests reuse its blocks from the tail. It then recomputes whatever was taken: little if a request
+   finished soon, most of its context if not (Section 3.7).
 5. **A prompt is fully cached. Why are 16 tokens still computed?** The last prompt token must run to produce logits,
    so the hit is capped at `num_tokens − 1`, and hits are whole blocks, so the final block is recomputed.
 6. **Where are stop conditions checked?** EOS, `stop_token_ids`, `max_tokens` and `max_model_len` in the engine
    (`check_stop`); stop strings in the API server's detokenizer, which then aborts the request. A token or two may
    be computed past a stop string.
 7. **Two tenants share a system prompt but use different LoRA adapters. Do they share KV?** No: the adapter name
-   is an extra key in every block hash. With the default `--max-loras 1` they cannot even share a step.
+   is an extra key in every block hash. With the default `--max-loras 1` they cannot even share a step: the second
+   adapter's requests are not admitted while any request on the first is running, so their TTFT includes whole
+   generations of the other tenant, and they can starve under steady first-tenant traffic.
 8. **Does speculative decoding change outputs?** No: acceptance with probability `min(1, p/q)` and residual
    resampling preserve the target distribution (greedy drafts make `q` one-hot; greedy targets reduce to exact
    match). It changes speed: a good win at small batch, shrinking at large batch where verification FLOPs cost.
@@ -1580,9 +1640,14 @@ arXiv:2503.01840; Cai et al., Medusa, arXiv:2401.10774 · Zheng et al., SGLang, 
 DistServe, arXiv:2401.09670; Patel et al., Splitwise, arXiv:2311.18677; Qin et al., Mooncake, arXiv:2407.00079 ·
 Dao, FlashAttention-2, arXiv:2307.08691; Shah et al., FlashAttention-3, arXiv:2407.08608; Ye et al., FlashInfer,
 arXiv:2501.01005 · DeepSeek-AI, DeepSeek-V2 (MLA), arXiv:2405.04434 · Dong et al., XGrammar, arXiv:2411.15100 ·
-Frantar et al., GPTQ, arXiv:2210.17323; Lin et al., AWQ, arXiv:2306.00978; Frantar et al., MARLIN, arXiv:2408.11743.
+Frantar et al., GPTQ, arXiv:2210.17323; Lin et al., AWQ, arXiv:2306.00978; Frantar et al., MARLIN, arXiv:2408.11743 ·
+Sun et al., block verification for speculative decoding, arXiv:2403.10444.
 
 **In this repo**: [`../serving-engine/PRIMER.md`](../serving-engine/PRIMER.md),
+[`../serving-engine/mini-engine-core/minengine/kv.py`](../serving-engine/mini-engine-core/minengine/kv.py) (the same
+cache built from scratch), [`../serving-engine/vllm-serving-lab/servelab/sizing.py`](../serving-engine/vllm-serving-lab/servelab/sizing.py)
+(the budgets of 4.7 and 8.2), [`../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)
+(rooflines, links, storage),
 [`../kv-cache/kv-cache-primer.md`](../kv-cache/kv-cache-primer.md),
 [`../paged-attention/paged-attention-primer.md`](../paged-attention/paged-attention-primer.md),
 [`../flash-attention/flash-attention-primer.md`](../flash-attention/flash-attention-primer.md),
@@ -1597,12 +1662,16 @@ Frantar et al., GPTQ, arXiv:2210.17323; Lin et al., AWQ, arXiv:2306.00978; Frant
 | vLLM state | `main` at `5840d95` (2026-09-25); PyPI latest 0.30.0 (2026-09-22); `torch == 2.13.0` build pin | `main` moves daily; line numbers in `source-map.md` drift |
 | Model Runner V2 | default when supported; README still says "[Experimental]" | defaults and the unsupported-feature list change often |
 | V0 removal | V1 is the only engine; `VLLM_USE_V1` absent | the release that removed V0 is not recorded here |
-| GPU memory seen by CUDA | L4 23,034 MiB; H100 80 GB 81,559 MiB | typical `nvidia-smi` values, not measured in this session |
-| Memory bandwidth | L4 300 GB/s; H100 SXM 3.35 TB/s | spec sheets; used only for floors |
-| Activation and CUDA-graph memory | 1.0 + 0.5 GiB (L4), 2.0 + 1.0 GiB (H100) | assumptions; read `Available KV cache memory` and graph-capture lines from logs |
+| GPU memory seen by CUDA | L4 22.49 GiB; H100 80 GB 79.65 GiB (the serving lab's `sizing.GPUS` table) | typical driver-reported totals, not measured in this session |
+| Memory bandwidth and peaks | L4 300 GB/s, 121 BF16 / 242.5 FP8 dense TFLOP/s; H100 SXM 3.35 TB/s, 989 / 1,979 | spec sheets (`roofline.specs` in layer 01); used only for floors and roofline times |
+| Non-KV overheads in 4.7 | L4 0.42 + 0.5 + 0.2 GiB, H100 1.67 + 0.5 + 0.2 GiB (`servelab.sizing.overhead_estimate`) | estimates; read `Available KV cache memory` and graph-capture lines from logs |
+| Quantized checkpoint layout | FP8 and GPTQ/AWQ keep `embed_tokens`, `lm_head` and norms in BF16; INT4 at 4.16 bits per weight | typical of llm-compressor, GPTQ and AWQ exports; check the checkpoint's `quantization_config` |
+| Link and storage rates | NVLink 4 450 GB/s per direction; storage read 2 GB/s (assumed) | datasheet peak and an assumption; measure achieved rates |
+| Ray vs `mp` step overhead | same `MessageQueue` control plane since `RayExecutorV2` | no measurement here |
 | Same-step prefix hits | blocks are hashed at allocation, so a later request in the same `schedule()` may hit them | inferred from `allocate_slots`; confirm with a test |
 | DeepSeek-V3 MLA shape | 61 layers, latent 512 + RoPE 64 | model config not fetched here |
 | NIXL proxy convention | prefill request sent with `max_tokens = 1` and `do_remote_decode` | proxy and router implementations differ |
 | GGUF and bitsandbytes loading | not in the loader registry at this commit | locate the current path before relying on it |
 | `--enforce-eager` ITL cost | larger on small models than large ones | measure in the serving lab |
-| SGLang and TensorRT-LLM specifics marked `(verify)` | from READMEs only | check their docs and code before a decision |
+| SGLang and TensorRT-LLM specifics marked `(verify)` | from READMEs and the SGLang paper only | check their docs and code before a decision |
+| Orchestrator support | llm-d, Dynamo and KServe integrate vLLM | from FACTS.md (Dynamo) and project descriptions; check each support matrix |

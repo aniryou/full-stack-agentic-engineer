@@ -76,11 +76,14 @@ def build_profile(model: str = "qwen2.5-0.5b-instruct", gpu: str = "T4", *, dtyp
                   quantization: str | None = None, kv_cache_dtype: str = "auto",
                   gpu_memory_utilization: float = 0.92, max_model_len: int = 4096, block_size: int = 16,
                   mfu: float = 0.5, bw_efficiency: float = 0.8, overhead_ms: float = 4.0,
+                  int4_compute_efficiency: float = 1.0,
                   num_blocks: int | None = None, name: str | None = None) -> EngineProfile:
     """A profile from a model config and a GPU datasheet, via :func:`servelab.sizing.size`.
 
     FP8 (W8A8) doubles tensor-core FLOP/s on GPUs that have FP8 units; int4 weight-only formats
-    (AWQ/GPTQ) shrink bytes but still compute in 16-bit (and pay ~10% dequantization)."""
+    (AWQ/GPTQ) shrink bytes but still compute in 16-bit. What dequantization costs a prefill is
+    kernel-dependent (Marlin-style kernels hide most of it at large batch; verify on yours), so
+    it is an explicit assumption: ``int4_compute_efficiency`` (1.0 = no penalty, the default)."""
     m = sizing.load_config(model)
     g = sizing.gpu(gpu)
     rep = sizing.size(m, g, dtype=dtype, quantization=quantization, kv_cache_dtype=kv_cache_dtype,
@@ -90,7 +93,7 @@ def build_profile(model: str = "qwen2.5-0.5b-instruct", gpu: str = "T4", *, dtyp
     if quantization in ("fp8", "w8a8") and g.fp8_tflops:
         tflops = g.fp8_tflops
     elif quantization in ("awq", "gptq", "int4"):
-        tflops *= 0.9
+        tflops *= int4_compute_efficiency
     return EngineProfile(
         name=name or f"{g.name.lower()}-{m.name.split('/')[-1].lower()}", model=m.name,
         weight_bytes=rep.weights_bytes, active_params=float(sizing.param_count(m).active),
@@ -266,8 +269,10 @@ class Scheduled:
 class Plan:
     items: list
     preempted: list
-    prefix_queries: int = 0
+    prefix_queries: int = 0          # first admissions only (vllm:prefix_cache_queries)
     prefix_hits: int = 0
+    preempted_prefix_queries: int = 0   # re-admissions after preemption (kept apart, as vLLM does)
+    preempted_prefix_hits: int = 0
 
     @property
     def empty(self) -> bool:
@@ -418,8 +423,14 @@ class FakeEngine:
             seq.blocks += self.pool.allocate(math.ceil((hit_tokens + n) / bs) - len(seq.blocks))
             seq.num_computed, seq.num_registered, seq.status = hit_tokens, len(hits), "running"
             if c.enable_prefix_caching:
-                plan.prefix_queries += seq.num_tokens
-                plan.prefix_hits += hit_tokens
+                # vLLM counts a re-admitted (preempted) request separately, not in
+                # vllm:prefix_cache_queries/hits: it would mostly re-hit its own blocks
+                if seq.preemptions == 0:
+                    plan.prefix_queries += seq.num_tokens
+                    plan.prefix_hits += hit_tokens
+                else:
+                    plan.preempted_prefix_queries += seq.num_tokens
+                    plan.preempted_prefix_hits += hit_tokens
             if seq.first_scheduled is None:
                 seq.first_scheduled, seq.cached_tokens = now, hit_tokens
             self.running.append(seq)

@@ -156,6 +156,12 @@ class Replica:
     def idle(self) -> bool:
         return not self.waiting and not self.running
 
+    def prefill_backlog(self) -> int:
+        """Uncached prompt tokens this replica still has to prefill (queued requests: minus their cached prefix)."""
+        owed = sum(s.target - s.computed for s in self.running if s.computed < s.target)
+        return owed + sum(max(0, s.target - s.computed - (0 if s.kv_ready else self.cached_tokens(s.req)))
+                          for s in self.waiting)
+
     def enqueue(self, req, now, kv_ready=False):
         if -(-(req.prompt + req.output) // self.p.block) > self.p.kv_blocks:
             raise ValueError(f"request {req.rid} needs more KV than replica {self.rid} has")

@@ -17,7 +17,8 @@ both: nothing here imports the core.
 - `igwlab/autoscale.py` — the Kubernetes HPA recommender ported line by line from
   kube-controller-manager v1.34, plus an HPA manifest generator and a simulated pool with cold starts.
 - `igwlab/bench.py` — a shared-prefix, multi-turn agentic workload and a streaming load generator.
-- `deploy/` — docker compose, kind + llm-d Router, and GKE (Terraform + manifests).
+- `deploy/` — docker compose (CPU), kind + llm-d Router (CPU), real vLLM on any GPU box, and GKE
+  (Terraform + manifests).
 
 ## Quick start (T0: laptop or Colab CPU, no GPU, no Docker)
 
@@ -51,7 +52,7 @@ never as GPU numbers.
 | 01 | `01_router_in_process` | T0 | prefix hashing and the index, queue/KV scores, the weighted pick; why round-robin loses on agent traffic (measured) | §1 Why a layer above the engine, §2 Routing signals and algorithms |
 | 02 | `02_scorer_weights_and_hot_prefixes` | T0 | the locality-vs-load trade-off in numbers, hot prefixes, the scrape-lag herd, choosing an affinity threshold, saturation shedding | §2, §3 Flow control and priorities |
 | 03 | `03_autoscaling_recommender` | T0 | the exact HPA algorithm (tolerance, stabilization, policies, unready pods); which vLLM signals to scale on and why queue alone collapses | §4 Autoscaling |
-| 04 | `04_local_stack_with_llm_d` | T0 walkthrough / T1-local (Docker, kind; CPU) | InferencePool semantics, the llm-d Router standalone mode, the simulator's latency model; benchmarks a running stack if there is one | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
+| 04 | `04_local_stack_with_llm_d` | T0 walkthrough; T0 + Docker (CPU: compose or kind); **T1/T2** with a GPU (real vLLM, `deploy/any-gpu`) | InferencePool semantics, the llm-d Router standalone mode, what the EPP reads that the lab router does not, the simulator's latency model; benchmarks a running stack, or the lab router in front of real vLLM | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
 | 05 | `05_gke_inference_gateway` | T3 (offline plan/inspect is T0) | the GKE Inference Gateway object graph, CRD validation, GMP → HPA plumbing, what an hour costs | §9, §10 |
 
 Every notebook opens with "The one-minute version", works examples, has 4–5 exercises each followed
@@ -65,36 +66,53 @@ changes into this directory and `pip install -e .`s it.
 |---|---|---|
 | `router/tokens.py` | ~60 | a router "tokenizes" by packing request bytes into 4-byte pseudo-tokens (the EPP's `estimate` backend) |
 | `router/prefix.py` | ~210 | chained block hashes + a per-endpoint LRU index; the match is the count of leading blocks held |
-| `router/datalayer.py` | ~160 | scraped vLLM metrics (lagged) vs router-local in-flight counters (instant, partial) |
+| `router/datalayer.py` | ~170 | scraped vLLM metrics (lagged) vs router-local in-flight counters (instant, partial) |
 | `router/plugins.py` | ~470 | producers, filters, scorers, pickers with upstream types, parameters and formulas |
 | `router/config.py` | ~260 | `EndpointPickerConfig`: parse, validate, inject upstream defaults, export for the real EPP |
 | `router/scheduler.py` | ~110 | one scheduling cycle and an explainable per-scorer decision table |
 | `router/server.py` | ~280 | the proxy: admission (shed priority < 0 at saturation), dispatch, streaming, metrics |
 | `fakebackend.py` | ~540 | a replica is a cache with a queue: TTFT = queueing + prefill of *uncached* tokens |
-| `autoscale.py` | ~430 | the HPA as a proportional controller with guard rails, exactly |
-| `bench.py` | ~310 | agent traffic is prefix-heavy; measure TTFT, hit rate and the per-replica split |
+| `autoscale.py` | ~470 | the HPA as a proportional controller with guard rails, exactly; a queue target from Little's law |
+| `bench.py` | ~340 | agent traffic is prefix-heavy; measure TTFT, hit rate (or `n/a` when the engine does not report it) and the per-replica split |
 | `k8s.py` | ~210 | the Gateway-mode object graph, validated offline against upstream CRD schemas |
-| `stack.py` | ~120 | backends + router in one process on free ports, usable from notebooks and tests |
+| `stack.py` | ~140 | backends + router in one process on free ports — or the router alone in front of servers you already run (T1: real vLLM) |
 | `promtext.py` | ~310 | Prometheus text, counters vs gauges, `histogram_quantile` |
 
-### How the router maps to llm-d (Sep 2026, llm-d-router v0.10)
+### How the router maps to llm-d (llm-d-router v0.10.0, the pinned release)
 
 | Upstream | Here | Notes |
 |---|---|---|
 | Envoy (standalone) or cloud L7 LB (Gateway mode) + ext-proc | `router/server.py` | one process proxies *and* picks; response header `x-gateway-destination-endpoint` |
 | `token-producer` (`estimate`) | `router/tokens.py` | same 4-byte packing of tools + role + content |
-| `approx-prefix-cache-producer` | `ApproxPrefixCacheProducer` | chained 64-bit hashes seeded by model + cache salt, block size ≥ 64 tokens, LRU 31,250/endpoint, tail-first insert, greedy match |
+| `approx-prefix-cache-producer` | `ApproxPrefixCacheProducer` | chained 64-bit hashes seeded by model + cache salt, block size ≥ 64 tokens, LRU 31,250/endpoint, greedy match; the lab inserts tail-first (see below) |
 | `metrics-data-source` + `core-metrics-extractor` | `router/datalayer.py` | `vllm:num_requests_waiting/running`, `kv_cache_usage_perc`, `lora_requests_info`, `cache_config_info`; 50 ms default |
-| `prefix-cache-scorer`, `queue-scorer`, `kv-cache-utilization-scorer`, `running-requests-size-scorer`, `active-request-scorer`, `token-load-scorer`, `lora-affinity-scorer` | `router/plugins.py` | formulas pinned in `tests/test_plugins.py` |
+| `prefix-cache-scorer`, `queue-scorer`, `kv-cache-utilization-scorer`, `running-requests-size-scorer`, `active-request-scorer`, `token-load-scorer`, `lora-affinity-scorer` | `router/plugins.py` | formulas pinned in `tests/test_plugins.py`; like upstream, a never-scraped endpoint has zero metrics and so looks idle; `token-load-scorer` adds the request's own uncached tokens per endpoint |
+| `inflight-load-producer` | `InFlightLoadProducer` | uncached tokens = (total − matched blocks) × block size + tail, as upstream |
 | `utilization-filter`, `prefix-cache-affinity-filter` | `router/plugins.py` | affinity filter supports `ttftSource: prefillThroughput` only |
-| `max-score-picker`, `random-picker`, `weighted-random-picker` | `router/plugins.py` | ties rotate by a request counter over a name-sorted list, so *no scorers* = round-robin here; upstream's list is map-ordered, so its ties are effectively random |
+| `max-score-picker`, `random-picker`, `weighted-random-picker` | `router/plugins.py` | see ties below |
 | legacy admission + `utilization-detector` | `Router.pool_saturation` | priority < 0 → 429 when saturation ≥ 1.0 (the lab also sets `x-llm-d-request-dropped-reason: rejected-saturated`, the reason string flow control uses) |
 | `InferenceObjective` priority | `RouterSettings.objectives` | selected by header `x-llm-d-inference-objective` |
 
-Deliberate differences: one scheduling profile only (no P/D disaggregation); flow-control *queueing*
-(`featureGates: [flowControl]`) is accepted but not implemented (the legacy shedding applies); the
-prefix index may take a lab-only `ttlSeconds` (stripped by `PickerConfig.to_upstream()`); auto-tuned
-LRU capacity is converted to index-block units (upstream uses the engine's block count directly).
+Deliberate differences (each also stated in the module that implements it):
+
+- **One scheduling profile** only (no P/D disaggregation).
+- **No flow control.** `featureGates: [flowControl]` is accepted with a warning (the loader, the
+  CLI and `Router` all print it; `describe()` shows it): no router-side queues, priority bands or
+  TTLs — the legacy shedding applies. The real EPP queues by priority with the gate on.
+- **Ties rotate.** `max-score-picker` rotates each tie by a per-request counter over a name-sorted
+  list, so *no scorers* = exact round-robin. v0.10.0 shuffles the candidates at random before a
+  stable sort, so its ties are uniformly random (main, after v0.10.0, rotates over a map-ordered list).
+- **Tail-first prefix insertion.** The lab inserts a prompt's block hashes tail-first, so a prompt's
+  head is evicted last and the greedy match never undercounts; that is llm-d-router *main* after
+  v0.10.0. v0.10.0 inserts head-first: under LRU pressure it evicts heads first and its greedy scan
+  can report 0 for an endpoint that holds most of the prompt (`PrefixIndex(head_first=True)`
+  reproduces it; `tests/test_prefix_and_tokens.py` pins both).
+- **Data-parallel ranks are summed.** The lab sums queue/running over a pod's `engine` label and takes
+  the maximum KV usage; the EPP reads one series per metric (the first, as vLLM sets no timestamps).
+  `extract_vllm(fam, aggregate="first")` reproduces the EPP.
+- **Lab-only parameters:** the prefix index may take `ttlSeconds` (stripped by
+  `PickerConfig.to_upstream()`); auto-tuned LRU capacity is converted to index-block units (upstream
+  uses the engine's block count directly).
 
 Presets (`igwlab/configs/`, loadable by name): `round-robin`, `default-weighted` (the Helm chart
 default: prefix ×3, queue ×2, KV ×2), `prefix-only`, `load-only`, `queue-only`, `active-requests`,
@@ -121,16 +139,18 @@ curl -s localhost:9000/v1/chat/completions -H 'Content-Type: application/json' \
 
 | Path | Tier | What runs | Cost | README |
 |---|---|---|---|---|
-| `deploy/local` | T0/T1 (Docker, CPU) | 3 × `llm-d-inference-sim` (or the fake) + the lab router + Prometheus | free | [`deploy/local/README.md`](deploy/local/README.md) |
-| `deploy/kind` | T1-local (Docker, kind, CPU) | 3 simulator pods + **llm-d Router** standalone (EPP + Envoy) via Helm | free | [`deploy/kind/README.md`](deploy/kind/README.md) |
-| `deploy/gcp/terraform` | T3 | zonal GKE, Gateway API, proxy-only subnet, L4 Spot pool 0→2, Managed Prometheus | ~$0.16/h idle, ~$0.44/h with one L4 Spot node (assumed prices, verify) | [`deploy/gcp/terraform/README.md`](deploy/gcp/terraform/README.md) |
-| `deploy/gke` | T3 | vLLM on L4, EPP + InferencePool + objectives (Helm), Gateway + HTTPRoute, HPA on vLLM's queue | as above | [`deploy/gke/README.md`](deploy/gke/README.md) |
+| `deploy/local` | T0 + Docker (CPU) | 3 × `llm-d-inference-sim` (or the fake) + the lab router + Prometheus | free | [`deploy/local/README.md`](deploy/local/README.md) |
+| `deploy/kind` | T0 + Docker (CPU, kind) | 3 simulator pods + **llm-d Router** standalone (EPP + Envoy) via Helm | free | [`deploy/kind/README.md`](deploy/kind/README.md) |
+| `deploy/any-gpu` | T1/T2 (real GPU, no cloud account) | 2+ real vLLM replicas (`Qwen2.5-0.5B-Instruct`) from pip or Docker; the lab router in front; notebook 04's T1 cells measure them | Colab/Kaggle T4 free; rented 24 GB GPU ~$0.3–0.7/h (verify) | [`deploy/any-gpu/README.md`](deploy/any-gpu/README.md) |
+| `deploy/gcp/terraform` | T3 | zonal GKE, Gateway API, proxy-only subnet, L4 Spot pool 0→2, Managed Prometheus | ~$0.16/h with the GPU pool at 0, ~$0.44/h with one L4 Spot node (assumed prices, verify) | [`deploy/gcp/terraform/README.md`](deploy/gcp/terraform/README.md) |
+| `deploy/gke` | T3 | vLLM on L4, EPP + InferencePool + objectives (Helm), Gateway + HTTPRoute, HPA on vLLM's waiting **and** running requests | ~$0.44/h even when idle while installed (`minReplicas: 1` keeps one L4 node) | [`deploy/gke/README.md`](deploy/gke/README.md) |
 
 Prices and GPU availability for GCP and non-GCP options: [`../../../COMPUTE.md`](../../../COMPUTE.md).
-None of the Docker, kind or GKE paths were executed while this lab was written (no Docker daemon or
-cloud access); they are correct by construction: `bash -n`, `DRY_RUN=1`, Terraform `validate`,
-`kubernetes-validate --strict -k 1.34.0` for core kinds, and CRD-schema checks for the rest
-(`tests/test_manifests.py`).
+None of the Docker, kind, GPU or GKE paths were executed while this lab was written (no Docker
+daemon, GPU or cloud access); they are correct by construction: `bash -n`, `DRY_RUN=1`, Terraform
+`validate`, `kubernetes-validate --strict -k 1.34.0` for core kinds, and CRD-schema checks for the
+rest (`tests/test_manifests.py`). The T1 cells of notebook 04 use the same router and bench code
+the T0 tests exercise, pointed at the servers in `IGW_BACKENDS`.
 
 ## Pinned versions (verify before relying on them; Sep 2026)
 
@@ -140,12 +160,13 @@ cloud access); they are correct by construction: `bash -n`, `DRY_RUN=1`, Terrafo
 | Gateway API Inference Extension (InferencePool v1 CRD) | v1.6.2 | kind/gke scripts; GKE ≥ 1.34.0-gke.1626000 manages it |
 | Gateway API (Gateway, HTTPRoute schemas) | v1.6.2 standard | `igwlab/crds/` |
 | llm-d-inference-sim | v0.11.2 | compose, kind |
-| vLLM | `vllm/vllm-openai:v0.29.0`, model `Qwen/Qwen2.5-1.5B-Instruct` | gke/vllm.yaml |
+| vLLM | `vllm/vllm-openai:v0.30.0` (PyPI 0.30.0, 2026-09-22), models `Qwen/Qwen2.5-1.5B-Instruct` (GKE) and `Qwen/Qwen2.5-0.5B-Instruct` (any-gpu) | gke/vllm.yaml, any-gpu |
 | Prometheus | v3.15.0 | compose |
 | kind node image | `kindest/node:v1.34.0` | kind-config.yaml |
 | Terraform / google provider | ≥ 1.9 / ≥ 8.0 (validated with 8.4.0) | gcp/terraform |
 | GKE Gateway classes | `gke-l7-regional-external-managed` (internal: `gke-l7-rilb`) | gke/gateway.yaml |
-| HPA metric name via the Custom Metrics Stackdriver Adapter | `prometheus.googleapis.com\|vllm:num_requests_waiting\|gauge` | gke/hpa.yaml |
+| HPA metric names via the Custom Metrics Stackdriver Adapter | `prometheus.googleapis.com\|vllm:num_requests_waiting\|gauge`, `…\|vllm:num_requests_running\|gauge` | gke/hpa.yaml |
+| Custom Metrics Stackdriver Adapter manifest | k8s-stackdriver commit `9500033f` (master, 2026-09-26; image v0.16.11-gke.0) | gke/install.sh, uninstall.sh |
 
 ## Regenerating notebooks and snapshots
 

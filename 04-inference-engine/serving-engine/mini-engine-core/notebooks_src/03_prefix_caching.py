@@ -19,7 +19,9 @@
 # `04-inference-engine/paged-attention/` (block tables, copy-on-write).
 
 # %%
-from minengine import Engine, SamplingParams, TinyLM, block_hashes, encode, hash_block
+import math
+
+from minengine import Engine, SamplingParams, TinyLM, block_hashes, encode, hash_block, perf
 from minengine.kv import KVCacheManager
 
 model = TinyLM()
@@ -61,7 +63,29 @@ print("\nstats:", eng.kv.stats)
 # refcount of 3. They only prefill their own question. Hits are counted in tokens, which is exactly what vLLM
 # reports as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
 #
-# ## Worked example 3 — freed blocks keep producing hits, until memory is needed
+# ## Worked example 3 — a burst: three requests in the same step
+# An agent fans out three tool calls at once, all behind the same system prompt, so all three are admitted in
+# **one** step. A block is published when the scheduler **schedules** the tokens that fill it (vLLM does it in
+# `allocate_slots`), so the second and third requests adopt `r0`'s blocks while `r0` is still computing them.
+
+# %%
+eng = Engine(model, num_blocks=128, block_size=16, max_num_batched_tokens=1024)
+for q in ["User: where is my order?", "User: I want a refund.", "User: my parcel is damaged."]:
+    eng.add_request(SYSTEM + q, greedy)
+eng.step()
+print(eng.trace())
+print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r2"]], "| blocks in use:",
+      eng.kv.num_blocks - eng.kv.num_free_blocks)
+
+# %% [markdown]
+# One step: `r0` prefills its whole prompt, `r1` and `r2` only what follows token 176. That is safe because the
+# forward pass writes each layer's K/V for the *whole* step before any request attends at that layer — the model
+# code does `cache.write(...)` for all tokens, then the per-request attention. It is also why the scheduler
+# publishes a running request's blocks only once no request can be preempted in that step any more: a request
+# removed from the batch must not publish blocks it will never compute. An engine that published blocks only
+# after the step would make a burst compute the shared prefix once per request, and hold one copy per request.
+#
+# ## Worked example 4 — freed blocks keep producing hits, until memory is needed
 
 # %%
 eng = Engine(model, num_blocks=24, block_size=16, max_num_batched_tokens=512)
@@ -82,7 +106,7 @@ print(f"   {o.num_cached_tokens} tokens from cache now")
 # memory nobody else needs yet. Note *which* 32 tokens survived the big request: the **head** of the system
 # prompt. Requests free their blocks tail first, so the most widely shared blocks are the last to go.
 #
-# ## Worked example 4 — why the parent must be in the name
+# ## Worked example 5 — why the parent must be in the name
 # Replace the hash with one that ignores the parent. Two prompts with the same tokens in their second block —
 # after different first blocks — now share a name, and the engine serves K/V computed under the wrong prefix.
 # This tiny model's greedy tokens barely depend on context, so compare what the engine *computed*: the logprob of
@@ -114,6 +138,26 @@ for label, fn in [("chained   ", hash_block), ("parentless", parentless)]:
 # wrong outputs (with a real model, visibly wrong text). That is why engines use a chained, collision-resistant hash
 # (vLLM defaults to SHA-256 as of Sep 2026, verify) and why tenant isolation adds a salt to the chain's root
 # (`cache_salt` in vLLM): without it, a timing side channel could reveal whether someone else sent a prefix.
+#
+# ## Worked example 6 — what it buys on a real GPU (SIMULATED)
+# 60 requests whose 2,000–2,200-token prompts share their first 1,800 tokens (a long system prompt with tool
+# schemas), H100 + Llama-3.1-8B, through `perf.simulate` — this package's scheduler and KV manager on a roofline
+# clock. First arriving at 6/s, then all at once.
+
+# %%
+g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
+for rate in [6, math.inf]:
+    w = perf.Workload(n_requests=60, rate=rate, prompt_len=(2000, 2200), output_len=(40, 80), shared_prefix=1800)
+    for caching in [True, False]:
+        label = f"{'6/s' if rate == 6 else 'burst'}, caching {'on' if caching else 'off'}"
+        print(perf.simulate(g, m, w, enable_prefix_caching=caching, label=label).summary())
+
+# %% [markdown]
+# At 6/s every request after the first skips 1,792 of its ~2,100 prompt tokens: TTFT p50 drops about 6×, and
+# because the shared blocks are held once, not 60 times, peak KV use falls too. In the burst the saving is larger
+# still: without caching, 60 copies of the same prefill queue behind one another. The hit rate (84%) is what
+# `vllm:prefix_cache_hits / vllm:prefix_cache_queries` would show. Assumptions in, estimates out — the lab
+# measures the real thing (`vllm-serving-lab`, notebook `04_prefix_caching_for_agents`).
 #
 # ## Exercise 3.1 — build the chain
 # Write `chain_names(tokens, block_size)`: the names of the **full** blocks, each `hash_block(parent, block_tokens)`

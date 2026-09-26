@@ -1,7 +1,15 @@
-# Scale the vLLM Deployment on its queue, not on GPU utilization.
-# Metric: the vLLM gauge vllm:num_requests_waiting, collected by Managed Service for Prometheus
-# (podmonitoring-vllm.yaml) and served to the HPA by the Custom Metrics Stackdriver Adapter
-# (install.sh step 6). Target: 5 waiting requests per pod on average (see notebook 03).
+# Scale the vLLM Deployment on two per-pod demand signals from vLLM's own /metrics, never on GPU
+# utilization. The HPA computes one proposal per metric and takes the larger (notebook 03):
+#   vllm:num_requests_waiting  reacts to bursts. Target 5 comes from Little's law: a request that finds
+#       N waiting waits about N x S / slots for a batch slot. With a 0.5 s queueing budget, 32 slots
+#       (--max-num-seqs in vllm.yaml) and S ~ 3 s per request in the batch: 0.5 x 32 / 3 = 5.3 -> 5.
+#       S is an ASSUMPTION for Qwen2.5-1.5B on an L4 (~200 output tokens at ~15 ms) -- measure it
+#       (vllm:e2e_request_latency_seconds) and recompute: igwlab waiting_target, notebook 03 Exercise 3.4.
+#   vllm:num_requests_running  holds capacity once the queue has drained: on the queue alone the HPA
+#       proposes the minimum at full load and the pool collapses. Target 24 = 75 % of the 32 slots;
+#       calibrate it with a load test (the highest per-pod value that still meets the TTFT SLO).
+# Both series reach the HPA through Managed Service for Prometheus (podmonitoring-vllm.yaml) and the
+# Custom Metrics Stackdriver Adapter (install.sh step 6).
 # minReplicas >= 1: scale-to-zero needs the HPAScaleToZero alpha gate (off in 1.34) or KEDA.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -13,7 +21,7 @@ spec:
     kind: Deployment
     name: vllm-qwen
   minReplicas: 1
-  maxReplicas: 2
+  maxReplicas: 2                       # = the Terraform GPU pool's max nodes (one L4 per pod)
   metrics:
     - type: Pods
       pods:
@@ -22,13 +30,20 @@ spec:
         target:
           type: AverageValue
           averageValue: "5"
+    - type: Pods
+      pods:
+        metric:
+          name: prometheus.googleapis.com|vllm:num_requests_running|gauge   # VERIFY adapter naming
+        target:
+          type: AverageValue
+          averageValue: "24"
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
       selectPolicy: Max
       policies:
         - type: Pods
-          value: 1                     # a new L4 node + model load takes minutes: add one at a time
+          value: 1                     # each new pod needs a new L4 Spot node (quota, obtainability): one at a time
           periodSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 300

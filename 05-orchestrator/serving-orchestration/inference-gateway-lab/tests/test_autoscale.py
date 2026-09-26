@@ -3,7 +3,8 @@ import pytest
 
 from igwlab.autoscale import (DEFAULT_BEHAVIOR, Behavior, FluidPool, HPARecommender, MetricError, PodSample,
                               ScalingPolicy, ScalingRules, Tolerances, external_per_pod_replicas, hpa_manifest,
-                              milli, plain_metric_replicas, recommend_from_scrapes, simulate, usage_ratio_replicas)
+                              milli, plain_metric_replicas, recommend_from_scrapes, simulate, usage_ratio_replicas,
+                              waiting_target)
 
 
 def pods(*vals, pending=0):
@@ -130,3 +131,14 @@ def test_recommendation_from_scraped_vllm_metrics():
     # waiting: ratio 10/5 = 2; p2 missing counts as 0 on a scale-up: 6.666/5 = 1.333 -> ceil(3.9996) = 4
     # running: ratio 8/6 = 1.333; with p2 at 0 it becomes 5.333/6 = 0.889 -> direction would flip -> keep 3
     assert per["vllm:num_requests_waiting"][0] == 4 and per["vllm:num_requests_running"][0] == 3 and best == 4
+
+
+def test_waiting_target_from_littles_law():
+    assert waiting_target(0.5, 3.0, 32) == 5              # floor(0.5 x 32 / 3) = floor(5.33)
+    assert waiting_target(0.3, 0.2, 8) == 12              # floor(12.0): the fake engine's shape
+    assert waiting_target(0.05, 4.0, 8) == 1              # never below 1
+
+
+def test_manifest_with_two_metrics():
+    m = hpa_manifest("v", "v", "a", 5, extra_metrics={"b": 24})
+    assert [(x["pods"]["metric"]["name"], x["pods"]["target"]["averageValue"]) for x in m["spec"]["metrics"]] == [("a", "5"), ("b", "24")]

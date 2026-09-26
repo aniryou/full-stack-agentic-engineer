@@ -21,6 +21,7 @@ import numpy as np
 from .kv import KVCacheManager
 from .sampler import SamplingParams
 from .scheduler import Request, Scheduler, SchedulerConfig
+from .spec import expected_tokens
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,21 @@ def knee_tokens(gpu: GPU, llm: LLM, flop_eff=1.0, bw_eff=1.0) -> float:
     a matmul weight (KV ignored): 2 P n / PEAK = P b / BW -> n = PEAK x b / (2 BW) - the ridge point in
     tokens. H100 bf16: 989e12 x 2 / (2 x 3.35e12) = 295 (the real flip for an 8B model is a little later)."""
     return gpu.peak_flops * llm.compute_scale * flop_eff * llm.bytes_per_param / (2 * gpu.hbm_bw * bw_eff)
+
+
+def spec_speedup(gpu: GPU, target: LLM, draft: LLM, batch: int, ctx: int, alpha: float, k: int,
+                 draft_overhead_s: float = 0.0005, **kw) -> float:
+    """SIMULATED gain of draft-model speculation over plain decoding, `batch` requests at context `ctx`.
+    Plain decoding: one target step per token. One round: k draft forwards - inside ONE engine step, so
+    each pays only `draft_overhead_s` (a CUDA-graph replay and a draft sample; an assumption) instead of
+    the step's overhead - plus one target verify pass of k + 1 tokens per request with logits at all
+    k + 1 positions; it emits expected_tokens(alpha, k) per request. kw: step_cost's efficiencies and
+    the engine-step overhead_s, paid once per round."""
+    base = step_time(gpu, target, [(ctx, 1)] * batch, **kw)
+    drafts = sum(step_time(gpu, draft, [(ctx + j, 1)] * batch, **{**kw, "overhead_s": draft_overhead_s})
+                 for j in range(k))
+    verify = step_time(gpu, target, [(ctx, k + 1, k + 1)] * batch, **kw)
+    return expected_tokens(alpha, k) * base / (drafts + verify)
 
 
 def tp_allreduces(n_layers: int, d_model: int, tokens: int, bytes_per_value: float = 2) -> tuple:

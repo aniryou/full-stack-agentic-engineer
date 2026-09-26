@@ -1,6 +1,6 @@
 {
  "description": "Low-priority job evicted for a high-priority one in the same queue (s4, a-low-2).",
- "source": "Workload trimmed to the fields that matter; condition text in the format of Kueue v0.19's flavor assigner/TAS as predicted by k8sgpu.kindsim for the kind lab (sample output in the documented format (illustrative))",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kueue",
   "category": "preempted"

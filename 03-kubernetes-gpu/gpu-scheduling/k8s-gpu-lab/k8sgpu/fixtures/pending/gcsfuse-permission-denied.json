@@ -1,6 +1,6 @@
 {
  "description": "vLLM pod bound to an L4 node but stuck in ContainerCreating: the GCS FUSE volume cannot be mounted.",
- "source": "GKE event/condition text in the documented format (sample output in the documented format (illustrative); verify against your cluster)",
+ "source": "GKE event/condition text written in the documented format - sample output in the documented format (illustrative); verify against your cluster",
  "expect": {
   "gate": "kubelet",
   "category": "volume-mount"

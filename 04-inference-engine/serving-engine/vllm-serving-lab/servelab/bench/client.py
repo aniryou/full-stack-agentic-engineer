@@ -1,24 +1,32 @@
 """client.py — one streaming request, timed the way ``vllm bench serve`` times it.
 
 One idea: TTFT and ITL are properties of the *stream*, so they are measured at the client from
-the arrival time of each server-sent-events chunk:
+the arrival time of each server-sent-events chunk that carries a token:
 
-    TTFT = t(first chunk carrying ``choices``) - t(send)
-    ITL  = the gaps between consecutive such chunks
-    E2E  = t(last such chunk) - t(send)
+    token chunk = a chunk with ``choices`` (text, content or a finish_reason), except a chat
+                  role-only chunk (see below)
+    TTFT = t(first token chunk) - t(send)
+    ITL  = the gaps between consecutive token chunks
+    E2E  = t(last token chunk) - t(send)
     TPOT = (E2E - TTFT) / (output_tokens - 1)      per request; output_tokens from ``usage``
 
-These are the definitions in vLLM's ``vllm/benchmarks/lib/endpoint_request_func.py``. Two
-consequences worth saying out loud: TTFT includes network, HTTP, tokenization and *queueing*
-(the server-side histogram ``vllm:time_to_first_token_seconds`` starts at arrival in the engine);
-and ITL is per *chunk*, so with speculative decoding or ``--stream-interval`` > 1 one chunk can
-carry several tokens — then ITL and TPOT differ, and TPOT is the per-token number.
+These are the definitions in vLLM's ``vllm/benchmarks/lib/endpoint_request_func.py`` (v0.30.0),
+with one deliberate difference. Two consequences worth saying out loud: TTFT includes network,
+HTTP, tokenization and *queueing* (the server-side histogram ``vllm:time_to_first_token_seconds``
+starts at arrival in the engine); and ITL is per *chunk*, so with speculative decoding or
+``--stream-interval`` > 1 one chunk can carry several tokens — then ITL and TPOT differ, and TPOT
+is the per-token number.
 
-One deliberate difference: a chat stream opens with a role-only chunk (``delta: {"role":
-"assistant", "content": ""}``). vLLM sends it together with the first token, and its benchmark
-counts it as a token, which adds a ~0 ms gap to every request's ITL list. Here role-only chunks
-are not token events, so TTFT is unchanged and ITL has no artifact. Pass ``ttft_on_content=True``
-to also ignore empty-text chunks before the first real token (servers that send one early).
+The difference: a chat stream opens with a role-only chunk (``delta: {"role": "assistant",
+"content": ""}``), which vLLM sends in the same engine iteration as, and just before, the first
+content chunk. ``vllm bench serve`` treats every chunk with ``choices`` as a stream chunk, so the
+role chunk sets its TTFT and the first content chunk adds a ~0 ms entry to that request's ITL
+list (its token count comes from ``usage``, so TPOT and E2E are unaffected). Here the role-only
+chunk is skipped: TTFT is the same to within microseconds, each chat request's ITL list has one
+fewer, near-zero entry, so chat ITL mean and low percentiles read slightly higher (by ~1/n for n
+output tokens). For ``/v1/completions`` the definitions are identical. Pass
+``ttft_on_content=True`` to also ignore empty-text chunks before the first real token (servers
+that send one early).
 """
 from __future__ import annotations
 

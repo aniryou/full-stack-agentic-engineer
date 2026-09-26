@@ -8,8 +8,8 @@ free ``nvidia.com/gpu``). Pods that bypass Kueue meet only the second decision.
 
 This is a small, readable model of both, sized for the kind lab (one GPU flavor per queue,
 whole-GPU requests, one resource that matters). It follows Kueue v0.19's documented rules:
-classic preemption (candidates from other queues first, then lowest priority, then most
-recently admitted; greedy, then minimised), TAS *BestFit* for required/preferred levels and
+classic preemption (candidates already being evicted first, then other queues, then lowest
+priority, then most recently admitted; greedy, then minimised), TAS *BestFit* for required/preferred levels and
 *LeastFreeCapacity* for workloads with no topology request, and the kube-scheduler's
 ``0/N nodes are available: ...`` message format. It is a predictor, not an emulator: where
 the real system breaks ties randomly (the default scheduler among equal nodes) it says so.
@@ -28,7 +28,7 @@ from .scenarios import FLAVOR, SCENARIOS, Scenario, scenario as get_scenario
 LAB_ROOT = Path(__file__).resolve().parents[1]
 KIND_DIR = LAB_ROOT / "deploy" / "kind"
 CP_TAINT = {"key": "node-role.kubernetes.io/control-plane", "value": "", "effect": "NoSchedule"}
-GPU_TAINT = {"key": m.GPU, "value": "present", "effect": "NoSchedule"}
+GPU_TAINT = dict(m.GPU_TAINT)
 
 
 # ---- the cluster ------------------------------------------------------------------------------
@@ -99,16 +99,11 @@ def nodes_from_k8s(items: Iterable[dict]) -> list[Node]:
 
 # ---- matching helpers (the kube-scheduler's filters, simplified) ---------------------------------
 def tolerates(taint: dict, tolerations: list[dict]) -> bool:
+    """Filter semantics: only NoSchedule/NoExecute taints keep a pod off a node; matching is
+    Kubernetes' own rule (``manifests.toleration_tolerates``)."""
     if taint.get("effect") not in ("NoSchedule", "NoExecute"):
         return True
-    for t in tolerations:
-        if t.get("effect") and t.get("effect") != taint.get("effect"):
-            continue
-        if t.get("operator") == "Exists" and (not t.get("key") or t.get("key") == taint["key"]):
-            return True
-        if t.get("key") == taint["key"] and t.get("value", "") == taint.get("value", ""):
-            return True
-    return False
+    return m.tolerates(taint, tolerations)
 
 
 def untolerated(node: Node, tolerations: list[dict]) -> dict | None:
@@ -147,6 +142,7 @@ class Workload:
     message: str = ""
     preempted: str = ""
     any_node: bool = False            # the default scheduler chose among equal nodes
+    evicting: bool = False            # evicted but still holding quota (never True here: eviction is instant)
 
     @property
     def gpus(self) -> int:
@@ -396,8 +392,28 @@ class Sim:
         return bool(cq) and self.usage(cq.name) + w.gpus <= cq.nominal
 
     def _quota_message(self, w: Workload, text: str) -> str:
+        """The same reason on every pod set (a flavor mismatch or a TAS failure)."""
         names = [ps.name for ps in w.podsets]
         return "; ".join(f"couldn't assign flavors to pod set {n}: {text}" for n in names)
+
+    def _unused_quota_message(self, w: Workload, cq: ClusterQueue, avail: int) -> str:
+        """Kueue's flavor assigner (v0.19 ``assignFlavors``/``fitsResourceQuota``): pod sets are
+        assigned in order, pod sets that share a ``podset-group-name`` together (their requests
+        summed, one status for all members); each is checked as *assumed usage so far + its
+        request* against what is available, and ``Assignment.Message()`` lists only the pod sets
+        that do not fit. Assignment stops at the first group that cannot fit."""
+        groups: dict[str, list[PodSet]] = {}
+        for ps in w.podsets:
+            groups.setdefault(ps.group or f"#{ps.name}", []).append(ps)
+        assumed, parts = 0, []
+        for members in groups.values():
+            val = assumed + sum(p.count * p.gpus for p in members)
+            if val > avail:
+                text = f"insufficient unused quota for {m.GPU} in flavor {cq.flavor}, {val - avail} more needed"
+                parts += [f"couldn't assign flavors to pod set {p.name}: {text}" for p in members]
+                break
+            assumed = val
+        return "; ".join(parts)
 
     def _try_admit(self, w: Workload) -> bool:
         cq = self.cfg.cqs.get(self.cq_of(w) or "")
@@ -422,8 +438,7 @@ class Sim:
         victims: list[Workload] = []
         avail = self.available(cq)
         if w.gpus > avail:
-            quota_msg = self._quota_message(
-                w, f"insufficient unused quota for {m.GPU} in flavor {cq.flavor}, {w.gpus - avail} more needed")
+            quota_msg = self._unused_quota_message(w, cq, avail)
             victims = self._find_victims(w, cq) if w.gpus <= cq.nominal else []
             if not victims:
                 w.message = quota_msg + self._preempted_suffix(w)
@@ -469,8 +484,11 @@ class Sim:
                     cands.append(v)
         if not cands:
             return []
-        # Kueue's CandidatesOrdering: other queues first, then lowest priority, then newest admission
-        cands.sort(key=lambda v: (self.cq_of(v) == cq.name, v.priority, -v.admitted_at))
+        # Kueue's CandidatesOrdering (v0.19 preemption/common/ordering.go): workloads already being
+        # evicted first, then other queues, then (admission fair sharing only) lower LocalQueue
+        # usage, then lowest priority, then newest admission. Eviction is instant in this model,
+        # so the first criterion never separates candidates here, and fair sharing is off.
+        cands.sort(key=lambda v: (not v.evicting, self.cq_of(v) == cq.name, v.priority, -v.admitted_at))
         if all(self.cq_of(v) == cq.name for v in cands):
             targets = self._greedy(w, cq, cands, allow_borrow=True)
         elif self.usage(cq.name) < cq.nominal:

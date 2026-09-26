@@ -1,6 +1,6 @@
 {
  "description": "Spot L4 pool already at max nodes; the autoscaler will not add another.",
- "source": "GKE event/condition text in the documented format (sample output in the documented format (illustrative); verify against your cluster)",
+ "source": "GKE event/condition text written in the documented format - sample output in the documented format (illustrative); verify against your cluster",
  "expect": {
   "gate": "cluster-autoscaler",
   "category": "max-size"

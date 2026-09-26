@@ -421,6 +421,25 @@ def load_fixture(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text())
 
 
+# How a pod names its Kueue Workload (Kueue v0.19.6): TAS-admitted job pods carry the
+# ``kueue.x-k8s.io/workload`` annotation (set on the pod template when the job starts); pods of a
+# pod group or a LeaderWorkerSet group carry ``kueue.x-k8s.io/prebuilt-workload-name`` - as an
+# annotation while the WorkloadIdentifierAnnotations gate is on (beta, default on), else a label.
+WORKLOAD_ANNOTATION = "kueue.x-k8s.io/workload"
+PREBUILT_WORKLOAD = "kueue.x-k8s.io/prebuilt-workload-name"
+
+
+def workload_name_of(pod: dict) -> str | None:
+    meta = pod.get("metadata") or {}
+    ann, labels = meta.get("annotations") or {}, meta.get("labels") or {}
+    return ann.get(WORKLOAD_ANNOTATION) or ann.get(PREBUILT_WORKLOAD) or labels.get(PREBUILT_WORKLOAD)
+
+
+def fixture_label(bundle: dict) -> str:
+    """The provenance line every fixture carries: fixtures are never measured output."""
+    return f"(fixture: {bundle.get('source', 'sample output in the documented format (illustrative)')})"
+
+
 def diagnose_live(pod_name: str, namespace: str, kubectl=None) -> Diagnosis:
     """Collect pod, events, nodes, pods and (if any) the Kueue workload with kubectl, then diagnose."""
     from .kindlab import Kubectl
@@ -429,7 +448,7 @@ def diagnose_live(pod_name: str, namespace: str, kubectl=None) -> Diagnosis:
     events = k.get_json("events", "-n", namespace, "--field-selector", f"involvedObject.name={pod_name}")["items"]
     bundle = {"pod": pod, "events": events, "nodes": k.get_json("nodes")["items"],
               "pods": k.get_json("pods", "-A")["items"]}
-    wl_name = (pod["metadata"].get("annotations") or {}).get("kueue.x-k8s.io/workload")
+    wl_name = workload_name_of(pod)
     if wl_name:
         bundle["workload"] = json.loads(k.run("get", "workloads.kueue.x-k8s.io", wl_name, "-n", namespace,
                                               "-o", "json", quiet=True, check=False) or "null")

@@ -1,10 +1,11 @@
-# deploy/kind — the real llm-d Router on a laptop (T1-local, CPU only)
+# deploy/kind — the real llm-d Router on a laptop (T0 + Docker, CPU only)
 
 A one-node kind cluster with:
 
 - the CRDs: `InferencePool` v1 (Gateway API Inference Extension v1.6.2) and `InferenceObjective`
   v1alpha2 (llm-d-router v0.10.0);
-- three `llm-d-inference-sim` pods (`sim-deployment.yaml`, same latency model as the lab's fake backend);
+- three `llm-d-inference-sim` pods (`sim-deployment.yaml`: the fake backend's per-request latency
+  formula and prefix cache, but no queueing of prefills behind each other — see `../local/README.md`);
 - the **llm-d Router in standalone mode** from the `llm-d-router-standalone` Helm chart
   (`router-values.yaml`): the EPP plus an Envoy sidecar listening on :8081, an `InferencePool` named
   after the release (`igw`) selecting `app: vllm-sim`, and the objectives `premium` (100) and `batch` (−10).

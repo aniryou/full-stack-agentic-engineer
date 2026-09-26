@@ -6,26 +6,31 @@
 # the backend switches to torch and every number is the GPU's. Concepts: primer §1 "Spec-sheet
 # literacy" and §2 "The roofline model" ([`../../PRIMER.md`](../../PRIMER.md)).
 #
+# **Predicted first in** [roofline-core notebook 01](../../roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb):
+# there you computed ridges, attainable FLOP/s and the H100's decode crossover from datasheets. Here
+# you measure the same quantities on the machine in front of you and hold the predictions up to them.
+#
 # ## The one-minute version
 #
 # A roofline is two numbers you can measure: the most FLOP/s any kernel reaches (a big GEMM) and
 # the most bytes/s any kernel moves (a STREAM kernel). Their ratio, the **ridge point**, is how
 # many FLOPs an operation must perform per byte it moves before arithmetic, not memory, is what
 # limits it. In this notebook you measure both on the machine in front of you, place GEMMs of
-# different sizes and dtypes on *your* roofline, set your ridge beside a datacenter GPU's, and
-# compute the decode batch size at which an H100 stops being memory-bound — the number behind
-# "batching is nearly free".
+# different sizes and dtypes on *your* roofline, explain what your measured peak implies about the
+# hardware, and then predict — and measure — how the time of a decode projection changes with the
+# batch: flat while it is memory-bound, the fact behind "batching is nearly free".
 
 # %%
-import os
+import math
 import time
 
 from IPython.display import Markdown, display
 
-from gpubench import gemm, get_backend, measure, membw, roofline, specs
-from gpubench.accounting import gemm_cost, gemm_intensity
-from gpubench.measure import si
+from gpubench import gemm, get_backend, inventory, measure, membw, roofline, specs
+from gpubench.accounting import gemm_cost, gemm_intensity, stream_cost
+from gpubench.measure import Measurement, si
 from gpubench.report import measurements_markdown
+from gpubench.timing import Timing
 
 QUICK = True            # False: bigger sizes (minutes, not seconds) and numbers closer to the true peak
 be = get_backend("auto")
@@ -113,10 +118,21 @@ print(f"→ {si(m.flops_per_s(), 'FLOP/s')} best, {si(m.flops_per_s('median'), '
 #
 # Square GEMMs over a range of sizes and every dtype this backend supports. Expect FLOP/s to rise
 # with size (small GEMMs cannot keep every core/SM busy, and fixed costs are not amortised), and
-# each halving of the element width to help: twice the SIMD lanes on a CPU, the next tensor-core
-# rate on a GPU (fp16/bf16 run 8–16× faster than IEEE fp32 there; TF32 sits in between). On the
-# CPU, numpy's float16 has **no BLAS path** at all — it is an emulated loop, and its row shows what
-# "no hardware support for this dtype" costs. (On a T4, bf16 is the same story: no native support.)
+# each halving of the element width to help: twice the SIMD lanes on a CPU, the tensor-core rate on
+# a GPU. How much faster fp16/bf16 run than IEEE fp32 **depends on the part** — about 15–16× on an
+# A100 or H100, 8× on a T4, 4× on an L4, 2× on an RTX 4090 (its fp16 figure with fp32 accumulate,
+# which is what PyTorch uses); TF32 sits in between where it exists. The next cell prints the
+# ratios from the spec table, so you know what to expect on your GPU. On the CPU, numpy's float16
+# has **no BLAS path** at all — it is an emulated loop, and its row shows what "no hardware support
+# for this dtype" costs. (On a T4, bf16 is the same story: no native support.)
+
+# %%
+print(f"{'GPU (spec, dense)':<26} {'fp32':>7} {'tf32':>7} {'fp16/bf16':>10} {'16-bit : fp32':>14}")
+for g in specs.GPUS:
+    f32, half = g.dense_tflops.get("float32"), g.dense_tflops.get("bfloat16") or g.dense_tflops.get("float16")
+    if f32 and half:
+        tf32 = g.dense_tflops.get("tf32")
+        print(f"{g.name:<26} {f32:7.1f} {tf32 if tf32 else '—':>7} {half:10.1f} {half / f32:13.1f}×")
 
 # %%
 skipped = []
@@ -130,10 +146,10 @@ for s in skipped:
 #
 # The slanted roof is the fastest any kernel moves bytes to and from main memory. STREAM's
 # kernels over arrays much larger than the last-level cache measure it (notebook 02 takes this
-# apart); on a CPU we use every core, because one core cannot fill the memory bus.
+# apart); on a CPU we use every usable core, because one core cannot fill the memory bus.
 
 # %%
-threads = 1 if be.is_gpu else (os.cpu_count() or 1)
+threads = 1 if be.is_gpu else inventory.usable_cpus()
 n = membw.stream_elems(be)
 streams = membw.stream_suite(be, n, threads=threads, repeats=3)
 display(Markdown(measurements_markdown(streams)))
@@ -141,30 +157,41 @@ bw = membw.peak(streams)
 print(f"slanted roof: {si(bw.bytes_per_s(), 'B/s')} ({bw.op}, {threads} thread(s), {si(bw.cost.bytes, 'B')} per call)")
 
 # %% [markdown]
-# ## Exercise 1.2 — the roofline itself
+# ## Exercise 1.2 — build the roofline from your measurements
 #
-# Write `my_attainable(intensity, peak_flops, peak_bw)` (the roofline) and
-# `my_ridge(peak_flops, peak_bw)` (the intensity where the two roofs meet).
+# roofline-core computed ridges from datasheet numbers; here the two roofs come from the tables
+# above. Write `my_roofline(gemms, streams, dtype)` → `(peak_flops, peak_bw, ridge)`, using each
+# measurement's **best** sample (what the machine *can* do). Two judgement calls:
+#
+# * the flat roof is a *per-dtype* number — fp32 and fp64 are different machines;
+# * the slanted roof may only use kernels whose counted bytes are all memory traffic. numpy's
+#   triad is two passes (`m.extras["passes"] == 2`): its second pass re-reads what the first just
+#   wrote — partly from cache — and updates it in place, which skips the write-allocate read
+#   (notebook 02, §4). Its *moved* rate is therefore not a memory rate, and it can beat every
+#   single-pass kernel. Leave such rows out.
 
 # %% exercise
-def my_attainable(intensity, peak_flops, peak_bw):
+def my_roofline(gemms, streams, dtype):
     ### BEGIN SOLUTION
-    return min(peak_flops, intensity * peak_bw)
-    ### END SOLUTION
-
-
-def my_ridge(peak_flops, peak_bw):
-    ### BEGIN SOLUTION
-    return peak_flops / peak_bw
+    peak = max(m.flops_per_s() for m in gemms if m.params["dtype"] == dtype)
+    bw = max(m.bytes_per_s() for m in streams if m.extras.get("passes", 1) == 1)
+    return peak, bw, peak / bw
     ### END SOLUTION
 
 # %% check
-assert my_attainable(1.0, 989e12, 3.35e12) == 3.35e12           # decode at batch 1 on an H100: bandwidth-bound
-assert my_attainable(1000.0, 989e12, 3.35e12) == 989e12         # a big GEMM: compute-bound
-assert abs(my_ridge(989e12, 3.35e12) - 295.2) < 0.1
-for i in (0.5, 4, 30, 300, 3000):
-    assert my_attainable(i, 2e12, 5e10) == roofline.attainable(i, 2e12, 5e10)
-print("✅ roofline and ridge — an H100 needs ~295 FLOP per byte of HBM traffic to be compute-bound at bf16")
+main = [d for d in dict.fromkeys(m.params["dtype"] for m in gemms) if not (be.name == "numpy" and d == "float16")]
+for d in main:
+    ref = roofline.measured_roofline(gemms, streams, d)
+    peak, bwr, rdg = my_roofline(gemms, streams, d)
+    assert (peak, bwr) == (ref.peak_flops, ref.peak_bw) and abs(rdg - ref.ridge) < 1e-9, d
+# a two-pass row that "moves" twice as fast must not become the roof
+fake_g = [Measurement("gemm", {"dtype": "float64"}, gemm_cost(512, 512, 512, 8), Timing((1e-3,)), "numpy", "cpu")]
+one = Measurement("stream.add", {}, stream_cost("add", 10**6, 8), Timing((2.4e-3,)), "numpy", "cpu",
+                  extras={"passes": 1})                                          # 10 GB/s
+two = Measurement("stream.triad", {}, stream_cost("triad", 10**6, 8).times(5 / 3), Timing((2e-3,)), "numpy",
+                  "cpu", extras={"passes": 2})                                   # "moves" 20 GB/s
+assert my_roofline(fake_g, [one, two], "float64")[1] == one.bytes_per_s()
+print("✅ your roofline:", ", ".join(f"{d} ridge {my_roofline(gemms, streams, d)[2]:.1f} FLOP/B" for d in main))
 
 # %% [markdown]
 # ## 6 · Your roofline
@@ -175,7 +202,6 @@ print("✅ roofline and ridge — an H100 needs ~295 FLOP per byte of HBM traffi
 # compulsory bytes from DRAM — the roofline counts DRAM (or HBM) traffic only.
 
 # %%
-main = [d for d in dict.fromkeys(m.params["dtype"] for m in gemms) if not (be.name == "numpy" and d == "float16")]
 roofs = [roofline.measured_roofline(gemms, streams, d) for d in main]
 best_dtype = max(main, key=lambda d: gemm.best(gemms, d).flops_per_s())
 points = [("o", m.intensity, m.flops_per_s()) for m in gemms if m.params["dtype"] == best_dtype]
@@ -186,16 +212,17 @@ print(f"\n'o' = {best_dtype} GEMMs of sizes {[m.params['m'] for m in gemms if m.
 # ## Exercise 1.3 — which of your GEMMs were compute-bound?
 #
 # For each GEMM of `best_dtype`, return `(size, bound, efficiency)`: `bound` is `"memory"` or
-# `"compute"` on *your* roofline, and `efficiency` is achieved FLOP/s (best sample) divided by the
-# attainable FLOP/s at that GEMM's intensity. Use your functions from 1.2.
+# `"compute"` on *your* roofline (compute-bound at or right of the ridge), and `efficiency` is
+# achieved FLOP/s (best sample) divided by the attainable FLOP/s at that GEMM's intensity — the
+# lower of the two roofs there.
 
 # %% exercise
 def classify(measurements, peak_flops, peak_bw):
     out = []
     ### BEGIN SOLUTION
     for m in measurements:
-        att = my_attainable(m.intensity, peak_flops, peak_bw)
-        kind = "compute" if m.intensity >= my_ridge(peak_flops, peak_bw) else "memory"
+        att = min(peak_flops, m.intensity * peak_bw)
+        kind = "compute" if m.intensity >= peak_flops / peak_bw else "memory"
         out.append((m.params["m"], kind, m.flops_per_s() / att))
     ### END SOLUTION
     return out
@@ -225,26 +252,30 @@ print(f"✅ classified on your {best_dtype} roofline (ridge {roof.ridge:.1f} FLO
 #
 # For a GPU the spec sheet gives dense peaks (the lab's `specs` table, dated — verify). For a CPU
 # you can *compute* one from the instruction set: `cores × GHz × lanes × 2 × FMA units`, with
-# `lanes = vector bits / (8 × bytes per element)`. It is an estimate — the FMA-unit count is an
-# assumption, heavy AVX-512 code often runs below the nominal clock, and a cloud vCPU may be a
-# hyperthread, not a core.
+# `lanes = vector bits / (8 × bytes per element)` (`specs.cpu_peak_flops`). It is an estimate —
+# the FMA-unit count is an assumption, heavy AVX-512 code often runs below the nominal clock, and
+# a cloud vCPU may be a hyperthread, not a core.
 #
-# ## Exercise 1.4 — a CPU's peak from its ISA
+# ## Exercise 1.4 — what does your measured peak imply?
 #
-# Write `cpu_peak(cores, ghz, simd_bits, fma_units, dtype_bytes)` in FLOP/s.
+# Turn the formula around. Given a *measured* GEMM rate, write `implied_fma_units(measured_flops,
+# cores, ghz, simd_bits, dtype_bytes)`: the number of FMA units per core that would explain it at
+# the nominal clock. About 2 on most x86 server cores (1 on some) says BLAS reaches the vector peak;
+# well below 1 says it does not (sizes too small — `QUICK` — or fewer physical cores than vCPUs);
+# above 2 says the clock or the core count you assumed is wrong (turbo, hyperthreads counted as cores).
 
 # %% exercise
-def cpu_peak(cores, ghz, simd_bits, fma_units, dtype_bytes):
+def implied_fma_units(measured_flops, cores, ghz, simd_bits, dtype_bytes):
     ### BEGIN SOLUTION
     lanes = simd_bits // (8 * dtype_bytes)
-    return cores * ghz * 1e9 * lanes * 2 * fma_units
+    return measured_flops / (cores * ghz * 1e9 * lanes * 2)
     ### END SOLUTION
 
 # %% check
-assert cpu_peak(4, 2.8, 512, 2, 8) == 358.4e9           # 4 cores of AVX-512, fp64
-assert cpu_peak(4, 2.8, 512, 2, 4) == 716.8e9           # fp32: twice the lanes
-assert cpu_peak(8, 3.2, 128, 4, 4) == specs.cpu_peak_flops(8, 3.2, 128, 4, 4)   # an Arm core with 4 NEON FMA pipes
-print("✅ cpu_peak — halving the element width doubles the lanes, and the peak")
+assert abs(implied_fma_units(358.4e9, 4, 2.8, 512, 8) - 2.0) < 1e-12      # 4 AVX-512 cores at the fp64 peak
+assert abs(implied_fma_units(358.4e9, 4, 2.8, 512, 4) - 1.0) < 1e-12      # the same rate in fp32 is half the peak
+assert abs(implied_fma_units(specs.cpu_peak_flops(8, 3.2, 128, 4, 4), 8, 3.2, 128, 4) - 4) < 1e-12
+print("✅ implied_fma_units inverts the ISA peak: halve the element width and the same FLOP/s is half as many units")
 
 # %%
 if be.is_gpu:
@@ -259,16 +290,26 @@ if be.is_gpu:
     if spec:
         print(f"{'memory':>14}: measured {si(bw.bytes_per_s(), 'B/s'):>13}   spec {si(spec.mem_bw, 'B/s'):>13}"
               f"   {bw.bytes_per_s() / spec.mem_bw:5.1%}")
+    half = next((d for d in ("bfloat16", "float16") if d in main), None)
+    if half and "float32" in main:
+        ratio = gemm.best(gemms, half).flops_per_s() / gemm.best(gemms, "float32").flops_per_s()
+        exp = spec.peak_flops(half) / spec.peak_flops("float32") if spec and spec.peak_flops(half) else None
+        print(f"{half} : float32 measured {ratio:.1f}×" + (f", spec {exp:.1f}× for this part" if exp else ""))
 else:
     cores, ghz = info.get("usable_cpus") or info.get("logical_cpus"), info.get("ghz_nominal")
     for d in main:
         got = gemm.best(gemms, d).flops_per_s()
         if ghz:
-            est = cpu_peak(cores, ghz, info["simd_bits"], 2, 8 if d == "float64" else 4)
-            print(f"{d:>8}: measured {si(got, 'FLOP/s'):>13}   ISA estimate {si(est, 'FLOP/s'):>13}"
-                  f" ({cores} cpus × {ghz} GHz × {info['simd_bits']}-bit × 2 FMA units)   {got / est:5.1%}")
+            b_el = 8 if d == "float64" else 4
+            units = implied_fma_units(got, cores, ghz, info["simd_bits"], b_el)
+            est = specs.cpu_peak_flops(cores, ghz, info["simd_bits"], 2, b_el)
+            print(f"{d:>8}: measured {si(got, 'FLOP/s'):>13} = {units:.2f} FMA units/core at {ghz} GHz on "
+                  f"{cores} cpus, {info['simd_bits']}-bit   (the 2-unit estimate {si(est, 'FLOP/s')}: {got / est:.0%})")
         else:
             print(f"{d:>8}: measured {si(got, 'FLOP/s')}; no clock in the CPU model name, so no estimate")
+    print("\nNo GPU here. For the tensor-core roofs: on Colab choose Runtime → Change runtime type → T4 GPU and "
+          "re-run this notebook; or on any GPU box run `python -m gpubench run --backend torch` "
+          "(deploy/any-gpu/ for Docker and plain pip, deploy/gcp/ for a Spot L4 VM).")
 
 # %% [markdown]
 # 70–85% of a GPU's *dense* spec is a healthy GEMM; if you compared against a number with an
@@ -292,42 +333,78 @@ for label, p, b, rdg in rows:
     print(f"{label:<44} {si(p, 'FLOP/s'):>13} {si(b, 'B/s'):>11}   ridge {rdg:7.1f} FLOP/B")
 
 # %% [markdown]
-# ## Exercise 1.5 — when does decode stop being memory-bound?
+# ## Exercise 1.5 — batching on your machine: predict, then measure
 #
-# At decode, a projection is a `(batch × d)·(d × d)` GEMM: the weights are read once per step
-# whatever the batch, so intensity grows with the batch. Write `crossover_batch(d, peak_flops,
-# peak_bw, b)`: the **smallest integer batch** whose intensity reaches the ridge (or `None` if no
-# batch ever does). This ignores KV-cache reads, which grow with the batch — primer §3 adds them.
+# At decode a projection is a `(batch × d)·(d × d)` GEMM: the weights are read once per step
+# whatever the batch, so its intensity grows with the batch. roofline-core notebook 01 (Ex 1.5)
+# found the batch where that crosses an H100's ridge. Here you predict the **time** of the
+# projection at several batch sizes from *your* roofline, then measure it. Write
+# `predicted_seconds(m, n, k, b, peak_flops, peak_bw)`: the roofline time of an `(m×k)·(k×n)` GEMM
+# with `b`-byte elements — the longer of its compute time and its memory time (use `my_gemm_cost`).
 
 # %% exercise
-def crossover_batch(d, peak_flops, peak_bw, b):
+def predicted_seconds(m, n, k, b, peak_flops, peak_bw):
     ### BEGIN SOLUTION
-    ridge_point = peak_flops / peak_bw
-    if d <= ridge_point * b:            # intensity 2Bd/((2B + d)·b) approaches d/b from below
-        return None
-    batch = max(1, int(ridge_point * b * d / (2 * (d - ridge_point * b))))
-    while gemm_intensity(batch, d, d, b) < ridge_point:
-        batch += 1
-    while batch > 1 and gemm_intensity(batch - 1, d, d, b) >= ridge_point:
-        batch -= 1
-    return batch
+    flops, nbytes = my_gemm_cost(m, n, k, b)
+    return max(flops / peak_flops, nbytes / peak_bw)
     ### END SOLUTION
 
 # %% check
+assert abs(predicted_seconds(1, 8192, 8192, 2, 989e12, 3.35e12) - 134_250_496 / 3.35e12) < 1e-15   # decode: bytes
+assert abs(predicted_seconds(4096, 4096, 4096, 2, 989e12, 3.35e12) - 2 * 4096 ** 3 / 989e12) < 1e-15  # prefill: FLOPs
+dt = "float32" if not be.is_gpu else "float16"
+d = 4096 if not be.is_gpu else 8192                   # weights well past the last-level cache / L2
+batches = [1, 4, 16, 64, 256] if not be.is_gpu else [1, 16, 64, 256, 1024]
+roof = roofline.measured_roofline(gemms, streams, dt)
+bsz = 4 if dt == "float32" else 2
+table = []
+for B in batches:
+    got = gemm.run_gemm(be, B, d, d, dt, repeats=3, min_time=0.02)
+    table.append((B, predicted_seconds(B, d, d, bsz, roof.peak_flops, roof.peak_bw), got.seconds(), got.flops_per_s()))
+print(f"(batch × {d})·({d} × {d}) {dt} on this machine — model from your roofline (ridge {roof.ridge:.1f} FLOP/B):")
+print(f"{'batch':>6} {'predicted':>11} {'measured':>11} {'measured FLOP/s':>16}  bound")
+for B, pred, meas, fl in table:
+    print(f"{B:>6} {si(pred, 's'):>11} {si(meas, 's'):>11} {si(fl, 'FLOP/s'):>16}  {roof.bound(gemm_intensity(B, d, d, bsz))}")
+assert table[-1][3] > table[0][3]                       # batching raised the throughput
+print(f"✅ {batches[-1]}× the rows for {table[-1][2] / table[0][2]:.1f}× the time: throughput ×{table[-1][3] / table[0][3]:.0f}")
+
+# %% [markdown]
+# Read the table against the model. While the projection is memory-bound the model's time barely
+# moves: the step streams the same `d²` weights whether it carries 1 row or 16, so throughput grows
+# with the batch almost for free. Past your ridge the FLOPs take over and time grows with the batch.
+# Where the measurement departs from the model, the model is telling you something:
+#
+# * **far below** it: the weights were served from cache, not memory (a CPU with a very large
+#   last-level cache — the model counts DRAM bytes);
+# * **far above** it at a small batch: the library runs below the roof there. CPU BLAS libraries
+#   typically copy ("pack") the weight matrix into their own tile layout for a GEMM with a few rows —
+#   an extra read and write of every weight — while batch 1 takes a GEMV path that streams the
+#   weights once. GPU libraries have the same kind of cliff between GEMV and GEMM kernels, which is
+#   why engines ship their own small-batch decode kernels.
+#
+# **The H100 numbers, reconciled.** For `d = 8192` at bf16 a standalone GEMM like the one above
+# must also read its `B·d` input and write its `B·d` output, so its intensity is
+# `2Bd²/((2Bd + d²)·2)` and it reaches the H100's ridge (295.2) at **batch 319**. Inside a model the
+# activations stay on chip between fused kernels (primer §3.1, §3.4): only the weights are streamed,
+# the intensity is `2Bd²/(d²·2) = B`, and the weight GEMMs turn compute-bound at the ridge itself —
+# **batch 296**, roofline-core's `gemm_crossover_batch()`. Both are right; they count different bytes.
+
+# %% check
 h100 = specs.get("h100-sxm")
-assert crossover_batch(8192, h100.peak_flops("bf16"), h100.mem_bw, 2) == 319
-l4 = specs.get("l4")
-assert crossover_batch(8192, l4.peak_flops("bf16"), l4.mem_bw, 2) == 448
-assert crossover_batch(256, h100.peak_flops("bf16"), h100.mem_bw, 2) is None      # a tiny model never gets there
-yours = crossover_batch(8192, mine_roof.peak_flops, mine_roof.peak_bw, 2)
-print(f"✅ H100 bf16: batch {crossover_batch(8192, h100.peak_flops('bf16'), h100.mem_bw, 2)}; "
-      f"L4: {crossover_batch(8192, l4.peak_flops('bf16'), l4.mem_bw, 2)}; this machine: {yours}")
+ridge_h100 = h100.ridge("bf16")
+standalone = next(B for B in range(1, 5000) if gemm_intensity(B, 8192, 8192, 2) >= ridge_h100)
+on_chip = next(B for B in range(1, 5000) if 2 * B * 8192 ** 2 / (8192 ** 2 * 2) >= ridge_h100)
+assert (standalone, on_chip) == (319, 296) and on_chip == math.ceil(ridge_h100)
+print(f"✅ H100 bf16, d = 8192: {standalone} counting activation bytes, {on_chip} with activations on chip")
 
 # %% [markdown]
 # Below the crossover, a decode step costs about the same whether it carries 1 sequence or 300:
-# the time is the weight bytes divided by bandwidth. That is why continuous batching (layer 04) is
-# the biggest single throughput lever, and why quantising weights (fewer bytes) speeds decode up
-# while a faster tensor core does not.
+# the time is the weight bytes divided by bandwidth. That is why continuous batching
+# ([layer 04](../../../../04-inference-engine/serving-engine/PRIMER.md)) is the biggest single
+# throughput lever, and why quantising weights (fewer bytes) speeds decode up while a faster tensor
+# core does not. A real decode step also reads each sequence's KV cache, which batching does not
+# amortise ([KV cache primer](../../../../04-inference-engine/kv-cache/kv-cache-primer.md), primer
+# §3.4); sizing a fleet from these numbers is [capacity planning](../../../../00-foundations/gpu-capacity-planning/PRIMER.md).
 #
 # ## In a design review
 #
@@ -337,8 +414,11 @@ print(f"✅ H100 bf16: batch {crossover_batch(8192, h100.peak_flops('bf16'), h10
 # far right of the ridge (compute-bound), a decode step at batch 1 sits at ~1 FLOP per byte
 # (memory-bound, running at well under 1% of peak FLOP/s). So decode time is weight bytes divided
 # by bandwidth until the batch reaches a few hundred; batching is nearly free throughput up to
-# there, and quantisation pays twice — fewer bytes, faster tensor cores. I measured the roofs on
-# our hardware rather than trusting the datasheet: a healthy GEMM reaches 70–85% of *dense* peak."
+# there. Quantisation cuts the bytes decode streams, which is what speeds it up; FP8 weight *and*
+# activation schemes also double the tensor-core rate, which only matters where the math binds —
+# prefill and large batches — while weight-only schemes (W4A16) still compute at the bf16 rate. I
+# measured the roofs on our hardware rather than trusting the datasheet: a healthy GEMM reaches
+# 70–85% of *dense* peak."
 #
 # **Drills**
 #
@@ -349,6 +429,8 @@ print(f"✅ H100 bf16: batch {crossover_batch(8192, h100.peak_flops('bf16'), h10
 #    you compared against the dense number (the headline is often 2:4 sparse — 2× the dense one),
 #    then the power cap and sustained clocks (`nvidia-smi`), then the size (small GEMMs cannot fill
 #    the SMs). 70–85% of dense is healthy.
-# 3. *What batch size makes a d=8192 projection compute-bound on an H100?* — About 320 (the
-#    ridge, ~295 FLOP/B, is reached at batch ≈ `R·b·d / (2(d − R·b))`). A real decode step stays
-#    memory-bound even longer: KV-cache reads add bytes per sequence that batching does not amortise.
+# 3. *What batch size makes a d=8192 projection compute-bound on an H100?* — About 300: batch 296
+#    inside a model, where activations stay on chip and the intensity is simply the batch (so the
+#    crossover is the ridge, ~295 FLOP/B); 319 for a standalone GEMM that also reads and writes its
+#    activations (`R·b·d / (2(d − R·b))`). A real decode step stays memory-bound even longer:
+#    KV-cache reads add bytes per sequence that batching does not amortise.

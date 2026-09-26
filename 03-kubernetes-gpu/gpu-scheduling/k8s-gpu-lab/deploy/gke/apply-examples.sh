@@ -4,6 +4,7 @@
 #   deploy/gke/apply-examples.sh dws            # 20: a 2-node gang through Kueue + DWS flex-start (needs install-addons.sh)
 #   deploy/gke/apply-examples.sh computeclass   # 30: the Spot -> on-demand -> flex-start ComputeClass
 #   WEIGHTS_BUCKET=my-bucket deploy/gke/apply-examples.sh serving   # 40: vLLM with GCS FUSE weights (applies 30 first)
+#   deploy/gke/apply-examples.sh sharing        # 50: four pods on one time-shared L4 (needs enable_time_sharing_pool = true)
 #   deploy/gke/apply-examples.sh delete         # remove every example object (the nodes scale back to zero)
 # Cost: a Spot g2-standard-4 L4 node runs only while a pod needs it; DRY_RUN=1 prints the commands.
 set -euo pipefail
@@ -41,12 +42,17 @@ case "${1:-}" in
     k apply -f "$rendered"
     echo "watch: kubectl -n serving get pods -w ; then kubectl -n serving port-forward svc/vllm-l4 8000:8000"
     ;;
+  sharing)
+    k apply -f "$HERE/50-time-sharing-l4.yaml"
+    echo "watch: kubectl get pods -o wide -w  (all four land on one l4-shared node);"
+    echo "       kubectl get nodes -l cloud.google.com/gke-nodepool=l4-shared -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'"
+    ;;
   delete)
-    for f in 40-serving-vllm-gcsfuse.yaml 30-computeclass-l4.yaml 20-dws-sample-job.yaml 00-smoke-l4.yaml; do
+    for f in 50-time-sharing-l4.yaml 40-serving-vllm-gcsfuse.yaml 30-computeclass-l4.yaml 20-dws-sample-job.yaml 00-smoke-l4.yaml; do
       k delete -f "$HERE/$f" --ignore-not-found
     done
     ;;
   *)
-    die "usage: $0 smoke|dws|computeclass|serving|delete"
+    die "usage: $0 smoke|dws|computeclass|serving|sharing|delete"
     ;;
 esac

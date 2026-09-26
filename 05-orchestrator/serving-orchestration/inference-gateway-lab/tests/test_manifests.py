@@ -105,12 +105,26 @@ def test_gke_rendered_objects_agree_with_values_route_and_workload():
     assert pm["spec"]["endpoints"][0]["port"] in ports and pm["spec"]["selector"]["matchLabels"] == {"app": labels["app"]}
 
 
-def test_hpa_scales_the_vllm_deployment_on_a_vllm_queue_metric():
+def test_hpa_scales_vllm_on_its_queue_and_its_occupied_batch_slots():
+    """Queue alone collapses the pool at full load (notebook 03), so the shipped HPA must carry a
+    demand metric too, and its targets must follow from the Deployment's --max-num-seqs."""
+    from igwlab.autoscale import waiting_target
     hpa = docs(DEPLOY / "gke/hpa.yaml")[0]
     dep = docs(DEPLOY / "gke/vllm.yaml")[0]
-    assert hpa["spec"]["scaleTargetRef"]["name"] == dep["metadata"]["name"]
-    metric = hpa["spec"]["metrics"][0]["pods"]["metric"]["name"]
-    assert any(m in metric for m in VLLM_METRICS) and hpa["spec"]["minReplicas"] >= 1
+    assert hpa["spec"]["scaleTargetRef"]["name"] == dep["metadata"]["name"] and hpa["spec"]["minReplicas"] >= 1
+    targets = {}
+    for m in hpa["spec"]["metrics"]:
+        assert m["type"] == "Pods" and m["pods"]["target"]["type"] == "AverageValue"
+        name = m["pods"]["metric"]["name"]
+        assert name.startswith("prometheus.googleapis.com|") and name.endswith("|gauge")
+        targets[name.split("|")[1]] = float(m["pods"]["target"]["averageValue"])
+    assert set(targets) == {"vllm:num_requests_waiting", "vllm:num_requests_running"}
+    args = dep["spec"]["template"]["spec"]["containers"][0]["args"]
+    slots = int(next(a.split("=", 1)[1] for a in args if a.startswith("--max-num-seqs=")))
+    assert "--enable-prompt-tokens-details" in args            # or the bench's hit rate is unavailable
+    assert targets["vllm:num_requests_running"] == 0.75 * slots   # 75 % of the batch slots
+    # hpa.yaml's stated assumptions: 0.5 s queueing budget, ~3 s per request in the batch
+    assert targets["vllm:num_requests_waiting"] == waiting_target(0.5, 3.0, slots)
 
 
 def test_simulator_flags_match_the_fake_backend_profile():

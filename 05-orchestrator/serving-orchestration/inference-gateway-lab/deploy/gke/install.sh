@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # GKE Inference Gateway, end to end, on the cluster from ../gcp/terraform:
-#   vLLM on an L4 Spot node -> InferencePool + llm-d EPP (Helm) -> Gateway + HTTPRoute -> HPA on vLLM's queue.
+#   vLLM on an L4 Spot node -> InferencePool + llm-d EPP (Helm) -> Gateway + HTTPRoute
+#   -> HPA on vLLM's waiting and running requests.
 # Usage: PROJECT_ID=... ZONE=us-central1-a [CLUSTER=igw-lab] ./install.sh
 # DRY_RUN=1 prints every command without running it. Costs money while the GPU node runs (see README).
 set -euo pipefail
@@ -15,7 +16,10 @@ GAIE_VERSION="${GAIE_VERSION:-v1.6.2}"                   # (verify) only used if
 ROUTER_VERSION="${ROUTER_VERSION:-v0.10.0}"              # (verify)
 ROUTER_CHART="${ROUTER_CHART:-oci://ghcr.io/llm-d/charts/llm-d-router-gateway}"
 ROUTER_CHART_VERSION="${ROUTER_CHART_VERSION:-${ROUTER_VERSION}}"
-ADAPTER_URL="${ADAPTER_URL:-https://raw.githubusercontent.com/GoogleCloudPlatform/k8s-stackdriver/master/custom-metrics-stackdriver-adapter/deploy/production/adapter_new_resource_model.yaml}"  # VERIFY
+# Custom Metrics Stackdriver Adapter, pinned to a k8s-stackdriver commit (master on 2026-09-26; image
+# custom-metrics-stackdriver-adapter:v0.16.11-gke.0). VERIFY against current GKE docs before relying on it.
+ADAPTER_SHA="${ADAPTER_SHA:-9500033f8a7d21b99843c2a8bd641a8a6a5685b4}"
+ADAPTER_URL="${ADAPTER_URL:-https://raw.githubusercontent.com/GoogleCloudPlatform/k8s-stackdriver/${ADAPTER_SHA}/custom-metrics-stackdriver-adapter/deploy/production/adapter_new_resource_model.yaml}"
 DRY_RUN="${DRY_RUN:-0}"
 
 step() { echo; echo "==> $*"; }
@@ -55,4 +59,4 @@ echo "curl -sS http://${IP}/v1/chat/completions -H 'Content-Type: application/js
 echo "  -H 'x-llm-d-inference-objective: premium' \\"
 echo "  -d '{\"model\":\"qwen\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}],\"max_tokens\":32}'"
 echo "watch the HPA:  kubectl get hpa vllm-qwen -n ${NAMESPACE} -w"
-echo "tear down:      ${HERE}/uninstall.sh && (cd ${HERE}/../gcp/terraform && terraform destroy)"
+echo "tear down:      PROJECT_ID=${PROJECT_ID} ${HERE}/uninstall.sh && (cd ${HERE}/../gcp/terraform && terraform destroy)"

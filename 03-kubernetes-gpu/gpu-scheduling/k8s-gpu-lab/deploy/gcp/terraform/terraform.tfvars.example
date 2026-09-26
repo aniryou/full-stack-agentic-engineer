@@ -20,6 +20,10 @@ gpu_driver_version = "LATEST"
 enable_flex_start_pool = false
 flex_max_nodes         = 2
 
+# --- optional: GPU time-sharing pool (for deploy/gke/50-time-sharing-l4.yaml) -----------------------
+enable_time_sharing_pool   = false
+max_shared_clients_per_gpu = 4
+
 # --- startup latency and weights ------------------------------------------------------------------
 enable_image_streaming = true
 enable_gcs_fuse        = true

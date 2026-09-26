@@ -1,4 +1,4 @@
-# Local stack (T0/T1 on any machine with Docker; no GPU): three vLLM-shaped backends, the lab
+# Local stack (T0 + Docker on any machine; no GPU): three vLLM-shaped backends, the lab
 # router in front of them, and Prometheus scraping everything.
 #
 #   PROFILE=sim  ./up.sh   -> 3 x llm-d-inference-sim (the upstream vLLM simulator image)

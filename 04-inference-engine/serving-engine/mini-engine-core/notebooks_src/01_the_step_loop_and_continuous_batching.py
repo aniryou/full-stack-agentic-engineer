@@ -16,9 +16,11 @@
 #
 # Membership changes every step, not every batch — that is **continuous (iteration-level) batching**, and it
 # is why a short request never waits for a long one. By the end you can explain what one step is, why the batch
-# is flat, how much continuous batching buys over static batching, and how KV blocks cap concurrency.
+# is flat, how much continuous batching buys over static batching, how KV blocks cap concurrency, and how one
+# step is split across two GPUs (tensor parallelism).
 #
-# Primer: §1 *Anatomy of an engine*, §2 *Continuous batching* (`../../PRIMER.md`).
+# Primer: §1 *Anatomy of an engine*, §2 *Continuous batching*, §9 *Parallelism inside the engine*
+# (`../../PRIMER.md`).
 
 # %%
 import numpy as np
@@ -217,6 +219,50 @@ print(f"✅ {blocks} blocks / {peak_blocks(1000, 200, 16)} per request = {concur
 print("   the same arithmetic as 00-foundations/gpu-capacity-planning; Notebook 06 moves it with quantization")
 
 # %% [markdown]
+# ## Exercise 1.6 — one step on two GPUs (tensor parallelism)
+# When one GPU is too small or too slow, the engine splits every layer across GPUs (the Megatron pattern). The
+# MLP `(silu(h W_gate) * (h W_up)) W_down` splits cleanly: each rank holds **half the columns** of `W_gate` and
+# `W_up` — *column-parallel*: it computes half of the hidden features with no communication, because the gating
+# is elementwise — and the **matching half of the rows** of `W_down` — *row-parallel*: it produces a full-size
+# **partial sum**. Adding the ranks' partial sums is the **all-reduce**. Write `tp_mlp_partials(L, h, world)`:
+# the `world` partial outputs, rank `r` using only its shard of the three weights (`h` is the normalised input,
+# `L` one layer's weights, e.g. `L["w_gate"]` of shape `(d_model, d_ff)`).
+
+# %% exercise
+def tp_mlp_partials(L, h, world):
+    ### BEGIN SOLUTION
+    d_ff = L["w_gate"].shape[1]
+    parts = []
+    for r in range(world):
+        cols = slice(r * d_ff // world, (r + 1) * d_ff // world)      # this rank's hidden features
+        g = h @ L["w_gate"][:, cols]
+        parts.append((g / (1 + np.exp(-g)) * (h @ L["w_up"][:, cols])) @ L["w_down"][cols, :])
+    return parts
+    ### END SOLUTION
+
+# %% check
+from minengine.model import rms_norm
+
+L, h = model.layers[0], rms_norm(model.emb[encode("The engine runs")])   # 15 tokens
+g = h @ L["w_gate"]
+dense = (g / (1 + np.exp(-g)) * (h @ L["w_up"])) @ L["w_down"]            # the unsplit MLP
+parts = tp_mlp_partials(L, h, 2)
+assert len(parts) == 2 and all(p.shape == dense.shape for p in parts)
+assert all(not np.allclose(p, dense) for p in parts)                     # one rank alone holds a partial sum
+np.testing.assert_allclose(parts[0] + parts[1], dense, atol=1e-12)       # the all-reduce restores the output
+np.testing.assert_allclose(sum(tp_mlp_partials(L, h, 4)), dense, atol=1e-12)
+n_ar, nbytes = perf.tp_allreduces(model.cfg.n_layers, model.cfg.d_model, len(h))
+print(f"✅ two ranks with half the MLP weights each + one all-reduce == the dense MLP")
+print(f"   with attention split by heads the same way: {n_ar} all-reduces per forward pass "
+      f"({model.cfg.n_layers} layers x 2), each {len(h)} tokens x {model.cfg.d_model} values")
+print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all-reduces, bytes each), primer §9")
+
+# %% [markdown]
+# Attention splits the same way: the Q/K/V projections are column-parallel **by head** (each rank owns whole
+# heads, and therefore their slice of the KV cache), the output projection is row-parallel, and its partial sums
+# need the layer's second all-reduce. Two all-reduces per layer on the critical path of every step is why tensor
+# parallelism stays inside one NVLink domain. Running it for real needs two GPUs (tier T2; `vllm-serving-lab`).
+#
 # ## In a design review
 # **The two-minute version.** "An engine is a loop around one forward pass. Each step the scheduler hands out a
 # token budget: running requests first — one token each if they are decoding, a chunk if they are still
@@ -224,8 +270,10 @@ print("   the same arithmetic as 00-foundations/gpu-capacity-planning; Notebook 
 # flattened into one batch, so the weights are read once for everyone; attention reads each request's history
 # through its block table. After the pass we sample for requests whose prompt is done, and finished requests
 # free their blocks immediately, so a waiting request joins at the next step — that is continuous batching,
-# worth several-fold throughput over static batching on long-tailed output lengths. Concurrency is capped by
-# KV blocks, not by compute: for an 8B model on an L4 it is about 28 chat requests."
+# about 1.6× the throughput of static batching from scheduling alone on a mix of 10–400-token outputs (more
+# with longer tails or more slots). Concurrency is capped by KV blocks, not by compute: for an 8B model on an
+# L4 it is about 28 chat requests. When a model needs more than one GPU, tensor parallelism splits each layer
+# and pays two all-reduces per layer per step."
 #
 # **Drill questions**
 # 1. *Why does the engine not have prefill steps and decode steps?* — Because the scheduler only tracks

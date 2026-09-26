@@ -7,6 +7,11 @@
 # cloud VM, whose boot disk is a very different tier from your laptop's SSD. Concepts: primer §6
 # "Storage and cold start" ([`../../PRIMER.md`](../../PRIMER.md)).
 #
+# **Predicted first in** [roofline-core notebook 04](../../roofline-core/notebooks/04_loading_reliability_and_cost.ipynb)
+# (Ex 4.1 streamed loading, Ex 4.2 the cold-start budget) from datasheet tier rates. Here you measure
+# the tier you actually have, decide which of your numbers is the one to plan with, and feed it to
+# the same model.
+#
 # ## The one-minute version
 #
 # A replica is not serving until its weights are in GPU memory, so a cold start is a bandwidth
@@ -19,20 +24,23 @@
 # %%
 import os
 import shutil
-import tempfile
 
 from IPython.display import Markdown, display
 
-from gpubench import get_backend, loading, measure
-from gpubench.measure import si
+from gpubench import get_backend, loading, measure, transfer
+from gpubench.accounting import transfer_cost
+from gpubench.measure import Measurement, si
 from gpubench.report import measurements_markdown
 from gpubench.specs import pcie_gbs
+from gpubench.timing import Timing
 
 QUICK = True
 be = get_backend("auto")
-workdir = tempfile.mkdtemp(prefix="gpubench-nb04-")      # point this at the disk you want to measure
+# The disk you measure is the disk this directory is on: point it elsewhere to measure another.
+# default_workdir() avoids /tmp when /tmp is tmpfs (RAM), as it is on many distributions.
+workdir = loading.default_workdir(prefix="gpubench-nb04-")
 path = os.path.join(workdir, "synthetic.safetensors")
-print("checkpoint will be written to", path)
+print(f"checkpoint will be written to {path} (filesystem: {loading.filesystem_type(workdir) or 'unknown'})")
 
 # %% [markdown]
 # ## 1 · The safetensors format
@@ -105,7 +113,8 @@ print(f"✅ header parsed: {len(tensors)} tensors whose sizes add up to every da
 #
 # * **The page cache.** Read a file twice and the second read comes from RAM. *Cold* runs evict the
 #   file first (`posix_fadvise(DONTNEED)`, Linux, no root needed); *warm* runs do not. A new node in
-#   production is cold.
+#   production is cold. A file on `tmpfs` cannot be evicted — it *is* RAM — so the lab refuses to
+#   call any read of it cold and lists the cold rows as skipped instead.
 # * **First-touch page faults.** Reading into a freshly allocated buffer pays a page fault per 4 KB
 #   of destination — billed to "the disk". The lab allocates and touches the buffer once, up front
 #   (on a GPU host, that buffer is the pinned staging area).
@@ -122,60 +131,77 @@ display(Markdown(measurements_markdown(loads)))
 for s in skipped:
     print("skipped:", s)
 cold = [m for m in loads if m.params["cache"] == "cold"]
-disk = max(cold, key=lambda m: m.bytes_per_s()) if cold else None
-if disk:
-    print(f"best cold read: {si(disk.bytes_per_s(), 'B/s')} ({disk.op}, {disk.params['threads']} thread(s)) "
-          f"— this is the number to plan a cold start with")
+warm = [m for m in loads if m.params["cache"] == "warm"]
+
+# %% [markdown]
+# ## Exercise 4.2 — is your "cold" number a disk number?
+#
+# Before planning with a measurement, decide what it measured. Write `cold_verdict(cold_bps,
+# warm_bps, filesystem)` returning:
+#
+# * `"ram"` if the file lives on `tmpfs` or `ramfs` — every read is a memory copy;
+# * `"suspect"` if the cold read ran at 70% or more of the warm read — either the eviction was not
+#   honoured (some container and network filesystems ignore it) or the device is as fast as memory
+#   copies (rare); check with `O_DIRECT` or a file larger than RAM before trusting it;
+# * `"disk"` otherwise — the number to plan a cold start with.
+
+# %% exercise
+def cold_verdict(cold_bps, warm_bps, filesystem):
+    ### BEGIN SOLUTION
+    if filesystem in ("tmpfs", "ramfs"):
+        return "ram"
+    return "suspect" if cold_bps >= 0.7 * warm_bps else "disk"
+    ### END SOLUTION
+
+# %% check
+assert cold_verdict(1.5e9, 9e9, "ext4") == "disk"                  # an NVMe behind a fast page cache
+assert cold_verdict(8.5e9, 9e9, "overlay") == "suspect"            # "cold" as fast as warm: not evicted?
+assert cold_verdict(9e9, 9e9, "tmpfs") == "ram"
+fs = loading.filesystem_type(path)
+by = {(m.op, m.params["cache"]): m for m in loads if m.params["threads"] in (1,)}
+if ("load.read", "cold") in by:
+    c, w = by[("load.read", "cold")].bytes_per_s(), by[("load.read", "warm")].bytes_per_s()
+    print(f"this machine ({fs}): cold read {si(c, 'B/s')}, warm {si(w, 'B/s')} → {cold_verdict(c, w, fs)}")
+else:
+    print(f"no cold rows on this machine ({fs}):", "; ".join(s["reason"] for s in skipped))
+print("✅ a cold read is only a disk number if the bytes really came from the disk")
 
 # %% [markdown]
 # Warm reads measure memory copies, not the disk: if warm is several GB/s and cold is not, the page
-# cache was doing the work. If cold ≈ warm, the file may live on `tmpfs` (RAM) or the drop was not
-# honoured — move `workdir` to a real disk. On a local NVMe, parallel reads usually beat a single
-# stream; on a network disk (a cloud boot disk, a FUSE mount of an object store) they are essential.
+# cache was doing the work. On a local NVMe, parallel reads usually beat a single stream; on a
+# network disk (a cloud boot disk, a FUSE mount of an object store) they are essential — Little's
+# law again: an object store serving each range request after a first-byte latency needs
+# `target × latency ÷ request size` requests outstanding (`loading.streams_needed`; roofline-core
+# Ex 4.2 sizes it). For 5 GB/s at 50 ms per 16 MB range that is 5e9 × 0.05 ÷ 16e6 ≈ 16 requests in
+# flight, not one.
 #
-# ## Exercise 4.2 — pipelined vs store-and-forward
+# ## Exercise 4.3 — which measured rate belongs in the model?
 #
-# Weights pass through several tiers. If each tier finishes before the next starts
-# (store-and-forward), times **add**; if chunks stream through all tiers at once (pipelined), the
-# **slowest** tier sets the pace. Write `my_load_time(nbytes, tiers, pipelined)` where `tiers` is a
-# list of `(name, bytes_per_second)`; return seconds.
+# The model is the one from primer §6 (`loading.load_time`): pipelined tiers run at the slowest
+# tier's rate. The judgement is which of your measurements *is* that tier. The lab's disk → GPU
+# loader (`make_file_to_device`, section 3) reads the file with **one** sequential stream, cold on a
+# new node — so its disk tier is the cold, one-thread `load.read` row, not the fastest row in the
+# table (a 4-thread `pread` or, worse, a warm read would flatter the prediction). Write
+# `loader_disk_rate(measurements)`: the best-sample bytes/s of that row, or `None` if there is none.
 
 # %% exercise
-def my_load_time(nbytes, tiers, pipelined=True):
+def loader_disk_rate(measurements):
     ### BEGIN SOLUTION
-    if pipelined:
-        return nbytes / min(bw for _, bw in tiers)
-    return sum(nbytes / bw for _, bw in tiers)
+    rows = [m for m in measurements
+            if m.op == "load.read" and m.params["cache"] == "cold" and m.params["threads"] == 1]
+    return max((m.bytes_per_s() for m in rows), default=None)
     ### END SOLUTION
 
 # %% check
-tiers = [("object store", 2e9), ("host RAM staging", 10e9), ("PCIe Gen4", 25e9)]
-assert abs(my_load_time(16e9, tiers) - 8.0) < 1e-9
-assert abs(my_load_time(16e9, tiers, pipelined=False) - (8.0 + 1.6 + 0.64)) < 1e-9
-assert abs(my_load_time(140e9, tiers) - loading.load_time(140e9, tiers)[0]) < 1e-9
-print(f"✅ 16 GB: {my_load_time(16e9, tiers):.1f} s streamed vs {my_load_time(16e9, tiers, False):.1f} s hop by hop")
+def _row(method, cache, threads, gbs):
+    return Measurement(f"load.{method}", {"nbytes": 1e9, "cache": cache, "threads": threads},
+                       transfer_cost(1e9), Timing((1 / gbs,)), "host", "cpu")
 
-# %% [markdown]
-# ## Exercise 4.3 — how many requests in flight?
-#
-# An object store serves each range request after a first-byte latency, then streams it. To sustain a
-# target throughput you need `target × latency ÷ request size` requests outstanding (Little's law).
-# Write `my_streams_needed(target_bw, latency_s, request_bytes)` — round **up** to a whole request.
-
-# %% exercise
-import math
-
-
-def my_streams_needed(target_bw, latency_s, request_bytes):
-    ### BEGIN SOLUTION
-    return math.ceil(target_bw * latency_s / request_bytes)
-    ### END SOLUTION
-
-# %% check
-assert my_streams_needed(5e9, 0.05, 16e6) == 16                   # 5 GB/s, 50 ms first byte, 16 MB ranges
-assert my_streams_needed(1e9, 0.01, 8e6) == 2
-assert my_streams_needed(10e9, 0.05, 16e6) == math.ceil(loading.streams_needed(10e9, 0.05, 16e6))
-print("✅ fast object-store loaders keep tens of range requests in flight; one stream would crawl")
+fake = [_row("read", "cold", 1, 1.2), _row("pread", "cold", 4, 3.1), _row("read", "warm", 1, 9.0)]
+assert abs(loader_disk_rate(fake) - 1.2e9) < 1
+assert loader_disk_rate([_row("read", "warm", 1, 9.0)]) is None
+disk_bw = loader_disk_rate(loads)
+print(f"✅ the loader's disk tier on this machine: {si(disk_bw, 'B/s') if disk_bw else 'not measurable here (no cold rows)'}")
 
 # %% [markdown]
 # ## 3 · To the GPU (T1)
@@ -186,66 +212,100 @@ print("✅ fast object-store loaders keep tens of range requests in flight; one 
 # stage, not the sum.
 
 # %%
-if disk is not None:
-    disk_bw = disk.bytes_per_s()
-elif loads:
-    disk_bw = max(m.bytes_per_s() for m in loads)
-    print("(no cold measurement on this OS: using the best warm read — an optimistic stand-in)")
+link = transfer.host_link(be.describe().get("name") if be.is_gpu else None)
+pcie = 0.85 * pcie_gbs(link["gen"], link["width"]) * 1e9
+pcie_label = f"PCIe Gen{link['gen']} x{link['width']} @85% ({link['source']})"
+if disk_bw is None:
+    print("No cold one-thread read was measurable here (see the skipped reasons above), so there is no disk tier "
+          "to model with: set workdir to a directory on a real disk and re-run.")
 else:
-    disk_bw = None
-if be.is_gpu and disk_bw:
-    to_dev = []
-    for is_cold in (True, False):
-        setup = (lambda: loading.drop_page_cache(path)) if is_cold else None
-        op = be.make_file_to_device(path, setup=setup)
-        to_dev.append(measure(be, op, "load.to_device", {"nbytes": info["bytes"], "cache": "cold" if is_cold else "warm"},
-                              repeats=3, min_time=0.0))
-    display(Markdown(measurements_markdown(to_dev)))
-    pcie = 0.85 * pcie_gbs(4) * 1e9
-    print(f"model (pipelined, assuming PCIe Gen4 x16 at 85%): {si(info['bytes'] / min(disk_bw, pcie), 's')}; "
-          f"measured cold: {si(to_dev[0].seconds(), 's')}")
-elif disk_bw:
-    pcie = 0.85 * pcie_gbs(4) * 1e9
-    t_pipe = loading.load_time(info["bytes"], [("disk (measured)", disk_bw), ("PCIe Gen4 x16 @85% (model)", pcie)])
-    t_sf = loading.load_time(info["bytes"], [("disk (measured)", disk_bw), ("PCIe Gen4 x16 @85% (model)", pcie)], False)
-    print(f"No GPU here. Model for this checkpoint on a Gen4 x16 GPU host, with YOUR measured disk: "
-          f"{si(t_pipe[0], 's')} pipelined (bottleneck: {t_pipe[1]}) vs {si(t_sf[0], 's')} store-and-forward.\n"
-          "On a GPU runtime this cell measures the real disk → pinned → GPU pipeline.")
+    tiers = [("disk: cold one-thread read (measured)", disk_bw), (pcie_label, pcie)]
+    t_pipe, slowest = loading.load_time(info["bytes"], tiers)
+    t_sf, _ = loading.load_time(info["bytes"], tiers, pipelined=False)
+    for name, rate_ in tiers:
+        print(f"   tier: {name:<50} {si(rate_, 'B/s')}")
+    print(f"model for this {si(info['bytes'], 'B')} checkpoint: {si(t_pipe, 's')} pipelined (bottleneck: {slowest}) "
+          f"vs {si(t_sf, 's')} store-and-forward")
+    if be.is_gpu:
+        cold_ok, why = loading.cold_read_possible(path)
+        to_dev = []
+        for is_cold in ((True, False) if cold_ok else (False,)):
+            setup = (lambda: loading.drop_page_cache(path)) if is_cold else None
+            op = be.make_file_to_device(path, setup=setup)
+            to_dev.append(measure(be, op, "load.to_device", {"nbytes": info["bytes"],
+                                                             "cache": "cold" if is_cold else "warm"},
+                                  repeats=3, min_time=0.0))
+        display(Markdown(measurements_markdown(to_dev)))
+        print(f"measured {to_dev[0].params['cache']}: {si(to_dev[0].seconds(), 's')} against the pipelined model's "
+              f"{si(t_pipe, 's')} and the store-and-forward {si(t_sf, 's')}")
+    else:
+        print("No GPU here: the PCIe tier above is a model of a GPU host's link, not a measurement. On a GPU runtime "
+              "(Colab: Runtime → Change runtime type → T4 GPU) this cell also measures the real disk → pinned → GPU "
+              "pipeline, with the PCIe generation and width nvidia-smi reports.")
+
+# %% [markdown]
+# If the measured pipeline lands near the pipelined model, double-buffering works and the disk is the
+# bottleneck; near the store-and-forward sum, the two stages are not overlapping (the reader waits for
+# the copy engine, or the copy waits for the reader). A loader that reads with several threads (a
+# `pread`-style reader, or a streaming loader for object stores) would move the disk tier to the
+# faster rows of section 2 — which is the next exercise.
+#
+# ## Exercise 4.4 — pick the loader for this disk
+#
+# From your cold measurements, choose how a loader on this machine should read: write
+# `pick_loader(measurements)` → `(method, threads)`. Take the fastest **cold** row, but keep the
+# simple one-stream `("read", 1)` unless the winner beats it by more than 20% — extra threads and
+# memory maps are complexity you should only pay for when the disk rewards them. Return `None` if
+# there are no cold rows.
+
+# %% exercise
+def pick_loader(measurements):
+    ### BEGIN SOLUTION
+    cold_rows = [m for m in measurements if m.params["cache"] == "cold"]
+    if not cold_rows:
+        return None
+    best = max(cold_rows, key=lambda m: m.bytes_per_s())
+    base = max((m.bytes_per_s() for m in cold_rows if m.op == "load.read"), default=0.0)
+    if best.bytes_per_s() > 1.2 * base:
+        return best.op.split(".", 1)[1], best.params["threads"]
+    return "read", 1
+    ### END SOLUTION
+
+# %% check
+nvme = [_row("read", "cold", 1, 1.5), _row("pread", "cold", 4, 4.2), _row("mmap", "cold", 1, 1.1), _row("read", "warm", 1, 9)]
+assert pick_loader(nvme) == ("pread", 4)                      # parallel requests pay on an SSD
+flat = [_row("read", "cold", 1, 0.25), _row("pread", "cold", 4, 0.27), _row("mmap", "cold", 1, 0.2)]
+assert pick_loader(flat) == ("read", 1)                       # one stream already saturates this disk
+assert pick_loader([_row("read", "warm", 1, 9)]) is None
+print(f"✅ this machine: {pick_loader(loads) or 'no cold rows — measure on a real disk'}")
 
 # %% [markdown]
 # ## 4 · The cold-start budget
 #
 # A new replica pays, in order: provisioning (a VM or node), pulling the container image, loading
-# weights, and engine start-up (allocating the KV cache, compiling or capturing CUDA graphs, warm-up).
-#
-# ## Exercise 4.4 — where does the time go?
-#
-# Write `cold_start(weight_bytes, weight_tiers, provision_s, image_bytes, image_bw, init_s)` returning
-# `(total_seconds, largest_stage_name)` with stages `"provision"`, `"image"`, `"weights"` (pipelined
-# through `weight_tiers`, using your `my_load_time`) and `"init"`. The inputs below are illustrative
-# round numbers, not measurements.
-
-# %% exercise
-def cold_start(weight_bytes, weight_tiers, provision_s, image_bytes, image_bw, init_s):
-    ### BEGIN SOLUTION
-    stages = {"provision": provision_s, "image": image_bytes / image_bw,
-              "weights": my_load_time(weight_bytes, weight_tiers), "init": init_s}
-    return sum(stages.values()), max(stages, key=stages.get)
-    ### END SOLUTION
-
-# %% check
-store = [("object store", 2e9), ("PCIe Gen4", 25e9)]
-assert cold_start(16e9, store, 60, 10e9, 0.5e9, 30) == (118.0, "provision")      # an 8B model in bf16
-assert cold_start(140e9, store, 60, 10e9, 0.5e9, 30) == (180.0, "weights")       # a 70B model in bf16
-total, worst = cold_start(70e9, store, 60, 10e9, 0.5e9, 30)                         # the 70B model in FP8
-assert (total, worst) == (145.0, "provision")
-print("✅ small models are dominated by fixed costs, big ones by bytes ÷ the slowest tier")
+# weights, and engine start-up (allocating the KV cache, compiling or capturing CUDA graphs, warm-up)
+# — primer §6.2; roofline-core Ex 4.2 budgets it from datasheet rates. Here only the weights stage
+# uses a measurement (your loader's disk tier); the other stages are **assumed round numbers**, and
+# the table says so.
 
 # %%
+ASSUMED = {"provision_s": 60, "image_bytes": 10e9, "image_bps": 0.5e9, "init_s": 30}   # illustrative, not measured
 if disk_bw:
+    rate = disk_bw
+    choice = pick_loader(loads)
+    if choice and choice != ("read", 1):
+        rate = max(m.bytes_per_s() for m in loads if m.params["cache"] == "cold"
+                   and m.op == f"load.{choice[0]}" and m.params["threads"] == choice[1])
+    print(f"weights: this machine's cold {choice[0] if choice else 'read'} rate {si(rate, 'B/s')} (measured), "
+          f"then {pcie_label} — pipelined")
+    print(f"assumed: provision {ASSUMED['provision_s']} s, image {si(ASSUMED['image_bytes'], 'B')} at "
+          f"{si(ASSUMED['image_bps'], 'B/s')}, engine init {ASSUMED['init_s']} s\n")
     for label, nbytes in (("8B bf16", 16e9), ("70B bf16", 140e9), ("70B fp8", 70e9)):
-        t, worst = cold_start(nbytes, [("this machine's disk (measured)", disk_bw), ("PCIe Gen4", 25e9)], 60, 10e9, 0.5e9, 30)
-        print(f"{label:>9} from this machine's disk ({si(disk_bw, 'B/s')}): {t / 60:5.1f} min, dominated by {worst}")
+        weights_s, _ = loading.load_time(nbytes, [("disk", rate), ("pcie", pcie)])
+        cs = loading.cold_start({"provision": ASSUMED["provision_s"], "image": ASSUMED["image_bytes"] / ASSUMED["image_bps"],
+                                 "weights": weights_s, "init": ASSUMED["init_s"]})
+        print(f"{label:>9}: {cs['total_s'] / 60:5.1f} min, largest stage {cs['largest']} "
+              f"({cs['shares'][cs['largest']]:.0%}) — weights measured-disk, other stages assumed")
 shutil.rmtree(workdir, ignore_errors=True)       # the synthetic checkpoint is not needed any more
 
 # %% [markdown]

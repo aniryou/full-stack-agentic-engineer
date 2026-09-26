@@ -21,10 +21,13 @@ GKE ≥ 1.34.0-gke.1626000 (verify which channels carry it when you apply).
 
 **Cost (assumed us-central1 prices, verify):** with the GPU pool at 0 you pay for the system node
 (~$0.13/h), the load balancer once the Gateway exists (~$0.025/h) and disks — roughly $0.16/h; each
-L4 Spot node adds ~$0.28/h (on-demand ~$0.70/h). The cluster management fee is covered by the free
+L4 Spot node adds ~$0.28/h (on-demand ~$0.70/h). The pool is at 0 only while no vLLM pod exists:
+with `../../gke` installed, `minReplicas: 1` keeps one L4 node up even when idle (~$0.44/h). The cluster management fee is covered by the free
 tier for one zonal cluster (verify). Spot VMs can be preempted at any time.
 
-**Cleanup:** `../../gke/uninstall.sh` then `terraform destroy` (deletion protection is off). Check
+**Cleanup:** `PROJECT_ID=<id> ../../gke/uninstall.sh` (it also removes the metrics adapter's
+project-level IAM binding, which `terraform destroy` does not own) then `terraform destroy`
+(deletion protection is off). Check
 that no `gke-igw-lab-*` disks or forwarding rules remain in the console.
 
 Validated offline with the google provider 8.4.0 (`terraform fmt -check`, `init`, `validate`).

@@ -112,7 +112,7 @@ variable "gpu_count" {
 }
 
 variable "gpu_driver_version" {
-  description = "GKE-managed NVIDIA driver: DEFAULT, LATEST (COS only) or INSTALLATION_DISABLED (bring your own, e.g. the GPU Operator)."
+  description = "GKE-managed NVIDIA driver: DEFAULT, LATEST (COS only) or INSTALLATION_DISABLED (bring your own, e.g. the GPU Operator). LATEST because the lab's vLLM v0.30.0 image is a CUDA 13.0 build that needs driver >= 580; DEFAULT may be an older branch (verify)."
   type        = string
   default     = "LATEST"
 
@@ -160,6 +160,27 @@ variable "flex_max_nodes" {
   description = "Upper bound on nodes DWS may provision at once in the flex-start pool."
   type        = number
   default     = 2
+}
+
+# ------------------------------------------------------------------------------------------
+# Optional time-sharing pool: one physical L4 advertised as several nvidia.com/gpu (primer section 9)
+# ------------------------------------------------------------------------------------------
+
+variable "enable_time_sharing_pool" {
+  description = "Create the l4-shared pool: Spot L4 nodes with GPU time-sharing (deploy/gke/50-time-sharing-l4.yaml). Off by default."
+  type        = bool
+  default     = false
+}
+
+variable "max_shared_clients_per_gpu" {
+  description = "Pods that may share one physical GPU on the l4-shared pool; the node advertises gpu_count x this many nvidia.com/gpu."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.max_shared_clients_per_gpu >= 2 && var.max_shared_clients_per_gpu <= 48
+    error_message = "max_shared_clients_per_gpu must be between 2 and 48 (GKE's limit - verify)."
+  }
 }
 
 # ------------------------------------------------------------------------------------------

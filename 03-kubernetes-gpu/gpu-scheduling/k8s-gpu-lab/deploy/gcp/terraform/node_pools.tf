@@ -1,8 +1,12 @@
-# Three pools, one per way of getting capacity:
-#   system   - always-on CPU node for controllers (kube-system, Kueue, JobSet)
-#   l4-spot  - L4 GPUs on Spot, autoscaling 0..N: you pay only while a GPU pod runs
-#   l4-flex  - (optional) DWS flex-start with queued provisioning: Kueue files a ProvisioningRequest and
-#              DWS creates every node of the gang at once, for at most 7 days
+# Three pools, one per way of getting capacity, plus one way of sharing it:
+#   system    - always-on CPU node for controllers (kube-system, Kueue, JobSet)
+#   l4-spot   - L4 GPUs on Spot, autoscaling 0..N: you pay only while a GPU pod runs
+#   l4-flex   - (optional) DWS flex-start with queued provisioning: Kueue files a ProvisioningRequest and
+#               DWS creates every node of the gang at once, for at most 7 days
+#   l4-shared - (optional) Spot L4 with GPU time-sharing: each physical GPU is advertised as
+#               max_shared_clients_per_gpu units of nvidia.com/gpu (primer section 9)
+# Driver: LATEST by default because the lab's vLLM image is a CUDA 13 build that needs an R580+
+# driver; DEFAULT may install an older branch (verify the branches for your GKE version).
 # The GPU pools carry the nvidia.com/gpu=present:NoSchedule taint explicitly (GKE applies the same
 # taint to GPU nodes - verify), so only pods that tolerate it (or request GPUs through GKE's
 # ExtendedResourceToleration admission) land there.
@@ -153,6 +157,64 @@ resource "google_container_node_pool" "gpu_flex" {
 
   management {
     auto_repair  = false
+    auto_upgrade = true
+  }
+}
+
+resource "google_container_node_pool" "gpu_shared" {
+  count              = var.enable_time_sharing_pool ? 1 : 0
+  name               = "l4-shared"
+  cluster            = google_container_cluster.lab.id
+  location           = var.zone
+  initial_node_count = 0
+
+  autoscaling {
+    min_node_count = 0
+    max_node_count = 1
+  }
+
+  node_config {
+    machine_type    = var.gpu_machine_type
+    spot            = true
+    disk_size_gb    = var.gpu_disk_size_gb
+    disk_type       = "pd-balanced"
+    oauth_scopes    = local.oauth_scopes
+    resource_labels = var.labels
+
+    guest_accelerator {
+      type  = var.gpu_type
+      count = var.gpu_count
+
+      gpu_driver_installation_config {
+        gpu_driver_version = var.gpu_driver_version
+      }
+
+      # Time-sharing: no memory or fault isolation between the pods on a GPU; a container may request
+      # at most one shared nvidia.com/gpu. GKE labels the nodes cloud.google.com/gke-gpu-sharing-strategy
+      # and cloud.google.com/gke-max-shared-clients-per-gpu (VERIFY for your GKE version).
+      gpu_sharing_config {
+        gpu_sharing_strategy       = "TIME_SHARING"
+        max_shared_clients_per_gpu = var.max_shared_clients_per_gpu
+      }
+    }
+
+    taint {
+      key    = local.gpu_taint.key
+      value  = local.gpu_taint.value
+      effect = local.gpu_taint.effect
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+
+    gcfs_config {
+      enabled = var.enable_image_streaming
+    }
+  }
+
+  management {
+    auto_repair  = true
     auto_upgrade = true
   }
 }

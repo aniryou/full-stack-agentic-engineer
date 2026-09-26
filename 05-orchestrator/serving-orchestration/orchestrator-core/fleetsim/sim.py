@@ -222,10 +222,9 @@ class Fleet:
                    running=sum(len(r.running) for r in ready),
                    gpu_util=sum(util.values()) / max(1, len(ready)),
                    kv=sum(r.pool.usage() for r in ready) / max(1, len(ready)))
-        if self.autoscaler:
-            vals = [self.autoscaler.value(r, util[r.rid], self.router) for r in ready]
-            held = self.autoscaler.held(self.pending + [q[-1] for q in self.queue], self.p)   # at the gateway/router
-            desired = self.autoscaler.decide(t, len(live), vals, len(live) - len(ready), sum(vals) + held)
+        if self.autoscaler:                            # requests at the gateway or in the router's queue count too
+            held = self.pending + [q[-1] for q in self.queue]
+            desired = self.autoscaler.decide(t, len(live), ready, util, len(live) - len(ready), held, self.p)
             self._resize(t, desired)
             row["desired"] = desired
         self.timeline.append(row)

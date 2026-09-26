@@ -40,7 +40,9 @@ def test_streaming_completion_timings_and_usage(server):
 def test_chat_streaming_and_non_streaming(server):
     msgs = [{"role": "system", "content": synthetic_text(30, 2)}, {"role": "user", "content": "hello there"}]
     r = send(server, Request(messages=msgs, max_tokens=5))
-    assert r.ok and r.output_tokens == 5 and len(r.itl) == 4              # role chunk + 5 token chunks
+    # the stream is a role-only chunk + 5 token chunks: 4 ITL gaps here (vllm bench serve would
+    # count the role chunk as a chunk too, and record 5, the first ~0 ms)
+    assert r.ok and r.output_tokens == 5 and len(r.itl) == 4
     body = json.dumps({"model": "tiny-model", "messages": msgs, "max_tokens": 3}).encode()
     req = urllib.request.Request(server + "/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as resp:
@@ -83,3 +85,38 @@ def test_open_loop_run_is_labelled_simulated(server):
     s = run.summary()
     assert run.simulated and "SIMULATED" in run.source
     assert s.completed == 12 and s.total_output == 96 and s.request_throughput > 0
+
+
+def test_fake_server_in_servelab_url_stays_simulated(server, monkeypatch):
+    """A hand-started fake server put in SERVELAB_URL must not be labelled as a measurement."""
+    from servelab import env
+    monkeypatch.setenv("SERVELAB_URL", server)
+    t = env.connect()
+    assert t.simulated and t.tier == "T0" and t.url == server and t.handle is None
+
+
+def test_real_looking_server_in_servelab_url_is_measured(monkeypatch):
+    """A server whose /version has no "simulated" flag (vLLM answers {"version": ...}) is real."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from servelab import env
+
+    class VLLMLike(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            body = b'{"version": "0.30.0"}' if self.path == "/version" else b""
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), VLLMLike)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setenv("SERVELAB_URL", f"http://127.0.0.1:{httpd.server_address[1]}")
+        t = env.connect()
+        assert not t.simulated and t.tier == "T1/T3"
+    finally:
+        httpd.shutdown()
