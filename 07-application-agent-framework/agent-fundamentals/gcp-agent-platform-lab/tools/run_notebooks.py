@@ -6,6 +6,9 @@
 
 Executed copies (with outputs) are written to ``_run_outputs/<dir>/`` so you can
 inspect what a solved notebook prints without opening Jupyter.
+
+With --expect-fail a blank notebook passes only if it stops at NotImplementedError; a
+missing module or a leftover `...` placeholder is reported as FAIL(env).
 """
 from __future__ import annotations
 
@@ -18,20 +21,21 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 
 ROOT = Path(__file__).resolve().parents[1]
+ENV_ERRORS = ("ModuleNotFoundError", "ImportError")
 
 
-def run(path: Path, timeout: int = 600) -> tuple[bool, str]:
+def run(path: Path, timeout: int = 600) -> tuple[bool, str, str]:
     nb = nbformat.read(path, as_version=4)
     client = NotebookClient(nb, timeout=timeout, kernel_name="python3", resources={"metadata": {"path": str(path.parent)}})
     try:
         client.execute()
-        ok, msg = True, "ok"
+        ok, ename, msg = True, "", "ok"
     except CellExecutionError as e:
-        ok, msg = False, f"cell failed: {e.ename}: {str(e.evalue)[:300]}"
+        ok, ename, msg = False, e.ename, f"cell failed: {e.ename}: {str(e.evalue)[:300]}"
     out_dir = ROOT / "_run_outputs" / path.parent.name
     out_dir.mkdir(parents=True, exist_ok=True)
     nbformat.write(nb, out_dir / path.name)
-    return ok, msg
+    return ok, ename, msg
 
 
 def main(argv: list[str]) -> int:
@@ -44,11 +48,13 @@ def main(argv: list[str]) -> int:
     failures = 0
     for p in paths:
         t0 = time.time()
-        ok, msg = run(p)
+        ok, ename, msg = run(p)
         dt = time.time() - t0
-        status = "PASS" if ok else "FAIL"
+        env = ename in ENV_ERRORS or "'ellipsis' object" in msg
+        status = "PASS" if ok else "FAIL(env)" if env else "FAIL"
         if expect_fail:
-            status = "PASS(stops as expected)" if not ok and "NotImplementedError" in msg else ("FAIL(ran to completion?)" if ok else f"FAIL({msg})")
+            status = ("FAIL(ran to completion?)" if ok else "FAIL(env)" if env
+                      else "PASS(stops as expected)" if "NotImplementedError" in msg else f"FAIL({msg})")
             if status.startswith("FAIL"):
                 failures += 1
         elif not ok:
