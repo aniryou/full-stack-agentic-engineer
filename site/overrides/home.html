@@ -125,8 +125,9 @@
     </ol>
     <p class="fse-note">
       Topics range from about an hour (the open-weight model landscape) to about 24 hours (the agent core, then
-      the full agent-platform lab). The whole path is about 170 hours; the two shorter routes in the learning path
-      take about 30 and 40.
+      the full agent-platform lab). Older topics in layers 00, 04, 06 and 07 follow the same arc with a primer and
+      practice notebooks. The whole path is about 170 hours; the two shorter routes in the learning path take about 30
+      and 40.
     </p>
   </section>
 
@@ -134,13 +135,14 @@
   <section class="fse-section fse-tested" aria-labelledby="fse-tested-title">
     <div class="fse-tested__text">
       <h2 id="fse-tested-title" class="fse-h2">You will be tested</h2>
-      <p class="fse-lede">Reading is not the end of a topic. Every notebook sets exercises, and a check cell under
+      <p class="fse-lede">Reading is not the end of a topic. Its notebooks set exercises, and a check cell under
         each one tells you whether your code is right.</p>
       <ul class="fse-checks">
         <li><strong>Fill-in notebooks.</strong> Write the function where it says <code># YOUR CODE HERE</code>;
-          the next cell prints ✅ only when it passes. Worked answers sit in <code>solutions/</code>.</li>
-        <li><strong>Test suites.</strong> Each core and lab ships <code>pytest</code> tests that pin its
-          numbers.</li>
+          the check cell under it prints ✅ only when it passes. Worked answers sit apart, usually in
+          <code>solutions/</code>.</li>
+        <li><strong>Test suites.</strong> Most cores and labs ship <code>pytest</code> tests; in layers 01–05
+          they pin every number the primer computes.</li>
         <li><strong>Real deployments.</strong> Labs carry <code>deploy/</code> targets: Docker compose, kind, any
           GPU box, and Google Cloud through Terraform.</li>
         <li><strong>Redo anything.</strong> <code>git restore &lt;notebook&gt;</code> returns an exercise to blank.</li>

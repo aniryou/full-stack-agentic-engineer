@@ -44,13 +44,14 @@ has the current options and prices, and the habits that keep a paid session from
 ## How the labs check your understanding
 
 - **Exercises are committed blank.** Exercise notebooks have `# YOUR CODE HERE` gaps.
-- **A check cell follows each exercise** and prints ✅ when your answer is right, or says what is off.
-- **Worked answers are separate.** They sit in `solutions/` (shown under "Solutions" in the navigation). Try the
-  exercise first.
+- **A check cell follows the exercise** in most notebooks (all of those in the primer, core and lab topics of layers 01–05). It prints ✅ when your
+  answer is right, or fails with what is off.
+- **Worked answers are separate.** They usually sit in `solutions/` (shown under "Solutions" in the navigation). Try
+  the exercise first.
 - **Start again at any time.** On Colab, reopen the notebook from its badge. Locally, `git restore <notebook>` returns
   it to the blank version; labs whose notebooks are generated from sources rebuild them with
   `python3 tools/build_notebooks.py`.
-- **Each module ends with a design review**: a short spoken explanation and a few drills, with answers.
+- **Most modules end with a design review**: a short spoken explanation and a few drills, with answers.
 
 ## Colab or local
 
@@ -70,4 +71,5 @@ jupyter lab notebooks/
 
 Notebooks and documents are rendered here. Python packages, tests, Terraform, Kubernetes manifests and scripts are
 not: links to them open the file on GitHub. The site shows notebooks as committed, without running them, so
-exercise notebooks appear blank and solution notebooks show their saved output.
+exercise notebooks appear blank and solution notebooks show their saved output. The Colab setup cell at the top of
+each notebook is left off these pages; it is still the first cell when you open the notebook in Colab.

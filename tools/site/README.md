@@ -33,7 +33,8 @@ link to a document, notebook or folder with a README goes to its page on the sit
 MkDocs does, or dropped when the heading is gone); a link to anything else in the repo (code, Terraform, YAML,
 folders without a README) goes to GitHub `blob/main` or `tree/main`. Exercise notebooks get an "Open in Colab"
 button, using the same URL as `tools/gen_colab_index.py`; notebooks under `solutions/` are grouped under
-"Solutions" in the navigation. Notebooks are shown as committed; the site never runs them.
+"Solutions" in the navigation. Notebooks are shown as committed, minus the Colab setup cell at the top (it only
+runs on Colab); the site never runs them.
 
 When content lands in a layer, nothing here needs editing: re-run the generator and commit the updated `nav:` in
 `mkdocs.yml`.

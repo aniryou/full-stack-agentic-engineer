@@ -6,8 +6,8 @@
  * Light values live on :root; Material's dark scheme ([data-md-color-scheme="slate"], set on <body>)
  * redefines the same tokens. Components read tokens only.
  *
- * Content pages keep Material's defaults. Everything below the palette section is scoped under .fse-home,
- * except the opt-in palette (applies only if mkdocs.yml sets primary/accent: custom).
+ * Content pages keep Material's defaults (one exception: code in table cells wraps at word boundaries). Everything
+ * else below the palette section is scoped under .fse-home, except the opt-in palette (applies only if mkdocs.yml sets primary/accent: custom).
  */
 
 :root {
@@ -61,6 +61,11 @@
 [data-md-color-accent="custom"] {
   --md-accent-fg-color: var(--fse-copper);
   --md-accent-fg-color--transparent: rgba(176, 88, 42, 0.1);
+}
+
+/* Content pages: let code in table cells break at hyphens and slashes, not mid-word */
+.md-typeset td code {
+  word-break: normal;
 }
 
 /* ------------------------------------------------------------------ landing page */
@@ -127,6 +132,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  /* Material sets display: flow-root on typeset lists; these lists are grids */
+  display: grid;
 }
 .md-typeset .fse-home .fse-steps > li,
 .md-typeset .fse-home .fse-tiers > li,
@@ -170,6 +177,21 @@
 }
 .md-typeset .fse-cta .md-button {
   margin: 0;
+}
+/* the custom primary is a dark navy: in slate, draw the buttons from the tokens so both stay visible */
+[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button {
+  color: var(--fse-ink);
+  border-color: var(--fse-rule);
+}
+[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button--primary {
+  background-color: var(--fse-cobalt);
+  border-color: var(--fse-cobalt);
+  color: #141c26;
+}
+[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button:is(:hover, :focus) {
+  background-color: var(--fse-copper);
+  border-color: var(--fse-copper);
+  color: #141c26;
 }
 
 /* stack map */
@@ -284,8 +306,11 @@
   max-width: 36rem;
 }
 .md-typeset .fse-home .fse-snippet {
+  /* Material centres figures; code reads left-aligned */
+  display: block;
   margin: 0;
   min-width: 0;
+  text-align: left;
 }
 .md-typeset .fse-home .fse-snippet figcaption {
   font-size: var(--fse-step--1);

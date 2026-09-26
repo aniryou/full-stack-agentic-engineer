@@ -389,6 +389,10 @@ def build_pages() -> None:
             head = (f"[![Open In Colab]({BADGE})]({colab(rp)}) &nbsp; "
                     f"[View on GitHub]({GITHUB}/blob/{BRANCH}/{rp})")
             stats["colab"] += 1
+        # The Colab setup cell (always first, a no-op off Colab) is plumbing, not lesson: leave it out of the page.
+        cells = nb.get("cells", [])
+        if cells and cells[0].get("cell_type") == "code" and "google.colab" in cell_text(cells[0]):
+            del cells[0]
         if (nb.get("nbformat", 4), nb.get("nbformat_minor", 0)) >= (4, 5):
             for i, c in enumerate(nb.get("cells", [])):
                 c.setdefault("id", f"cell-{i}")

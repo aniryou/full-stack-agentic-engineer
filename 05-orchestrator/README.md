@@ -45,7 +45,7 @@ cd ../inference-gateway-lab && python3 -m pip install -r requirements.txt && pyt
 ```
 
 Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below. Tiers, costs and the deploy
-paths (compose, kind, any GPU box, GKE) are in the topic [README](serving-orchestration/README.md#run-it).
+paths (compose, kind, any GPU box, GKE) are in the topic [README](serving-orchestration/README.md#run-tiers).
 
 ## How it fits
 

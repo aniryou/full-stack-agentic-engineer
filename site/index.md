@@ -17,8 +17,9 @@ reviews, under the owner's direction. The primer-core-lab topics in layers 01 to
 and then checked by adversarial Claude reviewers (concepts, runnability, pedagogy) before they were merged. In the owner's words:
 *thanks to Claude we now have a teacher we never had before.*
 
-The numbers follow one rule. A figure in a primer is computed by code in the repo and pinned by its tests,
-or it is marked `(verify)` with a date. Simulator output is labelled **simulated**; bundled tool output is
+The numbers follow one rule. A figure in a layer 01–05 primer is computed by code in the repo and pinned by its
+tests, or it is marked `(verify)` with a date. Older material in layers 00, 04, 06 and 07 predates that review;
+treat a number there that you cannot trace as a bug. Simulator output is labelled **simulated**; bundled tool output is
 labelled **sample output (illustrative)**.
 
 Found a mistake? [Open an issue](https://github.com/aniryou/full-stack-agentic-engineer/issues) with the file,
