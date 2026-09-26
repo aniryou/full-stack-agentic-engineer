@@ -1,0 +1,5 @@
+# Generated at build time by tools/site/build_site_content.py (never commit these)
+/layers/
+/guide/curriculum.md
+/guide/compute.md
+/guide/colab.md

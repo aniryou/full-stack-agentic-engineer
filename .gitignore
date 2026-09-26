@@ -38,3 +38,7 @@ terraform.tfvars
 # notebook runner scratch + terraform lockfiles from local validation
 _run_outputs/
 .terraform.lock.hcl
+
+# GitHub Pages site build (tools/site/)
+/site_build/
+/.cache/

@@ -1,0 +1,627 @@
+# Guide site for this repo, published to GitHub Pages by .github/workflows/pages.yml.
+# The pages under site/layers/ and site/guide/{curriculum,compute,colab}.md are generated from the repo by
+# tools/site/build_site_content.py (run it before `mkdocs build` / `mkdocs serve`); see tools/site/README.md.
+site_name: Full-stack agentic engineer
+site_description: The LLM inference and serving stack, layer by layer — from GPUs and fabric to the agent application.
+site_url: https://aniryou.github.io/full-stack-agentic-engineer/
+repo_url: https://github.com/aniryou/full-stack-agentic-engineer
+repo_name: aniryou/full-stack-agentic-engineer
+edit_uri: ""
+
+docs_dir: site
+site_dir: site_build
+exclude_docs: |
+  .gitignore
+  overrides/
+
+theme:
+  name: material
+  custom_dir: site/overrides
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Math only as \( … \) and \[ … \] / \begin{…}: the repo is full of dollar prices, which must stay text.
+  - pymdownx.arithmatex:
+      generic: true
+      inline_syntax: [round]
+      block_syntax: [square, begin]
+
+plugins:
+  - search
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      execute: false
+      include_source: true
+
+nav:
+  - Home: index.md
+  - Guide:
+      - How to use this site: guide/how-to-use.md
+      - Curriculum: guide/curriculum.md
+      - Compute: guide/compute.md
+      - Running in Colab: guide/colab.md
+      - About: guide/about.md
+  # nav-layers:start
+  - Layers:
+      - "layers/index.md"
+      - "00 · Foundations":
+          - "layers/00-foundations/index.md"
+          - "gpu-capacity-planning":
+              - "layers/00-foundations/gpu-capacity-planning/index.md"
+              - "Primer": "layers/00-foundations/gpu-capacity-planning/PRIMER.md"
+              - "Notebooks":
+                  - "01 · Capacity practice": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice.ipynb"
+                  - "Solutions":
+                      - "01 · Capacity practice solved": "layers/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb"
+          - "model-landscape":
+              - "Mistral Primer — Applied Exercises": "layers/00-foundations/model-landscape/mistral-primer-exercises.md"
+              - "Open-Weight LLMs: A Primer": "layers/00-foundations/model-landscape/open-weight-llms-primer.md"
+          - "transformers":
+              - "layers/00-foundations/transformers/index.md"
+              - "Docs":
+                  - "Transformers: A Practitioner's Primer": "layers/00-foundations/transformers/docs/transformer-primer.md"
+              - "Notebooks":
+                  - "01 · Transformer walkthrough": "layers/00-foundations/transformers/notebooks/01_transformer_walkthrough.ipynb"
+                  - "02 · Transformer exercises": "layers/00-foundations/transformers/notebooks/02_transformer_exercises.ipynb"
+              - "Practice":
+                  - "Attention practice": "layers/00-foundations/transformers/practice/attention_practice.ipynb"
+                  - "Solutions":
+                      - "Attention solutions": "layers/00-foundations/transformers/practice/attention_solutions.ipynb"
+      - "01 · Hardware & fabric":
+          - "layers/01-hardware-gpu-fabric/index.md"
+          - "gpu-deployment":
+              - "GPU Deployment Architecture for LLM Scale-Up": "layers/01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md"
+              - "GPU Deployment Architecture — Exercise Set": "layers/01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-exercises.md"
+          - "gpu-primer":
+              - "GPU Primer — Exercises": "layers/01-hardware-gpu-fabric/gpu-primer/gpu-primer-exercises.md"
+              - "A GPU Primer": "layers/01-hardware-gpu-fabric/gpu-primer/gpu-primer.md"
+          - "roofline-and-fabric":
+              - "layers/01-hardware-gpu-fabric/roofline-and-fabric/index.md"
+              - "Primer": "layers/01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md"
+              - "roofline-core":
+                  - "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/index.md"
+                  - "Notebooks":
+                      - "01 · Spec sheets and the roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb"
+                      - "02 · LLM inference on the roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb"
+                      - "03 · Fabrics and collective cost": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/03_fabrics_and_collective_cost.ipynb"
+                      - "04 · Loading reliability and cost": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/04_loading_reliability_and_cost.ipynb"
+                  - "Solutions":
+                      - "01 · Spec sheets and the roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/01_spec_sheets_and_the_roofline.ipynb"
+                      - "02 · LLM inference on the roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/02_llm_inference_on_the_roofline.ipynb"
+                      - "03 · Fabrics and collective cost": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/03_fabrics_and_collective_cost.ipynb"
+                      - "04 · Loading reliability and cost": "layers/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/04_loading_reliability_and_cost.ipynb"
+              - "gpu-bench-lab":
+                  - "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/index.md"
+                  - "gpubench":
+                      - "fixtures":
+                          - "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/gpubench/fixtures/index.md"
+                  - "Notebooks":
+                      - "01 · Measure your roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb"
+                      - "02 · Memory bandwidth and transfers": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/02_memory_bandwidth_and_transfers.ipynb"
+                      - "03 · Multi GPU topology and P2P": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/03_multi_gpu_topology_and_p2p.ipynb"
+                      - "04 · Weights loading and cold start": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/04_weights_loading_and_cold_start.ipynb"
+                  - "Solutions":
+                      - "01 · Measure your roofline": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/01_measure_your_roofline.ipynb"
+                      - "02 · Memory bandwidth and transfers": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/02_memory_bandwidth_and_transfers.ipynb"
+                      - "03 · Multi GPU topology and P2P": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/03_multi_gpu_topology_and_p2p.ipynb"
+                      - "04 · Weights loading and cold start": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/04_weights_loading_and_cold_start.ipynb"
+                  - "Deploy":
+                      - "any-gpu":
+                          - "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/deploy/gcp/index.md"
+      - "02 · CUDA, NCCL & runtime":
+          - "layers/02-cuda-nccl-runtime/index.md"
+          - "cuda-and-nccl":
+              - "layers/02-cuda-nccl-runtime/cuda-and-nccl/index.md"
+              - "Primer": "layers/02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md"
+              - "cuda-nccl-core":
+                  - "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/index.md"
+                  - "Notebooks":
+                      - "01 · SIMT warps and memory": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/notebooks/01_simt_warps_and_memory.ipynb"
+                      - "02 · Tiling fusion and occupancy": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/notebooks/02_tiling_fusion_and_occupancy.ipynb"
+                      - "03 · Collectives from scratch": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/notebooks/03_collectives_from_scratch.ipynb"
+                      - "04 · Compatibility and containers": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/notebooks/04_compatibility_and_containers.ipynb"
+                      - "05 · Sharing and health": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/notebooks/05_sharing_and_health.ipynb"
+                  - "Solutions":
+                      - "01 · SIMT warps and memory": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/solutions/01_simt_warps_and_memory.ipynb"
+                      - "02 · Tiling fusion and occupancy": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/solutions/02_tiling_fusion_and_occupancy.ipynb"
+                      - "03 · Collectives from scratch": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/solutions/03_collectives_from_scratch.ipynb"
+                      - "04 · Compatibility and containers": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/solutions/04_compatibility_and_containers.ipynb"
+                      - "05 · Sharing and health": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/solutions/05_sharing_and_health.ipynb"
+              - "cuda-nccl-lab":
+                  - "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Kernels in the simulator": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/01_kernels_in_the_simulator.ipynb"
+                      - "02 · Memory bound kernels on a real GPU": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/02_memory_bound_kernels_on_a_real_gpu.ipynb"
+                      - "03 · Collectives with torch distributed": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/03_collectives_with_torch_distributed.ipynb"
+                      - "04 · Busbw and the alpha beta fit": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/04_busbw_and_the_alpha_beta_fit.ipynb"
+                      - "05 · How a container sees a GPU": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/05_how_a_container_sees_a_gpu.ipynb"
+                      - "06 · GPU sharing and DCGM on GKE": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/notebooks/06_gpu_sharing_and_dcgm_on_gke.ipynb"
+                  - "Solutions":
+                      - "01 · Kernels in the simulator": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/01_kernels_in_the_simulator.ipynb"
+                      - "02 · Memory bound kernels on a real GPU": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/02_memory_bound_kernels_on_a_real_gpu.ipynb"
+                      - "03 · Collectives with torch distributed": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/03_collectives_with_torch_distributed.ipynb"
+                      - "04 · Busbw and the alpha beta fit": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/04_busbw_and_the_alpha_beta_fit.ipynb"
+                      - "05 · How a container sees a GPU": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/05_how_a_container_sees_a_gpu.ipynb"
+                      - "06 · GPU sharing and DCGM on GKE": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/06_gpu_sharing_and_dcgm_on_gke.ipynb"
+                  - "Deploy":
+                      - "any-gpu":
+                          - "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/index.md"
+                      - "gke":
+                          - "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gke/index.md"
+      - "03 · Kubernetes & GPUs":
+          - "layers/03-kubernetes-gpu/index.md"
+          - "gpu-scheduling":
+              - "layers/03-kubernetes-gpu/gpu-scheduling/index.md"
+              - "Primer": "layers/03-kubernetes-gpu/gpu-scheduling/PRIMER.md"
+              - "k8s-gpu-core":
+                  - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/index.md"
+                  - "Notebooks":
+                      - "01 · How kubernetes sees a GPU": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/notebooks/01_how_kubernetes_sees_a_gpu.ipynb"
+                      - "02 · Filter score and fragmentation": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/notebooks/02_filter_score_and_fragmentation.ipynb"
+                      - "03 · Gangs and topology": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/notebooks/03_gangs_and_topology.ipynb"
+                      - "04 · Queues quotas and preemption": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/notebooks/04_queues_quotas_and_preemption.ipynb"
+                      - "05 · Autoscaling and obtainability": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/notebooks/05_autoscaling_and_obtainability.ipynb"
+                  - "Solutions":
+                      - "01 · How kubernetes sees a GPU": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/solutions/01_how_kubernetes_sees_a_gpu.ipynb"
+                      - "02 · Filter score and fragmentation": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/solutions/02_filter_score_and_fragmentation.ipynb"
+                      - "03 · Gangs and topology": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/solutions/03_gangs_and_topology.ipynb"
+                      - "04 · Queues quotas and preemption": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/solutions/04_queues_quotas_and_preemption.ipynb"
+                      - "05 · Autoscaling and obtainability": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/solutions/05_autoscaling_and_obtainability.ipynb"
+              - "k8s-gpu-lab":
+                  - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Manifests and the linter": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/notebooks/01_manifests_and_the_linter.ipynb"
+                      - "02 · Kind with fake GPUs and kueue": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/notebooks/02_kind_with_fake_gpus_and_kueue.ipynb"
+                      - "03 · Why is my pod pending": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/notebooks/03_why_is_my_pod_pending.ipynb"
+                      - "04 · GKE pools DWS and computeclasses": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/notebooks/04_gke_pools_dws_and_computeclasses.ipynb"
+                  - "Solutions":
+                      - "01 · Manifests and the linter": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/solutions/01_manifests_and_the_linter.ipynb"
+                      - "02 · Kind with fake GPUs and kueue": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/solutions/02_kind_with_fake_gpus_and_kueue.ipynb"
+                      - "03 · Why is my pod pending": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/solutions/03_why_is_my_pod_pending.ipynb"
+                      - "04 · GKE pools DWS and computeclasses": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/solutions/04_gke_pools_dws_and_computeclasses.ipynb"
+                  - "Deploy":
+                      - "gcp":
+                          - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/index.md"
+                      - "gke":
+                          - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gke/index.md"
+                      - "gpu-vm":
+                          - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gpu-vm/index.md"
+                      - "kind":
+                          - "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/kind/index.md"
+      - "04 · Inference engine":
+          - "layers/04-inference-engine/index.md"
+          - "flash-attention":
+              - "FlashAttention: A Primer": "layers/04-inference-engine/flash-attention/flash-attention-primer.md"
+              - "FlashAttention in depth": "layers/04-inference-engine/flash-attention/flash-attention-deep-dive.md"
+              - "Flash attention deep dive": "layers/04-inference-engine/flash-attention/flash_attention_deep_dive.ipynb"
+              - "Flash attention practice": "layers/04-inference-engine/flash-attention/flash_attention_practice.ipynb"
+          - "kv-cache":
+              - "KV Cache on GPUs — A Primer": "layers/04-inference-engine/kv-cache/kv-cache-primer.md"
+              - "01 · KV cache worked": "layers/04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
+              - "02 · KV cache practice": "layers/04-inference-engine/kv-cache/02_kv_cache_practice.ipynb"
+          - "paged-attention":
+              - "PagedAttention: A Primer": "layers/04-inference-engine/paged-attention/paged-attention-primer.md"
+              - "Paged attention practice": "layers/04-inference-engine/paged-attention/paged_attention_practice.ipynb"
+          - "serving-engine":
+              - "layers/04-inference-engine/serving-engine/index.md"
+              - "Primer": "layers/04-inference-engine/serving-engine/PRIMER.md"
+              - "mini-engine-core":
+                  - "layers/04-inference-engine/serving-engine/mini-engine-core/index.md"
+                  - "Notebooks":
+                      - "01 · The step loop and continuous batching": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb"
+                      - "02 · Chunked prefill and the token budget": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/02_chunked_prefill_and_the_token_budget.ipynb"
+                      - "03 · Prefix caching": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb"
+                      - "04 · Sampling and structured output": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/04_sampling_and_structured_output.ipynb"
+                      - "05 · Speculative decoding": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/05_speculative_decoding.ipynb"
+                      - "06 · Quantization": "layers/04-inference-engine/serving-engine/mini-engine-core/notebooks/06_quantization.ipynb"
+                  - "Solutions":
+                      - "01 · The step loop and continuous batching": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/01_the_step_loop_and_continuous_batching.ipynb"
+                      - "02 · Chunked prefill and the token budget": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/02_chunked_prefill_and_the_token_budget.ipynb"
+                      - "03 · Prefix caching": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/03_prefix_caching.ipynb"
+                      - "04 · Sampling and structured output": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/04_sampling_and_structured_output.ipynb"
+                      - "05 · Speculative decoding": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/05_speculative_decoding.ipynb"
+                      - "06 · Quantization": "layers/04-inference-engine/serving-engine/mini-engine-core/solutions/06_quantization.ipynb"
+              - "vllm-serving-lab":
+                  - "layers/04-inference-engine/serving-engine/vllm-serving-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Size before you serve": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb"
+                      - "02 · Serve and measure": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/02_serve_and_measure.ipynb"
+                      - "03 · Knobs and tradeoffs": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/03_knobs_and_tradeoffs.ipynb"
+                      - "04 · Prefix caching for agents": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb"
+                      - "05 · Speculation and quantization in vLLM": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/05_speculation_and_quantization_in_vllm.ipynb"
+                      - "06 · Deploy on cloud run GPU": "layers/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb"
+                  - "Solutions":
+                      - "01 · Size before you serve": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/01_size_before_you_serve.ipynb"
+                      - "02 · Serve and measure": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/02_serve_and_measure.ipynb"
+                      - "03 · Knobs and tradeoffs": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/03_knobs_and_tradeoffs.ipynb"
+                      - "04 · Prefix caching for agents": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/04_prefix_caching_for_agents.ipynb"
+                      - "05 · Speculation and quantization in vLLM": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/05_speculation_and_quantization_in_vllm.ipynb"
+                      - "06 · Deploy on cloud run GPU": "layers/04-inference-engine/serving-engine/vllm-serving-lab/solutions/06_deploy_on_cloud_run_gpu.ipynb"
+                  - "Deploy":
+                      - "layers/04-inference-engine/serving-engine/vllm-serving-lab/deploy/index.md"
+                      - "any-gpu":
+                          - "layers/04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "cloud-run":
+                              - "layers/04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/index.md"
+                          - "gke":
+                              - "layers/04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/gke/index.md"
+          - "vllm-internals":
+              - "layers/04-inference-engine/vllm-internals/index.md"
+              - "vLLM internals: a source-level primer": "layers/04-inference-engine/vllm-internals/vllm-internals-primer.md"
+              - "vLLM source map": "layers/04-inference-engine/vllm-internals/source-map.md"
+              - "Notebooks":
+                  - "01 · Block hashes and eviction": "layers/04-inference-engine/vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb"
+      - "05 · Orchestrator":
+          - "layers/05-orchestrator/index.md"
+          - "serving-orchestration":
+              - "layers/05-orchestrator/serving-orchestration/index.md"
+              - "Primer": "layers/05-orchestrator/serving-orchestration/PRIMER.md"
+              - "orchestrator-core":
+                  - "layers/05-orchestrator/serving-orchestration/orchestrator-core/index.md"
+                  - "Notebooks":
+                      - "01 · Why LLM load balancing is different": "layers/05-orchestrator/serving-orchestration/orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb"
+                      - "02 · Cache aware routing and the load tradeoff": "layers/05-orchestrator/serving-orchestration/orchestrator-core/notebooks/02_cache_aware_routing_and_the_load_tradeoff.ipynb"
+                      - "03 · Autoscaling on the right signal": "layers/05-orchestrator/serving-orchestration/orchestrator-core/notebooks/03_autoscaling_on_the_right_signal.ipynb"
+                      - "04 · Prefill decode disaggregation": "layers/05-orchestrator/serving-orchestration/orchestrator-core/notebooks/04_prefill_decode_disaggregation.ipynb"
+                      - "05 · KV cache tiers and agent sessions": "layers/05-orchestrator/serving-orchestration/orchestrator-core/notebooks/05_kv_cache_tiers_and_agent_sessions.ipynb"
+                  - "Solutions":
+                      - "01 · Why LLM load balancing is different": "layers/05-orchestrator/serving-orchestration/orchestrator-core/solutions/01_why_llm_load_balancing_is_different.ipynb"
+                      - "02 · Cache aware routing and the load tradeoff": "layers/05-orchestrator/serving-orchestration/orchestrator-core/solutions/02_cache_aware_routing_and_the_load_tradeoff.ipynb"
+                      - "03 · Autoscaling on the right signal": "layers/05-orchestrator/serving-orchestration/orchestrator-core/solutions/03_autoscaling_on_the_right_signal.ipynb"
+                      - "04 · Prefill decode disaggregation": "layers/05-orchestrator/serving-orchestration/orchestrator-core/solutions/04_prefill_decode_disaggregation.ipynb"
+                      - "05 · KV cache tiers and agent sessions": "layers/05-orchestrator/serving-orchestration/orchestrator-core/solutions/05_kv_cache_tiers_and_agent_sessions.ipynb"
+              - "inference-gateway-lab":
+                  - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/index.md"
+                  - "Notebooks":
+                      - "01 · Router in process": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/notebooks/01_router_in_process.ipynb"
+                      - "02 · Scorer weights and hot prefixes": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/notebooks/02_scorer_weights_and_hot_prefixes.ipynb"
+                      - "03 · Autoscaling recommender": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/notebooks/03_autoscaling_recommender.ipynb"
+                      - "04 · Local stack with LLM d": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/notebooks/04_local_stack_with_llm_d.ipynb"
+                      - "05 · GKE inference gateway": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/notebooks/05_gke_inference_gateway.ipynb"
+                  - "Solutions":
+                      - "01 · Router in process": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/solutions/01_router_in_process.ipynb"
+                      - "02 · Scorer weights and hot prefixes": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/solutions/02_scorer_weights_and_hot_prefixes.ipynb"
+                      - "03 · Autoscaling recommender": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/solutions/03_autoscaling_recommender.ipynb"
+                      - "04 · Local stack with LLM d": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/solutions/04_local_stack_with_llm_d.ipynb"
+                      - "05 · GKE inference gateway": "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/solutions/05_gke_inference_gateway.ipynb"
+                  - "Deploy":
+                      - "any-gpu":
+                          - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/any-gpu/index.md"
+                      - "gcp":
+                          - "terraform":
+                              - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/index.md"
+                      - "gke":
+                          - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gke/index.md"
+                      - "kind":
+                          - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/kind/index.md"
+                      - "local":
+                          - "layers/05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/local/index.md"
+      - "06 · Gateway":
+          - "layers/06-gateway/index.md"
+          - "identity-security":
+              - "agentic-identity-core":
+                  - "layers/06-gateway/identity-security/agentic-identity-core/index.md"
+                  - "Core practice": "layers/06-gateway/identity-security/agentic-identity-core/core_practice.ipynb"
+                  - "Core walkthrough": "layers/06-gateway/identity-security/agentic-identity-core/core_walkthrough.ipynb"
+                  - "Solutions":
+                      - "Core solution": "layers/06-gateway/identity-security/agentic-identity-core/core_solution.ipynb"
+              - "agentic-identity-core-mistral":
+                  - "layers/06-gateway/identity-security/agentic-identity-core-mistral/index.md"
+                  - "Core mistral practice": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_practice.ipynb"
+                  - "Core mistral walkthrough": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_walkthrough.ipynb"
+                  - "Solutions":
+                      - "Core mistral solution": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_solution.ipynb"
+              - "agentic-identity-gcp-lab":
+                  - "layers/06-gateway/identity-security/agentic-identity-gcp-lab/index.md"
+                  - "Docs":
+                      - "Primer": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md"
+                      - "Deploy runbook": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/docs/deploy.md"
+                      - "Hardening notes and known limitations": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/docs/hardening-notes.md"
+                      - "Verified research notes (5 Sep 2026)": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/docs/sources.md"
+                  - "infra":
+                      - "terraform":
+                          - "layers/06-gateway/identity-security/agentic-identity-gcp-lab/infra/terraform/index.md"
+                  - "Notebooks":
+                      - "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/index.md"
+                      - "01 · Agent identity and principals": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/01_agent_identity_and_principals.ipynb"
+                      - "02 · Delegation and token exchange": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/02_delegation_and_token_exchange.ipynb"
+                      - "03 · Auth manager broker": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/03_auth_manager_broker.ipynb"
+                      - "04 · Policy enforcement point": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/04_policy_enforcement_point.ipynb"
+                      - "05 · Prompt injection and guardrails": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/05_prompt_injection_and_guardrails.ipynb"
+                      - "06 · MCP resource server": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/06_mcp_resource_server.ipynb"
+                      - "07 · A2A agent cards": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/07_a2a_agent_cards.ipynb"
+                      - "08 · Audit and governance": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/08_audit_and_governance.ipynb"
+                      - "09 · Code evaluation drills": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/09_code_evaluation_drills.ipynb"
+                      - "Practice":
+                          - "01 · Agent identity and principals practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/01_agent_identity_and_principals_practice.ipynb"
+                          - "02 · Delegation and token exchange practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/02_delegation_and_token_exchange_practice.ipynb"
+                          - "03 · Auth manager broker practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/03_auth_manager_broker_practice.ipynb"
+                          - "04 · Policy enforcement point practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/04_policy_enforcement_point_practice.ipynb"
+                          - "05 · Prompt injection and guardrails practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/05_prompt_injection_and_guardrails_practice.ipynb"
+                          - "06 · MCP resource server practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/06_mcp_resource_server_practice.ipynb"
+                          - "07 · A2A agent cards practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/07_a2a_agent_cards_practice.ipynb"
+                          - "08 · Audit and governance practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/08_audit_and_governance_practice.ipynb"
+                          - "09 · Code evaluation drills practice": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/practice/09_code_evaluation_drills_practice.ipynb"
+                      - "Solutions":
+                          - "01 · Agent identity and principals solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/01_agent_identity_and_principals_solution.ipynb"
+                          - "02 · Delegation and token exchange solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/02_delegation_and_token_exchange_solution.ipynb"
+                          - "03 · Auth manager broker solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/03_auth_manager_broker_solution.ipynb"
+                          - "04 · Policy enforcement point solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/04_policy_enforcement_point_solution.ipynb"
+                          - "05 · Prompt injection and guardrails solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/05_prompt_injection_and_guardrails_solution.ipynb"
+                          - "06 · MCP resource server solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/06_mcp_resource_server_solution.ipynb"
+                          - "07 · A2A agent cards solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/07_a2a_agent_cards_solution.ipynb"
+                          - "08 · Audit and governance solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/08_audit_and_governance_solution.ipynb"
+                          - "09 · Code evaluation drills solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/09_code_evaluation_drills_solution.ipynb"
+          - "scaling-admission-cost":
+              - "agentic-scaling-lab":
+                  - "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/index.md"
+                  - "Docs":
+                      - "Scaling Agentic Solutions — a primer": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md"
+                      - "Reference architecture": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md"
+                      - "Capacity plan — 100,000 conversations/day": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/03-capacity-plan.md"
+                      - "From the core concepts to Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/04-gcp-mapping.md"
+                      - "client":
+                          - "Scaling Agentic Solutions on Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/client/scaling-agentic-solutions-on-google-cloud.md"
+                  - "Notebooks":
+                      - "01 · Scaling math": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/01_scaling_math.ipynb"
+                      - "02 · Turn loop and durability": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/02_turn_loop_and_durability.ipynb"
+                      - "03 · Rate limits and admission": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/03_rate_limits_and_admission.ipynb"
+                      - "04 · Load to settings": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/04_load_to_settings.ipynb"
+                      - "Solutions":
+                          - "01 · Scaling math solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/01_scaling_math_solutions.ipynb"
+                          - "02 · Turn loop and durability solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/02_turn_loop_and_durability_solutions.ipynb"
+                          - "03 · Rate limits and admission solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/03_rate_limits_and_admission_solutions.ipynb"
+                          - "04 · Load to settings solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/04_load_to_settings_solutions.ipynb"
+              - "agentic-scaling-lab-mistral":
+                  - "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/index.md"
+                  - "Docs":
+                      - "Scaling Agentic Solutions on Mistral — a primer": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md"
+                      - "Reference architecture": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/02-reference-architecture.md"
+                      - "Capacity plan — 100,000 conversations/day": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/03-capacity-plan.md"
+                      - "From the core concepts to the platform": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/04-platform-mapping.md"
+                  - "Notebooks":
+                      - "01 · Scaling math": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/01_scaling_math.ipynb"
+                      - "02 · Turn loop and durability": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/02_turn_loop_and_durability.ipynb"
+                      - "03 · Rate limits and admission": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/03_rate_limits_and_admission.ipynb"
+                      - "04 · Load to settings": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/04_load_to_settings.ipynb"
+                      - "Solutions":
+                          - "01 · Scaling math solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/01_scaling_math_solutions.ipynb"
+                          - "02 · Turn loop and durability solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/02_turn_loop_and_durability_solutions.ipynb"
+                          - "03 · Rate limits and admission solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/03_rate_limits_and_admission_solutions.ipynb"
+                          - "04 · Load to settings solutions": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/04_load_to_settings_solutions.ipynb"
+      - "07 · Agents & applications":
+          - "layers/07-application-agent-framework/index.md"
+          - "agent-fundamentals":
+              - "agent-core":
+                  - "layers/07-application-agent-framework/agent-fundamentals/agent-core/index.md"
+                  - "Notebooks":
+                      - "01 · The agent loop": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb"
+                      - "02 · Tools": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/02_tools.ipynb"
+                      - "03 · State and control": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/03_state_and_control.ipynb"
+                      - "04 · Mini support agent": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/04_mini_support_agent.ipynb"
+                  - "Solutions":
+                      - "01 · The agent loop": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/01_the_agent_loop.ipynb"
+                      - "02 · Tools": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/02_tools.ipynb"
+                      - "03 · State and control": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/03_state_and_control.ipynb"
+                      - "04 · Mini support agent": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/04_mini_support_agent.ipynb"
+              - "mistral-agent-core":
+                  - "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/index.md"
+                  - "Docs":
+                      - "Running on Mistral": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/docs/MISTRAL.md"
+                  - "Notebooks":
+                      - "01 · The agent loop": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/01_the_agent_loop.ipynb"
+                      - "02 · Tools": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/02_tools.ipynb"
+                      - "03 · State and control": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/03_state_and_control.ipynb"
+                      - "04 · Mini support agent": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/04_mini_support_agent.ipynb"
+                      - "05 · Going live on mistral": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/05_going_live_on_mistral.ipynb"
+                  - "Solutions":
+                      - "01 · The agent loop": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/01_the_agent_loop.ipynb"
+                      - "02 · Tools": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/02_tools.ipynb"
+                      - "03 · State and control": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/03_state_and_control.ipynb"
+                      - "04 · Mini support agent": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/04_mini_support_agent.ipynb"
+                      - "05 · Going live on mistral": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/05_going_live_on_mistral.ipynb"
+              - "gcp-agent-platform-lab":
+                  - "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/index.md"
+                  - "Docs":
+                      - "Primer ↔ lab map": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/PRIMER_MAP.md"
+                      - "Working in this repository": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/CONTRIBUTING.md"
+                      - "Using a real Gemini model": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/GEMINI_ADAPTER.md"
+                      - "From the lab to ADK (and back)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/LAB_TO_ADK.md"
+                  - "notebooks_src":
+                      - "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/index.md"
+                  - "Notebooks":
+                      - "00 · Setup and fake LLM": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/00_setup_and_fake_llm.ipynb"
+                      - "01 · Agent loop and tools": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/01_agent_loop_and_tools.ipynb"
+                      - "02 · Workflows and multi agent": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/02_workflows_and_multi_agent.ipynb"
+                      - "03 · State sessions checkpoints": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/03_state_sessions_checkpoints.ipynb"
+                      - "04 · Context engineering and caching": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/04_context_engineering_and_caching.ipynb"
+                      - "05 · MCP server client gateway": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/05_mcp_server_client_gateway.ipynb"
+                      - "06 · OAuth identity propagation": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/06_oauth_identity_propagation.ipynb"
+                      - "07 · Agent API streaming tasks": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/07_agent_api_streaming_tasks.ipynb"
+                      - "08 · Evals trajectory judge gates": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb"
+                      - "09 · Tracing and metrics": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/09_tracing_and_metrics.ipynb"
+                      - "10 · Reliability retries breakers": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/10_reliability_retries_breakers.ipynb"
+                      - "11 · Security prompt injection": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/11_security_prompt_injection.ipynb"
+                      - "12 · Resource estimation": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/12_resource_estimation.ipynb"
+                      - "13 · Code review exercises": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/13_code_review_exercises.ipynb"
+                      - "14 · Capstone bank agent": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/14_capstone_bank_agent.ipynb"
+                  - "Solutions":
+                      - "00 · Setup and fake LLM": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/00_setup_and_fake_llm.ipynb"
+                      - "01 · Agent loop and tools": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/01_agent_loop_and_tools.ipynb"
+                      - "02 · Workflows and multi agent": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/02_workflows_and_multi_agent.ipynb"
+                      - "03 · State sessions checkpoints": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/03_state_sessions_checkpoints.ipynb"
+                      - "04 · Context engineering and caching": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/04_context_engineering_and_caching.ipynb"
+                      - "05 · MCP server client gateway": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/05_mcp_server_client_gateway.ipynb"
+                      - "06 · OAuth identity propagation": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/06_oauth_identity_propagation.ipynb"
+                      - "07 · Agent API streaming tasks": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/07_agent_api_streaming_tasks.ipynb"
+                      - "08 · Evals trajectory judge gates": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/08_evals_trajectory_judge_gates.ipynb"
+                      - "09 · Tracing and metrics": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/09_tracing_and_metrics.ipynb"
+                      - "10 · Reliability retries breakers": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/10_reliability_retries_breakers.ipynb"
+                      - "11 · Security prompt injection": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/11_security_prompt_injection.ipynb"
+                      - "12 · Resource estimation": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/12_resource_estimation.ipynb"
+                      - "13 · Code review exercises": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/13_code_review_exercises.ipynb"
+                      - "14 · Capstone bank agent": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/14_capstone_bank_agent.ipynb"
+          - "long-running-durable":
+              - "Long-Running Agentic Workflows on Google Cloud": "layers/07-application-agent-framework/long-running-durable/00_primer.md"
+              - "long-running-agents-core":
+                  - "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/index.md"
+                  - "Notebooks":
+                      - "01 · Worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/01_worked.ipynb"
+                      - "02 · Practice": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/02_practice.ipynb"
+              - "lra-core":
+                  - "lra-core":
+                      - "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/index.md"
+                      - "Primer": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/PRIMER.md"
+                      - "Notebooks":
+                          - "01 · Durable loop": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/01_durable_loop.ipynb"
+                          - "02 · Wait and resume": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/02_wait_and_resume.ipynb"
+                          - "03 · Retry and reaper": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/03_retry_and_reaper.ipynb"
+                          - "Solutions":
+                              - "01 · Durable loop": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/01_durable_loop.ipynb"
+                              - "02 · Wait and resume": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/02_wait_and_resume.ipynb"
+                              - "03 · Retry and reaper": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/03_retry_and_reaper.ipynb"
+              - "long-running-agentic":
+                  - "Long-Running Agentic Workflows on Google Cloud": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/00_primer.md"
+                  - "long-running-agents-gcp":
+                      - "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/index.md"
+                      - "Docs":
+                          - "Long-Running Agentic Workflows on Google Cloud": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/00_primer.md"
+                          - "GCP cheat sheet for long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md"
+                          - "Design drills — long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md"
+                      - "Notebooks":
+                          - "01 · Durable loop practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_practice.ipynb"
+                          - "01 · Durable loop worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_worked.ipynb"
+                          - "02 · Fan out fan in practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_practice.ipynb"
+                          - "02 · Fan out fan in worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_worked.ipynb"
+                          - "03 · HITL saga practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_practice.ipynb"
+                          - "03 · HITL saga scheduled worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_scheduled_worked.ipynb"
+                          - "04 · ADK workflow practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_practice.ipynb"
+                          - "04 · ADK workflow worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_worked.ipynb"
+              - "long-running-agents-mistral":
+                  - "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/index.md"
+                  - "Notebooks":
+                      - "01 · Worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/01_worked.ipynb"
+                      - "02 · Practice": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/02_practice.ipynb"
+              - "lra":
+                  - "Primer": "layers/07-application-agent-framework/long-running-durable/lra/primer.md"
+                  - "lra-gcp":
+                      - "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/index.md"
+                      - "Docs":
+                          - "Primer": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/primer.md"
+                          - "Code-evaluation drills": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/code-evaluation-drills.md"
+                          - "Runbook — operating long-running agent runs": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/runbook.md"
+                      - "examples":
+                          - "adk_agent_engine":
+                              - "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/examples/adk_agent_engine/index.md"
+                      - "Notebooks":
+                          - "Practice":
+                              - "00 · Core idea": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/00_core_idea.ipynb"
+                              - "01 · Durable execution": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/01_durable_execution.ipynb"
+                              - "02 · Human in the loop": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/02_human_in_the_loop.ipynb"
+                              - "03 · Fanout saga reflection": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/03_fanout_saga_reflection.ipynb"
+                          - "Worked examples":
+                              - "00 · Core idea": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/00_core_idea.ipynb"
+                              - "01 · Durable execution": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/01_durable_execution.ipynb"
+                              - "02 · Human in the loop": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/02_human_in_the_loop.ipynb"
+                              - "03 · Fanout saga reflection": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/03_fanout_saga_reflection.ipynb"
+          - "retrieval-rag":
+              - "Vector Databases: A Comprehensive Primer": "layers/07-application-agent-framework/retrieval-rag/vector-databases-primer.md"
+              - "embeddings-lab":
+                  - "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/index.md"
+                  - "Docs":
+                      - "Primer": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/docs/primer.md"
+                  - "Exercises":
+                      - "Ex01": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex01.ipynb"
+                      - "Ex02": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex02.ipynb"
+                      - "Ex03": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex03.ipynb"
+                      - "Ex04": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex04.ipynb"
+                      - "Ex05": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex05.ipynb"
+                      - "Ex06": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/exercises/ex06.ipynb"
+                  - "Notebooks":
+                      - "01 · Counts to vectors": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/01_counts_to_vectors.ipynb"
+                      - "02 · Contrastive bi encoder": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/02_contrastive_bi_encoder.ipynb"
+                      - "03 · Geometry": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/03_geometry.ipynb"
+                      - "04 · Vector search": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/04_vector_search.ipynb"
+                      - "05 · Retrieval pipeline": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/05_retrieval_pipeline.ipynb"
+                      - "06 · Superposition": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/notebooks/06_superposition.ipynb"
+                  - "Solutions":
+                      - "Ex01 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex01_solutions.ipynb"
+                      - "Ex02 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex02_solutions.ipynb"
+                      - "Ex03 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex03_solutions.ipynb"
+                      - "Ex04 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex04_solutions.ipynb"
+                      - "Ex05 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex05_solutions.ipynb"
+                      - "Ex06 solutions": "layers/07-application-agent-framework/retrieval-rag/embeddings-lab/solutions/ex06_solutions.ipynb"
+              - "rag-from-scratch":
+                  - "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/index.md"
+                  - "Notebooks":
+                      - "00 · Setup and corpus": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/00_setup_and_corpus.ipynb"
+                      - "01 · Minimal RAG": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/01_minimal_rag.ipynb"
+                      - "02 · Chunking": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/02_chunking.ipynb"
+                      - "03 · Hybrid search": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/03_hybrid_search.ipynb"
+                      - "04 · Reranking": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/04_reranking.ipynb"
+                      - "05 · Evaluation": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/05_evaluation.ipynb"
+                      - "06 · Iterative RAG": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/notebooks/06_iterative_rag.ipynb"
+                  - "Solutions":
+                      - "00 · Setup and corpus": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/00_setup_and_corpus.ipynb"
+                      - "01 · Minimal RAG": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/01_minimal_rag.ipynb"
+                      - "02 · Chunking": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/02_chunking.ipynb"
+                      - "03 · Hybrid search": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/03_hybrid_search.ipynb"
+                      - "04 · Reranking": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/04_reranking.ipynb"
+                      - "05 · Evaluation": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/05_evaluation.ipynb"
+                      - "06 · Iterative RAG": "layers/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/06_iterative_rag.ipynb"
+              - "vector_stores":
+                  - "layers/07-application-agent-framework/retrieval-rag/vector_stores/index.md"
+                  - "minigraphrag":
+                      - "layers/07-application-agent-framework/retrieval-rag/vector_stores/minigraphrag/index.md"
+  # nav-layers:end

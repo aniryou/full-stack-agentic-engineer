@@ -1,0 +1,8 @@
+# Build dependencies for the guide site (GitHub Pages). Pinned to what pip resolved on 2026-09-26.
+# Local preview: see tools/site/README.md
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+mkdocs-jupyter==0.26.3
+pymdown-extensions==12.1
+Markdown==3.11
+nbconvert==7.17.1
