@@ -114,6 +114,15 @@ def test_no_nested_workflows():
     assert nested == []
 
 
+def test_shell_helpers_are_committed_executable():
+    # the docs say `tools/ci/run_local.sh ...`; a 100644 blob fails with "Permission denied" on a fresh checkout
+    staged = subprocess.run(["git", "ls-files", "-s", "tools/ci/*.sh"], cwd=REPO, capture_output=True, text=True,
+                            check=True).stdout.splitlines()
+    modes = {line.split("\t", 1)[1]: line.split()[0] for line in staged}
+    assert "tools/ci/run_local.sh" in modes
+    assert {path: mode for path, mode in modes.items() if mode != "100755"} == {}
+
+
 def test_bootstrap_status_same_format_stale():
     make_cell = ci.injector().make_cell
     nb = REPO / "tools" / "ci" / "tests" / "_tmp_bootstrap.ipynb"
