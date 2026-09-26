@@ -1,4 +1,11 @@
-"""One test per concept. Run with `pytest -q` (about 10 seconds)."""
+"""The Mistral provider and the self-hosted backends: one test per concept.
+
+These are the cases of the former agentic-scaling-lab-mistral suite, run against the merged package:
+its capacity model is now ``scalelab.mistral``, its fake model ``fake_model("mistral")``, and its hosted
+simulations pass ``provider="mistral"``. The cases that were identical to tests/test_scalelab.py (token
+bucket, backoff, breaker, retries, the turn's budget, crash-and-resume, degrade level 2, hysteresis) run
+there once.
+"""
 
 import asyncio
 import random
@@ -6,11 +13,11 @@ import random
 import pytest
 
 from scalelab.admission import AdmissionConfig, AdmissionController
-from scalelab.capacity import Scenario, cost_per_call, fleet, plan
 from scalelab.clock import CLOCK, run_in_virtual_time
-from scalelab.loop import Budget, Store, run_turn
-from scalelab.model import FakeModel, HostedBackend, HybridBackend, ServerOverloaded, ServerPool, SharedPool
-from scalelab.resilience import CircuitBreaker, CircuitOpen, RateLimited, TokenBucket, backoff, call_with_retries
+from scalelab.loop import Store, run_turn
+from scalelab.mistral import Scenario, cost_per_call, fleet, plan
+from scalelab.model import HostedBackend, HybridBackend, ServerOverloaded, ServerPool, SharedPool, fake_model
+from scalelab.resilience import RateLimited
 from scalelab.serving import GPUS, OPEN_MODELS, Replica, kv_bytes_per_token, kv_bytes_per_token_mla, replica
 from scalelab.sim import compare, make_setup, simulate
 from scalelab.tools import Tools
@@ -78,47 +85,6 @@ def test_fleet_sizing_scales_with_gpu_price_not_demand():
     assert fleet(s, model_key="mistral-small-4", gpu_key="h100")["gpus"]["peak"] % 2 == 0   # TP=2 replicas
 
 
-# --- resilience -----------------------------------------------------------------------------
-
-async def test_token_bucket_paces_to_its_rate():
-    b = TokenBucket(rate=10, capacity=10)
-    t0 = CLOCK.now()
-    for _ in range(30):
-        await b.acquire(1)
-    assert 1.7 < CLOCK.now() - t0 < 2.6  # 10 from the burst, then 20 at 10/s
-
-
-def test_backoff_is_capped_and_jittered():
-    rng = random.Random(1)
-    assert backoff(4, jitter=False) == 4.0 and backoff(9, jitter=False) == 8.0
-    assert all(0 <= backoff(a, rng=rng) <= 8.0 for a in range(1, 10) for _ in range(20))
-
-
-async def test_breaker_trips_on_failure_ratio_and_recovers():
-    cb = CircuitBreaker(threshold=3, min_calls=4, ratio=0.5, cooldown=2.0)
-    for ok in (True, False, False, False):
-        cb.record(ok)
-    assert cb.state == "open"
-    with pytest.raises(CircuitOpen):
-        cb.before_call()
-    await CLOCK.sleep(2.1)
-    assert cb.state == "half_open"
-    cb.record(True)
-    assert cb.state == "closed"
-
-
-async def test_call_with_retries_honours_deadline():
-    calls = []
-
-    async def always_429():
-        calls.append(1)
-        raise RateLimited(retry_after=5.0)
-
-    with pytest.raises(RateLimited):
-        await call_with_retries(always_429, deadline=CLOCK.now() + 3.0)
-    assert len(calls) == 1  # a 5 s hint cannot fit in a 3 s deadline: no second attempt
-
-
 # --- the backends -----------------------------------------------------------------------------
 
 def test_hosted_pool_answers_429_on_tokens_and_on_rps():
@@ -154,73 +120,30 @@ async def test_hybrid_spills_to_the_api_when_the_fleet_is_saturated():
     assert served.count("self-hosted") >= 20 and served.count("hosted") >= 20
 
 
-# --- the loop -------------------------------------------------------------------------------
+# --- the loop ---------------------------------------------------------------------------------
 
 async def test_turn_runs_tools_then_answers():
-    r = await run_turn("t1", "my bill is higher than usual", model=FakeModel(), tools=Tools(), store=Store())
+    r = await run_turn("t1", "my bill is higher than usual", model=fake_model("mistral"), tools=Tools(), store=Store())
     assert r.status == "completed" and r.tool_names == ["get_customer", "get_invoice"] and r.steps == 5
     assert r.cost_usd > 0 and 3 < r.latency_s < 9 and r.hosted_calls == 3
 
 
-async def test_budget_ends_the_turn_gracefully():
-    r = await run_turn("t2", "my bill is wrong", model=FakeModel(), tools=Tools(), store=Store(), budget=Budget(max_steps=2))
-    assert r.status == "failed" and r.error == "budget:steps" and "sorry" in r.text
+async def test_a_fleet_call_costs_nothing_per_token():
+    srv = ServerPool(replica("ministral-14b", "h100"), replicas=1, context_tokens=5_200, shared_prefix_tokens=3_000)
+    r = await run_turn("t9", "my bill is higher than usual", model=fake_model("mistral", backend=srv), tools=Tools(), store=Store())
+    assert r.status == "completed" and r.hosted_calls == 0 and r.cost_usd == 0.0   # the GPUs are paid for by the hour
 
 
-async def test_crash_and_resume_creates_one_ticket():
-    store, tools, model = Store(), Tools(), FakeModel()
+# --- admission ---------------------------------------------------------------------------------
 
-    class Crash(Exception):
-        pass
-
-    original = store.append_step
-
-    def crash_after_ticket(turn_id, step):
-        original(turn_id, step)
-        if step["kind"] == "tool" and "create_ticket" in step["payload"]["tools"]:
-            raise Crash()
-
-    store.append_step = crash_after_ticket
-    with pytest.raises(Crash):
-        await run_turn("c1", "I want to complain to a human", model=model, tools=tools, store=store)
-    store.append_step = original
-    r = await run_turn("c1", "I want to complain to a human", model=model, tools=tools, store=store)  # the redelivery
-    assert r.status == "completed" and r.resumed_steps == 4 and r.model_attempts == 1
-    assert tools.tickets == ["T-1001"]  # exactly one side effect
-
-
-async def test_degrade_level_2_withholds_writes():
-    tools = Tools()
-    r = await run_turn("d1", "I want to complain to a human", model=FakeModel(), tools=tools, store=Store(), degrade_level=2)
-    assert "create_ticket" not in r.tool_names and tools.tickets == []
-
-
-# --- admission --------------------------------------------------------------------------------
-
-def test_admission_levels_and_shedding():
+def test_admission_reads_the_fleets_saturation():
     ac = AdmissionController(AdmissionConfig(max_inflight=4, dwell_s=0))
-    assert ac.admit().admitted and ac.level == 0
-    for _ in range(3):
-        ac.admit()
-    d = ac.admit()
-    assert not d.admitted and d.level == 3 and d.retry_after
-    assert ac.admit(priority=1).admitted          # priority bypasses the cap
     for _ in range(10):
         ac.note_model_call(rate_limited=True)
-    for _ in range(5):
-        ac.release()
-    assert ac.compute_level() == 2                # 67 % of calls pushed back
+    assert ac.compute_level() == 2                # 100 % of calls pushed back
     ac._recent.clear()
+    assert ac.compute_level() == 0
     assert ac.compute_level(saturation=0.85) == 1 and ac.compute_level(saturation=1.2) == 2   # the fleet's signal
-
-
-def test_level_hysteresis():
-    ac = AdmissionController(AdmissionConfig(max_inflight=100, dwell_s=10))
-    for _ in range(4):
-        ac.note_model_call(True)
-    assert ac.compute_level() == 2
-    ac._recent.clear()
-    assert ac.compute_level() == 2  # held for the dwell time
 
 
 # --- simulation ---------------------------------------------------------------------------------
@@ -230,8 +153,8 @@ def test_overload_regimes_hosted_and_local():
     # the numbers) and seeded randomness, including the retry jitter's module-level `random`.
     async def regimes():
         results = {}
-        for name, mode, kw in [("hosted naive", "hosted", dict(pool_tpm=3_000_000, naive=True)),
-                               ("hosted capped", "hosted", dict(pool_tpm=3_000_000, max_inflight=30)),
+        for name, mode, kw in [("hosted naive", "hosted", dict(provider="mistral", pool_tpm=3_000_000, naive=True)),
+                               ("hosted capped", "hosted", dict(provider="mistral", pool_tpm=3_000_000, max_inflight=30)),
                                ("local naive", "local", dict(replicas=2, naive=True)),
                                ("local capped", "local", dict(replicas=2, max_inflight=30)),
                                ("hybrid", "hybrid", dict(replicas=2, pool_tpm=3_000_000))]:

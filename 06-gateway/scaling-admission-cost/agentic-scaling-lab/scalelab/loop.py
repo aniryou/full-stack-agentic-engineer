@@ -29,7 +29,7 @@ class Budget:
 
 
 class Store:
-    """In-memory stand-in for Firestore (checkpoints) and Redis (idempotency markers)."""
+    """In-memory stand-in for Firestore or Postgres (checkpoints) and Redis (idempotency markers)."""
 
     def __init__(self):
         self.steps: dict[str, list[dict]] = {}
@@ -57,6 +57,7 @@ class TurnResult:
     latency_s: float = 0.0
     model_attempts: int = 0
     rate_limited: int = 0
+    hosted_calls: int = 0        # model calls served by the API (all of them on the API; the spill-over in hybrid)
     tool_names: list[str] = field(default_factory=list)
 
 
@@ -99,6 +100,7 @@ async def run_turn(turn_id: str, user_message: str, *, model: FakeModel, tools: 
                     result.rate_limited += stats.get("rate_limited", 0)
                 result.tokens += resp.input_tokens + resp.output_tokens
                 result.cost_usd += resp.cost_usd
+                result.hosted_calls += resp.served_by == "hosted"
                 store.append_step(turn_id, {"index": idx, "kind": "model", "payload": asdict(resp)})
             idx += 1
             if not resp.tool_calls:
