@@ -1,0 +1,246 @@
+<!--
+  Landing page for the full-stack-agentic-engineer guide site. Used by site/index.md (template: home.html).
+
+  Design note
+  - Subject: an eight-layer stack a request travels down, learned one topic at a time. The page's one job is to
+    get a curious engineer to their first topic, knowing what it costs them (hours, tier, money).
+  - Palette (tokens in site/stylesheets/extra.css, prefix --fse-): cool blue-grey neutrals, ink #17202B on
+    ground #F5F7FA; two accents only. Cobalt #2B50C8 marks layers and links (the stack). Copper #B0582A marks
+    what moves or is checked: the request arrow, the ✅ check, T0. Slate (dark) keeps the roles and lifts the
+    accents to #8EA6FF / #E39A62 so both clear 4.5:1 on the dark surfaces.
+  - Type: Archivo (semi-expanded, 600-700) for display only; Material's body font everywhere else; IBM Plex Mono
+    for layer numbers, tiers and paths, the terms of art of this repo. Loaded here, never on content pages.
+  - Layout: the hero pairs the promise with the stack map, because the stack is the thesis. Sections follow the
+    order a reader decides in: how a topic works (a real 1-2-3 sequence, so it is numbered), how you are tested,
+    what it costs to run, the eight layers, who wrote it. One column below 760px; 16px gutters come from Material.
+  - Diagram: inline SVG, bands 07 (top) to 01, with 00 dashed beneath because foundations are model math, not a
+    runtime layer. One copper arrow shows a request going down. Colours come from tokens, so it follows the theme.
+  - Content pages are untouched: every rule in extra.css for this page is scoped under .fse-home.
+-->
+{% extends "main.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+{% endblock %}
+
+{% block content %}
+{% set repo = "https://github.com/aniryou/full-stack-agentic-engineer" %}
+<div class="fse-home">
+
+  <!-- Hero -->
+  <section class="fse-hero" aria-labelledby="fse-hero-title">
+    <div class="fse-hero__text">
+      <p class="fse-eyebrow">full-stack-agentic-engineer</p>
+      <h1 id="fse-hero-title" class="fse-hero__title">Learn the LLM serving stack by building it</h1>
+      <p class="fse-hero__promise">
+        Topics of a few hours to a few days each, from GPUs to agents. Every topic goes from a primer to a
+        from-scratch implementation to a complete one, tests what you learned with hands-on labs, and runs free
+        on a laptop.
+      </p>
+      <p class="fse-hero__who">
+        For anyone curious who wants to dig in and build deep skills. You need Python and patience, not a GPU.
+      </p>
+      <div class="fse-cta">
+        <a class="md-button md-button--primary" href="{{ 'guide/curriculum/' | url }}">Start with the learning path</a>
+        <a class="md-button" href="{{ 'layers/' | url }}">Browse the stack</a>
+      </div>
+    </div>
+
+    <figure class="fse-stack">
+      <svg class="fse-stack__svg" viewBox="0 0 440 440" role="img"
+           aria-label="The stack: layers 07 agents, 06 gateway, 05 orchestrator, 04 inference engine, 03 Kubernetes and GPU scheduling, 02 CUDA, NCCL and runtime, 01 hardware and fabric, with 00 foundations beneath. A request travels down from 07 to 01.">
+        <defs>
+          <marker id="fse-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="fse-stack__arrowhead"></path>
+          </marker>
+        </defs>
+        <text x="416" y="16" text-anchor="middle" class="fse-stack__note">request</text>
+        <line x1="416" y1="26" x2="416" y2="344" class="fse-stack__arrow" marker-end="url(#fse-arrowhead)"></line>
+
+        {% set layers = [
+          ("07-application-agent-framework", "07", "Agents"),
+          ("06-gateway", "06", "Gateway"),
+          ("05-orchestrator", "05", "Orchestrator"),
+          ("04-inference-engine", "04", "Inference engine"),
+          ("03-kubernetes-gpu", "03", "Kubernetes and GPU scheduling"),
+          ("02-cuda-nccl-runtime", "02", "CUDA, NCCL and runtime"),
+          ("01-hardware-gpu-fabric", "01", "Hardware and fabric"),
+        ] %}
+        {% for folder, num, name in layers %}
+        {% set y = 28 + loop.index0 * 50 %}
+        <a href="{{ ('layers/' ~ folder ~ '/') | url }}" class="fse-stack__link">
+          <rect x="1" y="{{ y }}" width="392" height="42" rx="3" class="fse-stack__band"></rect>
+          <text x="18" y="{{ y + 27 }}" class="fse-stack__num">{{ num }}</text>
+          <text x="60" y="{{ y + 27 }}" class="fse-stack__name">{{ name }}</text>
+        </a>
+        {% endfor %}
+
+        <a href="{{ 'layers/00-foundations/' | url }}" class="fse-stack__link">
+          <rect x="1" y="386" width="392" height="42" rx="3" class="fse-stack__band fse-stack__band--base"></rect>
+          <text x="18" y="413" class="fse-stack__num">00</text>
+          <text x="60" y="413" class="fse-stack__name">Foundations</text>
+          <text x="378" y="412" text-anchor="end" class="fse-stack__note">beneath the stack</text>
+        </a>
+      </svg>
+      <figcaption>Each band opens its layer. A request enters at the agent and goes down to the GPUs; the model
+        math in 00 sits under all of it.</figcaption>
+    </figure>
+  </section>
+
+  <!-- How a topic works -->
+  <section class="fse-section" aria-labelledby="fse-topic-title">
+    <h2 id="fse-topic-title" class="fse-h2">How a topic works</h2>
+    <p class="fse-lede">
+      A topic is one idea taken all the way down: theory first, then a version small enough to write yourself,
+      then the complete thing. Here is one of them,
+      <a href="{{ repo }}/tree/main/05-orchestrator/serving-orchestration"><code>05-orchestrator/serving-orchestration</code></a>,
+      which decides which engine replica each request goes to and how many replicas run.
+    </p>
+    <ol class="fse-steps">
+      <li class="fse-step">
+        <p class="fse-step__label">1 · Primer</p>
+        <h3 class="fse-step__title">Theory, with worked numbers</h3>
+        <p><code>PRIMER.md</code>: why round-robin fails for LLMs, routing signals, flow control, autoscaling,
+          prefill/decode disaggregation, KV cache beyond HBM. Each formula comes with a worked number.</p>
+        <p class="fse-step__meta">Read it section by section, alongside step 2.</p>
+      </li>
+      <li class="fse-step">
+        <p class="fse-step__label">2 · Core</p>
+        <h3 class="fse-step__title">A from-scratch implementation</h3>
+        <p><code>orchestrator-core</code>: a discrete-event fleet simulator in the standard library only. Five
+          fill-in notebooks and 57 tests. You write the routing and autoscaling decisions yourself.</p>
+        <p class="fse-step__meta">About 9 hours with the primer · <span class="fse-tier">T0</span></p>
+      </li>
+      <li class="fse-step">
+        <p class="fse-step__label">3 · Lab</p>
+        <h3 class="fse-step__title">The complete implementation</h3>
+        <p><code>inference-gateway-lab</code>: a real async router that makes the llm-d endpoint picker's
+          decisions in front of fake or real vLLM servers, then Docker compose, kind and GKE Inference Gateway.
+          Five notebooks and 76 tests.</p>
+        <p class="fse-step__meta">About 8 hours more · <span class="fse-tier">T0</span> to <span class="fse-tier">T3</span></p>
+      </li>
+    </ol>
+    <p class="fse-note">
+      Topics range from about an hour (the open-weight model landscape) to about 24 hours (the agent core, then
+      the full agent-platform lab). Older topics in layers 00, 04, 06 and 07 follow the same arc with a primer and
+      practice notebooks. The whole path is about 170 hours; the two shorter routes in the learning path take about 30
+      and 40.
+    </p>
+  </section>
+
+  <!-- You will be tested -->
+  <section class="fse-section fse-tested" aria-labelledby="fse-tested-title">
+    <div class="fse-tested__text">
+      <h2 id="fse-tested-title" class="fse-h2">You will be tested</h2>
+      <p class="fse-lede">Reading is not the end of a topic. Its notebooks set exercises, and a check cell under
+        each one tells you whether your code is right.</p>
+      <ul class="fse-checks">
+        <li><strong>Fill-in notebooks.</strong> Write the function where it says <code># YOUR CODE HERE</code>;
+          the check cell under it prints ✅ only when it passes. Worked answers sit apart, usually in
+          <code>solutions/</code>.</li>
+        <li><strong>Test suites.</strong> Most cores and labs ship <code>pytest</code> tests; in layers 01–05
+          they pin every number the primer computes.</li>
+        <li><strong>Real deployments.</strong> Labs carry <code>deploy/</code> targets: Docker compose, kind, any
+          GPU box, and Google Cloud through Terraform.</li>
+        <li><strong>Redo anything.</strong> <code>git restore &lt;notebook&gt;</code> returns an exercise to blank.</li>
+      </ul>
+    </div>
+    <figure class="fse-snippet">
+      <figcaption>Exercise 1.1 in <code>agent-core/notebooks/01_the_agent_loop.ipynb</code></figcaption>
+<div class="highlight"><pre><code><span class="fse-c"># exercise: stop when the model gives a final answer</span>
+def is_final(resp) -&gt; bool:
+    <span class="fse-c"># YOUR CODE HERE</span>
+    raise NotImplementedError("your turn")
+
+<span class="fse-c"># check</span>
+assert is_final(text("done")) is True
+assert is_final(calls(call("get_time", city="X"))) is False
+print("✅ is_final works")</code></pre></div>
+      <p class="fse-snippet__out"><span class="fse-snippet__prompt">output</span> ✅ is_final works</p>
+    </figure>
+  </section>
+
+  <!-- Tiers -->
+  <section class="fse-section" aria-labelledby="fse-tiers-title">
+    <h2 id="fse-tiers-title" class="fse-h2">Where it runs, and what it costs</h2>
+    <p class="fse-lede">Every concept is learnable at T0. The other tiers turn predictions into measurements, and
+      they are optional. A notebook that needs hardware you do not have runs a labelled offline path instead.</p>
+    <ul class="fse-tiers">
+      <li class="fse-tiercard fse-tiercard--free">
+        <p class="fse-tiercard__tier">T0</p>
+        <p class="fse-tiercard__where">A laptop, Colab CPU or CI</p>
+        <p class="fse-tiercard__cost">Free</p>
+        <p>Simulators, calculators and from-scratch implementations. Add Docker for the local Kubernetes and
+          compose stacks.</p>
+      </li>
+      <li class="fse-tiercard">
+        <p class="fse-tiercard__tier">T1</p>
+        <p class="fse-tiercard__where">One small GPU</p>
+        <p class="fse-tiercard__cost">Free on Colab or Kaggle, or about $0.3–0.7 an hour</p>
+        <p>Real kernels, real vLLM with a 0.5–2B model, real metrics, on a T4 or a rented 24 GB card.</p>
+      </li>
+      <li class="fse-tiercard">
+        <p class="fse-tiercard__tier">T2</p>
+        <p class="fse-tiercard__where">A multi-GPU box</p>
+        <p class="fse-tiercard__cost">Free over PCIe on Kaggle; about $1–6 for an hour on two NVLink GPUs</p>
+        <p>Collective bandwidth, peer-to-peer and NVLink, tensor parallelism. Rent it for about an hour.</p>
+      </li>
+      <li class="fse-tiercard">
+        <p class="fse-tiercard__tier">T3</p>
+        <p class="fse-tiercard__where">Google Cloud, through Terraform</p>
+        <p class="fse-tiercard__cost">Pay per use; needs a paid billing account</p>
+        <p>How it looks in production on one cloud. Defaults to L4 Spot GPUs that scale to zero.</p>
+      </li>
+    </ul>
+    <p class="fse-note">Prices are approximate as of 2026-09-26 and marked <code>(verify)</code> in
+      <a href="{{ repo }}/blob/main/COMPUTE.md"><code>COMPUTE.md</code></a>, which also covers auto-stop and teardown habits.</p>
+  </section>
+
+  <!-- Layers -->
+  <section class="fse-section" aria-labelledby="fse-layers-title">
+    <h2 id="fse-layers-title" class="fse-h2">The eight layers</h2>
+    <p class="fse-lede">The learning path does not climb them in order. It starts with the model, spirals through
+      the engine and the hardware under it, and ends with the agents whose workloads shape every layer below.</p>
+    {% set cards = [
+      ("07-application-agent-framework", "07", "Agents", "The agent loop, tools, state, durable execution, evals and retrieval.", "agent-fundamentals · long-running-durable · retrieval-rag"),
+      ("06-gateway", "06", "Gateway", "Agent identity and policy, rate limits, admission control and cost.", "identity-security · scaling-admission-cost"),
+      ("05-orchestrator", "05", "Orchestrator", "Routing across replicas, autoscaling, prefill/decode disaggregation, KV-cache tiers.", "serving-orchestration"),
+      ("04-inference-engine", "04", "Inference engine", "The step loop, batching, the KV cache and paging, attention kernels.", "serving-engine · kv-cache · paged-attention · flash-attention · vllm-internals"),
+      ("03-kubernetes-gpu", "03", "Kubernetes and GPU scheduling", "Device plugins, gang and topology-aware scheduling, Kueue, startup latency.", "gpu-scheduling"),
+      ("02-cuda-nccl-runtime", "02", "CUDA, NCCL and runtime", "The execution model, memory access, collectives, containers and GPU sharing.", "cuda-and-nccl"),
+      ("01-hardware-gpu-fabric", "01", "Hardware and fabric", "Spec sheets, the roofline, fabrics, cold start and the cost of a token.", "roofline-and-fabric · gpu-primer · gpu-deployment"),
+      ("00-foundations", "00", "Foundations", "Transformer internals, GPU capacity planning, the model landscape.", "transformers · gpu-capacity-planning · model-landscape"),
+    ] %}
+    <ul class="fse-layers">
+      {% for folder, num, name, what, topics in cards %}
+      <li>
+        <a class="fse-layer{% if num == '00' %} fse-layer--base{% endif %}" href="{{ ('layers/' ~ folder ~ '/') | url }}">
+          <span class="fse-layer__num">{{ num }}</span>
+          <span class="fse-layer__name">{{ name }}</span>
+          <span class="fse-layer__what">{{ what }}</span>
+          <span class="fse-layer__topics">{{ topics }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <!-- Built with Claude (text lives in site/index.md) -->
+  <section class="fse-section fse-claude" aria-labelledby="fse-claude-title">
+    <h2 id="fse-claude-title" class="fse-h2">Built with Claude</h2>
+    <div class="fse-claude__body">
+      {{ page.content }}
+    </div>
+  </section>
+
+  <footer class="fse-foot">
+    <p>Source, issues and every notebook:
+      <a href="{{ repo }}">github.com/aniryou/full-stack-agentic-engineer</a></p>
+    <p>Each layer page links its notebooks to Colab; the first cell clones the repo and installs that lab.</p>
+  </footer>
+
+</div>
+{% endblock %}

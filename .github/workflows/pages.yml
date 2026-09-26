@@ -1,0 +1,52 @@
+# Build the guide site with MkDocs Material and publish it to GitHub Pages.
+# https://aniryou.github.io/full-stack-agentic-engineer/ — see tools/site/README.md
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "raw/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-site.txt
+      - name: Install site dependencies
+        run: python -m pip install -r requirements-site.txt
+      - name: Generate layer and guide pages
+        run: python tools/site/build_site_content.py
+      - name: Build (strict)
+        run: mkdocs build --strict
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site_build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
