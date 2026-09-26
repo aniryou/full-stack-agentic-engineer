@@ -1,0 +1,848 @@
+{
+ "description": "5 GPUs in one pod; the largest node has 4 (kind lab, s6).",
+ "source": "pod/node JSON trimmed to the fields that matter; the FailedScheduling message is simulated by k8sgpu.kindsim for the kind lab cluster, in the kube-scheduler's format - sample output in the documented format (illustrative)",
+ "expect": {
+  "gate": "kube-scheduler",
+  "category": "too-big"
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "name": "too-big-55785",
+   "namespace": "zoo",
+   "uid": "55785680-0000-4000-8000-000000000000",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "batch.kubernetes.io/job-name": "too-big",
+    "job-name": "too-big"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "too-big",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "restartPolicy": "Never",
+   "terminationGracePeriodSeconds": 5,
+   "nodeSelector": {
+    "cloud.google.com/gke-accelerator": "nvidia-l4"
+   },
+   "tolerations": [
+    {
+     "key": "nvidia.com/gpu",
+     "operator": "Exists",
+     "effect": "NoSchedule"
+    }
+   ],
+   "containers": [
+    {
+     "name": "worker",
+     "image": "busybox:1.38.0",
+     "command": [
+      "sh",
+      "-c",
+      "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+     ],
+     "env": [
+      {
+       "name": "GPUS",
+       "value": "5"
+      },
+      {
+       "name": "NODE_NAME",
+       "valueFrom": {
+        "fieldRef": {
+         "fieldPath": "spec.nodeName"
+        }
+       }
+      }
+     ],
+     "resources": {
+      "requests": {
+       "cpu": "100m",
+       "memory": "320Mi",
+       "nvidia.com/gpu": 5
+      },
+      "limits": {
+       "memory": "320Mi",
+       "nvidia.com/gpu": 5
+      }
+     },
+     "volumeMounts": [
+      {
+       "name": "dshm",
+       "mountPath": "/dev/shm"
+      }
+     ]
+    }
+   ],
+   "volumes": [
+    {
+     "name": "dshm",
+     "emptyDir": {
+      "medium": "Memory",
+      "sizeLimit": "256Mi"
+     }
+    }
+   ]
+  },
+  "status": {
+   "phase": "Pending",
+   "qosClass": "Burstable",
+   "conditions": [
+    {
+     "type": "PodScheduled",
+     "status": "False",
+     "reason": "Unschedulable",
+     "message": "0/6 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 Insufficient nvidia.com/gpu. preemption: 0/6 nodes are available: 6 Preemption is not helpful for scheduling.",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ]
+  }
+ },
+ "events": [
+  {
+   "apiVersion": "v1",
+   "kind": "Event",
+   "type": "Warning",
+   "reason": "FailedScheduling",
+   "message": "0/6 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 Insufficient nvidia.com/gpu. preemption: 0/6 nodes are available: 6 Preemption is not helpful for scheduling.",
+   "involvedObject": {
+    "kind": "Pod",
+    "name": "too-big-55785",
+    "namespace": "zoo"
+   },
+   "reportingComponent": "default-scheduler",
+   "source": {
+    "component": "default-scheduler"
+   },
+   "firstTimestamp": "2026-09-26T09:00:04Z",
+   "lastTimestamp": "2026-09-26T09:00:04Z",
+   "count": 1
+  }
+ ],
+ "nodes": [
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-control-plane",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-control-plane",
+     "node-role.kubernetes.io/control-plane": ""
+    }
+   },
+   "spec": {
+    "taints": [
+     {
+      "key": "node-role.kubernetes.io/control-plane",
+      "effect": "NoSchedule"
+     }
+    ]
+   },
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-worker",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-worker",
+     "cloud.google.com/gke-nodepool": "system"
+    }
+   },
+   "spec": {},
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-worker2",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-worker2",
+     "cloud.google.com/gke-nodepool": "gpu",
+     "cloud.google.com/gke-accelerator": "nvidia-l4",
+     "cloud.google.com/gce-topology-block": "block-a",
+     "cloud.google.com/gce-topology-subblock": "subblock-a1",
+     "cloud.google.com/gce-topology-host": "host-a1-1"
+    }
+   },
+   "spec": {
+    "taints": [
+     {
+      "key": "nvidia.com/gpu",
+      "value": "present",
+      "effect": "NoSchedule"
+     }
+    ]
+   },
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-worker3",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-worker3",
+     "cloud.google.com/gke-nodepool": "gpu",
+     "cloud.google.com/gke-accelerator": "nvidia-l4",
+     "cloud.google.com/gce-topology-block": "block-a",
+     "cloud.google.com/gce-topology-subblock": "subblock-a1",
+     "cloud.google.com/gce-topology-host": "host-a1-2"
+    }
+   },
+   "spec": {
+    "taints": [
+     {
+      "key": "nvidia.com/gpu",
+      "value": "present",
+      "effect": "NoSchedule"
+     }
+    ]
+   },
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-worker4",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-worker4",
+     "cloud.google.com/gke-nodepool": "gpu",
+     "cloud.google.com/gke-accelerator": "nvidia-l4",
+     "cloud.google.com/gce-topology-block": "block-a",
+     "cloud.google.com/gce-topology-subblock": "subblock-a2",
+     "cloud.google.com/gce-topology-host": "host-a2-1"
+    }
+   },
+   "spec": {
+    "taints": [
+     {
+      "key": "nvidia.com/gpu",
+      "value": "present",
+      "effect": "NoSchedule"
+     }
+    ]
+   },
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Node",
+   "metadata": {
+    "name": "gpu-lab-worker5",
+    "labels": {
+     "kubernetes.io/hostname": "gpu-lab-worker5",
+     "cloud.google.com/gke-nodepool": "gpu",
+     "cloud.google.com/gke-accelerator": "nvidia-l4",
+     "cloud.google.com/gce-topology-block": "block-a",
+     "cloud.google.com/gce-topology-subblock": "subblock-a2",
+     "cloud.google.com/gce-topology-host": "host-a2-2"
+    }
+   },
+   "spec": {
+    "taints": [
+     {
+      "key": "nvidia.com/gpu",
+      "value": "present",
+      "effect": "NoSchedule"
+     }
+    ]
+   },
+   "status": {
+    "allocatable": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "capacity": {
+     "cpu": "8",
+     "memory": "16Gi",
+     "pods": "110",
+     "nvidia.com/gpu": "4"
+    },
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     }
+    ]
+   }
+  }
+ ],
+ "pods": [
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "filler-a1-1-f011e",
+    "namespace": "zoo",
+    "uid": "f011ed-0000-4000-8000-000000000000",
+    "creationTimestamp": "2026-09-26T09:00:00Z",
+    "labels": {
+     "batch.kubernetes.io/job-name": "filler-a1-1",
+     "job-name": "filler-a1-1"
+    },
+    "ownerReferences": [
+     {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "name": "filler-a1-1",
+      "controller": true
+     }
+    ]
+   },
+   "spec": {
+    "restartPolicy": "Never",
+    "terminationGracePeriodSeconds": 5,
+    "nodeSelector": {
+     "cloud.google.com/gce-topology-host": "host-a1-1",
+     "cloud.google.com/gke-accelerator": "nvidia-l4"
+    },
+    "tolerations": [
+     {
+      "key": "nvidia.com/gpu",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+     }
+    ],
+    "containers": [
+     {
+      "name": "worker",
+      "image": "busybox:1.38.0",
+      "command": [
+       "sh",
+       "-c",
+       "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+      ],
+      "env": [
+       {
+        "name": "GPUS",
+        "value": "3"
+       },
+       {
+        "name": "NODE_NAME",
+        "valueFrom": {
+         "fieldRef": {
+          "fieldPath": "spec.nodeName"
+         }
+        }
+       }
+      ],
+      "resources": {
+       "requests": {
+        "cpu": "100m",
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       },
+       "limits": {
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       }
+      },
+      "volumeMounts": [
+       {
+        "name": "dshm",
+        "mountPath": "/dev/shm"
+       }
+      ]
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dshm",
+      "emptyDir": {
+       "medium": "Memory",
+       "sizeLimit": "256Mi"
+      }
+     }
+    ],
+    "nodeName": "gpu-lab-worker2"
+   },
+   "status": {
+    "phase": "Running",
+    "qosClass": "Burstable"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "filler-a1-2-f111e",
+    "namespace": "zoo",
+    "uid": "f111ed-0000-4000-8000-000000000000",
+    "creationTimestamp": "2026-09-26T09:00:00Z",
+    "labels": {
+     "batch.kubernetes.io/job-name": "filler-a1-2",
+     "job-name": "filler-a1-2"
+    },
+    "ownerReferences": [
+     {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "name": "filler-a1-2",
+      "controller": true
+     }
+    ]
+   },
+   "spec": {
+    "restartPolicy": "Never",
+    "terminationGracePeriodSeconds": 5,
+    "nodeSelector": {
+     "cloud.google.com/gce-topology-host": "host-a1-2",
+     "cloud.google.com/gke-accelerator": "nvidia-l4"
+    },
+    "tolerations": [
+     {
+      "key": "nvidia.com/gpu",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+     }
+    ],
+    "containers": [
+     {
+      "name": "worker",
+      "image": "busybox:1.38.0",
+      "command": [
+       "sh",
+       "-c",
+       "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+      ],
+      "env": [
+       {
+        "name": "GPUS",
+        "value": "3"
+       },
+       {
+        "name": "NODE_NAME",
+        "valueFrom": {
+         "fieldRef": {
+          "fieldPath": "spec.nodeName"
+         }
+        }
+       }
+      ],
+      "resources": {
+       "requests": {
+        "cpu": "100m",
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       },
+       "limits": {
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       }
+      },
+      "volumeMounts": [
+       {
+        "name": "dshm",
+        "mountPath": "/dev/shm"
+       }
+      ]
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dshm",
+      "emptyDir": {
+       "medium": "Memory",
+       "sizeLimit": "256Mi"
+      }
+     }
+    ],
+    "nodeName": "gpu-lab-worker3"
+   },
+   "status": {
+    "phase": "Running",
+    "qosClass": "Burstable"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "filler-a2-1-f211e",
+    "namespace": "zoo",
+    "uid": "f211ed-0000-4000-8000-000000000000",
+    "creationTimestamp": "2026-09-26T09:00:00Z",
+    "labels": {
+     "batch.kubernetes.io/job-name": "filler-a2-1",
+     "job-name": "filler-a2-1"
+    },
+    "ownerReferences": [
+     {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "name": "filler-a2-1",
+      "controller": true
+     }
+    ]
+   },
+   "spec": {
+    "restartPolicy": "Never",
+    "terminationGracePeriodSeconds": 5,
+    "nodeSelector": {
+     "cloud.google.com/gce-topology-host": "host-a2-1",
+     "cloud.google.com/gke-accelerator": "nvidia-l4"
+    },
+    "tolerations": [
+     {
+      "key": "nvidia.com/gpu",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+     }
+    ],
+    "containers": [
+     {
+      "name": "worker",
+      "image": "busybox:1.38.0",
+      "command": [
+       "sh",
+       "-c",
+       "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+      ],
+      "env": [
+       {
+        "name": "GPUS",
+        "value": "3"
+       },
+       {
+        "name": "NODE_NAME",
+        "valueFrom": {
+         "fieldRef": {
+          "fieldPath": "spec.nodeName"
+         }
+        }
+       }
+      ],
+      "resources": {
+       "requests": {
+        "cpu": "100m",
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       },
+       "limits": {
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       }
+      },
+      "volumeMounts": [
+       {
+        "name": "dshm",
+        "mountPath": "/dev/shm"
+       }
+      ]
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dshm",
+      "emptyDir": {
+       "medium": "Memory",
+       "sizeLimit": "256Mi"
+      }
+     }
+    ],
+    "nodeName": "gpu-lab-worker4"
+   },
+   "status": {
+    "phase": "Running",
+    "qosClass": "Burstable"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "filler-a2-2-f311e",
+    "namespace": "zoo",
+    "uid": "f311ed-0000-4000-8000-000000000000",
+    "creationTimestamp": "2026-09-26T09:00:00Z",
+    "labels": {
+     "batch.kubernetes.io/job-name": "filler-a2-2",
+     "job-name": "filler-a2-2"
+    },
+    "ownerReferences": [
+     {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "name": "filler-a2-2",
+      "controller": true
+     }
+    ]
+   },
+   "spec": {
+    "restartPolicy": "Never",
+    "terminationGracePeriodSeconds": 5,
+    "nodeSelector": {
+     "cloud.google.com/gce-topology-host": "host-a2-2",
+     "cloud.google.com/gke-accelerator": "nvidia-l4"
+    },
+    "tolerations": [
+     {
+      "key": "nvidia.com/gpu",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+     }
+    ],
+    "containers": [
+     {
+      "name": "worker",
+      "image": "busybox:1.38.0",
+      "command": [
+       "sh",
+       "-c",
+       "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+      ],
+      "env": [
+       {
+        "name": "GPUS",
+        "value": "3"
+       },
+       {
+        "name": "NODE_NAME",
+        "valueFrom": {
+         "fieldRef": {
+          "fieldPath": "spec.nodeName"
+         }
+        }
+       }
+      ],
+      "resources": {
+       "requests": {
+        "cpu": "100m",
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       },
+       "limits": {
+        "memory": "320Mi",
+        "nvidia.com/gpu": 3
+       }
+      },
+      "volumeMounts": [
+       {
+        "name": "dshm",
+        "mountPath": "/dev/shm"
+       }
+      ]
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dshm",
+      "emptyDir": {
+       "medium": "Memory",
+       "sizeLimit": "256Mi"
+      }
+     }
+    ],
+    "nodeName": "gpu-lab-worker5"
+   },
+   "status": {
+    "phase": "Running",
+    "qosClass": "Burstable"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "too-big-55785",
+    "namespace": "zoo",
+    "uid": "55785680-0000-4000-8000-000000000000",
+    "creationTimestamp": "2026-09-26T09:00:00Z",
+    "labels": {
+     "batch.kubernetes.io/job-name": "too-big",
+     "job-name": "too-big"
+    },
+    "ownerReferences": [
+     {
+      "apiVersion": "batch/v1",
+      "kind": "Job",
+      "name": "too-big",
+      "controller": true
+     }
+    ]
+   },
+   "spec": {
+    "restartPolicy": "Never",
+    "terminationGracePeriodSeconds": 5,
+    "nodeSelector": {
+     "cloud.google.com/gke-accelerator": "nvidia-l4"
+    },
+    "tolerations": [
+     {
+      "key": "nvidia.com/gpu",
+      "operator": "Exists",
+      "effect": "NoSchedule"
+     }
+    ],
+    "containers": [
+     {
+      "name": "worker",
+      "image": "busybox:1.38.0",
+      "command": [
+       "sh",
+       "-c",
+       "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+      ],
+      "env": [
+       {
+        "name": "GPUS",
+        "value": "5"
+       },
+       {
+        "name": "NODE_NAME",
+        "valueFrom": {
+         "fieldRef": {
+          "fieldPath": "spec.nodeName"
+         }
+        }
+       }
+      ],
+      "resources": {
+       "requests": {
+        "cpu": "100m",
+        "memory": "320Mi",
+        "nvidia.com/gpu": 5
+       },
+       "limits": {
+        "memory": "320Mi",
+        "nvidia.com/gpu": 5
+       }
+      },
+      "volumeMounts": [
+       {
+        "name": "dshm",
+        "mountPath": "/dev/shm"
+       }
+      ]
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dshm",
+      "emptyDir": {
+       "medium": "Memory",
+       "sizeLimit": "256Mi"
+      }
+     }
+    ]
+   },
+   "status": {
+    "phase": "Pending",
+    "qosClass": "Burstable",
+    "conditions": [
+     {
+      "type": "PodScheduled",
+      "status": "False",
+      "reason": "Unschedulable",
+      "message": "0/6 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 Insufficient nvidia.com/gpu. preemption: 0/6 nodes are available: 6 Preemption is not helpful for scheduling.",
+      "lastTransitionTime": "2026-09-26T09:00:04Z"
+     }
+    ]
+   }
+  }
+ ]
+}

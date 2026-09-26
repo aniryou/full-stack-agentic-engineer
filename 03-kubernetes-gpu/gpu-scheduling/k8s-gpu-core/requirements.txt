@@ -1,0 +1,9 @@
+# The library needs nothing. These are only to run the notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# only for tests/test_docs.py's schema check of the primer's DRA manifest (skipped if absent)
+pyyaml>=6.0
+kubernetes-validate>=1.34

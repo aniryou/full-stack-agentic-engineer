@@ -1,0 +1,179 @@
+{
+ "description": "vLLM pod bound to an L4 node but stuck in ContainerCreating: the GCS FUSE volume cannot be mounted.",
+ "source": "GKE event/condition text written by hand for this lab - sample output in the documented format (illustrative); verify against your cluster",
+ "expect": {
+  "gate": "kubelet",
+  "category": "volume-mount"
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "name": "vllm-l4-6d9f7c8b5-x2k4q",
+   "namespace": "serving",
+   "labels": {
+    "app": "vllm-l4"
+   },
+   "annotations": {
+    "gke-gcsfuse/volumes": "true",
+    "gke-gcsfuse/cpu-request": "500m",
+    "gke-gcsfuse/memory-request": "1Gi",
+    "gke-gcsfuse/ephemeral-storage-request": "20Gi"
+   }
+  },
+  "spec": {
+   "terminationGracePeriodSeconds": 60,
+   "serviceAccountName": "model-reader",
+   "nodeSelector": {
+    "cloud.google.com/compute-class": "l4-spot-first"
+   },
+   "tolerations": [
+    {
+     "key": "nvidia.com/gpu",
+     "operator": "Exists",
+     "effect": "NoSchedule"
+    }
+   ],
+   "containers": [
+    {
+     "name": "vllm",
+     "image": "vllm/vllm-openai:v0.30.0",
+     "command": [
+      "vllm",
+      "serve"
+     ],
+     "args": [
+      "/models/qwen2.5-1.5b-instruct",
+      "--served-model-name",
+      "qwen2.5-1.5b",
+      "--max-model-len",
+      "4096",
+      "--gpu-memory-utilization",
+      "0.90",
+      "--port",
+      "8000"
+     ],
+     "ports": [
+      {
+       "containerPort": 8000
+      }
+     ],
+     "resources": {
+      "requests": {
+       "cpu": "2",
+       "memory": "10Gi",
+       "nvidia.com/gpu": 1
+      },
+      "limits": {
+       "memory": "10Gi",
+       "nvidia.com/gpu": 1
+      }
+     },
+     "startupProbe": {
+      "httpGet": {
+       "path": "/health",
+       "port": 8000
+      },
+      "periodSeconds": 10,
+      "failureThreshold": 60
+     },
+     "readinessProbe": {
+      "httpGet": {
+       "path": "/health",
+       "port": 8000
+      },
+      "periodSeconds": 5,
+      "failureThreshold": 3
+     },
+     "livenessProbe": {
+      "httpGet": {
+       "path": "/health",
+       "port": 8000
+      },
+      "periodSeconds": 15,
+      "failureThreshold": 3
+     },
+     "volumeMounts": [
+      {
+       "name": "weights",
+       "mountPath": "/models",
+       "readOnly": true
+      },
+      {
+       "name": "dshm",
+       "mountPath": "/dev/shm"
+      }
+     ]
+    }
+   ],
+   "volumes": [
+    {
+     "name": "weights",
+     "csi": {
+      "driver": "gcsfuse.csi.storage.gke.io",
+      "readOnly": true,
+      "volumeAttributes": {
+       "bucketName": "${WEIGHTS_BUCKET}",
+       "mountOptions": "implicit-dirs",
+       "fileCacheCapacity": "-1",
+       "fileCacheForRangeRead": "true",
+       "metadataStatCacheCapacity": "-1",
+       "metadataTypeCacheCapacity": "-1",
+       "metadataCacheTTLSeconds": "-1"
+      }
+     }
+    },
+    {
+     "name": "dshm",
+     "emptyDir": {
+      "medium": "Memory",
+      "sizeLimit": "1Gi"
+     }
+    }
+   ],
+   "nodeName": "gke-gpu-lab-l4-spot-first-1a2b3c4d-k9zt"
+  },
+  "status": {
+   "phase": "Pending",
+   "conditions": [
+    {
+     "type": "PodScheduled",
+     "status": "True"
+    }
+   ],
+   "containerStatuses": [
+    {
+     "name": "vllm",
+     "ready": false,
+     "restartCount": 0,
+     "state": {
+      "waiting": {
+       "reason": "ContainerCreating"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "events": [
+  {
+   "apiVersion": "v1",
+   "kind": "Event",
+   "type": "Warning",
+   "reason": "FailedMount",
+   "message": "MountVolume.SetUp failed for volume \"weights\" : rpc error: code = PermissionDenied desc = failed to get GCS bucket \"gpu-lab-weights\": googleapi: Error 403: Caller does not have storage.objects.list access to the Google Cloud Storage bucket. Permission 'storage.objects.list' denied on resource (or it may not exist)., forbidden",
+   "involvedObject": {
+    "kind": "Pod",
+    "name": "vllm-l4-6d9f7c8b5-x2k4q",
+    "namespace": "serving"
+   },
+   "reportingComponent": "kubelet",
+   "source": {
+    "component": "kubelet"
+   },
+   "firstTimestamp": "2026-09-26T09:00:04Z",
+   "lastTimestamp": "2026-09-26T09:00:04Z",
+   "count": 1
+  }
+ ]
+}

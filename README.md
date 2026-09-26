@@ -6,7 +6,7 @@ foundations underneath (`00`). Each layer holds self-contained labs: a primer, r
 worked notebooks, and fill-in-the-blank exercises with solutions. Several topics are worked on more
 than one vendor stack (Google Cloud, Mistral) so the same concepts can be compared across providers.
 
-**181 notebooks**, all runnable in Google Colab with one click.
+**199 notebooks**, all runnable in Google Colab with one click.
 
 ## How to use it
 
@@ -46,7 +46,7 @@ than one vendor stack (Google Cloud, Mistral) so the same concepts can be compar
 | **`00-foundations/`** | Transformer internals, GPU capacity planning, the open-weight model landscape | `transformers/` (attention → block → tiny GPT, primer + practice), `gpu-capacity-planning/` (memory and bandwidth constraints, TTFT/TPOT, sizing formulas), `model-landscape/` (open-weight LLM primer, Mistral cost/routing exercises) |
 | **`01-hardware-gpu-fabric/`** | Why a GPU is shaped the way it is; scale-up vs scale-out fabrics; rooflines, fabrics and the cost of a token | `gpu-primer/`, `gpu-deployment/` (NVLink vs InfiniBand/RoCE and what it means for serving). `roofline-and-fabric/`: a primer (spec sheets, the roofline, LLM inference on the roofline, the memory hierarchy, fabrics and collective cost, cold start, reliability, cost per token, the accelerator landscape), `roofline-core/` (the calculators, standard library only), `gpu-bench-lab/` (measure the machine you have — GEMM, memory bandwidth, transfers, P2P, weight loading — on a laptop CPU or a GPU; Docker recipes and a Spot L4 VM on Google Cloud via Terraform) |
 | **`02-cuda-nccl-runtime/`** | Driver, CUDA, NCCL collectives, container runtime, MIG | _scaffolded, awaiting content_ |
-| **`03-kubernetes-gpu/`** | GPU Operator, device plugins, gang and topology-aware scheduling | _scaffolded, awaiting content_ |
+| **`03-kubernetes-gpu/`** | GPU Operator, device plugins, gang and topology-aware scheduling; Kueue quotas, GPU autoscaling and sharing | `gpu-scheduling/`: a primer (what Kubernetes sees — extended resources, the device plugin, DRA — the scheduling cycle and GPU fragmentation, gangs, topology-aware placement, Kueue queues and quotas, getting capacity, startup latency, sharing, learning locally), `k8s-gpu-core/` (a simulator of the device plugin, scheduler, gangs + Kueue TAS, Kueue quotas and a GPU cluster autoscaler, standard library only), `k8s-gpu-lab/` (manifest generators, a pod-spec linter and a "why is my pod Pending?" explainer; kind with fake GPUs and real Kueue/JobSet/LWS on a laptop with Docker; k3s + the real device plugin on one GPU VM; GKE with DWS flex-start via Terraform) |
 | **`04-inference-engine/`** | Attention kernels, KV cache, paging | `flash-attention/`, `paged-attention/`, `kv-cache/` (minimal implementations + practice notebooks) |
 | **`05-orchestrator/`** | Replica routing, autoscaling, prefill/decode disaggregation | _scaffolded, awaiting content_ |
 | **`06-gateway/`** | Identity & security for agents; scaling, admission control and cost | `identity-security/`: `agentic-identity-core/` (the idea in one file), `agentic-identity-gcp-lab/` (SPIFFE principals, token exchange, policy enforcement, MCP resource server, A2A, audit on Google Cloud), `agentic-identity-core-mistral/`. `scaling-admission-cost/`: `agentic-scaling-lab/` (capacity math, provisioned-throughput break-even, resilience, admission control, a Cloud Run + Gemini reference architecture), `agentic-scaling-lab-mistral/` (hosted vs self-hosted on vLLM) |
