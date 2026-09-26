@@ -4,6 +4,8 @@ A primer on designing agents that run for minutes to weeks — waiting on tools,
 
 Long-running agents on Google Cloud, as a primer, a reference implementation and design drills. Everything runs **offline** in ~2 seconds; the GCP backends are one environment variable away.
 
+**Time and tier:** ~8 h (rough); module 07.3, an alternative full lab in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: offline, no credentials, but not a small install: ~220 MB for the tests, ~400 MB with Jupyter (ADK 2 and the Google Cloud clients; measured 2026-09-26, verify). A Google Cloud project adds the optional T3 deploy, billed per use.
+
 ## Start here (5 minutes)
 
 ```bash

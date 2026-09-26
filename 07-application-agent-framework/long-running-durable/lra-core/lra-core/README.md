@@ -14,6 +14,8 @@ notebooks/       three fill-in-the-blank notebooks (solutions/ has the answers, 
 PRIMER.md        the concept in two pages
 ```
 
+**Time and tier:** ~2 h (rough; ~10 h with `lra-gcp`); module 07.3 in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: standard library only, no key. A Google Cloud project adds the one-service deploy in `gcp/` (T3, optional, billed per use).
+
 ## Run it
 
 ```bash

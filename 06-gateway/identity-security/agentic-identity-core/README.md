@@ -17,6 +17,8 @@ moves that everything else is an elaboration of.
 Plus two tiny helpers for the untrusted-content boundary: `screen()` (block a prompt before the
 model, Model Armor's job) and `fence()` (tag tool output as data with its provenance).
 
+**Time and tier:** 1–2 h (rough); module 06.6, with the GCP lab in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: one dependency (PyJWT), no key, no cloud account.
+
 ## Run it
 
 ```bash

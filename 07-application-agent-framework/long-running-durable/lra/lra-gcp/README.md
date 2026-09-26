@@ -7,6 +7,8 @@ with the same semantics, so the crash/resume/timeout behaviour is testable in se
 
 **Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/practice/00_core_idea.ipynb` → the rest (answers in `notebooks/worked/`).
 
+**Time and tier:** ~8 h after `lra-core` (rough); module 07.3 in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: in-memory adapters with the same semantics, no key, no cloud project. A Google Cloud project adds the optional T3 deploy (Terraform in `infra/terraform/`), billed per use; the `adk` extra adds the ADK 2 workflow.
+
 ## Quick start (no GCP needed)
 
 ```bash

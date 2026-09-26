@@ -77,8 +77,8 @@ layer below; if you already build agents, the curriculum suggests skimming 07.1 
 - At T0 every model is scripted or fake, so latencies and costs in the labs are simulated; a Gemini, Mistral or other
   model key swaps in a real model where a lab supports it.
 - The Google Cloud paths (the long-running labs' deploys, the sandbox lab's GKE Sandbox pool) are optional T3 steps;
-  `long-running-agents-gcp` pulls in ADK 2 and the Google Cloud clients, a ~420 MB install even for its offline
-  tests (2026-09-26, verify).
+  `long-running-agents-gcp` pulls in ADK 2 and the Google Cloud clients: ~220 MB even for its offline tests, ~400 MB
+  with Jupyter (measured 2026-09-26, verify).
 - The durable-execution primer [`00_primer.md`](long-running-durable/00_primer.md) is the one copy for the topic (the
   duplicates inside `long-running-agentic/` and `long-running-agents-gcp/docs/` were removed); `lra-core` and
   `lra-gcp` carry their own shorter primers.

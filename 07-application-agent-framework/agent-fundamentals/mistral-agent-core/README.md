@@ -10,6 +10,8 @@ The core loop is provider-agnostic — that is the point. `FakeLLM` runs it offl
 version (async, parallel tools, MCP, OAuth, evals, tracing) is
 [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md), next to this lab — the **step-up** for later. Learn it here first.
 
+**Time and tier:** ~4 h, plus about an hour for notebook 05 (rough); module 07.1, the Mistral variant in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: notebooks 01–04 and the tests run offline. A `MISTRAL_API_KEY` adds notebook 05's live model (billed API calls).
+
 ## Quick start (offline, no key)
 
 ```bash

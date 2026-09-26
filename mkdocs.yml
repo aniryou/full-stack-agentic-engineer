@@ -413,6 +413,7 @@ nav:
       - "06 · Gateway":
           - "layers/06-gateway/index.md"
           - "Identity security":
+              - "layers/06-gateway/identity-security/index.md"
               - "Agentic identity core":
                   - "layers/06-gateway/identity-security/agentic-identity-core/index.md"
                   - "Identity & security for an agent loop — PRACTICE": "layers/06-gateway/identity-security/agentic-identity-core/core_practice.ipynb"
@@ -462,6 +463,7 @@ nav:
                           - "08 · Audit and governance solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/08_audit_and_governance_solution.ipynb"
                           - "09 · Code evaluation drills solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/09_code_evaluation_drills_solution.ipynb"
           - "Scaling admission cost":
+              - "layers/06-gateway/scaling-admission-cost/index.md"
               - "Agentic scaling lab":
                   - "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/index.md"
                   - "Docs":

@@ -8,6 +8,8 @@ real model.
 
     83 exercises · 15 notebooks · 6.5k lines of library · 147 unit tests · every solution notebook executes clean
 
+**Time and tier:** ~20 h; module 07.2 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: a scripted `FakeLLM` stands in for the model, no GPU, no cloud project. A Gemini key is optional and swaps in the real model.
+
 ## Quick start
 
 ```bash
