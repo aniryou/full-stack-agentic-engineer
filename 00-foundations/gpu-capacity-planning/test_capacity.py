@@ -66,10 +66,20 @@ def _run_notebook(name, monkeypatch, replace=None):
     monkeypatch.setattr(sys, "path", list(sys.path))
     cells = [("".join(cell["source"])) for cell in json.loads((NB / name).read_text())["cells"] if cell["cell_type"] == "code"]
     ns = {}
-    for src in cells:
+    for i, src in enumerate(cells):
         fn = next((f for f in (replace or {}) if src.startswith(f"def {f}(")), None)
-        exec(compile(replace[fn] if fn else src, name, "exec"), ns)
+        try:
+            exec(compile(replace[fn] if fn else src, name, "exec"), ns)
+        except Exception as e:
+            e.cell = i                         # which code cell stopped, so a test can say it was the right one
+            raise
     return ns
+
+
+def _def_cell(name, fn):
+    import json
+    cells = [("".join(c["source"])) for c in json.loads((NB / name).read_text())["cells"] if c["cell_type"] == "code"]
+    return next(i for i, src in enumerate(cells) if src.startswith(f"def {fn}("))
 
 
 def test_practice_solution_runs_and_reproduces_the_bank(monkeypatch, capsys):
@@ -80,10 +90,14 @@ def test_practice_solution_runs_and_reproduces_the_bank(monkeypatch, capsys):
 
 @pytest.mark.parametrize("fn", sorted(WRONG))
 def test_practice_checks_fail_a_wrong_answer(fn, monkeypatch):
-    with pytest.raises(AssertionError):
-        _run_notebook("01_capacity_practice_solved.ipynb", monkeypatch, {fn: WRONG[fn]})
+    """The exercise's own check (the cell right after its def) fails it, not some later cell."""
+    name = "01_capacity_practice_solved.ipynb"
+    with pytest.raises(AssertionError) as err:
+        _run_notebook(name, monkeypatch, {fn: WRONG[fn]})
+    assert err.value.cell == _def_cell(name, fn) + 1
 
 
 def test_practice_blank_stops_at_the_first_exercise(monkeypatch):
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError) as err:
         _run_notebook("01_capacity_practice.ipynb", monkeypatch)
+    assert err.value.cell == _def_cell("01_capacity_practice.ipynb", "weight_gb") + 1   # its check, not its def
