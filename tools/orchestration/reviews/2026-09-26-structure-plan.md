@@ -60,3 +60,4 @@ regenerate rather than hand-merge generated files (`python3 tools/gen_colab_inde
 - 2026-09-26 20:40Z — approval received ("Yes, let's do all of these. Use own judgment."). Ledger opened; scratch orchestration dir
   prepared (SPEC, FACTS, README-STYLE, build_topic.js, review_workflow.js, fixpkg.js, helpers). Next: draft the two §6b blocks,
   launch `c1-durable` and `c2-mistral`, then `c4-gateway` and `c5-memory` once their blocks are in SPEC.md.
+- 2026-09-26 23:10Z — tracking PR #35 opened (draft). Launched `c1-durable` (workflow wf_37801607-4e8, script `scratchpad/orch/restructure-c1.js`) and `c2-mistral` (wf_c6959350-46f, `restructure-c2.js`); both scripts are `fixpkg.js` with the wording changed from findings to acceptance criteria, and the package brief embedded. Two drafting agents are writing the SPEC §6b blocks for `llm-gateway` and `agent-memory` (`scratchpad/orch/spec-*.md`). Check-in armed for 00:08Z.
