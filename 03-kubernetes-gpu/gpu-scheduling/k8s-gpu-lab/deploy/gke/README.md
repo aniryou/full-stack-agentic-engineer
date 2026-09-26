@@ -70,7 +70,11 @@ kubectl context that does not start with `gke_` unless `KUBE_CONTEXT` is set.
   the cold start notebook 04 budgets. A Spot stockout shows as `FailedScaleUp` (notebook 03).
 * **DWS through Kueue** (`dws`): the Job stays suspended; the Workload gets `QuotaReserved=True`,
   then the `dws-prov` check stays `Pending` while the ProvisioningRequest waits; when both nodes
-  exist it turns `Ready` and the Job is admitted. `python3 -m k8sgpu pending` explains each stage.
+  exist it turns `Ready` and the Job is admitted. While it is suspended there is no pod to diagnose:
+  read `kubectl get workloads,provisioningrequests -n ml`, and
+  `python3 -m k8sgpu pending --fixture gke-dws-waiting` shows how that stage reads (illustrative).
+  Once the pods exist, diagnose a live one that is still Pending with
+  `python3 -m k8sgpu pending --live "$(kubectl get pods -n ml -l job-name=dws-l4-gang -o jsonpath='{.items[0].metadata.name}')" -n ml`.
 * **ComputeClass** (`computeclass`, `serving`): `kubectl get nodes -L cloud.google.com/compute-class,cloud.google.com/gke-spot`
   shows which rung provisioned; with `activeMigration` GKE moves the pod back to Spot when it returns.
 * **GCS FUSE** (`serving`): a `gke-gcsfuse-sidecar` native sidecar is injected into the pod; a
