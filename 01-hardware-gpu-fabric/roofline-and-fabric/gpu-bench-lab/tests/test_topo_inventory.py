@@ -51,6 +51,21 @@ def test_predicted_p2p_is_labelled_a_model():
     assert pcie[("GPU0", "GPU2")].gbs == pytest.approx(31.508 / 2, abs=1e-3)   # staged through host
 
 
+def test_p2p_model_says_what_it_assumes_about_peer_access():
+    kaggle = topo.parse(topo.load_fixture("kaggle-2xt4"))
+    unknown = p2p.predict(kaggle, arch="turing", pcie_gen=3)[("GPU0", "GPU1")]
+    assert unknown.path == "PHB" and unknown.mode == "upper-bound"
+    assert unknown.gbs == pytest.approx(15.754, abs=1e-3)                        # only if peer access works
+    off = p2p.predict(kaggle, arch="turing", pcie_gen=3, peer_access={("GPU0", "GPU1"): False})[("GPU0", "GPU1")]
+    assert off.mode == "staged" and off.gbs == pytest.approx(15.754 / 2, abs=1e-3)
+    assert p2p.path_bandwidth("PHB", pcie_gen=3, peer_access=True).mode == "direct"
+    assert p2p.path_bandwidth("PIX", pcie_gen=4, peer_access=False).mode == "staged"
+    assert p2p.path_bandwidth("SYS", pcie_gen=4).mode == "staged"
+    assert p2p.path_bandwidth("NV12", arch="ampere").gbs == 300
+    with pytest.raises(ValueError):
+        p2p.path_bandwidth("XYZ")
+
+
 def test_ring_allreduce_formula():
     assert p2p.ring_allreduce_time(1e9, 8, 0.0, 100e9) == pytest.approx(0.0175)     # 2·7/8 · 1 GB / 100 GB/s
     assert p2p.ring_allreduce_time(0, 8, 10e-6, 1e9) == pytest.approx(140e-6)      # 2·7 latency steps

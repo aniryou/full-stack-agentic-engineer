@@ -36,7 +36,8 @@ class AdmissionError(RuntimeError):
 
 class DevicePlugin:
     """The node-local plugin. replicas > 1 models time-slicing: each GPU is advertised N times, and
-    the replicas are handed out without regard to which physical GPU they belong to.
+    replicas are preferred from the physical GPUs with the fewest replicas already allocated (the
+    NVIDIA plugin's distributed policy) - so a request for several can still land on one GPU.
     fail_requests_greater_than_one mirrors the NVIDIA plugin's `failRequestsGreaterThanOne`."""
 
     def __init__(self, devices: list, resource: str = GPU, replicas: int = 1,
@@ -57,7 +58,20 @@ class DevicePlugin:
         next(d for d in self.devices if d.id == device_id).health = health
 
     def get_preferred_allocation(self, available: list, must_include: list, size: int) -> list:
-        """Keep a multi-GPU container on one NVLink island if possible, else one NUMA node."""
+        """Keep a multi-GPU container on one NVLink island if possible, else one NUMA node.
+        Time-sliced replicas instead go one at a time to the GPU with the fewest replicas allocated
+        so far (NVIDIA's distributed policy; ties here by listing order, which upstream leaves open)."""
+        if self.replicas > 1:
+            chosen, rest = list(must_include), [a for a in available if a not in must_include]
+            allocated = {d.id: self.replicas for d in self.devices}
+            for a in rest:
+                allocated[a.split("::")[0]] -= 1
+            while len(chosen) < size and rest:
+                pick = min(rest, key=lambda a: allocated[a.split("::")[0]])
+                allocated[pick.split("::")[0]] += 1
+                rest.remove(pick)
+                chosen.append(pick)
+            return chosen
         island = {d.id: d.island for d in self.devices}
         numa = {d.id: d.numa for d in self.devices}
         chosen = list(must_include)

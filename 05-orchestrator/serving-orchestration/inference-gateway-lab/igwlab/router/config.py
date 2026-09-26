@@ -23,7 +23,9 @@ and fills in what you left out (upstream rules, reproduced here):
   * `metrics-data-source` + `core-metrics-extractor` are always present.
 
 The lab router runs exactly one scheduling profile (no P/D disaggregation) and only the plugin
-types in plugins.REGISTRY; anything else is rejected with a message rather than ignored.
+types in plugins.REGISTRY; anything else is rejected with a message rather than ignored. The
+`flowControl` feature gate is accepted with a warning: the lab router implements only the
+flow-control-off (legacy) admission path.
 `to_upstream()` returns the document with lab-only parameters removed, ready to paste into the
 Helm value `router.epp.pluginsCustomConfig` (see deploy/kind and deploy/gke).
 """
@@ -46,6 +48,9 @@ KIND = "EndpointPickerConfig"
 KNOWN_TOP = {"apiVersion", "kind", "plugins", "schedulingProfiles", "featureGates",
              "dataLayer", "requestHandler", "flowControl", "saturationDetector", "parser"}
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "configs"
+FLOW_CONTROL_WARNING = ("featureGates: flowControl is accepted but NOT implemented by the lab router: no router-side "
+                        "queues, priority bands or TTLs; the legacy admission applies (priority < 0 -> 429 at "
+                        "saturation, everything else is routed at once). The real EPP queues by priority with it on.")
 
 __all__ = ["ConfigError", "Profile", "PickerConfig", "load_config", "preset_names", "parse_duration"]
 
@@ -96,6 +101,8 @@ class PickerConfig:
         lines += [f"  scorer  {s.TYPE:<32} {s.name}  weight={w:g}" for s, w in p.scorers]
         lines.append(f"  picker  {p.picker.TYPE:<32} {p.picker.name}")
         lines += [f"  data    {d.TYPE:<32} {d.name}" for d in self.producers]
+        lines.append("  admission: " + ("flowControl gate set, but the lab router has no flow control -> legacy shedding"
+                                         if self.flow_control else "legacy (priority < 0 shed with 429 at saturation)"))
         return "\n".join(lines)
 
     def to_upstream(self) -> dict:
@@ -176,7 +183,9 @@ def load_config(src, seed: int = 0, clock=time.monotonic) -> PickerConfig:
         if val.lower() in ("", "true"):
             gates.append(name)
     for g in gates:
-        if g != "flowControl":
+        if g == "flowControl":
+            warnings.append(FLOW_CONTROL_WARNING)
+        else:
             warnings.append(f"feature gate {g!r} ignored by the lab router")
 
     rng = random.Random(seed)

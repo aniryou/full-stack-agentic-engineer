@@ -57,6 +57,20 @@ def test_lru_evicts_the_tail_first_and_an_oversized_prompt_keeps_its_head():
     assert idx.longest_prefix(h, "A") == 2 and idx.block_counts() == {"A": 4}
 
 
+def test_head_first_insertion_of_v0_10_evicts_the_head_and_the_greedy_scan_undercounts():
+    h = block_hashes(list(range(64 * 6)), 64)
+    lab = PrefixIndex(capacity_per_endpoint=4)                     # tail-first (llm-d-router main)
+    v010 = PrefixIndex(capacity_per_endpoint=4, head_first=True)   # llm-d-router v0.10.0
+    lab.add(h, "A")
+    v010.add(h, "A")
+    assert lab.match(h) == {"A": 4}                   # keeps blocks 0-3: a 4-block match
+    assert v010.block_counts() == {"A": 4}            # also holds 4 blocks (2-5) ...
+    assert v010.match(h) == {}                        # ... but block 0 is gone, so the scan stops at once
+    roomy = PrefixIndex(head_first=True)              # with room to spare, the order does not matter
+    roomy.add(h, "A")
+    assert roomy.match(h) == {"A": 6}
+
+
 def test_ttl_expires_entries(monkeypatch):
     now = [100.0]
     idx = PrefixIndex(ttl_s=10, clock=lambda: now[0])
@@ -69,8 +83,9 @@ def test_ttl_expires_entries(monkeypatch):
 
 
 def test_greedy_union_match_equals_per_endpoint_longest_prefix():
-    """Tail-first insertion keeps every endpoint's chain hole-free, so the upstream greedy scan
-    gives the same count as a per-endpoint contiguous match (randomized check)."""
+    """The lab's tail-first insertion (llm-d-router main; v0.10.0 inserts head-first) keeps every
+    endpoint's chain hole-free, so the greedy scan gives the same count as a per-endpoint
+    contiguous match (randomized check)."""
     rng = random.Random(1)
     prompts = [[p] * 64 * 3 + list(range(rng.randrange(0, 64 * 8))) for p in range(5)]
     idx = PrefixIndex(capacity_per_endpoint=12)

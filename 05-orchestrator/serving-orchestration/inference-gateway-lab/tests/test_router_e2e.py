@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 
 import aiohttp
+import pytest
 from aiohttp import web
 
 from igwlab.promtext import Families
@@ -115,10 +116,9 @@ def test_no_endpoints_is_503_and_bad_json_is_400_and_unknown_model_passes_throug
         assert st == 503 and h["x-llm-d-request-dropped-reason"] == "rejected-no-endpoints"
     with LocalStack(1, "round-robin") as s:
         req = urllib.request.Request(s.router_url + "/v1/chat/completions", data=b"{not json", method="POST")
-        try:
-            urllib.request.urlopen(req)
-        except urllib.error.HTTPError as e:
-            assert e.code == 400
+        with pytest.raises(urllib.error.HTTPError) as ei:
+            urllib.request.urlopen(req, timeout=30)
+        assert ei.value.code == 400
         assert _post(s.router_url, {"model": "no-such-model", "messages": []})[0] == 404
 
 
@@ -151,3 +151,24 @@ def test_client_disconnect_mid_stream_releases_router_and_backend_state():
                 break
             time.sleep(0.05)
         assert state == (0, 0, 0)
+
+
+def test_a_failed_start_stops_what_it_started():
+    import threading
+    with pytest.raises(Exception):
+        LocalStack(3, "no-such-preset").start()           # backends start before the config is rejected
+    time.sleep(0.1)
+    assert not any(t.name == "igwlab-stack" for t in threading.enumerate())
+
+
+def test_router_in_front_of_already_running_backends():
+    """The T1 shape: the in-process router in front of servers it did not start (here: fakes)."""
+    with LocalStack(2, "round-robin") as servers:
+        with LocalStack(config="round-robin", backends=servers.backend_urls) as s:
+            assert s.backends == [] and s.names == ["a", "b"]
+            for i in range(4):
+                assert _post(s.router_url, {"model": "lab/llm", "messages": [{"role": "user", "content": f"q{i}"}],
+                                            "max_tokens": 2})[0] == 200
+            assert s.routed() == {"a": 2, "b": 2}
+            m = s.backend_metrics()                                   # fetched over HTTP
+            assert set(m) == {"a", "b"} and all("vllm:num_requests_running" in v for v in m.values())

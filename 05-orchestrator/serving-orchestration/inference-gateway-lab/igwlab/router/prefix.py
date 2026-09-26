@@ -20,11 +20,19 @@ sized like the engine's KV capacity, and optionally a TTL); (3) the pseudo-token
 line up with the engine's real 16-token KV blocks. llm-d calls this the
 `approx-prefix-cache-producer`; its precise sibling subscribes to the engines' KV events.
 
-Faithful to llm-d-router (Sep 2026): chained 64-bit hashes seeded with the model name (and
-cache salt), block size clamped to >= 64 tokens, per-endpoint LRU (default 31,250 entries),
-tail-first insertion so the head of a prompt is the most recently used entry, and the greedy
-match that stops at the first block no endpoint holds. Lab additions (documented, off by
-default): an optional TTL, and LRU capacity converted to index-block units when auto-tuned.
+Faithful to llm-d-router v0.10.0 (the pinned release): chained 64-bit hashes seeded with the
+model name (and cache salt), block size clamped to >= 64 tokens, per-endpoint LRU (default
+31,250 entries), and the greedy match that stops at the first block no endpoint holds.
+
+One deliberate difference -- insertion order. The lab inserts a prompt's hashes *tail-first*,
+so the head of every prompt is its most recently used entry; llm-d-router main adopted this
+after v0.10.0 (indexer.go: "Insert hashes tail-first"). v0.10.0 itself inserts *head-first*:
+the tail becomes most recent, so under LRU pressure it evicts the *head* of a prompt first, and
+because the greedy scan stops at the first missing block, an endpoint whose head was evicted
+matches 0 blocks even though it still holds most of the prompt (the EPP undercounts). With
+enough LRU capacity -- the usual case -- both orders give the same matches.
+Lab additions (documented, off by default): an optional TTL, and LRU capacity converted to
+index-block units when auto-tuned.
 """
 from __future__ import annotations
 
@@ -107,17 +115,19 @@ class PrefixIndex:
     """hash -> endpoints, plus one LRU of hashes per endpoint (bounded memory, recency order).
 
     `ttl_s` (lab addition): entries older than this are treated as evicted — a crude model of
-    "the engine has probably dropped it by now". Because insertion is tail-first, recency
-    decreases along every recorded chain, so LRU and TTL both evict a prompt's *deepest*
-    blocks first and never punch holes in the middle of a cached prefix.
+    "the engine has probably dropped it by now". Because the lab inserts tail-first (as
+    llm-d-router main does; v0.10.0 inserts head-first), recency decreases along every recorded
+    chain, so LRU and TTL both evict a prompt's *deepest* blocks first and never punch holes in
+    the middle of a cached prefix.
     """
 
     def __init__(self, capacity_per_endpoint: int = DEFAULT_LRU_CAPACITY_PER_SERVER,
-                 ttl_s: float | None = None, clock=time.monotonic):
+                 ttl_s: float | None = None, clock=time.monotonic, head_first: bool = False):
         if capacity_per_endpoint <= 0:
             raise ValueError("capacity_per_endpoint must be > 0")
         self.default_capacity = capacity_per_endpoint
         self.ttl_s = ttl_s
+        self.head_first = head_first                 # True = llm-d-router v0.10.0's insertion order
         self.clock = clock
         self._hash_to_eps: dict[int, set[str]] = {}
         self._lru: dict[str, OrderedDict] = {}      # endpoint -> OrderedDict[hash -> last-used time]
@@ -133,13 +143,14 @@ class PrefixIndex:
             self._cap[endpoint] = capacity if capacity and capacity > 0 else self.default_capacity
         cap = self._cap[endpoint]
         now = self.clock()
-        for h in reversed(list(hashes)):             # tail first: the head ends up most recent
+        order = list(hashes) if self.head_first else list(reversed(list(hashes)))
+        for h in order:                              # tail first (default): the head ends up most recent
             if h in lru:
                 lru.move_to_end(h)
             else:
                 self._hash_to_eps.setdefault(h, set()).add(endpoint)
             lru[h] = now
-            while len(lru) > cap:                     # an oversized prompt keeps exactly its head
+            while len(lru) > cap:                     # tail-first: an oversized prompt keeps exactly its head
                 old, _ = lru.popitem(last=False)
                 self._forget(old, endpoint)
                 self.evictions += 1

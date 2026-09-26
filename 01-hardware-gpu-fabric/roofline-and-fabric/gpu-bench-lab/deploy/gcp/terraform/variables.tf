@@ -66,7 +66,7 @@ variable "provisioning_model" {
 }
 
 variable "max_run_duration_seconds" {
-  description = "Safety net: Compute Engine stops or deletes the VM after this long even if the startup script hangs."
+  description = "Safety net for a hung run: Compute Engine stops or deletes (termination_action) a VM that has been RUNNING this long. It counts running time only, so it does not delete a VM that already powered itself off (verify)."
   type        = number
   default     = 3600
 
@@ -161,7 +161,7 @@ variable "torch_index_url" {
 }
 
 variable "power_off_when_done" {
-  description = "Shut the VM down after uploading the report (the disk remains until terraform destroy, or until max_run_duration deletes it)."
+  description = "Shut the VM down after uploading the report: GPU and vCPU billing stop, but the stopped VM and its boot disk remain (the disk bills) until terraform destroy — bench-on-gcp.sh destroys for you. max_run_duration does not act on a stopped VM (verify)."
   type        = bool
   default     = true
 }

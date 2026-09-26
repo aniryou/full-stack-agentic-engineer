@@ -15,6 +15,13 @@ The EPP's `core-metrics-extractor` maps these vLLM series to its attributes:
     vllm:num_requests_waiting -> WaitingQueueSize      vllm:kv_cache_usage_perc -> KVCacheUsagePercent
     vllm:num_requests_running -> RunningRequestsSize   vllm:lora_requests_info  -> Active/WaitingModels
     vllm:cache_config_info    -> block size, number of GPU KV blocks
+
+For each metric the EPP (llm-d-router v0.10.0, `getLatestMetric`) keeps ONE series: the one with
+the latest timestamp -- vLLM's exposition carries no timestamps, so in practice the first
+matching series. It does not aggregate. With one engine per pod that is the whole story; a pod
+that exposes several data-parallel ranks (`engine="0"`, `engine="1"`, ...) is read as rank 0
+only. The lab router sums the ranks' queues and takes the maximum KV usage instead (its own
+choice, `aggregate="sum"`); `extract_vllm(fam, aggregate="first")` reproduces the EPP.
 """
 from __future__ import annotations
 
@@ -48,19 +55,24 @@ def _split(v: str | None) -> set:
     return {x for x in (v or "").split(",") if x}
 
 
-def extract_vllm(fam: Families) -> EndpointMetrics:
+def extract_vllm(fam: Families, aggregate: str = "sum") -> EndpointMetrics:
     """Map one scrape of a vLLM (or vLLM-compatible) `/metrics` page to routing attributes.
 
-    Gauges are summed across the `engine` label (data-parallel ranks) for queue/running and
-    maxed for KV usage (the most constrained rank). `vllm:gpu_cache_usage_perc` is the pre-V1
-    name of the KV gauge and is accepted as a fallback.
+    aggregate="sum" (the lab router's choice): queue/running are summed across the `engine`
+    label (data-parallel ranks) and KV usage is the maximum (the most constrained rank).
+    aggregate="first" (what the EPP does): the first series of each metric, nothing summed.
+    `vllm:gpu_cache_usage_perc` is the pre-V1 name of the KV gauge and is accepted as a fallback.
     """
+    if aggregate not in ("sum", "first"):
+        raise ValueError("aggregate must be 'sum' or 'first'")
+    total = fam.sum if aggregate == "sum" else fam.value          # Families.value = the first series
+    worst = fam.max if aggregate == "sum" else fam.value
     m = EndpointMetrics()
-    m.waiting = int(fam.sum("vllm:num_requests_waiting", default=0))
-    m.running = int(fam.sum("vllm:num_requests_running", default=0))
-    kv = fam.max("vllm:kv_cache_usage_perc")
+    m.waiting = int(total("vllm:num_requests_waiting", 0))
+    m.running = int(total("vllm:num_requests_running", 0))
+    kv = worst("vllm:kv_cache_usage_perc")
     if kv is None:
-        kv = fam.max("vllm:gpu_cache_usage_perc", default=0.0)
+        kv = worst("vllm:gpu_cache_usage_perc", 0.0)
     m.kv_usage = float(kv)
     lora = fam.get("vllm:lora_requests_info")
     if lora:

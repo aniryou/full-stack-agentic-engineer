@@ -105,10 +105,15 @@ persistent `InputBatch` and builds inputs on the CPU. `vllm/v1/worker/gpu/model_
 ("MRV2") keeps request state in fixed GPU slots and builds inputs with Triton kernels. MRV2's README still
 says "[Experimental]", but `VllmConfig.use_v2_model_runner` (`vllm/config/vllm.py`) returns **True by
 default** when Triton is available and nothing unsupported is requested; it falls back to MRV1 for, among
-others, the `ngram`, `draft_model`, `suffix` and `medusa` speculative methods, stock `torch.compile`, and
-sequence parallelism (`_get_v2_model_runner_unsupported_features`). `VLLM_USE_V2_MODEL_RUNNER=0|1` forces
-the choice; the worker logs "Using V2 Model Runner" (`vllm/v1/worker/gpu_worker.py`) or the config logs the fallback
-reason. Section 5 covers both.
+others, the `ngram`, `ngram_gpu`, `draft_model`, `suffix` and `medusa` speculative methods, stock
+`torch.compile`, and sequence parallelism with TP > 1 (`_get_v2_model_runner_unsupported_features`).
+Three exceptions to "default": on ROCm, the architectures in `ROCM_DEFAULT_MRV1_ARCHITECTURES` (DeepSeek-V3.2,
+DeepSeek-V4, GLM-MoE-DSA) default to MRV1 ("Defaulting to V1 model runner on ROCm"), and HiSparse attention
+and watermarking force MRV2 even over `VLLM_USE_V2_MODEL_RUNNER=0`. Otherwise `VLLM_USE_V2_MODEL_RUNNER=0|1`
+forces the choice; the worker logs "Using V2 Model Runner" (`vllm/v1/worker/gpu_worker.py`) or the config logs
+the fallback reason. A source comment in `_get_v1_model_runner_unsupported_features` already calls MRV1
+"deprecated". **This primer traces the default, MRV2**, and names the MRV1 equivalent where it differs;
+Section 5.3 covers MRV2 and 5.4 keeps MRV1 as the contrast.
 
 ---
 
@@ -138,13 +143,14 @@ client      API server process                                EngineCore process
   │                                                                          step_with_batch_queue (async scheduling):
   │                                                                           Scheduler.schedule() → SchedulerOutput
   │                                                                           Executor.execute_model(so, non_block=True) ──▶ Worker.execute_model
-  │                                                                           Scheduler.get_grammar_bitmask(so)               GPUModelRunner.execute_model:
-  │                                                                             (CPU, overlaps the forward)                    _update_states, _prepare_inputs,
-  │                                                                                                                            attention metadata, forward,
-  │                                                                                                                            compute_logits (kept on GPU)
+  │                                                                           Scheduler.get_grammar_bitmask(so)               GPUModelRunner.execute_model [MRV2]:
+  │                                                                             (CPU, overlaps the forward)                    add_requests, update_requests,
+  │                                                                                                                            prepare_inputs, prepare_attn,
+  │                                                                                                                            forward → hidden states (kept)
   │                                                                           Executor.sample_tokens(grammar) ─────────────▶ GPUModelRunner.sample_tokens:
-  │                                                                                                                            apply bitmask, Sampler or
-  │                                                                           ◀──────────── ModelRunnerOutput ──────────────── RejectionSampler, draft proposal
+  │                                                                                                                            sample: logits, bitmask, Sampler or
+  │                                                                                                                            RejectionSampler; postprocess_sampled;
+  │                                                                           ◀──────────── ModelRunnerOutput ──────────────── speculator.propose (drafts)
   │                                                                           Scheduler.update_from_output → EngineCoreOutputs
   │                                                                             (append tokens, check_stop, free finished)
   │                                                                          output_queue → output thread: process_output_sockets
@@ -169,9 +175,9 @@ client      API server process                                EngineCore process
 | 5 | Core, input thread | `EngineCoreProc.process_input_sockets` → `EngineCore.preprocess_add_request` (`vllm/v1/engine/core.py`) | build `Request` (computes prompt block hashes); start async grammar compile | overlaps the GPU step |
 | 6 | Core | `run_busy_loop` → `_process_input_queue` → `Scheduler.add_request` | request enters `waiting`; `QUEUED` event | queue time |
 | 7 | Core | `Scheduler.schedule` (`vllm/v1/core/sched/scheduler.py`) | budget, prefix lookup, block allocation, preemption → `SchedulerOutput` | queue time, TTFT |
-| 8 | Core→GPU | `Executor.execute_model(so, non_block=True)` | forward pass up to logits | step time |
+| 8 | Core→GPU | `Executor.execute_model(so, non_block=True)` → `GPUModelRunner.execute_model` (`vllm/v1/worker/gpu/model_runner.py`, MRV2) | apply the `SchedulerOutput` delta to GPU request slots, build inputs and slot mappings, forward pass to hidden states | step time |
 | 9 | Core | `Scheduler.get_grammar_bitmask` | structured-output mask built on the CPU during step 8 (`EngineCore.step`) | hidden |
-| 10 | GPU | `GPUModelRunner.sample_tokens(grammar_output)` | mask, sample or rejection-sample, propose drafts | step time |
+| 10 | GPU | `GPUModelRunner.sample_tokens(grammar_output)` → `sample` | logits for the sampled rows only, bitmask, sample or rejection-sample, update GPU state (`postprocess_sampled`), propose drafts | step time |
 | 11 | Core | `Scheduler.update_from_output` | append tokens, roll back rejected drafts, `check_stop`, free finished requests; outputs encoded and pushed by the output thread | step time |
 | 12 | API | `AsyncLLM._run_output_handler` → `OutputProcessor.process_outputs` (`vllm/v1/engine/output_processor.py`) → `chat_completion_stream_generator` | the one loop over all outputs: stats, incremental detokenize, stop strings, logprobs; chunks of `VLLM_V1_OUTPUT_PROC_CHUNK_SIZE` with `await asyncio.sleep(0)` between; SSE deltas, then `data: [DONE]` | ITL jitter under load |
 
@@ -305,8 +311,10 @@ chunks. `--max-num-batched-tokens` sets the step size, and every decode sharing 
 remaining budget; at 512, two concurrent long prompts each advance 512 per step instead of one blocking the
 other. The cap is dropped when only one request is eligible, and `--long-prefill-token-threshold-adaptive`
 floors it at `max_num_batched_tokens / num_requests` (`SchedulerConfig`). A chunk that ends mid-prompt still
-produces logits, but the runner marks the row in `discard_request_mask` and drops the sampled token
-(`vllm/v1/worker/gpu_model_runner.py: GPUModelRunner._prepare_inputs`).
+gets a logits row and a draw, which is then thrown away: in MRV2, `get_num_sampled_and_rejected`
+(`vllm/v1/worker/gpu/input_batch.py`) sets `num_sampled = 0` for any row with `seq_len < prefill_len`, so
+`postprocess_sampled` records nothing for it (MRV1 does the same with `discard_request_mask` in
+`GPUModelRunner._prepare_inputs`, `vllm/v1/worker/gpu_model_runner.py`).
 
 ### 3.5 Worked example: four requests through six steps
 
@@ -321,7 +329,12 @@ arrive together; C (6,000) arrives before step 3. Blocks are `ceil(tokens / 16)`
 | 3 | A: 1, B: 1 | C: `min(6000, 2046) = 2046` | 2,048 | C +128 (A's position 3000 is in block 187, already held; B's 500 in block 31) | A, B |
 | 4 | A: 1, B: 1, C: `min(3954, 2046) = 2046` | — | 2,048 | C +128 | A, B |
 | 5 | A: 1, B: 1, C: `6000 − 4092 = 1908` | — | 1,910 | C +119 | A, B, C (C's TTFT: 3 steps) |
-| 6 | A: 1, B: 1, C: 1 | — | 3 | 0 | A, B, C (pure decode: full CUDA graph, padded to 4) |
+| 6 | A: 1, B: 1, C: 1 | — | 3 | C +1 (position 6000 opens block 375; A's 3003 and B's 503 fit in held blocks) | A, B, C (pure decode: full CUDA graph, padded to 4) |
+
+The rule behind the "New blocks" column: `allocate_slots` needs `ceil((num_computed_tokens + n) / 16)` blocks,
+so a decode takes a new block exactly when `num_computed_tokens` is a multiple of 16. C's prompt fills 375 blocks
+exactly (6,000 = 375 × 16), so its first decode needs block 376; A and B took their partial last blocks at
+admission and next need one at positions 3,008 and 512.
 
 A and B keep producing one token per step while C prefills, but steps 3–5 each carry ~2,048 tokens, so their
 ITL during C's prefill is the time of a 2,048-token step, not a 6,000-token one. Raising the budget to 8,192
@@ -333,9 +346,22 @@ that is the TTFT-versus-ITL dial.
 `allocate_slots` admits a waiting request only if its **whole** sequence fits, not just its first chunk: the
 scheduler passes `full_sequence_must_fit = scheduler_reserve_full_isl` (default `True`), and
 `KVCacheManager.allocate_slots` compares the blocks for `min(num_tokens, max_model_len)` plus the watermark
-with `BlockPool.get_num_free_blocks()`. Prefix hits sitting in the free queue count as needed capacity, since
-touching them removes them from the free pool (`vllm/v1/core/single_type_kv_cache_manager.py:
-SingleTypeKVCacheManager.get_num_blocks_to_allocate`). `--watermark` (default 0.0) holds back
+with `BlockPool.get_num_free_blocks()` (the mini engine calls the same gate `admit_whole_prompt`,
+`../serving-engine/mini-engine-core/minengine/kv.py`). `num_tokens` is the *current* length, prompt plus any
+outputs so far: a resumed request must fit everything it has generated, and nothing reserves room for
+`max_tokens`, so admitted requests can still outgrow the pool later (Section 3.7). Prefix hits sitting in the
+free queue count as needed capacity, since touching them removes them from the free pool
+(`vllm/v1/core/single_type_kv_cache_manager.py: SingleTypeKVCacheManager.get_num_blocks_to_allocate`: "If a
+computed block is an eviction candidate ... we must count it in the free-capacity check"):
+
+```
+required = ceil(num_tokens / 16) − len(hits)          # new blocks
+         + #(hits with ref_cnt == 0)                   # evictable hits: leaving the free queue
+         + watermark_blocks                            # waiting/preempted requests only
+admit iff required ≤ get_num_free_blocks()             # free count includes cached, unreferenced blocks
+```
+
+`--watermark` (default 0.0) holds back
 `int(watermark × num_blocks)` blocks when admitting waiting or preempted requests while something else runs.
 The engine's queue is unbounded; bounds live in the API server (`--max-num-queued-reqs`,
 `--max-num-queued-tokens`, HTTP 503 when full; `vllm/config/scheduler.py`).
@@ -350,23 +376,37 @@ victim's blocks and encoder-cache entries, sets `status = PREEMPTED` and `num_co
 drafts, increments `num_preemptions`, records a `PREEMPTED` event, and **prepends** it to `waiting`.
 
 There is no swap-to-CPU path in the V1 scheduler (`CacheConfig` has no `swap_space`); the request keeps its
-token ids and recomputes. With prefix caching, recompute is usually cheap: its full blocks went back to the
-free queue **with their hashes** (Section 4.6), so re-admission re-hits them unless they were reallocated.
+token ids and recomputes. Its full blocks go back to the free queue **with their hashes** (Section 4.6), so a
+later re-admission re-hits whatever has not been reallocated in the meantime. Whether that happens soon depends
+on the admission rule of Section 3.6, and the worked example shows it often does not.
 
 Worked example with `--num-gpu-blocks-override 300` (documented in `CacheConfig` as "used for testing
-preemption"; 299 usable blocks because block 0 is the null block):
+preemption"; 299 usable blocks because block 0 is the null block). Two requests with 2,000-token prompts and
+long `max_tokens`, FCFS, synchronous accounting (async scheduling shifts each count by the one in-flight token
+without changing the outcome). "Free" is `get_num_free_blocks()`, which counts cached, unreferenced blocks.
 
-| Moment | R1 (2,000-token prompt) | R2 (2,000-token prompt) | Free blocks |
+| Moment | R1 | R2 | Free |
 |---|---|---|---|
 | both prefilled | 125 blocks | 125 blocks | 49 |
-| lockstep decode, a block every 16 tokens | +24 blocks | +24 blocks | 1 |
-| next 16-token boundary | takes the last block | `allocate_slots` → `None`; R2 is `running[-1]`, preempts itself | 0 |
-| after preemption | running | ~149 blocks freed (full ones keep hashes), head of `waiting` | ~149 |
-| next step | decodes | re-hits its ~148 cached blocks; admitted if the full sequence fits; recomputes ~1 block | ~0 |
-| 16 tokens later | needs a block | needs a block | ping-pong |
+| lockstep decode, one block each per 16 tokens | +24 → 149 | +24 → 149 | 1 |
+| next boundary (both at position 2,384) | takes the last free block (150 held) | `allocate_slots` → `None`; R2 is `running[-1]`, so it preempts itself: 149 full, hashed blocks go to the free-queue tail in reverse (its block 149 nearest the head), `num_computed_tokens = 0`, prepended to `waiting`; no admissions this step | 149 |
+| next step | decodes (no new block for 15 tokens) | head of `waiting`: hit = `(2385 − 1) // 16` = 149 blocks, but the full-sequence check needs `ceil(2385 / 16)` = 150 = 1 new + 149 evictable hits > 149 free → `None` → `break` | 149 |
+| 16 tokens later | needs block 151: `get_new_blocks` pops the queue head, R2's block 149, and evicts its hash | hit falls to 148 blocks; still needs 150 against 148 free | 148 |
+| every further 16 tokens | +1 block | loses its current tail block; still refused | −1 |
+| R1 finishes, having taken *j* blocks after the preemption | frees 150 + *j* blocks | re-admitted: hits the 149 − *j* surviving blocks, recomputes 16*j* + 1 tokens | 299, then 149 once R2 holds 150 |
 
-The pair thrashes every 16 tokens and `vllm:num_preemptions` climbs. The fixes are capacity (FP8 KV, fewer
-concurrent sequences, shorter `max_model_len`, more GPUs) or headroom (`--watermark`), not a bigger token budget.
+So one preemption, no ping-pong: the victim cannot come back while the request that displaced it runs, because it
+needs one block more than exists outside that request, and every block the survivor takes comes from the
+victim's cached tail. Meanwhile the victim sits at the head of `waiting` and, because the waiting pass stops at
+the first request that does not fit (`break`), **no request behind it is admitted either**: the engine serializes
+on R1, and TTFT for everything queued grows by R1's remaining decode time. The notebook replays this at small
+scale ([`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb), exercise 4).
+
+`vllm:num_preemptions` climbs under a different pattern: many requests admitted because their *current* length
+fits (Section 3.6 reserves nothing for `max_tokens`), then all growing. Each time a running request finds no free
+block the newest running request is preempted, and as victims are re-admitted when others finish, the cycle
+repeats. The fixes are capacity (FP8 KV, fewer concurrent sequences via `--max-num-seqs`, shorter
+`max_model_len`, more GPUs) or admission headroom (`--watermark`), not a bigger token budget.
 
 ### 3.8 Async scheduling and the batch queue
 
@@ -382,8 +422,11 @@ step N+1: schedule(N+1) while GPU runs N ─▶ enqueue ─▶ block on N's resu
 ```
 
 The scheduler must schedule a decode for a token it has not seen. `AsyncScheduler._update_after_schedule` adds
-`num_output_placeholders` and `-1` placeholder draft ids; the runner reads the real ids from the previous
-step's GPU tensor (`GPUModelRunner._prepare_input_ids`, `prev_sampled_token_ids`); when outputs arrive,
+`num_output_placeholders` and `-1` placeholder draft ids; the runner fills in the real ids on the GPU. In MRV2,
+`postprocess_sampled` writes each request's sampled token into `RequestState.last_sampled_tokens`, and the next
+step's `combine_sampled_and_draft_tokens` kernel (`vllm/v1/worker/gpu/input_batch.py`) copies it, plus any
+drafts, into `input_ids`, so the token never visits the host (MRV1: `GPUModelRunner._prepare_input_ids` with
+`prev_sampled_token_ids`). When outputs arrive,
 `AsyncScheduler._update_request_with_output` retires the placeholders and calls `cache_blocks`. The cost: a
 request that stops on EOS may already have one more step scheduled, whose output is dropped (the running loop
 avoids it when `max_tokens` makes the stop predictable). The benefit: CPU scheduling time leaves the step time.
@@ -420,6 +463,22 @@ Scheduler
 
 The scheduler-side cache is pure CPU bookkeeping. The KV tensors live on the workers; the scheduler hands them
 block ids, and the runner turns those into a block table and a slot mapping (Section 5.3).
+
+The repo's mini engine builds the same structure from scratch
+([`../serving-engine/mini-engine-core/minengine/kv.py`](../serving-engine/mini-engine-core/minengine/kv.py), with
+its notebook `03_prefix_caching`); read it first if the idea is new. Where the two differ is what this section and
+the notebook focus on:
+
+| Concern | mini engine (`minengine/kv.py`) | vLLM (`vllm/v1/core/`) |
+|---|---|---|
+| free queue | `OrderedDict` of block ids, `popitem(last=False)` | `FreeKVCacheBlockQueue`, intrusive doubly linked list, O(1) `remove` |
+| freeing | every ref-0 block to the back, tail first | cached blocks to the back, **uncached (partial) blocks to the front** (4.6) |
+| reserved block | none; usage is `1 − free / num_blocks` | block 0 is the null block; usage is `1 − free / (num_blocks − 1)` |
+| when a block is named | after the step that computed it (`cache_blocks`) | at scheduling time, inside `allocate_slots` (4.5) |
+| duplicate full blocks | the second copy stays unpublished | both kept under the same hash (`BlockHashToBlockMap`, no dedup) |
+| extra keys | one `extra` value on every block | LoRA name on every block, `cache_salt` on the first only, MM offsets, group id in the key (4.3) |
+| admission gate | `allocate_slots(..., admit_whole_prompt=True)`, revived hits counted | `allocate_slots(..., full_sequence_must_fit=scheduler_reserve_full_isl)`, evictable hits counted (3.6) |
+| hit cap | `(len − 1) // block_size` blocks | the same, via `max_cache_hit_length = num_tokens − 1` (4.4) |
 
 ### 4.2 Blocks and the free queue
 
@@ -479,7 +538,10 @@ The prompt-design rule: put everything shared (system prompt, tool schemas, few-
 first and byte-identical, and anything per-request (timestamps, user ids) after it; one changed token early on
 changes every later hash. `record_prefix_cache_stats` adds `request.num_tokens` to queries and the hit length
 to hits at admission, so `vllm:prefix_cache_hits / vllm:prefix_cache_queries` is a **token-weighted** hit rate
-(`vllm/v1/metrics/stats.py: PrefixCacheStats.record`).
+(`vllm/v1/metrics/stats.py: PrefixCacheStats.record`). It covers **first admissions only**: `record` is called
+with `preempted = request.num_preemptions > 0`, and a re-admission after preemption goes to separate
+`preempted_queries`/`preempted_hits` fields that `PrometheusStatLogger` does not export, so the re-hits of
+Section 3.7 never show in this ratio.
 
 ### 4.5 Allocation: `allocate_slots`
 
@@ -555,28 +617,34 @@ page per layer   = 8 heads × 16 tokens × (128 + 128) × 2 B     = 65,536 B = 6
 bytes_per_block  = 32 layers × 64 KiB                         = 2 MiB per 16 tokens
 ```
 
-The activation and graph rows are assumptions; your `Available KV cache memory: … GiB` log line replaces them.
+The non-KV overheads are estimates, and this table uses the serving lab's estimator so that the two documents
+give the same numbers: `servelab.sizing.size("llama-3.1-8b-instruct", "L4", max_model_len=8192)` and
+`size(..., "H100-80GB", max_num_batched_tokens=8192, max_num_seqs=1024)`
+([`../serving-engine/vllm-serving-lab/servelab/sizing.py`](../serving-engine/vllm-serving-lab/servelab/sizing.py);
+`overhead_estimate` models the profiling forward's MLP activations plus FP32 sampler logits, 0.5 GiB of graphs and
+0.2 GiB non-torch memory). The notebook's last section recomputes every number below and fails if the primer and
+the lab drift apart. Your `Available KV cache memory: … GiB` log line replaces all of the estimates.
 
 | | L4 24 GB | H100 80 GB (SXM) |
 |---|---|---|
-| total memory seen by CUDA | 23,034 MiB = 22.49 GiB `(verify)` | 81,559 MiB = 79.65 GiB `(verify)` |
+| total memory seen by CUDA (lab GPU table) | 22.49 GiB `(verify)` | 79.65 GiB `(verify)` |
 | `requested` at 0.92 | 20.69 GiB | 73.28 GiB |
 | weights | 14.96 GiB | 14.96 GiB |
-| activation peak + non-torch (assumed) | 1.0 GiB (2,048-token profile, 256-row sampler) | 2.0 GiB (8,192-token profile, 1,024-row sampler) |
-| CUDA graphs (assumed) | 0.5 GiB | 1.0 GiB |
-| **available KV** | **4.24 GiB** | **55.32 GiB** |
-| `num_blocks` (÷ 2 MiB) | 2,169 | 28,322 |
-| token capacity (× 16) | 34,704 | 453,152 |
-| max concurrency at `max_model_len` 8,192 (512 blocks each) | 4.24× | 55.3× |
-| at 32,768 (2,048 blocks) | 1.06× | 13.8× |
-| at 131,072, the model default (8,192 blocks = 16 GiB) | **does not start** | 3.46× |
-| with `--kv-cache-dtype fp8` (1 MiB per block) | 4,338 blocks, 69,408 tokens | 56,645 blocks, 906,320 tokens |
+| activations of the profiling pass + sampler logits (estimate) | 0.42 GiB (2,048-token profile, 256-row sampler) | 1.67 GiB (8,192-token profile, 1,024-row sampler) |
+| CUDA graphs + non-torch (estimate) | 0.5 + 0.2 GiB | 0.5 + 0.2 GiB |
+| **available KV** | **4.62 GiB** | **55.95 GiB** |
+| `num_blocks` (÷ 2 MiB) | 2,363 | 28,648 |
+| token capacity (× 16) | 37,808 | 458,368 |
+| max concurrency at `max_model_len` 8,192 (512 blocks each) | 4.62× | 55.95× |
+| at 32,768 (2,048 blocks) | 1.15× | 13.99× |
+| at 131,072, the model default (8,192 blocks = 16 GiB) | **does not start** | 3.50× |
+| with `--kv-cache-dtype fp8` (1 MiB per block) | 4,727 blocks, 75,632 tokens | 57,297 blocks, 916,752 tokens |
 
 The L4 row is the most common first-deployment failure: with no `--max-model-len`, one 131,072-token request
 needs 16 GiB of KV and `_check_enough_kv_cache_memory` raises "To serve at least one request with the model's max
 seq len (131072), (16.00 GiB KV cache is needed, which is larger than the available KV cache memory (…)". Fix it
-with `--max-model-len 16384` (2.12×), `--max-model-len auto` (`-1`: `_auto_fit_max_model_len` picks the largest
-length that fits, about 34.7k tokens with the assumptions above), FP8 KV, or a bigger GPU. The result is logged
+with `--max-model-len 16384` (2.31×), `--max-model-len auto` (`-1`: `_auto_fit_max_model_len` binary-searches the
+largest length that fits, about 37.8k tokens with the estimates above), FP8 KV, or a bigger GPU. The result is logged
 as "GPU KV cache size: N tokens, Maximum concurrency for M tokens per request: X.XXx" (`update_kv_cache_capacity`).
 That concurrency is `num_blocks / ceil(max_model_len / block_size)` (`get_max_concurrency_for_kv_cache_config`),
 a worst case: real requests are shorter, and prefix sharing raises it further.
@@ -608,14 +676,35 @@ length. `--disable-hybrid-kv-cache-manager` allocates every layer as full attent
 |---|---|---|---|
 | `uni` → `UniProcExecutor` | world size 1 | worker inside the EngineCore process | direct call |
 | `mp` → `MultiprocExecutor` | world size > 1 on CUDA, fits on the node (or `--nnodes` set) | one `WorkerProc` per GPU | shared-memory `MessageQueue` broadcast |
-| `ray` → `RayDistributedExecutor` (`RayExecutorV2` with `VLLM_USE_RAY_V2_EXECUTOR_BACKEND`) | in a Ray placement group, `--data-parallel-backend ray`, or explicit | Ray actors, multi-node | Ray compiled DAG (`_compiled_ray_dag`) |
+| `ray` → `RayExecutorV2` (default), `RayDistributedExecutor` with `VLLM_USE_RAY_V2_EXECUTOR_BACKEND=0` | in a Ray placement group, `--data-parallel-backend ray`, or explicit | one `RayWorkerProc` actor per GPU, placed by a placement group, any number of nodes | V2: the same `MessageQueue` as `mp` (shared memory on the driver's node, TCP to other nodes); legacy: Ray compiled DAG (`_compiled_ray_dag`) |
 | `external_launcher` | `torchrun`-style launch (RL, SPMD) | caller owns the processes | — |
+
+The Ray default comes from `vllm/envs.py` (`VLLM_USE_RAY_V2_EXECUTOR_BACKEND` defaults to `"1"`, commented "use
+RayExecutorV2 (MQ-based) instead of RayDistributedExecutor (compiled-graph backend)") and `Executor.get_class`.
 
 `MultiprocExecutor.collective_rpc` enqueues `(method, args, kwargs, output_rank)` on one `MessageQueue`
 (`vllm/distributed/device_communicators/shm_broadcast.py`): a shared-memory ring buffer for readers on the node
 (default chunk 24 MiB, "large enough to accommodate grammar bitmask tensors for large batches (1024 requests)")
 plus a ZMQ XPUB socket for remote readers. Every worker executes the same `SchedulerOutput`; only one replies:
 `_get_output_rank` returns the first tensor-parallel rank of the last pipeline stage.
+
+**Ray or multiprocessing.** Since `RayExecutorV2` subclasses `MultiprocExecutor`
+(`vllm/v1/executor/ray_executor_v2.py`: "Inherits from MultiprocExecutor to reuse the MQ-based control plane and
+NCCL data plane. Workers are Ray actors."), the per-step path is the same in both: one `MessageQueue` broadcast of
+the `SchedulerOutput`, NCCL for the tensors. What differs is who creates, places and watches the worker
+processes:
+
+| | `mp` | `ray` (`RayExecutorV2`) |
+|---|---|---|
+| default when (`ParallelConfig.__post_init__`) | world size > 1 and it fits on this node, or `--nnodes > 1` on CUDA | already inside a Ray placement group, `--data-parallel-backend ray`, or `--distributed-executor-backend ray`; the only option on TPU per the config docstring |
+| multi-node | you start `vllm serve` on every node with `--nnodes`, `--node-rank`, `--master-addr`, `--master-port`; something else (a script, Kubernetes LeaderWorkerSet) owns the processes | `initialize_ray_cluster` creates or reuses a placement group; Ray starts one actor per bundle on whichever nodes hold the GPUs |
+| GPU assignment | local rank → device on each node | `RayWorkerProc` discovers the physical GPU Ray bound to its bundle and never rewrites `CUDA_VISIBLE_DEVICES`, so several engines can share a node through externally managed placement groups (class docstring) |
+| failure handling | worker processes are children of EngineCore | a monitor thread `ray.wait`s on every actor's `run()` reference and shuts the executor down when one dies (`start_worker_monitor`) |
+| costs | nothing extra | a Ray installation and cluster, actor start-up before model load, logs and stack traces spread across Ray's per-actor logs |
+
+Pick `mp` for one node, and for multi-node when an orchestrator already places the pods; pick Ray when a Ray
+cluster is already the unit of scheduling (Ray Serve, RL frameworks that place engines themselves). Whether
+Ray adds per-step latency over `mp` now that both share the `MessageQueue` control plane is `(verify: measure)`.
 
 ### 5.2 A worker's life
 
@@ -638,60 +727,81 @@ plus a ZMQ XPUB socket for remote readers. Every worker executes the same `Sched
 At runtime each step is two RPCs, `execute_model(scheduler_output)` then `sample_tokens(grammar_output)`, so
 EngineCore can compute the structured-output bitmask while the forward runs (`EngineCore.step`).
 
-### 5.3 Model runner V1: the persistent batch
+### 5.3 Model runner V2, the default: one step in order
 
-`GPUModelRunner` (`vllm/v1/worker/gpu_model_runner.py`) keeps an `InputBatch`
-(`vllm/v1/worker/gpu_input_batch.py`): fixed-capacity arrays with a row per request, including
-`token_ids_cpu_tensor` (`max_num_reqs × max_model_len`), `num_computed_tokens_cpu_tensor`, a
-`MultiGroupBlockTable` (one block table per KV cache group) and sampling parameters as tensors. The bet, stated
-in `_update_states`: "consecutive batches contain mostly the same requests". Per step:
+`vllm/v1/worker/gpu/model_runner.py: GPUModelRunner` keeps each request in a fixed **slot** of GPU-side state:
+`RequestState` (`vllm/v1/worker/gpu/states.py`) holds `all_token_ids` (`max_num_reqs × max_model_len`, placed in
+UVA host memory because it "can be extremely large"), `prompt_len`, `prefill_len` (prompt plus any outputs
+replayed after a preemption), `total_len`, `num_computed_tokens`, `last_sampled_tokens` and `draft_tokens`,
+recycling free slot indices. A step's batch is an `idx_mapping` from batch rows to slots. The file header's rule for
+contributors: shared code only, "Be paranoid about changing this file". One step, as `execute_model` and
+`sample_tokens` run it:
 
-1. `_update_states`: drop finished requests; remove unscheduled ones from the batch but keep their state; add
-   new and resumed ones; append new token and block ids; `condense()` the gaps.
-2. `_prepare_inputs`: build the flattened ragged batch. With three requests scheduled for `[2, 5, 3]` tokens
-   and `num_computed_tokens = [10, 0, 40]` (the example in the source comments, extended with positions):
+1. **Apply the diff.** `finish_requests` frees the slots of finished and preempted requests; `add_requests` copies
+   each new or resumed request's tokens into its slot (`RequestState.add_request`), appends its block ids
+   (`BlockTables.append_block_ids`) and registers its sampling parameters; `update_requests` appends new block ids
+   and `num_computed_tokens` for continuing requests. Staged writes are flushed to the GPU in one go
+   (`apply_staged_writes`).
+2. **Order and pad.** `gather_batch_req_state` sorts the scheduled requests decode/verification first, then short
+   extends, then prefills (`sort_batch_req_ids`: "split_decodes_and_prefills relies on decode-like requests
+   leading"), and `dispatch_cg_and_sync_dp` picks the CUDA-graph mode and padded size for the batch (FULL for a
+   uniform decode batch, PIECEWISE otherwise; Section 5.5), agreeing on it across data-parallel ranks.
+3. **Inputs, on the GPU** (`prepare_inputs`). Little crosses from the host beyond `idx_mapping` and
+   `query_start_loc` (a CPU cumulative sum of scheduled tokens); three Triton kernels in `vllm/v1/worker/gpu/input_batch.py` do the rest:
+   `prepare_prefill_inputs` gathers prompt tokens from `all_token_ids`, `prepare_pos_seq_lens` writes positions
+   and sequence lengths, and `combine_sampled_and_draft_tokens` writes each decoding request's last sampled token
+   and drafts into `input_ids` and returns `logits_indices`, the rows that will be sampled. With three requests
+   scheduled for `[2, 5, 3]` tokens and `num_computed_tokens = [10, 0, 40]` (the example in the MRV1 source
+   comments, extended with positions), the kernels produce:
 
 ```
-req_indices   = [0, 0, 1, 1, 1, 1, 1, 2, 2, 2]          np.repeat(arange(3), [2, 5, 3])
-cu_num_tokens = [2, 7, 10]  → query_start_loc = [0, 2, 7, 10]
-query_pos     = [0, 1, 0, 1, 2, 3, 4, 0, 1, 2]
-positions     = computed[req_indices] + query_pos = [10, 11, 0, 1, 2, 3, 4, 40, 41, 42]
-input_ids     = token_ids_cpu.flatten()[positions + req_indices × max_model_len]
-seq_lens      = computed + scheduled = [12, 5, 43]
+row → slot     idx_mapping   = [s0, s1, s2]             (whatever slots the three requests occupy)
+query_start_loc              = [0, 2, 7, 10]            cumsum of [2, 5, 3]
+positions      = computed[row] + offset in row = [10, 11, 0, 1, 2, 3, 4, 40, 41, 42]
+seq_lens       = computed + scheduled = [12, 5, 43]
+logits_indices = last row of each request = [1, 6, 9]   (one per request without drafts)
 ```
 
-3. Slot mapping, computed by a Triton kernel: `slot = block_table[req, pos // block_size] × block_size + pos %
-   block_size`, padded slots set to a pad id so CUDA-graph shapes stay fixed
-   (`vllm/v1/worker/block_table.py: BlockTable.compute_slot_mapping`). If request 2's block table is
-   `[7, 3, 12]`, position 42 lands in block 12 (42 // 16 = 2) at offset 10: slot `12 × 16 + 10 = 202`.
-4. `_build_attention_metadata`: one `CommonAttentionMetadata` (`query_start_loc`, `seq_lens`,
-   `block_table_tensor`, `slot_mapping`, `max_query_len`, `max_seq_len`; `vllm/v1/attention/backend.py`),
-   turned into backend metadata by each group's `AttentionMetadataBuilder.build`.
-5. `_determine_batch_execution_and_padding` asks the `CudagraphDispatcher` (`vllm/v1/cudagraph_dispatcher.py`)
-   for the runtime mode (FULL, PIECEWISE or NONE) and the padded size (Section 5.5).
-6. Forward under `set_forward_context(attn_metadata, ...)` (`vllm/forward_context.py`): `Attention` layers read
-   their metadata inside the custom ops `vllm::unified_kv_cache_update` and `vllm::unified_attention_with_output`
-   (`vllm/model_executor/layers/attention/attention.py`). Logits are computed only for rows to be sampled,
-   parked in `execute_model_state`, and `execute_model` returns `None`.
-7. `sample_tokens`: apply the bitmask, run `Sampler` or `RejectionSampler`, run the drafter, return
-   `ModelRunnerOutput` (under async scheduling an `AsyncGPUModelRunnerOutput` copies tokens to the host on a
-   side stream).
+4. **Where K/V go** (`prepare_attn`). `BlockTables.gather_block_tables` builds this batch's block tables from the
+   slots, and the Triton kernel behind `BlockTables.compute_slot_mappings` (`vllm/v1/worker/gpu/block_table.py`)
+   computes `slot = block_table[row, pos // block_size] × block_size + pos % block_size`, padding the tail with
+   `PAD_SLOT_ID` so CUDA-graph shapes stay fixed. If request 2's block table is `[7, 3, 12]`, position 42 lands
+   in block 12 (42 // 16 = 2) at offset 10: slot `12 × 16 + 10 = 202`. `model_state.prepare_attn` then turns
+   `query_start_loc`, `seq_lens`, block tables and slot mappings into each layer group's attention metadata
+   (Section 6.1).
+5. **Forward.** A FULL batch replays its graph with `cudagraph_manager.run_fullgraph` (inputs are already in the
+   graph's static buffers); PIECEWISE runs `run_pw_graph`; NONE (eager, `--enforce-eager`) calls `self.model(...)`.
+   The last two run under `set_forward_context(attn_metadata, ..., slot_mapping=...)` (`vllm/forward_context.py`),
+   and `Attention` layers read their metadata inside the custom ops `vllm::unified_kv_cache_update` and
+   `vllm::unified_attention_with_output` (`vllm/model_executor/layers/attention/attention.py`). The hidden states
+   are parked in `execute_model_state`, and `execute_model` returns `None`.
+6. **Sample** (`sample_tokens` → `sample`). Logits are computed only for `hidden_states[logits_indices]`;
+   `StructuredOutputsWorker.apply_grammar_bitmask` masks them; `Sampler` or `RejectionSampler` (Section 7) draws;
+   an `AsyncOutput` starts the device-to-host copy on a side stream; `postprocess_sampled` runs the `post_update`
+   kernel, which advances `num_computed_tokens`, stores `last_sampled_tokens` and appends to `all_token_ids` on
+   the GPU; then the speculator, if any, proposes the next drafts.
 
-Rows are reordered decode → short extend → long extend → prefill (`reorder_batch_to_split_decodes_and_prefills`,
-`vllm/v1/attention/backends/utils.py`) so backends can run decode and prefill kernels on contiguous slices.
+Sampled and draft tokens never leave the device between steps, which is what lets async scheduling and
+speculative decoding compose without host syncs.
 
-### 5.4 Model runner V2: request state in GPU slots
+### 5.4 Model runner V1: the persistent batch (fallback and contrast)
 
-`vllm/v1/worker/gpu/model_runner.py: GPUModelRunner` (the default when supported, Section 1.4) keeps each
-request in a fixed slot: `RequestState` (`vllm/v1/worker/gpu/states.py`) holds `all_token_ids` (`max_num_reqs ×
-max_model_len`, placed in UVA host memory because it "can be extremely large"), `prompt_len`, `prefill_len`,
-`total_len` and `num_computed_tokens`, recycling free slot indices. A step's batch is an `idx_mapping` from rows
-to slots instead of a reordered persistent batch, and Triton kernels build the inputs on the GPU
-(`_prepare_prefill_inputs_kernel`, `_prepare_pos_seq_lens_kernel`, `_combine_sampled_and_draft_tokens_kernel` in
-`vllm/v1/worker/gpu/input_batch.py`). Sampled and draft tokens never leave the device between steps, which is
-what lets async scheduling and speculative decoding compose without host syncs; its sampler uses Gumbel-max with
-Philox noise in Triton (`vllm/v1/worker/gpu/sample/gumbel.py`). The file header's rule for contributors: shared
-code only, "Be paranoid about changing this file".
+`vllm/v1/worker/gpu_model_runner.py: GPUModelRunner` runs when MRV2 declines a configuration (Section 1.4) or
+`VLLM_USE_V2_MODEL_RUNNER=0`. It keeps an `InputBatch` (`vllm/v1/worker/gpu_input_batch.py`): fixed-capacity arrays
+with a row per request, including `token_ids_cpu_tensor` (`max_num_reqs × max_model_len`),
+`num_computed_tokens_cpu_tensor`, a `MultiGroupBlockTable` (one block table per KV cache group) and sampling
+parameters as tensors. The bet, stated in `_update_states`: "consecutive batches contain mostly the same
+requests". The step is the same six stages with different machinery:
+
+| Stage | MRV1 | MRV2 |
+|---|---|---|
+| apply the diff | `_update_states`: drop finished, keep unscheduled rows' state, add new/resumed, append token and block ids, `condense()` the gaps | per-slot writes, no condensing |
+| order | `reorder_batch_to_split_decodes_and_prefills` (`vllm/v1/attention/backends/utils.py`) moves rows in the persistent batch | `sort_batch_req_ids` orders `idx_mapping`; slots never move |
+| inputs | `_prepare_inputs` on the CPU with NumPy: `np.repeat` for `req_indices`, `input_ids = token_ids_cpu.flatten()[positions + req_indices × max_model_len]`, then copies to the GPU; `_prepare_input_ids` patches in last step's sampled ids under async scheduling | Triton kernels over GPU state |
+| slots, metadata | `BlockTable.compute_slot_mapping` (`vllm/v1/worker/block_table.py`); `_build_attention_metadata` builds a `CommonAttentionMetadata` and each group's `AttentionMetadataBuilder.build` | `BlockTables.compute_slot_mappings`; `model_state.prepare_attn` |
+| graph choice | `_determine_batch_execution_and_padding` asks the `CudagraphDispatcher` (`vllm/v1/cudagraph_dispatcher.py`) | `dispatch_cg_and_sync_dp` |
+| logits | computed in `execute_model` for the rows to sample | computed in `sample_tokens` |
+| sampling | `vllm/v1/sample/sampler.py: Sampler`, `vllm/v1/sample/rejection_sampler.py: RejectionSampler`; `AsyncGPUModelRunnerOutput` copies on a side stream | `vllm/v1/worker/gpu/sample/sampler.py`, `vllm/v1/worker/gpu/spec_decode/rejection_sampler.py` |
 
 ### 5.5 torch.compile and CUDA graphs
 
@@ -723,12 +833,19 @@ FlashInfer `UNIFORM_BATCH` or `UNIFORM_SINGLE_TOKEN_DECODE` depending on its TRT
 `VllmConfig._set_cudagraph_sizes` builds:
 
 ```
-max_capture = min(max_num_seqs × uniform_decode_query_len × 2, 512)   # 1024 on data-center Blackwell (SM100 family)
+q           = uniform_decode_query_len = 1 + num_speculative_tokens
+max_capture = min(max_num_batched_tokens, min(max_num_seqs × q × 2, 512))   # 1024 on data-center Blackwell (SM100 family)
 sizes       = [1, 2, 4] + range(8, 256, 8) + range(256, max_capture + 1, 16)   (+ max_num_batched_tokens if ≤ max_capture)
+            + uniform-decode sizes (below)
 ```
 
-With `max_num_seqs = 256` and no speculation: `min(512, 512) = 512`, so 3 + 31 + 17 = **51 sizes** (1, 2, 4, 8,
-…, 248, 256, 272, …, 512). With speculation `uniform_decode_query_len = 1 + num_speculative_tokens`. A batch of
+With `max_num_seqs = 256` and no speculation: `min(2048, min(512, 512)) = 512`, so 3 + 31 + 17 = **51 sizes** (1, 2,
+4, 8, …, 248, 256, 272, …, 512); the uniform-decode size is `max_num_seqs` itself, 256, already in the grid. With
+`k` drafts the token grid is **not** rescaled: vLLM appends `n × q` for a request-count grid
+`n ∈ {1, 2, 4, 8, 16, …}` wherever `n × q` fits under the ceiling, because a uniform decode batch can only replay a
+graph whose size is an exact multiple of `q` (the source's example: at `q = 17` a captured 560 is useless, since the
+batch would need 561). With `k = 2` (`q = 3`) that adds 3, 6, 12, 24, 48, …; with dynamic speculation each tier's `q`
+gets its own list (`_set_cudagraph_sizes`). A batch of
 *n* tokens replays the next captured size up (a 3-token decode replays size 4); larger batches run without
 graphs; `--performance-mode interactivity` captures every size 1–32 to cut padding. Optimization levels
 (`vllm/config/vllm.py: OptimizationLevel`): `-O0` no compilation or graphs, `-O1` compilation plus piecewise
@@ -837,25 +954,47 @@ Hence dedicated MLA kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and KV dtype
 
 ### 7.1 The sampler's order of operations
 
-`Sampler.forward` (`vllm/v1/sample/sampler.py`) documents nine steps: (1) logprobs, if requested, from the
-**raw** logits (default `logprobs_mode = "raw_logprobs"`, before penalties and temperature, unlike V0); (2) cast
-to float32; (3) `allowed_token_ids`; (4) `bad_words`; (5) non-argmax-invariant logits processors
-(`MinTokensLogitsProcessor`, which masks stop tokens until `min_tokens`, and `LogitBiasLogitsProcessor`);
-(6) repetition, frequency and presence penalties; (7) greedy rows take the argmax, the rest apply temperature,
-argmax-invariant processors (`MinPLogitsProcessor`), top-k/top-p, and draw; (8) gather top-`logprobs` and the
-sampled token's logprob; (9) return. V1 logits processors are **batch-level classes**, not per-request callables:
-each declares `is_argmax_invariant`, updates state from a `BatchUpdate` as rows move, and edits the whole logits
-tensor (`vllm/v1/sample/logits_processor/interface.py`, `builtin.py`); custom ones load via `--logits-processors`.
+MRV2's `Sampler` (`vllm/v1/worker/gpu/sample/sampler.py`, `__call__` → `sample` → `apply_sampling_params`) keeps
+every sampling parameter as per-slot GPU state and runs, per step:
+
+1. optionally count NaN logits (`VLLM_COMPUTE_NANS_IN_LOGITS`), before anything touches them;
+2. if no row in the batch needs processing, keep the logits as they are; otherwise copy them to a new FP32 tensor;
+3. the logits processors in pipeline order ("bias adds, penalties scale, so the two do not commute"):
+   `LogitBiasState` (`logit_bias`, `allowed_token_ids`, and masking stop tokens until `min_tokens`),
+   `PenaltiesState` (repetition, frequency, presence), `BadWordsState`, then any custom processors; then the
+   thinking-budget forcing, last so nothing can undo it;
+4. temperature, then `min_p`, in place;
+5. top-k/top-p and the draw: FlashInfer's fused sampler when the batch is eligible (some row uses top-k or
+   top-p, no greedy rows, no per-request seeds, no processed-logprob requests), otherwise `apply_top_k_top_p`
+   followed by `gumbel_sample` (Section 7.2); greedy rows (temperature 0) take the plain argmax;
+6. logprobs from the **raw** logits by default (`logprobs_mode = "raw_logprobs"`: before penalties and
+   temperature), from the processed ones in the `processed_*` modes;
+7. `num_sampled` set to 0 for rows still mid-prefill (Section 3.4).
+
+MRV1's `Sampler.forward` (`vllm/v1/sample/sampler.py`) documents the same pipeline as nine steps and implements
+parameters as **batch-level logits-processor classes** (`MinTokensLogitsProcessor`, `LogitBiasLogitsProcessor`,
+`MinPLogitsProcessor`; `vllm/v1/sample/logits_processor/interface.py`, `builtin.py`), each declaring
+`is_argmax_invariant` and updating its state from a `BatchUpdate` as rows move in the persistent batch; that
+row-movement bookkeeping is what MRV2's fixed slots remove. Custom processors load via `--logits-processors`.
 
 ### 7.2 Drawing a token without a host sync
 
-`random_sample` (`vllm/v1/sample/ops/topk_topp_sampler.py`) avoids `torch.multinomial` because it forces a
-CPU-GPU sync: it draws `q ~ Exp(1)` and returns `argmax(probs / q)`, an exact sample from `probs` (the
-exponential-race form of the Gumbel-max trick). Seeded requests get their own `torch.Generator`, applied row by
-row ("This can be slow"); the rest share one batched draw. For top-k/top-p rows, FlashInfer's rejection-based
-sampler is used by default when the GPU supports it (SM 8.0–12.1, more than 16 SMs; log "Using FlashInfer for
-top-p & top-k sampling."; opt out with `VLLM_USE_FLASHINFER_SAMPLER=0`; `flashinfer_sampler_supported`); it is
-statistically equivalent, not bit-identical. Model Runner V2 does the same with Philox Gumbel noise (Section 5.4).
+`torch.multinomial` forces a CPU-GPU sync, so neither runner uses it. MRV2 draws with the **Gumbel-max trick**:
+`argmax(logits / T + g)` with `g = −log(−log u)` is an exact sample from `softmax(logits / T)`. The uniform `u` is
+not drawn from a random-number generator but computed as a **counter-based hash**: murmur3 of
+`(seed, position, token id)` (`vllm/v1/worker/gpu/sample/gumbel.py: gumbel_noised_argmax`, via
+`murmur3_uniform32/64`). The docstring gives the reason: "`keys` indexes the noise, so the same token draws the same
+noise wherever it appears; `pos` and `seed` place the draw in the request's stream, which is what lets a draft and
+its verification agree." It also makes seeded requests free: a seed is just a per-slot number, with no
+`torch.Generator` per request. (Philox, via `tl.rand` in `tl_rand32`, survives only for the uniform in the
+rejection test, Section 7.4.)
+
+MRV1's `random_sample` (`vllm/v1/sample/ops/topk_topp_sampler.py`) uses the exponential-race form of the same
+trick, `argmax(probs / q)` with `q ~ Exp(1)`; seeded requests get their own `torch.Generator`, applied row by row
+("This can be slow"). In both runners top-k/top-p rows go to FlashInfer's rejection-based sampler by default when
+the GPU supports it (SM 8.0–12.1, more than 16 SMs; log "Using FlashInfer for top-p & top-k sampling."; opt out with
+`VLLM_USE_FLASHINFER_SAMPLER=0`; `flashinfer_sampler_supported`); it is statistically equivalent, not
+bit-identical.
 
 ### 7.3 Structured output
 
@@ -870,8 +1009,9 @@ statistically equivalent, not bit-identical. Model Runner V2 does the same with 
    `regex`, `choice`, `grammar`, `json_object`, `structural_tag`).
 3. **Mask**: each step `Scheduler.get_grammar_bitmask` → `grammar_bitmask` fills a packed int32 bitmask (one
    bit per vocabulary entry; a row per structured request and per speculative position) while the GPU runs the
-   forward (`EngineCore.step`); the worker applies it before sampling (`apply_grammar_bitmask`,
-   `vllm/v1/structured_output/utils.py`).
+   forward (`EngineCore.step`); the worker applies it to the logits before sampling, in MRV2 with a Triton kernel
+   (`vllm/v1/worker/gpu/structured_outputs.py: StructuredOutputsWorker.apply_grammar_bitmask`, called from
+   `GPUModelRunner.sample`), in MRV1 with `apply_grammar_bitmask` (`vllm/v1/structured_output/utils.py`).
 4. **Advance**: `update_from_output` calls `accept_tokens`; drafts are pre-validated (`validate_tokens`) and
    invalid ones become `-1`, which the rejection sampler always rejects.
 
@@ -888,19 +1028,33 @@ target's hidden states; EAGLE-3 uses auxiliary hidden states from several layers
 `MTPModelTypes`) that reuse the checkpoint's multi-token-prediction layers, plus `medusa`, `mlp_speculator`,
 `suffix`, `dflash`, `dspark`, `custom_class`.
 
-**Scheduling.** Drafts are just more tokens to compute: after step *N* the drafter proposes `k` tokens
-(`GPUModelRunner.propose_draft_token_ids`; on the GPU under async scheduling), step *N+1* schedules `1 + k` tokens
+**Scheduling.** Drafts are just more tokens to compute: after step *N* the drafter proposes `k` tokens (MRV2:
+`speculator.propose` at the end of `sample_tokens`, stored in `RequestState.draft_tokens` on the GPU and read by the
+next step's `combine_sampled_and_draft_tokens`; MRV1: `GPUModelRunner.propose_draft_token_ids`), step *N+1*
+schedules `1 + k` tokens
 for the request, `allocate_slots` reserves `num_lookahead_tokens` slots, and `update_from_output` rolls back the
 rejected ones. New decodes are padded to `1 + k` rows so uniform-decode full graphs still apply
 (`pad_spec_decode` in `schedule`).
 
-**Verification.** `RejectionSampler` (`vllm/v1/sample/rejection_sampler.py`) "strictly follows" Leviathan et al.:
-accept draft *x* with probability `min(1, p(x)/q(x))`; at the first rejection sample a recovered token from
-`normalize(max(p − q, 0))`; if all `k` pass, append a **bonus** token from the target. With the default
-`draft_sample_method = "greedy"` the draft is a point mass, so `q(x) = 1`, the test is `accept iff p(x) ≥ u`, and
-the recovered token is drawn from `p` with *x* removed (`NO_DRAFT_PROBS` paths of `rejection_random_sample_kernel`
-and `sample_recovered_tokens_kernel`); for greedy targets acceptance is exact match with the argmax. The output
-distribution is the target's: speculation changes speed, not quality.
+**Verification** follows Leviathan et al.: accept draft *x* with probability `min(1, p(x)/q(x))`; at the first
+rejection sample a recovered token from `normalize(max(p − q, 0))`; if all `k` pass, append a **bonus** token from
+the target. In MRV2, `RejectionSampler` (`vllm/v1/worker/gpu/spec_decode/rejection_sampler.py`) applies the
+sampling parameters to the target logits and calls `rejection_sample`
+(`vllm/v1/worker/gpu/spec_decode/rejection_sampler_utils.py`), whose `_rejection_kernel` walks each request's
+drafts in order and stops at the first rejection:
+
+- greedy target (temperature 0): accept iff the draft equals the target argmax; the argmax is stored directly, so
+  a rejection needs no resampling;
+- otherwise the ratio test in log space, `log p(x) > log u + log q(x)`, with `u` from Philox (`tl_rand32(seed,
+  pos)`); with the default `draft_sample_method = "greedy"` the draft is a point mass (`q(x) = 1`), so the test is
+  `p(x) > u`, and `_resample_kernel` draws the recovered token from `p` with *x* removed (the one-hot residual),
+  using the same position-keyed Gumbel noise as ordinary sampling.
+
+`rejection_sample_method` (`SpeculativeConfig`) defaults to `"standard"`; `"block"` verifies the drafts jointly
+(block verification, Sun et al., arXiv:2403.10444) and `"synthetic"` accepts at configured rates, for benchmarking
+without a real drafter. MRV1's `vllm/v1/sample/rejection_sampler.py: RejectionSampler` "strictly follows" the same
+algorithm with `rejection_random_sample_kernel` and `sample_recovered_tokens_kernel` (their `NO_DRAFT_PROBS` paths
+are the greedy-draft case). The output distribution is the target's: speculation changes speed, not quality.
 
 **Worked expectation.** With `k = 3` and per-token acceptance α = 0.7 (independence assumed), tokens per target
 step = `(1 − α^(k+1)) / (1 − α) = (1 − 0.2401) / 0.3 = 2.53`. At small batch a 4-token verify step costs about a
@@ -908,7 +1062,9 @@ step = `(1 − α^(k+1)) / (1 − α) = (1 − 0.2401) / 0.3 = 2.53`. At small b
 is compute-bound and the gain shrinks or inverts, which `num_speculative_tokens_per_batch_size` addresses by
 varying `k` with batch size (`dynamic_sd_lookup` in `Scheduler.__init__`). Measure it with
 `vllm:spec_decode_num_drafts`, `_num_draft_tokens`, `_num_accepted_tokens`, `_num_accepted_tokens_per_pos` and the
-"Mean acceptance length" log line (`vllm/v1/spec_decode/metrics.py`): acceptance length is the measured 2.53.
+"Mean acceptance length" log line (`vllm/v1/spec_decode/metrics.py`): mean acceptance length is the measured
+counterpart of the 2.53 (and per-position acceptance shows whether the independence assumption holds; it usually
+decays with position).
 
 ---
 

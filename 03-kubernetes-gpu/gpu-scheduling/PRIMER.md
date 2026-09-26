@@ -707,12 +707,12 @@ view:
 | **DRA** | claims shared by several containers or pods; MIG devices as `mig.nvidia.com` (profile attribute) | per driver | the direction of travel (section 1.5) |
 
 The trap with time-slicing: a container that requests 2 "GPUs" may get two slices of the **same** physical
-GPU — `DevicePlugin(replicas=10)` hands out `GPU-fake-0000` twice (notebook 01, exercise 1.6), exactly as
-the NVIDIA plugin can. Its `failRequestsGreaterThanOne` option fails such a container at admission
-(`DevicePlugin(fail_requests_greater_than_one=True)`); on GKE time-sharing nodes a container may request at most one
-`nvidia.com/gpu` (the GKE device plugin enforces it). MIG partition counts are fixed per profile — an A100
-40 GB offers seven `1g.5gb`, three `2g.10gb` or two `3g.20gb` slices; H100 80 GB seven `1g.10gb` (per GKE's
-device plugin; verify for your GPU and driver).
+GPU — the NVIDIA plugin takes replicas from the least-loaded GPUs, so on a busy node one lightly used GPU
+supplies both (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). `failRequestsGreaterThanOne` fails
+such a container at admission (`DevicePlugin(fail_requests_greater_than_one=True)`); on GKE time-sharing
+nodes a container may request at most one `nvidia.com/gpu` (the GKE device plugin enforces it). MIG
+partition counts are fixed per profile — an A100 40 GB offers seven `1g.5gb`, three `2g.10gb` or two
+`3g.20gb` slices; H100 80 GB seven `1g.10gb` (per GKE's device plugin; verify for your GPU and driver).
 Node-level sharing settings are per node pool on GKE (`gpu_sharing_config.gpu_sharing_strategy`,
 `max_shared_clients_per_gpu`), so sharing is a *pool* decision: put shared and exclusive GPUs in different
 pools and let labels route the pods.
@@ -867,8 +867,8 @@ weights come from a cache."
   (quota arithmetic), `pkg/scheduler/preemption/preemption.go` (classic preemption).
 * JobSet (`kubernetes-sigs/jobset`, `api/jobset/v1alpha2`), LeaderWorkerSet (`kubernetes-sigs/lws`,
   `api/leaderworkerset/v1`).
-* NVIDIA: `k8s-device-plugin` README and GPU Feature Discovery label table; `gpu-operator` README and
-  ClusterPolicy types; `kubernetes-sigs/dra-driver-nvidia-gpu` README and quickstart specs.
+* NVIDIA: `k8s-device-plugin` README, GPU Feature Discovery labels, `internal/rm/allocate.go` (replicas);
+  `gpu-operator` README and ClusterPolicy types; `kubernetes-sigs/dra-driver-nvidia-gpu` README, quickstart specs.
 * Google: `GoogleCloudPlatform/container-engine-accelerators` (GKE GPU device plugin: sharing rules, MIG
   partition sizes); Terraform google provider 8.x schemas for node-pool and cluster attributes.
 * cluster-autoscaler (`kubernetes/autoscaler`): FAQ (expanders, scale-down flags, expendable pods and

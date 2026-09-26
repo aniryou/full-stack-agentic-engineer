@@ -26,8 +26,9 @@ On Kaggle: *Settings → Accelerator → GPU T4 x2* and *Internet on*, then in a
 !python -m gpubench run --suite inventory,gemm,transfer,p2p --out results
 ```
 
-Expect the two T4s to reach each other over PCIe through the CPU (`PHB`); if peer access is not
-available in the VM, copies are staged through host memory — notebook 03 explains the number.
+Expect the two T4s to reach each other over PCIe through the CPU (`PHB`). The model's 15.8 GB/s
+(Gen3 x16) assumes direct peer access; if the VM does not allow it, copies are staged through host
+memory at about half the link or less — notebook 03 explains how to tell which you got.
 
 ## 2 · Any Linux GPU box, plain pip
 
@@ -35,15 +36,24 @@ available in the VM, copies are staged through host memory — notebook 03 expla
 git clone --depth 1 https://github.com/aniryou/full-stack-agentic-engineer.git
 cd full-stack-agentic-engineer/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab
 python3 -m venv .venv && . .venv/bin/activate
-pip install -e '.[gpu,dev]'            # torch from PyPI brings its own CUDA runtime; the driver must be recent enough
+pip install -e '.[gpu,dev]'            # PyPI torch (2.11+) is a CUDA 13 build: needs an R580+ driver (verify)
+# older driver (nvidia-smi shows < 580)? install a CUDA 12.6 build first (Maxwell..Hopper, no Blackwell):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126 && pip install -e '.[dev]'
 nvidia-smi && python -m gpubench info  # the driver and PyTorch both see the GPU?
 python -m gpubench run --out results   # add --full for bigger sizes
 python -m jupyterlab notebooks
 ```
 
+Which PyTorch build a driver can run (verify against the PyTorch install matrix): PyPI's default from
+2.11 on is built for CUDA 13 and needs an **R580+** driver; the `cu126` index serves CUDA 12.6 builds
+that run on R525+ but carry no Blackwell kernels; Blackwell GPUs (B200, RTX 50xx, RTX PRO 6000) need a
+CUDA 12.8+ build and an R570+ driver. If `gpubench info` falls back to numpy on a machine where
+`nvidia-smi` works, the message names your driver and PyTorch's CUDA version — that mismatch is the cause.
+
 On RunPod or Vast you are already inside a container with a GPU: choose a PyTorch template, then run
-the same commands (skip `[gpu]` if the template has PyTorch). You cannot change the driver there,
-and `nvidia-smi topo -m` shows only the GPUs given to your container.
+the same commands (skip `[gpu]` if the template has PyTorch). You cannot change the driver there — pick
+a template whose CUDA version the host driver supports — and `nvidia-smi topo -m` shows only the GPUs
+given to your container.
 
 ## 3 · Docker (`run.sh`)
 
@@ -59,8 +69,9 @@ BASE=pytorch/pytorch:<tag> deploy/any-gpu/run.sh   # another CUDA/PyTorch base i
 What it does: builds `gpubench:local` from [`Dockerfile`](Dockerfile) (a `pytorch/pytorch` runtime
 image plus this lab), runs `gpubench info` in a container as a smoke test, then runs the suite with
 `--gpus all --ipc=host --ulimit memlock=-1` and writes the report to `./results` on the host.
-The base image's CUDA must suit the host driver (verify: CUDA 12.x images run on R525+ drivers;
-CUDA 13.x images need R580+ and drop pre-Turing GPUs).
+The base image's CUDA must suit the host driver *and* the GPU (verify): the default `cuda12.6` image
+runs on R525+ drivers but has no Blackwell kernels; on a B200 or an RTX 50xx / RTX PRO 6000 use
+`BASE=pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime` (R580+ driver, Turing and newer only).
 
 ## 4 · GCP
 

@@ -29,20 +29,52 @@ def test_prefix_cache_scorer_formula():
     assert s.score(c, [ep("a"), ep("b")]) == {"a": 0.25, "b": 0.0}     # missing info scores 0
 
 
-def test_queue_scorer_min_max_ties_and_unscraped():
+def test_queue_scorer_min_max_ties_and_never_scraped_looks_idle():
     q = QueueScorer()
     assert q.score(ctx(), [ep("a", waiting=0), ep("b", waiting=5), ep("c", waiting=10)]) == {"a": 1.0, "b": 0.5, "c": 0.0}
     assert q.score(ctx(), [ep("a", waiting=3), ep("b", waiting=3)]) == {"a": 1.0, "b": 1.0}
-    assert q.score(ctx(), [ep("a", waiting=4), ep("b", fresh=False)]) == {"a": 1.0}      # b unscored
+    # upstream reads GetMetrics() with no freshness check: a never-scraped endpoint has queue 0 -> best score
+    assert q.score(ctx(), [ep("a", waiting=4), ep("b", fresh=False), ep("c", waiting=8)]) == {"a": 0.5, "b": 1.0, "c": 0.0}
 
 
 def test_kv_active_token_and_lora_scorers():
-    assert KVCacheUtilizationScorer().score(ctx(), [ep("a", kv=0.25), ep("b", fresh=False)]) == {"a": 0.75}
+    assert KVCacheUtilizationScorer().score(ctx(), [ep("a", kv=0.25), ep("b", fresh=False)]) == {"a": 0.75, "b": 1.0}
     loads = {"inflight-load-producer": {"a": InFlightLoad(0, 0), "b": InFlightLoad(2, 100), "c": InFlightLoad(4, 900)}}
     eps = [ep("a"), ep("b"), ep("c")]
     assert ActiveRequestScorer().score(ctx(**loads), eps) == {"a": 1.0, "b": 0.5, "c": 0.0}
     assert ActiveRequestScorer(idleThreshold=2, maxBusyScore=0.5).score(ctx(**loads), eps) == {"a": 1.0, "b": 1.0, "c": 0.0}
     assert TokenLoadScorer(queueThresholdTokens=1000).score(ctx(**loads), eps) == {"a": 1.0, "b": 0.9, "c": pytest.approx(0.1)}
+    # the request's own uncached tokens on each endpoint count too (upstream UncachedRequestTokens):
+    # b: 1 - (100 + 10)/1000 = 0.89; c: 1 - min(1, (900 + 200)/1000) = 0.0
+    loads2 = {"inflight-load-producer": {"a": InFlightLoad(0, 0, 0), "b": InFlightLoad(2, 100, 10), "c": InFlightLoad(4, 900, 200)}}
+    assert TokenLoadScorer(queueThresholdTokens=1000).score(ctx(**loads2), eps) == {"a": 1.0, "b": pytest.approx(0.89), "c": 0.0}
+
+
+def test_uncached_input_tokens_counts_whole_blocks_and_the_tail_like_upstream():
+    from igwlab.router.plugins import uncached_input_tokens
+    assert uncached_input_tokens(None, 300) == 300                          # no prefix info: everything
+    assert uncached_input_tokens(PrefixMatch(3, 5, 64), 300) == 128         # (5 - 3) x 64: the partial block counts whole
+    assert uncached_input_tokens(PrefixMatch(5, 5, 64), 300) == 0
+    assert uncached_input_tokens(PrefixMatch(2, 4, 64), 1000) == 128 + 744  # 4 x 64 indexed (capped), 744-token tail
+
+
+def test_token_load_scorer_prefers_the_endpoint_that_caches_the_prompt():
+    """End to end through the producers: two idle endpoints, one already holding this prompt.
+    (The prefix producer is optional input to inflight-load-producer, upstream too: without one
+    every endpoint is charged the whole prompt.)"""
+    cfg = load_config({"apiVersion": "llm-d.ai/v1", "kind": "EndpointPickerConfig",
+                       "plugins": [{"type": "approx-prefix-cache-producer"},
+                                   {"type": "token-load-scorer", "parameters": {"queueThresholdTokens": 1024}}]})
+    tokens = list(range(640))                                   # 10 blocks of 64
+    ds = Datastore([ep("warm"), ep("cold")])
+    sched = Scheduler(cfg, ds)
+    first = RequestCtx("r0", "lab/llm", tokens)
+    sched.schedule(first)
+    sched.pre_request(first, ds.get("warm"))                    # the index now says: warm holds these 10 blocks
+    sched.on_complete(first, ds.get("warm"))                    # ... and warm is idle again
+    d = sched.schedule(RequestCtx("r1", "lab/llm", tokens + list(range(64))))     # 11 blocks, 10 cached on warm
+    # warm: 1 - 64/1024 = 0.9375; cold: 1 - 704/1024 = 0.3125
+    assert d.scores["token-load-scorer"] == pytest.approx({"warm": 0.9375, "cold": 0.3125}) and d.endpoint == "warm"
     l = LoraAffinityScorer()
     c = RequestCtx("r", "sql-lora", [])
     eps = [ep("act", active_models={"sql-lora"}, max_active_models=2),
@@ -74,7 +106,7 @@ def test_weighted_random_picker_prefers_high_scores():
 def test_utilization_filter_caps_and_fallback():
     f = UtilizationFilter(conditions=[{"metric": "waiting-queue", "maxValue": 2}, {"metric": "kv-cache-utilization", "maxValue": 0.8}])
     eps = [ep("a", waiting=1, kv=0.5), ep("b", waiting=3), ep("c", kv=0.9), ep("d", fresh=False)]
-    assert [e.name for e in f.filter(ctx(), eps)] == ["a", "d"]           # missing metrics count as 0
+    assert [e.name for e in f.filter(ctx(), eps)] == ["a", "d"]           # never scraped: metrics are 0, like upstream
     strict = UtilizationFilter(conditions=[{"metric": "waiting-queue", "maxValue": 0}])
     fallback = UtilizationFilter(conditions=[{"metric": "waiting-queue", "maxValue": 0}], fallbackOnEmpty=True)
     assert strict.filter(ctx(), [eps[1]]) == [] and fallback.filter(ctx(), [eps[1]]) == [eps[1]]
@@ -136,6 +168,9 @@ def test_config_rejects_what_it_cannot_run():
         with pytest.raises(ConfigError):
             load_config(bad)
     assert load_config({**base, "apiVersion": "llm-d.ai/v1alpha1"}).warnings   # deprecated but accepted
+    fc = load_config({**base, "featureGates": ["flowControl"], "plugins": [{"type": "queue-scorer"}]})
+    assert fc.flow_control and any("NOT implemented" in w for w in fc.warnings)   # accepted, never silently
+    assert "legacy shedding" in fc.describe()
 
 
 def test_to_upstream_strips_lab_only_parameters():

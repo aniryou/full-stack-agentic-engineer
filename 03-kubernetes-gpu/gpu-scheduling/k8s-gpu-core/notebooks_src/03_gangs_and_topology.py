@@ -121,6 +121,7 @@ print("unconstrained 3-node gang:", spread)
 # *tightest*; when a gang has to be split across child domains, take the ones with the most room first
 # and choose the last one as the tightest that holds the remainder (that keeps big holes intact for big
 # jobs). Kueue then repeats the choice one level down over the children of *all* the domains it chose.
+# (The simulator's gangs have one pod shape: no leader pod set, no slices, no balanced placement.)
 #
 # ## Exercise 3.2 — Kueue's BestFit
 #

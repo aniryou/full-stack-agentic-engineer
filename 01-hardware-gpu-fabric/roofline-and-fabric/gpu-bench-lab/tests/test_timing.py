@@ -52,3 +52,31 @@ def test_alpha_beta_recovers_exact_parameters():
     assert fit.n_half == pytest.approx(120_000, rel=1e-6)          # α·β = 10e-6 × 12e9
     assert fit.bandwidth(fit.n_half) == pytest.approx(beta / 2)     # half the link at n½
     assert fit.r2 == pytest.approx(1.0)
+
+
+def test_transfer_series_keep_pipelined_and_latency_sweeps_apart():
+    from gpubench import transfer
+    from gpubench.accounting import transfer_cost
+    from gpubench.measure import Measurement
+
+    def m(op, n, pinned, mode, t):
+        return Measurement(op, {"nbytes": n, "pinned": pinned, "mode": mode}, transfer_cost(n), Timing((t,)), "torch", "cuda:0")
+
+    ms = [m("h2d", n, True, "pipelined", 2e-6 + n / 25e9) for n in (4096, 1 << 20, 64 << 20)]
+    ms += [m("h2d", n, True, "latency", 9e-6 + n / 25e9) for n in (4096, 65536, 1 << 20)]
+    groups = transfer.series(ms)
+    assert set(groups) == {("h2d", True, "pipelined"), ("h2d", True, "latency")}
+    fits = {transfer.series_label(k): transfer.fit(v) for k, v in groups.items()}
+    assert fits["h2d pinned latency"].alpha == pytest.approx(9e-6, rel=1e-6)
+    assert fits["h2d pinned pipelined"].alpha == pytest.approx(2e-6, rel=1e-6)
+    assert transfer.series_label(("memcpy", None, None)) == "memcpy"
+
+
+def test_host_link_prefers_nvidia_smi_then_the_spec_then_says_it_assumed(monkeypatch):
+    from gpubench import inventory, transfer
+    monkeypatch.setattr(inventory, "query_gpus", lambda: ([{"pcie.link.gen.max": 3, "pcie.link.width.current": 8,
+                                                             "pcie.link.width.max": 16}], ""))
+    assert transfer.host_link("Tesla T4") == {"gen": 3, "width": 8, "source": "nvidia-smi"}
+    monkeypatch.setattr(inventory, "query_gpus", lambda: (None, "no nvidia-smi"))
+    assert transfer.host_link("Tesla T4")["gen"] == 3                          # spec table: PCIe Gen3 x16
+    assert transfer.host_link(None)["source"].startswith("assumed")

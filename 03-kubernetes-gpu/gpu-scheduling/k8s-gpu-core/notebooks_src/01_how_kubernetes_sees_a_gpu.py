@@ -280,8 +280,9 @@ print("✅ topology-aware allocation inside one node - notebook 03 does the same
 #
 # Because the scheduler only counts, sharing a GPU means advertising *more units*. With time-slicing
 # the NVIDIA device plugin is configured with `replicas: N`: every physical GPU is listed N times in
-# `ListAndWatch` (IDs `<uuid>::0 ... ::N-1`), and allocatable grows N-fold. The replicas are handed out
-# without regard to which physical GPU they belong to, and a replica carries no memory limit and no
+# `ListAndWatch` (IDs `<uuid>::0 ... ::N-1`), and allocatable grows N-fold. The plugin's preferred
+# allocation takes replicas one at a time from the physical GPU with the fewest replicas already
+# allocated (its default *distributed* policy), and a replica carries no memory limit and no
 # guaranteed share of compute — every process on the GPU is time-sliced equally.
 
 # %%
@@ -294,31 +295,44 @@ print("node status:", shared_kubelet.node_status())
 # %% [markdown]
 # ## Exercise 1.6 — what does a time-sliced request really get?
 #
-# On a **fresh** node with 8 GPUs and `replicas: 10`, predict:
+# A node with 8 GPUs and `replicas: 10`. Predict:
 #
 # * `allocatable` for `nvidia.com/gpu`;
-# * how many **physical** GPUs back a container that requests `nvidia.com/gpu: 2` (the kubelet asks the
-#   plugin for a preferred set of 2 among the free replica IDs; all 8 GPUs sit on one NVLink island);
-# * whether that 2-"GPU" container is admitted when the plugin sets `failRequestsGreaterThanOne: true`
+# * on the **fresh** node, how many **physical** GPUs back a container that requests `nvidia.com/gpu: 2`;
+# * the same after sixteen 1-replica pods have been admitted (the plugin spreads them, two per GPU)
+#   and the two on `GPU-fake-0003` have finished;
+# * whether a 2-"GPU" container is admitted when the plugin sets `failRequestsGreaterThanOne: true`
 #   (NVIDIA's option that treats a shared request as "access to a GPU", so more than one is an error).
 
 # %% exercise
 # predicted_shared_allocatable = ...     an int
-# predicted_physical_gpus_for_two = ...  an int
+# predicted_physical_fresh = ...         an int
+# predicted_physical_loaded = ...        an int
 # predicted_admitted_with_limit = ...    True or False
 ### BEGIN SOLUTION
 predicted_shared_allocatable = 8 * 10          # every GPU advertised ten times
-predicted_physical_gpus_for_two = 1            # two replicas of GPU-fake-0000: the same device
+predicted_physical_fresh = 2                   # least-loaded first: GPU 0, then GPU 1 (now fewer than GPU 0)
+predicted_physical_loaded = 1                  # GPU 3 holds 0 replicas, the rest 2: both picks land on GPU 3
 predicted_admitted_with_limit = False          # more than one shared replica is refused at Allocate
 ### END SOLUTION
 
 # %% check
+def physical_gpus(kubelet, pod, count):
+    visible = kubelet.admit(pod, count)["envs"]["NVIDIA_VISIBLE_DEVICES"]
+    print(f"{pod}: NVIDIA_VISIBLE_DEVICES = {visible}")
+    return len(visible.split(","))
+
 fresh_kubelet = Kubelet()
 fresh_kubelet.register(DevicePlugin(make_gpus(8), replicas=10))
 assert predicted_shared_allocatable == fresh_kubelet.node_status()["allocatable"][GPU]
-visible = fresh_kubelet.admit("wants-two", 2)["envs"]["NVIDIA_VISIBLE_DEVICES"]
-print("a 2-GPU request sees NVIDIA_VISIBLE_DEVICES =", visible)
-assert predicted_physical_gpus_for_two == len(visible.split(","))
+assert predicted_physical_fresh == physical_gpus(fresh_kubelet, "fresh-two", 2)
+loaded_kubelet = Kubelet()
+loaded_kubelet.register(DevicePlugin(make_gpus(8), replicas=10))
+for i in range(16):
+    loaded_kubelet.admit(f"small-{i}", 1)
+for pod in [p for p, ids in loaded_kubelet.assigned.items() if ids[0].startswith("GPU-fake-0003")]:
+    del loaded_kubelet.assigned[pod]                                  # the pods on GPU 3 finish
+assert predicted_physical_loaded == physical_gpus(loaded_kubelet, "loaded-two", 2)
 strict_kubelet = Kubelet()
 strict_kubelet.register(DevicePlugin(make_gpus(8), replicas=10, fail_requests_greater_than_one=True))
 try:

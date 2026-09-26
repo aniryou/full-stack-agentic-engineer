@@ -182,14 +182,20 @@ class NumpyBackend:
             slots = 1
         src = np.ones(slots * nbytes, dtype=np.uint8)
         dst = np.full(slots * nbytes, 2, dtype=np.uint8)      # touch every destination page now
-        views = [(dst[i * nbytes:(i + 1) * nbytes], src[i * nbytes:(i + 1) * nbytes]) for i in range(slots)]
-        state = [0]
-
-        def fn():
-            d, s = views[state[0]]
-            state[0] = (state[0] + 1) % slots
-            np.copyto(d, s)
-
+        fn = _RotatingCopy(dst, src, nbytes, slots)
         return Op(fn, transfer_cost(nbytes), note="host memcpy (RAM to RAM), not PCIe" + (", cache-cold" if cold else ""),
                   extras={"stream_bytes": 2 * nbytes, "pool_slots": slots},
-                  verify=lambda: bool(views[0][0][0] == 1 and views[0][0][-1] == 1))
+                  verify=lambda: bool(fn.views[0][0][0] == 1 and fn.views[0][0][-1] == 1))
+
+
+class _RotatingCopy:
+    """Each call copies the next ``nbytes`` slot of a pool, so no call re-reads what the last one touched."""
+
+    def __init__(self, dst, src, nbytes: int, slots: int):
+        self.views = [(dst[i * nbytes:(i + 1) * nbytes], src[i * nbytes:(i + 1) * nbytes]) for i in range(slots)]
+        self.slot = 0                         # the slot the next call copies
+
+    def __call__(self) -> None:
+        d, s = self.views[self.slot]
+        self.slot = (self.slot + 1) % len(self.views)
+        np.copyto(d, s)

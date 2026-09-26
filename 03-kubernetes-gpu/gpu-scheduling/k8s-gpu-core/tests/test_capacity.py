@@ -32,7 +32,19 @@ def test_time_slicing_multiplies_the_advertised_count_not_the_gpus():
     kubelet.register(plugin)
     assert kubelet.node_status()["allocatable"] == {GPU: 80}
     env = kubelet.admit("two-slices", 2)["envs"]["NVIDIA_VISIBLE_DEVICES"]
-    assert env == "GPU-fake-0000"                             # two "GPUs", one physical device
+    assert env == "GPU-fake-0000,GPU-fake-0001"               # fresh node: spread over the least-loaded GPUs
+
+
+def test_time_sliced_replicas_can_share_one_physical_gpu_on_a_loaded_node():
+    # NVIDIA k8s-device-plugin v0.17 internal/rm/allocate.go distributedAlloc: pick one replica at a
+    # time from the GPU with the fewest allocated replicas
+    plugin, kubelet = DevicePlugin(make_gpus(8), replicas=10), Kubelet()
+    kubelet.register(plugin)
+    for i in range(16):                                       # two 1-replica pods per GPU, round robin
+        assert kubelet.admit(f"p{i}", 1)["envs"]["NVIDIA_VISIBLE_DEVICES"] == f"GPU-fake-{i % 8:04d}"
+    del kubelet.assigned["p3"], kubelet.assigned["p11"]       # both pods on GPU-fake-0003 finish
+    env = kubelet.admit("two-slices", 2)["envs"]["NVIDIA_VISIBLE_DEVICES"]
+    assert env == "GPU-fake-0003"                             # two "GPUs", one physical device
 
 
 def test_fail_requests_greater_than_one_rejects_multi_replica_requests_at_admission():

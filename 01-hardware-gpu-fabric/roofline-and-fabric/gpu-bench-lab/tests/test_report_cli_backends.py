@@ -27,7 +27,12 @@ def test_tiny_suite_writes_a_report_that_round_trips(tmp_path, monkeypatch, caps
     assert rep.meta["tiny"] is True and "roofline" in rep.analyses and "alpha_beta" in rep.analyses
     again = Report.from_dict(json.loads(json.dumps(rep.to_dict())))
     assert [m.cost for m in again.measurements] == [m.cost for m in rep.measurements]
-    assert "### GEMM" in rep.to_markdown() and "STREAM convention" in rep.to_markdown()
+    md = rep.to_markdown()
+    assert "### GEMM" in md and "STREAM convention" in md
+    assert "**WARNING: tiny run: plumbing check only" in md and "mode `tiny`" in md   # never passes for a real run
+    assert md.index("WARNING") < md.index("## Machine")
+    full = Report(meta={"quick": False, "backend": "numpy"})
+    assert full.mode == "full" and "WARNING" not in full.to_markdown()
 
 
 def test_cli_topo_and_inventory_on_saved_output(tmp_path, capsys):

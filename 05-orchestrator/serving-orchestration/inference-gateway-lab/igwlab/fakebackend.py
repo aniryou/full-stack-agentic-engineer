@@ -22,9 +22,19 @@ this backend is "measured on this machine, emulated backend" — real HTTP, fake
 
 Upstream equivalent: `llm-d-inference-sim` (ghcr.io/llm-d/llm-d-inference-sim), which the
 deploy/local and deploy/kind stacks use; `EngineProfile.sim_args()` prints the matching flags.
+What carries over is the *per-request* model: TTFT = overhead + uncached tokens x per-token
+time, ITL per output token, 16-token prefix-cache blocks, max_num_seqs slots. What does not:
+this fake serializes prefills per replica (a request waits for the prefills ahead of it), the
+simulator runs each request's prefill independently and only stretches prefill and ITL by
+`--time-factor-under-load` as the batch fills (sim_args sets it to match the ITL slope). So
+cache-aware routing wins less TTFT on the simulator than here -- compare hit rates and the
+per-endpoint split there, not TTFT alone.
 
 Not modelled (documented simplifications): preemption, chunked prefill interleaving prefill
-with decode, caching of generated-token blocks, speculative decoding, real tokenization.
+with decode, caching of generated-token blocks, speculative decoding, real tokenization. KV
+blocks for all `max_tokens` output tokens are reserved at admission (vLLM allocates decode
+blocks as tokens are generated), so `vllm:kv_cache_usage_perc` and KV-limited admission are
+pessimistic compared with vLLM, most visibly for requests with a large max_tokens.
 """
 from __future__ import annotations
 
@@ -111,6 +121,11 @@ class EngineProfile:
     def itl_seconds(self, running: int) -> float:
         return self.itl_s * (1.0 + self.itl_batch_slope * max(0, running - 1))
 
+    def time_factor_under_load(self) -> float:
+        """llm-d-inference-sim scales latencies by 1 + (f - 1)(n - 1)/(max_num_seqs - 1) with n running;
+        this f makes its ITL slope equal ours at a full batch: 1 + slope x (max_num_seqs - 1)."""
+        return 1.0 + self.itl_batch_slope * max(0, self.max_num_seqs - 1)
+
     def sim_args(self, model: str = "lab/llm", port: int = 8000) -> list[str]:
         """The llm-d-inference-sim flags (v0.11) that approximate this profile."""
         ms = lambda s: f"{s * 1e3:g}ms"
@@ -118,8 +133,8 @@ class EngineProfile:
         return ["--model", model, "--port", str(port), "--max-num-seqs", str(self.max_num_seqs),
                 "--max-model-len", str(self.max_model_len), "--latency-calculator", "per-token",
                 "--prefill-overhead", ms(self.prefill_overhead_s), "--prefill-time-per-token", us(self.prefill_s_per_token),
-                "--inter-token-latency", ms(self.itl_s), "--enable-kvcache", "--kv-cache-size", str(self.num_gpu_blocks),
-                "--block-size", str(self.block_size)]
+                "--inter-token-latency", ms(self.itl_s), "--time-factor-under-load", f"{self.time_factor_under_load():g}",
+                "--enable-kvcache", "--kv-cache-size", str(self.num_gpu_blocks), "--block-size", str(self.block_size)]
 
 
 class KVCache:

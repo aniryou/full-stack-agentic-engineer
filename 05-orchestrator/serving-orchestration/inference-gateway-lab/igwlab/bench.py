@@ -15,6 +15,11 @@ a short tool "think" time) over streaming HTTP, and records TTFT/E2E, which endp
 each request (`x-gateway-destination-endpoint`), and how many prompt tokens the engine
 reported as cached (`usage.prompt_tokens_details.cached_tokens`).
 
+That usage field is optional: the fake backend and llm-d-inference-sim (with --enable-kvcache)
+send it; vLLM sends it only when started with `--enable-prompt-tokens-details`. When no response
+carries it the hit rate is reported as unavailable (None, "n/a"), never as 0% -- read the
+engines' own counters instead (`engine_hit_rate`, from two scrapes of `/metrics`).
+
 Numbers measured against the fake backend are real wall-clock on this machine but the backend
 timing is *emulated* — compare policies with them, do not quote them as GPU numbers.
 """
@@ -29,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 
 __all__ = ["AgentType", "Session", "make_agent_types", "agentic_sessions", "Record", "BenchResult",
-           "run_sessions", "run_bench", "burst", "percentile", "compare", "ascii_bars"]
+           "run_sessions", "run_bench", "burst", "percentile", "compare", "ascii_bars", "engine_hit_rate"]
 
 _WORDS = ("agent must plan call tools read files write patches run tests check results summarize "
           "findings report status handle errors retry safely respect limits log actions cite sources "
@@ -115,7 +120,7 @@ class Record:
     status: int = 0
     endpoint: str | None = None
     prompt_tokens: int = 0
-    cached_tokens: int = 0
+    cached_tokens: int | None = None          # None: the response carried no prompt_tokens_details
     text: str = ""
     error: str = ""
 
@@ -150,7 +155,8 @@ class BenchResult:
     def summary(self) -> dict:
         ok = self.ok
         pe = self.per_endpoint()
-        prompt = sum(r.prompt_tokens for r in ok)
+        reported = [r for r in ok if r.cached_tokens is not None]
+        prompt = sum(r.prompt_tokens for r in reported)
         mean = (sum(pe.values()) / len(pe)) if pe else 0
         return {
             "label": self.label, "requests": len(self.records), "errors": len(self.records) - len(ok),
@@ -159,7 +165,7 @@ class BenchResult:
             "ttft_p99_ms": percentile([r.ttft for r in ok], 99) * 1e3,
             "e2e_p50_ms": percentile([r.e2e for r in ok], 50) * 1e3,
             "e2e_p90_ms": percentile([r.e2e for r in ok], 90) * 1e3,
-            "hit_rate": (sum(r.cached_tokens for r in ok) / prompt) if prompt else 0.0,
+            "hit_rate": (sum(r.cached_tokens for r in reported) / prompt) if prompt else None,   # None = unavailable
             "per_endpoint": pe,
             "imbalance": (max(pe.values()) / mean) if pe else math.nan,
             "rps": len(ok) / self.wall_s if self.wall_s else 0.0,
@@ -210,7 +216,9 @@ async def _request(http, url: str, body: dict, rec: Record, headers: dict | None
                     u = ev.get("usage")
                     if u:
                         rec.prompt_tokens = u.get("prompt_tokens", 0)
-                        rec.cached_tokens = (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0
+                        details = u.get("prompt_tokens_details")
+                        if isinstance(details, dict) and details.get("cached_tokens") is not None:
+                            rec.cached_tokens = int(details["cached_tokens"])
             rec.text = "".join(parts).strip()
     except Exception as e:                       # record, never crash the whole run
         rec.error = f"{type(e).__name__}: {e}"
@@ -296,10 +304,32 @@ def compare(results) -> str:
     head = f"{'policy':<24}{'TTFT p50':>10}{'p90':>9}{'p99':>9}{'E2E p50':>10}{'hit rate':>10}{'imbal.':>8}  per-endpoint"
     lines = [head, "-" * len(head)]
     for s in rows:
+        hit = f"{s['hit_rate']:>10.1%}" if s["hit_rate"] is not None else f"{'n/a':>10}"
         lines.append(f"{s['label']:<24}{s['ttft_p50_ms']:>8.1f}ms{s['ttft_p90_ms']:>7.1f}ms{s['ttft_p99_ms']:>7.1f}ms"
-                     f"{s['e2e_p50_ms']:>8.1f}ms{s['hit_rate']:>10.1%}{s['imbalance']:>8.2f}  {s['per_endpoint']}"
+                     f"{s['e2e_p50_ms']:>8.1f}ms{hit}{s['imbalance']:>8.2f}  {s['per_endpoint']}"
                      + (f"  errors={s['errors']}" if s["errors"] else ""))
+    if any(s["hit_rate"] is None for s in rows):
+        lines.append("n/a: no response carried usage.prompt_tokens_details.cached_tokens (vLLM needs "
+                     "--enable-prompt-tokens-details); use engine_hit_rate() on two /metrics scrapes")
     return "\n".join(lines)
+
+
+def engine_hit_rate(before: dict, after: dict) -> float | None:
+    """Prefix-cache hit rate between two scrapes of every engine ({name: /metrics text}), from
+    vLLM's own counters (in tokens): sum of increases of vllm:prefix_cache_hits_total over sum of
+    increases of vllm:prefix_cache_queries_total. None when no engine exports them."""
+    from .promtext import Families
+    hits = queries = 0.0
+    seen = False
+    for name, text in after.items():
+        a, b = Families.from_text(text), Families.from_text(before.get(name, ""))
+        if a.has("vllm:prefix_cache_queries_total"):
+            seen = True
+            hits += a.sum("vllm:prefix_cache_hits_total", 0.0) - b.sum("vllm:prefix_cache_hits_total", 0.0)
+            queries += a.sum("vllm:prefix_cache_queries_total", 0.0) - b.sum("vllm:prefix_cache_queries_total", 0.0)
+    if not seen:
+        return None
+    return hits / queries if queries else 0.0
 
 
 def ascii_bars(values: dict, width: int = 40, fmt: str = "{:.1f}") -> str:

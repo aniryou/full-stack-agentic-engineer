@@ -21,7 +21,8 @@ machine_type = "g2-standard-4"
 
 # --- cost guards --------------------------------------------------------------------------------
 provisioning_model       = "SPOT"
-max_run_duration_seconds = 3600     # Compute Engine deletes the VM after an hour no matter what
+max_run_duration_seconds = 3600     # a VM still RUNNING after an hour (a hung run) is deleted; one that
+                                    # powered itself off stays, with its disk, until terraform destroy
 termination_action       = "DELETE"
 
 # --- what to run --------------------------------------------------------------------------------

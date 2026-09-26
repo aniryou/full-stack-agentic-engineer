@@ -28,7 +28,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from ..promtext import Registry
-from .config import PickerConfig, load_config
+from .config import FLOW_CONTROL_WARNING, PickerConfig, load_config
 from .datalayer import Datastore, Endpoint, Scraper
 from .plugins import RequestCtx
 from .scheduler import Scheduler
@@ -62,6 +62,9 @@ class Router:
     def __init__(self, config, endpoints, settings: RouterSettings | None = None):
         self.settings = settings or RouterSettings()
         self.config: PickerConfig = config if isinstance(config, PickerConfig) else load_config(config, seed=self.settings.seed)
+        if self.config.flow_control:                 # say so where the learner sees it, not only in the README
+            import warnings
+            warnings.warn(FLOW_CONTROL_WARNING, stacklevel=2)
         self.ds = Datastore(endpoints)
         self.scheduler = Scheduler(self.config, self.ds)
         self.decisions: collections.deque = collections.deque(maxlen=self.settings.decisions_kept)

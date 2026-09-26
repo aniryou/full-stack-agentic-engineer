@@ -4,7 +4,8 @@ from collections import Counter
 
 import pytest
 
-from igwlab.bench import BenchResult, Record, agentic_sessions, compare, percentile, session_messages
+from igwlab.bench import (BenchResult, Record, agentic_sessions, compare, engine_hit_rate, percentile,
+                          session_messages)
 
 
 def test_percentile_linear_interpolation():
@@ -34,3 +35,18 @@ def test_summary_counts_idle_endpoints_and_hit_rate():
     assert s["per_endpoint"] == {"a": 4, "b": 0} and s["imbalance"] == 2.0
     assert s["hit_rate"] == 0.5 and s["ttft_p50_ms"] == pytest.approx(25.0) and s["rps"] == 2.0
     assert "x" in compare([r])
+
+
+def test_hit_rate_is_unavailable_not_zero_when_the_engine_does_not_report_it():
+    recs = [Record("s", i, "a0", 0.0, ttft=0.01, e2e=0.1, status=200, endpoint="a", prompt_tokens=100) for i in range(3)]
+    s = BenchResult("vllm-without-details", recs, wall_s=1.0, endpoints=["a"]).summary()
+    assert s["hit_rate"] is None                                  # vLLM without --enable-prompt-tokens-details
+    assert "n/a" in compare([BenchResult("vllm-without-details", recs, wall_s=1.0, endpoints=["a"])])
+
+
+def test_engine_hit_rate_from_counter_increases():
+    page = lambda h, q: f"vllm:prefix_cache_hits_total{{engine=\"0\"}} {h}\nvllm:prefix_cache_queries_total{{engine=\"0\"}} {q}\n"
+    before = {"a": page(100, 1000), "b": page(0, 0)}
+    after = {"a": page(700, 2000), "b": page(300, 1000)}
+    assert engine_hit_rate(before, after) == pytest.approx((600 + 300) / (1000 + 1000))
+    assert engine_hit_rate({"a": ""}, {"a": "# nothing\n"}) is None

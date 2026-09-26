@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from gpubench import gemm, membw, transfer
+from gpubench import gemm, inventory, membw, transfer
 from gpubench.backends.numpy_backend import NumpyBackend, split
 
 be = NumpyBackend()
@@ -59,6 +59,32 @@ def test_memcpy_and_ladder_ops():
     assert op.verify() and op.cost.bytes == 4096 and op.extras["stream_bytes"] == 8192
     lad = be.make_scale_inplace(8192)
     assert lad.cost.bytes == 2 * 8192 and lad.extras["working_set_bytes"] == 8192
+
+
+def test_cold_memcpy_rotates_through_a_pool_bigger_than_the_cache():
+    small = be.make_memcpy(4096, pool_bytes=1 << 20)
+    assert small.extras["pool_slots"] == 256                      # 1 MiB pool / 4 KiB copies
+    default = be.make_memcpy(1 << 20)
+    llc = max(list(inventory.cache_sizes().values()) + [16 << 20])
+    assert default.extras["pool_slots"] * (1 << 20) >= 4 * llc - (1 << 20)   # source pool ≥ 4× the LLC
+    assert be.make_memcpy(4096, cold=False).extras["pool_slots"] == 1
+    # successive calls copy *different* slots: no call re-reads bytes the previous one just touched
+    op = be.make_memcpy(4096, pool_bytes=4 * 4096)
+    seen = []
+    for _ in range(5):
+        seen.append(op.fn.slot)
+        op.fn()
+    assert seen == [0, 1, 2, 3, 0]
+    assert op.verify()
+
+
+def test_stream_arrays_are_sized_from_every_last_level_cache():
+    total = inventory.llc_total_bytes()
+    n = membw.stream_elems(be)
+    if total:
+        assert n * 8 >= 4 * total                                  # fp64 arrays, 4× the summed LLC
+    assert membw.stream_elems(be, llc_bytes=64 << 20) == 4 * (64 << 20) // 8
+    assert 1 <= inventory.usable_cpus() <= (__import__("os").cpu_count() or 1)
 
 
 def test_small_suites_produce_labelled_measurements():

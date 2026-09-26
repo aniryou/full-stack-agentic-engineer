@@ -257,7 +257,7 @@ class TorchBackend:
                     b.copy_(a, non_blocking=True)
                 with t.cuda.stream(s_dst):           # dst→src on a side stream of dst
                     b2.copy_(a2, non_blocking=True)
-        note = "direct peer access" if peer else "no peer access: the driver stages through host memory"
+        note = "direct peer access" if peer else "no peer access: copies are staged through host memory"
         return Op(fn, transfer_cost(nbytes, directions=2 if bidirectional else 1), timer="wall", note=note,
                   max_inner=1 if sync_each else None, extras={"peer_access": peer, "sync_each": sync_each})
 

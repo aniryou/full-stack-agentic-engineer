@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # gpubench VM startup script: wait for the GPU driver, install the lab, run the suite on the GPU,
 # upload the report to GCS, power off. Compute Engine runs it as root on every boot; settings come
-# from instance metadata set by compute.tf (gpubench-*).
+# from instance metadata set by compute.tf (gpubench-*). Whatever fails — the driver, the clone,
+# the PyTorch install, the suite — the script still writes FAILED.txt, uploads what exists and
+# powers off, so a broken run never idles on the GPU until max_run_duration.
 #
 # Try it anywhere without side effects:  DRY_RUN=1 bash startup.sh   (prints each step's commands)
 set -euo pipefail
@@ -42,10 +44,21 @@ RUN_ID="$(hostname)-$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="$WORK/results/$RUN_ID"
 PY="$WORK/venv/bin/python"
 
+FINISHED=0
 finish() { # upload whatever exists, then power off (unless told not to)
-  run gcloud storage cp -r "$OUT" "gs://$BUCKET/results/"
+  FINISHED=1
+  run gcloud storage cp -r "$OUT" "gs://$BUCKET/results/" || step "upload failed: the output stays in $OUT"
   if [ "$POWEROFF" = "true" ]; then run shutdown -h now; fi
 }
+on_exit() { # any unhandled failure (set -e) lands here: leave evidence, upload, power off
+  local rc=$?
+  if [ "$rc" -ne 0 ] && [ "$FINISHED" != "1" ] && [ "$DRY_RUN" != "1" ]; then
+    step "failed with exit $rc (the last step above is the one that broke): uploading what exists"
+    { mkdir -p "$OUT" && echo "startup script failed with exit $rc; see the serial console log" >"$OUT/FAILED.txt"; } || true
+    finish
+  fi
+}
+trap on_exit EXIT
 
 if [ -f "$WORK/.done" ] && [ "$DRY_RUN" != "1" ]; then
   step "already ran on this disk ($WORK/.done); delete it to run again"

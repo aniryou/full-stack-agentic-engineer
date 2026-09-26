@@ -1,7 +1,9 @@
 """The roofline model, the spec table, and the numbers the notebooks ask you to predict."""
 import pytest
 
-from gpubench import roofline, specs
+import math
+
+from gpubench import membw, roofline, specs
 from gpubench.accounting import gemm_cost, gemm_intensity, stream_cost
 from gpubench.measure import Measurement
 from gpubench.timing import Timing
@@ -20,10 +22,20 @@ def test_h100_bf16_decode_is_memory_bound_and_big_gemm_is_not():
     assert r.bound(gemm_intensity(4096, 4096, 4096, 2)) == "compute"
 
 
-def test_decode_batch_crossover_on_h100_is_319():
+def test_decode_batch_crossover_on_h100_is_319_standalone_and_296_with_activations_on_chip():
     ridge = specs.get("h100-sxm").ridge("bf16")
     b = next(m for m in range(1, 5000) if gemm_intensity(m, 8192, 8192, 2) >= ridge)
-    assert b == 319          # the batch at which a d=8192 projection becomes compute-bound
+    assert b == 319          # a standalone d=8192 GEMM also reads B·d and writes B·d activation bytes
+    # inside a model the activations stay on chip (primer §3.4): only the d² weights are streamed,
+    # intensity = 2·B·d² / (d²·2) = B, so the crossover is the ridge itself — roofline-core's 296
+    weights_only = next(m for m in range(1, 5000) if 2 * m * 8192 * 8192 / (8192 * 8192 * 2) >= ridge)
+    assert weights_only == math.ceil(ridge) == 296
+
+
+def test_spec_ridges_match_the_primer():
+    assert specs.get("l4").ridge("fp8") == pytest.approx(808.3, abs=0.1)     # 242.5 dense (485 sparse) / 0.30
+    assert specs.get("l4").ridge("bf16") == pytest.approx(403.3, abs=0.1)
+    assert specs.get("h100-sxm").ridge("bf16") == pytest.approx(295.2, abs=0.1)
 
 
 def _m(op, cost, seconds, **params):
@@ -38,6 +50,18 @@ def test_measured_roofline_takes_the_best_of_each_roof():
     assert r.peak_flops == pytest.approx(2 * 512 ** 3 / 1e-3)
     assert r.peak_bw == pytest.approx(10e9)          # both kernels moved 10 GB/s
     assert r.efficiency(r.peak_flops, 1e6) == pytest.approx(1.0)
+
+
+def test_the_slanted_roof_ignores_multi_pass_kernels():
+    g = [_m("gemm", gemm_cost(512, 512, 512, 8), 1e-3, dtype="float64")]
+    add = _m("stream.add", stream_cost("add", 10**6, 8), 2.4e-3)                 # 10 GB/s
+    two_pass = _m("stream.triad", stream_cost("triad", 10**6, 8).times(5 / 3), 2.0e-3)   # "moves" 20 GB/s
+    two_pass.extras["passes"] = 2
+    r = roofline.measured_roofline(g, [add, two_pass], "float64")
+    assert r.peak_bw == pytest.approx(10e9)
+    assert membw.peak([add, two_pass]) is add and membw.single_pass([add, two_pass]) == [add]
+    with pytest.raises(ValueError):
+        roofline.measured_roofline(g, [two_pass], "float64")
 
 
 def test_ascii_plot_draws_roofs_points_and_legend():

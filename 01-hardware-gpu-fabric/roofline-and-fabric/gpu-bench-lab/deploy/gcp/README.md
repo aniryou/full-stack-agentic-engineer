@@ -9,7 +9,7 @@ What it creates ([`terraform/`](terraform/), split by concern):
 | `storage.tf` | a private results bucket (uniform access, public access prevented, objects deleted after 30 days) |
 | `iam.tf` | a service account that can write objects to that bucket and write logs — nothing else |
 | `compute.tf` | one `g2-standard-4` (1× L4) **Spot** VM from a Deep Learning VM image, `max_run_duration` = 1 h, termination action DELETE |
-| `startup.sh` | runs on boot: waits for the driver, records `nvidia-smi` / topology / inventory, installs the lab, runs `python -m gpubench run --backend torch`, uploads to `gs://<bucket>/results/<vm>-<time>/`, powers off |
+| `startup.sh` | runs on boot: waits for the driver, records `nvidia-smi` / topology / inventory, installs the lab, runs `python -m gpubench run --backend torch`, uploads to `gs://<bucket>/results/<vm>-<time>/`, powers off — and on *any* failure writes `FAILED.txt`, uploads what exists and powers off |
 
 The VM measures the L4 (tensor-core GEMMs including FP8, GDDR6 bandwidth, PCIe Gen4 host↔device
 copies) *and* its own boot disk (notebook 04's cold reads) — a clean cloud baseline to set beside your
@@ -28,13 +28,18 @@ laptop and Colab runs.
 
 `g2-standard-4` is about $0.70/hr on demand; Spot is typically 60–91% cheaper, so roughly
 $0.07–0.28/hr, plus a 100 GB pd-balanced boot disk (cents per day) and an ephemeral external IP. A
-quick run is done in well under an hour, and the VM powers itself off; `max_run_duration` deletes it
-after an hour regardless. `a2-highgpu-2g` (2× A100 40GB with NVLink, for the P2P notebook) is about
+quick run is done in well under an hour, and the VM powers itself off — GPU billing stops, but the
+**stopped VM and its boot disk stay until `terraform destroy`** (`bench-on-gcp.sh` destroys for you;
+by hand, run it yourself). `max_run_duration` is the net for a *hung* run: it deletes a VM that has
+been running for an hour; it counts running time only, so it does not clean up a VM that already
+stopped itself (verify). `a2-highgpu-2g` (2× A100 40GB with NVLink, for the P2P notebook) is about
 $7/hr on demand — use Spot if capacity allows and keep the duration short.
 
 ## Run it
 
-One command (apply → wait for the report → download to `results/gcp/` → destroy):
+One command (apply → wait for the report → download to `results/gcp/` → destroy). If anything
+fails after the apply — including no report within `TIMEOUT_MIN` (default 45) — it copies whatever
+reached the bucket and destroys everything anyway; `KEEP=1` keeps the resources instead:
 
 ```bash
 PROJECT=my-gpu-lab deploy/gcp/bench-on-gcp.sh
@@ -77,16 +82,23 @@ Getting that capacity is layer 03's territory.
 * The report contains `FAILED.txt` — the driver did not come up or the suite failed; the serial
   console log (`watch_progress`) shows which step.
 * No report and the VM is gone — Spot preemption or `max_run_duration`; run again.
+* You ran Terraform by hand and the run finished — the VM is *stopped*, not deleted: `terraform destroy`.
 
 ## VERIFY before relying on it
 
 * `image_family` default `common-cu128-ubuntu-2204-nvidia-570`: Deep Learning VM family names change
-  with CUDA and driver releases — list current ones with
+  with CUDA and driver releases, and older families stop receiving images (check that this one is
+  still current before relying on it) — list current ones with
   `gcloud compute images list --project deeplearning-platform-release --no-standard-images --format='value(family)' | sort -u`.
+  A family with an `nvidia-580` driver (for example `common-cu129-ubuntu-2404-nvidia-580`, if listed —
+  verify) also runs CUDA 13 PyTorch wheels, which need R580+.
 * `install-nvidia-driver = True` metadata installs the driver on first boot for DLVM images that do
   not ship one preinstalled.
 * `boot_disk_type = pd-balanced` suits G2/A2/N1; newer shapes (A3 Ultra, A4, ...) may require `hyperdisk-balanced`.
-* `torch_index_url` (default CUDA 12.8 wheels) must suit the image's driver (R525+ for CUDA 12.x).
+* `torch_index_url` (default CUDA 12.8 wheels) must suit the image's driver (R525+ for CUDA 12.x
+  through minor-version compatibility; R570+ for Blackwell). The newest PyTorch with cu128 wheels is
+  2.11 (Docker Hub has no later `cuda12.8` tag), so this VM runs an older PyTorch than the Docker path.
+* `max_run_duration` counts only time in the RUNNING state: a VM that powered itself off is not deleted by it.
 * L4 availability in `us-central1-a`, Spot pricing and discounts.
 
 The concepts behind the numbers are in the topic primer, [`../../../PRIMER.md`](../../../PRIMER.md)
