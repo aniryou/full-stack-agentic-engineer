@@ -53,6 +53,9 @@ class BlockManager:
     """Hands out physical blocks; tracks reference counts for sharing."""
 
     def __init__(self, num_blocks=NUM_BLOCKS):
+        if num_blocks > K_POOL.shape[0]:
+            raise ValueError(f"num_blocks={num_blocks} exceeds the {K_POOL.shape[0]}-block pool tensor")
+        self.num_blocks = num_blocks    # this manager's pool size (may be < NUM_BLOCKS)
         self.free = list(range(num_blocks))
         RNG.shuffle(self.free)          # so allocations *look* scattered
         self.refcount = {}
@@ -77,7 +80,7 @@ class BlockManager:
             self.free.append(b)
 
     def blocks_in_use(self):
-        return NUM_BLOCKS - len(self.free)
+        return self.num_blocks - len(self.free)
 
 # ============================================================================
 # PART 3 — a sequence holds NO tensors. Only a block table: a list mapping

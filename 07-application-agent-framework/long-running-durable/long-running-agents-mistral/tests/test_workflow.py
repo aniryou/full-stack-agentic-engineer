@@ -5,7 +5,14 @@ import asyncio
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+if sys.version_info < (3, 12):
+    pytest.skip("Mistral Workflows needs Python >= 3.12 (mistralai-workflows requires it); "
+                "the core and adapter tests run on 3.11", allow_module_level=True)
+pytest.importorskip("mistralai.workflows", reason="pip install -r requirements.txt (Python >= 3.12) installs mistralai-workflows")
 
 from durable import FakeModel, PaymentAPI
 import mistral_workflow as mw

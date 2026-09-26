@@ -4,7 +4,7 @@ This file is the brief every contributor (human or agent) follows so the lab sta
 
 ## Layout
 
-    agentlab/            the library: small, readable, tested; docstrings cite Primer sections (§2.1, §3.3 …)
+    agentlab/            the library: small, readable, tested; docstrings name the notebook that teaches them
       llm/             FakeLLM (offline model), message/response types, optional Gemini adapter
       agents/          tools, budgets, agent loop, workflows, sessions/state, context builder, runner  ← CORE
       mcp/             teaching subset of MCP (2026-07-28 shape) + gateway
@@ -28,7 +28,7 @@ This file is the brief every contributor (human or agent) follows so the lab sta
    longer than a few hundred milliseconds in tests or notebooks (inject clocks/sleepers where timing matters).
 3. Every module gets a `tests/test_<module>.py`; run it with `python3 -m pytest -q tests/test_<module>.py`.
 4. Every notebook source follows `notebooks_src/README.md` and the pattern in `notebooks_src/00_setup_and_fake_llm.py`:
-   heading + primer mapping + "you will" list → worked examples → 4–7 exercises each with a check cell →
+   heading + the concept it teaches (see `docs/PRIMER_MAP.md`) + "you will" list → worked examples → 4–7 exercises each with a check cell →
    a *The one-minute version* cell. Build and verify with:
 
        python3 tools/build_notebooks.py notebooks_src/NN_name.py

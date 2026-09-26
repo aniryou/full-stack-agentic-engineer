@@ -6,7 +6,7 @@ tensor-parallel decode step, why a container does or does not see its GPU, and w
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md): *The one-minute version*, then §2–§3 (the execution model, memory access patterns).
-2. `cd cuda-nccl-core && python3 -m pytest -q` — 128 tests in under a second, numpy only; then open
+2. `cd cuda-nccl-core && python3 -m pytest -q` — 133 tests in under a second, numpy only; then open
    [`notebooks/01_simt_warps_and_memory.ipynb`](cuda-nccl-core/notebooks/01_simt_warps_and_memory.ipynb).
 3. `cd ../cuda-nccl-lab && python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M` — a real ring
    all-reduce between two processes, printed like nccl-tests, in about a second. Then
@@ -56,13 +56,13 @@ Finish with the primer's [*In a design review*](PRIMER.md#in-a-design-review) dr
 # T0 — the core: numpy only
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core
 python3 -m pip install -r requirements.txt
-python3 -m pytest -q                            # 128 tests, under a second
+python3 -m pytest -q                            # 133 tests, under a second
 python3 -m jupyterlab notebooks                 # do the exercises
 
 # T0 — the lab: numpy, numba (its CUDA simulator runs on any CPU), pyyaml
 cd ../cuda-nccl-lab
 python3 -m pip install -r requirements.txt
-python3 -m pytest -q                            # 122 pass, 2 skip without torch / numba-cuda; ~20 s
+python3 -m pytest -q                            # 123 pass, 2 skip without torch / numba-cuda; 15–30 s
 python3 -m jupyterlab notebooks
 ```
 

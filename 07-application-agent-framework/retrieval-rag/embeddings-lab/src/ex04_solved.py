@@ -57,7 +57,8 @@ print("adc_dists ✓ (equals distance to reconstructions)")
 # ## Task 2 — IVF search
 # `ivf_search(q, n_probe)`: find the `n_probe` nearest coarse centroids, gather
 # their inverted lists, score exactly, return top-10 ids. With
-# `n_probe = n_list` it must match brute force.
+# `n_probe = n_list` it must match brute force; with fewer probes every result
+# must come from the probed cells (brute force would pass the first check only).
 
 # %%
 NLIST = 32
@@ -73,8 +74,17 @@ def ivf_search(q, n_probe):
     # <<< SOLUTION
 
 assert np.array_equal(np.sort(ivf_search(Q[0], NLIST)), np.sort(gold[0]))
+for q in Q:
+    for n_probe in (1, 2):
+        probed = np.argsort(((cents - q) ** 2).sum(1))[:n_probe]
+        hits = ivf_search(q, n_probe)
+        assert np.isin(cell[hits], probed).all(), f"n_probe={n_probe}: a result lies outside the probed cells"
+        in_probed = np.where(np.isin(cell, probed))[0]
+        best = in_probed[np.argsort(((X[in_probed] - q) ** 2).sum(1))[:10]]
+        assert np.array_equal(np.sort(hits), np.sort(best)), f"n_probe={n_probe}: not the exact top-10 of the probed cells"
+rec1 = np.mean([len(set(ivf_search(q, 1)) & set(g)) / 10 for q, g in zip(Q, gold)])
 rec4 = np.mean([len(set(ivf_search(q, 4)) & set(g)) / 10 for q, g in zip(Q, gold)])
-print(f"ivf_search ✓   recall@10 with n_probe=4: {rec4:.2f}")
+print(f"ivf_search ✓   recall@10 with n_probe=1: {rec1:.2f}, n_probe=4: {rec4:.2f}")
 
 # %% [markdown]
 # ## Task 3 — post-filtering collapses on selective filters

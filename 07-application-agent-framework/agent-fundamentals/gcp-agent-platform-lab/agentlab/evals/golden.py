@@ -1,4 +1,4 @@
-"""Golden sets: the curated cases an agent is measured against (Primer §4.1).
+"""Golden sets: the curated cases an agent is measured against (notebook 08).
 
 A golden case pins down an *input*, the *trajectory* a correct agent takes
 (which tools, roughly which arguments, in which order), what the final answer
@@ -90,7 +90,7 @@ class GoldenSet:
         return list(self.by_stratum())
 
     def split_holdout(self, fraction: float, seed: int) -> tuple["GoldenSet", "GoldenSet"]:
-        """Stratified dev/holdout split. The holdout is never used to tune prompts (Primer §4.1).
+        """Stratified dev/holdout split. The holdout is never used to tune prompts (notebook 08).
 
         Deterministic for a given seed so the split can be reproduced in CI.
         """

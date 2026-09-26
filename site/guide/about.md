@@ -21,12 +21,15 @@ and what you think is right, ideally with a source or a command that shows it.
 
 ## Licences
 
-There is no repository-wide licence; each lab carries its own.
+Everything in the repository that does not carry its own licence — the primers, the curriculum, the compute guide,
+this site's text and the code outside the labs — is under the MIT licence in the repository's
+[`LICENSE`](https://github.com/aniryou/full-stack-agentic-engineer/blob/main/LICENSE) file. A lab with its own
+`LICENSE` keeps it:
 
 | Licence | Labs |
 |---|---|
-| MIT | `roofline-core`, `gpu-bench-lab` (01); `cuda-nccl-core`, `cuda-nccl-lab` (02); `k8s-gpu-core`, `k8s-gpu-lab` (03); `mini-engine-core`, `vllm-serving-lab` (04); `orchestrator-core`, `inference-gateway-lab` (05); `agentic-scaling-lab`, `agentic-scaling-lab-mistral` (06); `agent-core`, `gcp-agent-platform-lab`, `mistral-agent-core` (07) |
+| MIT | every other lab that ships a `LICENSE`, including all the cores and labs of layers 01–05 and of the four newer topics (mixture-of-experts, RL and thinking models, quantization, sandboxed execution) |
 | Apache 2.0 | `agentic-identity-gcp-lab` (06); `lra-gcp` (07) |
-| No licence file | everything else, including the primers outside those labs; open an issue before reusing it |
+| No licence file of its own | covered by the repository's MIT licence |
 
 Third-party names and products are trademarks of their owners and are mentioned only to explain how they work.

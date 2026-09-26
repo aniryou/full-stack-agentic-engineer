@@ -4,18 +4,26 @@
 
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to the agent application at the top. It is
-organised as eight layers and, within each layer, by topic. Each topic has a primer, a small from-scratch
-implementation and a fuller lab, with notebooks; the notebooks run on a laptop or in Google Colab
-([`COLAB.md`](COLAB.md)). A readable copy is at <https://aniryou.github.io/full-stack-agentic-engineer/>.
+organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
+which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Nine topics come as a primer, a small
+from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
+(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts` and
+`rl-and-thinking-models` (00) and `sandboxed-execution` (07). The other topics vary in shape: layer 01's
+`gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code; the rest are usually a primer
+plus practice notebooks or a lab; each topic's or lab's README says what it contains.
 
 ## Start here
 
 1. **Pick a layer** from the [stack map](#the-stack) below — start where your question lives, or at the bottom
    and work up.
-2. **Read its primer.** Each topic has a `PRIMER.md` (or a `*-primer.md`) that explains the concepts with
-   worked numbers; the layer's `README.md` links it and says which sections to read first.
+2. **Read its primer.** Most topics have a primer (`PRIMER.md`, a `*-primer.md` or a lab's `docs/primer.md`) that
+   explains the concepts with worked numbers; `agent-fundamentals/` teaches through its lab notebooks instead. The
+   layer's `README.md` links it; for layers 01–05 and the newer topics it also says which
+   sections to read first (the other layer READMEs are being brought to the same shape).
 3. **Run its core notebooks**, in Colab (the badges in each layer README) or locally (see [Run it](#run-it)).
-   Each exercise has a check cell that prints ✅ when your answer is right.
+   Most exercises are followed by a check cell — all of them in the primer, core and lab topics — that prints ✅
+   when your answer is right; some older checks are lighter, and the 06 scaling notebooks print "not attempted"
+   until you fill an exercise in.
 
 **Learning path:** [`CURRICULUM.md`](CURRICULUM.md) gives the order to work the whole repo, module by module, with
 hours, tiers, shorter routes and cross-layer design drills.
@@ -40,23 +48,49 @@ Read bottom-up: each layer is built on the one below it.
 
 ## What is inside
 
-| Layer | Topics | What you will be able to do | Where |
-|---|---|---|---|
-| **00** foundations | transformer internals; GPU capacity planning; the open-weight model landscape; mixture-of-experts models; RL post-training and thinking models | build attention, a transformer block and a tiny GPT; size memory and bandwidth for a model and budget TTFT/TPOT; compare open-weight models on cost and routing; predict which experts an MoE batch reads, price expert parallelism and size an MoE against a dense model; implement REINFORCE, DPO and GRPO, choose between thinking longer and sampling more, and size a fleet for a thinking model — then train a tiny MoE and a tiny GRPO model on a CPU and serve real ones on a free T4 | [`00-foundations/`](00-foundations/README.md): `transformers/`, `gpu-capacity-planning/`, `model-landscape/`, [`mixture-of-experts/`](00-foundations/mixture-of-experts/README.md), [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md) |
-| **01** hardware and fabric | why a GPU is shaped the way it is; scale-up vs scale-out fabrics; rooflines, fabrics and the cost of a token | read a GPU spec sheet and predict whether an LLM step is compute- or memory-bound; price a collective on NVLink vs InfiniBand; budget a cold start and a failure rate; compute $/M tokens — then measure your own machine (CPU, a free T4, or a Spot L4 on Google Cloud) | [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md): `gpu-primer/`, `gpu-deployment/`, [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/README.md) |
-| **02** CUDA, NCCL, runtime | why a kernel is fast or slow; collectives and NCCL; how a container gets a GPU; sharing and monitoring a GPU | predict memory coalescing, occupancy and what an all-reduce costs with numpy simulators; run Numba CUDA kernels in the simulator, then on a GPU; measure collectives like nccl-tests with an α-β fit; see what a container sees of its GPU; choose MIG, MPS or time-slicing and alert on DCGM and XIDs — on a laptop, a free Kaggle 2×T4, any GPU box, or GKE | [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md): [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/README.md) |
-| **03** Kubernetes for GPUs | device plugin and DRA; the scheduling cycle and GPU fragmentation; gangs and topology-aware placement; Kueue quotas; getting capacity; sharing | explain why a GPU pod is Pending and fix it; place gangs without deadlock; set up Kueue quotas with borrowing and reclaim; choose Spot, flex-start or reservations — on a laptop simulator, a kind cluster with fake GPUs, one GPU VM, or GKE | [`03-kubernetes-gpu/`](03-kubernetes-gpu/README.md): [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/README.md) |
-| **04** inference engine | attention kernels, KV cache, paging; the engine itself — continuous batching, chunked prefill, prefix caching, sampling, speculation, quantization; quantization in depth; vLLM in its source | implement FlashAttention and paged attention in miniature and defend a kernel choice with byte counts; build an engine's step loop, scheduler and prefix cache in numpy; size a model's KV cache before paying for a GPU; measure and tune a real vLLM against an SLO (a fake vLLM on a laptop, a free T4, Cloud Run GPU or GKE); say what INT4, FP8, NVFP4 or an FP8 KV cache buys on a given GPU, implement GPTQ, AWQ and SmoothQuant, and produce, serve and evaluate a quantized checkpoint; follow a request through vLLM's source | [`04-inference-engine/`](04-inference-engine/README.md): `kv-cache/`, `paged-attention/`, `flash-attention/` (primer and deep dive), [`serving-engine/`](04-inference-engine/serving-engine/README.md), [`quantization/`](04-inference-engine/quantization/README.md), [`vllm-internals/`](04-inference-engine/vllm-internals/README.md) |
-| **05** orchestrator | replica routing, flow control, autoscaling, prefill/decode disaggregation, KV-cache tiers | route on prefix affinity and load like the llm-d endpoint picker; autoscale on the right signal; size a prefill/decode split — in a fleet simulator, then as a real router on kind or GKE Inference Gateway | [`05-orchestrator/`](05-orchestrator/README.md): [`serving-orchestration/`](05-orchestrator/serving-orchestration/README.md) |
-| **06** gateway | identity and security for agents; scaling, admission control and cost | give agents SPIFFE identities, exchange tokens and enforce policy (including MCP authorization and A2A) with an audit trail; plan capacity, find the provisioned-throughput break-even, and add admission control | [`06-gateway/`](06-gateway/README.md): `identity-security/`, `scaling-admission-cost/` |
-| **07** agent application | the agent loop, tools, state, multi-agent, durable execution, evals, retrieval; sandboxed execution of model-written code | write an agent loop from scratch, then build multi-agent workflows with sessions, MCP, OAuth, evals and tracing; make long-running agents durable; build RAG and vector indexes (IVF, PQ, HNSW, GraphRAG) from scratch; run an agent's `run_code` tool with no ambient authority — a process sandbox, an egress proxy that holds the credential, pod-per-execution on kind and a GKE Sandbox (gVisor) node pool | [`07-application-agent-framework/`](07-application-agent-framework/README.md): `agent-fundamentals/`, [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md), `long-running-durable/`, `retrieval-rag/` |
+One entry per layer: what you will be able to do, then its topic folders.
+
+- **00 foundations** — [`00-foundations/`](00-foundations/README.md). Build a tiny GPT; size memory and bandwidth
+  for a model; predict what MoE and thinking models do to serving; implement REINFORCE, DPO and GRPO.
+  Topics: `transformers/`, `gpu-capacity-planning/`, `model-landscape/`,
+  [`mixture-of-experts/`](00-foundations/mixture-of-experts/README.md),
+  [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md).
+- **01 hardware and fabric** — [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md). Read a spec sheet
+  and say whether a step is compute- or memory-bound; price a collective; compute $/M tokens; measure your machine.
+  Topics: `gpu-primer/`, `gpu-deployment/`,
+  [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/README.md).
+- **02 CUDA, NCCL, runtime** — [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md). Predict coalescing,
+  occupancy and all-reduce cost; run Numba kernels; measure collectives; see how a container gets a GPU.
+  Topic: [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/README.md).
+- **03 Kubernetes for GPUs** — [`03-kubernetes-gpu/`](03-kubernetes-gpu/README.md). Explain why a GPU pod is
+  Pending; place gangs; set Kueue quotas; choose Spot, flex-start or reservations.
+  Topic: [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/README.md).
+- **04 inference engine** — [`04-inference-engine/`](04-inference-engine/README.md). Build an engine's step loop,
+  scheduler and prefix cache; size a KV cache; tune a real vLLM against an SLO; choose a quantization scheme.
+  Topics: `kv-cache/`, `paged-attention/`, `flash-attention/`,
+  [`serving-engine/`](04-inference-engine/serving-engine/README.md),
+  [`quantization/`](04-inference-engine/quantization/README.md),
+  [`vllm-internals/`](04-inference-engine/vllm-internals/README.md).
+- **05 orchestrator** — [`05-orchestrator/`](05-orchestrator/README.md). Route on prefix affinity and load;
+  autoscale on the right signals; size a prefill/decode split — in a simulator, then a real router.
+  Topic: [`serving-orchestration/`](05-orchestrator/serving-orchestration/README.md).
+- **06 gateway** — [`06-gateway/`](06-gateway/README.md). Give agents identities, exchange tokens, enforce
+  policy with an audit trail; plan capacity, find the provisioned-throughput break-even, add admission control.
+  Topics: `identity-security/`, `scaling-admission-cost/`.
+- **07 agent application** — [`07-application-agent-framework/`](07-application-agent-framework/README.md). Write
+  an agent loop; make long-running agents durable; build RAG and vector indexes; sandbox model-written code.
+  Topics: `agent-fundamentals/`, `long-running-durable/`, `retrieval-rag/`,
+  [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md).
 
 Several topics are worked on more than one provider (Google Cloud, Mistral) so the same concept can be compared
 across stacks. Each layer `README.md` has the full scope, the current contents and the Colab links.
 
 ## How the labs work
 
-Most topics follow the same pattern, so once you have done one you know how to do the rest.
+The nine primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
+one you know how to do the rest. The other topics are shaped differently — a primer with written exercises
+(`gpu-primer/`, `gpu-deployment/`), a primer plus practice notebooks (for example `kv-cache/`, `paged-attention/`,
+`flash-attention/`), or a lab of its own (most of 06 and 07) — and their READMEs say what they have.
 
 | Piece | What it is |
 |---|---|
@@ -64,8 +98,8 @@ Most topics follow the same pattern, so once you have done one you know how to d
 | **Core** | a minimal implementation, usually standard-library Python, plus fill-in notebooks that *predict* what the real system does |
 | **Lab** | the detailed version: real tools, benchmarks and deploy recipes that *run* or *measure* the same ideas |
 
-**Tiers** say what hardware a notebook or recipe needs, and the primer + core + lab topics (layers 01–05, and the
-newer topics in 00, 04 and 07) mark every step with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
+**Tiers** say what hardware a notebook or recipe needs, and the nine primer + core + lab topics mark every step
+with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 - **T0** — a laptop, Colab CPU or CI. Free. Every concept is learnable here.
 - **T1** — one small GPU: a free Colab or Kaggle T4, or a rented card.
@@ -74,8 +108,9 @@ newer topics in 00, 04 and 07) mark every step with one ([`COMPUTE.md`](COMPUTE.
 
 Notebooks that need a GPU detect what they have and fall back to a clearly labelled T0 path.
 
-**Exercises** sit in `notebooks/` (or `exercises/`) with `# YOUR CODE HERE` and a check cell that prints ✅ when
-your answer is right; worked answers are in `solutions/`. Exercises are committed blank, so
+**Exercises** sit in `notebooks/` (or `exercises/`, or `practice/`) with `# YOUR CODE HERE`; in the primer, core and
+lab topics each is followed by a check cell that prints ✅ when your answer is right, and worked answers are in
+`solutions/` (older labs keep them beside the exercise, for example `*_solution.ipynb`). Exercises are committed blank, so
 `git restore <notebook>` returns one to its starting state (for labs built from `notebooks_src/`, re-run that
 lab's `python3 tools/build_notebooks.py`).
 
@@ -101,16 +136,32 @@ python3 -m pytest -q      # most labs ship tests
 ```
 .
 ├── 00-foundations/ … 07-application-agent-framework/   one folder per layer; labs in topic sub-folders
-├── raw/            inbox for new material (gitignored except its README); sorted into a layer, never copied
-├── tools/          inject_colab_bootstrap.py, gen_colab_index.py; site/ (the guide site generator); orchestration/ (how the topics were built and checked)
-├── CURRICULUM.md   the learning path: modules, order, hours, tiers, design drills
-├── COMPUTE.md      where to run each tier, what it costs, which lab needs which tier
-├── COLAB.md        running notebooks in Colab
-├── CLAUDE.md       how the repo is organised and how new content gets sorted
-└── README.md       this file
+├── CURRICULUM.md          the learning path: modules, order, hours, tiers, design drills
+├── COMPUTE.md             where to run each tier, what it costs, which lab needs which tier
+├── COLAB.md               running notebooks in Colab
+├── LICENSE                MIT, for everything not otherwise licensed (see Licence)
+├── site/, mkdocs.yml      the guide site: hand-written pages and theme; the site configuration
+├── requirements-site.txt  what building the site needs
+├── .github/workflows/     builds and publishes the site on every push to main
+├── tools/                 Colab bootstrap and link generators; site/ (the site's page generator)
+├── tools/orchestration/   notes on how the topics were built and reviewed — maintainer material, not lessons
+├── raw/                   inbox for new material (gitignored except its README)
+├── CLAUDE.md              instructions for the agent that maintains the repo
+└── README.md              this file
 ```
 
-## Adding material
+## Licence
 
-Drop it in [`raw/`](raw/) and follow [`raw/README.md`](raw/README.md). The sorting rules (which layer, which topic
-folder) are in [`CLAUDE.md`](CLAUDE.md).
+Everything in this repository that does not carry its own licence — the primers, the curriculum, the compute
+guide, the site's text and the code outside the labs — is under the MIT licence in [`LICENSE`](LICENSE). A lab
+with its own `LICENSE` file keeps it: most are MIT as well, and two are Apache 2.0 —
+[`agentic-identity-gcp-lab`](06-gateway/identity-security/agentic-identity-gcp-lab/LICENSE) (06) and
+[`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/LICENSE) (07). Third-party names and
+products are trademarks of their owners and are mentioned only to explain how they work.
+
+## Maintaining the repo
+
+New material arrives in [`raw/`](raw/README.md) and is moved, never copied, into the layer and topic folder it
+belongs to; [`raw/README.md`](raw/README.md) says what a good drop looks like. [`CLAUDE.md`](CLAUDE.md) holds the
+maintainer and agent instructions: the layer rules, the reorganisation checklist and a log of decisions.
+Corrections are welcome as [GitHub issues](https://github.com/aniryou/full-stack-agentic-engineer/issues).

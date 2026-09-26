@@ -1,4 +1,8 @@
-"""Reliability mechanisms for agent systems (Primer §4.4): retries, breakers, bulkheads, deadlines, fallbacks."""
+"""Reliability mechanisms for agent systems (notebook 10): retries, breakers, bulkheads, deadlines, fallbacks.
+
+The same mechanisms at fleet scale are the scaling primer's §5.2
+(06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md).
+"""
 from .breaker import (BreakerMetrics, BreakerState, Bulkhead, BulkheadFull, CircuitBreaker, CircuitOpen, Deadline,
                       DeadlineExceeded, per_hop_budget, with_deadline)
 from .fallback import (FallbackChain, FallbackExhausted, FallbackResult, GracefulTool, Step, cached_answer_step,

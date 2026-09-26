@@ -6,13 +6,19 @@ Writes, under the MkDocs docs_dir `site/`:
                                 the images those docs reference, with relative links rewritten for the site
   layers/index.md               the stack diagram + one row per layer
   guide/curriculum.md, guide/compute.md, guide/colab.md   from CURRICULUM.md, COMPUTE.md, COLAB.md
-and rewrites the `nav:` entries between `# nav-layers:start` / `# nav-layers:end` in mkdocs.yml.
+and rewrites, in mkdocs.yml, the `nav:` entries between `# nav-layers:start` / `# nav-layers:end` and the
+`not_in_nav:` patterns between `# not-in-nav:start` / `# not-in-nav:end` (deploy targets, fixtures and other
+plumbing keep their pages, reachable from the READMEs that link them, but stay out of the navigation).
 
 Everything written here is gitignored (site/.gitignore); run it before `mkdocs build` or `mkdocs serve`:
     python3 tools/site/build_site_content.py
 Link rules: a relative link to something that has a page on the site points at that page (anchors are
-re-slugified the way MkDocs' toc does, or dropped if the heading cannot be found); anything else in the repo
-(code, Terraform, YAML, folders without a README, LICENSE, ...) points at GitHub; absolute URLs are untouched.
+re-slugified the way MkDocs' toc does for Markdown pages and the way mkdocs-jupyter does for notebooks; an anchor
+whose heading cannot be found is dropped: the link keeps its page, and a same-page link becomes plain text);
+anything else in the repo (code, Terraform, YAML, folders without a README, LICENSE, ...) points at GitHub;
+absolute URLs are untouched.
+Math: in notebook Markdown, inline TeX written as $...$ becomes \\(...\\), the only inline delimiter the site's
+MathJax accepts, so dollar amounts ("$20 / $100") stay text; see site/javascripts/mathjax.js.
 """
 from __future__ import annotations
 
@@ -58,11 +64,31 @@ SKIP_DIRS = {".git", "__pycache__", ".ipynb_checkpoints", ".pytest_cache", ".myp
 DATA_DIRS = {"data", "corpus"}          # Markdown under these is data a lab reads, not a document
 IMAGE_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
 NOTEBOOK_DIRS = {"notebooks": "Notebooks", "exercises": "Exercises", "practice": "Practice",
-                 "worked": "Worked examples", "lessons": "Lessons"}
+                 "lessons": "Lessons"}
+# Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
+# name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
+# is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
+# same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
+# own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
+# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
+# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
+# Kept identical to tools/gen_colab_index.py.
+ROOT = REPO
+SOLUTION_DIRS = {"solutions", "worked"}
+SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved)(?:$|[_\-.])", re.I)
+WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
+EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
+# Folders that are plumbing, not lessons: their Markdown still becomes pages (the lab READMEs link them), but they
+# are left out of the navigation and listed under `not_in_nav:` in mkdocs.yml.
+PLUMBING_DIRS = ("client", "deploy", "fixtures", "infra", "notebooks_src")
+# Folders whose name says nothing about the lesson: a primer inside one is named after the nearest real folder.
+GENERIC_DIRS = {"docs", "notebooks", "solutions", "worked", "exercises", "practice", "lessons"}
 
 stats = {"pages": 0, "notebooks": 0, "colab": 0, "images": 0, "to_page": 0, "to_github": 0,
-         "anchors_kept": 0, "anchors_dropped": 0, "missing": 0, "skipped": 0}
+         "anchors_kept": 0, "anchors_dropped": 0, "nb_anchors_kept": 0, "nb_anchors_dropped": 0,
+         "math": 0, "missing": 0, "skipped": 0}
 missing_examples: list[str] = []
+dropped_anchors: list[str] = []
 
 
 def read(p: Path) -> str | None:
@@ -80,10 +106,65 @@ pages: dict[str, str] = {}       # repo path (posix) -> site path of a Markdown 
 notebooks: dict[str, str] = {}   # repo path -> site path of a notebook page
 images: dict[str, str] = {}      # repo path -> site path of a copied image
 
+def _stem(path: str) -> str:
+    return path.replace(os.sep, "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
-def is_solution(repo_path: str) -> bool:
-    parts = repo_path.split("/")
-    return "solutions" in parts[:-1] or bool(re.search(r"solution|solved", parts[-1].lower()))
+
+def _folder(path: str) -> str:
+    path = path.replace(os.sep, "/")
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def _base(stem: str, token: re.Pattern) -> str:
+    """The stem with a worked/practice token taken out: 01_kv_cache_worked -> 01_kv_cache."""
+    return re.sub(r"^[_\-.]+|[_\-.]+$", "", token.sub("_", stem))
+
+
+def _number(stem: str) -> str | None:
+    m = re.match(r"^\d+", stem)
+    return m.group(0) if m else None
+
+
+def answers_elsewhere(folder: str, siblings=None) -> bool:
+    """True when `folder` keeps its exercises' answers in a solutions/ or worked/ folder of its own (on disk, or
+    among `siblings`, which may name any file): then a `*_worked` notebook beside them is a lesson."""
+    if any((ROOT / folder / d).is_dir() for d in SOLUTION_DIRS):
+        return True
+    return any(p.replace(os.sep, "/").startswith(f"{folder}/{d}/") for p in siblings or () for d in SOLUTION_DIRS)
+
+
+def has_exercise_twin(path: str, siblings=None) -> bool:
+    """True when a `*_worked` notebook has an exercise version in the same folder (see the rule above).
+    `siblings` is any iterable of notebook paths; by default the folder is listed on disk."""
+    folder = _folder(path)
+    if siblings is None:
+        d = ROOT / folder
+        siblings = [f"{folder}/{n}" for n in os.listdir(d) if n.endswith(".ipynb")] if d.is_dir() else []
+    base = _base(_stem(path), WORKED_STEM)
+    for other in siblings:
+        s = _stem(other)
+        if _folder(other) != folder or SOLUTION_STEM.search(s) or WORKED_STEM.search(s):
+            continue
+        exercise = bool(EXERCISE_STEM.search(s))
+        if s == base or (exercise and _base(s, EXERCISE_STEM) == base):
+            return True
+        if exercise and _number(base) and _number(s) == _number(base):
+            return True
+    return False
+
+
+def is_solution(path: str, siblings=None) -> bool:
+    """True for a notebook with the answers in it (see the rule above SOLUTION_DIRS)."""
+    parts = path.replace(os.sep, "/").split("/")
+    stem = parts[-1].rsplit(".", 1)[0]
+    if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
+        return True
+    return (bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
+            and not answers_elsewhere(_folder(path), siblings))
+
+
+def is_plumbing(repo_path: str) -> bool:
+    return bool(set(PLUMBING_DIRS) & set(repo_path.split("/")[1:-1]))
 
 
 def inventory() -> list[str]:
@@ -178,6 +259,72 @@ def anchors_of(repo_path: str) -> dict[str, str]:
     return amap
 
 
+_nb_cache: dict[str, dict] = {}
+
+
+def load_notebook(repo_path: str) -> dict:
+    if repo_path not in _nb_cache:
+        try:
+            _nb_cache[repo_path] = json.loads(read(REPO / repo_path) or "{}")
+        except json.JSONDecodeError:
+            _nb_cache[repo_path] = {}
+    return _nb_cache[repo_path]
+
+
+def nb_anchors_of(repo_path: str) -> dict[str, str]:
+    """Map every plausible anchor spelling for a notebook's headings -> the id mkdocs-jupyter gives the heading.
+
+    mkdocs-jupyter ids a heading slugify(text) (the same slugify as MkDocs' toc) and does not de-duplicate.
+    Authors write anchors the way GitHub or Jupyter render the notebook: GitHub's slug, or Jupyter's, which is the
+    heading text with spaces turned into hyphens (case and punctuation kept)."""
+    key = "nb:" + repo_path
+    if key in _anchor_cache:
+        return _anchor_cache[key]
+    amap: dict[str, str] = {}
+    seen_gh: dict[str, int] = {}
+    for c in md_cells(load_notebook(repo_path)):
+        in_fence = None
+        for line in cell_text(c).splitlines():
+            m = FENCE.match(line)
+            if m:
+                tok = m.group(1)
+                if in_fence is None:
+                    in_fence = tok[0] * 3
+                elif tok.startswith(in_fence):
+                    in_fence = None
+                continue
+            if in_fence:
+                continue
+            h = re.match(r"^\s{0,3}#{1,6}\s+(.*)$", line)
+            if not h:
+                continue
+            t = heading_text(h.group(1))
+            nb_id = mkdocs_slug(t)
+            if not nb_id:
+                continue
+            g = github_slug(t)
+            k = seen_gh.get(g, 0)
+            seen_gh[g] = k + 1
+            jup = re.sub(r"\s+", "-", t.strip())
+            for spelling in (nb_id, g if k == 0 else f"{g}-{k}", jup, jup.lower()):
+                amap.setdefault(spelling, nb_id)
+    _anchor_cache[key] = amap
+    return amap
+
+
+def resolve_anchor(repo_path: str, frag: str) -> str | None:
+    amap = nb_anchors_of(repo_path) if repo_path.endswith(".ipynb") else anchors_of(repo_path)
+    frag = unquote(frag)
+    return amap.get(frag) or amap.get(frag.lower())
+
+
+def count_anchor(repo_path: str, kept: bool, src_repo: str, target: str) -> None:
+    prefix = "nb_" if repo_path.endswith(".ipynb") else ""
+    stats[prefix + ("anchors_kept" if kept else "anchors_dropped")] += 1
+    if not kept:
+        dropped_anchors.append(f"{src_repo} -> {target}")
+
+
 # ---------------------------------------------------------------- link rewriting
 
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:|^//")
@@ -205,19 +352,19 @@ def relative(target_site: str, src_site: str, html: bool) -> str:
     return (rel + "/") if is_dir_url else rel
 
 
-def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str:
+def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str | None:
+    """The site's version of a link target, or None for a same-page anchor to a heading that does not exist
+    (the caller turns that link into plain text)."""
     raw = target.strip()
     if not raw or SCHEME.match(raw):
         return target
     path, _, frag = raw.partition("#")
     path = path.split("?", 1)[0]
     if not path:                                    # same-page anchor
-        if src_repo.endswith(".md") and frag:
-            new = anchors_of(src_repo).get(unquote(frag)) or anchors_of(src_repo).get(unquote(frag).lower())
-            if new:
-                stats["anchors_kept"] += 1
-                return "#" + new
-            stats["anchors_dropped"] += 1
+        if frag and src_repo.endswith((".md", ".ipynb")):
+            new = resolve_anchor(src_repo, frag)
+            count_anchor(src_repo, bool(new), src_repo, target)
+            return "#" + new if new else None
         return target
     rp = posixpath.normpath(posixpath.join(posixpath.dirname(src_repo), unquote(path)))
     if rp.startswith(".."):
@@ -233,24 +380,15 @@ def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str
             return relative(pages[readme], src_site, html)
         stats["to_github"] += 1
         return f"{GITHUB}/tree/{BRANCH}/{rp}".rstrip("/")
-    if rp in pages:
+    if rp in pages or rp in notebooks:
         stats["to_page"] += 1
-        out = relative(pages[rp], src_site, html)
+        out = relative(pages[rp] if rp in pages else notebooks[rp], src_site, html)
         if frag:
-            new = anchors_of(rp).get(unquote(frag)) or anchors_of(rp).get(unquote(frag).lower())
+            new = resolve_anchor(rp, frag)
+            count_anchor(rp, bool(new), src_repo, target)
             if new:
-                stats["anchors_kept"] += 1
                 out += "#" + new
-            else:
-                stats["anchors_dropped"] += 1
-                if os.environ.get("SITE_VERBOSE"):
-                    print(f"  dropped anchor: {src_repo} -> {target}", file=sys.stderr)
         return out
-    if rp in notebooks:
-        stats["to_page"] += 1
-        if frag:
-            stats["anchors_dropped"] += 1
-        return relative(notebooks[rp], src_site, html)
     if rp in images:
         return relative(images[rp], src_site, html)
     if not full.exists():
@@ -258,6 +396,27 @@ def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str
         missing_examples.append(f"{src_repo} -> {target}")
     stats["to_github"] += 1
     return f"{GITHUB}/blob/{BRANCH}/{rp}" + (f"#{frag}" if frag else "")
+
+
+# Inline TeX between single dollars, by pandoc's rule (no space inside either dollar, no digit right after the
+# closing one), and only when it looks like TeX: a backslash, ^, _ or braces, or a single letter ($x$). "$20 / $100"
+# fails the rule; "$5 and $10" too. Display math ($$...$$) is left as it is: MathJax takes $$ as display math.
+INLINE_TEX = re.compile(r"(?<![\\$\w])\$(?![\s$])((?:\\.|[^$\\\n])+?)(?<![\s\\])\$(?![\d$])")
+TEXISH = re.compile(r"[\\^_{}]|^[A-Za-z]'*$")
+MATH_ENTITIES = {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\\": "&#92;", "_": "&#95;", "*": "&#42;", "`": "&#96;",
+                 "[": "&#91;", "]": "&#93;", "|": "&#124;", "~": "&#126;"}
+
+
+def inline_tex_to_parens(text: str) -> str:
+    """$x_1$ -> \\(x_1\\), written with character references so Markdown passes it through untouched."""
+    def conv(m):
+        body = m.group(1)
+        if not TEXISH.search(body):
+            return m.group(0)
+        stats["math"] += 1
+        enc = "".join(MATH_ENTITIES.get(ch, ch) for ch in body)
+        return f"&#92;({enc}&#92;)"
+    return INLINE_TEX.sub(conv, text)
 
 
 LINK = re.compile(r"(!?\[((?:[^\[\]]|\[[^\]]*\])*)\])\(\s*(<[^>]*>|[^()\s]*(?:\([^()\s]*\)[^()\s]*)*)(\s+\"[^\"]*\")?\s*\)")
@@ -271,17 +430,18 @@ def rewrite_segment(s: str, fn) -> str:
         label, inner, tgt, title = m.group(1), m.group(2), m.group(3), m.group(4) or ""
         if "](" in inner:   # a linked image: rewrite the inner link too
             label = label[0:label.index("[") + 1] + rewrite_segment(inner, fn) + "]"
-        if tgt.startswith("<") and tgt.endswith(">"):
-            new = "<" + fn(tgt[1:-1]) + ">"
-        else:
-            new = fn(tgt)
-        return f"{label}({new}{title})"
+        bracketed = tgt.startswith("<") and tgt.endswith(">")
+        new = fn(tgt[1:-1] if bracketed else tgt)
+        if new is None:     # a dead same-page anchor: keep the words, drop the link
+            return m.group(0) if label.startswith("!") else label[label.index("[") + 1:-1]
+        return f"{label}({'<' + new + '>' if bracketed else new}{title})"
     s = LINK.sub(link, s)
-    return HTMLATTR.sub(lambda m: f'{m.group(1)}="{fn(m.group(2))}"', s)
+    return HTMLATTR.sub(lambda m: f'{m.group(1)}="{fn(m.group(2)) or m.group(2)}"', s)
 
 
-def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False) -> str:
-    """Rewrite link targets in Markdown, outside fenced code and inline code; links may span lines."""
+def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False, math: bool = False) -> str:
+    """Rewrite link targets in Markdown, outside fenced code and inline code; links may span lines.
+    With math=True (notebook cells), also turn inline $...$ TeX into \\(...\\) (inline_tex_to_parens)."""
     fn = lambda t: rewrite_target(t, src_repo, src_site, html)  # noqa: E731
     out: list[str] = []
     prose: list[str] = []
@@ -291,13 +451,16 @@ def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False
             return
         block = "\n".join(prose)
         prose.clear()
-        block = REFDEF.sub(lambda r: r.group(1) + fn(r.group(2)) + r.group(3), block)
+        block = REFDEF.sub(lambda r: r.group(1) + (fn(r.group(2)) or r.group(2)) + r.group(3), block)
         spans: list[str] = []            # mask inline code so links inside it stay as written
 
         def mask(c):
             spans.append(c.group(0))
             return f"\x00{len(spans) - 1}\x00"
-        masked = rewrite_segment(CODESPAN.sub(mask, block), fn)
+        masked = CODESPAN.sub(mask, block)
+        if math:
+            masked = inline_tex_to_parens(masked)
+        masked = rewrite_segment(masked, fn)
         out.append(re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], masked))
 
     in_fence = None
@@ -387,10 +550,10 @@ def build_pages() -> None:
     for rp, nb in nbs.items():
         site_path = notebooks[rp]
         for c in md_cells(nb):
-            c["source"] = rewrite_markdown(cell_text(c), rp, site_path, html=True)
-        if is_solution(rp):
-            head = (f"*Worked answers.* [View this notebook on GitHub]({GITHUB}/blob/{BRANCH}/{rp}) · "
-                    f"try the exercise version first.")
+            c["source"] = rewrite_markdown(cell_text(c), rp, site_path, html=True, math=True)
+        if is_solution(rp):   # no Colab badge (the badge is the call to action for exercises), a plain link
+            head = (f"*Worked answers: try the exercise version first.* "
+                    f"[View on GitHub]({GITHUB}/blob/{BRANCH}/{rp}) · [Open in Colab]({colab(rp)})")
         else:
             head = (f"[![Open In Colab]({BADGE})]({colab(rp)}) &nbsp; "
                     f"[View on GitHub]({GITHUB}/blob/{BRANCH}/{rp})")
@@ -467,31 +630,113 @@ def build_layers_index(layers: list[str]) -> None:
 
 ACRONYMS = {w.lower(): w for w in (
     "LLM LLMs GPU GPUs P2P KV HPA MCP RAG API SIMT NCCL CUDA TP DRA GKE ADK A2A TTFT TPOT HBM vLLM "
-    "LoRA MoE GCP DWS OAuth PQ IVF HNSW GraphRAG TF CPU SLO SLOs PD HITL JWT RDMA MIG DCGM").split()}
+    "LoRA MoE GCP DWS OAuth PQ IVF HNSW GraphRAG TF CPU SLO SLOs PD HITL JWT RDMA MIG DCGM RL LRA EP GRPO DPO "
+    "Mistral K8s").split()}
+COMPOUNDS = ("long-running",)          # hyphenated words that stay hyphenated in a title
+SLUGLIKE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
+# A folder named for a provider variant (agent-core vs mistral-agent-core) says so in its title.
+VARIANTS = {"mistral": ("Mistral",), "gcp": ("GCP", "Google Cloud")}
+DIR_TITLES = {"docs": "Docs", "solutions": "Solutions", "worked": "Worked", **NOTEBOOK_DIRS}
+TITLE_SPLIT = re.compile(r"\s+[—–]\s+|:\s+")
 
 
 def humanize(stem: str) -> str:
     m = re.match(r"^(\d+[a-z]?)[_\-. ]+(.*)$", stem)
     num, rest = (m.group(1), m.group(2)) if m else ("", stem)
-    rest = rest.replace("_", " ").replace("-", " ").strip()
-    rest = " ".join(ACRONYMS.get(w.lower(), w) for w in rest.split())
-    rest = rest[:1].upper() + rest[1:]
+    for c in COMPOUNDS:
+        rest = rest.replace(c, c.replace("-", "\0"))
+    words = rest.replace("_", " ").replace("-", " ").replace("\0", "-").split()
+    out = [ACRONYMS.get(w.lower(), w) for w in words]
+    if out and out[0] == words[0]:      # capitalise the first word unless it is a spelled acronym (vLLM)
+        out[0] = out[0][:1].upper() + out[0][1:]
+    rest = " ".join(out)
     return f"{num} · {rest}" if num and rest else (num or rest)
+
+
+def short_title(h: str, limit: int = 60) -> str:
+    """A heading short enough for the sidebar: whole if it fits, else cut at the last dash or colon that fits."""
+    if len(h) <= limit:
+        return h
+    cuts = [m.start() for m in TITLE_SPLIT.finditer(h) if 4 <= m.start() <= limit]
+    return h[: cuts[-1]].strip() if cuts else h
+
+
+def first_h1(text: str) -> str | None:
+    in_fence = None
+    for ln in text.splitlines():
+        m = FENCE.match(ln)
+        if m:
+            tok = m.group(1)
+            if in_fence is None:
+                in_fence = tok[0] * 3
+            elif tok.startswith(in_fence):
+                in_fence = None
+            continue
+        if not in_fence and ln.startswith("# "):
+            return heading_text(ln[2:]) or None
+    return None
+
+
+_dir_titles: dict[str, str] = {}
+
+
+def section_title(repo_dir: str) -> str:
+    """Sidebar title of a folder: its layer name, a fixed name for notebooks/solutions/docs folders, or the name part
+    of its README's H1 (humanised when that is just the folder name), or else the folder name humanised."""
+    if repo_dir in _dir_titles:
+        return _dir_titles[repo_dir]
+    name = posixpath.basename(repo_dir)
+    title = None
+    if "/" not in repo_dir:
+        title = LAYER_TITLES.get(name[:2], name)
+    elif name in DIR_TITLES:
+        title = DIR_TITLES[name]
+    else:
+        readme = f"{repo_dir}/README.md"
+        h = first_h1(read(REPO / readme) or "") if readme in pages else None
+        if h:
+            head = TITLE_SPLIT.split(h)[0].strip()   # README-STYLE H1s are "<name> — <promise>": keep the name
+            title = humanize(head) if SLUGLIKE.match(head) else short_title(head if len(head) >= 4 else h)
+        title = title or humanize(name)
+        tokens = set(re.split(r"[-_]", name.lower()))
+        for token, words in VARIANTS.items():
+            if token in tokens and not any(w.lower() in title.lower() for w in words):
+                title += f" ({words[0]})"
+    _dir_titles[repo_dir] = title
+    return title
+
+
+def topic_title(repo_dir: str) -> str:
+    """The nearest folder whose name means something (not docs/, notebooks/...), for naming a primer."""
+    while posixpath.basename(repo_dir) in GENERIC_DIRS and "/" in repo_dir:
+        repo_dir = posixpath.dirname(repo_dir)
+    return re.sub(r"\s*\([^)]*\)$", "", section_title(repo_dir))
 
 
 def md_title(rp: str) -> str:
     name = posixpath.basename(rp)
     if name.upper() == "PRIMER.MD":
-        return "Primer"
-    t = read(REPO / rp) or ""
-    for ln in t.splitlines():
-        if ln.startswith("# "):
-            h = heading_text(ln[2:])
-            if len(h) <= 50:
-                return h
-            short = re.split(r"\s+[—–]\s+|:\s+", h)[0].strip()
-            return short if len(short) >= 4 else h
-    return humanize(name[:-3])
+        return f"{topic_title(posixpath.dirname(rp))} primer"
+    h = first_h1(read(REPO / rp) or "")
+    return short_title(h) if h else humanize(name[:-3])
+
+
+def nb_title(rp: str) -> str:
+    """A notebook's sidebar title: its first H1 (shortened), numbered like its file name; a solution says so."""
+    stem = posixpath.basename(rp)[:-len(".ipynb")]
+    h = None
+    for c in md_cells(load_notebook(rp)):
+        h = first_h1(cell_text(c))
+        if h:
+            break
+    title = short_title(h) if h else humanize(stem)
+    num = re.match(r"^(\d+)[_\-. ]", stem)
+    if num and not title[:1].isdigit():
+        title = f"{num.group(1)} · {title}"
+    if is_solution(rp) and not re.search(r"solution|solved|worked|answer", title, re.I):
+        worked = "worked" in rp.split("/")[:-1] or re.search(r"worked", stem, re.I)
+        title += " (worked)" if worked else " (solution)"
+    return title
 
 
 def dir_rank(name: str) -> tuple[int, str]:
@@ -499,10 +744,8 @@ def dir_rank(name: str) -> tuple[int, str]:
         return (1, name)
     if name in NOTEBOOK_DIRS:
         return (5, name)
-    if name == "solutions":
+    if name in SOLUTION_DIRS:
         return (6, name)
-    if name == "deploy":
-        return (7, name)
     if "core" in name:
         return (2, name)
     if "lab" in name:
@@ -510,37 +753,109 @@ def dir_rank(name: str) -> tuple[int, str]:
     return (4, name)
 
 
-def dir_title(name: str) -> str:
-    return {"docs": "Docs", "solutions": "Solutions", "deploy": "Deploy"}.get(name, NOTEBOOK_DIRS.get(name, name))
+def leaves(entries: list[tuple[str, str, str]]) -> list[dict]:
+    """[(title, site path, repo path)] -> nav leaves; titles that collide fall back to the file name."""
+    seen: dict[str, int] = {}
+    for t, _, _ in entries:
+        seen[t] = seen.get(t, 0) + 1
+    out = []
+    for t, site_path, rp in entries:
+        if seen[t] > 1:
+            t = humanize(posixpath.basename(rp).rsplit(".", 1)[0])
+        out.append({t: site_path})
+    return out
 
 
 def nav_for_dir(repo_dir: str) -> list:
-    """Nav entries for one directory: README (section index) → primers → other docs → core → lab → notebooks."""
+    """Nav entries for one directory: README (section index) → primers → other docs → core → lab → notebooks →
+    solutions. Plumbing folders (PLUMBING_DIRS) are left out; a folder with nothing but one section or one page
+    collapses into it."""
     items: list = []
     index = f"{repo_dir}/README.md"
     if index in pages:
         items.append(pages[index])
     here_md = sorted((rp for rp in pages if posixpath.dirname(rp) == repo_dir and rp != index),
                      key=lambda rp: (0 if "primer" in rp.lower().rsplit("/", 1)[-1] else 1, rp.lower()))
-    items += [{md_title(rp): pages[rp]} for rp in here_md]
+    items += leaves([(md_title(rp), pages[rp], rp) for rp in here_md])
     here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)
-    in_solutions_dir = posixpath.basename(repo_dir) == "solutions"
-    blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp)]
-    sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp)]
+    in_solutions_dir = posixpath.basename(repo_dir) in SOLUTION_DIRS
+    blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp, here_nb)]
+    # Worked lessons come before the exercises that follow them (long-running-agents-gcp: 01..04_*_worked, then
+    # 01..04_*_practice); elsewhere the file names already give that order.
+    blanks.sort(key=lambda rp: (not WORKED_STEM.search(posixpath.basename(rp)[:-len(".ipynb")]), rp))
+    sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp, here_nb)]
     subdirs = sorted({rp[len(repo_dir) + 1:].split("/")[0] for rp in list(pages) + list(notebooks)
                       if rp.startswith(repo_dir + "/") and "/" in rp[len(repo_dir) + 1:]}, key=dir_rank)
+    subdirs = [d for d in subdirs if d not in PLUMBING_DIRS]
+
+    def add_dir(d: str) -> None:
+        child = f"{repo_dir}/{d}"
+        sub = nav_for_dir(child)
+        if not sub:
+            return
+        has_readme = f"{child}/README.md" in pages
+        if len(sub) == 1 and isinstance(sub[0], str):          # only a README: a page, not a section
+            items.append({section_title(child): sub[0]})
+        elif len(sub) == 1 and not has_readme:                 # a wrapper folder around one entry
+            items.append(sub[0])
+        elif (d in NOTEBOOK_DIRS and not has_readme            # notebooks/ holding only practice/ and worked/
+              and all(isinstance(e, dict) and isinstance(next(iter(e.values())), list) for e in sub)):
+            items.extend(sub)
+        else:
+            items.append({section_title(child): sub})
+
     for d in [d for d in subdirs if dir_rank(d)[0] < 5]:
-        sub = nav_for_dir(f"{repo_dir}/{d}")
-        if sub:
-            items.append({dir_title(d): sub})
-    items += [{humanize(posixpath.basename(rp)[:-6]): notebooks[rp]} for rp in blanks]
+        add_dir(d)
+    items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in blanks])
     for d in [d for d in subdirs if dir_rank(d)[0] >= 5]:
-        sub = nav_for_dir(f"{repo_dir}/{d}")
-        if sub:
-            items.append({dir_title(d): sub})
-    if sols:
-        items.append({"Solutions": [{humanize(posixpath.basename(rp)[:-6]): notebooks[rp]} for rp in sols]})
+        add_dir(d)
+    if len(sols) == 1:                                         # one answer key: a page (its title says so)
+        items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])
+    elif sols:
+        worked_only = all("worked" in posixpath.basename(rp).lower() for rp in sols)
+        items.append({"Worked" if worked_only else "Solutions":
+                      leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])})
     return items
+
+
+def variant_of(repo_path: str) -> tuple[str, ...]:
+    """The provider a path's folders name (lab-mistral/, mistral-agent-core/ -> ("Mistral",)), if any."""
+    tokens = {t for part in repo_path.split("/")[:-1] for t in re.split(r"[-_]", part.lower())}
+    return next((words for token, words in VARIANTS.items() if token in tokens), ())
+
+
+def mark_variant_duplicates(items: list) -> list:
+    """A page title used more than once in the nav (agent-core's and mistral-agent-core's "01 · The agent loop")
+    names its provider when its folder is a provider variant, so search results and tabs tell them apart."""
+    counts: dict[str, int] = {}
+
+    def count(entries):
+        for e in entries:
+            if isinstance(e, dict):
+                (t, v), = e.items()
+                if isinstance(v, str):
+                    counts[t] = counts.get(t, 0) + 1
+                else:
+                    count(v)
+
+    def rename(entries):
+        out = []
+        for e in entries:
+            if isinstance(e, dict):
+                (t, v), = e.items()
+                if isinstance(v, list):
+                    e = {t: rename(v)}
+                else:
+                    words = variant_of(v[len("layers/"):]) if counts.get(t, 0) > 1 else ()
+                    if words and not any(w.lower() in t.lower() for w in words):
+                        m = re.match(r"^(.*) \((solution|worked)\)$", t)
+                        t = f"{m.group(1)} ({m.group(2)}, {words[0]})" if m else f"{t} ({words[0]})"
+                    e = {t: v}
+            out.append(e)
+        return out
+
+    count(items)
+    return rename(items)
 
 
 def yaml_nav(items: list, indent: int) -> list[str]:
@@ -559,25 +874,56 @@ def yaml_nav(items: list, indent: int) -> list[str]:
     return out
 
 
-def update_nav(layers: list[str]) -> bool:
+def replace_block(text: str, marker: str, body: list[str]) -> str | None:
+    """Replace the lines between `# <marker>:start` and `# <marker>:end` (keeping the markers' indent)."""
+    m = re.search(rf"^([ \t]*)# {marker}:start\n.*?^[ \t]*# {marker}:end[ \t]*$", text, re.S | re.M)
+    if not m:
+        print(f"  mkdocs.yml: {marker} markers not found; left unchanged", file=sys.stderr)
+        return None
+    pad = m.group(1)
+    block = [f"{pad}# {marker}:start"] + body + [f"{pad}# {marker}:end"]
+    return text[: m.start()] + "\n".join(block) + text[m.end():]
+
+
+def update_mkdocs_yml(layers: list[str]) -> str:
+    """Rewrite the generated parts of mkdocs.yml: the layer nav and the not_in_nav patterns."""
     text = read(MKDOCS_YML)
     if text is None:
-        return False
-    m = re.search(r"^([ \t]*)# nav-layers:start\n.*?^[ \t]*# nav-layers:end[ \t]*$", text, re.S | re.M)
-    if not m:
-        print("  mkdocs.yml: nav-layers markers not found; nav left unchanged", file=sys.stderr)
-        return False
-    pad = m.group(1)
+        return "unreadable"
     layer_items: list = ["layers/index.md"]
     for layer in layers:
         sub = nav_for_dir(layer)
         if sub:
-            layer_items.append({LAYER_TITLES.get(layer[:2], layer): sub})
-    block = [f"{pad}# nav-layers:start", f"{pad}- Layers:"] + yaml_nav(layer_items, len(pad) + 4) + [f"{pad}# nav-layers:end"]
-    new = text[: m.start()] + "\n".join(block) + text[m.end():]
-    if new != text:
-        MKDOCS_YML.write_text(new, encoding="utf-8")
-    return True
+            layer_items.append({section_title(layer): sub})
+    layer_items = mark_variant_duplicates(layer_items)
+    new = replace_block(text, "nav-layers", ["  - Layers:"] + yaml_nav(layer_items, 6))
+    if new is None:
+        return "markers missing"
+    plumbing = ["not_in_nav: |"] + [f"  /layers/**/{d}/" for d in PLUMBING_DIRS]
+    new = replace_block(new, "not-in-nav", plumbing)
+    if new is None:
+        return "markers missing"
+    if new == text:
+        return "unchanged"
+    MKDOCS_YML.write_text(new, encoding="utf-8")
+    return "updated"
+
+
+def nav_stats(items: list, depth: int = 1) -> tuple[int, int, int]:
+    """(leaves, sections, max depth) of a nav tree."""
+    n_leaf = n_sec = 0
+    deepest = depth
+    for it in items:
+        if isinstance(it, str):
+            n_leaf += 1
+            continue
+        (_, val), = it.items()
+        if isinstance(val, str):
+            n_leaf += 1
+        else:
+            a, b, c = nav_stats(val, depth + 1)
+            n_leaf, n_sec, deepest = n_leaf + a, n_sec + 1 + b, max(deepest, c)
+    return n_leaf, n_sec, deepest
 
 
 def main() -> int:
@@ -588,14 +934,19 @@ def main() -> int:
     layers = inventory()
     build_pages()
     build_layers_index(layers)
-    nav_ok = update_nav(layers)
+    yml = update_mkdocs_yml(layers)
     for ex in missing_examples[:10]:
         print(f"  missing target: {ex}", file=sys.stderr)
+    for ex in dropped_anchors[: None if os.environ.get("SITE_VERBOSE") else 10]:
+        print(f"  dropped anchor: {ex}", file=sys.stderr)
     s = stats
+    n_leaf, n_sec, deepest = nav_stats([{section_title(layer): nav_for_dir(layer)} for layer in layers])
     print(f"site: {len(layers)} layers, {s['pages']} pages, {s['notebooks']} notebooks "
           f"({s['colab']} with Colab buttons), {s['images']} images; links: {s['to_page']} to site pages, "
-          f"{s['to_github']} to GitHub, anchors {s['anchors_kept']} kept / {s['anchors_dropped']} dropped, "
-          f"{s['missing']} missing targets, {s['skipped']} files skipped; nav {'updated' if nav_ok else 'unchanged'}")
+          f"{s['to_github']} to GitHub, {s['missing']} missing targets; anchors: Markdown {s['anchors_kept']} kept / "
+          f"{s['anchors_dropped']} dropped, into notebooks {s['nb_anchors_kept']} kept / {s['nb_anchors_dropped']} "
+          f"dropped (in-page notebook anchors are counted by the build, tools/site/hooks.py); {s['math']} inline formulas; nav {n_leaf} pages in {n_sec} sections, depth {deepest}; "
+          f"{s['skipped']} files skipped; mkdocs.yml {yml}")
     return 0
 
 
