@@ -16,6 +16,12 @@ through a Workload Identity Federation `principal://` binding — no keys). Both
 the `nvidia.com/gpu=present:NoSchedule` taint. The driver is `LATEST` because the lab's vLLM
 v0.30.0 image is a CUDA 13.0 build that needs an R580+ driver; `DEFAULT` may be older (verify).
 
+**Cost.** About a dollar for a session of a few hours: ~$0.23/h with the GPU pools at zero, plus ~$0.25/h per busy
+Spot L4 node (us-central1, Sep 2026 - verify; the table is under [Cost](#cost-us-central1-sep-2026---verify)).
+
+**Clean up.** `deploy/gke/apply-examples.sh delete`, then `terraform destroy` in `deploy/gcp/terraform` — one pass,
+nothing left behind but the enabled APIs (see [Clean up](#clean-up)).
+
 | File | Contents |
 |---|---|
 | `versions.tf` | Terraform >= 1.9, google provider >= 8.0 (validated with 8.4.0), default labels |

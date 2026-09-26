@@ -17,6 +17,9 @@ VM (Spot is cheapest), or any box with an NVIDIA GPU. Prices and obtainability:
 `COMPUTE.md` at the repo root. One hour covers everything below. RunPod and Vast.ai give
 you a *container*, not a VM: no systemd and no kubelet of your own, so k3s does not fit there.
 
+**Clean up.** `deploy/gpu-vm/down.sh` uninstalls k3s; then **stop or delete the VM** — the GPU bills until
+you do.
+
 **Needs, on the VM.** Ubuntu (or another systemd Linux) with the **NVIDIA driver** and the
 **NVIDIA Container Toolkit** installed (`nvidia-smi` and `nvidia-container-runtime` on `PATH`;
 Lambda Stack and GCP Deep Learning VM images come with both - verify), `sudo`, `curl`,

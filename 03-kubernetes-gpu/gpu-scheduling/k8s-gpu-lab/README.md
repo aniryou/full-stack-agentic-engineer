@@ -1,15 +1,22 @@
-# k8s-gpu-lab
+# k8s-gpu-lab — Kubernetes for GPUs, hands-on
 
-**Kubernetes for GPUs, hands-on.** How a GPU becomes schedulable, and how Kubernetes places,
-queues, shares and scales it — practised on a real control plane with fake GPUs on a laptop
-($0), predicted offline by a small bundled model, run with the real device plugin on one GPU VM
-you rent by the hour, and carried to GKE with Terraform when you want the production shape.
+After this lab you can write GPU manifests that schedule, explain why a GPU pod is Pending, and watch the real
+kube-scheduler and Kueue admit, place, preempt and reclaim GPU work — practised on a real control plane with fake GPUs
+on a laptop ($0), predicted offline by a small bundled model, run with the real device plugin on one GPU VM you rent
+by the hour, and carried to GKE with Terraform when you want the production shape.
 
-The concepts are in the topic primer, [`../PRIMER.md`](../PRIMER.md); this lab cites its sections
-by number (§1 *What Kubernetes sees* … §10 *Learning locally*). The minimal, standard-library
-version of the same ideas is [`../k8s-gpu-core/`](../k8s-gpu-core/); this lab does not import it.
+The concepts are in the topic primer, [`../PRIMER.md`](../PRIMER.md); this lab cites its sections by number (§1
+*What Kubernetes sees* … §10 *Learning locally*). The minimal, standard-library version of the same ideas is
+[`../k8s-gpu-core/`](../k8s-gpu-core/); this lab does not import it.
 
-## Tiers
+## Start here
+
+1. Install and run the tests (below) — 118 tests, offline, no cluster.
+2. `python3 -m k8sgpu kind predict s2` — the predictor's step-by-step outcome for a gang scenario (simulated).
+3. Open [`notebooks/01_manifests_and_the_linter.ipynb`](notebooks/01_manifests_and_the_linter.ipynb); with Docker,
+   bring up [`deploy/kind`](deploy/kind/README.md) and continue with notebook 02.
+
+## What you get: tiers
 
 | Tier | What you need | Cost | What runs |
 |---|---|---|---|
@@ -29,7 +36,7 @@ labels and every event you will read are real. The GPUs are an extended resource
 node status (`deploy/kind/fake-gpus.sh`): the scheduler counts them and the kubelet admits the
 pods, but there is no device plugin, no `/dev/nvidia*`, no CUDA — the pods print as much.
 
-## Quick start
+## Run it
 
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab

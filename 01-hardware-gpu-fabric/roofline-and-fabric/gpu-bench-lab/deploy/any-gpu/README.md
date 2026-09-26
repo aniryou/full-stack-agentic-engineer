@@ -1,8 +1,17 @@
 # Run gpubench on any GPU (T1/T2)
 
-The lab needs Python ≥ 3.10, numpy, and — for the GPU tiers — PyTorch with CUDA and an NVIDIA
-driver. Four ways to get there, cheapest first. Prices are approximate (September 2026, verify);
-`COMPUTE.md` at the repo root keeps the current comparison.
+**What it does.** Gets the lab's measurement suite onto a real GPU — Colab, Kaggle, a rented container or VM, or any
+Linux box with Docker — so the notebooks' GPU cells and `gpubench run` measure real hardware.
+
+**Cost.** Free on Colab and Kaggle; a rented GPU bills by the hour while the machine exists (table below). The
+suite's default (quick) run takes a few minutes on one GPU.
+
+**Clean up.** Stop or terminate the pod/VM once the report is written (`ls results/`), and delete any volume you
+attached.
+
+The lab needs Python ≥ 3.10, numpy, and — for the GPU tiers — PyTorch with CUDA and an NVIDIA driver. Four ways to
+get there, cheapest first. Prices are approximate (September 2026, verify); `COMPUTE.md` at the repo root keeps the
+current comparison.
 
 | Where | GPUs | Cost | Gets you |
 |---|---|---|---|

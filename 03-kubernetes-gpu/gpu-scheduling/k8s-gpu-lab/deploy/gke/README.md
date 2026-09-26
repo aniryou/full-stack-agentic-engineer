@@ -12,6 +12,13 @@ file (generated from `k8sgpu/gke.py`), each applied with `apply-examples.sh`:
 | `40-serving-vllm-gcsfuse.yaml` | vLLM on one L4 through the ComputeClass; weights mounted read-only from GCS by the FUSE CSI driver; a startup probe sized for the load; `maxSurge: 0` (a lab choice: one replica means every rollout is an outage) | the weights copied to the bucket |
 | `50-time-sharing-l4.yaml` | four 1-GPU pods on one time-shared L4 (primer §9): the node advertises 4 `nvidia.com/gpu`, every pod sees the same GPU, nothing isolates them | `enable_time_sharing_pool = true` |
 
+**Cost.** Each GPU example creates one or two `g2-standard-4` L4 nodes for as long as its pods
+run: ~$0.25/h per Spot node, ~$0.70/h on-demand, flex-start discounted (all verify). The DWS
+Job ends after 5 minutes; the serving Deployment runs until you delete it.
+
+**Clean up.** `deploy/gke/apply-examples.sh delete` drains the GPU nodes back to zero; then `terraform destroy`
+(see `deploy/gcp/README.md`).
+
 **The driver matters.** `vllm/vllm-openai:v0.30.0` is a CUDA 13.0.2 build (its image config:
 `CUDA_VERSION=13.0.2`, `VLLM_ENABLE_CUDA_COMPATIBILITY=0`; read from the registry on 2026-09-26),
 and CUDA 13.0 needs an NVIDIA driver >= 580.65.06 (layer 02 primer §1.2). The node pools the
@@ -32,10 +39,6 @@ the autoscaler then adds Spot nodes one at a time, and a stockout can leave part
 Running. Kueue v0.19's `waitForPodsReady` (on by default: 30 min timeout, then evict and requeue
 with backoff) cleans that up; tune it in the `kueue-manager-config` ConfigMap in `kueue-system`.
 `l4-flex` does not need it as much: its ProvisioningRequest check admits only when every node exists.
-
-**Cost.** Each GPU example creates one or two `g2-standard-4` L4 nodes for as long as its pods
-run: ~$0.25/h per Spot node, ~$0.70/h on-demand, flex-start discounted (all verify). The DWS
-Job ends after 5 minutes; the serving Deployment runs until you delete it.
 
 ## Run it
 

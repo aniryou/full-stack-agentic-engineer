@@ -1,15 +1,24 @@
-# roofline-core
+# roofline-core — predict what the hardware should do, with arithmetic
 
-Reading the machine with arithmetic: **a dated accelerator catalogue, the roofline, the FLOPs and bytes
-of an LLM step, the α-β cost of a collective, cold start, failure rates and the cost of a token** — seven
-small standard-library modules plus four fill-in notebooks. Tier **T0**: runs on a laptop, Colab CPU or
-CI, no GPU, no network.
+After this core you can compute, from a spec sheet and a model config, whether an LLM step is compute- or
+memory-bound, what a collective costs, how long a cold start takes, how often a big job fails and what a token
+costs. It is seven small standard-library modules — a dated accelerator catalogue, the roofline, the FLOPs and bytes
+of an LLM step, the α-β cost of a collective, cold start, failure rates and the cost of a token — plus four fill-in
+notebooks.
 
-This is the *minimal* core of the topic. The concepts are in [`../PRIMER.md`](../PRIMER.md) — every computed
-number it quotes comes from here and is pinned by `tests/test_primer_numbers.py`. The *detailed* lab,
-[`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same quantities on the hardware you have.
+**Tier T0** (laptop, Colab CPU or CI; no GPU, no network; free). This is the *minimal* core of the topic. The
+concepts are in [`../PRIMER.md`](../PRIMER.md) — every computed number it quotes comes from here and is pinned by
+`tests/test_primer_numbers.py`. The *detailed* lab, [`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same
+quantities on the hardware you have.
 
-## Quick start
+## Start here
+
+1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (spec sheets and the roofline).
+2. Run the tests (below): 58 tests, well under a second.
+3. Open [`notebooks/01_spec_sheets_and_the_roofline.ipynb`](notebooks/01_spec_sheets_and_the_roofline.ipynb); each
+   exercise's check cell prints ✅ when you are right.
+
+## Run it
 
 ```bash
 cd roofline-core
@@ -36,7 +45,7 @@ fabric.tp_comm_time(m70, 4096, 8, nv)                       # 0.046 s of all-red
 fabric.tp_comm_time_across_nodes(m70, 4096, 8, 2, nv, ib)   # 0.075 s at TP=16 over two nodes with rails
 ```
 
-## The whole library (seven files)
+## What you get: the library (seven files)
 
 | File | What it teaches |
 |------|-----------------|
@@ -84,7 +93,7 @@ On Colab, each notebook's first cell clones the repository and installs this pac
 `roofline/` by walking up from the notebook's directory. Charts use `matplotlib` if it is installed
 (`pip install -e ".[plot]"`) and fall back to text otherwise.
 
-## What the numbers are — and are not
+## Caveats: what the numbers are — and are not
 
 Every time here is a **roofline bound**: ideal overlap, compulsory traffic, peak clocks. Real kernels and
 engines land below it; the gap is what `gpu-bench-lab` and layer 04's `vllm-serving-lab` measure. Product

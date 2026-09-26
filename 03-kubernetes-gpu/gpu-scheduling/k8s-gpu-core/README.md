@@ -1,18 +1,24 @@
-# k8s-gpu-core
+# k8s-gpu-core — how Kubernetes turns GPUs into schedulable integers
 
-**How Kubernetes turns GPUs into schedulable integers — and how to place, share, queue and scale
-them.** A small, deterministic simulator of the pieces that decide where GPU work runs: the device
-plugin and kubelet, kube-scheduler's filter/score/preempt cycle, gang and topology-aware placement
-(Kueue TAS), Kueue quotas with cohort borrowing and reclaim, and a cluster autoscaler for GPU pools.
-Pure standard library, about a thousand lines you can read in two sittings, plus five fill-in
-notebooks.
+After this core you can predict where GPU work lands and why: how the device plugin turns GPUs into integers, how
+kube-scheduler filters, scores and preempts, how gangs and topology-aware placement (Kueue TAS) avoid deadlock, how
+Kueue quotas borrow and reclaim across a cohort, and how a cluster autoscaler brings GPU pools up from zero. It is a
+small, deterministic simulator — pure standard library, about a thousand lines you can read in two sittings — plus
+five fill-in notebooks.
 
-**Tier: T0.** Everything runs on a laptop, Colab CPU or CI — no cluster, no GPU, no network. The
-concepts are the whole point; the detailed lab next door, [`../k8s-gpu-lab`](../k8s-gpu-lab), takes
-the same ideas to real manifests, a kind cluster with fake GPUs and Kueue (T0 + Docker), and GKE (T3). The
-concept primer both share is [`../PRIMER.md`](../PRIMER.md).
+**Tier T0** (laptop, Colab CPU or CI; no cluster, no GPU, no network; free). The concepts are the whole point; the
+detailed lab next door, [`../k8s-gpu-lab`](../k8s-gpu-lab), takes the same ideas to real manifests, a kind cluster
+with fake GPUs and Kueue (T0 + Docker, a laptop with Docker, still free), and GKE (T3, the optional Google Cloud
+deployment). The concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 
-## Quick start
+## Start here
+
+1. Read [`../PRIMER.md`](../PRIMER.md) §1 (what Kubernetes sees).
+2. Run the tests (below): 49 tests, well under a second.
+3. Open [`notebooks/01_how_kubernetes_sees_a_gpu.ipynb`](notebooks/01_how_kubernetes_sees_a_gpu.ipynb); each
+   exercise's check cell prints ✅ when you are right.
+
+## Run it
 
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core
@@ -39,7 +45,7 @@ print(sched.schedule_one(gpu_pod("train", 8)).message)
 print(stranded_gpus(cluster, 8))                     # 16 free GPUs, none usable by an 8-GPU pod
 ```
 
-## The library (seven files)
+## What you get: the library (seven files)
 
 | File | What it teaches |
 |------|-----------------|
@@ -85,7 +91,7 @@ make check                                              # all of the above + tes
 
 To redo an exercise, `git restore notebooks/<name>.ipynb` returns it to the committed blank.
 
-## Where the numbers come from
+## Caveats: where the numbers come from
 
 Every worked number in the notebooks and in `../PRIMER.md` is computed by this package, with inputs
 stated next to it; product facts (defaults, versions, discounts, MIG profiles) are cited in the

@@ -9,6 +9,9 @@ each step with the bundled predictor.
 
 **Cost.** $0: everything runs in Docker on your machine. About 3-4 GB of Docker memory.
 
+**Clean up.** `deploy/kind/down.sh` deletes the cluster; `python3 -m k8sgpu kind reset` clears the
+workloads between scenarios and keeps the queues.
+
 **Needs.** Docker, kind v0.33.0, kubectl >= 1.27 (for `kubectl patch --subresource=status`),
 network access to github.com (release manifests) and Docker Hub (busybox). Python 3.10+ with
 `pip install -e ..` (from the lab root) for the scenario runner.

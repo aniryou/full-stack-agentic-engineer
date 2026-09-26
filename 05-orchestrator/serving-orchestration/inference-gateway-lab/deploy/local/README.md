@@ -2,6 +2,8 @@
 
 Three vLLM-shaped backends, the lab router in front of them, and Prometheus scraping everything.
 
+**Cost:** free (local CPU). **Cleanup:** `./down.sh`.
+
 | Profile | Backends | Needs |
 |---|---|---|
 | `sim` (default) | 3 × `ghcr.io/llm-d/llm-d-inference-sim:v0.11.2` (verify tag) | Docker, pull access to ghcr.io |
@@ -26,5 +28,3 @@ open http://localhost:9090 # Prometheus: try  sum by (endpoint) (igw_request_tot
 The router listens on `http://localhost:9000` (`/v1/chat/completions`, `/metrics`, `/debug/state`)
 with the `default-weighted` preset and two InferenceObjectives (`premium=100`, `batch=-10`, chosen per
 request with the header `x-llm-d-inference-objective`). Notebook 04 benchmarks it if it is running.
-
-**Cost:** free (local CPU). **Cleanup:** `./down.sh`.
