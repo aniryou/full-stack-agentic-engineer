@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "servelab"
+version = "0.1.0"
+description = "Serve, measure, size and tune a real inference engine (vLLM): benchmark, /metrics parser, KV sizing, flag tuner, and a fake vLLM for offline work."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Runtime: an async HTTP client/server (the load generator and the fake server) and the
+# Prometheus client (so the fake server's /metrics is byte-for-byte the format vLLM emits).
+dependencies = ["aiohttp>=3.9", "prometheus_client>=0.20"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "numpy>=1.24",
+       "pyyaml>=6.0"]
+# T1: the real engine. Needs an NVIDIA GPU and a CUDA-matched wheel; never installed for T0 work.
+gpu = ["vllm>=0.30"]
+
+[project.scripts]
+servelab = "servelab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["servelab*"]
+
+[tool.setuptools.package-data]
+servelab = ["data/configs/*.json", "data/samples/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

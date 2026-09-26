@@ -1,0 +1,17 @@
+# Google Cloud Managed Service for Prometheus: scrape vLLM's /metrics every 15 s.
+# The series land in Cloud Monitoring as prometheus.googleapis.com/vllm:.../...; query them with
+# PromQL (see README.md), e.g. histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[5m]))).
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: vllm
+  labels:
+    app: vllm
+spec:
+  selector:
+    matchLabels:
+      app: vllm
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
