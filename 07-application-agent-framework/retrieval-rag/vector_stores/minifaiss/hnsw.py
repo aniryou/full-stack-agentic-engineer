@@ -27,7 +27,8 @@ class IndexHNSWFlat(Index):
     multi-layer navigable small-world graph over them. Requires no training
     (``is_trained`` is True from construction). Search quality/speed is tuned by
     ``efConstruction`` (build-time beam width) and ``efSearch`` (query-time beam
-    width); ``M`` sets the neighbour budget per node per layer.
+    width); ``M`` sets the neighbour budget per node on the upper layers and
+    layer 0 gets ``M0 = 2 * M``.
 
     Internally all "distances" are kept in a *smaller-is-closer* convention so
     the heaps behave uniformly: for L2 this is the squared distance, for inner
