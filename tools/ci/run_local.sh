@@ -3,7 +3,8 @@
 #
 #   tools/ci/run_local.sh roofline-core lra-gcp   # the tests job for these labs (ids from tools/ci/labs.json)
 #   tools/ci/run_local.sh --all-labs              # the tests job for every lab (about 37 venvs; slow)
-#   tools/ci/run_local.sh --solutions agent-core  # the manual solutions job for these labs
+#   tools/ci/run_local.sh --solutions agent-core  # the manual solutions job for these labs (lra-gcp's rewrites the
+#                                                 # outputs of its worked notebooks: git restore them afterwards)
 #   tools/ci/run_local.sh --notebooks             # every builder + the Colab injector are no-ops (needs a clean tree)
 #   tools/ci/run_local.sh --docs                  # site tests, mkdocs.yml up to date, strict build, relative links
 #   tools/ci/run_local.sh --colab-index           # tools/gen_colab_index.py is a no-op
@@ -61,7 +62,7 @@ lab() {  # lab <id> <phase: test|solutions>
 }
 
 phase="test"
-[ $# -gt 0 ] || { sed -n '2,14p' "$0"; exit 2; }
+[ $# -gt 0 ] || { sed -n '2,15p' "$0"; exit 2; }
 for arg in "$@"; do
   case "$arg" in
     --list) python3 -c 'import json; [print(l["id"]) for l in json.load(open("tools/ci/labs.json"))["labs"]]'; exit 0 ;;
