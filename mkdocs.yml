@@ -2,7 +2,7 @@
 # The pages under site/layers/ and site/guide/{curriculum,compute,colab}.md are generated from the repo by
 # tools/site/build_site_content.py (run it before `mkdocs build` / `mkdocs serve`); see tools/site/README.md.
 site_name: Full-stack agentic engineer
-site_description: The LLM inference and serving stack, layer by layer — from GPUs and fabric to the agent application.
+site_description: The LLM inference and serving stack, layer by layer — from GPUs and fabric to agents and applications.
 site_url: https://aniryou.github.io/full-stack-agentic-engineer/
 repo_url: https://github.com/aniryou/full-stack-agentic-engineer
 repo_name: aniryou/full-stack-agentic-engineer
