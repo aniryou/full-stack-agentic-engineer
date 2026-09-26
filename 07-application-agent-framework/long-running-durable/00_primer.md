@@ -195,7 +195,7 @@ Workflows YAML holds the graph (`parallel` fan-out, `await_callback` for humans,
 ### C. ADK 2 on Cloud Run with Cloud SQL sessions (this repo's `adk/`)
 `get_fast_api_app(session_service_uri="postgresql+asyncpg://…", artifact_service_uri="gs://…", trigger_sources=["pubsub"])` in one container; `Workflow` graph with `RequestInput` interrupts; Cloud Scheduler → Pub/Sub → `/wake` resumes the *existing* session. **Pros:** framework-native interrupts/resume/compaction; local dev with `adk web` and SQLite; same agent code from laptop to Cloud Run byte-for-byte. **Cons:** resume is best-effort/at-least-once (tools must be idempotent anyway); the framework is moving fast (pre-GA configs); you still own wake-up plumbing.
 
-(D: the same ADK agent on **Agent Runtime** — swap the runner, keep the agent, drive wake-ups from outside. Best when the customer wants a managed surface and Memory Bank out of the box.)
+(D: the same ADK agent on **Agent Runtime** — swap the runner, keep the agent, drive wake-ups from outside. Best when the team wants a managed surface and Memory Bank out of the box.)
 
 ---
 
@@ -234,7 +234,7 @@ Service-to-service calls use OIDC tokens minted for a dedicated service account 
 4. **Pick the runtime with the decision table** and say the one limit that decided it (60-min request timeout; 1-year Workflows execution; at-least-once everywhere).
 5. **Walk one failure** end to end: crash after side effect → lease expiry → retry → memo hit → one charge.
 6. **Estimate**: wake-ups/s, writes/s, tokens/day, cost/run; name the first thing that would break at 10× (hot documents, per-step Workflows pricing, connection pools).
-7. **Close** with observability and the eval loop — a Staff answer includes how you'd know it's working next month.
+7. **Close** with observability and the eval loop — a complete design says how you'd know it's working next month.
 
 Code-evaluation drills (spot the bug in a loop, a fan-in, an approval handler) are in the GCP lab's [`docs/02_design_drills.md`](long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md); limits with sources in its [`docs/01_gcp_cheatsheet.md`](long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md).
 
