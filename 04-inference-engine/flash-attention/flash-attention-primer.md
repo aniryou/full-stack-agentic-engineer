@@ -126,7 +126,7 @@ The correction factor `α` is the entire idea. If a later block contains a bigge
 
 Take one row with four scores, arriving in two blocks of two: `[1, 3]` then `[5, 2]`.
 
-**The answer we're aiming for.** Global max is 5. `exp([1,3,5,2] − 5) = [0.0183, 0.1353, 1.0, 0.0498]`, summing to `1.2034`. So the true weights are `[0.0152, 0.1124, 0.8310, 0.0414]`.
+**The answer we're aiming for.** Global max is 5. `exp([1,3,5,2] − 5) = [0.0183, 0.1353, 1.0, 0.0498]`, summing to `1.2034`. So the true weights are `[0.0152, 0.1125, 0.8310, 0.0414]`.
 
 **Block 1.** `m = 3`, `ℓ = exp(1−3) + exp(3−3) = 0.1353 + 1 = 1.1353`, and `O = 0.1353·v₁ + 1.0·v₂`. If we stopped here we'd get the softmax of just the first two elements — correct for what we've seen, wrong overall.
 
@@ -141,7 +141,7 @@ O_new = 0.1353 × (0.1353·v₁ + 1.0·v₂) + 1.0·v₃ + 0.0498·v₄
       = 0.0183·v₁ + 0.1353·v₂ + 1.0·v₃ + 0.0498·v₄  ✓ matches the global numerators
 ```
 
-Divide by `ℓ_new = 1.2034` and you recover `[0.0152, 0.1124, 0.8310, 0.0414]` exactly.
+Divide by `ℓ_new = 1.2034` and you recover `[0.0152, 0.1125, 0.8310, 0.0414]` exactly.
 
 No approximation anywhere — just deferred normalization plus bookkeeping. The `N×N` score matrix never existed in full.
 
@@ -224,6 +224,8 @@ If you take one transferable thing from this: **on modern accelerators, look at 
 - The `Dao-AILab/flash-attention` repo — the CuTeDSL rewrite is far more approachable than the old C++ templates.
 
 Worth doing on any machine, no GPU needed: implement the online-softmax accumulator yourself in ~50 lines of numpy (or PyTorch) and check it against a reference softmax. It takes an afternoon and the idea stops being abstract; [`flash_attention_minimal.py`](flash_attention_minimal.py) is one answer to compare with.
+
+**Code and tests.** [`kernel-core`](../kernel-core/README.md)'s `kerncore.flash` is the same tiled forward with counters: it checks itself against `flash_attention_minimal.py`, counts tiles and bytes against [`fa_calculators.py`](fa_calculators.py) (which it imports), and shows why a forward key loop needs no `-inf` guard (deep dive §11.2); the tests are `kernel-core/tests/test_flash.py`, and `kernel-core/tests/test_primer_numbers.py` recomputes this page's worked numbers.
 
 ---
 
