@@ -4,13 +4,14 @@ You do NOT reimplement a transformer to learn RAG, so the embedder is a black
 box on purpose. Everything you *do* build (search, fusion, reranking) operates
 on the vectors this returns.
 
-Default model: `all-MiniLM-L6-v2` (~90 MB, CPU-fine). First run downloads it.
+Default model: `all-MiniLM-L6-v2` (~90 MB as of 2026-09-26 (verify), CPU-fine). First run downloads it.
 Reranker:      `cross-encoder/ms-marco-MiniLM-L-6-v2` (used in notebook 04).
 Both need `sentence-transformers` (and so torch): `pip install -r requirements-full.txt`.
 
-T0 fallback: when `sentence-transformers` is not installed, `get_embedder()`
-returns a `HashingEmbedder` (bag-of-words feature hashing) and
-`get_cross_encoder()` a `TokenOverlapReranker`, and each says so once. Every
+T0 fallback: when `sentence-transformers` is not installed, or fails to import
+(a broken torch install can raise OSError), `get_embedder()` returns a
+`HashingEmbedder` (bag-of-words feature hashing) and `get_cross_encoder()` a
+`TokenOverlapReranker`, and each says so once. Every
 notebook then runs and every self-check passes (they grade the *shape* of your
 code, not model quality), but the vectors are lexical, not semantic: "holidays"
 and "vacation" share nothing. Set `RAGKIT_EMBEDDER=hashing` to force the
@@ -35,7 +36,7 @@ RERANKER_FALLBACK_LABEL = "token-overlap reranker (T0 fallback; not a cross-enco
 _INSTALL_HINT = (
     "sentence-transformers is required for real embeddings.\n"
     "    pip install -r requirements-full.txt      # or: pip install sentence-transformers\n"
-    "(It pulls in torch; the first call downloads a ~90 MB model, then it is "
+    "(It pulls in torch; the first call downloads a ~90 MB (verify) model, then it is "
     "cached and runs offline on CPU.)"
 )
 
@@ -46,7 +47,7 @@ def have_sentence_transformers() -> bool:
         return False
     try:
         import sentence_transformers  # noqa: F401
-    except ImportError:
+    except Exception:  # not installed (ImportError) or a broken torch (e.g. OSError)
         return False
     return True
 

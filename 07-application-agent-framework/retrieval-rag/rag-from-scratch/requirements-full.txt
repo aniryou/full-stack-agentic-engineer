@@ -1,5 +1,6 @@
-# The real models: all-MiniLM-L6-v2 (~90 MB) and cross-encoder/ms-marco-MiniLM-L-6-v2.
+# The real models: all-MiniLM-L6-v2 (~90 MB, 2026-09-26 (verify)) and cross-encoder/ms-marco-MiniLM-L-6-v2.
 # sentence-transformers pulls in torch + transformers (a multi-GB install); CPU is fine.
-# Colab already ships both, so there the notebooks use the real model with no extra install.
+# The Colab runtime ships both as of 2026-09-26 (verify), so there the notebooks use the real
+# model with no extra install; if a runtime lacks them, install this file.
 -r requirements.txt
 sentence-transformers>=2.6

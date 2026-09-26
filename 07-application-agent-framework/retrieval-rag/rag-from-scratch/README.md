@@ -12,14 +12,14 @@ box. Everything that teaches is ~40 lines you can read in one sitting.
 
 ```bash
 pip install -r requirements.txt        # T0: numpy + pytest, no torch (seconds, a few MB)
-python -m pytest -q                    # 11 tests: reference primitives + the embedder fallback
+python -m pytest -q                    # 12 tests: reference primitives + the embedder fallback
 pip install -r requirements-full.txt   # optional: the real models (sentence-transformers, so torch: a multi-GB install)
 ```
 
 | Where you run it | Embedder the notebooks get | What you learn |
 |---|---|---|
 | **T0** — laptop or Colab CPU, `requirements.txt` only | `hashing embedder (T0 fallback; not semantic)`: bag-of-words feature hashing | every mechanism; all self-checks pass. Dense search is lexical, so the "semantic beats lexical" results do not show |
-| **T0 + torch** (`requirements-full.txt`) or **Colab** (ships sentence-transformers) | `all-MiniLM-L6-v2` (~90 MB, downloaded once, then offline on CPU) and the `ms-marco-MiniLM-L-6-v2` cross-encoder | the same, plus the real dense-vs-lexical and reranking differences |
+| **T0 + torch** (`requirements-full.txt`) or **Colab** (its runtime ships sentence-transformers and torch as of 2026-09-26 (verify); if yours does not, `pip install -r requirements-full.txt`) | `all-MiniLM-L6-v2` (~90 MB as of 2026-09-26 (verify), downloaded once, then offline on CPU) and the `ms-marco-MiniLM-L-6-v2` cross-encoder | the same, plus the real dense-vs-lexical and reranking differences |
 
 `ragkit.embed.get_embedder()` and `get_cross_encoder()` pick the real model when
 `sentence-transformers` is installed and otherwise print which fallback they

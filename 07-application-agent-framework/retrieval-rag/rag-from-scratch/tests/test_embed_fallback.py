@@ -25,6 +25,25 @@ def test_factory_falls_back_and_says_so(no_sentence_transformers, capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_broken_install_falls_back(monkeypatch, capsys):
+    """A sentence-transformers whose import raises something other than
+    ImportError (a broken torch can raise OSError) still gets the fallback."""
+    class _Broken:
+        def find_spec(self, name, path=None, target=None):
+            if name == "sentence_transformers":
+                raise OSError("libtorch.so: cannot open shared object file")
+            return None
+
+    monkeypatch.delitem(sys.modules, "sentence_transformers", raising=False)
+    monkeypatch.setattr(sys, "meta_path", [_Broken(), *sys.meta_path])
+    monkeypatch.delenv("RAGKIT_EMBEDDER", raising=False)
+    monkeypatch.setattr(embed, "_CACHE", {})
+    monkeypatch.setattr(embed, "_ANNOUNCED", set())
+    assert not embed.have_sentence_transformers()
+    assert isinstance(embed.get_embedder(), embed.HashingEmbedder)
+    assert embed.FALLBACK_LABEL in capsys.readouterr().out
+
+
 def test_env_var_forces_the_fallback(monkeypatch):
     monkeypatch.setenv("RAGKIT_EMBEDDER", "hashing")
     monkeypatch.setattr(embed, "_CACHE", {})
