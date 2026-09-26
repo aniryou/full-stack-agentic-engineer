@@ -12,15 +12,20 @@ setup-notebooks:  ## JupyterLab and the notebook runner (`make check`, `make lab
 test:
 	$(PY) -m pytest -q
 
-notebooks:
+NEEDS_NB = @$(PY) -c "import nbformat, nbclient" 2>/dev/null || { \
+	echo "This target needs nbformat and nbclient: run 'make setup-notebooks' (pip install -r requirements-notebooks.txt)."; \
+	exit 1; }
+
+notebooks:        ## needs `make setup-notebooks` (nbformat), not just `make setup`
+	$(NEEDS_NB)
 	$(PY) tools/build_notebooks.py
 
-check: notebooks
+check: notebooks  ## needs `make setup-notebooks` (nbformat, nbclient, ipykernel)
 	$(PY) -m pytest -q
 	$(PY) tools/run_notebooks.py solutions
 	$(PY) tools/run_notebooks.py notebooks --expect-fail
 
-lab:
+lab:              ## needs `make setup-notebooks` (JupyterLab)
 	$(PY) -m jupyterlab notebooks
 
 clean:

@@ -52,8 +52,9 @@ Finish with the primer's [design-review walkthrough and drills](PRIMER.md#in-a-d
 
 ```bash
 cd roofline-core
-python3 -m pip install -r requirements.txt   # only for notebooks and tests; the library needs nothing
+python3 -m pip install -r requirements.txt             # pytest only, for the tests; the library needs nothing
 python3 -m pytest -q
+python3 -m pip install -r requirements-notebooks.txt   # JupyterLab, to do the notebooks locally
 python3 -m jupyterlab notebooks
 
 cd ../gpu-bench-lab
