@@ -127,8 +127,9 @@ def test_sts_rejects_a_user_token_minted_for_another_audience(demo):
         stray = issuer.mint(subject="u-ana", audience=aud, scope={"tickets:read", "tickets:write"})
         with pytest.raises(TokenError, match="Audience"):
             issuer.exchange(stray, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
-        with pytest.raises(TokenError, match="Audience"):
-            agent.issuer.verify(stray, audience=APP_AUDIENCE)  # the check Agent.run makes first
+        with pytest.raises(TokenError, match="Audience"):  # Agent.run checks aud before anything else
+            agent.run(stray, "list my tickets")
+        assert agent.audit.events == []  # rejected up front: no screening, no policy, no tool call
 
 
 def test_sts_requires_an_authenticated_actor(demo):
@@ -145,6 +146,15 @@ def test_sts_requires_an_authenticated_actor(demo):
     for name, actor_token in bad_actors.items():
         with pytest.raises(TokenError):
             issuer.exchange(ana, actor_token=actor_token, audience=server.audience, scope={"tickets:read"})
+    # A subject token without may_act leaves only the actor-type check between a non-agent
+    # credential and a delegated token: a user's token or a delegated token is not an agent's
+    # own credential, even when the delegated token's subject is itself an agent.
+    no_may_act = issuer.mint(subject="u-ana", audience=APP_AUDIENCE, scope={"tickets:read"})
+    agent_on_behalf = issuer.mint(subject=agent.identity.spiffe_id, audience=issuer.issuer, scope=set(), actor=AgentIdentity("other-agent").spiffe_id)
+    for actor_token in (bad_actors["a user"], bad_actors["delegated"], agent_on_behalf):
+        with pytest.raises(TokenError, match="not an agent"):
+            issuer.exchange(no_may_act, actor_token=actor_token, audience=server.audience, scope={"tickets:read"})
+    assert issuer.exchange(no_may_act, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     agent.credential = ""  # an agent without its own credential gets no delegated token
     first = agent.run(ana, "list my tickets")["tool_results"][0]
     assert "error" in first["result"] and "Jazz" not in first["result"]  # fails closed, no data
