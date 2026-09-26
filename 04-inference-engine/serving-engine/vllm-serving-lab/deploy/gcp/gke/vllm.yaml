@@ -1,0 +1,97 @@
+# vLLM on one L4 in GKE: a Deployment and a ClusterIP Service.
+# Needs a node pool with L4 GPUs (./cluster.sh creates a Spot pool that autoscales 0..2).
+# Scrape config for Google Cloud Managed Service for Prometheus: ./podmonitoring.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels:
+    app: vllm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+        cloud.google.com/gke-spot: "true"          # remove to run on an on-demand pool
+      tolerations:
+        - key: nvidia.com/gpu                      # GKE taints GPU nodes (verify: nvidia.com/gpu=present:NoSchedule)
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 25            # Spot VMs get ~30 s notice before preemption
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.30.0          # ENTRYPOINT is `vllm serve`; tag on Docker Hub since 2026-09-22
+          args:
+            - Qwen/Qwen2.5-1.5B-Instruct
+            - --port=8000
+            - --max-model-len=8192
+            - --gpu-memory-utilization=0.92
+          env:
+            - name: HF_TOKEN                       # only needed for gated models
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "6"
+              memory: 20Gi
+              nvidia.com/gpu: "1"                  # extended resource: requests == limits
+            limits:
+              memory: 26Gi
+              nvidia.com/gpu: "1"
+          startupProbe:                            # model download + load + KV allocation + graphs
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90                   # 15 minutes
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: dshm                               # shared memory for the engine's worker processes
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        - name: hf-cache                           # node-local; use GCS FUSE or a PVC to survive restarts
+          emptyDir:
+            sizeLimit: 30Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  labels:
+    app: vllm
+spec:
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
