@@ -114,8 +114,9 @@ low unless heavily tuned.
 
 ### HNSW — hierarchical navigable small world (`hnsw.py`)
 Builds a layered proximity graph: sparse upper layers act as express lanes, and
-layer 0 holds everyone. Search greedy-descends the upper layers, then beam-
-searches layer 0. Stores full vectors plus the graph. **Space:** high (vectors +
+layer 0 holds everyone. Each node keeps up to `M` neighbours per upper layer and
+`M0 = 2M` on layer 0, as in the HNSW paper and `faiss.IndexHNSWFlat`. Search
+greedy-descends the upper layers, then beam-searches layer 0. Stores full vectors plus the graph. **Space:** high (vectors +
 edges). **Speed:** very fast. **Recall:** high, tuned by `efSearch`.
 
 ---
@@ -217,8 +218,8 @@ index                               bytes/vec   recall@10
 ---------------------------------  ----------  ----------
 IndexFlatL2                               128       1.000
 IndexIVFFlat(nlist=64,nprobe=8)           128       0.999
-IndexPQ(m=8)                                8       0.548
+IndexPQ(m=8)                                8       0.535
 IndexIVFPQ(nlist=64,m=8,nprobe=8)           8       0.755
-IndexLSH(nbits=64)                          8       0.108
-IndexHNSWFlat(M=16)                       128       0.955
+IndexLSH(nbits=64)                          8       0.107
+IndexHNSWFlat(M=16)                       128       0.969
 ```
