@@ -6,7 +6,7 @@ tensor-parallel decode step, why a container does or does not see its GPU, and w
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md): *The one-minute version*, then §2–§3 (the execution model, memory access patterns).
-2. `cd cuda-nccl-core && python3 -m pytest -q` — 133 tests in under a second, numpy only; then open
+2. `cd cuda-nccl-core && python3 -m pytest -q` — 141 tests in about 30 s, numpy only; then open
    [`notebooks/01_simt_warps_and_memory.ipynb`](cuda-nccl-core/notebooks/01_simt_warps_and_memory.ipynb).
 3. `cd ../cuda-nccl-lab && python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M` — a real ring
    all-reduce between two processes, printed like nccl-tests, in about a second. Then
@@ -56,17 +56,17 @@ Finish with the primer's [*In a design review*](PRIMER.md#in-a-design-review) dr
 # T0 — the core: numpy only
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core
 python3 -m pip install -r requirements.txt
-python3 -m pytest -q                            # 133 tests, under a second
+python3 -m pytest -q                            # 141 tests, ~30 s
 python3 -m jupyterlab notebooks                 # do the exercises
 
 # T0 — the lab: numpy, numba (its CUDA simulator runs on any CPU), pyyaml
 cd ../cuda-nccl-lab
 python3 -m pip install -r requirements.txt
-python3 -m pytest -q                            # 123 pass, 2 skip without torch / numba-cuda; 15–30 s
+python3 -m pytest -q                            # 130 pass, 3 skip (2 without torch / numba-cuda); ~50 s
 python3 -m jupyterlab notebooks
 ```
 
-On Colab, each notebook's first cell clones the repo and installs its lab; the badges are in the
+On Colab, each notebook's first cell clones the repo and installs its lab; the Colab links are in the
 [layer README](../README.md). For a GPU (T1/T2) or GKE (T3), follow the lab's
 [Run it](cuda-nccl-lab/README.md#run-it) section.
 

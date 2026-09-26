@@ -181,8 +181,10 @@ assert subblocks(g3) == {subblock_for_3} and subblocks(g2) == {subblock_for_2}
 assert {fleet.nodes[n].topology[0] for n in g5.values()} == {block_for_5}
 assert place_gang(fleet, [gpu_pod(f"r{i}", 8) for i in range(5)], required="subblock") is None
 print("✅ gang of 5 (preferred) ->", sorted(fleet.nodes[n].name for n in g5.values()))
+split = " + ".join(f"{sum(fleet.nodes[n].topology[1] == sb for n in g5.values())} in {sb}"
+                  for sb in sorted(subblocks(g5)))
 print("   the sub-block pass picks 4 + 1, but the host pass re-runs BestFit over all six free hosts of both\n"
-      "   sub-blocks, which tie at one slot each and are taken in name order: 2 in b1-s0 + 3 in b1-s1")
+      "   sub-blocks, which tie at one slot each and are taken in name order:", split)
 
 # %% [markdown]
 # ## Exercise 3.4 — choose a constraint per workload
@@ -206,9 +208,26 @@ choices = {
 ### END SOLUTION
 
 # %% check
-assert choices["serving"] == ("required", "subblock")
-assert choices["pretraining"][0] == "preferred" and choices["pretraining"][1] in ("block", "subblock")
-assert choices["batch-eval"] is None
+import hashlib
+
+
+def digest(key, value):  # the check compares digests, so the blank does not print the answer
+    value = tuple(value) if isinstance(value, (list, tuple)) else value
+    return hashlib.sha256(f"{key}={value!r}".encode()).hexdigest()[:10]
+
+
+ACCEPTED = {  # more than one digest: more than one defensible answer
+    "serving": {'fa891141ec'},
+    "pretraining": {'64f19d6c88', '9092837345'},
+    "batch-eval": {'79c8c55899'},
+}
+HINTS = {
+    "serving": "a replica that talks every layer, every token: is a slow placement acceptable, or worth waiting for?",
+    "pretraining": "32 nodes for weeks: locality matters, but can you afford to wait for a perfect domain?",
+    "batch-eval": "no communication at all: what does any topology constraint buy?",
+}
+for workload, ok in ACCEPTED.items():
+    assert digest(workload, choices.get(workload)) in ok, f"{workload}: not quite. {HINTS[workload]}"
 print("✅", choices)
 
 # %% [markdown]

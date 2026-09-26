@@ -9,7 +9,7 @@ Kubernetes that enforces it.
 
 1. Read [`PRIMER.md`](PRIMER.md) §1–§2 (30 min): why a code tool is the most dangerous tool, and the
    isolation ladder from process to microVM.
-2. `cd sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 81 tests, ~30 s; then open
+2. `cd sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 89 tests, ~50 s; then open
    [`sandbox-core/notebooks/01_the_threat_model.ipynb`](sandbox-core/notebooks/01_the_threat_model.ipynb)
    and watch a secret leak from unsandboxed code, then get contained.
 3. When you have Docker or a cluster: [`sandbox-lab/`](sandbox-lab/) hardens a real container, runs a
@@ -37,7 +37,7 @@ review". Finished versions are in [`sandbox-core/solutions/`](sandbox-core/solut
 ```bash
 cd sandbox-core
 python3 -m pip install -e ".[dev]"     # the library is stdlib only; dev adds pytest, jupyter, pyyaml, kubernetes-validate
-python3 -m pytest -q                    # 81 tests, ~30 s
+python3 -m pytest -q                    # 89 tests, ~50 s
 python3 tools/build_notebooks.py        # (re)build notebooks/ and solutions/
 python3 -m jupyterlab notebooks         # do the exercises
 ```

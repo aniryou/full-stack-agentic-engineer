@@ -191,7 +191,7 @@ nav:
               - "Practice":
                   - "Attention practice": "layers/00-foundations/transformers/practice/attention_practice.ipynb"
                   - "Attention practice — solutions": "layers/00-foundations/transformers/practice/attention_solutions.ipynb"
-      - "01 · Hardware & fabric":
+      - "01 · Hardware and fabric":
           - "layers/01-hardware-gpu-fabric/index.md"
           - "GPU deployment":
               - "GPU Deployment Architecture for LLM Scale-Up": "layers/01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md"
@@ -226,7 +226,7 @@ nav:
                       - "02 · Memory bandwidth and transfers (solution)": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/02_memory_bandwidth_and_transfers.ipynb"
                       - "03 · Multi-GPU topology and P2P (solution)": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/03_multi_gpu_topology_and_p2p.ipynb"
                       - "04 · Weights loading and cold start (solution)": "layers/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/04_weights_loading_and_cold_start.ipynb"
-      - "02 · CUDA, NCCL & runtime":
+      - "02 · CUDA, NCCL and runtime":
           - "layers/02-cuda-nccl-runtime/index.md"
           - "CUDA and NCCL":
               - "layers/02-cuda-nccl-runtime/cuda-and-nccl/index.md"
@@ -261,7 +261,7 @@ nav:
                       - "04 · busbw and the α-β fit (solution)": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/04_busbw_and_the_alpha_beta_fit.ipynb"
                       - "05 · How a container sees a GPU (solution)": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/05_how_a_container_sees_a_gpu.ipynb"
                       - "06 · GPU sharing and DCGM on GKE (solution)": "layers/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/solutions/06_gpu_sharing_and_dcgm_on_gke.ipynb"
-      - "03 · Kubernetes & GPUs":
+      - "03 · Kubernetes and GPU scheduling":
           - "layers/03-kubernetes-gpu/index.md"
           - "GPU scheduling":
               - "layers/03-kubernetes-gpu/gpu-scheduling/index.md"
@@ -413,6 +413,7 @@ nav:
       - "06 · Gateway":
           - "layers/06-gateway/index.md"
           - "Identity security":
+              - "layers/06-gateway/identity-security/index.md"
               - "Agentic identity core":
                   - "layers/06-gateway/identity-security/agentic-identity-core/index.md"
                   - "Identity & security for an agent loop — PRACTICE": "layers/06-gateway/identity-security/agentic-identity-core/core_practice.ipynb"
@@ -462,6 +463,7 @@ nav:
                           - "08 · Audit and governance solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/08_audit_and_governance_solution.ipynb"
                           - "09 · Code evaluation drills solution": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/solutions/09_code_evaluation_drills_solution.ipynb"
           - "Scaling admission cost":
+              - "layers/06-gateway/scaling-admission-cost/index.md"
               - "Agentic scaling lab":
                   - "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/index.md"
                   - "Docs":
@@ -497,7 +499,7 @@ nav:
                           - "02 · The turn: budgets, checkpoints and idempotency (solution, Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/02_turn_loop_and_durability_solutions.ipynb"
                           - "03 · Rate limits, retries, breakers and admission (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/03_rate_limits_and_admission_solutions.ipynb"
                           - "04 · From a load test to Kubernetes and vLLM settings (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/04_load_to_settings_solutions.ipynb"
-      - "07 · Agents & applications":
+      - "07 · Agents and applications":
           - "layers/07-application-agent-framework/index.md"
           - "Agent fundamentals":
               - "Agent core":

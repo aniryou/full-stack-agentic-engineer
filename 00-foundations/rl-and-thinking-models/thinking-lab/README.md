@@ -47,7 +47,7 @@ function, predict a number, pick a setting) each followed by a check that prints
 cd thinking-lab
 python3 -m pip install -e ".[dev]"             # aiohttp; dev: pytest, jupyter, pyyaml, matplotlib
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu   # optional: notebooks 01/05 train for real
-python3 -m pytest -q                           # 91 tests, offline, no GPU: ~50 s with torch (one full GRPO run; -m 'not slow' skips it), ~10 s without
+python3 -m pytest -q                           # 99 tests, offline, no GPU: ~80 s with torch (one full GRPO run; -m 'not slow' skips it), ~40 s without
 python3 -m thinklab tinyrl                     # SFT + GRPO on the tiny transformer (~1 min on a CPU)
 python3 -m thinklab fake --port 8000 &         # a fake vLLM serving a simulated Qwen3-0.6B on a T4
 THINKLAB_URL=http://127.0.0.1:8000 python3 -m thinklab ask "What is 47 * 23 - 318?"

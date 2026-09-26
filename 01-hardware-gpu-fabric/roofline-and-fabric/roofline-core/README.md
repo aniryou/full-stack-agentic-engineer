@@ -14,7 +14,7 @@ quantities on the hardware you have.
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (spec sheets and the roofline).
-2. Run the tests (below): 58 tests, well under a second.
+2. Run the tests (below): 66 tests, ~30 s.
 3. Open [`notebooks/01_spec_sheets_and_the_roofline.ipynb`](notebooks/01_spec_sheets_and_the_roofline.ipynb); each
    exercise's check cell prints ✅ when you are right.
 
@@ -23,7 +23,7 @@ quantities on the hardware you have.
 ```bash
 cd roofline-core
 python3 -m pip install -r requirements.txt   # pytest only: enough for the tests
-python3 -m pytest -q                          # 58 tests, well under a second
+python3 -m pytest -q                          # 66 tests, ~30 s
 python3 -m pip install -r requirements-notebooks.txt   # JupyterLab (~250 MB), to do the notebooks locally
 python3 -m jupyterlab notebooks               # do the exercises
 ```

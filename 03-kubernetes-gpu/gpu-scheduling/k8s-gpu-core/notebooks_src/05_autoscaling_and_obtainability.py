@@ -244,7 +244,24 @@ capacity = {
 ### END SOLUTION
 
 # %% check
-assert capacity == {"chat": "on-demand", "finetune": "flex-start", "embeddings": "spot", "flagship": "reservation"}
+import hashlib
+
+
+def digest(key, value):  # the check compares digests, so the blank does not print the answer
+    value = tuple(value) if isinstance(value, (list, tuple)) else value
+    return hashlib.sha256(f"{key}={value!r}".encode()).hexdigest()[:10]
+
+
+ACCEPTED = {'chat': 'fa5a7fda80', 'finetune': 'af396b8373', 'embeddings': '139b974c15', 'flagship': '882d122ea0'}
+HINTS = {
+    "chat": "it must scale up within minutes when traffic arrives, and it cannot wait in a queue",
+    "finetune": "a big gang whose start can slip a few days: which type avoids paying for half-provisioned nodes?",
+    "embeddings": "retryable pods and a deadline hours away: which type is cheapest when it can be taken back?",
+    "flagship": "steady high utilisation for a year: what guarantees the capacity is there every day?",
+}
+assert set(capacity) == set(ACCEPTED), "answer for exactly: " + ", ".join(ACCEPTED)
+for workload, want in ACCEPTED.items():
+    assert digest(workload, capacity[workload]) == want, f"{workload}: not quite. {HINTS[workload]}"
 print("✅", capacity)
 
 # %% [markdown]

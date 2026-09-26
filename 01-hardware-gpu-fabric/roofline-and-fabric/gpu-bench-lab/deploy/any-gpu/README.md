@@ -22,7 +22,7 @@ current comparison.
 
 ## 1 · Colab or Kaggle (no install)
 
-Open a notebook from the Colab badge in the layer README ([`01-hardware-gpu-fabric/README.md`](../../../../README.md)), then
+Open a notebook from its Colab link in the layer README ([`01-hardware-gpu-fabric/README.md`](../../../../README.md)), then
 *Runtime → Change runtime type → T4 GPU*. The first cell clones this repository, changes into the lab
 and runs `pip install -e .`; PyTorch is already there, so `get_backend("auto")` picks the GPU.
 

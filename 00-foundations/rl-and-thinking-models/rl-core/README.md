@@ -10,7 +10,7 @@ for the network so every expectation can also be computed exactly.
 
 1. Read [`../PRIMER.md`](../PRIMER.md): "The one-minute version", then §1 From pretraining to post-training and
    §2 Policy gradients over token sequences.
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 57 tests in about 30 s, including "DPO
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 65 tests in about 50 s, including "DPO
    lands on the closed-form optimum π_ref·exp(r/β)" and "the capacity primer's bank example, number for number".
 3. Open [`notebooks/01_policy_gradients_on_a_toy_task.ipynb`](notebooks/01_policy_gradients_on_a_toy_task.ipynb)
    and watch RL find a verifier's bug.
@@ -37,7 +37,7 @@ the primer.
 ```bash
 cd rl-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 57 tests, ~30 s
+python3 -m pytest -q                           # 65 tests, ~50 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -70,7 +70,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (57, offline, ~30 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (57, plus 8 notebook-tooling checks; offline, ~50 s in all). The ones that carry the correctness claims:
 
 - **The gradients are right.** `grad_logprob` matches finite differences; the mean of 400 REINFORCE estimates
   correlates above 0.95 with the exact gradient of P(correct) computed by enumeration; DPO's step matches finite

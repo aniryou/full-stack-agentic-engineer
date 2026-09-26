@@ -3,7 +3,7 @@
 **Read it as a site:** <https://aniryou.github.io/full-stack-agentic-engineer/> (same content, with search and rendered notebooks).
 
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
-Kubernetes, the inference engine, the orchestrator and the gateway, to the agent application at the top. It is
+Kubernetes, the inference engine, the orchestrator and the gateway, to agents and applications at the top. It is
 organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
 which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Nine topics come as a primer, a small
 from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
@@ -18,9 +18,8 @@ plus practice notebooks or a lab; each topic's or lab's README says what it cont
    and work up.
 2. **Read its primer.** Most topics have a primer (`PRIMER.md`, a `*-primer.md` or a lab's `docs/primer.md`) that
    explains the concepts with worked numbers; `agent-fundamentals/` teaches through its lab notebooks instead. The
-   layer's `README.md` links it; for layers 01–05 and the newer topics it also says which
-   sections to read first (the other layer READMEs are being brought to the same shape).
-3. **Run its core notebooks**, in Colab (the badges in each layer README) or locally (see [Run it](#run-it)).
+   layer's `README.md` links it and says which sections to read first, with the time and tier of each topic.
+3. **Run its core notebooks**, in Colab (the links at the end of each layer README) or locally (see [Run it](#run-it)).
    Most exercises are followed by a check cell — all of them in the primer, core and lab topics — that prints ✅
    when your answer is right; some older checks are lighter, and the 06 scaling notebooks print "not attempted"
    until you fill an exercise in.
@@ -50,40 +49,42 @@ Read bottom-up: each layer is built on the one below it.
 
 One entry per layer: what you will be able to do, then its topic folders.
 
-- **00 foundations** — [`00-foundations/`](00-foundations/README.md). Build a tiny GPT; size memory and bandwidth
+- **00 · Foundations** — [`00-foundations/`](00-foundations/README.md). Build a tiny GPT; size memory and bandwidth
   for a model; predict what MoE and thinking models do to serving; implement REINFORCE, DPO and GRPO.
   Topics: `transformers/`, `gpu-capacity-planning/`, `model-landscape/`,
   [`mixture-of-experts/`](00-foundations/mixture-of-experts/README.md),
   [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md).
-- **01 hardware and fabric** — [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md). Read a spec sheet
+- **01 · Hardware and fabric** — [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md). Read a spec sheet
   and say whether a step is compute- or memory-bound; price a collective; compute $/M tokens; measure your machine.
   Topics: `gpu-primer/`, `gpu-deployment/`,
   [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/README.md).
-- **02 CUDA, NCCL, runtime** — [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md). Predict coalescing,
+- **02 · CUDA, NCCL and runtime** — [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md). Predict coalescing,
   occupancy and all-reduce cost; run Numba kernels; measure collectives; see how a container gets a GPU.
   Topic: [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/README.md).
-- **03 Kubernetes for GPUs** — [`03-kubernetes-gpu/`](03-kubernetes-gpu/README.md). Explain why a GPU pod is
+- **03 · Kubernetes and GPU scheduling** — [`03-kubernetes-gpu/`](03-kubernetes-gpu/README.md). Explain why a GPU pod is
   Pending; place gangs; set Kueue quotas; choose Spot, flex-start or reservations.
   Topic: [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/README.md).
-- **04 inference engine** — [`04-inference-engine/`](04-inference-engine/README.md). Build an engine's step loop,
+- **04 · Inference engine** — [`04-inference-engine/`](04-inference-engine/README.md). Build an engine's step loop,
   scheduler and prefix cache; size a KV cache; tune a real vLLM against an SLO; choose a quantization scheme.
   Topics: `kv-cache/`, `paged-attention/`, `flash-attention/`,
   [`serving-engine/`](04-inference-engine/serving-engine/README.md),
   [`quantization/`](04-inference-engine/quantization/README.md),
   [`vllm-internals/`](04-inference-engine/vllm-internals/README.md).
-- **05 orchestrator** — [`05-orchestrator/`](05-orchestrator/README.md). Route on prefix affinity and load;
+- **05 · Orchestrator** — [`05-orchestrator/`](05-orchestrator/README.md). Route on prefix affinity and load;
   autoscale on the right signals; size a prefill/decode split — in a simulator, then a real router.
   Topic: [`serving-orchestration/`](05-orchestrator/serving-orchestration/README.md).
-- **06 gateway** — [`06-gateway/`](06-gateway/README.md). Give agents identities, exchange tokens, enforce
+- **06 · Gateway** — [`06-gateway/`](06-gateway/README.md). Give agents identities, exchange tokens, enforce
   policy with an audit trail; plan capacity, find the provisioned-throughput break-even, add admission control.
-  Topics: `identity-security/`, `scaling-admission-cost/`.
-- **07 agent application** — [`07-application-agent-framework/`](07-application-agent-framework/README.md). Write
+  Topics: [`identity-security/`](06-gateway/identity-security/README.md),
+  [`scaling-admission-cost/`](06-gateway/scaling-admission-cost/README.md).
+- **07 · Agents and applications** — [`07-application-agent-framework/`](07-application-agent-framework/README.md). Write
   an agent loop; make long-running agents durable; build RAG and vector indexes; sandbox model-written code.
   Topics: `agent-fundamentals/`, `long-running-durable/`, `retrieval-rag/`,
   [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md).
 
 Several topics are worked on more than one provider (Google Cloud, Mistral) so the same concept can be compared
-across stacks. Each layer `README.md` has the full scope, the current contents and the Colab links.
+across stacks. Each layer `README.md` has its topics with time and tier, where to start, how it fits with the layers around it and
+the Colab links.
 
 ## How the labs work
 
@@ -116,7 +117,7 @@ lab's `python3 tools/build_notebooks.py`).
 
 ## Run it
 
-**In Colab:** open any notebook from the badge in its layer README. There is nothing to set up: the first cell
+**In Colab:** open any notebook from its link in its layer README. There is nothing to set up: the first cell
 clones this repo and installs that lab's dependencies. [`COLAB.md`](COLAB.md) has the details, including how
 to keep your edits.
 
