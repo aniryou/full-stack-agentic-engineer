@@ -1,4 +1,4 @@
-"""Tracing for agent runs (Primer §4.2).
+"""Tracing for agent runs (notebook 09; the capstone's traces in notebook 14).
 
 A *span* is one unit of work — an agent turn, a model call, a tool call, a
 retrieval — with start/end times, a kind, and attributes. Spans nest: the tool
@@ -7,11 +7,22 @@ span is the root of the *trace* for that conversation turn. Nesting is tracked
 with a ``contextvars.ContextVar`` so spans opened inside ``asyncio.gather``
 tasks (parallel tool calls, parallel branches) still find the right parent.
 
-Attribute names follow the OpenTelemetry GenAI semantic conventions where they
-exist (``gen_ai.request.model``, ``gen_ai.usage.input_tokens`` …) so a real
-exporter — Cloud Trace, Langfuse, Arize — understands them unchanged.
+Attribute names follow the OpenTelemetry GenAI semantic conventions as of
+September 2026 (verify): ``gen_ai.operation.name``, ``gen_ai.request.model``,
+``gen_ai.usage.input_tokens`` / ``output_tokens`` / ``cache_read.input_tokens``,
+``gen_ai.response.finish_reasons`` (an array) and, on tool spans,
+``gen_ai.tool.name`` / ``gen_ai.tool.call.id``. The conventions are still at
+*Development* stability and now live in their own repository,
+open-telemetry/semantic-conventions-genai, so names can change between
+releases; a backend that implements the same version reads these attributes
+without a mapping. Three things here are not the convention: the ``tool.ok`` /
+``tool.latency_ms`` / ``tool.error`` attributes are this lab's own; the fake
+model has no provider, so the ``gen_ai.provider.name`` a real instrumentation
+must set is left to the adapter; and message content goes in the opt-in
+``gen_ai.input.messages`` / ``gen_ai.output.messages`` (the old ``gen_ai.prompt``
+is deprecated), which the lab never records by default.
 
-Traces carry customer data: prompts, tool arguments, retrieved documents. The
+Traces carry personal data: prompts, tool arguments, retrieved documents. The
 ``RedactingExporter`` scrubs values field by field *before* anything leaves the
 process, which is the only place redaction can be enforced reliably.
 
@@ -36,22 +47,41 @@ from ..llm.types import Usage
 
 # --------------------------------------------------------------- attribute names
 # OpenTelemetry GenAI semantic conventions (the ones the loop and the metrics use).
+# Checked against open-telemetry/semantic-conventions-genai, September 2026 (verify).
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
-GEN_AI_INPUT_TOKENS = "gen_ai.usage.input_tokens"
+GEN_AI_INPUT_TOKENS = "gen_ai.usage.input_tokens"               # includes the cached ones
 GEN_AI_OUTPUT_TOKENS = "gen_ai.usage.output_tokens"
-GEN_AI_CACHED_TOKENS = "gen_ai.usage.cached_tokens"     # not in the convention yet; same style
-GEN_AI_FINISH_REASON = "gen_ai.response.finish_reason"
-# Tool attributes (the loop sets these on every tool span).
-TOOL_NAME = "tool.name"
+GEN_AI_CACHED_TOKENS = "gen_ai.usage.cache_read.input_tokens"  # the cached subset of input_tokens
+GEN_AI_FINISH_REASONS = "gen_ai.response.finish_reasons"       # string[]: one reason per choice
+GEN_AI_FINISH_REASON = GEN_AI_FINISH_REASONS                   # old name of the constant, kept as an alias
+GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages"                # opt-in: raw prompt content (never exported here)
+GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages"              # opt-in: raw completion content
+# Tool attributes (the loop sets these on every tool span). The first two are the
+# convention's; ok / latency / error are this lab's own, outside the gen_ai namespace.
+TOOL_NAME = "gen_ai.tool.name"
+TOOL_CALL_ID = "gen_ai.tool.call.id"
 TOOL_OK = "tool.ok"
 TOOL_LATENCY_MS = "tool.latency_ms"
 TOOL_ERROR = "tool.error"
 
+# Attribute names older code in this lab wrote before it followed the convention.
+# Read-only fallbacks, so spans written that way still price and render correctly.
+_LEGACY_ATTRS = {GEN_AI_CACHED_TOKENS: "gen_ai.usage.cached_tokens",
+                 GEN_AI_FINISH_REASONS: "gen_ai.response.finish_reason"}
+
 SPAN_KINDS = ("agent", "model", "tool", "retrieval", "internal")
 
-# ``gen_ai.operation.name`` values per span kind; "internal" spans carry none.
+# ``gen_ai.operation.name`` values per span kind (all four are well-known values of
+# the convention); "internal" spans carry none.
 _OPERATION_BY_KIND = {"agent": "invoke_agent", "model": "chat", "tool": "execute_tool", "retrieval": "retrieval"}
+
+
+def _attr(span: "Span", name: str, default: Any = None) -> Any:
+    """``span.attrs[name]``, falling back to the pre-convention name this lab used."""
+    if name in span.attrs:
+        return span.attrs[name]
+    return span.attrs.get(_LEGACY_ATTRS.get(name, name), default)
 
 
 def _new_id() -> str:
@@ -102,7 +132,7 @@ def span_usage(span: Span) -> Usage:
     return Usage(
         input_tokens=int(a.get(GEN_AI_INPUT_TOKENS, 0)),
         output_tokens=int(a.get(GEN_AI_OUTPUT_TOKENS, 0)),
-        cached_tokens=int(a.get(GEN_AI_CACHED_TOKENS, 0)),
+        cached_tokens=int(_attr(span, GEN_AI_CACHED_TOKENS, 0)),
     )
 
 
@@ -258,8 +288,9 @@ def _span_detail(span: Span, price_table: Any) -> str:
     if span.kind == "model":
         u = span_usage(span)
         parts.append(f"in {u.input_tokens} (cached {u.cached_tokens}) · out {u.output_tokens}")
-        if GEN_AI_FINISH_REASON in span.attrs:
-            parts.append(str(span.attrs[GEN_AI_FINISH_REASON]))
+        reasons = _attr(span, GEN_AI_FINISH_REASONS)
+        if reasons is not None:
+            parts.append(",".join(reasons) if isinstance(reasons, (list, tuple)) else str(reasons))
         cost = _cost_of(span, price_table)
         parts.append(f"${cost:.6f}" if cost is not None else "$? (model not priced)")
     elif span.kind == "tool" and TOOL_OK in span.attrs:
@@ -316,7 +347,7 @@ def redact(value: Any, rules: tuple[RedactionRule, ...] | list[RedactionRule] = 
 
 
 class RedactingExporter:
-    """Field-level redaction at the export boundary (Primer §4.2).
+    """Field-level redaction at the export boundary (notebook 09).
 
     ``drop_attrs`` removes whole attributes (raw prompts, retrieved passages)
     that should never be exported; ``rules`` scrub PII patterns from what

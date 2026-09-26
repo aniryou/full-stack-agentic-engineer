@@ -6,7 +6,7 @@ Gemini — so you practise the mechanisms (tool contracts, loops, state, identit
 tracing, reliability, cost) rather than API plumbing. When you have a key, one import swaps in the
 real model.
 
-    83 exercises · 15 notebooks · 6.5k lines of library · 143 unit tests · every solution notebook executes clean
+    83 exercises · 15 notebooks · 6.5k lines of library · 146 unit tests · every solution notebook executes clean
 
 ## Quick start
 

@@ -15,6 +15,9 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from ..llm.types import LLM, ModelResponse, ToolCall
+from ..observability.tracing import (GEN_AI_CACHED_TOKENS, GEN_AI_FINISH_REASONS, GEN_AI_INPUT_TOKENS,
+                                     GEN_AI_OUTPUT_TOKENS, GEN_AI_REQUEST_MODEL, TOOL_CALL_ID, TOOL_ERROR,
+                                     TOOL_LATENCY_MS, TOOL_NAME, TOOL_OK)
 from .budget import Budget, BudgetExceeded
 from .context import ContextBuilder
 from .state import Event, Session, SessionStatus
@@ -130,7 +133,7 @@ class LlmAgent(BaseAgent):
                            idempotency_key=self._idempotency_key(ctx.session, step, tc), budget=ctx.budget, depth=ctx.depth,
                            extras={"invocation": ctx})
         async with ctx.semaphore:
-            with _span(ctx, f"tool {tc.name}", kind="tool", **{"tool.name": tc.name, "agent": self.name}) as span:
+            with _span(ctx, f"tool {tc.name}", kind="tool", **{TOOL_NAME: tc.name, TOOL_CALL_ID: tc.id, "agent": self.name}) as span:
                 tctx.span = span
                 try:
                     result = await asyncio.wait_for(tool.run(tc.args, tctx), timeout=ctx.tool_timeout_s)
@@ -138,8 +141,8 @@ class LlmAgent(BaseAgent):
                     result = ToolResult.failure("timeout", f"{tc.name} exceeded {ctx.tool_timeout_s}s", retryable=True,
                                                 hint="The system is slow; tell the user you will follow up if it fails again.")
                 if span is not None:
-                    span.set(**{"tool.ok": result.ok, "tool.latency_ms": round(result.latency_ms, 1),
-                                "tool.error": result.error.type if result.error else None})
+                    span.set(**{TOOL_OK: result.ok, TOOL_LATENCY_MS: round(result.latency_ms, 1),
+                                TOOL_ERROR: result.error.type if result.error else None})
                 return result
 
     # -- the loop ------------------------------------------------------------
@@ -156,7 +159,7 @@ class LlmAgent(BaseAgent):
                 ctx.budget.consume_step()
                 ctx.budget.check_time()
                 messages = self._messages(session)
-                with _span(ctx, "model.generate", kind="model", agent=self.name, **{"gen_ai.request.model": getattr(self.llm, "model_name", "?")}) as mspan:
+                with _span(ctx, "model.generate", kind="model", agent=self.name, **{GEN_AI_REQUEST_MODEL: getattr(self.llm, "model_name", "?")}) as mspan:
                     t0 = time.perf_counter()
                     resp: ModelResponse = await asyncio.wait_for(
                         self.llm.generate(messages, tools=schemas or None, **self.model_options),
@@ -164,10 +167,10 @@ class LlmAgent(BaseAgent):
                     )
                     wall_ms = (time.perf_counter() - t0) * 1000
                     if mspan is not None:
-                        mspan.set(**{"gen_ai.usage.input_tokens": resp.usage.input_tokens,
-                                     "gen_ai.usage.output_tokens": resp.usage.output_tokens,
-                                     "gen_ai.usage.cached_tokens": resp.usage.cached_tokens,
-                                     "gen_ai.response.finish_reason": resp.finish_reason,
+                        mspan.set(**{GEN_AI_INPUT_TOKENS: resp.usage.input_tokens,
+                                     GEN_AI_OUTPUT_TOKENS: resp.usage.output_tokens,
+                                     GEN_AI_CACHED_TOKENS: resp.usage.cached_tokens,
+                                     GEN_AI_FINISH_REASONS: [resp.finish_reason],
                                      "model.latency_ms": round(resp.latency_ms, 1)})
                 ctx.budget.consume_tokens(resp.usage.total)
                 ev = session.append(Event(kind="model", agent=self.name, step=step, usage=resp.usage,
