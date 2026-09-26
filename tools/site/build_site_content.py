@@ -755,6 +755,46 @@ def nav_for_dir(repo_dir: str) -> list:
     return items
 
 
+def variant_of(repo_path: str) -> tuple[str, ...]:
+    """The provider a path's folders name (lab-mistral/, mistral-agent-core/ -> ("Mistral",)), if any."""
+    tokens = {t for part in repo_path.split("/")[:-1] for t in re.split(r"[-_]", part.lower())}
+    return next((words for token, words in VARIANTS.items() if token in tokens), ())
+
+
+def mark_variant_duplicates(items: list) -> list:
+    """A page title used more than once in the nav (agent-core's and mistral-agent-core's "01 · The agent loop")
+    names its provider when its folder is a provider variant, so search results and tabs tell them apart."""
+    counts: dict[str, int] = {}
+
+    def count(entries):
+        for e in entries:
+            if isinstance(e, dict):
+                (t, v), = e.items()
+                if isinstance(v, str):
+                    counts[t] = counts.get(t, 0) + 1
+                else:
+                    count(v)
+
+    def rename(entries):
+        out = []
+        for e in entries:
+            if isinstance(e, dict):
+                (t, v), = e.items()
+                if isinstance(v, list):
+                    e = {t: rename(v)}
+                else:
+                    words = variant_of(v[len("layers/"):]) if counts.get(t, 0) > 1 else ()
+                    if words and not any(w.lower() in t.lower() for w in words):
+                        m = re.match(r"^(.*) \((solution|worked)\)$", t)
+                        t = f"{m.group(1)} ({m.group(2)}, {words[0]})" if m else f"{t} ({words[0]})"
+                    e = {t: v}
+            out.append(e)
+        return out
+
+    count(items)
+    return rename(items)
+
+
 def yaml_nav(items: list, indent: int) -> list[str]:
     pad = " " * indent
     out = []
@@ -792,6 +832,7 @@ def update_mkdocs_yml(layers: list[str]) -> str:
         sub = nav_for_dir(layer)
         if sub:
             layer_items.append({section_title(layer): sub})
+    layer_items = mark_variant_duplicates(layer_items)
     new = replace_block(text, "nav-layers", ["  - Layers:"] + yaml_nav(layer_items, 6))
     if new is None:
         return "markers missing"

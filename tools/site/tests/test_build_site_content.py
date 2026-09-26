@@ -227,3 +227,20 @@ def test_colab_index_marks_worked_answers_and_describes_every_layout():
     assert any(ln.endswith("`01_x_worked.ipynb` — *worked answers*") for ln in lines)
     assert any(ln.endswith("`01_x.ipynb` — *worked answers*") and "/solutions/" in ln for ln in lines)
     assert "Exercises are under `notebooks/` / `exercises/`" not in out
+
+
+def test_duplicate_titles_in_provider_variants_name_the_provider():
+    nav = [{"Agent core": [{"01 · The loop": "layers/07-x/agent-core/notebooks/01_loop.ipynb"},
+                           {"01 · The loop (solution)": "layers/07-x/agent-core/solutions/01_loop.ipynb"}]},
+           {"Mistral agent core": [{"01 · The loop": "layers/07-x/mistral-agent-core/notebooks/01_loop.ipynb"},
+                                   {"01 · The loop (solution)": "layers/07-x/mistral-agent-core/solutions/01_loop.ipynb"},
+                                   {"05 · Going live on Mistral": "layers/07-x/mistral-agent-core/notebooks/05.ipynb"}]},
+           {"Long-running": [{"A primer": "layers/07-x/a/primer.md"}, {"A primer": "layers/07-x/b/primer.md"}]},
+           {"GCP": [{"On Google Cloud": "layers/07-x/c/primer.md"}, {"On Google Cloud": "layers/07-x/c-gcp/p.md"}]}]
+    out = json.dumps(b.mark_variant_duplicates(nav), ensure_ascii=False)
+    assert '"01 · The loop": "layers/07-x/agent-core/' in out
+    assert '"01 · The loop (Mistral)": "layers/07-x/mistral-agent-core/notebooks' in out
+    assert '"01 · The loop (solution, Mistral)"' in out
+    assert '"05 · Going live on Mistral"' in out                  # unique titles are left alone
+    assert out.count('"A primer"') == 2                           # not a provider variant: unchanged
+    assert out.count('"On Google Cloud"') == 2                    # the title already names the provider
