@@ -1,0 +1,37 @@
+# Alertmanager configuration for Google Managed Prometheus' managed Alertmanager (T3). The rules in
+# ../06-dcgm-alert-rules.yaml only *evaluate*; GMP's rule-evaluator sends firing alerts here, and this file
+# decides who hears about them. Replace the example.invalid webhooks with your paging/ticketing/chat
+# endpoints (or use email_configs, slack_configs, ...), then load it (from deploy/gke/):
+#
+#   kubectl -n gmp-public create secret generic alertmanager \
+#     --from-file=alertmanager.yaml=alertmanager/alertmanager.example.yaml --dry-run=client -o yaml | kubectl apply -f -
+#
+# VERIFY: the Secret name and key GMP's managed Alertmanager reads (Secret "alertmanager", key
+# "alertmanager.yaml", namespace gmp-public — or whatever OperatorConfig managedAlertmanager.configSecret
+# names). This is an Alertmanager config file, not a Kubernetes manifest: it lives in its own folder so
+# that `kubectl apply -f deploy/gke/` never tries to apply it.
+#
+# Routing follows gpurt.dcgm's severities: critical pages (hardware), warning opens a ticket (node
+# operator), info notifies (application owners, idle allocations).
+route:
+  receiver: notify
+  group_by: [alertname, Hostname, gpu]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: page
+      repeat_interval: 30m
+    - matchers: ['severity="warning"']
+      receiver: ticket
+receivers:
+  - name: page
+    webhook_configs:
+      - url: https://example.invalid/page
+  - name: ticket
+    webhook_configs:
+      - url: https://example.invalid/ticket
+  - name: notify
+    webhook_configs:
+      - url: https://example.invalid/notify

@@ -1,0 +1,12 @@
+# The lab in a container with *no* CUDA in the base image: the CUDA userland arrives as pip wheels
+# (numba-cuda[cu12] pulls the CUDA runtime/NVVM wheels), and libcuda.so arrives from the host at
+# `docker run --gpus all`. `python -m gpurt.container` shows both halves (primer §6).
+#   docker build -f deploy/any-gpu/Dockerfile.lab -t gpurt-lab .        (from the lab root)
+#   docker run --rm --gpus all gpurt-lab                                # explain how this container sees its GPU
+#   docker run --rm --gpus all gpurt-lab python -m gpurt.kernels.bench --quick
+FROM python:3.12-slim
+WORKDIR /lab
+COPY pyproject.toml README.md LICENSE ./
+COPY gpurt ./gpurt
+RUN pip install --no-cache-dir -e ".[gpu]"
+CMD ["python", "-m", "gpurt.container"]

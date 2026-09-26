@@ -1,0 +1,57 @@
+# dcgm-exporter collectors for this lab: the exporter's stock default counters (etc/default-counters.csv,
+# main, read 2026-09-26) plus the three fields gpurt.dcgm needs and stock leaves out (marked "lab adds").
+# Use with a self-managed exporter:  -f /path/to/dcgm-counters.csv  (or DCGM_EXPORTER_COLLECTORS=...).
+# DCGM_FI_PROF_* fields need the SYS_ADMIN capability (docker run --cap-add SYS_ADMIN). VERIFY field names
+# for your DCGM version (DCGM_FI_DEV_CLOCKS_EVENT_REASONS was DCGM_FI_DEV_CLOCK_THROTTLE_REASONS).
+# Format: DCGM field, Prometheus metric type, help message
+
+# Clocks
+DCGM_FI_DEV_SM_CLOCK,  gauge, SM clock frequency (in MHz).
+DCGM_FI_DEV_MEM_CLOCK, gauge, Memory clock frequency (in MHz).
+DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge, Bitmask of clock-event (throttle) reasons (lab adds).
+
+# Temperature and power
+DCGM_FI_DEV_MEMORY_TEMP, gauge, Memory temperature (in C).
+DCGM_FI_DEV_GPU_TEMP,    gauge, GPU temperature (in C).
+DCGM_FI_DEV_POWER_USAGE,              gauge, Power draw (in W).
+DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, counter, Total energy consumption since the driver was last reloaded (in mJ).
+
+# PCIe
+DCGM_FI_DEV_PCIE_REPLAY_COUNTER, counter, Total number of PCIe retries.
+
+# Utilization
+DCGM_FI_DEV_GPU_UTIL,      gauge, GPU utilization (in %).
+DCGM_FI_DEV_MEM_COPY_UTIL, gauge, Memory utilization (in %).
+DCGM_FI_DEV_ENC_UTIL,      gauge, Encoder utilization (in %).
+DCGM_FI_DEV_DEC_UTIL,      gauge, Decoder utilization (in %).
+
+# Errors
+DCGM_FI_DEV_XID_ERRORS, gauge, Value of the last XID error encountered.
+
+# Memory
+DCGM_FI_DEV_FB_FREE,     gauge, Framebuffer memory free (in MiB).
+DCGM_FI_DEV_FB_USED,     gauge, Framebuffer memory used (in MiB).
+DCGM_FI_DEV_FB_RESERVED, gauge, Framebuffer memory reserved (in MiB).
+
+# NVLink
+DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, gauge, Aggregate NVLink throughput across all lanes (in MB/s).
+
+# vGPU
+DCGM_FI_DEV_VGPU_LICENSE_STATUS, gauge, vGPU License status
+
+# Remapped rows
+DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS, counter, Number of remapped rows for uncorrectable errors
+DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS,   counter, Number of remapped rows for correctable errors
+DCGM_FI_DEV_ROW_REMAP_FAILURE,           gauge,   Whether remapping of rows has failed
+
+# Driver version (as a label)
+DCGM_FI_DRIVER_VERSION, label, Driver Version
+
+# Profiling (DCP) fields
+DCGM_FI_PROF_GR_ENGINE_ACTIVE,   gauge, Ratio of time the graphics engine is active.
+DCGM_FI_PROF_SM_ACTIVE,          gauge, The ratio of cycles an SM has at least 1 warp assigned (lab adds).
+DCGM_FI_PROF_SM_OCCUPANCY,       gauge, The ratio of number of warps resident on an SM (lab adds).
+DCGM_FI_PROF_PIPE_TENSOR_ACTIVE, gauge, Ratio of cycles the tensor (HMMA) pipe is active.
+DCGM_FI_PROF_DRAM_ACTIVE,        gauge, Ratio of cycles the device memory interface is active sending or receiving data.
+DCGM_FI_PROF_PCIE_TX_BYTES,      gauge, The rate of data transmitted over the PCIe bus - including both protocol headers and data payloads - in bytes per second.
+DCGM_FI_PROF_PCIE_RX_BYTES,      gauge, The rate of data received over the PCIe bus - including both protocol headers and data payloads - in bytes per second.

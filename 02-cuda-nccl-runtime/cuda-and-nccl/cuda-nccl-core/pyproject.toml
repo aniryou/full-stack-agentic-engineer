@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpusim"
+version = "0.1.0"
+description = "The GPU software substrate simulated on a CPU: SIMT and memory, occupancy, tiling, collectives, CUDA compatibility, GPU sharing and health."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # the library is numpy + standard library
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["gpusim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
