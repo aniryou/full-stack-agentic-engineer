@@ -194,6 +194,8 @@ by smem       smem_per_SM // roundup(smem_per_block + 1 KB reserved, 128)     (C
 | 8.9 (L4) | 1,536 | 48 | 24 | 65,536 | 100 KB | 99 KB |
 | 9.0 (H100) | 2,048 | 64 | 32 | 65,536 | 228 KB | 227 KB |
 | 10.0 (B200) | 2,048 | 64 | 32 | 65,536 | 228 KB | 227 KB (verify) |
+| 10.3 (B300) | 2,048 | 64 | 32 | 65,536 | 228 KB | 227 KB (verify) |
+| 12.0 (RTX 5090, RTX PRO 6000) | 1,536 | 48 | 32 | 65,536 | 128 KB | 99 KB (verify) |
 
 Worked on an **L4**. A block of 256 threads using 64 registers per thread gives 2,048 registers per warp. The
 16,384 in each sub-partition hold 8 warps, so 32 warps per SM, which is **4 blocks and 67% occupancy**,
