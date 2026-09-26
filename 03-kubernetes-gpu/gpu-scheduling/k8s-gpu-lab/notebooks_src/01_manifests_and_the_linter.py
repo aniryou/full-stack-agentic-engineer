@@ -21,6 +21,8 @@
 # CPU request of a 1-GPU pod. Primer: [`../../PRIMER.md`](../../PRIMER.md).
 
 # %%
+import copy
+
 from k8sgpu import lint, machines
 from k8sgpu import manifests as m
 
@@ -251,6 +253,7 @@ broken = {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "l
                                     "ports": [{"containerPort": 8000}],
                                     "resources": {"requests": {m.GPU: 1}},
                                     "livenessProbe": {"httpGet": {"path": "/health", "port": 8000}}}]}}}}
+original = copy.deepcopy(broken)  # the check compares your edit with this
 ### BEGIN SOLUTION
 spec = broken["spec"]["template"]["spec"]
 c0 = spec["containers"][0]
@@ -262,9 +265,29 @@ broken["spec"]["strategy"] = {"type": "RollingUpdate", "rollingUpdate": {"maxSur
 ### END SOLUTION
 
 # %% check
-left = lint.lint(broken, machine="g2-standard-8", expected_load_s=240)
-assert not [f for f in left if f.severity in ("error", "warning")], lint.format_findings(left)
-print("✅ lint-clean:", lint.format_findings(left))
+def serious(obj):
+    return [f for f in lint.lint(obj, machine="g2-standard-8", expected_load_s=240) if f.severity in ("error", "warning")]
+
+
+def gpus(container):  # the GPU count a container asks for: the limit, or the request if no limit is set
+    res = container.get("resources") or {}
+    q = (res.get("limits") or {}).get(m.GPU, (res.get("requests") or {}).get(m.GPU, 0))
+    return int(lint.parse_quantity(q))
+
+
+was = serious(original)
+assert len(was) >= 5, "`original` must be the Deployment as given: the linter flags it with 1 error and 4 warnings"
+assert not serious(broken), lint.format_findings(serious(broken))
+assert broken.get("kind") == "Deployment" and broken["metadata"] == original["metadata"], \
+    "fix the same Deployment in place: same kind, name and namespace"
+got = broken["spec"]["template"]["spec"].get("containers") or []
+want = original["spec"]["template"]["spec"]["containers"]
+assert [(x.get("name"), x.get("image")) for x in got] == [(x["name"], x["image"]) for x in want], \
+    "keep the vllm container: a pod without it serves nothing"
+assert gpus(got[0]) == gpus(want[0]) and (got[0]["resources"].get("limits") or {}).get(m.GPU) is not None, \
+    "the container must still get its GPU, as a limit"
+print("✅ lint-clean — cleared:", ", ".join(sorted({f.rule for f in was})))
+print(lint.format_findings(lint.lint(broken, machine="g2-standard-8", expected_load_s=240)))
 
 # %% [markdown]
 # ## Two more ways to ask for a GPU
