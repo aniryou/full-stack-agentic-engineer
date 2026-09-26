@@ -7,8 +7,8 @@ live on Mistral.
 
 The core loop is provider-agnostic — that is the point. `FakeLLM` runs it offline;
 `MistralLLM` runs it against `la Plateforme`; nothing else changes. The full-featured
-version (async, parallel tools, MCP, OAuth, evals, tracing) is the separate
-`gcp-agent-platform-lab` — the **step-up** for later. Learn it here first.
+version (async, parallel tools, MCP, OAuth, evals, tracing) is
+[`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md), next to this lab — the **step-up** for later. Learn it here first.
 
 ## Quick start (offline, no key)
 

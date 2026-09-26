@@ -4,7 +4,7 @@ The smallest honest agent: **a fake model, a tool, and the loop** — the one id
 rest of the stack keeps circling back to. Pure standard library, synchronous, about 200
 lines you can read in a sitting, plus four fill-in notebooks.
 
-This is the *starter*. The full `gcp-agent-platform-lab` (async, parallel tools, MCP,
+This is the *starter*. The full [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md) (async, parallel tools, MCP,
 OAuth, evals, tracing) is the **step-up** for later — same concepts, much more
 machinery. Learn it here first.
 
@@ -51,7 +51,7 @@ prints ✅ when you get it right. Solutions are in `solutions/`.
 1. **`01_the_agent_loop`** — build the loop yourself (termination, tool dispatch, the loop, the budget), then meet the packaged `Agent`.
 2. **`02_tools`** — tool contracts: schema, validation, structured errors, an idempotent write, and watching the loop recover from a not-found error.
 3. **`03_state_and_control`** — multi-turn memory, a policy that reacts to results, duplicate-call detection, reasoning about the step budget.
-4. **`04_mini_support_agent`** — a small bank support agent: every fact from a tool, a card block gated by human approval, out-of-scope work escalated as a case. The primer's §8.1 scenario, shrunk.
+4. **`04_mini_support_agent`** — a small bank support agent: every fact from a tool, a card block gated by human approval, out-of-scope work escalated as a case. The bank agent of `gcp-agent-platform-lab`'s capstone (notebook 14), shrunk.
 
 ## Regenerating notebooks
 
