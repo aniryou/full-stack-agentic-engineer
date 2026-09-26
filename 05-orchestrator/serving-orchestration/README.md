@@ -7,8 +7,8 @@ then run those decisions as a real router in front of real or emulated engines.
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md): "The one-minute version", then §1 — why a replica is a cache and round-robin fails.
-2. `cd orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 57 tests in about
-   4 s; then open [`01_why_llm_load_balancing_is_different`](orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb).
+2. `cd orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 58 tests in about
+   5 s; then open [`01_why_llm_load_balancing_is_different`](orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb).
 3. Put a real router in front of three emulated engines, still on a laptop CPU:
    [`inference-gateway-lab/notebooks/01_router_in_process.ipynb`](inference-gateway-lab/notebooks/01_router_in_process.ipynb).
 
@@ -48,7 +48,7 @@ Finish with the primer's "In a design review": a two-minute walkthrough and six 
 ```bash
 cd orchestrator-core
 python3 -m pip install -r requirements.txt     # only to run the notebooks and tests; the library is stdlib-only
-python3 -m pytest -q                           # 57 tests, ~4 s, pinned to hand-computed numbers
+python3 -m pytest -q                           # 58 tests, ~5 s, pinned to hand-computed numbers
 python3 -m jupyterlab notebooks                # do the exercises; finished versions are in solutions/
 
 cd ../inference-gateway-lab

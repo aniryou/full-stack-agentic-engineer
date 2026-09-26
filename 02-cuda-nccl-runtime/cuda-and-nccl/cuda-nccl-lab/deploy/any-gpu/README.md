@@ -32,6 +32,9 @@ python -m gpurt.container                   # how this process sees the GPU, and
 python -m gpurt.kernels.bench --quick --json out/kernels.json   # notebook 02 prints this file if present
 ```
 
+`gpurt.kernels.bench` times real kernels, so it needs the GPU and `numba-cuda`: without them it stops with one
+line and exit status 2 (`python -m gpurt.env` says why). On a laptop, notebook 02's T0 path is the equivalent.
+
 With two or more GPUs and a CUDA build of PyTorch (T2):
 
 ```bash

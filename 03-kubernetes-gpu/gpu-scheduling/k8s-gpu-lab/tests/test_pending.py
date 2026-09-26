@@ -97,3 +97,30 @@ def test_fixture_sources_are_not_nested():
         src = pending.load_fixture(name)["source"]
         assert src.count("in the documented format") == 1 and src.count("(illustrative)") == 1, name
         assert "simulated by k8sgpu.kindsim" in src or "written by hand" in src, name
+
+
+def test_every_pending_command_in_the_docs_is_a_real_invocation(capsys):
+    """Each `python3 -m k8sgpu pending ...` in this lab's Markdown parses, and the offline ones exit 0
+    (a bare `pending` exits 2: it needs --list, --fixture, --live or a pod JSON file)."""
+    import pathlib
+    import re
+    import shlex
+
+    from k8sgpu.__main__ import main
+    root = pathlib.Path(__file__).resolve().parents[1]
+    cmds = [m.group(1) for md in root.rglob("*.md") if ".ipynb_checkpoints" not in md.parts
+            for m in re.finditer(r"python3 -m k8sgpu (pending[^`\n#]*)", md.read_text(encoding="utf-8"))]
+    assert len(cmds) >= 3
+    for cmd in cmds:
+        args = shlex.split(cmd)
+        if "--live" in args:                                  # needs a cluster: check the shape only
+            assert args.index("--live") + 1 < len(args) and "-n" in args, cmd
+            continue
+        assert main(args) == 0, cmd
+    capsys.readouterr()
+
+
+def test_live_with_an_empty_pod_name_says_so(capsys):
+    from k8sgpu.__main__ import main
+    assert main(["pending", "--live", "", "-n", "ml"]) == 2
+    assert "--live got an empty pod name" in capsys.readouterr().err

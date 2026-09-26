@@ -95,7 +95,15 @@ def step_cost(gpu: GPU, llm: LLM, chunks, flop_eff=0.6, bw_eff=0.8, overhead_s=0
     rows per request (default 1, its last token; a speculative verify pass needs k + 1), and
     4 x layers x heads x head_dim per (query, key) pair of attention. Bytes: the streamed weights once,
     each request's cached KV once, the new KV written. Returns FLOPs, bytes, both times and the bound.
-    (A one-line version of layer 01's roofline.llm model, cheap enough to run every simulated step.)"""
+    (A one-line version of layer 01's roofline.llm model, cheap enough to run every simulated step.)
+
+    The same H100 is modelled differently one layer up: layer 06's
+    06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/scalelab/serving.py
+    (`Replica.step_seconds`) prices a decode step as bytes / (BW x 0.6) + 2 ms, with no compute
+    term, where this uses max(bytes / (BW x 0.8), flops / (peak x 0.6)) + 2 ms. For a decode step
+    that reads 15 GB (Llama-3.1-8B's streamed weights) that is ~9.5 ms there against 7.6 ms here,
+    about 25% apart. Both efficiencies are assumptions, not measurements: calibrate either against
+    a measured vLLM step (the serving lab's bench) before trusting absolute times."""
     if llm.compute_scale > 1 and not gpu.fp8:
         raise ValueError(f"{gpu.name} has no FP8 tensor cores: FP8 weights run weight-only (compute_scale=1)")
     chunks = [(c[0], c[1], c[2] if len(c) > 2 else 1) for c in chunks]

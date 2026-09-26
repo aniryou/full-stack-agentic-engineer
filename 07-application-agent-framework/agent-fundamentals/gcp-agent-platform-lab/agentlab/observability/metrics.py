@@ -1,4 +1,4 @@
-"""Metrics derived from traces (Primer §4.2, §5.3).
+"""Metrics derived from traces (notebooks 09 and 12).
 
 Everything here is arithmetic over ``Span`` objects and streamed chunks:
 
@@ -119,8 +119,8 @@ class Price:
 class PriceTable:
     """Per-model prices plus aliases (``fake-flash`` → ``gemini-3-flash``).
 
-    ``cost`` bills uncached input, cached input and output separately (Primer
-    §5.3 A); thinking tokens are billed as output, as Gemini does.
+    ``cost`` bills uncached input, cached input and output separately (notebook 12,
+    scenario A); thinking tokens are billed as output, as Gemini does.
     """
 
     def __init__(self, prices: dict[str, Price], aliases: dict[str, str] | None = None, note: str = ""):
@@ -224,7 +224,7 @@ def tokens_per_task(summaries: Iterable[TraceSummary]) -> dict[str, float]:
 
 
 def cost_per_resolved(summaries: Iterable[TraceSummary], resolved: Callable[[TraceSummary], bool]) -> float:
-    """Total spend divided by the tasks actually resolved — the unit economics number (Primer §5.3).
+    """Total spend divided by the tasks actually resolved — the unit economics number (notebook 12).
 
     Cost per *conversation* flatters an agent that gives up cheaply; cost per
     *resolution* charges every failed attempt to the successes.

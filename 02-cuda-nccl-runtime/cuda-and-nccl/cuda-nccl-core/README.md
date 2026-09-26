@@ -7,7 +7,7 @@ nccl-tests will report, whether a CUDA build runs under a given driver and GPU, 
 
 ## Start here
 
-1. `python3 -m pytest -q` in this folder — 128 tests, well under a second.
+1. `python3 -m pytest -q` in this folder — 133 tests, well under a second.
 2. Paste the tour below into a `python3` prompt: a column walk costs 32 sectors, a ring all-reduce prints its
    six steps, busbw reads 447 GB/s, and a CUDA 12.4 build fails on driver 535 with error 222, with the reason.
 3. Open [`notebooks/01_simt_warps_and_memory.ipynb`](notebooks/01_simt_warps_and_memory.ipynb) with the
@@ -44,7 +44,7 @@ check cell that prints ✅ when you are right, and *In a design review* drills; 
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core
 python3 -m pip install -r requirements.txt   # numpy + the notebook/test tools
-python3 -m pytest -q                          # 128 tests, well under a second
+python3 -m pytest -q                          # 133 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

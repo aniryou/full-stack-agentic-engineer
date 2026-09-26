@@ -2,7 +2,7 @@
 
 ## Why the KV cache is the problem
 
-Serving throughput for autoregressive LLMs is, to first order, a batching problem: the GPU is compute-starved during decode, so you want as many concurrent sequences per forward pass as possible, and the binding constraint on batch size is memory. Weights are static and activations are small, so the dynamic consumer of memory is the KV cache. During decoding, each new token attends over the keys and values of every token before it; recomputing those projections each step would make generation quadratic in sequence length, so serving engines cache them. The cache grows by one token's worth of K and V per layer per step, lives for the entire request, and its final size is unknown in advance because you don't know how long the model will generate.
+Serving throughput for autoregressive LLMs is, to first order, a batching problem: decode is memory-bandwidth-bound — each step reads all the weights and every cached K and V to produce one token per sequence — so the tensor cores sit mostly idle unless many sequences share each forward pass, and the binding constraint on batch size is memory. Weights are static and activations are small, so the dynamic consumer of memory is the KV cache. During decoding, each new token attends over the keys and values of every token before it; recomputing those projections each step would make generation quadratic in sequence length, so serving engines cache them. The cache grows by one token's worth of K and V per layer per step, lives for the entire request, and its final size is unknown in advance because you don't know how long the model will generate.
 
 The footprint is large. Per token, the cache costs `2 × n_layers × n_kv_heads × d_head × bytes_per_element` (the 2 covers K and V). For LLaMA-13B in FP16 — 40 layers, 40 heads of dimension 128 — that works out to roughly 800 KB per token, so a single 2,048-token sequence occupies about 1.6 GB. On a 40 GB A100, the FP16 weights already take 26 GB, leaving room for only a handful of max-length sequences if each one gets a full reservation. Batch size, and therefore throughput, is bottlenecked by exactly this arithmetic.
 
@@ -57,3 +57,17 @@ A 13B FP16 model costs ~800 KB of KV cache per token, so ~1.6 GB per 2K-token se
 ## Sources
 
 Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023 (arXiv:2309.06180) — the primary source, and unusually readable. Yu et al., "Orca," OSDI 2022, for continuous batching. Zheng et al., "SGLang" (arXiv:2312.07104) for RadixAttention. Prabhu et al., "vAttention" (arXiv:2405.04437) for the counter-argument. Dao et al., FlashAttention 1/2, for the compute-side complement.
+
+## Verify list (dated 2026-09-26)
+
+Paper and product facts this primer states; nothing here was re-measured.
+
+| Item | Value used | Why it needs checking |
+|---|---|---|
+| LLaMA-13B shape and memory | 40 layers, 40 heads of dimension 128; ~800 KB of FP16 KV per token; 26 GB of FP16 weights on a 40 GB A100 | model config and the paper's setup |
+| KV utilization before and after paging | 20–40% of KV memory held token state before; waste 60–80% before and under 4% with paging | PagedAttention paper (Kwon et al., SOSP 2023) |
+| Kernel overhead | 20–26% extra attention-kernel latency versus a contiguous layout | paper microbenchmark, on the paper's GPUs and kernel |
+| Sharing savings | ~6–10% for parallel sampling, up to ~55% for wide beam search | paper figures |
+| Throughput | 2–4× over FasterTransformer and Orca at matched latency | paper figure; engines have changed a lot since |
+| Default block size | 16 tokens in vLLM | engine default; attention backends may choose another size |
+| Adoption | TensorRT-LLM, HF TGI, SGLang and LMDeploy use paged KV caches; FlashAttention-2/3 and FlashInfer accept paged layouts | project docs at the release in use |

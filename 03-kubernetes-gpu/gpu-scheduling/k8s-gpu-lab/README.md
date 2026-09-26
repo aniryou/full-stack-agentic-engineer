@@ -11,7 +11,7 @@ The concepts are in the topic primer, [`../PRIMER.md`](../PRIMER.md); this lab c
 
 ## Start here
 
-1. Install and run the tests (below) — 118 tests, offline, no cluster.
+1. Install and run the tests (below) — 120 tests, offline, no cluster, in under 10 s.
 2. `python3 -m k8sgpu kind predict s2` — the predictor's step-by-step outcome for a gang scenario (simulated).
 3. Open [`notebooks/01_manifests_and_the_linter.ipynb`](notebooks/01_manifests_and_the_linter.ipynb); with Docker,
    bring up [`deploy/kind`](deploy/kind/README.md) and continue with notebook 02.
@@ -41,7 +41,7 @@ pods, but there is no device plugin, no `/dev/nvidia*`, no CUDA — the pods pri
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                               # 118 tests, ~5 s, offline
+python3 -m pytest -q                               # 120 tests, under 10 s, offline
 python3 -m k8sgpu kind predict s2                  # the predictor's step-by-step outcome (simulated)
 python3 -m k8sgpu lint deploy/gke/40-serving-vllm-gcsfuse.yaml --machine g2-standard-4 --load-seconds 120
 python3 -m k8sgpu pending --list                   # 17 Pending-pod fixtures (illustrative); --fixture NAME to diagnose one
