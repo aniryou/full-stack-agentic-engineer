@@ -28,26 +28,27 @@ a **Check** cell that fails loudly until your solution is right and prints ✅ w
 solved version of every notebook is in `solutions/` — try the exercise first, then compare. Each
 notebook ends with *The one-minute version*: how to explain that topic in a design review.
 
-| # | Notebook | Primer | What you build |
+| # | Notebook | Deeper in this repo | What you build |
 |---|----------|--------|----------------|
-| 00 | Setup and the fake model | 0, 2.1 | drive a function-calling model three ways; see caching and usage |
-| 01 | Agent loop and tools | 2.1, 3.1 | tool contracts from signatures, structured errors, idempotency, the loop with budgets and parallel calls |
-| 02 | Workflows and multi-agent | 2.2, 2.3 | sequential/parallel/loop agents, delegation, when an extra agent earns its keep |
-| 03 | State, sessions, checkpoints | 2.4 | event log vs working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
-| 04 | Context engineering and caching | 2.5 | cache-friendly layout, compaction, tool-result shaping, token budgets |
-| 05 | MCP server, client, gateway | 3.2 | a teaching subset of MCP (2026-07-28 shape): stateless requests, mirrored headers, MRTR, Tasks; a policy gateway |
-| 06 | OAuth and identity propagation | 3.3 | PKCE, resource indicators, audience-bound tokens, step-up, token exchange, the confused deputy |
-| 07 | The agent's own API | 3.5 | sessions, SSE-style event streams, 202 + task handles, idempotency keys, rate limits |
-| 08 | Evals: trajectory, judge, gates | 4.1 | golden sets, trajectory metrics, judge calibration (kappa), release gates with confidence intervals |
-| 09 | Tracing and metrics | 4.2, 4.3 | spans with `gen_ai.*` attributes, cost per conversation, p95 by step, TTFT and tokens/s, alerts |
-| 10 | Reliability | 4.4 | backoff with jitter, idempotent retries, circuit breakers, bulkheads, deadlines, fallbacks |
-| 11 | Security and prompt injection | 4.5 | indirect injection demo, provenance-tagged data blocks, screening, allowlists, redaction |
-| 12 | Resource estimation | 5 | the primer's worked numbers reproduced: cost, peak TPM, Little's law, latency waterfall, vectors |
-| 13 | Code evaluation | 7 | two full buggy programs and six drills with tests that pass only when your fixes are right |
-| 14 | Capstone: the bank agent | 8.1 | everything assembled along the spine, with a gate, traces, and a production cost estimate |
+| 00 | Setup and the fake model | — | drive a function-calling model three ways; see caching and usage |
+| 01 | Agent loop and tools | [sandbox](../../sandboxed-execution/PRIMER.md) §3 | tool contracts from signatures, structured errors, idempotency, the loop with budgets and parallel calls |
+| 02 | Workflows and multi-agent | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 | sequential/parallel/loop agents, delegation, when an extra agent earns its keep |
+| 03 | State, sessions, checkpoints | [durable](../../long-running-durable/00_primer.md) §2–§3 | event log vs working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
+| 04 | Context engineering and caching | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 | cache-friendly layout, compaction, tool-result shaping, token budgets |
+| 05 | MCP server, client, gateway | [MCP revisions](docs/MCP_REVISIONS.md); [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 | a teaching subset of MCP (2026-07-28 shape): stateless requests, mirrored headers, MRTR, Tasks; a policy gateway |
+| 06 | OAuth and identity propagation | [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5, §7.1 | PKCE, resource indicators, audience-bound tokens, step-up, token exchange, the confused deputy |
+| 07 | The agent's own API | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3, §5.7 | sessions, SSE-style event streams, 202 + task handles, idempotency keys, rate limits |
+| 08 | Evals: trajectory, judge, gates | — | golden sets, trajectory metrics, judge calibration (kappa), release gates with confidence intervals |
+| 09 | Tracing and metrics | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.10 | spans with `gen_ai.*` attributes, cost per conversation, p95 by step, TTFT and tokens/s, alerts |
+| 10 | Reliability | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.2 | backoff with jitter, idempotent retries, circuit breakers, bulkheads, deadlines, fallbacks |
+| 11 | Security and prompt injection | [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §6; [sandbox](../../sandboxed-execution/PRIMER.md) §1 | indirect injection demo, provenance-tagged data blocks, screening, allowlists, redaction |
+| 12 | Resource estimation | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 | worked numbers reproduced: cost, peak TPM, Little's law, latency waterfall, vectors |
+| 13 | Code evaluation | [vectors](../../retrieval-rag/vector-databases-primer.md) §12 | two full buggy programs and six drills with tests that pass only when your fixes are right |
+| 14 | Capstone: the bank agent | all of the above | everything assembled along the spine, with a gate, traces, and a production cost estimate |
 
 A reasonable pace is one or two notebooks per evening; 13 and 14 deserve a full session each.
-`docs/PRIMER_MAP.md` maps each primer section to notebooks, modules and exercises.
+[`docs/PRIMER_MAP.md`](docs/PRIMER_MAP.md) maps each concept to its notebooks, modules, key exercises and
+the primers elsewhere in this repo that go deeper.
 
 ## The library, in one screen
 
@@ -109,7 +110,7 @@ to ADK are in `docs/GEMINI_ADAPTER.md`.
 agentlab/           library            tests/          pytest (unit + slow notebook execution)
 notebooks_src/    notebook sources   tools/          build_notebooks.py, run_notebooks.py
 notebooks/        exercises          solutions/      solved notebooks
-docs/             primer map, ADK mapping, Gemini adapter, contributing
+docs/             concept map, MCP revisions, ADK mapping, Gemini adapter, contributing
 ```
 
 MIT licensed.

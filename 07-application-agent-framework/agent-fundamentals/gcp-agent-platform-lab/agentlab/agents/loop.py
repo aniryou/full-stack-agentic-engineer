@@ -1,4 +1,4 @@
-"""The agent loop (Primer §2.1) and delegation (§2.3).
+"""The agent loop (notebook 01) and delegation (notebook 02).
 
 ``LlmAgent.run`` is the whole ReAct loop in one place: build context → call the
 model → validate and execute tool calls (in parallel, under a semaphore, with
@@ -267,7 +267,7 @@ class LlmAgent(BaseAgent):
 
 
 class AgentTool:
-    """Expose an agent as a tool: hierarchical delegation (Primer §2.3).
+    """Expose an agent as a tool: hierarchical delegation (notebook 02).
 
     The sub-agent runs in its own child session so its transcript does not
     pollute the parent's context; only its final answer comes back. Two
