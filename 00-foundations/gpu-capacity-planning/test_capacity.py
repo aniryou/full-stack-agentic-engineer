@@ -1,4 +1,5 @@
-"""Pins the numbers PRIMER.md quotes. Run: python -m pytest -q test_capacity.py (standard library + pytest)."""
+"""Pins the numbers PRIMER.md quotes and checks the practice notebooks.
+Run: python -m pytest -q test_capacity.py (standard library + pytest)."""
 import math
 import sys
 from pathlib import Path
@@ -43,3 +44,46 @@ def test_prefill_attention_term():
     assert round(c.prefill_flops(24, 32000, SMALL) / 1e15, 2) == 1.87
     assert round(c.ttft_s(24, 2000, H100), 3) == 0.097 and round(c.ttft_s(24, 32000, H100, model=SMALL), 2) == 1.89
     assert c.prefill_flops(41, 2000, c.MISTRAL_LARGE) == c.prefill_flops(41, 2000)   # no q_heads: weights only
+
+
+# --- the practice notebooks: the solution runs, and each check cell fails a wrong answer -------------------------
+NB = Path(__file__).resolve().parent / "notebooks"
+WRONG = {  # old answers that used to pass a single range assert, plus the old GiB units
+    "decode_tok_s": "def decode_tok_s(weight_gb_, gpu):\n    return 70\n",
+    "ttft_s": "def ttft_s(active_b, prompt_tokens, gpu, mfu=0.5):\n    return prompt_tokens / 20000\n",
+    "concurrency": "def concurrency(rps, active_b, in_tok, out_tok, gpu, tpot_ms=40):\n    return 100\n",
+    "kv_per_token_kb": "def kv_per_token_kb(m, dtype):\n"
+                       "    return 2 * m['layers'] * m['kv_heads'] * m['head_dim'] * BYTES[dtype] / 1024\n",
+    "max_sessions": "def max_sessions(spare_gb, m, context_tokens, dtype):\n"
+                    "    return spare_gb / (kv_per_token_kb(m, dtype) * context_tokens / (1024 * 1024))\n",
+}
+
+
+def _run_notebook(name, monkeypatch, replace=None):
+    """Execute a notebook's code cells in-process (they are standard library only); return the namespace."""
+    import json
+    monkeypatch.chdir(NB)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    cells = [("".join(cell["source"])) for cell in json.loads((NB / name).read_text())["cells"] if cell["cell_type"] == "code"]
+    ns = {}
+    for src in cells:
+        fn = next((f for f in (replace or {}) if src.startswith(f"def {f}(")), None)
+        exec(compile(replace[fn] if fn else src, name, "exec"), ns)
+    return ns
+
+
+def test_practice_solution_runs_and_reproduces_the_bank(monkeypatch, capsys):
+    ns = _run_notebook("01_capacity_practice_solved.ipynb", monkeypatch)
+    assert (round(ns["per_gpu_fp8"], 1), round(ns["per_gpu_bf16"], 1)) == (355.1, 88.8)
+    assert "163.84 kB (bf16)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("fn", sorted(WRONG))
+def test_practice_checks_fail_a_wrong_answer(fn, monkeypatch):
+    with pytest.raises(AssertionError):
+        _run_notebook("01_capacity_practice_solved.ipynb", monkeypatch, {fn: WRONG[fn]})
+
+
+def test_practice_blank_stops_at_the_first_exercise(monkeypatch):
+    with pytest.raises(NotImplementedError):
+        _run_notebook("01_capacity_practice.ipynb", monkeypatch)

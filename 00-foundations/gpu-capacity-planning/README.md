@@ -14,8 +14,8 @@ Mistral Small 3 (24B dense) and Mistral Large 3 (675B MoE).
 | `PRIMER.md` | The reference. Mental model, ~8 formulas, worked example, MoE, cheat-sheet. |
 | `capacity.py` | Every formula as a small plain-Python function. No numpy. |
 | `worked_example.py` | Runs it all: Mistral Small on H100, the bank, Mistral Large 3. |
-| `test_capacity.py` | Pins the numbers `PRIMER.md` quotes (units, the bank example, prefill's attention term). |
-| `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions; assertions check you. |
+| `test_capacity.py` | Pins the numbers `PRIMER.md` quotes (units, the bank example, prefill's attention term) and checks the practice notebooks: the solution runs and each check cell fails a wrong answer. |
+| `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions; the checks compare them with `capacity.py` on several inputs. |
 | `notebooks/01_capacity_practice_solved.ipynb` | Solutions. |
 
 ## Run
