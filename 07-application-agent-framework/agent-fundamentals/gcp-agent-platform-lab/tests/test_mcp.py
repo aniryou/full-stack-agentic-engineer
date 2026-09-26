@@ -171,11 +171,27 @@ async def test_no_elicitation_capability_gets_a_tool_error_not_a_hang():
     assert result["isError"] and result["structuredContent"]["error"] == "input_required"
 
 
+async def test_every_ordinary_result_carries_result_type_complete():
+    # 2026-07-28 schema: every Result carries resultType; "complete" for an ordinary one.
+    server = make_server()
+    client = McpClient(InProcessTransport(server))
+    assert (await client.discover())["resultType"] == "complete"
+    assert (await client.request("tools/list"))["resultType"] == "complete"
+    ok = await client.request("tools/call", {"name": "get_order", "arguments": {"order_id": "ORD-1"}})
+    assert ok["resultType"] == "complete" and not ok["isError"]
+    failed = await client.request("tools/call", {"name": "get_order", "arguments": {}})
+    assert failed["resultType"] == "complete" and failed["isError"]
+    raw = await client.request("tools/call", {"name": "reconcile", "arguments": {"batch": "b9"}})
+    assert raw["resultType"] == "task"                    # a result that names its kind keeps it
+    t = await client.get_task(raw["task"]["taskId"])
+    assert t["resultType"] == "complete"
+
+
 # ------------------------------------------------------------------ tasks
 async def test_no_task_for_client_without_the_extension():
     client = McpClient(InProcessTransport(make_server()), capabilities=client_capabilities(tasks=False))
     raw = await client.request("tools/call", {"name": "slow_export", "arguments": {"rows": 3}})
-    assert "resultType" not in raw and raw["structuredContent"] == {"rows": 3}
+    assert raw["resultType"] == "complete" and raw["structuredContent"] == {"rows": 3}
     inline = await client.call_tool("reconcile", {"batch": "b"}, on_input_required=say_yes)
     assert inline["structuredContent"] == {"batch": "b", "posted": True}
 

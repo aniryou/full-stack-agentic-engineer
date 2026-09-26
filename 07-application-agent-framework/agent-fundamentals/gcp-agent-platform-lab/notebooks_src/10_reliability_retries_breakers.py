@@ -6,7 +6,7 @@
 # standard mechanisms concrete with fake clocks and injected sleeps, so nothing waits and every
 # state transition is visible.
 #
-# **Primer sections:** 4.4 (reliability patterns), with §3.1 (tool error contracts) and §2.4 (durable tasks).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.2 (retries, jitter, breakers, fallbacks, hedging).
 #
 # In this notebook you will:
 # 1. watch a naive retry refund a customer twice, then fix it with an idempotency key;

@@ -1,15 +1,14 @@
 # %% [markdown]
 # # 13 · Code review exercises — read, spot, rank, fix
 #
-# The "code evaluation" round hands you 30–60 lines and asks three things: *what is wrong*, *how bad is each
+# A code review hands you 30–60 lines and asks three things: *what is wrong*, *how bad is each
 # thing*, and *what is the optimal solution*. Fluent reviewers do not hunt for bugs at random: they run the same
 # passes every time and narrate as they go. This notebook makes you practise that on the two systems a platform
 # engineer actually ships — a tool-calling agent loop and a retrieval pipeline — and then drills six patterns reviewers
 # keep reusing.
 #
-# **Primer sections:** 2.1 (the single-agent loop), 3.1 (tool contracts), 4.4 (reliability patterns) and 4.5 (prompt
-# injection and defences), with §2.5 (context engineering) for the retrieval exercise. It pulls together Notebooks
-# 01, 04, 10 and 11 in the form a code review uses: someone else's code.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [vector databases primer](../../../retrieval-rag/vector-databases-primer.md) §12 (the retrieval pipeline end to
+# end). It pulls together Notebooks 01, 04, 10 and 11 in the form a code review uses: someone else's code.
 #
 # In this notebook you will:
 # 1. run a six-pass review protocol on a buggy agent loop and a buggy retriever, writing the review *before* touching the code;

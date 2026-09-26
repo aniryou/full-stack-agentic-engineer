@@ -1,6 +1,8 @@
 import asyncio
 import json
 import math
+import re
+from pathlib import Path
 
 import pytest
 
@@ -152,11 +154,20 @@ async def test_loop_writes_convention_attributes_on_model_and_tool_spans():
     assert t[TOOL_NAME] == "get_balance" and t[TOOL_CALL_ID] and "tool.name" not in t
 
 
-def test_spans_written_with_the_old_names_still_price_and_render():
+def test_no_lab_code_or_notebook_writes_the_pre_convention_attribute_names():
+    # The capstone once wrote gen_ai.usage.cached_tokens / gen_ai.response.finish_reason; the
+    # library no longer reads those names, so such a span would lose its cached-token price.
+    root = Path(__file__).resolve().parents[1]
+    offenders = [str(p.relative_to(root)) for d in ("agentlab", "notebooks_src") for p in (root / d).rglob("*.py")
+                 if re.search(r'"gen_ai\.usage\.cached_tokens"|"gen_ai\.response\.finish_reason"', p.read_text())]
+    assert offenders == []
+
+
+def test_spans_are_read_by_their_convention_names_only():
     tracer = Tracer(clock=FakeClock())
     with tracer.span("model.generate", kind="model", **{GEN_AI_REQUEST_MODEL: "fake-flash"}) as s:
-        s.set(**{GEN_AI_INPUT_TOKENS: 1000, GEN_AI_OUTPUT_TOKENS: 10, "gen_ai.usage.cached_tokens": 400,
-                 "gen_ai.response.finish_reason": "stop"})
+        s.set(**{GEN_AI_INPUT_TOKENS: 1000, GEN_AI_OUTPUT_TOKENS: 10, GEN_AI_CACHED_TOKENS: 400,
+                 GEN_AI_FINISH_REASONS: ["stop"]})
     from agentlab.observability import span_usage
     assert span_usage(s).cached_tokens == 400
     assert "(cached 400)" in tracer.render_tree() and "stop" in tracer.render_tree()

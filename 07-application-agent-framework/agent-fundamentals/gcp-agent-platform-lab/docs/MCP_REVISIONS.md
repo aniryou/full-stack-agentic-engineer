@@ -35,10 +35,6 @@ takes ten minutes" — into ordinary request/response, which is what lets the se
 The lab keeps what a design discussion needs; these are the known gaps, so nobody mistakes the
 lab for a conformant implementation:
 
-- **`resultType` on complete results.** The 2026-07-28 schema requires every result to carry
-  `resultType` (`"complete"` for an ordinary one). The lab's server omits it on complete results
-  and sets it only for `"input_required"` and `"task"` — the same thing a client must assume for
-  an earlier-revision server, which treats a missing field as `"complete"`.
 - **The task handle** is returned as `resultType: "task"` with a `task` object. `ResultType` is an
   open string in the schema, so an extension can add values; check the Tasks extension's own
   page for the exact shape before relying on it (verify).
@@ -56,6 +52,9 @@ An agent that must reach both kinds of server needs a client that can do the `in
 handshake and keep the session id for 2025 servers, and send `_meta` per request for 2026 ones.
 The 2026-07-28 revision names the probe: call `server/discover` first (the changelog calls
 it out for stdio in particular); a server that answers speaks the new revision, one that
-returns method-not-found gets the old handshake. The lab speaks only 2026-07-28 on both sides:
+returns method-not-found gets the old handshake. A 2025 server sends no `resultType`; the
+2026-07-28 schema tells the client to treat a missing field as `"complete"`, which is what the
+lab's client does (the lab's server sets `"complete"` on every ordinary result).
+The lab speaks only 2026-07-28 on both sides:
 its server rejects a client that sends `protocol_version="2025-11-25"` with -32022 and lists
 the versions it supports (see `tests/test_mcp.py`).

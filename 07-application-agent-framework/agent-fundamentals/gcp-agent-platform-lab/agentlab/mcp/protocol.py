@@ -187,13 +187,20 @@ def _jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
+def complete_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Mark an ordinary result ``resultType: "complete"``, as the 2026-07-28 schema requires of every
+    result; one that already names its kind (``input_required``, ``task``) is returned unchanged."""
+    return result if "resultType" in result else {"resultType": "complete", **result}
+
+
 def call_tool_result(result: ToolResult) -> dict[str, Any]:
     """``CallToolResult``: text content for any client, structured content for typed ones.
 
     A tool *failure* is still a successful JSON-RPC response with ``isError``:
     the model should see it and react; protocol errors are for broken requests.
     """
-    out: dict[str, Any] = {"content": [{"type": "text", "text": result.to_content()}], "isError": not result.ok}
+    out: dict[str, Any] = {"resultType": "complete", "content": [{"type": "text", "text": result.to_content()}],
+                           "isError": not result.ok}
     if result.ok:
         out["structuredContent"] = _jsonable(result.data)
     else:

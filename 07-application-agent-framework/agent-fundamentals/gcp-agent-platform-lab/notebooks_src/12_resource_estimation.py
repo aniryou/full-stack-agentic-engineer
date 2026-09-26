@@ -3,12 +3,12 @@
 #
 # A design review does not want a spreadsheet; it wants to see that you know **what drives** cost and latency,
 # can put an order of magnitude on it in a minute, and know which levers move it. Every number in this
-# notebook is arithmetic you can redo on a whiteboard — the library only gives the arithmetic names.
+# notebook is arithmetic you can redo by hand in a design review — the library only gives the arithmetic names.
 #
-# **Primer sections:** 5.1–5.4 (token anchors, cost scenarios, capacity, latency budgets), with §2.5 (context caching).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 (the arithmetic, worked).
 #
 # In this notebook you will:
-# 1. reproduce the primer's cost scenarios A–D and the capacity numbers (peak TPM, concurrency) from first principles;
+# 1. reproduce cost scenarios A–D and the capacity numbers (peak TPM, concurrency) from first principles;
 # 2. build a latency budget with parallel tool calls and read it as an ASCII waterfall;
 # 3. apply the optimisation playbook lever by lever: **$0.80 → $0.15 per conversation and 14 s → 4 s per turn**.
 
@@ -60,7 +60,7 @@ for args in ((6_000, 400, pro, 0.0, False), (6_000, 400, pro, 2 / 3, False), (1_
 print("✅ token_cost reproduces the per-call numbers")
 
 # %% [markdown]
-# ## 2. Primer §5.3 — scenarios A to D
+# ## 2. Scenarios A to D
 #
 # 50,000 conversations a day, 8 model calls each, 6,000 tokens in and 400 out per call. Same traffic, four designs.
 
@@ -146,7 +146,7 @@ for p, hops in ((0.99, 10), (0.999, 10), (0.99, 25)):
 # %% [markdown]
 # ## 5. The latency budget and its waterfall
 #
-# The primer's turn: plan **1.1 s**, two tool calls of **0.4 s** and **0.5 s**, an answer of **2.7 s** whose first token
+# A typical turn: plan **1.1 s**, two tool calls of **0.4 s** and **0.5 s**, an answer of **2.7 s** whose first token
 # arrives 0.7 s in. Sequential tools give 4.7 s; running the two lookups in parallel gives 4.3 s and a first token at 2.3 s.
 
 # %%
