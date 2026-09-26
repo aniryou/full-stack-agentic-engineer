@@ -2,6 +2,8 @@
 
 *Assumes no prior knowledge of attention internals. Builds up to why the KV cache is the single biggest constraint in LLM serving.*
 
+**Tier and notebooks.** Reading this is T0. The two notebooks, [`01_kv_cache_worked.ipynb`](01_kv_cache_worked.ipynb) and [`02_kv_cache_practice.ipynb`](02_kv_cache_practice.ipynb), import **PyTorch** and matplotlib: they run on a CPU (T0 + torch), so use a Colab CPU runtime, where both are preinstalled, or `pip install torch matplotlib` locally. A GPU is optional; the timing cells use CUDA when one is present. Sizes below are in binary units (1 KiB = 1,024 bytes, 1 GiB = 2³⁰ bytes) with decimal GB in brackets; the notebooks print decimal GB (1 GB = 10⁹ bytes).
+
 ---
 
 ## 1. The setup: how an LLM actually writes text
@@ -60,7 +62,7 @@ This distinction is the heart of GPU inference.
 
 **Decode** — generating output, one token per forward pass. There's only one token of new work, but you must read every model weight and the entire KV cache out of memory to do it. It is **memory-bandwidth-bound**: the tensor cores sit mostly idle waiting on data. Latency here is your *tokens per second*.
 
-Why bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16 but moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy you'd need ~300 floating-point operations per byte loaded. Attention over a cache does about **2 operations per byte** — you load a value and multiply-accumulate it once. You are off by two orders of magnitude. The GPU is a delivery truck stuck in traffic, not an engine short on horsepower.
+Why bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16 but moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy you'd need ~300 floating-point operations per byte loaded. Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention: each cached K or V element (2 bytes) is loaded once and used in one multiply-add (2 FLOPs) for its one query head. In general it is `2g/b` FLOP per byte, with `g` query heads sharing each KV head and `b` bytes per cached value, so GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B. Either way you are off by about two orders of magnitude (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck stuck in traffic, not an engine short on horsepower.
 
 Useful approximation for decode speed:
 
@@ -81,26 +83,26 @@ KV bytes = 2 × layers × kv_heads × head_dim × seq_len × batch × bytes_per_
 **Worked example — Llama 3 8B** (32 layers, 8 KV heads, head_dim 128, fp16 = 2 bytes):
 
 ```
-per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KB
+per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 ```
 
 | Scenario | KV cache |
 |---|---|
-| 1 user, 8K context | ~1 GB |
-| 1 user, 128K context | ~16 GB |
-| 32 users, 8K context each | ~32 GB |
+| 1 user, 8K (8,192-token) context | 1 GiB (1.07 GB) |
+| 1 user, 128K (131,072-token) context | 16 GiB (17.2 GB); the notebooks' 128,000 tokens give 15.6 GiB (16.8 GB) |
+| 32 users, 8K context each | 32 GiB (34.4 GB) |
 
-The model's *weights* are a fixed 16 GB in fp16. On an 80 GB H100, that batch of 32 users has already consumed more memory than the model itself. The cache is the part that scales with your traffic and your context lengths — the weights just sit there.
+The model's *weights* are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users has already consumed more memory than the model itself. The cache is the part that scales with your traffic and your context lengths — the weights just sit there.
 
 **Now remove the architectural trick.** Llama 2 13B uses full multi-head attention — 40 layers, 40 KV heads:
 
 ```
-per token = 2 × 40 × 40 × 128 × 2 = 819,200 bytes = 800 KB
+per token = 2 × 40 × 40 × 128 × 2 = 819,200 bytes = 800 KiB
 ```
 
 Six times larger per token, for a model only 1.6× bigger. That gap is grouped-query attention, explained below.
 
-**Second-order effect:** at 128K context, decode reads 16 GB of weights *plus* 16 GB of cache per token — twice the traffic, so roughly **half the tokens per second** compared to a short context. Long context costs you capacity *and* speed.
+**Second-order effect:** at 128K context, decode reads ~16 GB of weights *plus* ~17 GB of cache per token — twice the traffic, so roughly **half the tokens per second** compared to a short context. Long context costs you capacity *and* speed.
 
 ---
 
@@ -159,3 +161,17 @@ Three consequences worth internalising:
 | **Prefix caching** | Reusing cached K/V for shared prompt prefixes across requests. |
 | **Continuous batching** | Adding and retiring requests mid-batch as sequences finish, instead of waiting for the slowest. |
 | **Arithmetic intensity** | FLOPs per byte loaded. Low intensity ⇒ bandwidth-bound. |
+
+---
+
+## Verify list (dated 2026-09-26)
+
+Product and paper facts this primer states; the sizes are computed from them.
+
+| Item | Value used | Why it needs checking |
+|---|---|---|
+| H100 peak and bandwidth (§3) | ~1,000 TFLOP/s dense fp16 (989 on the datasheet), 3.35 TB/s HBM (SXM), 80 GB | datasheet; PCIe and NVL parts differ |
+| Llama 3 8B shape (§4, §6) | 32 layers, 32 query heads, 8 KV heads, head_dim 128; ~16 GB of fp16 weights | the model's `config.json` |
+| Llama 2 13B shape (§4) | 40 layers, 40 KV heads (full MHA), head_dim 128 | the model's `config.json` |
+| Fragmentation (§5) | 60–80% waste in early serving stacks; under 4% with paging; 16-token blocks | PagedAttention paper and vLLM's default block size |
+| Decode intensity (§3) | `2g/b` FLOP/B: 1 for fp16 MHA, 4 for Llama 3 8B's GQA | derived in the FlashAttention deep dive; kernels that pack a GQA group reach it, others do not |
