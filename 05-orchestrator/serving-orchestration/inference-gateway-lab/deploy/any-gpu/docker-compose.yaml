@@ -1,0 +1,51 @@
+# T1 with Docker on a GPU machine (a rented 24 GB card, a GCP/Lambda VM with the NVIDIA Container
+# Toolkit): two real vLLM replicas sharing one GPU, and the lab router in front of them.
+#
+#   docker compose -f docker-compose.yaml up -d --build      # first start downloads the model
+#   export IGW_BACKENDS=r0=http://127.0.0.1:8001,r1=http://127.0.0.1:8002   # notebook 04's T1 cells
+#   curl -s localhost:9100/v1/chat/completions -H 'Content-Type: application/json' \
+#        -d '{"model":"lab/llm","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'
+#
+# The replicas serve Qwen2.5-0.5B-Instruct as `lab/llm` with 16 batch slots and per-request cached-token
+# counts (--enable-prompt-tokens-details). 0.40 + 0.40 of the GPU's memory leaves room for both on one
+# 16-24 GB card; on a T4 add "--dtype", "half" (no bfloat16). vllm-b waits for vllm-a to be healthy so
+# the two do not profile GPU memory at the same time.
+name: igw-lab-gpu
+
+x-vllm: &vllm
+  image: vllm/vllm-openai:v0.30.0                              # (verify) same pin as deploy/gke and layer 04
+  ipc: host
+  environment: {HF_TOKEN: "${HF_TOKEN:-}"}
+  volumes: ["${HOME}/.cache/huggingface:/root/.cache/huggingface"]
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 10s
+    retries: 90                                                # model download + load: up to 15 minutes
+  deploy:
+    resources:
+      reservations:
+        devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+
+services:
+  vllm-a:
+    <<: *vllm
+    command: ["Qwen/Qwen2.5-0.5B-Instruct", "--served-model-name", "lab/llm", "--port", "8000",
+              "--max-model-len", "4096", "--max-num-seqs", "16", "--gpu-memory-utilization", "0.40",
+              "--enable-prompt-tokens-details"]
+    ports: ["8001:8000"]
+  vllm-b:
+    <<: *vllm
+    command: ["Qwen/Qwen2.5-0.5B-Instruct", "--served-model-name", "lab/llm", "--port", "8000",
+              "--max-model-len", "4096", "--max-num-seqs", "16", "--gpu-memory-utilization", "0.40",
+              "--enable-prompt-tokens-details"]
+    ports: ["8002:8000"]
+    depends_on: {vllm-a: {condition: service_healthy}}
+
+  router:                                                      # the lab router (default-weighted) on :9100
+    build: {context: ../.., dockerfile: deploy/local/Dockerfile}
+    image: igwlab:local
+    command: ["python", "-m", "igwlab.router", "--config", "default-weighted", "--port", "9000",
+              "--objective", "premium=100", "--objective", "batch=-10",
+              "--backend", "r0=http://vllm-a:8000", "--backend", "r1=http://vllm-b:8000"]
+    ports: ["9100:9000"]
+    depends_on: {vllm-b: {condition: service_healthy}}

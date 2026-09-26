@@ -1,0 +1,17 @@
+# The llm-d router Helm chart's default-plugins.yaml (routerlib/_config.yaml, v0.10):
+# prefix affinity weighted 3 against two load signals weighted 2 each.
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: queue-scorer
+- type: kv-cache-utilization-scorer
+- type: prefix-cache-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: queue-scorer
+    weight: 2
+  - pluginRef: kv-cache-utilization-scorer
+    weight: 2
+  - pluginRef: prefix-cache-scorer
+    weight: 3

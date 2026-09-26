@@ -1,0 +1,19 @@
+# What the gateway chart renders from ../epp-values.yaml (routerlib/_inferencepool.yaml, v0.10;
+# chart labels omitted). Helm applies it — do not `kubectl apply` this file as well.
+# Kept for reading and for the offline schema check in tests/test_manifests.py.
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: vllm-qwen
+spec:
+  targetPorts:
+    - number: 8000
+  appProtocol: http
+  selector:
+    matchLabels:
+      app: vllm-qwen
+  endpointPickerRef:
+    name: vllm-qwen-epp
+    port:
+      number: 9002
+    failureMode: FailClose

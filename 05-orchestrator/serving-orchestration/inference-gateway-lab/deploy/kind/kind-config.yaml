@@ -1,0 +1,8 @@
+# A one-node kind cluster for the llm-d Router in standalone mode (CPU only; simulators, no GPUs).
+#   kind create cluster --config kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: igw-lab
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.34.0     # (verify) a node image built for your kind release (kind v0.33, Sep 2026)

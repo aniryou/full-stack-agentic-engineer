@@ -1,0 +1,10 @@
+# Scrape the router and every engine replica every 5 s (targets of the inactive profile show as down).
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: router
+    static_configs:
+      - targets: ["router:9000", "router-fake:9000"]
+  - job_name: engines
+    static_configs:
+      - targets: ["sim-a:8000", "sim-b:8000", "sim-c:8000", "fake-a:8000", "fake-b:8000", "fake-c:8000"]

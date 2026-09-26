@@ -1,0 +1,6 @@
+# The library needs nothing (standard library only). These are only to run the notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0

@@ -1,0 +1,13 @@
+# Pure load balancing on scraped engine signals (waiting queue + KV usage), cache-blind.
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: queue-scorer
+- type: kv-cache-utilization-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: queue-scorer
+    weight: 1
+  - pluginRef: kv-cache-utilization-scorer
+    weight: 1

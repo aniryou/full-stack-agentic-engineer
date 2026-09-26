@@ -1,0 +1,63 @@
+# Helm values for the llm-d Router *standalone* chart (EPP + Envoy sidecar) on kind.
+#   helm install igw oci://ghcr.io/llm-d/charts/llm-d-router-standalone --version v0.10.0 -f router-values.yaml
+# The release name (igw) names the InferencePool the chart creates and the EPP Service (igw-epp).
+router:
+  modelServers:
+    matchLabels:
+      app: vllm-sim
+    targetPorts:
+      - number: 8000
+    type: vllm
+    protocol: http
+  inferencePool:
+    create: true
+    failureMode: FailOpen          # CRD enum: FailOpen | FailClose (not "FailClosed")
+  inferenceObjectives:             # requests pick one with the header x-llm-d-inference-objective
+    - name: premium
+      priority: 100
+    - name: batch
+      priority: -10                # negative = sheddable when the pool is saturated
+  epp:
+    image:
+      registry: ghcr.io/llm-d
+      repository: llm-d-router-endpoint-picker
+      tag: v0.10.0                 # (verify) release tag; the chart default is the moving `main`
+      pullPolicy: IfNotPresent
+    resources:                     # chart default requests 8 CPU / 8 GiB: far too much for a laptop
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    pluginsConfigFile: igw-lab.yaml
+    pluginsCustomConfig:
+      # The same EndpointPickerConfig as the lab preset `default-weighted`
+      # (igwlab/configs/default-weighted.yaml; tests/test_manifests.py keeps them identical).
+      igw-lab.yaml: |
+        # The llm-d router Helm chart's default-plugins.yaml (routerlib/_config.yaml, v0.10):
+        # prefix affinity weighted 3 against two load signals weighted 2 each.
+        apiVersion: llm-d.ai/v1
+        kind: EndpointPickerConfig
+        plugins:
+        - type: queue-scorer
+        - type: kv-cache-utilization-scorer
+        - type: prefix-cache-scorer
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: queue-scorer
+            weight: 2
+          - pluginRef: kv-cache-utilization-scorer
+            weight: 2
+          - pluginRef: prefix-cache-scorer
+            weight: 3
+  proxy:
+    enabled: true
+    proxyType: envoy
+    mode: sidecar
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
