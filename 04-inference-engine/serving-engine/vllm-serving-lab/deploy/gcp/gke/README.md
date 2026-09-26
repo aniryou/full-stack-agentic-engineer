@@ -8,10 +8,9 @@ Routing across replicas and autoscaling on engine signals are the next layer:
 This directory is the minimal **gcloud** path: one script and two manifests keep the engine the
 subject. The same kind of cluster as **Terraform** — zonal GKE Standard, an L4 Spot pool that scales
 from zero with a GKE-installed driver, managed Prometheus — lives in layer 03's lab,
-[`k8s-gpu-lab/deploy/gcp/terraform/`](../../../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/)
-(plus DWS flex-start and GCS FUSE), and in layer 05's lab,
-[`inference-gateway-lab/deploy/gcp/terraform/`](../../../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/)
-(plus the Gateway API and a proxy-only subnet); this lab's own Terraform is the Cloud Run service in
+`03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/` (plus DWS flex-start and GCS FUSE), and
+in layer 05's lab, `05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/` (plus
+the Gateway API and a proxy-only subnet); this lab's own Terraform is the Cloud Run service in
 [`../cloud-run/terraform/`](../cloud-run/terraform/). The manifests here apply to either cluster.
 
 | File | What it is |
@@ -48,7 +47,7 @@ autoscaler should use (layer 05) — GPU utilization is not.
 ## Cost and cleanup
 
 A `g2-standard-8` (1 × L4, 8 vCPU, 32 GB) on Spot costs a fraction of the ~$0.7-1/hr on-demand
-L4 VM price (Spot is 60-91% off; verify current prices in [`COMPUTE.md`](../../../../../../COMPUTE.md)),
+L4 VM price (Spot is 60-91% off; verify current prices in `COMPUTE.md` at the repo root),
 plus the cluster: one `e2-standard-4` system node and the GKE cluster fee (the free tier covers
 one zonal cluster per billing account; verify). The L4 pool scales back to zero ~10 minutes after
 the Deployment is gone; the cluster keeps billing until you delete it:

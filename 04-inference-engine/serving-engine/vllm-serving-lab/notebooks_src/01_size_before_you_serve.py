@@ -89,9 +89,10 @@ print(f"PRIMER §4's inputs (24e9 B x 0.9 - 1e9 B reserve): {primer.num_blocks:,
 # 2,000), assuming the L4's 22.49 GiB are all visible to CUDA, vLLM v0.30.0's default
 # `gpu_memory_utilization` of 0.92 and ~1.1 GiB of estimated overhead. The honest range is 17-19:
 # CUDA usually reports a few hundred MiB less than nvidia-smi (verify on your card), which alone
-# costs a session. PRIMER §4 and §12 quote **17** because they use the core's simpler inputs —
-# 0.9 of 24 GB minus a flat 1 GB reserve (2,164 blocks) — with the same formulas. Neither is a
-# measurement: the startup log's `Available KV cache memory` is (exercise 1.5).
+# costs a session. PRIMER §4 sets both input sets side by side: its simulated numbers use the
+# core's simpler inputs — 0.9 of 24 GB minus a flat 1 GB reserve (2,164 blocks, **17** sessions) —
+# with the same formulas. Neither is a measurement: the startup log's `Available KV cache memory`
+# is (exercise 1.5).
 #
 # ## Exercise 1.1 — KV bytes per token, from a raw `config.json`
 #

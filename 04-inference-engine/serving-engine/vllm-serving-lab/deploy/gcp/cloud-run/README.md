@@ -66,7 +66,7 @@ bandwidth; the startup log (`gcloud run services logs read vllm-l4`) shows the r
 Cloud Run bills GPU instances per second while they exist (with CPU always allocated), and nothing
 while scaled to zero. The L4 rate is roughly that of a `g2-standard` L4 hour (~$0.7/hr on Compute
 Engine on-demand, us-central1) plus vCPU and memory — check the Cloud Run pricing page (verify)
-and [`COMPUTE.md`](../../../../../../COMPUTE.md). An idle service with `min_instances = 0` costs nothing
+and `COMPUTE.md` at the repo root. An idle service with `min_instances = 0` costs nothing
 but the image in Artifact Registry (none here: the image comes from Docker Hub).
 
 ```bash

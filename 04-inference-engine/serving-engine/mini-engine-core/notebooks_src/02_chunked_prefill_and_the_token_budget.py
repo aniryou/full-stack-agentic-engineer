@@ -106,7 +106,9 @@ for rate in [6, math.inf]:
 # * **Saturated, the budget sets capacity.** 512 does best: each step mixes a prompt chunk (compute-bound) with
 #   the running decodes' KV reads (memory-bound), so the tensor cores and HBM are busy at once — Sarathi-Serve's
 #   case for hybrid batches. Whole prompts or 8,192-token steps alternate compute-heavy prefill steps with
-#   memory-bound decode steps. At 256 a step sits just above the knee with these efficiencies (~221 tokens, next
+#   memory-bound decode steps. Part of the gain is memory, not overlap: read the `preempt` and `peak KV` columns —
+#   the three larger settings fill the KV pool and preempt a few requests, whose work is recomputed; 512 never
+#   fills it. At 256 a step sits just above the knee with these efficiencies (~221 tokens, next
 #   exercise): its time is mostly the weight read, the decodes' KV reads and the 2 ms overhead, the prompt gets
 #   small, poorly amortised chunks — TTFT doubles at 6/s and capacity drops by about a quarter.
 # * **Goodput** is the honest summary: saturated, every row streams ~1,700–2,300 tokens/s yet almost no request

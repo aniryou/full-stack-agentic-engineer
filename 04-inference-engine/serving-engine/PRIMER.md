@@ -86,8 +86,8 @@ the detokenizer's job: they need text, and the engine core only sees token ids. 
 free blocks — the core's tests check that nothing leaks.
 
 **What sits outside the loop but matters.** CUDA Graphs replay a captured decode step to remove kernel-launch
-overhead (why engines capture graphs for a set of batch sizes — [cuda-and-nccl
-§4](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md)); asynchronous scheduling overlaps the CPU work of step n+1
+overhead (why engines capture graphs for a set of batch sizes — layer 02's cuda-and-nccl primer, §4,
+`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`); asynchronous scheduling overlaps the CPU work of step n+1
 with the GPU work of step n (on unless disabled in recent vLLM, verify); memory profiling at start-up decides how
 many KV blocks exist (§4).
 
@@ -130,8 +130,9 @@ important, newest request).
 `⌈(P + O − 1) / B⌉` blocks — the last sampled token is never fed back, so it never gets a slot
 (`KVCacheManager.blocks_needed(P + O − 1)`, notebook 01). Llama-3.1-8B on a 24 GB L4 at 90% utilisation leaves 2,164
 blocks of 16 tokens (`perf.kv_cache_blocks()`); chat requests of 1,000 + 200 tokens need 75 blocks each → **28
-concurrent requests**. The same arithmetic, plus Little's law (concurrency = arrival rate × time in system), sizes a
-fleet — [capacity planning, formulas 2 and 5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
+concurrent requests** (31 at vLLM v0.30.0's defaults, which §4 compares). The same arithmetic, plus Little's law
+(concurrency = arrival rate × time in system), sizes a fleet —
+[capacity planning, formulas 2 and 5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
 
 ## 3. Chunked prefill and prefill/decode interference
 
@@ -185,7 +186,10 @@ below capacity finishes exactly what it is offered; such a run cannot show a thr
 budget matters. At 512 each step mixes a prompt chunk (compute-bound) with the running decodes' KV reads
 (memory-bound), so tensor cores and HBM are busy at once — Sarathi-Serve's case for hybrid batches; whole prompts
 or 8,192-token steps alternate compute-heavy prefill steps with memory-bound decode steps and leave one resource
-idle in each. At 256 a step sits just above the knee (~221 tokens with these efficiencies): its time is mostly
+idle in each. Part of the gain is memory, not overlap: saturated, the three larger settings admit prompts faster
+than decodes finish, fill the KV pool (peak 100%) and preempt 3–8 requests whose work is then recomputed, while at
+512 the pool peaks at 38% and nothing is preempted (SIMULATED; `SimResult.preemptions`, `peak_kv_usage`). At 256
+a step sits just above the knee (~221 tokens with these efficiencies): its time is mostly
 the weight read, the decodes' KV reads and the 2 ms overhead, and after the decodes take their share the prompt
 gets small, poorly amortised chunks — so TTFT doubles at 6/s, goodput drops ~10%, and capacity drops by a quarter.
 **Choosing it:** take the largest budget whose worst step — all running decodes plus a full prefill chunk — meets
@@ -219,19 +223,34 @@ L4 (24 GB) × 0.9 − 16.06 GB (Llama-3.1-8B bf16) − 1 GB  =  4.54 GB  /  (16 
 H100 (80 GB), same model                                                                     = 26,197 blocks
 ```
 
-`perf.kv_cache_blocks()`; the lab's `sizing.py` does it from a real `config.json`. vLLM's default utilisation is
-0.92 on main as of Sep 2026 (verify; 0.9 for a long time), `block_size` 16. vLLM refuses to start if one
-`max_model_len` sequence cannot fit — otherwise that request could never finish (the core raises the same error in
-`Scheduler.__init__`). Model choice moves this number more than any knob: per token, Qwen2.5-1.5B needs 28 KiB of KV
+Those are the core's round inputs (`perf.kv_cache_blocks()`), and every simulated number in this primer uses them.
+vLLM v0.30.0 starts from different ones; the lab's `sizing.size()` models them from a real `config.json`:
+
+| Input | The core (`perf.kv_cache_blocks()`) | vLLM v0.30.0 defaults (the lab's `sizing.size()`) |
+|---|---|---|
+| total memory | 24 GB, the datasheet figure | 22.49 GiB = 24.15 GB, the L4's total as `nvidia-smi` reports it; vLLM uses the total CUDA reports, often a few hundred MiB lower (verify on your card) |
+| `gpu_memory_utilization` | 0.9, vLLM's default for a long time | 0.92 (`vllm/config/cache.py`) |
+| overhead | a flat 1 GB | profiled at start-up: the activation peak of a 2,048-token pass, CUDA graphs, non-torch buffers — ~1.2 GB by the lab's estimate |
+| KV budget → blocks | 4.54 GB → 2,164 | 4.96 GB → 2,363 |
+| 2,000-token sessions | 17.3 | 18.9 |
+
+Same formulas, different inputs: the higher utilisation adds ~229 blocks, the larger reported total ~65, and the
+profiled overhead takes back ~95 — 199 blocks (about 8%), one or two 2K-token sessions of an 8B model on an L4.
+Neither column is a measurement: the `Available KV cache memory` line vLLM prints at start-up is, and the lab's
+notebook 01 calibrates its estimate against that line (exercise 1.5). `block_size` is 16 in both. vLLM refuses to
+start if one `max_model_len` sequence cannot fit — otherwise that request could never finish (the core raises the
+same error in `Scheduler.__init__`). Model choice moves this number more than any knob: per token, Qwen2.5-1.5B needs 28 KiB of KV
 (2 KV heads), Qwen3-0.6B 112 KiB (8 KV heads of 128), Llama-3.1-8B 128 KiB — GQA width, not parameter count.
 
 **Admission.** A new request is admitted only if its blocks are free *now*. Two refinements keep the pool from
 thrashing: an optional **watermark** (a fraction of blocks kept free when admitting new or preempted requests; vLLM
-default 0, verify) and a **whole-prompt check** (admit only if the full prompt, not just its first chunk, fits;
-vLLM's `scheduler_reserve_full_isl`, default on, verify). Without the latter, chunked prefill admits prompts it
-cannot finish and preempts them a few steps later (`KVCacheManager.allocate_slots(..., admit_whole_prompt=True)`):
-in notebook 02's exercise 2.6, 22 preemptions at 2,000 blocks with the check, 87 without (SIMULATED); the core's
-tests pin both effects on a tight pool.
+default 0, verify) and a **whole-prompt check** (admit only if the full prompt, not just its first chunk, fits:
+vLLM's scheduler admits a waiting request through
+`allocate_slots(..., full_sequence_must_fit=scheduler_reserve_full_isl)` in `vllm/v1/core/sched/scheduler.py`;
+default on, verify). Without the latter, chunked prefill admits prompts it cannot finish and preempts them a few
+steps later. The core's version is `KVCacheManager.allocate_slots(..., admit_whole_prompt=True)`, switched by
+`SchedulerConfig.admit_whole_prompt`: in notebook 02's exercise 2.6, 22 preemptions at 2,000 blocks with the check,
+87 without (SIMULATED); the core's tests pin both effects on a tight pool.
 
 **Growth and preemption.** Decodes take a new block every 16 tokens. When a running request needs one and the free
 queue is empty, the scheduler **preempts** the lowest-priority running request — under FCFS the most recently
@@ -504,16 +523,18 @@ and folds `s` into the weights, leaving `XW` unchanged (`quant.smoothquant_scale
 notebook 06).
 
 **What each buys** — Llama-3.1-8B on a 24 GB L4, decode at 1K context, an 1,800-token prefill, sessions of 1,800 +
-200 tokens; embedding and LM head in bf16 throughout (SIMULATED, notebook 06):
+200 tokens; embedding and LM head in bf16 throughout (SIMULATED, notebook 06). Sessions are given for both sets of
+memory inputs in §4: whole sessions with the core's (`perf.kv_cache_blocks()`, as notebook 06 prints them), and at
+vLLM v0.30.0's defaults as the lab's `sizing.size(..., typical_len=2000)` estimates them:
 
-| Scheme | Weights | Decode, batch 1 | Decode, batch 32 | Prefill 1.8K | Sessions that fit |
-|---|---|---|---|---|---|
-| bf16 | 16.1 GB | 65 ms | 82 ms | 360 ms | 17 |
-| INT8 weight-only | 9.1 GB | 36 ms | 53 ms | 360 ms | 43 |
-| INT4 weight-only g128 | 5.7 GB | 22 ms | 39 ms | 360 ms | 56 |
-| FP8 W8A8 | 9.1 GB | 36 ms | 53 ms | 181 ms | 43 |
-| FP8 W8A8 + FP8 KV | 9.1 GB | 36 ms | 44 ms | 181 ms | 87 |
-| INT4 weight-only + FP8 KV | 5.7 GB | 22 ms | 30 ms | 360 ms | 113 |
+| Scheme | Weights | Decode, batch 1 | Decode, batch 32 | Prefill 1.8K | Sessions (core inputs) | Sessions (vLLM defaults) |
+|---|---|---|---|---|---|---|
+| bf16 | 16.1 GB | 65 ms | 82 ms | 360 ms | 17 | 18.9 |
+| INT8 weight-only | 9.1 GB | 36 ms | 53 ms | 360 ms | 43 | 45.5 |
+| INT4 weight-only g128 | 5.7 GB | 22 ms | 39 ms | 360 ms | 56 | 58.3 |
+| FP8 W8A8 | 9.1 GB | 36 ms | 53 ms | 181 ms | 43 | 45.5 |
+| FP8 W8A8 + FP8 KV | 9.1 GB | 36 ms | 44 ms | 181 ms | 87 | 91.1 |
+| INT4 weight-only + FP8 KV | 5.7 GB | 22 ms | 30 ms | 360 ms | 113 | 116.6 |
 
 Decode is the weight read, so INT4 weight-only is ~3× faster at batch 1 — not the 3.9× its linear layers' bytes
 suggest, because the 16-bit LM head (1.05 GB, read every step), the KV read and the per-step overhead do not
@@ -534,7 +555,7 @@ metric — in notebook 06 an INT8 model with 99.8% top-1 agreement diverges from
 When a model does not fit one GPU, or one GPU is too slow, the engine spans several. The menu and the rule — tensor
 and expert parallelism inside the NVLink domain, pipeline and data parallelism across it — are in [gpu-deployment
 §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md); the cost of each collective is in
-[cuda-and-nccl §5](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) and [roofline-and-fabric
+layer 02's cuda-and-nccl primer, §5, and in [roofline-and-fabric
 §5](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). What the engine does:
 
 **Tensor parallelism (TP)** splits every layer. The Megatron pattern pairs a *column-parallel* matmul (QKV, or the
@@ -567,8 +588,9 @@ model fits one 24 GB GPU (§4); a 70B model needs 141 GB in bf16 — TP = 2 on 8
 TP = 4 leaves ~37 GB per GPU for KV at 90% utilisation, or INT4 (39.5 GB with its 16-bit embedding and LM head,
 exercise 6.3) fits one GPU. vLLM's flags:
 `--tensor-parallel-size`, `--pipeline-parallel-size`, `--data-parallel-size`, `--enable-expert-parallel` (verify).
-The split itself is learnable at T0 (exercise 1.6); to measure it you need two GPUs (tier T2): Kaggle's free 2×T4
-shows the mechanics over PCIe, a rented NVLink pair shows the speed ([`COMPUTE.md`](../../COMPUTE.md)).
+The split itself is learnable at T0 (exercise 1.6); to measure it you need two GPUs (tier T2): the lab's exercise
+3.6 predicts TP = 2 on Kaggle's free 2×T4 and measures it there over PCIe; a rented NVLink pair shows the speed
+(prices in `COMPUTE.md` at the repo root).
 
 ## 10. Multi-LoRA serving
 
@@ -635,7 +657,7 @@ TPOT SLO, SIMULATED).
 | `max_num_batched_tokens` | TTFT; capacity, up to a few hundred tokens past the knee (§3) | ITL tail (§3) |
 | `max_num_seqs` | throughput (bigger batches) | ITL, KV pressure, preemptions |
 | `gpu_memory_utilization` | KV blocks → concurrency | headroom for activations and other processes (OOM risk) |
-| `max_model_len` | longest request served | KV per request; with no chunking, the budget |
+| `max_model_len` | longest request served | the worst-case concurrency vLLM logs (blocks ÷ the blocks of one `max_model_len` request); start-up fails if one such request cannot fit (§4). The block count does not change; with chunking off, the budget must be at least this |
 | `enable_prefix_caching` (on) | TTFT, compute on shared prefixes | hashing overhead on no-reuse traffic (small) |
 | `enable_chunked_prefill` (on) | ITL under long prompts | slightly later first tokens |
 | `kv_cache_dtype fp8` | 2× KV capacity, faster long-context decode | a small accuracy cost; needs support per model and GPU |
@@ -665,20 +687,21 @@ The concepts in this primer are engine-independent; the flags and metric names d
 lab because its scheduler and KV manager are readable Python and its metrics are the ones layer 05's routers
 consume.
 
-**Where to run it** — concept by concept, on GCP and elsewhere (prices and obtainability in
-[`COMPUTE.md`](../../COMPUTE.md)):
+**Where to run it** — concept by concept, on GCP and elsewhere (prices and obtainability in `COMPUTE.md` at the
+repo root):
 
 | To learn | T0 (laptop / Colab CPU) | Non-GCP GPU (T1/T2) | GCP (T3) |
 |---|---|---|---|
 | §1–8 mechanics | `mini-engine-core` notebooks; the lab's fake server | — | — |
 | real TTFT/ITL, knobs, prefix caching | the lab's T0 fake server (labelled) | Colab / Kaggle T4 (free, fp16 only — no bf16 on Turing), RunPod / Vast.ai 24 GB GPU (containers, ~$0.3–0.4/hr), Lambda (VMs) | a `g2-standard-4` L4 VM (Spot) |
 | FP8 (sm_89+) | FP8 emulation in `quant.py` | an RTX 4090 / L4 / H100 rental | L4 (G2) or H100 (A3) |
-| tensor parallelism (§9) | notebook 01 exercise 1.6 (a column/row-parallel MLP in numpy); `perf.tp_allreduces()` | Kaggle 2×T4 (PCIe), a rented 2–8× NVLink box | A2/A3 multi-GPU shapes |
+| tensor parallelism (§9) | notebook 01 exercise 1.6 (a column/row-parallel MLP in numpy); `perf.tp_allreduces()` | Kaggle 2×T4 (PCIe; the lab's exercise 3.6), a rented 2–8× NVLink box | A2/A3 multi-GPU shapes |
 | serve an endpoint | — | `docker run vllm/vllm-openai` on any GPU box | **Cloud Run with GPUs** (L4 or RTX PRO 6000; per-second billing; scale to zero) · **GKE** (vLLM Deployment on an L4 node pool; autoscaling and routing in 05) · **Vertex AI** (Model Garden deploys open models on managed endpoints with vLLM-based containers, verify) |
 | TPUs | — | — | GKE with TPU v5e/v6e or v7 "Ironwood" (GA 2026-04-22); vLLM's TPU backend (verify name and status) |
 
 A 0.5–2B model (Qwen2.5-0.5B/1.5B, Llama-3.2-1B) is enough to see every effect in this primer on a single T4 or L4;
-an 8B model in bf16 needs a 24 GB GPU (and runs at 17 concurrent 2K-token sessions there, §8). The lab's
+an 8B model in bf16 needs a 24 GB GPU (and holds 17–19 concurrent 2K-token sessions there: 17 with the core's
+memory inputs, 18.9 at vLLM's defaults, §4 and §8). The lab's
 [`deploy/`](vllm-serving-lab/deploy/) has the any-GPU recipe, the Cloud Run GPU Terraform and the GKE manifests.
 
 ---
@@ -691,7 +714,7 @@ waiting requests while there are sequence slots and KV blocks. Everything schedu
 the weights are read once for all of it, and attention reads each request's history through its block table. A step
 is memory-bound up to ~300 tokens on an H100, so decodes batch almost for free and a long prompt is the expensive
 thing; chunked prefill caps the step so an 8K-token prompt cannot stall everyone's stream, and I set the budget as
-large as the ITL SLO allows. Concurrency is capped by KV memory — about 28 chat sessions for an 8B model on an L4 —
+large as the ITL SLO allows. Concurrency is capped by KV memory — about 30 chat sessions for an 8B model on an L4 —
 and when it runs out the newest request is preempted and recomputed, which shows up as TTFT, so we alert on
 preemptions. Prefix caching names each full block by a hash chained through its parent, so our agents' shared system
 prompt and append-only histories are computed once; that decides our prompt layout. Sampling and structured output
@@ -727,9 +750,9 @@ at realistic lengths and report goodput against the SLO."
    requests at 200-token contexts.
 6. *INT4 or FP8 for an 8B model on a 24 GB L4 that must hold 48 concurrent 2K-token sessions and prefill 1.8K tokens
    in 300 ms?* — FP8 W8A8 with an FP8 KV cache: it halves prefill (FP8 tensor cores) and doubles KV capacity —
-   181 ms and 87 sessions in the roofline model (§8, SIMULATED). INT4 weight-only wins decode (~3×) and memory but
-   its prefill stays at 360 ms, because weight-only formats cut bytes, not FLOPs. Then gate the choice on task
-   evals against bf16.
+   a 181 ms prefill in the roofline model and 87 sessions (91 at vLLM's defaults; §8, SIMULATED). INT4
+   weight-only wins decode (~3×) and memory but its prefill stays at 360 ms, because weight-only formats cut bytes,
+   not FLOPs. Then gate the choice on task evals against bf16.
 
 ---
 
@@ -812,8 +835,8 @@ Code and documentation:
   [paged-attention](../paged-attention/paged-attention-primer.md) and
   [flash-attention](../flash-attention/flash-attention-primer.md) primers;
   [roofline-and-fabric](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md);
-  [cuda-and-nccl](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md);
-  [gpu-scheduling](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md);
+  the cuda-and-nccl (`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`) and gpu-scheduling
+  (`03-kubernetes-gpu/gpu-scheduling/PRIMER.md`) primers;
   [gpu-capacity-planning](../../00-foundations/gpu-capacity-planning/PRIMER.md); [transformer
   primer](../../00-foundations/transformers/docs/transformer-primer.md);
   [agentic-scaling-lab](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) (admission, rate limits, cost
@@ -827,7 +850,8 @@ main branch source on that date — re-check them against the release you pin.
 - **vLLM defaults and behaviour:** V1 as the architecture (separate API-server and engine-core processes, async
   scheduling); `block_size` 16; `enable_prefix_caching` true; `prefix_caching_hash_algo` `sha256` (options
   `sha256_cbor`, `xxhash`, `xxhash_cbor`); `cache_salt` in the first block's extra keys; `gpu_memory_utilization`
-  0.92 on main; `watermark` 0.0; `scheduler_reserve_full_isl` true; policies `fcfs` and `priority` (lower first);
+  0.92 on main and in v0.30.0 (the core keeps 0.9, §4); the L4's 22.49 GiB total as `nvidia-smi` reports it and how
+  far below it CUDA's total sits; `watermark` 0.0; `scheduler_reserve_full_isl` true; policies `fcfs` and `priority` (lower first);
   API-server defaults for `max_num_batched_tokens` / `max_num_seqs` (2,048/256 below 70 GB or on A100; 8,192/1,024
   H100/H200-class; 16,384/1,024 at ≥160 GB); chunked prefill on by default and `max_num_batched_tokens ≥
   max_model_len` required without it; `long_prefill_token_threshold` (default 0 = off),
@@ -862,5 +886,5 @@ main branch source on that date — re-check them against the release you pin.
 - **Where to run:** Cloud Run GPU types (L4; RTX PRO 6000 Blackwell), per-second billing and scale to zero (FACTS);
   Vertex AI Model Garden's vLLM-based serving; TPU v7 "Ironwood" GA 2026-04-22 (FACTS) and vLLM's TPU backend name
   and status; T4 lacks bf16 and FP8, L4 and H100 have FP8; Colab/Kaggle/RunPod/Vast.ai/Lambda offerings and prices
-  (maintained in [`COMPUTE.md`](../../COMPUTE.md)).
+  (maintained in `COMPUTE.md` at the repo root).
 - **Engine summaries in §12:** SGLang, TensorRT-LLM and llama.cpp feature claims.

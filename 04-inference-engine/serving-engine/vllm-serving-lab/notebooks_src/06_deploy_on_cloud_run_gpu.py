@@ -20,7 +20,7 @@
 #
 # Concepts: PRIMER §12 "Engines and where to run them" ([`PRIMER.md`](../../PRIMER.md)); the deploy
 # assets are in [`deploy/gcp/cloud-run/`](../deploy/gcp/cloud-run/) (Terraform and `gcloud`). Prices:
-# [`COMPUTE.md`](../../../../COMPUTE.md). Admission control, rate limits and cost per conversation in
+# `COMPUTE.md` at the repo root. Admission control, rate limits and cost per conversation in
 # front of a fleet like this one are layer 06:
 # [`agentic-scaling-lab`](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/).
 

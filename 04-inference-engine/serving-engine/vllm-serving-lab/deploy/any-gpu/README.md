@@ -71,7 +71,7 @@ value when you compare with a prediction (`servelab size --gpu-memory-utilizatio
 `The current --gpu-memory-utilization=...` line). Read the capacity lines back:
 `from servelab.sizing import parse_startup_log; parse_startup_log(open("vllm.log").read())`.
 Free Colab sessions last up to ~12 h and disconnect after roughly 90 minutes idle; weekly GPU time
-is limited and not guaranteed (verify, see [`COMPUTE.md`](../../../../../COMPUTE.md)). Kaggle gives
+is limited and not guaranteed (verify, see `COMPUTE.md` at the repo root). Kaggle gives
 about 30 GPU-hours a week (verify).
 
 ## Two GPUs: tensor parallelism on Kaggle's T4 x2 (T2)
@@ -93,7 +93,7 @@ themselves are layer 02's subject.
 * **RunPod / Vast.ai** give you a *container*: choose the `vllm/vllm-openai` image as the template
   image, put the model and flags in the container arguments, expose port 8000, and set
   `--api-key` (the endpoint is public). An RTX 4090 (24 GB) costs roughly $0.3-0.4/hr (verify in
-  [`COMPUTE.md`](../../../../../COMPUTE.md)); per-second billing makes a 30-minute session cost cents.
+  `COMPUTE.md` at the repo root); per-second billing makes a 30-minute session cost cents.
 * **Lambda** (and GCP Compute Engine) give you a *VM*: install Docker + the NVIDIA Container
   Toolkit (layer 02) or `pip install vllm`, then run `./serve.sh`.
 * Run the benchmark **from the same machine** (`--url http://127.0.0.1:8000`) unless you want the

@@ -22,7 +22,7 @@ The concepts come first in the serving-engine topic; this topic is the "now read
 2. **The engine**: [`vllm-internals-primer.md`](vllm-internals-primer.md), sections 1–4 first (process map, a
    request's life, scheduler, KV cache), then 5–10 as needed, then the flag table (11) and observability (12).
 3. **The code**: [`source-map.md`](source-map.md), a concept → file → symbol index with line numbers at `5840d95`
-   and a reading plan of three two-hour sittings with named line ranges.
+   and a reading plan of three sittings of about two hours with named line ranges.
 4. **Re-implement the parts vLLM does differently**:
    [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb). Four exercises,
    each followed by a check that tests your code: the capped longest hit, a free-queue prediction, `free_blocks`

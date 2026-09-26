@@ -147,3 +147,13 @@ def test_eight_b_on_an_l4_headline_number():
     core = size("llama-3.1-8b-instruct", gpu_memory_bytes=int(24e9), gpu_memory_utilization=0.9,
                 overhead_bytes={"reserve": int(1e9)}, max_model_len=2048, typical_len=2000)
     assert core.num_blocks == 2164 and round(core.concurrency_at_typical_len, 1) == 17.3
+
+
+def test_primer_quantization_sessions_at_vllm_defaults():
+    # PRIMER §8's "Sessions (vLLM defaults)" column: 2,000-token sessions of Llama-3.1-8B on an L4 at v0.30.0's
+    # defaults, next to the core's round inputs (§4). Weight-only INT8 and FP8 W8A8 hold the same bytes here.
+    got = {name: round(size("llama-3.1-8b-instruct", "L4", quantization=q, kv_cache_dtype=kv, max_model_len=2048,
+                            typical_len=2000).concurrency_at_typical_len, 1)
+           for name, q, kv in [("bf16", None, "auto"), ("int8", "int8", "auto"), ("int4", "awq", "auto"),
+                               ("fp8", "fp8", "auto"), ("fp8+fp8kv", "fp8", "fp8"), ("int4+fp8kv", "awq", "fp8")]}
+    assert got == {"bf16": 18.9, "int8": 45.5, "int4": 58.3, "fp8": 45.5, "fp8+fp8kv": 91.1, "int4+fp8kv": 116.6}
