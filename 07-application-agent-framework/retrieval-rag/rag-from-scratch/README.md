@@ -11,14 +11,23 @@ box. Everything that teaches is ~40 lines you can read in one sitting.
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt        # T0: numpy + pytest, no torch (seconds, a few MB)
+python -m pytest -q                    # 11 tests: reference primitives + the embedder fallback
+pip install -r requirements-full.txt   # optional: the real models (sentence-transformers, so torch: a multi-GB install)
 ```
 
-The first embedding call downloads a ~90 MB model (`all-MiniLM-L6-v2`) and then
-runs offline on CPU. **Generation is optional:** with no API key, a deterministic
-*extractive* fallback answers straight from the retrieved text, so every notebook
-runs end to end offline. To use a real model instead, set `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY` — it's picked up automatically, no code change.
+| Where you run it | Embedder the notebooks get | What you learn |
+|---|---|---|
+| **T0** — laptop or Colab CPU, `requirements.txt` only | `hashing embedder (T0 fallback; not semantic)`: bag-of-words feature hashing | every mechanism; all self-checks pass. Dense search is lexical, so the "semantic beats lexical" results do not show |
+| **T0 + torch** (`requirements-full.txt`) or **Colab** (ships sentence-transformers) | `all-MiniLM-L6-v2` (~90 MB, downloaded once, then offline on CPU) and the `ms-marco-MiniLM-L-6-v2` cross-encoder | the same, plus the real dense-vs-lexical and reranking differences |
+
+`ragkit.embed.get_embedder()` and `get_cross_encoder()` pick the real model when
+`sentence-transformers` is installed and otherwise print which fallback they
+use; `RAGKIT_EMBEDDER=hashing` forces the fallback. **Generation is optional:**
+with no API key, a deterministic *extractive* fallback answers straight from the
+retrieved text, so every notebook runs end to end offline. To use a real model
+instead, set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — it's picked up
+automatically, no code change.
 
 Open the notebooks with Jupyter (`pip install jupyterlab && jupyter lab`) or in
 VS Code / Cursor.
@@ -41,15 +50,16 @@ versions are in `solutions/`.
 
 The self-checks test the **shape** of your implementation (sorted correctly,
 right length, correct maths) rather than which document a model happens to rank
-first — so they pass whether or not you've plugged in the real embedder, and a
-green notebook means your code is right.
+first — so they pass with the hashing fallback or the real embedder, and a
+green notebook means your code is right. The *observations* (which retriever
+wins on which question type in 03 and 05) need the real model.
 
 ## What's in the box
 
 ```
 ragkit/                 tiny support library (NOT the lesson — plumbing only)
   corpus.py             load the docs + eval labels; the shared tokenizer
-  embed.py              wrapper over sentence-transformers (dense + cross-encoder)
+  embed.py              sentence-transformers wrapper (dense + cross-encoder), hashing fallback at T0
   llm.py                generation: real API if a key is set, else extractive
   reference.py          reference implementations (the answer key; later
                         notebooks import primitives earlier ones built)
@@ -70,7 +80,7 @@ retrieval — so each notebook's lesson actually shows up when you measure it.
 ## Verify the reference code
 
 ```bash
-PYTHONPATH=. python tests/test_reference.py       # the from-scratch primitives
+python -m pytest -q                               # the from-scratch primitives + the embedder fallback
 PYTHONPATH=. python tests/test_notebooks_run.py   # every solution runs + asserts pass
 ```
 
