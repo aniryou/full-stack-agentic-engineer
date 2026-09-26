@@ -30,7 +30,7 @@ from gpurt import env
 print(env.describe())
 from gpurt.kernels import MODE, SIMULATOR, blocks_for, cuda  # noqa: E402  (decides simulator vs GPU first)
 
-print("numba CUDA mode:", MODE)
+print("numba CUDA mode:", MODE, "- every CUDA thread is a Python thread" if SIMULATOR else "- compiled for this GPU")
 # The simulator releases threads from cuda.syncthreads() by polling; with CPython's default 5 ms GIL
 # slices every barrier costs milliseconds. A 0.1 ms slice makes barrier-heavy kernels ~5x faster here.
 sys.setswitchinterval(1e-4)
