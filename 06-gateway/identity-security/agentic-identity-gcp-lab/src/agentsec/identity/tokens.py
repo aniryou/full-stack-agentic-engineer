@@ -336,10 +336,13 @@ class TokenIssuer:
         token = self.mint(
             subject=subject.subject, audience=audience, scope=sorted(narrowed), ttl=ttl, extra=extra
         )
+        # RFC 9449 §5: "DPoP" only for a key-bound (cnf.jkt) token. A certificate-bound token
+        # (RFC 8705, cnf.x5t#S256) is still a Bearer token type, presented over mutual TLS.
+        dpop_bound = actor is not None and "jkt" in actor.cnf
         return {
             "access_token": token,
             "issued_token_type": ACCESS_TOKEN_TYPE,
-            "token_type": "Bearer" if not actor or not actor.cnf else "DPoP",
+            "token_type": "DPoP" if dpop_bound else "Bearer",
             "expires_in": ttl or self.default_ttl,
             "scope": " ".join(sorted(narrowed)),
         }
