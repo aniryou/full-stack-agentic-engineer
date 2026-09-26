@@ -74,7 +74,7 @@ Then `python3 -m jupyterlab notebooks` in either directory, or the Colab links b
 (sizing, TTFT/TPOT budgets) and this layer's `gpu-primer/` and `gpu-deployment/`. The
 [curriculum's spiral](../CURRICULUM.md#31-why-this-order) visits layer 04's concepts before this layer on purpose
 (00 → 04 → 01 → 02 → 04 again with a GPU): with the engine's step loop in mind, each hardware number has a use; the
-roofline itself needs only 00. **Leads to layer 02
+roofline itself needs only 00. **Leads to** layer 02
 ([`02-cuda-nccl-runtime`](../02-cuda-nccl-runtime/README.md): the execution model, memory access patterns and NCCL
 collectives behind the fabric numbers here), layer 03 ([`03-kubernetes-gpu`](../03-kubernetes-gpu/README.md): cold
 start, failure domains and topology at cluster scale) and layer 04

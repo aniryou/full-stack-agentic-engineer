@@ -303,7 +303,7 @@ a Kaggle 2×T4 recipe), [`gke`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab
 
 ### 03 · Kubernetes and GPU scheduling — [`gpu-scheduling`](03-kubernetes-gpu/gpu-scheduling/README.md)
 
-"Kubernetes for GPUs: how a GPU becomes schedulable, and how to place, share, queue and scale it." Primer:
+"Scheduling GPUs on Kubernetes: how a GPU becomes schedulable, and how to place, share, queue and scale it." Primer:
 [`PRIMER.md`](03-kubernetes-gpu/gpu-scheduling/PRIMER.md). Core:
 [`k8s-gpu-core`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/) (package `gpusched`, a pure-Python scheduler,
 quota and autoscaler). Lab: [`k8s-gpu-lab`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/) (package `k8sgpu`). The
