@@ -34,12 +34,17 @@ def mlp(x, p):
     return gelu(x @ p["W1"]) @ p["W2"]
 
 def not_blank(*fns):
-    """Each check calls this first: stop with a clear message while an exercise still has `...` blanks."""
-    def has_blank(consts):
-        return any(c is ... or (isinstance(c, tuple) and has_blank(c)) or
-                   (hasattr(c, "co_consts") and has_blank(c.co_consts)) for c in consts)
+    """Each check calls this first: stop with a clear message while an exercise still has `...` blanks.
+    A `...` used as an index (x[...], mask[..., None]) is numpy's Ellipsis, not a blank."""
+    import ast, inspect, textwrap
     for fn in fns:
-        if has_blank(fn.__code__.co_consts):
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, TypeError, SyntaxError):
+            continue                                  # no source to read: the check itself still runs
+        index = {id(n) for s in ast.walk(tree) if isinstance(s, ast.Subscript)
+                 for n in [s.slice, *getattr(s.slice, "elts", [])]}
+        if any(isinstance(n, ast.Constant) and n.value is ... and id(n) not in index for n in ast.walk(tree)):
             raise NotImplementedError(f"{fn.__name__}() still has `...` blanks: fill them in, "
                                       "run its cell, then run this check again")
 
