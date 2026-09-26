@@ -27,8 +27,7 @@ The topics added to layers 01–05 in September 2026 each went through the same 
 1. **Three adversarial reviewers**, each with one lens: *concepts* (is it correct, current and precise),
    *runnability* (do the commands, tests and notebooks run as written, at the tier they claim), and *pedagogy*
    (does a reader learn it in this order, are the exercises and checks fair).
-2. **A fixer** that checks each finding against the code and the sources before changing anything, and records the
-   findings it rejects and why.
+2. **A fixer** that checks each finding against the code and the sources before changing anything.
 3. **An independent validator** that re-runs the tests, notebooks and link checks after the fixes.
 
 Older material in layers 00, 04, 06 and 07 predates this process; it was edited for consistency but not put through
@@ -37,7 +36,7 @@ the same review.
 ## Reporting an error
 
 Open an issue on [GitHub](https://github.com/aniryou/full-stack-agentic-engineer/issues) with the page, the claim,
-and what you think is right, ideally with a source or a command that shows it. Pull requests are welcome.
+and what you think is right, ideally with a source or a command that shows it.
 
 ## Licences
 

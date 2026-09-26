@@ -41,3 +41,6 @@ _run_outputs/
 
 # guide site build output (mkdocs site_dir)
 /site_build/
+
+# mkdocs-jupyter render cache
+/.cache/
