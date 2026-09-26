@@ -12,6 +12,8 @@ from sandboxlab.agent.loop import Tool
 from sandboxlab.audit import AuditEvent, AuditLog, args_digest, detect, execution_event, summary
 from sandboxlab.process import Budgets, ExecResult, ProcessSandbox
 
+from ._timing import CPU_BURN, can_pin, cpu_contention
+
 IDENTITY_LAB_FIELDS = ["event_type", "agent", "authority", "user", "tool", "decision", "reasons", "args_hash",
                        "args_redacted", "result_hash", "approver", "provenance", "trace_id", "invocation_id",
                        "session_id", "latency_ms", "ts", "id", "extra"]
@@ -74,21 +76,43 @@ def test_redelivered_step_replays_instead_of_rerunning():
     assert first == again and ex.calls == 1
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux")
-def test_execution_events_feed_detection():
-    sb = ProcessSandbox(Budgets(cpu_s=1, wall_s=2), netns=False)
+def _detection_scenario() -> AuditLog:
+    # Three busy loops and an output flood through the sandbox, plus one denied egress from the proxy.
+    # CPU_BURN's wall limit is 10x its CPU budget, so a loop the scheduler starves still ends on cpu_time.
+    sb = ProcessSandbox(CPU_BURN, netns=False)
     log = AuditLog()
     for code in ["while True: pass"] * 3 + ["import sys; sys.stdout.write('x' * 2**21)"]:
         log.emit(execution_event(sb.run(code), agent="a", session_id="s1", invocation_id="i", code=code))
     log.from_proxy([{"event_type": "egress", "agent": "sandbox", "authority": "own", "decision": "deny",
                      "reasons": ["host 'attacker.net' is not on the egress allowlist"], "extra": {"host": "attacker.net"}}],
                    session_id="s1")
+    return log
+
+
+def _assert_detection(log: AuditLog) -> None:
     s = summary(log.events)
     assert s["executions"] == 4 and s["exit_reasons"] == {"cpu_time": 3, "output_limit": 1}
     rules = {a.rule for a in detect(log.events)}
     assert rules == {"repeated-cpu-kills", "output-flood", "egress-denied"}
     line = json.loads(log.jsonl().splitlines()[0])
     assert line["exit_reason"] == "cpu_time" and line["budgets_used"]["cpu_s"] >= 0.9
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux")
+def test_execution_events_feed_detection():
+    _assert_detection(_detection_scenario())
+
+
+@pytest.mark.skipif(not (sys.platform.startswith("linux") and can_pin()), reason="Linux CPU affinity")
+def test_execution_events_feed_detection_on_a_starved_cpu():
+    # Regression: on a shared 2-vCPU CI runner one busy loop reached a 2 s wall limit before its 1 s
+    # CPU budget (wall_timeout, not cpu_time). Here the loops share one CPU with a competing busy loop,
+    # so each gets at most about half a core; the verdicts must be exactly those of an idle machine.
+    with cpu_contention(loops=1):
+        log = _detection_scenario()
+    burns = [e.budgets_used for e in log.events if e.exit_reason in ("cpu_time", "wall_timeout")]
+    assert max(u["wall_s"] for u in burns) > 1.4, burns          # the contention was real: wall ran ahead of CPU
+    _assert_detection(log)
 
 
 def test_fetch_url_refuses_https_without_a_route_instead_of_downgrading(monkeypatch):

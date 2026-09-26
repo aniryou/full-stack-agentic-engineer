@@ -47,7 +47,7 @@ cfg = {"routes": {"weather": {"upstream": api.url, "methods": ["GET"],
                               "inject": {"header": "Authorization", "value_from": f"file:{STATE}/token", "format": "Bearer {}"}}},
        "forward_allow": [], "allow_connect": False}
 proxy = EgressProxy(cfg, unix_path=os.path.join(STATE, "proxy.sock")).serve()
-sandbox = ProcessSandbox(Budgets(cpu_s=1, wall_s=3), extra_env={"SANDBOX_PROXY_URL": proxy.url})
+sandbox = ProcessSandbox(Budgets(cpu_s=1, wall_s=5), extra_env={"SANDBOX_PROXY_URL": proxy.url})
 tools = [run_code_tool(sandbox, prelude=SANDBOX_CLIENT),
          fetch_url_tool(proxy.url, {"https://api.weather.example/": "weather"})]
 print("tools:", {t.name: t.tier for t in tools})

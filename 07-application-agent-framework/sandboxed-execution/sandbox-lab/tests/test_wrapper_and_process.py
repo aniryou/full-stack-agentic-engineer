@@ -1,14 +1,19 @@
 """The execution contract: one exit reason per budget, output truncation, a clean environment, and the
 07.1 tool-result shape. Runs real processes on this machine (a few seconds)."""
 import os
+import shutil
 import signal
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
 from sandboxlab import env
 from sandboxlab.process import Budgets, ProcessSandbox, Unsandboxed, parse_wrapper_output
 from sandboxlab.wrapper import MARKER, classify
+
+from ._timing import CPU_BURN
 
 LINUX = sys.platform.startswith("linux")
 B = Budgets(cpu_s=1, wall_s=2)
@@ -48,9 +53,10 @@ def test_parse_wrapper_output_finds_the_last_marker_line():
     ("import sys; sys.stdout.write('A' * (2 * 2**20))", "output_limit"),
 ])
 def test_each_budget_has_its_exit_reason(sb, code, reason):
-    r = sb.run(code)
+    b = CPU_BURN if reason == "cpu_time" else B     # a starved busy loop must not reach the wall clock first
+    r = sb.run(code, b)
     assert r.exit_reason == reason, (r.exit_reason, r.stderr[-300:])
-    assert r.wall_s < B.wall_s + 1.5
+    assert r.wall_s < b.wall_s + 1.5
 
 
 @pytest.mark.skipif(not LINUX, reason="Linux")
@@ -93,3 +99,32 @@ def test_netns_blocks_the_network():
         "import socket\ntry:\n    socket.create_connection(('127.0.0.1', 9), timeout=1); print('connected')\n"
         "except OSError as e:\n    print(type(e).__name__)")
     assert r.exit_reason == "ok" and "connected" not in r.stdout
+
+
+@pytest.mark.skipif(not LINUX, reason="POSIX permission bits")
+def test_a_venv_in_a_private_directory_is_not_executable_by_the_sandbox_uid(monkeypatch):
+    # A venv's bin/python is a symlink to a world-executable system python, but exec walks the venv's
+    # own directories first: under /root or a 0700 temp directory the sandbox UID gets EACCES. The check
+    # must look at the path as given, not only at the file it resolves to.
+    from sandboxlab import process
+    real = os.path.realpath(sys.executable)
+    if not process._world_ok(real):
+        pytest.skip("this interpreter is not world-executable")
+    base = tempfile.mkdtemp(dir="/tmp" if os.path.isdir("/tmp") else None)       # mode 0700
+    try:
+        os.makedirs(os.path.join(base, "venv", "bin"))
+        link = os.path.join(base, "venv", "bin", "python")
+        os.symlink(real, link)
+        os.chmod(os.path.join(base, "venv"), 0o755)
+        os.chmod(os.path.join(base, "venv", "bin"), 0o755)
+        if not all(os.stat(p).st_mode & 0o001 for p in Path(base).parents):
+            pytest.skip("the temp directory's parents are private too")
+        assert process._world_ok(link) is False                              # base is 0700
+        monkeypatch.setattr(process.sys, "executable", link)
+        assert process.child_python(True) != link                            # a system python3, or None
+        assert process.child_python(False) == link                           # no UID switch: our own python
+        os.chmod(base, 0o755)
+        assert process._world_ok(link) is True
+    finally:
+        os.chmod(base, 0o700)
+        shutil.rmtree(base, ignore_errors=True)
