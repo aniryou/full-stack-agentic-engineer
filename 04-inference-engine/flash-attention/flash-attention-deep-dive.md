@@ -318,7 +318,7 @@ Recomputation is a good trade because of section 1: re-deriving `P` costs one ex
 
 ## 4. FlashAttention-2: work partitioning
 
-FA2 (Dao, 2023) keeps the algorithm and changes who does what. The execution model it relies on (grids, CTAs, warps, occupancy, shared memory) is covered in the CUDA primer of layer 02 (`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`).
+FA2 (Dao, 2023) keeps the algorithm and changes who does what. The execution model it relies on (grids, CTAs, warps, occupancy, shared memory) is covered in [the CUDA primer (02)](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md).
 
 ### 4.1 Swap the loops: one CTA per Q block
 
@@ -1166,7 +1166,7 @@ Decide first whether it is an FP8 KV cache (decode bandwidth) or FP8 matrix mult
 - `vllm-project/vllm`: `vllm/v1/attention/backends/flash_attn.py`, `fa_utils.py`, `flashinfer.py`, `triton_attn.py`; `vllm/v1/attention/selector.py`; `vllm/platforms/cuda.py`; `vllm/config/attention.py`; `requirements/cuda.txt`; `vllm/v1/attention/ops/merge_attn_states.py`, `triton_merge_attn_states.py`.
 - `flashinfer-ai/flashinfer`: `README.md`, `flashinfer/decode.py`, `flashinfer/cascade.py`.
 
-**In this repository:** [the FlashAttention primer](flash-attention-primer.md), [`flash_attention_minimal.py`](flash_attention_minimal.py), [`fa_calculators.py`](fa_calculators.py) and its tests, [`test_triton_kernel_emulated.py`](test_triton_kernel_emulated.py), [the companion notebook](flash_attention_deep_dive.ipynb), [the practice notebook](flash_attention_practice.ipynb), [the paged-attention primer](../paged-attention/paged-attention-primer.md), [the KV-cache primer](../kv-cache/kv-cache-primer.md), [the vLLM internals primer](../vllm-internals/vllm-internals-primer.md) (section 6, attention backends from the engine's side), [the transformer primer](../../00-foundations/transformers/docs/transformer-primer.md), [the GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md), [the roofline primer (01)](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), the CUDA primer of layer 02 (`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`), [the capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md).
+**In this repository:** [the FlashAttention primer](flash-attention-primer.md), [`flash_attention_minimal.py`](flash_attention_minimal.py), [`fa_calculators.py`](fa_calculators.py) and its tests, [`test_triton_kernel_emulated.py`](test_triton_kernel_emulated.py), [the companion notebook](flash_attention_deep_dive.ipynb), [the practice notebook](flash_attention_practice.ipynb), [the paged-attention primer](../paged-attention/paged-attention-primer.md), [the KV-cache primer](../kv-cache/kv-cache-primer.md), [the vLLM internals primer](../vllm-internals/vllm-internals-primer.md) (section 6, attention backends from the engine's side), [the transformer primer](../../00-foundations/transformers/docs/transformer-primer.md), [the GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md), [the roofline primer (01)](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [the CUDA primer (02)](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [the capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md).
 
 ---
 

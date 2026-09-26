@@ -11,6 +11,8 @@ A one-node kind cluster with:
   after the release (`igw`) selecting `app: vllm-sim`, and the objectives `premium` (100) and `batch` (−10).
   The EPP runs the lab preset `default-weighted` verbatim (`router.epp.pluginsCustomConfig`).
 
+**Cost:** free (local CPU). **Cleanup:** `./down.sh`.
+
 ```bash
 ./up.sh                                               # DRY_RUN=1 ./up.sh to see every command first
 kubectl port-forward svc/igw-epp 8081:8081 &
@@ -32,5 +34,3 @@ implementation that supports InferencePool (the llm-d guides document agentgatew
 current versions), then the `llm-d-router-gateway` chart with `--set httpRoute.create=true` and an
 HTTPRoute whose backendRef is the InferencePool. `deploy/gke/gateway.yaml` shows the object shapes
 (swap the GatewayClass for your implementation's).
-
-**Cost:** free (local CPU). **Cleanup:** `./down.sh`.

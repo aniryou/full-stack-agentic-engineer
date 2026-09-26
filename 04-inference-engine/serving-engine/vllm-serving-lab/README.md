@@ -123,7 +123,7 @@ L4, scale to zero, weights from Hugging Face or a GCS mount, HF token from Secre
 Managed Prometheus). Each has a README with cost and cleanup. This lab's Terraform is the Cloud Run
 service (`deploy/gcp/cloud-run/terraform/`); GKE here is a `gcloud` script plus manifests, and the
 cluster as Terraform lives in layer 03's
-`k8s-gpu-lab` (`03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/`) and layer 05's
+[`k8s-gpu-lab`](../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) and layer 05's
 [`inference-gateway-lab`](../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/).
 
 ## Regenerating notebooks

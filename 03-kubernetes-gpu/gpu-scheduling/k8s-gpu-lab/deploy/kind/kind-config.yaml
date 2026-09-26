@@ -1,0 +1,16 @@
+# kind cluster for the GPU scheduling lab: 1 control plane + 1 CPU "system pool" worker + 4 workers
+# that fake-gpus.sh turns into fake 4-GPU L4 nodes (see topology.txt for their labels).
+# The node image is passed on the command line (up.sh: --image from deploy/versions.env).
+#
+# Why a separate system worker: the GPU workers get the nvidia.com/gpu NoSchedule taint (as on GKE),
+# and the Kueue / JobSet / LWS controllers do not tolerate it - they need an untainted node.
+# Memory: roughly 3-4 GB of Docker memory for six nodes plus the controllers.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker   # <cluster>-worker   system pool (CPU only)
+  - role: worker   # <cluster>-worker2  fake GPU node, host-a1-1
+  - role: worker   # <cluster>-worker3  fake GPU node, host-a1-2
+  - role: worker   # <cluster>-worker4  fake GPU node, host-a2-1
+  - role: worker   # <cluster>-worker5  fake GPU node, host-a2-2

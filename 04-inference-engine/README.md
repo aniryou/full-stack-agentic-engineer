@@ -57,8 +57,9 @@ vllm-internals notebook needs only the standard library plus the serving lab ins
 Builds on [`00-foundations/transformers`](../00-foundations/transformers/) (attention and decoding),
 [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (weights, KV bytes, TTFT
 and TPOT) and layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a
-decode step is a memory read). Layer 02 (CUDA graphs, the all-reduces tensor parallelism runs on) and layer 03 (how
-the engine's pod gets its GPUs) sit between them. Leads to [`05-orchestrator`](../05-orchestrator/README.md), which
+decode step is a memory read). Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
+parallelism runs on) and layer 03's [`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md) (how the engine's pod
+gets its GPUs) sit between them. Leads to [`05-orchestrator`](../05-orchestrator/README.md), which
 routes across many engine replicas by prefix-cache affinity and load, autoscales them and splits prefill from decode.
 
 ## Caveats

@@ -86,8 +86,8 @@ the detokenizer's job: they need text, and the engine core only sees token ids. 
 free blocks — the core's tests check that nothing leaks.
 
 **What sits outside the loop but matters.** CUDA Graphs replay a captured decode step to remove kernel-launch
-overhead (why engines capture graphs for a set of batch sizes — layer 02's cuda-and-nccl primer, §4,
-`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`); asynchronous scheduling overlaps the CPU work of step n+1
+overhead (why engines capture graphs for a set of batch sizes — [cuda-and-nccl
+§4](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md)); asynchronous scheduling overlaps the CPU work of step n+1
 with the GPU work of step n (on unless disabled in recent vLLM, verify); memory profiling at start-up decides how
 many KV blocks exist (§4).
 
@@ -555,7 +555,7 @@ metric — in notebook 06 an INT8 model with 99.8% top-1 agreement diverges from
 When a model does not fit one GPU, or one GPU is too slow, the engine spans several. The menu and the rule — tensor
 and expert parallelism inside the NVLink domain, pipeline and data parallelism across it — are in [gpu-deployment
 §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md); the cost of each collective is in
-layer 02's cuda-and-nccl primer, §5, and in [roofline-and-fabric
+[cuda-and-nccl §5](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) and in [roofline-and-fabric
 §5](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). What the engine does:
 
 **Tensor parallelism (TP)** splits every layer. The Megatron pattern pairs a *column-parallel* matmul (QKV, or the
@@ -835,8 +835,8 @@ Code and documentation:
   [paged-attention](../paged-attention/paged-attention-primer.md) and
   [flash-attention](../flash-attention/flash-attention-primer.md) primers;
   [roofline-and-fabric](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md);
-  the cuda-and-nccl (`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`) and gpu-scheduling
-  (`03-kubernetes-gpu/gpu-scheduling/PRIMER.md`) primers;
+  [cuda-and-nccl](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md);
+  [gpu-scheduling](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md);
   [gpu-capacity-planning](../../00-foundations/gpu-capacity-planning/PRIMER.md); [transformer
   primer](../../00-foundations/transformers/docs/transformer-primer.md);
   [agentic-scaling-lab](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) (admission, rate limits, cost

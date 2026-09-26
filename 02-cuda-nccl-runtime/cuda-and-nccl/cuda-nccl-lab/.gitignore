@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+/build/
+/dist/
+# gpurt/dist is source code (torch.distributed benchmarks), not a build artefact: re-include it
+# (the repository root ignores every directory named dist/).
+!gpurt/dist/
+.venv/
+_run_outputs/
+.DS_Store
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+# Results of the GPU recipes (deploy/any-gpu, deploy/gke/run.sh) and an nccl-tests checkout, should SRC
+# point here: never commit them (the checkout is a git repository of its own).
+out/
+nccl-tests/

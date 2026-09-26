@@ -1,6 +1,13 @@
 # deploy/gke — GKE Inference Gateway, end to end (T3)
 
-Runs on the cluster from [`../gcp/terraform`](../gcp/terraform/README.md). `install.sh` applies, in order:
+**What it does.** Puts GKE Inference Gateway in front of vLLM on the cluster from
+[`../gcp/terraform`](../gcp/terraform/README.md): an InferencePool with the llm-d endpoint picker, InferenceObjective
+priorities, a regional Gateway and an HPA on Managed Prometheus metrics.
+
+**Cost and cleanup, in short.** ~$0.44/h even when idle while installed (one L4 Spot node stays up; assumed prices,
+verify); `PROJECT_ID=<id> ./uninstall.sh`, then `terraform destroy` in `../gcp/terraform`. Details at the end.
+
+`install.sh` applies, in order:
 
 | Step | Object(s) | File |
 |---|---|---|
