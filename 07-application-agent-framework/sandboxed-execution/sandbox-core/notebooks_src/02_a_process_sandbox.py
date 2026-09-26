@@ -124,8 +124,8 @@ for note in r.notes:
 # sandbox asks `Popen` to do the privileged part in C — `user=`, `group=`, `extra_groups=[]`,
 # `start_new_session=True` — and the child's own interpreter lowers the limits (`executor._LAUNCHER`) before
 # it executes the code. Lowering a limit needs no privilege, and an unprivileged process cannot raise its hard
-# limit again. The root caveat: `RLIMIT_NPROC` counts **every process of the real UID** and is **ignored for
-# uid 0**, so without a UID switch a fork bomb is not stopped — and root could even raise its own limits.
+# limit again. The root caveat: `RLIMIT_NPROC` counts **every task of the real UID** and is **ignored for
+# uid 0**, so as root without a UID switch a fork bomb is not stopped — and root could even raise its own limits.
 
 # %%
 from sandboxcore import rlimits_for
