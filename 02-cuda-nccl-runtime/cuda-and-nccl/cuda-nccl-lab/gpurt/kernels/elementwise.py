@@ -62,7 +62,7 @@ def run_saxpy(alpha: float, x, y, blocks: int = 4, threads: int = 128) -> np.nda
     """Deliberately launches fewer threads than elements: the grid-stride loop covers the rest.
 
     ``alpha`` is passed as ``np.float32`` — a plain Python float is float64 to Numba, and the
-    multiply would silently run in FP64 (1/32 of the FP32 rate on a T4 or L4).
+    multiply would silently run in FP64 (1/32 of the FP32 rate on a T4, 1/64 on an L4; verify).
     """
     x, y = _f32(x), _f32(y)
     d_out = cuda.device_array_like(x)

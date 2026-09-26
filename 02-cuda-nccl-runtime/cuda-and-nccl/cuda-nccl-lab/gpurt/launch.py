@@ -17,7 +17,11 @@ A two-pipeline model (T0) — the slower pipeline sets the pace:
 so graphs help exactly when the step is launch-bound (L > k + g) and change nothing when it is not.
 
 ``L``, ``G`` and ``g`` below are *assumptions* of the right order of magnitude, not measurements;
-:func:`measure_graph_vs_eager` measures them on a real GPU (T1, torch + CUDA).
+:func:`measure_graph_vs_eager` measures them on a real GPU (T1, torch + CUDA). The defaults are primer
+§4.2's (L = 5 µs, G = 10 µs, no gap), so 384 kernels of 2 µs give eager 1,920 µs and graph 778 µs, 2.5x
+— the core's ``gpusim.tiling.step_time()`` says 1,922 µs because it also counts the last kernel after its
+launch. ``g`` is this lab's addition: a GPU-side gap of 1 µs per kernel (the front end fetching the next
+kernel) lowers that gain to 1,920 / 1,162 = 1.65x, because a graph removes CPU cost, not GPU work.
 """
 
 from __future__ import annotations
@@ -27,9 +31,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class LaunchModel:
-    launch_us: float = 6.0  # CPU cost per eager launch (assumption — measure yours)
-    graph_launch_us: float = 8.0  # one cudaGraphLaunch (assumption)
-    node_gap_us: float = 1.0  # GPU-side gap between consecutive kernels (assumption)
+    launch_us: float = 5.0  # CPU cost per eager launch (assumption, primer §4.2 — measure yours)
+    graph_launch_us: float = 10.0  # one cudaGraphLaunch (assumption, primer §4.2)
+    node_gap_us: float = 0.0  # GPU-side gap between consecutive kernels (the lab's knob; the primer's model has none)
 
     def eager_us(self, n_kernels: int, kernel_us: float) -> float:
         return n_kernels * max(kernel_us + self.node_gap_us, self.launch_us)

@@ -334,7 +334,7 @@ arrive together; C (6,000) arrives before step 3. Blocks are `ceil(tokens / 16)`
 
 The rule behind the "New blocks" column: `allocate_slots` needs `ceil((num_computed_tokens + n) / 16)` blocks,
 so a decode takes a new block exactly when `num_computed_tokens` is a multiple of 16. C's prompt fills 375 blocks
-exactly (6,000 = 375 × 16), so its first decode needs block 376; A and B took their partial last blocks at
+exactly (6,000 = 375 × 16, block indices 0–374), so its first decode needs a 376th block (index 375); A and B took their partial last blocks at
 admission and next need one at positions 3,008 and 512.
 
 A and B keep producing one token per step while C prefills, but steps 3–5 each carry ~2,048 tokens, so their
@@ -931,7 +931,9 @@ the SM75 bug reference; `triton_attn.py` any; `mla/flashmla.py` major 9 or 10); 
 `--block-size` excludes a higher-priority backend, the selector warns and suggests dropping the flag.
 
 **In one line each.** *FlashAttention* (vLLM's fork, `vllm.vllm_flash_attn`): one varlen kernel for mixed
-batches, paged KV via `block_table`, block sizes in multiples of 16, FP8 KV with descales, sliding windows; FA3
+batches, paged KV via `block_table`, block sizes in multiples of 16, FP8 KV with descales (only with FA3 on SM 9.0 or FA4 on SM 10.x:
+`flash_attn_supports_kv_cache_dtype` in `fa_utils.py`; on an L4 or A100, `--kv-cache-dtype fp8` makes the selector
+skip FlashAttention for FlashInfer), sliding windows; FA3
 graphs mixed batches, FA2 only uniform ones (algorithm in [`../flash-attention/`](../flash-attention/)).
 *FlashInfer* (`flashinfer.py`): `BatchPrefillWithPagedKVCacheWrapper` / `BatchDecodeWithPagedKVCacheWrapper`
 with a per-batch `plan()`, plus TRT-LLM-generated kernels (`trtllm_batch_decode_with_kv_cache`,
@@ -949,6 +951,10 @@ vector per token per layer (`head_size_v = 0`, one "head"; `vllm/v1/kv_cache_int
 MLA, BF16:        61 × 576 × 2 B                  =  70,272 B/token ≈ 68.6 KiB
 MHA equivalent:   61 × 128 heads × 128 × 2 × 2 B  ≈  4.0 MB/token          (57× more)
 ```
+
+The 57× assumes 128-dim keys and values. DeepSeek-V3's MHA-style heads actually use 192-dim keys (128 + 64 RoPE)
+and 128-dim values, so the like-for-like figure is 61 × 128 × (192 + 128) × 2 B ≈ 5.0 MB/token, 71× the latent
+cache.
 
 Hence dedicated MLA kernels (FlashMLA, CUTLASS MLA, FlashInfer MLA) and KV dtypes (`fp8_ds_mla`, `nvfp4_ds_mla`).
 

@@ -18,12 +18,12 @@ Read the primer section, then do the matching core notebook, then the lab notebo
 
 | Step | Primer | Core notebook (T0) | Lab notebook |
 |---|---|---|---|
-| 1 | §1–2 | `01_why_llm_load_balancing_is_different` — request cost spread, round-robin vs least-outstanding vs power-of-two, herding on stale metrics, Little's law | `01_router_in_process` (T0) |
-| 2 | §2–3 | `02_cache_aware_routing_and_the_load_tradeoff` — chain hashes, EPP scorers, prefix hashing vs bounded loads vs weighted scoring, hot prefixes, approximate vs precise indexes | `02_scorer_weights_and_hot_prefixes` (T0) |
-| 3 | §4 | `03_autoscaling_on_the_right_signal` — the HPA rule, tolerance, stabilization, policies; GPU util vs queue vs KV vs in-flight; cold start and scale-to-zero | `03_autoscaling_recommender` (T0; manifests for T3) |
+| 1 | §1, §2.1–2.2, §3 | `01_why_llm_load_balancing_is_different` — request cost spread, round-robin vs least-outstanding vs power-of-two, herding on stale metrics, flow control: a router queue with priorities and a per-endpoint cap sized by Little's law | `01_router_in_process` (T0) |
+| 2 | §2.3–2.6, §7 | `02_cache_aware_routing_and_the_load_tradeoff` — chain hashes, EPP scorers, prefix hashing vs bounded loads vs weighted scoring vs the affinity filter's TTFT gate, hot prefixes, approximate vs precise indexes, LoRA adapter affinity | `02_scorer_weights_and_hot_prefixes` (T0) |
+| 3 | §4 | `03_autoscaling_on_the_right_signal` — the HPA rule, tolerance, stabilization, policies, Pending pods; GPU util vs queue vs KV vs in-flight requests vs prefill backlog, on chat and on a chat + RAG mix; cold start and scale-to-zero with the node | `03_autoscaling_recommender` (T0; manifests for T3) |
 | 4 | §5 | `04_prefill_decode_disaggregation` — the prefill stall, KV transfer cost, P:D sizing and the split search, chunk budget first, conditional disaggregation | — |
 | 5 | §6 | `05_kv_cache_tiers_and_agent_sessions` — agent working sets, fetch vs recompute, tiered LRU, sticky vs shared tiers | — |
-| 6 | §7–10 | — | `04_local_stack_with_llm_d` (T0 + Docker or kind), `05_gke_inference_gateway` (T3; offline it plans and inspects) |
+| 6 | §7–10 | — (§7's adapter routing is in `02`) | `04_local_stack_with_llm_d` (T0 + Docker or kind), `05_gke_inference_gateway` (T3; offline it plans and inspects) |
 
 Budget about 9 hours for the primer and the core, and 8 more for the lab (see [`CURRICULUM.md`](../../CURRICULUM.md),
 modules 05.1–05.6).

@@ -21,6 +21,12 @@ The same recurrence, applied tile by tile to attention scores, is the heart of F
 
 Per-block partial ``(m, d)`` pairs are merged with a shared-memory tree, exactly like
 ``reduction.py`` but combining pairs:  ``m = max(m1, m2);  d = d1*e^(m1-m) + d2*e^(m2-m)``.
+
+How this maps to primer §3.5 (``gpusim.tiling.softmax_traffic``): the primer's unfused chain is five
+kernels — max, subtract, exp, sum, divide: 8RC (+4R) element accesses. This unfused path already merges
+subtract and exp into one kernel (``sub_exp``), so it is four kernels and 6RC. The fused kernel here is the
+primer's *online* row (3RC: two reads and a write), not its 2RC variant that holds a whole row on chip and
+reads it once — that one is ``triton_kernels.softmax`` (the Triton tutorial's kernel).
 """
 
 from __future__ import annotations

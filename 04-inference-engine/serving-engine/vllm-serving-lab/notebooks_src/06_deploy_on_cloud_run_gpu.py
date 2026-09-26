@@ -19,14 +19,19 @@
 # * **`max_instances`** — a cap on GPUs, on the bill, and on the load you can absorb.
 #
 # Concepts: PRIMER §12 "Engines and where to run them" ([`PRIMER.md`](../../PRIMER.md)); the deploy
-# assets are in `deploy/gcp/cloud-run/` (Terraform and `gcloud`). Prices: `COMPUTE.md` at the repo root.
+# assets are in [`deploy/gcp/cloud-run/`](../deploy/gcp/cloud-run/) (Terraform and `gcloud`). Prices:
+# [`COMPUTE.md`](../../../../COMPUTE.md). Admission control, rate limits and cost per conversation in
+# front of a fleet like this one are layer 06:
+# [`agentic-scaling-lab`](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/).
 
 # %%
-import os, shutil, subprocess
+import math, os, re, shutil, subprocess
 from pathlib import Path
 import servelab
 from servelab import env, sizing
 from servelab.bench import SLO, Lengths, random_requests, run_closed_loop
+from servelab.bench.summary import Stat, Summary
+from servelab.fake_engine import EngineConfig
 from servelab.fakeserver import FakeServer
 
 LAB = Path(servelab.__file__).resolve().parents[1]
@@ -66,6 +71,13 @@ print(plan.summary())
 # the weights. The inputs below are **assumptions**, not measurements — replace them with your own
 # (image size from the registry, bandwidths from a test, init time from the log line
 # `init engine (profile, create kv cache, warmup model) took ...`).
+#
+# Then the part that breaks deployments: the **startup probe** must outlast the part of the cold
+# start that happens *inside* the container. The image pull comes before the container starts, so
+# only weights + engine init count against the probe (as in Kubernetes; verify for Cloud Run). Write
+# `min_failure_threshold(weights_gb, weights_gb_s, init_s, period_s, margin)`: the smallest
+# `failure_threshold` whose `failure_threshold × period_s` covers `margin ×` that time. The check
+# reads the probe settings from this lab's Terraform.
 
 # %%
 ASSUME = {"image_gb": 8.0,         # vllm/vllm-openai compressed size (assumption; verify in the registry)
@@ -82,13 +94,28 @@ def cold_start_s(image_gb: float, pull_gb_s: float, weights_gb: float, weights_g
     return image_gb / pull_gb_s + weights_gb / weights_gb_s + init_s
     ### END SOLUTION
 
+def min_failure_threshold(weights_gb: float, weights_gb_s: float, init_s: float, period_s: float,
+                          margin: float = 1.5) -> int:
+    ### BEGIN SOLUTION
+    return math.ceil(margin * (weights_gb / weights_gb_s + init_s) / period_s)
+    ### END SOLUTION
+
 # %% check
 assert cold_start_s(8, 0.5, 3, 0.1, 60) == 16 + 30 + 60
 hf = cold_start_s(ASSUME["image_gb"], ASSUME["pull_gb_s"], WEIGHTS_GB, ASSUME["hf_gb_s"], ASSUME["init_s"])
 gcs = cold_start_s(ASSUME["image_gb"], ASSUME["pull_gb_s"], WEIGHTS_GB, ASSUME["gcs_gb_s"], ASSUME["init_s"])
 assert gcs < hf
+assert min_failure_threshold(3, 0.1, 60, 10, 1.0) == 9 and min_failure_threshold(3, 0.1, 60, 10) == 14
+period = int(re.search(r"period_seconds\s*=\s*(\d+)", tf).group(1))
+tf_threshold = int(re.search(r'variable "startup_failure_threshold"[^}]*default\s*=\s*(\d+)',
+                             (CR / "terraform" / "variables.tf").read_text(), re.S).group(1))
+need_hf = min_failure_threshold(WEIGHTS_GB, ASSUME["hf_gb_s"], ASSUME["init_s"], period)
+slow_hf = min_failure_threshold(15.0, 0.05, 120, period)     # an 8B model on a slow day
+print(f"   startup probe in the Terraform: {tf_threshold} x {period} s = {tf_threshold * period} s; this model from "
+      f"the Hub needs >= {need_hf} failures; an 8B download at 50 MB/s would need {slow_hf}")
+assert tf_threshold >= need_hf
 print(f"✅ cold start under these assumptions: {hf:.0f} s with Hugging Face, {gcs:.0f} s with weights in GCS — "
-      f"after that, image pull and engine init dominate")
+      f"after that, image pull and engine init dominate; the probe budget covers weights + init with room")
 
 # %% [markdown]
 # ## Exercise 6.2 — choose Cloud Run `concurrency` from a measurement
@@ -117,9 +144,14 @@ def pick_concurrency(summaries: dict, min_attainment: float = 0.9):
     ### END SOLUTION
 
 # %% check
+def S(attainment):          # a minimal Summary: only slo_attainment matters here
+    st = Stat(1, 1.0, 1.0, 0.0, {99: 1.0})
+    return Summary(1, 0, 1.0, 1, 1, 1.0, 1.0, 1.0, attainment, attainment, st, st, st, st)
+assert pick_concurrency({1: S(1.0), 8: S(0.95), 32: S(0.91), 64: S(0.4)}) == 32
+assert pick_concurrency({1: S(1.0), 8: S(0.9), 32: S(0.89)}) == 8                  # exactly 0.9 counts
+assert pick_concurrency({64: S(0.95), 1: S(1.0), 8: S(0.5), 32: S(0.2)}) == 64      # noisy, unsorted: largest level that meets it
+assert pick_concurrency({1: S(0.5)}) is None and pick_concurrency(summaries, 1.01) is None
 chosen = pick_concurrency(summaries)
-assert chosen == max(c for c, s in summaries.items() if s.slo_attainment >= 0.9)
-assert pick_concurrency(summaries, 1.01) is None
 print(f"✅ set concurrency = {chosen} (Terraform var.concurrency / gcloud --concurrency); beyond it Cloud Run "
       f"should add an instance rather than slow this one down")
 
@@ -171,6 +203,39 @@ assert monthly_costs(1.0, 4, 4) == (150.0, 720.0)
 s0, warm = monthly_costs(PRICE_PER_HOUR, busy_hours_per_day=3, bursts_per_day=6)
 print(f"✅ 3 busy hours/day in 6 bursts: ${s0:,.0f}/month scaling to zero (6 cold starts of ~{gcs:.0f} s a day) "
       f"vs ${warm:,.0f}/month always warm")
+
+# %% [markdown]
+# ## Exercise 6.5 — Cloud Run concurrency above the engine's batch cap
+#
+# Cloud Run's `concurrency` and vLLM's `--max-num-seqs` are two different limits. If Cloud Run
+# lets 64 requests into an instance whose engine runs at most 16 at a time, 48 wait *inside vLLM*:
+# Cloud Run sees a busy instance, not a queue. Predict the wait. In a closed loop of `concurrency`
+# users against a batch cap `max_num_seqs`, each admitted request takes `service_s` (its E2E at a
+# full batch), so the engine completes `max_num_seqs / service_s` requests per second, and by
+# Little's law each request spends `concurrency × service_s / max_num_seqs` in the instance: the
+# part beyond its own `service_s` is queueing. Write `queued_wait_s(concurrency, max_num_seqs,
+# service_s)`. The check measures `service_s` with 16 users, then runs 64 users and compares TTFT.
+
+# %% exercise
+def queued_wait_s(concurrency: int, max_num_seqs: int, service_s: float) -> float:
+    ### BEGIN SOLUTION
+    return max(0.0, concurrency / max_num_seqs - 1) * service_s
+    ### END SOLUTION
+
+# %% check
+assert queued_wait_s(16, 16, 0.6) == 0.0 and math.isclose(queued_wait_s(64, 16, 0.6), 1.8)
+with FakeServer("l4-qwen2.5-1.5b", EngineConfig(max_num_seqs=16)) as url:
+    full = run_closed_loop(url, random_requests(48, Lengths.fixed(256), Lengths.fixed(32), seed=41), 16,
+                           ramp_s=0.5).summary()
+    over = run_closed_loop(url, random_requests(256, Lengths.fixed(256), Lengths.fixed(32), seed=42), 64,
+                           ramp_s=0.5).summary()
+service = full.e2el.mean / 1000
+pred = queued_wait_s(64, 16, service) + full.ttft.mean / 1000
+print(f"[SIMULATED L4] max_num_seqs 16: service {service:.2f} s at 16 users; at 64 users predicted TTFT "
+      f"{pred:.2f} s, measured mean {over.ttft.mean / 1000:.2f} s (p99 {over.ttft.p[99] / 1000:.2f} s)")
+assert abs(over.ttft.mean / 1000 / pred - 1) < 0.3
+print("✅ concurrency above max_num_seqs becomes a queue inside the engine: set Cloud Run's concurrency to the batch "
+      "that meets the SLO, so the extra load starts a new instance instead")
 
 # %% [markdown]
 # ## Deploy for real (T3, opt-in)

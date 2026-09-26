@@ -25,7 +25,7 @@ both: nothing here imports the core.
 ```bash
 cd inference-gateway-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                     # 64 tests, a few seconds, offline
+python3 -m pytest -q                     # 75 tests, a few seconds, offline
 python3 -m jupyterlab notebooks          # exercises; worked answers in solutions/
 ```
 
@@ -51,7 +51,7 @@ never as GPU numbers.
 |---|---|---|---|---|
 | 01 | `01_router_in_process` | T0 | prefix hashing and the index, queue/KV scores, the weighted pick; why round-robin loses on agent traffic (measured) | §1 Why a layer above the engine, §2 Routing signals and algorithms |
 | 02 | `02_scorer_weights_and_hot_prefixes` | T0 | the locality-vs-load trade-off in numbers, hot prefixes, the scrape-lag herd, choosing an affinity threshold, saturation shedding | §2, §3 Flow control and priorities |
-| 03 | `03_autoscaling_recommender` | T0 | the exact HPA algorithm (tolerance, stabilization, policies, unready pods); which vLLM signals to scale on and why queue alone collapses | §4 Autoscaling |
+| 03 | `03_autoscaling_recommender` | T0 | the HPA controller where the basic rule is not enough (missing and starting pods, legacy vs `behavior`, live scrapes); which vLLM signals to scale on, why queue alone collapses, and targets derived from batch slots and Little's law | §4 Autoscaling |
 | 04 | `04_local_stack_with_llm_d` | T0 walkthrough; T0 + Docker (CPU: compose or kind); **T1/T2** with a GPU (real vLLM, `deploy/any-gpu`) | InferencePool semantics, the llm-d Router standalone mode, what the EPP reads that the lab router does not, the simulator's latency model; benchmarks a running stack, or the lab router in front of real vLLM | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
 | 05 | `05_gke_inference_gateway` | T3 (offline plan/inspect is T0) | the GKE Inference Gateway object graph, CRD validation, GMP → HPA plumbing, what an hour costs | §9, §10 |
 
@@ -65,13 +65,13 @@ changes into this directory and `pip install -e .`s it.
 | Module | Lines | The one idea |
 |---|---|---|
 | `router/tokens.py` | ~60 | a router "tokenizes" by packing request bytes into 4-byte pseudo-tokens (the EPP's `estimate` backend) |
-| `router/prefix.py` | ~210 | chained block hashes + a per-endpoint LRU index; the match is the count of leading blocks held |
+| `router/prefix.py` | ~220 | chained block hashes + a per-endpoint LRU index; the match is the count of leading blocks held |
 | `router/datalayer.py` | ~170 | scraped vLLM metrics (lagged) vs router-local in-flight counters (instant, partial) |
-| `router/plugins.py` | ~470 | producers, filters, scorers, pickers with upstream types, parameters and formulas |
-| `router/config.py` | ~260 | `EndpointPickerConfig`: parse, validate, inject upstream defaults, export for the real EPP |
+| `router/plugins.py` | ~500 | producers, filters, scorers, pickers with upstream types, parameters and formulas |
+| `router/config.py` | ~270 | `EndpointPickerConfig`: parse, validate, inject upstream defaults, export for the real EPP |
 | `router/scheduler.py` | ~110 | one scheduling cycle and an explainable per-scorer decision table |
 | `router/server.py` | ~280 | the proxy: admission (shed priority < 0 at saturation), dispatch, streaming, metrics |
-| `fakebackend.py` | ~540 | a replica is a cache with a queue: TTFT = queueing + prefill of *uncached* tokens |
+| `fakebackend.py` | ~560 | a replica is a cache with a queue: TTFT = queueing + prefill of *uncached* tokens |
 | `autoscale.py` | ~470 | the HPA as a proportional controller with guard rails, exactly; a queue target from Little's law |
 | `bench.py` | ~340 | agent traffic is prefix-heavy; measure TTFT, hit rate (or `n/a` when the engine does not report it) and the per-replica split |
 | `k8s.py` | ~210 | the Gateway-mode object graph, validated offline against upstream CRD schemas |

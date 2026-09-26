@@ -4,9 +4,12 @@ Numba use its CUDA simulator?"
 The one idea: Numba picks between the real CUDA target and the CPU simulator **once, when
 ``numba.cuda`` is first imported**, from the environment variable ``NUMBA_ENABLE_CUDASIM``. So the
 decision has to be made before that import — which is what :func:`ensure_numba_mode` does, and why
-``gpurt.kernels`` calls it first. Detection here is deliberately cheap and side-effect free: it looks
-for device nodes and ``nvidia-smi``; it never calls ``cuInit`` in this process (a process that has
-initialised CUDA cannot hand CUDA to children it forks).
+``gpurt.kernels`` calls it first. Detection never calls ``cuInit`` in this process (a process that has
+initialised CUDA cannot hand CUDA to children it forks): it looks for device nodes and ``nvidia-smi``,
+and when it finds a GPU it asks a *child* process whether Numba can actually compile and run a kernel
+there (:func:`numba_cuda_usable`). A GPU that Numba cannot use — numba-cuda not installed, NVVM
+missing, a driver too old for the toolkit — falls back to the simulator with the reason in
+:data:`NUMBA_FALLBACK`, instead of failing at the first kernel launch.
 
 Tiers (see the lab README):  T0 = no GPU (simulator, fixtures, CPU backends) · T1 = one GPU ·
 T2 = two or more GPUs · T3 = a managed cluster (GKE), detected here only as "in Kubernetes".
@@ -23,6 +26,7 @@ import sys
 from contextlib import contextmanager
 
 SIM_ENV = "NUMBA_ENABLE_CUDASIM"
+NUMBA_FALLBACK: str | None = None  # why a visible GPU is not used by Numba (set by ensure_numba_mode)
 
 
 def gpu_device_nodes() -> list[str]:
@@ -66,16 +70,66 @@ def numba_mode() -> str:
     return "simulator" if config.ENABLE_CUDASIM else "cuda"
 
 
+_PROBE = r"""
+import numpy as np
+from numba import cuda
+if not cuda.is_available():
+    raise SystemExit("numba.cuda.is_available() is False: no driver Numba can load, or NVVM/libdevice missing")
+@cuda.jit
+def _twice(a):
+    i = cuda.grid(1)
+    if i < a.size:
+        a[i] = 2 * i
+d = cuda.to_device(np.zeros(64, np.float32))
+_twice[1, 64](d)
+if d.copy_to_host()[5] != 10:
+    raise SystemExit("a test kernel ran but computed a wrong value")
+"""
+
+
+def numba_cuda_usable(timeout: float = 180.0) -> tuple[bool, str]:
+    """Can Numba compile *and run* a kernel on the visible GPU? Asked in a child process with
+    ``NUMBA_ENABLE_CUDASIM=0``, so this process never initialises CUDA. Returns (ok, reason)."""
+    env = {**os.environ, SIM_ENV: "0"}
+    try:
+        out = subprocess.run([sys.executable, "-c", _PROBE], capture_output=True, text=True, timeout=timeout, env=env)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"the probe did not run ({type(e).__name__})"
+    if out.returncode == 0:
+        return True, "ok"
+    lines = [line.strip() for line in (out.stderr or out.stdout or "").splitlines() if line.strip()]
+    return False, lines[-1][:300] if lines else f"the probe exited with status {out.returncode}"
+
+
+def choose_mode(explicit: str | None, n_gpus: int, probe=None) -> tuple[str, str | None]:
+    """The decision rule, without side effects: ``(mode, fallback_reason)``.
+
+    An explicit ``NUMBA_ENABLE_CUDASIM`` of "0"/"1" wins; no GPU -> simulator; a GPU that ``probe()``
+    says Numba cannot use -> simulator, with the reason and the fix; otherwise the real CUDA target."""
+    if explicit in ("0", "1"):
+        return ("simulator" if explicit == "1" else "cuda"), None
+    if n_gpus == 0:
+        return "simulator", None
+    ok, why = (probe or numba_cuda_usable)()
+    if ok:
+        return "cuda", None
+    return "simulator", (f"{n_gpus} GPU(s) visible but Numba cannot run kernels on them: {why}. "
+                         'Fix: pip install "numba-cuda[cu12]" (a CUDA 12 driver; [cu13] for 13) and restart; '
+                         "`python -m gpurt.container` checks driver/runtime compatibility")
+
+
 def ensure_numba_mode(simulator: bool | None = None) -> str:
     """Decide Numba's CUDA mode **before** ``numba.cuda`` is imported, and return it.
 
     * ``simulator=True/False`` forces the choice;
     * otherwise an explicit ``NUMBA_ENABLE_CUDASIM`` in the environment wins;
-    * otherwise: a GPU is visible -> real CUDA target, no GPU -> simulator.
+    * otherwise :func:`choose_mode`: no GPU -> simulator; a GPU Numba can use -> real CUDA target;
+      a GPU it cannot use -> simulator, reason in :data:`NUMBA_FALLBACK`.
 
     If ``numba.cuda`` was already imported the mode cannot change any more; the current mode is
     returned (and a forced, conflicting request raises so the surprise is loud, not silent).
     """
+    global NUMBA_FALLBACK
     current = numba_mode()
     if current != "unset":
         if simulator is not None and simulator != (current == "simulator"):
@@ -86,7 +140,8 @@ def ensure_numba_mode(simulator: bool | None = None) -> str:
     if simulator is not None:
         os.environ[SIM_ENV] = "1" if simulator else "0"
     elif os.environ.get(SIM_ENV, "").strip() not in ("0", "1"):
-        os.environ[SIM_ENV] = "0" if gpu_count() > 0 else "1"
+        mode, NUMBA_FALLBACK = choose_mode(None, gpu_count())
+        os.environ[SIM_ENV] = "1" if mode == "simulator" else "0"
     if "numba" in sys.modules:  # numba imported but not numba.cuda: re-read the environment
         from numba.core import config
 
@@ -172,6 +227,7 @@ def summary() -> dict:
         "gpu_names": [line.split(" (UUID")[0] for line in nvidia_smi_gpus()] if n else [],
         "numba_mode": numba_mode() if numba_mode() != "unset" else (
             "simulator" if os.environ.get(SIM_ENV) == "1" else ("cuda" if n else "simulator (on import)")),
+        "numba_fallback": NUMBA_FALLBACK,
         "torch_installed": has_module("torch"),
         "triton_installed": has_module("triton"),
         "platform": platform_hint(),
@@ -181,8 +237,11 @@ def summary() -> dict:
 def describe() -> str:
     s = summary()
     gpus = ", ".join(s["gpu_names"]) if s["gpu_names"] else "none"
-    return (f"tier {s['tier']} | GPUs: {s['gpus']} ({gpus}) | numba: {s['numba_mode']} | "
+    text = (f"tier {s['tier']} | GPUs: {s['gpus']} ({gpus}) | numba: {s['numba_mode']} | "
             f"torch: {'yes' if s['torch_installed'] else 'no'} | platform: {s['platform']}")
+    if s["numba_fallback"]:
+        text += f"\n  numba fell back to its simulator — {s['numba_fallback']}"
+    return text
 
 
 if __name__ == "__main__":  # python -m gpurt.env

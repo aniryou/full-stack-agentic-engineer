@@ -54,6 +54,8 @@ for cfg in ("prefix-only", "load-only", "default-weighted", "sticky-until-satura
 print(compare(hot_results.values()))
 print("\nTTFT p90 (ms, emulated backend):")
 print(ascii_bars({k: r.summary()["ttft_p90_ms"] for k, r in hot_results.items()}))
+p90 = {k: r.summary()["ttft_p90_ms"] for k, r in hot_results.items()}
+assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-only"], p90   # what the text below reads
 
 # %% [markdown]
 # `prefix-only` sends everything for the hot program to one replica: a top hit rate and by far the
@@ -62,9 +64,9 @@ print(ascii_bars({k: r.summary()["ttft_p90_ms"] for k, r in hot_results.items()}
 # of the hits while letting load push traffic off a busy replica — once a second replica has served
 # the hot prefix, the index lists it too and both become "sticky".
 #
-# **This ranking belongs to this engine and this workload.** Here `sticky-until-saturated` beats the
-# 3:2:2 chart default, while the primer's simulated fleet ([PRIMER §2.5](../../PRIMER.md)) ranks
-# the 3:2:2 EPP ahead of it. One reason is the fake backend: it runs one prefill at a time per
+# **This ranking belongs to this engine and this workload.** Here `sticky-until-saturated` has a
+# clearly shorter tail (p90) than the 3:2:2 chart default, while the primer's simulated fleet
+# ([PRIMER §2.5](../../PRIMER.md)) ranks the 3:2:2 EPP ahead of it. One reason is the fake backend: it runs one prefill at a time per
 # replica, so the tokens queued for prefill *are* the delay, and a filter gated on exactly that
 # (in-flight uncached tokens ÷ prefill throughput) plus a scorer that balances tokens fits it
 # well; the queue and KV scores of 3:2:2 see a request count and memory, not prefill work. On an
