@@ -650,11 +650,9 @@ nav:
                               - "02 · Wait and resume": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/02_wait_and_resume.ipynb"
                               - "03 · Retry and reaper": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/03_retry_and_reaper.ipynb"
               - "long-running-agentic":
-                  - "Long-Running Agentic Workflows on Google Cloud": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/00_primer.md"
                   - "long-running-agents-gcp":
                       - "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/index.md"
                       - "Docs":
-                          - "Long-Running Agentic Workflows on Google Cloud": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/00_primer.md"
                           - "GCP cheat sheet for long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md"
                           - "Design drills — long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md"
                       - "Notebooks":
@@ -672,7 +670,6 @@ nav:
                       - "01 · Worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/01_worked.ipynb"
                       - "02 · Practice": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/02_practice.ipynb"
               - "lra":
-                  - "Primer": "layers/07-application-agent-framework/long-running-durable/lra/primer.md"
                   - "lra-gcp":
                       - "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/index.md"
                       - "Docs":

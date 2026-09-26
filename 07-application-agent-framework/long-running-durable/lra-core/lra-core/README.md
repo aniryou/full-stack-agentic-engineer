@@ -5,9 +5,9 @@ plus the same loop deployed to Google Cloud in one service. The full-featured ve
 sagas, budgets, Terraform, ADK) is the step-up; this is the part to understand first.
 
 ```
-core.py          the loop: Store, Queue, Ctx, Engine (guard -> lease -> step -> checkpoint -> enqueue), reaper   ~200 lines
+core.py          the loop: Store, Queue, Ctx, Engine (guard -> lease -> step -> checkpoint -> enqueue), reaper   ~220 lines
 workflow.py      draft -> review (wait for a human) -> publish (idempotent effect) -> notify                     ~60 lines
-test_core.py     nine tests, one per claim in core.py's docstring
+test_core.py     twelve tests: one per claim in core.py's docstring, plus the crash windows
 gcp/main.py      same Engine on Firestore + Cloud Tasks + Cloud Run (+ Scheduler for /reap)                     ~125 lines
 gcp/deploy.sh    gcloud commands: enable APIs, Firestore, queue, deploy, scheduler
 notebooks/       three fill-in-the-blank notebooks (solutions/ has the answers, executed)
@@ -18,7 +18,7 @@ PRIMER.md        the concept in two pages
 
 ```bash
 python workflow.py                 # start a run, park it at review, "two days" pass, approve, publish
-python -m pytest -q                # 9 tests: stale guard, retries, crash windows, resume, timeout, lease
+python -m pytest -q                # 12 tests: stale guard, retries, crash windows, orphans, resume, timeout, lease
 jupyter lab notebooks/             # fill in the blanks; asserts tell you when you're right
 ```
 
