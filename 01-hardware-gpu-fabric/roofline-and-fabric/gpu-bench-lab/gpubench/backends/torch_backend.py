@@ -31,6 +31,21 @@ from ..timing import Timing, bench
 from . import BackendUnavailable
 
 
+def _why_no_cuda(torch) -> str:
+    """Tell apart "no GPU here" from "a GPU, but this PyTorch cannot use its driver"."""
+    from ..inventory import query_gpus
+
+    rows, _ = query_gpus()
+    built = getattr(torch.version, "cuda", None)
+    if not rows:
+        return "PyTorch is installed but no CUDA GPU is visible (torch.cuda.is_available() is False)"
+    driver = rows[0].get("driver_version", "?")
+    return (f"nvidia-smi sees {rows[0].get('name', 'a GPU')} (driver {driver}), but PyTorch {torch.__version__} "
+            f"(built for CUDA {built or 'none: a CPU-only build'}) cannot use it. CUDA 13 builds — PyPI's default "
+            "from PyTorch 2.11 — need an R580+ driver (verify); on an older driver install a CUDA 12.6 build: "
+            "pip install torch --index-url https://download.pytorch.org/whl/cu126")
+
+
 class TorchBackend:
     name = "torch"
     is_gpu = True
@@ -42,7 +57,7 @@ class TorchBackend:
         except ImportError as e:
             raise BackendUnavailable("PyTorch is not installed (Colab/Kaggle have it; else pip install -e '.[gpu]')") from e
         if not torch.cuda.is_available():
-            raise BackendUnavailable("PyTorch is installed but no CUDA GPU is visible (torch.cuda.is_available() is False)")
+            raise BackendUnavailable(_why_no_cuda(torch))
         if device_index >= torch.cuda.device_count():
             raise BackendUnavailable(f"cuda:{device_index} requested but only {torch.cuda.device_count()} GPU(s) visible")
         self.torch = torch
@@ -194,8 +209,12 @@ class TorchBackend:
                   extras={"working_set_bytes": x.numel() * x.element_size()})
 
     # -- transfers ---------------------------------------------------------------------------------
-    def make_transfer(self, nbytes: int, direction: str = "h2d", pinned: bool = True) -> Op:
-        """Host↔device copy of ``nbytes`` from pinned (page-locked) or pageable host memory."""
+    def make_transfer(self, nbytes: int, direction: str = "h2d", pinned: bool = True, sync_each: bool = False) -> Op:
+        """Host↔device copy of ``nbytes`` from pinned (page-locked) or pageable host memory.
+
+        ``sync_each=False``: timed back to back (a pinned copy is asynchronous, so copies overlap
+        their fixed costs: the fitted α is an issue cost). ``sync_each=True``: every sample is one
+        copy between two synchronisations (the fitted α is the latency of a copy)."""
         t = self.torch
         host = t.empty(nbytes, dtype=t.uint8, pin_memory=pinned)
         host.fill_(1)                                    # touch every page before timing
@@ -209,11 +228,14 @@ class TorchBackend:
                 host.copy_(dev, non_blocking=pinned)
         else:
             raise ValueError("direction must be 'h2d' or 'd2h'")
-        return Op(fn, transfer_cost(nbytes), timer="wall",
-                  note=("pinned" if pinned else "pageable") + " host memory")
+        return Op(fn, transfer_cost(nbytes), timer="wall", max_inner=1 if sync_each else None,
+                  note=("pinned" if pinned else "pageable") + " host memory, "
+                       + ("one synchronised copy per sample" if sync_each else "copies back to back"),
+                  extras={"sync_each": sync_each})
 
-    def make_p2p(self, src: int, dst: int, nbytes: int, bidirectional: bool = False) -> Op:
-        """GPU ``src`` → GPU ``dst`` copy (both ways at once if ``bidirectional``)."""
+    def make_p2p(self, src: int, dst: int, nbytes: int, bidirectional: bool = False, sync_each: bool = False) -> Op:
+        """GPU ``src`` → GPU ``dst`` copy (both ways at once if ``bidirectional``); ``sync_each`` as
+        in ``make_transfer`` (one synchronised copy per sample: the latency, not the issue cost)."""
         t = self.torch
         a = t.empty(nbytes, dtype=t.uint8, device=f"cuda:{src}")
         a.fill_(1)
@@ -237,7 +259,7 @@ class TorchBackend:
                     b2.copy_(a2, non_blocking=True)
         note = "direct peer access" if peer else "no peer access: the driver stages through host memory"
         return Op(fn, transfer_cost(nbytes, directions=2 if bidirectional else 1), timer="wall", note=note,
-                  extras={"peer_access": peer})
+                  max_inner=1 if sync_each else None, extras={"peer_access": peer, "sync_each": sync_each})
 
     def make_file_to_device(self, path: str, chunk_bytes: int = 64 << 20, buffers: int = 2,
                             setup=None) -> Op:

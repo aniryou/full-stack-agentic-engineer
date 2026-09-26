@@ -10,7 +10,9 @@ in ~40 lines; the ``safetensors`` library (optional) reads what they write.
 
 **The measurement.** "How fast can I load weights?" has three honest answers, and the lab
 measures each: *cold* (the file is not in the OS page cache — the disk's speed; the lab evicts
-the file with ``posix_fadvise(DONTNEED)``, no root needed, Linux only), *warm* (the page cache
+the file with ``posix_fadvise(DONTNEED)``, no root needed, Linux only — and refuses to call a
+read cold when the file sits on ``tmpfs``/``ramfs``, which *is* RAM and cannot be evicted; ``/tmp``
+is tmpfs on many distributions, so ``default_workdir`` avoids it), *warm* (the page cache
 has it — you are measuring memory copies), and *parallel* (several reads in flight — what SSDs
 and network disks need to reach their rated throughput: Little's law again). The destination
 buffer is allocated and touched once, up front: otherwise the first-touch page faults on a fresh
@@ -25,7 +27,9 @@ from __future__ import annotations
 import json
 import mmap
 import os
+import re
 import struct
+import tempfile
 
 import numpy as np
 
@@ -140,11 +144,59 @@ def synthetic_checkpoint(path, target_bytes: int, hidden: int = 1024, dtype: str
     return {"path": str(path), "bytes": written, "tensors": len(tensors), "layers": layer, "hidden": hidden, "dtype": dtype}
 
 
+# -- where the file lives ------------------------------------------------------------------------------------
+RAM_FILESYSTEMS = {"tmpfs", "ramfs"}
+
+
+def filesystem_type(path) -> str | None:
+    """The filesystem type holding ``path`` (``"ext4"``, ``"tmpfs"``, ...) from the longest matching
+    mount point in ``/proc/self/mountinfo``; None where that file does not exist (not Linux)."""
+    try:
+        lines = open("/proc/self/mountinfo").read().splitlines()
+    except OSError:
+        return None
+    target = os.path.realpath(path)
+    best, fstype = -1, None
+    for line in lines:
+        left, sep, right = line.partition(" - ")
+        fields = left.split()
+        if not sep or len(fields) < 5 or not right.split():
+            continue
+        mnt = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[4])   # \040 is a space
+        inside = target == mnt or mnt == "/" or target.startswith(mnt.rstrip("/") + "/")
+        if inside and len(mnt) > best:            # later mounts over the same point win (>=)
+            best, fstype = len(mnt), right.split()[0]
+        elif inside and len(mnt) == best:
+            fstype = right.split()[0]
+    return fstype
+
+
+def cold_read_possible(path) -> tuple:
+    """``(True, "")`` if a read of ``path`` can be made cold here, else ``(False, why)``."""
+    if not hasattr(os, "posix_fadvise"):
+        return False, "posix_fadvise is unavailable (not Linux): the page cache cannot be dropped"
+    fs = filesystem_type(path)
+    if fs in RAM_FILESYSTEMS:
+        return False, (f"the file is on {fs}, i.e. in RAM: nothing can be evicted, so a 'cold' read would be a "
+                       "memory copy — point the workdir at a real disk")
+    return True, ""
+
+
+def default_workdir(prefix: str = "gpubench-") -> str:
+    """A fresh temporary directory on a real disk: the system temp dir unless it is RAM-backed
+    (``/tmp`` is tmpfs on Fedora, Arch, Debian 13, ...), else the current directory, else home."""
+    for base in (tempfile.gettempdir(), os.getcwd(), os.path.expanduser("~")):
+        if filesystem_type(base) not in RAM_FILESYSTEMS and os.access(base, os.W_OK):
+            return tempfile.mkdtemp(prefix=prefix, dir=base)
+    return tempfile.mkdtemp(prefix=prefix)
+
+
 # -- reading, three ways ----------------------------------------------------------------------------------
 def drop_page_cache(path) -> bool:
     """Evict ``path`` from the OS page cache (Linux ``posix_fadvise``; no root needed). Returns
-    False where unsupported — then every "cold" read is really warm, and the lab says so."""
-    if not hasattr(os, "posix_fadvise"):
+    False where that cannot make the next read cold — no ``posix_fadvise``, or a file on
+    tmpfs/ramfs (RAM itself) — and then the lab does not call the read cold."""
+    if not cold_read_possible(path)[0]:
         return False
     fd = os.open(path, os.O_RDONLY)
     try:
@@ -232,6 +284,13 @@ def make_load_op(path, method: str = "read", threads: int = 1, chunk_bytes: int 
     else:
         raise ValueError(f"method must be one of {list(METHODS)}")
     setup = (lambda: drop_page_cache(path)) if cold else None
+    cold_ok, why = cold_read_possible(path) if cold else (True, "")
+    if not cold:
+        note = "warm (page cache)"
+    elif cold_ok:
+        note = "cold (page cache dropped before each sample)"
+    else:
+        note = f"NOT cold — {why}"
 
     def verify() -> bool:
         with open(path, "rb") as f:
@@ -240,10 +299,10 @@ def make_load_op(path, method: str = "read", threads: int = 1, chunk_bytes: int 
             tail = f.read()
         return bytes(dst[: len(head)]) == head and bytes(dst[size - len(tail): size]) == tail
 
-    return Op(fn, transfer_cost(size), setup=setup, max_inner=1 if cold else None, verify=verify,
-              note=("cold (page cache dropped before each sample)" if cold else "warm (page cache)"),
-              extras={"cache": "cold" if cold else "warm", "threads": threads if method == "pread" else 1,
-                      "chunk_bytes": chunk_bytes})
+    return Op(fn, transfer_cost(size), setup=setup, max_inner=1 if cold else None, verify=verify, note=note,
+              extras={"cache": "cold" if cold else "warm", "cold_valid": cold_ok,
+                      "threads": threads if method == "pread" else 1, "chunk_bytes": chunk_bytes,
+                      "filesystem": filesystem_type(path)})
 
 
 def bench_load(path, methods=("read", "pread", "mmap"), caches=("cold", "warm"), threads=(4,),
@@ -251,12 +310,12 @@ def bench_load(path, methods=("read", "pread", "mmap"), caches=("cold", "warm"),
     """Measure each method × cache state (× thread count for ``pread``) on ``path``."""
     size = os.path.getsize(path)
     dst = np.empty(size, dtype=np.uint8)
-    cold_ok = drop_page_cache(path)
+    cold_ok, why = cold_read_possible(path)
     out = []
     for cache in caches:
         if cache == "cold" and not cold_ok:
             if skipped is not None:
-                skipped.append({"what": "cold reads", "reason": "cannot drop the page cache here (not Linux?)"})
+                skipped.append({"what": "cold reads", "reason": why})
             continue
         for method in methods:
             for t in (threads if method == "pread" else (1,)):

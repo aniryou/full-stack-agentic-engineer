@@ -40,9 +40,14 @@ def measure_matrix(be, nbytes: int = 256 << 20, bidirectional: bool = False, dev
     return out
 
 
-def size_sweep(be, src: int, dst: int, sizes, repeats: int = 5, min_time: float = 0.02) -> list:
-    """One pair over a range of sizes: feed it to ``transfer.fit`` for α and β of the path."""
-    return [measure(be, be.make_p2p(src, dst, s), "p2p", {"src": src, "dst": dst, "nbytes": s},
+def size_sweep(be, src: int, dst: int, sizes, repeats: int = 5, min_time: float = 0.02,
+               latency: bool = False) -> list:
+    """One pair over a range of sizes: feed it to ``transfer.fit`` for α and β of the path.
+    ``latency=True`` times one synchronised copy per sample, so the fitted α is a copy's latency
+    (what each dependent step of a collective pays) rather than the pipelined issue cost."""
+    mode = "latency" if latency else "pipelined"
+    return [measure(be, be.make_p2p(src, dst, s, sync_each=latency), "p2p",
+                    {"src": src, "dst": dst, "nbytes": s, "mode": mode},
                     repeats=repeats, min_time=min_time) for s in sizes]
 
 
@@ -51,30 +56,59 @@ class PathEstimate:
     gbs: float               # theoretical GB/s per direction (a model, not a measurement)
     path: str                # the topo code, e.g. "NV18", "PIX", "SYS"
     why: str
+    mode: str = "direct"     # "direct" (peer access), "staged" (through host memory), "upper-bound" (unknown)
 
 
-def path_bandwidth(code: str, arch: str | None = None, pcie_gen: int = 4, pcie_lanes: int = 16) -> PathEstimate:
-    """Theoretical per-direction bandwidth of one ``nvidia-smi topo`` path."""
+def path_bandwidth(code: str, arch: str | None = None, pcie_gen: int = 4, pcie_lanes: int = 16,
+                   peer_access: bool | None = None) -> PathEstimate:
+    """Theoretical per-direction bandwidth of one ``nvidia-smi topo`` path.
+
+    ``peer_access`` is what ``torch.cuda.can_device_access_peer`` says for the pair (None when it
+    is not known, e.g. from a saved topology). With peer access a PCIe copy runs at the link rate;
+    without it the driver stages the copy through host memory — two PCIe crossings and a host
+    copy — modelled as half the link (measured staged copies often land lower still):
+
+    * ``NV#``: links × the per-link rate of the NVLink generation.
+    * ``PIX``/``PXB``: the link rate (peer access through PCIe switches normally works).
+    * ``PHB``: the link rate *if* peer access works through the root complex — an upper bound
+      when unknown, because many platforms and most VMs disable it; staged when it is off.
+    * ``NODE``/``SYS``: staged unless peer access is reported (P2P rarely crosses host bridges or
+      the socket link).
+    """
     if code.startswith("NV"):
         links = int(code[2:])
         gen = NVLINK_GEN.get(arch or "", 4)
         rate = NVLINK_GBS_PER_LINK[gen]
         assumed = "" if arch in NVLINK_GEN else " (NVLink gen assumed 4; pass arch)"
         return PathEstimate(links * rate, code, f"{links} NVLink{gen} links × {rate:g} GB/s{assumed}")
+    if code not in ("PIX", "PXB", "PHB", "NODE", "SYS"):
+        raise ValueError(f"unknown path code {code!r}")
     link = pcie_gbs(pcie_gen, pcie_lanes)
+    at = f"Gen{pcie_gen} x{pcie_lanes}"
+    staged = PathEstimate(link / 2, code, f"no peer access: staged through host memory, ~half of {at} (often less)",
+                          "staged")
+    if peer_access is False:
+        return staged
     if code in ("PIX", "PXB"):
-        return PathEstimate(link, code, f"P2P through PCIe switch(es) at Gen{pcie_gen} x{pcie_lanes}")
+        return PathEstimate(link, code, f"direct P2P through PCIe switch(es) at {at}")
     if code == "PHB":
-        return PathEstimate(link, code, "P2P through the CPU root complex: often slower or disabled — measure it")
-    if code in ("NODE", "SYS"):
-        return PathEstimate(link / 2, code, "P2P usually unavailable across host bridges/sockets: "
-                                            "the copy is staged through host memory (~half the link)")
-    raise ValueError(f"unknown path code {code!r}")
+        if peer_access:
+            return PathEstimate(link, code, f"direct P2P through the CPU root complex at {at} (can be slower: measure)")
+        return PathEstimate(link, code, f"upper bound {at}, if peer access works through the root complex; "
+                                        "often off (most VMs): then staged, ~half or less", "upper-bound")
+    if peer_access:
+        return PathEstimate(link, code, f"peer access reported across host bridges: at most {at}, usually far "
+                                        "less — measure")
+    return PathEstimate(link / 2, code, f"P2P rarely crosses host bridges or sockets: staged through host "
+                                        f"memory, ~half of {at} (often less)", "staged")
 
 
-def predict(topo: Topology, arch: str | None = None, pcie_gen: int = 4, pcie_lanes: int = 16) -> dict:
-    """``{(gpu_a, gpu_b): PathEstimate}`` for every ordered GPU pair of a parsed topology."""
-    return {(a, b): path_bandwidth(topo.link(a, b), arch, pcie_gen, pcie_lanes)
+def predict(topo: Topology, arch: str | None = None, pcie_gen: int = 4, pcie_lanes: int = 16,
+            peer_access: dict | None = None) -> dict:
+    """``{(gpu_a, gpu_b): PathEstimate}`` for every ordered GPU pair of a parsed topology.
+    ``peer_access`` optionally maps ``(gpu_a, gpu_b)`` to what the driver reported."""
+    peer_access = peer_access or {}
+    return {(a, b): path_bandwidth(topo.link(a, b), arch, pcie_gen, pcie_lanes, peer_access.get((a, b)))
             for a in topo.gpus for b in topo.gpus if a != b}
 
 

@@ -10,7 +10,11 @@ exactly what the orchestration layer can observe or exploit:
   * preemption by recompute when decode runs out of blocks,
   * a roofline step time, overhead + max(compute, memory), so one prefill chunk stalls every decode in the batch.
 
-The profile numbers come from spec-sheet arithmetic in `engine_profile()`; nothing here is measured.
+The profile numbers come from spec-sheet arithmetic in `engine_profile()`; nothing here is measured. What the model
+leaves out, so its long-context numbers are optimistic: prefill compute is linear in tokens (2 x params FLOPs per
+token; attention's ~4 x layers x d_model x context FLOPs per token are omitted — about +10 % for an 8B model at
+6k tokens of prompt, +16 % at 10k, +50 % at 30k), and a small prefill chunk costs no more per token than a big one
+(real kernels lose efficiency on small chunks). Decode attention's KV *reads* are modelled.
 """
 from __future__ import annotations
 
@@ -56,7 +60,8 @@ H100_8B = engine_profile("8B bf16 on 1x H100 (simulated)", params_b=8, bytes_per
 
 
 def step_time(p: EngineProfile, tokens: int, kv_tokens: int) -> float:
-    """One engine step: overhead + max(tokens / compute speed, weight read + KV read) — a roofline."""
+    """One engine step: overhead + max(tokens / compute speed, weight read + KV read) — a roofline.
+    Compute is linear in tokens: attention FLOPs, which grow with context, are left out (see the module docstring)."""
     return p.overhead_s + max(tokens / p.compute_tok_s, p.weight_read_s + kv_tokens * p.kv_read_s)
 
 
@@ -130,7 +135,7 @@ class Replica:
         self.ready, self.draining, self.busy = ready, False, False
         self.born, self.ready_at, self.died = now, now if ready else None, None
         self.busy_time, self.itl = 0.0, []
-        self.stats = dict(requests=0, prompt=0, cached=0, tokens=0, preempted=0, steps=0)
+        self.stats = dict(requests=0, prompt=0, cached=0, tokens=0, preempted=0, steps=0, lora_loads=0)
         self._batch, self._t0, self._snap, self._snap_t, self._busy_mark = [], 0.0, None, -1.0, 0.0
 
     # -- what a router or autoscaler can observe ---------------------------------------------------------
@@ -233,11 +238,13 @@ class Replica:
     # -- KV bookkeeping ----------------------------------------------------------------------------------
     def _admit(self, s, budget) -> bool:
         B, pool = self.p.block, self.pool
-        if s.kv_ready:                                  # KV arrived over the network: no lookup, no prefill
-            need = -(-(s.ctx + 1) // B)
-            if len(pool.free) < need:
+        if s.kv_ready:                                  # P/D: the prompt was prefilled elsewhere. Its cached prefix
+            hit = pool.match(s.req.hashes, s.req.pblocks)   # comes from this pool; the rest arrived over the link
+            need = -(-(s.ctx + 1) // B) - len(hit)
+            if len(pool.free) - sum(1 for b in hit if pool.ref[b] == 0) < need:
                 return False
-            s.blocks = [pool.allocate() for _ in range(need)]
+            pool.take(hit)
+            s.blocks, s.nreg = hit + [pool.allocate() for _ in range(need)], len(hit)
             self._register(s)
             return True
         hit = pool.match(s.req.hashes, min((s.target - 1) // B, s.req.nblocks))   # always compute >= 1 token
@@ -297,5 +304,6 @@ class Replica:
                 return False                            # every slot serves a running request
             del self.loras[victim]
         self.loras[lora] = None
-        self._lora_s += self.p.lora_load_s
+        self._lora_s += self.p.lora_load_s              # the whole step waits for the adapter load
+        self.stats["lora_loads"] += 1
         return True

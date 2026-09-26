@@ -6,7 +6,7 @@ the **ridge point**, is the arithmetic intensity (FLOPs per byte) an operation n
 compute, rather than memory, limits it. Below the ridge, a faster ALU buys nothing.
 
 ``measured_roofline`` builds the roofline from Measurements (best GEMM for the flat roof,
-best STREAM kernel for the slanted one); ``spec_roofline`` builds the datasheet version, so the
+best single-pass STREAM kernel for the slanted one); ``spec_roofline`` builds the datasheet version, so the
 two can be compared. Primer §2 derives the model; this module only applies it.
 
 One caution the notebooks repeat: the intensities here count *compulsory DRAM/HBM bytes*. A
@@ -69,10 +69,13 @@ class Roofline:
 
 def measured_roofline(gemms, bandwidths, dtype: str | None = None, label: str | None = None,
                       stat: str = "best") -> Roofline:
-    """Flat roof = fastest GEMM (of ``dtype`` if given); slanted roof = fastest byte-mover."""
+    """Flat roof = fastest GEMM (of ``dtype`` if given); slanted roof = fastest *single-pass*
+    byte-mover (a multi-pass implementation such as numpy's two-pass triad is left out: part of
+    its counted traffic can be served from cache, so its rate is not a DRAM rate)."""
     g = [m for m in gemms if dtype is None or m.params.get("dtype") == dtype]
+    bandwidths = [m for m in bandwidths if m.extras.get("passes", 1) == 1]
     if not g or not bandwidths:
-        raise ValueError("need at least one GEMM and one bandwidth measurement")
+        raise ValueError("need at least one GEMM and one single-pass bandwidth measurement")
     peak = max(m.flops_per_s(stat) for m in g)
     bw = max(m.bytes_per_s(stat) for m in bandwidths)
     dev = g[0].device

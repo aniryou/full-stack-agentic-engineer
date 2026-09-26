@@ -233,14 +233,19 @@ class KVCacheUtilizationScorer:
 
 
 class TokenLoadScorer:
-    """token-load-scorer: 1 - min(1, in-flight uncached prompt tokens / threshold). Counts work, not requests."""
+    """token-load-scorer: 1 - min(1, tokens / threshold), tokens = the endpoint's uncached prompt tokens in flight
+    + this request's tokens the endpoint has not cached (upstream InFlightLoad + UncachedRequestTokens). It counts
+    work, not requests, and prices cache warmth in the same units: a warm endpoint costs this request less."""
     name = "token-load-scorer"
 
     def __init__(self, threshold_tokens=4_194_304):
         self.threshold = threshold_tokens
 
+    def tokens(self, req, r, router) -> int:
+        return router.inflight_tokens[r.rid] + max(0, req.prompt - router.cached_estimate(req, r))
+
     def score(self, req, replicas, router, now):
-        return {r.rid: 1.0 - min(1.0, router.inflight_tokens[r.rid] / self.threshold) for r in replicas}
+        return {r.rid: 1.0 - min(1.0, self.tokens(req, r, router) / self.threshold) for r in replicas}
 
 
 class LoraAffinityFilter:
@@ -257,23 +262,30 @@ class LoraAffinityFilter:
 
 class PrefixAffinityFilter:
     """prefix-cache-affinity-filter, "sticky until saturated": keep replicas whose prefix score >= threshold; if the
-    best sticky replica's estimated TTFT (in-flight tokens / peak prefill tok/s) exceeds the best non-sticky one's
-    by more than max_ttft_penalty_s, break stickiness and keep everyone. Upstream defaults: 0.80, 18 s, 15928."""
+    best sticky replica's estimated TTFT (its in-flight tokens / peak prefill tok/s) exceeds the best non-sticky
+    one's by more than max_ttft_penalty_s, break stickiness and keep everyone (penalty 0 = always stick).
+    Upstream defaults: 0.80, 18 s, 15928. `decisions` counts outcomes like the upstream
+    llm_d_epp_prefix_cache_affinity_filter_decisions_total: no_match, sticky, load_override (a gate break)."""
     name = "prefix-cache-affinity-filter"
 
     def __init__(self, index=None, threshold=0.8, max_ttft_penalty_s=18.0, peak_prefill_tok_s=15928.0):
         self.index, self.threshold = index or ApproxPrefixIndex(), threshold
         self.penalty, self.peak = max_ttft_penalty_s, peak_prefill_tok_s
+        self.decisions = defaultdict(int)
 
     def filter(self, req, replicas, router, now):
         total = req.pblocks
         sticky = [r for r in replicas if total and self.index.match(req, r) / total >= self.threshold]
-        if not sticky or len(sticky) == len(replicas):
-            return replicas
-        est = lambda r: router.inflight_tokens[r.rid] / self.peak          # noqa: E731
         others = [r for r in replicas if r not in sticky]
-        if min(map(est, sticky)) - min(map(est, others)) > self.penalty:
-            return replicas                                               # sticky set is saturated: spread
+        if not sticky:
+            self.decisions["no_match"] += 1
+            return replicas
+        if self.penalty > 0 and others:
+            est = lambda r: router.inflight_tokens[r.rid] / self.peak      # noqa: E731
+            if min(map(est, sticky)) - min(map(est, others)) > self.penalty:
+                self.decisions["load_override"] += 1
+                return replicas                                           # sticky set is saturated: spread
+        self.decisions["sticky"] += 1
         return sticky
 
 

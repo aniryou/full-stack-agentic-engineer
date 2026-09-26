@@ -342,10 +342,11 @@ print("✅ time-slicing multiplies the integer, not the hardware")
 # streams device health; the kubelet turns that into capacity and allocatable on the Node; the
 # scheduler sees an integer and never overcommits it. Requests are whole GPUs with requests equal
 # to limits. We taint GPU nodes so only GPU pods land there — the ExtendedResourceToleration
-# plugin adds the toleration automatically — and select GPU types with node labels. If we need
-# fractions we choose MIG for isolation or time-slicing for density, knowing time-slicing gives
-# no memory or fault isolation and that two slices may be one GPU. A GPU that goes unhealthy drops allocatable but does not evict
-# running pods, so health alerts and node drains are part of the design."
+# admission plugin (on in GKE; we enable it on self-built clusters) adds the toleration to GPU pods —
+# and select GPU types with node labels. If we need fractions we choose MIG for isolation or
+# time-slicing for density, knowing time-slicing gives no memory or fault isolation and that two
+# slices may be one GPU. A GPU that goes unhealthy drops allocatable but does not evict running
+# pods, so health alerts and node drains are part of the design."
 #
 # **Drill questions.**
 #

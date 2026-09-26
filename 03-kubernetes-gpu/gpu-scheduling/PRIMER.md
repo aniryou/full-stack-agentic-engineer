@@ -351,9 +351,8 @@ does not break the tie. Admitting each job **whole** runs A on 8 GPUs while B wa
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler; common in HPC-style clusters |
 | **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`; the scheduler places a pod group together | alpha in 1.35 behind the `GenericWorkload` feature gate, beta in 1.37 and stable targeted for 1.38 per the KEP metadata (verify the release you run); Kueue plans to integrate |
 
-The pattern that works today on GKE and elsewhere is Kueue in front of the default scheduler: jobs queue
-as whole units, TAS or a ProvisioningRequest makes sure the nodes exist and fit, and `waitForPodsReady`
-catches what slips through.
+The pattern that works today, on GKE and elsewhere, is Kueue in front of the default scheduler: jobs queue
+whole, TAS or a ProvisioningRequest makes sure the nodes exist and fit, `waitForPodsReady` catches the rest.
 
 ### 4.3 JobSet and LeaderWorkerSet
 
@@ -708,11 +707,12 @@ view:
 | **DRA** | claims shared by several containers or pods; MIG devices as `mig.nvidia.com` (profile attribute) | per driver | the direction of travel (section 1.5) |
 
 The trap with time-slicing: a container that requests 2 "GPUs" may get two slices of the **same** physical
-GPU — `DevicePlugin(replicas=10)` hands out `GPU-fake-0000` twice in the simulator, exactly as the NVIDIA
-plugin can. NVIDIA's `failRequestsGreaterThanOne` option rejects such requests, and on GKE time-sharing
-nodes a container may request at most one `nvidia.com/gpu` (the GKE device plugin enforces it). MIG
-partition counts are fixed per profile — an A100 40 GB offers seven `1g.5gb`, three `2g.10gb` or two
-`3g.20gb` slices; H100 80 GB seven `1g.10gb` (per GKE's device plugin; verify for your GPU and driver).
+GPU — `DevicePlugin(replicas=10)` hands out `GPU-fake-0000` twice (notebook 01, exercise 1.6), exactly as
+the NVIDIA plugin can. Its `failRequestsGreaterThanOne` option fails such a container at admission
+(`DevicePlugin(fail_requests_greater_than_one=True)`); on GKE time-sharing nodes a container may request at most one
+`nvidia.com/gpu` (the GKE device plugin enforces it). MIG partition counts are fixed per profile — an A100
+40 GB offers seven `1g.5gb`, three `2g.10gb` or two `3g.20gb` slices; H100 80 GB seven `1g.10gb` (per GKE's
+device plugin; verify for your GPU and driver).
 Node-level sharing settings are per node pool on GKE (`gpu_sharing_config.gpu_sharing_strategy`,
 `max_shared_clients_per_gpu`), so sharing is a *pool* decision: put shared and exclusive GPUs in different
 pools and let labels route the pods.
@@ -740,8 +740,8 @@ kubectl taint node kind-worker nvidia.com/gpu=present:NoSchedule
 pods the `nvidia.com/gpu` Exists/NoSchedule toleration yourself, or enable the plugin through a kind
 `kubeadmConfigPatches` entry for the API server (keep `NodeRestriction`). The scheduler then places GPU pods,
 Kueue admits and preempts against real quota, TAS reads your topology labels — and containers get no device,
-because no device plugin answers `Allocate`. Lab notebook `02_kind_with_fake_gpus_and_kueue` scripts this (and falls back to a
-bundled simulator when Docker is absent).
+because no device plugin answers `Allocate`. Lab notebook `02_kind_with_fake_gpus_and_kueue` scripts this
+(and falls back to a bundled simulator when Docker is absent).
 
 ### 10.2 KWOK and fake-gpu-operator
 

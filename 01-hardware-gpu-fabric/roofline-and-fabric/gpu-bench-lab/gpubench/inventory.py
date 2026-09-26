@@ -165,13 +165,58 @@ def cache_sizes() -> dict:
     return out
 
 
+def llc_total_bytes() -> int | None:
+    """Every last-level cache on the machine added up (Linux).
+
+    ``cache_sizes`` reports cpu0's caches only, but a two-socket server has one L3 per socket and
+    an AMD EPYC one per CCD (8 × 32 MB is 256 MB of L3). STREAM's rule — each array at least 4× the
+    last-level cache — means 4× the *sum* of every LLC the run's threads can use, so this counts
+    each distinct instance once (instances are told apart by ``shared_cpu_list``). None where
+    /sys is not available; the caller falls back to ``cache_sizes``.
+    """
+    root = "/sys/devices/system/cpu"
+    if not os.path.isdir(root):
+        return None
+    instances: dict = {}
+    top = 0
+    for cpu in os.listdir(root):
+        base = os.path.join(root, cpu, "cache")
+        if not re.fullmatch(r"cpu\d+", cpu) or not os.path.isdir(base):
+            continue
+        for idx in os.listdir(base):
+            p = os.path.join(base, idx)
+            try:
+                level = int(open(os.path.join(p, "level")).read())
+                if open(os.path.join(p, "type")).read().strip() == "Instruction":
+                    continue
+                size = _size(open(os.path.join(p, "size")).read())
+                shared = open(os.path.join(p, "shared_cpu_list")).read().strip()
+            except (OSError, ValueError):
+                continue
+            instances[(level, shared)] = size
+            top = max(top, level)
+    total = sum(size for (level, _), size in instances.items() if level == top)
+    return total or None
+
+
+def usable_cpus() -> int:
+    """CPUs this process may run on: the affinity mask (a container or ``taskset`` can restrict it),
+    not ``os.cpu_count()``, which reports every CPU of the host."""
+    if hasattr(os, "sched_getaffinity"):
+        try:
+            return len(os.sched_getaffinity(0)) or 1
+        except OSError:
+            pass
+    return os.cpu_count() or 1
+
+
 def cpu_info() -> dict:
     """Model, usable CPUs, vector ISA, nominal clock, caches and RAM of this machine."""
     from .specs import simd_bits_from_flags
 
     info = {"system": platform.system(), "machine": platform.machine(), "logical_cpus": os.cpu_count()}
     if hasattr(os, "sched_getaffinity"):
-        info["usable_cpus"] = len(os.sched_getaffinity(0))    # containers may restrict this
+        info["usable_cpus"] = usable_cpus()    # containers may restrict this
     model, flags, mhz = None, set(), None
     if os.path.exists("/proc/cpuinfo"):
         for line in open("/proc/cpuinfo", errors="replace"):
@@ -201,6 +246,7 @@ def cpu_info() -> dict:
     m = re.search(r"@\s*([\d.]+)\s*GHz", info["model"])
     info["ghz_nominal"] = float(m.group(1)) if m else (round(mhz / 1000, 2) if mhz else None)
     info["caches"] = cache_sizes()
+    info["llc_total_bytes"] = llc_total_bytes()
     try:
         info["memory_bytes"] = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
     except (ValueError, OSError, AttributeError):

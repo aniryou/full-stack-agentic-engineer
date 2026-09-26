@@ -14,7 +14,7 @@ number it quotes comes from here and is pinned by `tests/test_primer_numbers.py`
 ```bash
 cd roofline-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 57 tests, well under a second
+python3 -m pytest -q                          # 58 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

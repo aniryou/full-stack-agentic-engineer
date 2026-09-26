@@ -734,14 +734,14 @@ Every concept in this topic is learnable at T0; hardware is for measuring it. Wh
 
 ### 10.1 On Google Cloud
 
-GPU families (September 2026, verify): **G2** (L4, e.g. `g2-standard-4` = 1 L4, ~$0.70/hr on demand);
-**N1 + T4**; **A2** (A100 40 GB `a2-highgpu-*`, 80 GB `a2-ultragpu-*`); **A3** (H100: on demand only as
+GPU families (September 2026, verify): **G2** (L4, e.g. `g2-standard-4` = 1 L4, ~$0.70/hr on demand); **N1 +
+T4**; **A2** (A100 40 GB `a2-highgpu-*`, 80 GB `a2-ultragpu-*`); **A3** (H100: on demand only as
 `a3-highgpu-8g`, ~$88/hr; smaller A3 shapes via Spot or flex-start; **A3 Mega** adds GPUDirect-TCPXO
-networking); **A3 Ultra** (H200) and **A4** (B200, NVLink 1.8 TB/s per GPU), **A4X** (GB200 NVL72) and
-**A4X Max** (GB300 NVL72), which use GPUDirect RDMA over ConnectX-7 NICs on a rail-aligned network; **G4**
-(RTX PRO 6000 Blackwell, 96 GB). **Cloud Run** offers L4 and RTX PRO 6000 GPUs with per-second billing and
-scale to zero. **TPUs**: v5e and v6e as Cloud TPU VMs or through GKE; TPU7x "Ironwood" (GA April 2026)
-through GKE (verify).
+networking); **A3 Ultra** (H200) and **A4** (B200, NVLink 1.8 TB/s per GPU), **A4X** (GB200 NVL72) and **A4X
+Max** (GB300 NVL72), which use GPUDirect RDMA over ConnectX NICs on a rail-aligned network (ConnectX-7 on A3
+Ultra and A4; likely ConnectX-8 on A4X Max — verify per machine type); **G4** (RTX PRO 6000 Blackwell, 96
+GB). **Cloud Run** offers L4 and RTX PRO 6000 GPUs with per-second billing and scale to zero. **TPUs**: v5e
+and v6e as Cloud TPU VMs or through GKE; TPU7x "Ironwood" (GA April 2026) through GKE (verify).
 
 Obtainability matters as much as price. **On-demand** is simplest and scarcest for large parts. **Spot** is
 60–91% cheaper and can be preempted at any time — fine for benchmarks and stateless replicas with headroom.
