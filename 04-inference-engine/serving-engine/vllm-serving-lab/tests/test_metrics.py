@@ -1,12 +1,10 @@
 """/metrics parsing: names, windows between scrapes, and PromQL-exact histogram quantiles."""
 import math
-from pathlib import Path
 
 import pytest
 
+from servelab import SAMPLES_DIR as FIX
 from servelab import metrics as M
-
-FIX = Path(__file__).parent / "fixtures"
 
 
 def load(name, t):

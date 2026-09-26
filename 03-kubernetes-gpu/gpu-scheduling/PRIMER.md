@@ -343,7 +343,7 @@ does not break the tie. Admitting each job **whole** runs A on 8 GPUs while B wa
 
 | Mechanism | How | Notes |
 |---|---|---|
-| **Kueue** (job level) | a webhook creates Jobs **suspended** (`spec.suspend: true`; plain pods get the scheduling gate `kueue.x-k8s.io/admission`); Kueue admits the whole Workload against quota, then unsuspends it and injects the flavor's node selectors | quota is *logical*: an admitted job's pods may still not all fit on real nodes (fragmentation, pods Kueue does not manage). `waitForPodsReady` (default timeout 30 min) evicts and requeues a job whose pods are not all Ready, with backoff; `blockAdmission` admits one at a time; TAS (section 5) and ProvisioningRequest (section 7) check physical capacity |
+| **Kueue** (job level) | Kueue's webhook suspends queued Jobs on creation (`spec.suspend: true`; plain pods get the scheduling gate `kueue.x-k8s.io/admission`); Kueue admits the whole Workload against quota, then unsuspends it and injects the flavor's node selectors | quota is *logical*: an admitted job's pods may still not all fit on real nodes (fragmentation, pods Kueue does not manage). `waitForPodsReady` (default timeout 30 min) evicts and requeues a job whose pods are not all Ready, with backoff; `blockAdmission` admits one at a time; TAS (section 5) and ProvisioningRequest (section 7) check physical capacity |
 | **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | a `PodGroup` with `minMember`; the **Permit** stage holds reserved pods until `minMember` are reserved, else rejects after a timeout | runs inside a second scheduler profile; PodGroup API `scheduling.x-k8s.io/v1alpha1` (verify) |
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler; common in HPC-style clusters |
 | **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`; the scheduler places a pod group together | alpha in 1.35 behind the `GenericWorkload` feature gate, beta targeted for 1.37 (verify the version you run); Kueue plans to integrate |
@@ -750,8 +750,9 @@ Discovery labels, MIG and Prometheus metrics, so dashboards and label-based plac
 | autoscaling, Spot, queued provisioning | notebook 05 (simulated) | – | node pools, Spot, DWS flex-start, ComputeClass (lab notebook 04) | Karpenter, capacity reservations (verify) |
 | sharing (MIG, time-slicing) | notebook 01 (time-slicing replicas) | an A100/H100 VM for MIG | node-pool sharing settings | GPU Operator configs |
 
-Prices, free tiers and how obtainable each GPU is: [`COMPUTE.md`](../../COMPUTE.md). The order to work
-the whole curriculum: [`CURRICULUM.md`](../../CURRICULUM.md).
+Colab and Kaggle give you notebooks, not clusters: they run the core (T0) but not kind, which needs a Docker
+daemon. Prices, free tiers and how obtainable each GPU is: [`COMPUTE.md`](../../COMPUTE.md). The order to
+work the whole curriculum: [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ---
 
@@ -780,7 +781,7 @@ weights come from a cache."
 2. *Two training jobs have been "running" for an hour and neither has logged a step. What happened?* —
    Partial gang placement: each holds some GPUs and waits for the rest. Admit jobs whole (Kueue with
    `waitForPodsReady`, or a gang scheduler) so one runs and the other waits holding nothing.
-3. *Team A has 32 GPUs of nominal quota, runs nothing, and its 16-GPU job is Pending. Why?* — Its unused
+3. *Team A has 16 GPUs of nominal quota, runs nothing, and its 16-GPU job is Pending. Why?* — Its unused
    quota was lent to the cohort and `reclaimWithinCohort` is `Never`, so borrowers keep it until they finish.
    Enable reclaim, or set a `lendingLimit` to keep part of the quota home.
 4. *Required or preferred topology for a 2-node tensor-parallel serving group, and for a 32-node training

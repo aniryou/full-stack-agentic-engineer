@@ -61,8 +61,6 @@ print(l4.summary())
 # advertised 128K context needs 16 GiB of KV on its own. The fixes are exactly the knobs of this
 # notebook. (Recent vLLM also accepts `--max-model-len -1` to auto-fit the largest length — verify.)
 #
-# > **Exercise cells** below: replace `# YOUR CODE HERE`, then run the check cell under it.
-#
 # ## Exercise 1.1 — KV bytes per token, from a raw `config.json`
 #
 # Write `kv_bytes_per_token(cfg, kv_bytes=2, tp=1)` for a plain dict as read from `config.json`.
@@ -173,11 +171,12 @@ print(f"✅ FP8 weights + FP8 KV: {actual:.1f}x the concurrency ({r16.max_concur
 
 # %%
 import os, pathlib
+from servelab import SAMPLES_DIR
 log_path = pathlib.Path(os.environ.get("VLLM_LOG", "vllm.log"))
 if log_path.exists():                                   # T1: your own server's log
     LOG_TEXT, source = log_path.read_text(), f"measured ({log_path})"
 else:
-    LOG_TEXT = next(p for p in [pathlib.Path("../tests/fixtures/vllm_startup_log.txt")] if p.exists()).read_text()
+    LOG_TEXT = (SAMPLES_DIR / "vllm_startup_log.txt").read_text()
     source = "illustrative sample in vLLM's log format (not a measurement)"
 log = sizing.parse_startup_log(LOG_TEXT)
 print(source)
@@ -194,8 +193,10 @@ def replan(log: dict, max_model_len: int, kv_per_token: int, block_size: int = 1
 
 # %% check
 same = replan(log, log.get("max_model_len", 4096), 12_288)
-if "max_concurrency" in log and source.startswith("illustrative"):
+if source.startswith("illustrative"):
     assert abs(same - log["max_concurrency"]) < 0.01, (same, log)      # reproduces the logged line
+else:
+    print(f"your log says {log.get('max_concurrency')}x; replan says {same:.2f}x (12,288 B/token assumes Qwen2.5-0.5B)")
 at_8k = replan(log, 8192, 12_288)
 ref = size("qwen2.5-0.5b-instruct", "T4", max_model_len=8192,
            kv_budget_bytes=int(round(log["available_kv_gib"] * GiB))).max_concurrency

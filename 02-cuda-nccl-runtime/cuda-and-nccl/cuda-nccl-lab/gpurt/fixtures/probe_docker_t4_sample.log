@@ -1,0 +1,49 @@
+# SAMPLE OUTPUT in the documented format of deploy/any-gpu/probe.sh (illustrative, not captured from a real machine).
+# Scenario: `docker run --gpus all nvidia/cuda:12.8.1-base-ubuntu24.04 bash probe.sh` on a VM with one T4;
+# the NVIDIA Container Toolkit bind-mounts the host driver's files into the container one by one.
+=== gpurt-probe v1 ===
+2026-09-20T10:00:00Z
+=== env ===
+CUDA_VERSION=12.8.1
+LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+NVIDIA_DRIVER_CAPABILITIES=compute,utility
+NVIDIA_REQUIRE_CUDA=cuda>=12.8 brand=tesla,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536
+NVIDIA_VISIBLE_DEVICES=all
+=== dev ===
+crw-rw-rw- 1 root root 195, 254 Sep 20 09:59 /dev/nvidia-modeset
+crw-rw-rw- 1 root root 507,   0 Sep 20 09:59 /dev/nvidia-uvm
+crw-rw-rw- 1 root root 507,   1 Sep 20 09:59 /dev/nvidia-uvm-tools
+crw-rw-rw- 1 root root 195,   0 Sep 20 09:59 /dev/nvidia0
+crw-rw-rw- 1 root root 195, 255 Sep 20 09:59 /dev/nvidiactl
+=== mountinfo ===
+741 712 8:1 /usr/bin/nvidia-smi /usr/bin/nvidia-smi ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+742 712 8:1 /usr/bin/nvidia-debugdump /usr/bin/nvidia-debugdump ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+743 712 8:1 /usr/bin/nvidia-persistenced /usr/bin/nvidia-persistenced ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+744 712 8:1 /usr/bin/nvidia-cuda-mps-control /usr/bin/nvidia-cuda-mps-control ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+745 712 8:1 /usr/bin/nvidia-cuda-mps-server /usr/bin/nvidia-cuda-mps-server ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+746 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+747 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+748 712 8:1 /usr/lib/x86_64-linux-gnu/libcuda.so.570.172.08 /usr/lib/x86_64-linux-gnu/libcuda.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+749 712 8:1 /usr/lib/x86_64-linux-gnu/libcudadebugger.so.570.172.08 /usr/lib/x86_64-linux-gnu/libcudadebugger.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+750 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+751 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+752 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-allocator.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+753 712 8:1 /usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so.570.172.08 /usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so.570.172.08 ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+754 712 8:1 /usr/lib/firmware/nvidia/570.172.08/gsp_ga10x.bin /usr/lib/firmware/nvidia/570.172.08/gsp_ga10x.bin ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+755 712 8:1 /usr/lib/firmware/nvidia/570.172.08/gsp_tu10x.bin /usr/lib/firmware/nvidia/570.172.08/gsp_tu10x.bin ro,nosuid,nodev,relatime master:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+756 715 0:24 /nvidia-persistenced/socket /run/nvidia-persistenced/socket rw,nosuid,nodev,noexec,relatime master:5 - tmpfs tmpfs rw,size=1628664k,mode=755
+757 714 0:5 /nvidiactl /dev/nvidiactl ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8119180k,nr_inodes=2029795,mode=755
+758 714 0:5 /nvidia-uvm /dev/nvidia-uvm ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8119180k,nr_inodes=2029795,mode=755
+759 714 0:5 /nvidia-uvm-tools /dev/nvidia-uvm-tools ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8119180k,nr_inodes=2029795,mode=755
+760 714 0:5 /nvidia0 /dev/nvidia0 ro,nosuid,noexec,relatime master:2 - devtmpfs udev rw,size=8119180k,nr_inodes=2029795,mode=755
+761 713 0:22 /driver/nvidia/gpus/0000:00:04.0 /proc/driver/nvidia/gpus/0000:00:04.0 ro,nosuid,nodev,noexec,relatime master:12 - proc proc rw
+=== proc-driver-version ===
+NVRM version: NVIDIA UNIX x86_64 Kernel Module  570.172.08  (illustrative build string)
+GCC version:  gcc version 12.2.0
+=== nvidia-smi ===
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.172.08             Driver Version: 570.172.08     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+=== gpus ===
+0, Tesla T4, 7.5, 15360 MiB
+=== end ===

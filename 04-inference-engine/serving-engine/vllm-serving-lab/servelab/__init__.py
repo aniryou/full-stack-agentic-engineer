@@ -12,4 +12,10 @@ Modules, in the order the notebooks use them:
 """
 __version__ = "0.1.0"
 
+from pathlib import Path
+
+DATA_DIR = Path(__file__).parent / "data"
+# Illustrative samples in vLLM's formats (a /metrics page at two times, a startup log): not measurements.
+SAMPLES_DIR = DATA_DIR / "samples"
+
 from . import env, metrics, sizing  # noqa: F401  (light modules; bench/fakeserver import aiohttp)

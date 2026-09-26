@@ -26,7 +26,7 @@ servelab = "servelab.__main__:main"
 include = ["servelab*"]
 
 [tool.setuptools.package-data]
-servelab = ["data/configs/*.json"]
+servelab = ["data/configs/*.json", "data/samples/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
