@@ -33,9 +33,11 @@ print("ndcg_at_k ✓")
 # `rrf(rankings, k)`: score(d) = Σ over rankings 1/(k + rank(d) + 1), rank
 # 0-based; return doc ids sorted by score. Checks with k=1:
 # [a,b,c] + [c,a,b] → a: 1/2+1/3, c: 1/4+1/2, b: 1/3+1/4 → order a, c, b.
-# [d,c,e,a] + [a,c] → a: 1/5+1/2 = 7/10, c: 1/3+1/3 = 2/3, d: 1/2, e: 1/4
-#   → order a, c, d, e. The constant matters here: 1/(k+rank) gives a, d, c, e
-#   and 1/(k+rank+2) gives c, a, d, e.
+# [a,b,c,d] + [b,c,d] → b: 1/3+1/2 = 5/6, c: 1/4+1/3 = 7/12, a: 1/2,
+#   d: 1/5+1/4 = 9/20 → order b, c, a, d. No two scores tie, so the order
+#   does not depend on how you break ties, and the constant shows:
+#   1/(k+rank) scores b 3/2, a 1, c 5/6, d 7/12 → b, a, c, d;
+#   1/(k+rank+2) scores b 7/12, c 9/20, d 11/30, a 1/3 → b, c, d, a.
 
 # %%
 def rrf(rankings, k=60):
@@ -48,7 +50,7 @@ def rrf(rankings, k=60):
     # <<< SOLUTION
 
 assert rrf([["a", "b", "c"], ["c", "a", "b"]], k=1) == ["a", "c", "b"]
-assert rrf([["d", "c", "e", "a"], ["a", "c"]], k=1) == ["a", "c", "d", "e"], \
+assert rrf([["a", "b", "c", "d"], ["b", "c", "d"]], k=1) == ["b", "c", "a", "d"], \
     "check the constant: score = 1/(k + rank + 1) with 0-based rank"
 print("rrf ✓")
 
