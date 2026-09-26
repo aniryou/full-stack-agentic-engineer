@@ -4,7 +4,7 @@
 
 Serving throughput for autoregressive LLMs is, to first order, a batching problem: decode is memory-bandwidth-bound — each step reads all the weights and every cached K and V to produce one token per sequence — so the tensor cores sit mostly idle unless many sequences share each forward pass, and the binding constraint on batch size is memory. Weights are static and activations are small, so the dynamic consumer of memory is the KV cache. During decoding, each new token attends over the keys and values of every token before it; recomputing those projections each step would make generation quadratic in sequence length, so serving engines cache them. The cache grows by one token's worth of K and V per layer per step, lives for the entire request, and its final size is unknown in advance because you don't know how long the model will generate.
 
-The footprint is large. Per token, the cache costs `2 × n_layers × n_kv_heads × d_head × bytes_per_element` (the 2 covers K and V). For LLaMA-13B in FP16 — 40 layers, 40 heads of dimension 128 — that works out to roughly 800 KB per token, so a single 2,048-token sequence occupies about 1.6 GB. On a 40 GB A100, the FP16 weights already take 26 GB, leaving room for only a handful of max-length sequences if each one gets a full reservation. Batch size, and therefore throughput, is bottlenecked by exactly this arithmetic.
+The footprint is large. Per token, the cache costs `2 × n_layers × n_kv_heads × d_head × bytes_per_element` (the 2 covers K and V). For LLaMA-13B in FP16 — 40 layers, 40 heads of dimension 128 — that works out to 800 KiB per token, so a single 2,048-token sequence occupies about 1.56 GiB (1.68 GB). On a 40 GB A100, the FP16 weights already take 26 GB, leaving room for only a handful of max-length sequences if each one gets a full reservation. Batch size, and therefore throughput, is bottlenecked by exactly this arithmetic.
 
 Before vLLM, production systems (FasterTransformer, Orca) stored each request's KV cache as a single contiguous tensor, reserved up front at the maximum possible sequence length. Contiguity plus unknown lengths produces three distinct kinds of waste. Internal fragmentation: slots reserved for output that never materializes, because most requests stop well short of the maximum. Reservation waste: slots that will eventually be used but sit empty now, and cannot serve any other request in the meantime. External fragmentation: gaps between variable-sized contiguous allocations that are too small to fit a new request. The PagedAttention paper measured that only about 20–40% of KV cache memory in these systems held actual token state. Most of the scarcest resource on the GPU was reserved air.
 
@@ -52,7 +52,7 @@ The sharpest critique came from vAttention (2024), which argues that PagedAttent
 
 ## Numbers to keep in your pocket
 
-A 13B FP16 model costs ~800 KB of KV cache per token, so ~1.6 GB per 2K-token sequence; pre-paging systems achieved only 20–40% KV memory utilization versus >96% with paging; the default block holds 16 tokens; the kernel pays ~20–26% overhead on attention in isolation; and the headline result is 2–4× serving throughput over FasterTransformer and Orca at matched latency.
+A 13B FP16 model costs 800 KiB of KV cache per token, so ~1.56 GiB (1.68 GB) per 2K-token sequence; pre-paging systems achieved only 20–40% KV memory utilization versus >96% with paging; the default block holds 16 tokens; the kernel pays ~20–26% overhead on attention in isolation; and the headline result is 2–4× serving throughput over FasterTransformer and Orca at matched latency.
 
 ## Sources
 
@@ -66,7 +66,7 @@ Paper and product facts this primer states; nothing here was re-measured.
 
 | Item | Value used | Why it needs checking |
 |---|---|---|
-| LLaMA-13B shape and memory | 40 layers, 40 heads of dimension 128; ~800 KB of FP16 KV per token; 26 GB of FP16 weights on a 40 GB A100 | model config and the paper's setup |
+| LLaMA-13B shape and memory | 40 layers, 40 heads of dimension 128; 800 KiB of FP16 KV per token; 26 GB of FP16 weights on a 40 GB A100 | model config and the paper's setup |
 | KV utilization before and after paging | 20–40% of KV memory held token state before; waste 60–80% before and under 4% with paging | PagedAttention paper (Kwon et al., SOSP 2023) |
 | Kernel overhead | 20–26% extra attention-kernel latency versus a contiguous layout | paper microbenchmark, on the paper's GPUs and kernel |
 | Sharing savings | ~6–10% for parallel sampling, up to ~55% for wide beam search | paper figures |
