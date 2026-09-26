@@ -1,0 +1,91 @@
+# vLLM on one NVIDIA L4 per pod (GKE, Spot GPU pool from ../gcp/terraform).
+# The InferencePool created from epp-values.yaml selects these pods by `app: vllm-qwen`; the EPP
+# scrapes each pod's /metrics on port 8000 (vllm:num_requests_waiting, vllm:kv_cache_usage_perc, ...).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen
+  labels:
+    app: vllm-qwen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen
+        llm-d.ai/engine-type: vllm
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+        cloud.google.com/gke-spot: "true"
+      tolerations:
+        - key: nvidia.com/gpu            # GKE taints GPU nodes; VERIFY value "present"
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.30.0           # (verify) vLLM 0.30.0, released 2026-09-22; same pin as layer 04
+          args:
+            - --model=Qwen/Qwen2.5-1.5B-Instruct       # (verify) small, ungated; no HF token needed
+            - --served-model-name=qwen
+            - --port=8000
+            - --max-model-len=8192
+            - --gpu-memory-utilization=0.90
+            - --max-num-seqs=32                       # batch slots, set explicitly: hpa.yaml's targets are derived from it
+                                                      # (vLLM's own default is much larger, e.g. 256 -- verify)
+            - --enable-prefix-caching                 # the default in vLLM V1; stated for clarity
+            - --enable-prompt-tokens-details          # usage.prompt_tokens_details.cached_tokens -> per-request hit rates
+          env:
+            - name: HF_TOKEN                          # only for gated models
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+                  optional: true
+            - name: HF_HOME
+              value: /cache/huggingface
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "2"
+              memory: 10Gi
+              nvidia.com/gpu: "1"
+            limits:
+              memory: 12Gi
+              nvidia.com/gpu: "1"
+          startupProbe:                               # model download + load: allow up to 10 minutes
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi

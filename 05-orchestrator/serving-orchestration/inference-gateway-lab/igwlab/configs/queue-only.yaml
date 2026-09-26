@@ -1,0 +1,11 @@
+# Scraped waiting-queue depth only. Between two scrapes every request sees the same queue
+# numbers, so a burst can herd onto the endpoint that looked emptiest at the last scrape.
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: queue-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: queue-scorer
+    weight: 1
