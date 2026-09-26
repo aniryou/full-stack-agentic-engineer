@@ -14,7 +14,7 @@ jupyter lab notebooks/           # 4 worked notebooks (executed, with outputs) +
 
 Read in this order:
 
-1. `docs/00_primer.md` — the concepts: five invariants, the run state machine, eight patterns, GCP building blocks with the limits that decide designs, three reference architectures, estimation, observability, how to explain the design.
+1. [`../../00_primer.md`](../../00_primer.md) (the layer's shared long-running primer) — the concepts: five invariants, the run state machine, eight patterns, GCP building blocks with the limits that decide designs, three reference architectures, estimation, observability, how to explain the design.
 2. `notebooks/01_durable_loop_worked.ipynb` → `02` → `03` → `04` — each pattern executed step by step with a crash injected at the worst moment.
 3. `notebooks/*_practice.ipynb` — rebuild the core of each pattern yourself; `lragents.practice_checks` tells you what's wrong. Solutions in `notebooks/solutions/`.
 4. `docs/02_design_drills.md` — six system-design prompts with answer sketches, eight "find the bug" snippets, rapid-fire.
@@ -37,7 +37,7 @@ src/lragents/
   practice_checks.py   the graders used by the practice notebooks and tests/test_solutions.py
 tests/           30 offline tests (pytest)
 notebooks/       4 worked (executed) + 4 practice + solutions/; regenerate with tools/build_notebooks.py
-docs/            primer, GCP cheat sheet, design drills
+docs/            GCP cheat sheet, design drills (the primer is ../../00_primer.md, shared by the layer)
 infra/           terraform (Firestore, Cloud Tasks queue, Pub/Sub + DLQ + push subs, Scheduler, Workflows, SAs/IAM),
                  workflows/ (HITL callback wait, parallel fan-out/fan-in), deploy.sh (Cloud Run source deploys)
 ```

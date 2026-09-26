@@ -1,6 +1,6 @@
 # Long-Running Agentic Workflows on Google Cloud — A Primer
 
-*Written for a System Design / Code Evaluation loop: the goal is to reason out loud about trade-offs, limits and failure modes, not to recite service names. Every pattern here has a runnable implementation in `src/lragents/` and a notebook in `notebooks/`.*
+*Written for explaining a design in a design review: the goal is to reason out loud about trade-offs, limits and failure modes, not to recite service names. Every pattern here has a runnable implementation in the GCP lab's [`src/lragents/`](long-running-agentic/long-running-agents-gcp/src/lragents/) and a notebook in its [`notebooks/`](long-running-agentic/long-running-agents-gcp/notebooks/).*
 
 ---
 
@@ -76,7 +76,7 @@ Every delivery mechanism on GCP is **at-least-once**: Cloud Tasks, Pub/Sub, Clou
 3. **Named wake-ups.** Cloud Tasks rejects a task whose name was seen recently; name the next step `run-step-N` so a double enqueue collapses.
 4. **Duplicate-delivery guard.** If the journal already contains the step this delivery was for, re-enqueue the next (named) task and return 200.
 
-Test it the way `tests/test_durable_loop.py` does: inject a crash *after* the side effect, let the lease expire, retry, assert one charge.
+Test it the way the GCP lab's [`tests/test_durable_loop.py`](long-running-agentic/long-running-agents-gcp/tests/test_durable_loop.py) does: inject a crash *after* the side effect, let the lease expire, retry, assert one charge.
 
 ### 3.3 Exclusivity — leases, not locks
 Two Cloud Run instances can receive the same task 50 ms apart. A **lease** (`acquire_lease` as a transactional compare-and-set with a TTL) makes the second one fail fast (`LeaseHeld` → HTTP 429 → the queue retries later). Leases *expire*, which is the difference from a lock: a dead worker cannot wedge a run forever. Long steps extend the lease (heartbeat). The `version` field is the second half: optimistic concurrency on every save catches the race the lease didn't.
@@ -236,7 +236,7 @@ Service-to-service calls use OIDC tokens minted for a dedicated service account 
 6. **Estimate**: wake-ups/s, writes/s, tokens/day, cost/run; name the first thing that would break at 10× (hot documents, per-step Workflows pricing, connection pools).
 7. **Close** with observability and the eval loop — a Staff answer includes how you'd know it's working next month.
 
-Code-evaluation drills (spot the bug in a loop, a fan-in, an approval handler) are in `docs/02_design_drills.md`; limits with sources in `docs/01_gcp_cheatsheet.md`.
+Code-evaluation drills (spot the bug in a loop, a fan-in, an approval handler) are in the GCP lab's [`docs/02_design_drills.md`](long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md); limits with sources in its [`docs/01_gcp_cheatsheet.md`](long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md).
 
 ---
 
