@@ -19,7 +19,10 @@ Without root, ``RLIMIT_NPROC`` is shared with every process of your UID, so it c
 the process budget is then the run's own — the parent counts the tasks in the run's process tree (its group,
 its session and every descendant still linked to it) and ends the run as ``pids`` past the budget. That
 count is sampled (every ``TREE_POLL_S``, and once more when the run ends), so a burst of forks between two
-counts runs on until the backstop — ``NPROC_BACKSTOP_SLACK`` tasks past the budget — makes ``fork`` fail.
+counts runs on until the backstop makes ``fork`` fail. The backstop is set once, at the start, to what the UID
+holds then plus the budget plus ``NPROC_BACKSTOP_SLACK``, and the kernel checks it against the whole UID: a
+burst can pass the budget by the slack **plus every task the rest of your UID frees while the run goes on**
+(at most all it held at the start). Only a UID of the run's own makes the limit exact.
 
 What it does not stop, stated in ``isolation_report()``: the **network** (rlimits never touch sockets), the
 **host kernel** (every syscall reaches it), and — without root — your files and a ``setsid`` escape.
@@ -376,7 +379,8 @@ class ProcessSandbox:
                         "No UID drop here (not root, or disabled): the code runs as YOUR UID, so it can read "
                         "your files by absolute path, RLIMIT_NPROC is shared with your processes (the parent "
                         f"counts the run's own process tree instead, every {TREE_POLL_S * 1000:.0f} ms, so a "
-                        f"burst of forks can pass the budget by up to {NPROC_BACKSTOP_SLACK} tasks) or ignored "
+                        f"burst of forks can pass the budget by {NPROC_BACKSTOP_SLACK} tasks plus any your other "
+                        "processes free during the run) or ignored "
                         "as root, a process that calls setsid() can outlive the call, and files it writes "
                         "outside the workspace (e.g. in /tmp) stay behind.")),
         }
@@ -423,6 +427,7 @@ class ProcessSandbox:
                         # itself is the run's: the parent counts its process tree (_tree_tasks).
                         nproc = held + req.budgets.pids + NPROC_BACKSTOP_SLACK
                         tree_budget = req.budgets.pids
+                        report["pids_backstop"] = nproc      # for the whole UID, not the run: see _spawn's note
                         hard = resource.getrlimit(resource.RLIMIT_NPROC)[1]
                         if hard != resource.RLIM_INFINITY and hard < nproc:
                             notes.append(f"your RLIMIT_NPROC hard limit ({hard}) is below what the run needs "
@@ -549,11 +554,17 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
         burst = final > tree_budget and final > tree_peak
         tree_peak = max(tree_peak, final)
         preset = _parent_verdict(pids=tree_peak > tree_budget)
-    if preset == "pids":
+    if preset == "pids" and tree_budget is not None:
+        backstop = (isolation or {}).get("pids_backstop")
         notes.append(f"the run's process tree held {tree_peak} tasks (budget {tree_budget})"
-                     + (f"; a burst between two counts ({TREE_POLL_S * 1000:.0f} ms apart) ran on until the "
-                        f"shared RLIMIT_NPROC backstop (the budget plus {NPROC_BACKSTOP_SLACK} tasks of slack) "
-                        "stopped it" if burst else ""))
+                     + ("; the last count, as the run ended, caught a burst of forks between two counts"
+                        if burst else "")
+                     + f"; the tree is counted every {TREE_POLL_S * 1000:.0f} ms and forks between two counts "
+                       "are stopped only by the shared RLIMIT_NPROC backstop"
+                     + (f" ({backstop} tasks for your UID: what it held at the start, the budget and "
+                        f"{NPROC_BACKSTOP_SLACK} of slack)" if backstop is not None else "")
+                     + f", so a burst can pass the budget by {NPROC_BACKSTOP_SLACK} tasks plus any your other "
+                       "processes free during the run")
     _kill_group(proc)            # the leader on timeout/limit, and anything still in its group either way
     ru = leader_ru if proc.returncode is not None else _reap(proc)
     wall = time.monotonic() - start

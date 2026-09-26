@@ -143,9 +143,10 @@ that UID — including one that called `setsid()` to leave the group — and rem
 With a per-execution UID it contains every probe except egress; as a non-root user it cannot switch UID, and
 the key read and the escape get through. The process budget then only roughly holds: the parent counts the
 run's own process tree every 50 ms, so a burst of forks between two counts runs on until the shared
-`RLIMIT_NPROC`, set 32 tasks past the budget, stops it. It runs anywhere, including Colab and CI. What it
-never does: it shares the host kernel (a kernel exploit escapes it) and it does not touch the network. The
-sharp edges are in §2's box below and §3.
+`RLIMIT_NPROC` stops it; that limit is set 32 tasks past the budget for the whole UID, so the burst also gets
+every task your other processes free meanwhile. It runs anywhere, including Colab and CI. What it never does:
+it shares the host kernel (a kernel exploit escapes it) and it does not touch the network. The sharp edges are
+in §2's box below and §3.
 
 **Rung 1b — the same process, plus namespaces and a syscall filter (no container).** Linux can give a plain
 process most of what a container has, one piece at a time: an **empty network namespace** (`unshare -n`, or
@@ -249,7 +250,7 @@ resource the code could exhaust**, plus the policy that applies. The budget is t
 | `cpu_s` | `RLIMIT_CPU` | 2 |
 | `wall_s` | an external wall-clock kill | 5 |
 | `memory_mb` | `RLIMIT_AS` (virtual) + the container `--memory`/limit | 256 |
-| `pids` | `RLIMIT_NPROC` under the run's own UID (as a user: a 50 ms count of the run's tree, `RLIMIT_NPROC` at +32 as a backstop) / kubelet `podPidsLimit` / `--pids-limit` | 16 |
+| `pids` | `RLIMIT_NPROC` under the run's own UID (as a user: a 50 ms count of the run's tree, the UID's `RLIMIT_NPROC` at +32 as a backstop) / kubelet `podPidsLimit` / `--pids-limit` | 16 |
 | `file_mb` | `RLIMIT_FSIZE` (largest single file, not a disk quota) | 8 |
 | `disk_mb` | measured after the run; `emptyDir.sizeLimit` in K8s | 16 |
 | `output_bytes` | the parent reads as it streams and keeps this much per stream | 16,384 |

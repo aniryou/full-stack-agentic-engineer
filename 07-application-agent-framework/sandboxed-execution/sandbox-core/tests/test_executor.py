@@ -280,12 +280,15 @@ def test_a_venv_the_sandbox_uid_cannot_reach_falls_back_to_a_system_python():
 needs_proc = pytest.mark.skipif(not os.path.isdir("/proc/self") or not hasattr(resource, "RLIMIT_NPROC"),
                                 reason="counts tasks from /proc (Linux)")
 THREAD_HOG = ("import sys, threading, time\n"          # another process of the same UID holding many threads,
-              "def more(n):\n"                           # like a CI agent or a browser, and starting more of them
-              "    for _ in range(n):\n"                 # (argv[2]) 0.2 s into the run
-              "        threading.Thread(target=time.sleep, args=(120,), daemon=True).start()\n"
+              "stops = []\n"                             # like a CI agent or a browser, and 0.2 s into the run
+              "def more(n):\n"                           # starting argv[2] more of them (or, if negative,
+              "    for _ in range(n):\n"                 # ending that many)
+              "        stops.append(threading.Event())\n"
+              "        threading.Thread(target=stops[-1].wait, args=(120,), daemon=True).start()\n"
               "more(int(sys.argv[1]))\n"
               "print('up', flush=True)\n"
-              "time.sleep(0.2); more(int(sys.argv[2]))\n"
+              "time.sleep(0.2); change = int(sys.argv[2])\n"
+              "more(change) if change >= 0 else [e.set() for e in stops[:-change]]\n"
               "time.sleep(120)\n")
 AS_ME_SCENARIOS = r'''
 import json, subprocess, sys
@@ -300,7 +303,8 @@ try:
         if poll:
             executor.TREE_POLL_S = poll[0]
         r = sb.run(ExecutionRequest(code=code, budgets=Budgets(**budgets)))
-        out.append([r.exit_reason, r.reason_source, r.usage.wall_s, r.stderr[-300:], r.stdout, r.notes])
+        out.append([r.exit_reason, r.reason_source, r.usage.wall_s, r.stderr[-300:], r.stdout, r.notes,
+                    r.isolation.get("pids_backstop")])
 finally:
     hog.kill()
 print(json.dumps(out))
@@ -309,8 +313,8 @@ print(json.dumps(out))
 
 def run_as_an_unprivileged_user(scenarios, hog_threads, hog_grows_by=0):
     """Run ``scenarios`` through ``ProcessSandbox`` without a UID switch, as a non-root user, while another
-    process of that same user holds ``hog_threads`` threads (and starts ``hog_grows_by`` more 0.2 s after the
-    first run starts). As root the helper runs as a free UID from the per-execution range (what CI's
+    process of that same user holds ``hog_threads`` threads (and starts ``hog_grows_by`` more, or ends that many
+    if negative, 0.2 s after the first run starts). As root the helper runs as a free UID from the per-execution range (what CI's
     unprivileged runner user is); otherwise as us."""
     import json
     import shutil
@@ -409,34 +413,68 @@ def test_the_tree_count_covers_threads_the_group_and_a_setsid_child():
         p.wait()
 
 
+def fork_burst(after_s=0.0):
+    """Code that waits ``after_s``, then forks sleeping children as fast as it can until a fork fails (or 500)."""
+    return ("import errno, os, time\n"
+            f"time.sleep({after_s})\n"
+            "n, why = 0, 'cap'\n"
+            "while n < 500:\n"
+            "    try:\n"
+            "        pid = os.fork()\n"
+            "    except OSError as e:\n"
+            "        why = errno.errorcode.get(e.errno, str(e.errno))\n"
+            "        break\n"
+            "    if pid == 0:\n"
+            "        os.closerange(0, 3); time.sleep(3); os._exit(0)\n"
+            "    n += 1\n"
+            "print(n, why)\n")
+
+
+def _burst_checks(result, budget):
+    """(forked, backstop) of a fork_burst run, after the checks every burst shares: fork failed with EAGAIN
+    (the backstop stopped it, not the loop's cap), the parent reported ``pids`` and its note names the peak it
+    counted and the backstop it set, and the tree never held more than the backstop minus the parent's task."""
+    import re
+    reason, source, _wall, stderr, stdout, notes, backstop = result
+    forked, why = stdout.split()
+    forked = int(forked)
+    assert why == "EAGAIN", (stdout, stderr)
+    assert (reason, source) == ("pids", "parent"), (reason, source, stderr)
+    held = re.search(rf"process tree held (\d+) tasks \(budget {budget}\); the last count, as the run ended, "
+                     rf"caught a burst .* backstop \({backstop} tasks for your UID", notes[-1])
+    assert held and int(held.group(1)) in (forked, 1 + forked), notes      # the leader may be reaped already
+    assert budget < 1 + forked <= backstop - 1, (forked, backstop)         # the parent's own task is the UID's
+    return forked, backstop
+
+
 @needs_proc
 def test_a_fork_burst_between_two_counts_is_stopped_by_the_backstop_and_reported():
     # The tree is counted every TREE_POLL_S, so forks faster than that run on until RLIMIT_NPROC — set to
     # what the UID held + the budget + NPROC_BACKSTOP_SLACK — makes fork fail. The parent's last count still
     # sees the burst (its children are in the run's group) and reports it as pids. The poll is stretched to
     # 60 s here so the whole burst falls between two counts, as it would for any fork loop faster than 50 ms.
-    import re
     from sandboxcore.executor import NPROC_BACKSTOP_SLACK
-    burst = ("import os, time\n"
-             "n = 0\n"
-             "while n < 500:\n"
-             "    try:\n"
-             "        pid = os.fork()\n"
-             "    except OSError:\n"
-             "        break\n"
-             "    if pid == 0:\n"
-             "        os.closerange(0, 3); time.sleep(3); os._exit(0)\n"
-             "    n += 1\n"
-             "print(n)\n")
-    scope, (reason, source, _wall, stderr, stdout, notes) = run_as_an_unprivileged_user(
-        [[burst, {"pids": 8, "wall_s": 4}, 60]], hog_threads=64)
-    forked = int(stdout.strip())
-    # a fresh UID holds nothing else that could exit mid-run; as a user, others may free a few slots
-    tolerance = 0 if running_as_root() else 8
-    assert 8 < 1 + forked <= 8 + NPROC_BACKSTOP_SLACK + tolerance, (forked, stderr)
-    assert (reason, source) == ("pids", "parent"), (reason, source, stderr)
-    held = re.search(r"process tree held (\d+) tasks \(budget 8\); a burst between two counts", notes[-1])
-    assert held and int(held.group(1)) in (forked, 1 + forked), notes      # the leader may be reaped already
+    scope, result = run_as_an_unprivileged_user([[fork_burst(), {"pids": 8, "wall_s": 4}, 60]], hog_threads=64)
+    forked, backstop = _burst_checks(result, 8)
+    if running_as_root():
+        # A fresh UID: nothing else of it starts or ends during the run, so the overshoot is exactly the slack.
+        # As a user the rest of the UID moves (a CI agent's threads come and go), so only the bound above holds.
+        assert 1 + forked == 8 + NPROC_BACKSTOP_SLACK, (forked, backstop)
+    assert scope == "tree"
+
+
+@needs_proc
+def test_a_fork_burst_also_takes_the_tasks_the_users_other_processes_free():
+    # RLIMIT_NPROC is the UID's, set once at the start: when another process of the same user ends 48 of its
+    # threads during the run, a burst after that gets those 48 slots on top of the slack. This is why the docs
+    # say "32 plus any your other processes free", not "up to 32", and why only a UID of its own is exact.
+    from sandboxcore.executor import NPROC_BACKSTOP_SLACK
+    scope, result = run_as_an_unprivileged_user([[fork_burst(after_s=0.8), {"pids": 8, "wall_s": 4}, 60]],
+                                                hog_threads=64, hog_grows_by=-48)
+    forked, backstop = _burst_checks(result, 8)
+    assert 1 + forked > 8 + NPROC_BACKSTOP_SLACK, (forked, backstop)
+    if running_as_root():
+        assert 1 + forked == 8 + NPROC_BACKSTOP_SLACK + 48, (forked, backstop)   # a fresh UID: exactly
     assert scope == "tree"
 
 
@@ -450,7 +488,7 @@ def test_the_backstop_leaves_room_for_the_users_other_processes_to_grow():
                     "for _ in range(2)]\n"
                     "print('forked', flush=True)\n"
                     "time.sleep(30)")
-    scope, (reason, source, _wall, stderr, stdout, _notes) = run_as_an_unprivileged_user(
+    scope, (reason, source, _wall, stderr, stdout, _notes, _backstop) = run_as_an_unprivileged_user(
         [[two_children, {"pids": 16, "wall_s": 2.5, "cpu_s": 4}]], hog_threads=16, hog_grows_by=24)
     assert stdout.strip() == "forked", stderr
     assert (reason, source) == ("wall_timeout", "parent"), stderr
@@ -499,13 +537,16 @@ def test_the_docs_give_the_tree_counts_period_and_the_backstops_slack():
     ms, slack = f"{executor.TREE_POLL_S * 1000:.0f} ms", executor.NPROC_BACKSTOP_SLACK
     assert (ms, slack) == ("50 ms", 32)
     readme = (lab / "README.md").read_text()
-    assert f"every {ms} instead" in readme and f"backstop {slack} tasks past the budget" in readme
-    assert f"counts stops at `RLIMIT_NPROC` {slack} tasks past the budget" in readme
+    assert f"every {ms} instead" in readme and f"backstop: {slack} tasks past the budget plus any" in readme
+    assert f"counts runs on to the `RLIMIT_NPROC` backstop ({slack} tasks past the budget, plus any" in readme
+    assert "by up to" not in readme
     contract = (lab / "sandboxcore" / "contract.py").read_text()
-    assert f"tree every {ms} (a fork burst can pass it by up to {slack}" in contract
+    assert f"tree every {ms} (a fork burst can pass it by {slack} plus what your other" in contract
+    assert "by up to" not in contract
     primer = lab.parent / "PRIMER.md"
     if not primer.is_file():
         pytest.skip("PRIMER.md is outside this copy of the lab")
     text = primer.read_text()
-    assert f"process tree every {ms}" in text and f"`RLIMIT_NPROC`, set {slack} tasks past the budget" in text
-    assert f"a {ms} count of the run's tree, `RLIMIT_NPROC` at +{slack} as a backstop" in text
+    assert f"process tree every {ms}" in text
+    assert f"`RLIMIT_NPROC` stops it; that limit is set {slack} tasks past the budget for the whole UID" in text
+    assert f"a {ms} count of the run's tree, the UID's `RLIMIT_NPROC` at +{slack} as a backstop" in text
