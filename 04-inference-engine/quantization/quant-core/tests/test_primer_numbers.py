@@ -41,8 +41,13 @@ def test_s1_crossovers_and_bytes():
     present(f"BF16 {bf:.0f} tokens FP8 W8A8 {f8:.0f} W4A16 {w4:.0f}")
     t = lambda M, s: C.gemm_time(M, 14336, 4096, L4, s, w_bits=4.16 if s == "w4a16" else None)["t"] * 1e6
     present(f"W4A16 at {t(1, 'w4a16'):.0f} µs against BF16's {t(1, 'bf16'):.0f} µs")
-    assert abs(t(2048, "w4a16") - t(2048, "bf16")) < 1e-9
-    present(f"it is {2 * M8.embed_params / 1e9:.2f} GB of the {M8.weight_bytes(4.125) / 1e9:.2f} GB an INT4 checkpoint")
+    assert abs(t(2048, "w4a16") - t(2048, "bf16")) < 1e-9 and abs(t(462, "w4a16") / t(462, "bf16") - 1) < 0.005
+    present(f"{t(256, 'bf16') / t(256, 'w4a16'):.1f}× at 256 tokens", f"nothing at {bf:.0f} and beyond")
+    assert C.gemm_time(119, 14336, 4096, L4, "w4a16", w_bits=4.16)["bound"] == "memory"
+    assert C.gemm_time(256, 14336, 4096, L4, "w4a16", w_bits=4.16)["bound"] == "compute"
+    assert C.gemm_time(256, 14336, 4096, L4, "bf16")["bound"] == "memory"
+    present(f"it is {M8.embed_params * 2 / 1e9:.2f} GB of the {M8.streamed_bytes(4.125) / 1e9:.2f} GB an INT4 decode step "
+            f"streams (`cost.Model.streamed_bytes()`; the checkpoint is {M8.weight_bytes(4.125) / 1e9:.2f} GB")
     present(f"16/4.125 = **{16 / 4.125:.2f}×**")
 
 
@@ -76,9 +81,15 @@ def test_s2_block_formats():
     rows = {"INT4 g32, fp16 scale (full convention) | 4.5":
             lambda W: G.fake_quant(W, fmt="int4", granularity="group", group_size=32, convention="full"),
             "FP4 E2M1 g32, fp16 scale | 4.5": lambda W: G.fake_quant(W, fmt="fp4", granularity="group", group_size=32),
-            "MXFP4 | 4.25": lambda W: F.mxfp4(W)[2], "NVFP4 | 4.5": lambda W: F.nvfp4(W)[3]}
+            "MXFP4 (OCP exponent) | 4.25": lambda W: F.mxfp4(W)[2],
+            "MXFP4 (compressed-tensors exponent) | 4.25": lambda W: F.mxfp4(W, rule="compressed-tensors")[2],
+            "NVFP4 | 4.5": lambda W: F.nvfp4(W)[3]}
     for label, fn in rows.items():
         present(f"| {label} | {G.error(Wg, fn(Wg))['rel']:.4f} | {G.error(Wt, fn(Wt))['rel']:.4f} |")
+    clipped = {r: np.mean(np.abs(Wg.reshape(256, 16, 32)).max(-1) / 2.0 ** (F.mxfp4(Wg, rule=r)[1][..., 0].astype(float) - 127) > 6)
+               for r in ("ocp", "compressed-tensors")}
+    present(f"That clips {clipped['compressed-tensors']:.0%} of Gaussian blocks' maxima instead of {clipped['ocp']:.0%}")
+    assert F.mxfp4(np.full(32, 7.5))[2][0] == 6 and F.mxfp4(np.full(32, 7.5), rule="compressed-tensors")[2][0] == 8
 
 
 def test_s2_error_model_and_outliers():
@@ -113,6 +124,11 @@ def test_s3_columns_activations_and_budget(tiny):
     out = np.argsort(-amax)[:4]
     normal = np.setdiff1d(np.arange(64), out)
     present(f"absmax {amax[out].min():.0f}–{amax[out].max():.0f} against a median channel absmax of {np.median(amax[normal]):.1f}")
+    Wup = m.weights["blocks.0.up"]
+    col = np.abs(Wup).max(0)
+    share = G.output_error_by_input(A, Wup, G.fake_quant(Wup, fmt="int4", granularity="group", group_size=32, convention="full"))
+    present(f"have absmax {col[out].min():.3f}–{col[out].max():.3f} against a median column of {np.median(col):.3f}",
+            f"cause {share[out].sum() / share.sum():.1%} of that layer's INT4 g32 output error")
     tok, ten, fp8 = (G.quantize_activations(A, f, p) for f, p in (("int8", "token"), ("int8", "tensor"), ("fp8", "token")))
     present(f"Per-token INT8 gives {pct(G.error(A, tok)['rel'])} error",
             f"but **{pct(G.error(A[:, normal], tok[:, normal])['rel'])}** on the 60 ordinary channels",
@@ -170,6 +186,8 @@ def test_s4_gptq_awq_and_calibration(tiny):
     present(f"for the lowest KL of all: {E.compare(ref, quantize_model(m, 'awq+gptq', 4, 32, calib=Xc).forward(X), y)['kl']:.4f}")
     by_n = {n: pct(acc(quantize_model(m, "gptq", 3, 32, calib=m.sample(n, "calib")[0]))) for n in (16, 64, 256, 1024)}
     present(f"GPTQ INT3 gets {by_n[16]} with 16 samples, {by_n[64]} with 64, {by_n[256]} with 256 and {by_n[1024]} with 1,024")
+    draws = [acc(quantize_model(m, "gptq", 3, 32, calib=D)) for D in m.sample(768, "calib")[0].reshape(3, 256, -1)]
+    present(f"Three other 256-sample draws give {100 * min(draws):.1f}–{pct(max(draws))}")
     Xa, ya = m.sample(4096, "calib")
     narrow = pct(acc(quantize_model(m, "gptq", 3, 32, calib=Xa[ya < 2][:256])))
     noise = pct(acc(quantize_model(m, "gptq", 3, 32, calib=np.random.default_rng(1).standard_normal((256, 64)) * 1.6)))
@@ -216,6 +234,36 @@ def test_s5_epilogue_smoothquant_fp8_and_head(tiny):
     present(f"costs {100 * (fp - head):.1f} points, against {100 * (fp - hidden):.1f} for all four hidden linears")
 
 
+def test_s5_w4a4_activations(tiny):
+    m, X, y, Xc, ref, cap = tiny
+    A, Wu = cap["blocks.0.up"], m.weights["blocks.0.up"]
+    amax = np.abs(A).max(0)
+    hot = np.argsort(-amax)[:4]
+    assert len(set((hot // 16).tolist())) == 3
+    ordinary = np.setdiff1d(np.arange(64), hot)
+    free = np.array([c for c in range(64) if c // 16 not in set((hot // 16).tolist())])
+    nv = F.nvfp4(A)[3]
+    s_up = S.smooth_scales(amax, np.abs(Wu).max(0), 0.5)
+    nvs = F.nvfp4(A / s_up)[3]
+    present(f"its ordinary channels carry {pct(G.error(A[:, ordinary], nv[:, ordinary])['rel'])} error, and "
+            f"{np.mean(nv[:, ordinary] == 0):.0%} of them become zero; the block with no outlier carries "
+            f"{pct(G.error(A[:, free], nv[:, free])['rel'])}",
+            f"the ordinary channels drop to {pct(G.error(A[:, ordinary] / s_up[ordinary], nvs[:, ordinary])['rel'])} error")
+
+    def nvfp4_model(model, acts=True):
+        wq = {n: F.nvfp4(model.weights[n])[3] for n in model.linears()}
+        aq = (lambda name, x: x if name == "head" else F.nvfp4(x)[3]) if acts else None
+        return model.forward(X, act_quant=aq, weights=wq)
+
+    sm = m
+    for name in ("blocks.0.up", "blocks.1.up"):
+        A_ = sm.calibration_inputs(Xc)[name]
+        sm = sm.with_weights(sm.fold(name, S.smooth_scales(np.abs(A_).max(0), np.abs(sm.weights[name]).max(0), 0.5)))
+    acc = lambda logits: pct(float(np.mean(logits.argmax(1) == y)))
+    present(f"The model has {acc(nvfp4_model(m, acts=False))} accuracy with NVFP4 weights only and {acc(nvfp4_model(m))} "
+            f"with W4A4 (full precision: {acc(ref)})", f"the model recovers to {acc(nvfp4_model(sm))}")
+
+
 def test_s6_kv_cache():
     per_tok = [M8.kv_bytes_per_token(b) for b in (16, 8, 5, 3)]
     present(f"is {per_tok[0]:,.0f} B per token in BF16 and {per_tok[1]:,.0f} in FP8", f"({per_tok[2]:,.0f} B per token)",
@@ -256,9 +304,14 @@ def test_s8_eval_numbers(tiny):
     present(f"INT4 RTN has KL {r['kl']:.3f}, top-1 agreement {pct(r['top1'])} and accuracy {pct(r['acc'])}: it lost "
             f"{r['lost']} right answers and gained {r['gained']}",
             f"GPTQ has KL {g['kl']:.3f}, {pct(g['top1'])} and {pct(g['acc'])}, losing {g['lost']} and gaining {g['gained']}")
-    present(f"±{E.accuracy_stderr(0.768, 250):.4f}", f"~{100 * 2 * E.accuracy_stderr(0.768, 250):.0f}")
-    n = next(n for n in range(100, 100000) if 2 * E.accuracy_stderr(0.77, n) <= 0.01)
-    present(f"takes {n:,} items")
+    present(f"±{E.accuracy_stderr(0.768, 250):.4f}", f"smaller than ~{100 * 2 * E.diff_stderr(0.768, 0.768, 250):.1f} points")
+    n = next(n for n in range(100, 100000) if 2 * E.diff_stderr(0.77, 0.77, n) <= 0.01)
+    present(f"takes {n:,} items per model")
+    ag = E.compare(ref, quantize_model(m, "awq+gptq", 4, 32, calib=Xc).forward(X), y)
+    drop, bar = ag["acc_ref"] - ag["acc"], 2 * ag["diff_stderr"]
+    assert drop < bar and abs(ag["paired_z"]) > 2
+    present(f"AWQ + GPTQ INT4 drops {100 * drop:.1f} points on {len(y):,} items: inside the unpaired bar of ±{100 * bar:.1f}, "
+            f"but {ag['lost']} lost against {ag['gained']} gained gives z = {ag['paired_z']:.1f}".replace("-", "−"))
     i8 = E.compare(ref, quantize_model(m, "rtn", 8, None).forward(X), y)
     assert E.within_budget(i8, max_kl=0.05) and E.within_budget(g, max_kl=0.05) and not E.within_budget(r, max_kl=0.05)
 
@@ -269,9 +322,10 @@ def test_s10_decisions_and_cost():
     t4 = {r["scheme"]: r for r in C.table(T4, M8, kv=(16,))}
     assert C.choose(list(t4.values()), min_sessions=20, max_prefill_ms=700)["scheme"] == "w4a16"
     present(f"weights leave room for {t4['w8a16-fp8']['sessions']} sessions, INT4 for {t4['w4a16']['sessions']}")
-    present(f"{M70.weight_bytes(16) / 1e9:.1f} GB in BF16 and {M70.weight_bytes(8) / 1e9:.1f} GB in FP8",
-            f"({M70.weight_bytes(4.125) / 1e9:.1f} GB) serves {C.sessions(H100, M70, 'w4a16', 4000, 8)} of them")
-    assert C.sessions(H100, M70, "w8a8-fp8", 4000, 8) == 0
+    present(f"BF16 ({M70.weight_bytes(16) / 1e9:.1f} GB) does not fit. FP8 ({M70.weight_bytes(8) / 1e9:.1f} GB) fits",
+            f"INT4 ({M70.weight_bytes(4.125) / 1e9:.1f} GB) serves {C.sessions(H100, M70, 'w4a16', 4000, 8)} of them")
+    assert C.sessions(H100, M70, "w8a8-fp8", 4000, 8) == 0 and C.kv_blocks(H100, M70, "w8a8-fp8", 8) == 0
+    assert M70.params == 70_553_706_496                      # quant-lab/tests pins the lab's 2 / 4 / 54 sessions
     rows = {}
     for s, kv in (("bf16", 16), ("w8a8-fp8", 8)):
         b = C.sessions(L4, M8, s, 2000, kv)
