@@ -7,8 +7,7 @@
 # operator watches: dollars per conversation, p95 latency by span kind, time-to-first-token and tokens
 # per second — then alert rules that fire when a looping agent drifts.
 #
-# **Primer sections:** 4.2 (observability: spans with `gen_ai.*` attributes, redaction, retention),
-# 5.2 (token and latency anchors), 5.3 A (cost arithmetic: pro vs flash, caching).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.10 (observability and SLOs).
 #
 # In this notebook you will:
 # 1. attach a `Tracer` to a `Runner`, run three conversations and read the span tree;
@@ -26,9 +25,11 @@ from agentlab.observability import (DEFAULT_PRICES, AlertRule, Price, RedactingE
 # ## 1. A traced runner
 #
 # The agent loop opens a span per agent turn, per model call and per tool call, and stamps them with
-# OpenTelemetry GenAI attribute names (`gen_ai.request.model`, `gen_ai.usage.input_tokens`, …) so any
-# real backend understands them. Tools can enrich their own span through `ctx.span` — `create_case`
-# records the case details, which is exactly how customer data ends up in traces (section 5).
+# OpenTelemetry GenAI attribute names (`gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+# `gen_ai.usage.cache_read.input_tokens`, `gen_ai.response.finish_reasons`, `gen_ai.tool.name` …, as of
+# September 2026, verify — the conventions are at Development stability) so a backend on the same
+# convention version reads them without a mapping. Tools can enrich their own span through `ctx.span` —
+# `create_case` records the case details, which is exactly how personal data ends up in traces (section 5).
 
 # %%
 @tool
@@ -104,7 +105,7 @@ for s in summaries:
 print("\nprice table note:", DEFAULT_PRICES.note)
 
 # %% [markdown]
-# The same arithmetic as Primer §5.3 A, at small scale. Take a typical turn — 6,000 input tokens of which
+# The same arithmetic as scenarios A–D in Notebook 12, at small scale. Take a typical turn — 6,000 input tokens of which
 # 4,500 are a stable prefix, 300 output tokens — and price it four ways. Per turn the numbers look like
 # rounding errors; at a million turns a day they are budget lines, and the two levers are visible:
 # **model tier** (≈4×) and **caching** (≈2×).
@@ -257,7 +258,7 @@ print(f"✅ TTFT {mine[0]:.1f} ms, {mine[1]:,.0f} tok/s — matches the library 
 # retrieved passages) that should never leave at all.
 
 # %%
-exporter = RedactingExporter(drop_attrs=("gen_ai.prompt",))
+exporter = RedactingExporter(drop_attrs=("gen_ai.input.messages",))
 case_span = next(s for s in tracer.spans if s.name == "tool create_case")
 exported = exporter.export(tracer)
 exported_case = next(d for d in exported if d["name"] == "tool create_case")
@@ -375,9 +376,11 @@ print("✅ retention rule explained")
 #
 # When asked *"how would you operate this?"*, answer with the span tree in your head:
 #
-# * **One trace per turn, spans per agent / model / tool**, attributes in the `gen_ai.*` convention so the
-#   platform's tracing backend (Cloud Trace, an OTel collector) works unchanged. Tool spans carry `tool.ok`
-#   and `tool.error`; model spans carry tokens, cached tokens and finish reason.
+# * **One trace per turn, spans per agent / model / tool**, attributes named by the OpenTelemetry GenAI
+#   (`gen_ai.*`) conventions — at Development stability as of September 2026 (verify) — so a tracing backend
+#   on the same convention version (Cloud Trace, an OTel collector) reads them without a mapping. Tool spans
+#   carry `gen_ai.tool.name` plus the lab's own `tool.ok` and `tool.error`; model spans carry input, cached
+#   input and output tokens and the finish reasons.
 # * **Cost is arithmetic on those spans**: uncached input, cached input, output — priced per model. Say the
 #   two levers out loud: model tier is ≈4×, prompt caching is ≈2×, and both come from prompt layout and
 #   routing decisions, not from negotiation.

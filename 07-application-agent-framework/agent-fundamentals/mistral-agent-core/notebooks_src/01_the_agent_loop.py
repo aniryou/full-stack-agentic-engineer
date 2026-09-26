@@ -119,6 +119,8 @@ assert [m["role"] for m in messages] == ["system", "user", "assistant", "tool", 
 runaway = FakeLLM(policy=lambda m, t: calls(call("get_time", city="X")))
 ans2, _ = run_loop(runaway, {"get_time": get_time}, "loop", max_steps=3)
 assert ans2 == "(stopped: max steps)"
+# the budget counts model calls: max_steps=3 means exactly 3 calls, never a 4th
+assert runaway.call_count == 3, f"max_steps=3 but the loop called the model {runaway.call_count} times"
 print("✅ run_loop works — you just built an agent")
 
 # %% [markdown]

@@ -6,7 +6,7 @@
 # state dict beside it — and the **durable task record** that lets a multi-step job crash and resume without doing
 # anything twice. The mechanics are small; the design questions about them are not.
 #
-# **Primer sections:** 2.4 (sessions, state and memory; pause/resume; long-running tasks).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [durable-workflows primer](../../../long-running-durable/00_primer.md) §2–§3 (the run as a durable state machine, the five invariants).
 #
 # In this notebook you will:
 # 1. read a session's event log and the model-facing view *derived* from it, and see what the model never sees;

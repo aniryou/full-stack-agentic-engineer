@@ -8,7 +8,11 @@
 # interactions, the Tasks extension) as a *teaching subset* — enough to explain every hop in a design review,
 # not a conformant implementation.
 #
-# **Primer sections:** 3.2 (MCP as the spec stands now), 3.3 (the gateway half of identity), 4.5 (screening), 6.3 (Agent Gateway).
+# Checked against the spec repository on 2026-09-26 (verify). What differs from the 2025-03-26, 2025-06-18 and
+# 2025-11-25 revisions, and where this subset departs from the spec:
+# [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md).
+#
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) and the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 (MCP and A2A security).
 #
 # In this notebook you will:
 # 1. serve three tools — a read, a write that asks the user to confirm (MRTR elicitation), a long-running one that returns a Task;
@@ -28,7 +32,7 @@ from agentlab.mcp import (Forbidden, Gateway, HttpTransport, InProcessTransport,
 # %% [markdown]
 # ## 1. Three tools, one server
 #
-# An MCP server is an *anti-corruption layer* for one bounded context (Primer §3.2): it speaks the business
+# An MCP server is an *anti-corruption layer* for one bounded context: it speaks the business
 # vocabulary and hides the backend. Here the backend is a dict. The three tools cover the three shapes a
 # tool call can take on the wire:
 #
@@ -148,7 +152,7 @@ print("after the round trip:", final["structuredContent"])
 # `_meta`, the server answers `tools/call` immediately with a **task handle** and runs the work in the
 # background; the client polls `tasks/get` at the server's suggested interval and answers mid-flight
 # questions with `tasks/update`. This is the protocol-level answer to approvals and to backends that
-# already think in job ids (Primer §3.2).
+# already think in job ids.
 
 # %%
 raw = await client.request("tools/call", {"name": "reconcile_batch", "arguments": {"batch_id": "B-77"}})
@@ -174,7 +178,7 @@ print("final:", snapshot["status"], snapshot["result"]["structuredContent"])
 legacy = McpClient(InProcessTransport(orders_server), capabilities=client_capabilities(tasks=False))
 inline = await legacy.request("tools/call", {"name": "reconcile_batch", "arguments": {"batch_id": "B-78"},
                                              "inputResponses": {"post": accept(post=False)}})
-print("resultType present?", "resultType" in inline, "| result:", inline["structuredContent"])
+print("resultType:", inline["resultType"], "| result:", inline["structuredContent"])
 
 # %% [markdown]
 # ## 5. The same server over real HTTP
@@ -204,7 +208,7 @@ http.stop()
 # gateway extracts), decides **whether that agent may call that tool** (deny by default, IAM-style rules
 # with CEL-like conditions), **screens** arguments and results, refuses to forward tokens minted for other
 # audiences, and writes an **audit record** per call. Prompts reduce how often the agent tries the wrong
-# thing; the gateway is what stops it from succeeding (Primer §4.5).
+# thing; the gateway is what stops it from succeeding.
 #
 # The rules below name tools by glob (`get_*`). A production gateway keys on the *registry's* pinned,
 # reviewed tool metadata rather than on whatever the server says at runtime — annotations from a server
@@ -241,7 +245,7 @@ print("ops cancel        →", (await ops.call_tool("cancel_order", {"order_id":
 
 # %% [markdown]
 # **Screening a poisoned result.** Order `ORD-1003` carries an injection in a free-text field — the classic
-# indirect prompt injection (Primer §4.5). Without the gateway the text would land in the model's context as
+# indirect prompt injection (Notebook 11). Without the gateway the text would land in the model's context as
 # a tool result. With it, the call is blocked and the audit says why. Note that screening a *result* cannot
 # undo a side effect; it keeps the poison out of the next model call.
 
@@ -314,7 +318,7 @@ assert snap["status"] == "completed" and snap["result"]["structuredContent"] == 
 assert any(m.startswith("month ") for m in messages), f"no progress messages seen: {messages}"
 inline_client = McpClient(InProcessTransport(exports_server), capabilities=client_capabilities(tasks=False))
 inline = await inline_client.request("tools/call", {"name": "export_statements", "arguments": {"account_id": "acc-2", "months": 2}})
-assert "resultType" not in inline and inline["structuredContent"]["pages"] == 6, inline
+assert inline.get("resultType") == "complete" and inline["structuredContent"]["pages"] == 6, inline
 print("✅ task for capable clients, inline for legacy ones; progress seen:", sorted(set(messages)))
 
 # %% [markdown]
@@ -460,6 +464,9 @@ print("✅", why_strip)
 # never needs a channel back to the client, so a plain HTTP gateway can sit in between), mirrored headers (the
 # gateway enforces per-tool policy without parsing bodies — and the server rejects mismatches so that policy
 # and execution agree), and Tasks (approvals and job ids become a protocol shape instead of a bespoke API).
+# Many servers still speak a 2025 revision, so say which one the design assumes; what differs, and where this
+# lab's subset departs from the spec (checked 2026-09-26, verify), is in
+# [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md).
 #
 # Then draw the gateway: agent identity in, deny-by-default policy keyed on agent × server × tool with
 # conditions, screening on both directions, tokens forwarded only to their audience, an audit record per
