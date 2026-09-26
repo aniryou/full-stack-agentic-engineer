@@ -10,10 +10,16 @@ Source cells in ``notebooks_src/NN_name.py``:
 
 For each source, writes ``notebooks/NN_name.ipynb`` (solution blocks replaced by
 ``# YOUR CODE HERE`` + NotImplementedError) and ``solutions/NN_name.ipynb`` (blocks
-kept). A bootstrap cell makes ``import agentcore`` work from a fresh checkout.
+kept). Every notebook starts with the repo's Colab setup cell, exactly as
+``tools/inject_colab_bootstrap.py`` writes it (so running the injector afterwards
+is a no-op), then a bootstrap cell that makes ``import agentcore`` work from a
+fresh checkout. Cell ids are stable: rebuilding unchanged sources is a no-op.
 """
 from __future__ import annotations
 
+import hashlib
+import importlib.util
+import json
 import re
 import sys
 from pathlib import Path
@@ -24,6 +30,10 @@ from nbformat.v4 import new_code_cell, new_markdown_cell, new_notebook
 ROOT = Path(__file__).resolve().parents[1]
 SRC, EX, SOL = ROOT / "notebooks_src", ROOT / "notebooks", ROOT / "solutions"
 BEGIN, END = "### BEGIN SOLUTION", "### END SOLUTION"
+REPO = next(p for p in ROOT.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file())
+_spec = importlib.util.spec_from_file_location("inject_colab_bootstrap", REPO / "tools" / "inject_colab_bootstrap.py")
+_inject = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_inject)
 
 BOOTSTRAP = (
     "# make `import agentcore` work from anywhere (auto-inserted)\n"
@@ -77,6 +87,13 @@ def keep_solution(src: str) -> str:
     return "\n".join(l for l in src.splitlines() if l.strip() not in (BEGIN, END))
 
 
+def write_nb(nb, out: Path) -> None:
+    """Write ``nb`` with the Colab setup cell first, in the injector's JSON layout."""
+    d = json.loads(nbformat.writes(nb))
+    d["cells"].insert(0, _inject.make_cell(out.resolve().parent.relative_to(REPO).as_posix()))
+    out.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def build(path: Path):
     cells = parse(path.read_text())
     for variant, out_dir in (("exercise", EX), ("solution", SOL)):
@@ -95,8 +112,10 @@ def build(path: Path):
                 nb.cells.append(new_code_cell(strip_solution(src) if variant == "exercise" else keep_solution(src)))
             else:
                 nb.cells.append(new_code_cell(keep_solution(src)))
+        for i, cell in enumerate(nb.cells):   # stable ids: rebuilding unchanged sources is a no-op
+            cell.id = hashlib.sha1(f"{path.stem}/{i}".encode()).hexdigest()[:12]
         out_dir.mkdir(parents=True, exist_ok=True)
-        nbformat.write(nb, out_dir / f"{path.stem}.ipynb")
+        write_nb(nb, out_dir / f"{path.stem}.ipynb")
     print("built", path.stem)
 
 
