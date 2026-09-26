@@ -444,8 +444,9 @@ def build_layers_index(layers: list[str]) -> None:
         pg = sum(1 for rp in pages if rp.startswith(layer + "/"))
         title = LAYER_TITLES.get(layer[:2], layer)
         link = f"[{title}]({layer}/index.md)" if readme is not None else title
-        desc = promise(readme or "").replace("|", "\\|")
-        rows.append(f"| {link} | {desc} | {pg} | {nb} |")
+        # One heading and paragraph per layer, not a table row: a four-column table with a prose column
+        # collapses to a word a line on a phone.
+        rows += [f"## {link}", "", promise(readme or ""), "", f"*{pg} pages · {nb} notebooks*", ""]
     body = [
         "# The stack, layer by layer", "",
         "Eight layers, bottom-up: the model-level foundations (00), the hardware (01), and every layer of software "
@@ -453,9 +454,7 @@ def build_layers_index(layers: list[str]) -> None:
         "runnable code and notebooks. The suggested order to work through them is in the "
         "[curriculum](../guide/curriculum.md).", "",
         stack_diagram(), "",
-        "| Layer | What it covers | Pages | Notebooks |",
-        "|---|---|---:|---:|",
-        *rows, "",
+        *rows,
     ]
     write("layers/index.md", "\n".join(body))
 

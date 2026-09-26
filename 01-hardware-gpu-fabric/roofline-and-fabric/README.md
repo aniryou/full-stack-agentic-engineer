@@ -27,7 +27,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`PRIMER.md`](PRIMER.md) | explain the concepts, sections 1–10: spec sheets, the roofline, LLM inference on the roofline, the memory hierarchy, fabrics, storage and cold start, reliability, cost, the September 2026 accelerator landscape, getting hardware; then a design-review walkthrough and drills. Every computed number comes from the core and is pinned by its tests | read alongside the core | — |
+| [`PRIMER.md`](PRIMER.md) | explain the concepts, sections 1–10: spec sheets, the roofline, LLM inference on the roofline, the memory hierarchy, fabrics, storage and cold start, reliability, cost, the September 2026 accelerator landscape, getting hardware; then a design-review walkthrough and drills. Every computed number comes from the core | read alongside the core | — |
 | [`roofline-core/`](roofline-core/README.md) | **predict** step times, collective costs, cold starts, failure rates and $/M tokens with the minimal implementation: package `roofline`, seven standard-library modules (`specs`, `roofline`, `llm`, `fabric`, `storage`, `reliability`, `cost`) and four fill-in notebooks | ~8 h with the primer | T0 |
 | [`gpu-bench-lab/`](gpu-bench-lab/README.md) | **measure** the machine you have with the detailed lab, package `gpubench`: numpy (CPU) and torch (CUDA) backends for GEMM throughput, memory bandwidth, host↔device and GPU↔GPU transfers, weight loading; `nvidia-smi` topology and inventory parsers; Docker and GCP Terraform deploys | ~5 h | T0 → T3 |
 

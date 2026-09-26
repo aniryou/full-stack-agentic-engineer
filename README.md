@@ -1,12 +1,10 @@
 # full-stack-agentic-engineer — the LLM serving stack, from GPUs to agents
 
-A hands-on course in how an LLM request is served, layer by layer: the GPUs and fabric at the bottom, the
-runtime, Kubernetes, the inference engine, the orchestrator and the gateway in the middle, and the agent
-application at the top. It is for engineers who build or run LLM systems and want to explain each design
-choice with numbers. After working through a layer you can predict how it behaves, run it yourself on a
-laptop or a free GPU, and walk a colleague through the design in a review.
-
-**267 notebooks**, every one runnable in Google Colab with one click.
+A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
+Kubernetes, the inference engine, the orchestrator and the gateway, to the agent application at the top. It is
+organised as eight layers and, within each layer, by topic. Each topic has a primer, a small from-scratch
+implementation and a fuller lab, with notebooks; the notebooks run on a laptop or in Google Colab
+([`COLAB.md`](COLAB.md)). A readable copy is at <https://aniryou.github.io/full-stack-agentic-engineer/>.
 
 ## Start here
 
@@ -102,7 +100,7 @@ python3 -m pytest -q      # most labs ship tests
 .
 ├── 00-foundations/ … 07-application-agent-framework/   one folder per layer; labs in topic sub-folders
 ├── raw/            inbox for new material (gitignored except its README); sorted into a layer, never copied
-├── tools/          inject_colab_bootstrap.py, gen_colab_index.py; orchestration/ (build spec, facts, status, README style guide)
+├── tools/          inject_colab_bootstrap.py, gen_colab_index.py; site/ (the guide site generator)
 ├── CURRICULUM.md   the learning path: modules, order, hours, tiers, design drills
 ├── COMPUTE.md      where to run each tier, what it costs, which lab needs which tier
 ├── COLAB.md        running notebooks in Colab
@@ -113,5 +111,4 @@ python3 -m pytest -q      # most labs ship tests
 ## Adding material
 
 Drop it in [`raw/`](raw/) and follow [`raw/README.md`](raw/README.md). The sorting rules (which layer, which topic
-folder) and the decisions log are in [`CLAUDE.md`](CLAUDE.md); READMEs follow
-[`tools/orchestration/README-STYLE.md`](tools/orchestration/README-STYLE.md).
+folder) are in [`CLAUDE.md`](CLAUDE.md).
