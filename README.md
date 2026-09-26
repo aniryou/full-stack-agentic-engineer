@@ -6,7 +6,7 @@ application at the top. It is for engineers who build or run LLM systems and wan
 choice with numbers. After working through a layer you can predict how it behaves, run it yourself on a
 laptop or a free GPU, and walk a colleague through the design in a review.
 
-**219 notebooks**, every one runnable in Google Colab with one click.
+**241 notebooks**, every one runnable in Google Colab with one click.
 
 ## Start here
 
@@ -41,7 +41,7 @@ Read bottom-up: each layer is built on the one below it.
 |---|---|---|---|
 | **00** foundations | transformer internals; GPU capacity planning; the open-weight model landscape | build attention, a transformer block and a tiny GPT; size memory and bandwidth for a model and budget TTFT/TPOT; compare open-weight models on cost and routing | [`00-foundations/`](00-foundations/README.md): `transformers/`, `gpu-capacity-planning/`, `model-landscape/` |
 | **01** hardware and fabric | why a GPU is shaped the way it is; scale-up vs scale-out fabrics; rooflines, fabrics and the cost of a token | read a GPU spec sheet and predict whether an LLM step is compute- or memory-bound; price a collective on NVLink vs InfiniBand; budget a cold start and a failure rate; compute $/M tokens — then measure your own machine (CPU, a free T4, or a Spot L4 on Google Cloud) | [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md): `gpu-primer/`, `gpu-deployment/`, [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/README.md) |
-| **02** CUDA, NCCL, runtime | driver, CUDA, NCCL collectives, container runtime, MIG | in progress — the `cuda-and-nccl` topic lands in a later PR | [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md) (scope only for now) |
+| **02** CUDA, NCCL, runtime | why a kernel is fast or slow; collectives and NCCL; how a container gets a GPU; sharing and monitoring a GPU | predict memory coalescing, occupancy and what an all-reduce costs with numpy simulators; run Numba CUDA kernels in the simulator, then on a GPU; measure collectives like nccl-tests with an α-β fit; see what a container sees of its GPU; choose MIG, MPS or time-slicing and alert on DCGM and XIDs — on a laptop, a free Kaggle 2×T4, any GPU box, or GKE | [`02-cuda-nccl-runtime/`](02-cuda-nccl-runtime/README.md): [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/README.md) |
 | **03** Kubernetes for GPUs | device plugin and DRA; the scheduling cycle and GPU fragmentation; gangs and topology-aware placement; Kueue quotas; getting capacity; sharing | explain why a GPU pod is Pending and fix it; place gangs without deadlock; set up Kueue quotas with borrowing and reclaim; choose Spot, flex-start or reservations — on a laptop simulator, a kind cluster with fake GPUs, one GPU VM, or GKE | [`03-kubernetes-gpu/`](03-kubernetes-gpu/README.md): [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/README.md) |
 | **04** inference engine | attention kernels, KV cache, paging | implement FlashAttention and paged attention in miniature and reason about KV-cache memory; a serving-engine topic and a vLLM internals guide are in progress | [`04-inference-engine/`](04-inference-engine/README.md): `flash-attention/`, `paged-attention/`, `kv-cache/` |
 | **05** orchestrator | replica routing, flow control, autoscaling, prefill/decode disaggregation, KV-cache tiers | route on prefix affinity and load like the llm-d endpoint picker; autoscale on the right signal; size a prefill/decode split — in a fleet simulator, then as a real router on kind or GKE Inference Gateway | [`05-orchestrator/`](05-orchestrator/README.md): [`serving-orchestration/`](05-orchestrator/serving-orchestration/README.md) |
@@ -61,7 +61,7 @@ Most topics follow the same pattern, so once you have done one you know how to d
 | **Core** | a minimal implementation, usually standard-library Python, plus fill-in notebooks that *predict* what the real system does |
 | **Lab** | the detailed version: real tools, benchmarks and deploy recipes that *run* or *measure* the same ideas |
 
-**Tiers** say what hardware a notebook or recipe needs, and the newer topics (layers 01, 03 and 05) mark every
+**Tiers** say what hardware a notebook or recipe needs, and the newer topics (layers 01, 02, 03 and 05) mark every
 step with one:
 
 - **T0** — a laptop, Colab CPU or CI. Free. Every concept is learnable here.

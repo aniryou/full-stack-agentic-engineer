@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (git-ignored) and edit.
+project_id = "my-gpu-lab-project"
+region     = "us-central1"
+zone       = "us-central1-a" # must offer L4 (and A100 if enable_mig_pool = true)
+
+# Cheapest useful defaults: Spot L4 pools that scale from zero.
+gpu_spot           = true
+gpu_max_nodes      = 2
+gpu_driver_version = "DEFAULT"
+
+# 2 x L4 node for nccl-tests: free until a pod asks for 2 GPUs.
+enable_multi_gpu_pool = true
+
+# Optional pools (off by default):
+enable_time_sharing_pool = false
+time_sharing_clients     = 2
+enable_mig_pool          = false # needs A100 quota
+mig_partition_size       = "1g.5gb"

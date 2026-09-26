@@ -1,0 +1,7 @@
+# Everything the lab runs on GKE lives in one namespace: `kubectl delete namespace gpu-lab` cleans up.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-lab
+  labels:
+    app.kubernetes.io/part-of: cuda-nccl-lab

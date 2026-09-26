@@ -1,0 +1,62 @@
+# nccl-tests on one g2-standard-24 node (2 x L4, PCIe; no NVLink). Builds nccl-tests in a CUDA devel
+# image (which ships NCCL), prints the GPU topology NCCL sees, then all_reduce and all_gather sweeps.
+# NCCL_DEBUG=INFO shows the transport NCCL picked (P2P or SHM through host memory).
+#   ./run.sh nccl  ->  out/nccl-tests-2gpu.log  ->  python -m gpurt.nccltests out/nccl-tests-2gpu.log
+# (the log holds both sweeps; nccl-tests prints "# nccl-tests version" and "# Collective test starting" at the
+# top of each, and the parser splits the log there). nccl-tests is pinned to a release tag: its output layout
+# and buffer sizing are what gpurt.nccltests and gpurt.dist.busbw.plan mirror.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nccl-tests-2gpu
+  namespace: gpu-lab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: nccl-tests
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+        node.kubernetes.io/instance-type: g2-standard-24
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: nccl-tests
+          image: nvidia/cuda:12.8.1-devel-ubuntu24.04 # VERIFY: tag; devel images include libnccl-dev
+          env:
+            - name: NCCL_DEBUG
+              value: INFO
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apt-get update -qq && apt-get install -y -qq git make > /dev/null
+              [ -f /usr/include/nccl.h ] || apt-get install -y -qq libnccl2 libnccl-dev > /dev/null
+              # VERIFY: v2.20.0 is the latest nccl-tests tag as of 2026-09-26; bump deliberately
+              git clone --depth 1 --branch v2.20.0 https://github.com/NVIDIA/nccl-tests.git /opt/nccl-tests
+              make -C /opt/nccl-tests -j"$(nproc)" MPI=0 CUDA_HOME=/usr/local/cuda \
+                NVCC_GENCODE="-gencode=arch=compute_89,code=sm_89" > /dev/null
+              nvidia-smi topo -m
+              /opt/nccl-tests/build/all_reduce_perf -b 8 -e 512M -f 2 -g 2
+              /opt/nccl-tests/build/all_gather_perf -b 8 -e 512M -f 2 -g 2
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              nvidia.com/gpu: 2
+              memory: 32Gi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm # NCCL's SHM transport needs more than the container default of 64 MiB
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
