@@ -16,15 +16,18 @@ Mistral Small 3 (24B dense) and Mistral Large 3 (675B MoE).
 | `PRIMER.md` | The reference. Mental model, ~8 formulas, worked example, MoE, cheat-sheet. |
 | `capacity.py` | Every formula as a small plain-Python function. No numpy. |
 | `worked_example.py` | Runs it all: Mistral Small on H100, the bank, Mistral Large 3. |
-| `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions; assertions check you. |
+| `test_capacity.py` | Pins the numbers `PRIMER.md` quotes (units, the bank example, prefill's attention term) and checks the practice notebooks: the solution runs and each check cell fails a wrong answer. |
+| `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions; the checks compare them with `capacity.py` on several inputs. |
 | `notebooks/01_capacity_practice_solved.ipynb` | Solutions. |
 
 ## Run
 ```bash
 python worked_example.py          # prints the numbers in PRIMER.md
+python -m pytest -q test_capacity.py   # checks them (needs pytest)
 jupyter notebook notebooks/       # do the practice (pure stdlib, no install)
 ```
 
 Start with `PRIMER.md`, run `worked_example.py`, then do the practice notebook
-from memory. Numbers (layers, kv_heads, TFLOPS) are the running example — in
-real life read them from the model's `config.json` and the GPU spec sheet.
+from memory. Memory is in GB = 10⁹ bytes throughout (weights, HBM and KV cache).
+Numbers (layers, kv_heads, TFLOPS) are the running example — in real life read
+them from the model's `config.json` and the GPU spec sheet.

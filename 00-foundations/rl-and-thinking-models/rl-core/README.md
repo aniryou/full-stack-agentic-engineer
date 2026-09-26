@@ -90,8 +90,8 @@ Read the modules in this order; each opens with a docstring stating the one idea
   DPO loss 0.598139, GAE, the unbiased pass@k (0.916667, 0.728022, 0.914746) and pass^k, exact majority votes
   (a dominant misconception makes every extra vote cost accuracy; a narrow one only past ~130 votes)
   (`test_grpo.py`, `test_pref.py`, `test_ttc.py`).
-- **Existing repo numbers reproduced.** The capacity primer's bank example — 12.07 s, 100.6 live, 95.3 and 381.3
-  sessions per GPU, 9,156 and 20,615 tokens/s — both as constants and against `capacity.py` function by function,
+- **Existing repo numbers reproduced.** The capacity primer's bank example — 12.07 s, 100.6 live, 88.8 and 355.1
+  sessions per GPU, 8,929 and 20,615 tokens/s, every memory quantity in GB = 10⁹ bytes — both as constants and against `capacity.py` function by function,
   and the 06 scaling lab's `cost_per_call` ($0.007005, $0.035355) (`test_workload.py`).
 - **The primer says what the code computes.** Every computed number in `../PRIMER.md` is recomputed and must
   appear verbatim (`test_primer_numbers.py`).

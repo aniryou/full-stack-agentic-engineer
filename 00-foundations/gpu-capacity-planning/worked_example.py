@@ -11,7 +11,7 @@ Two scenarios:
 
 import math
 from capacity import (
-    BYTES, GPUS, MISTRAL_SMALL as SMALL, MISTRAL_LARGE as LARGE,
+    GPUS, MISTRAL_SMALL as SMALL, MISTRAL_LARGE as LARGE,
     weight_memory_gb, usable_hbm_gb, kv_per_token_kb, kv_per_session_gb,
     max_concurrent_sessions, decode_tok_s_single, decode_aggregate,
     roofline_batch, ttft_s, prefill_tok_s, request_duration_s,
@@ -40,7 +40,7 @@ for dt in ("bf16", "fp8"):
 line()
 print("  KV cache (the concurrency tax):")
 for dt in ("bf16", "fp8"):
-    print(f"    {dt}: {kv_per_token_kb(SMALL, dt):.0f} KB/token   "
+    print(f"    {dt}: {kv_per_token_kb(SMALL, dt):.2f} kB/token   "
           f"| 8K conv = {kv_per_session_gb(SMALL, 8000, dt):.2f} GB")
 
 print("  concurrent 8K sessions on one H100:")
@@ -59,9 +59,11 @@ print(f"    batch 32 @ 4K bf16: {agg:.0f} tok/s aggregate, {per:.0f} tok/s per u
 print(f"    decode stays bandwidth-bound until ~batch {roofline_batch(H100):.0f}")
 
 line()
-print("  prefill (compute-bound) -> TTFT:")
-for pt in (2000, 8000, 32000):
-    print(f"    {pt:>6}-token prompt: TTFT ~{ttft_s(SMALL.active_b, pt, H100):.2f} s")
+print("  prefill (compute-bound) -> TTFT, weights only | + causal attention:")
+for pt in (2000, 8000, 32000, 128000):
+    w_only = ttft_s(SMALL.active_b, pt, H100)
+    full = ttft_s(SMALL.active_b, pt, H100, model=SMALL)
+    print(f"    {pt:>6}-token prompt: TTFT ~{w_only:.2f} s | ~{full:.2f} s  (attention +{full / w_only - 1:.0%})")
 
 
 # ---------------------------------------------------------------- B ----------
@@ -69,7 +71,7 @@ print()
 print("=" * 68)
 print("B. SINGAPORE BANK — internal assistant, on-prem (data residency)")
 print("=" * 68)
-# Inputs you must extract from the customer:
+# The workload's inputs (state them before sizing anything):
 STAFF        = 10_000
 PEAK_ACTIVE  = 0.10          # fraction active at peak
 REQ_PER_MIN  = 0.5           # each active user: ~1 request / 2 min
@@ -154,5 +156,5 @@ print(f"                 / (8 x {H200.bw_tb_s} TB/s) = ~{step_ms:.0f} ms/step fl
 print("    => MoE wants BIG batches + expert parallelism to be worth it.")
 print()
 print("  Parallelism rule: smallest tensor-parallel degree that fits weights+KV")
-print("  (TP inside a node over NVLink @900GB/s; never TP across IB @~50GB/s),")
+print("  (TP inside a node over NVLink @450 GB/s each way; never TP across IB @~50 GB/s each way, ~9x less),")
 print("  then add replicas for throughput; pipeline across nodes only if forced.")

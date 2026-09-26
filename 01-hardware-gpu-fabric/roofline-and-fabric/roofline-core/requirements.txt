@@ -1,7 +1,3 @@
-# The library needs nothing. These are only to run the notebooks and tests.
+# The library needs nothing. This is all the tests need (tier T0: any CPU, a few MB).
 pytest>=7.4
-nbformat>=5.9
-nbclient>=0.9
-ipykernel>=6.25
-jupyterlab>=4.0
-# optional: matplotlib>=3.8 draws the roofline charts; without it the notebooks print text charts
+# To do the notebooks locally as well: pip install -r requirements-notebooks.txt

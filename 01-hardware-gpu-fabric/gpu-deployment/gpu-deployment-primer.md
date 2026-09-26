@@ -15,7 +15,7 @@
 **Technically**, in GPU infrastructure, scale-up has a precise meaning that sits opposite scale-out:
 
 - **Scale-up network** — the fabric connecting GPUs *inside* one tightly-coupled domain (one server, or one rack). NVIDIA's version is NVLink/NVSwitch. It behaves like memory: a GPU can read another GPU's memory almost as if it were local.
-- **Scale-out network** — the fabric connecting *domains* to each other across the data centre. InfiniBand or RDMA-over-Ethernet. It behaves like a network: you send messages, and it's roughly two orders of magnitude slower.
+- **Scale-out network** — the fabric connecting *domains* to each other across the data centre. InfiniBand or RDMA-over-Ethernet. It behaves like a network: you send messages, and each GPU gets about 9× less bandwidth per direction than over NVLink (§5), with higher latency.
 
 Almost every architectural decision in this document comes down to one question: **which side of that boundary does this piece of work live on?**
 
@@ -160,12 +160,12 @@ This is the actual "architecture" in GPU deployment architecture. Order-of-magni
 | Link | Where | Rough bandwidth |
 |---|---|---|
 | HBM (on-package memory) | GPU ↔ its own memory | 3.4 TB/s (H100) → 8 TB/s (Blackwell) → 22 TB/s (Rubin) |
-| **NVLink / NVSwitch** (scale-up) | GPU ↔ GPU, same node/rack | 900 GB/s (H100) → 1.8 TB/s (Blackwell) → 3.6 TB/s (Rubin) |
+| **NVLink / NVSwitch** (scale-up) | GPU ↔ GPU, same node/rack | 900 GB/s (H100) → 1.8 TB/s (Blackwell) → 3.6 TB/s (Rubin), bidirectional totals: half each way |
 | PCIe Gen5 ×16 | GPU ↔ CPU/NIC | ~64 GB/s |
-| **InfiniBand / RoCE** (scale-out) | node ↔ node | ~50–100 GB/s per NIC (400–800 Gb/s) |
+| **InfiniBand / RoCE** (scale-out) | node ↔ node | ~50–100 GB/s per NIC per direction (400–800 Gb/s) |
 | Storage / general Ethernet | cluster ↔ storage | ~1–12 GB/s |
 
-Note the cliff. Scale-up bandwidth is roughly **an order of magnitude or more** above scale-out. Latency differs by even more: nanoseconds on NVLink, microseconds over the fabric.
+Note the cliff. Compare like with like: NVLink figures are marketed as the two directions added, NIC figures are per direction. Per direction and within one generation, a GPU's NVLink carries about **9×** what its NIC does: 450 vs 50 GB/s for H100 with a 400 Gb/s NIC, 900 vs 100 GB/s for Blackwell with an 800 Gb/s NIC (the [roofline primer's link ladder, §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), computes this in `roofline.fabric.LINKS`). Dividing a bidirectional NVLink total by a one-way NIC rate gives 18×, which double-counts NVLink. Latency differs too: a hop through NVSwitch costs less than one through a NIC and a network switch.
 
 Two practical consequences:
 
@@ -184,7 +184,7 @@ Current landscape as of mid-2026:
 
 - **Hopper (H100 80 GB, H200 141 GB)** — still ubiquitous, still the price/performance workhorse for most enterprise workloads.
 - **Blackwell Ultra (B300 / GB300 NVL72)** — 288 GB HBM3e at 8 TB/s, ~1,400 W per GPU. The volume production part.
-- **Vera Rubin (R100 / VR200)** — entered production June 2026, partner availability H2 2026. 288 GB of HBM4 at 22 TB/s, NVLink 6 at 3.6 TB/s per GPU. Availability is constrained by TSMC 3nm and HBM4 supply.
+- **Vera Rubin (R100 / VR200)** — entered production June 2026, available from OEMs and clouds in H2 2026 (verify). 288 GB of HBM4 at 22 TB/s, NVLink 6 at 3.6 TB/s per GPU. Availability is constrained by TSMC 3nm and HBM4 supply.
 - **AMD** — MI300X/MI325X mature in production; MI400/MI450 ramping. Credible, especially on memory capacity per GPU, with ROCm as the software risk.
 - **Custom silicon** — Google TPU, AWS Trainium/Inferentia, Microsoft Maia, Meta MTIA. Large volumes, mostly captive to internal hyperscaler workloads.
 

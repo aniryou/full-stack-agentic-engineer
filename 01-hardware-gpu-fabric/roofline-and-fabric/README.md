@@ -8,7 +8,8 @@ numbers you can defend in a design review.
 
 1. Read [PRIMER.md](PRIMER.md) "The one-minute version", then §1–§2: spec-sheet literacy and the roofline.
 2. `cd roofline-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 66 tests, ~30
-   s; then open [`01_spec_sheets_and_the_roofline`](roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb).
+   s; then open [`01_spec_sheets_and_the_roofline`](roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb)
+   (on Colab as is; locally, `pip install -r requirements-notebooks.txt` adds JupyterLab).
 3. Measure the real thing with [`gpu-bench-lab/notebooks/01_measure_your_roofline`](gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb):
    on a laptop it measures your CPU's roofline; on any GPU (even a free Colab T4) it measures the GPU's.
 
@@ -51,8 +52,9 @@ Finish with the primer's [design-review walkthrough and drills](PRIMER.md#in-a-d
 
 ```bash
 cd roofline-core
-python3 -m pip install -r requirements.txt   # only for notebooks and tests; the library needs nothing
+python3 -m pip install -r requirements.txt             # pytest only, for the tests; the library needs nothing
 python3 -m pytest -q
+python3 -m pip install -r requirements-notebooks.txt   # JupyterLab, to do the notebooks locally
 python3 -m jupyterlab notebooks
 
 cd ../gpu-bench-lab

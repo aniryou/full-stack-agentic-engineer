@@ -18,6 +18,12 @@ levers. Never reason about them together.
 
 ## The formulas (all of `capacity.py` in one page)
 
+**Units.** GB means 10⁹ bytes everywhere below — weights, HBM and KV cache alike — so
+they can be added and subtracted. HBM is taken at its marketed size: an "80 GB" H100
+really carries 80 GiB (85.9 × 10⁹ bytes), so planning with 80 × 10⁹ is about 7%
+conservative, the same choice as layer 01's
+[roofline primer §1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#1-spec-sheet-literacy).
+
 **1. Weights — does it fit?**
 ```
 memory = params × bytes/param        bf16=2, fp8=1, int4=0.5
@@ -31,8 +37,8 @@ decides how many users you serve.
 KV/token = 2(K,V) × layers × kv_heads × head_dim × bytes
 ```
 Every token of every live conversation holds this in HBM. Mistral Small:
-`2×40×8×128×2 = 160 KB/token` (bf16), 80 KB (fp8).
-- 8K conversation ≈ 1.2 GB; 32K ≈ 5 GB; 128K ≈ 20 GB
+`2×40×8×128×2 = 163,840 bytes ≈ 164 kB/token` (bf16), 82 kB (fp8).
+- 8K conversation ≈ 1.3 GB; 32K ≈ 5.2 GB; 128K ≈ 21 GB
 - `concurrent sessions = spare_HBM ÷ KV_per_session`
 - **GQA is why this works**: it uses `kv_heads` (8), not query heads (32) — a
   built-in 4× cut. Mistral 7B popularised it.
@@ -52,13 +58,19 @@ roofline (~batch 300 on H100 = FLOPS ÷ bandwidth).
 
 **4. Prefill — compute-bound.**
 ```
-FLOPs ≈ 2 × params × prompt_tokens        TTFT = FLOPs ÷ (peak_FLOPS × MFU)
+FLOPs ≈ 2 × params × S  +  2 × layers × q_heads × head_dim × S²      (S = prompt tokens)
+        weight GEMMs        causal attention (QKᵀ and AV)
+TTFT = FLOPs ÷ (peak_FLOPS × MFU)
 ```
-24B × 2K prompt ≈ 100 TFLOP → ~0.1–0.2 s. A 32K RAG prompt ≈ 1.6 PFLOP → seconds.
+The attention term grows as S², so it only matters for long prompts. For Mistral Small
+(40 layers, 32 query heads × 128) it adds 1.4% at 2K tokens, 5.6% at 8K, 22% at 32K and
+90% at 128K (`capacity.attention_flops`). 24B × 2K prompt ≈ 100 TFLOP → ~0.1 s at 50% MFU
+in fp8. A 32K RAG prompt ≈ 1.5 PFLOP for the weights plus 0.35 for attention ≈ 1.9 PFLOP →
+~1.9 s. The bank example below leaves attention out: at 1,500 tokens it is 1%.
 RAG and agents are prefill-dominated, so **prefix caching** (shared system
 prompts, repeated documents) is the biggest single win there.
 
-**5. Workload → GPUs.** Get from the customer: **peak concurrent users** (not
+**5. Workload → GPUs.** Pin down the workload first: **peak concurrent users** (not
 headcount), avg input/output tokens, TTFT + TPOT targets, availability, growth.
 ```
 concurrency = RPS × request_duration        (Little's Law)
@@ -76,7 +88,7 @@ apply utilisation headroom (~60–70%) and add **N+1** spares.
 Avg 1,500 in / 300 out. Target ≥25 tok/s/user (TPOT ≤ 40 ms).
 
 - **Concurrency**: duration ≈ 0.1 s + 300×40 ms ≈ 12 s → 8 × 12 ≈ **~100 live sessions**
-- **Memory (the driver)**: bf16 → ~95 sessions/GPU → **2 GPUs**; fp8 → ~380/GPU
+- **Memory (the driver)**: bf16 → ~89 sessions/GPU → **2 GPUs**; fp8 → ~355/GPU
   → **1 GPU**. *This is the lesson: the binding constraint is KV-cache memory,
   and fp8 is the biggest lever on it.*
 - **Decode throughput**: need 8×300 = 2,500 tok/s; one H100 does ~9,000 → <1 GPU
@@ -87,8 +99,8 @@ Avg 1,500 in / 300 out. Target ≥25 tok/s/user (TPOT ≤ 40 ms).
 - **Cost check**: $/M tokens = GPU-hour price ÷ tokens/hour (1,500 tok/s ≈ 5.4M/hr).
 
 > The two sizing paths — memory (~sessions/GPU) and throughput (tok/s/GPU) —
-> should roughly agree. Say that out loud; it shows you know
-> both constraints bind.
+> should roughly agree. Show both in a design review; if they disagree by
+> much, one of the inputs is wrong.
 
 ---
 
@@ -110,8 +122,10 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 
 **Parallelism rule of thumb:**
 1. Use the **smallest tensor-parallel (TP)** degree that fits weights + KV.
-2. TP only *inside* a node — it needs constant chatter over **NVLink (~900 GB/s)**;
-   never TP across **InfiniBand (~50 GB/s)**, ~18× slower.
+2. TP only *inside* a node — it needs constant chatter over **NVLink (H100: 450 GB/s
+   each way, marketed as 900 GB/s for both directions)**; never TP across **InfiniBand
+   (a 400 Gb/s NIC: 50 GB/s each way)**, ~9× less per direction
+   ([roofline primer §5.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#51-the-link-ladder)).
 3. Scale throughput with **replicas** (data parallelism), each a full copy.
 4. **Pipeline-parallel (PP) across nodes** only when a single node can't hold it.
 5. **Expert-parallel (EP)** spreads MoE experts across GPUs.
@@ -139,7 +153,7 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 
 - **Dense vs MoE** for the workload (quality needed vs hardware you can get).
 - **FP8 by default** on Hopper+; **INT4 only where quality was validated on the
-  customer's own evals.**
+  workload's own evals.**
 - **Prefix caching** for RAG/agents; **speculative decoding** for latency at low batch.
 - **Thinking models** change the output length, not the formulas: with 2,700 thinking tokens before a 300-token
   answer, the bank example needs about 18× the GPUs for KV memory at the SLO's TPOT
@@ -147,6 +161,6 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 - **Chunked prefill** (interleave long prompts with decode) vs **disaggregated
   prefill/decode pools** (separate GPU fleets, each sized for its bottleneck)
   once you're past a few nodes.
-- For an APAC partner deployment the real constraint is usually **data residency +
-  in-country GPU availability** → "which Mistral model gives the quality you need
-  on the hardware you can actually get?"
+- When data must stay in one country, the binding constraint is usually **in-country
+  GPU availability** → "which model gives the quality you need on the hardware you
+  can actually get there?"

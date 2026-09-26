@@ -9,8 +9,12 @@ Each function below is one line of the mental model. No numpy, no classes
 beyond three tiny records. Units are stated in every docstring so you can
 check them by hand.
 
-Convention for units:
-  * memory in GB (10^9 bytes), bandwidth in TB/s (10^12 bytes/s)
+Convention for units — one unit for every memory quantity:
+  * memory in GB = 10^9 bytes: weights, HBM and KV cache alike (KV per token in
+    kB = 10^3 bytes). HBM sizes are the marketed "GB"; an "80 GB" H100 really
+    carries 80 GiB = 85.9e9 bytes, so planning with 80e9 is ~7% conservative
+    (layer 01's roofline primer §1 makes the same choice).
+  * bandwidth in TB/s (10^12 bytes/s)
     -> 1 TB/s = 1000 GB/s, so seconds = GB / (TB_s * 1000)
   * params in "B" (billions), so a 24B model is params_b = 24
   * FLOPs are raw; TFLOPS = 10^12 FLOP/s
@@ -56,6 +60,7 @@ class ModelSpec:
     kv_heads: int          # GQA: KV heads (NOT query heads) — this is the lever
     head_dim: int
     active_b: float = None  # MoE: params used per token. dense -> == params_b
+    q_heads: int = None    # query heads: set the attention FLOPs of prefill
 
     def __post_init__(self):
         if self.active_b is None:
@@ -64,7 +69,8 @@ class ModelSpec:
 
 # Two Mistral models used throughout the primer.
 MISTRAL_SMALL = ModelSpec("Mistral Small 3 (24B dense)",
-                          params_b=24, layers=40, kv_heads=8, head_dim=128)
+                          params_b=24, layers=40, kv_heads=8, head_dim=128,
+                          q_heads=32)
 MISTRAL_LARGE = ModelSpec("Mistral Large 3 (675B MoE)",
                           params_b=675, layers=88, kv_heads=8, head_dim=128,
                           active_b=41)
@@ -89,16 +95,17 @@ def usable_hbm_gb(gpu, overhead=0.10):
 #    per token = 2(K,V) * layers * kv_heads * head_dim * bytes
 # =============================================================================
 def kv_per_token_kb(model, dtype="bf16"):
-    """KB of KV cache per token, per sequence.
-    Mistral Small: 2*40*8*128*2 = 163840 B = 160 KB (bf16); 80 KB (fp8).
+    """kB (10^3 bytes) of KV cache per token, per sequence.
+    Mistral Small: 2*40*8*128*2 = 163,840 B = 163.84 kB (bf16); 81.92 kB (fp8).
     Note it uses kv_heads, so GQA (8 vs 32 query heads) already saves 4x."""
     bytes_ = 2 * model.layers * model.kv_heads * model.head_dim * BYTES[dtype]
-    return bytes_ / 1024
+    return bytes_ / 1e3
 
 
 def kv_per_session_gb(model, context_tokens, dtype="bf16"):
-    """GB of KV for ONE conversation of `context_tokens` length."""
-    return kv_per_token_kb(model, dtype) * context_tokens / (1024 * 1024)
+    """GB (10^9 bytes) of KV for ONE conversation of `context_tokens` length —
+    the same GB as weight_memory_gb and gpu.hbm_gb, so they can be subtracted."""
+    return kv_per_token_kb(model, dtype) * context_tokens / 1e6
 
 
 def max_concurrent_sessions(spare_gb, model, context_tokens, dtype="bf16"):
@@ -143,22 +150,39 @@ def roofline_batch(gpu):
 
 # =============================================================================
 # 4. PREFILL — read the whole prompt in parallel, COMPUTE-bound
-#    FLOPs ~ 2 * params * prompt_tokens
+#    FLOPs ~ 2 * params * S  +  2 * layers * q_heads * head_dim * S^2
+#            (weight GEMMs)     (causal attention: QK^T and AV)
 # =============================================================================
-def prefill_flops(active_b, prompt_tokens):
-    """For MoE use ACTIVE params here — prefill costs like a dense `active_b`."""
-    return 2 * active_b * 1e9 * prompt_tokens
+def attention_flops(model, prompt_tokens):
+    """Causal self-attention over a prompt of S tokens: token i attends to i
+    positions, QK^T and AV each cost 2 FLOPs per multiply-add, so
+    4 * layers * q_heads * head_dim * S(S+1)/2 (as layer 01's roofline.llm counts it).
+    Grows as S^2: +1.4% on the weights' 2*P*S at 2K for Mistral Small,
+    +22% at 32K, +90% at 128K."""
+    s = prompt_tokens
+    return 2 * model.layers * model.q_heads * model.head_dim * s * (s + 1)
 
 
-def ttft_s(active_b, prompt_tokens, gpu, dtype="fp8", mfu=0.5):
-    """Time to first token. 24B * 2K prompt on H100 ~ 0.2 s.
-    32K RAG prompt ~ 2-3 s -> prefix caching is the big win for RAG/agents."""
+def prefill_flops(active_b, prompt_tokens, model=None):
+    """For MoE use ACTIVE params here — prefill costs like a dense `active_b`.
+    Pass `model` (with q_heads) to add the attention term; without it this is
+    the weights-only 2 * P * S, which is fine below a few thousand tokens."""
+    flops = 2 * active_b * 1e9 * prompt_tokens
+    if model is not None and model.q_heads:
+        flops += attention_flops(model, prompt_tokens)
+    return flops
+
+
+def ttft_s(active_b, prompt_tokens, gpu, dtype="fp8", mfu=0.5, model=None):
+    """Time to first token. 24B * 2K prompt on H100 ~ 0.1 s.
+    32K RAG prompt ~ 1.9 s with attention -> prefix caching is the big win for RAG/agents."""
     tflops = gpu.fp8_tflops if dtype in ("fp8", "int8") else gpu.bf16_tflops
-    return prefill_flops(active_b, prompt_tokens) / (tflops * 1e12 * mfu)
+    return prefill_flops(active_b, prompt_tokens, model) / (tflops * 1e12 * mfu)
 
 
 def prefill_tok_s(active_b, gpu, dtype="fp8", mfu=0.5):
-    """Prefill tokens/sec one GPU can chew = compute_budget / flops_per_token."""
+    """Prefill tokens/sec one GPU can chew = compute_budget / flops_per_token.
+    Weights only: a long prompt costs more per token (see attention_flops)."""
     tflops = gpu.fp8_tflops if dtype in ("fp8", "int8") else gpu.bf16_tflops
     return (tflops * 1e12 * mfu) / (2 * active_b * 1e9)
 

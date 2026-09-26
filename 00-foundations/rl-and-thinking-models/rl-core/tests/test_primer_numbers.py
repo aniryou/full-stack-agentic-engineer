@@ -270,7 +270,7 @@ def test_s7_serving_numbers():
     present(f"mean {w.lognormal_mean(1500, 1.0):,.0f}, p90 {w.lognormal_quantile(1500, 1.0, 0.9):,.0f} and p99 "
             f"{w.lognormal_quantile(1500, 1.0, 0.99):,.0f}")
     kv = w.kv_per_token_kb(w.QWEN3_0_6B, "fp16")
-    present(f"{kv:.0f} KiB of KV per token in fp16 ({kv * 1024:,.0f} B", f"holds {8192 * kv * 1024 / 1e9:.2f} GB against "
+    present(f"{kv:.0f} kB of KV per token in fp16 ({kv * 1000:,.0f} B", f"holds {8192 * kv * 1000 / 1e9:.2f} GB against "
             f"{w.weight_gb(w.QWEN3_0_6B, 'fp16'):.2f} GB of weights")
     k = lambda L: w.kv_token_steps(1500, L)
     present(f"L = 300 → {k(300):,}; L = 3,000 → {k(3000):,} = {k(3000) / k(300):.1f}×; L = 1,500 → {k(1500) / k(300):.1f}×; "
@@ -285,7 +285,7 @@ def test_s7_serving_numbers():
             "| batch per GPU within the ITL SLO | " + " | ".join(f"{p['itl_batch']}" for p in plans) + " |",
             "| GPUs by memory / ITL / decode / prefill | " + " | ".join(" / ".join(
                 f"{p['gpus'][c]:.2f}" for c in ("memory", "itl_slots", "decode", "prefill")) for p in plans) + " |")
-    assert [p["gpus_needed"] for p in plans] == [1, 5, 3] and [p["binding"] for p in plans] == ["prefill", "memory", "itl_slots"]
+    assert [p["gpus_needed"] for p in plans] == [1, 6, 3] and [p["binding"] for p in plans] == ["prefill", "memory", "itl_slots"]
     steady = [w.plan_steady(S, H, rps, 1500, 300), w.plan_steady(S, H, rps, 1500, 3000),
               w.plan_steady(S, H, rps, 1500, 3000, tpot_ms=20)]
     present("| GPUs by memory / ITL / prefill | " + " | ".join(" / ".join(

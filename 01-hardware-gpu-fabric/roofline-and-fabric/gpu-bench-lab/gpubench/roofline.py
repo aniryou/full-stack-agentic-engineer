@@ -7,7 +7,8 @@ compute, rather than memory, limits it. Below the ridge, a faster ALU buys nothi
 
 ``measured_roofline`` builds the roofline from Measurements (best GEMM for the flat roof,
 best single-pass STREAM kernel for the slanted one); ``spec_roofline`` builds the datasheet version, so the
-two can be compared. Primer §2 derives the model; this module only applies it.
+two can be compared; ``noise_warnings`` flags a roofline measured on a busy machine. Primer §2 derives
+the model; this module only applies it.
 
 One caution the notebooks repeat: the intensities here count *compulsory DRAM/HBM bytes*. A
 small GEMM whose operands sit in cache after the first call is not really moving those bytes
@@ -80,6 +81,41 @@ def measured_roofline(gemms, bandwidths, dtype: str | None = None, label: str | 
     bw = max(m.bytes_per_s(stat) for m in bandwidths)
     dev = g[0].device
     return Roofline(label or f"{dev} {dtype or 'best dtype'} (measured)", peak, bw, "measured")
+
+
+NOISY_CV = 0.15      # coefficient of variation of a roof-setting measurement's samples above which we warn
+
+
+def noise_warnings(gemms, bandwidths, is_gpu: bool = False, cv_limit: float = NOISY_CV) -> list:
+    """Sanity checks on a measured roofline; each returned string starts with a label a reader can grep.
+
+    Two symptoms of a machine that was busy while it was measured (a shared vCPU, a laptop on battery,
+    another job): the samples behind a roof disagree with each other (their coefficient of variation
+    exceeds ``cv_limit``), or — on a CPU — float32 peaks *below* float64. A SIMD unit does twice as
+    many float32 lanes as float64 ones, so a CPU's float32 roof should be about 2× its float64 roof; an
+    inversion means the float32 sweep ran while something else had the cores. An empty list means
+    neither symptom was seen, not that the numbers are right.
+    """
+    label = f"noisy measurement (shared {'GPU' if is_gpu else 'CPU'}?)"
+    out, peaks = [], {}
+    for dtype in dict.fromkeys(m.params.get("dtype") for m in gemms):
+        top = max((m for m in gemms if m.params.get("dtype") == dtype), key=lambda m: m.flops_per_s())
+        peaks[dtype] = top.flops_per_s()
+        if top.timing.cv > cv_limit:
+            out.append(f"{label}: the {dtype} flat roof ({si(peaks[dtype], 'FLOP/s')}) comes from samples that "
+                       f"vary by {top.timing.cv:.0%} (coefficient of variation); re-run on an idle machine")
+    single = [m for m in bandwidths if m.extras.get("passes", 1) == 1]
+    if single:
+        top = max(single, key=lambda m: m.bytes_per_s())
+        if top.timing.cv > cv_limit:
+            out.append(f"{label}: the bandwidth roof ({si(top.bytes_per_s(), 'B/s')}, {top.op}) comes from "
+                       f"samples that vary by {top.timing.cv:.0%} (coefficient of variation); re-run on an idle machine")
+    f32, f64 = peaks.get("float32"), peaks.get("float64")
+    if not is_gpu and f32 is not None and f64 is not None and f32 < f64:
+        out.append(f"{label}: float32 peaked at {si(f32, 'FLOP/s')}, below float64's {si(f64, 'FLOP/s')}; a CPU "
+                   "does twice as many float32 lanes per SIMD instruction, so expect about 2× — this roofline "
+                   "describes the load on the machine, not the machine; re-run on an idle machine")
+    return out
 
 
 def spec_roofline(spec, dtype: str) -> Roofline:

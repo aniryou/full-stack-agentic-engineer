@@ -161,6 +161,8 @@ class Report:
         if self.meta.get("warning"):
             lines += [f"**WARNING: {self.meta['warning']}.** The roofline and fractions below are built from "
                       "these sizes too: they describe the plumbing, not the machine.", ""]
+        for w in self.meta.get("noise_warnings", []):
+            lines += [f"**WARNING — {w}.**", ""]
         lines += [f"*{self.meta.get('created_utc', '')} · backend `{self.meta.get('backend', '?')}` · "
                   f"mode `{self.mode}` · host `{self.meta.get('host', '?')}` · every number below was measured "
                   f"on this machine by this run, except rows explicitly marked spec/model/estimate.*", ""]

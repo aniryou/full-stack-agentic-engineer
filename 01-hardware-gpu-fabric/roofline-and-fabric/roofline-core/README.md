@@ -22,10 +22,15 @@ quantities on the hardware you have.
 
 ```bash
 cd roofline-core
-python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
+python3 -m pip install -r requirements.txt   # pytest only: enough for the tests
 python3 -m pytest -q                          # 66 tests, ~30 s
+python3 -m pip install -r requirements-notebooks.txt   # JupyterLab (~250 MB), to do the notebooks locally
 python3 -m jupyterlab notebooks               # do the exercises
 ```
+
+`make setup test` and `make setup-notebooks lab` do the same (`make notebooks` and `make check` also need
+`make setup-notebooks`). On Colab you need neither file: the notebooks' first cell clones the repo and
+installs the library, and Colab already has Jupyter.
 
 The library itself needs nothing installed:
 
@@ -81,9 +86,11 @@ explanation and drill questions). Solutions are in `solutions/`.
 ## Regenerating notebooks
 
 `notebooks/` and `solutions/` are generated from `notebooks_src/*.py` (percent format with
-`### BEGIN SOLUTION` blocks). Edit the sources, then:
+`### BEGIN SOLUTION` blocks). The build and run tools need the notebook requirements, not just the test
+ones (`requirements.txt` is pytest only), so install those first. Edit the sources, then:
 
 ```bash
+python3 -m pip install -r requirements-notebooks.txt    # nbformat, nbclient, ipykernel, JupyterLab (or make setup-notebooks)
 python3 tools/build_notebooks.py                        # rebuild both variants
 python3 tools/run_notebooks.py solutions                # solutions must run clean
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
