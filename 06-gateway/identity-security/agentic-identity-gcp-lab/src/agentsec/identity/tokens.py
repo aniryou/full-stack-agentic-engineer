@@ -10,6 +10,7 @@ What this gives you, standards-faithfully but in ~300 lines:
   - **RFC 8693 token exchange** for delegation: ``subject_token`` (the user) + ``actor_token``
     (the agent) → a token whose ``sub`` is the user and whose ``act`` claim names the agent,
     narrowed to one ``audience`` and ``scope``. Nested ``act`` chains express multi-hop delegation.
+    A ``may_act`` claim on the subject token (RFC 8693 §4.4) limits which actor may do this.
 
 * :class:`DPoP` — RFC 9449 proof-of-possession: the client signs a per-request proof with a
   private key; the token carries ``cnf.jkt`` (the JWK thumbprint, RFC 7638). A stolen bearer
@@ -316,6 +317,10 @@ class TokenIssuer:
                 presented_thumbprint=presented_thumbprint,
                 allow_unbound=presented_thumbprint is None,
             )
+        may_act = subject.raw.get("may_act")
+        if actor is not None and may_act is not None and may_act.get("sub") != actor.subject:
+            # RFC 8693 §4.4: the subject token names who may act for it; nobody else may.
+            raise TokenError(f"may_act does not authorize actor {actor.subject}")
         requested = set(scope.split()) if isinstance(scope, str) else set(scope)
         if subject.raw.get("scope"):
             # A delegated token can never be broader than what the subject already had.

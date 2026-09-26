@@ -22,6 +22,7 @@ from agentsec.identity import (
     PrincipalSet,
     ProviderKind,
     ReplayDetected,
+    TokenError,
     TokenIssuer,
     UserPrincipal,
     build_boundary,
@@ -195,6 +196,33 @@ def test_token_exchange_records_actor_and_narrows_scope(
     ).actor_chain
     assert chain == [sub2.spiffe_id, agent.spiffe_id]
     assert jwt.get_unverified_header(id_token)["typ"] == "at+jwt"
+
+
+def test_exchange_honours_may_act(
+    issuer: TokenIssuer, agent: AgentIdentity, other_agent: AgentIdentity, ana: UserPrincipal
+):
+    """RFC 8693 §4.4: a subject token's may_act names the only actor allowed to act for it."""
+    subject_token = issuer.mint(
+        subject=ana.subject,
+        audience="https://app.acme.example",
+        scope="tickets:read",
+        extra={"may_act": {"sub": agent.spiffe_id}},
+    )
+    common = dict(
+        subject_token=subject_token,
+        subject_token_audience="https://app.acme.example",
+        actor_token_audience=issuer.issuer,
+        audience="https://tickets.example/mcp",
+        scope="tickets:read",
+    )
+    named = issuer.mint(subject=agent.spiffe_id, audience=issuer.issuer)
+    resp = issuer.exchange(actor_token=named, **common)
+    assert issuer.verify(resp["access_token"], audience="https://tickets.example/mcp").actor == (
+        agent.spiffe_id
+    )
+    stranger = issuer.mint(subject=other_agent.spiffe_id, audience=issuer.issuer)
+    with pytest.raises(TokenError, match="may_act"):
+        issuer.exchange(actor_token=stranger, **common)
 
 
 def test_exchange_token_type_follows_binding_kind(

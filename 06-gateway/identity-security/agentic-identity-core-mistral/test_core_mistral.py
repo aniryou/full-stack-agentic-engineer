@@ -11,12 +11,15 @@ import jwt
 import pytest
 
 from agentsec_core_mistral import (
+    APP_AUDIENCE,
     MODERATION_MODEL,
     PLAN,
     TICKETS,
     Agent,
+    AgentIdentity,
     AuditLog,
     Authority,
+    Issuer,
     LocalScreener,
     MistralModel,
     MistralModeration,
@@ -43,7 +46,7 @@ def demo():
 
 def test_delegated_token_names_both_user_and_agent_for_one_audience(demo):
     issuer, server, agent, ana = demo
-    tok = issuer.exchange(ana, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     claims = issuer.verify(tok, audience=server.audience)
     assert claims["sub"] == "u-ana" and claims["act"]["sub"] == agent.identity.spiffe_id
     assert claims["scope"] == "tickets:read" and claims["exp"] - claims["iat"] == 300
@@ -52,14 +55,14 @@ def test_delegated_token_names_both_user_and_agent_for_one_audience(demo):
 def test_agent_cannot_widen_the_users_grant(demo):
     issuer, server, agent, _ = demo
     read_only = issuer.mint(subject="u-ana", audience="https://app.acme.example", scope={"tickets:read"})
-    tok = issuer.exchange(read_only, agent=agent.identity, audience=server.audience, scope={"tickets:write"})
+    tok = issuer.exchange(read_only, actor_token=agent.credential, audience=server.audience, scope={"tickets:write"})
     with pytest.raises(TokenError, match="insufficient_scope"):
         issuer.verify(tok, audience=server.audience, required={"tickets:write"})
 
 
 def test_token_for_one_api_is_rejected_by_another(demo):
     issuer, server, agent, ana = demo
-    tok = issuer.exchange(ana, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     with pytest.raises(TokenError, match="Audience"):
         issuer.verify(tok, audience="https://payments.acme.example")
 
@@ -113,6 +116,45 @@ def test_agent_key_is_read_at_use_not_stored(demo, monkeypatch):
     monkeypatch.setenv("MISTRAL_API_KEY_SUPPORT_AGENT", "sk-agent-own-key")
     assert agent.identity.api_key == "sk-agent-own-key"
     assert "sk-agent" not in repr(agent.identity)  # the identity object never carries the secret
+
+
+# ---- the STS checks every input of the exchange ------------------------------------------------
+
+
+def test_sts_rejects_a_user_token_minted_for_another_audience(demo):
+    issuer, server, agent, _ = demo
+    for aud in (server.audience, "https://evil.example"):  # a tool server's token, a stranger's token
+        stray = issuer.mint(subject="u-ana", audience=aud, scope={"tickets:read", "tickets:write"})
+        with pytest.raises(TokenError, match="Audience"):
+            issuer.exchange(stray, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
+        with pytest.raises(TokenError, match="Audience"):
+            agent.issuer.verify(stray, audience=APP_AUDIENCE)  # the check Agent.run makes first
+
+
+def test_sts_requires_an_authenticated_actor(demo):
+    issuer, server, agent, ana = demo
+    with pytest.raises(TypeError):
+        issuer.exchange(ana, audience=server.audience, scope={"tickets:read"})  # no actor_token at all
+    bad_actors = {
+        "empty": "",
+        "forged": Issuer().mint_agent_token(agent.identity),  # right claims, someone else's key
+        "wrong aud": issuer.mint(subject=agent.identity.spiffe_id, audience=server.audience, scope=set()),
+        "a user": issuer.mint(subject="u-ben", audience=issuer.issuer, scope=set()),
+        "delegated": issuer.exchange(ana, actor_token=agent.credential, audience=issuer.issuer, scope=set()),
+    }
+    for name, actor_token in bad_actors.items():
+        with pytest.raises(TokenError):
+            issuer.exchange(ana, actor_token=actor_token, audience=server.audience, scope={"tickets:read"})
+    agent.credential = ""  # an agent without its own credential gets no delegated token
+    first = agent.run(ana, "list my tickets")["tool_results"][0]
+    assert "error" in first["result"] and "Jazz" not in first["result"]  # fails closed, no data
+
+
+def test_sts_honours_may_act(demo):
+    issuer, server, _, ana = demo
+    other = AgentIdentity("marketing-agent")  # a real agent, but not the one Ana named in may_act
+    with pytest.raises(TokenError, match="may_act"):
+        issuer.exchange(ana, actor_token=issuer.mint_agent_token(other), audience=server.audience, scope={"tickets:read"})
 
 
 # ---- live-shape tests: the SDK's own response types through a fake client -------------------
