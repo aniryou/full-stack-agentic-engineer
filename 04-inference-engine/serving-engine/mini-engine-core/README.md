@@ -2,12 +2,12 @@
 
 After this you can explain every decision an engine like vLLM makes in one step — who runs, how many tokens, which
 KV blocks, which request is preempted, which cached prefix is reused — because you will have filled in the code
-that makes it, in `minengine`, a numpy "nano-vLLM" small enough to read in a sitting (~960 lines).
+that makes it, in `minengine`, a numpy "nano-vLLM" small enough to read in two sittings (~1,400 lines).
 
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (anatomy of an engine, continuous batching).
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about 15 s, including
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about 5 s, including
    "paged attention equals dense attention to 1e-10".
 3. Open [`notebooks/01_the_step_loop_and_continuous_batching.ipynb`](notebooks/01_the_step_loop_and_continuous_batching.ipynb)
    and take one engine step apart.
@@ -36,7 +36,7 @@ names, pinned in `tests/test_perf.py` and `tests/test_kv.py`.
 ```bash
 cd mini-engine-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 67 tests, ~15 s
+python3 -m pytest -q                           # 67 tests, ~5 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -70,7 +70,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (67, offline, ~15 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (67, offline, ~5 s). The ones that carry the correctness claims:
 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10; the engine's greedy tokens equal `generate_dense` — including under
