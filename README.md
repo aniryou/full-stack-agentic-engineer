@@ -5,17 +5,20 @@
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to the agent application at the top. It is
 organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
-which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). The topics of layers 01–05 and the four newer
-topics (mixture-of-experts, RL and thinking models, quantization, sandboxed execution) each have a primer, a small
-from-scratch implementation and a fuller lab; the older labs in 00, 04, 06 and 07 vary in shape — usually a primer
-plus practice notebooks — and each lab's README says what it contains.
+which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Nine topics come as a primer, a small
+from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
+(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts` and
+`rl-and-thinking-models` (00) and `sandboxed-execution` (07). The other topics vary in shape: layer 01's
+`gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code; the rest are usually a primer
+plus practice notebooks or a lab; each topic's or lab's README says what it contains.
 
 ## Start here
 
 1. **Pick a layer** from the [stack map](#the-stack) below — start where your question lives, or at the bottom
    and work up.
-2. **Read its primer.** Each topic has a `PRIMER.md` (or a `*-primer.md`) that explains the concepts with
-   worked numbers. The layer's `README.md` links it; for layers 01–05 and the newer topics it also says which
+2. **Read its primer.** Most topics have a primer (`PRIMER.md`, a `*-primer.md` or a lab's `docs/primer.md`) that
+   explains the concepts with worked numbers; `agent-fundamentals/` teaches through its lab notebooks instead. The
+   layer's `README.md` links it; for layers 01–05 and the newer topics it also says which
    sections to read first (the other layer READMEs are being brought to the same shape).
 3. **Run its core notebooks**, in Colab (the badges in each layer README) or locally (see [Run it](#run-it)).
    Most exercises are followed by a check cell — all of them in the primer, core and lab topics — that prints ✅
@@ -84,8 +87,10 @@ across stacks. Each layer `README.md` has the full scope, the current contents a
 
 ## How the labs work
 
-The topics of layers 01–05 and the four newer topics follow the same pattern, so once you have done one you know how
-to do the rest; the older labs in 00, 04, 06 and 07 work the same way with fewer pieces.
+The nine primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
+one you know how to do the rest. The other topics are shaped differently — a primer with written exercises
+(`gpu-primer/`, `gpu-deployment/`), a primer plus practice notebooks (for example `kv-cache/`, `paged-attention/`,
+`flash-attention/`), or a lab of its own (most of 06 and 07) — and their READMEs say what they have.
 
 | Piece | What it is |
 |---|---|
@@ -93,8 +98,8 @@ to do the rest; the older labs in 00, 04, 06 and 07 work the same way with fewer
 | **Core** | a minimal implementation, usually standard-library Python, plus fill-in notebooks that *predict* what the real system does |
 | **Lab** | the detailed version: real tools, benchmarks and deploy recipes that *run* or *measure* the same ideas |
 
-**Tiers** say what hardware a notebook or recipe needs, and the primer + core + lab topics (layers 01–05, and the
-newer topics in 00, 04 and 07) mark every step with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
+**Tiers** say what hardware a notebook or recipe needs, and the nine primer + core + lab topics mark every step
+with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 - **T0** — a laptop, Colab CPU or CI. Free. Every concept is learnable here.
 - **T1** — one small GPU: a free Colab or Kaggle T4, or a rented card.

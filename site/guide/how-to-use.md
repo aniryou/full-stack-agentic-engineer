@@ -15,7 +15,7 @@ starts at the foundations, goes to the engine, down to the hardware that explain
 
 ## Three pieces per topic
 
-Most topics come in the same three pieces. Use them in this order.
+The main topics come in three pieces. Use them in this order.
 
 | Piece | What it is | How to use it |
 |---|---|---|
@@ -23,8 +23,11 @@ Most topics come in the same three pieces. Use them in this order.
 | **Minimal core** | A small implementation from scratch, mostly standard-library Python, that runs on a laptop in seconds. | Where the concept is learned. Do every exercise. |
 | **Detailed lab** | The fuller version: real GPU code paths, a real engine or cluster, deployment recipes. Each has an offline fallback. | Run it on a laptop first, then again on whatever hardware you have. |
 
-Older topics (for example parts of layers 00, 04, 06 and 07) are shaped a little differently, usually a primer plus
-practice notebooks, but work the same way.
+Nine topics have all three: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling` (03),
+`serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts` and
+`rl-and-thinking-models` (00) and `sandboxed-execution` (07). The others are shaped differently: layer 01's
+`gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code; the rest are usually a primer
+plus practice notebooks or a lab of their own. Each topic's README says what it has.
 
 ## Run tiers and what they cost
 
@@ -44,8 +47,8 @@ has the current options and prices, and the habits that keep a paid session from
 ## How the labs check your understanding
 
 - **Exercises are committed blank.** Exercise notebooks have `# YOUR CODE HERE` gaps.
-- **A check cell follows the exercise** in most notebooks (all of those in the primer, core and lab topics of layers
-  01–05 and the four newer topics in 00, 04 and 07). It prints ✅ when your answer is right, or fails with what is
+- **A check cell follows the exercise** in most notebooks (all of those in the nine primer, core and lab
+  topics). It prints ✅ when your answer is right, or fails with what is
   off; some older checks are lighter, and the 06 scaling notebooks print "not attempted" until you fill one in.
 - **Worked answers are separate.** They usually sit in `solutions/` (shown under "Solutions" in the navigation). Try
   the exercise first.

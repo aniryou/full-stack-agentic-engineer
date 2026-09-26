@@ -20,9 +20,10 @@ does every exercise; treat it as a budget, not a measurement.*
   that explain the engine's behaviour (01, 02) → back to the engine with real measurements → up through
   Kubernetes (03) and the orchestrator (05) → the gateway (06) and the agents (07), whose workloads shape every
   layer below.
-- **Three artifacts per topic in 01–05, and in the newer topics of 00, 04 and 07:** a `PRIMER.md` (concepts, worked
-  numbers), a *core* (a minimal from-scratch implementation that runs on a laptop) and a *lab* (the detailed
-  version: real GPUs, a real engine, a GCP deployment, each with an offline fallback).
+- **Three artifacts per topic in the nine main topics** (one each in 01, 02, 03 and 05; `serving-engine` and
+  `quantization` in 04; `mixture-of-experts` and `rl-and-thinking-models` in 00; `sandboxed-execution` in 07):
+  a `PRIMER.md` (concepts, worked numbers), a *core* (a minimal from-scratch implementation that runs on a
+  laptop) and a *lab* (the detailed version: real GPUs, a real engine, a GCP deployment, each with an offline fallback).
 - **Every concept is learnable at T0** — a laptop or Colab CPU, $0. Real GPUs (T1, T2) and Google Cloud (T3) turn
   predictions into measurements; they are optional steps, never prerequisites.
 - **Budget about 267 hours** end to end, about 127 of them in layers 01–05; shorter routes are in §3.3.
@@ -33,7 +34,7 @@ does every exercise; treat it as a budget, not a measurement.*
 
 ## 1. How to use it
 
-### 1.1 Three artifacts per topic
+### 1.1 Three artifacts per topic (the nine main topics)
 
 | Artifact | What it is | Tier | How to use it |
 |---|---|---|---|
@@ -41,11 +42,13 @@ does every exercise; treat it as a budget, not a measurement.*
 | `<topic>/<core>/` | the minimal implementation: standard library + numpy, offline, readable in a sitting; 4–6 notebooks | T0 | where the concept is learned; do every exercise |
 | `<topic>/<lab>/` | the detailed implementation: T0 fallbacks, GPU code paths, `deploy/` targets (any GPU box, kind or compose, GCP Terraform) | T0 → T3 | run at T0 first, then again on whatever hardware you have |
 
-Each `<topic>/README.md` gives the order to work the topic and its tier table. The notebooks of these topics —
-layers 01–05 and the four newer topics (00.4, 00.5, 04.9, 07.5) — share one pattern: exercises in `notebooks/`,
+Each `<topic>/README.md` gives the order to work the topic and its tier table. The notebooks of these nine topics —
+`roofline-and-fabric`, `cuda-and-nccl`, `gpu-scheduling`, `serving-engine`, `serving-orchestration` and the four
+newer topics (00.4, 00.5, 04.9, 07.5) — share one pattern: exercises in `notebooks/`,
 worked answers in `solutions/`, both generated from `notebooks_src/` by the lab's `tools/build_notebooks.py`. Every
 such notebook states its tier, opens with "The one-minute version", works examples, sets 3–6 exercises each
-followed by a check cell that prints ✅, and ends with "In a design review". The older labs in 00, 04, 06 and 07
+followed by a check cell that prints ✅, and ends with "In a design review". The other topics (01's
+text-only `gpu-primer/` and `gpu-deployment/`, 04's kernel topics and `vllm-internals/`, and the other labs of 00, 06 and 07)
 vary — some keep solutions beside the exercises, some checks are lighter, and the 06 scaling notebooks print
 "not attempted" until an exercise is filled in — and each lab's README says what it has. To redo an exercise,
 `git restore` the notebook or rebuild it. Colab links for every notebook are in each layer's `README.md`;
@@ -407,7 +410,7 @@ Gateway, InferenceObjective priorities, HPA on a Prometheus metric).
 |---|---|---|---:|---|
 | **07.1 The loop** | build the loop with termination, tool dispatch, a step budget and an approval gate; design tool contracts with structured errors and idempotent writes | [`agent-core`](07-application-agent-framework/agent-fundamentals/agent-core/): [`01_the_agent_loop`](07-application-agent-framework/agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb), [`02_tools`](07-application-agent-framework/agent-fundamentals/agent-core/notebooks/02_tools.ipynb), [`03_state_and_control`](07-application-agent-framework/agent-fundamentals/agent-core/notebooks/03_state_and_control.ipynb), [`04_mini_support_agent`](07-application-agent-framework/agent-fundamentals/agent-core/notebooks/04_mini_support_agent.ipynb) | 4 | T0 |
 | **07.2 The platform** | choose between a workflow and multiple agents; keep state as an event log with checkpoints; lay out context for cache hits and compaction (the agent side of 04.3); expose tools over MCP behind a policy gateway; propagate identity with OAuth; gate releases on evals; trace with `gen_ai.*` attributes; estimate cost and latency | [`gcp-agent-platform-lab`](07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/) notebooks 00–14, e.g. [`04_context_engineering_and_caching`](07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/04_context_engineering_and_caching.ipynb), [`08_evals_trajectory_judge_gates`](07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb), [`09_tracing_and_metrics`](07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/09_tracing_and_metrics.ipynb), [`14_capstone_bank_agent`](07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/14_capstone_bank_agent.ipynb) | 20 | T0 (model API key optional) |
-| **07.3 Durable, long-running agents** | state the invariants (durable state, intent before act, leases, budgets, park instead of wait); run fan-out/fan-in, human-in-the-loop, sagas and scheduled agents; map them onto a queue, a store and stateless compute | **The path:** primer [`00_primer.md`](07-application-agent-framework/long-running-durable/00_primer.md), then [`lra-core`](07-application-agent-framework/long-running-durable/lra-core/lra-core/) (standard library, nine tests, three notebooks) → [`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/) (needs only pydantic offline: orphan re-drive, cooperative cancel, workflow versioning, chaos hooks for each crash window, [code-evaluation drills](07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/code-evaluation-drills.md)). **Alternatives:** [`long-running-agents-core`](07-application-agent-framework/long-running-durable/long-running-agents-core/) (the same rules in one standard-library file) → [`long-running-agents-gcp`](07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/) (ADK 2 and Google Cloud clients: a ~420 MB install even for its offline tests); the Temporal-based [`long-running-agents-mistral`](07-application-agent-framework/long-running-durable/long-running-agents-mistral/) (its workflow half needs Python ≥ 3.12) | 10 | T0 (T3 optional) |
+| **07.3 Durable, long-running agents** | state the invariants (durable state, intent before act, leases, budgets, park instead of wait); run fan-out/fan-in, human-in-the-loop, sagas and scheduled agents; map them onto a queue, a store and stateless compute | **The path:** primer [`00_primer.md`](07-application-agent-framework/long-running-durable/00_primer.md), then [`lra-core`](07-application-agent-framework/long-running-durable/lra-core/lra-core/) (standard library, nine tests, three notebooks) → [`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/) (needs only pydantic offline: orphan re-drive, cooperative cancel, workflow versioning, chaos hooks for each crash window, [code-evaluation drills](07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/code-evaluation-drills.md)). **Alternatives:** [`long-running-agents-core`](07-application-agent-framework/long-running-durable/long-running-agents-core/) (the same rules in one standard-library file) → [`long-running-agents-gcp`](07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/) (ADK 2 and Google Cloud clients: a ~420 MB install even for its offline tests, 2026-09-26 `(verify)`); the Mistral Workflows (Temporal) version [`long-running-agents-mistral`](07-application-agent-framework/long-running-durable/long-running-agents-mistral/) (its workflow half needs Python ≥ 3.12 for `mistralai-workflows`, 2026-09-26 `(verify)`) | 10 | T0 (T3 optional) |
 | **07.4 Retrieval** | explain embeddings as factorizations and contrastive training; choose and tune an ANN index (IVF, PQ, HNSW); build hybrid search with fusion and reranking; evaluate retrieval with recall@k, MRR and nDCG | [vector-databases primer](07-application-agent-framework/retrieval-rag/vector-databases-primer.md) · [embeddings primer](07-application-agent-framework/retrieval-rag/embeddings-lab/docs/primer.md) · [`embeddings-lab`](07-application-agent-framework/retrieval-rag/embeddings-lab/) (6 notebooks, 6 exercise sets) · [`rag-from-scratch`](07-application-agent-framework/retrieval-rag/rag-from-scratch/) (7 notebooks) · [`vector_stores`](07-application-agent-framework/retrieval-rag/vector_stores/) (IVF, PQ, HNSW and GraphRAG from scratch) | 28 | T0 (`rag-from-scratch`'s semantic embedder needs torch: T0 + torch, or Colab) |
 
 #### 07.5 Sandboxed execution — [`sandboxed-execution`](07-application-agent-framework/sandboxed-execution/README.md)
