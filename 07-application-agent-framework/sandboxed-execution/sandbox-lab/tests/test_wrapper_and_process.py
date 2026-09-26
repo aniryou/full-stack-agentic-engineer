@@ -13,6 +13,8 @@ from sandboxlab import env
 from sandboxlab.process import Budgets, ProcessSandbox, Unsandboxed, parse_wrapper_output
 from sandboxlab.wrapper import MARKER, classify
 
+from ._timing import CPU_BURN
+
 LINUX = sys.platform.startswith("linux")
 B = Budgets(cpu_s=1, wall_s=2)
 
@@ -51,9 +53,10 @@ def test_parse_wrapper_output_finds_the_last_marker_line():
     ("import sys; sys.stdout.write('A' * (2 * 2**20))", "output_limit"),
 ])
 def test_each_budget_has_its_exit_reason(sb, code, reason):
-    r = sb.run(code)
+    b = CPU_BURN if reason == "cpu_time" else B     # a starved busy loop must not reach the wall clock first
+    r = sb.run(code, b)
     assert r.exit_reason == reason, (r.exit_reason, r.stderr[-300:])
-    assert r.wall_s < B.wall_s + 1.5
+    assert r.wall_s < b.wall_s + 1.5
 
 
 @pytest.mark.skipif(not LINUX, reason="Linux")

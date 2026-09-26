@@ -6,7 +6,8 @@ import pytest
 
 from sandboxlab.k8s import policy as P
 from sandboxlab.k8s import runner as R
-from sandboxlab.process import Budgets
+
+from ._timing import CPU_BURN
 
 LINUX = sys.platform.startswith("linux")
 POL = P.SandboxPolicy.kind()
@@ -27,7 +28,7 @@ def test_job_runner_runs_and_replays():
 @pytest.mark.skipif(not LINUX, reason="Linux")
 def test_budgets_travel_into_the_pod():
     be = R.SimulatedBackend(POL, seed=0)
-    r = R.JobRunner(POL, be).run("while True: pass", Budgets(cpu_s=1, wall_s=3))
+    r = R.JobRunner(POL, be).run("while True: pass", CPU_BURN)
     assert r.exit_reason == "cpu_time"
 
 
