@@ -1,11 +1,35 @@
 """Build pipeline: src/*.py (jupytext percent) -> executed notebooks.
 Worked notebooks -> notebooks/ ; solved exercises -> solutions/ (executed)
-and exercises/ (solutions stripped, unexecuted)."""
-import re, sys, pathlib
+and exercises/ (solutions stripped, unexecuted).
+
+The build is reproducible: cell ids are derived from the notebook name and the
+cell's position, no execution timestamps are recorded, consecutive stream
+outputs are merged, and the kernel runs single-threaded BLAS with a fixed hash
+seed. Every notebook starts with the repo's Colab setup cell, exactly as
+tools/inject_colab_bootstrap.py writes it and in the injector's JSON layout, so
+rebuilding unchanged sources (with the versions in
+tools/ci/embeddings-lab-build.txt, which CI installs) rewrites the committed
+notebooks byte for byte (on any x86-64 machine: see _ENV) and running the injector afterwards is a
+no-op."""
+import hashlib, importlib.util, json, os, platform, sys, pathlib
 import jupytext, nbformat
 from nbclient import NotebookClient
 
-ROOT = pathlib.Path(__file__).parent
+ROOT = pathlib.Path(__file__).resolve().parent
+REPO = next(p for p in ROOT.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file())
+_spec = importlib.util.spec_from_file_location("inject_colab_bootstrap",
+                                               REPO / "tools" / "inject_colab_bootstrap.py")
+_inject = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_inject)
+
+# The kernel inherits this environment: same numbers and the same output on every run, and on every
+# x86-64 machine: one BLAS thread, OpenBLAS's AVX2 (Haswell) kernels and numpy without its AVX-512 loops,
+# whatever the CPU offers (AVX-512 kernels round differently, so plots and printed digits would drift).
+_ENV = {"PYTHONHASHSEED": "0", "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+if platform.machine().lower() in ("x86_64", "amd64"):
+    _ENV.update(OPENBLAS_CORETYPE="Haswell", NPY_DISABLE_CPU_FEATURES="X86_V4 AVX512_ICL AVX512_SPR")
+for _k, _v in _ENV.items():
+    os.environ.setdefault(_k, _v)
 
 def strip_solutions(text):
     out, skip = [], False
@@ -28,24 +52,34 @@ def clean(text):
     return "\n".join(keep) + "\n"
 
 def execute(nb, cwd):
-    NotebookClient(nb, timeout=1200, kernel_name="python3",
+    NotebookClient(nb, timeout=1200, kernel_name="python3", record_timing=False,
+                   coalesce_streams=True,
                    resources={"metadata": {"path": str(cwd)}}).execute()
     return nb
+
+def write(nb, path):
+    """Stable ids, no interpreter version, bootstrap cell first, injector's JSON layout."""
+    for i, cell in enumerate(nb.cells):
+        cell.id = hashlib.sha1(f"{path.parent.name}/{path.stem}/{i}".encode()).hexdigest()[:12]
+    nb.metadata.get("language_info", {}).pop("version", None)
+    d = json.loads(nbformat.writes(nb))
+    d["cells"].insert(0, _inject.make_cell(path.parent.relative_to(REPO).as_posix()))
+    path.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 
 def build_worked(name):
     text = (ROOT / "src" / f"{name}.py").read_text()
     nb = jupytext.reads(text, fmt="py:percent")
     execute(nb, ROOT / "notebooks")
-    nbformat.write(nb, ROOT / "notebooks" / f"{name}.ipynb")
+    write(nb, ROOT / "notebooks" / f"{name}.ipynb")
     print(f"  notebooks/{name}.ipynb ok")
 
 def build_exercise(name):
     text = (ROOT / "src" / f"{name}_solved.py").read_text()
     sol = jupytext.reads(clean(text), fmt="py:percent")
     execute(sol, ROOT / "solutions")
-    nbformat.write(sol, ROOT / "solutions" / f"{name}_solutions.ipynb")
+    write(sol, ROOT / "solutions" / f"{name}_solutions.ipynb")
     ex = jupytext.reads(strip_solutions(text), fmt="py:percent")
-    nbformat.write(ex, ROOT / "exercises" / f"{name}.ipynb")
+    write(ex, ROOT / "exercises" / f"{name}.ipynb")
     print(f"  solutions/{name}_solutions.ipynb ok + exercises/{name}.ipynb")
 
 if __name__ == "__main__":

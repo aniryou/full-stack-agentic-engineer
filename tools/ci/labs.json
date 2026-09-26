@@ -1,0 +1,292 @@
+{
+ "_comment": [
+  "One entry per lab with tests: the tests job of .github/workflows/tests.yml runs install then test in the lab directory,",
+  "and tools/ci/run_local.sh runs the same commands in a fresh venv per lab (bash, in the lab directory). install is what",
+  "the lab's README says, minus anything that pulls in torch (T0: no torch, no GPU, no Docker, no keys); solutions (optional) is the manual solutions job.",
+  "tools/ci/ci.py check fails when a directory with tests is missing here."
+ ],
+ "labs": [
+  {
+   "id": "moe-core",
+   "dir": "00-foundations/mixture-of-experts/moe-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "moe-lab",
+   "dir": "00-foundations/mixture-of-experts/moe-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "rl-core",
+   "dir": "00-foundations/rl-and-thinking-models/rl-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "thinking-lab",
+   "dir": "00-foundations/rl-and-thinking-models/thinking-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "transformers",
+   "dir": "00-foundations/transformers",
+   "python": "3.11",
+   "install": "python -m pip install -r <(grep -viE '^[[:space:]]*torch' requirements.txt) pytest nbformat nbclient ipykernel",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "gpu-bench-lab",
+   "dir": "01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt && python -m pip install -e .",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "roofline-core",
+   "dir": "01-hardware-gpu-fabric/roofline-and-fabric/roofline-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "cuda-nccl-core",
+   "dir": "02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "cuda-nccl-lab",
+   "dir": "02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "k8s-gpu-core",
+   "dir": "03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "k8s-gpu-lab",
+   "dir": "03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt && python -m pip install -e .",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "flash-attention",
+   "dir": "04-inference-engine/flash-attention",
+   "python": "3.11",
+   "install": "python -m pip install numpy pytest",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "paged-attention",
+   "dir": "04-inference-engine/paged-attention",
+   "python": "3.11",
+   "install": "python -m pip install numpy pytest",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "quant-core",
+   "dir": "04-inference-engine/quantization/quant-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "quant-lab",
+   "dir": "04-inference-engine/quantization/quant-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "mini-engine-core",
+   "dir": "04-inference-engine/serving-engine/mini-engine-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "vllm-serving-lab",
+   "dir": "04-inference-engine/serving-engine/vllm-serving-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "inference-gateway-lab",
+   "dir": "05-orchestrator/serving-orchestration/inference-gateway-lab",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt && python -m pip install -e .",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "orchestrator-core",
+   "dir": "05-orchestrator/serving-orchestration/orchestrator-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "agentic-identity-core",
+   "dir": "06-gateway/identity-security/agentic-identity-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "agentic-identity-core-mistral",
+   "dir": "06-gateway/identity-security/agentic-identity-core-mistral",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "agentic-identity-gcp-lab",
+   "dir": "06-gateway/identity-security/agentic-identity-gcp-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q && ruff check src tests",
+   "solutions": "mkdir -p build/nb && for nb in notebooks/*.ipynb notebooks/solutions/*.ipynb; do jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=180 --output-dir build/nb \"$nb\"; done"
+  },
+  {
+   "id": "agentic-scaling-lab",
+   "dir": "06-gateway/scaling-admission-cost/agentic-scaling-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "agentic-scaling-lab-mistral",
+   "dir": "06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "agent-core",
+   "dir": "07-application-agent-framework/agent-fundamentals/agent-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "gcp-agent-platform-lab",
+   "dir": "07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q -m \"not slow\"",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "mistral-agent-core",
+   "dir": "07-application-agent-framework/agent-fundamentals/mistral-agent-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "long-running-agents-gcp",
+   "dir": "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest tests -q"
+  },
+  {
+   "id": "long-running-agents-core",
+   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-core",
+   "python": "3.11",
+   "install": "python -m pip install pytest",
+   "test": "python -m pytest tests -q"
+  },
+  {
+   "id": "long-running-agents-mistral",
+   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest tests -q"
+  },
+  {
+   "id": "long-running-agents-mistral-py312",
+   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
+   "python": "3.12",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest tests -q"
+  },
+  {
+   "id": "lra-core",
+   "dir": "07-application-agent-framework/long-running-durable/lra-core/lra-core",
+   "python": "3.11",
+   "install": "python -m pip install pytest",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "lra-gcp",
+   "dir": "07-application-agent-framework/long-running-durable/lra/lra-gcp",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev,services]\"",
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/local_demo.py && python scripts/run_notebooks.py"
+  },
+  {
+   "id": "rag-from-scratch",
+   "dir": "07-application-agent-framework/retrieval-rag/rag-from-scratch",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q"
+  },
+  {
+   "id": "vector-stores",
+   "dir": "07-application-agent-framework/retrieval-rag/vector_stores",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest tests -q"
+  },
+  {
+   "id": "sandbox-core",
+   "dir": "07-application-agent-framework/sandboxed-execution/sandbox-core",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "sandbox-lab",
+   "dir": "07-application-agent-framework/sandboxed-execution/sandbox-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  }
+ ]
+}
