@@ -1,0 +1,85 @@
+# Guide site for this repo, published to GitHub Pages by .github/workflows/pages.yml.
+# The pages under site/layers/ and site/guide/{curriculum,compute,colab}.md are generated from the repo by
+# tools/site/build_site_content.py (run it before `mkdocs build` / `mkdocs serve`); see tools/site/README.md.
+site_name: Full-stack agentic engineer
+site_description: The LLM inference and serving stack, layer by layer — from GPUs and fabric to the agent application.
+site_url: https://aniryou.github.io/full-stack-agentic-engineer/
+repo_url: https://github.com/aniryou/full-stack-agentic-engineer
+repo_name: aniryou/full-stack-agentic-engineer
+edit_uri: ""
+
+docs_dir: site
+site_dir: site_build
+exclude_docs: |
+  .gitignore
+
+theme:
+  name: material
+  custom_dir: site/overrides
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Math only as \( … \) and \[ … \] / \begin{…}: the repo is full of dollar prices, which must stay text.
+  - pymdownx.arithmatex:
+      generic: true
+      inline_syntax: [round]
+      block_syntax: [square, begin]
+
+plugins:
+  - search
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      execute: false
+      include_source: true
+
+nav:
+  - Home: index.md
+  - Guide:
+      - How to use this site: guide/how-to-use.md
+      - Curriculum: guide/curriculum.md
+      - Compute: guide/compute.md
+      - Running in Colab: guide/colab.md
+      - About: guide/about.md
+  # nav-layers:start
+  - Layers: layers/index.md
+  # nav-layers:end

@@ -38,3 +38,6 @@ terraform.tfvars
 # notebook runner scratch + terraform lockfiles from local validation
 _run_outputs/
 .terraform.lock.hcl
+
+# guide site build output (mkdocs site_dir)
+/site_build/
