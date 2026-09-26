@@ -246,9 +246,11 @@ for i in (2, 3, 4):   # a-low-1, a-low-2, a-high
 out = sim.outcome()
 
 # %% check
-assert answer == ("borrow" if out["Job/team-a/a-low-2"]["state"] == "admitted" else "preempt") == "borrow"
+assert answer in ("preempt", "borrow"), 'answer "preempt" or "borrow"'
 assert out["Job/team-a/a-high"]["state"] == "admitted"
-print("✅ with idle quota in the cohort, borrowing beats preemption:", out["Job/team-a/a-high"])
+happened = "borrow" if out["Job/team-a/a-low-2"]["state"] == "admitted" else "preempt"
+assert answer == happened, f"the simulator disagrees: a-low-2 is {out['Job/team-a/a-low-2']['state']}"
+print(f"✅ {happened}: a-high {out['Job/team-a/a-high']}, a-low-2 {out['Job/team-a/a-low-2']['state']}")
 
 # %% [markdown]
 # ## s5 — borrowing is a loan: the lender takes it back

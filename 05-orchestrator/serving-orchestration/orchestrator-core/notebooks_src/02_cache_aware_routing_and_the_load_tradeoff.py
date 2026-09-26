@@ -188,20 +188,34 @@ for eps in (0.1, 0.25, 1.0, 4.0):
 print(table(rows, ["eps"] + cols, title="simulated: bounded-load hashing on the system prompt"))
 
 # %% [markdown]
-# ## Exercise 2.4 — tune the EPP for a target
-# Choose `weights = (prefix, queue, kv)` so that this workload reaches **hit rate >= 0.85**, **p95 TTFT <= 0.6 s**
-# and **imbalance <= 1.3** — and be ready to say why your choice sits where it does on the curve above.
+# ## Exercise 2.4 — find the band of weights that meets a target
+# The sweep above samples the prefix weight at only five points. With the queue and KV weights held at 2, find the
+# **lowest** and the **highest** integer prefix weight from 1 to 12 at which this workload reaches **hit rate >= 0.85**,
+# **p95 TTFT <= 0.6 s** and **imbalance <= 1.3** (one run takes under a second). Set `band = (lowest, highest)`, and
+# be ready to say which target stops the band at each end, and why.
 
 # %% exercise
-weights = None
+band = None
 ### BEGIN SOLUTION
-weights = (3, 2, 2)     # enough weight to keep sessions home, enough load weight to leave a busy replica
+def meets_targets(prefix_weight):
+    s = Fleet(p, 4, epp((prefix_weight, 2, 2))).run(agents()).summary(ttft_slo=1.0, tpot_slo=0.15)
+    return s["hit_rate"] >= 0.85 and s["ttft_p95"] <= 0.6 and s["imbalance"] <= 1.3
+
+
+ok = [w for w in range(1, 13) if meets_targets(w)]
+band = (min(ok), max(ok))   # below it re-prefill costs TTFT; above it the hot replica costs balance
 ### END SOLUTION
 
 # %% check
-s = Fleet(p, 4, epp(weights)).run(agents()).summary(ttft_slo=1.0, tpot_slo=0.15)
-assert s["hit_rate"] >= 0.85 and s["ttft_p95"] <= 0.6 and s["imbalance"] <= 1.3, s
-print(f"✅ {weights}: hit {s['hit_rate']:.2f}, p95 TTFT {s['ttft_p95']:.2f} s, imbalance {s['imbalance']:.2f}")
+fine = []
+for w in range(1, 13):
+    s = Fleet(p, 4, epp((w, 2, 2))).run(agents()).summary(ttft_slo=1.0, tpot_slo=0.15)
+    fine.append({"prefix weight": w, **{c: s[c] for c in cols},
+                 "meets": s["hit_rate"] >= 0.85 and s["ttft_p95"] <= 0.6 and s["imbalance"] <= 1.3})
+inside = [r["prefix weight"] for r in fine if r["meets"]]
+assert band is not None and tuple(band) == (min(inside), max(inside)), "not quite: sweep every integer weight from 1 to 12"
+print(table(fine, ["prefix weight"] + cols + ["meets"], title="simulated: EPP weight sweep (queue 2, kv 2), every integer"))
+print(f"✅ prefix weights {band[0]}-{band[1]} meet all three targets on this workload; the band moves when the workload does")
 
 # %% [markdown]
 # ## Exercise 2.5 — a hotter prefix
