@@ -113,12 +113,17 @@ def rlimits_for(budgets: Budgets, nproc: int | None) -> list[tuple[str, int, int
 
 
 def _world_executable(path: str) -> bool:
-    """Can an arbitrary UID run ``path`` (file world r-x, every parent directory world-traversable)?"""
-    p = Path(os.path.realpath(path))
+    """Can an arbitrary UID run ``path`` (file world r-x, every parent directory world-traversable)?
+
+    Both the path as given and the file it resolves to: a virtualenv's ``bin/python`` is a symlink to a
+    system interpreter, but the sandbox UID starts it by the link's own path, so a venv under a 0700
+    directory (``/root``, a private scratch dir) is unusable even though its target is world-executable.
+    """
+    given, real = Path(os.path.abspath(path)), Path(os.path.realpath(path))
     try:
-        if (p.stat().st_mode & 0o005) != 0o005:
+        if (real.stat().st_mode & 0o005) != 0o005:
             return False
-        return all(parent.stat().st_mode & 0o001 for parent in p.parents)
+        return all(parent.stat().st_mode & 0o001 for parent in (*given.parents, *real.parents))
     except OSError:
         return False
 

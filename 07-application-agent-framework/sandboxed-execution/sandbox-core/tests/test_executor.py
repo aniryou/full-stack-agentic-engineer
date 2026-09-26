@@ -231,3 +231,44 @@ def test_workspace_permissions_constant():
         assert stat.S_IMODE(os.stat(d).st_mode) == 0o700
     finally:
         os.rmdir(d)
+
+
+def test_an_interpreter_behind_a_private_directory_is_not_world_executable():
+    # A venv's bin/python is a symlink to a system interpreter, but a sandbox UID starts it by the link's
+    # path: a venv under a 0700 directory (/root, a private scratch dir) cannot be used by it.
+    from sandboxcore import executor
+    base = tempfile.mkdtemp()
+    try:
+        os.chmod(base, 0o755)
+        target = os.path.join(base, "python3")
+        with open(target, "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(target, 0o755)
+        if not executor._world_executable(target):
+            pytest.skip("the temp directory itself is not world-traversable here")
+        private = os.path.join(base, "private")
+        os.mkdir(private, 0o700)
+        link = os.path.join(private, "python")
+        os.symlink(target, link)
+        assert executor._world_executable(link) is False
+        os.chmod(private, 0o755)
+        assert executor._world_executable(link) is True
+    finally:
+        import shutil
+        shutil.rmtree(base, ignore_errors=True)
+
+
+@needs_root
+def test_a_venv_the_sandbox_uid_cannot_reach_falls_back_to_a_system_python():
+    base = tempfile.mkdtemp()                                   # 0700: like /root or a private scratch dir
+    link = os.path.join(base, "python")
+    os.symlink(os.path.realpath(sys.executable), link)
+    try:
+        r = run("print('hello')", SandboxConfig(python=link), wall_s=5)
+    finally:
+        import shutil
+        shutil.rmtree(base, ignore_errors=True)
+    if r.notes and "no world-executable python3" in r.notes[0]:
+        assert r.exit_reason == "ok" and r.isolation["uid_dropped"] is False   # ran as us, and said so
+    else:
+        assert r.exit_reason == "ok" and r.stdout.strip() == "hello", (r.exit_reason, r.stderr)
