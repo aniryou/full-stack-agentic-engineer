@@ -22,6 +22,7 @@
 # predict, and shorten, how long a new replica takes to come up.
 
 # %%
+import atexit
 import os
 import shutil
 
@@ -39,6 +40,7 @@ be = get_backend("auto")
 # The disk you measure is the disk this directory is on: point it elsewhere to measure another.
 # default_workdir() avoids /tmp when /tmp is tmpfs (RAM), as it is on many distributions.
 workdir = loading.default_workdir(prefix="gpubench-nb04-")
+atexit.register(shutil.rmtree, workdir, ignore_errors=True)   # the checkpoint goes when the kernel does
 path = os.path.join(workdir, "synthetic.safetensors")
 print(f"checkpoint will be written to {path} (filesystem: {loading.filesystem_type(workdir) or 'unknown'})")
 
