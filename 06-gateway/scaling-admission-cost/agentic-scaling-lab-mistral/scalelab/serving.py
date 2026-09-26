@@ -139,7 +139,18 @@ class Replica:
         return one_token + (m.weights_gb - one_token) * extra
 
     def step_seconds(self, batch: int, context_tokens: int) -> float:
-        """One decode step for ``batch`` sequences of ``context_tokens`` each — this is the TPOT."""
+        """One decode step for ``batch`` sequences of ``context_tokens`` each — this is the TPOT.
+
+        Memory only: bytes / (bandwidth × ``efficiency`` 0.6) + 2 ms, with no compute term, because at
+        these batches decode is bandwidth-bound (the FLOPs of a Ministral 3 14B step at batch 64 take
+        about 1.5 ms on an H100 in FP8, against a ~28 ms memory term). Layer 04's engine model,
+        ``minengine.perf.step_cost`` in 04-inference-engine/serving-engine/mini-engine-core, uses
+        max(bytes / (bandwidth × 0.8), FLOPs / (peak × 0.6)) + 2 ms. The difference is the bandwidth
+        efficiency: this model is the more conservative one, about 25–30 % slower per step (Ministral
+        3 14B on one H100 at 5.2 k context: 10.2 / 20.0 / 36.9 ms at batch 1 / 24 / 64 here, about
+        8.2 / 15.5 / 28.2 ms with layer 04's factors). Both are estimates; ``vllm bench serve`` on the
+        target GPU settles which is closer. The primer's fleet numbers are pinned to this one.
+        """
         kv_gb = batch * context_tokens * self.kv_gb_per_token()
         gb_per_s = self.tp * self.gpu.bandwidth_tb_s * 1e3 * self.efficiency
         return (self.weights_read_gb(batch) + kv_gb) / gb_per_s + self.step_overhead_s
