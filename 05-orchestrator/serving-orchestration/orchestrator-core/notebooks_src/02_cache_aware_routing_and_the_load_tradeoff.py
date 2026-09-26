@@ -140,8 +140,8 @@ for name, d in gates.items():
 # reason is what its gate measures: estimated TTFT = the endpoint's uncached prompt tokens in flight / peak prefill
 # rate — the **prefill backlog**. Here a hot replica slows down from KV pressure and decode residency (see the
 # preemptions), which that estimate does not see, so the upstream 18 s gate never fires and the router is simply
-# sticky with a token-load tie-break. Tightening the gate to 0.5 s lets it break stickiness a few dozen times and
-# recovers much of the gap. What the filter buys is one knob in TTFT seconds instead of weights to tune; it is
+# sticky with a token-load tie-break. Tightening the gate to 0.5 s lets it break stickiness 14 times (of ~725
+# decisions) and recovers much of the gap. What the filter buys is one knob in TTFT seconds instead of weights to tune; it is
 # designed for prefill-bound traffic (upstream pairs it with `active-request-scorer` for decode-bound traffic).
 #
 # ## Worked example — the knob: how much should cache locality weigh?
