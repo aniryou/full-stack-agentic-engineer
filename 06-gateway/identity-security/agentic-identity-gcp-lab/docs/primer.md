@@ -47,7 +47,7 @@ Two well-known framings are worth naming:
 
 ## 2. Threat model
 
-Use the **OWASP Top 10 for Agentic Applications (2026)** as the shared vocabulary — customers and auditors increasingly know it — and map each risk to the control that bounds it.
+Use the **OWASP Top 10 for Agentic Applications (2026)** as the shared vocabulary — security teams and auditors increasingly know it — and map each risk to the control that bounds it.
 
 | ID | Risk | Typical manifestation | Primary deterministic control | Supporting probabilistic control |
 |---|---|---|---|---|
@@ -112,7 +112,7 @@ Supported runtimes today: **Agent Runtime** (Agent Engine, resource type `reason
 Two things worth knowing:
 
 - **Migration from a service account to an agent identity creates a new principal with no inherited permissions.** Pre-grant roles (Policy Analyzer helps) before flipping `--identity-type`. Legacy bucket roles cannot be granted to agent identities.
-- **The opt-out exists and is a red flag.** `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False` disables token binding; it is documented as strongly discouraged. If you see it in a customer's config, that is a finding.
+- **The opt-out exists and is a red flag.** `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False` disables token binding; it is documented as strongly discouraged. If you see it in a deployment's config, that is a finding.
 
 ### 3.4 Where the older primitives still fit
 
@@ -129,7 +129,7 @@ Agent Identity does not replace the rest of Google Cloud IAM; you compose them:
 
 *Delegation as token exchange: the STS combines the user's subject token and the agent's certificate-bound actor token into one short-lived token that names both (`sub` + `act`), is scoped to one audience, and stays bound to the agent's certificate; the resource server checks all three. The lab's `TokenIssuer.exchange()` does exactly this.*
 
-- **RFC 8693 token exchange** — the standard way to represent "agent A acting for user U": the STS takes the user's `subject_token` and the agent's `actor_token` and issues a token whose `sub` is the user and whose `act` claim identifies the agent, scoped to an `audience` and `scope`. Chains (`act.act`) represent multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
+- **RFC 8693 token exchange** — the standard way to represent "agent A acting for user U": the STS takes the user's `subject_token` and the agent's `actor_token` and issues a token whose `sub` is the user and whose `act` claim identifies the agent, scoped to an `audience` and `scope`. Before it issues anything the STS verifies both inputs: the subject token must be minted for an audience it serves, and the actor token must authenticate the agent (its own credential, not a claim in the request). If the subject token carries `may_act` (§4.4), only the actor it names may act for the user. Chains (`act.act`) represent multi-hop delegation. Google's own STS uses this grant for Workload Identity Federation.
 - **RFC 9449 DPoP** — the client proves possession of a private key on every request with a signed `DPoP` header (`htm`, `htu`, `iat`, `jti`, `ath`); the token carries `cnf.jkt`. A replayed bearer token without the key fails.
 - **RFC 8705 mTLS-bound tokens** — the token carries `cnf.x5t#S256` (certificate thumbprint); the resource server checks the TLS client certificate matches. This is what "certificate-bound" means for Agent Identity.
 - **Credential Access Boundaries** — a downscoped Google access token restricted to specific buckets/prefixes and permissions; the pattern for "give this tool call access to exactly one prefix for five minutes".
@@ -268,7 +268,7 @@ Design rules for multi-agent systems:
 
 - **Perimeters.** Put the Agent Platform, the MCP servers, Secret Manager, the Agent Identity services (`agentidentity.googleapis.com`, `agentidentitycredentials.googleapis.com`), and the data stores in a VPC-SC perimeter; use ingress/egress rules with agent principals; route Google APIs through the restricted VIP. Including Agent Platform in a perimeter automatically blocks the agents' public-internet access — which is the behavior you want by default; add explicit egress for the few destinations that are legitimate.
 - **Private connectivity.** Agent Runtime supports PSC-interface network attachments and DNS peering for private tool endpoints; Cloud Run MCP servers should use internal ingress and IAM invoker bindings for the agent principal.
-- **Encryption and residency.** CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs, and data stores; pick regions deliberately (Model Armor's Vertex integration and Agent Identity have region lists; Auth Manager vault residency is not uniform across regions — put that on the Verify list for any regulated customer).
+- **Encryption and residency.** CMEK on Agent Engine (`encryption_spec.kms_key_name`), Secret Manager, logs, and data stores; pick regions deliberately (Model Armor's Vertex integration and Agent Identity have region lists; Auth Manager vault residency is not uniform across regions — put that on the Verify list for any regulated workload).
 - **Tenancy.** Decide the isolation unit: per-tenant agent deployments (strongest, most cost) vs shared agents with per-user delegation and per-tenant memory/session partitioning. Sessions and Memory Bank must be keyed by user/tenant and never searchable across tenants; RAG retrieval must be ACL-aware, i.e., run under the user's delegated identity or filter by the user's entitlements *before* content reaches the model.
 - **Logs are data too.** Prompts and tool results often contain PII; apply Sensitive Data Protection to what you log and restrict log-bucket access.
 

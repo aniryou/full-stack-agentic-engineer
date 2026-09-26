@@ -3,7 +3,7 @@
 import jwt
 import pytest
 
-from agentsec_core import TICKETS, Authority, Mode, TokenError, build_demo, screen
+from agentsec_core import APP_AUDIENCE, TICKETS, AgentIdentity, Authority, Issuer, Mode, TokenError, build_demo, screen
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def demo():
 
 def test_delegated_token_names_both_user_and_agent_for_one_audience(demo):
     issuer, server, agent, ana = demo
-    tok = issuer.exchange(ana, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     claims = issuer.verify(tok, audience=server.audience)
     assert claims["sub"] == "u-ana" and claims["act"]["sub"] == agent.identity.spiffe_id
     assert claims["scope"] == "tickets:read"
@@ -24,14 +24,14 @@ def test_delegated_token_names_both_user_and_agent_for_one_audience(demo):
 def test_agent_cannot_widen_the_users_grant(demo):
     issuer, server, agent, _ = demo
     read_only = issuer.mint(subject="u-ana", audience="https://app.acme.example", scope={"tickets:read"})
-    tok = issuer.exchange(read_only, agent=agent.identity, audience=server.audience, scope={"tickets:write"})
+    tok = issuer.exchange(read_only, actor_token=agent.credential, audience=server.audience, scope={"tickets:write"})
     with pytest.raises(TokenError, match="insufficient_scope"):
         issuer.verify(tok, audience=server.audience, required={"tickets:write"})
 
 
 def test_token_for_one_api_is_rejected_by_another(demo):
     issuer, server, agent, ana = demo
-    tok = issuer.exchange(ana, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     with pytest.raises(TokenError, match="Audience"):
         issuer.verify(tok, audience="https://payments.acme.example")
     with pytest.raises(TokenError):
@@ -84,6 +84,55 @@ def test_every_audit_event_carries_both_identities(demo):
 
 def test_tokens_are_short_lived(demo):
     issuer, server, agent, ana = demo
-    tok = issuer.exchange(ana, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     claims = jwt.decode(tok, options={"verify_signature": False})
     assert claims["exp"] - claims["iat"] == 300
+
+
+# ---- the STS checks every input of the exchange ------------------------------------------------
+
+
+def test_sts_rejects_a_user_token_minted_for_another_audience(demo):
+    issuer, server, agent, _ = demo
+    for aud in (server.audience, "https://evil.example"):  # a tool server's token, a stranger's token
+        stray = issuer.mint(subject="u-ana", audience=aud, scope={"tickets:read", "tickets:write"})
+        with pytest.raises(TokenError, match="Audience"):
+            issuer.exchange(stray, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
+        with pytest.raises(TokenError, match="Audience"):  # Agent.run checks aud before anything else
+            agent.run(stray, "list my tickets", [("list_tickets", {})])
+        assert agent.audit.events == []  # rejected up front: no screening, no policy, no tool call
+
+
+def test_sts_requires_an_authenticated_actor(demo):
+    issuer, server, agent, ana = demo
+    with pytest.raises(TypeError):
+        issuer.exchange(ana, audience=server.audience, scope={"tickets:read"})  # no actor_token at all
+    bad_actors = {
+        "empty": "",
+        "forged": Issuer().mint_agent_token(agent.identity),  # right claims, someone else's key
+        "wrong aud": issuer.mint(subject=agent.identity.spiffe_id, audience=server.audience, scope=set()),
+        "a user": issuer.mint(subject="u-ben", audience=issuer.issuer, scope=set()),
+        "delegated": issuer.exchange(ana, actor_token=agent.credential, audience=issuer.issuer, scope=set()),
+    }
+    for name, actor_token in bad_actors.items():
+        with pytest.raises(TokenError):
+            issuer.exchange(ana, actor_token=actor_token, audience=server.audience, scope={"tickets:read"})
+    # A subject token without may_act leaves only the actor-type check between a non-agent
+    # credential and a delegated token: a user's token or a delegated token is not an agent's
+    # own credential, even when the delegated token's subject is itself an agent.
+    no_may_act = issuer.mint(subject="u-ana", audience=APP_AUDIENCE, scope={"tickets:read"})
+    agent_on_behalf = issuer.mint(subject=agent.identity.spiffe_id, audience=issuer.issuer, scope=set(), actor=AgentIdentity("other-agent").spiffe_id)
+    for actor_token in (bad_actors["a user"], bad_actors["delegated"], agent_on_behalf):
+        with pytest.raises(TokenError, match="not an agent"):
+            issuer.exchange(no_may_act, actor_token=actor_token, audience=server.audience, scope={"tickets:read"})
+    assert issuer.exchange(no_may_act, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
+    agent.credential = ""  # an agent without its own credential gets no delegated token
+    out = agent.run(ana, "list my tickets", [("list_tickets", {})])
+    assert "error" in out[0]["result"] and "Jazz" not in out[0]["result"]  # fails closed, no data
+
+
+def test_sts_honours_may_act(demo):
+    issuer, server, _, ana = demo
+    other = AgentIdentity("marketing-agent")  # a real agent, but not the one Ana named in may_act
+    with pytest.raises(TokenError, match="may_act"):
+        issuer.exchange(ana, actor_token=issuer.mint_agent_token(other), audience=server.audience, scope={"tickets:read"})
