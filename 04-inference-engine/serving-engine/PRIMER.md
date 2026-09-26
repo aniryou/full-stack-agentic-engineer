@@ -427,9 +427,9 @@ The formula assumes every position is accepted independently with one α; real a
 x is the draft's argmax and the rejection sampler treats q as one-hot. The rule is still exact — accept x with
 probability p(x), otherwise resample from p with x removed — but the acceptance rate is then p(x), not Σ min(p, q);
 `"probabilistic"` samples x ~ q and uses the full q. Exactness holds for the `standard` rejection method and for
-`block` (block verification, Sun et al. 2024: the k drafts are verified jointly, still distribution-preserving, and
-at least as many tokens accepted in expectation); vLLM's `synthetic` method accepts with a calibrated probability to benchmark speed and
-does not preserve the distribution (verify).
+`block` (block verification, Sun et al. 2024: the k drafts are verified jointly — still distribution-preserving,
+with at least as many tokens accepted in expectation); vLLM's `synthetic` method accepts with a calibrated
+probability to benchmark speed and does not preserve the distribution (verify).
 
 **Proposers** (vLLM's methods include `ngram`, `suffix`, `draft_model`, `eagle`, `eagle3`, `medusa`,
 `mlp_speculator` and model-specific MTP, verify):
@@ -782,7 +782,7 @@ Papers:
   — RadixAttention.
 - Leviathan, Kalman & Matias, *Fast Inference from Transformers via Speculative Decoding*, ICML 2023
   (arXiv:2211.17192); Chen et al., *Accelerating Large Language Model Decoding with Speculative Sampling*
-  (arXiv:2302.01318).
+  (arXiv:2302.01318); Sun et al., *Block Verification Accelerates Speculative Decoding* (arXiv:2403.10444).
 - Li et al., *EAGLE* (arXiv:2401.15077) and *EAGLE-3* (arXiv:2503.01840); Cai et al., *Medusa* (arXiv:2401.10774);
   Saxena, *Prompt Lookup Decoding* (2023); DeepSeek-AI, *DeepSeek-V3 Technical Report* (arXiv:2412.19437) — MTP.
 - Chen et al., *MagicDec: Breaking the Latency-Throughput Tradeoff for Long Context Generation with Speculative

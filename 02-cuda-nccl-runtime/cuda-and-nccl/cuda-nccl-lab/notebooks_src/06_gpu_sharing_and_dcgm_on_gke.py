@@ -167,9 +167,17 @@ print("✅ decoded; the deployed rule tests bits 0x20|0x40 as:", thermal_rule.ex
 # ## Exercise 6.4 — who gets woken up?
 #
 # Each rule has a severity: `critical` pages (hardware: drain now), `warning` opens a ticket (node
-# operator), `info` notifies (application owner, cost). Write `worst_alert(snapshot)`: the most severe
-# severity among the rules that fire for one GPU (`dcgm.evaluate([snapshot])` gives `(rule, severity,
-# gpu)` tuples), or `None`.
+# operator), `info` notifies (application owner, cost). An XID missing from the lab's table goes to the
+# node operator at `warning` (`GpuXidUnknown`), never silently to an application team.
+#
+# One subtlety of the XID rules: `DCGM_FI_DEV_XID_ERRORS` is a gauge holding the *last* XID seen, and it
+# does not return to 0 once the GPU is fixed (verify for your DCGM version). An alert on the value alone
+# would never resolve, so each deployed XID rule also requires `changes(DCGM_FI_DEV_XID_ERRORS[15m]) > 0`:
+# it fires when the XID appears and resolves 15 minutes later — the drain, not the alert, remembers the
+# node's state. One snapshot cannot show a change, so `dcgm.evaluate` treats a present XID as recent.
+#
+# Write `worst_alert(snapshot)`: the most severe severity among the rules that fire for one GPU
+# (`dcgm.evaluate([snapshot])` gives `(rule, severity, gpu)` tuples), or `None`.
 
 # %% exercise
 RANK = {"critical": 3, "warning": 2, "info": 1}
