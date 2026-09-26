@@ -8,7 +8,7 @@ can defend in a design review.
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md) "The one-minute version", then §1–§2 (30 min): why sparsity, the MoE layer.
-2. `cd moe-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests, ~7 s; then open
+2. `cd moe-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 75 tests, ~30 s; then open
    [`01_the_moe_layer`](moe-core/notebooks/01_the_moe_layer.ipynb).
 3. With torch installed (CPU is enough), train a tiny MoE in the lab, [`moe-lab/`](moe-lab/README.md): notebook
    [`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb); with any GPU,
@@ -52,7 +52,7 @@ Finish with the primer's [design-review walkthrough and drills](PRIMER.md#in-a-d
 ```bash
 cd moe-core
 python3 -m pip install -r requirements.txt   # numpy + notebook/test tooling
-python3 -m pytest -q                          # 67 tests, ~7 s
+python3 -m pytest -q                          # 75 tests, ~30 s
 python3 -m jupyterlab notebooks
 
 cd ../moe-lab                                 # see its README for the GPU paths

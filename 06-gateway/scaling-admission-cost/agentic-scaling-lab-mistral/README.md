@@ -9,6 +9,8 @@ day, with a residency requirement, on Mistral's API or on vLLM replicas in your 
 
 Nothing here needs cloud credentials or a GPU; simulations run 50× faster than real time.
 
+**Time and tier:** ~2 h after `agentic-scaling-lab` (its hosted-vs-own-GPUs parts), about a day on its own (rough); module 06.5 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: no GPU, no key, no cloud account. A `MISTRAL_API_KEY` (and optionally a vLLM endpoint) adds the real calls at the bottom of `scalelab/model.py`.
+
 ## What is in the box
 
 | Path | What it is |

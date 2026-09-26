@@ -1,17 +1,19 @@
 # How to use this site
 
-This site is a readable copy of the [full-stack-agentic-engineer](https://github.com/aniryou/full-stack-agentic-engineer)
-repository: a study guide to the LLM inference and serving stack, from the GPU and its fabric at the bottom to the
-agent application at the top. Every page here is built from the repository's Markdown and notebooks, so the site and
-the repo always say the same thing. The code itself lives on GitHub; links to code files open there.
+This site is a readable copy of the
+[full-stack-agentic-engineer](https://github.com/aniryou/full-stack-agentic-engineer) repository: a study guide to the
+LLM inference and serving stack, from the GPU and its fabric at the bottom to agents and applications at the top.
+Every page here is built from the repository's Markdown and notebooks, so the site and the repo always say the same
+thing. The code itself lives on GitHub; links to code files open there.
 
 ## The layers
 
-The material is organised as eight layers, bottom-up: model-level foundations (00), hardware and fabric (01), CUDA
-and NCCL (02), Kubernetes for GPUs (03), the inference engine (04), the orchestrator above the engines (05), the
-gateway in front of the models (06), and the agent application (07). The [layers overview](../layers/index.md) has
-one line per layer. You do not have to read them in order: the [curriculum](curriculum.md) suggests a path that
-starts at the foundations, goes to the engine, down to the hardware that explains it, and back up.
+The material is organised as eight layers, bottom-up: model-level foundations (00), hardware and fabric (01), CUDA,
+NCCL and runtime (02), Kubernetes and GPU scheduling (03), the inference engine (04), the orchestrator above the
+engines (05), the gateway in front of the models (06), and agents and applications (07). The [layers
+overview](../layers/index.md) has one line per layer. You do not have to read them in order: the
+[curriculum](curriculum.md) suggests a path that starts at the foundations, goes to the engine, down to the hardware
+that explains it, and back up.
 
 ## Three pieces per topic
 

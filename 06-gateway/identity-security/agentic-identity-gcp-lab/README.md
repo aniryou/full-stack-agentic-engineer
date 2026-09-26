@@ -16,6 +16,8 @@ infra/terraform/      ← Google Cloud infrastructure (validated with provider 8
 tests/                ← 41 tests exercising every flow end to end through the real ADK Runner
 ```
 
+**Time and tier:** ~10 h at T0 (rough; ~12 h with the core); module 06.6 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: everything runs offline on local fakes, no key. A Google Cloud project adds the optional T3 path (`terraform apply` and the agent deploy in `docs/deploy.md`), billed per use.
+
 ## What the reference implementation demonstrates
 
 | Primer idea | Where |

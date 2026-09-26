@@ -6,8 +6,8 @@ llm-d Router, then behind GKE Inference Gateway. Package `igwlab`.
 
 ## Start here
 
-1. `python3 -m pip install -r requirements.txt && python3 -m pip install -e . && python3 -m pytest -q` — 76 tests in
-   a few seconds, offline.
+1. `python3 -m pip install -r requirements.txt && python3 -m pip install -e . && python3 -m pytest -q` — 84 tests in
+   about 30 s, offline.
 2. Run the [comparison under "Run it"](#run-it): three emulated backends behind the router, round-robin against the
    llm-d chart default; it prints TTFT percentiles, hit rate and the per-replica split in about 4 s.
 3. Open [`notebooks/01_router_in_process.ipynb`](notebooks/01_router_in_process.ipynb) with
@@ -49,7 +49,7 @@ companion is [`../orchestrator-core/`](../orchestrator-core/). It is independent
 ```bash
 cd inference-gateway-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                     # 76 tests, a few seconds, offline
+python3 -m pytest -q                     # 84 tests, ~30 s, offline
 python3 -m jupyterlab notebooks          # exercises; worked answers in solutions/
 ```
 

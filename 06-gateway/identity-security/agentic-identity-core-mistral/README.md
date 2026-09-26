@@ -22,6 +22,8 @@ yours — or your cloud's, when you self-host.
 | 5. Audit | `AuditLog` — one event per decision, both identities | Studio **Observability** (traces, spans, logs) + **AI Registry**; Le Chat Enterprise audit logs for the chat product | Cloud Audit Logs, Agent Observability |
 | Screening | `MistralModeration` (live) / `LocalScreener` (offline) | `mistral-moderation-2603` — categories incl. `jailbreaking` (prompt injection) and `pii`; as a pre-check, or inline with `guardrails=[{"moderation_llm_v2": {"custom_category_thresholds": {...}, "action": "block"}}]` on `chat.complete`, agents and conversations | Model Armor templates + floor settings |
 
+**Time and tier:** 1–2 h (rough); module 06.6, the Mistral variant of its core in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: offline with a scripted model and a local screener. A `MISTRAL_API_KEY` adds the live model and the moderation classifier (billed API calls).
+
 ## Run it
 
 ```bash

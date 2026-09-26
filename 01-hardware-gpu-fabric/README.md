@@ -1,4 +1,4 @@
-# 01 · Hardware — GPUs, NVLink, NICs, storage, cooling
+# 01 · Hardware and fabric
 
 Read the machine: after this layer you can take a GPU spec sheet, a model and a network diagram and say which
 resource bounds an LLM step, what a collective costs on each link, how long a replica takes to load, how often a
@@ -7,11 +7,18 @@ big job fails and what a token costs — and then measure the machine you have t
 ## Where this layer sits
 
 ```
-   03 kubernetes-gpu     pods, nodes and GPUs: where the work is placed
-   02 cuda-nccl-runtime  driver, CUDA, NCCL: the software that drives the hardware
- ▶ 01 hardware           silicon, memory, interconnect, storage, power: the limits everything above inherits
-   00 foundations        the model: what one step of prefill or decode has to compute and move
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
+
+This layer is the machine every step is measured against: the limits the runtime (02) drives and the engine (04)
+runs into.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
@@ -27,7 +34,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough
 
 1. Read [`roofline-and-fabric/PRIMER.md`](roofline-and-fabric/PRIMER.md) §1–§2: spec-sheet literacy and the roofline.
 2. `cd roofline-and-fabric/roofline-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` —
-   58 tests, well under a second; then open
+   66 tests, ~30 s; then open
    [`01_spec_sheets_and_the_roofline`](roofline-and-fabric/roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb).
 3. When you have any GPU (even a free Colab T4), measure the real thing with
    [`gpu-bench-lab/notebooks/01_measure_your_roofline`](roofline-and-fabric/gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb);
@@ -52,7 +59,7 @@ cd ../gpu-bench-lab && python3 -m pip install -r requirements.txt && python3 -m 
 python3 -m gpubench info            # what is this machine?
 ```
 
-Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below.
+Then `python3 -m jupyterlab notebooks` in either directory, or the Colab links below.
 
 | Tier | Where | What you do in this topic | Cost (Sep 2026, verify) |
 |---|---|---|---|
@@ -63,8 +70,11 @@ Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges 
 
 ## How it fits
 
-Builds on [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (sizing,
-TTFT/TPOT budgets) and this layer's `gpu-primer/` and `gpu-deployment/`. Leads to layer 02
+**Needed first:** [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md)
+(sizing, TTFT/TPOT budgets) and this layer's `gpu-primer/` and `gpu-deployment/`. The
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) visits layer 04's concepts before this layer on purpose
+(00 → 04 → 01 → 02 → 04 again with a GPU): with the engine's step loop in mind, each hardware number has a use; the
+roofline itself needs only 00. **Leads to** layer 02
 ([`02-cuda-nccl-runtime`](../02-cuda-nccl-runtime/README.md): the execution model, memory access patterns and NCCL
 collectives behind the fabric numbers here), layer 03 ([`03-kubernetes-gpu`](../03-kubernetes-gpu/README.md): cold
 start, failure domains and topology at cluster scale) and layer 04
@@ -80,41 +90,11 @@ techniques whose payoff the roofline computes).
   *sample output (illustrative)*.
 - GPU specs, prices and obtainability are a September 2026 snapshot marked (verify); they move monthly.
 
-## Scope of this layer
-
-**Covers:** GPU SKUs & memory (H100 / H200 / B200, HBM), NVLink / NVSwitch, scale-up vs scale-out fabrics, RDMA NICs
-(InfiniBand, RoCE), network topology, storage, power and cooling — and the arithmetic that ties them together:
-rooflines, collective cost, cold start, failure rates, the cost of a token.
-
-**Signal keywords:** NVLink, NVSwitch, InfiniBand, RoCE, HBM, memory bandwidth, scale-up/scale-out, rail-optimized,
-GPUDirect, RDMA, power/cooling, TCO, fabric, roofline, arithmetic intensity, `nvidia-smi topo`, MTBF.
-
 <!-- colab-links:start -->
 ## Run in Colab
 
-One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `notebooks/` / `exercises/`; worked answers under `solutions/`.
+One-time Colab setup is in [`../COLAB.md`](../COLAB.md). One line per lab: each link opens that notebook in Colab, exercises first. *Answers* are the worked answer keys (in a `solutions/` or `worked/` folder, named `*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin when the folder has no `solutions/` of its own): try the exercise first. Any other `*_worked` notebook is a walkthrough lesson.
 
-**`roofline-and-fabric/gpu-bench-lab/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb) `01_measure_your_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/02_memory_bandwidth_and_transfers.ipynb) `02_memory_bandwidth_and_transfers.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/03_multi_gpu_topology_and_p2p.ipynb) `03_multi_gpu_topology_and_p2p.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/04_weights_loading_and_cold_start.ipynb) `04_weights_loading_and_cold_start.ipynb`
-
-**`roofline-and-fabric/gpu-bench-lab/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/01_measure_your_roofline.ipynb) `01_measure_your_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/02_memory_bandwidth_and_transfers.ipynb) `02_memory_bandwidth_and_transfers.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/03_multi_gpu_topology_and_p2p.ipynb) `03_multi_gpu_topology_and_p2p.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/04_weights_loading_and_cold_start.ipynb) `04_weights_loading_and_cold_start.ipynb`
-
-**`roofline-and-fabric/roofline-core/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb) `01_spec_sheets_and_the_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb) `02_llm_inference_on_the_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/03_fabrics_and_collective_cost.ipynb) `03_fabrics_and_collective_cost.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/04_loading_reliability_and_cost.ipynb) `04_loading_reliability_and_cost.ipynb`
-
-**`roofline-and-fabric/roofline-core/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/01_spec_sheets_and_the_roofline.ipynb) `01_spec_sheets_and_the_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/02_llm_inference_on_the_roofline.ipynb) `02_llm_inference_on_the_roofline.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/03_fabrics_and_collective_cost.ipynb) `03_fabrics_and_collective_cost.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/04_loading_reliability_and_cost.ipynb) `04_loading_reliability_and_cost.ipynb`
+- **`roofline-and-fabric/gpu-bench-lab/`** — [01_measure_your_roofline](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb) · [02_memory_bandwidth_and_transfers](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/02_memory_bandwidth_and_transfers.ipynb) · [03_multi_gpu_topology_and_p2p](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/03_multi_gpu_topology_and_p2p.ipynb) · [04_weights_loading_and_cold_start](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/notebooks/04_weights_loading_and_cold_start.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/01_measure_your_roofline.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/02_memory_bandwidth_and_transfers.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/03_multi_gpu_topology_and_p2p.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/solutions/04_weights_loading_and_cold_start.ipynb)
+- **`roofline-and-fabric/roofline-core/`** — [01_spec_sheets_and_the_roofline](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb) · [02_llm_inference_on_the_roofline](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb) · [03_fabrics_and_collective_cost](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/03_fabrics_and_collective_cost.ipynb) · [04_loading_reliability_and_cost](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/notebooks/04_loading_reliability_and_cost.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/01_spec_sheets_and_the_roofline.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/02_llm_inference_on_the_roofline.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/03_fabrics_and_collective_cost.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/solutions/04_loading_reliability_and_cost.ipynb)
 <!-- colab-links:end -->

@@ -4,6 +4,8 @@ Hands-on companion to the embeddings primer (`docs/primer.md`). Every core idea
 is implemented from scratch in plain NumPy — no torch, no sklearn — small
 enough to read in one sitting, real enough that the phenomena actually show up.
 
+**Time and tier:** ~8 h (rough); module 07.4, with the other retrieval labs and primers (~28 h in all) in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: numpy and matplotlib, no torch, no GPU, no key.
+
 ## Setup
 
 ```

@@ -8,6 +8,8 @@ yourself, then check against a self-grading `assert`.
 The heavy lifting nobody learns anything from — the embedding model — is a black
 box. Everything that teaches is ~40 lines you can read in one sitting.
 
+**Time and tier:** ~8 h (rough); module 07.4, with the other retrieval labs and primers (~28 h in all) in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: numpy only, with a hashing embedder (table below). T0 + torch or Colab adds the real embedding and reranking models.
+
 ## Setup
 
 ```bash
@@ -45,7 +47,7 @@ versions are in `solutions/`.
 | 02 | `chunking` | Fixed vs structure-aware vs small-to-big; why splitting decides retrieval |
 | 03 | `hybrid_search` | BM25 from scratch + dense, fused with Reciprocal Rank Fusion |
 | 04 | `reranking` | Cheap first-stage recall, then a cross-encoder for precision |
-| 05 | `evaluation` | Recall@k and MRR; score dense vs BM25 vs hybrid, by question type |
+| 05 | `evaluation` | Hit@k, Recall@k (all gold docs) and MRR; score dense vs BM25 vs hybrid, by question type |
 | 06 | `iterative_rag` | *(advanced)* multi-hop questions and the loop behind agentic RAG |
 
 The self-checks test the **shape** of your implementation (sorted correctly,

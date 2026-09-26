@@ -8,7 +8,7 @@ Spot, DWS flex-start, startup latency, sharing.
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md) "The one-minute version", then §1 — what Kubernetes sees.
-2. `cd k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 51 tests in a few
+2. `cd k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 59 tests in about 25
    seconds; then open [`01_how_kubernetes_sees_a_gpu`](k8s-gpu-core/notebooks/01_how_kubernetes_sees_a_gpu.ipynb).
 3. With Docker on your laptop, run the real scheduler and Kueue against fake GPUs:
    [`k8s-gpu-lab/deploy/kind`](k8s-gpu-lab/deploy/kind/README.md) and the lab's
@@ -61,12 +61,12 @@ Finish with the primer's "In a design review": a walkthrough and drill questions
 ```bash
 cd k8s-gpu-core
 python3 -m pip install -r requirements.txt     # only to run the notebooks and tests; the library is stdlib-only
-python3 -m pytest -q                           # 51 tests, a few seconds
+python3 -m pytest -q                           # 59 tests, ~25 s
 python3 -m jupyterlab notebooks                # do the exercises; finished versions are in solutions/
 
 cd ../k8s-gpu-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                           # 120 tests, under 10 s, offline
+python3 -m pytest -q                           # 128 tests, ~30 s, offline
 python3 -m jupyterlab notebooks
 ```
 

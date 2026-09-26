@@ -89,12 +89,12 @@ def test_agrees_with_capacity_planning_formulas():
     finally:
         sys.dont_write_bytecode = dont_write
     m = load_config("mistral-small-24b-instruct-2501")
-    assert kv_bytes_per_token(m) == cap.kv_per_token_kb(cap.MISTRAL_SMALL) * 1024 == 163_840
-    assert kv_bytes_per_token(m, kv_cache_dtype="fp8") == cap.kv_per_token_kb(cap.MISTRAL_SMALL, "fp8") * 1024
+    assert kv_bytes_per_token(m) == cap.kv_per_token_kb(cap.MISTRAL_SMALL) * 1000 == 163_840
+    assert kv_bytes_per_token(m, kv_cache_dtype="fp8") == cap.kv_per_token_kb(cap.MISTRAL_SMALL, "fp8") * 1000
     # concurrency: same spare memory and context -> same answer (block-aligned, so no rounding)
     spare, ctx = 4096 * 16 * 163_840, 8192
     ours = size(m, gpu_memory_bytes=80 * GiB, max_model_len=ctx, kv_budget_bytes=spare).max_concurrency
-    theirs = cap.max_concurrent_sessions(spare / GiB, cap.MISTRAL_SMALL, ctx)
+    theirs = cap.max_concurrent_sessions(spare / 1e9, cap.MISTRAL_SMALL, ctx)
     assert ours == pytest.approx(theirs) == 8.0
 
 

@@ -25,10 +25,24 @@ SOLUTION_DIRS = {"solutions", "worked"}
 SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved)(?:$|[_\-.])", re.I)
 WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
 EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
-INTRO = ("One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Notebooks are listed by folder; "
-         "*worked answers* marks the answer key of an exercise (in a `solutions/` or `worked/` folder, named "
+INTRO = ("One-time Colab setup is in [`../COLAB.md`](../COLAB.md). One line per lab: each link opens that notebook "
+         "in Colab, exercises first. *Answers* are the worked answer keys (in a `solutions/` or `worked/` folder, named "
          "`*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin when the folder has no "
          "`solutions/` of its own): try the exercise first. Any other `*_worked` notebook is a walkthrough lesson.")
+# One name per layer, used everywhere (layer README H1s, the root README, CURRICULUM.md, the site).
+# Kept identical to LAYER_TITLES in tools/site/build_site_content.py.
+LAYER_NAMES = {
+    "00": "00 · Foundations",
+    "01": "01 · Hardware and fabric",
+    "02": "02 · CUDA, NCCL and runtime",
+    "03": "03 · Kubernetes and GPU scheduling",
+    "04": "04 · Inference engine",
+    "05": "05 · Orchestrator",
+    "06": "06 · Gateway",
+    "07": "07 · Agents and applications",
+}
+# Folders that only hold a lab's notebooks: a notebook is listed under the lab folder above them.
+NOTEBOOK_DIRS = {"notebooks", "solutions", "worked", "practice", "exercises", "lessons"}
 
 
 def colab(p): return f"https://colab.research.google.com/github/{REPO}/blob/{BRANCH}/{p}"
@@ -90,28 +104,68 @@ def is_solution(path, siblings=None):
             and not answers_elsewhere(_folder(path), siblings))
 
 
+def lab_of(rel_dir):
+    """The lab a notebook folder belongs to: the folder with trailing notebooks/solutions/... parts removed."""
+    parts = [p for p in rel_dir.replace(os.sep, "/").split("/") if p not in ("", ".")]
+    while parts and parts[-1] in NOTEBOOK_DIRS:
+        parts.pop()
+    return "/".join(parts)
+
+
+def _label(rel):
+    """A notebook's link text: its path inside the lab without the .ipynb and a leading notebooks/ folder."""
+    rel = rel[:-len(".ipynb")] if rel.endswith(".ipynb") else rel
+    return rel[len("notebooks/"):] if rel.startswith("notebooks/") else rel
+
+
+def _answer_labels(rels):
+    """Answer keys are labelled by their number when the numbers are unique (01 · 02 · ...), else by name."""
+    stems = [_stem(r) for r in rels]
+    nums = [_number(s) for s in stems]
+    if all(nums) and len(set(nums)) == len(nums):
+        return nums
+    return [_label(r) for r in rels]
+
+
 def layer_section(layer, nbs):
     body = ["## Run in Colab", "", INTRO, ""]
     if not nbs:
         body.append("_No notebooks yet._")
     else:
-        groups = OrderedDict()
+        labs = OrderedDict()
         for nb in nbs:
-            groups.setdefault(os.path.relpath(os.path.dirname(nb), layer), []).append(nb)
-        for rel, items in groups.items():
-            body.append(f"**`{rel}/`**" if rel != '.' else "**(layer root)**")
-            for nb in items:
-                note = " — *worked answers*" if is_solution(nb, nbs) else ""
-                body.append(f"- [![Open In Colab]({BADGE})]({colab(nb)}) `{os.path.basename(nb)}`{note}")
-            body.append("")
+            lab = lab_of(os.path.relpath(os.path.dirname(nb), layer))
+            labs.setdefault(lab, []).append(nb)
+        for lab, items in sorted(labs.items()):
+            base = f"{layer}/{lab}" if lab else layer
+            rels = [os.path.relpath(nb, base).replace(os.sep, "/") for nb in items]
+            lessons = [(r, nb) for r, nb in zip(rels, items) if not is_solution(nb, nbs)]
+            answers = [(r, nb) for r, nb in zip(rels, items) if is_solution(nb, nbs)]
+            line = f"- **`{lab}/`**" if lab else "- **(layer root)**"
+            line += " — " + " · ".join(f"[{_label(r)}]({colab(nb)})" for r, nb in lessons) if lessons else ""
+            if answers:
+                labels = _answer_labels([r for r, _ in answers])
+                line += " — *answers:* " + " · ".join(
+                    f"[{lab_}]({colab(nb)})" for lab_, (_, nb) in zip(labels, answers))
+            body.append(line)
     return START + "\n" + "\n".join(body).rstrip() + "\n" + END
 
 
+# Folders that hold copies, caches or run outputs, never lessons (gitignored; a lab's tests write executed copies
+# of its notebooks to _run_outputs/). Kept in step with SKIP_DIRS in tools/site/build_site_content.py.
+SKIP_DIRS = {".ipynb_checkpoints", "_run_outputs", ".venv", "venv", "node_modules", "site_build", ".git"}
+
+
+def layer_notebooks(layer):
+    """The layer's notebooks, sorted, leaving out anything under a SKIP_DIRS folder."""
+    return sorted(p for p in glob.glob(f'{layer}/**/*.ipynb', recursive=True)
+                  if not SKIP_DIRS & set(p.replace(os.sep, "/").split("/")[:-1]))
+
+
 def main():
-    total = 0
+    total, per_layer = 0, []
     for layer in sorted(d for d in glob.glob('[0-9][0-9]-*') if os.path.isdir(d)):
-        nbs = sorted(p for p in glob.glob(f'{layer}/**/*.ipynb', recursive=True)
-                     if '.ipynb_checkpoints' not in p)
+        nbs = layer_notebooks(layer)
         total += len(nbs)
         section = layer_section(layer, nbs)
         readme = Path(layer) / "README.md"
@@ -122,20 +176,30 @@ def main():
             t = t.rstrip() + "\n\n" + section + "\n"
         readme.write_text(t)
         print(f"  {layer}: {len(nbs)} notebooks")
+        per_layer.append((layer, len(nbs)))
 
-    Path("COLAB.md").write_text('''# Running notebooks in Google Colab
+    layer_list = "\n".join(
+        f"- [{LAYER_NAMES.get(layer[:2], layer)}]({layer}/README.md#run-in-colab) — {n} notebooks"
+        for layer, n in per_layer)
 
-Every notebook in this repo opens directly in Colab: click the **"Open in Colab"** badge next to it in
+    Path("COLAB.md").write_text(f'''# Running notebooks in Google Colab
+
+Every notebook in this repo opens directly in Colab: click its link in the *Run in Colab* section of
 its layer's `README.md`. The repo is public, so there is nothing to set up. Each notebook's first cell
 (tagged `colab-bootstrap`) is a no-op locally; on Colab it clones this repo, `cd`s into the notebook's
 folder and pip-installs that lab's dependencies.
+
+## Where the links are
+Each layer README ends with a *Run in Colab* section: one line per lab, exercises first, then the worked answers.
+
+{layer_list}
 
 ## Keeping your work
 Colab opens a fresh copy from GitHub each time. To keep your edits, use *File -> Save a copy in Drive*
 (or *Save a copy in GitHub* into your own fork).
 
 ## Redo an exercise
-On Colab, reopen the notebook from its badge. Locally, `git restore <notebook>` returns it to the
+On Colab, reopen the notebook from its link. Locally, `git restore <notebook>` returns it to the
 committed blank; for percent-source labs, re-run the lab's `python3 tools/build_notebooks.py`.
 
 _Per-layer notebook links are generated by `tools/gen_colab_index.py`._

@@ -7,7 +7,7 @@ that makes it, in `minengine`, a numpy "nano-vLLM" small enough to read in two s
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (anatomy of an engine, continuous batching).
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about 5 s, including
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 75 tests in about 50 s, including
    "paged attention equals dense attention to 1e-10".
 3. Open [`notebooks/01_the_step_loop_and_continuous_batching.ipynb`](notebooks/01_the_step_loop_and_continuous_batching.ipynb)
    and take one engine step apart.
@@ -36,7 +36,7 @@ names, pinned in `tests/test_perf.py` and `tests/test_kv.py`.
 ```bash
 cd mini-engine-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 67 tests, ~5 s
+python3 -m pytest -q                           # 75 tests, ~50 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -70,7 +70,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (67, offline, ~5 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (67, plus 8 notebook-tooling checks; offline, ~50 s in all). The ones that carry the correctness claims:
 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10; the engine's greedy tokens equal `generate_dense` — including under

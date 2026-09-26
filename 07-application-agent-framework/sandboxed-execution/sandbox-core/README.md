@@ -68,7 +68,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (99, offline, ~60 s):
+`tests/` has one focused test per concept (91, plus 8 notebook-tooling checks; offline, ~60 s in all):
 
 - **What the process sandbox contains depends on its UID, and egress is never contained.**
   `test_threats.py` runs every probe: with a per-execution UID (as root) all are contained except
