@@ -1,0 +1,29 @@
+{#-
+  Every page but the landing page (home.html overrides the same block): a "View on GitHub" link to the file the
+  page was made from, above the content.
+  - Generated pages carry it as front matter (tools/site/build_site_content.py): `source_path` is a repo path
+    (a layer README, a primer, CURRICULUM.md...), `source_url` a full URL (the layers overview: the repo tree).
+  - Hand-written pages under site/guide/ link to their own source in site/.
+  - Notebooks carry "Open in Colab" and "View on GitHub" in their first cell instead (mkdocs-jupyter pages have
+    no front matter), so they get nothing here.
+  MkDocs' own edit_uri cannot do this: it maps a page to its path under docs_dir (site/), which for a generated
+  page is a copy, not the source.
+-#}
+{% extends "base.html" %}
+
+{% block content %}
+  {%- set blob = config.repo_url ~ "/blob/main/" -%}
+  {%- set src = none -%}
+  {%- if page.meta and page.meta.source_url -%}
+    {%- set src = page.meta.source_url -%}
+  {%- elif page.meta and page.meta.source_path -%}
+    {%- set src = blob ~ page.meta.source_path -%}
+  {%- elif page.file and page.file.src_uri.startswith("guide/") and page.file.src_uri.endswith(".md") -%}
+    {%- set src = blob ~ "site/" ~ page.file.src_uri -%}
+  {%- endif -%}
+  {%- if src %}
+  <p class="fse-source"><a href="{{ src }}" title="The file this page is made from">
+    <span class="fse-source__icon">{% include ".icons/fontawesome/brands/github.svg" %}</span>View on GitHub</a></p>
+  {%- endif %}
+  {{ super() }}
+{% endblock %}

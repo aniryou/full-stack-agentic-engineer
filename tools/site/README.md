@@ -36,6 +36,12 @@ button, using the same URL as `tools/gen_colab_index.py`; notebooks under `solut
 "Solutions" in the navigation. Notebooks are shown as committed, minus the Colab setup cell at the top (it only
 runs on Colab); the site never runs them.
 
+Every generated Markdown page gets front matter naming the file it came from (`source_path`, a repo path; the
+layers overview gets `source_url`, the repo tree). `site/overrides/main.html` turns it into a "View on GitHub"
+link at the top of the page; hand-written pages under `site/guide/` link to their own source, and notebooks carry
+the link (beside "Open in Colab") in their first cell. `tools/site/hooks.py` adds a content hash to the
+stylesheet URL so a deploy never pairs new HTML with a cached, older `extra.css`.
+
 When content lands in a layer, nothing here needs editing: re-run the generator and commit the updated `nav:` in
 `mkdocs.yml`.
 
