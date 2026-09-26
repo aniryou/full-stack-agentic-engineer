@@ -1,4 +1,4 @@
-# 02 · Runtime — CUDA, NCCL, the container runtime and the driver
+# 02 · CUDA, NCCL and runtime
 
 After this layer you can explain why a GPU kernel is fast or slow, what an all-reduce costs a tensor-parallel
 decode step, why a container does or does not see its GPU, and which GPU metrics to trust.
@@ -6,26 +6,29 @@ decode step, why a container does or does not see its GPU, and which GPU metrics
 ## Where this layer sits
 
 ```
-  05-orchestrator           routes and scales engine replicas; moves KV caches between them
-  04-inference-engine       runs the kernels, captures CUDA Graphs, all-reduces across GPUs
-  03-kubernetes-gpu         the device plugin hands a pod its GPUs
-▶ 02-cuda-nccl-runtime      driver, CUDA runtime, kernels, NCCL, container runtime, GPU sharing, health
-  01-hardware-gpu-fabric    SMs, HBM, NVLink, PCIe, NICs: the limits everything above works within
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
 
-The software that turns raw GPUs into a usable, multi-GPU compute substrate: it sits between the hardware
-and any scheduler or engine above it.
+This layer is the software that turns raw GPUs into a usable, multi-GPU compute substrate: it sits between the
+hardware (01) and any scheduler (03) or engine (04) above it.
 
-| Topic | What you learn | Tier |
-|---|---|---|
-| [`cuda-and-nccl/`](cuda-and-nccl/README.md) | CUDA's execution model and memory access patterns, launch overhead and CUDA Graphs, collectives and NCCL, driver/CUDA/GPU compatibility, how a container gets a GPU, MIG vs MPS vs time-slicing, DCGM and XIDs — a primer, a numpy core and a hands-on lab | T0 → T3 |
+| Topic | You will be able to… | Time | Tier |
+|---|---|---|---|
+| [`cuda-and-nccl/`](cuda-and-nccl/README.md) | explain CUDA's execution model and memory access patterns, launch overhead and CUDA Graphs, collectives and NCCL, driver/CUDA/GPU compatibility, how a container gets a GPU, MIG vs MPS vs time-slicing, DCGM and XIDs — a primer, a numpy core and a hands-on lab | ~9 h primer + core; ~9 h lab | T0 → T3 |
 
 ## Start here
 
 1. Read the one-minute version of [`cuda-and-nccl/PRIMER.md`](cuda-and-nccl/PRIMER.md#the-one-minute-version) (a page).
-2. `cd cuda-and-nccl/cuda-nccl-core && python3 -m pytest -q` — 128 tests in under a second, numpy only.
+2. `cd cuda-and-nccl/cuda-nccl-core && python3 -m pytest -q` — 133 tests in under a second, numpy only.
 3. Open [`01_simt_warps_and_memory`](cuda-and-nccl/cuda-nccl-core/notebooks/01_simt_warps_and_memory.ipynb)
-   locally, or through its Colab badge below. The [topic README](cuda-and-nccl/README.md) has the full order.
+   locally, or through its Colab link below. The [topic README](cuda-and-nccl/README.md) has the full order.
 
 ## What you get
 
@@ -42,9 +45,9 @@ multi-GPU box, rented for an hour (Kaggle's 2 × T4 is a free one); T3 = the Goo
 
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 128 tests, under a second
+python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 133 tests, under a second
 cd ../cuda-nccl-lab
-python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 122 pass, 2 skip; ~20 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 123 pass, 2 skip; 15–30 s
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M          # a real ring all-reduce, no GPU
 ```
 
@@ -52,9 +55,11 @@ Or open any notebook below in Colab: its first cell clones the repo and installs
 
 ## How it fits
 
-- **Builds on** layer 01 ([`01-hardware-gpu-fabric`](../01-hardware-gpu-fabric/README.md)): the roofline,
-  the memory hierarchy, link rates and the α-β model in
-  [roofline-and-fabric](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2, §4 and §5.
+- **Builds on** layer 01 ([`01-hardware-gpu-fabric`](../01-hardware-gpu-fabric/README.md)): needed first are the
+  roofline, the memory hierarchy, link rates and the α-β model in
+  [roofline-and-fabric](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2, §4 and §5. The
+  [curriculum's spiral](../CURRICULUM.md#31-why-this-order) reaches this layer after 00, layer 04's concepts and 01,
+  so tiling, fusion and CUDA Graphs land on an engine you already know; nothing in 04 is a prerequisite here.
 - **Leads to** layer 03 ([`03-kubernetes-gpu/`](../03-kubernetes-gpu/): the device plugin, MIG and time-sharing per node pool),
   layer 04 ([`04-inference-engine`](../04-inference-engine/README.md): kernels, CUDA Graphs and TP
   all-reduces inside an engine) and layer 05 ([`05-orchestrator`](../05-orchestrator/README.md): KV transfer over the same fabrics).
@@ -67,16 +72,6 @@ Or open any notebook below in Colab: its first cell clones the repo and installs
 - The GKE deployment is optional: GPU pools scale from zero, the idle cluster costs a few dollars a day
   (verify), and `terraform destroy` ends it. Prices: [`COMPUTE.md`](../COMPUTE.md).
 - Driver tables, MIG profiles, DCGM field lists and versions are dated 2026-09-26 and marked (verify).
-
-## Scope of this layer
-
-**Covers:** NVIDIA driver & CUDA toolkit versioning and compatibility, cuDNN/cuBLAS,
-NCCL collectives (all-reduce, all-gather) and topology awareness, the container
-runtime (containerd, NVIDIA Container Toolkit), device plugins, MIG partitioning,
-CUDA graphs, kernels & memory model.
-
-**Signal keywords:** CUDA, cuDNN, NCCL, all-reduce, collective, driver, MIG,
-nvidia-container-toolkit, containerd, PTX, kernel, CUDA graph, compute capability.
 
 <!-- colab-links:start -->
 ## Run in Colab

@@ -1,62 +1,90 @@
-# 07 · Application / agent framework
+# 07 · Agents and applications
 
-The top of the stack: the agent itself — its loop, tools, memory, durability, the retrieval it
-stands on, and the sandbox its code-running tools execute in. What the end user interacts with.
+Build the agent the whole stack serves: after this layer you can write an agent loop with tool contracts, a step
+budget and an approval gate; design the platform around it (state, context for cache hits, MCP tools, evals,
+tracing); make a long-running agent survive crashes, duplicate deliveries and multi-day waits; build retrieval from
+embeddings to hybrid search and evaluate it; and run model-written code without handing it your keys.
 
-**Covers:** the agent loop, tool calling, state/sessions/checkpoints, context engineering &
-caching, multi-agent workflows, durable/long-running execution, evals, retrieval-augmented
-generation and vector search, sandboxed execution of model-generated code (the isolation ladder,
-the execution contract, egress and secrets, sandboxes on Kubernetes, warm pools and cost per
-action), capstone applications.
+## Where this layer sits
 
-**Signal keywords:** agent loop, tool calling, ADK, LangGraph, multi-agent, workflow, durable
-execution, long-running, checkpoint, saga, human-in-the-loop, RAG, retrieval, vector store,
-embeddings, eval, trajectory, sandbox, code execution, `run_code`, gVisor, Firecracker, Kata,
-RuntimeClass, Pod Security, NetworkPolicy, egress proxy, warm pool.
-
-## Current contents
-
-### `agent-fundamentals/`
-- **`agent-core/`** — the minimal agent core: loop, tools, state & control, a mini support agent.
-- **`gcp-agent-platform-lab/`** — the full agent-platform lab (workflows, multi-agent, state,
-  context engineering, evals, reliability, resource estimation, capstone). Cross-refs **06-gateway**.
-- **`mistral-agent-core/`** — Mistral variant of the agent core (`agentcore` + a `mistral_llm`
-  adapter and a "going live on Mistral" lesson).
-
-### [`sandboxed-execution/`](sandboxed-execution/README.md)
-Run the model's code without handing it your keys: say what a `run_code` tool can reach when the model
-is hijacked, which control bounds each risk, how much isolation you need and what a pool of sandboxes
-costs — then render and check the Kubernetes that enforces it. Builds on `agent-core`'s tool contract
-(07.1) and the identity primer's §6.2 (code execution); module 07.5 in [`CURRICULUM.md`](../CURRICULUM.md).
-*T0 = laptop or Colab CPU, free; T0 + Docker = the container rungs and kind on your own machine; T3 = the
-Google Cloud deployment, optional. No GPU anywhere.*
-
-| Path | You will be able to… | Time | Tier |
-|---|---|---|---|
-| [`PRIMER.md`](sandboxed-execution/PRIMER.md) | explain the threat model, the isolation ladder (process → container → gVisor → microVM), the execution contract, egress and secrets, sandboxes on Kubernetes, latency and cost per action, and audit — then walk the design in a review | read with the core | — |
-| [`sandbox-core/`](sandboxed-execution/sandbox-core/README.md) | build every part of a safe `run_code` in standard-library Python: attack probes, a process sandbox with rlimits, a wall-clock kill and its own UID, the execution contract, an allowlisting egress proxy that injects a credential the code never holds, policy rendered to Kubernetes YAML, and warm-pool sizing with Erlang C; 5 notebooks | ~4 h with the primer | T0 |
-| [`sandbox-lab/`](sandboxed-execution/sandbox-lab/README.md) | the same controls on a network namespace, a hardened Docker container, pod-per-execution on kind and a GKE Sandbox (gVisor) node pool, with an agent whose `run_code`/`fetch_url` tools fail closed under prompt injection; 5 notebooks | ~8 h | T0, T0 + Docker, T3 |
-
-```bash
-cd sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 81 tests, ~30 s
-cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                     # 112 tests, ~25 s, offline
-python3 -m sandboxlab env      # which isolation levels this machine can actually run
+```
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
 
-### `long-running-durable/`
-Durable, long-running agentic workflows — several fidelities kept side by side (not merged).
-- **`long-running-agents-core/`**, **`lra-core/`** — minimal durable cores.
-- **`long-running-agentic/`**, **`lra/`** — full GCP labs (Cloud Run, Tasks, Pub/Sub, Workflows, Firestore, ADK 2).
-- **`long-running-agents-mistral/`** — Mistral variant (durable core + a local-Temporal workflow + Mistral model adapter).
-- **`00_primer.md`** — the shared primer (identical to the copy inside `long-running-agentic/`).
+This layer is the workload: an agent's turns, tools and shared prefixes are what the gateway (06) bounds, the
+orchestrator (05) routes and the engine (04) caches.
 
-### `retrieval-rag/`
-- **`vector_stores/`** — from-scratch retrieval: `minifaiss` (IVF, PQ, HNSW, LSH, k-means in numpy),
-  `minigraphrag` (GraphRAG), a homemade TF-IDF, Gutenberg demos.
-- **`embeddings-lab/`** — embeddings from scratch in NumPy: counts→vectors, contrastive bi-encoder,
-  geometry, vector search, a retrieval pipeline, superposition (worked notebooks + exercises + solutions).
-- **`rag-from-scratch/`** — a RAG pipeline built from scratch.
-- **`vector-databases-primer.md`** — first-principles-to-production primer on vector databases.
+*Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
+rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + Docker" is a laptop with Docker, still free.
+No topic here needs a GPU; model API keys are optional everywhere (each lab runs a scripted or fake model at T0).
+Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 07.1–07.5).
+
+| Topic | You will be able to… | Time | Tier |
+|---|---|---|---|
+| [`agent-fundamentals/`](agent-fundamentals/agent-core/README.md) | build the loop — termination, tool dispatch, a step budget, an approval gate, structured tool errors — in [`agent-core`](agent-fundamentals/agent-core/README.md) (standard library, 4 notebooks), or its [Mistral variant](agent-fundamentals/mistral-agent-core/README.md) with a fifth notebook that goes live; then the platform in [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md): workflows vs multi-agent, state as an event log, context engineering and caching, MCP behind a policy gateway, OAuth, evals, tracing, reliability, cost — 15 notebooks, 83 exercises | ~4 h core; ~20 h platform lab | T0 (a model key is optional) |
+| [`sandboxed-execution/`](sandboxed-execution/README.md) | say what a `run_code` tool can reach when the model is hijacked, which control bounds each risk, how much isolation you need (process → container → gVisor → microVM) and what a pool of sandboxes costs; then enforce it on Docker, kind and GKE — a [PRIMER](sandboxed-execution/PRIMER.md), [`sandbox-core`](sandboxed-execution/sandbox-core/README.md) (standard library, 5 notebooks) and [`sandbox-lab`](sandboxed-execution/sandbox-lab/README.md) (5 notebooks) | ~4 h primer + core; ~8 h lab | T0, T0 + Docker, T3 |
+| [`long-running-durable/`](long-running-durable/00_primer.md) | state the durable-execution invariants (durable state, intent before act, leases, budgets, park instead of wait) and run fan-out/fan-in, human-in-the-loop, sagas and scheduled agents on a queue, a store and stateless compute — the [primer](long-running-durable/00_primer.md), then [`lra-core`](long-running-durable/lra-core/lra-core/README.md) → [`lra-gcp`](long-running-durable/lra/lra-gcp/README.md); alternatives [`long-running-agents-core`](long-running-durable/long-running-agents-core/README.md), [`long-running-agents-gcp`](long-running-durable/long-running-agentic/long-running-agents-gcp/README.md) and the Mistral Workflows (Temporal) version [`long-running-agents-mistral`](long-running-durable/long-running-agents-mistral/README.md) | ~10 h (a core, then one full lab) | T0 (T3 optional) |
+| [`retrieval-rag/`](retrieval-rag/vector-databases-primer.md) | explain embeddings as factorizations and contrastive training; choose and tune an ANN index (IVF, PQ, HNSW); build hybrid search with fusion and reranking; evaluate retrieval with recall@k, MRR and nDCG — the [vector-databases primer](retrieval-rag/vector-databases-primer.md), [`embeddings-lab`](retrieval-rag/embeddings-lab/README.md) (numpy, 6 notebooks + exercises), [`rag-from-scratch`](retrieval-rag/rag-from-scratch/README.md) (7 notebooks) and [`vector_stores`](retrieval-rag/vector_stores/README.md) (FAISS index families and GraphRAG rebuilt in numpy) | ~28 h | T0 (`rag-from-scratch`'s semantic embedder: T0 + torch, or Colab) |
+
+## Start here
+
+1. `cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 14
+   tests in well under a second; then open
+   [`01_the_agent_loop`](agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb).
+2. Work [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md) notebooks 00–14 in order,
+   or at least 04 (context and caching), 08 (evals) and 09 (tracing) if time is short.
+3. Then the topic your design needs: [`sandboxed-execution/`](sandboxed-execution/README.md) for code-running tools,
+   the [durable-execution primer](long-running-durable/00_primer.md) for anything that waits, the
+   [vector-databases primer](retrieval-rag/vector-databases-primer.md) for retrieval.
+
+## Run it
+
+Each lab has its own environment and its own README; the commands below are the fastest check that one works.
+
+```bash
+cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q        # 14 tests
+cd ../gcp-agent-platform-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                   # 147 unit tests + 15 notebook runs, ~50 s
+cd ../../sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q      # 81 tests, ~30 s
+cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                              # 112 tests, ~25 s, offline
+python3 -m sandboxlab env                                                                                    # which isolation levels this machine can run
+cd ../../long-running-durable/lra-core/lra-core && python3 -m pytest -q                                      # 12 tests, standard library
+cd ../../../retrieval-rag/rag-from-scratch && python3 -m pip install -r requirements.txt && python3 -m pytest -q   # 12 tests
+```
+
+Then open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`) or from the Colab links below.
+
+## How it fits
+
+**Builds on** nothing from the layers below for the loop itself (07.1 is standard-library Python). Three places lean
+on lower layers: context layout for cache hits (platform lab notebook 04) is the agent side of layer 04's
+[prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching); sandboxed execution starts from
+the layer 06 identity primer's §6.2 and puts its pods on the Kubernetes of layer 03
+([`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md)); and the platform lab's cost estimates use
+00's [capacity planning](../00-foundations/gpu-capacity-planning/README.md). In the
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) this layer comes last, as the workload that shapes every
+layer below; if you already build agents, the curriculum suggests skimming 07.1 first for motivation. Next door:
+[`06-gateway`](../06-gateway/README.md) bounds the agent's turns and authority.
+
+## Caveats
+
+- At T0 every model is scripted or fake, so latencies and costs in the labs are simulated; a Gemini, Mistral or other
+  model key swaps in a real model where a lab supports it.
+- The Google Cloud paths (the long-running labs' deploys, the sandbox lab's GKE Sandbox pool) are optional T3 steps;
+  `long-running-agents-gcp` pulls in ADK 2 and the Google Cloud clients, a ~420 MB install even for its offline
+  tests (2026-09-26, verify).
+- The durable-execution primer [`00_primer.md`](long-running-durable/00_primer.md) is the one copy for the topic (the
+  duplicates inside `long-running-agentic/` and `long-running-agents-gcp/docs/` were removed); `lra-core` and
+  `lra-gcp` carry their own shorter primers.
+- Product facts (ADK, MCP, gVisor, GKE Sandbox, model names) are dated September 2026 and marked (verify) in each
+  lab; not covered yet: agent memory beyond a paragraph, evals at scale, computer-use agents
+  ([`CURRICULUM.md`](../CURRICULUM.md) §2).
 
 <!-- colab-links:start -->
 ## Run in Colab

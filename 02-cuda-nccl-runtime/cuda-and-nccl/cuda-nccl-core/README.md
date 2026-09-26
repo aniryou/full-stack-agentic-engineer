@@ -48,7 +48,7 @@ python3 -m pytest -q                          # 133 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
-On Colab, each notebook's first cell clones the repo and installs this package; the badges are in the
+On Colab, each notebook's first cell clones the repo and installs this package; the Colab links are in the
 [layer README](../../README.md). `notebooks/` and `solutions/` are generated from `notebooks_src/*.py`
 (percent format with `### BEGIN SOLUTION` blocks). Edit the sources, then:
 

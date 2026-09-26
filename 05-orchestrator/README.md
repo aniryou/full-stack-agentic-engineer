@@ -1,4 +1,4 @@
-# 05 · Orchestrator — Dynamo, llm-d, Ray Serve
+# 05 · Orchestrator
 
 Turn many inference-engine replicas into one serving system: after this layer you can decide which replica each
 request goes to, how many replicas run and on which signal, and whether prefill and decode share a GPU — and defend
@@ -7,11 +7,18 @@ each choice with numbers in a design review.
 ## Where this layer sits
 
 ```
-   06 gateway            auth, quotas, admission, cost: should this request run at all?
- ▶ 05 orchestrator       which replica · how many replicas · how to split prefill, decode and the KV cache
-   04 inference engine   one replica: continuous batching, the KV cache, prefix caching
-   03 kubernetes-gpu     pods, nodes and GPUs the replicas run on
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
+
+This layer is the fleet: it turns many engine replicas (04) on the cluster (03) into one service, below the
+gateway (06) that decides whether a request runs at all.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
@@ -24,7 +31,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 
 1. Read [`serving-orchestration/PRIMER.md`](serving-orchestration/PRIMER.md): "The one-minute version" and §1.
 2. `cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`
-   — 57 tests in about 4 s; then open
+   — 58 tests in about 5 s; then open
    [`01_why_llm_load_balancing_is_different`](serving-orchestration/orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb).
 3. Follow the step table in the topic [`README.md`](serving-orchestration/README.md): each primer section pairs
    with a core notebook and, where there is one, a lab notebook.
@@ -44,23 +51,22 @@ cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirem
 cd ../inference-gateway-lab && python3 -m pip install -r requirements.txt && python3 -m pip install -e . && python3 -m pytest -q
 ```
 
-Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below. Tiers and costs are in the
+Then `python3 -m jupyterlab notebooks` in either directory, or the Colab links below. Tiers and costs are in the
 topic README's [Run it](serving-orchestration/README.md#run-it); the deploy paths (compose, kind, any GPU box, GKE)
 are in the lab's [Deploy paths](serving-orchestration/inference-gateway-lab/README.md#deploy-paths).
 
 ## How it fits
 
-Builds on [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (prefill vs
+**Needed first:** [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (prefill vs
 decode, TTFT and TPOT), layer 04's [KV cache](../04-inference-engine/kv-cache/kv-cache-primer.md) and
 [paged attention](../04-inference-engine/paged-attention/paged-attention-primer.md) primers, and layer 01's
-[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (fabrics, cold start). Leads to
-layer 06, where [admission control, rate limits and cost](../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
+[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (fabrics, cold start); layer
+04's [prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching) makes §2's routing
+signals concrete. In the [curriculum's spiral](../CURRICULUM.md#31-why-this-order) this layer follows 03, so the
+HPA and LeaderWorkerSet already mean something. **Leads to** layer 06, where [admission control, rate limits and cost](../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
 decide whether a request runs before the router decides where, and to the agent workloads in
 [`07-application-agent-framework`](../07-application-agent-framework/README.md), whose multi-turn sessions shape
 every routing and caching decision here.
-
-> Note: [`06-gateway/scaling-admission-cost/agentic-scaling-lab`](../06-gateway/scaling-admission-cost/agentic-scaling-lab) touches this layer
-> (capacity planning, autoscaling) but is filed under Gateway — see the root CLAUDE.md.
 
 ## Caveats
 
@@ -68,15 +74,9 @@ every routing and caching decision here.
   latencies are real HTTP against emulated engine timing: both compare designs, neither is a GPU measurement.
 - Product versions, GKE details and prices are as of September 2026 and marked `(verify)`; the primer's
   [Verify list](serving-orchestration/PRIMER.md#verify-list) collects them.
-
-## Scope of this layer
-
-**Covers:** request routing (KV-cache-aware, prefix-aware, load-aware), autoscaling replicas to load,
-prefill/decode disaggregation, multi-model & LoRA routing, KV-cache offload/transfer between workers, SLA-driven
-scheduling, serving-layer observability.
-
-**Signal keywords:** Dynamo, llm-d, Ray Serve, disaggregation, prefill/decode split, KV-aware routing, prefix cache
-routing, replica autoscaling, LoRA routing, SLO routing.
+- Not covered yet: SLO planners (thin), fleet observability, multi-cluster and multi-region serving, request
+  cancellation and migration, cost-aware routing across GPU types — see
+  [`CURRICULUM.md` §2](../CURRICULUM.md#2-what-each-layer-has-and-what-it-does-not-cover-yet).
 
 <!-- colab-links:start -->
 ## Run in Colab

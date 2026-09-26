@@ -1,4 +1,4 @@
-# 00 · Foundations — the model itself: internals, capacity math, sparsity, post-training
+# 00 · Foundations
 
 Understand the model the whole stack serves: after this layer you can build a transformer from nothing, size a
 model's memory, bandwidth and latency before paying for a GPU, place a model family in the open-weight landscape,
@@ -8,11 +8,17 @@ produces thinking models and what their long outputs do to a serving fleet.
 ## Where this layer sits
 
 ```
-   07 agents             the workload: turns, tools, long outputs, model-written code
-   04 inference engine   one replica running the model: the step loop, the KV cache, batching, quantization
-   01 hardware           the FLOP/s and bytes per second every step is measured against
- ▶ 00 foundations        the model: its shapes and parameter counts, how it was trained, what one step computes
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
+
+This layer sits beneath the stack: it is the model every layer above stores, moves and serves.
 
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box
 (Kaggle's free 2×T4, or rented for an hour); T3 = the Google Cloud deployment, optional.* Times are rough, include
@@ -51,11 +57,16 @@ python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 57 test
 cd ../thinking-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 91 tests, offline; ~50 s with torch
 ```
 
-Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab badges below. The two labs run
+Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab links below. The two labs run
 every notebook at T0 (torch on a CPU, a fake vLLM, bundled outputs labelled illustrative) and measure on a GPU when
 you point them at one.
 
 ## How it fits
+
+**Builds on** Python and numpy (CPU PyTorch for the tiny GPT) and nothing else: this is the first stop in the
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) (00 → 04 → 01 → 02 → 04 → 03 → 05 → 06 → 07). Its two
+newer topics come later in that spiral, where their prerequisites are: mixture-of-experts after layer 01's roofline,
+RL and thinking models after the serving-engine primer (step 3 above).
 
 Everything above builds on this layer's numbers: parameters and KV bytes per token (transformers, capacity
 planning), total vs active parameters (mixture-of-experts) and output length (rl-and-thinking-models). Layer 01's
@@ -76,19 +87,6 @@ thinking-model workload reshapes the engine's KV budget, the router and the gate
   direction across seeds, not a real model's magnitude.
 - Model configs, vLLM v0.30.0 flags, TRL defaults and prices are a September 2026 snapshot marked `(verify)`; each
   primer ends with a dated Verify list.
-
-## Scope of this layer
-
-**Covers:** transformer architecture (attention, MLP blocks, a tiny GPT from scratch), GPU capacity planning for LLM
-serving (memory vs bandwidth, TTFT/TPOT, fleet sizing), the open-weight and commercial model landscape,
-mixture-of-experts models (routers, load balance, active vs total parameters, expert parallelism, sizing), and
-post-training with reinforcement learning (policy gradients, preferences and DPO, GRPO with verifiable rewards,
-thinking models, test-time compute, what thinking does to serving).
-
-**Signal keywords:** transformer, attention, MLP, embeddings, tiny GPT, scaling laws, capacity planning, TTFT, TPOT,
-HBM vs bandwidth, open-weight, model landscape, Mistral/Llama/Qwen, MoE, mixture of experts, router, load balance,
-expert parallelism, active parameters, RL, RLHF, reward model, DPO, GRPO, verifiable rewards, thinking models,
-reasoning, test-time compute.
 
 <!-- colab-links:start -->
 ## Run in Colab

@@ -20,7 +20,7 @@ plus practice notebooks or a lab; each topic's or lab's README says what it cont
    explains the concepts with worked numbers; `agent-fundamentals/` teaches through its lab notebooks instead. The
    layer's `README.md` links it; for layers 01–05 and the newer topics it also says which
    sections to read first (the other layer READMEs are being brought to the same shape).
-3. **Run its core notebooks**, in Colab (the badges in each layer README) or locally (see [Run it](#run-it)).
+3. **Run its core notebooks**, in Colab (the links at the end of each layer README) or locally (see [Run it](#run-it)).
    Most exercises are followed by a check cell — all of them in the primer, core and lab topics — that prints ✅
    when your answer is right; some older checks are lighter, and the 06 scaling notebooks print "not attempted"
    until you fill an exercise in.
@@ -116,7 +116,7 @@ lab's `python3 tools/build_notebooks.py`).
 
 ## Run it
 
-**In Colab:** open any notebook from the badge in its layer README. There is nothing to set up: the first cell
+**In Colab:** open any notebook from its link in its layer README. There is nothing to set up: the first cell
 clones this repo and installs that lab's dependencies. [`COLAB.md`](COLAB.md) has the details, including how
 to keep your edits.
 

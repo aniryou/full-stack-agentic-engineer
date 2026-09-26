@@ -66,7 +66,7 @@ python3 -m pytest -q                            # 123 pass, 2 skip without torch
 python3 -m jupyterlab notebooks
 ```
 
-On Colab, each notebook's first cell clones the repo and installs its lab; the badges are in the
+On Colab, each notebook's first cell clones the repo and installs its lab; the Colab links are in the
 [layer README](../README.md). For a GPU (T1/T2) or GKE (T3), follow the lab's
 [Run it](cuda-nccl-lab/README.md#run-it) section.
 

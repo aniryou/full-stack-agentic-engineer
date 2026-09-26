@@ -323,6 +323,19 @@ def test_colab_index_groups_notebook_folders_under_their_lab():
     assert g.lab_of(".") == ""
 
 
+def test_colab_index_skips_run_outputs_and_checkpoints(tmp_path, monkeypatch):
+    """Executed copies a lab's tests write (_run_outputs/) and checkpoints never get a Colab link."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    import gen_colab_index as g
+    for rel in ("07-x/lab/notebooks/01_a.ipynb", "07-x/lab/_run_outputs/01_a.ipynb",
+                "07-x/lab/notebooks/.ipynb_checkpoints/01_a-checkpoint.ipynb"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("{}")
+    monkeypatch.chdir(tmp_path)
+    assert g.layer_notebooks("07-x") == ["07-x/lab/notebooks/01_a.ipynb"]
+    assert g.SKIP_DIRS <= b.SKIP_DIRS | {".git"}
+
+
 def test_layer_names_match_the_colab_index():
     """One name per layer: the site's layer titles and the Colab index's layer names are the same strings."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

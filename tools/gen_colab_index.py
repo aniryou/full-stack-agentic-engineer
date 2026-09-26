@@ -151,11 +151,21 @@ def layer_section(layer, nbs):
     return START + "\n" + "\n".join(body).rstrip() + "\n" + END
 
 
+# Folders that hold copies, caches or run outputs, never lessons (gitignored; a lab's tests write executed copies
+# of its notebooks to _run_outputs/). Kept in step with SKIP_DIRS in tools/site/build_site_content.py.
+SKIP_DIRS = {".ipynb_checkpoints", "_run_outputs", ".venv", "venv", "node_modules", "site_build", ".git"}
+
+
+def layer_notebooks(layer):
+    """The layer's notebooks, sorted, leaving out anything under a SKIP_DIRS folder."""
+    return sorted(p for p in glob.glob(f'{layer}/**/*.ipynb', recursive=True)
+                  if not SKIP_DIRS & set(p.replace(os.sep, "/").split("/")[:-1]))
+
+
 def main():
     total, per_layer = 0, []
     for layer in sorted(d for d in glob.glob('[0-9][0-9]-*') if os.path.isdir(d)):
-        nbs = sorted(p for p in glob.glob(f'{layer}/**/*.ipynb', recursive=True)
-                     if '.ipynb_checkpoints' not in p)
+        nbs = layer_notebooks(layer)
         total += len(nbs)
         section = layer_section(layer, nbs)
         readme = Path(layer) / "README.md"

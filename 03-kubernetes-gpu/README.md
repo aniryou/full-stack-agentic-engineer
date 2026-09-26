@@ -1,4 +1,4 @@
-# 03 · Kubernetes + GPU Operator + scheduler
+# 03 · Kubernetes and GPU scheduling
 
 Make GPUs schedulable: after this layer you can explain how a GPU becomes an integer Kubernetes can schedule, why a
 GPU pod is Pending and how to fix it, how to place gangs without deadlock, how to share a cluster between teams with
@@ -7,12 +7,18 @@ Kueue quotas, and how to get GPU capacity — from zero, on Spot or through queu
 ## Where this layer sits
 
 ```
-   05 orchestrator       which replica, how many replicas: the fleet above the cluster
-   04 inference engine   one replica on its GPUs
- ▶ 03 kubernetes-gpu     how GPU nodes are exposed, scheduled, shared and scaled across workloads
-   02 cuda-nccl-runtime  driver, container runtime: how a container gets a GPU
-   01 hardware           GPUs, NVLink, fabrics: the topology placement has to respect
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
+
+This layer is the cluster: it takes the GPUs the runtime (02) exposes and hands them to the engines (04) and
+fleets (05) above.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
@@ -25,8 +31,8 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
 ## Start here
 
 1. Read [`gpu-scheduling/PRIMER.md`](gpu-scheduling/PRIMER.md) §1: what Kubernetes sees.
-2. `cd gpu-scheduling/k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 49 tests,
-   well under a second; then open
+2. `cd gpu-scheduling/k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 51 tests,
+   a few seconds; then open
    [`01_how_kubernetes_sees_a_gpu`](gpu-scheduling/k8s-gpu-core/notebooks/01_how_kubernetes_sees_a_gpu.ipynb).
 3. Follow the step table in the topic [`README.md`](gpu-scheduling/README.md): each primer section pairs with a core
    notebook and, optionally, a lab notebook.
@@ -51,7 +57,7 @@ cd ../k8s-gpu-lab && python3 -m pip install -r requirements.txt && python3 -m pi
 python3 -m k8sgpu kind predict s2   # the predictor's step-by-step outcome for a gang scenario (simulated)
 ```
 
-Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below. With Docker, the lab's
+Then `python3 -m jupyterlab notebooks` in either directory, or the Colab links below. With Docker, the lab's
 [`deploy/kind`](gpu-scheduling/k8s-gpu-lab/deploy/kind/README.md) runs the same scenarios on a real control plane.
 
 | Tier | Where | What you do in this topic | Cost (Sep 2026, verify) |
@@ -63,12 +69,14 @@ Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges 
 
 ## How it fits
 
-Builds on layer 01 — the [GPU deployment primer](../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md)
+**Needed first:** layer 01 — the [GPU deployment primer](../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md)
 §7 (Kubernetes specifics in brief; §4 the parallelism menu) and
 [`roofline-and-fabric/`](../01-hardware-gpu-fabric/roofline-and-fabric/README.md) (fabric bandwidth and why topology
 matters, cold-start arithmetic, checkpoint intervals, GPU families and obtainability) — and layer 02
 ([`02-cuda-nccl-runtime`](../02-cuda-nccl-runtime/README.md): how a container gets a GPU; MIG, time-slicing and MPS
-mechanics; DCGM health). Leads to layer 05 ([`05-orchestrator`](../05-orchestrator/README.md): autoscaling replicas
+mechanics; DCGM health). The [curriculum's spiral](../CURRICULUM.md#31-why-this-order) brings you here after
+layer 04 has been measured on a GPU, so the pods being scheduled are engines you have already run; the engine itself
+is not a prerequisite. **Leads to** layer 05 ([`05-orchestrator`](../05-orchestrator/README.md): autoscaling replicas
 and LeaderWorkerSet groups on queue and SLO signals, prefill/decode disaggregation) and layer 06
 ([`agentic-scaling-lab`](../06-gateway/scaling-admission-cost/agentic-scaling-lab/): admission control and cost at the
 gateway — "shape demand to capacity" one layer up from Kueue's quotas).
@@ -80,15 +88,9 @@ gateway — "shape demand to capacity" one layer up from Kueue's quotas).
   status: no device plugin, no `/dev/nvidia*`, no CUDA.
 - RunPod and Vast.ai rent containers, not nodes, so they cannot teach this layer; the T1/T2 path needs a VM.
 - Product versions, GKE details and prices are as of September 2026 and marked (verify).
-
-## Scope of this layer
-
-**Covers:** the NVIDIA GPU Operator, device plugins, node feature discovery, scheduling for GPUs (bin-packing, gang
-scheduling, topology-aware placement, Volcano/Kueue), taints/tolerations, NUMA alignment, multi-tenancy & quotas at
-the cluster level, node autoscaling of GPU pools.
-
-**Signal keywords:** Kubernetes, GPU Operator, device plugin, gang scheduling, Volcano, Kueue, topology-aware,
-bin-packing, node pool, taint, NUMA, cluster autoscaler.
+- Not covered yet: NUMA and CPU-manager alignment, Volcano beyond a table row, MultiKueue, GPU Operator install and
+  upgrade mechanics, node health remediation — see
+  [`CURRICULUM.md` §2](../CURRICULUM.md#2-what-each-layer-has-and-what-it-does-not-cover-yet).
 
 <!-- colab-links:start -->
 ## Run in Colab

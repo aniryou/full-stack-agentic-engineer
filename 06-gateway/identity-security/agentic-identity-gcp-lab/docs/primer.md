@@ -316,11 +316,11 @@ Governance loop: **register** (Agent Registry as the inventory and allowlist) �
 
 ### 11.1 System-design prompts (talk through, 20 minutes each)
 
-1. *"A bank wants a support agent that can read a customer's transactions and issue refunds up to $200. Design the identity and authorization model."* — Expect: user authentication and delegated authority for reads; agent identity with minimal own roles; refund as DESTRUCTIVE with an argument envelope and confirmation above threshold; audit with both identities; kill switch; Model Armor floor.
-2. *"We have 40 agents built by different teams calling 15 MCP servers. How do we govern this?"* — Expect: Agent Registry as inventory; principalSet-level policies; Agent Gateway as the chokepoint with IAP/IAM per SPIFFE ID; VPC-SC `mcp.*` conditions; per-server scopes; deny policies for the never-list; SCC dashboard.
-3. *"An agent needs to call Jira and GitHub on behalf of employees."* — Expect: Auth Manager 3LO providers per SaaS; consent flow (`adk_request_credential`); scopes minimized; the direct-vs-gateway secret-handling choice; revocation on offboarding.
-4. *"Our RAG agent leaked another tenant's document."* — Expect: ACL-aware retrieval under the user's identity; tenant-partitioned indexes and memory; provenance; tests.
-5. *"How would you migrate a service-account-based agent to Agent Identity?"* — Expect: new principal, no inherited permissions; Policy Analyzer; pre-grant; `--no-traffic` revision; verify cert-bound tokens; remove SA keys.
+1. *"A bank wants a support agent that can read a customer's transactions and issue refunds up to $200. Design the identity and authorization model."* — A strong design covers: user authentication and delegated authority for reads; agent identity with minimal own roles; refund as DESTRUCTIVE with an argument envelope and confirmation above threshold; audit with both identities; kill switch; Model Armor floor.
+2. *"We have 40 agents built by different teams calling 15 MCP servers. How do we govern this?"* — A strong design covers: Agent Registry as inventory; principalSet-level policies; Agent Gateway as the chokepoint with IAP/IAM per SPIFFE ID; VPC-SC `mcp.*` conditions; per-server scopes; deny policies for the never-list; SCC dashboard.
+3. *"An agent needs to call Jira and GitHub on behalf of employees."* — A strong design covers: Auth Manager 3LO providers per SaaS; consent flow (`adk_request_credential`); scopes minimized; the direct-vs-gateway secret-handling choice; revocation on offboarding.
+4. *"Our RAG agent leaked another tenant's document."* — A strong design covers: ACL-aware retrieval under the user's identity; tenant-partitioned indexes and memory; provenance; tests.
+5. *"How would you migrate a service-account-based agent to Agent Identity?"* — A strong design covers: new principal, no inherited permissions; Policy Analyzer; pre-grant; `--no-traffic` revision; verify cert-bound tokens; remove SA keys.
 
 ### 11.2 Code-evaluation drills (spot the bug)
 

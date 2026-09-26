@@ -1,33 +1,83 @@
-# 06 · Gateway — auth, rate limits, routing, quotas, observability, cost
+# 06 · Gateway
 
-The control plane in front of the models: who may call, how much, where the call goes, and what
-it cost. Policy and economics enforced in code, outside the model.
+Decide, outside the model, who may run what and how much of it: after this layer you can give each agent its own
+identity, let it act for a user through an RFC 8693 token exchange without widening the user's grant, enforce
+deny-by-default tool policy with an audit trail, turn conversations per day into tokens per minute and dollars, find
+the provisioned-throughput (or own-GPU) break-even, and keep a service up under a 429 storm with rate limits,
+breakers and admission control.
 
-**Covers:** authn/authz & agent identity, delegation/token-exchange, policy enforcement,
-rate limiting & admission control, request routing, quotas & provisioned-throughput budgeting,
-cost accounting, observability, guardrails / prompt-injection defense.
+## Where this layer sits
 
-**Signal keywords:** auth, OAuth, OIDC, SPIFFE, token exchange, RFC 8693, policy, guardrail,
-rate limit, admission control, token bucket, quota, provisioned throughput, cost per conversation,
-circuit breaker, audit, MCP authorization, gateway.
+```
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
+```
 
-## Current contents
+This layer is the control plane in front of the models: it decides whether a request runs at all, before layer 05
+decides where.
 
-### `identity-security/`
-- **`agentic-identity-core/`** — identity & security for an agent loop in one ~250-line file
-  (`agentsec_core.py`): identity, own-vs-delegated authority, policy, resource-server verification, audit.
-- **`agentic-identity-gcp-lab/`** — the full lab: SPIFFE principals, cert-bound tokens, RFC 8693
-  token exchange, DPoP, policy enforcement, prompt-injection guardrails, MCP resource server,
-  A2A agent cards, audit & governance (ADK 2 + MCP + Terraform).
-- **`agentic-identity-core-mistral/`** — Mistral-flavoured variant of the identity core
-  (`agentsec_core_mistral.py` + walkthrough/practice/solution notebooks).
+*Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
+rented for an hour; T3 = the Google Cloud deployment, optional.* Every lab in this layer runs at T0 with no key and
+no GPU. Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 06.1–06.6).
 
-### `scaling-admission-cost/`
-- **`agentic-scaling-lab/`** — scaling by *bounding tokens*: capacity math, provisioned-throughput
-  break-even, token-bucket/backoff/circuit-breaker resilience, admission control & load-shedding,
-  a Cloud Run + Gemini reference architecture. Cross-refs **05-orchestrator**.
-- **`agentic-scaling-lab-mistral/`** — Mistral-platform variant (adds `scalelab/serving.py`;
-  platform-mapping docs in place of the GCP mapping).
+| Topic | You will be able to… | Time | Tier |
+|---|---|---|---|
+| [`identity-security/`](identity-security/README.md) | give an agent its own principal; separate its own authority from authority delegated by a user; enforce policy before every tool call; make an MCP server verify audience and scope itself; screen untrusted content; audit every decision with both identities — a one-file [core](identity-security/agentic-identity-core/README.md), the full [Google Cloud lab](identity-security/agentic-identity-gcp-lab/README.md) with its [primer](identity-security/agentic-identity-gcp-lab/docs/primer.md), and a [Mistral variant](identity-security/agentic-identity-core-mistral/README.md) of the core | ~12 h (core + lab); +1–2 h for the Mistral core | T0 (T3 optional) |
+| [`scaling-admission-cost/`](scaling-admission-cost/README.md) | size an agent service from conversations per day (tokens per minute, turns in flight, cost per conversation); find the provisioned-throughput break-even; bound a turn and survive a crash mid-turn; smooth traffic, retry, break circuits and shed load with `Retry-After`; decide between a hosted API and your own vLLM fleet — the [GCP lab](scaling-admission-cost/agentic-scaling-lab/README.md) with its [primer](scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) and the [Mistral variant](scaling-admission-cost/agentic-scaling-lab-mistral/README.md) | ~6 h; +2 h for the Mistral variant | T0 |
+
+## Start here
+
+1. Read the [scaling primer](scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1–3 (why agents
+   scale differently, the arithmetic).
+2. `cd scaling-admission-cost/agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m scalelab.capacity`
+   — a second, and it prints the capacity plan for 100,000 conversations a day; then open
+   [`01_scaling_math`](scaling-admission-cost/agentic-scaling-lab/notebooks/01_scaling_math.ipynb).
+3. For identity, run `python3 agentsec_core.py` in
+   [`identity-security/agentic-identity-core/`](identity-security/agentic-identity-core/README.md): the five moves
+   end to end with the audit timeline. Then follow the topic [README](identity-security/README.md).
+
+## Run it
+
+Each lab has its own environment. The two scaling labs both install a package named `scalelab`: use a venv each.
+
+```bash
+cd identity-security/agentic-identity-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q   # 13 tests
+cd ../agentic-identity-gcp-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                      # 41 tests, ~6 s
+cd ../../scaling-admission-cost/agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q  # 14 tests, ~4 s
+```
+
+Then open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`; the identity cores keep theirs beside
+the code), or use the Colab links below. The scaling notebooks' checks print `not attempted yet` until you fill an exercise in; that
+is by design, not a failure.
+
+## How it fits
+
+**Builds on** capacity planning in [`00-foundations`](../00-foundations/README.md) (tokens, TTFT and TPOT, Little's
+law) — the one prerequisite for the scaling topic; the identity topic needs nothing from the layers below. The
+Mistral scaling variant's hosted-vs-own-GPUs chapter is easier after layer 04's
+[`serving-engine`](../04-inference-engine/serving-engine/README.md) (a replica's batch and step time). In the
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) this layer comes after the orchestrator (05) and before
+the agents (07); if you already build agents, the curriculum suggests skimming 06.1 first for motivation.
+**Leads to** layer 07 ([`07-application-agent-framework`](../07-application-agent-framework/README.md)): the agent
+loop whose turns this layer bounds, and [sandboxed execution](../07-application-agent-framework/sandboxed-execution/README.md),
+which builds on the identity primer's §6.2. Layer 05 ([`05-orchestrator`](../05-orchestrator/README.md)) sits below:
+admission here, routing and replica autoscaling there.
+
+## Caveats
+
+- The scaling labs' latencies and 429s come from simulations on a virtual clock (a fake model with a shared
+  tokens-per-minute pool); prices, quotas and model ids are dated snapshots marked (verify) in each primer.
+- The identity plane runs on local fakes at T0; the GCP lab's Terraform (T3, optional) binds the same code to
+  Google Cloud's agent identity, credential broker and screening products, dated September 2026 (verify).
+- A model API key (Gemini or Mistral) is optional everywhere: it swaps a scripted model for a real one.
+- Not covered yet: the LLM gateway itself — model routing and fallback chains, semantic caching, token metering and
+  chargeback; see [`CURRICULUM.md`](../CURRICULUM.md) §2 and §6.
 
 <!-- colab-links:start -->
 ## Run in Colab

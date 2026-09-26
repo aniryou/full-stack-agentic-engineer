@@ -1,4 +1,4 @@
-# 04 · Inference engine — vLLM / SGLang / TensorRT-LLM
+# 04 · Inference engine
 
 Understand what one engine instance does between "a request arrived" and "tokens are streaming out": after this
 layer you can size a model's KV cache before paying for a GPU, explain continuous batching, chunked prefill, prefix
@@ -8,23 +8,31 @@ a real server against an SLO.
 ## Where this layer sits
 
 ```
-   05 orchestrator       which replica · how many replicas · prefill/decode split
- ▶ 04 inference engine   one replica: the step loop, the KV cache, batching, attention kernels
-   03 kubernetes-gpu     pods, nodes and GPUs the engine runs on
-   01 hardware           HBM bandwidth and FLOPs that set every step time
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
 
+This layer is one replica: it runs the model (00) on its GPUs (01, 02), inside a pod (03), as one of the
+orchestrator's replicas (05).
+
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
-rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough and include the exercises.
+rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + torch" is T0 with CPU PyTorch installed
+(Colab has it). Times are rough and include the exercises.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook | ~2 h | T0 |
+| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook | ~2 h | T0 + torch (Colab CPU) |
 | [`paged-attention/`](paged-attention/paged-attention-primer.md) | explain fragmentation and how block tables, refcounts and copy-on-write fix it — a primer, `paged_attention_minimal.py` and a practice notebook | ~1.5 h | T0 |
 | [`flash-attention/`](flash-attention/flash-attention-primer.md) | explain tiling and online softmax from zero ([primer](flash-attention/flash-attention-primer.md)), then defend a kernel or backend choice with exact byte counts, the FA2/FA3/FA4 changes, decode kernels, paged KV and a Triton forward pass ([deep dive](flash-attention/flash-attention-deep-dive.md)); `fa_calculators.py` computes every number (49 tests); two notebooks: [practice](flash-attention/flash_attention_practice.ipynb) (five exercises) and the [deep-dive companion](flash-attention/flash_attention_deep_dive.ipynb) | ~1.5 h primer + practice; ~4 h deep dive (rough) | T0 (kernel timing T1) |
 | [`serving-engine/`](serving-engine/README.md) | explain and simulate the engine itself — step loop, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, LoRA, measurement — then size, measure and tune a real vLLM: a [PRIMER](serving-engine/PRIMER.md), [`mini-engine-core`](serving-engine/mini-engine-core/) (a numpy "nano-vLLM", 6 notebooks) and [`vllm-serving-lab`](serving-engine/vllm-serving-lab/) (sizing, a load generator, `/metrics`, a fake vLLM for T0, Cloud Run and GKE deploys, 6 notebooks) | ~11 h primer + core; ~12 h lab | T0 → T1 (T2, T3 optional) |
 | [`quantization/`](quantization/README.md) | say what INT4, FP8, NVFP4 or an FP8 KV cache buys for a given model on a given GPU — decode speed, prefill speed or concurrency — and what each runs as on that GPU generation; make 4 bits accurate with GPTQ, AWQ or SmoothQuant; then produce, serve and evaluate a real quantized checkpoint: a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) (numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model; 5 notebooks) and [`quant-lab`](quantization/quant-lab/) (llm-compressor checkpoints, FP16 vs INT4 vs FP8 in vLLM, lm-eval with error bars, FP8 KV, the NVFP4/MXFP4 layouts; a bundled tiny model and a fake server for T0; 5 notebooks) | ~10 h primer + core; ~9 h lab | T0 → T1 (T3 optional) |
-| [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | three ~2 h sittings + the notebook | T0 (observing it T1) |
+| [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | four ~2 h sittings (about 8.5 h) + the notebook | T0 (observing it T1) |
 
 ## Start here
 
@@ -45,9 +53,9 @@ attention backends (vllm-internals primer §6).
 ## Run it
 
 ```bash
-cd flash-attention && python3 -m pytest -q                         # 49 tests, ~1 s (numpy)
+cd flash-attention && python3 -m pytest -q                         # 49 tests, a few seconds (numpy)
 cd ../serving-engine/mini-engine-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 67 tests, ~15 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 67 tests, ~5 s
 cd ../vllm-serving-lab
 python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 66 tests, a few seconds, offline
 cd ../../quantization/quant-core
@@ -56,15 +64,18 @@ cd ../quant-lab
 python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 86 tests, ~11 s, offline (one needs Terraform, else skipped)
 ```
 
-Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab badges below. The
+Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab links below. The
 vllm-internals notebook needs only the standard library plus the serving lab installed (`pip install -e` above).
 
 ## How it fits
 
-Builds on [`00-foundations/transformers`](../00-foundations/transformers/) (attention and decoding),
+**Needed first:** [`00-foundations/transformers`](../00-foundations/transformers/) (attention and decoding) and
 [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (weights, KV bytes, TTFT
-and TPOT) and layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a
-decode step is a memory read). Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
+and TPOT) — enough for the kernel topics and serving-engine §1–8 at T0. The
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) visits this layer twice on purpose: right after 00 for the
+concepts, then again after layers 01 and 02 with a GPU, when layer 01's
+[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a decode step is a memory
+read) is needed for serving-engine §9–12, the measurements, quantization and the two deep dives. Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
 parallelism runs on) and layer 03's [`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md) (how the engine's pod
 gets its GPUs) sit between them. Two layer-00 topics bring workloads that change how an engine is run:
 [mixture-of-experts](../00-foundations/mixture-of-experts/PRIMER.md) (§6: fused MoE kernels and expert parallelism)
@@ -79,17 +90,6 @@ routes across many engine replicas by prefix-cache affinity and load, autoscales
   or newer GPU (a free T4 runs INT4 and INT8 only), and NVFP4 needs a rented Blackwell GPU.
 - vLLM facts are pinned to v0.30.0 and `main` at `5840d95` (September 2026) and marked `(verify)` where they move;
   each primer ends with a dated verify list.
-
-## Scope of this layer
-
-**Covers:** paged attention & KV-cache management, continuous/in-flight batching, prefill vs decode, attention
-kernels (flash attention), tensor/pipeline parallelism, speculative decoding, quantization (number formats,
-granularity, GPTQ/AWQ/SmoothQuant calibration, W8A8 and FP4 kernels per GPU generation, KV-cache quantization,
-producing and evaluating a checkpoint), throughput-vs-latency tuning.
-
-**Signal keywords:** vLLM, SGLang, TensorRT-LLM, KV cache, paged attention, flash attention, continuous batching,
-prefill/decode, speculative decoding, quantization, GPTQ, AWQ, SmoothQuant, FP8, FP4, NVFP4, MXFP4, KV-cache
-quantization, llm-compressor, tensor parallel, tokens/sec, TTFT, ITL.
 
 <!-- colab-links:start -->
 ## Run in Colab

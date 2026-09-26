@@ -5,7 +5,7 @@ a durable-execution engine (Firestore + Cloud Tasks + Cloud Run + Pub/Sub + Gemi
 the same flow, and an ADK 2 `Workflow` for Vertex AI Agent Engine. Everything runs locally on in-memory adapters
 with the same semantics, so the crash/resume/timeout behaviour is testable in seconds.
 
-**Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/worked/00_core_idea.ipynb` → the rest.
+**Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/practice/00_core_idea.ipynb` → the rest (answers in `notebooks/worked/`).
 
 ## Quick start (no GCP needed)
 
