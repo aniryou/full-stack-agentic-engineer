@@ -1,4 +1,4 @@
-"""Run the same agent loop against a real Mistral model.
+"""Run the same agent loop against a real Mistral model: the provider adapter.
 
 The core loop (agent.py) never mentions a provider — it only needs something with
 a ``.generate(messages, tools) -> Response`` method. ``FakeLLM`` is that for
@@ -9,15 +9,18 @@ other is a single line:
     from agentcore.mistral_llm import MistralLLM
     agent = Agent(MistralLLM(model="mistral-large-latest"), tools=[...])
 
-This file is the *only* Mistral-specific code in the repo. It does two small jobs:
+This file is the *only* Mistral-specific code in the lab. It does two small jobs:
 translate our tool schemas and messages into Mistral's shapes on the way out, and
-translate Mistral's reply back into our ``Response`` on the way in. The four
-conversion functions are pure and importable, so the tests exercise them without
-a network call or an API key.
+translate Mistral's reply back into our ``Response`` on the way in. The conversion
+functions are pure and importable, and ``MistralLLM`` accepts an injected client, so
+the tests exercise all of it without the SDK, a network call or an API key.
 
-Needs ``pip install mistralai`` and ``MISTRAL_API_KEY`` in the environment. The
-SDK surface moves — if a call fails, check https://docs.mistral.ai against the
-notes here.
+A live call needs the optional extra (``pip install -e ".[mistral]"``, the
+``mistralai`` client) and ``MISTRAL_API_KEY``. Without either, ``MistralLLM`` raises
+``MistralUnavailable`` with a message that says which one is missing. The SDK surface
+moves: this file supports ``mistralai`` 2.x (``from mistralai.client import Mistral``,
+2.10 as of 2026-09-26 (verify)) and falls back to the 1.x import; if a call fails,
+check https://docs.mistral.ai against the notes here.
 """
 from __future__ import annotations
 
@@ -86,37 +89,56 @@ def parse_response(mistral_response: Any) -> Response:
 
 
 # -- the adapter ---------------------------------------------------------------
+class MistralUnavailable(RuntimeError):
+    """The live path cannot run here: the ``mistralai`` client or ``MISTRAL_API_KEY`` is missing."""
+
+
+def _sdk_client_class():
+    """The SDK's client class: ``mistralai.client.Mistral`` (2.x), else ``mistralai.Mistral`` (1.x)."""
+    try:
+        from mistralai.client import Mistral       # mistralai 2.x
+        return Mistral
+    except ImportError:
+        pass
+    try:
+        from mistralai import Mistral              # mistralai 1.x
+        return Mistral
+    except ImportError as e:
+        raise MistralUnavailable(
+            "MistralLLM needs the Mistral client: pip install -e \".[mistral]\" (or pip install mistralai), "
+            "then set MISTRAL_API_KEY. The rest of the lab runs offline with FakeLLM."
+        ) from e
+
+
 class MistralLLM:
     """A drop-in replacement for ``FakeLLM`` backed by Mistral's API.
 
     ``model`` is any Mistral model string, e.g. ``mistral-large-latest`` (flagship,
-    best for agents/tool use), ``mistral-medium-latest`` (cheaper frontier),
-    ``mistral-small-latest`` (open-weight, cheap), ``magistral-medium-latest``
-    (reasoning), ``codestral-latest`` (code). See docs/MISTRAL.md.
+    best for agents/tool use), ``mistral-small-latest`` (open-weight, cheap),
+    ``magistral-medium-latest`` (reasoning), ``codestral-latest`` (code). See
+    docs/MISTRAL.md. ``client`` injects anything with ``.chat.complete(**kwargs)``
+    (a test double, or a preconfigured SDK client); when it is given, neither the
+    SDK nor a key is needed.
     """
 
     def __init__(self, model: str = "mistral-large-latest", api_key: str | None = None,
-                 tool_choice: str = "auto", temperature: float | None = None):
-        try:
-            from mistralai import Mistral            # v1.x SDK: `pip install mistralai`
-        except ImportError as e:                      # pragma: no cover - depends on env
-            raise ImportError(
-                "MistralLLM needs the Mistral SDK. Install it with `pip install mistralai` "
-                "and set MISTRAL_API_KEY. (The core lab runs fully offline with FakeLLM — "
-                "you only need this to talk to a real model.)"
-            ) from e
-        key = api_key or os.environ.get("MISTRAL_API_KEY")
-        if not key:
-            raise RuntimeError("set MISTRAL_API_KEY (or pass api_key=...) to use MistralLLM")
+                 tool_choice: str = "auto", temperature: float | None = None, client: Any = None):
         self.model = model
         self.model_name = model
         self.tool_choice = tool_choice
         self.temperature = temperature
-        self._client = Mistral(api_key=key)
         self.calls = 0
+        if client is not None:
+            self._client = client
+            return
+        key = api_key or os.environ.get("MISTRAL_API_KEY")
+        if not key:
+            raise MistralUnavailable("set MISTRAL_API_KEY (or pass api_key=...) to call Mistral's API; "
+                                     "the rest of the lab runs offline with FakeLLM")
+        self._client = _sdk_client_class()(api_key=key)
 
-    def generate(self, messages: list[dict], tools: list[dict] | None = None) -> Response:
-        self.calls += 1
+    def request(self, messages: list[dict], tools: list[dict] | None = None) -> dict[str, Any]:
+        """The keyword arguments ``generate`` sends to ``client.chat.complete`` (pure: no call is made)."""
         kwargs: dict[str, Any] = {"model": self.model, "messages": to_mistral_messages(messages)}
         mtools = to_mistral_tools(tools)
         if mtools:
@@ -124,4 +146,8 @@ class MistralLLM:
             kwargs["tool_choice"] = self.tool_choice
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
-        return parse_response(self._client.chat.complete(**kwargs))
+        return kwargs
+
+    def generate(self, messages: list[dict], tools: list[dict] | None = None) -> Response:
+        self.calls += 1
+        return parse_response(self._client.chat.complete(**self.request(messages, tools)))

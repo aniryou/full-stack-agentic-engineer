@@ -3,7 +3,16 @@
     from agentcore import Agent, tool, FakeLLM, call, calls, text
 
 Three files, ~200 lines, pure standard library, synchronous. Read them in this
-order: fake_llm.py, tools.py, agent.py. When you want the production version
+order: fake_llm.py, tools.py, agent.py. The loop is provider-agnostic — it only
+needs something with ``.generate(messages, tools) -> Response``.
+
+To run against a real Mistral model, use the optional provider adapter (the
+``mistral`` extra and ``MISTRAL_API_KEY``; see docs/MISTRAL.md):
+
+    from agentcore.mistral_llm import MistralLLM
+    agent = Agent(MistralLLM(model="mistral-large-latest"), tools=[...])
+
+When you want the production version
 (async, parallel tools, MCP, OAuth, evals, tracing), that is `gcp-agent-platform-lab`,
 next to this lab in 07-application-agent-framework/agent-fundamentals/ — this is the
 concept it is built on.
@@ -17,3 +26,7 @@ __all__ = [
     "FakeLLM", "Response", "ToolCall", "call", "calls", "text",
     "Tool", "ToolError", "tool", "tool_message",
 ]
+
+# MistralLLM is intentionally not imported here: keeping it out means the core
+# package never depends on the `mistralai` client. Import it explicitly when needed:
+#     from agentcore.mistral_llm import MistralLLM
