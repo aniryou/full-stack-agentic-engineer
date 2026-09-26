@@ -219,7 +219,7 @@
    "id": "long-running-agents-gcp",
    "dir": "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp",
    "python": "3.11",
-   "install": "python -m pip install -e \".[test]\"",
+   "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest tests -q"
   },
   {

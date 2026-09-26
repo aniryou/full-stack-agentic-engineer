@@ -24,6 +24,7 @@ if dirty; then
   echo "::error::a notebook builder changed the tree: rebuild with the builder and commit the result" >&2
   git status --short >&2
   git diff --stat >&2
+  git diff --text | cut -c1-300 | head -n 200 >&2
   exit 1
 fi
 
