@@ -57,8 +57,9 @@ print("unsandboxed:", v.detail, "| leaked:", v.leaked)
 # what it can enforce depends on this machine. The environment secret is gone (clean environment) and the
 # resource abuses are stopped by limits. Three probes depend on **running as a different UID**, which the
 # sandbox can only do when it runs as root (Colab, most CI): the key read (a different UID cannot open your
-# 0700 home — pointing `HOME` at the workspace hides nothing from an absolute path), the fork bomb
-# (`RLIMIT_NPROC` counts processes per UID) and the session escape (only a per-execution UID lets the sandbox
+# 0700 home — pointing `HOME` at the workspace hides nothing from an absolute path), the fork bomb when the
+# sandbox runs as root (`RLIMIT_NPROC` counts tasks per UID and ignores root; as a user the parent counts the
+# run's own process tree instead) and the session escape (only a per-execution UID lets the sandbox
 # find and kill a process that left its process group). And **egress is the one thing a process sandbox never
 # stops**, which it reports honestly. That exception is why the network is a separate control (notebook 04,
 # and NetworkPolicy in the lab).
@@ -76,9 +77,10 @@ for p in PROBES:
 
 # %% [markdown]
 # Read the table: with a per-execution UID every probe but `egress_connect` is contained; without one (not
-# root, or `drop_to_uid=None`) the key read, the fork bomb and the escape get through too. Egress is never
-# contained here, because resource limits do not touch sockets. That is not a bug in the sandbox — it is the
-# boundary between the *process* layer and the *network* layer. Hold that thought for notebook 04.
+# root, or `drop_to_uid=None`) the key read and the escape get through too, and so does the fork bomb as root.
+# Egress is never contained here, because resource limits do not touch sockets. That is not a bug in the
+# sandbox — it is the boundary between the *process* layer and the *network* layer. Hold that thought for
+# notebook 04.
 #
 # ## Exercise 1.1 — classify the blast radius
 # For each probe, say which control bounds it. Fill `control` with one of `"clean_env"`, `"separate_uid"`,
