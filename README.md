@@ -1,5 +1,7 @@
 # full-stack-agentic-engineer — the LLM serving stack, from GPUs to agents
 
+**Read it as a site:** <https://aniryou.github.io/full-stack-agentic-engineer/> (same content, with search and rendered notebooks).
+
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to the agent application at the top. It is
 organised as eight layers and, within each layer, by topic. Each topic has a primer, a small from-scratch
