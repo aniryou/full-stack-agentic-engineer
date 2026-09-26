@@ -42,7 +42,8 @@ Notes:
 
 **Cost:** see the Terraform README. With these workloads installed an *idle* hour still costs
 ~$0.44 (assumed prices, verify): `minReplicas: 1` keeps one vLLM pod, so one L4 Spot node stays up.
-Only after `uninstall.sh` does the GPU pool drop to 0 (~$0.16/h until `terraform destroy`).
+Only after `uninstall.sh` does the GPU pool drop to 0 (the system node and disks, ~$0.13–0.16/h, until
+`terraform destroy`; `uninstall.sh` deletes the Gateway and with it the load balancer).
 **Cleanup:** `PROJECT_ID=<id> ./uninstall.sh` (removes the workloads, the metrics adapter and its
 project-level IAM binding, which `terraform destroy` would leave behind), then `terraform destroy`
 in `../gcp/terraform`.
