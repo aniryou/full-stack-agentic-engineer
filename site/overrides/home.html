@@ -7,8 +7,9 @@
     copper for the request arrow and T0. Slate (dark) redefines the same tokens.
   - Type: Archivo for the few headings, Material's body font for text, IBM Plex Mono for layer numbers and tiers.
   - Layout: one column on phones; from 60em the stack map sits beside "How to use it".
-  - The stack map is an ordered list of links, 07 at the top to 01, with 00 dashed beneath; a copper line on its
-    right edge shows a request going down. Every rule for this page is scoped under .fse-home.
+  - The stack map is an ordered list of rows, 07 at the top to 01: a mono number badge, the layer name (the link) and
+    a muted one-line description, separated by hairlines. A thin copper rule runs down behind the badges and ends in
+    an arrowhead: a request going down. 00 sits beneath with an outlined badge. Every rule for this page is scoped under .fse-home.
   (A Jinja comment, not an HTML one: an HTML comment here would be sent before <!doctype html>.)
 -#}
 {% extends "main.html" %}
@@ -37,7 +38,6 @@
   <div class="fse-columns">
     <section aria-labelledby="fse-stack-title">
       <h2 id="fse-stack-title" class="fse-h2">The stack</h2>
-      <p class="fse-note">A request enters at the agent (07) and goes down to the GPUs (01). Each layer opens its page.</p>
       {% set layers = [
         ("07-application-agent-framework", "07", "Agents", "the agent loop, tools, state, durable execution, evals, retrieval"),
         ("06-gateway", "06", "Gateway", "identity and policy, rate limits, admission control, cost"),
@@ -48,36 +48,40 @@
         ("01-hardware-gpu-fabric", "01", "Hardware and fabric", "spec sheets, the roofline, fabrics, the cost of a token"),
         ("00-foundations", "00", "Foundations", "transformer internals, capacity planning, the model landscape"),
       ] %}
-      <ol class="fse-stack" aria-label="Layers 07 to 01, top to bottom">
+      <ol class="fse-stack" aria-label="Layers 07 to 01: a request enters at the agent and goes down to the GPUs">
         {% for folder, num, name, what in layers if num != '00' %}
-        <li><a class="fse-band" href="{{ ('layers/' ~ folder ~ '/') | url }}">
-          <span class="fse-band__num">{{ num }}</span>
-          <span class="fse-band__name">{{ name }}</span>
-          <span class="fse-band__what">{{ what }}</span>
+        <li><a class="fse-layer" href="{{ ('layers/' ~ folder ~ '/') | url }}">
+          <span class="fse-layer__num">{{ num }}</span>
+          <span class="fse-layer__text">
+            <span class="fse-layer__name">{{ name }}</span>
+            <span class="fse-layer__what">{{ what }}</span>
+          </span>
         </a></li>
         {% endfor %}
       </ol>
       {% for folder, num, name, what in layers if num == '00' %}
-      <p class="fse-base"><a class="fse-band fse-band--base" href="{{ ('layers/' ~ folder ~ '/') | url }}">
-        <span class="fse-band__num">{{ num }}</span>
-        <span class="fse-band__name">{{ name }}</span>
-        <span class="fse-band__what">{{ what }}; beneath the stack</span>
-      </a></p>
+      <a class="fse-layer fse-layer--base" href="{{ ('layers/' ~ folder ~ '/') | url }}">
+        <span class="fse-layer__num">{{ num }}</span>
+        <span class="fse-layer__text">
+          <span class="fse-layer__name">{{ name }}</span>
+          <span class="fse-layer__what">{{ what }}; beneath the stack</span>
+        </span>
+      </a>
       {% endfor %}
-      <p class="fse-note"><a href="{{ 'layers/' | url }}">All layers and their topics</a></p>
+      <p class="fse-more"><a href="{{ 'layers/' | url }}">All layers and their topics</a></p>
     </section>
 
     <section aria-labelledby="fse-use-title">
       <h2 id="fse-use-title" class="fse-h2">How to use it</h2>
       <ol class="fse-use">
-        <li>Pick a layer from the stack, or follow the <a href="{{ 'guide/curriculum/' | url }}">learning path</a>,
-          which orders the topics and estimates the hours.</li>
-        <li>Read the topic's primer first, section by section as the notebooks ask for it.</li>
-        <li>Run the core notebooks. They need no GPU: a laptop or a free Colab CPU session is enough.
-          Each exercise is followed by a check cell.</li>
-        <li>Go on to the lab when you have a GPU or a cloud project. Every lab notebook also has an offline path.</li>
-        <li>To redo an exercise, <code>git restore &lt;notebook&gt;</code> returns it to blank; on Colab, reopen it
-          from its badge.</li>
+        <li><div>Pick a layer from the stack, or follow the <a href="{{ 'guide/curriculum/' | url }}">learning path</a>,
+          which orders the topics and estimates the hours.</div></li>
+        <li><div>Read the topic's primer first, section by section as the notebooks ask for it.</div></li>
+        <li><div>Run the core notebooks. They need no GPU: a laptop or a free Colab CPU session is enough.
+          Each exercise is followed by a check cell.</div></li>
+        <li><div>Go on to the lab when you have a GPU or a cloud project. Every lab notebook also has an offline path.</div></li>
+        <li><div>To redo an exercise, <code>git restore &lt;notebook&gt;</code> returns it to blank; on Colab, reopen it
+          from its badge.</div></li>
       </ol>
 
       <h3 class="fse-h3">Run tiers</h3>
