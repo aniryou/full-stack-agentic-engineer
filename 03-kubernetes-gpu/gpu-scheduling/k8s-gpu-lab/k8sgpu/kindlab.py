@@ -184,11 +184,12 @@ def settle(k: Kubectl, sc: Scenario, *, stable_s: float = 12.0, timeout_s: float
             return cur
         if time.time() - start > timeout_s:
             return cur
-        time.sleep(poll_s)
+        if poll_s:
+            time.sleep(poll_s)
 
 
 def run_scenario(key: str, *, k: Kubectl | None = None, dry_run: bool = False, do_reset: bool = True,
-                 printer: Callable[[str], None] = print) -> dict:
+                 printer: Callable[[str], None] = print, stable_s: float = 12.0, poll_s: float = 3.0) -> dict:
     """Apply a scenario on the cluster step by step; print predictions, observations and differences."""
     sc = get_scenario(key)
     k = k or Kubectl(dry_run=dry_run, echo=printer)
@@ -212,7 +213,7 @@ def run_scenario(key: str, *, k: Kubectl | None = None, dry_run: bool = False, d
                   name, "-n", ns, f"--replicas={st.replicas}")
         kindsim.run_step(sim, sc, i)
         predicted = sim.outcome()
-        observed = settle(k, sc, stable_s=12.0 if st.action == "apply" else 30.0,
+        observed = settle(k, sc, stable_s=stable_s if st.action == "apply" else 2.5 * stable_s, poll_s=poll_s,
                           expect_keys=[kk for kk in predicted if st.action != "apply" or kk in _keys_of(st)])
         if live:   # follow the scheduler's random choices so later predictions start from reality
             for kk, o in observed.items():

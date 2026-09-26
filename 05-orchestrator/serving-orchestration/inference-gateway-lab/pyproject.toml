@@ -27,3 +27,4 @@ igwlab = ["configs/*.yaml", "crds/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

@@ -84,8 +84,8 @@ the core's tests check that nothing leaks.
 
 **What sits outside the loop but matters.** CUDA Graphs replay a captured decode step to remove kernel-launch
 overhead (why engines capture graphs for a set of batch sizes — [cuda-and-nccl §4](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md));
-asynchronous scheduling overlaps the CPU work of step n+1 with the GPU work of step n (verify: on by default in
-recent vLLM); memory profiling at start-up decides how many KV blocks exist (§4).
+asynchronous scheduling overlaps the CPU work of step n+1 with the GPU work of step n (on unless disabled in
+recent vLLM, verify); memory profiling at start-up decides how many KV blocks exist (§4).
 
 ## 2. Continuous batching
 
@@ -276,8 +276,8 @@ request evicted 13 blocks, the first 32 tokens of the system prompt were still c
 costs no memory; it uses memory nobody else needs yet.
 
 **Hit accounting** is in tokens: `vllm:prefix_cache_queries` counts prompt tokens looked up, `vllm:prefix_cache_hits`
-those found (`CacheStats`). Three requests sharing a 176-token system prompt: the second and third hit 176 of their
-205–210 prompt tokens. The payoff is TTFT and prefill compute: 60 requests with 2,000–2,200-token prompts that share
+those found (`CacheStats`). Three requests sharing a 183-token system prompt: the second and third hit 176 tokens (its 11 full
+blocks) of their 205–210 prompt tokens. The payoff is TTFT and prefill compute: 60 requests with 2,000–2,200-token prompts that share
 their first 1,800 tokens, H100 + Llama-3.1-8B — hit rate 84%, **TTFT p50 13 ms vs 74 ms** without caching, and the
 shared blocks cut peak KV use from 7% to 1% of the pool (SIMULATED).
 
@@ -466,7 +466,7 @@ concurrency lever before it is a speed lever** ([capacity planning, formula 2](.
 
 **Checking accuracy.** Compare distributions, not strings: mean KL and top-1 agreement over many positions
 (`quant.compare_logits()`), perplexity, and above all task-level evals on your own data. Greedy text is a brittle
-metric — in notebook 06 an INT8 model with 99.8% top-1 agreement diverges from the bf16 greedy text after 13 tokens,
+metric — in notebook 06 an INT8 model with 99.8% top-1 agreement diverges from the full-precision greedy text after 13 tokens,
 because one flipped near-tie changes everything after it.
 
 ## 9. Parallelism inside the engine
@@ -501,7 +501,7 @@ linearly; what matters is routing requests to the replica that holds their prefi
 
 **Choosing.** Use the smallest TP that fits weights plus the KV cache you need; add replicas for throughput. An 8B
 model fits one 24 GB GPU (§4); a 70B model needs 141 GB in bf16 — TP = 2 on 80 GB GPUs leaves almost nothing for KV,
-TP = 4 leaves ~40 GB per GPU of headroom, or INT4 (36 GB, exercise 6.3) fits one GPU. vLLM's flags:
+TP = 4 leaves ~37 GB per GPU for KV at 90% utilisation, or INT4 (36 GB, exercise 6.3) fits one GPU. vLLM's flags:
 `--tensor-parallel-size`, `--pipeline-parallel-size`, `--data-parallel-size`, `--enable-expert-parallel` (verify).
 To try TP yourself you need two GPUs (tier T2): Kaggle's free 2×T4 shows the mechanics over PCIe, a rented NVLink
 pair shows the speed ([`COMPUTE.md`](../../COMPUTE.md)).
@@ -621,7 +621,7 @@ token budget — running requests first, one token each for decodes and a chunk 
 waiting requests while there are sequence slots and KV blocks. Everything scheduled is flattened into one batch, so
 the weights are read once for all of it, and attention reads each request's history through its block table. A step
 is memory-bound up to ~300 tokens on an H100, so decodes batch almost for free and a long prompt is the expensive
-thing; chunked prefill caps the step so a 8K-token prompt cannot stall everyone's stream, and I set the budget as
+thing; chunked prefill caps the step so an 8K-token prompt cannot stall everyone's stream, and I set the budget as
 large as the ITL SLO allows. Concurrency is capped by KV memory — about 28 chat sessions for an 8B model on an L4 —
 and when it runs out the newest request is preempted and recomputed, which shows up as TTFT, so we alert on
 preemptions. Prefix caching names each full block by a hash chained through its parent, so our agents' shared
@@ -737,7 +737,9 @@ main branch source on that date — re-check them against the release you pin.
   for `max_num_batched_tokens` / `max_num_seqs` (2,048/256 below 70 GB or on A100; 8,192/1,024 H100/H200-class;
   16,384/1,024 at ≥160 GB); chunked prefill on by default and `max_num_batched_tokens ≥ max_model_len` required without it;
   `long_prefill_token_threshold`; preemption by recompute only in V1 and `kv_offloading_size` for CPU offload;
-  `max_cache_hit_length = num_tokens − 1`; tail-first freeing into an LRU free queue.
+  `max_cache_hit_length = num_tokens − 1`; tail-first freeing into an LRU free queue; the start-up error when one
+  `max_model_len` sequence cannot fit the KV cache; `async_scheduling` on unless disabled; `include_stop_str_in_output`
+  false by default.
 - **vLLM sampling and outputs:** the sampler order (allowed tokens/bad words/logit bias → penalties → greedy below
   1e-5 → temperature → min-p → top-k/top-p); `logprobs_mode` default `raw_logprobs`; `top_k` 0 or −1 disables; batch-invariant
   mode; structured-output backends `auto`, `xgrammar`, `guidance`, `outlines`, `lm-format-enforcer`; speculative methods

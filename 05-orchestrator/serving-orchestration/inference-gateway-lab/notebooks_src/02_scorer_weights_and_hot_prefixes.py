@@ -55,8 +55,8 @@ print("\nTTFT p90 (ms, emulated backend):")
 print(ascii_bars({k: r.summary()["ttft_p90_ms"] for k, r in hot_results.items()}))
 
 # %% [markdown]
-# `prefix-only` sends everything for the hot program to one replica: the best hit rate and the worst
-# latency, because that replica's prefill queue grows while two replicas idle. `load-only` spreads
+# `prefix-only` sends everything for the hot program to one replica: a top hit rate and by far the
+# worst latency, because that replica's prefill queue grows while two replicas idle. `load-only` spreads
 # evenly and pays for it in re-prefilled histories. The weighted and sticky policies both keep most
 # of the hits while letting load push traffic off a busy replica — once a second replica has served
 # the hot prefix, the index lists it too and both become "sticky".
