@@ -136,14 +136,18 @@ def matmul_bench(n: int = 1024, tile: int = 16) -> dict:
 
         if torch.cuda.is_available():
             ta = torch.ones((n, n), device="cuda", dtype=torch.float32)
-            torch.backends.cuda.matmul.allow_tf32 = False  # compare like with like: FP32
-            for _ in range(3):
-                ta @ ta
-            torch.cuda.synchronize()
-            t0 = time.perf_counter()
-            for _ in range(10):
-                ta @ ta
-            torch.cuda.synchronize()
+            tf32 = torch.backends.cuda.matmul.allow_tf32
+            torch.backends.cuda.matmul.allow_tf32 = False  # compare like with like: FP32 on CUDA cores
+            try:
+                for _ in range(3):
+                    ta @ ta
+                torch.cuda.synchronize()
+                t0 = time.perf_counter()
+                for _ in range(10):
+                    ta @ ta
+                torch.cuda.synchronize()
+            finally:
+                torch.backends.cuda.matmul.allow_tf32 = tf32
             s = (time.perf_counter() - t0) / 10
             out["cublas_fp32 (torch)"] = {"seconds": s, "gflops": flops / s / 1e9}
     except ImportError:
@@ -162,7 +166,7 @@ def softmax_bench(rows: int = 4096, cols: int = 4096, threads: int = 256) -> dic
     res["fused"] = {"seconds": s, "gbps": traffic.effective_gbps(traffic.softmax_bytes(rows, cols, "fused"), s)}
     bufs = sm.unfused_buffers(rows, cols)
     s = time_launches(lambda: sm.run_softmax_unfused(x, threads, bufs))
-    res["unfused"] ={"seconds": s, "gbps": traffic.effective_gbps(traffic.softmax_bytes(rows, cols, "unfused"), s)}
+    res["unfused"] = {"seconds": s, "gbps": traffic.effective_gbps(traffic.softmax_bytes(rows, cols, "unfused"), s)}
     return res
 
 
