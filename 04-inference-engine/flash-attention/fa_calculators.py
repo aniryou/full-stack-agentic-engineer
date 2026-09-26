@@ -138,7 +138,9 @@ def flash_traffic(n: int, d: int, block_m: int, block_n: int, b: int = 2,
     """HBM bytes for one head under the tiled schedules, assuming NO L2 reuse (the paper's model).
 
     fa1: outer loop over K/V blocks, inner over Q blocks. K, V read once; for every K/V block
-         the whole Q and O stream through (O and the fp32 (m, l) are read and written back).
+         the Q blocks it touches stream through (Q read, O and the fp32 (m, l) read and written
+         back). Non-causal: all of Q and O, every K/V block. Causal: only the Q blocks that
+         reach this K/V block's first key (the rest are above the diagonal and skipped).
     fa2: outer loop over Q blocks (one CTA each), inner over K/V blocks. Q read once, O and LSE
          written once; K and V are re-read once per Q block (only below-diagonal blocks if causal).
     Real kernels on GPUs with a large L2 see much less DRAM traffic, because CTAs working on the
@@ -148,9 +150,14 @@ def flash_traffic(n: int, d: int, block_m: int, block_n: int, b: int = 2,
     t_c = math.ceil(n / block_n)
     if schedule == "fa1":
         kv = 2 * n * d * b
-        per_kv_block = 3 * n * d * b + 4 * n * 4        # read Q, read O, write O; r/w m and l
-        total = kv + t_c * per_kv_block
-        parts = {"K,V once": kv, "Q,O,m,l per K/V block": t_c * per_kv_block}
+        per_row = 3 * d * b + 4 * 4                      # read Q, read O, write O; r/w m and l (fp32)
+        if causal:
+            # Q block i touches K/V block j iff its last row (i+1)*B_r - 1 >= j*B_c
+            rows = sum(n - min(n, (j * block_n // block_m) * block_m) for j in range(t_c))
+        else:
+            rows = t_c * n
+        total = kv + rows * per_row
+        parts = {"K,V once": kv, "Q,O,m,l per K/V block": rows * per_row}
     elif schedule == "fa2":
         if causal:
             visited, _, _ = causal_tiles(n, n, block_m, block_n)
@@ -171,6 +178,29 @@ def tile_smem_bytes(block_m: int, block_n: int, d: int, b: int = 2, kv_stages: i
     return (block_m + 2 * block_n * kv_stages) * d * b
 
 
+def fa1_block_sizes(smem_elems: int, d: int) -> tuple[int, int]:
+    """The FA1 paper's block sizes for M elements of SRAM: B_c = ceil(M/(4d)), B_r = min(B_c, d)."""
+    b_c = math.ceil(smem_elems / (4 * d))
+    return b_c, min(b_c, d)
+
+
+def io_saving(d: int, schedule: str = "fa1", smem_elems: int | None = None,
+              block_m: int | None = None) -> float:
+    """Large-N ratio naive bytes / tiled bytes, keeping the constants the Theta hides.
+
+    naive ~ 4 N^2 elements.
+    fa1:  T_c = N / B_c outer iterations, each streaming Q in and O in and out (3 N d), with the
+          paper's B_c = M / (4d):  12 N^2 d^2 / M   ->  saving M / (3 d^2).
+    fa2:  T_r = N / B_r Q blocks, each re-reading K and V (2 N d):  2 N^2 d / B_r
+          ->  saving 2 B_r / d   (no L2 reuse).
+    """
+    if schedule == "fa1":
+        return smem_elems / (3.0 * d * d)
+    if schedule == "fa2":
+        return 2.0 * block_m / d
+    raise ValueError(schedule)
+
+
 # ---------------------------------------------------------------------------------------
 # Roofline
 # ---------------------------------------------------------------------------------------
@@ -184,6 +214,37 @@ def roofline(flops: float, bytes_: float, device: str | Device) -> dict:
             "bound": "memory" if t_m > t_c else "compute",
             "attainable_tflops": flops / t / 1e12,
             "fraction_of_peak": (flops / t) / (dev.bf16_tflops * 1e12)}
+
+
+def clocks_per_score(device: str, d: int = 128, fp32_instr_per_score: float = 5.0) -> dict:
+    """SM clocks one attention score costs on each unit, if that unit ran alone.
+
+    Per score: 4d tensor-core FLOPs (Q K^T and P V), one EX2 on the MUFU, and about five FP32
+    instructions (scale-and-subtract FFMA, max, add into l, the amortized O rescale, conversion).
+    Returns clocks per unit and the EX2 / FP32 time as a fraction of the MMA time.
+    """
+    u = PER_SM_CLOCK[device]
+    mma = 4.0 * d / u["mma_flops"]
+    ex2 = 1.0 / u["mufu"]
+    fp32 = fp32_instr_per_score / u["fp32_instr"]
+    return {"mma": mma, "ex2": ex2, "fp32": fp32, "ex2_vs_mma": ex2 / mma, "fp32_vs_mma": fp32 / mma}
+
+
+def fa3_registers(block_m_per_wg: int = 64, block_n: int = 176, d: int = 128,
+                  load_regs: int = 24, mma_regs: int = 240, consumer_wgs: int = 2) -> dict:
+    """FA3's register budget (hopper: LoadRegisterRequirement / MmaRegisterRequirement).
+
+    Per consumer thread (128 threads per warpgroup): fp32 score tile, fp32 output accumulator,
+    and the 16-bit probabilities packed two per 32-bit register. Per SM: one producer warpgroup
+    at load_regs plus consumer_wgs warpgroups at mma_regs, against the 65,536-register file.
+    """
+    threads = 128
+    s = block_m_per_wg * block_n // threads
+    o = block_m_per_wg * d // threads
+    p = block_m_per_wg * block_n * 2 // (threads * 4)
+    total = threads * load_regs + consumer_wgs * threads * mma_regs
+    return {"scores": s, "out_acc": o, "probs_16bit": p, "consumer_live": s + o + p,
+            "sm_total": total, "register_file": 65_536}
 
 
 # ---------------------------------------------------------------------------------------
@@ -266,6 +327,79 @@ def fa2_decode_splits(batch: int, n_heads_q: int, n_heads_kv: int, seqlen_k: int
 
 
 # ---------------------------------------------------------------------------------------
+# FlashAttention-3's split-KV chooser, ported from hopper/heuristics.h, hopper/flash_api.cpp
+# (get_num_splits) and hopper/flash_prepare_scheduler.cu (fetched 2026-09-26; vLLM's fork
+# vllm-project/flash-attention computes the same splits for this case).
+# ---------------------------------------------------------------------------------------
+def fa3_num_splits_heuristic(total_mblocks: int, num_sms: int, num_n_blocks: int,
+                             num_m_blocks: int, size_one_kv_head: int,
+                             is_causal_or_local: bool, max_splits: int = 128) -> int:
+    """FA3's version: no 2x SM count, no eligibility skip, never split <= 4 KV blocks, and split
+    a full GPU only when one KV head exceeds a 50 MB L2 estimate (non-causal, many query blocks)."""
+    if total_mblocks >= 0.8 * num_sms:
+        size_l2 = 50 * 1024 * 1024
+        if size_one_kv_head > size_l2 and num_m_blocks >= num_sms * 2 and not is_causal_or_local:
+            return min(math.ceil(size_one_kv_head / size_l2), max_splits)
+        return 1
+    if num_n_blocks <= 4:
+        return 1
+    max_splits = min(max_splits, num_sms, num_n_blocks)
+    eff = []
+    for s in range(1, max_splits + 1):
+        waves = float(np.float32(total_mblocks * s) / np.float32(num_sms))
+        eff.append(waves / math.ceil(waves))
+    best = max(eff)
+    for s in range(1, max_splits + 1):
+        if eff[s - 1] >= 0.85 * best:
+            return s
+    return 1
+
+
+def fa3_decode_splits(batch: int, n_heads_q: int, n_heads_kv: int, seqlen_k: int,
+                      head_dim: int, num_sms: int, block_n: int = 128, b: int = 2,
+                      max_splits: int = 0) -> dict:
+    """What FA3 launches for a uniform decode batch passed the way vLLM passes it (varlen,
+    paged KV, seqlen_q = 1, causal).
+
+    Tile: with vLLM's 16-token pages the paged path cannot use TMA (page size is not a
+    multiple of kBlockN), and for head_dim 128 causal is kept, so kBlockN = 128
+    (tile_size_fwd_sm90). GQA is always packed when splitting.
+    Static split (get_num_splits): varlen uses dynamic splitting, so the static count is an
+    upper bound computed as if batch = 1. max_splits > 0 replaces it (vLLM passes its CUDA-graph
+    cap, 32 by default, when the step runs under a full CUDA graph; 0 otherwise).
+    Dynamic split (prepare_varlen_num_blocks_kernel), per sequence:
+        blocks_per_sm = ceil(total_blocks * 1.1 * n_heads_kv / num_sms)
+        splits        = clamp(ceil(n_blocks / blocks_per_sm), 1, static)
+    """
+    group = n_heads_q // n_heads_kv
+    block_m = 64 if group <= 64 else 128            # vLLM's build: one MMA warpgroup for small packed decode
+    m_blocks = math.ceil(group / block_m)
+    n_blocks = math.ceil(seqlen_k / block_n)
+    size_one_kv_head = seqlen_k * 2 * head_dim * b
+    static = max_splits if max_splits > 0 else fa3_num_splits_heuristic(
+        1 * n_heads_kv * m_blocks, num_sms, n_blocks, m_blocks, size_one_kv_head, True)
+    if batch > 992 or static == 1:
+        dynamic = 1
+    else:
+        total_blocks = batch * m_blocks * n_blocks
+        blocks_per_sm = math.ceil(float(np.float32(total_blocks) * np.float32(1.1)
+                                        * np.float32(n_heads_kv) / np.float32(num_sms)))
+        dynamic = max(min(math.ceil(n_blocks / blocks_per_sm), static), 1)
+    ctas = batch * n_heads_kv * m_blocks
+    return {"group": group, "ctas_without_split": ctas, "block_n": block_n, "n_blocks": n_blocks,
+            "static_splits": static, "splits": dynamic, "ctas": ctas * dynamic,
+            "blocks_per_split": math.ceil(n_blocks / dynamic)}
+
+
+def split_partials_bytes(splits: int, batch: int, n_heads_kv: int, group: int, d_v: int) -> dict:
+    """fp32 partial outputs and LSEs of one split-KV launch (GQA packed: group rows per KV head).
+    Each is written once by the split kernel and read once by the combine."""
+    o = splits * batch * n_heads_kv * group * d_v * 4
+    lse = splits * batch * n_heads_kv * group * 4
+    return {"o_bytes": o, "lse_bytes": lse, "traffic": 2 * (o + lse)}
+
+
+# ---------------------------------------------------------------------------------------
 # Decode
 # ---------------------------------------------------------------------------------------
 def kv_bytes_per_token(n_layers: int, n_kv_heads: int, head_dim: int, b: int = 2) -> int:
@@ -293,6 +427,38 @@ def mla_decode_intensity(n_heads: int = 128, d_latent: int = 512, d_rope: int = 
     """
     flops = 2 * (d_latent + d_rope) * n_heads + 2 * d_latent * n_heads
     return flops / ((d_latent + d_rope) * b)
+
+
+def mla_cache_ratio(n_heads: int = 128, d_nope: int = 128, d_rope: int = 64, d_v: int = 128,
+                    d_latent: int = 512, count_rope_in_key: bool = True) -> dict:
+    """Bytes per token per layer (bf16) of the equivalent multi-head K/V cache vs MLA's latent.
+
+    Multi-head: every head caches a key of d_nope + d_rope dims and a value of d_v dims.
+    MLA: one latent of d_latent plus one shared rotary key of d_rope. Counting the key at
+    d_nope only (as if keys were as wide as values) gives the smaller ratio some pages quote.
+    """
+    key = d_nope + (d_rope if count_rope_in_key else 0)
+    mha = n_heads * (key + d_v) * 2
+    mla = (d_latent + d_rope) * 2
+    return {"mha_bytes": mha, "mla_bytes": mla, "ratio": mha / mla}
+
+
+def mla_prefill_absorbed_ratio(d_latent: int = 512, d_rope: int = 64, d_nope: int = 128,
+                               d_v: int = 128) -> float:
+    """Quadratic FLOPs of attention done in the latent space (absorbed) vs per-head K/V:
+    scores + outputs over (d_latent + d_rope) + d_latent dims instead of (d_nope + d_rope) + d_v."""
+    return ((d_latent + d_rope) + d_latent) / ((d_nope + d_rope) + d_v)
+
+
+def padding_waste(lengths, tile: int = 128) -> dict:
+    """Score pairs of a batch padded to its longest sequence vs packed (varlen), and the
+    fraction of its last Q tile each sequence actually uses."""
+    lengths = list(lengths)
+    padded = len(lengths) * max(lengths) ** 2
+    actual = sum(n * n for n in lengths)
+    util = [n / (math.ceil(n / tile) * tile) for n in lengths]
+    return {"padded_pairs": padded, "actual_pairs": actual, "waste": padded / actual,
+            "tile_utilisation": util}
 
 
 def prefill_attention_share(context: int, n_heads: int, head_dim: int,

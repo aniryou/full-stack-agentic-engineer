@@ -1,8 +1,8 @@
 # Reading the machine: rooflines, memory hierarchy, fabrics, and the cost of a token
 
 *A primer for layer 01. Snapshot: September 2026. Product facts are dated and marked (verify); every
-formula has a worked number, and every number is computed by a function in
-[`roofline-core/`](roofline-core/) and pinned by its tests.*
+formula has a worked number, and every computed number comes from a function in
+[`roofline-core/`](roofline-core/) and is pinned by its tests.*
 
 This primer turns a GPU datasheet and a network diagram into predictions you can defend: how long an
 LLM step takes and which resource bounds it, what a collective costs on each kind of link, how long a
@@ -23,11 +23,12 @@ bandwidth)**, and the ratio peak ÷ bandwidth — the **ridge point**, about 295
 in bf16 — is the arithmetic intensity a kernel needs before the math units are the limit. An LLM step
 streams every weight once however many tokens it carries, so its intensity is roughly **the number of
 tokens in the step**: a 2K-token prefill is compute-bound (TTFT ≈ FLOPs ÷ peak), a batch-1 decode step
-sits at ~1 FLOP/B (time per token ≈ bytes ÷ bandwidth), and batching helps decode until each sequence's
-**KV-cache reads**, which grow as fast as its FLOPs, cap it far below the ridge. Quantization and MoE
-change **bytes**. Between GPUs every transfer costs **α + n/β**: decode's tensor-parallel all-reduces are
-latency-bound, prefill's are bandwidth-bound, and β falls ~9× from NVLink to a 400 Gb/s NIC — so tensor
-parallelism stays inside the NVLink domain. Then three fleet numbers follow from the same arithmetic:
+sits at ~1 FLOP/B (time per token ≈ bytes ÷ bandwidth), and batching lifts decode's weight GEMMs toward
+the ridge while each sequence's **KV-cache reads**, which grow as fast as its attention FLOPs, keep
+attention at a few FLOP/B and come to dominate the step. Quantization and MoE change **bytes**. Between
+GPUs every transfer costs **α + n/β**: decode's tensor-parallel all-reduces are latency-bound, prefill's
+are bandwidth-bound and do not shrink as the TP degree grows, and β per GPU falls ~9× from NVLink to a
+400 Gb/s NIC — so tensor parallelism stays inside the NVLink domain. Then three fleet numbers follow from the same arithmetic:
 cold start is **bytes ÷ the slowest tier**, failure rates **add** (checkpoint every √(2 δ M)), and
 **$/M tokens = $/GPU-hr ÷ (tokens/s × 3600 × utilisation) × 10⁶**.
 
@@ -46,7 +47,7 @@ A datasheet is a handful of numbers. Five of them carry almost every argument in
 | Network | bytes, not bits | a 400 Gb/s NIC moves 50 GB/s |
 
 Two more lines matter for planning. **TDP** (or TBP) is the board power the cooling and power delivery
-must sustain — 72 W for an L4, 700 W for an H100 SXM, 1,400 W for a GB300 — and under sustained tensor
+must sustain — 72 W for an L4, 700 W for an H100 SXM, 1,400 W for a GB300 (verify) — and under sustained tensor
 load clocks drop below boost to stay inside it, so a measured peak lands below the datasheet (measure it:
 `gpu-bench-lab` notebook `01_measure_your_roofline`). **Form factor** changes the part: an H100 PCIe card
 has fewer SMs, HBM2e at ~2 TB/s and a 350 W limit (verify), so "H100" alone is ambiguous — always name
@@ -135,7 +136,7 @@ does 1.1 × 10¹² FLOPs and cannot finish in less than 1.11 ms on an H100.
 
 It is a bound, not a prediction. Real kernels miss both ceilings: sustained clocks sit below boost, a
 kernel rarely overlaps loads and math perfectly, the last wave of thread blocks leaves SMs idle (wave
-quantization), and tiny kernels are dominated by launch latency (a 128³ GEMM is 4 MFLOP — tens of
+quantization), and tiny kernels are dominated by launch latency (a 128³ GEMM is 4 MFLOP — a few
 nanoseconds at peak, microseconds in practice). It also assumes compulsory traffic; §4 shows how far a
 real tiling is from that. Use the model to decide *which* ceiling to attack, then measure how close you
 get (`gpu-bench-lab` fits a measured roofline to your device).
@@ -195,10 +196,12 @@ reads its own KV cache:
 | 32 | 21.8 | 7.05 ms | 4,542 | 142 | 36% |
 | 64 | 32.0 | 9.61 ms | 6,659 | 104 | 53% |
 | 128 | 41.7 | 14.74 ms | 8,682 | 68 | 70% |
-| 256 | 49.2 | 25.00 ms | 10,238 | 40 | 82% |
+| 208 (HBM limit) | 47.2 | 21.16 ms | 9,832 | 47 | 79% |
 
-Throughput climbs with batch and per-user speed falls: the trade you tune against an ITL SLO. Under a
-20 ms ITL at 4K context the largest batch is 96 (`best_batch_under_itl()`); HBM capacity allows 104.
+Throughput climbs with batch and per-user speed falls: the trade you tune against an ITL SLO. The table
+stops where HBM does: 208 sequences of 2K tokens fit beside the weights with 10% headroom
+(`max_batch_by_memory()`). Under a 20 ms ITL at 4K context the largest batch is 96
+(`best_batch_under_itl()`); HBM capacity allows 104.
 
 ### 3.4 KV reads cap decode intensity
 
@@ -212,15 +215,37 @@ decode intensity as batch → ∞  =  FLOPs per token / KV bytes per token
 Llama-3.1-8B, bf16 KV:   1K context → 115.7 FLOP/B    4K → 32.0    32K → 7.5
 ```
 
-Against an H100 ridge of 295, no batch size makes a 4K-context decode compute-bound. The crossover batch
-exists only at very short contexts — 297 at c = 0, 440 at c = 128, 854 at c = 256 — and never beyond
-~392 tokens (`max_context_for_compute_bound()`); long before that, HBM runs out (104 sequences of 4K
-tokens fit beside the weights with 10% headroom). The planning rule "decode turns compute-bound around
-batch ≈ ridge" in [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) is the
-short-context limit of this picture. This is what the KV-cache techniques in layer 04 fight
+Against an H100 ridge of 295, no batch size makes a 4K-context decode *step* compute-bound as a whole.
+Treated as one kernel (`decode()`), the step's crossover batch exists only at very short contexts — 297
+at c = 0, 440 at c = 128, 854 at c = 256 — and never beyond ~392 tokens
+(`max_context_for_compute_bound()`); and HBM runs out first (104 sequences of 4K tokens fit beside the
+weights with 10% headroom).
+
+**Per kernel, not per step.** That average blends two kernels with opposite shapes. The weight GEMMs
+multiply a [batch × d] activation by every weight matrix, so their intensity is ≈ batch × 2 / weight
+bytes at any context, and they turn compute-bound from batch 296 (`gemm_crossover_batch()`; FP8 halves the
+bytes and doubles the peak, so also 296). The planning rule "decode turns compute-bound around batch ≈
+ridge" in [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) is exactly right for
+them. Attention reads each sequence's own KV cache and does 2 × (heads / kv_heads) / kv_bytes = 4 FLOP/B
+(bf16 KV) whatever the batch: it is never compute-bound. An engine runs these kernels one after another,
+so the tighter bound is the **sum of per-kernel roofline times** (`decode_split()`), not
+max(ΣF ÷ peak, ΣB ÷ BW), which assumes the GEMMs' math overlaps attention's KV streaming perfectly. The two
+agree while both kernels are memory-bound — every decode row in §3.3–3.6 and §8 — and part once the GEMMs
+cross the ridge:
+
+```
+Llama-3.1-8B, H100, FP8 weights and KV, 2K context, batch 400 (476 fit):
+  one kernel    18.27 ms, memory-bound
+  per kernel    GEMMs 3.03 ms (compute-bound) + attention 16.03 ms (memory-bound) = 19.07 ms
+```
+
+Past the GEMM crossover, throughput stops rising — 20,978 tokens/s here at any larger batch — and each
+extra sequence only adds KV time; at long context the KV reads are most of the step whatever the batch.
+That is what the KV-cache techniques in layer 04 fight
 ([KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md),
 [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md)): GQA/MQA/MLA and
-FP8 KV shrink the bytes; paging and prefix caching stop wasting them.
+FP8 KV shrink the bytes; paging and prefix caching stop wasting them. It is also the argument for
+attention–FFN disaggregation, which runs the two on separate GPU pools so each can take its own batch.
 
 ### 3.5 Quantization moves bytes
 
@@ -247,7 +272,7 @@ Memory is sized by *total* parameters — every expert lives in HBM — while a 
 ones. A decode step streams only the experts its tokens are routed to; with uniform routing one layer
 touches E(1 − (1 − k/E)^T) distinct experts for T tokens (`experts_touched()`):
 
-| Batch | Mixtral-8x7B (8 experts, top-2) | Step bytes on H200 | Step time | Qwen3-30B-A3B (128, top-8) |
+| Batch (1K context) | Mixtral-8x7B (8 experts, top-2) | Step bytes on H200 | Step time | Qwen3-30B-A3B (128, top-8) |
 |---|---|---|---|---|
 | 1 | 2.00 experts/layer | 25.6 GB | 5.34 ms | 8.0 / 128 |
 | 4 | 5.47 | 65.1 GB | 13.57 ms | 29.1 |
@@ -256,8 +281,13 @@ touches E(1 − (1 − k/E)^T) distinct experts for T tokens (`experts_touched()
 
 Mixtral (46.7 B total, 12.9 B active) decodes like a 13 B model only at batch 1; by batch 16 it streams
 nearly all 93 GB of its weights every step. Fine-grained MoE keeps the saving to larger batches, and at
-high batch the cost per token still falls because the full stream is shared. Serving large MoE models is
-therefore about big batches and expert parallelism (see [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md)
+high batch the cost per token still falls because the full stream is shared. The roofline consequence:
+FLOPs follow *active* parameters while the bytes approach *total* ones — each expert sees only B·k/E of
+the batch — so the batch at which the weight stream reaches the ridge scales with total ÷ active. At
+c = 0 on an H200 (ridge 206; `decode_crossover_batch()`): 207 for Llama-3.1-8B, 754 for Mixtral-8x7B
+(total/active 3.6) and 2,055 for Qwen3-30B-A3B (9.1). Serving large MoE models is therefore about big
+batches, and expert parallelism is how systems reach them: attention runs data-parallel on many GPUs and
+all their tokens meet at each expert (see [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md)
 for the sizing side, §5 for the all-to-all it implies).
 
 ---
@@ -308,12 +338,14 @@ Elementwise operations sit at ~0.2 FLOP/B; chaining them unfused round-trips eve
 HBM (`fusion_bytes()`):
 
 ```
-unfused chain of k ops on n elements: 2 · n · b · k bytes        fused: 2 · n · b
-4 ops (bias, GELU, dropout, residual) on a 4096 × 8192 bf16 activation:
-   unfused 537 MB → 160 µs on an H100       fused 134 MB → 40 µs
+k ops on n elements, e of which read a second full tensor (a residual):
+   unfused (2k + e) · n · b bytes            fused (2 + e) · n · b
+4 ops (bias, GELU, dropout, residual add) on a 4096 × 8192 bf16 activation, e = 1:
+   unfused 604 MB → 180 µs on an H100       fused 201 MB → 60 µs
 ```
 
-Fusion changes no FLOPs and removes 75% of the bytes. FlashAttention is the canonical case — tile Q, K and
+Fusion changes no FLOPs and removes 67% of the bytes: the fused kernel still reads each distinct input
+once and writes the result once. FlashAttention is the canonical case — tile Q, K and
 V into shared memory, compute softmax online, never write the N × N score matrix — see the
 [FlashAttention primer](../../04-inference-engine/flash-attention/flash-attention-primer.md) (its §3
 prices the naive version at ~32 FLOP/B). How warps map onto sectors, banks and tiles — coalescing, shared

@@ -259,7 +259,7 @@ print("   as a likely symptom and fix the hardware first")
 # layout planned up front, since profiles have fixed placements. Cooperative small workloads
 # share through MPS, and idle-heavy dev notebooks through time-slicing. We alert on DCGM SM
 # active, tensor active and DRAM active, never on GPU util. Hardware XIDs (48, 79, 95) and
-# pending row remaps drain the node automatically, while app XIDs (13, 31, 43) page the service
+# pending row remaps drain the node automatically, while app XIDs (13, 31, 43) notify the service
 # owner."
 #
 # **Drill questions**

@@ -194,7 +194,8 @@ def online_softmax(x, block=128):
     ### END SOLUTION
 
 # %% check
-x = rng.normal(size=(6, 1000)) * 400                    # exp(400) overflows even float64
+x = rng.normal(size=(6, 1000)) * 400                    # exp(x) overflows float64 once x > 709.8
+assert x.max() > 710                                    # so a softmax that skips the max would overflow here
 y = online_softmax(x, block=64)
 assert np.allclose(y, tiling.softmax_ref(x), rtol=1e-12, atol=0) and np.all(np.isfinite(y))
 assert np.allclose(online_softmax(x, block=7), y, rtol=1e-12)
@@ -270,7 +271,7 @@ print("tail effect:", occ.waves(140, n_sms=132, blocks_per_sm=1), "<- 140 blocks
 # **The two-minute version.** "Our kernels are memory-bound, so we count bytes. Tiling makes
 # each byte fetched from HBM feed many FLOPs from shared memory and registers: a 128-wide tile
 # cuts GEMM traffic about 128x, and L2 captures the reuse between tiles. Fusion removes the
-# round trips between kernels. A fused softmax moves 2 bytes per element instead of about 8, and
+# round trips between kernels. A fused softmax makes 2 HBM passes per element instead of about 8, and
 # FlashAttention never writes the score matrix at all. At small batch, decode is hundreds of
 # microsecond-scale kernels, so the CPU launch path becomes the bottleneck and we capture CUDA
 # graphs per batch size. We size occupancy with Little's law, not as a target: enough bytes in

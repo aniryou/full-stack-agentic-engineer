@@ -234,9 +234,10 @@ print("branch on (tid//32) % 2:", f"{divergence((tid // 32) % 2, {0: 10, 1: 10})
 # **Drill questions**
 #
 # 1. *The profiler shows 32 sectors per request on a load. What is wrong and what do you do?*
-#    Consecutive lanes are 128 or more bytes apart, a column-style access. Change the layout
-#    (struct-of-arrays, transpose the data once) or stage through a shared-memory tile so that
-#    lanes read contiguous bytes.
+#    For 4-byte loads, consecutive lanes are 32 or more bytes apart, so every lane lands in its
+#    own sector: a column walk or a large struct stride. Change the layout (struct-of-arrays,
+#    transpose the data once) or stage through a shared-memory tile so that lanes read contiguous
+#    bytes.
 # 2. *Why a 33-float pitch and not 32?* With 32, every row starts in bank 0, so a column is a
 #    32-way conflict. With 33, row `r` starts in bank `r % 32`, so a column spans all banks.
 #    Any odd pitch works.
