@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-python -m pytest -q tools/site/tests tools/ci/tests
+python -m pytest -q tools/site/tests   # tools/ci/tests run in the lab-list-check job
 python tools/site/build_site_content.py
 if ! git diff --exit-code --stat mkdocs.yml; then
   echo "::error::mkdocs.yml is stale: run python3 tools/site/build_site_content.py and commit mkdocs.yml" >&2

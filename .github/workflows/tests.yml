@@ -32,8 +32,7 @@ jobs:
       solutions: ${{ steps.labs.outputs.solutions }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-      - name: Every directory with tests is in tools/ci/labs.json
-        run: python3 tools/ci/ci.py check
+      # No gate here: an incomplete lab list turns the lab-list-check job red, and every listed lab still runs.
       - id: labs
         name: Build the matrices
         run: |
@@ -65,6 +64,24 @@ jobs:
         run: python tools/ci/ci.py run "$LAB" install
       - name: Test
         run: python tools/ci/ci.py run "$LAB" test
+
+  lab-list-check:
+    name: lab list complete, CI helpers tested
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.11"
+      - name: Every test file is in a lab of tools/ci/labs.json; every notebook runner has a solutions step
+        run: python tools/ci/ci.py check
+      - name: Install pytest and PyYAML
+        if: always()
+        run: python -m pip install pytest pyyaml
+      - name: Tests of tools/ci (workflow pinned and T0, helpers, mdlinks)
+        if: always()
+        run: python -m pytest -q tools/ci/tests
 
   notebooks:
     name: notebook rebuilds are no-ops

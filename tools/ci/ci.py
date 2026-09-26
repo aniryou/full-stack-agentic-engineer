@@ -3,7 +3,8 @@
 
     python3 tools/ci/ci.py matrix [--solutions]   # JSON list of {id, dir, python} for the job matrix
     python3 tools/ci/ci.py run <id> <phase>       # phase: install | test | solutions, in the lab directory
-    python3 tools/ci/ci.py check                  # every directory with tests is in labs.json, and each exists
+    python3 tools/ci/ci.py check                  # every directory with tests is in labs.json, each exists, and
+                                                  # every lab with a notebook runner has a solutions step
     python3 tools/ci/ci.py builders               # every notebook builder, one path per line
     python3 tools/ci/ci.py bootstrap-targets      # notebooks the Colab injector owns (first cell tagged)
     python3 tools/ci/ci.py bootstrap-check        # the injector would not change what their setup cell does
@@ -56,6 +57,16 @@ def uncovered(tests: list[str], lab_dirs: list[str], ignore: tuple[str, ...] = (
     return [t for t in tests if not t.startswith(ignore) and not any(t.startswith(d) for d in dirs)]
 
 
+def without_solutions(runners: list[str], labs: list[dict]) -> list[str]:
+    """Labs that ship a notebook runner (tools/ or scripts/run_notebooks.py) but have no solutions step."""
+    out = []
+    for lab in labs:
+        prefix = lab["dir"].rstrip("/") + "/"
+        if not lab.get("solutions") and any(r.startswith(prefix) and r[len(prefix):].count("/") == 1 for r in runners):
+            out.append(lab["id"])
+    return out
+
+
 def cmd_matrix(argv: list[str]) -> int:
     labs = load_labs()
     if "--solutions" in argv:
@@ -97,6 +108,8 @@ def cmd_check(argv: list[str]) -> int:
                  for lab in labs if lab["python"] not in ("3.11", "3.12")]
     problems += [f"test file in no lab of tools/ci/labs.json: {t}"
                  for t in uncovered(test_files(tracked("*.py")), [lab["dir"] for lab in labs])]
+    problems += [f"{lab_id}: has a notebook runner (run_notebooks.py) but no solutions step in tools/ci/labs.json"
+                 for lab_id in without_solutions(tracked("*/tools/run_notebooks.py", "*/scripts/run_notebooks.py"), labs)]
     for p in problems:
         print(p)
     print(f"{len(labs)} labs, {len(problems)} problems")

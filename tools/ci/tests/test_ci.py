@@ -46,6 +46,15 @@ def test_uncovered_reports_a_test_outside_every_lab():
     assert ci.uncovered(["a/lab-2/tests/test_q.py"], ["a/lab"]) == ["a/lab-2/tests/test_q.py"]  # prefix is a directory
 
 
+def test_without_solutions_flags_a_lab_with_a_runner_and_no_solutions_step():
+    runners = ["a/lab/tools/run_notebooks.py", "b/lab/scripts/run_notebooks.py", "c/lab/sub/tools/run_notebooks.py"]
+    labs = [{"id": "a", "dir": "a/lab"}, {"id": "b", "dir": "b/lab", "solutions": "python scripts/run_notebooks.py"},
+            {"id": "c", "dir": "c/lab"}, {"id": "d", "dir": "d/lab"}]
+    # a: runner, no step -> flagged; b: has a step; c: the runner belongs to a nested lab; d: no runner
+    assert ci.without_solutions(runners, labs) == ["a"]
+    assert ci.without_solutions(runners, [{"id": "a2", "dir": "a/lab/"}]) == ["a2"]  # trailing slash
+
+
 def test_builders_are_all_found():
     found = ci.builders()
     assert "07-application-agent-framework/retrieval-rag/embeddings-lab/build.py" in found
@@ -92,8 +101,11 @@ def test_workflow_actions_are_pinned_and_t0():
     jobs = wf["jobs"]
     assert jobs["tests"]["strategy"]["fail-fast"] is False
     assert jobs["solutions"]["if"] == "github.event_name == 'workflow_dispatch'"
-    for name in ("notebooks", "docs", "colab-index"):
+    for name in ("notebooks", "docs", "colab-index", "lab-list-check"):
         assert name in jobs
+    # the matrix is emitted even when the lab list is incomplete: one missing entry must not skip every lab's tests
+    assert not any("ci.py check" in (step.get("run") or "") for step in jobs["matrix"]["steps"])
+    assert "ci.py check" in "".join(step.get("run") or "" for step in jobs["lab-list-check"]["steps"])
 
 
 def test_no_nested_workflows():
