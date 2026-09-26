@@ -290,7 +290,7 @@ def test_mkdocs_yml_blocks_are_rewritten_idempotently(tree, tmp_path, monkeypatc
     assert b.update_mkdocs_yml(["07-x"]) == "updated"
     text = yml.read_text()
     assert "not_in_nav: |\n  /layers/**/client/\n  /layers/**/deploy/" in text
-    assert '  - Layers:\n      - "layers/index.md"\n      - "07 · Agents & applications":' in text
+    assert '  - Layers:\n      - "layers/index.md"\n      - "07 · Agents and applications":' in text
     assert b.update_mkdocs_yml(["07-x"]) == "unchanged"
 
 
@@ -301,11 +301,33 @@ def test_colab_index_marks_worked_answers_and_describes_every_layout():
                                    "07-x/a/solutions/01_x.ipynb", "07-x/kv/01_kv_worked.ipynb",
                                    "07-x/kv/02_kv_practice.ipynb"])
     lines = out.splitlines()
-    assert any(ln.endswith("`01_kv_worked.ipynb`") for ln in lines)   # a worked lesson: a plain Colab link
-    assert any(ln.endswith("`01_x.ipynb`") and "/notebooks/" in ln for ln in lines)
-    assert any(ln.endswith("`01_x_worked.ipynb` — *worked answers*") for ln in lines)
-    assert any(ln.endswith("`01_x.ipynb` — *worked answers*") and "/solutions/" in ln for ln in lines)
+    lab_a = next(ln for ln in lines if ln.startswith("- **`a/`**"))
+    lab_kv = next(ln for ln in lines if ln.startswith("- **`kv/`**"))
+    lessons_a, answers_a = lab_a.split(" — *answers:* ")
+    assert "[01_x](" in lessons_a and "/a/notebooks/01_x.ipynb" in lessons_a     # the exercise
+    assert "01_x_worked" not in lessons_a                                          # its twin is an answer key
+    assert "/a/notebooks/01_x_worked.ipynb" in answers_a and "/a/solutions/01_x.ipynb" in answers_a
+    assert "*answers:*" not in lab_kv                                             # a worked lesson: a plain link
+    assert "[01_kv_worked](" in lab_kv and "[02_kv_practice](" in lab_kv
+    assert len([ln for ln in lines if ln.startswith("- **")]) == 2                  # one line per lab
     assert "Exercises are under `notebooks/` / `exercises/`" not in out
+
+
+def test_colab_index_groups_notebook_folders_under_their_lab():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    import gen_colab_index as g
+    assert g.lab_of("a/lab/notebooks") == "a/lab"
+    assert g.lab_of("a/lab/notebooks/solutions") == "a/lab"
+    assert g.lab_of("a/lab/notebooks/practice") == "a/lab"
+    assert g.lab_of("kv-cache") == "kv-cache"
+    assert g.lab_of(".") == ""
+
+
+def test_layer_names_match_the_colab_index():
+    """One name per layer: the site's layer titles and the Colab index's layer names are the same strings."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    import gen_colab_index as g
+    assert g.LAYER_NAMES == b.LAYER_TITLES
 
 
 def test_duplicate_titles_in_provider_variants_name_the_provider():
