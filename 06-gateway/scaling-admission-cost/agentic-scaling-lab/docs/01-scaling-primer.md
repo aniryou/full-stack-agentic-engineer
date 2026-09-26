@@ -10,7 +10,7 @@ The code, the capacity model and the practice notebooks that go with this primer
 
 An agent system is scaled by bounding tokens, not by adding servers. Everything that looks like a classic capacity problem — instances, connections, queue depth, database throughput — turns out to be small and cheap next to one number: tokens per minute at the model, a resource you share with your whole organisation and cannot buy by the instance. The design work is to make demand for that resource predictable (admission control, routing, caching, compaction), to make the system degrade instead of collapse when it runs out (levels, shedding, fallbacks), and to make every turn survive the failures that a long, multi-step, side-effecting unit of work invites (checkpoints, idempotency, at-least-once delivery).
 
-A scaling design has to answer four things. *Resource estimation*: can you get from "100,000 conversations a day" to tokens per minute, in-flight turns and dollars in two minutes on a whiteboard? *Trade-offs*: provisioned throughput or pay-as-you-go, sync or queued, managed runtime or Cloud Run, degrade or shed? *Robustness*: what breaks first, what happens when it does, and how does the user experience it? *Simplicity*: which of the mechanisms below does this customer actually need at their scale, and which are premature?
+A scaling design has to answer four things. *Resource estimation*: can you get from "100,000 conversations a day" to tokens per minute, in-flight turns and dollars in two minutes on a whiteboard? *Trade-offs*: provisioned throughput or pay-as-you-go, sync or queued, managed runtime or Cloud Run, degrade or shed? *Robustness*: what breaks first, what happens when it does, and how does the user experience it? *Simplicity*: which of the mechanisms below does this workload actually need at its scale, and which are premature?
 
 > **In a design review** — Open a scaling question with the unit of work and the binding constraint: "The unit of work is a *turn*; each turn is two to three model calls of about five thousand tokens; so 100k conversations a day is about 14 million input tokens a minute at peak, which is above the Flash tier baseline — that's the constraint I'll design around. Cloud Run is not going to be the problem."
 
@@ -31,7 +31,7 @@ A web request is stateless, short and homogeneous; you scale it by adding replic
 | Binding resource | CPU / DB connections | GPU seconds | tokens per minute at a shared model pool |
 | Cost driver | requests | requests | tokens × steps × context length |
 | State | none or a row | none | a growing transcript plus checkpoints |
-| Side effects | in your DB | none | in the customer's CRM, billing, ticketing |
+| Side effects | in your DB | none | in systems of record: CRM, billing, ticketing |
 | Failure unit | retry the request | retry the request | resume the *step*, never repeat a write |
 
 Everything in the rest of this primer follows from that last column.
@@ -160,7 +160,7 @@ PT is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 *burndown* tok
 
 So PT is not a discount unless you commit for a year *and* keep the units three-quarters busy. Sizing PT for peak (207 GSUs) leaves it 33 % utilised on average and costs more than pay-as-you-go; sizing it for the base (69 GSUs, $138 k a month on a 1-year term) and letting peaks spill over to Priority or Standard PayGo is the usual answer. What PT buys is an SLA and immunity from the shared pool's contention for the traffic that matters most — which is why the request headers let you say, per call, "dedicated only", "spill over to Priority" or "bypass PT".
 
-> **In a design review** — "PT for the base load on a long term, spill-over for the peak, and *shaping* for the incident. I'd quote the break-even utilisation to the customer before they buy a monthly term, because a monthly term is never cheaper than pay-as-you-go."
+> **In a design review** — "PT for the base load on a long term, spill-over for the peak, and *shaping* for the incident. I'd check the break-even utilisation before anyone buys a monthly term, because a monthly term is never cheaper than pay-as-you-go."
 
 ### 3.6 The rest of the estate
 
@@ -227,9 +227,9 @@ A turn, end to end: the client posts a message; the gateway authenticates, check
 |---|---|---|---|
 | **Cloud Run** (this design) | You want every scaling mechanism visible and tunable; polyglot services; you already run Cloud Run | You operate the queue, the stores and the loop yourself | concurrency, min/max instances, billing mode, CPU/memory, Direct VPC, timeouts |
 | **Agent Runtime** (managed; formerly Agent Engine) | Python agents on ADK; you want managed sessions, Memory Bank, sandboxed code execution, identity, and the Optimize pillar with the least infrastructure | Less control: min instances 0–10, max up to 1,000, container concurrency default 9 (≈ 2 × CPU + 1), 1–8 vCPU, up to 32 GiB; a default *90 queries per minute* quota that must be raised before any load test; measured cold latency ≈ 4.7 s with min instances 1 vs ≈ 0.4 s warm | min/max instances, container concurrency, resource limits, quotas |
-| **GKE Autopilot** | Kubernetes is the customer's platform; GPUs for self-hosted models; queue-depth autoscaling with KEDA; service mesh | Most operational surface; slower iteration | HPA/KEDA on queue depth or custom metrics, pod resources, node pools |
+| **GKE Autopilot** | Kubernetes is already the platform; GPUs for self-hosted models; queue-depth autoscaling with KEDA; service mesh | Most operational surface; slower iteration | HPA/KEDA on queue depth or custom metrics, pod resources, node pools |
 
-The honest answer is that Agent Runtime is the default for a Google-native customer and Cloud Run is the choice when the customer's platform team wants to own the compute or the agent is not Python-first — and that the *mechanisms* in Part 5 are the same in all three; only where they are configured differs.
+The honest answer is that Agent Runtime is the default for a Google-native team and Cloud Run is the choice when a platform team wants to own the compute or the agent is not Python-first — and that the *mechanisms* in Part 5 are the same in all three; only where they are configured differs.
 
 ---
 
@@ -360,18 +360,18 @@ Per-tenant buckets at the gateway, tenant labels on every metric and cost record
 | Scale | 20,000–200,000 | admission control with degrade levels, client-side smoothing, sibling fallbacks, compaction and caching, PT for the base load, capacity reviews | GKE |
 | Enterprise | > 200,000, multi-brand | per-tenant quotas and priorities, custom PayGo tier, multi-region, Agent Gateway/Registry for governance, cost allocation per tenant | — |
 
-The order of adoption matters: durability (checkpoints, idempotency) before admission control, admission control before PT, PT before multi-region. Each stage should be triggered by a measurement, and the design should name it: "I'd add the queue when p95 during the peak hour crosses the budget; I'd buy PT when the 429 ratio stays above 5 % at peak for a week; I'd add a second region when the customer's residency or availability requirement says so, not before."
+The order of adoption matters: durability (checkpoints, idempotency) before admission control, admission control before PT, PT before multi-region. Each stage should be triggered by a measurement, and the design should name it: "I'd add the queue when p95 during the peak hour crosses the budget; I'd buy PT when the 429 ratio stays above 5 % at peak for a week; I'd add a second region when a residency or availability requirement says so, not before."
 
 ---
 
 ## 8. Walking the design in a review
 
-### 8.1 The 45-minute flow for a scaling prompt
+### 8.1 A 45-minute design review
 
 | Minutes | Move |
 |---|---|
-| 0–3 | Restate the ask; name the unit of work (the turn) and the binding constraint (tokens per minute). |
-| 3–10 | Run the dimension checklist (Part 2). Offer defaults so the customer can nod: volume, peak ratio, incident behaviour, turn shape, latency budget, residency, tenancy. |
+| 0–3 | Restate the goal; name the unit of work (the turn) and the binding constraint (tokens per minute). |
+| 3–10 | Run the dimension checklist (Part 2). State a default for each unknown so the review can move: volume, peak ratio, incident behaviour, turn shape, latency budget, residency, tenancy. |
 | 10–16 | The arithmetic (Part 3) on the board: rates → tokens → Little's law → TPM vs tier → cost per conversation → what breaks first. |
 | 16–26 | The architecture (Part 4) with the specifics in each box; say which parts are boring and which are hard. |
 | 26–38 | Two deep dives chosen by risk: usually admission/degradation and durable execution; sometimes quota/PT strategy or context/cost. |
@@ -380,7 +380,7 @@ The order of adoption matters: durability (checkpoints, idempotency) before admi
 
 ### 8.2 Questions that change the design
 
-"What happens to traffic during an outage?" (incident factor → degrade design). "Is there a PT commitment already, and on what term?" (spill-over design, break-even). "Does the data have to stay in-country?" (regional endpoint, model availability, +10 %). "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch). "What is the customer's cost per human contact?" (the ROI line that makes $0.07 a conversation obviously fine). "How many brands or tenants share this?" (fairness). "What must never happen twice?" (idempotency scope).
+"What happens to traffic during an outage?" (incident factor → degrade design). "Is there a PT commitment already, and on what term?" (spill-over design, break-even). "Does the data have to stay in-country?" (regional endpoint, model availability, +10 %). "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch). "What does a human-handled contact cost today?" (the ROI line that makes $0.07 a conversation obviously fine). "How many brands or tenants share this?" (fairness). "What must never happen twice?" (idempotency scope).
 
 ### 8.3 Anchors to keep in your head
 
@@ -410,7 +410,7 @@ The order of adoption matters: durability (checkpoints, idempotency) before admi
 
 ### 8.5 Quick-fire
 
-*Why not just raise max instances?* Because instances do not make tokens; the pool is shared and the cap is the token budget. *Why a queue if the user waits?* Backlog with one observable age, redelivery for durability, drain rate set by the bucket. *Exactly-once?* Not on push; design for at-least-once with idempotency keys. *PT or PayGo?* PT for the base on a long term if utilisation clears the break-even, PayGo/Priority for peaks, shaping for incidents. *Sync or async?* Sync for a single-step read with a sub-second budget; queued for anything with tools, side effects or a deadline over a few seconds. *What do you measure in week one?* 429 ratio, queue age, degrade level minutes, p95 by step, cost per conversation, shed rate, cached-token share. *When would you move to Agent Runtime?* Python-first, ADK, the customer wants managed sessions/memory/identity and does not want to run the queue and stores — after raising the default quotas.
+*Why not just raise max instances?* Because instances do not make tokens; the pool is shared and the cap is the token budget. *Why a queue if the user waits?* Backlog with one observable age, redelivery for durability, drain rate set by the bucket. *Exactly-once?* Not on push; design for at-least-once with idempotency keys. *PT or PayGo?* PT for the base on a long term if utilisation clears the break-even, PayGo/Priority for peaks, shaping for incidents. *Sync or async?* Sync for a single-step read with a sub-second budget; queued for anything with tools, side effects or a deadline over a few seconds. *What do you measure in week one?* 429 ratio, queue age, degrade level minutes, p95 by step, cost per conversation, shed rate, cached-token share. *When would you move to Agent Runtime?* Python-first, ADK, the team wants managed sessions/memory/identity and does not want to run the queue and stores — after raising the default quotas.
 
 > **Pitfall** — Quoting a p95 without a step breakdown, a cost without the token shape behind it, or a "we'll shed load" without saying what the user sees and when they can retry.
 
@@ -432,7 +432,7 @@ The order of adoption matters: durability (checkpoints, idempotency) before admi
 | Observability | Cloud Trace via OTLP (`telemetry.googleapis.com`), Cloud Monitoring custom metrics and SLOs with burn-rate alerts, log-based metrics, Managed Prometheus sidecar; Agent Observability/Evaluation on the managed path |
 | Delivery and cost | Cloud Build, Cloud Deploy canaries for Cloud Run (10/50/100 with verify), budgets with Pub/Sub notifications (budgets do not cap spend — wire the notification to a kill switch), Cloud Run flexible CUDs (28 % / 46 %), Cloud Run budget spend caps (Preview) |
 
-For a customer not on Google, the mechanisms translate one to one: token buckets and breakers are yours to write anywhere; Pub/Sub ↔ SQS/Service Bus; Firestore ↔ DynamoDB/Cosmos; Memorystore ↔ ElastiCache; PT ↔ provisioned throughput on Bedrock or PTUs on Azure OpenAI; Cloud Run ↔ App Runner/Container Apps. The design is yours, not the vendor's.
+Off Google Cloud, the mechanisms translate one to one: token buckets and breakers are yours to write anywhere; Pub/Sub ↔ SQS/Service Bus; Firestore ↔ DynamoDB/Cosmos; Memorystore ↔ ElastiCache; PT ↔ provisioned throughput on Bedrock or PTUs on Azure OpenAI; Cloud Run ↔ App Runner/Container Apps. The design is yours, not the vendor's.
 
 ---
 

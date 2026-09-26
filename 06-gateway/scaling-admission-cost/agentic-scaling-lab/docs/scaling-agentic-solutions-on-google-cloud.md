@@ -8,7 +8,7 @@ Five kinds of callout appear throughout:
 
 - **In practice** — how a principle shows up in a real build, and how to say it in a design review.
 - **Scenario** — a concrete situation that makes the mechanism tangible.
-- **Key figures** — numbers worth keeping at hand during a capacity conversation.
+- **Key figures** — numbers worth keeping at hand during a capacity review.
 - **Confirm before committing** — facts that move: prices, model identifiers, platform limits.
 - **Common misstep** — the mistake that shows up most often in real designs.
 
