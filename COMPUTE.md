@@ -43,7 +43,7 @@ T0 path and print the commands to run on real hardware, so no notebook requires 
 |---|---|
 | learn any concept in the repo | T0: a laptop or Colab CPU |
 | time a kernel, measure memory bandwidth, load weights | Colab or Kaggle T4 |
-| serve a real model with vLLM | Colab or Kaggle T4 with a 0.5–2B model and `--dtype half`; a 24 GB GPU for 7–8B models at 16-bit |
+| serve a real model with vLLM | Colab or Kaggle T4 with a 0.5–2B model and `--dtype half` (vLLM picks its Triton attention backend there); a 24 GB GPU for 7–8B models at 16-bit |
 | try FP8 | a GPU with compute capability 8.9 or higher: RTX 4090 (RunPod, Vast.ai) or L4 (GCP Spot) |
 | measure NCCL collectives over PCIe | Kaggle 2×T4 |
 | measure NVLink P2P and busbw | 2× A100 or H100 SXM on RunPod, Vast.ai or Lambda for an hour |
@@ -72,7 +72,10 @@ Consequences for the labs:
 - **Decode-bound experiments care about bandwidth per dollar.** An RTX 4090 has about 3× an L4's memory bandwidth
   for a similar hourly price, so ITL and bandwidth measurements look very different on the two.
 - **A T4 has no BF16 and no TF32.** Run vLLM with `--dtype half`, and read only the fp32 and fp16 rows of a GEMM
-  sweep. Check that the vLLM version a lab pins still supports compute capability 7.5 `(verify)`.
+  sweep. vLLM v0.30.0, the version layer 04 pins, supports compute capability 7.5 and up, so a T4 works and a V100
+  or a P100 does not; FlashAttention is not available on a T4, so vLLM falls back to its Triton attention backend
+  (`TRITON_ATTN`) `(verify)`. The details are in layer 04's
+  [`deploy/any-gpu`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/README.md).
 - **FP8 needs compute capability 8.9 or higher** (L4, RTX 4090, H100). On a T4, use INT8/INT4 weight-only
   quantization instead `(verify kernel support in the pinned vLLM)`.
 - **NVLink needs SXM A100/H100** (or PCIe cards joined by a bridge). Kaggle's 2×T4, GCP's 2×L4 `g2-standard-24` and
@@ -110,7 +113,8 @@ Consequences for the labs:
 
 ### 3.3 Kaggle (T1, and T2 without NVLink)
 
-- Free: 2×T4 (or one P100), 30 GPU-hours a week `(verify)`, PCIe only. It is the only free two-GPU box: real NCCL
+- Free: 2×T4 (or one P100), 30 GPU-hours a week `(verify)`, PCIe only. Pick *GPU T4 x2*: the P100 (compute
+  capability 6.0) is below vLLM's minimum and has no tensor cores worth measuring. It is the only free two-GPU box: real NCCL
   collectives, `nvidia-smi topo -m`, P2P over PCIe (check whether peer access is enabled; NCCL falls back to host
   memory if not `(verify)`), and nccl-tests via the recipe in layer 02's
   [`deploy/any-gpu/`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/any-gpu/).
@@ -185,7 +189,7 @@ scale to zero.
 | Spot (`SPOT`) | the same machine at 60–91 % off | the cheapest | can be preempted at any time with ~30 s notice `(verify)`; no capacity guarantee; separate quota | the default for every GPU VM and node pool in the labs' Terraform |
 | DWS flex-start (`FLEX_START`) | ask for N GPUs; they are provisioned when capacity frees up and then run for a bounded time (up to 7 days); on GKE with queued provisioning the request is all-or-nothing, through a Kueue ProvisioningRequest | discounted against on-demand `(verify)` | an unknown wait; a bounded run | layer 03's optional flex-start pool; the practical way to try A100/H100 without a reservation |
 | DWS calendar mode | a block of capacity booked for fixed future dates | `(verify)` | you pay for the whole window `(verify durations and lead time)` | not needed for the labs |
-| Reservations and committed use | capacity held in a zone; 1- or 3-year commitments for discounts | billed whether used or not | idle cost | production only; a ComputeClass fallback list usually starts from one (CURRICULUM 03.5) |
+| Reservations and committed use | capacity held in a zone; 1- or 3-year commitments for discounts | billed whether used or not | idle cost | production only; a ComputeClass fallback list usually starts from one ([`CURRICULUM.md`](CURRICULUM.md) module 03.5) |
 
 ### 5.4 What the labs create, and what bills besides the GPU
 
@@ -222,7 +226,8 @@ backlog ([`CURRICULUM.md`](CURRICULUM.md) §6).
 
 ## 6. Which lab needs which tier
 
-Every core runs entirely at T0. "Real run" is the tier at which a lab notebook's numbers become measurements.
+Every core runs entirely at T0, and every lab notebook has a T0 path (the second column). "Real run" is the tier at
+which a lab notebook's numbers become measurements.
 
 ### 01 · [`gpu-bench-lab`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/)
 
@@ -233,6 +238,7 @@ Every core runs entirely at T0. "Real run" is the tier at which a lab notebook's
 | `03_multi_gpu_topology_and_p2p` | parses bundled `nvidia-smi topo -m` sample output | T2: P2P bandwidth | Kaggle 2×T4 (PCIe, $0); 2× A100/H100 SXM for NVLink (~$1–6/hr) | `a2-highgpu-2g` (A100, NVLink; quota is hard) |
 | `04_weights_loading_and_cold_start` | disk and safetensors load throughput on your machine | T1: load into GPU memory | Colab T4 | the L4 Spot VM, with `max_run_duration` |
 | [`deploy/any-gpu`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/deploy/any-gpu/) | — | T1/T2 | Docker `--gpus all` or plain pip; notes for Colab, Kaggle, RunPod, Vast.ai, Lambda | — |
+| [`deploy/gcp/terraform`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/deploy/gcp/terraform/) | `terraform validate` and `plan` offline | T3 | — | the whole suite on a Spot L4 VM with `max_run_duration`, results uploaded to a bucket; `a2-highgpu-2g` for NVLink |
 
 ### 02 · [`cuda-nccl-lab`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/)
 
@@ -240,16 +246,18 @@ Every core runs entirely at T0. "Real run" is the tier at which a lab notebook's
 |---|---|---|---|---|
 | `01_kernels_in_the_simulator` | Numba's CUDA simulator (`NUMBA_ENABLE_CUDASIM=1`): correctness, not speed | — | — | — |
 | `02_memory_bound_kernels_on_a_real_gpu` | the same kernels in the simulator | T1: timings against the roofline | Colab T4 | an L4 node |
-| `03_collectives_with_torch_distributed` | the `gloo` backend across CPU processes: real semantics | T2: the `nccl` backend | Kaggle 2×T4 | 2-GPU Job on `g2-standard-24` (2× L4, PCIe) |
-| `04_busbw_and_the_alpha_beta_fit` | fits bundled `all_reduce_perf` sample output (illustrative) | T2: nccl-tests | Kaggle 2×T4; an NVLink box for the contrast | nccl-tests Job on `g2-standard-24` |
+| `03_collectives_with_torch_distributed` | the `pipes` backend (a real ring all-reduce across OS processes, no torch) or `gloo`: real semantics and real CPU timings | T2: the `nccl` backend | Kaggle 2×T4 | 2-GPU Job on `g2-standard-24` (2× L4, PCIe) |
+| `04_busbw_and_the_alpha_beta_fit` | fits bundled `all_reduce_perf` sample output (illustrative), or your own `pipes`/gloo sweep | T2: nccl-tests | Kaggle 2×T4; an NVLink box for the contrast | nccl-tests Job on `g2-standard-24` |
 | `05_how_a_container_sees_a_gpu` | runs in any Linux container and explains what is missing | T1 | any GPU notebook or container: Colab, Kaggle, RunPod, Vast.ai | `nvidia-smi` smoke Job on GKE |
-| `06_gpu_sharing_and_dcgm_on_gke` | MIG placement packer and DCGM-exporter sample metrics | T3 | — | L4 Spot pool, optional time-sharing pool; the A100 MIG pool is off by default |
+| `06_gpu_sharing_and_dcgm_on_gke` | MIG placement packer and DCGM-exporter sample metrics | T1/T2 on a GPU VM (dcgm-exporter in Docker, MIG and MPS by hand); T3 | a Lambda or GCP GPU VM for MIG (A100/H100) | L4 Spot pool, optional time-sharing pool; the A100 MIG pool is off by default |
 | [`deploy/any-gpu`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/any-gpu/), [`deploy/gke`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gke/) | — | T1/T2, T3 | Docker commands, nccl-tests build and run, the Kaggle 2×T4 recipe | smoke, CUDA sample, 2-GPU nccl-tests, MIG and time-sharing manifests |
+| [`deploy/gcp/terraform`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform/) | `terraform validate` and `plan` offline | T3 | — | the GKE cluster the `deploy/gke` Jobs run on (§5.4) |
 
 ### 03 · [`k8s-gpu-lab`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/)
 
-No GPU is needed anywhere in layer 03: the scheduler sees a GPU as an integer resource. Fake capacity cannot show
-the device plugin injecting a real device, driver installation or DCGM — those are layer 02.
+No GPU is needed for any layer-03 notebook: the scheduler sees a GPU as an integer resource. Fake capacity cannot
+show the device plugin injecting a real device, driver installation or DCGM — `deploy/gpu-vm` (T1) shows the first,
+layer 02 the rest.
 
 | Notebook or target | T0 path | Real run | Cheapest real option | GCP (T3) |
 |---|---|---|---|---|
@@ -257,18 +265,23 @@ the device plugin injecting a real device, driver installation or DCGM — those
 | `02_kind_with_fake_gpus_and_kueue` | without a cluster, a bundled mini-simulator predicts outcomes and prints the commands | T0 + Docker: kind with fake GPUs, Kueue v0.19.6, JobSet, LWS | a laptop with Docker | — |
 | `03_why_is_my_pod_pending` | bundled `kubectl get pod -o json` and event fixtures | any cluster | kind | GKE |
 | `04_gke_pools_dws_and_computeclasses` | plan and inspect offline | T3 | — | zonal GKE, L4 Spot pool 0→N, optional flex-start queued-provisioning pool, ComputeClass fallbacks, the Kueue ProvisioningRequest admission check, GCS FUSE weights |
+| [`deploy/kind`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/kind/) | — | T0 + Docker | a laptop with Docker: the real kube-scheduler, Kueue, JobSet and LWS against fake `nvidia.com/gpu` capacity, optionally hundreds of KWOK nodes | — |
+| [`deploy/gpu-vm`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gpu-vm/) | — | T1 | any GPU VM you control (Lambda, a GCP L4 Spot VM): k3s plus the real NVIDIA device plugin, optional time-slicing; not a container pod (RunPod, Vast.ai) | — |
+| [`deploy/gcp/terraform`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/), [`deploy/gke`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gke/) | `terraform validate` and schema checks offline | T3 | — | the cluster and manifests above (§5.4) |
 
 ### 04 · [`vllm-serving-lab`](04-inference-engine/serving-engine/vllm-serving-lab/)
 
 | Notebook or target | T0 path | Real run | Cheapest real option | GCP (T3) |
 |---|---|---|---|---|
 | `01_size_before_you_serve` | sizing from bundled `config.json` samples | — | — | — |
-| `02_serve_and_measure` | `fakeserver.py`: an OpenAI-compatible server emulating vLLM timing and metrics (simulated) | T1: `vllm serve` with a 0.5–2B model | Colab or Kaggle T4 with `--dtype half` | vLLM on a GKE L4 pool (`deploy/gcp/gke`) |
-| `03_knobs_and_tradeoffs` | the fake server | T1 | T4; a 4090 or L4 for larger batches | — |
+| `02_serve_and_measure` | `fakeserver.py`: an OpenAI-compatible server emulating vLLM timing and metrics (simulated) | T1: `vllm serve` with a 0.5–2B model | Colab or Kaggle T4: fp16 only (`--dtype half`), Triton attention backend | vLLM on a GKE L4 pool (`deploy/gcp/gke`) |
+| `03_knobs_and_tradeoffs` | the fake server | T1; exercise 3.6 (tensor parallelism) T2 | T4; a 4090 or L4 for larger batches; Kaggle 2×T4 for 3.6 | — |
 | `04_prefix_caching_for_agents` | the fake server's prefix-cache emulation | T1 | T4 | — |
 | `05_speculation_and_quantization_in_vllm` | simulated | T1; FP8 needs compute capability 8.9+ | a 4090 (RunPod, Vast.ai) or a GCP L4 Spot VM; a T4 for n-gram speculation and weight-only INT4/INT8 | — |
 | `06_deploy_on_cloud_run_gpu` | render and inspect the Terraform and the `gcloud run deploy` equivalent offline | T3 | — | Cloud Run with an L4, per-second billing, scale to zero |
-| [`deploy/any-gpu`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/) | — | T1 | `vllm/vllm-openai` as the pod image on RunPod or Vast.ai; the Colab/Kaggle T4 recipe | — |
+| [`deploy/any-gpu`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/) | — | T1 | `vllm/vllm-openai` as the pod image on RunPod or Vast.ai; the Colab/Kaggle T4 recipe (fp16, Triton attention, compute capability 7.5 minimum) | — |
+| [`deploy/gcp/cloud-run`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/), [`deploy/gcp/gke`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/gke/) | `DRY_RUN=1`, `terraform validate` and schema checks offline | T3 | — | Cloud Run with an L4 scaling to zero; a vLLM Deployment on a GKE L4 pool (§5.4) |
+| [`vllm-internals`](04-inference-engine/vllm-internals/README.md) notebook, [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) notebook | standard library or numpy: the whole notebook | T1 to watch vLLM's metrics and logs, or to time attention kernels | Colab or Kaggle T4 | — |
 
 ### 05 · [`inference-gateway-lab`](05-orchestrator/serving-orchestration/inference-gateway-lab/)
 
@@ -277,14 +290,16 @@ the device plugin injecting a real device, driver installation or DCGM — those
 | `01_router_in_process` | the router in front of in-process fake backends | — | — | — |
 | `02_scorer_weights_and_hot_prefixes` | the same, with a shared-prefix agentic load | — | — | — |
 | `03_autoscaling_recommender` | HPA recommendations from scraped fake metrics, and the generated manifests | T3 to apply them | — | an HPA on a Managed Prometheus metric |
-| `04_local_stack_with_llm_d` | without Docker, a labelled fallback and the commands to run | T0 + Docker: compose (three simulated backends, the router, Prometheus) or kind (llm-d Router standalone with Envoy and `llm-d-inference-sim`) | a laptop with Docker; real vLLM backends on any T1 GPU are optional | — |
+| `04_local_stack_with_llm_d` | without Docker, a labelled fallback and the commands to run | T0 + Docker: compose (three simulated backends, the router, Prometheus) or kind (llm-d Router standalone with Envoy and `llm-d-inference-sim`); T1/T2: the lab router in front of real vLLM replicas | a laptop with Docker; for real backends, Colab or Kaggle T4 via [`deploy/any-gpu`](05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/any-gpu/) | — |
 | `05_gke_inference_gateway` | plan and inspect offline | T3 | — | GKE with the Gateway API, a proxy-only subnet, an L4 Spot pool 0→N, InferencePool v1 with the endpoint picker, a `gke-l7-regional-external-managed` Gateway, InferenceObjective priorities |
+| [`deploy/local`](05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/local/), [`deploy/kind`](05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/kind/) | — | T0 + Docker | a laptop with Docker | — |
+| [`deploy/gcp/terraform`](05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/), [`deploy/gke`](05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gke/) | Terraform `validate` and CRD schema checks offline | T3 | — | ~$0.16/h with the GPU pool at 0, ~$0.44/h with one L4 Spot node `(verify)`; `deploy/gke` keeps one L4 node while installed |
 
-### 00, 06, 07 (existing labs)
+### 00, 06, 07 and the other layer-04 topics
 
 | Labs | Tier | Notes |
 |---|---|---|
-| 00 transformers, capacity planning, model landscape; 01 gpu-primer and gpu-deployment exercises; 04 kv-cache, paged-attention, flash-attention | T0 | numpy and matplotlib; the transformer walkthrough notebooks use CPU PyTorch (preinstalled on Colab) |
+| 00 transformers, capacity planning, model landscape; 01 gpu-primer and gpu-deployment exercises; 04 kv-cache, paged-attention, flash-attention (practice and deep-dive notebooks) | T0 | numpy and matplotlib; the transformer walkthrough notebooks use CPU PyTorch (preinstalled on Colab) |
 | 06 identity labs, scaling labs | T0 | `agentic-identity-gcp-lab`'s Terraform is an optional T3 step; the Mistral variants call a hosted API with a key (per-token cost, no GPU) |
 | 07 agent labs, long-running labs, retrieval labs | T0 | Gemini, Mistral, Anthropic or OpenAI keys are optional; `rag-from-scratch` downloads a ~90 MB embedding model and runs it on CPU; the long-running labs' GCP deploys are optional T3 steps |
 
@@ -296,8 +311,8 @@ GPU time is cheapest when the T0 work is already done and several labs share one
 
 | Session | Hardware | Cost | Run |
 |---|---|---|---|
-| A · one GPU | Colab or Kaggle T4; a rented 4090 or a GCP L4 Spot VM when you need FP8 | $0, or ~$0.3–0.7/hr | 01 lab 01, 02, 04 · 02 lab 02, 05 · 04 lab 02–05 |
-| B · two GPUs over PCIe | Kaggle 2×T4 | $0 | 01 lab 03 · 02 lab 03, 04 (and the nccl-tests recipe) |
+| A · one GPU | Colab or Kaggle T4; a rented 4090 or a GCP L4 Spot VM when you need FP8 | $0, or ~$0.3–0.7/hr | 01 lab 01, 02, 04 · 02 lab 02, 05 · 04 lab 02–05 and the vllm-internals observations · 05 lab 04 with one real vLLM backend |
+| B · two GPUs over PCIe | Kaggle 2×T4 | $0 | 01 lab 03 · 02 lab 03, 04 (and the nccl-tests recipe) · 04 lab exercise 3.6 (tensor parallelism) · 05 lab 04 with two vLLM replicas |
 | C · NVLink | 2× A100 or H100 SXM on RunPod, Vast.ai or Lambda, about an hour | ~$1–6 | session B again, to compare P2P and busbw with PCIe; optionally a vLLM run with `--tensor-parallel-size 2` to see the all-reduce cost in ITL |
 | D · GCP, one lab at a time | each lab's Terraform | GPU at the Spot price plus the cluster or load-balancer overhead | 01 VM suite · 04 Cloud Run · 02, 03, 05 on GKE; destroy before starting the next |
 
@@ -374,6 +389,6 @@ gcloud storage buckets list
 | DWS | flex-start run limit (7 days), discount and quota; queued provisioning via ProvisioningRequest; calendar-mode durations and lead time | §5.3 |
 | GKE | management fee and the free tier's zonal-cluster credit; automatic driver install from 1.32.2-gke.1297000; GPU node taint; autoscaler scale-down delay; Inference Gateway GatewayClass names; load-balancer pricing | §5.4 |
 | Cloud Run GPU | L4 (min 4 vCPU/16 GiB) and RTX PRO 6000 (min 20 vCPU/80 GiB); per-second, instance-based billing; idle time before scale-in; zonal-redundancy pricing; regions | §5.4 |
-| GPU capabilities | the §2 table (memory, bandwidth, compute capability, BF16/FP8, NVLink, MIG incl. RTX PRO 6000); vLLM support for compute capability 7.5; FP8 and INT4/INT8 kernels in the pinned vLLM | §2, §6 |
+| GPU capabilities | the §2 table (memory, bandwidth, compute capability, BF16/FP8, NVLink, MIG incl. RTX PRO 6000); vLLM v0.30.0 minimum compute capability 7.5 and its Triton attention fallback on a T4; FP8 and INT4/INT8 kernels in the pinned vLLM | §2, §6 |
 | TPUs | v7 Ironwood GA 2026-04-22, 192 GB HBM and ~4.6 PFLOPS FP8 per chip; vLLM TPU backend name and status | §5.5 |
 | Tooling | Terraform google provider 8.4.0 (labs pin `>= 8.0`); Kueue v0.19.6; `gcloud billing budgets create` flags; project-deletion recovery window | §6, §8 |
