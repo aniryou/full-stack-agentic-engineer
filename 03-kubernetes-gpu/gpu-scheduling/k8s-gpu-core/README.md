@@ -14,7 +14,7 @@ deployment). The concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1 (what Kubernetes sees).
-2. Run the tests (below): 49 tests, well under a second.
+2. Run the tests (below): 51 tests, a few seconds.
 3. Open [`notebooks/01_how_kubernetes_sees_a_gpu.ipynb`](notebooks/01_how_kubernetes_sees_a_gpu.ipynb); each
    exercise's check cell prints ✅ when you are right.
 
@@ -23,7 +23,7 @@ deployment). The concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 49 tests, well under a second
+python3 -m pytest -q                          # 51 tests, a few seconds
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
