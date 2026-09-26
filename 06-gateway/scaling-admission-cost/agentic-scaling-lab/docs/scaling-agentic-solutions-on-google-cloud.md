@@ -2,7 +2,7 @@
 
 **The long-form companion to [the primer](01-scaling-primer.md), for an engineer walking the design through a review.** An agent system is scaled by bounding tokens, not by adding servers. This document works that idea end to end — the arithmetic, the reference architecture, the mechanisms and the failure modes — on a customer-service agent running on Cloud Run and Gemini.
 
-*Platform facts and prices as of September 2026 (verify). Every figure in Part 3 is computed by this lab's capacity model, `scalelab.capacity` (`python -m scalelab.capacity`, output in [03-capacity-plan.md](03-capacity-plan.md)), so the arithmetic is internally consistent; the behavioural findings are simulated, from `scalelab.sim` load tests against a simulated model pool. Sections are numbered so they can be referenced individually in design reviews.*
+*Platform facts and prices as of September 2026 (verify). The rates, tokens, concurrency, cost, Provisioned Throughput and what-breaks-first figures in Part 3 are computed by this lab's capacity model, `scalelab.capacity` (`python -m scalelab.capacity`, output in [03-capacity-plan.md](03-capacity-plan.md)); the tool-call, gateway-instance, Firestore, Redis and Pub/Sub rows are the same arithmetic done by hand (§3 says which is which); the behavioural findings are simulated, from `scalelab.sim` load tests against a simulated model pool. Sections are numbered so they can be referenced individually in design reviews.*
 
 Five kinds of callout appear throughout:
 
