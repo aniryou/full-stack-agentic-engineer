@@ -34,14 +34,22 @@ def test_readings_for_each_sample_gpu(snaps):
 def test_throttle_bits_and_xid_triage():
     assert dcgm.decode_throttle(0x60) == ["sw_thermal_slowdown", "hw_thermal_slowdown"]
     assert dcgm.decode_throttle(4) == ["sw_power_cap"]
-    assert dcgm.triage_xid(79)["category"] == "hardware" and dcgm.triage_xid(13)["category"] == "application"
+    assert dcgm.triage_xid(79)["owner"] == "hardware" and dcgm.triage_xid(79)["severity"] == "critical"
+    assert dcgm.triage_xid(63)["owner"] == "node" and dcgm.triage_xid(13)["owner"] == "application"
     assert dcgm.triage_xid(9999)["meaning"] == "unknown XID"
 
 
 def test_alert_rules_fire_where_expected(snaps):
     fired = {(rule, gpu.split("/")[0].split("-")[-1]) for rule, _, gpu in dcgm.evaluate(list(snaps.values()))}
-    assert fired == {("GpuBusyButUnderfilled", "b"), ("GpuXidOther", "c"), ("GpuIdleWhileAllocated", "c"),
+    assert fired == {("GpuBusyButUnderfilled", "b"), ("GpuXidApplication", "c"), ("GpuIdleWhileAllocated", "c"),
                      ("GpuUncorrectableRemappedRows", "d"), ("GpuThermalThrottling", "d")}
+
+
+def test_xid_owners_partition_the_catalogue():
+    owners = {o for _, o, _ in dcgm.XIDS.values()}
+    assert owners == {"application", "node", "hardware"}
+    hw, node = set(dcgm.xids_owned_by("hardware")), set(dcgm.xids_owned_by("node"))
+    assert {48, 64, 74, 79, 95} == hw and not hw & node
 
 
 def test_promql_bit_test_matches_the_python_decode():

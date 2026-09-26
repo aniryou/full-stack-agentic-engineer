@@ -187,31 +187,38 @@ def bottleneck(sig: Signals) -> str:
 
 
 # --------------------------------------------------------------------------- XID triage
-# code: (meaning, category, action) — condensed from NVIDIA's XID catalogue (verify before automating)
+# code: (meaning, owner, action). Owner = who acts: the application team, the node operator (drain /
+# reset when convenient), or hardware (drain now; recurring -> replace). Condensed from NVIDIA's XID
+# catalogue — verify before automating anything on it.
 XIDS = {
-    13: ("graphics engine exception", "application", "usually an application bug (e.g. out-of-bounds); run compute-sanitizer; many apps failing on one GPU -> suspect hardware"),
-    31: ("GPU memory page fault", "application", "illegal address from a kernel; restart the workload, fix the bug"),
+    13: ("graphics engine exception", "application", "usually an out-of-bounds access in a kernel: run compute-sanitizer, fix, restart"),
+    31: ("GPU memory page fault", "application", "illegal address from a kernel: fix the bug, restart the workload"),
     43: ("GPU stopped processing", "application", "a user process faulted; the GPU is usable once it exits"),
-    45: ("preemptive cleanup after earlier errors", "informational", "look at the XID that preceded it"),
-    48: ("double-bit ECC error", "hardware", "uncorrectable memory error: drain the node, reset the GPU; recurring -> replace"),
-    61: ("internal micro-controller breakpoint", "driver/firmware", "reset the GPU; update the driver if it recurs"),
-    62: ("internal micro-controller halt", "driver/firmware", "reset the GPU (reboot the node); update driver/firmware"),
-    63: ("ECC page retirement / row remap recorded", "hardware", "reset to apply the remap; watch remapped-row counters"),
-    64: ("ECC page retirement / row remap failure", "hardware", "drain; the GPU likely needs replacement"),
-    74: ("NVLink error", "hardware", "check `nvidia-smi nvlink -s`, reset; recurring -> hardware ticket"),
-    79: ("GPU has fallen off the bus", "hardware", "PCIe/power/thermal event: drain the node and reboot; recurring -> hardware ticket"),
-    92: ("high single-bit ECC error rate", "hardware", "monitor; schedule replacement if it persists"),
-    94: ("contained ECC error", "hardware", "only the affected application stopped; restart it, the GPU continues"),
-    95: ("uncontained ECC error", "hardware", "every application on the GPU is affected: drain and reset"),
-    119: ("GSP RPC timeout", "driver/firmware", "reset the GPU; update driver/firmware"),
-    120: ("GSP error", "driver/firmware", "reset the GPU; update driver/firmware"),
+    45: ("preemptive cleanup", "application", "secondary: read the XID that preceded it"),
+    61: ("internal micro-controller breakpoint", "node", "reset the GPU; update the driver if it recurs"),
+    62: ("internal micro-controller halt", "node", "reset the GPU (reboot the node); update driver/firmware"),
+    63: ("row remapping / page retirement recorded", "node", "the remap is pending until a GPU reset: drain and reset"),
+    92: ("high single-bit ECC error rate", "node", "schedule diagnostics (dcgmi diag); replace if it persists"),
+    94: ("contained ECC error", "node", "only the affected application died: restart it, reset the GPU when drained"),
+    119: ("GSP RPC timeout", "node", "reset the GPU; update driver/firmware"),
+    120: ("GSP error", "node", "reset the GPU; update driver/firmware"),
+    48: ("double-bit ECC error", "hardware", "drain and reset now; recurring -> replace"),
+    64: ("row remapper failure", "hardware", "drain; the GPU needs replacement"),
+    74: ("NVLink error", "hardware", "drain, check `nvidia-smi nvlink -s`, reset; recurring -> hardware ticket"),
+    79: ("GPU has fallen off the bus", "hardware", "drain and reboot; diagnose PCIe, power, thermals; recurring -> replace"),
+    95: ("uncontained ECC error", "hardware", "every application on the GPU is affected: drain and reset now"),
 }
-HARDWARE_XIDS = sorted(c for c, (_, cat, _) in XIDS.items() if cat == "hardware")
+SEVERITY = {"hardware": "critical", "node": "warning", "application": "info"}  # page / ticket / notify
+
+
+def xids_owned_by(owner: str) -> list[int]:
+    return sorted(c for c, (_, o, _) in XIDS.items() if o == owner)
 
 
 def triage_xid(code: int) -> dict:
-    meaning, category, action = XIDS.get(int(code), ("unknown XID", "unknown", "look it up in NVIDIA's XID catalogue"))
-    return {"xid": int(code), "meaning": meaning, "category": category, "action": action}
+    meaning, owner, action = XIDS.get(int(code), ("unknown XID", "unknown", "look it up in NVIDIA's XID catalogue"))
+    return {"xid": int(code), "meaning": meaning, "owner": owner, "severity": SEVERITY.get(owner, "warning"),
+            "action": action}
 
 
 # --------------------------------------------------------------------------- alert rules
@@ -230,22 +237,29 @@ def _bit(field_name: str, bit: int, width: int = 1) -> str:
     return f"floor({field_name} / {bit}) % {2 ** width} > 0"
 
 
+def _xid_in(codes: list[int]) -> str:
+    return " or ".join(f"DCGM_FI_DEV_XID_ERRORS == {c}" for c in codes)
+
+
 RULES = [
-    Rule("GpuXidHardware", " or ".join(f"DCGM_FI_DEV_XID_ERRORS == {c}" for c in HARDWARE_XIDS), "0m", "critical",
-         "Hardware-class XID on {{ $labels.Hostname }} gpu {{ $labels.gpu }}: drain and reset",
-         lambda s: s.xid in HARDWARE_XIDS),
-    Rule("GpuXidOther", "DCGM_FI_DEV_XID_ERRORS > 0 unless (" + " or ".join(
-        f"DCGM_FI_DEV_XID_ERRORS == {c}" for c in HARDWARE_XIDS) + ")", "0m", "warning",
-         "XID {{ $value }} on {{ $labels.Hostname }}: usually the application — check its logs",
-         lambda s: s.xid > 0 and s.xid not in HARDWARE_XIDS),
+    Rule("GpuXidHardware", _xid_in(xids_owned_by("hardware")), "0m", "critical",
+         "Hardware XID {{ $value }} on {{ $labels.Hostname }} gpu {{ $labels.gpu }}: drain now",
+         lambda s: triage_xid(s.xid)["owner"] == "hardware"),
+    Rule("GpuXidNode", _xid_in(xids_owned_by("node")), "0m", "warning",
+         "XID {{ $value }} on {{ $labels.Hostname }}: drain and reset the GPU when convenient",
+         lambda s: triage_xid(s.xid)["owner"] == "node"),
+    Rule("GpuXidApplication", "DCGM_FI_DEV_XID_ERRORS > 0 unless (" + _xid_in(
+        xids_owned_by("hardware") + xids_owned_by("node")) + ")", "0m", "info",
+         "XID {{ $value }} on {{ $labels.Hostname }}: usually the application; tell its owner",
+         lambda s: s.xid > 0 and triage_xid(s.xid)["owner"] not in ("hardware", "node")),
     Rule("GpuRowRemapFailure", "DCGM_FI_DEV_ROW_REMAP_FAILURE > 0", "0m", "critical",
-         "Row remapping failed: the GPU cannot repair its memory — replace it",
+         "Row remapping failed: the GPU cannot repair its memory, replace it",
          lambda s: s.row_remap_failure > 0),
     Rule("GpuUncorrectableRemappedRows", "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS > 0", "0m", "warning",
          "Rows remapped after uncorrectable errors: reset pending; watch the trend",
          lambda s: s.remapped_uncorrectable > 0),
     Rule("GpuThermalThrottling", _bit("DCGM_FI_DEV_CLOCKS_EVENT_REASONS", 32, 2), "5m", "warning",
-         "Thermal slowdown (SW or HW) on {{ $labels.Hostname }} gpu {{ $labels.gpu }}",
+         "Thermal slowdown (SW or HW) on {{ $labels.Hostname }} gpu {{ $labels.gpu }}: facilities ticket",
          lambda s: bool(set(s.throttle) & THERMAL)),
     Rule("GpuHardwareSlowdown", f"{_bit('DCGM_FI_DEV_CLOCKS_EVENT_REASONS', 8)} or "
          f"{_bit('DCGM_FI_DEV_CLOCKS_EVENT_REASONS', 128)}", "5m", "warning",
@@ -308,7 +322,7 @@ def report(text: str) -> str:
         lines.append(f"  reading: {bottleneck(s)}")
         if s.xid:
             t = triage_xid(s.xid)
-            lines.append(f"  XID {t['xid']} ({t['meaning']}, {t['category']}): {t['action']}")
+            lines.append(f"  XID {t['xid']} ({t['meaning']}; owner: {t['owner']}): {t['action']}")
         for rule, sev, _ in evaluate([snap]):
             lines.append(f"  alert: {rule} [{sev}]")
     return "\n".join(lines)
