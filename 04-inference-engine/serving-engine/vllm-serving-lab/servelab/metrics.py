@@ -96,7 +96,8 @@ def _unescape(v: str) -> str:
 
 
 def _float(v: str) -> float:
-    return {"+Inf": math.inf, "-Inf": -math.inf, "Inf": math.inf}.get(v, None) or float(v)
+    special = {"+Inf": math.inf, "Inf": math.inf, "-Inf": -math.inf}
+    return special[v] if v in special else float(v)
 
 
 class Scrape:
@@ -234,8 +235,9 @@ def histogram_quantile(q: float, buckets) -> float:
     if total == 0:
         return math.nan
     rank = q * total
-    idx = next(i for i in range(len(fixed) - 1 + 1) if i == len(fixed) - 1 or fixed[i][1] >= rank)
-    if idx == len(fixed) - 1:
+    last = len(fixed) - 1  # the +Inf bucket is never searched, only fallen into
+    idx = next((i for i in range(last) if fixed[i][1] >= rank), last)
+    if idx == last:
         return fixed[-2][0]
     if idx == 0 and fixed[0][0] <= 0:
         return fixed[0][0]
@@ -244,6 +246,8 @@ def histogram_quantile(q: float, buckets) -> float:
         start = fixed[idx - 1][0]
         count -= fixed[idx - 1][1]
         rank -= fixed[idx - 1][1]
+    if count == 0:  # only q == 0 with an empty first bucket: Go's 0/0 is NaN
+        return math.nan
     return start + (end - start) * (rank / count)
 
 

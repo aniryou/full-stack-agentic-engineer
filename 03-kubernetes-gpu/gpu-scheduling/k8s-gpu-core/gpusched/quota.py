@@ -110,34 +110,36 @@ class Kueue:
             wl.cq = self.local_queues.get(wl.queue, wl.queue)
             self.pending.append(wl)
 
-    def schedule(self) -> list:
+    def schedule(self, max_steps: int = 10_000) -> list:
         """Admit (and preempt) until nothing changes; return the events of this call."""
         start = len(self.events)
-        while self._cycle():
-            pass
+        for _ in range(max_steps):
+            if not self._step():
+                break
         return self.events[start:]
 
     def _heads(self) -> list:
+        """Candidates in Kueue's order: no borrowing needed first, then priority, then age.
+        StrictFIFO offers only its head; BestEffortFIFO lets later workloads past a blocked one."""
         heads = []
         for cq in self.cqs.values():
             queue = sorted((w for w in self.pending if w.cq == cq.name), key=lambda w: (-w.priority, w.seq))
             heads += queue[:1] if cq.queueing_strategy == "StrictFIFO" else queue
-        def rank(w):        # within-nominal first, then priority, then age (Kueue's cohort ordering)
-            cq = self.cqs[w.cq]
-            return (not any(self.fits(w, cq, f, borrow=False) for f in cq.quotas), -w.priority, w.seq)
-        return sorted(heads, key=rank)
 
-    def _cycle(self) -> bool:
-        heads = self._heads()
-        for wl in heads:                               # first flavor where it fits (borrowing allowed)
+        def needs_borrowing(w):
+            cq = self.cqs[w.cq]
+            return not any(all(cq.quota(f, r) and cq.usage.get((f, r), 0) + a <= cq.quota(f, r).nominal
+                               for r, a in w.requests.items()) for f in cq.quotas)
+        return sorted(heads, key=lambda w: (needs_borrowing(w), -w.priority, w.seq))
+
+    def _step(self) -> bool:
+        for wl in self._heads():
             cq = self.cqs[wl.cq]
-            flavor = next((f for f in cq.quotas if self.fits(wl, cq, f)), None)
+            flavor = next((f for f in cq.quotas if self.fits(wl, cq, f)), None)   # fit, borrowing allowed
             if flavor:
                 self._admit(wl, cq, flavor)
                 return True
-        for wl in heads:                               # nothing fits: try preemption, flavor by flavor
-            cq = self.cqs[wl.cq]
-            for flavor in cq.quotas:
+            for flavor in cq.quotas:                                               # else: preempt
                 targets = self.preemption_targets(wl, cq, flavor)
                 if targets:
                     for v in targets:
