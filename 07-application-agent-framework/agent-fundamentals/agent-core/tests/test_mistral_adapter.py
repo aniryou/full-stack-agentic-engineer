@@ -149,8 +149,11 @@ def test_no_client_installed_is_a_labelled_stop(monkeypatch):
 
 
 def test_the_installed_client_constructs_without_a_call():
-    pytest.importorskip("mistralai")
-    from agentcore.mistral_llm import MistralLLM, _sdk_client_class
+    from agentcore.mistral_llm import MistralLLM, MistralUnavailable, _sdk_client_class
 
+    try:
+        client_class = _sdk_client_class()
+    except MistralUnavailable:
+        pytest.skip("the optional mistral extra is not installed")
     llm = MistralLLM(api_key="not-a-real-key")                              # constructing makes no request
-    assert isinstance(llm._client, _sdk_client_class()) and callable(llm._client.chat.complete)
+    assert isinstance(llm._client, client_class) and callable(llm._client.chat.complete)
