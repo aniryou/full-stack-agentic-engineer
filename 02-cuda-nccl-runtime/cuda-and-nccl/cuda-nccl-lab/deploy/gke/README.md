@@ -41,7 +41,7 @@ Every GPU pod requests `nvidia.com/gpu` in `limits` (extended resources cannot b
 so requests equal limits), selects an accelerator with `cloud.google.com/gke-accelerator`, and
 tolerates the `nvidia.com/gpu` taint. How the device plugin turns that request into device nodes
 and a driver mount is primer §6; how the scheduler places it is layer 03
-(`03-kubernetes-gpu/gpu-scheduling`).
+([`03-kubernetes-gpu/gpu-scheduling`](../../../../../03-kubernetes-gpu/gpu-scheduling)).
 
 ## DCGM metrics and alerts
 

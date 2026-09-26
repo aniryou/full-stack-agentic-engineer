@@ -4,8 +4,8 @@
 under them do not. Everything dated is collected in the [Verify list](#verify-list).*
 
 This primer covers the software between the silicon ([layer 01](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md))
-and the schedulers and engines above it (layer 03, `03-kubernetes-gpu/gpu-scheduling/`, and layer 04,
-`04-inference-engine/serving-engine/`). It explains how a driver, a CUDA runtime and a compiled kernel agree to
+and the schedulers and engines above it (layer 03, [`03-kubernetes-gpu/gpu-scheduling/`](../../03-kubernetes-gpu/gpu-scheduling/), and layer 04,
+[`04-inference-engine/serving-engine/`](../../04-inference-engine/serving-engine/)). It explains how a driver, a CUDA runtime and a compiled kernel agree to
 run; how a kernel executes (warps, occupancy, 32-byte memory transactions); why launches cost time; how GPUs
 exchange data (collectives and NCCL); how a container gets a GPU; how one GPU is shared; and how to tell whether
 it is healthy. Every formula here is computed by the `gpusim` package in
@@ -573,7 +573,7 @@ classifies any path as host-injected or image.
 
 The device plugin advertises `nvidia.com/gpu` as an extended resource. At pod admission its `Allocate` call
 returns the device IDs, environment variables, mounts or CDI device names for the chosen GPUs, and the container
-runtime injects them as above (layer 03's primer, `03-kubernetes-gpu/gpu-scheduling/PRIMER.md` §1 *What Kubernetes
+runtime injects them as above (layer 03's primer, [`03-kubernetes-gpu/gpu-scheduling/PRIMER.md`](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md) §1 *What Kubernetes
 sees*). On GKE, Google manages the device plugin and installs the driver on the node (§9). With the NVIDIA GPU
 Operator, the operator installs the driver, toolkit, plugin and DCGM exporter as pods.
 
@@ -627,7 +627,7 @@ A100 80 GB has the same shapes, A100 40 GB halves the memory (1g.5gb ... 7g.40gb
 So plan a layout per node pool and create instances with explicit placements. Kubernetes exposes MIG either
 as plain `nvidia.com/gpu` with one profile per node ("single" strategy) or as `nvidia.com/mig-1g.10gb`-style
 resources ("mixed"). GKE sets one partition size per node pool (§9); layer 03 covers sharing at cluster level
-(`03-kubernetes-gpu/gpu-scheduling/PRIMER.md` §9 *Sharing GPUs at the cluster level*). A 7g instance is not the
+([`03-kubernetes-gpu/gpu-scheduling/PRIMER.md`](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md) §9 *Sharing GPUs at the cluster level*). A 7g instance is not the
 whole GPU: in MIG mode each slice gets a fixed number of SMs, so an A100's 7g has 98 of its 108 SMs (verify).
 
 ### 7.3 MPS: overlap
@@ -744,7 +744,7 @@ error 802.
 
 ## 9. On GCP and elsewhere
 
-The same concepts on each platform; prices and obtainability are in `COMPUTE.md` at the repo root.
+The same concepts on each platform; prices and obtainability are in [`COMPUTE.md`](../../COMPUTE.md).
 
 | Concept | T0 (`gpusim`, any laptop) | T1/T2 (any GPU box) | T3 (GCP) |
 |---|---|---|---|

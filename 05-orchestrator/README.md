@@ -44,8 +44,9 @@ cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirem
 cd ../inference-gateway-lab && python3 -m pip install -r requirements.txt && python3 -m pip install -e . && python3 -m pytest -q
 ```
 
-Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below. Tiers, costs and the deploy
-paths (compose, kind, any GPU box, GKE) are in the topic [README](serving-orchestration/README.md#run-it).
+Then `python3 -m jupyterlab notebooks` in either directory, or the Colab badges below. Tiers and costs are in the
+topic README's [Run it](serving-orchestration/README.md#run-it); the deploy paths (compose, kind, any GPU box, GKE)
+are in the lab's [Deploy paths](serving-orchestration/inference-gateway-lab/README.md#deploy-paths).
 
 ## How it fits
 
@@ -58,7 +59,7 @@ decide whether a request runs before the router decides where, and to the agent 
 [`07-application-agent-framework`](../07-application-agent-framework/README.md), whose multi-turn sessions shape
 every routing and caching decision here.
 
-> Note: `06-gateway/scaling-admission-cost/agentic-scaling-lab` touches this layer
+> Note: [`06-gateway/scaling-admission-cost/agentic-scaling-lab`](../06-gateway/scaling-admission-cost/agentic-scaling-lab) touches this layer
 > (capacity planning, autoscaling) but is filed under Gateway — see the root CLAUDE.md.
 
 ## Caveats

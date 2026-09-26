@@ -14,7 +14,7 @@ k3s/containerd settings).
 
 **Cost.** Whatever the VM costs while it runs: a 1-GPU VM on Lambda, a GCP `g2-standard-4` L4
 VM (Spot is cheapest), or any box with an NVIDIA GPU. Prices and obtainability:
-`COMPUTE.md` at the repo root. One hour covers everything below. RunPod and Vast.ai give
+[`COMPUTE.md`](../../../../../COMPUTE.md). One hour covers everything below. RunPod and Vast.ai give
 you a *container*, not a VM: no systemd and no kubelet of your own, so k3s does not fit there.
 
 **Clean up.** `deploy/gpu-vm/down.sh` uninstalls k3s; then **stop or delete the VM** — the GPU bills until

@@ -39,7 +39,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + Docker" i
 | [`k8s-gpu-lab/`](k8s-gpu-lab/) | write, lint and debug real GPU manifests with the **detailed** lab: `k8sgpu` — typed manifest builders (Job, JobSet, LWS, Kueue, DRA, ComputeClass), a GPU pod-spec linter, a "why is my pod Pending?" analyser, a capacity-type chooser; [`deploy/kind`](k8s-gpu-lab/deploy/kind/) (fake GPUs, Kueue, JobSet, LWS), [`deploy/gpu-vm`](k8s-gpu-lab/deploy/gpu-vm/) (k3s + the real device plugin on one GPU VM), [`deploy/gcp`](k8s-gpu-lab/deploy/gcp/) (Terraform) and [`deploy/gke`](k8s-gpu-lab/deploy/gke/) (manifests) | ~5 h at T0 (+2 h on GKE) | T0 → T3 |
 
 Times are rough: about 9 hours for the primer and the core, 5 more for the lab's T0 path (the repo's curriculum,
-`CURRICULUM.md` at the repo root, modules 03.1–03.6).
+[`CURRICULUM.md`](../../CURRICULUM.md), modules 03.1–03.6).
 
 ### Work it in this order
 
@@ -77,12 +77,11 @@ On Colab, every notebook's first cell clones the repo and installs its lab; the 
 |---|---|---|---|
 | **T0** | laptop, Colab CPU, CI | the whole core; the lab's manifests, linter and Pending analyser; the lab's kind notebook falls back to a simulator without Docker | $0 |
 | **T0 + Docker** | laptop with Docker | the lab's `deploy/kind`: the real kube-scheduler, Kueue v0.19.6, JobSet and LWS against fake `nvidia.com/gpu` capacity (optionally hundreds of KWOK nodes) | $0 |
-| T1 / T2 | any GPU VM you control (Lambda, a GCP VM) with k3s or kubeadm and the GPU Operator | the real device plugin, GPU Feature Discovery labels, MIG or time-slicing on one box (the lab's [`deploy/gpu-vm`](k8s-gpu-lab/deploy/gpu-vm/): k3s + the device plugin, optional time-slicing) | the VM's hourly price (`COMPUTE.md` at the repo root) |
+| T1 / T2 | any GPU VM you control (Lambda, a GCP VM) with k3s or kubeadm and the GPU Operator | the real device plugin, GPU Feature Discovery labels, MIG or time-slicing on one box (the lab's [`deploy/gpu-vm`](k8s-gpu-lab/deploy/gpu-vm/): k3s + the device plugin, optional time-slicing) | the VM's hourly price ([`COMPUTE.md`](../../COMPUTE.md)) |
 | **T3** | GKE via the lab's Terraform | a zonal cluster, a Spot L4 pool from zero with driver auto-install, flex-start queued provisioning, image streaming, GCS FUSE; ComputeClass and Kueue ProvisioningRequest manifests | pay per use; L4 Spot, scale to zero, destroy after |
 
 RunPod and Vast give you containers, not nodes, so they cannot teach this layer; use them for layers 01, 02 and 04.
-Prices and GPU obtainability: `COMPUTE.md` at the repo root. Where this sits in the whole course: `CURRICULUM.md` at
-the repo root.
+Prices and GPU obtainability: [`COMPUTE.md`](../../COMPUTE.md). Where this sits in the whole course: [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ## How it fits
 
@@ -93,7 +92,7 @@ engine (layer 04).
 |---|---|---|
 | before | layer 01 — [`roofline-and-fabric/PRIMER.md`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §5, §6, §7, §10 | fabric bandwidth (why topology matters), cold-start arithmetic, checkpoint intervals, GPU families and obtainability |
 | before | layer 01 — [`gpu-deployment-primer.md`](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md) §4 and §7 | the parallelism menu; Kubernetes specifics in brief |
-| beside | layer 02 — `02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md` §6, §7, §8 | how a container gets a GPU; MIG, time-slicing, MPS mechanics; health and DCGM |
+| beside | layer 02 — [`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §6, §7, §8 | how a container gets a GPU; MIG, time-slicing, MPS mechanics; health and DCGM |
 | after | layer 05 — [`serving-orchestration/PRIMER.md`](../../05-orchestrator/serving-orchestration/PRIMER.md) §4, §5 | autoscaling replicas and LeaderWorkerSet groups on queue and SLO signals; cold-start anatomy; prefill/decode disaggregation |
 | after | layer 06 — [`agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) | admission control and cost at the gateway, the same "shape demand to capacity" idea one layer up |
 

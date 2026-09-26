@@ -31,7 +31,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 | [`roofline-core/`](roofline-core/README.md) | **predict** step times, collective costs, cold starts, failure rates and $/M tokens with the minimal implementation: package `roofline`, seven standard-library modules (`specs`, `roofline`, `llm`, `fabric`, `storage`, `reliability`, `cost`) and four fill-in notebooks | ~8 h with the primer | T0 |
 | [`gpu-bench-lab/`](gpu-bench-lab/README.md) | **measure** the machine you have with the detailed lab, package `gpubench`: numpy (CPU) and torch (CUDA) backends for GEMM throughput, memory bandwidth, host↔device and GPU↔GPU transfers, weight loading; `nvidia-smi` topology and inventory parsers; Docker and GCP Terraform deploys | ~5 h | T0 → T3 |
 
-Times are rough and come from the repo's curriculum (`CURRICULUM.md` at the repo root, modules 01.1–01.5).
+Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../../CURRICULUM.md), modules 01.1–01.5).
 
 ### Work it in this order
 
@@ -71,8 +71,8 @@ On Colab, every notebook's first cell clones the repo and installs its lab; the 
 | **T2** | Kaggle 2×T4 (free, PCIe only), 2–8× A100/H100 SXM on RunPod/Vast/Lambda, GCP `a2-highgpu-2g` | P2P bandwidth over PCIe vs NVLink, `nvidia-smi topo -m` on real machines | ~$0–25 per session |
 | **T3** | GCP via the lab's Terraform | the suite on a Spot L4 VM with auto-stop, results uploaded to a bucket | pay per use |
 
-Prices and obtainability move monthly: see `COMPUTE.md` (repo root) and the primer's §10; the whole learning path is
-in `CURRICULUM.md` (repo root).
+Prices and obtainability move monthly: see [`COMPUTE.md`](../../COMPUTE.md) and the primer's §10; the whole learning path is
+in [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ## How it fits
 

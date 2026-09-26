@@ -74,7 +74,7 @@ GKE (optional).
 - Every output is **simulated**: a model of documented NVIDIA behaviour, not a measurement. The lab measures.
 - Version tables, per-SM limits and MIG profiles are dated September 2026 and marked *verify* in the code and in
   the primer's [Verify list](../PRIMER.md#verify-list).
-- Where to run the GPU parts and what they cost: `COMPUTE.md` at the repo root.
+- Where to run the GPU parts and what they cost: [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## The library
 

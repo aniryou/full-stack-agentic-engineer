@@ -31,7 +31,7 @@ then *terminate* the rented machine — it bills until you do, not until vLLM st
 
 Flag names are from vLLM 0.30.0 (verify for other releases); the single-replica recipe and the
 flags in depth are in layer 04's `vllm-serving-lab/deploy/any-gpu`
-(`04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/README.md`).
+([`04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/README.md`](../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/README.md)).
 
 ## Colab or Kaggle (free T4)
 
@@ -56,7 +56,7 @@ Colab sessions end after idle time and free GPU hours are limited (not guarantee
   the same machine, so the network is not part of your TTFT.
 - **VMs (Lambda, GCP Compute Engine):** install Docker and the NVIDIA Container Toolkit (layer 02)
   and use `docker compose -f docker-compose.yaml up -d --build`, or use `serve.sh` with pip.
-- Prices and availability: `COMPUTE.md` at the repo root (all verify).
+- Prices and availability: [`COMPUTE.md`](../../../../../COMPUTE.md) (all verify).
 
 ## What changes from the fake backend
 

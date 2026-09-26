@@ -48,7 +48,7 @@ labelled T0 path when there is no GPU. Hours are the course plan's estimates for
 | 5 | §7 Sharing a GPU · §8 Health and observability · §9 On GCP and elsewhere | [`05_sharing_and_health`](cuda-nccl-core/notebooks/05_sharing_and_health.ipynb) | [`06_gpu_sharing_and_dcgm_on_gke`](cuda-nccl-lab/notebooks/06_gpu_sharing_and_dcgm_on_gke.ipynb) (T0; T1/T2 on a GPU VM; T3) | MIG vs MPS vs time-slicing, GPU util vs SM active, XID triage | 3 (+2 on GKE) |
 
 Finish with the primer's [*In a design review*](PRIMER.md#in-a-design-review) drills. These five steps are the course plan's modules
-02.1–02.5 (`CURRICULUM.md` at the repo root).
+02.1–02.5 ([`CURRICULUM.md`](../../CURRICULUM.md)).
 
 ## Run it
 
@@ -75,8 +75,8 @@ On Colab, each notebook's first cell clones the repo and installs its lab; the b
 - **Builds on** layer 01's [roofline-and-fabric](../../01-hardware-gpu-fabric/roofline-and-fabric/README.md)
   primer — the roofline (§2), the memory hierarchy (§4), link rates and the α-β model (§5) — and the
   [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) for the anatomy of an SM.
-- **Leads to** layer 03 (`03-kubernetes-gpu/gpu-scheduling/`: the device plugin, MIG and time-sharing at
-  cluster level), layer 04 (`04-inference-engine/serving-engine/`: these kernels, CUDA Graphs and TP
+- **Leads to** layer 03 ([`03-kubernetes-gpu/gpu-scheduling/`](../../03-kubernetes-gpu/gpu-scheduling/): the device plugin, MIG and time-sharing at
+  cluster level), layer 04 ([`04-inference-engine/serving-engine/`](../../04-inference-engine/serving-engine/): these kernels, CUDA Graphs and TP
   all-reduces inside an engine; also the [FlashAttention](../../04-inference-engine/flash-attention/flash-attention-primer.md)
   and [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md) primers) and
   layer 05 ([`serving-orchestration`](../../05-orchestrator/serving-orchestration/README.md): KV transfer between prefill and decode workers over
@@ -90,7 +90,7 @@ On Colab, each notebook's first cell clones the repo and installs its lab; the b
   illustrative samples in the tools' documented formats.
 - **Real hardware.** T1 is free on Colab or Kaggle. Kaggle's 2 × T4 is a free T2 box, but PCIe only: no
   NVLink numbers. A rented 24 GB GPU is roughly $0.3–0.7/hr, an hour on a multi-GPU NVLink box $2–25
-  (verify). Prices and obtainability: `COMPUTE.md` at the repo root.
+  (verify). Prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md).
 - **Google Cloud (T3).** Idle, the lab's GKE cluster costs the management fee (one zonal cluster is covered
   by GKE's free-tier credit, verify) and one e2-standard-4 system node, a few dollars a day (verify). GPU
   pools cost nothing until a pod asks for a GPU; the MIG pool (A100) is off by default and needs quota. Run

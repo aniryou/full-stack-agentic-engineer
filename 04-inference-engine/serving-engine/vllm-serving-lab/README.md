@@ -44,7 +44,7 @@ cache, preemption and a roofline step-time model. Its numbers are labelled *simu
 
 vLLM v0.30.0 needs compute capability 7.5 or newer: a T4 works, Kaggle's P100 does not. The minimal from-scratch
 engine is next door in [`../mini-engine-core/`](../mini-engine-core/); this lab never imports it. Prices and where
-to get GPUs: `COMPUTE.md` at the repo root.
+to get GPUs: [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## Run it
 
