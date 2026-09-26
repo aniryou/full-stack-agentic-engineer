@@ -39,8 +39,11 @@ from . import transpose as tr
 
 def require_gpu() -> None:
     if SIMULATOR:
+        from gpurt.env import NUMBA_FALLBACK
+
         raise RuntimeError("gpurt.kernels.bench needs a real GPU: the simulator's timings are Python-thread "
-                           "times. Run on a GPU box (Colab/Kaggle T4, any rented GPU) with numba-cuda installed.")
+                           "times. Run on a GPU box (Colab/Kaggle T4, any rented GPU) with numba-cuda installed."
+                           + (f" Here: {NUMBA_FALLBACK}" if NUMBA_FALLBACK else ""))
     if not cuda.is_available():
         raise RuntimeError("no CUDA device available to Numba (driver missing? numba-cuda not installed? "
                            "see `python -m gpurt.container`)")

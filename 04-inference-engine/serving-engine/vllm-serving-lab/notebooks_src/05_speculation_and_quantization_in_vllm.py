@@ -228,9 +228,10 @@ print(f"   AWQ decode is {res['bf16'][0] / res['awq (W4A16)'][0]:.1f}x faster, n
 # or weight-only there (verify for your vLLM version). Attention on a T4 runs on vLLM's Triton
 # backend, which v0.30.0 selects by itself (its FlashAttention backend needs sm_80+); no flag needed.
 #
-# The quantized sizes here keep embeddings and `lm_head` in 16-bit, as real checkpoints do, so
-# AWQ decode comes out ~2.8x faster than bf16; PRIMER §8's table quantizes every parameter (4.1 GB,
-# ~3.5x). Same physics, different bookkeeping — use the checkpoint's real size. N-gram speculation needs repetitive text
+# The quantized sizes here keep embeddings and `lm_head` in 16-bit, as real checkpoints do (5.73 GB
+# for AWQ Llama-3.1-8B, 9.08 GB for FP8), so AWQ decode comes out ~2.8x faster than bf16, not the
+# ~3.9x the linear layers' bytes alone suggest. PRIMER §8's table uses the same convention (5.7 GB,
+# ~3x with its step model's overhead and KV read) — use the checkpoint's real size, not 4 bits × params. N-gram speculation needs repetitive text
 # (code edits, extraction, RAG answers that quote the context) to reach a useful acceptance rate;
 # measure it with exercise 5.2 against your own traffic before turning it on.
 
