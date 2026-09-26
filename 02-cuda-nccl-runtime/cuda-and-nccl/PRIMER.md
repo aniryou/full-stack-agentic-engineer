@@ -644,14 +644,17 @@ on that GPU (verify for your driver). MPS suits cooperative workloads of one tea
 The device plugin (or GKE's `max_shared_clients_per_gpu`) advertises one GPU as N schedulable replicas. The GPU
 runs one context at a time, round-robin. There is **no memory isolation**, so one tenant can OOM the others, and
 no performance isolation. With N busy tenants, a request needing W of GPU time in quanta q with switch cost s
-finishes after `W + (⌈W/q⌉ − 1)·((N−1)(q+s) + s)` at best (`gpusim.sharing.timeslice_latency()`): 10 ms of
-work with 4 busy tenants, 2 ms quanta and 50 µs switches takes **34.8 ms**. Idle tenants cost nothing, which is
-why time-slicing suits notebooks and bursty dev work.
+finishes after `W + (⌈W/q⌉ − 1)·((N−1)(q+s) + s)` at best, when it arrives just as its turn starts
+(`gpusim.sharing.timeslice_latency()`): 10 ms of work with 4 busy tenants, 2 ms quanta and 50 µs switches takes
+**34.8 ms at best**. Arriving just after its turn adds one more round of the others' turns, 6.2 ms, so **41.0 ms
+at worst** and **37.9 ms on average**. Idle tenants cost nothing, which is why time-slicing suits notebooks and
+bursty dev work.
 
 ### 7.5 Choosing
 
 An idealised latency model, counting SM capacity only (`gpusim.sharing.shared_latency()`): one request needs
-10 ms alone, 4 always-busy tenants share, and `util` is the share of the GPU its kernels fill:
+10 ms alone, 4 always-busy tenants share, and `util` is the share of the GPU its kernels fill. The time-slicing
+column is the mean over arrival times from §7.4 (34.8 ms at best, 41.0 ms at worst):
 
 | Kernel size | Exclusive | Time-slicing | MPS | MIG (1g each) |
 |---|---|---|---|---|
