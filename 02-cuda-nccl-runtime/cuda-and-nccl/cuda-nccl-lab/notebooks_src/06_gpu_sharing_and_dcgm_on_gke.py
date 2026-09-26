@@ -251,7 +251,7 @@ if not scrapes:
 # and the exporter never runs in the workloads' namespace. The scraper's own `namespace`/`pod` target
 # labels win, so the exporter's workload labels arrive as `exported_namespace`/`exported_pod` (verify).
 # Rules only *evaluate*: firing alerts go to GMP's managed Alertmanager, which needs receivers
-# (`deploy/gke/alertmanager.example.yaml`) — not to Cloud Monitoring alerting policies. And on the managed
+# (`deploy/gke/alertmanager/alertmanager.example.yaml`) — not to Cloud Monitoring alerting policies. And on the managed
 # exporter's field list, the health rules may be blind (above; verify).
 #
 # ```bash

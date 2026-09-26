@@ -95,8 +95,8 @@ case "${1:-}" in
   rules)
     run kubectl apply -f "${HERE}/06-dcgm-alert-rules.yaml" # ClusterRules: cluster-scoped, no namespace
     echo "== rules only evaluate; firing alerts go to GMP's managed Alertmanager. Give it receivers:" >&2
-    echo "   edit alertmanager.example.yaml, then: kubectl -n gmp-public create secret generic alertmanager \\" >&2
-    echo "     --from-file=alertmanager.yaml=${HERE}/alertmanager.example.yaml --dry-run=client -o yaml | kubectl apply -f -" >&2
+    echo "   edit alertmanager/alertmanager.example.yaml, then: kubectl -n gmp-public create secret generic alertmanager \\" >&2
+    echo "     --from-file=alertmanager.yaml=${HERE}/alertmanager/alertmanager.example.yaml --dry-run=client -o yaml | kubectl apply -f -" >&2
     ;;
   clean)
     run kubectl delete namespace "${NS}" --ignore-not-found

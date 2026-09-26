@@ -4,11 +4,11 @@
 under them do not. Everything dated is collected in the [Verify list](#verify-list).*
 
 This primer covers the software between the silicon ([layer 01](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md))
-and the schedulers and engines above it ([layer 03](../../03-kubernetes-gpu/gpu-scheduling/),
-[layer 04](../../04-inference-engine/serving-engine/)). It explains how a driver, a CUDA runtime and a
-compiled kernel agree to run; how a kernel executes (warps, occupancy, 32-byte memory transactions); why
-launches cost time; how GPUs exchange data (collectives and NCCL); how a container gets a GPU; how one GPU is
-shared; and how to tell whether it is healthy. Every formula here is computed by the `gpusim` package in
+and the schedulers and engines above it (layer 03, `03-kubernetes-gpu/gpu-scheduling/`, and layer 04,
+`04-inference-engine/serving-engine/`). It explains how a driver, a CUDA runtime and a compiled kernel agree to
+run; how a kernel executes (warps, occupancy, 32-byte memory transactions); why launches cost time; how GPUs
+exchange data (collectives and NCCL); how a container gets a GPU; how one GPU is shared; and how to tell whether
+it is healthy. Every formula here is computed by the `gpusim` package in
 [`cuda-nccl-core/`](cuda-nccl-core/) (T0, runs on a laptop CPU) and measured for real in
 [`cuda-nccl-lab/`](cuda-nccl-lab/) (T1 to T3). It assumes the [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md)
 and links to it rather than repeating it.
@@ -573,9 +573,9 @@ classifies any path as host-injected or image.
 
 The device plugin advertises `nvidia.com/gpu` as an extended resource. At pod admission its `Allocate` call
 returns the device IDs, environment variables, mounts or CDI device names for the chosen GPUs, and the container
-runtime injects them as above ([layer 03 §1](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md#1-what-kubernetes-sees)). On GKE, Google manages
-the device plugin and installs the driver on the node (§9). With the NVIDIA GPU Operator, the operator
-installs the driver, toolkit, plugin and DCGM exporter as pods.
+runtime injects them as above (layer 03's primer, `03-kubernetes-gpu/gpu-scheduling/PRIMER.md` §1 *What Kubernetes
+sees*). On GKE, Google manages the device plugin and installs the driver on the node (§9). With the NVIDIA GPU
+Operator, the operator installs the driver, toolkit, plugin and DCGM exporter as pods.
 
 ### 6.4 Failure modes (`gpusim.compat.explain_container()`)
 
@@ -627,8 +627,8 @@ A100 80 GB has the same shapes, A100 40 GB halves the memory (1g.5gb ... 7g.40gb
 So plan a layout per node pool and create instances with explicit placements. Kubernetes exposes MIG either
 as plain `nvidia.com/gpu` with one profile per node ("single" strategy) or as `nvidia.com/mig-1g.10gb`-style
 resources ("mixed"). GKE sets one partition size per node pool (§9); layer 03 covers sharing at cluster level
-([§9](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md#9-sharing-gpus-at-the-cluster-level)). A 7g instance is not the whole GPU: in MIG
-mode each slice gets a fixed number of SMs, so an A100's 7g has 98 of its 108 SMs (verify).
+(`03-kubernetes-gpu/gpu-scheduling/PRIMER.md` §9 *Sharing GPUs at the cluster level*). A 7g instance is not the
+whole GPU: in MIG mode each slice gets a fixed number of SMs, so an A100's 7g has 98 of its 108 SMs (verify).
 
 ### 7.3 MPS: overlap
 
@@ -692,6 +692,16 @@ time at least one kernel was running**. A kernel with 8 blocks on a 132-SM H100 
 | `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_SM_CLOCK` | power, temperature, clocks | with the throttle reasons below |
 | `DCGM_FI_DEV_XID_ERRORS` | last XID error | triage below |
 
+**Check which fields your exporter exports.** Stock dcgm-exporter's default counters file
+(`default-counters.csv`) has `DCGM_FI_PROF_SM_ACTIVE` and `DCGM_FI_PROF_SM_OCCUPANCY` commented out and leaves out
+`DCGM_FI_DEV_CLOCKS_EVENT_REASONS` (§8.3), so by default you get neither the first two rows above nor the throttle
+bits. The lab ships a counters file that adds all three
+([`deploy/any-gpu/dcgm-counters.csv`](cuda-nccl-lab/deploy/any-gpu/dcgm-counters.csv)); the per-exporter field lists
+are `gpurt.dcgm.EXPORTED_BY`, and [`deploy/gke/README.md`](cuda-nccl-lab/deploy/gke/README.md) shows which alert rules
+each exporter lets fire. Google's managed-Prometheus DCGM field list (its `nvidia-dcgm` example, which GKE's managed
+package resembles) has SM active, occupancy and tensor active but no XID or row-remap fields, nor clock-event or DRAM
+ones (verify). On GKE, the §8.3–8.4 signals therefore need a self-managed exporter with that counters file.
+
 `gpusim.health.diagnose()` turns a sample into findings such as *"busy but mostly empty"* (util high, SM active
 low: small batch, launch gaps, tiny grids) and *"memory-bandwidth-bound"*. Notebook 05 works through both.
 
@@ -734,12 +744,12 @@ error 802.
 
 ## 9. On GCP and elsewhere
 
-The same concepts on each platform; prices and obtainability are in [COMPUTE.md](../../COMPUTE.md).
+The same concepts on each platform; prices and obtainability are in `COMPUTE.md` at the repo root.
 
 | Concept | T0 (`gpusim`, any laptop) | T1/T2 (any GPU box) | T3 (GCP) |
 |---|---|---|---|
 | kernels, coalescing, occupancy | `simt`, `occupancy`, `tiling` | lab `01`–`02`: Numba kernels, simulator then GPU | same kernels on an L4 node |
-| collectives, busbw | `collectives` | lab `03`–`04`: torch.distributed (gloo, NCCL), nccl-tests on 2+ GPUs | 2-GPU nccl-tests Job on `g2-standard-24` (2 × L4) |
+| collectives, busbw | `collectives` | lab `03`–`04`: collectives over OS pipes (a real multi-process ring, no torch) or gloo at T0, NCCL and nccl-tests on 2+ GPUs | 2-GPU nccl-tests Job on `g2-standard-24` (2 × L4) |
 | compatibility, containers | `compat` | lab `05`: what the container sees | GKE-installed drivers, container images |
 | sharing, health | `sharing`, `health` | MIG and DCGM on a rented A100/H100 VM | GKE MIG and time-sharing pools, DCGM metrics (lab `06`) |
 
@@ -753,7 +763,8 @@ A3 High (H100, `a3-highgpu-8g`) uses GPUDirect-TCPX (verify) and A3 Mega (H100) 
 A4 (B200), A4X (GB200 NVL72) and A4X Max (GB300 NVL72) use GPUDirect RDMA over ConnectX-7 NICs on a rail-aligned
 network with Google's NCCL network plugin (gIB, verify names). DCGM metrics can flow into Cloud Monitoring through
 GKE's managed collection (verify). The deploy assets in [`cuda-nccl-lab`](cuda-nccl-lab/) hold the Terraform (a zonal
-GKE Standard cluster with an L4 Spot pool that scales from zero, optional time-sharing and MIG pools) and the Jobs.
+GKE Standard cluster with an L4 Spot pool that scales from zero, an `l4x2` pool of `g2-standard-24` nodes (2 × L4,
+also Spot and from zero) that hosts the 2-GPU nccl-tests Job, and optional time-sharing and MIG pools) and the Jobs.
 
 **Elsewhere.** **Colab** gives one T4 (CC 7.5, so no bf16 tensor cores). **Kaggle** gives **2 × T4 over PCIe**
 for free: a real 2-GPU NCCL box without NVLink, where `NCCL_DEBUG=INFO` shows P2P or SHM over PCIe and busbw

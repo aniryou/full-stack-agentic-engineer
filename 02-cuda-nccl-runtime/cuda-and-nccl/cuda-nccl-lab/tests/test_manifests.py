@@ -61,7 +61,7 @@ def test_core_kinds_pass_strict_schema_validation():
 def test_alertmanager_example_routes_every_rule_severity():
     from gpurt import dcgm
 
-    cfg = yaml.safe_load((GKE / "alertmanager.example.yaml").read_text())
+    cfg = yaml.safe_load((GKE / "alertmanager" / "alertmanager.example.yaml").read_text())
     receivers = {r["name"] for r in cfg["receivers"]}
     route = cfg["route"]
     assert route["receiver"] in receivers and all(r["receiver"] in receivers for r in route["routes"])

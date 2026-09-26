@@ -14,7 +14,7 @@ Every concept is learnable on a laptop (T0). Real GPUs and GCP are optional step
 |---|---|---|
 | [`PRIMER.md`](PRIMER.md) | the concept primer: 9 sections, a design-review walkthrough with 6 drills, glossary, sources, dated verify list | read |
 | [`cuda-nccl-core/`](cuda-nccl-core/) | **minimal** implementation, package `gpusim`: seven small numpy simulators (SIMT and memory, occupancy, tiling and launches, collectives, compatibility, sharing, health) and 5 fill-in notebooks. Every formula and worked number in the primer is computed here | T0 |
-| [`cuda-nccl-lab/`](cuda-nccl-lab/) | **detailed** implementation, package `gpurt`: CUDA kernels written in Numba (run in the CUDA simulator on CPU, or on a GPU), torch.distributed collectives with algbw/busbw exactly as nccl-tests computes them and an α-β fit, nccl-tests output parsing, CUDA Graphs vs eager, what a container sees of its GPU, DCGM parsing; deploy assets for any GPU box, GKE and Terraform | T0 fallbacks, then T1, T2, T3 |
+| [`cuda-nccl-lab/`](cuda-nccl-lab/) | **detailed** implementation, package `gpurt`: CUDA kernels written in Numba (run in the CUDA simulator on CPU, or on a GPU), collectives over OS pipes, gloo (T0) or NCCL (2+ GPUs) with algbw/busbw exactly as nccl-tests computes them and an α-β fit, nccl-tests output parsing, CUDA Graphs vs eager, what a container sees of its GPU, DCGM parsing; deploy assets for any GPU box, GKE and Terraform | T0 fallbacks, then T1, T2, T3 |
 
 ## Order to work it
 
@@ -36,7 +36,7 @@ Finish with the primer's *In a design review* drills. The curriculum's modules 0
 
 | Tier | Where | What runs here |
 |---|---|---|
-| **T0** | laptop, Colab CPU, CI ($0) | all of `cuda-nccl-core`; in the lab, Numba kernels in the CUDA simulator (`NUMBA_ENABLE_CUDASIM=1`), collectives over gloo, and parsing sample nccl-tests, nvidia-smi and DCGM output |
+| **T0** | laptop, Colab CPU, CI ($0) | all of `cuda-nccl-core`; in the lab, Numba kernels in the CUDA simulator (`NUMBA_ENABLE_CUDASIM=1`), collectives over OS pipes (a real multi-process ring, no torch) or gloo, and parsing sample nccl-tests, nvidia-smi and DCGM output |
 | **T1** | one GPU: Colab or Kaggle T4, an L4, any rented 24 GB GPU | real kernel timings against the roofline, CUDA Graphs vs eager, what a container sees |
 | **T2** | 2+ GPUs: Kaggle 2 × T4 (free, PCIe), a rented NVLink box for an hour | NCCL collectives, nccl-tests, busbw and α-β fits, P2P |
 | **T3** | GCP: GKE through Terraform | an L4 Spot pool that scales from zero, a 2-GPU nccl-tests Job, time-sharing and MIG pools, DCGM metrics |
