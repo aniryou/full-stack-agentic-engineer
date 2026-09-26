@@ -1,0 +1,8 @@
+# The library needs only numpy. The rest runs the tests and the kv-cache notebooks.
+numpy>=1.24
+pytest>=7.4
+matplotlib>=3.7
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0

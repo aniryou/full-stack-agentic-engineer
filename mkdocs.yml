@@ -294,6 +294,7 @@ nav:
                       - "04 · GKE: node pools, DWS flex-start and ComputeClasses (solution)": "layers/03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/solutions/04_gke_pools_dws_and_computeclasses.ipynb"
       - "04 · Inference engine":
           - "layers/04-inference-engine/index.md"
+          - "Kernel core": "layers/04-inference-engine/kernel-core/index.md"
           - "Flash attention":
               - "FlashAttention: A Primer": "layers/04-inference-engine/flash-attention/flash-attention-primer.md"
               - "FlashAttention in depth": "layers/04-inference-engine/flash-attention/flash-attention-deep-dive.md"
