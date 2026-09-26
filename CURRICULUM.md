@@ -4,8 +4,9 @@ A study plan for this repository: the order to work through it, what each module
 measure, where the material lives, roughly how long it takes and what hardware it needs. It covers all eight
 layers, `00-foundations` to `07-application-agent-framework`. Layers 01–05 each have a topic in the same shape — a
 primer, a minimal core and a detailed lab — and layer 04 also has two deep dives (vLLM's source and FlashAttention).
-The path below weaves them together with the other topics in 00, 04, 06 and 07. Where to run each tier, what it costs and how to obtain GPUs is in
-[`COMPUTE.md`](COMPUTE.md).
+Four more topics have the same shape: mixture-of-experts and RL and thinking models in 00, quantization in 04 and
+sandboxed execution in 07. The path below weaves them together with the other topics in 00, 04, 06 and 07. Where to
+run each tier, what it costs and how to obtain GPUs is in [`COMPUTE.md`](COMPUTE.md).
 
 *As of 2026-09-26. Product names, versions and prices are the ones in each primer's Verify list; re-check them there.
 Every time in this file (hours per step, module or route) is an estimate for an engineer comfortable with Python who
@@ -19,12 +20,12 @@ does every exercise; treat it as a budget, not a measurement.*
   that explain the engine's behaviour (01, 02) → back to the engine with real measurements → up through
   Kubernetes (03) and the orchestrator (05) → the gateway (06) and the agents (07), whose workloads shape every
   layer below.
-- **Three artifacts per topic in 01–05:** a `PRIMER.md` (concepts, worked numbers), a *core* (a minimal
-  from-scratch implementation that runs on a laptop) and a *lab* (the detailed version: real GPUs, a real engine,
-  a GCP deployment, each with an offline fallback).
+- **Three artifacts per topic in 01–05, and in the newer topics of 00, 04 and 07:** a `PRIMER.md` (concepts, worked
+  numbers), a *core* (a minimal from-scratch implementation that runs on a laptop) and a *lab* (the detailed
+  version: real GPUs, a real engine, a GCP deployment, each with an offline fallback).
 - **Every concept is learnable at T0** — a laptop or Colab CPU, $0. Real GPUs (T1, T2) and Google Cloud (T3) turn
   predictions into measurements; they are optional steps, never prerequisites.
-- **Budget about 185 hours** end to end, about 110 of them in layers 01–05; shorter routes are in §3.3.
+- **Budget about 254 hours** end to end, about 127 of them in layers 01–05; shorter routes are in §3.3.
 - **Every module ends in a design review:** the two-minute explanation and its drills. §5 indexes every drill in
   the repo and adds cross-layer ones.
 
@@ -76,14 +77,14 @@ repo or marked `(verify)`.
 
 | Layer | What is here | Not covered yet |
 |---|---|---|
-| **00** foundations | [transformer primer](00-foundations/transformers/docs/transformer-primer.md), three lessons and practice notebooks; [capacity-planning primer](00-foundations/gpu-capacity-planning/PRIMER.md) with `capacity.py` and practice; [open-weight model primer](00-foundations/model-landscape/open-weight-llms-primer.md) and Mistral exercises | MoE and attention variants (MLA) only in passing; no tokenization; capacity math is closed-form, with no step-level model |
-| **01** hardware | [gpu-primer](01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) and [gpu-deployment primer](01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md) with exercise sets — qualitative, no code; [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/): [PRIMER](01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [`roofline-core`](01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/) (4 notebooks), [`gpu-bench-lab`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/) (4 notebooks, 89 tests; numpy and torch backends, `nvidia-smi` parsers; any-GPU and GCP Spot VM deploys); the core has 4 notebooks and 58 tests | nothing runnable; no quantitative roofline, fabric, storage, reliability or cost model; no measurement; no guidance on obtaining GPUs |
-| **02** runtime | [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/): [PRIMER](02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [`cuda-nccl-core`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/) (5 notebooks, 128 tests; seven numpy simulators), [`cuda-nccl-lab`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/) (6 notebooks, 122 tests; Numba kernels in the CUDA simulator and on a GPU, collectives over OS pipes, gloo or NCCL, nccl-tests, DCGM; any-GPU, GKE and Terraform deploys) | the whole layer: execution model, memory access, collectives, compatibility, containers, sharing, health |
-| **03** Kubernetes | [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/): [PRIMER](03-kubernetes-gpu/gpu-scheduling/PRIMER.md), [`k8s-gpu-core`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/) (5 notebooks, 49 tests), [`k8s-gpu-lab`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/) (4 notebooks, 118 tests; manifest builders, a linter, a Pending analyser; kind with fake GPUs, Kueue, JobSet, LWS; k3s on one GPU VM; GKE Terraform) | the whole layer: device plugin and DRA, the scheduling cycle, gangs, topology, Kueue, capacity, startup latency |
-| **04** engine | [kv-cache](04-inference-engine/kv-cache/), [paged-attention](04-inference-engine/paged-attention/), [flash-attention](04-inference-engine/flash-attention/): primers, minimal numpy implementations, practice; [`serving-engine/`](04-inference-engine/serving-engine/): [PRIMER](04-inference-engine/serving-engine/PRIMER.md), [`mini-engine-core`](04-inference-engine/serving-engine/mini-engine-core/) (6 notebooks, 67 tests; a numpy nano-engine), [`vllm-serving-lab`](04-inference-engine/serving-engine/vllm-serving-lab/) (6 notebooks, 66 tests; load generator, metrics, sizing, fake server; any-GPU, Cloud Run and GKE deploys). Two deep dives: [`vllm-internals/`](04-inference-engine/vllm-internals/README.md) (a primer on vLLM `main` at `5840d95`, a source map, 1 notebook) and the [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) (`fa_calculators.py` with 49 tests, a companion notebook) | the engine itself: step loop, scheduler, chunked prefill, prefix caching, sampling, speculation, quantization; no real engine; no benchmarking method |
-| **05** orchestrator | [`serving-orchestration/`](05-orchestrator/serving-orchestration/): [PRIMER](05-orchestrator/serving-orchestration/PRIMER.md), [`orchestrator-core`](05-orchestrator/serving-orchestration/orchestrator-core/) (5 notebooks, 57 tests; a discrete-event fleet simulator), [`inference-gateway-lab`](05-orchestrator/serving-orchestration/inference-gateway-lab/) (5 notebooks, 76 tests; a router with the llm-d endpoint picker's filters → scorers → picker, fake backends, an HPA recommender; compose, kind + llm-d, GKE Inference Gateway) | routing, autoscaling signals, disaggregation, KV tiers, the Kubernetes-native stack |
+| **00** foundations | [transformer primer](00-foundations/transformers/docs/transformer-primer.md), three lessons and practice notebooks; [capacity-planning primer](00-foundations/gpu-capacity-planning/PRIMER.md) with `capacity.py` and practice; [open-weight model primer](00-foundations/model-landscape/open-weight-llms-primer.md) and Mistral exercises; [`mixture-of-experts/`](00-foundations/mixture-of-experts/README.md): [PRIMER](00-foundations/mixture-of-experts/PRIMER.md), [`moe-core`](00-foundations/mixture-of-experts/moe-core/) (5 notebooks, 67 tests; routers, balance, experts touched, expert-parallel all-to-alls, sizing), [`moe-lab`](00-foundations/mixture-of-experts/moe-lab/) (5 notebooks, 118 tests; a tiny MoE in torch, router hooks, vLLM with expert parallelism on two GPUs, offload and 4-bit experts; any-GPU and GKE deploys); [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md): [PRIMER](00-foundations/rl-and-thinking-models/PRIMER.md), [`rl-core`](00-foundations/rl-and-thinking-models/rl-core/) (5 notebooks, 57 tests; REINFORCE, DPO, GRPO, test-time compute, the thinking workload), [`thinking-lab`](00-foundations/rl-and-thinking-models/thinking-lab/) (5 notebooks, 91 tests; GRPO on a tiny transformer, a thinking model in vLLM with a reasoning parser, best-of-n, one GRPO step with vLLM rollouts; any-GPU deploy, the 04 lab's Cloud Run and GKE for T3) | attention variants (MQA/GQA, MLA, sliding window, hybrid state-space layers) only in passing; no tokenization |
+| **01** hardware | [gpu-primer](01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) and [gpu-deployment primer](01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md) with exercise sets — qualitative, no code; [`roofline-and-fabric/`](01-hardware-gpu-fabric/roofline-and-fabric/): [PRIMER](01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [`roofline-core`](01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/) (4 notebooks), [`gpu-bench-lab`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/) (4 notebooks, 89 tests; numpy and torch backends, `nvidia-smi` parsers; any-GPU and GCP Spot VM deploys); the core has 4 notebooks and 58 tests | a TPU deep dive; AMD accelerators and ROCm; power, cooling and facilities (§6) |
+| **02** runtime | [`cuda-and-nccl/`](02-cuda-nccl-runtime/cuda-and-nccl/): [PRIMER](02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [`cuda-nccl-core`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core/) (5 notebooks, 128 tests; seven numpy simulators), [`cuda-nccl-lab`](02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/) (6 notebooks, 122 tests; Numba kernels in the CUDA simulator and on a GPU, collectives over OS pipes, gloo or NCCL, nccl-tests, DCGM; any-GPU, GKE and Terraform deploys) | kernel authoring beyond Numba: Triton, CUDA Tile, reading a profiler trace (§6) |
+| **03** Kubernetes | [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/): [PRIMER](03-kubernetes-gpu/gpu-scheduling/PRIMER.md), [`k8s-gpu-core`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core/) (5 notebooks, 49 tests), [`k8s-gpu-lab`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/) (4 notebooks, 118 tests; manifest builders, a linter, a Pending analyser; kind with fake GPUs, Kueue, JobSet, LWS; k3s on one GPU VM; GKE Terraform) | DRA with a real driver; multi-cluster queues (§6) |
+| **04** engine | [kv-cache](04-inference-engine/kv-cache/), [paged-attention](04-inference-engine/paged-attention/), [flash-attention](04-inference-engine/flash-attention/): primers, minimal numpy implementations, practice; [`serving-engine/`](04-inference-engine/serving-engine/): [PRIMER](04-inference-engine/serving-engine/PRIMER.md), [`mini-engine-core`](04-inference-engine/serving-engine/mini-engine-core/) (6 notebooks, 67 tests; a numpy nano-engine), [`vllm-serving-lab`](04-inference-engine/serving-engine/vllm-serving-lab/) (6 notebooks, 66 tests; load generator, metrics, sizing, fake server; any-GPU, Cloud Run and GKE deploys). Two deep dives: [`vllm-internals/`](04-inference-engine/vllm-internals/README.md) (a primer on vLLM `main` at `5840d95`, a source map, 1 notebook) and the [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) (`fa_calculators.py` with 49 tests, a companion notebook). [`quantization/`](04-inference-engine/quantization/README.md): [PRIMER](04-inference-engine/quantization/PRIMER.md), [`quant-core`](04-inference-engine/quantization/quant-core/) (5 notebooks, 78 tests; formats, granularity, GPTQ, AWQ, SmoothQuant, KV quantization, a per-GPU cost model), [`quant-lab`](04-inference-engine/quantization/quant-lab/) (5 notebooks, 86 tests; compressed-tensors checkpoints and llm-compressor recipes, FP16 vs INT4 vs FP8 in vLLM, lm-eval, FP8 KV, NVFP4 and MXFP4; any-GPU deploy, the serving lab's Cloud Run and GKE for T3) | SGLang and TensorRT-LLM measured beside vLLM; long-context serving: context parallelism, KV compression (§6) |
+| **05** orchestrator | [`serving-orchestration/`](05-orchestrator/serving-orchestration/): [PRIMER](05-orchestrator/serving-orchestration/PRIMER.md), [`orchestrator-core`](05-orchestrator/serving-orchestration/orchestrator-core/) (5 notebooks, 57 tests; a discrete-event fleet simulator), [`inference-gateway-lab`](05-orchestrator/serving-orchestration/inference-gateway-lab/) (5 notebooks, 76 tests; a router with the llm-d endpoint picker's filters → scorers → picker, fake backends, an HPA recommender; compose, kind + llm-d, GKE Inference Gateway) | multi-cluster and multi-region serving; KV tiers on real hardware (§6) |
 | **06** gateway | identity and security (a core, a GCP lab, a Mistral core); scaling, admission and cost (a GCP lab, a Mistral lab) | no LLM gateway: model routing and fallback, semantic caching, token metering, OpenTelemetry GenAI conventions |
-| **07** agents | agent fundamentals (3 labs), long-running durable execution (5 labs, primers, drills), retrieval (3 labs, a primer) | agent memory, computer-use agents, evals at scale |
+| **07** agents | agent fundamentals (3 labs), long-running durable execution (5 labs, primers, drills), retrieval (3 labs, a primer); [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md): [PRIMER](07-application-agent-framework/sandboxed-execution/PRIMER.md), [`sandbox-core`](07-application-agent-framework/sandboxed-execution/sandbox-core/) (5 notebooks, 81 tests; attack probes, a process sandbox, the execution contract, an egress proxy, policy rendered to Kubernetes, warm-pool sizing), [`sandbox-lab`](07-application-agent-framework/sandboxed-execution/sandbox-lab/) (5 notebooks, 112 tests; a network namespace, hardened Docker and gVisor, pod-per-execution on kind, an agent whose code tools fail closed; Docker, kind and GKE Sandbox deploys) | agent memory, computer-use agents, evals at scale |
 
 ---
 
@@ -117,6 +118,11 @@ numbers are what they are. The path is a spiral around the engine:
 - **06 and 07 last**, as the workload that drives all of it. Turns, sessions and shared prefixes are what the engine
   caches and the router exploits, and the gateway bounds them. The spiral closes when an agent's prompt layout (07)
   shows up as a prefix-cache hit rate (04) and a routing decision (05).
+- **The four newer topics sit where their prerequisites are.** Mixture-of-experts (00.4) comes right after the
+  roofline, because which experts a step streams is a roofline question; quantization (04.9) once the engine has
+  been measured, as the deep dive behind its §8; RL and thinking models (00.5) after reading the real engine,
+  because thinking workloads reshape the KV budget, the router (05) and the gateway's cost (06); sandboxed
+  execution (07.5) right after the agent loop and platform (07.1, 07.2), whose `run_code` tool it makes safe.
 
 If you already build agents, skim 07.1 and 06.1 first for motivation, then start the spiral.
 
@@ -135,33 +141,39 @@ Hours are estimates, as above.
 | 6 | 01 | 01.0 | gpu-primer and gpu-deployment primer with their exercises | 4 | T0 | T0 |
 | 7 | 01 | 01.1–01.5 | roofline-and-fabric PRIMER; `roofline-core` 01–04 | 8 | T0 | T0 |
 | 8 | 01 | 01.1–01.4 | `gpu-bench-lab` 01–04 | 5 | T0 | T1; 03 at T2 |
-| 9 | 02 | 02.1–02.5 | cuda-and-nccl PRIMER; `cuda-nccl-core` 01–05 | 9 | T0 | T0 |
-| 10 | 02 | 02.1–02.4 | `cuda-nccl-lab` 01–05 (collectives over OS pipes or gloo at T0) | 7 | T0 | T1; 03–04 at T2 |
-| 11 | 04 | 04.2–04.7 | serving-engine PRIMER §9–12; `vllm-serving-lab` 03–05 | 7 | T0 | T1; 03 exercise 3.6 at T2 |
-| 12 | 04 | 04.8 | vllm-internals primer, source map and notebook; FlashAttention deep dive and its notebook | 12 | T0 | T0 (T1 to observe) |
-| 13 | 04 | 04.7 | `vllm-serving-lab` 06 (Cloud Run GPU) | 2 | T0 (inspect) | T3 |
-| 14 | 03 | 03.1–03.6 | gpu-scheduling PRIMER; `k8s-gpu-core` 01–05 | 9 | T0 | T0 |
-| 15 | 03 | 03.1–03.4, 03.6 | `k8s-gpu-lab` 01–03 | 5 | T0 | T0 + Docker |
-| 16 | 03, 02 | 03.5, 02.5 | `k8s-gpu-lab` 04; `cuda-nccl-lab` 06 | 4 | T0 (inspect) | T3 |
-| 17 | 05 | 05.1–05.6 | serving-orchestration PRIMER; `orchestrator-core` 01–05 | 9 | T0 | T0 |
-| 18 | 05 | 05.1–05.3, 05.6 | `inference-gateway-lab` 01–04 | 6 | T0 | T0 + Docker |
-| 19 | 05 | 05.6 | `inference-gateway-lab` 05 (GKE Inference Gateway) | 2 | T0 (inspect) | T3 |
-| 20 | 06 | 06.1–06.5 | `agentic-scaling-lab`, then the hosted-vs-self-hosted parts of its Mistral variant | 8 | T0 | T0 |
-| 21 | 06 | 06.6 | `agentic-identity-core`, then `agentic-identity-gcp-lab` | 12 | T0 | T0 (T3 optional) |
-| 22 | 07 | 07.1, 07.2 | `agent-core`, then `gcp-agent-platform-lab` | 24 | T0 | T0 |
-| 23 | 07 | 07.3 | a durable core, then one full long-running lab | 10 | T0 | T0 (T3 optional) |
-| 24 | 07 | 07.4 | vector-databases primer, `embeddings-lab`, `rag-from-scratch`, `vector_stores` | 15 | T0 | T0 |
+| 9 | 00 | 00.4 | mixture-of-experts PRIMER; `moe-core` 01–05; `moe-lab` 01–05 | 15.5 | T0 | T1; 04 at T2 |
+| 10 | 02 | 02.1–02.5 | cuda-and-nccl PRIMER; `cuda-nccl-core` 01–05 | 9 | T0 | T0 |
+| 11 | 02 | 02.1–02.4 | `cuda-nccl-lab` 01–05 (collectives over OS pipes or gloo at T0) | 7 | T0 | T1; 03–04 at T2 |
+| 12 | 04 | 04.2–04.7 | serving-engine PRIMER §9–12; `vllm-serving-lab` 03–05 | 7 | T0 | T1; 03 exercise 3.6 at T2 |
+| 13 | 04 | 04.9 | quantization PRIMER; `quant-core` 01–05; `quant-lab` 01–05 | 19 | T0 | T1 (FP8 on Ada or newer; lab 05 on Blackwell) |
+| 14 | 04 | 04.8 | vllm-internals primer, source map and notebook; FlashAttention deep dive and its notebook | 12 | T0 | T0 (T1 to observe) |
+| 15 | 00 | 00.5 | rl-and-thinking-models PRIMER; `rl-core` 01–05; `thinking-lab` 01–05 | 22 | T0 | T1 |
+| 16 | 04 | 04.7 | `vllm-serving-lab` 06 (Cloud Run GPU) | 2 | T0 (inspect) | T3 |
+| 17 | 03 | 03.1–03.6 | gpu-scheduling PRIMER; `k8s-gpu-core` 01–05 | 9 | T0 | T0 |
+| 18 | 03 | 03.1–03.4, 03.6 | `k8s-gpu-lab` 01–03 | 5 | T0 | T0 + Docker |
+| 19 | 03, 02 | 03.5, 02.5 | `k8s-gpu-lab` 04; `cuda-nccl-lab` 06 | 4 | T0 (inspect) | T3 |
+| 20 | 05 | 05.1–05.6 | serving-orchestration PRIMER; `orchestrator-core` 01–05 | 9 | T0 | T0 |
+| 21 | 05 | 05.1–05.3, 05.6 | `inference-gateway-lab` 01–04 | 6 | T0 | T0 + Docker |
+| 22 | 05 | 05.6 | `inference-gateway-lab` 05 (GKE Inference Gateway) | 2 | T0 (inspect) | T3 |
+| 23 | 06 | 06.1–06.5 | `agentic-scaling-lab`, then the hosted-vs-self-hosted parts of its Mistral variant | 8 | T0 | T0 |
+| 24 | 06 | 06.6 | `agentic-identity-core`, then `agentic-identity-gcp-lab` | 12 | T0 | T0 (T3 optional) |
+| 25 | 07 | 07.1, 07.2 | `agent-core`, then `gcp-agent-platform-lab` | 24 | T0 | T0 |
+| 26 | 07 | 07.5 | sandboxed-execution PRIMER; `sandbox-core` 01–05; `sandbox-lab` 01–05 | 12 | T0 | T0 + Docker; 05 at T3 |
+| 27 | 07 | 07.3 | a durable core, then one full long-running lab | 10 | T0 | T0 (T3 optional) |
+| 28 | 07 | 07.4 | vector-databases primer, `embeddings-lab`, `rag-from-scratch`, `vector_stores` | 15 | T0 | T0 |
 
-Total: about 185 hours. Steps 3–19 (layers 01–05, including the kernel topics of layer 04 and the two deep dives) are
-about 110 hours, of which the three T3 steps (13, 16, 19) are 8 and optional. "T0 + Docker" means a laptop with Docker for kind
-or compose; without Docker those notebooks fall back to a bundled simulator.
+Total: about 254 hours. Steps 3–22 other than 9 and 15 (layers 01–05, including the kernel topics of layer 04,
+quantization and the two deep dives) are about 127 hours, of which the three T3 steps (16, 19, 22) are 8 and
+optional. The four newer topics — 00.4 (step 9), 04.9 (13), 00.5 (15) and 07.5 (26) — are 68.5 of the hours.
+"T0 + Docker" means a laptop with Docker for kind or compose; without Docker those notebooks fall back to a bundled
+simulator.
 
 ### 3.3 Shorter routes
 
 | Route | For | Modules, in order | Hours |
 |---|---|---|---:|
-| Serving-infrastructure core | the stack from engine to fleet, all at T0 | 00.2 → 04.0 → 04.1–04.3 (core 01–03) → 01.1–01.3 (core 01–03) → 02.3 (core 03) → 05.1–05.5 (core 01–05) → 03.3–03.5 (core 03–05), reading the matching primer sections | ~40 |
-| Agent builder | what agent design does to the layers below | 07.1 → 06.1–06.3 → 04.3 (core 03, lab 04) → 05.2 and 05.5 (core 02, 05) → 06.6 (identity core) → 07.2 (notebooks 04, 08, 09) → 07.3 (a durable core) | ~30 |
+| Serving-infrastructure core | the stack from engine to fleet, all at T0 | 00.2 → 04.0 → 04.1–04.3 (core 01–03) → 01.1–01.3 (core 01–03) → 04.9.1–04.9.3 (quantization core 01–03) → 02.3 (core 03) → 05.1–05.5 (core 01–05) → 03.3–03.5 (core 03–05), reading the matching primer sections | ~45 |
+| Agent builder | what agent design does to the layers below | 07.1 → 06.1–06.3 → 04.3 (core 03, lab 04) → 05.2 and 05.5 (core 02, 05) → 00.5.5 (RL and thinking-models primer §7: what thinking does to serving) → 06.6 (identity core) → 07.5 (sandbox core 01–05) → 07.2 (notebooks 04, 08, 09) → 07.3 (a durable core) | ~35 |
 | Measurement weekend | turning predictions into measurements | the one-GPU, two-GPU and NVLink sessions in [`COMPUTE.md`](COMPUTE.md) §7, after the matching core notebooks | ~10 GPU-hours |
 
 ---
@@ -179,6 +191,48 @@ notebook and the lab notebook at T0; "+2 T3" is the optional cloud step. They ad
 | **00.1 Transformer internals** | explain attention as a soft lookup and a block as attention + MLP with residuals; count parameters from a config; say what the KV cache stores and why decoding is sequential | [transformer primer](00-foundations/transformers/docs/transformer-primer.md) §2–8 · [lessons](00-foundations/transformers/lessons/) 01–03 · [`attention_practice`](00-foundations/transformers/practice/attention_practice.ipynb) · [`01_transformer_walkthrough`](00-foundations/transformers/notebooks/01_transformer_walkthrough.ipynb), [`02_transformer_exercises`](00-foundations/transformers/notebooks/02_transformer_exercises.ipynb) | 5 | T0 |
 | **00.2 Capacity planning** | size weights and KV cache against HBM; estimate TTFT from prefill FLOPs and TPOT from bandwidth; take the GPU count as the maximum over the constraints, plus headroom and N+1 | [PRIMER](00-foundations/gpu-capacity-planning/PRIMER.md) · [`capacity.py`](00-foundations/gpu-capacity-planning/capacity.py) · [`01_capacity_practice`](00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice.ipynb) | 2 | T0 |
 | **00.3 Model landscape** | say what "open weight" grants and what it does not; check a licence; place a model family by size, architecture (dense or MoE, attention variant) and deployment tier | [open-weight LLMs primer](00-foundations/model-landscape/open-weight-llms-primer.md) §2, §5, §7–8 · [Mistral exercises](00-foundations/model-landscape/mistral-primer-exercises.md) | 1 | T0 |
+
+#### 00.4 Mixture-of-experts — [`mixture-of-experts`](00-foundations/mixture-of-experts/README.md)
+
+"Understand the router and the experts, and predict what sparsity does to serving." Primer:
+[`PRIMER.md`](00-foundations/mixture-of-experts/PRIMER.md). Core: [`moe-core`](00-foundations/mixture-of-experts/moe-core/) (package `moecore`, numpy: the routers of six model
+families, balance losses, a toy trainer, experts touched, expert-parallel all-to-alls, sizing). Lab:
+[`moe-lab`](00-foundations/mixture-of-experts/moe-lab/) (package `moelab`: a tiny MoE in torch, router hooks, vLLM on one or two GPUs; every
+notebook falls back to a labelled T0 path).
+
+| Module | You can … | Primer | Core notebook | Lab notebook | Hours | Tier |
+|---|---|---|---|---|---:|---|
+| **00.4.1 The MoE layer** | route tokens through the real routers (Mixtral, OLMoE, Qwen3, DeepSeek-V3, gpt-oss, Llama 4) and write the sparse forward pass; count total and active parameters from a config and name the "active" convention a published number uses; argue for fine-grained and shared experts; train a tiny MoE in torch on a CPU | §1 Why sparsity · §2 The MoE layer | [`01_the_moe_layer`](00-foundations/mixture-of-experts/moe-core/notebooks/01_the_moe_layer.ipynb) | [`01_a_tiny_moe_in_torch`](00-foundations/mixture-of-experts/moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb) | 3 | T0 (torch on CPU) |
+| **00.4.2 Routing and load balance** | explain router collapse; compute the Switch auxiliary loss in both normalisations, the z-loss, capacity and token dropping; balance a router with DeepSeek-V3's selection-only bias; record a real router's choices with forward hooks or `--enable-return-routed-experts` and read utilisation and hot experts | §3 Routing and load balance · §4 Training MoE in brief | [`02_routing_and_load_balance`](00-foundations/mixture-of-experts/moe-core/notebooks/02_routing_and_load_balance.ipynb) | [`02_watch_the_router`](00-foundations/mixture-of-experts/moe-lab/notebooks/02_watch_the_router.ipynb) | 3 | T0 → T1 |
+| **00.4.3 Which experts a step touches** | derive E(1 − (1 − k/E)^T) and reproduce layer 01's MoE table; predict the batch where decode turns compute-bound from weights streamed ÷ weights multiplied (754 for Mixtral against 207 for a dense 8B on an H200); measure decode step time against batch for an MoE and a dense model | §5 MoE at inference: which experts a step touches | [`03_which_experts_a_batch_touches`](00-foundations/mixture-of-experts/moe-core/notebooks/03_which_experts_a_batch_touches.ipynb) | [`03_batch_vs_weight_stream`](00-foundations/mixture-of-experts/moe-lab/notebooks/03_batch_vs_weight_stream.ipynb) | 3.5 | T0 → T1 |
+| **00.4.4 Expert parallelism** | price dispatch and combine on NVLink, PCIe and InfiniBand; model each EP rank as its own roofline and find the slowest; rebalance hot experts; compare TP, TP + EP and DP + EP in vLLM on two GPUs; choose a wide-EP degree | §6 Running MoE on GPUs (§6.1–6.5) | [`04_expert_parallelism_and_all_to_all`](00-foundations/mixture-of-experts/moe-core/notebooks/04_expert_parallelism_and_all_to_all.ipynb) | [`04_expert_parallelism_on_two_gpus`](00-foundations/mixture-of-experts/moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb) | 3.5 | T0 → T2 (T3 on layer 02's `l4x2` pool) |
+| **00.4.5 Sizing, cost and small GPUs** | size memory by total, prefill by active and decode by bytes streamed; budget KV room on one GPU the way vLLM does; plan GPUs and EP degree against an ITL target; price $/M tokens against a dense model; choose between CPU offload and 4-bit experts on a 16–24 GB GPU | §6.6 Expert offloading for small GPUs · §6.7 Quantized experts · §7 Sizing and cost · §8 In a design review: failure modes · §9 Where to run it | [`05_sizing_and_cost`](00-foundations/mixture-of-experts/moe-core/notebooks/05_sizing_and_cost.ipynb) | [`05_moe_on_a_small_gpu`](00-foundations/mixture-of-experts/moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb) | 2.5 | T0 → T1 |
+
+Deploy targets: [`any-gpu`](00-foundations/mixture-of-experts/moe-lab/deploy/any-gpu/) (`serve_moe.sh` on one GPU with offload or on two in any
+layout, `bench_layouts.sh` for TP vs EP, Colab and Kaggle recipes), [`gke`](00-foundations/mixture-of-experts/moe-lab/deploy/gke/) (a vLLM
+Deployment with `--enable-expert-parallel` on layer 02's 2 × L4 `l4x2` pool; no new Terraform).
+
+#### 00.5 RL and thinking models — [`rl-and-thinking-models`](00-foundations/rl-and-thinking-models/README.md)
+
+"How post-training teaches a model to reason, and what thinking does to serving." Primer:
+[`PRIMER.md`](00-foundations/rl-and-thinking-models/PRIMER.md). Core: [`rl-core`](00-foundations/rl-and-thinking-models/rl-core/) (package `rlcore`, standard library + numpy:
+verifiable toy tasks, a table-of-softmaxes policy so every expectation can also be computed exactly, REINFORCE,
+Bradley–Terry and DPO, GRPO with TRL's options and DAPO's fixes, pass@k, the serving workload model). Lab:
+[`thinking-lab`](00-foundations/rl-and-thinking-models/thinking-lab/) (package `thinklab`: GRPO on a tiny transformer in torch, a thinking model in
+vLLM; a fake vLLM and bundled outputs make every notebook run at T0).
+
+| Module | You can … | Primer | Core notebook | Lab notebook | Hours | Tier |
+|---|---|---|---|---|---:|---|
+| **00.5.1 Policy gradients** | derive REINFORCE and say why a baseline matters; compute the KL-regularised optimum in closed form; watch RL exploit a buggy verifier and lengthen uncharged thinking; train a tiny transformer with SFT then GRPO in torch and read its reward and length curves | §1 From pretraining to post-training · §2 Policy gradients over token sequences | [`01_policy_gradients_on_a_toy_task`](00-foundations/rl-and-thinking-models/rl-core/notebooks/01_policy_gradients_on_a_toy_task.ipynb) | [`01_grpo_on_a_tiny_transformer`](00-foundations/rl-and-thinking-models/thinking-lab/notebooks/01_grpo_on_a_tiny_transformer.ipynb) | 4.5 | T0 (torch on CPU; T1 faster) |
+| **00.5.2 Preferences and DPO** | fit a Bradley–Terry reward model; run RLHF and DPO on the same pairs and land both on the closed form; read TRL's DPO metrics; compute GAE; pick a KL budget against a length-biased reward model | §3 Learning from preferences | [`02_preferences_reward_models_and_dpo`](00-foundations/rl-and-thinking-models/rl-core/notebooks/02_preferences_reward_models_and_dpo.ipynb) | — | 2.5 | T0 |
+| **00.5.3 GRPO with verifiable rewards** | compute group advantages, the k3 KL and the clipped surrogate by hand; measure the length bias of per-sequence averaging; weigh dynamic sampling; write DAPO's and R1's `GRPOConfig`; keep the books of one GRPO step whose rollouts an inference engine generates (the train–inference log-prob mismatch, stragglers, weight sync) | §4 RL with verifiable rewards and GRPO · §8 The RL training stack in brief | [`03_grpo_with_verifiable_rewards`](00-foundations/rl-and-thinking-models/rl-core/notebooks/03_grpo_with_verifiable_rewards.ipynb) | [`05_rl_rollouts_with_an_engine`](00-foundations/rl-and-thinking-models/thinking-lab/notebooks/05_rl_rollouts_with_an_engine.ipynb) | 5 | T0 → T1 |
+| **00.5.4 Test-time compute** | estimate pass@k without bias and pass^k for reliability; predict when majority vote helps or hurts; compare a verifier with a noisy reward model; split a token budget between samples and thinking; price a correct answer | §6 Test-time compute | [`04_test_time_compute`](00-foundations/rl-and-thinking-models/rl-core/notebooks/04_test_time_compute.ipynb) | [`03_test_time_compute_for_real`](00-foundations/rl-and-thinking-models/thinking-lab/notebooks/03_test_time_compute_for_real.ipynb) | 3 | T0 → T1 |
+| **00.5.5 Thinking models and serving** | serve a thinking model with `--reasoning-parser`, switch thinking on and off and budget it; avoid the `max_tokens` trap; size a heavy-tailed thinking workload with the capacity primer's formulas plus HBM and ITL caps; choose `max_model_len`; predict prefix-cache hits when templates drop old thinking; route effort by cost per correct answer | §5 Thinking models · §7 What thinking does to serving · §9 Where to run it | [`05_thinking_models_and_the_serving_workload`](00-foundations/rl-and-thinking-models/rl-core/notebooks/05_thinking_models_and_the_serving_workload.ipynb) | [`02_a_thinking_model_on_one_gpu`](00-foundations/rl-and-thinking-models/thinking-lab/notebooks/02_a_thinking_model_on_one_gpu.ipynb), [`04_serving_thinking_models`](00-foundations/rl-and-thinking-models/thinking-lab/notebooks/04_serving_thinking_models.ipynb) | 7 | T0 → T1 |
+
+Deploy targets: [`any-gpu`](00-foundations/rl-and-thinking-models/thinking-lab/deploy/any-gpu/) (`serve.sh`: `vllm serve` with the right reasoning
+parser, and `--dtype half` on a T4; `rl_step.sh`: one GRPO step with vLLM rollouts), [`gcp`](00-foundations/rl-and-thinking-models/thinking-lab/deploy/gcp/)
+(the 04 serving lab's Cloud Run Terraform and GKE manifests set up for Qwen3-4B with a reasoning parser; no new
+Terraform).
 
 ### 01 · Hardware — [`roofline-and-fabric`](01-hardware-gpu-fabric/roofline-and-fabric/README.md) and the GPU primers
 
@@ -270,6 +324,27 @@ with a small model; a Colab/Kaggle T4 recipe, fp16 only on the T4), [`gcp/cloud-
 [`gcp/gke`](04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/gke/). For the fleet view of a vLLM
 replica (batch, latency, break-even price) see 06.5.
 
+#### 04.9 Quantization — [`quantization`](04-inference-engine/quantization/README.md)
+
+"Pick a number format for a model and a GPU, and know what it costs you." Primer: [`PRIMER.md`](04-inference-engine/quantization/PRIMER.md) (the
+deep dive behind 04.6). Core: [`quant-core`](04-inference-engine/quantization/quant-core/) (package `quantcore`, numpy: grids from their bits,
+scale granularity, GPTQ, AWQ, SmoothQuant, W8A8 epilogues, FP8 and KIVI KV caches, an eval with error bars, a
+per-GPU cost model). Lab: [`quant-lab`](04-inference-engine/quantization/quant-lab/) (package `quantlab`: compressed-tensors checkpoints,
+llm-compressor recipes, a scheme-aware emulator and fake vLLM, lm-eval commands and parsers; a bundled tiny model
+makes every notebook run at T0).
+
+| Module | You can … | Primer | Core notebook | Lab notebook | Hours | Tier |
+|---|---|---|---|---|---:|---|
+| **04.9.1 Formats and their error** | enumerate INT, FP8 (E4M3, E5M2) and FP4 grids from their bits and round onto them; compare INT4, FP4, MXFP4 and NVFP4 on Gaussian and heavy-tailed weights; predict SQNR from bits and crest factor; count bits per weight and whole-model GB; say what quantization can and cannot speed up | §1 Why quantize, and what it can and cannot speed up · §2 Number formats | [`01_number_formats_and_error`](04-inference-engine/quantization/quant-core/notebooks/01_number_formats_and_error.ipynb) | — (lab 05's exercises 5.1–5.3 on E2M1, MXFP4 and NVFP4 fit here) | 2 | T0 |
+| **04.9.2 Granularity and outliers** | show why per-channel scales fix an outlier row but not an outlier input column; measure what per-token INT8 does to activations with outlier channels and what FP8 does instead; use 128×128 block scales; read a compressed-tensors checkpoint and predict its size | §3 Granularity and the bits-per-weight budget | [`02_granularity_and_outliers`](04-inference-engine/quantization/quant-core/notebooks/02_granularity_and_outliers.ipynb) | [`01_quantize_a_checkpoint`](04-inference-engine/quantization/quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) | 3.5 | T0 → T1 |
+| **04.9.3 Calibration and its accuracy cost** | implement GPTQ's column loop and AWQ's scale search; fold SmoothQuant and AWQ scales into a model without changing it; say which layers each method helps; measure the damage as KL, top-1 agreement and task accuracy with its standard error, and decide whether a drop is real | §4 Weight-only post-training quantization · §5 Weight-and-activation quantization · §8 Measuring the accuracy you pay | [`03_gptq_awq_and_smoothquant_from_scratch`](04-inference-engine/quantization/quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | [`03_measure_the_accuracy_cost`](04-inference-engine/quantization/quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) (and lab 01's RTN vs GPTQ vs AWQ) | 4.5 | T0 → T1 |
+| **04.9.4 Activations and the KV cache** | implement a W8A8 GEMM epilogue; compare static and dynamic activation scales; keep the LM head in 16-bit; judge FP8 KV with and without calibrated scales; implement KIVI; size the cache (2,363 → 4,727 blocks for an 8B model on an L4 with FP8 KV) and say which attention backend reads it | §5 · §6 KV-cache quantization | [`04_activation_and_kv_cache_quantization`](04-inference-engine/quantization/quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) | [`04_kv_cache_quantization_in_vllm`](04-inference-engine/quantization/quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) | 3.5 | T0 → T1 (Ada or newer) |
+| **04.9.5 Choosing and shipping a scheme** | say what a checkpoint runs as from a T4 to a B200; find where W4A16 stops paying (compute-bound at ~120 tokens per step on an L4, no edge over BF16 by ~460); choose schemes for a T4, an L4 and an H100 serving a 70B; price a million tokens (simulated); serve FP16, INT4 and FP8 and compare them; work the NVFP4 and MXFP4 path on Blackwell | §7 Quantization-aware training and QLoRA in brief · §9 Producing a checkpoint · §10 Choosing a scheme | [`05_choosing_a_scheme`](04-inference-engine/quantization/quant-core/notebooks/05_choosing_a_scheme.ipynb) | [`02_serve_and_compare_schemes`](04-inference-engine/quantization/quant-lab/notebooks/02_serve_and_compare_schemes.ipynb), [`05_fp4_and_the_blackwell_path`](04-inference-engine/quantization/quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) | 5.5 | T0 → T1 (Blackwell for lab 05) |
+
+Deploy targets: [`any-gpu`](04-inference-engine/quantization/quant-lab/deploy/any-gpu/) (`compress.sh`: llm-compressor in its own virtualenv;
+`serve.sh`: `vllm serve` per scheme after checking it against the GPU), [`gcp`](04-inference-engine/quantization/quant-lab/deploy/gcp/)
+(variables and a wrapper for the serving lab's Cloud Run Terraform and GKE manifests; no new Terraform).
+
 ### 05 · Orchestrator — [`serving-orchestration`](05-orchestrator/serving-orchestration/README.md)
 
 "Orchestrating a fleet of engines: routing, autoscaling, disaggregation and KV-cache tiers." Primer:
@@ -315,6 +390,27 @@ Gateway, InferenceObjective priorities, HPA on a Prometheus metric).
 | **07.3 Durable, long-running agents** | state the invariants (durable state, intent before act, leases, budgets, park instead of wait); run fan-out/fan-in, human-in-the-loop, sagas and scheduled agents; map them onto a queue, a store and stateless compute | cores [`long-running-agents-core`](07-application-agent-framework/long-running-durable/long-running-agents-core/), [`lra-core`](07-application-agent-framework/long-running-durable/lra-core/lra-core/); primer [`00_primer.md`](07-application-agent-framework/long-running-durable/00_primer.md); full labs [`long-running-agents-gcp`](07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/), [`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/); the Temporal-based variant [`long-running-agents-mistral`](07-application-agent-framework/long-running-durable/long-running-agents-mistral/) | 10 | T0 (T3 optional) |
 | **07.4 Retrieval** | explain embeddings as factorizations and contrastive training; choose and tune an ANN index (IVF, PQ, HNSW); build hybrid search with fusion and reranking; evaluate retrieval with recall@k, MRR and nDCG | [vector-databases primer](07-application-agent-framework/retrieval-rag/vector-databases-primer.md) · [`embeddings-lab`](07-application-agent-framework/retrieval-rag/embeddings-lab/) · [`rag-from-scratch`](07-application-agent-framework/retrieval-rag/rag-from-scratch/) · [`vector_stores`](07-application-agent-framework/retrieval-rag/vector_stores/) | 15 | T0 |
 
+#### 07.5 Sandboxed execution — [`sandboxed-execution`](07-application-agent-framework/sandboxed-execution/README.md)
+
+"Run the model's code without handing it your keys." Primer: [`PRIMER.md`](07-application-agent-framework/sandboxed-execution/PRIMER.md). Core:
+[`sandbox-core`](07-application-agent-framework/sandboxed-execution/sandbox-core/) (package `sandboxcore`, standard library: attack probes, a process sandbox, the
+execution contract, an egress proxy, policy rendered to Kubernetes, warm-pool arithmetic). Lab:
+[`sandbox-lab`](07-application-agent-framework/sandboxed-execution/sandbox-lab/) (package `sandboxlab`: the same controls on a network namespace, Docker with runc
+or gVisor, kind and GKE Sandbox, and an agent whose code tools fail closed). No GPU anywhere.
+
+| Module | You can … | Primer | Core notebook | Lab notebook | Hours | Tier |
+|---|---|---|---|---|---:|---|
+| **07.5.1 The threat model and the isolation ladder** | name a code tool's blast radius and map each risk (secret, egress, fork bomb, disk, CPU, output) to the control that bounds it; run attack probes through every rung — process, dedicated UID, network namespace, hardened container, gVisor — and read what each stops | §1 Why a sandbox, and the threat model · §2 The isolation ladder | [`01_the_threat_model`](07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/01_the_threat_model.ipynb) | [`01_hardened_containers`](07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/01_hardened_containers.ipynb) | 2.5 | T0 (+ Docker) |
+| **07.5.2 A process sandbox** | build the first real boundary: a clean environment, a private workspace, a UID per execution, rlimits, a wall-clock kill of the process group, streamed and capped output; say what it cannot stop (the network, a kernel exploit) and why `RLIMIT_NPROC` does nothing for root | §2 · §3 The execution contract | [`02_a_process_sandbox`](07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/02_a_process_sandbox.ipynb) | — | 1 | T0 |
+| **07.5.3 The contract and Kubernetes** | design the request/result contract with budgets, exit reasons and an idempotency key; write policy as data and render it to Pod Security *restricted*, a default-deny NetworkPolicy, a non-retrying Job, a RuntimeClass and a ValidatingAdmissionPolicy; predict the admission chain offline and run a pod per execution on kind | §3 · §5 Sandboxes on Kubernetes | [`03_the_execution_contract_and_policies`](07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/03_the_execution_contract_and_policies.ipynb) | [`02_pod_per_execution_on_kind`](07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/02_pod_per_execution_on_kind.ipynb) | 3 | T0 (+ Docker for kind) |
+| **07.5.4 Egress, secrets and the agent** | put an allowlisting egress proxy in front of a network-less sandbox that injects a credential the code never holds, refuses redirects and `CONNECT`, and audits every decision; run the 07.1 loop with `run_code`/`fetch_url` behind it and watch a poisoned document fail closed | §4 Network and secrets · §8 Observability, audit and abuse detection | [`04_egress_and_secrets`](07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/04_egress_and_secrets.ipynb) | [`03_egress_proxy_and_secret_brokering`](07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/03_egress_proxy_and_secret_brokering.ipynb), [`04_an_agent_with_a_sandbox_tool`](07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/04_an_agent_with_a_sandbox_tool.ipynb) | 3.5 | T0 |
+| **07.5.5 Pools, cost and GKE Sandbox** | see why Little's law is only the floor and size a replace-after-use warm pool with Erlang C; pick an isolation level for a latency budget; price cost per action, cold start included; read the GKE Sandbox (gVisor) Terraform as a design-review checklist | §6 Latency, throughput and cost per action · §7 Browser, computer-use and GPU sandboxes in brief · §9 Where to run it | [`05_pools_latency_and_cost`](07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/05_pools_latency_and_cost.ipynb) | [`05_gke_sandbox_with_gvisor`](07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/05_gke_sandbox_with_gvisor.ipynb) | 2 | T0 → T3 |
+
+Deploy targets: [`docker`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/docker/) (the hardened run script, the proxy over a Unix socket,
+the gVisor install), [`kind`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/kind/) (restricted Pod Security, default-deny NetworkPolicy,
+the proxy, the admission policy; no gVisor), [`gcp/terraform`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/terraform/) and
+[`gke`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gke/) (a GKE Sandbox node pool with private nodes and no NAT).
+
 ---
 
 ## 5. Design-review drills
@@ -329,7 +425,8 @@ Gateway, InferenceObjective priorities, HPA on a Prometheus metric).
 | 01 | [gpu-deployment exercises](01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-exercises.md) | recall, eight numerical workouts, design scenarios, a self-assessment; answer key in Part D |
 | 01–05 | "In a design review" in each new primer: [01](01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [02](02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [03](03-kubernetes-gpu/gpu-scheduling/PRIMER.md), [04](04-inference-engine/serving-engine/PRIMER.md), [05](05-orchestrator/serving-orchestration/PRIMER.md) | a two-minute walkthrough of the layer and six drill questions with answers |
 | 04 | "In a design review" in the [vllm-internals primer](04-inference-engine/vllm-internals/vllm-internals-primer.md) and the [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) | the engine as vLLM builds it and the attention-kernel choice, each with drill questions |
-| 01–05 | the closing "In a design review" of every core and lab notebook | a two-minute explanation of the notebook's idea and 2–3 questions with short answers |
+| 00, 04, 07 | "In a design review" in the four newer primers: [mixture-of-experts](00-foundations/mixture-of-experts/PRIMER.md#in-a-design-review), [RL and thinking models](00-foundations/rl-and-thinking-models/PRIMER.md#in-a-design-review), [quantization](04-inference-engine/quantization/PRIMER.md#in-a-design-review), [sandboxed execution](07-application-agent-framework/sandboxed-execution/PRIMER.md#in-a-design-review) | a two-minute walkthrough of the topic and six drill questions with answers (seven for sandboxed execution); the MoE primer adds its failure modes as a table ([§8](00-foundations/mixture-of-experts/PRIMER.md#8-in-a-design-review-failure-modes)) |
+| 01–05, 00.4, 00.5, 04.9, 07.5 | the closing "In a design review" of every core and lab notebook | a two-minute explanation of the notebook's idea and 2–3 questions with short answers |
 | 06 | [scaling primer](06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §8 "Walking the design in a review" | a 45-minute flow for a scaling prompt and the questions that change the design |
 | 06 | [Mistral scaling primer](06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md) §8 "The deployment conversation" | the hosted-vs-self-hosted walkthrough |
 | 06 | [identity primer](06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §11 "Design drills" · [`09_code_evaluation_drills`](06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/09_code_evaluation_drills.ipynb) | five system-design prompts, spot-the-bug drills, trade-offs to argue |
@@ -356,17 +453,23 @@ Answer aloud first, then read the sketch.
 | 9 | Pods on a new node pool fail with "no kernel image is available for execution on the device". | The image carries SASS for other compute capabilities and no PTX that could be JIT-compiled for this GPU, or the driver is older than the CUDA runtime needs. Check the driver, runtime and compute-capability rules; rebuild for the right architectures or pin a matching image. | 02.4, 03.1 |
 | 10 | Multi-turn agent sessions get slower every turn, and the prefix-cache hit rate drops at peak. | The sessions' KV working set exceeds HBM, so cached prefixes are evicted before the next turn arrives. Route with session affinity, add DRAM or NVMe KV tiers, and compact context at the agent. | 05.5, 04.3, 07.2 |
 | 11 | A 3× burst arrives. What protects the latency SLO in the first minute: autoscaling or admission control? | Admission control: it acts in milliseconds, autoscaling in minutes. Degrade or shed at the gateway with `Retry-After`, prioritise at the router, keep engine queues short; autoscaling restores capacity afterwards. | 06.3, 05.2, 05.3 |
+| 12 | The assistant switched to a thinking model at the same traffic; the fleet ran out of KV memory and ITL rose. | Output length grew by an order of magnitude with a heavy tail, and a request holds its KV for its whole generation, so concurrency and memory × time grow faster than the output: in the capacity primer's example, 10× the output needs 18× the GPUs for memory. Size on the tail, raise `max_model_len` for it, cap cost with a thinking budget rather than `max_tokens` (which truncates answers), keep the batch within the ITL SLO, expect fewer multi-turn prefix hits because templates drop old thinking, and route effort by cost per correct answer. | 00.5, 00.2, 04.2, 04.3, 06.1 |
+| 13 | INT4 weights made decode about 3× faster, but long-prompt TTFT did not improve and got slightly worse. | W4A16 cuts the bytes decode streams, but its kernels dequantize to 16-bit before the matrix multiply, so prefill does the same FLOPs plus the dequantization. On an L4 its GEMM turns compute-bound at about 120 tokens per step and has no edge over BF16 by about 460, so long prefill chunks gain nothing. Prefill gets faster only with formats the tensor cores multiply natively — FP8 W8A8 on Ada or Hopper, INT8 W8A8 with SmoothQuant on older GPUs, NVFP4 on Blackwell — and check what the checkpoint actually runs as (an FP8 checkpoint on an A100 is weight-only). | 04.9, 01.2, 04.2 |
+| 14 | "Qwen3-30B-A3B is 3B active, so it runs like a 3B model on our one 24 GB GPU for a low-traffic tool." | Memory follows the total: 61.1 GB in BF16 and 30.5 GB in FP8, so only 4-bit experts (18.5 GB) fit, leaving room for about five 4K-token sessions. Decode streams only the active experts at batch 1, but a batch reads the union of its tokens' experts, so the saving fades as traffic grows; an MoE pays at large batch with expert parallelism. For low traffic on one GPU, a dense model of the active size is usually the better choice. | 00.4, 00.2, 01.2, 04.9 |
+| 15 | A web page told the agent to "check connectivity", and its code tool posted the service's API key to an unknown host. | The code ran with the agent's ambient authority: its environment, its files and an open network. Treat a code tool as DESTRUCTIVE tier and remove that authority: a sandbox with a clean environment, its own UID, a budget for every resource and no network by default (a network namespace, or a default-deny NetworkPolicy); allowed APIs only through an egress proxy that injects the credential outbound, refuses redirects and `CONNECT`, and audits every decision. The hosts a tool call declares are the model's claim, not a control. Give the agent its own principal with scoped, delegated tokens so a leak is bounded. | 07.5, 06.6, 07.1 |
 
 ---
 
 ## 6. Next topics (not built yet)
 
 Areas the repo does not cover yet, in rough priority order within each layer. Suggested homes follow `CLAUDE.md`'s
-rule of one topic sub-folder per sub-domain; new material still arrives through `raw/`.
+rule of one topic sub-folder per sub-domain; new material still arrives through `raw/`. Built from this list so far
+(2026-09-26): MoE architectures, now [`mixture-of-experts`](00-foundations/mixture-of-experts/README.md) (00.4). The
+other three newer topics — RL and thinking models (00.5), quantization (04.9) and sandboxed execution (07.5) — were
+not on it; nothing else below has been built.
 
 | Layer | Topic | What it would teach | Suggested home |
 |---|---|---|---|
-| 00 | MoE architectures | router and load-balancing losses; active vs total parameters and what each costs in memory vs bandwidth; why MoE favours large batches and expert parallelism | `00-foundations/architectures/` |
 | 00 | Attention variants: MQA/GQA, MLA, sliding window, hybrid state-space layers | how each shrinks KV bytes per token or attention compute, worked on real configs | `00-foundations/architectures/` |
 | 00 | Tokenization | BPE and byte-level vocabularies; tokens per word by language and domain; how the tokenizer moves cost and context limits; chat templates and special tokens | `00-foundations/tokenization/` |
 | 01 | TPU deep dive | v5e, v6e and v7 Ironwood: the MXU systolic array, the ICI torus, slices and pods, the XLA/JAX compile model, vLLM on TPU; which parts of the roofline and fabric models transfer | `01-hardware-gpu-fabric/tpu/` |
@@ -375,10 +478,10 @@ rule of one topic sub-folder per sub-domain; new material still arrives through 
 | 02 | Kernel authoring beyond Numba | Triton kernels beyond the FlashAttention deep dive's forward pass, CUDA Tile, autotuning, reading a profiler (Nsight) trace | `02-cuda-nccl-runtime/kernels/` |
 | 03 | DRA with a real driver; multi-cluster queues | GPU and NVLink-domain claims on real hardware; MultiKueue across clusters | `03-kubernetes-gpu/` |
 | 04 | SGLang and TensorRT-LLM compared with vLLM | the same benchmark (`servelab.bench`) against three engines: RadixAttention, engine builds and in-flight batching, structured-output speed | `04-inference-engine/engine-comparison/` |
-| 04 | MoE and long-context serving | expert parallelism inside the engine, context parallelism, KV compression | `04-inference-engine/` |
+| 04 | Long-context serving, and MoE at scale | context parallelism, KV compression; expert parallelism beyond 00.4's two-GPU lab (wide-EP on real multi-node hardware) | `04-inference-engine/` |
 | 05 | Multi-cluster and multi-region serving | routing across clusters and regions, capacity failover, data residency, global vs regional endpoints | `05-orchestrator/multi-cluster/` |
 | 05 | KV tiers on real hardware | LMCache or Mooncake with vLLM at T1/T2, measured against `fleetsim.kvtier` | `05-orchestrator/serving-orchestration/` |
 | 06 | An LLM gateway | model routing and fallback chains across models and providers; semantic caching (what is safe to cache, similarity thresholds, invalidation); token metering and per-tenant chargeback; OpenTelemetry GenAI semantic conventions for spans and metrics; streaming-aware rate limits | `06-gateway/llm-gateway/` |
 | 07 | Agent memory | episodic, semantic and procedural memory; write policies, retrieval, decay and consolidation; deletion and privacy | `07-application-agent-framework/agent-memory/` |
-| 07 | Computer-use agents | screenshot-to-action loops, sandboxing, latency and cost per action, verifying effects | `07-application-agent-framework/computer-use/` |
+| 07 | Computer-use agents | screenshot-to-action loops, browser and desktop sandboxes (07.5 covers code execution and §7 of its primer sketches these), latency and cost per action, verifying effects | `07-application-agent-framework/computer-use/` |
 | 07 | Evals at scale | dataset versioning, judge calibration at volume, offline and online evals, regression gates in CI, the cost of evaluation | `07-application-agent-framework/evals/` |

@@ -190,7 +190,7 @@ print("   and one snapshot must never be restored into two tenants (PRIMER §2, 
 # ```
 #
 # Clean up with `terraform -chdir=deploy/gcp/terraform destroy`. Cost and cleanup:
-# [`deploy/gcp/README.md`](../../../07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/README.md).
+# [`deploy/gcp/README.md`](../deploy/gcp/README.md).
 
 # %% [markdown]
 # ## In a design review

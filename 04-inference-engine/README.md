@@ -23,6 +23,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough
 | [`paged-attention/`](paged-attention/paged-attention-primer.md) | explain fragmentation and how block tables, refcounts and copy-on-write fix it — a primer, `paged_attention_minimal.py` and a practice notebook | ~1.5 h | T0 |
 | [`flash-attention/`](flash-attention/flash-attention-primer.md) | explain tiling and online softmax from zero ([primer](flash-attention/flash-attention-primer.md)), then defend a kernel or backend choice with exact byte counts, the FA2/FA3/FA4 changes, decode kernels, paged KV and a Triton forward pass ([deep dive](flash-attention/flash-attention-deep-dive.md)); `fa_calculators.py` computes every number (49 tests); two notebooks: [practice](flash-attention/flash_attention_practice.ipynb) (five exercises) and the [deep-dive companion](flash-attention/flash_attention_deep_dive.ipynb) | ~1.5 h primer + practice; ~4 h deep dive (rough) | T0 (kernel timing T1) |
 | [`serving-engine/`](serving-engine/README.md) | explain and simulate the engine itself — step loop, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, LoRA, measurement — then size, measure and tune a real vLLM: a [PRIMER](serving-engine/PRIMER.md), [`mini-engine-core`](serving-engine/mini-engine-core/) (a numpy "nano-vLLM", 6 notebooks) and [`vllm-serving-lab`](serving-engine/vllm-serving-lab/) (sizing, a load generator, `/metrics`, a fake vLLM for T0, Cloud Run and GKE deploys, 6 notebooks) | ~11 h primer + core; ~12 h lab | T0 → T1 (T2, T3 optional) |
+| [`quantization/`](quantization/README.md) | say what INT4, FP8, NVFP4 or an FP8 KV cache buys for a given model on a given GPU — decode speed, prefill speed or concurrency — and what each runs as on that GPU generation; make 4 bits accurate with GPTQ, AWQ or SmoothQuant; then produce, serve and evaluate a real quantized checkpoint: a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) (numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model; 5 notebooks) and [`quant-lab`](quantization/quant-lab/) (llm-compressor checkpoints, FP16 vs INT4 vs FP8 in vLLM, lm-eval with error bars, FP8 KV, the NVFP4/MXFP4 layouts; a bundled tiny model and a fake server for T0; 5 notebooks) | ~10 h primer + core; ~9 h lab | T0 → T1 (T3 optional) |
 | [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | three ~2 h sittings + the notebook | T0 (observing it T1) |
 
 ## Start here
@@ -33,11 +34,13 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough
 2. `cd serving-engine/vllm-serving-lab && python3 -m pip install -e ".[dev]" && python3 -m servelab size --model llama-3.1-8b-instruct --gpu L4 --max-model-len 16384`
    — under a second, and it prints the KV blocks and concurrency an 8B model gets on a 24 GB L4.
 3. Work [`serving-engine/`](serving-engine/README.md) by its module table (primer section → core notebook → lab
-   notebook), then read the real engine with [`vllm-internals/`](vllm-internals/README.md).
+   notebook), then go deeper where you need it: [`quantization/`](quantization/README.md) for number formats and
+   calibration, [`vllm-internals/`](vllm-internals/README.md) to read the real engine.
 
-Reading order across the layer: kv-cache → paged-attention → flash-attention → serving-engine → vllm-internals.
-The FlashAttention deep dive can wait until after serving-engine; it pays off most next to vLLM's attention backends
-(vllm-internals primer §6).
+Reading order across the layer: kv-cache → paged-attention → flash-attention → serving-engine → quantization and
+vllm-internals (either order; quantization's §4 kernels and §6 FP8 KV cite vllm-internals §6.3 and §8, so read them
+side by side). The FlashAttention deep dive can wait until after serving-engine; it pays off most next to vLLM's
+attention backends (vllm-internals primer §6).
 
 ## Run it
 
@@ -47,9 +50,13 @@ cd ../serving-engine/mini-engine-core
 python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 67 tests, ~15 s
 cd ../vllm-serving-lab
 python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 66 tests, a few seconds, offline
+cd ../../quantization/quant-core
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 78 tests, ~7 s
+cd ../quant-lab
+python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 86 tests, ~11 s, offline (one needs Terraform, else skipped)
 ```
 
-Then `python3 -m jupyterlab notebooks` in either serving-engine directory, or the Colab badges below. The
+Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab badges below. The
 vllm-internals notebook needs only the standard library plus the serving lab installed (`pip install -e` above).
 
 ## How it fits
@@ -59,24 +66,30 @@ Builds on [`00-foundations/transformers`](../00-foundations/transformers/) (atte
 and TPOT) and layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a
 decode step is a memory read). Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
 parallelism runs on) and layer 03's [`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md) (how the engine's pod
-gets its GPUs) sit between them. Leads to [`05-orchestrator`](../05-orchestrator/README.md), which
+gets its GPUs) sit between them. Two layer-00 topics bring workloads that change how an engine is run:
+[mixture-of-experts](../00-foundations/mixture-of-experts/PRIMER.md) (§6: fused MoE kernels and expert parallelism)
+and [rl-and-thinking-models](../00-foundations/rl-and-thinking-models/PRIMER.md) (§7: long, heavy-tailed outputs
+against the KV budget). Leads to [`05-orchestrator`](../05-orchestrator/README.md), which
 routes across many engine replicas by prefix-cache affinity and load, autoscales them and splits prefill from decode.
 
 ## Caveats
 
-- Every latency the mini engine and the lab's fake server print is **simulated** from a roofline model; the lab's
-  numbers become measurements only against a real `vllm serve` (T1 and up).
+- Every latency the mini engine, `quantcore.cost` and the labs' fake servers print is **simulated** from a roofline
+  model; the labs' numbers become measurements only against a real `vllm serve` (T1 and up). FP8 math needs an Ada
+  or newer GPU (a free T4 runs INT4 and INT8 only), and NVFP4 needs a rented Blackwell GPU.
 - vLLM facts are pinned to v0.30.0 and `main` at `5840d95` (September 2026) and marked `(verify)` where they move;
   each primer ends with a dated verify list.
 
 ## Scope of this layer
 
 **Covers:** paged attention & KV-cache management, continuous/in-flight batching, prefill vs decode, attention
-kernels (flash attention), tensor/pipeline parallelism, speculative decoding, quantization,
-throughput-vs-latency tuning.
+kernels (flash attention), tensor/pipeline parallelism, speculative decoding, quantization (number formats,
+granularity, GPTQ/AWQ/SmoothQuant calibration, W8A8 and FP4 kernels per GPU generation, KV-cache quantization,
+producing and evaluating a checkpoint), throughput-vs-latency tuning.
 
 **Signal keywords:** vLLM, SGLang, TensorRT-LLM, KV cache, paged attention, flash attention, continuous batching,
-prefill/decode, speculative decoding, quantization, FP8, tensor parallel, tokens/sec, TTFT, ITL.
+prefill/decode, speculative decoding, quantization, GPTQ, AWQ, SmoothQuant, FP8, FP4, NVFP4, MXFP4, KV-cache
+quantization, llm-compressor, tensor parallel, tokens/sec, TTFT, ITL.
 
 <!-- colab-links:start -->
 ## Run in Colab
@@ -93,6 +106,34 @@ One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `no
 
 **`paged-attention/`**
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/paged-attention/paged_attention_practice.ipynb) `paged_attention_practice.ipynb`
+
+**`quantization/quant-core/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/01_number_formats_and_error.ipynb) `01_number_formats_and_error.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/02_granularity_and_outliers.ipynb) `02_granularity_and_outliers.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) `03_gptq_awq_and_smoothquant_from_scratch.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) `04_activation_and_kv_cache_quantization.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/05_choosing_a_scheme.ipynb) `05_choosing_a_scheme.ipynb`
+
+**`quantization/quant-core/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/01_number_formats_and_error.ipynb) `01_number_formats_and_error.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/02_granularity_and_outliers.ipynb) `02_granularity_and_outliers.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/03_gptq_awq_and_smoothquant_from_scratch.ipynb) `03_gptq_awq_and_smoothquant_from_scratch.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/04_activation_and_kv_cache_quantization.ipynb) `04_activation_and_kv_cache_quantization.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/05_choosing_a_scheme.ipynb) `05_choosing_a_scheme.ipynb`
+
+**`quantization/quant-lab/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) `01_quantize_a_checkpoint.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/02_serve_and_compare_schemes.ipynb) `02_serve_and_compare_schemes.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) `03_measure_the_accuracy_cost.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) `04_kv_cache_quantization_in_vllm.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) `05_fp4_and_the_blackwell_path.ipynb`
+
+**`quantization/quant-lab/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/01_quantize_a_checkpoint.ipynb) `01_quantize_a_checkpoint.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/02_serve_and_compare_schemes.ipynb) `02_serve_and_compare_schemes.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/03_measure_the_accuracy_cost.ipynb) `03_measure_the_accuracy_cost.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/04_kv_cache_quantization_in_vllm.ipynb) `04_kv_cache_quantization_in_vllm.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/05_fp4_and_the_blackwell_path.ipynb) `05_fp4_and_the_blackwell_path.ipynb`
 
 **`serving-engine/mini-engine-core/notebooks/`**
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb) `01_the_step_loop_and_continuous_batching.ipynb`

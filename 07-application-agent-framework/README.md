@@ -1,15 +1,18 @@
 # 07 · Application / agent framework
 
-The top of the stack: the agent itself — its loop, tools, memory, durability, and the retrieval it
-stands on. What the end user interacts with.
+The top of the stack: the agent itself — its loop, tools, memory, durability, the retrieval it
+stands on, and the sandbox its code-running tools execute in. What the end user interacts with.
 
 **Covers:** the agent loop, tool calling, state/sessions/checkpoints, context engineering &
 caching, multi-agent workflows, durable/long-running execution, evals, retrieval-augmented
-generation and vector search, capstone applications.
+generation and vector search, sandboxed execution of model-generated code (the isolation ladder,
+the execution contract, egress and secrets, sandboxes on Kubernetes, warm pools and cost per
+action), capstone applications.
 
 **Signal keywords:** agent loop, tool calling, ADK, LangGraph, multi-agent, workflow, durable
 execution, long-running, checkpoint, saga, human-in-the-loop, RAG, retrieval, vector store,
-embeddings, eval, trajectory.
+embeddings, eval, trajectory, sandbox, code execution, `run_code`, gVisor, Firecracker, Kata,
+RuntimeClass, Pod Security, NetworkPolicy, egress proxy, warm pool.
 
 ## Current contents
 
@@ -19,6 +22,26 @@ embeddings, eval, trajectory.
   context engineering, evals, reliability, resource estimation, capstone). Cross-refs **06-gateway**.
 - **`mistral-agent-core/`** — Mistral variant of the agent core (`agentcore` + a `mistral_llm`
   adapter and a "going live on Mistral" lesson).
+
+### [`sandboxed-execution/`](sandboxed-execution/README.md)
+Run the model's code without handing it your keys: say what a `run_code` tool can reach when the model
+is hijacked, which control bounds each risk, how much isolation you need and what a pool of sandboxes
+costs — then render and check the Kubernetes that enforces it. Builds on `agent-core`'s tool contract
+(07.1) and the identity primer's §6.2 (code execution); module 07.5 in [`CURRICULUM.md`](../CURRICULUM.md).
+*T0 = laptop or Colab CPU, free; T0 + Docker = the container rungs and kind on your own machine; T3 = the
+Google Cloud deployment, optional. No GPU anywhere.*
+
+| Path | You will be able to… | Time | Tier |
+|---|---|---|---|
+| [`PRIMER.md`](sandboxed-execution/PRIMER.md) | explain the threat model, the isolation ladder (process → container → gVisor → microVM), the execution contract, egress and secrets, sandboxes on Kubernetes, latency and cost per action, and audit — then walk the design in a review | read with the core | — |
+| [`sandbox-core/`](sandboxed-execution/sandbox-core/README.md) | build every part of a safe `run_code` in standard-library Python: attack probes, a process sandbox with rlimits, a wall-clock kill and its own UID, the execution contract, an allowlisting egress proxy that injects a credential the code never holds, policy rendered to Kubernetes YAML, and warm-pool sizing with Erlang C; 5 notebooks | ~4 h with the primer | T0 |
+| [`sandbox-lab/`](sandboxed-execution/sandbox-lab/README.md) | the same controls on a network namespace, a hardened Docker container, pod-per-execution on kind and a GKE Sandbox (gVisor) node pool, with an agent whose `run_code`/`fetch_url` tools fail closed under prompt injection; 5 notebooks | ~8 h | T0, T0 + Docker, T3 |
+
+```bash
+cd sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 81 tests, ~30 s
+cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                     # 112 tests, ~25 s, offline
+python3 -m sandboxlab env      # which isolation levels this machine can actually run
+```
 
 ### `long-running-durable/`
 Durable, long-running agentic workflows — several fidelities kept side by side (not merged).
@@ -181,4 +204,32 @@ One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `no
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/04_reranking.ipynb) `04_reranking.ipynb`
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/05_evaluation.ipynb) `05_evaluation.ipynb`
 - [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/retrieval-rag/rag-from-scratch/solutions/06_iterative_rag.ipynb) `06_iterative_rag.ipynb`
+
+**`sandboxed-execution/sandbox-core/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/01_the_threat_model.ipynb) `01_the_threat_model.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/02_a_process_sandbox.ipynb) `02_a_process_sandbox.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/03_the_execution_contract_and_policies.ipynb) `03_the_execution_contract_and_policies.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/04_egress_and_secrets.ipynb) `04_egress_and_secrets.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/notebooks/05_pools_latency_and_cost.ipynb) `05_pools_latency_and_cost.ipynb`
+
+**`sandboxed-execution/sandbox-core/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/01_the_threat_model.ipynb) `01_the_threat_model.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/02_a_process_sandbox.ipynb) `02_a_process_sandbox.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/03_the_execution_contract_and_policies.ipynb) `03_the_execution_contract_and_policies.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/04_egress_and_secrets.ipynb) `04_egress_and_secrets.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-core/solutions/05_pools_latency_and_cost.ipynb) `05_pools_latency_and_cost.ipynb`
+
+**`sandboxed-execution/sandbox-lab/notebooks/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/01_hardened_containers.ipynb) `01_hardened_containers.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/02_pod_per_execution_on_kind.ipynb) `02_pod_per_execution_on_kind.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/03_egress_proxy_and_secret_brokering.ipynb) `03_egress_proxy_and_secret_brokering.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/04_an_agent_with_a_sandbox_tool.ipynb) `04_an_agent_with_a_sandbox_tool.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks/05_gke_sandbox_with_gvisor.ipynb) `05_gke_sandbox_with_gvisor.ipynb`
+
+**`sandboxed-execution/sandbox-lab/solutions/`**
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/01_hardened_containers.ipynb) `01_hardened_containers.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/02_pod_per_execution_on_kind.ipynb) `02_pod_per_execution_on_kind.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/03_egress_proxy_and_secret_brokering.ipynb) `03_egress_proxy_and_secret_brokering.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/04_an_agent_with_a_sandbox_tool.ipynb) `04_an_agent_with_a_sandbox_tool.ipynb`
+- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/07-application-agent-framework/sandboxed-execution/sandbox-lab/solutions/05_gke_sandbox_with_gvisor.ipynb) `05_gke_sandbox_with_gvisor.ipynb`
 <!-- colab-links:end -->

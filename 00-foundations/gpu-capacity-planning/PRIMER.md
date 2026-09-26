@@ -104,6 +104,10 @@ MoE splits the sizing in two, and people get both wrong:
   expert is hit every step, so you stream ~675 GB/step → ~18 ms floor across
   8×H200. **MoE wants big batches and expert parallelism** to pay off.
 
+Why a batch reads nearly every expert, and how to size memory by total, prefill by active and decode by the bytes a
+step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inference-which-experts-a-step-touches) and
+[§7](../mixture-of-experts/PRIMER.md#7-sizing-and-cost) (`moecore` reproduces this section's 17.6 ms floor).
+
 **Parallelism rule of thumb:**
 1. Use the **smallest tensor-parallel (TP)** degree that fits weights + KV.
 2. TP only *inside* a node — it needs constant chatter over **NVLink (~900 GB/s)**;
@@ -137,6 +141,9 @@ MoE splits the sizing in two, and people get both wrong:
 - **FP8 by default** on Hopper+; **INT4 only where quality was validated on the
   customer's own evals.**
 - **Prefix caching** for RAG/agents; **speculative decoding** for latency at low batch.
+- **Thinking models** change the output length, not the formulas: with 2,700 thinking tokens before a 300-token
+  answer, the bank example needs about 18× the GPUs for KV memory at the SLO's TPOT
+  ([RL and thinking-models primer §7](../rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
 - **Chunked prefill** (interleave long prompts with decode) vs **disaggregated
   prefill/decode pools** (separate GPU fleets, each sized for its bottleneck)
   once you're past a few nodes.

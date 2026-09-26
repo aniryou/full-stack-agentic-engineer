@@ -69,4 +69,6 @@ python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at th
 Reach for `gcp-agent-platform-lab` when you want to see: async and parallel tool
 execution, MCP servers with a policy gateway, OAuth identity propagation, evaluation
 gates, and OpenTelemetry-style tracing. Everything there is built on the loop you learn
-here. MIT licensed.
+here. Running a `run_code` tool safely — no credentials, no network by default, a budget for
+every resource — is the [sandboxed-execution](../../sandboxed-execution/README.md) topic, which
+reuses this loop's tool contract. MIT licensed.

@@ -287,7 +287,9 @@ c = 0 on an H200 (ridge 206; `decode_crossover_batch()`): 207 for Llama-3.1-8B, 
 gathered, not streamed or multiplied). Serving large MoE models is therefore about big
 batches, and expert parallelism is how systems reach them: attention runs data-parallel on many GPUs and
 all their tokens meet at each expert (see [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md)
-for the sizing side, §5 for the all-to-all it implies).
+for the sizing side, §5 for the all-to-all it implies). The router and the experts themselves — how tokens are
+routed, why routers must be balanced, and expert parallelism's dispatch and combine — are worked in
+[00-foundations/mixture-of-experts](../../00-foundations/mixture-of-experts/PRIMER.md) (§2–3, §5–6).
 
 ---
 

@@ -627,7 +627,8 @@ DeepSeek-R1-0528 on 32 H200 or B200 GPUs as 16-way data-parallel prefill plus 16
 disaggregated with NIXL over InfiniBand or RoCE. For the router, each DP rank is an endpoint (a multi-port model
 server, "DP-aware scheduling"), so prefix and load scoring apply per rank; multi-host groups are scheduled as a unit
 with LeaderWorkerSet (layer 03 §4). Load imbalance moves inside the model — hot experts — which the engine balances,
-not the router.
+not the router. Dispatch and combine, the slowest rank, EPLB-style rebalancing and choosing a wide-EP degree are
+worked in [MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus).
 
 ---
 
