@@ -92,7 +92,7 @@ class Profile:
             return 0.0
         flops = 2.0 * self.params_per_token * tokens
         kv_read = (sum(decode_contexts) + prefill_context) * self.kv_bytes_per_token
-        byts = self.streamed_bytes + kv_read + tokens * 0.0
+        byts = self.streamed_bytes + kv_read
         return self.overhead_s + max(flops / (self.peak_flops * self.compute_eff), byts / (self.mem_bw * self.memory_eff))
 
     def describe(self) -> str:
@@ -146,7 +146,7 @@ def profile(model: str = "llama-3.1-8b-instruct", gpu_name="L4", scheme: str = "
 def decode_floor_ms(model: str, gpu_name, scheme: str) -> float:
     """Streamed weight bytes / bandwidth at 100%: the ITL floor at batch 1 (vllm-internals §8.2:
     Llama-3.1-8B on an L4 50.0 / 26.8 / 15.6 ms for BF16 / FP8 / INT4)."""
-    p = profile(model, gpu_name, scheme if scheme != "fp8" or _gpu(gpu_name).sm >= 75 else "bf16")
+    p = profile(model, gpu_name, scheme)
     return p.streamed_bytes / p.mem_bw * 1e3
 
 
