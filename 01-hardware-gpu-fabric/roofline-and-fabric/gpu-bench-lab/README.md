@@ -36,7 +36,7 @@ on real hardware. Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.
 ```bash
 cd 01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                      # ~90 tests, a few seconds, no GPU
+python3 -m pytest -q                      # 97 tests (94 pass, 3 skip), ~35 s, no GPU
 python3 -m gpubench info                  # what is this machine?
 python3 -m gpubench run --out results     # the suite: results/gpubench-<host>-<backend>-<time>.{json,md}
 python3 -m jupyterlab notebooks           # the four fill-in notebooks (answers in solutions/)
@@ -129,7 +129,7 @@ python3 -m gpubench show results/<run>.json       # re-render a saved report
 
 | | Colab / Kaggle | Any GPU box (RunPod, Vast, Lambda, your own) | GCP (T3) |
 |---|---|---|---|
-| How | open the notebook from the layer README's Colab badge; T4 runtime; Kaggle for 2×T4 | `pip install -e '.[gpu]'` or [`deploy/any-gpu/run.sh`](deploy/any-gpu/) (Docker + NVIDIA Container Toolkit) | [`deploy/gcp/`](deploy/gcp/): Terraform, one Spot `g2-standard-4` (L4), report to GCS |
+| How | open the notebook from its Colab link in the layer README; T4 runtime; Kaggle for 2×T4 | `pip install -e '.[gpu]'` or [`deploy/any-gpu/run.sh`](deploy/any-gpu/) (Docker + NVIDIA Container Toolkit) | [`deploy/gcp/`](deploy/gcp/): Terraform, one Spot `g2-standard-4` (L4), report to GCS |
 | Good for | T1 for free; P2P over PCIe | NVLink P2P on SXM machines; FP8 on H100 | a clean, repeatable cloud baseline; the cloud disk's cold reads |
 | Clean up | nothing | stop or terminate the pod/VM | `terraform destroy` (or `bench-on-gcp.sh`, which destroys for you) |
 

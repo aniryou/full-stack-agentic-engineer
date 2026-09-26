@@ -1,4 +1,4 @@
-# 04 · Inference engine — vLLM / SGLang / TensorRT-LLM
+# 04 · Inference engine
 
 Understand what one engine instance does between "a request arrived" and "tokens are streaming out": after this
 layer you can size a model's KV cache before paying for a GPU, explain continuous batching, chunked prefill, prefix
@@ -8,23 +8,31 @@ a real server against an SLO.
 ## Where this layer sits
 
 ```
-   05 orchestrator       which replica · how many replicas · prefill/decode split
- ▶ 04 inference engine   one replica: the step loop, the KV cache, batching, attention kernels
-   03 kubernetes-gpu     pods, nodes and GPUs the engine runs on
-   01 hardware           HBM bandwidth and FLOPs that set every step time
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
+   04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
+   03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
+   02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
+   01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
 
+This layer is one replica: it runs the model (00) on its GPUs (01, 02), inside a pod (03), as one of the
+orchestrator's replicas (05).
+
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
-rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough and include the exercises.
+rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + torch" is T0 with CPU PyTorch installed
+(Colab has it). Times are rough and include the exercises.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook | ~2 h | T0 |
+| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook | ~2 h | T0 + torch (Colab CPU) |
 | [`paged-attention/`](paged-attention/paged-attention-primer.md) | explain fragmentation and how block tables, refcounts and copy-on-write fix it — a primer, `paged_attention_minimal.py` and a practice notebook | ~1.5 h | T0 |
 | [`flash-attention/`](flash-attention/flash-attention-primer.md) | explain tiling and online softmax from zero ([primer](flash-attention/flash-attention-primer.md)), then defend a kernel or backend choice with exact byte counts, the FA2/FA3/FA4 changes, decode kernels, paged KV and a Triton forward pass ([deep dive](flash-attention/flash-attention-deep-dive.md)); `fa_calculators.py` computes every number (49 tests); two notebooks: [practice](flash-attention/flash_attention_practice.ipynb) (five exercises) and the [deep-dive companion](flash-attention/flash_attention_deep_dive.ipynb) | ~1.5 h primer + practice; ~4 h deep dive (rough) | T0 (kernel timing T1) |
 | [`serving-engine/`](serving-engine/README.md) | explain and simulate the engine itself — step loop, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, LoRA, measurement — then size, measure and tune a real vLLM: a [PRIMER](serving-engine/PRIMER.md), [`mini-engine-core`](serving-engine/mini-engine-core/) (a numpy "nano-vLLM", 6 notebooks) and [`vllm-serving-lab`](serving-engine/vllm-serving-lab/) (sizing, a load generator, `/metrics`, a fake vLLM for T0, Cloud Run and GKE deploys, 6 notebooks) | ~11 h primer + core; ~12 h lab | T0 → T1 (T2, T3 optional) |
 | [`quantization/`](quantization/README.md) | say what INT4, FP8, NVFP4 or an FP8 KV cache buys for a given model on a given GPU — decode speed, prefill speed or concurrency — and what each runs as on that GPU generation; make 4 bits accurate with GPTQ, AWQ or SmoothQuant; then produce, serve and evaluate a real quantized checkpoint: a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) (numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model; 5 notebooks) and [`quant-lab`](quantization/quant-lab/) (llm-compressor checkpoints, FP16 vs INT4 vs FP8 in vLLM, lm-eval with error bars, FP8 KV, the NVFP4/MXFP4 layouts; a bundled tiny model and a fake server for T0; 5 notebooks) | ~10 h primer + core; ~9 h lab | T0 → T1 (T3 optional) |
-| [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | three ~2 h sittings + the notebook | T0 (observing it T1) |
+| [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | four ~2 h sittings (about 8.5 h) + the notebook | T0 (observing it T1) |
 
 ## Start here
 
@@ -45,26 +53,29 @@ attention backends (vllm-internals primer §6).
 ## Run it
 
 ```bash
-cd flash-attention && python3 -m pytest -q                         # 49 tests, ~1 s (numpy)
+cd flash-attention && python3 -m pytest -q                         # 49 tests, a few seconds (numpy)
 cd ../serving-engine/mini-engine-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 67 tests, ~15 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 75 tests, ~50 s
 cd ../vllm-serving-lab
-python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 66 tests, a few seconds, offline
+python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 74 tests, ~30 s, offline
 cd ../../quantization/quant-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 78 tests, ~7 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 86 tests, ~30 s
 cd ../quant-lab
-python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 86 tests, ~11 s, offline (one needs Terraform, else skipped)
+python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 94 tests, ~35 s, offline (one needs Terraform, else skipped)
 ```
 
-Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab badges below. The
+Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab links below. The
 vllm-internals notebook needs only the standard library plus the serving lab installed (`pip install -e` above).
 
 ## How it fits
 
-Builds on [`00-foundations/transformers`](../00-foundations/transformers/) (attention and decoding),
+**Needed first:** [`00-foundations/transformers`](../00-foundations/transformers/) (attention and decoding) and
 [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (weights, KV bytes, TTFT
-and TPOT) and layer 01's [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a
-decode step is a memory read). Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
+and TPOT) — enough for the kernel topics and serving-engine §1–8 at T0. The
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) visits this layer twice on purpose: right after 00 for the
+concepts, then again after layers 01 and 02 with a GPU, when layer 01's
+[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (why a decode step is a memory
+read) is needed for serving-engine §9–12, the measurements, quantization and the two deep dives. Layer 02's [`cuda-and-nccl`](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) (CUDA Graphs, the all-reduces tensor
 parallelism runs on) and layer 03's [`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md) (how the engine's pod
 gets its GPUs) sit between them. Two layer-00 topics bring workloads that change how an engine is run:
 [mixture-of-experts](../00-foundations/mixture-of-experts/PRIMER.md) (§6: fused MoE kernels and expert parallelism)
@@ -80,93 +91,17 @@ routes across many engine replicas by prefix-cache affinity and load, autoscales
 - vLLM facts are pinned to v0.30.0 and `main` at `5840d95` (September 2026) and marked `(verify)` where they move;
   each primer ends with a dated verify list.
 
-## Scope of this layer
-
-**Covers:** paged attention & KV-cache management, continuous/in-flight batching, prefill vs decode, attention
-kernels (flash attention), tensor/pipeline parallelism, speculative decoding, quantization (number formats,
-granularity, GPTQ/AWQ/SmoothQuant calibration, W8A8 and FP4 kernels per GPU generation, KV-cache quantization,
-producing and evaluating a checkpoint), throughput-vs-latency tuning.
-
-**Signal keywords:** vLLM, SGLang, TensorRT-LLM, KV cache, paged attention, flash attention, continuous batching,
-prefill/decode, speculative decoding, quantization, GPTQ, AWQ, SmoothQuant, FP8, FP4, NVFP4, MXFP4, KV-cache
-quantization, llm-compressor, tensor parallel, tokens/sec, TTFT, ITL.
-
 <!-- colab-links:start -->
 ## Run in Colab
 
-One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Exercises are under `notebooks/` / `exercises/`; worked answers under `solutions/`.
+One-time Colab setup is in [`../COLAB.md`](../COLAB.md). One line per lab: each link opens that notebook in Colab, exercises first. *Answers* are the worked answer keys (in a `solutions/` or `worked/` folder, named `*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin when the folder has no `solutions/` of its own): try the exercise first. Any other `*_worked` notebook is a walkthrough lesson.
 
-**`flash-attention/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_deep_dive.ipynb) `flash_attention_deep_dive.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_practice.ipynb) `flash_attention_practice.ipynb`
-
-**`kv-cache/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/kv-cache/01_kv_cache_worked.ipynb) `01_kv_cache_worked.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/kv-cache/02_kv_cache_practice.ipynb) `02_kv_cache_practice.ipynb`
-
-**`paged-attention/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/paged-attention/paged_attention_practice.ipynb) `paged_attention_practice.ipynb`
-
-**`quantization/quant-core/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/01_number_formats_and_error.ipynb) `01_number_formats_and_error.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/02_granularity_and_outliers.ipynb) `02_granularity_and_outliers.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) `03_gptq_awq_and_smoothquant_from_scratch.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) `04_activation_and_kv_cache_quantization.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/05_choosing_a_scheme.ipynb) `05_choosing_a_scheme.ipynb`
-
-**`quantization/quant-core/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/01_number_formats_and_error.ipynb) `01_number_formats_and_error.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/02_granularity_and_outliers.ipynb) `02_granularity_and_outliers.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/03_gptq_awq_and_smoothquant_from_scratch.ipynb) `03_gptq_awq_and_smoothquant_from_scratch.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/04_activation_and_kv_cache_quantization.ipynb) `04_activation_and_kv_cache_quantization.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/05_choosing_a_scheme.ipynb) `05_choosing_a_scheme.ipynb`
-
-**`quantization/quant-lab/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) `01_quantize_a_checkpoint.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/02_serve_and_compare_schemes.ipynb) `02_serve_and_compare_schemes.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) `03_measure_the_accuracy_cost.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) `04_kv_cache_quantization_in_vllm.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) `05_fp4_and_the_blackwell_path.ipynb`
-
-**`quantization/quant-lab/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/01_quantize_a_checkpoint.ipynb) `01_quantize_a_checkpoint.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/02_serve_and_compare_schemes.ipynb) `02_serve_and_compare_schemes.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/03_measure_the_accuracy_cost.ipynb) `03_measure_the_accuracy_cost.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/04_kv_cache_quantization_in_vllm.ipynb) `04_kv_cache_quantization_in_vllm.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/05_fp4_and_the_blackwell_path.ipynb) `05_fp4_and_the_blackwell_path.ipynb`
-
-**`serving-engine/mini-engine-core/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb) `01_the_step_loop_and_continuous_batching.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/02_chunked_prefill_and_the_token_budget.ipynb) `02_chunked_prefill_and_the_token_budget.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb) `03_prefix_caching.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/04_sampling_and_structured_output.ipynb) `04_sampling_and_structured_output.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/05_speculative_decoding.ipynb) `05_speculative_decoding.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/06_quantization.ipynb) `06_quantization.ipynb`
-
-**`serving-engine/mini-engine-core/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/01_the_step_loop_and_continuous_batching.ipynb) `01_the_step_loop_and_continuous_batching.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/02_chunked_prefill_and_the_token_budget.ipynb) `02_chunked_prefill_and_the_token_budget.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/03_prefix_caching.ipynb) `03_prefix_caching.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/04_sampling_and_structured_output.ipynb) `04_sampling_and_structured_output.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/05_speculative_decoding.ipynb) `05_speculative_decoding.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/06_quantization.ipynb) `06_quantization.ipynb`
-
-**`serving-engine/vllm-serving-lab/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb) `01_size_before_you_serve.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/02_serve_and_measure.ipynb) `02_serve_and_measure.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/03_knobs_and_tradeoffs.ipynb) `03_knobs_and_tradeoffs.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb) `04_prefix_caching_for_agents.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/05_speculation_and_quantization_in_vllm.ipynb) `05_speculation_and_quantization_in_vllm.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb) `06_deploy_on_cloud_run_gpu.ipynb`
-
-**`serving-engine/vllm-serving-lab/solutions/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/01_size_before_you_serve.ipynb) `01_size_before_you_serve.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/02_serve_and_measure.ipynb) `02_serve_and_measure.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/03_knobs_and_tradeoffs.ipynb) `03_knobs_and_tradeoffs.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/04_prefix_caching_for_agents.ipynb) `04_prefix_caching_for_agents.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/05_speculation_and_quantization_in_vllm.ipynb) `05_speculation_and_quantization_in_vllm.ipynb`
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/06_deploy_on_cloud_run_gpu.ipynb) `06_deploy_on_cloud_run_gpu.ipynb`
-
-**`vllm-internals/notebooks/`**
-- [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) `01_block_hashes_and_eviction.ipynb`
+- **`flash-attention/`** — [flash_attention_deep_dive](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_deep_dive.ipynb) · [flash_attention_practice](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/flash-attention/flash_attention_practice.ipynb)
+- **`kv-cache/`** — [01_kv_cache_worked](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/kv-cache/01_kv_cache_worked.ipynb) · [02_kv_cache_practice](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/kv-cache/02_kv_cache_practice.ipynb)
+- **`paged-attention/`** — [paged_attention_practice](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/paged-attention/paged_attention_practice.ipynb)
+- **`quantization/quant-core/`** — [01_number_formats_and_error](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/01_number_formats_and_error.ipynb) · [02_granularity_and_outliers](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/02_granularity_and_outliers.ipynb) · [03_gptq_awq_and_smoothquant_from_scratch](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) · [04_activation_and_kv_cache_quantization](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/04_activation_and_kv_cache_quantization.ipynb) · [05_choosing_a_scheme](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/notebooks/05_choosing_a_scheme.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/01_number_formats_and_error.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/02_granularity_and_outliers.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/03_gptq_awq_and_smoothquant_from_scratch.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/04_activation_and_kv_cache_quantization.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-core/solutions/05_choosing_a_scheme.ipynb)
+- **`quantization/quant-lab/`** — [01_quantize_a_checkpoint](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/01_quantize_a_checkpoint.ipynb) · [02_serve_and_compare_schemes](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/02_serve_and_compare_schemes.ipynb) · [03_measure_the_accuracy_cost](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/03_measure_the_accuracy_cost.ipynb) · [04_kv_cache_quantization_in_vllm](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/04_kv_cache_quantization_in_vllm.ipynb) · [05_fp4_and_the_blackwell_path](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/notebooks/05_fp4_and_the_blackwell_path.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/01_quantize_a_checkpoint.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/02_serve_and_compare_schemes.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/03_measure_the_accuracy_cost.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/04_kv_cache_quantization_in_vllm.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/quantization/quant-lab/solutions/05_fp4_and_the_blackwell_path.ipynb)
+- **`serving-engine/mini-engine-core/`** — [01_the_step_loop_and_continuous_batching](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/01_the_step_loop_and_continuous_batching.ipynb) · [02_chunked_prefill_and_the_token_budget](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/02_chunked_prefill_and_the_token_budget.ipynb) · [03_prefix_caching](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb) · [04_sampling_and_structured_output](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/04_sampling_and_structured_output.ipynb) · [05_speculative_decoding](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/05_speculative_decoding.ipynb) · [06_quantization](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/notebooks/06_quantization.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/01_the_step_loop_and_continuous_batching.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/02_chunked_prefill_and_the_token_budget.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/03_prefix_caching.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/04_sampling_and_structured_output.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/05_speculative_decoding.ipynb) · [06](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/mini-engine-core/solutions/06_quantization.ipynb)
+- **`serving-engine/vllm-serving-lab/`** — [01_size_before_you_serve](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/01_size_before_you_serve.ipynb) · [02_serve_and_measure](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/02_serve_and_measure.ipynb) · [03_knobs_and_tradeoffs](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/03_knobs_and_tradeoffs.ipynb) · [04_prefix_caching_for_agents](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb) · [05_speculation_and_quantization_in_vllm](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/05_speculation_and_quantization_in_vllm.ipynb) · [06_deploy_on_cloud_run_gpu](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/01_size_before_you_serve.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/02_serve_and_measure.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/03_knobs_and_tradeoffs.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/04_prefix_caching_for_agents.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/05_speculation_and_quantization_in_vllm.ipynb) · [06](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/serving-engine/vllm-serving-lab/solutions/06_deploy_on_cloud_run_gpu.ipynb)
+- **`vllm-internals/`** — [01_block_hashes_and_eviction](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/04-inference-engine/vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb)
 <!-- colab-links:end -->

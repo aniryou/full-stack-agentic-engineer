@@ -60,7 +60,7 @@ reasons are one vocabulary in both packages (PRIMER §3: `cpu_time`, `wall_timeo
 ```bash
 cd sandbox-lab
 python3 -m pip install -e ".[dev]"                 # PyYAML + kubernetes-validate; the sandbox itself is stdlib
-python3 -m pytest -q                               # 112 tests, ~25 s, offline, no GPU
+python3 -m pytest -q                               # 120 tests, ~60 s, offline, no GPU
 python3 -m sandboxlab env                          # which isolation levels are measurable here
 python3 -m sandboxlab probes --level process+netns # the attack probes through a process sandbox
 python3 -m sandboxlab probes --level docker:runc    # measured with Docker; else the command + sample verdicts

@@ -8,12 +8,14 @@ This is the *starter*. The full [`gcp-agent-platform-lab`](../gcp-agent-platform
 OAuth, evals, tracing) is the **step-up** for later — same concepts, much more
 machinery. Learn it here first.
 
+**Time and tier:** ~4 h; module 07.1 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: standard library (pytest and Jupyter only for the tests and notebooks), no key.
+
 ## Quick start
 
 ```bash
 cd agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 14 tests, ~0.1s
+python3 -m pytest -q                          # 22 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

@@ -11,6 +11,8 @@ Three files carry the idea:
 | `mistral_model.py` | the model swap: a Mistral model decides the next step via function calling over the journal | `mistralai` |
 | `mistral_workflow.py` | **the same agent as a Mistral Workflow** — Temporal underneath provides the five rules, so the plumbing disappears | `mistralai-workflows[mistralai]` |
 
+**Time and tier:** ~2 h (rough); module 07.3, the Mistral Workflows version in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: the durable core and the adapter tests run offline with a fake client. The workflow half needs Python 3.12–3.14 and a local Temporal dev server (still free); a `MISTRAL_API_KEY` adds the live model.
+
 ## The five rules, and who provides them
 
 | # | Rule | `durable.py` | Mistral Workflows |
