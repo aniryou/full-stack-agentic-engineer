@@ -34,7 +34,7 @@ Every notebook says which tier it needs. Every concept can be learned at T0.
 |---|---|---|
 | **T0** | Your laptop, a free Colab CPU session, or CI. Simulators, calculators and from-scratch code. | Free |
 | **T1** | One small GPU: a free Colab or Kaggle T4, or a rented 24 GB card. Real kernels and a real small model. | Free, or about $0.3–0.7 an hour (verify) |
-| **T2** | A machine with several GPUs, ideally linked by NVLink, rented for about an hour. Collectives and tensor parallelism. | Free on Kaggle's 2×T4 (no NVLink); roughly $1–25 a session rented (verify) |
+| **T2** | A machine with several GPUs, ideally linked by NVLink, rented for about an hour. Collectives and tensor parallelism. | Free on Kaggle's 2×T4 (no NVLink); rented, about $1–6 for an hour on two NVLink GPUs, up to about $25 for eight (verify) |
 | **T3** | Google Cloud managed services, deployed with Terraform with cheap defaults (L4, Spot, scale to zero). Optional. | Pay per use; tear it down afterwards |
 
 Notebooks at T1 and above look for the hardware they need. When it is not there they run a clearly labelled T0 path:
@@ -44,8 +44,9 @@ has the current options and prices, and the habits that keep a paid session from
 ## How the labs check your understanding
 
 - **Exercises are committed blank.** Exercise notebooks have `# YOUR CODE HERE` gaps.
-- **A check cell follows the exercise** in most notebooks (all of those in the primer, core and lab topics of layers 01–05). It prints ✅ when your
-  answer is right, or fails with what is off.
+- **A check cell follows the exercise** in most notebooks (all of those in the primer, core and lab topics of layers
+  01–05 and the four newer topics in 00, 04 and 07). It prints ✅ when your answer is right, or fails with what is
+  off; some older checks are lighter, and the 06 scaling notebooks print "not attempted" until you fill one in.
 - **Worked answers are separate.** They usually sit in `solutions/` (shown under "Solutions" in the navigation). Try
   the exercise first.
 - **Start again at any time.** On Colab, reopen the notebook from its badge. Locally, `git restore <notebook>` returns
