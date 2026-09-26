@@ -64,6 +64,42 @@ def test_the_slanted_roof_ignores_multi_pass_kernels():
         roofline.measured_roofline(g, [two_pass], "float64")
 
 
+def _ms(op, cost, samples, **params):
+    return Measurement(op, params, cost, Timing(tuple(samples)), "numpy", "cpu")
+
+
+def test_a_cpu_roofline_with_float32_below_float64_is_flagged_as_noisy():
+    """The review's case: a busy machine measured float32 below float64 and the report said nothing."""
+    s = [_ms("stream.add", stream_cost("add", 10**6, 8), [2.4e-3, 2.4e-3, 2.4e-3])]
+    quiet = [_ms("gemm", gemm_cost(512, 512, 512, 8), [1.0e-3, 1.0e-3, 1.0e-3], dtype="float64"),
+             _ms("gemm", gemm_cost(512, 512, 512, 4), [0.5e-3, 0.5e-3, 0.5e-3], dtype="float32")]   # 2x: fine
+    assert roofline.noise_warnings(quiet, s) == []
+    busy = [quiet[0], _ms("gemm", gemm_cost(512, 512, 512, 4), [1.5e-3, 1.5e-3, 1.5e-3], dtype="float32")]
+    (w,) = roofline.noise_warnings(busy, s)
+    assert w.startswith("noisy measurement (shared CPU?)") and "float32" in w and "float64" in w
+    assert roofline.noise_warnings(busy, s, is_gpu=True) == []    # on a GPU fp64 may match fp32 (H100: 67 TF each)
+
+
+def test_scattered_samples_behind_a_roof_are_flagged_as_noisy():
+    s = [_ms("stream.add", stream_cost("add", 10**6, 8), [2.4e-3, 2.4e-3, 2.4e-3])]
+    g = [_ms("gemm", gemm_cost(512, 512, 512, 8), [1.0e-3, 1.0e-3, 1.0e-3], dtype="float64")]
+    assert roofline.noise_warnings(g, s) == []
+    jumpy_g = [_ms("gemm", gemm_cost(512, 512, 512, 8), [1.0e-3, 1.6e-3, 2.2e-3], dtype="float64")]
+    jumpy_s = [_ms("stream.add", stream_cost("add", 10**6, 8), [2.4e-3, 4.0e-3, 3.0e-3])]
+    (wg,) = roofline.noise_warnings(jumpy_g, s)
+    assert wg.startswith("noisy measurement (shared CPU?)") and "float64 flat roof" in wg
+    (ws,) = roofline.noise_warnings(g, jumpy_s)
+    assert "bandwidth roof" in ws
+    assert roofline.noise_warnings(jumpy_g, s, cv_limit=1.0) == []
+
+
+def test_the_report_prints_the_noise_warning():
+    from gpubench.report import Report
+    rep = Report(meta={"noise_warnings": ["noisy measurement (shared CPU?): float32 peaked below float64"]})
+    assert "**WARNING — noisy measurement (shared CPU?): float32 peaked below float64.**" in rep.to_markdown()
+    assert "WARNING" not in Report(meta={}).to_markdown()
+
+
 def test_ascii_plot_draws_roofs_points_and_legend():
     r = roofline.Roofline("toy", 100e9, 10e9)
     art = roofline.ascii_plot([r], [("o", 2.0, 15e9), ("x", 50.0, 90e9)])
