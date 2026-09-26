@@ -1,11 +1,18 @@
 """
 Generates attention_practice.ipynb (blanks) and attention_solutions.ipynb (filled in) from one spec,
 so the two never drift apart. Run:  python practice/build_notebooks.py
+Both start with the repo's Colab setup cell, exactly as tools/inject_colab_bootstrap.py writes it,
+so rebuilding matches the committed notebooks and running the injector afterwards is a no-op.
 """
+import importlib.util
 import json
 from pathlib import Path
 
-HERE = Path(__file__).parent
+HERE = Path(__file__).resolve().parent
+REPO = next(p for p in HERE.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file())
+_spec = importlib.util.spec_from_file_location("inject_colab_bootstrap", REPO / "tools" / "inject_colab_bootstrap.py")
+_inject = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_inject)
 
 SETUP = '''import numpy as np
 np.set_printoptions(precision=2, suppress=True, linewidth=120)
@@ -262,7 +269,7 @@ def build(solution):
 Each exercise has a cell with `...` blanks to fill in, followed by a check cell. Run the check; it prints ✅ when your
 implementation is right and tells you what's off when it isn't. Later exercises use earlier ones, so go in order.
 Solutions are in `attention_solutions.ipynb`; try to get each check to pass before looking."""
-    cells = [md(title + "\n\n" + intro), md("## Setup"), code(SETUP)]
+    cells = [_inject.make_cell(HERE.relative_to(REPO).as_posix()), md(title + "\n\n" + intro), md("## Setup"), code(SETUP)]
     for text, sol, prac, check in EXERCISES:
         cells.append(md(text))
         body = sol if solution else (prac if prac is not None else sol)
@@ -280,6 +287,6 @@ Solutions are in `attention_solutions.ipynb`; try to get each check to pass befo
 
 
 if __name__ == "__main__":
-    (HERE / "attention_practice.ipynb").write_text(json.dumps(build(solution=False), indent=1))
-    (HERE / "attention_solutions.ipynb").write_text(json.dumps(build(solution=True), indent=1))
+    for name, solution in (("attention_practice.ipynb", False), ("attention_solutions.ipynb", True)):
+        (HERE / name).write_text(json.dumps(build(solution), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print("wrote attention_practice.ipynb and attention_solutions.ipynb")
