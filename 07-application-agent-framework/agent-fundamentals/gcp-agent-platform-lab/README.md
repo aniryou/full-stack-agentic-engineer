@@ -11,7 +11,8 @@ real model.
 ## Quick start
 
 ```bash
-git clone <this repo> && cd gcp-agent-platform-lab
+git clone --depth 1 https://github.com/aniryou/full-stack-agentic-engineer.git
+cd full-stack-agentic-engineer/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab
 python3 -m venv .venv && source .venv/bin/activate      # Python 3.10+
 make setup            # pip install -e ".[dev]" + a Jupyter kernel
 make lab              # opens JupyterLab in notebooks/
@@ -87,9 +88,11 @@ python tools/run_notebooks.py notebooks --expect-fail   # exercise variants stop
 ## Using a real model
 
 `pip install -e ".[gemini]"`, set `GOOGLE_API_KEY` (or the Vertex environment variables), then in any
-notebook replace `FakeLLM(...)` with `GeminiLLM(model="gemini-3-flash")`. The adapter follows the
-`google-genai` 1.x surface and is marked *verify before relying on it*; details and a porting guide
-to ADK are in `docs/GEMINI_ADAPTER.md`.
+notebook replace `FakeLLM(...)` with `GeminiLLM(model="gemini-3-flash")` (the model string as of
+September 2026, verify). The adapter was written against the `google-genai` 1.x surface; the SDK is
+on 2.x since May 2026, so treat it as *verify before relying on it*. Details are in
+[`docs/GEMINI_ADAPTER.md`](docs/GEMINI_ADAPTER.md); the mapping to Google's Agent Development Kit
+(2.x on PyPI since May 2026, verify) is [`docs/LAB_TO_ADK.md`](docs/LAB_TO_ADK.md).
 
 ## Honesty notes
 
