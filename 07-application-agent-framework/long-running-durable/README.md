@@ -38,7 +38,7 @@ python3 tools/run_notebooks.py solutions     # the worked answers run clean
 
 cd ../lra-gcp
 python3 -m pip install -e ".[dev,services]"  # pydantic, FastAPI for the services, Jupyter's runner
-python3 -m pytest -q                         # 70 tests: 64 pass, 6 skip without the optional extras, ~15 s
+python3 -m pytest -q                         # 70 tests: 63 pass, 7 skip without the optional extras, ~15 s
 python3 scripts/local_demo.py                # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback
 ```
 

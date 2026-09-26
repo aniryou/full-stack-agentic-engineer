@@ -37,7 +37,7 @@ Each blank in `notebooks/` stops at its first exercise until you fill it in.
 
 ```bash
 python3 -m pip install -e ".[dev,services]"
-python3 -m pytest -q          # 70 tests: 64 pass, 6 skip (Google Cloud clients, ADK 2, Mistral Workflows), ~15 s
+python3 -m pytest -q          # 70 tests: 63 pass, 7 skip (Google Cloud clients, ADK 2, Mistral Workflows), ~15 s
 python3 scripts/local_demo.py
 make notebooks                # the solutions run clean; each blank stops at its first exercise
 ```
@@ -45,8 +45,9 @@ make notebooks                # the solutions run clean; each blank stops at its
 The optional extras add paths, never requirements: `pip install -e ".[dev,services,gcp]"` runs the four Google Cloud
 adapter tests against fake clients (no credentials); `".[adk]"` (ADK 2 and the Google Cloud clients, about 220 MB,
 measured 2026-09-26, verify) runs the two ADK test files, notebook 04 and `make adk-demo`; `".[mistral]"` adds the
-`mistralai` SDK and, on Python 3.12–3.14, Mistral Workflows (see [`docs/mistral.md`](docs/mistral.md)). With every
-extra on Python 3.12 the suite runs all 70 tests.
+`mistralai` SDK and, on Python 3.12–3.14, Mistral Workflows (see [`docs/mistral.md`](docs/mistral.md)), whose four
+tests start a local Temporal dev server downloaded from `temporal.download` on first use. With every extra (`gcp`, `adk`,
+`mistral`) on Python 3.12 and that download reachable, 77 tests run.
 
 ## The engine in one picture
 
