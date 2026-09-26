@@ -1,4 +1,4 @@
-# Build status — layers 01–05 (+ deep primers)
+# Build status — layers 01–05 (+ deep primers) and the four §6b topics
 
 Legend: `building` (agents writing) → `built` (builder validation passed) → `reviewed` (adversarial review + fixes passed) → `merged` (on `main`).
 WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed layers are merged to `main` through their own branch/PR.
@@ -15,6 +15,14 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | Root docs | `CURRICULUM.md`, `COMPUTE.md` | reconciled with the tree; on `claude/gifted-johnson-9gjwzc-final` (PR pending) | open the PR and merge |
 | Integration | layer READMEs, root README, `CLAUDE.md` decisions log, Colab links (`tools/gen_colab_index.py`) | final pass done on `claude/gifted-johnson-9gjwzc-final` (PR pending): root docs linked everywhere, cross-layer links, 267 notebooks, link check clean (one false positive: inline code in `README-STYLE.md`) | merge with the root docs |
 | Site | GitHub Pages: `mkdocs.yml`, `tools/site/`, `.github/workflows/pages.yml` | pending merge (separate branch/PR) | merge after the root docs so the nav includes them |
+| 00 mixture-of-experts (00.4) | `00-foundations/mixture-of-experts/` (PRIMER, `moe-core` 67 tests, `moe-lab` 118 tests; 5 + 5 notebooks) | REVIEWED (30 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
+| 00 rl-and-thinking-models (00.5) | `00-foundations/rl-and-thinking-models/` (PRIMER, `rl-core` 57 tests, `thinking-lab` 91 tests; 5 + 5 notebooks) | REVIEWED (28 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
+| 04 quantization (04.9) | `04-inference-engine/quantization/` (PRIMER, `quant-core` 78 tests, `quant-lab` 86 tests incl. one Terraform check; 5 + 5 notebooks) | REVIEWED (33 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
+| 07 sandboxed-execution (07.5) | `07-application-agent-framework/sandboxed-execution/` (PRIMER, `sandbox-core` 81 tests, `sandbox-lab` 112 tests; 5 + 5 notebooks; GKE Sandbox Terraform) | REVIEWED (58 findings fixed, validator pass) → merged via the `claude/four-new-topics` PR | — |
+| Integration (four topics) | layer READMEs 00/04/07 (00 restyled), cross-links from existing primers, `CURRICULUM.md` (00.4, 00.5, 04.9, 07.5; drills 12–15), `COMPUTE.md` (§5.4, §6, §7, §9), root README, `CLAUDE.md` log, site landing text, Colab links | done on `claude/four-new-topics`: 347 notebooks, link check clean, site generator 0 missing targets | commit, PR, `mkdocs build --strict`, merge |
+
+The four §6b topics were built with `build_topic.js` (research → builders A ∥ B → nested `review_workflow.js`) on
+`claude/four-new-topics`; the integration checklist they followed is [`INTEGRATION.md`](INTEGRATION.md).
 
 ## Resuming after an interruption
 1. `git checkout claude/gifted-johnson-9gjwzc && git pull` — the latest WIP snapshot.
