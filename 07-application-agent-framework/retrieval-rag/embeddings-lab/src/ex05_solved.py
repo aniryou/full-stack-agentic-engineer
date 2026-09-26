@@ -31,8 +31,11 @@ print("ndcg_at_k ✓")
 # %% [markdown]
 # ## Task 2 — Reciprocal Rank Fusion
 # `rrf(rankings, k)`: score(d) = Σ over rankings 1/(k + rank(d) + 1), rank
-# 0-based; return doc ids sorted by score. Check with k=1:
+# 0-based; return doc ids sorted by score. Checks with k=1:
 # [a,b,c] + [c,a,b] → a: 1/2+1/3, c: 1/4+1/2, b: 1/3+1/4 → order a, c, b.
+# [d,c,e,a] + [a,c] → a: 1/5+1/2 = 7/10, c: 1/3+1/3 = 2/3, d: 1/2, e: 1/4
+#   → order a, c, d, e. The constant matters here: 1/(k+rank) gives a, d, c, e
+#   and 1/(k+rank+2) gives c, a, d, e.
 
 # %%
 def rrf(rankings, k=60):
@@ -45,6 +48,8 @@ def rrf(rankings, k=60):
     # <<< SOLUTION
 
 assert rrf([["a", "b", "c"], ["c", "a", "b"]], k=1) == ["a", "c", "b"]
+assert rrf([["d", "c", "e", "a"], ["a", "c"]], k=1) == ["a", "c", "d", "e"], \
+    "check the constant: score = 1/(k + rank + 1) with 0-based rank"
 print("rrf ✓")
 
 # %% [markdown]
