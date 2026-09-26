@@ -11,7 +11,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | building | builder reports → review workflow |
 | 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | building | builder reports → review workflow |
 | vLLM internals primer | `04-inference-engine/vllm-internals/` | building | review → merge with layer 04 |
-| FlashAttention deep dive | `04-inference-engine/flash-attention/flash-attention-deep-dive.md` | building | review → merge with layer 04 |
+| FlashAttention deep dive | `04-inference-engine/flash-attention/` (deep-dive.md, fa_calculators.py + 25 tests, deep_dive notebook) | built; review running | fix pre-existing broken practice notebook in review; Colab-inject the new notebook at integration; merge with layer 04 |
 | Root docs | `CURRICULUM.md`, `COMPUTE.md` | built | reconcile with what was actually built, then merge last |
 | Integration | layer READMEs, root README, `CLAUDE.md` decisions log, Colab links (`tools/gen_colab_index.py`) | pending | after each layer's review; final pass at the end |
 

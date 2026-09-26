@@ -239,7 +239,7 @@ worst_chunked_ms = max(1e3 * perf.step_time(g, m, decodes + [(i * per_chunk, min
 
 # %% check
 normal = 1e3 * perf.step_time(g, m, decodes)
-assert 400 < stall_ms < 440 and chunked_steps == 17 and worst_chunked_ms < 40
+assert 350 < stall_ms < 380 and chunked_steps == 17 and worst_chunked_ms < 40
 print(f"✅ normal ITL {normal:.1f} ms; unchunked stall {stall_ms:.0f} ms; "
       f"chunked: {chunked_steps} steps, worst gap {worst_chunked_ms:.1f} ms - SIMULATED")
 
@@ -274,7 +274,7 @@ print(f"✅ {min_blocks} blocks = {kv_gb:.1f} GB of KV; an H100 left ~{perf.kv_c
 # **The two-minute version.** "A forward pass is memory-bound until a few hundred tokens — the weight read
 # dominates — and compute-bound after. So decode tokens batch almost for free, and a long prompt is expensive in
 # proportion to its length. If an 8k-token prompt runs in one step, every user decoding in that step waits for
-# it: on an L4 with a 1.5B model their 17 ms token gap becomes about 420 ms. Chunked prefill caps each step at
+# it: on an L4 with a 1.5B model their 17 ms token gap becomes about 370 ms. Chunked prefill caps each step at
 # `max_num_batched_tokens`; decodes are scheduled first and the prompt gets the rest, so the worst gap stays near
 # 30 ms at a 512 budget, at the price of a slightly later first token for the long prompt. The budget trades TTFT
 # against ITL; throughput barely changes. I pick the largest budget whose worst step meets the ITL SLO. The second

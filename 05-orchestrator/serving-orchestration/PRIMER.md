@@ -400,8 +400,8 @@ transfer_s  = latency + KV bytes × 8 ÷ link Gb/s          (× (1 − overlap) 
 400 Gb/s RDMA, 43 ms over 100 GbE, 0.43 s over 10 GbE; on a 70B model (327,680 B/token) 1.34 GB, 26.8 ms at
 400 Gb/s. Judge it against the prefill it replaces: 6,000 tokens take 1.59 s to prefill on the L4 model but 0.19 s on
 an H100, so a 10 % overhead budget admits 100 GbE for the L4 and only 400 Gb/s RDMA or NVLink-class links for the
-H100 (notebook 04). A faster GPU makes the network matter more. In the simulator the transfer adds to TTFT: the same
-3P5D fleet on 10 GbE instead of 400 Gb/s added ~0.6 s to median TTFT.
+H100 (notebook 04). A faster GPU makes the network matter more. In the simulator the transfer adds straight to TTFT:
+the ~6,060-token prompts of notebook 04 take 0.64 s to cross 10 GbE and 16 ms to cross 400 Gb/s (`transfer_s()`).
 
 ### 5.3 Sizing the P:D ratio
 
@@ -425,7 +425,7 @@ aggregated serving reached 0.68 (the chunk stall breaks the tight TPOT), and lop
   makes that decision per request.
 - **Slow links** (the transfer rivals the prefill) and **fast GPUs on ordinary networks**.
 - **The wrong ratio or a small fleet.** Two pools fragment capacity; aggregated serving multiplexes both phases on
-  every GPU. On four L4s neither 1P3D nor 2P2D beat four aggregated replicas.
+  every GPU. Of the seven splits of eight L4s in §5.3, only 3P5D beat aggregated serving.
 - **Before tuning the chunk budget.** With `max_num_batched_tokens` 256 instead of 2,048, the eight aggregated L4s
   reached 0.94 SLO attainment and an ITL p99 of 71 ms — as good as the best split, with one pool. (The simulator has
   no per-chunk efficiency loss, so this is the optimistic end; bigger models shorten decode steps relative to a
@@ -526,9 +526,10 @@ Mixture-of-experts models such as DeepSeek-R1 are served with **expert paralleli
 **data-parallel attention**: every rank runs attention for its own requests with its own KV cache, and each MoE layer
 exchanges tokens with the experts' ranks in an all-to-all (layer 02 §5 has the collective, layer 01 §5 the fabric
 cost). Spreading experts thin frees HBM for KV and allows very large batches — llm-d's wide-EP guide deploys
-DeepSeek-R1 this way, usually combined with P/D disaggregation. For the router, each DP rank is an endpoint (a
-multi-port model server), so prefix and load scoring apply per rank; multi-host groups are scheduled as a unit with
-LeaderWorkerSet (layer 03 §4). Load imbalance moves inside the model — hot experts — which the engine balances,
+DeepSeek-R1-0528 on 32 H200 or B200 GPUs as 16-way data-parallel prefill plus 16-way data-parallel decode,
+disaggregated with NIXL over InfiniBand or RoCE. For the router, each DP rank is an endpoint (a multi-port model
+server, "DP-aware scheduling"), so prefix and load scoring apply per rank; multi-host groups are scheduled as a unit
+with LeaderWorkerSet (layer 03 §4). Load imbalance moves inside the model — hot experts — which the engine balances,
 not the router.
 
 ---

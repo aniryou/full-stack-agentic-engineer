@@ -137,6 +137,7 @@ print(f"✅ [SIMULATED] acceptance rate {rate:.1%}, mean acceptance length {leng
 # draft_cost)`: baseline time per token (one decode step per token) divided by speculative time
 # per token (one verify step + drafting, divided by the expected tokens per step). Use the roofline
 # as in notebook 03: `overhead + max(2·P·tokens / FLOP/s, (weights + batch·context·kv) / bandwidth)`.
+# Predict first: at which batch sizes does speculation stop paying, and why does context length matter?
 
 # %% exercise
 def spec_speedup(p, batch: int, context: int, alpha: float, k: int, draft_cost: float = 0.0) -> float:
@@ -152,11 +153,14 @@ def spec_speedup(p, batch: int, context: int, alpha: float, k: int, draft_cost: 
 
 # %% check
 L4_8B = build_profile("llama-3.1-8b-instruct", "L4", quantization="fp8", kv_cache_dtype="fp8", max_model_len=8192)
-sp = {b: spec_speedup(L4_8B, b, 1024, 0.7, 4, draft_cost=0.05) for b in (1, 8, 64, 256)}
+sp = {b: spec_speedup(L4_8B, b, 256, 0.7, 4, draft_cost=0.05) for b in (1, 8, 32, 128, 256, 512)}
 for b, v in sp.items():
-    print(f"   batch {b:>3}: speedup {v:4.2f}x")
-assert sp[1] > 2.0 and sp[1] > sp[8] > sp[64] > sp[256] and sp[256] < 1.0
-print("✅ speculation is a low-batch latency tool: at batch 256 the 8B model is compute-bound and it slows decode down")
+    print(f"   batch {b:>3}, 256-token context: speedup {v:4.2f}x")
+assert sp[1] > 2.0 and sp[128] < sp[1] and sp[256] < 1.0 and sp[512] < sp[256]
+long_ctx = spec_speedup(L4_8B, 256, 2048, 0.7, 4, draft_cost=0.05)
+print(f"   batch 256, 2,048-token context: speedup {long_ctx:4.2f}x (KV reads keep the step memory-bound)")
+assert long_ctx > sp[256]
+print("✅ speculation is a latency tool while decode is memory-bound; once the verify step is compute-bound it costs throughput")
 
 # %% [markdown]
 # ## Exercise 5.4 — what each quantization format buys, prefill versus decode
@@ -224,10 +228,10 @@ else:
 # a step yields 2.8 tokens, and the rejection sampler keeps the output distribution identical to
 # the target model's. It is a latency tool for small batches — at batch 256 the verify step is
 # compute-bound and speculation slows us down — so we enable it for interactive traffic and watch
-# the mean acceptance length on vLLM's counters. Quantization cuts the bytes: AWQ INT4 makes
-# batch-1 decode ~2.6x faster but not prefill; FP8 W8A8 on L4 or H100 halves both and frees room
-# for KV, and FP8 KV doubles the tokens we can hold. Each gets an accuracy gate on our evals
-# before it ships."
+# the mean acceptance length on vLLM's counters. Quantization cuts the bytes: for an 8B model on an
+# L4, AWQ INT4 makes batch-1 decode ~2.8x faster but prefill slightly slower; FP8 W8A8 almost halves
+# decode, halves prefill and frees room for KV, and FP8 KV doubles the tokens we can hold. Each gets
+# an accuracy gate on our evals before it ships."
 #
 # **Drill 1.** *Acceptance rate is 40%. Is speculation working?* — Look at the mean acceptance
 # length instead (1 + accepted/drafts): 40% per draft token with k = 4 can still mean ~2.6 tokens
