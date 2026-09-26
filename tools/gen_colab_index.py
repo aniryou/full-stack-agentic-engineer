@@ -14,9 +14,11 @@ BADGE = "https://colab.research.google.com/assets/colab-badge.svg"
 START, END = "<!-- colab-links:start -->", "<!-- colab-links:end -->"
 # Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
 # name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
-# is an answer key only when an exercise twin sits beside it: 01_x_worked next to 01_x_practice (or 01_x), or the
-# same number next to a *_practice/*_exercise notebook. Without a twin it is a worked lesson (kv-cache's
-# 01_kv_cache_worked comes before 02_kv_cache_practice) and stays an ordinary notebook.
+# is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
+# same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
+# own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
+# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
+# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
 # Kept identical to tools/site/build_site_content.py.
 ROOT = Path(__file__).resolve().parents[1]
 SOLUTION_DIRS = {"solutions", "worked"}
@@ -25,8 +27,8 @@ WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
 EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
 INTRO = ("One-time Colab setup is in [`../COLAB.md`](../COLAB.md). Notebooks are listed by folder; "
          "*worked answers* marks the answer key of an exercise (in a `solutions/` or `worked/` folder, named "
-         "`*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin): try the exercise "
-         "first. A `*_worked` notebook with no exercise twin is a walkthrough lesson.")
+         "`*_solution` or `*_solved`, or a `*_worked` notebook beside its `*_practice` twin when the folder has no "
+         "`solutions/` of its own): try the exercise first. Any other `*_worked` notebook is a walkthrough lesson.")
 
 
 def colab(p): return f"https://colab.research.google.com/github/{REPO}/blob/{BRANCH}/{p}"
@@ -48,6 +50,14 @@ def _base(stem, token):
 def _number(stem):
     m = re.match(r"^\d+", stem)
     return m.group(0) if m else None
+
+
+def answers_elsewhere(folder, siblings=None):
+    """True when `folder` keeps its exercises' answers in a solutions/ or worked/ folder of its own (on disk, or
+    among `siblings`, which may name any file): then a `*_worked` notebook beside them is a lesson."""
+    if any((ROOT / folder / d).is_dir() for d in SOLUTION_DIRS):
+        return True
+    return any(p.replace(os.sep, "/").startswith(f"{folder}/{d}/") for p in siblings or () for d in SOLUTION_DIRS)
 
 
 def has_exercise_twin(path, siblings=None):
@@ -76,7 +86,8 @@ def is_solution(path, siblings=None):
     stem = parts[-1].rsplit(".", 1)[0]
     if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
         return True
-    return bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
+    return (bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
+            and not answers_elsewhere(_folder(path), siblings))
 
 
 def layer_section(layer, nbs):

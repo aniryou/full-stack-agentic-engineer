@@ -42,8 +42,11 @@ Notebooks with the answers filled in, in any of the repo's conventions (a `solut
 name with `_solution`, `_solutions` or `_solved`; `is_solution`, kept identical to `tools/gen_colab_index.py`), get
 a "worked answers" line instead, a "(solution)" or "(worked)" suffix in the navigation, and are left out of search.
 A name with `_worked` counts only beside its exercise twin in the same folder (`01_x_worked` next to
-`01_x_practice` or `01_x`, or the same number next to a `*_practice` notebook); without one, as kv-cache's
-`01_kv_cache_worked` before `02_kv_cache_practice`, it is a worked lesson and is treated like any other notebook.
+`01_x_practice` or `01_x`, or the same number next to a `*_practice` notebook), and only when that folder keeps no
+`solutions/` or `worked/` folder of its own. Otherwise it is a worked lesson, treated like any other notebook and
+listed before the exercises: kv-cache's `01_kv_cache_worked` comes before `02_kv_cache_practice` (no twin), and
+long-running-agents-gcp's `01`–`04_*_worked` are the lessons its README reads first, with the practice answers in
+`notebooks/solutions/`.
 A single answer key sits beside its exercise instead of in a one-entry "Solutions" section. Notebooks are shown as committed, minus the Colab setup cell at the top (it
 only runs on Colab); the site never runs them. Inline TeX in notebook Markdown written as `$...$` is rewritten to
 `\(...\)`, the only inline delimiter the site's MathJax accepts, so dollar amounts stay text.

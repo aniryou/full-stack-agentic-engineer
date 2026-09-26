@@ -593,15 +593,14 @@ nav:
                           - "GCP cheat sheet for long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md"
                           - "Design drills — long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md"
                       - "Notebooks":
+                          - "01 · The Durable Agent Loop — worked example": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_worked.ipynb"
+                          - "02 · Orchestrator / workers (fan-out, fan-in) and the reflection loop — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_worked.ipynb"
+                          - "03 · Waiting for humans, undoing work, waking up on time": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_scheduled_worked.ipynb"
+                          - "04 · The same patterns with ADK 2 Workflow — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_worked.ipynb"
                           - "01 · Durable loop — practice (fill in the blanks)": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_practice.ipynb"
                           - "02 · Fan-out / fan-in — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_practice.ipynb"
                           - "03 · HITL + saga — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_practice.ipynb"
                           - "04 · ADK 2 Workflow — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_practice.ipynb"
-                          - "Worked":
-                              - "01 · The Durable Agent Loop — worked example": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_worked.ipynb"
-                              - "02 · Orchestrator / workers (fan-out, fan-in) and the reflection loop — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_worked.ipynb"
-                              - "03 · Waiting for humans, undoing work, waking up on time (worked)": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_scheduled_worked.ipynb"
-                              - "04 · The same patterns with ADK 2 Workflow — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_worked.ipynb"
               - "Long-running agents (Mistral)":
                   - "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/index.md"
                   - "Notebooks":

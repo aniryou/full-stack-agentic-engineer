@@ -67,9 +67,11 @@ NOTEBOOK_DIRS = {"notebooks": "Notebooks", "exercises": "Exercises", "practice":
                  "lessons": "Lessons"}
 # Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
 # name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
-# is an answer key only when an exercise twin sits beside it: 01_x_worked next to 01_x_practice (or 01_x), or the
-# same number next to a *_practice/*_exercise notebook. Without a twin it is a worked lesson (kv-cache's
-# 01_kv_cache_worked comes before 02_kv_cache_practice) and stays an ordinary notebook.
+# is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
+# same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
+# own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
+# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
+# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
 # Kept identical to tools/gen_colab_index.py.
 ROOT = REPO
 SOLUTION_DIRS = {"solutions", "worked"}
@@ -123,6 +125,14 @@ def _number(stem: str) -> str | None:
     return m.group(0) if m else None
 
 
+def answers_elsewhere(folder: str, siblings=None) -> bool:
+    """True when `folder` keeps its exercises' answers in a solutions/ or worked/ folder of its own (on disk, or
+    among `siblings`, which may name any file): then a `*_worked` notebook beside them is a lesson."""
+    if any((ROOT / folder / d).is_dir() for d in SOLUTION_DIRS):
+        return True
+    return any(p.replace(os.sep, "/").startswith(f"{folder}/{d}/") for p in siblings or () for d in SOLUTION_DIRS)
+
+
 def has_exercise_twin(path: str, siblings=None) -> bool:
     """True when a `*_worked` notebook has an exercise version in the same folder (see the rule above).
     `siblings` is any iterable of notebook paths; by default the folder is listed on disk."""
@@ -149,7 +159,8 @@ def is_solution(path: str, siblings=None) -> bool:
     stem = parts[-1].rsplit(".", 1)[0]
     if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
         return True
-    return bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
+    return (bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
+            and not answers_elsewhere(_folder(path), siblings))
 
 
 def is_plumbing(repo_path: str) -> bool:
@@ -769,6 +780,9 @@ def nav_for_dir(repo_dir: str) -> list:
     here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)
     in_solutions_dir = posixpath.basename(repo_dir) in SOLUTION_DIRS
     blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp, here_nb)]
+    # Worked lessons come before the exercises that follow them (long-running-agents-gcp: 01..04_*_worked, then
+    # 01..04_*_practice); elsewhere the file names already give that order.
+    blanks.sort(key=lambda rp: (not WORKED_STEM.search(posixpath.basename(rp)[:-len(".ipynb")]), rp))
     sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp, here_nb)]
     subdirs = sorted({rp[len(repo_dir) + 1:].split("/")[0] for rp in list(pages) + list(notebooks)
                       if rp.startswith(repo_dir + "/") and "/" in rp[len(repo_dir) + 1:]}, key=dir_rank)
@@ -930,8 +944,8 @@ def main() -> int:
     print(f"site: {len(layers)} layers, {s['pages']} pages, {s['notebooks']} notebooks "
           f"({s['colab']} with Colab buttons), {s['images']} images; links: {s['to_page']} to site pages, "
           f"{s['to_github']} to GitHub, {s['missing']} missing targets; anchors: Markdown {s['anchors_kept']} kept / "
-          f"{s['anchors_dropped']} dropped, notebooks {s['nb_anchors_kept']} kept / {s['nb_anchors_dropped']} "
-          f"dropped; {s['math']} inline formulas; nav {n_leaf} pages in {n_sec} sections, depth {deepest}; "
+          f"{s['anchors_dropped']} dropped, into notebooks {s['nb_anchors_kept']} kept / {s['nb_anchors_dropped']} "
+          f"dropped (in-page notebook anchors are counted by the build, tools/site/hooks.py); {s['math']} inline formulas; nav {n_leaf} pages in {n_sec} sections, depth {deepest}; "
           f"{s['skipped']} files skipped; mkdocs.yml {yml}")
     return 0
 
