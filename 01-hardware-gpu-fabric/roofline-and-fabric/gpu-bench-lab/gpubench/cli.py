@@ -29,7 +29,8 @@ def main(argv=None) -> int:
     r.add_argument("--suite", default=",".join(("inventory", "gemm", "stream", "transfer", "p2p", "load")),
                    help="comma-separated subset of: inventory,gemm,stream,transfer,p2p,load")
     r.add_argument("--out", default="results", help="directory for the JSON and Markdown report")
-    r.add_argument("--workdir", default=None, help="where to write the synthetic checkpoint (default: a temp dir)")
+    r.add_argument("--workdir", default=None, help="where to write the synthetic checkpoint: put it on the disk you want measured "
+                        "(default: a temp dir on a real disk — /tmp is skipped if it is tmpfs)")
     t = sub.add_parser("topo", help="analyse `nvidia-smi topo -m` output")
     t.add_argument("file", nargs="?", help="saved output ('-' for stdin); omit to run nvidia-smi")
     t.add_argument("--tp", type=int, default=0, help="also suggest the best group of this many GPUs")

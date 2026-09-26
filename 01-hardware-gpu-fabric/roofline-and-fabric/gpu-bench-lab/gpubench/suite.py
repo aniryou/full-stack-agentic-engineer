@@ -1,18 +1,19 @@
 """Run the whole suite on this machine and write one report — what the CLI and the GCP VM call.
 
 The suite adapts to what it finds. The numpy backend measures the CPU: GEMM by size and dtype,
-STREAM with one thread and with every core, host memcpy with an α-β fit, and disk reads cold
-and warm. The torch backend measures the GPU: tensor-core dtypes (FP8 where supported), HBM
-STREAM, host↔device pinned/pageable sweeps with α-β fits, P2P when two or more GPUs are
-visible, and a streamed disk→GPU load. Nothing that cannot run is faked: it lands in
-``report.skipped`` with the reason. Rooflines are built from the measurements and set beside
-the datasheet (GPU) or an ISA estimate (CPU), each labelled with its source.
+STREAM with one thread and with every usable core, host memcpy with an α-β fit, and disk reads
+cold and warm. The torch backend measures the GPU: tensor-core dtypes (FP8 where supported), HBM
+STREAM, host↔device pinned/pageable sweeps with α-β fits (back to back, plus a synchronised
+latency sweep of pinned copies), P2P when two or more GPUs are visible, and a streamed disk→GPU
+load. Nothing that cannot run is faked: it lands in ``report.skipped`` with the reason — including
+"cold" reads of a file that lives on tmpfs, which is RAM. Rooflines are built from the
+measurements and set beside the datasheet (GPU) or an ISA estimate (CPU), each labelled with its
+source.
 """
 from __future__ import annotations
 
 import os
 import shutil
-import tempfile
 
 from . import __version__, gemm, inventory, loading, membw, p2p, topo, transfer
 from .backends import get_backend
@@ -86,7 +87,7 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
     if "stream" in suites:
         log("STREAM ...")
         n = (1 << 16) if tiny else membw.stream_elems(be)
-        threads = [1] if be.is_gpu else sorted({1, (os.cpu_count() or 1)})
+        threads = [1] if be.is_gpu else sorted({1, inventory.usable_cpus()})
         for t in threads:
             ms = membw.stream_suite(be, n, threads=t, **kw)
             streams += ms
@@ -99,11 +100,15 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
         sweep = transfer.sizes(4 << 10, (256 << 10) if tiny else (64 << 20) if quick else (1 << 30), 4)
         if be.is_gpu:
             ms = transfer.hostdevice_sweep(be, sweep, **kw)
+            # α of a copy you wait for (one synchronised copy per sample), small sizes, pinned only
+            lat = transfer.sizes(4 << 10, (64 << 10) if tiny else (4 << 20), 4)
+            ms += transfer.hostdevice_sweep(be, lat, pinned=(True,), latency=True,
+                                            **(kw or dict(repeats=20, min_time=0.0)))
         else:
             ms = transfer.memcpy_sweep(be, sweep, **kw)
         rep.extend(ms)
-        rep.analyses["alpha_beta"] = {f"{op} pinned={p}" if p is not None else op: transfer.fit(s).to_dict()
-                                      for (op, p), s in transfer.series(ms).items()}
+        rep.analyses["alpha_beta"] = {transfer.series_label(key): transfer.fit(s).to_dict()
+                                      for key, s in transfer.series(ms).items()}
 
     if "p2p" in suites:
         count = be.describe().get("device_count", 0) if be.is_gpu else 0
@@ -117,7 +122,7 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
 
     if "load" in suites:
         log("weights loading ...")
-        tmp = workdir or tempfile.mkdtemp(prefix="gpubench-")
+        tmp = workdir or loading.default_workdir()      # not /tmp if that is tmpfs (RAM)
         os.makedirs(tmp, exist_ok=True)
         path = os.path.join(tmp, "synthetic.safetensors")
         try:
@@ -127,7 +132,10 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
             rep.extend(loading.bench_load(path, threads=(4,) if quick else (4, 8), skipped=rep.skipped,
                                           repeats=2 if tiny else 3))
             if be.is_gpu:
-                for cold in (True, False):
+                cold_ok, why = loading.cold_read_possible(path)
+                if not cold_ok:
+                    rep.skipped.append({"what": "load.to_device cold", "reason": why})
+                for cold in ((True, False) if cold_ok else (False,)):
                     setup = (lambda: loading.drop_page_cache(path)) if cold else None
                     op = be.make_file_to_device(path, setup=setup)
                     rep.extend([measure(be, op, "load.to_device", {"nbytes": info["bytes"],

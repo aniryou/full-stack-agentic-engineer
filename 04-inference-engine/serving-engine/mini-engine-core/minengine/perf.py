@@ -50,19 +50,24 @@ class LLM:
     head_dim: int
     embed_params: float = 0.0        # vocab x d_model: the embedding table (and LM head, if tied)
     tied: bool = True                # LM head shares the embedding table
-    bytes_per_param: float = 2.0     # bf16 = 2, fp8/int8 = 1, int4 (g128) ~ 0.52
+    bytes_per_param: float = 2.0     # the matmul weights: bf16 = 2, fp8/int8 = 1, int4 (g128) ~ 0.52
+    embed_bytes_per_param: float = 2.0   # embedding + LM head: GPTQ/AWQ/FP8 checkpoints keep them in 16-bit
     kv_bytes_per_value: float = 2.0  # bf16 = 2, fp8 = 1
     compute_scale: float = 1.0       # 2.0 when weights AND activations are FP8 (W8A8) on FP8 hardware
+                                     # (applied to every FLOP - a simplification; attention is <5% of a prefill)
 
     @property
     def weight_bytes(self) -> float:
-        """HBM the weights occupy."""
-        return self.params * self.bytes_per_param
+        """HBM the weights occupy: matmul weights at bytes_per_param, the embedding table and LM head
+        (one table if tied, two if not) at embed_bytes_per_param."""
+        return (self.matmul_params * self.bytes_per_param
+                + self.embed_params * (1 if self.tied else 2) * self.embed_bytes_per_param)
 
     @property
     def streamed_bytes(self) -> float:
-        """Bytes one step reads: every weight except an untied input embedding (a gather of a few rows)."""
-        return (self.params - (0.0 if self.tied else self.embed_params)) * self.bytes_per_param
+        """Bytes one step reads: every matmul weight and the LM head; an untied input embedding is a
+        gather of a few rows, not a stream."""
+        return self.matmul_params * self.bytes_per_param + self.embed_params * self.embed_bytes_per_param
 
     @property
     def matmul_params(self) -> float:
@@ -84,18 +89,20 @@ LLMS = {   # from each model's config.json (verify)
 
 
 def step_cost(gpu: GPU, llm: LLM, chunks, flop_eff=0.6, bw_eff=0.8, overhead_s=0.002) -> dict:
-    """chunks: [(start, n)] per scheduled request - n new tokens after `start` tokens already cached.
-    FLOPs: 2 x matmul params per token, the LM head once per request (its last token), and
+    """chunks: [(start, n)] or [(start, n, logit_rows)] per scheduled request - n new tokens after
+    `start` tokens already cached. FLOPs: 2 x matmul params per token, the LM head for `logit_rows`
+    rows per request (default 1, its last token; a speculative verify pass needs k + 1), and
     4 x layers x heads x head_dim per (query, key) pair of attention. Bytes: the streamed weights once,
     each request's cached KV once, the new KV written. Returns FLOPs, bytes, both times and the bound.
     (A one-line version of layer 01's roofline.llm model, cheap enough to run every simulated step.)"""
     if llm.compute_scale > 1 and not gpu.fp8:
         raise ValueError(f"{gpu.name} has no FP8 tensor cores: FP8 weights run weight-only (compute_scale=1)")
-    tokens = sum(n for _, n in chunks)
-    pairs = sum(n * s + n * (n + 1) / 2 for s, n in chunks)
-    flops = (2 * llm.matmul_params * tokens + 2 * llm.embed_params * len(chunks)
+    chunks = [(c[0], c[1], c[2] if len(c) > 2 else 1) for c in chunks]
+    tokens = sum(n for _, n, _ in chunks)
+    pairs = sum(n * s + n * (n + 1) / 2 for s, n, _ in chunks)
+    flops = (2 * llm.matmul_params * tokens + 2 * llm.embed_params * sum(r for _, _, r in chunks)
              + 4 * llm.n_layers * llm.n_heads * llm.head_dim * pairs)
-    nbytes = llm.streamed_bytes + llm.kv_bytes_per_token * (sum(s for s, _ in chunks) + tokens)
+    nbytes = llm.streamed_bytes + llm.kv_bytes_per_token * (sum(s for s, _, _ in chunks) + tokens)
     t_mem = nbytes / (gpu.hbm_bw * bw_eff)
     t_cmp = flops / (gpu.peak_flops * llm.compute_scale * flop_eff)
     return {"flops": flops, "bytes": nbytes, "t_memory": t_mem, "t_compute": t_cmp,
@@ -176,7 +183,7 @@ class SimResult:
         return self.output_tokens / self.duration
 
     def goodput(self, ttft_slo: float, tpot_slo: float) -> float:
-        """Requests per second that met BOTH SLOs - throughput that counts."""
+        """Requests per second that met BOTH SLOs (seconds) - throughput that counts (DistServe)."""
         return float(np.sum((self.ttft <= ttft_slo) & (self.tpot <= tpot_slo))) / self.duration
 
     def summary(self) -> str:
@@ -188,15 +195,19 @@ class SimResult:
 
 def simulate(gpu: GPU, llm: LLM, workload: Workload, *, max_num_batched_tokens=2048, max_num_seqs=256,
              enable_chunked_prefill=True, enable_prefix_caching=True, block_size=16, num_blocks=None,
-             gpu_memory_utilization=0.9, flop_eff=0.6, bw_eff=0.8, overhead_s=0.002, label="") -> SimResult:
+             gpu_memory_utilization=0.9, admit_whole_prompt=True, watermark_blocks=0,
+             flop_eff=0.6, bw_eff=0.8, overhead_s=0.002, label="") -> SimResult:
     """Run the workload through the real scheduler on a virtual clock. Without chunked prefill the
-    budget is raised to the longest sequence, as vLLM requires (a whole prompt must fit in a step)."""
+    budget is raised to the longest sequence, as vLLM requires (a whole prompt must fit in a step).
+    The hit rate counts first admissions only (vllm:prefix_cache_hits / _queries); re-admissions
+    after preemption are kept apart in the KV manager's CacheStats, as vLLM does."""
     arrivals = workload.requests()
     max_len = max(len(ids) + n for _, ids, n in arrivals) + 1
     budget = max_num_batched_tokens if enable_chunked_prefill else max(max_num_batched_tokens, max_len)
     kv = KVCacheManager(num_blocks or kv_cache_blocks(gpu, llm, gpu_memory_utilization, block_size),
                         block_size, enable_prefix_caching)
-    sched = Scheduler(SchedulerConfig(budget, max_num_seqs, enable_chunked_prefill, max_len), kv)
+    sched = Scheduler(SchedulerConfig(budget, max_num_seqs, enable_chunked_prefill, max_len,
+                                      watermark_blocks=watermark_blocks, admit_whole_prompt=admit_whole_prompt), kv)
     pending = deque(Request(f"q{i}", ids, SamplingParams(max_tokens=n, ignore_eos=True), arrival_time=t)
                     for i, (t, ids, n) in enumerate(arrivals))
     reqs, times = list(pending), {f"q{i}": [] for i in range(len(arrivals))}

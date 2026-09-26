@@ -11,9 +11,13 @@ walks its prompt's chain and adopts every block already in the cache (refcount +
 recomputing it. A finished request's blocks go back to the free queue *with their names*: they
 are still hits until the allocator reuses them, least-recently-freed first (LRU), and a request's
 blocks are freed tail-first so the shared head of a prefix is evicted last. This mirrors vLLM V1's
-KVCacheManager / BlockPool (vllm/v1/core/), minus multi-group and hybrid-model machinery. One
-simplification: we publish a block after the step that computed it; vLLM publishes at scheduling
-time (safe there because every layer writes the step's K/V before any request attends).
+KVCacheManager / BlockPool (vllm/v1/core/), minus multi-group and hybrid-model machinery.
+
+A block is published at SCHEDULING time, for the tokens this step will compute (the scheduler calls
+cache_blocks), as vLLM's allocate_slots does. That is safe because in the forward pass every layer
+writes the whole step's K/V before any request attends - so a second request admitted in the same
+step can adopt a block whose K/V is being computed right then, and a burst of N requests sharing a
+system prompt (an agent's parallel tool calls) prefills that prompt once, not N times.
 """
 from __future__ import annotations
 
@@ -46,8 +50,10 @@ class Block:
 
 @dataclass
 class CacheStats:
-    queries: int = 0                  # prompt tokens looked up (vllm:prefix_cache_queries)
-    hits: int = 0                     # of those, served from cache  (vllm:prefix_cache_hits)
+    queries: int = 0                  # prompt tokens looked up by NEW requests (vllm:prefix_cache_queries)
+    hits: int = 0                     # of those, served from cache           (vllm:prefix_cache_hits)
+    preempted_queries: int = 0        # the same for re-admissions after preemption: kept apart, as in
+    preempted_hits: int = 0           # vLLM, so a victim re-hitting its own blocks is not a "cache hit"
     evictions: int = 0                # cached blocks reused for new content
 
     @property
@@ -96,14 +102,15 @@ class KVCacheManager:
 
     # -- allocation -------------------------------------------------------------------------------
     def allocate_slots(self, rid: str, tokens, num_computed: int, num_new: int, hits=(),
-                       reserve: int = 0, admit_whole_prompt: bool = False):
+                       reserve: int = 0, admit_whole_prompt: bool = False, preempted: bool = False):
         """Grow `rid`'s block table to cover num_computed + num_new tokens (after adopting `hits`).
         Returns the newly allocated block ids, or None if the pool cannot supply them - the
         caller then preempts someone (running request) or waits (new request).
         `reserve` blocks must stay free afterwards (the admission watermark); with
         `admit_whole_prompt` a new request is only admitted if its WHOLE prompt fits, not just
         the first chunk (vLLM's scheduler_reserve_full_isl) - otherwise chunked prefill can admit
-        more than memory can finish, and the excess is preempted a few steps later."""
+        more than memory can finish, and the excess is preempted a few steps later. `preempted`
+        routes the lookup's hit accounting to preempted_queries / preempted_hits."""
         table = self.tables.get(rid, [])
         target = len(tokens) if admit_whole_prompt else num_computed + num_new
         need = max(0, self.blocks_needed(target) - len(table) - len(hits))
@@ -111,8 +118,13 @@ class KVCacheManager:
         if need + revived > self.num_free_blocks - reserve:
             return None
         if rid not in self.tables:                                      # first allocation: count the lookup
-            self.stats.queries += len(tokens)
-            self.stats.hits += len(hits) * self.block_size
+            st = self.stats
+            if preempted:
+                st.preempted_queries += len(tokens)
+                st.preempted_hits += len(hits) * self.block_size
+            else:
+                st.queries += len(tokens)
+                st.hits += len(hits) * self.block_size
             self.hashes[rid] = [self.blocks[b].block_hash for b in hits]
         self.tables[rid] = table
         for b in hits:                                                  # adopt the hits
@@ -137,8 +149,10 @@ class KVCacheManager:
         return bid
 
     def cache_blocks(self, rid: str, tokens, num_computed: int, extra=None):
-        """After a step: name every block of `rid` whose tokens are now all computed, and publish
-        it to the prefix cache unless an identical block is already there."""
+        """Name every block of `rid` whose tokens will all be computed once this step runs
+        (num_computed = computed + scheduled), and publish it to the prefix cache unless an
+        identical block is already there. Called by the scheduler once a request's place in the
+        step is final."""
         names, table, B = self.hashes.setdefault(rid, []), self.tables[rid], self.block_size
         for i in range(len(names), num_computed // B):
             toks = tuple(tokens[i * B:(i + 1) * B])

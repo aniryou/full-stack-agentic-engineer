@@ -11,7 +11,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | PRIMER+core built (59 tests, 6/6 nbs), review running; lab built (58 tests, 6/6 nbs, TF valid), review running | both reviews + vLLM/FA primers pass → integrate layer README → merge layer 04 to main |
 | 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | PRIMER+core built (43 tests, 5/5 nbs), review running; lab built (64 tests, 5/5 nbs, TF valid), review running | both reviews pass → integrate layer README → merge layer 05 to main |
 | vLLM internals primer | `04-inference-engine/vllm-internals/` (primer 1,416 lines, source-map, 1 notebook) | built; review running | merge with layer 04 |
-| FlashAttention deep dive | `04-inference-engine/flash-attention/` (deep-dive.md, fa_calculators.py + 25 tests, deep_dive notebook) | built; review running | fix pre-existing broken practice notebook in review; Colab-inject the new notebook at integration; merge with layer 04 |
+| FlashAttention deep dive | `04-inference-engine/flash-attention/` (deep-dive.md, fa_calculators.py + 49 tests, deep_dive notebook; practice notebook repaired) | REVIEWED ✓ (27 findings incl. 4 blocking fixed) | Colab-inject the new notebook at integration; merge with layer 04 |
 | Root docs | `CURRICULUM.md`, `COMPUTE.md` | built | reconcile with what was actually built, then merge last |
 | Integration | layer READMEs, root README, `CLAUDE.md` decisions log, Colab links (`tools/gen_colab_index.py`) | pending | after each layer's review; final pass at the end |
 
@@ -27,3 +27,4 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 - Root `README.md` and the layer READMEs still describe 02/03/05 as empty; the integration pass rewrites them and regenerates Colab links.
 - `.gitignore` now excludes `terraform.tfvars` / `*.auto.tfvars` (COMPUTE.md tells learners to check with `git check-ignore`).
 - vLLM `main` (commit 5840d95, 2026-09-25; PyPI 0.30.0): Model Runner V2 and async scheduling are default-on; `VLLM_USE_V1` and `VLLM_ATTENTION_BACKEND` were removed. The layer-04 lab review must check the lab's env vars/flags against this.
+- After the vLLM-internals review completes, check two items the FA validator flagged in `vllm-internals-primer.md`: §6.4 uses a 57× figure (verify against the FA deep dive §8.1: 71.1×/56.9×), and §6.3 omits the FA3-on-SM90 / FA4 condition for FP8 KV cache support.

@@ -9,8 +9,15 @@ Every 15 s (sync period) the HPA controller does, per metric:
     -> clamp to [minReplicas, maxReplicas]
 
 This mirrors kube-controller-manager (pkg/controller/podautoscaler: replica_calculator.go, horizontal.go):
-milli-unit averaging, strict time windows, and the conservative treatment of pods that are not ready yet
-(counted as using 0 on a scale-up: replicas still loading weights count as capacity already on its way).
+milli-unit averaging, strict time windows, and its treatment of pods without a usable sample. For a Pods metric
+(anything but CPU) the controller sorts pods into: *unready* = phase Pending (scheduling, image pull) — dropped on
+a scale-down, counted as 0 on a scale-up; *missing* = Running with no sample (a vLLM still loading weights exports
+no /metrics) — counted at the target on a scale-down, 0 on a scale-up. It checks the Ready condition only for CPU.
+Note what this does NOT do: the zeros never raise the result (desired is ceil(sum of samples / target) either
+way); they only make a small or direction-flipping change fall inside the tolerance and be skipped. A scale-up is
+bounded because the ratio is multiplied by the number of pods that reported, not by the current replica count.
+The Fleet treats a starting replica as Pending for its whole cold start (the same on a scale-up; on a scale-down
+real pods past their image pull would count at the target instead of being dropped).
 """
 from __future__ import annotations
 
@@ -25,7 +32,7 @@ def within(ratio: float, up: float = 0.1, down: float = 0.1) -> bool:
 
 def pods_metric_replicas(values, target, current, *, unready=0, missing=0, tol_up=0.1, tol_down=0.1) -> int:
     """Desired replicas for a per-pod metric with an AverageValue target (calcPlainMetricReplicas).
-    values: the metric of each ready pod; unready: pods not ready yet; missing: running pods with no sample."""
+    values: the samples of the pods that reported; unready: Pending pods; missing: Running pods with no sample."""
     if not values:
         return current                                   # no metrics at all: the controller skips this metric
     tgt, ms = round(target * 1000), [round(v * 1000) for v in values]        # Kubernetes quantities: milli-units
@@ -33,8 +40,9 @@ def pods_metric_replicas(values, target, current, *, unready=0, missing=0, tol_u
     up_with_unready = unready > 0 and ratio > 1.0
     if not up_with_unready and not missing:
         return current if within(ratio, tol_up, tol_down) else math.ceil(ratio * len(ms))
-    ms += [tgt if ratio < 1.0 else 0] * missing          # missing: at target on a scale-down, 0 on a scale-up
-    ms += [0] * (unready if up_with_unready else 0)      # not-yet-ready pods count as idle on a scale-up
+    if ratio != 1.0:                                     # missing: at target on a scale-down, 0 on a scale-up
+        ms += [tgt if ratio < 1.0 else 0] * missing
+    ms += [0] * (unready if up_with_unready else 0)      # Pending pods count as idle on a scale-up only
     new_ratio = (sum(ms) // len(ms)) / tgt
     if within(new_ratio, tol_up, tol_down) or (ratio < 1.0 < new_ratio) or (ratio > 1.0 > new_ratio):
         return current                                   # too small a change, or the direction flipped
@@ -131,11 +139,13 @@ class Autoscaler:
     """An HPA bound to one fleet signal.
 
     metric: 'waiting' (vllm:num_requests_waiting), 'running', 'inflight' (waiting + running), 'kv'
-    (vllm:kv_cache_usage_perc) or 'gpu_util' (fraction of time a kernel ran — what nvidia-smi calls utilisation).
+    (vllm:kv_cache_usage_perc), 'gpu_util' (fraction of time a kernel ran — what nvidia-smi calls utilisation) or
+    'backlog_s' (seconds of prefill work in flight: the router's uncached in-flight tokens / prefill tokens/s — the
+    llm-d token-aware path's EPP in-flight tokens / peakPrefillThroughput; it counts work, not requests).
     kind='pods' averages per ready pod; kind='external' scales on the pool total including requests held at the
-    gateway while nothing is ready (the KEDA pattern) — the only kind that may scale to zero."""
+    gateway or in the router's queue (the KEDA pattern) — the only kind that may scale to zero."""
 
-    METRICS = ("waiting", "running", "inflight", "kv", "gpu_util")
+    METRICS = ("waiting", "running", "inflight", "kv", "gpu_util", "backlog_s")
 
     def __init__(self, hpa: HPA, metric="waiting", target=4.0, kind="pods"):
         if metric not in self.METRICS or kind not in ("pods", "external"):
@@ -144,10 +154,18 @@ class Autoscaler:
             raise ValueError("minReplicas: 0 needs an Object or External metric (the API server rejects it)")
         self.hpa, self.metric, self.target, self.kind = hpa, metric, target, kind
 
-    def value(self, r, util: float) -> float:
+    def value(self, r, util: float, router=None) -> float:
         """This replica's sample of the metric (`util` = its busy fraction over the last sync period)."""
+        if self.metric == "backlog_s":
+            return router.inflight_tokens[r.rid] / r.p.compute_tok_s
         return {"waiting": len(r.waiting), "running": len(r.running), "inflight": len(r.waiting) + len(r.running),
                 "kv": r.pool.usage(), "gpu_util": util}[self.metric]
+
+    def held(self, reqs, profile) -> float:
+        """What requests not yet on any replica add to an External metric's pool total."""
+        if self.metric == "backlog_s":
+            return sum(q.prompt for q in reqs) / profile.compute_tok_s
+        return len(reqs) if self.metric in ("waiting", "inflight") else 0.0
 
     def decide(self, now, current, values, unready, pool_total) -> int:
         tol = dict(tol_up=self.hpa.up.tolerance, tol_down=self.hpa.down.tolerance)

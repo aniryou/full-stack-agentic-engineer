@@ -6,7 +6,8 @@ bytes of JSON (``{name: {"dtype", "shape", "data_offsets": [begin, end]}, "__met
 then the raw tensor bytes, back to back. No pickle, no code execution, and every tensor's
 position is known before a byte of data is read — so a loader can ``mmap`` the file, read
 tensors in parallel, or stream them to a GPU. ``write_safetensors``/``read_header`` implement it
-in ~40 lines; the ``safetensors`` library (optional) reads what they write.
+in ~40 lines, and the tests check them against the ``safetensors`` library (when installed)
+in both directions.
 
 **The measurement.** "How fast can I load weights?" has three honest answers, and the lab
 measures each: *cold* (the file is not in the OS page cache — the disk's speed; the lab evicts
@@ -148,16 +149,18 @@ def synthetic_checkpoint(path, target_bytes: int, hidden: int = 1024, dtype: str
 RAM_FILESYSTEMS = {"tmpfs", "ramfs"}
 
 
-def filesystem_type(path) -> str | None:
+def filesystem_type(path, mountinfo: str | None = None) -> str | None:
     """The filesystem type holding ``path`` (``"ext4"``, ``"tmpfs"``, ...) from the longest matching
-    mount point in ``/proc/self/mountinfo``; None where that file does not exist (not Linux)."""
-    try:
-        lines = open("/proc/self/mountinfo").read().splitlines()
-    except OSError:
-        return None
+    mount point in ``/proc/self/mountinfo`` (or the ``mountinfo`` text given); None where that file
+    does not exist (not Linux)."""
+    if mountinfo is None:
+        try:
+            mountinfo = open("/proc/self/mountinfo").read()
+        except OSError:
+            return None
     target = os.path.realpath(path)
     best, fstype = -1, None
-    for line in lines:
+    for line in mountinfo.splitlines():
         left, sep, right = line.partition(" - ")
         fields = left.split()
         if not sep or len(fields) < 5 or not right.split():

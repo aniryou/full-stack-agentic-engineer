@@ -148,12 +148,22 @@ class Report:
     def load(cls, path) -> "Report":
         return cls.from_dict(json.loads(Path(path).read_text()))
 
+    @property
+    def mode(self) -> str:
+        """``tiny`` (a plumbing check), ``quick`` (the default sizes) or ``full``."""
+        if self.meta.get("tiny"):
+            return "tiny"
+        return "quick" if self.meta.get("quick", True) else "full"
+
     def to_markdown(self, stat: str = "best") -> str:
         dev = self.meta.get("device", {})
-        lines = [f"# gpubench report — {dev.get('name', self.meta.get('host', ''))}", "",
-                 f"*{self.meta.get('created_utc', '')} · backend `{self.meta.get('backend', '?')}` · "
-                 f"host `{self.meta.get('host', '?')}` · every number below was measured on this machine "
-                 f"by this run, except rows explicitly marked spec/model.*", ""]
+        lines = [f"# gpubench report — {dev.get('name', self.meta.get('host', ''))}", ""]
+        if self.meta.get("warning"):
+            lines += [f"**WARNING: {self.meta['warning']}.** The roofline and fractions below are built from "
+                      "these sizes too: they describe the plumbing, not the machine.", ""]
+        lines += [f"*{self.meta.get('created_utc', '')} · backend `{self.meta.get('backend', '?')}` · "
+                  f"mode `{self.mode}` · host `{self.meta.get('host', '?')}` · every number below was measured "
+                  f"on this machine by this run, except rows explicitly marked spec/model/estimate.*", ""]
         if dev:
             lines += ["## Machine", "", table(sorted(dev.items()), [("field", lambda kv: kv[0]),
                                                                   ("value", lambda kv: kv[1])]), ""]
