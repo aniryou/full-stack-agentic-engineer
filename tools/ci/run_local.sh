@@ -62,7 +62,7 @@ lab() {  # lab <id> <phase: test|solutions>
 }
 
 phase="test"
-[ $# -gt 0 ] || { sed -n '2,15p' "$0"; exit 2; }
+[ $# -gt 0 ] || { sed -n '2,14p' "$0"; exit 2; }
 for arg in "$@"; do
   case "$arg" in
     --list) python3 -c 'import json; [print(l["id"]) for l in json.load(open("tools/ci/labs.json"))["labs"]]'; exit 0 ;;
