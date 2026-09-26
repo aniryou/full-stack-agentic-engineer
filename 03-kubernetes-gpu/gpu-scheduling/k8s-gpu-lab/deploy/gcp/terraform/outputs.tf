@@ -31,7 +31,7 @@ output "weights_reader_principal" {
 output "next_steps" {
   description = "What to run after apply."
   value       = <<-EOT
-    ${"gcloud container clusters get-credentials ${google_container_cluster.lab.name} --location ${google_container_cluster.lab.location} --project ${var.project_id}"}
+    gcloud container clusters get-credentials ${google_container_cluster.lab.name} --location ${google_container_cluster.lab.location} --project ${var.project_id}
     deploy/gke/apply-examples.sh smoke          # scale the L4 Spot pool from zero, run nvidia-smi
     deploy/gke/install-addons.sh                # JobSet + Kueue + the GKE queues (DWS needs enable_flex_start_pool)
     deploy/gke/apply-examples.sh dws

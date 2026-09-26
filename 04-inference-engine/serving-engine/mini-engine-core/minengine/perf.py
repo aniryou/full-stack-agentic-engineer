@@ -48,13 +48,26 @@ class LLM:
     n_heads: int
     n_kv_heads: int
     head_dim: int
+    embed_params: float = 0.0        # vocab x d_model: the embedding table (and LM head, if tied)
+    tied: bool = True                # LM head shares the embedding table
     bytes_per_param: float = 2.0     # bf16 = 2, fp8/int8 = 1, int4 (g128) ~ 0.52
     kv_bytes_per_value: float = 2.0  # bf16 = 2, fp8 = 1
     compute_scale: float = 1.0       # 2.0 when weights AND activations are FP8 (W8A8) on FP8 hardware
 
     @property
     def weight_bytes(self) -> float:
+        """HBM the weights occupy."""
         return self.params * self.bytes_per_param
+
+    @property
+    def streamed_bytes(self) -> float:
+        """Bytes one step reads: every weight except an untied input embedding (a gather of a few rows)."""
+        return (self.params - (0.0 if self.tied else self.embed_params)) * self.bytes_per_param
+
+    @property
+    def matmul_params(self) -> float:
+        """Parameters every token multiplies through (the LM head is charged per sampled row instead)."""
+        return self.params - self.embed_params * (1 if self.tied else 2)
 
     @property
     def kv_bytes_per_token(self) -> float:
@@ -62,24 +75,27 @@ class LLM:
 
 
 LLMS = {   # from each model's config.json (verify)
-    "qwen2.5-0.5b": LLM("qwen2.5-0.5b", 0.494e9, 24, 14, 2, 64),
-    "qwen3-0.6b": LLM("qwen3-0.6b", 0.596e9, 28, 16, 8, 128),
-    "qwen2.5-1.5b": LLM("qwen2.5-1.5b", 1.54e9, 28, 12, 2, 128),
-    "llama-3.2-1b": LLM("llama-3.2-1b", 1.24e9, 16, 32, 8, 64),     # a draft for llama-3.1-8b (same tokenizer)
-    "llama-3.1-8b": LLM("llama-3.1-8b", 8.03e9, 32, 32, 8, 128),
+    "qwen2.5-0.5b": LLM("qwen2.5-0.5b", 0.494e9, 24, 14, 2, 64, 151936 * 896),
+    "qwen3-0.6b": LLM("qwen3-0.6b", 0.596e9, 28, 16, 8, 128, 151936 * 1024),
+    "qwen2.5-1.5b": LLM("qwen2.5-1.5b", 1.54e9, 28, 12, 2, 128, 151936 * 1536),
+    "llama-3.2-1b": LLM("llama-3.2-1b", 1.24e9, 16, 32, 8, 64, 128256 * 2048),   # a draft for llama-3.1-8b
+    "llama-3.1-8b": LLM("llama-3.1-8b", 8.03e9, 32, 32, 8, 128, 128256 * 4096, tied=False),
 }
 
 
 def step_cost(gpu: GPU, llm: LLM, chunks, flop_eff=0.6, bw_eff=0.8, overhead_s=0.002) -> dict:
     """chunks: [(start, n)] per scheduled request - n new tokens after `start` tokens already cached.
-    Each request reads its cached KV once; attention does 4 x layers x heads x head_dim FLOPs per
-    (query, key) pair. Returns FLOPs, bytes, both times and which bound won."""
+    FLOPs: 2 x matmul params per token, the LM head once per request (its last token), and
+    4 x layers x heads x head_dim per (query, key) pair of attention. Bytes: the streamed weights once,
+    each request's cached KV once, the new KV written. Returns FLOPs, bytes, both times and the bound.
+    (A one-line version of layer 01's roofline.llm model, cheap enough to run every simulated step.)"""
     if llm.compute_scale > 1 and not gpu.fp8:
         raise ValueError(f"{gpu.name} has no FP8 tensor cores: FP8 weights run weight-only (compute_scale=1)")
     tokens = sum(n for _, n in chunks)
     pairs = sum(n * s + n * (n + 1) / 2 for s, n in chunks)
-    flops = 2 * llm.params * tokens + 4 * llm.n_layers * llm.n_heads * llm.head_dim * pairs
-    nbytes = llm.weight_bytes + llm.kv_bytes_per_token * (sum(s for s, _ in chunks) + tokens)
+    flops = (2 * llm.matmul_params * tokens + 2 * llm.embed_params * len(chunks)
+             + 4 * llm.n_layers * llm.n_heads * llm.head_dim * pairs)
+    nbytes = llm.streamed_bytes + llm.kv_bytes_per_token * (sum(s for s, _ in chunks) + tokens)
     t_mem = nbytes / (gpu.hbm_bw * bw_eff)
     t_cmp = flops / (gpu.peak_flops * llm.compute_scale * flop_eff)
     return {"flops": flops, "bytes": nbytes, "t_memory": t_mem, "t_compute": t_cmp,
@@ -91,8 +107,9 @@ def step_time(gpu: GPU, llm: LLM, chunks, **kw) -> float:
 
 
 def knee_tokens(gpu: GPU, llm: LLM, flop_eff=1.0, bw_eff=1.0) -> float:
-    """Batch size (tokens) where compute time catches up with the weight read (KV ignored):
-    2 P n / PEAK = P b / BW  ->  n = PEAK x b / (2 BW). H100 bf16: 989e12 x 2 / (2 x 3.35e12) = 295."""
+    """Batch size (tokens) where compute time catches up with the weight read, treating every weight as
+    a matmul weight (KV ignored): 2 P n / PEAK = P b / BW -> n = PEAK x b / (2 BW) - the ridge point in
+    tokens. H100 bf16: 989e12 x 2 / (2 x 3.35e12) = 295 (the real flip for an 8B model is a little later)."""
     return gpu.peak_flops * llm.compute_scale * flop_eff * llm.bytes_per_param / (2 * gpu.hbm_bw * bw_eff)
 
 

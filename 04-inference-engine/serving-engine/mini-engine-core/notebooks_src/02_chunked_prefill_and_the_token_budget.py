@@ -262,7 +262,7 @@ kv_gb = min_blocks * 16 * m.kv_bytes_per_token / 1e9
 ### END SOLUTION
 
 # %% check
-assert min_blocks == 5000 and abs(kv_gb - 10.49) < 0.01
+assert min_blocks == 4000 and abs(kv_gb - 8.39) < 0.01
 for nb in [3000, min_blocks]:
     r = perf.simulate(g, m, load, num_blocks=nb, label=f"{nb} blocks")
     print(r.summary())

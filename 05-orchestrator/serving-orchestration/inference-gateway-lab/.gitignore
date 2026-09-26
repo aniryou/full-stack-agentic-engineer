@@ -8,3 +8,8 @@ dist/
 .venv/
 _run_outputs/
 .DS_Store
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars

@@ -14,14 +14,16 @@ EXACT = dict(flop_eff=1.0, bw_eff=1.0, overhead_s=0.0)
 def test_decode_step_is_the_weight_read():
     c = perf.step_cost(H100, LLAMA, [(0, 1)], **EXACT)
     assert c["bound"] == "memory"
-    assert np.isclose(c["t"], (16.06e9 + 131072) / 3.35e12)         # ~4.79 ms: bytes / bandwidth
+    streamed = (8.03e9 - 128256 * 4096) * 2                          # untied: the input embedding is a gather
+    assert np.isclose(c["t"], (streamed + 131072) / 3.35e12)        # ~4.48 ms: bytes / bandwidth
     batch = perf.step_cost(H100, LLAMA, [(0, 1)] * 64, **EXACT)
     assert batch["t"] < 1.01 * c["t"]                               # 64 decodes cost ~ the same as one
 
 
 def test_prefill_is_compute_bound():
     c = perf.step_cost(H100, LLAMA, [(0, 2048)], **EXACT)
-    flops = 2 * 8.03e9 * 2048 + 4 * 32 * 32 * 128 * (2048 * 2049 / 2)
+    embed = 128256 * 4096
+    flops = 2 * (8.03e9 - 2 * embed) * 2048 + 2 * embed + 4 * 32 * 32 * 128 * (2048 * 2049 / 2)
     assert c["bound"] == "compute" and np.isclose(c["flops"], flops)
     assert np.isclose(c["t"], flops / 989e12)
 
