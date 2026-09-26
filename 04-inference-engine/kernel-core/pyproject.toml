@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kerncore"
+version = "0.1.0"
+description = "The kernel topics of layer 04 in numpy: KV-cache sizing and a cached decoder, a paged KV pool with copy-on-write, and tiled attention with the online softmax."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # standard library + numpy; no GPU, no torch
+
+[project.optional-dependencies]
+# pytest for the tests; the rest runs the kv-cache notebooks (matplotlib draws the cost curves)
+dev = ["pytest>=7.4", "matplotlib>=3.7", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["kerncore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
