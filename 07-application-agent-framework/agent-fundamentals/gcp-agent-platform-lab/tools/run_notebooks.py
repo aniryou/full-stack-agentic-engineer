@@ -59,7 +59,8 @@ def main(argv: list[str]) -> int:
                 failures += 1
         elif not ok:
             failures += 1
-        print(f"{status:>28}  {p.relative_to(ROOT)}  ({dt:.1f}s)  {'' if ok else msg}")
+        shown = p.relative_to(ROOT) if p.is_relative_to(ROOT) else p
+        print(f"{status:>28}  {shown}  ({dt:.1f}s)  {'' if ok else msg}")
     print(f"\n{len(paths) - failures}/{len(paths)} notebooks {'behaved' if expect_fail else 'passed'}")
     return 1 if failures else 0
 
