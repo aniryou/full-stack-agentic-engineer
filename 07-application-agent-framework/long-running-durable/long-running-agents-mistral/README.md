@@ -46,6 +46,8 @@ jupyter lab notebooks/    # 01_worked.ipynb (executed) · 02_practice.ipynb (6 g
 
 ## The Mistral setup, piece by piece
 
+Product facts in this table (APIs, SDK names, preview status, limits) are as of 2026-09-26 (verify).
+
 | Need | Mistral piece | In this repo |
 |---|---|---|
 | A model that picks the next step | Chat Completions with function calling via the `mistralai` SDK (`from mistralai.client import Mistral`; `chat.complete(..., tools=..., tool_choice="auto")`). Aliases: `mistral-medium-latest` (default here), `mistral-small-latest` for cheap steps, `mistral-large-latest`. Tool-call ids must be 9 alphanumeric characters. | `mistral_model.py` |
