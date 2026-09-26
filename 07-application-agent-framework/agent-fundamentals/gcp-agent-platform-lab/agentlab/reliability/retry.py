@@ -1,4 +1,4 @@
-"""Retries: classify first, back off with jitter, and never retry a write without a key (Primer §4.4).
+"""Retries: classify first, back off with jitter, and never retry a write without a key (notebook 10).
 
 Three ideas, each of which a design review will probe:
 

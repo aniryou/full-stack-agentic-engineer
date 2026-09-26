@@ -1,12 +1,12 @@
 # %% [markdown]
 # # 02 · Workflows and multi-agent systems
 #
-# Once you have one reliable loop, the question is how to compose several. The rule from the Primer: **use code where the
+# Once you have one reliable loop, the question is how to compose several. The rule: **use code where the
 # control flow is known, use the model where judgement is needed.** Workflow agents (`Sequential`, `Parallel`, `Loop`) are
 # code; delegation (`AgentTool`) is a model deciding to call another agent. Both compound cost and failure, so this
 # notebook also makes you *measure* what an extra agent costs before you add one.
 #
-# **Primer sections:** 2.2 (workflow agents), 2.3 (multi-agent patterns — and when not to use them).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 (multi-agent multiplies everything).
 #
 # In this notebook you will:
 # 1. wire agents together through session state (`output_key` + `{placeholder}` instructions) in sequence, in parallel and in a loop;

@@ -1,4 +1,4 @@
-"""Graceful degradation: a fallback chain, and tools that tell the model when they are down (Primer §4.4).
+"""Graceful degradation: a fallback chain, and tools that tell the model when they are down (notebook 10).
 
 The failure a user remembers is not the outage, it is the agent that pretended nothing
 was wrong. Two mechanisms fix that:

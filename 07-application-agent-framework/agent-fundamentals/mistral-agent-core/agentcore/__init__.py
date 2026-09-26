@@ -13,8 +13,8 @@ To run against a real Mistral model, use the optional adapter (needs
     agent = Agent(MistralLLM(model="mistral-large-latest"), tools=[...])
 
 When you want the production version (async, parallel tools, MCP, OAuth, evals,
-tracing), that is the separate `gcp-agent-platform-lab` repository — this is the
-concept it is built on.
+tracing), that is `gcp-agent-platform-lab`, next to this lab in
+07-application-agent-framework/agent-fundamentals/ — this is the concept it is built on.
 """
 from .agent import Agent, Result
 from .fake_llm import FakeLLM, Response, ToolCall, call, calls, text

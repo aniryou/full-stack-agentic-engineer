@@ -7,9 +7,10 @@
 # * reads are free; a **card block** is irreversible, so it needs human approval;
 # * anything it can't do becomes a **case** for a human.
 #
-# This is the same shape as the primer's §8.1 bank scenario, shrunk to what fits on one
-# screen. The production version (identity, MCP, evals, tracing) is the separate
-# `gcp-agent-platform-lab` repo — this is the concept underneath it.
+# This is the same shape as the bank agent in gcp-agent-platform-lab's capstone (notebook
+# 14), shrunk to what fits on one screen. The production version (identity, MCP, evals,
+# tracing) is `gcp-agent-platform-lab`, next to this lab in
+# 07-application-agent-framework/agent-fundamentals/ — this is the concept underneath it.
 
 # %%
 from agentcore import Agent, FakeLLM, ToolError, call, calls, text, tool
@@ -81,7 +82,8 @@ run_once([call("get_balance", account_id="a1"), "Your balance is SGD 1,234.50."]
 # ## Exercise 4.2 — the approval gate
 #
 # Run a "block my card" conversation twice with the same script
-# `[call("block_card", card_id="card-1"), "Your card is now blocked."]`:
+# `[call("block_card", card_id="card-1"), "Your card is now blocked."]`, keeping the two
+# results as `declined` and `approved`:
 #
 # * once with `on_confirm` returning **False** — assert the card is still `"active"`
 #   and the tool result the model saw contains `"declined"`;
@@ -100,7 +102,14 @@ assert CARDS["card-1"]["status"] == "blocked"
 ### END SOLUTION
 
 # %% check
+def block_results(r):
+    return [m["content"] for m in r.messages if m["role"] == "tool" and m["name"] == "block_card"]
 assert CARDS["card-1"]["status"] == "blocked", "after approval the card must be blocked"
+assert block_results(declined) and all("declined" in c for c in block_results(declined)), \
+    "the declined run must reach block_card and get a declined result"
+assert block_results(approved) and '"blocked"' in block_results(approved)[0] \
+    and "declined" not in block_results(approved)[0], \
+    "the card must be blocked by the agent's approved block_card call, not by hand"
 print("✅ irreversible action gated on human approval")
 
 # %% [markdown]
@@ -132,7 +141,8 @@ print("✅ the agent acts only through tools")
 # You now have the whole core: a model, tools, the loop, state, budgets, and a human in
 # the loop for irreversible actions. The step-up — async and parallel tool calls, MCP
 # servers and a policy gateway, OAuth identity propagation, evaluation gates, and
-# tracing — is the `gcp-agent-platform-lab` repository. Same concepts; more machinery.
+# tracing — is `gcp-agent-platform-lab`, next to this lab in this repo. Same concepts;
+# more machinery.
 #
 # ## The one-minute version
 # Walk this design as: unit of work (a support interaction), every fact from a tool,

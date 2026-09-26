@@ -407,18 +407,25 @@ in flight (layer 02 §8 has the DCGM fields that measure more). Then a 1.5 → 7
 | KV usage per pod (0.5) | 7.3 s | 0.90 | 0.80 | proportional but capped at 1.0: climbs one cold start at a time |
 | in-flight total, External (40 per pod) | 3.6 s | 0.94 | 0.91 | tracks demand; the rest of its tail is the cold start |
 
-The targets come from the load test above: the per-replica value at the highest load that still meets the SLO
-(3.5 req/s: 60.6 requests in flight, KV 0.75), minus a one-third margin for the cold start — 40 in flight, KV 0.5
-(notebook 03's `pick_target`). In-flight requests — running plus waiting, including requests the router or gateway
-is holding — is the signal llm-d's queue-based KEDA path uses (EPP flow-control queue plus running requests), and it
-counts *requests*: safe while they are alike, wrong when the mix shifts. The same 40-per-pod HPA on a chat + RAG step
-(half the rate as chat; ~10 % of requests RAG with ~6,000-token prompts, most of the prefill) reached 0.69 SLO
-attainment (TTFT ≤ 2 s) against 0.94 on chat (simulated, notebook 03). llm-d's **token-aware** KEDA path measures
-work instead: the prefill backlog in seconds (EPP in-flight tokens ÷ `peakPrefillThroughput`), compared with a share of
-the TTFT SLO, and KV occupancy for decode, the HPA taking the larger recommendation (`Autoscaler(..., "backlog_s",
-..., also=[("kv", ...)])`). One such HPA — 0.25 s of backlog per replica plus KV 0.5 — met both budgets without
-re-tuning: 0.94 on chat at 1.21 GPU-hours, 0.91 on the mix. Latency-driven variants scale on the ratio of
-estimated or measured TTFT to the SLO.
+The targets come from the load test above: the per-replica value at the highest load that still meets the SLO (3.5
+req/s: 60.6 requests in flight, KV 0.75), minus a one-third margin for the cold start — 40 in flight, KV 0.5 (notebook
+03's `pick_target`). In-flight requests — running plus waiting, including requests the router or gateway is holding —
+is the signal llm-d's queue-based KEDA path uses (EPP flow-control queue plus running requests). That path needs the
+`flowControl` feature gate (§3.1), off by default in v0.10.0: with the gate off the EPP holds no queue, and the lab's
+router has none either, so requests wait in the engines and the same signal is the engines' own
+`vllm:num_requests_running` plus `vllm:num_requests_waiting`, summed over pods (an External metric, as in the table;
+the lab's `hpa_manifest()` also writes the two as one Pods-metric HPA, `extra_metrics`). Either way it counts
+*requests*: safe while they are alike, wrong when the mix shifts. The same 40-per-pod HPA on a chat + RAG step (about
+half the rate as chat; ~15 % of requests RAG with ~6,000-token prompts, three quarters of the prefill the prefix cache
+does not cover) reached 0.69 SLO attainment (TTFT ≤ 2 s) against 0.94 on chat (simulated, notebook 03). llm-d's
+**token-aware** KEDA path measures work instead: the prefill backlog in seconds (EPP in-flight tokens ÷
+`peakPrefillThroughput`), compared with a share of the TTFT SLO, and KV occupancy for decode, the HPA taking the
+larger recommendation (`Autoscaler(..., "backlog_s", ..., also=[("kv", ...)])`). One such HPA — 0.25 s of backlog per
+replica plus KV 0.5 — met both budgets without re-tuning: 0.94 on chat at 1.21 GPU-hours, 0.91 on the mix. It needs no
+flow-control queue, which makes it the path to take while the `flowControl` gate is off: KV usage comes from the
+engines, and the backlog from the EPP's `llm_d_epp_inflight_tokens`, published by its `inflight-load-producer` plugin
+(llm-d's token-aware guide, fetched 2026-09-26; verify). Latency-driven variants scale on the ratio of estimated or
+measured TTFT to the SLO.
 
 ### 4.3 Cold start anatomy
 
@@ -688,8 +695,8 @@ Cheap and free GPUs (Colab, Kaggle, RunPod, Vast, Lambda) and GCP obtainability 
 caches, so I route on prefix affinity and load together — the llm-d endpoint picker with a prefix-affinity filter or
 prefix scorer and a load scorer, tuned on replayed traffic while watching hit rate and per-replica load; flow control
 holds bursts in the router with priorities per workload and a per-endpoint cap sized by Little's law. *How many*:
-an HPA through KEDA on work in flight — running plus waiting requests, including the router's queue, if requests are
-alike; seconds of prefill backlog plus KV occupancy if prompt sizes vary — with the target from a load test at the
+an HPA through KEDA on work in flight — running plus waiting requests, including the router's queue when flow control
+is on, if requests are alike; seconds of prefill backlog plus KV occupancy if prompt sizes vary — with the target from a load test at the
 SLO, the 5-minute scale-down window kept, and the cold start attacked term by term; utilisation is useless because
 continuous batching pegs it. *How to split*: aggregated with a tuned chunk budget until ITL p99 or model size says otherwise;
 then xPyD sized from the input/output ratio, conditional on prompt length, over RDMA. For agent sessions, a DRAM
@@ -771,7 +778,7 @@ Checked 2026-09-26; re-check before relying on any of it.
 - llm-d-router Helm chart default profile (`default-plugins.yaml`, v0.10.0, latency predictor off): `prefix-cache-scorer` 3, `queue-scorer` 2, `kv-cache-utilization-scorer` 2.
 - llm-d optimized baseline = `prefix-cache-affinity-filter` (threshold 0.80, `maxTTFTPenaltyMs` 18,000, `peakPrefillThroughput` 15,928 for Qwen3-32B on 2× H100 TP=2 with vLLM 0.19) + `token-load-scorer` (`queueThresholdTokens` 4,194,304). EPP metrics refresh 50 ms.
 - llm-d flow control: feature gate `flowControl`, off by default in v0.10.0 (then the legacy admission check only rejects priority < 0 with 429 at saturation; no priority ordering); with it on, default `global-strict-fairness-policy`, `fcfs-ordering-policy`, `utilization-detector`; production guidance `concurrency-detector` (default `maxConcurrency` 100; 132 in the flow-control guide's values for Qwen3-32B on 16 H100s).
-- llm-d workload autoscaling: KEDA + EPP metrics recommended — queue-based (flow-control queue + running), saturation-based, token-aware (EPP in-flight tokens ÷ calibrated `peakPrefillThroughput`, plus KV occupancy) and SLO-aware paths; Workload Variant Autoscaler deprecated (final v0.9.0).
+- llm-d workload autoscaling: KEDA + EPP metrics recommended — queue-based (flow-control queue + running) and saturation-based (both need the `flowControl` gate), token-aware (EPP in-flight tokens ÷ calibrated `peakPrefillThroughput`, plus KV occupancy) and SLO-aware paths; Workload Variant Autoscaler deprecated (final v0.9.0).
 - llm-d P/D: `disagg-profile-handler` + `prefix-based-pd-decider` (`nonCachedTokens`, `promptTokens`).
 - Cluster autoscaler: `--scale-down-unneeded-time` 10 min upstream (GKE's managed autoscaler may differ); GPU node to allocatable in ~300 s is an assumption from layer 03.
 - Kubernetes HPA: sync 15 s; tolerance 0.1; scale-down window 300 s; default policies as in §4.1. `HPAConfigurableTolerance`: alpha 1.33, beta 1.35, GA 1.37. `HPAScaleToZero`: alpha (off) through 1.36, beta (on by default) from 1.37 — check your cluster's version and feature gates.

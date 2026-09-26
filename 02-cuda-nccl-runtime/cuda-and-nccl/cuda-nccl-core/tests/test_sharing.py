@@ -44,3 +44,13 @@ def test_small_kernels_share_well_on_mps_badly_with_time_slicing():
     assert lat["mig"] == pytest.approx(10 * 0.2 / (1 / 7))
     assert lat["time_slicing"] > 3 * lat["exclusive"]
     assert S.shared_latency(10.0, 4, "mps", util=1.0) == 40.0     # a saturating kernel gains nothing
+
+
+def test_primer_time_slicing_numbers():
+    # PRIMER §7.4 quotes best / mean / worst; §7.5's table uses the mean for the time-slicing column.
+    t = S.timeslice_latency(10.0, tenants=4, quantum_ms=2.0, switch_ms=0.05)
+    assert (round(t["best"], 1), round(t["mean"], 1), round(t["worst"], 1)) == (34.8, 37.9, 41.0)
+    for util in (0.2, 1.0):
+        assert S.shared_latency(10.0, 4, "time_slicing", util=util) == pytest.approx(t["mean"])
+    assert round(S.shared_latency(10.0, 4, "mig", util=0.2), 1) == 14.0
+    assert S.shared_latency(10.0, 4, "mig", util=1.0) == pytest.approx(70.0)

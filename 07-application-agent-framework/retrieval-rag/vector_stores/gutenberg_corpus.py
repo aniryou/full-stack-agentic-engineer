@@ -5,7 +5,10 @@ splits each into fixed-size word windows ("passages"), and returns the passages
 with metadata (which book, where). These passages are the "documents" the demo
 turns into TF-IDF vectors and indexes with minifaiss.
 
-Requires the corpus to be present:  python -m nltk.downloader gutenberg
+Fetch the corpus once with ``python gutenberg_corpus.py`` (or call
+:func:`ensure_corpus`). It uses ``nltk.download(..., quiet=True)``, which never
+prompts. Avoid ``python -m nltk.downloader gutenberg``: when a download fails it
+asks "Retry? [n/y/e]" on stdin, which hangs or crashes in a non-interactive shell.
 """
 
 import numpy as np
@@ -43,6 +46,29 @@ DEFAULT_BOOKS = [
     "chesterton-brown.txt",
     "milton-paradise.txt",
 ]
+
+
+def ensure_corpus():
+    """Make sure the NLTK Gutenberg corpus is present; download it if not.
+
+    Non-interactive: ``nltk.download(quiet=True)`` returns False instead of
+    prompting. Raises ``RuntimeError`` with the fix when the download fails.
+    """
+    import nltk
+
+    try:
+        nltk.data.find("corpora/gutenberg")
+        return
+    except LookupError:
+        pass
+    if nltk.download("gutenberg", quiet=True, raise_on_error=False):
+        return
+    raise RuntimeError(
+        "Could not download the NLTK 'gutenberg' corpus. Check network access to "
+        "raw.githubusercontent.com. Recent NLTK releases refuse to fetch through an HTTP(S) "
+        "proxy; if yours is trusted, set NLTK_ALLOW_PROXIED_URLOPEN=1 and retry. Or unzip "
+        "gutenberg.zip from the nltk_data repository into ~/nltk_data/corpora/."
+    )
 
 
 def title_for(fileid):
@@ -95,3 +121,8 @@ def load_chunks(books=None, words_per_chunk=90, max_chunks=1500, seed=1234):
         books_of = [books_of[i] for i in keep]
 
     return texts, books_of
+
+
+if __name__ == "__main__":
+    ensure_corpus()
+    print("NLTK 'gutenberg' corpus is ready.")

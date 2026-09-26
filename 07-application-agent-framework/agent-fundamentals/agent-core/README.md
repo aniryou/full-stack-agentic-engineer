@@ -4,16 +4,18 @@ The smallest honest agent: **a fake model, a tool, and the loop** — the one id
 rest of the stack keeps circling back to. Pure standard library, synchronous, about 200
 lines you can read in a sitting, plus four fill-in notebooks.
 
-This is the *starter*. The full `gcp-agent-platform-lab` (async, parallel tools, MCP,
+This is the *starter*. The full [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md) (async, parallel tools, MCP,
 OAuth, evals, tracing) is the **step-up** for later — same concepts, much more
 machinery. Learn it here first.
+
+**Time and tier:** ~4 h; module 07.1 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: standard library (pytest and Jupyter only for the tests and notebooks), no key.
 
 ## Quick start
 
 ```bash
 cd agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 11 tests, ~0.1s
+python3 -m pytest -q                          # 22 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -38,7 +40,7 @@ print(result.transcript())  # see every step the loop took
 | File | Lines | What it teaches |
 |------|-------|-----------------|
 | `agentcore/fake_llm.py` | ~110 | a tool-calling model returns *text* or *tool calls*; drive it with a script or a policy |
-| `agentcore/tools.py` | ~90 | a tool is a contract: schema from the signature, arguments validated, results structured |
+| `agentcore/tools.py` | ~130 | a tool is a contract: schema from the signature, arguments validated, results structured |
 | `agentcore/agent.py` | ~90 | the loop: call the model → run tools → append results → repeat, with a step budget and a human-approval gate |
 
 Read them in that order. There is no async, no pydantic, no framework — just the shape.
@@ -51,7 +53,7 @@ prints ✅ when you get it right. Solutions are in `solutions/`.
 1. **`01_the_agent_loop`** — build the loop yourself (termination, tool dispatch, the loop, the budget), then meet the packaged `Agent`.
 2. **`02_tools`** — tool contracts: schema, validation, structured errors, an idempotent write, and watching the loop recover from a not-found error.
 3. **`03_state_and_control`** — multi-turn memory, a policy that reacts to results, duplicate-call detection, reasoning about the step budget.
-4. **`04_mini_support_agent`** — a small bank support agent: every fact from a tool, a card block gated by human approval, out-of-scope work escalated as a case. The primer's §8.1 scenario, shrunk.
+4. **`04_mini_support_agent`** — a small bank support agent: every fact from a tool, a card block gated by human approval, out-of-scope work escalated as a case. The bank agent of `gcp-agent-platform-lab`'s capstone (notebook 14), shrunk.
 
 ## Regenerating notebooks
 

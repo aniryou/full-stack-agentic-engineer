@@ -6,7 +6,7 @@ schemas in, `ModelResponse` out), so any notebook cell that builds an agent can 
 
 ```python
 from agentlab.llm.gemini import GeminiLLM
-llm = GeminiLLM(model="gemini-3-flash")          # GOOGLE_API_KEY in the environment, or Vertex env vars
+llm = GeminiLLM(model="gemini-3-flash")          # model name as of September 2026 (verify); GOOGLE_API_KEY or Vertex env vars
 agent = LlmAgent("assistant", llm, "You are a bank assistant.", tools=[get_balance])
 ```
 
@@ -14,7 +14,9 @@ Install the extra first: `pip install -e ".[gemini]"`.
 
 ## Verify before relying on it
 
-The adapter follows the `google-genai` 1.x surface as documented in mid-2026:
+The adapter was written against the `google-genai` 1.x surface as documented in mid-2026. The
+SDK's 2.x line has been on PyPI since 2026-05-07 (2.25.0 on 2026-09-22) and the `[gemini]` extra
+does not cap the version, so check these calls against the version you install (verify):
 
 - `genai.Client()` picks up `GOOGLE_API_KEY`, or `GOOGLE_GENAI_USE_VERTEXAI=true` with
   `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` for Vertex.

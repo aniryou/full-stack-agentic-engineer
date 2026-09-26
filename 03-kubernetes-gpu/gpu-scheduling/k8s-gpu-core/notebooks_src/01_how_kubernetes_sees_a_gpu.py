@@ -31,6 +31,9 @@ print("2. ListAndWatch() first message:", plugin.list_and_watch()[:2], "... (8 d
 print("3. node status the kubelet publishes:", kubelet.node_status())
 
 # %% [markdown]
+# The `options` in the Register request are the plugin's `DevicePluginOptions`: this plugin answers
+# `GetPreferredAllocation` and needs no `PreStartContainer` call.
+#
 # That last line is all the scheduler will ever know: `nvidia.com/gpu: 8`. When a pod that asks for
 # GPUs lands on the node, the kubelet picks free healthy device IDs (asking the plugin for a
 # *preferred* set first) and calls `Allocate`. With the NVIDIA plugin's default `envvar` strategy
@@ -343,6 +346,18 @@ except AdmissionError as e:
     print("kubelet:", e)
 assert predicted_admitted_with_limit == admitted_with_limit
 print("✅ time-slicing multiplies the integer, not the hardware")
+
+# %% [markdown]
+# That was the plugin's default `distributed` policy. The NVIDIA plugin's
+# `--shared-devices-allocation-policy` also offers `packed` (v0.20.0 and later) and, on its main branch,
+# `spread` (verify; primer §9); the model takes the same names as `DevicePlugin(allocation_policy=...)`.
+# The same 2-"GPU" request on a fresh node, under each:
+
+# %%
+for policy in ("distributed", "packed", "spread"):
+    k = Kubelet()
+    k.register(DevicePlugin(make_gpus(8), replicas=10, allocation_policy=policy))
+    print(f"{policy:12} -> {k.admit('two', 2)['envs']['NVIDIA_VISIBLE_DEVICES']}")
 
 # %% [markdown]
 # GKE's own device plugin enforces the same rule on time-sharing nodes: a container may request at most

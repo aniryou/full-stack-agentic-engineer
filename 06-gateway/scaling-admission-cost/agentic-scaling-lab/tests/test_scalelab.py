@@ -34,6 +34,35 @@ def test_capacity_plan_reproduces_the_primer_numbers():
     assert p["breaks_first"][0]["resource"] == "model TPM baseline"
 
 
+def test_docs_part3_figures_are_the_capacity_plan():
+    """The primer and its long-form companion quote plan(Scenario()); pin the text to the model."""
+    from pathlib import Path
+
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    p = plan(Scenario())
+    call = cost_per_call("gemini-3.5-flash", 5000, 350, 2700)  # the scenario's per-call working
+    assert abs(call - (2300 * 1.50 + 2700 * 0.15 + 350 * 9.00) / 1e6) < 1e-12 and round(call, 4) == 0.0070
+    figures = [  # (text as the doc prints it, the model's value, the number that text stands for)
+        ("15.3", p["rates"]["average"]["calls_per_s"], 15.3),
+        ("45.8", p["rates"]["peak"]["calls_per_s"], 45.8),
+        ("13.75 M", p["tokens"]["peak"]["input_tpm"] / 1e6, 13.75),
+        ("45.8 M", p["tokens"]["incident"]["input_tpm"] / 1e6, 45.8),
+        ("**125**", p["concurrency"]["peak"]["inflight_turns"], 125),
+        ("**417**", p["concurrency"]["incident"]["inflight_turns"], 417),
+        ("$0.141", p["cost"]["per_conversation_no_cache"], 0.141),
+        ("$0.092", p["cost"]["per_conversation_cached"], 0.092),
+        ("**$0.068**", p["cost"]["per_conversation_routed_cached"], 0.068),
+        ("69 GSUs", p["pt"]["gsus"]["average"], 69),
+        ("688", p["pt"]["gsus"]["incident"], 688),
+    ]
+    text = (docs / "scaling-agentic-solutions-on-google-cloud.md").read_text()
+    for quoted, value, number in figures:
+        assert quoted in text, quoted
+        assert abs(value - number) <= 0.006 * number, (quoted, value)  # rounding only
+    for doc in ("01-scaling-primer.md", "scaling-agentic-solutions-on-google-cloud.md"):
+        assert "2,300 uncached" in (docs / doc).read_text() and "2,000 uncached" not in (docs / doc).read_text()
+
+
 def test_pricing_arithmetic():
     # 2,000 uncached × $1.50 + 3,000 cached × $0.15 + 350 out × $9 per 1M tokens
     assert abs(cost_per_call("gemini-3.5-flash", 5000, 350, 3000) - (3000 + 450 + 3150) / 1e6) < 1e-12

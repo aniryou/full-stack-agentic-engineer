@@ -8,7 +8,7 @@ notebooks can import what earlier ones built, but try the exercises first.
 """
 
 from .corpus import Chunk, load_corpus, load_qrels, tokenize
-from .embed import Embedder, get_embedder
+from .embed import Embedder, HashingEmbedder, get_cross_encoder, get_embedder
 
 __all__ = [
     "Chunk",
@@ -16,5 +16,7 @@ __all__ = [
     "load_qrels",
     "tokenize",
     "Embedder",
+    "HashingEmbedder",
     "get_embedder",
+    "get_cross_encoder",
 ]

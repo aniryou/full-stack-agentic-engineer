@@ -1,10 +1,10 @@
-"""Back-of-the-envelope arithmetic for GenAI systems (Primer Part 5).
+"""Back-of-the-envelope arithmetic for GenAI systems (notebook 12).
 
 A design review wants three things from an estimate: the *shape* (what drives cost, what
 drives latency), the *order of magnitude*, and the *levers*. Everything here is deliberately
 simple arithmetic wrapped in names, so the numbers you quote are reproducible.
 
-Prices are illustrative and must be verified before they are quoted to a customer.
+Prices are illustrative, dated September 2026, and must be verified before you rely on them (verify).
 """
 from __future__ import annotations
 

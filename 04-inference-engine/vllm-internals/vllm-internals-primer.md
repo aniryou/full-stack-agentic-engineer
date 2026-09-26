@@ -16,7 +16,7 @@ build. Paths were checked at that commit; anything not confirmed in source is ma
 
 **Conventions.** `(path: Class.method)` means "read it there"; paths are relative to the vLLM repository
 root. [`source-map.md`](source-map.md) lists the same files with line numbers at `5840d95` and a reading
-plan in three sittings of about two hours. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
+plan in four sittings of about two hours. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
 (metrics, log lines, preemptions) is **T1** in the serving lab.
 
 ---
@@ -241,7 +241,7 @@ compute) and speculative decoding are the same operation.
 | Budget | Source | Default for `vllm serve` | Enforced in |
 |---|---|---|---|
 | tokens per step | `--max-num-batched-tokens`; `max_num_scheduled_tokens` defaults to it | 2048 on GPUs under 70 GiB and on A100; 8192 on ≥ 70 GiB non-A100 (H100/H200); 16384 on ≥ 160 GiB (B200/B300); doubled by `--performance-mode throughput` | `Scheduler.schedule` (`token_budget`) |
-| requests in RUNNING | `--max-num-seqs`; `--max-num-active-seqs` lowers admission only | 256 below 70 GiB and on A100; 1024 above | waiting loop |
+| requests in RUNNING | `--max-num-seqs`; `--max-num-active-seqs` (main after 0.30.0, verify) lowers admission only | 256 below 70 GiB and on A100; 1024 above | waiting loop |
 | per-request chunk | `--long-prefill-token-threshold` | 0 (off); ignored when one request is eligible | both loops |
 | encoder tokens per step | `MultiModalBudget.encoder_compute_budget` | derived | `_try_schedule_encoder_inputs` |
 | distinct LoRAs per step | `--max-loras` | 1 | waiting loop |
@@ -275,6 +275,7 @@ for req in running:
 
 # (2) WAITING requests, only if nothing was preempted in (1)
 if not preempted_reqs:
+    # max_num_active_seqs: main after 0.30.0 (verify); in the 0.30.0 wheel the cap is max_num_seqs
     while (waiting or skipped_waiting) and token_budget > 0 and len(running) < max_num_active_seqs:
         req = queue.peek_request()            # deque (fcfs) or heap on (priority, arrival, id)
         if blocked (grammar compiling, remote KV pending, LoRA cap): move to skipped; continue
@@ -311,7 +312,7 @@ chunks. `--max-num-batched-tokens` sets the step size, and every decode sharing 
 `--long-prefill-token-threshold` caps one request's chunk: at the default 0 a long prompt can take the whole
 remaining budget; at 512, two concurrent long prompts each advance 512 per step instead of one blocking the
 other. The cap is dropped when only one request is eligible, and `--long-prefill-token-threshold-adaptive`
-floors it at `max_num_batched_tokens / num_requests` (`SchedulerConfig`). A chunk that ends mid-prompt still
+(main after 0.30.0, verify) floors it at `max_num_batched_tokens / num_requests` (`SchedulerConfig`). A chunk that ends mid-prompt still
 gets a logits row and a draw, which is then thrown away: in MRV2, `get_num_sampled_and_rejected`
 (`vllm/v1/worker/gpu/input_batch.py`) sets `num_sampled = 0` for any row with `seq_len < prefill_len`, so
 `postprocess_sampled` records nothing for it (MRV1 does the same with `discard_request_mask` in
@@ -1304,7 +1305,7 @@ Defaults for `vllm serve` at `5840d95`; "GPU-dependent" follows `EngineArgs.get_
 | `--max-model-len` | model maximum; `-1`/`auto` fits memory | per-request cap; one max-length request must fit | — | — | — | ↓ lets small GPUs start |
 | `--max-num-batched-tokens` | 2048 / 8192 / 16384 (GPU-dependent) | per-step budget; profiling size | ↓ under load | ↑ longer mixed steps | ↑ | ↑ activations → ↓ KV |
 | `--max-num-seqs` | 256 / 1024 | running slots, sampler buffers, graph-size ceiling | — | ↑ at high occupancy | ↑ | ↑ buffers |
-| `--max-num-active-seqs` | = max-num-seqs | admission-only cap | ↑ queueing | ↓ | ↓ | — |
+| `--max-num-active-seqs` (main after 0.30.0, verify) | = max-num-seqs | admission-only cap | ↑ queueing | ↓ | ↓ | — |
 | `--long-prefill-token-threshold` | 0 (off) | per-request chunk cap | ↓ for short prompts behind long ones | ↓ spikes | ≈ | — |
 | `--enable-chunked-prefill` | on (decoders) | split prompts across steps | ≈ | ↓ | ↑ | — |
 | `--enable-prefix-caching` | on | block-hash reuse (Section 4) | ↓↓ on shared prefixes | — | ↑ | hashing CPU |
@@ -1677,6 +1678,7 @@ cache built from scratch), [`../serving-engine/vllm-serving-lab/servelab/sizing.
 | Item | Value used | Why it needs checking |
 |---|---|---|
 | vLLM state | `main` at `5840d95` (2026-09-25); PyPI latest 0.30.0 (2026-09-22); `torch == 2.13.0` build pin | `main` moves daily; line numbers in `source-map.md` drift |
+| Flags newer than the wheel | `--max-num-active-seqs` and `--long-prefill-token-threshold-adaptive` are in `SchedulerConfig`/`EngineArgs` at `5840d95` but not at the `v0.30.0` tag | `vllm serve` from the 0.30.0 wheel rejects them; check the release notes of the next release |
 | Model Runner V2 | default when supported; README still says "[Experimental]" | defaults and the unsupported-feature list change often |
 | V0 removal | V1 is the only engine; `VLLM_USE_V1` absent | the release that removed V0 is not recorded here |
 | GPU memory seen by CUDA | L4 22.49 GiB; H100 80 GB 79.65 GiB (the serving lab's `sizing.GPUS` table) | typical driver-reported totals, not measured in this session |

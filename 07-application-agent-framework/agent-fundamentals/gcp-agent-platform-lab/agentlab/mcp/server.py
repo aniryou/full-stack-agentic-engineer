@@ -1,4 +1,4 @@
-"""An MCP server over agentlab tools (Primer §3.2, §3.3). Teaching subset, not a conformant implementation.
+"""An MCP server over agentlab tools (notebook 05). Teaching subset, not a conformant implementation.
 
 Read top to bottom:
 
@@ -182,7 +182,7 @@ class McpServer:
             self._check_mirrored_headers(hdrs, req)
             self._check_version(req)
             result = await self._dispatch(req, identity, hdrs.get(p.HEADER_AGENT_IDENTITY.lower(), "mcp-client"))
-            return Response(200, {}, p.success(req.id, result))
+            return Response(200, {}, p.success(req.id, p.complete_result(result)))
         except McpError as e:
             return Response(e.http_status, e.headers, p.error(request_id, e))
 

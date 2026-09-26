@@ -63,9 +63,10 @@ print("✅ set_priority validates its input")
 #
 # Writes get retried (a timeout, a dropped connection). A retried "refund" must not
 # refund twice. Implement `make_refund_tool()` returning a `@tool`-decorated function
-# `refund(order_id, amount)` that records each `order_id` it has refunded in a closure
-# set; a second call for the same order returns the **same** result with
-# `{"already_done": True}` and does **not** append again.
+# `refund(order_id, amount)` that records each `order_id` it has refunded, with its
+# result, in the closure dict `done`; a second call for the same order returns the
+# **first** result with `{"already_done": True}` added and does **not** refund or record
+# again — even if the retry carries a different amount.
 
 # %% exercise
 def make_refund_tool():
@@ -86,8 +87,15 @@ def make_refund_tool():
 refund = make_refund_tool()
 first = refund.run({"order_id": "ORD-1", "amount": 20.0})
 again = refund.run({"order_id": "ORD-1", "amount": 20.0})
-assert first["data"]["refunded"] == 20.0
+garbled = refund.run({"order_id": "ORD-1", "amount": 99.0})   # a retry with a changed body
+other = refund.run({"order_id": "ORD-2", "amount": 5.0})
+assert first["data"]["refunded"] == 20.0 and not first["data"].get("already_done")
 assert again["data"].get("already_done") is True
+first_again = {k: v for k, v in again["data"].items() if k != "already_done"}
+assert first_again == first["data"], "a retry must return the first result"
+assert garbled["data"]["refunded"] == 20.0 and garbled["data"].get("already_done") is True, \
+    "a retry must not overwrite the first refund (no double refund)"
+assert other["data"]["refunded"] == 5.0 and not other["data"].get("already_done")
 print("✅ refund is idempotent:", first["data"], "→", again["data"])
 
 # %% [markdown]
@@ -114,7 +122,7 @@ print("✅ the agent recovered from a not-found error instead of crashing")
 
 # %% [markdown]
 # ## The one-minute version
-# In a design round, when you "design the interface", write one full tool contract on
+# In a design review, when you "design the interface", write one full tool contract on
 # the board: name, description, arguments with an enum, the success shape, the error
 # cases, and an idempotency key for writes. One concrete contract beats a list of tool
 # names — it shows you have thought about what the model will do wrong.

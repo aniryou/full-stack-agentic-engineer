@@ -34,6 +34,7 @@ works from a fresh checkout without ``pip install -e .``.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -167,6 +168,8 @@ def build_one(src_path: Path) -> tuple[Path, Path]:
                 nb.cells.append(new_code_cell(keep_solution(src), metadata={"tags": ["check"]}))
             else:
                 nb.cells.append(new_code_cell(keep_solution(src), metadata={"tags": []}))
+        for i, cell in enumerate(nb.cells):   # stable ids: rebuilding unchanged sources is a no-op
+            cell.id = hashlib.sha1(f"{title}/{i}".encode()).hexdigest()[:12]
         out_dir.mkdir(parents=True, exist_ok=True)
         out = out_dir / f"{title}.ipynb"
         nbformat.write(nb, out)

@@ -1,4 +1,4 @@
-"""Nine tests, one per claim in core.py's docstring. Run: python -m pytest -q"""
+"""One test per claim in core.py's docstring, plus the reaper's crash windows. Run: python -m pytest -q"""
 
 import pytest
 
@@ -133,3 +133,68 @@ def test_lease_blocks_second_worker(env):
     assert engine.execute("r1", "draft", 1) == "busy"
     clock[0] += 61
     assert engine.execute("r1", "draft", 1) == "ok"
+
+
+# ---- regression: a crash between a checkpoint that leaves no lease and its enqueue ----
+# start(), resume() and the retry branch of execute() write a RUNNING run with no lease, then
+# enqueue. Die in between and there is no task and no lease to expire: only the reaper's orphan
+# rule (RUNNING, no lease, untouched for 2 x lease_ttl) re-drives the run.
+
+def crash_on_next_push(queue):
+    real = queue.push
+
+    def push(*args, **kwargs):
+        queue.push = real                     # die once; later pushes work
+        raise Crash("died after the checkpoint, before the enqueue")
+
+    queue.push = push
+
+
+def test_crash_between_retry_checkpoint_and_enqueue_is_redriven_by_reaper(env):
+    engine, now, clock = env
+    boom = {"n": 0}
+
+    def flaky(ctx):
+        boom["n"] += 1
+        if boom["n"] == 1:
+            raise ConnectionError("503")
+        return ("done", "ok")
+
+    engine.steps["flaky"] = flaky
+    engine.start("r2", "flaky", {})
+    crash_on_next_push(engine.queue)
+    assert drain(engine, engine.queue, now) == [("flaky", "CRASH")]
+    run = engine.store.get("r2")
+    assert run["status"] == "RUNNING" and run["lease"] is None and run["attempts"] == {"flaky": 2}
+    clock[0] += 30
+    assert drain(engine, engine.queue, now) == [("flaky", "stale")]    # redelivered attempt 1 is stale
+    assert engine.queue.tasks == [] and engine.reap() == []            # nothing queued; not orphaned yet
+    clock[0] += 2 * 60
+    assert engine.reap() == [("orphan", "r2")]
+    assert drain(engine, engine.queue, now) == [("flaky", "succeeded")]
+
+
+def test_crash_between_resume_checkpoint_and_enqueue_is_redriven_by_reaper(env):
+    engine, now, clock = env
+    to_review(engine, now)
+    crash_on_next_push(engine.queue)
+    with pytest.raises(Crash):
+        engine.resume("r1", "approval:r1", {"decision": "approve"})
+    run = engine.store.get("r1")
+    assert run["status"] == "RUNNING" and run["step"] == "publish" and run["lease"] is None
+    assert engine.queue.tasks == [] and engine.resume("r1", "approval:r1", {"decision": "approve"}) is None
+    clock[0] += 2 * 60
+    assert engine.reap() == [("orphan", "r1")]
+    assert drain(engine, engine.queue, now) == [("publish", "ok"), ("notify", "succeeded")]
+
+
+def test_crash_between_start_checkpoint_and_enqueue_is_redriven_by_reaper(env):
+    engine, now, clock = env
+    crash_on_next_push(engine.queue)
+    with pytest.raises(Crash):
+        engine.start("r1", "draft", {"topic": "x"})
+    engine.start("r1", "draft", {"topic": "x"})                        # idempotent start does not re-enqueue
+    assert engine.queue.tasks == []
+    clock[0] += 2 * 60
+    assert engine.reap() == [("orphan", "r1")]
+    assert drain(engine, engine.queue, now) == [("draft", "ok"), ("review", "waiting")]

@@ -34,7 +34,11 @@ def _pending(a) -> int:
         print(pending.fixture_label(bundle))
         print(pending.diagnose(bundle))
         return 0
-    if a.live:
+    if a.live is not None:
+        if not a.live.strip():                           # e.g. a $(kubectl get pods ...) that found none
+            print("--live got an empty pod name: no pod matched (a Kueue Job that is still suspended has "
+                  "none yet; read its Workload with `kubectl get workloads -n NAMESPACE`)", file=sys.stderr)
+            return 2
         from .kindlab import KubectlMissing
         try:
             print(pending.diagnose_live(a.live, a.namespace))

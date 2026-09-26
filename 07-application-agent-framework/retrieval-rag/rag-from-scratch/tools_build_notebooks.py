@@ -6,12 +6,22 @@ Each notebook is a list of cells. Exercise cells carry BOTH a blanked version
 (sorted, correct length, right maths) rather than model-dependent rankings, so
 they pass offline and under the real embedding model alike.
 
+Every written notebook starts with the repo's Colab setup cell, exactly as
+tools/inject_colab_bootstrap.py writes it, and in the injector's JSON layout, so a
+rebuild reproduces the committed notebooks byte for byte and running the injector
+afterwards is a no-op.
+
 Run: `python tools_build_notebooks.py`
 """
+import importlib.util
 import json
 from pathlib import Path
 
-HERE = Path(__file__).parent
+HERE = Path(__file__).resolve().parent
+REPO = next(p for p in HERE.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file())
+_spec = importlib.util.spec_from_file_location("inject_colab_bootstrap", REPO / "tools" / "inject_colab_bootstrap.py")
+_inject = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_inject)
 NB_DIR = HERE / "notebooks"
 SOL_DIR = HERE / "solutions"
 NB_DIR.mkdir(exist_ok=True)
@@ -56,11 +66,14 @@ from scratch, because that is where almost all RAG failures live.
 **What you need**
 
 ```
-pip install -r requirements.txt      # numpy, sentence-transformers
+pip install -r requirements.txt        # T0: numpy + pytest, no torch
+pip install -r requirements-full.txt   # optional: sentence-transformers (and torch) for the real models
 ```
 
-The first embedding call downloads a ~90 MB model (`all-MiniLM-L6-v2`) and then
-runs offline on CPU. **Generation** is optional: set `ANTHROPIC_API_KEY` or
+Without `sentence-transformers`, `ragkit.embed` falls back to a labelled hashing
+embedder (lexical, not semantic) and every notebook still runs. With it, the first
+embedding call downloads a ~90 MB model (`all-MiniLM-L6-v2`) and then runs offline
+on CPU. **Generation** is optional: set `ANTHROPIC_API_KEY` or
 `OPENAI_API_KEY` to use a real model, otherwise a deterministic *extractive*
 fallback answers from the retrieved text so every notebook still runs.
 """),
@@ -126,7 +139,7 @@ for a, b in pairs:
 | 02 | chunking: why *how* you split decides what you can retrieve |
 | 03 | hybrid search: BM25 (exact) + dense (meaning), fused with RRF |
 | 04 | reranking: cheap recall, then a cross-encoder for precision |
-| 05 | evaluation: recall@k and MRR — measure everything above |
+| 05 | evaluation: hit@k, recall@k and MRR — measure everything above |
 | 06 | iterative RAG (advanced): multi-hop questions need >1 retrieval |
 
 Do the exercises in each notebook (fill the `# YOUR CODE HERE` blanks; the
@@ -559,8 +572,10 @@ RRF combines ranked lists using only **rank position**, so it doesn't care that
 BM25 and cosine scores live on different scales:
 
 ```
-score(d) = Σ_lists 1 / (k + rank_of_d)      # k ≈ 60, rank starts at 0
+score(d) = Σ_lists 1 / (k + r(d))      # k = 60; r(d) = 1 for the top result of a list
 ```
+
+(`enumerate` counts from 0, so in code that is `1 / (k + rank + 1)`.)
 
 Implement it, then fuse the dense and BM25 rankings.
 """),
@@ -578,7 +593,21 @@ def rrf(rankings, k=60):
 
 # consensus check: 'b' is near the top of both lists, so it should win
 fused = rrf([["a", "b", "c"], ["b", "c", "a"]])
-assert fused[0] == "b"
+assert fused == ["b", "a", "c"], fused   # 1/61+1/62 > 1/61+1/63 > 1/62+1/63
+
+# exact-formula check. With k=60 an off-by-one in the rank barely moves a score, so
+# the probe needs deep ranks. Four documents, filler everywhere else:
+#   x1: 1st in A                  -> 1/61          = 0.016393
+#   y1: 38th in B and 100th in A  -> 1/98 + 1/160  = 0.016454
+#   x2: 2nd in B                  -> 1/62          = 0.016129
+#   y2: 40th in A and 98th in B   -> 1/100 + 1/158 = 0.016329
+# Ranks counted from 0 put x1 above y1; ranks from 2 put y2 above x1.
+def ranked(placed, n, filler):
+    return [placed.get(r, f"{filler}{r}") for r in range(1, n + 1)]
+A = ranked({1: "x1", 40: "y2", 100: "y1"}, 100, "a")
+B = ranked({2: "x2", 38: "y1", 98: "y2"}, 100, "b")
+probe = [d for d in rrf([A, B]) if d in {"x1", "y1", "x2", "y2"}]
+assert probe == ["y1", "x1", "y2", "x2"], f"{probe}: use 1 / (k + rank + 1) with k=60"
 
 def hybrid_ids(query, k=5):
     return rrf([dense_ids(query, 10), bm25_ids(query, 10)])[:k]
@@ -598,7 +627,21 @@ def rrf(rankings, k=60):
 
 # consensus check: 'b' is near the top of both lists, so it should win
 fused = rrf([["a", "b", "c"], ["b", "c", "a"]])
-assert fused[0] == "b"
+assert fused == ["b", "a", "c"], fused   # 1/61+1/62 > 1/61+1/63 > 1/62+1/63
+
+# exact-formula check. With k=60 an off-by-one in the rank barely moves a score, so
+# the probe needs deep ranks. Four documents, filler everywhere else:
+#   x1: 1st in A                  -> 1/61          = 0.016393
+#   y1: 38th in B and 100th in A  -> 1/98 + 1/160  = 0.016454
+#   x2: 2nd in B                  -> 1/62          = 0.016129
+#   y2: 40th in A and 98th in B   -> 1/100 + 1/158 = 0.016329
+# Ranks counted from 0 put x1 above y1; ranks from 2 put y2 above x1.
+def ranked(placed, n, filler):
+    return [placed.get(r, f"{filler}{r}") for r in range(1, n + 1)]
+A = ranked({1: "x1", 40: "y2", 100: "y1"}, 100, "a")
+B = ranked({2: "x2", 38: "y1", 98: "y2"}, 100, "b")
+probe = [d for d in rrf([A, B]) if d in {"x1", "y1", "x2", "y2"}]
+assert probe == ["y1", "x1", "y2", "x2"], f"{probe}: use 1 / (k + rank + 1) with k=60"
 
 def hybrid_ids(query, k=5):
     return rrf([dense_ids(query, 10), bm25_ids(query, 10)])[:k]
@@ -725,7 +768,10 @@ You cannot improve what you don't measure, and "the demo looked good" is not
 measurement. With the labelled `qrels` we can score each retriever with two
 standard metrics:
 
-* **Recall@k** — is a gold document in the top *k*? (Did we even fetch it?)
+* **Hit@k** — is *any* gold document in the top *k*? (Did we fetch something useful?)
+* **Recall@k** — are *all* the gold documents in the top *k*? (Did we fetch everything
+  the answer needs?) On a one-gold question the two agree; on a two-gold (multihop)
+  question hit@k can say 1.0 while half the answer is missing.
 * **MRR** — 1/rank of the first gold hit. (How high did it land?)
 """),
     SETUP,
@@ -733,13 +779,14 @@ standard metrics:
 ### Exercise 1 — the metrics
 
 Implement both over **document-level** rankings (gold labels are per document).
-These are pure functions — the asserts pin the exact maths.
+`recall_at_k(..., require_all=False)` is hit@k; with `require_all=True` it is
+recall@k. These are pure functions — the asserts pin the exact maths.
 """),
     ex(
         blank="""
-def recall_at_k(ranked_docs, gold_docs, k):
+def recall_at_k(ranked_docs, gold_docs, k, require_all=False):
     top = ranked_docs[:k]
-    # YOUR CODE HERE: 1.0 if ANY gold doc is in `top`, else 0.0
+    # YOUR CODE HERE: 1.0 if ANY gold doc is in `top` (ALL of them when require_all), else 0.0
     return ...
 
 def mrr(ranked_docs, gold_docs):
@@ -748,14 +795,20 @@ def mrr(ranked_docs, gold_docs):
 
 assert recall_at_k(["a", "b", "c"], ["c"], k=3) == 1.0
 assert recall_at_k(["a", "b", "c"], ["c"], k=2) == 0.0
+# two gold documents: hit@k needs one of them, recall@k needs both
+assert recall_at_k(["a", "b", "c"], ["a", "z"], k=3) == 1.0
+assert recall_at_k(["a", "b", "c"], ["a", "z"], k=3, require_all=True) == 0.0
+assert recall_at_k(["a", "b", "c"], ["a", "c"], k=3, require_all=True) == 1.0
+assert recall_at_k(["a", "b", "c"], ["a", "c"], k=2, require_all=True) == 0.0
 assert mrr(["a", "b", "c"], ["b"]) == 0.5
 assert mrr(["a", "b", "c"], ["z"]) == 0.0
 print("metrics OK")
 """,
         solution="""
-def recall_at_k(ranked_docs, gold_docs, k):
+def recall_at_k(ranked_docs, gold_docs, k, require_all=False):
     top = ranked_docs[:k]
-    return 1.0 if any(g in top for g in gold_docs) else 0.0
+    hits = [g in top for g in gold_docs]
+    return 1.0 if (all(hits) if require_all else any(hits)) else 0.0
 
 def mrr(ranked_docs, gold_docs):
     for rank, d in enumerate(ranked_docs, start=1):
@@ -765,6 +818,11 @@ def mrr(ranked_docs, gold_docs):
 
 assert recall_at_k(["a", "b", "c"], ["c"], k=3) == 1.0
 assert recall_at_k(["a", "b", "c"], ["c"], k=2) == 0.0
+# two gold documents: hit@k needs one of them, recall@k needs both
+assert recall_at_k(["a", "b", "c"], ["a", "z"], k=3) == 1.0
+assert recall_at_k(["a", "b", "c"], ["a", "z"], k=3, require_all=True) == 0.0
+assert recall_at_k(["a", "b", "c"], ["a", "c"], k=3, require_all=True) == 1.0
+assert recall_at_k(["a", "b", "c"], ["a", "c"], k=2, require_all=True) == 0.0
 assert mrr(["a", "b", "c"], ["b"]) == 0.5
 assert mrr(["a", "b", "c"], ["z"]) == 0.0
 print("metrics OK")
@@ -774,44 +832,50 @@ print("metrics OK")
 ### Exercise 2 — the evaluation harness
 
 `evaluate` takes a retrieval function `run(query) -> ranked list of doc_ids` and
-averages Recall@k and MRR over a set of questions. Fill the averaging loop; the
+averages hit@k, recall@k (every gold document) and MRR over a set of questions. Fill the averaging loop; the
 assert uses a fake `run` with a known answer so it's model-independent.
 """),
     ex(
         blank="""
 def evaluate(run, questions, k=3):
-    rec = mr = 0.0
+    hit = rec = mr = 0.0
     for q in questions:
         ranked = run(q["question"])
-        # YOUR CODE HERE: accumulate recall_at_k(...) and mrr(...) for this q
+        # YOUR CODE HERE: accumulate hit@k (recall_at_k), recall@k (require_all=True)
+        # and mrr(...) for this q
         ...
     n = len(questions)
-    return {"recall@%d" % k: rec / n, "mrr": mr / n}
+    return {"hit@%d" % k: hit / n, "recall@%d" % k: rec / n, "mrr": mr / n}
 
 # fake retriever: always returns the same ranking, so the score is hand-checkable
-fake_qs = [{"question": "x", "gold_docs": ["b"]},
-           {"question": "y", "gold_docs": ["z"]}]   # one hit at rank 2, one miss
+fake_qs = [{"question": "x", "gold_docs": ["b"]},        # hit at rank 2
+           {"question": "y", "gold_docs": ["z"]},        # miss
+           {"question": "w", "gold_docs": ["a", "z"]}]   # two gold: one at rank 1, one missing
 res = evaluate(lambda q: ["a", "b", "c"], fake_qs, k=3)
-assert abs(res["recall@3"] - 0.5) < 1e-9    # 1 of 2 has a gold doc in top-3
-assert abs(res["mrr"] - 0.25) < 1e-9        # (1/2 + 0) / 2
+assert abs(res["hit@3"] - 2 / 3) < 1e-9     # x and w have a gold doc in the top 3
+assert abs(res["recall@3"] - 1 / 3) < 1e-9  # only x has every gold doc in the top 3
+assert abs(res["mrr"] - 0.5) < 1e-9         # (1/2 + 0 + 1) / 3
 print("harness OK:", res)
 """,
         solution="""
 def evaluate(run, questions, k=3):
-    rec = mr = 0.0
+    hit = rec = mr = 0.0
     for q in questions:
         ranked = run(q["question"])
-        rec += recall_at_k(ranked, q["gold_docs"], k)
+        hit += recall_at_k(ranked, q["gold_docs"], k)
+        rec += recall_at_k(ranked, q["gold_docs"], k, require_all=True)
         mr += mrr(ranked, q["gold_docs"])
     n = len(questions)
-    return {"recall@%d" % k: rec / n, "mrr": mr / n}
+    return {"hit@%d" % k: hit / n, "recall@%d" % k: rec / n, "mrr": mr / n}
 
 # fake retriever: always returns the same ranking, so the score is hand-checkable
-fake_qs = [{"question": "x", "gold_docs": ["b"]},
-           {"question": "y", "gold_docs": ["z"]}]   # one hit at rank 2, one miss
+fake_qs = [{"question": "x", "gold_docs": ["b"]},        # hit at rank 2
+           {"question": "y", "gold_docs": ["z"]},        # miss
+           {"question": "w", "gold_docs": ["a", "z"]}]   # two gold: one at rank 1, one missing
 res = evaluate(lambda q: ["a", "b", "c"], fake_qs, k=3)
-assert abs(res["recall@3"] - 0.5) < 1e-9    # 1 of 2 has a gold doc in top-3
-assert abs(res["mrr"] - 0.25) < 1e-9        # (1/2 + 0) / 2
+assert abs(res["hit@3"] - 2 / 3) < 1e-9     # x and w have a gold doc in the top 3
+assert abs(res["recall@3"] - 1 / 3) < 1e-9  # only x has every gold doc in the top 3
+assert abs(res["mrr"] - 0.5) < 1e-9         # (1/2 + 0 + 1) / 3
 print("harness OK:", res)
 """,
     ),
@@ -848,22 +912,26 @@ def hybrid_run(q):
 
 qrels = load_qrels()
 runs = {"dense": dense_run, "bm25": bm25_run, "hybrid": hybrid_run}
-print(f"{'method':8} {'recall@3':>9} {'mrr':>6}")
+print(f"{'method':8} {'hit@3':>6} {'recall@3':>9} {'mrr':>6}")
 for name, fn in runs.items():
     r = evaluate(fn, qrels, k=3)
-    print(f"{name:8} {r['recall@3']:>9.3f} {r['mrr']:>6.3f}")
+    print(f"{name:8} {r['hit@3']:>6.3f} {r['recall@3']:>9.3f} {r['mrr']:>6.3f}")
 
-print("\\nBy question kind (recall@3):")
+print("\\nBy question kind (recall@3: every gold doc in the top 3; multihop questions have two):")
 for kind in ("lexical", "semantic", "multihop"):
     subset = [q for q in qrels if q["kind"] == kind]
     row = {name: evaluate(fn, subset, k=3)["recall@3"] for name, fn in runs.items()}
+    if kind == "multihop":
+        assert all(len(q["gold_docs"]) == 2 for q in subset)
+        assert all(evaluate(fn, subset, k=3)["recall@3"] <= evaluate(fn, subset, k=3)["hit@3"] for fn in runs.values())
     print(f"  {kind:8}", {k: round(v, 2) for k, v in row.items()})
 """),
     md("""
 Read the by-kind table: BM25 should shine on **lexical**, dense on **semantic**,
 and **hybrid** should be the most consistent across both — which is exactly why
 hybrid is the sane default. (`multihop` stays hard for every single-shot
-retriever; that's notebook 06.)
+retriever on recall@3 — hit@3 would hide it, because one of the two gold
+documents is enough for a hit; that's notebook 06.)
 
 ### A note on faithfulness
 
@@ -1054,12 +1122,13 @@ NOTEBOOKS = {
 
 def render(cells, solution: bool) -> dict:
     out = []
-    for c in cells:
+    for i, c in enumerate(cells):
+        cid = f"cell-{i:02d}"                 # stable ids: nbformat 4.5 requires them
         if c["t"] == "md":
-            out.append({"cell_type": "markdown", "metadata": {}, "source": c["src"]})
+            out.append({"cell_type": "markdown", "id": cid, "metadata": {}, "source": c["src"]})
         else:
             src = c.get("sol", c["src"]) if solution else c["src"]
-            out.append({"cell_type": "code", "metadata": {}, "execution_count": None,
+            out.append({"cell_type": "code", "id": cid, "metadata": {}, "execution_count": None,
                         "outputs": [], "source": src})
     return {
         "cells": out,
@@ -1071,8 +1140,14 @@ def render(cells, solution: bool) -> dict:
     }
 
 
+def write_nb(nb: dict, path: Path) -> None:
+    """Write ``nb`` with the Colab setup cell first, in the injector's JSON layout."""
+    nb["cells"].insert(0, _inject.make_cell(path.parent.relative_to(REPO).as_posix()))
+    path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 if __name__ == "__main__":
     for name, cells in NOTEBOOKS.items():
-        (NB_DIR / f"{name}.ipynb").write_text(json.dumps(render(cells, False), indent=1))
-        (SOL_DIR / f"{name}.ipynb").write_text(json.dumps(render(cells, True), indent=1))
+        write_nb(render(cells, False), NB_DIR / f"{name}.ipynb")
+        write_nb(render(cells, True), SOL_DIR / f"{name}.ipynb")
     print(f"Wrote {len(NOTEBOOKS)} notebooks to {NB_DIR} and solutions to {SOL_DIR}")

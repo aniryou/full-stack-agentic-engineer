@@ -19,7 +19,7 @@ Rules that keep the pipeline honest:
    and prints a ✅ line when it passes.
 3. Notebooks run offline, in under ~30 s, with no network and no API keys. Use `FakeLLM`.
 4. Top-level `await` is fine (Jupyter and nbclient support it).
-5. Start with a heading, the primer sections it maps to, and a 3-bullet "in this notebook you will".
+5. Start with a heading, a **Concept map** line (docs/PRIMER_MAP.md plus the in-repo primer that goes deeper), and a 3-bullet "in this notebook you will".
    End with a **The one-minute version** cell: how to explain this topic in a design review.
 6. `make check` (or `python tools/run_notebooks.py solutions`) must pass: every solution notebook
    executes clean end to end. `python tools/run_notebooks.py notebooks --expect-fail` verifies the

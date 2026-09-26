@@ -247,6 +247,39 @@ def test_hnsw_recall_on_easy_data():
     assert recall_at_k(hnsw_I, truth) >= 0.7
 
 
+def test_hnsw_layer0_budget_is_2M():
+    """Layer 0 keeps up to M0 = 2M neighbours (paper's M_max0, faiss's nb_neighbors(0));
+    upper layers keep up to M."""
+    db, _ = make_clustered(n=600, d=8, n_blobs=6, seed=11)
+    hnsw = IndexHNSWFlat(8, M=4)
+    hnsw.add(db)
+    assert hnsw.M0 == 8
+    layer0 = [len(nb[0]) for nb in hnsw._neighbors]
+    upper = [len(nb[l]) for nb in hnsw._neighbors for l in range(1, len(nb))]
+    assert max(layer0) <= hnsw.M0 and max(layer0) > hnsw.M      # the budget is used
+    assert not upper or max(upper) <= hnsw.M
+
+
+def test_hnsw_recall_on_random_data_default_efsearch():
+    """Regression: with layer 0 capped at M (not 2M) this scored recall@10 = 0.834;
+    with M0 = 2M it scores 0.903, matching faiss.IndexHNSWFlat(16, 16) with
+    efConstruction=40, efSearch=16 on the same seeded data (0.905, measured
+    2026-09-26). ~10 s: 5,000 inserts in pure Python."""
+    d, k = 16, 10
+    rng = np.random.default_rng(0)
+    db = rng.standard_normal((5000, d)).astype(np.float32)
+    q = rng.standard_normal((100, d)).astype(np.float32)
+    flat = IndexFlatL2(d)
+    flat.add(db)
+    _, truth = flat.search(q, k)
+
+    hnsw = IndexHNSWFlat(d, M=16)
+    assert hnsw.efSearch == 16 and hnsw.efConstruction == 40   # the defaults, as in faiss
+    hnsw.add(db)
+    _, hnsw_I = hnsw.search(q, k)
+    assert recall_at_k(hnsw_I, truth) >= 0.87
+
+
 def test_hnsw_reconstruct_exact():
     db, _ = make_clustered(n=200, d=8, n_blobs=5, seed=10)
     hnsw = IndexHNSWFlat(8, M=8)

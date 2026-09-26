@@ -20,7 +20,7 @@ rented for an hour.* Times are rough.
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`vllm-internals-primer.md`](vllm-internals-primer.md) | explain the API-server / EngineCore split, the token-budget scheduler, admission and preemption, block-hash prefix caching and its eviction order, how the pool is sized from `gpu_memory_utilization`, the model runner and CUDA graphs, attention-backend selection, sampling and speculation, quantization and loading, KV connectors, and the flags, metrics and log lines that expose all of it | §1–4 first, then the rest as needed | T0 |
-| [`source-map.md`](source-map.md) | find any of those mechanisms in the code: a concept → file → symbol index with line numbers at `5840d95`, and a reading plan of three sittings of about two hours with named line ranges and the branches to step over | three ~2 h sittings | T0 |
+| [`source-map.md`](source-map.md) | find any of those mechanisms in the code: a concept → file → symbol index with line numbers at `5840d95`, and a reading plan of four sittings of about two hours with named line ranges, the branches to step over and a line count per slot | four ~2 h sittings (about 8.5 h) | T0 |
 | [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb) | implement the capped longest hit, predict the free queue, write `free_blocks` (uncached blocks to the head, LRU refresh) and the full-sequence admission gate with evictable hits — each exercise followed by a check, the last replaying the primer's preemption case (§3.7) at small scale; a final section recomputes every worked number in the primer, using the serving lab's `servelab.sizing` for the KV budgets | ~1.5 h | T0 |
 
 ## Run it

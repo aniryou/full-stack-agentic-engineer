@@ -6,7 +6,7 @@
 # accuracy. The lab's `ContextBuilder` makes those decisions explicit: a cache-friendly layout, tool-result truncation,
 # compaction of old turns and a hard token cap. This notebook measures each of them.
 #
-# **Primer sections:** 2.5 (context engineering: layout, caching, compaction, tool scoping).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 (context engineering for scale).
 #
 # In this notebook you will:
 # 1. read a `ContextBuilder` layout and account for every token in it by role;

@@ -13,8 +13,10 @@ notebooks/            ← worked examples + fill-in-the-blank practice + solutio
 src/agentsec/         ← the reference implementation (Python, ADK 2.8, MCP SDK, A2A SDK)
 policies/             ← deny-by-default tool policy (YAML)
 infra/terraform/      ← Google Cloud infrastructure (validated with provider 8.1); infra/scripts/ for gcloud-only steps
-tests/                ← 37 tests exercising every flow end to end through the real ADK Runner
+tests/                ← 41 tests exercising every flow end to end through the real ADK Runner
 ```
+
+**Time and tier:** ~10 h at T0 (rough; ~12 h with the core); module 06.6 in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: everything runs offline on local fakes, no key. A Google Cloud project adds the optional T3 path (`terraform apply` and the agent deploy in `docs/deploy.md`), billed per use.
 
 ## What the reference implementation demonstrates
 
@@ -35,7 +37,7 @@ tests/                ← 37 tests exercising every flow end to end through the 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q                     # 37 tests, ~10s
+pytest -q                     # 41 tests, ~6 s
 agentsec demo                 # policy, confirmation round-trip and audit trail in your terminal
 agentsec token-demo           # mint / exchange / inspect a delegated, certificate-bound token
 agentsec policy-check --agent "spiffe://agents.global.org-123456789012.system.id.goog/resources/aiplatform/projects/987654321098/locations/us-central1/reasoningEngines/support-agent" \

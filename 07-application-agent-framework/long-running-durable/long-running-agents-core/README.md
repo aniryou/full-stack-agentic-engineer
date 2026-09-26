@@ -15,6 +15,8 @@ Five rules make it safe (marked `## (n)` in the code):
 | 4 | **Budget** — a hard step limit in code; prompts can't enforce limits | `Agent._decide` |
 | 5 | **Park, don't wait** — a wait is a status + a token, not a sleeping process | `Agent._park`, `Agent.resume` |
 
+**Time and tier:** 1–2 h (rough); module 07.3, an alternative core in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: standard library only, no key.
+
 ## Run it
 
 ```bash

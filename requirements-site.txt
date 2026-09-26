@@ -6,3 +6,5 @@ mkdocs-jupyter==0.26.3
 pymdown-extensions==12.1
 Markdown==3.11
 nbconvert==7.17.1
+# tests for tools/site (the generator and the hooks), run by the workflow before the build
+pytest==9.1.1

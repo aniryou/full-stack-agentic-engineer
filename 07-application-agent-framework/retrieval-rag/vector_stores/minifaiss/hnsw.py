@@ -27,7 +27,8 @@ class IndexHNSWFlat(Index):
     multi-layer navigable small-world graph over them. Requires no training
     (``is_trained`` is True from construction). Search quality/speed is tuned by
     ``efConstruction`` (build-time beam width) and ``efSearch`` (query-time beam
-    width); ``M`` sets the neighbour budget per node per layer.
+    width); ``M`` sets the neighbour budget per node on the upper layers and
+    layer 0 gets ``M0 = 2 * M``.
 
     Internally all "distances" are kept in a *smaller-is-closer* convention so
     the heaps behave uniformly: for L2 this is the squared distance, for inner
@@ -37,7 +38,11 @@ class IndexHNSWFlat(Index):
     Attributes
     ----------
     M : int
-        Target number of neighbours per node per layer.
+        Neighbour budget per node on the upper layers.
+    M0 : int
+        Neighbour budget per node on layer 0, ``2 * M`` as in the HNSW paper
+        (``M_max0``) and ``faiss.IndexHNSWFlat``. Layer 0 holds every vector and
+        is where the search does its real work, so it gets the denser graph.
     efConstruction : int
         Beam width used while inserting (larger -> better graph, slower build).
     efSearch : int
@@ -52,7 +57,8 @@ class IndexHNSWFlat(Index):
         d : int
             Vector dimensionality.
         M : int
-            Neighbours per node per layer (graph degree budget).
+            Neighbours per node on the upper layers (graph degree budget);
+            layer 0 gets ``2 * M``.
         metric_type : int
             ``METRIC_L2`` or ``METRIC_INNER_PRODUCT``.
         seed : int
@@ -60,6 +66,7 @@ class IndexHNSWFlat(Index):
         """
         super().__init__(d, metric_type)
         self.M = int(M)
+        self.M0 = 2 * self.M
         self.efConstruction = 40
         self.efSearch = 16
 
@@ -229,14 +236,20 @@ class IndexHNSWFlat(Index):
                 selected.append(cid)
         return selected
 
+    def _max_degree(self, layer):
+        """Neighbour budget on ``layer``: ``M0 = 2M`` on layer 0, ``M`` above
+        (faiss's ``nb_neighbors(layer)``)."""
+        return self.M0 if layer == 0 else self.M
+
     def _prune(self, node, layer):
-        """Shrink ``node``'s neighbour list on ``layer`` back to M via heuristic."""
+        """Shrink ``node``'s neighbour list on ``layer`` back to its budget via heuristic."""
         neigh = self._neighbors[node][layer]
-        if len(neigh) <= self.M:
+        budget = self._max_degree(layer)
+        if len(neigh) <= budget:
             return
         base = self._data[node]
         cand = [(self._closeness_pair(base, self._data[c]), c) for c in neigh]
-        self._neighbors[node][layer] = self._select_neighbors_heuristic(cand, self.M)
+        self._neighbors[node][layer] = self._select_neighbors_heuristic(cand, budget)
 
     # ------------------------------------------------------------------ #
     # Insertion
@@ -279,7 +292,7 @@ class IndexHNSWFlat(Index):
         # Phase 2: from the node's top layer down to 0, beam-search + connect.
         for lc in range(min(level, self._max_level), -1, -1):
             found = self._search_layer(q, [(ep_c, ep)], self.efConstruction, lc)
-            selected = self._select_neighbors_heuristic(found, self.M)
+            selected = self._select_neighbors_heuristic(found, self._max_degree(lc))
 
             for nb in selected:
                 self._neighbors[node][lc].append(nb)

@@ -24,7 +24,7 @@ import time
 import numpy as np
 
 from tfidf import TfidfVectorizer
-from gutenberg_corpus import load_chunks
+from gutenberg_corpus import ensure_corpus, load_chunks
 
 from minifaiss import (
     METRIC_INNER_PRODUCT,
@@ -96,6 +96,7 @@ def main():
 
     # ---- Load + vectorize -------------------------------------------------- #
     print("Loading Project Gutenberg passages ...")
+    ensure_corpus()                                    # downloads once, never prompts
     texts, books_of = load_chunks(
         words_per_chunk=args.words_per_chunk,
         max_chunks=args.max_chunks,

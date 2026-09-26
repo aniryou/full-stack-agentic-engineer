@@ -2,13 +2,13 @@
 # # 07 · The agent's own API: streaming, tasks, idempotency, limits
 #
 # "API discussions" here mean the interface the agent presents to the channel or to other
-# systems (Primer §3.5). This notebook builds that API **in-process on `agentlab.agents.Runner`** — no web
+# systems. This notebook builds that API **in-process on `agentlab.agents.Runner`** — no web
 # framework, just the shapes: a `request(method, path, headers, body)` entry point that returns a status,
-# headers and either JSON or a stream of SSE-style events. Every design point from the primer's sketch is here:
+# headers and either JSON or a stream of SSE-style events. Every design point of that API is here:
 # events (not tokens) on the stream, a task handle for long-running work, `Idempotency-Key` on POSTs because
 # clients retry, `429` with `Retry-After`, and `X-Agent-Version` because behaviour is part of the contract.
 #
-# **Primer sections:** 3.5 (the agent's own API), 2.4 (state and durable tasks), 3.2 (MCP Tasks shape), 4.4 (backpressure).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3 (admission control) and §5.7 (streaming and connections).
 #
 # In this notebook you will:
 # 1. drive the API end to end: create a session, stream a turn, pause for approval, answer it, run a turn as a background task;
@@ -138,7 +138,7 @@ async def collect(resp: Response) -> list[str]:
 
 # %%
 class AgentApi:
-    """The agent service (Primer §3.5) on top of a Runner. Sessions are the Runner's; turns are TaskRecords."""
+    """The agent service on top of a Runner. Sessions are the Runner's; turns are TaskRecords."""
 
     def __init__(self, runner: Runner, verify_token: Callable[[str], dict], *, version: str,
                  serialize: Callable[[Event], str] = raw_sse, idempotency=None, task_view=minimal_task_view, bucket=None):
@@ -402,7 +402,7 @@ print(f"model calls +{llm.call_count - before[0]} (two per turn), get_balance ra
 # %% [markdown]
 # ### Exercise 2.1 — event → SSE
 #
-# Implement `event_to_sse(ev)` producing the typed event names from the primer's sketch:
+# Implement `event_to_sse(ev)` producing these typed event names:
 #
 # | `Event.kind` | SSE `event:` |
 # |---|---|

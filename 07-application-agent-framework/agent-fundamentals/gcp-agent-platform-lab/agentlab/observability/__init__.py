@@ -1,15 +1,17 @@
 from .metrics import (DEFAULT_PRICES, Alert, AlertRule, Price, PriceTable, StreamStats, TraceSummary, agent_metrics,
                       cost_per_resolved, describe, evaluate_alerts, now_ms, percentile, reported_latency_ms,
                       summarize_latencies, tokens_per_task, ttft_and_tps, wrong_tool_rate)
-from .tracing import (DEFAULT_REDACTION_RULES, GEN_AI_CACHED_TOKENS, GEN_AI_FINISH_REASON, GEN_AI_INPUT_TOKENS,
-                      GEN_AI_OPERATION_NAME, GEN_AI_OUTPUT_TOKENS, GEN_AI_REQUEST_MODEL, SPAN_KINDS, TOOL_ERROR,
+from .tracing import (DEFAULT_REDACTION_RULES, GEN_AI_CACHED_TOKENS, GEN_AI_FINISH_REASON, GEN_AI_FINISH_REASONS,
+                      GEN_AI_INPUT_MESSAGES, GEN_AI_INPUT_TOKENS, GEN_AI_OPERATION_NAME, GEN_AI_OUTPUT_MESSAGES,
+                      GEN_AI_OUTPUT_TOKENS, GEN_AI_REQUEST_MODEL, SPAN_KINDS, TOOL_CALL_ID, TOOL_ERROR,
                       TOOL_LATENCY_MS, TOOL_NAME, TOOL_OK, RedactingExporter, RedactionRule, Span, Trace, Tracer,
                       redact, rule, span_usage)
 
 __all__ = [
     "Tracer", "Span", "Trace", "SPAN_KINDS", "span_usage",
     "GEN_AI_OPERATION_NAME", "GEN_AI_REQUEST_MODEL", "GEN_AI_INPUT_TOKENS", "GEN_AI_OUTPUT_TOKENS",
-    "GEN_AI_CACHED_TOKENS", "GEN_AI_FINISH_REASON", "TOOL_NAME", "TOOL_OK", "TOOL_LATENCY_MS", "TOOL_ERROR",
+    "GEN_AI_CACHED_TOKENS", "GEN_AI_FINISH_REASONS", "GEN_AI_FINISH_REASON", "GEN_AI_INPUT_MESSAGES",
+    "GEN_AI_OUTPUT_MESSAGES", "TOOL_NAME", "TOOL_CALL_ID", "TOOL_OK", "TOOL_LATENCY_MS", "TOOL_ERROR",
     "redact", "rule", "RedactionRule", "DEFAULT_REDACTION_RULES", "RedactingExporter",
     "Price", "PriceTable", "DEFAULT_PRICES", "TraceSummary",
     "percentile", "describe", "summarize_latencies", "reported_latency_ms", "ttft_and_tps", "StreamStats", "now_ms",

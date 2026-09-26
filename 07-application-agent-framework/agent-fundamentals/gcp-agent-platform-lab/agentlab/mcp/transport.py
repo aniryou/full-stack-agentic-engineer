@@ -1,4 +1,4 @@
-"""Transports: how JSON-RPC bytes reach an ``McpServer`` (Primer §3.2). Teaching subset.
+"""Transports: how JSON-RPC bytes reach an ``McpServer`` (notebook 05). Teaching subset.
 
 Streamable HTTP in this revision is one POST per request to a single endpoint.
 We answer every request with one JSON object (the request-scoped SSE stream

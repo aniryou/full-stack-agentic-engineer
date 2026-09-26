@@ -29,9 +29,15 @@ Two things make side effects safe:
 - **Effects before the checkpoint, keyed by intent (I3):** `ctx.effect("charge", fn)` records the result under `run:charge` *before* the checkpoint. If the worker dies in between, the retry finds the record and skips the call. No double charge — ever.
 - **A wait is just a status:** `("wait", key, then)` writes `WAITING` and enqueues nothing. A webhook with the matching key flips it back to `RUNNING` at `then`. Days of waiting cost zero compute and zero attention.
 
-One repair job covers what the loop cannot: the **reaper** (a cron) re-enqueues runs whose lease
-expired (worker died mid-step, or between checkpoint and enqueue) and fails waits past their
-absolute timeout.
+One repair job covers what the loop cannot: the **reaper** (a cron) re-enqueues the current step of
+two kinds of stuck `RUNNING` run, and fails waits past their absolute timeout:
+
+- **expired lease** — the worker died mid-step, or after a `next` checkpoint and before its enqueue
+  (that checkpoint keeps the lease set until the enqueue is done, so the lease expires);
+- **orphan** — no lease and the document untouched for `2 × lease_ttl`: `start`, `resume` or a
+  retry wrote `RUNNING` without a lease and died before its enqueue, so there is no lease to expire.
+
+Re-enqueueing is safe either way: the task name `(run, step, attempt)` dedups a task that still exists.
 
 ## The same thing on Google Cloud (this is `gcp/main.py`)
 
@@ -62,7 +68,7 @@ Agent Engine gives you nodes, retries, interrupts and persisted sessions.
 
 ## What to be able to say in a design conversation
 
-- "Checkpoint before enqueue; the reaper covers the gap." (I1)
+- "Checkpoint before enqueue; the reaper covers the gap — expired leases and lease-less orphans." (I1)
 - "`(run, step, attempt)` is the identity of work; anything else is stale." (I2)
 - "Effects are recorded before the checkpoint, keyed by intent, so retries never repeat them." (I3)
 - "A waiting run is a document with `status=WAITING` and no task — sleeping is free."

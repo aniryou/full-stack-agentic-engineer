@@ -7,15 +7,17 @@ live on Mistral.
 
 The core loop is provider-agnostic — that is the point. `FakeLLM` runs it offline;
 `MistralLLM` runs it against `la Plateforme`; nothing else changes. The full-featured
-version (async, parallel tools, MCP, OAuth, evals, tracing) is the separate
-`gcp-agent-platform-lab` — the **step-up** for later. Learn it here first.
+version (async, parallel tools, MCP, OAuth, evals, tracing) is
+[`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md), next to this lab — the **step-up** for later. Learn it here first.
+
+**Time and tier:** ~4 h, plus about an hour for notebook 05 (rough); module 07.1, the Mistral variant in [`CURRICULUM.md`](../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: notebooks 01–04 and the tests run offline. A `MISTRAL_API_KEY` adds notebook 05's live model (billed API calls).
 
 ## Quick start (offline, no key)
 
 ```bash
 cd mistral-agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 16 tests, ~0.1s
+python3 -m pytest -q                          # 27 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
@@ -58,7 +60,7 @@ function-calling shapes and back. Models, pricing and the deployment story are i
 | File | Lines | What it teaches |
 |------|-------|-----------------|
 | `agentcore/fake_llm.py` | ~110 | a tool-calling model returns *text* or *tool calls*; drive it with a script or a policy |
-| `agentcore/tools.py` | ~90 | a tool is a contract: schema from the signature, arguments validated, results structured |
+| `agentcore/tools.py` | ~130 | a tool is a contract: schema from the signature, arguments validated, results structured |
 | `agentcore/agent.py` | ~90 | the loop: call the model → run tools → append results → repeat, with a step budget and a human-approval gate |
 | `agentcore/mistral_llm.py` | ~90 | *optional* adapter: the same loop against Mistral's API |
 

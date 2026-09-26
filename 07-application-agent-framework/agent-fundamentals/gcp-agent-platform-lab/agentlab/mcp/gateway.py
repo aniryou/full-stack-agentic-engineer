@@ -1,4 +1,4 @@
-"""An egress gateway between agents and MCP servers (Primer §3.3, §6.3). Teaching subset.
+"""An egress gateway between agents and MCP servers (notebooks 05 and 06). Teaching subset.
 
 The agent still addresses the server's canonical URL; every request goes
 through the gateway, which does what Agent Gateway does on Google Cloud, in

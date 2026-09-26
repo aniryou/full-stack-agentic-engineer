@@ -30,7 +30,7 @@ session; one tenant in v1 with the seams for more.
 
 **Constraints.** Model capacity is the organisation's Standard PayGo Flash tier (10 M TPM) plus an
 optional Provisioned Throughput commitment; the billing mainframe accepts 40 QPS and the CRM 200 QPS;
-Cloud Run is the customer's standard compute; Python 3.11.
+Cloud Run is Meridian's standard compute; Python 3.11.
 
 ## 2. System overview
 
@@ -290,7 +290,7 @@ manual: the Provisioned Throughput purchase, the PayGo tier, the IAP consent scr
 
 | Decision | Chosen | Alternatives | Why |
 |---|---|---|---|
-| Runtime | Cloud Run | Agent Runtime (managed), GKE | customer standard; every mechanism visible |
+| Runtime | Cloud Run | Agent Runtime (managed), GKE | Meridian's standard; every mechanism visible |
 | Turn execution | Pub/Sub push + durable loop | synchronous HTTP; Workflows; Cloud Tasks | backlog observability, at-least-once, drain rate set by the bucket |
 | Durable state | Firestore | AlloyDB, Spanner | document shape, TTL, PITR, no schema migration |
 | Hot state and relay | Redis Streams | Pub/Sub per session; Firestore listeners | resume by sequence, sub-ms, cheap |

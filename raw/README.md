@@ -15,7 +15,7 @@ runs in Colab with no extra work:
 - A package dir (`mylab/` or `src/mylab/`) for importable code; keep notebooks thin.
 - `notebooks/` — exercises. Best authored as percent-format sources (`notebooks_src/*.py`) plus a
   `tools/build_notebooks.py` that emits blank `notebooks/` + filled `solutions/`
-  (see `07-application-agent-framework/agent-fundamentals/google-fde-prep-lab`). Hand-written
+  (see `07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab`). Hand-written
   notebooks are fine too.
 - `tests/` — one check per concept. `docs/` — a primer and cheatsheets.
 

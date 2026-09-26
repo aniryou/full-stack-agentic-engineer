@@ -250,7 +250,7 @@ print(f"one replica holds the SLO up to {cap} req/s; a {start.total:.0f} s cold 
 #
 # ## Worked example — a request count does not transfer across traffic
 # The in-flight target came from a chat load test. Now the same step arrives as a mix: half the rate as chat,
-# plus RAG requests carrying ~6,000-token prompts (about 10 % of the requests but most of the prefill work).
+# plus RAG requests carrying ~6,000-token prompts (about 15 % of the requests but three quarters of the prefill the prefix cache does not cover).
 
 # %%
 def mixed_step():
@@ -282,9 +282,11 @@ print(table(mixed_rows, title=f"simulated: in-flight target {inflight_target} pe
 #
 # ## Exercise 3.5 — one autoscaler for both mixes
 # Write `make_autoscaler()` returning a fresh `Autoscaler` (min 1, max 8; any metric or metrics from
-# `Autoscaler.METRICS`, any targets) that meets both budgets without re-tuning: on the chat step, SLO attainment
-# **>= 0.94 within 1.3 GPU-hours**; on the chat + RAG step, attainment **>= 0.90**. Be ready to say where each target
-# comes from.
+# `Autoscaler.METRICS`) that meets both budgets without re-tuning: on the chat step, SLO attainment
+# **>= 0.94 within 1.3 GPU-hours**; on the chat + RAG step, attainment **>= 0.90**. Every target must come from the
+# load test, not from trial and error: for a signal the sweep measured, its per-replica value at the 1 s TTFT SLO
+# minus a margin of 20-50 % (`pick_target`); for `backlog_s`, a share (10-50 %) of the tightest TTFT SLO. Be ready to
+# say where each target comes from.
 
 # %% exercise
 def make_autoscaler():
@@ -294,6 +296,20 @@ def make_autoscaler():
     ### END SOLUTION
 
 # %% check
+def derived_range(metric):  # what the load test (and the SLO) allow for this metric's target
+    if metric == "backlog_s":
+        return 0.1 * 1.0, 0.5 * 1.0
+    if metric in sweep[0] and metric != "gpu_util":   # gpu_util is pinned at 1.0: no target comes out of it
+        return pick_target(sweep, metric, 1.0, 0.5), pick_target(sweep, metric, 1.0, 0.2)
+    return None
+
+
+for metric, target, kind in make_autoscaler().specs:
+    allowed = derived_range(metric)
+    assert allowed, f"{metric}: the load test gives no target for it — which signal did it show tracking load?"
+    assert allowed[0] <= target <= allowed[1], (f"{metric} target {target}: outside {allowed[0]:.2f}-{allowed[1]:.2f}, "
+                                                "what the load test gives with a 20-50 % margin (a share of the SLO "
+                                                "for backlog_s)")
 yours = [{"traffic": "chat step (SLO 1 s)", **scorecard(make_autoscaler(), step_traffic, 1.0)},
          {"traffic": "chat + RAG step (SLO 2 s)", **scorecard(make_autoscaler(), mixed_step, 2.0)}]
 print(table(yours, title="simulated: your autoscaler"))

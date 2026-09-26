@@ -1,7 +1,9 @@
-# Core — everything the notebooks need to run.
+# T0 — everything the notebooks and tests need. No torch: without sentence-transformers,
+# ragkit.embed falls back to a labelled hashing embedder (lexical, not semantic).
 numpy>=1.24
-sentence-transformers>=2.6      # pulls in torch + transformers; CPU is fine
+pytest>=8
 
+# The real embedding model and cross-encoder: pip install -r requirements-full.txt
 # Optional — only if you want real (non-extractive) generation in 01/06.
 # Set the matching API key in your environment and it's picked up automatically.
 # anthropic>=0.34               # uses ANTHROPIC_API_KEY

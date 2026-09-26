@@ -1,4 +1,4 @@
-"""Run a golden set and decide whether a change ships (Primer §4.1).
+"""Run a golden set and decide whether a change ships (notebook 08).
 
 ``run_eval`` drives the agent through every case ``n_runs`` times with a fresh
 session per run, so flakiness is measured rather than averaged away. ``Gate``

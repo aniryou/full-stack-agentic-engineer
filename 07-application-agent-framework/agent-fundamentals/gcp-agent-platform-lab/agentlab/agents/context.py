@@ -1,4 +1,4 @@
-"""Context engineering: what the model sees each turn (Primer §2.5).
+"""Context engineering: what the model sees each turn (notebook 04).
 
 The context window is a budget. A ``ContextBuilder`` assembles it in a
 cache-friendly order (stable prefix first), truncates oversized tool results,

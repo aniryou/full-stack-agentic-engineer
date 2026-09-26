@@ -1,14 +1,13 @@
 # %% [markdown]
 # # 08 · Evals: trajectories, judges and release gates
 #
-# An agent that looks fine in a demo is an agent nobody has measured. The Primer §4.1 flywheel is
+# An agent that looks fine in a demo is an agent nobody has measured. The evaluation flywheel is
 # how measurement becomes routine: **production traces → triage → golden cases → gate → ship**, and
 # round again. This notebook builds every stage on a small bank assistant and keeps the statistics
 # honest — confidence intervals instead of a single pass rate, run-to-run noise instead of a single
 # run, Cohen's kappa instead of "the judge mostly agrees".
 #
-# **Primer sections:** 4.1 (the evaluation flywheel, trajectory evals, LLM-as-judge), 3.1 (side-effect
-# classes — why a card block gets an *absolute* gate), 4.4 (prompt injection through tool results).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md).
 #
 # In this notebook you will:
 # 1. build a stratified golden set and score **trajectories**, not just answers, across repeated runs with Wilson intervals;
@@ -32,7 +31,7 @@ from agentlab.evals import (Gate, GoldenCase, GoldenSet, KeywordJudge, RubricJud
 # %% [markdown]
 # ## 1. The agent under test
 #
-# Four tools with explicit side-effect classes (Primer §3.1): two reads, one reversible write, one
+# Four tools with explicit side-effect classes (Notebook 01): two reads, one reversible write, one
 # **irreversible** write that requires confirmation. The planner is a `KeywordPlanner` wrapped in a
 # `FlakyPlanner` that occasionally "forgets" one tool call — a stand-in for sampling noise, so that
 # repeated runs disagree the way real ones do.
@@ -226,7 +225,7 @@ print("✅ in_order_match agrees with the library on 200 random trajectories")
 #
 # One run gives one number. Three runs with a fresh session each show which cases are **flaky**, and the
 # Wilson interval says how much a pass rate on 15 cases actually proves (spoiler: a 95% interval on 15
-# cases is about ±20 points — Primer §4.1's "you need hundreds of cases" is arithmetic, not opinion).
+# cases is about ±20 points — "you need hundreds of cases" is arithmetic, not opinion).
 
 # %%
 baseline = await run_eval(make_agent, golden, n_runs=3, seed=13, user=USER)

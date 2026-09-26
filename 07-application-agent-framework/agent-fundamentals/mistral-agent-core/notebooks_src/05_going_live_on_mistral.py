@@ -165,11 +165,10 @@ else:
 
 # %% [markdown]
 # ## The one-minute version (Mistral)
-# The deployment-strategist question is rarely "which model is smartest" — it is *which
-# model clears the bar at the lowest cost and the right deployment posture*. Mistral's
-# edge is that the small models are **open-weight (Apache-2.0)**, so the same agent can
-# run in a customer's VPC or on-prem for data-sovereignty reasons — a real differentiator
-# in regulated APAC accounts. Be ready to say: start on `la Plateforme` with
-# `mistral-large` for the hard agent, route routine turns to `mistral-small`, reach for
-# `magistral` only where reasoning pays, and offer a self-hosted `small`/`ministral`
-# path when the data cannot leave the customer's environment.
+# The deployment question is rarely "which model is smartest" — it is *which model
+# clears the bar at the lowest cost and the right deployment posture*. The small Mistral
+# models are **open-weight (Apache-2.0)**, so the same agent can run on weights in your
+# own VPC or on-prem when the data is regulated or must stay in one jurisdiction. In a
+# design review, say: start on `la Plateforme` with `mistral-large` for the hard agent,
+# route routine turns to `mistral-small`, reach for `magistral` only where reasoning
+# pays, and self-host `small`/`ministral` when the data cannot leave your environment.

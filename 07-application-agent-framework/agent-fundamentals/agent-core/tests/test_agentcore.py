@@ -1,4 +1,4 @@
-"""Ten focused tests — the whole library's behaviour on one screen."""
+"""Focused tests — the whole library's behaviour on one screen."""
 import pytest
 
 from agentcore import Agent, FakeLLM, ToolError, call, calls, text, tool
@@ -41,6 +41,41 @@ def test_unexpected_exception_becomes_tool_failure():
 
     r = boom.run({})
     assert r["ok"] is False and r["error"] == "tool_failure" and "kaboom" in r["message"]
+
+
+def test_schema_types_survive_future_annotations():
+    # `from __future__ import annotations` turns every annotation into a string;
+    # the schema must still say "integer", not "string".
+    src = (
+        "from __future__ import annotations\n"
+        "from agentcore import tool\n"
+        "@tool\n"
+        "def pay(amount: int, rate: float, urgent: bool = False, tags: list[str] | None = None) -> dict:\n"
+        "    \"\"\"Pay an amount.\"\"\"\n"
+        "    return {}\n"
+    )
+    ns: dict = {}
+    exec(compile(src, "<future_tool>", "exec"), ns)
+    props = ns["pay"].schema["parameters"]["properties"]
+    assert {k: v["type"] for k, v in props.items()} == {
+        "amount": "integer", "rate": "number", "urgent": "boolean", "tags": "array"}
+    assert ns["pay"].schema["parameters"]["required"] == ["amount", "rate"]
+
+
+def test_unknown_argument_is_invalid_arguments_not_tool_failure():
+    r = get_balance.run({"account_id": "a1", "acount": "typo"})
+    assert r["ok"] is False and r["error"] == "invalid_arguments"
+    assert "acount" in r["message"] and "hint" in r
+
+
+def test_not_implemented_propagates_so_blank_exercises_stop():
+    @tool
+    def todo(x: str) -> dict:
+        """An exercise nobody has written yet."""
+        raise NotImplementedError
+
+    with pytest.raises(NotImplementedError):
+        todo.run({"x": "1"})
 
 
 # -- fake model ----------------------------------------------------------------

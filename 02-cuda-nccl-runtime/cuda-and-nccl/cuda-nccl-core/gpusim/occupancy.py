@@ -38,7 +38,9 @@ class SM:
 
 
 # Per-compute-capability limits: "Technical Specifications per Compute Capability", CUDA C++
-# Programming Guide (checked Sep 2026; verify new architectures before relying on them).
+# Programming Guide (checked Sep 2026; verify new architectures before relying on them). The 10.3
+# and 12.0 rows also match the Blackwell Tuning Guide and CUTLASS's `sm100_smem_capacity_bytes`
+# (227 KB) / `sm120_smem_capacity_bytes` (99 KB) per-block limits (verify, 2026-09-26).
 SMS = {
     "7.0": SM("Volta (V100)", 2048, 32, 96 * KB, 96 * KB, 0, 256),
     "7.5": SM("Turing (T4)", 1024, 16, 64 * KB, 64 * KB, 0, 256),
@@ -47,7 +49,19 @@ SMS = {
     "8.9": SM("Ada (L4, L40S, RTX 40)", 1536, 24, 100 * KB, 99 * KB, 1 * KB, 128),
     "9.0": SM("Hopper (H100, H200)", 2048, 32, 228 * KB, 227 * KB, 1 * KB, 128),
     "10.0": SM("Blackwell (B200, GB200)", 2048, 32, 228 * KB, 227 * KB, 1 * KB, 128),
+    "10.3": SM("Blackwell Ultra (B300, GB300)", 2048, 32, 228 * KB, 227 * KB, 1 * KB, 128),
+    "12.0": SM("Blackwell (RTX 50, RTX PRO 6000)", 1536, 32, 128 * KB, 99 * KB, 1 * KB, 128),
 }
+
+
+def sm_limits(cc: str) -> SM:
+    """The per-SM limits for compute capability `cc`, or a clear error naming the known ones."""
+    try:
+        return SMS[cc]
+    except KeyError:
+        raise KeyError(f"no occupancy limits for compute capability {cc!r}; known: "
+                       f"{', '.join(SMS)} (add a row to gpusim.occupancy.SMS from the CUDA "
+                       f"Programming Guide's per-compute-capability table)") from None
 
 # Spec-sheet values used by the worked examples (verify; the dated catalogue is layer 01's job).
 DEVICES = {
@@ -86,7 +100,7 @@ class Occupancy:
 def occupancy(threads_per_block: int, regs_per_thread: int = 32, smem_per_block: int = 0,
               cc: str = "8.9") -> Occupancy:
     """Resident blocks and warps per SM for one kernel launch configuration."""
-    sm = SMS[cc]
+    sm = sm_limits(cc)
     if not 0 < threads_per_block <= sm.max_threads_per_block:
         raise ValueError(f"threads_per_block must be 1..{sm.max_threads_per_block}")
     wpb = -(-threads_per_block // 32)                    # warps are allocated whole
@@ -128,6 +142,6 @@ def loads_in_flight_per_thread(device: str, latency_s: float, bytes_per_load: in
                                threads_per_sm: int | None = None) -> float:
     """Independent loads each resident thread must keep outstanding to saturate DRAM."""
     d = DEVICES[device]
-    threads = threads_per_sm or SMS[d["cc"]].max_threads
+    threads = threads_per_sm or sm_limits(d["cc"]).max_threads
     per_sm = bytes_in_flight(d["hbm_Bps"], latency_s) / d["sms"]
     return per_sm / (threads * bytes_per_load)

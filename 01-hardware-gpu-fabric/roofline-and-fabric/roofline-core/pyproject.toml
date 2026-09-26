@@ -12,7 +12,8 @@ license = { text = "MIT" }
 dependencies = []                      # the library is standard-library only
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+dev = ["pytest>=7.4"]                  # the tests
+notebooks = ["nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]   # JupyterLab, ~250 MB
 plot = ["matplotlib>=3.8"]             # optional: the notebooks fall back to text charts
 
 [tool.setuptools.packages.find]

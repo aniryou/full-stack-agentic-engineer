@@ -153,12 +153,35 @@ def kernel_image(cc: tuple[int, int], archs: list[str]) -> str:
     ### END SOLUTION
 
 # %% check
+from itertools import combinations
+
+
+def reference(cc, archs):  # the lab's compatibility model (gpurt.container, kept in step with gpusim.compat)
+    if any(a.startswith("sm_") and c.sass_runs_on(a, cc) for a in archs):
+        return "sass"
+    if any(a.startswith("compute_") and c.ptx_jits_on(a, cc) for a in archs):
+        return "ptx-jit"
+    return "no-kernel-image"
+
+
 assert kernel_image((7, 5), ["sm_80", "sm_86", "sm_90"]) == "no-kernel-image"  # a T4 with an Ampere+ build
 assert kernel_image((8, 9), ["sm_80"]) == "sass"  # L4 runs sm_80 SASS: same major, 0 <= 9
+assert kernel_image((8, 6), ["sm_80"]) == "sass"  # A10 runs sm_80 SASS
+assert kernel_image((8, 0), ["sm_86"]) != "sass"  # but an A100 cannot run sm_86 SASS: its minor is lower
+assert kernel_image((9, 0), ["sm_80", "compute_80"]) == "ptx-jit"  # H100: no SASS across majors, PTX JITs up
 assert kernel_image((12, 0), ["sm_80", "sm_90", "compute_90"]) == "ptx-jit"  # RTX PRO 6000: JIT from PTX
+assert kernel_image((10, 3), ["sm_100", "compute_100"]) == "sass"  # B300 runs sm_100 SASS
 assert kernel_image((9, 0), ["sm_90a"]) == "sass"
 assert kernel_image((10, 0), ["sm_90a", "compute_90a"]) == "no-kernel-image"  # arch-specific does not carry forward
-print("✅ SASS within a major, PTX upward, 'a' targets exactly one GPU — anything else is error 209")
+# ... and against the model over every pair of targets on every GPU generation in c.ARCH
+POOL = ["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_103", "sm_120",
+        "compute_75", "compute_80", "compute_86", "compute_90", "compute_90a", "compute_100", "compute_120"]
+pairs = [[a] for a in POOL] + [list(p) for p in combinations(POOL, 2)]
+wrong = [(cc, archs) for cc in c.ARCH for archs in pairs if kernel_image(cc, archs) != reference(cc, archs)]
+assert not wrong, f"{len(wrong)} of {len(c.ARCH) * len(pairs)} cases differ, e.g. cc={wrong[0][0]} archs={wrong[0][1]}: " \
+    f"got {kernel_image(*wrong[0])!r}, the model says {reference(*wrong[0])!r}"
+print(f"✅ {len(c.ARCH) * len(pairs)} (GPU, build) cases: SASS within a major for an equal or newer minor, "
+      "PTX upward, 'a' targets exactly one GPU — anything else is error 209")
 
 # %% [markdown]
 # ## Exercise 5.4 — a whole scenario

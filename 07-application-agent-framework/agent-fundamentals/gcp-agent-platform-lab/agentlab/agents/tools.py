@@ -1,6 +1,6 @@
 """Tools: contracts a model can call.
 
-Design rules baked in here (Primer §3.1):
+Design rules baked in here (notebook 01):
 
 * the schema is derived from a typed Python signature (pydantic) and arguments
   are validated *before* execution — the model's output is never trusted to be

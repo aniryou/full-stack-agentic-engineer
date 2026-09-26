@@ -15,12 +15,16 @@ to run: simulator time is Python-thread time and says nothing about a GPU.
 
     python -m gpurt.kernels.bench            # full suite, prints a report
     python -m gpurt.kernels.bench --quick --json results.json
+
+Without a usable GPU the command stops at once with a one-line message and exit status 2 (like
+``tools/check_ptx.py``'s "skipped"); notebook 02's T0 path is the laptop version.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -253,6 +257,12 @@ def main(argv=None) -> int:
     p.add_argument("--quick", action="store_true", help="smaller sizes (~20 s)")
     p.add_argument("--json", help="write raw results to this file")
     a = p.parse_args(argv)
+    try:  # no GPU: one clear line, not a traceback
+        require_gpu()
+    except RuntimeError as e:
+        print(f"error: {e} On a laptop, notebook 02's T0 path runs the same kernels in the "
+              "simulator and labels its numbers as model predictions.", file=sys.stderr)
+        return 2
     if a.json:  # fail before a minutes-long benchmark, not after it
         Path(a.json).parent.mkdir(parents=True, exist_ok=True)
     r = run_all(quick=a.quick)

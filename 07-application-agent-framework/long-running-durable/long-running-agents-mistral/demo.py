@@ -125,6 +125,11 @@ def resume():
 def workflow_demo():
     """Approve → one charge; worker dies after charging → retry converges; 2-second approval timeout."""
     import asyncio
+    import importlib.util
+
+    if sys.version_info < (3, 12) or importlib.util.find_spec("mistralai.workflows") is None:
+        sys.exit("`demo.py workflow` needs Python >= 3.12 and mistralai-workflows "
+                 "(pip install -r requirements.txt on 3.12+); the other demos run on 3.11.")
 
     import mistral_workflow as mw
     from local_temporal import local_worker, start

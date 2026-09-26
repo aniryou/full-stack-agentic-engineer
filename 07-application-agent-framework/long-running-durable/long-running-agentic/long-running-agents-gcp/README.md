@@ -4,17 +4,25 @@ A primer on designing agents that run for minutes to weeks — waiting on tools,
 
 Long-running agents on Google Cloud, as a primer, a reference implementation and design drills. Everything runs **offline** in ~2 seconds; the GCP backends are one environment variable away.
 
+**Time and tier:** ~8 h (rough); module 07.3, an alternative full lab in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: offline, no credentials, but not a small install: ~220 MB for the tests, ~400 MB with Jupyter (ADK 2 and the Google Cloud clients; measured 2026-09-26, verify). A Google Cloud project adds the optional T3 deploy, billed per use.
+
 ## Start here (5 minutes)
 
 ```bash
-pip install -e ".[dev]"          # or: pip install -r <(python -c "import tomllib;print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))")
-make test                        # 30 tests: crash-after-side-effect, duplicate delivery, lease expiry, HITL, saga, fan-in, ADK resume …
+pip install -e ".[test]"         # what the offline tests need: the base dependencies + pytest (~220 MB)
+make test                        # 38 tests (2 skip): crash-after-side-effect, duplicate delivery, lease expiry, HITL, saga, fan-in, ADK resume …
+pip install -e ".[dev]"          # adds Jupyter and nbconvert for the notebooks (~400 MB in all)
 jupyter lab notebooks/           # 4 worked notebooks (executed, with outputs) + 4 practice notebooks (fill in the blanks)
 ```
 
+The "offline" tests need no credentials and no network, but they are not a small install: the base dependencies
+include `google-adk[db]` (the ADK 2 workflow tests and notebook 04 run it offline), FastAPI (the service tests) and
+the Firestore, Cloud Tasks and Pub/Sub clients (imported lazily, only used in `gcp` mode). Sizes measured on
+Python 3.11, 2026-09-26. The `gcp` extra adds `google-cloud-aiplatform` for the Agent Runtime deploy.
+
 Read in this order:
 
-1. `docs/00_primer.md` — the concepts: five invariants, the run state machine, eight patterns, GCP building blocks with the limits that decide designs, three reference architectures, estimation, observability, how to explain the design.
+1. [`../../00_primer.md`](../../00_primer.md) (the layer's shared long-running primer) — the concepts: five invariants, the run state machine, eight patterns, GCP building blocks with the limits that decide designs, three reference architectures, estimation, observability, how to explain the design.
 2. `notebooks/01_durable_loop_worked.ipynb` → `02` → `03` → `04` — each pattern executed step by step with a crash injected at the worst moment.
 3. `notebooks/*_practice.ipynb` — rebuild the core of each pattern yourself; `lragents.practice_checks` tells you what's wrong. Solutions in `notebooks/solutions/`.
 4. `docs/02_design_drills.md` — six system-design prompts with answer sketches, eight "find the bug" snippets, rapid-fire.
@@ -37,7 +45,7 @@ src/lragents/
   practice_checks.py   the graders used by the practice notebooks and tests/test_solutions.py
 tests/           30 offline tests (pytest)
 notebooks/       4 worked (executed) + 4 practice + solutions/; regenerate with tools/build_notebooks.py
-docs/            primer, GCP cheat sheet, design drills
+docs/            GCP cheat sheet, design drills (the primer is ../../00_primer.md, shared by the layer)
 infra/           terraform (Firestore, Cloud Tasks queue, Pub/Sub + DLQ + push subs, Scheduler, Workflows, SAs/IAM),
                  workflows/ (HITL callback wait, parallel fan-out/fan-in), deploy.sh (Cloud Run source deploys)
 ```
@@ -68,6 +76,6 @@ Deploy (after `terraform apply` in `infra/terraform`): `make deploy` — see `in
 
 ## What was verified, and what wasn't
 
-* **Verified locally:** all 30 tests; all four worked notebooks executed end to end (outputs are committed); practice notebooks fail only at their TODO cells with explicit messages; the ADK 2 Workflow demo (ADK 2.8.0) parks/resumes across four wake-ups with exactly one queue join and one purchase, routes to `abandon` on a sold-out staleness check, and reproduces the "new invocation instead of resume ⇒ second ticket" mistake.
+* **Verified locally:** all 38 tests (36 pass, 2 skip); all four worked notebooks executed end to end (outputs are committed); practice notebooks fail only at their TODO cells with explicit messages; the ADK 2 Workflow demo (ADK 2.8.0) parks/resumes across four wake-ups with exactly one queue join and one purchase, routes to `abandon` on a sold-out staleness check, and reproduces the "new invocation instead of resume ⇒ second ticket" mistake.
 * **Written against the docs but not run live** (needs a GCP project): `FirestoreRunStore`, `CloudTasksDispatcher`, `PubSubDispatcher`, `GeminiLLM`, the OIDC verifier, `adk/main.py` on Cloud Run, `deploy_agent_runtime.py`, the Terraform and the two Workflows YAMLs (parsed, not deployed).
 * **Moving targets:** ADK 2 resumability/compaction configs are pre-GA; Gemini model ids and the Agent Runtime naming change often. The primer ends with a "verify before relying on it" list.

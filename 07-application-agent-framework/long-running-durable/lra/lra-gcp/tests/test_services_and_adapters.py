@@ -15,6 +15,11 @@ from lra import LeaseHeldError, StepTask
 from lra.core.models import Run
 
 
+def needs_gcp(module: str) -> None:
+    """The adapter tests use fake clients but import the real Google libraries: skip, don't fail, without them."""
+    pytest.importorskip(module, reason="needs the gcp extra: pip install -e '.[dev,services,gcp]'")
+
+
 # --------------------------------------------------------------------- services
 @pytest.fixture
 def clients(monkeypatch):
@@ -114,6 +119,7 @@ class _FakeTasksClient:
 
 
 def test_cloud_tasks_request_shape_dedup_and_delay() -> None:
+    needs_gcp("google.cloud.tasks_v2")
     from lra.adapters.gcp.cloud_tasks_queue import CloudTasksQueue
 
     q = CloudTasksQueue(
@@ -137,6 +143,7 @@ def test_cloud_tasks_request_shape_dedup_and_delay() -> None:
 
 # --------------------------------------------------------------------- pub/sub
 def test_pubsub_publish_uses_ordering_key_per_run() -> None:
+    needs_gcp("google.cloud.pubsub_v1")
     from lra.adapters.gcp.pubsub_bus import PubSubEventBus
 
     class FakePublisher:
@@ -159,6 +166,7 @@ def test_pubsub_publish_uses_ordering_key_per_run() -> None:
 
 # ---------------------------------------------------------------------- gemini
 def test_gemini_adapter_accounts_usage_and_retries_503() -> None:
+    needs_gcp("google.genai")
     from google.genai import errors
 
     from lra.adapters.gcp.gemini_llm import GeminiLLM
@@ -247,6 +255,7 @@ class _FakeClient:
 
 
 def test_firestore_store_version_check_lease_and_fan_in() -> None:
+    needs_gcp("google.cloud.firestore")
     from lra.adapters.gcp.firestore_store import FirestoreStateStore
     from lra.core.ports import ConflictError
 

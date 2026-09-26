@@ -1,3 +1,7 @@
+# durable.py (the core) is standard library only; mistral_model.py needs mistralai; the tests need pytest.
 mistralai>=2.8
-mistralai-workflows[mistralai]>=3.15
 pytest>=8
+# The Workflows edition (mistral_workflow.py, local_temporal.py, tests/test_workflow.py, `demo.py workflow`)
+# needs mistralai-workflows, which requires Python >=3.12,<3.15 (3.15.0, checked 2026-09-26, verify).
+# On Python 3.11 pip skips this line; the core and adapter tests still run and the workflow tests skip.
+mistralai-workflows[mistralai]>=3.15; python_version >= "3.12" and python_version < "3.15"

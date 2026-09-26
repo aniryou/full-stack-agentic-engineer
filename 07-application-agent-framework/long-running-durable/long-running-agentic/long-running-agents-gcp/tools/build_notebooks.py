@@ -1,7 +1,13 @@
-"""Generate the worked + practice notebooks. Run: python tools/build_notebooks.py"""
+"""Generate the worked + practice notebooks. Run: python tools/build_notebooks.py
+
+Rebuilding unchanged sources is a no-op (see ``write_nb``); ``make notebooks`` then executes the worked ones.
+"""
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
+import json
 import textwrap
 from pathlib import Path
 
@@ -9,6 +15,35 @@ import nbformat as nbf
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "notebooks"
+REPO = next(p for p in ROOT.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file())
+_spec = importlib.util.spec_from_file_location("inject_colab_bootstrap", REPO / "tools" / "inject_colab_bootstrap.py")
+_inject = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_inject)
+
+
+def _content(d: dict):
+    """What a rebuild decides: cell types, sources and tags -- not ids, outputs or execution records."""
+    cells = [(c["cell_type"], "".join(c["source"]) if isinstance(c["source"], list) else c["source"],
+              {k: v for k, v in c.get("metadata", {}).items() if k != "execution"}) for c in d["cells"]]
+    meta = {k: v for k, v in d["metadata"].items() if k != "language_info"}
+    return cells, meta, d.get("nbformat"), d.get("nbformat_minor")
+
+
+def write_nb(nb: nbf.NotebookNode, path: Path) -> bool:
+    """Write ``nb`` with the repo's Colab setup cell first, exactly as tools/inject_colab_bootstrap.py
+    writes it (so running the injector afterwards is a no-op), and stable cell ids.
+
+    A notebook whose content is unchanged is left alone, so rebuilding is a no-op and the outputs
+    that executing the worked notebooks recorded survive; a changed notebook is rewritten without outputs.
+    """
+    for i, cell in enumerate(nb.cells):
+        cell.id = hashlib.sha1(f"{path.stem}/{i}".encode()).hexdigest()[:12]
+    d = json.loads(nbf.writes(nb))
+    d["cells"].insert(0, _inject.make_cell(path.resolve().parent.relative_to(REPO).as_posix()))
+    if path.exists() and _content(json.loads(path.read_text(encoding="utf-8"))) == _content(d):
+        return False
+    path.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
 
 SETUP = '''
 import sys, os, json, warnings
@@ -37,8 +72,7 @@ def write(name: str, cells: list) -> None:
     nb["cells"] = cells
     nb["metadata"] = {"kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},
                       "language_info": {"name": "python"}}
-    (OUT / name).write_text(nbf.writes(nb))
-    print("wrote", name)
+    print("wrote" if write_nb(nb, OUT / name) else "unchanged", name)
 
 
 # =====================================================================

@@ -2,13 +2,13 @@
 # # 06 · OAuth and identity propagation
 #
 # "Secure agentic workflows with MCP, tool calling and OAuth" is one question: **when the agent calls a tool,
-# who is it acting as, and how does the system of record know?** This notebook walks the identity chain from
-# Primer §3.3 hop by hop, with a toy OAuth 2.1 authorization server (HS256 JWTs, in-process — a real IdP signs
+# who is it acting as, and how does the system of record know?** This notebook walks the identity chain
+# hop by hop, with a toy OAuth 2.1 authorization server (HS256 JWTs, in-process — a real IdP signs
 # with asymmetric keys and publishes JWKS) and the MCP server from Notebook 05. At every hop ask the four
 # questions a design review wants answered: *what token is on the wire, who issued it, what audience, what scope
 # — and where is it validated?*
 #
-# **Primer sections:** 3.3 (OAuth and identity propagation), 3.2 (MCP authorization), 4.5 (privilege escalation, confused deputy).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5 (delegation mechanics) and §7.1 (the MCP server as an OAuth 2.1 resource server).
 #
 # In this notebook you will:
 # 1. run the MCP authorization chain: 401 → protected-resource metadata → AS metadata → PKCE → an audience-bound token;
@@ -466,7 +466,7 @@ print("✅ ownership enforced in the system of record; the service account can n
 # ### Exercise 8.5 — the rule, in one sentence
 #
 # Write `the_rule`: one sentence that states where authorisation decisions happen and what the agent may never
-# hold, in the spirit of Primer §3.3. It should mention the system of record, the prompt, and credentials.
+# hold. It should mention the system of record, the prompt, and credentials.
 
 # %% exercise
 ### BEGIN SOLUTION

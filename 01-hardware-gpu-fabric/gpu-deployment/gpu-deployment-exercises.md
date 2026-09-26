@@ -82,8 +82,8 @@ A 70B model at FP8 needs 70 GB of weights read from HBM for every single decode 
 
 ### B5 — The interconnect cliff
 
-(a) A Blackwell GPU has 1.8 TB/s of NVLink bandwidth. A node's scale-out NIC runs at 800 Gb/s. Express the scale-out link in GB/s, then compute the ratio.
-(b) Rubin raises NVLink to 3.6 TB/s while the NIC stays at 800 Gb/s. What happens to the ratio?
+(a) A Blackwell GPU has 1.8 TB/s of NVLink bandwidth, the marketed bidirectional total. A node's scale-out NIC runs at 800 Gb/s, quoted per direction. Express both links per direction in GB/s, then compute the ratio.
+(b) Rubin raises NVLink to 3.6 TB/s (again a bidirectional total). If the NIC stayed at 800 Gb/s, what would happen to the ratio?
 (c) What does the trend in (b) imply for how you should partition models over time?
 
 ### B6 — Is disaggregation feasible?
@@ -200,9 +200,9 @@ Two to four sentences each. State your reasoning, not just your conclusion.
 (d) Batching buys throughput essentially for free in decode, because the dominant cost — reading the weights — is paid once regardless of batch size.
 
 **B5.**
-(a) 800 Gb/s ÷ 8 = 100 GB/s. Ratio = 1,800 ÷ 100 = **18×**
-(b) 3,600 ÷ 100 = **36×**. The cliff is getting steeper, not shallower.
-(c) The penalty for letting a tightly-coupled collective cross the node boundary grows with each hardware generation. Partitioning strategies should become *more* conservative about staying inside the scale-up domain over time, and platform choice should weight the size of the NVLink domain more heavily than per-GPU FLOPs.
+(a) NIC: 800 Gb/s ÷ 8 = 100 GB/s per direction. NVLink: 1.8 TB/s is both directions added, so 900 GB/s per direction. Ratio = 900 ÷ 100 = **9×**. Dividing the 1,800 total by the NIC's one-way 100 gives 18×, which double-counts NVLink: compare like with like. The Hopper pair gives the same answer, 450 GB/s per direction of NVLink 4 over a 400 Gb/s (50 GB/s) NIC: **9×** ([roofline primer §1 and §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), `roofline.fabric.LINKS`).
+(b) 1,800 GB/s per direction ÷ 100 = **18×**: the cliff would double. Whether it does depends on the NIC keeping pace; the Rubin generation's NICs are announced at 1.6 Tb/s, 200 GB/s per direction, which would hold the per-GPU ratio near 9× (verify, 2026-09).
+(c) The per-GPU ratio has sat near 9× for two generations because NICs doubled with NVLink, while the scale-up domain grew from 8 GPUs to 72 and beyond. So the penalty for letting a tightly coupled collective cross the domain boundary is not shrinking, and more of a model's parallelism can now stay inside the domain. Partition to keep tensor parallelism inside the scale-up domain, and when choosing a platform weight the size of the NVLink domain at least as heavily as per-GPU FLOPs.
 
 **B6.**
 (a) 500 − 200 = **300 ms**
@@ -227,7 +227,7 @@ Two to four sentences each. State your reasoning, not just your conclusion.
 
 **C1.** Architecture B (Kubernetes cluster), likely 2–4 nodes of 8×H100 or H200. Run the model at FP8 with TP inside each node and DP across them. First three optimisations: continuous batching and paged attention (non-negotiable baseline), FP8 KV cache (roughly doubles concurrency), and chunked prefill (4,000-token prompts at 200 concurrency will otherwise wreck p95 TTFT). Prefix caching is a strong fourth if there is a shared system prompt.
 
-**C2.** TP=16 would force layer-level all-reduce operations across the scale-out fabric, which is 18× slower and orders of magnitude higher latency than NVLink, and TP synchronises many times per token. Throughput would collapse. Instead: TP=8 within each node, PP=2 across the two nodes — pipeline parallelism only passes boundary activations, which the fabric handles comfortably.
+**C2.** TP=16 would force layer-level all-reduce operations across the scale-out fabric, which gives each GPU about 9× less bandwidth per direction than NVLink (B5) and higher latency, and TP synchronises many times per token. Throughput would collapse. Instead: TP=8 within each node, PP=2 across the two nodes — pipeline parallelism only passes boundary activations, which the fabric handles comfortably.
 
 **C3.** Cold-start dominated by loading a very large checkpoint over the network. Twelve minutes means the autoscaler responds long after the traffic spike has passed, so it is not functioning as autoscaling at all. Fixes: keep warm standby replicas sized to your expected burst; move checkpoints to fast local NVMe or a node-local cache so loads are not pulling from object storage; consider tiered scaling where a small model absorbs overflow while large replicas spin up.
 

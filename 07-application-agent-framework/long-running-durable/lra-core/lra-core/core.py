@@ -109,8 +109,8 @@ class Engine:
             return self.store.get(run_id)
         run = {"id": run_id, "status": "RUNNING", "step": first_step, "attempts": {first_step: 1},
                "state": {}, "input": input, "history": [], "wait": None, "lease": None,
-               "result": None, "error": None, "version": 0}
-        self.store.save(run)
+               "result": None, "error": None, "updated": None, "version": 0}
+        self._save(run)                       # a crash before the push leaves no task: reap() orphan rule
         self.queue.push(run_id, first_step, 1, self.clock())
         return run
 
@@ -125,7 +125,7 @@ class Engine:
         if run["lease"] and run["lease"] > now:
             return "busy"                     # HTTP 503 -> Cloud Tasks retries later
         run["lease"] = now + self.lease_ttl
-        run = self.store.save(run)
+        run = self._save(run)
 
         ctx = Ctx(copy.deepcopy(run), self.store)
         try:
@@ -136,7 +136,7 @@ class Engine:
                 return self._finish(run, "FAILED", error=f"{step} failed after {attempt} attempts: {e!r}")
             run["attempts"][step] = attempt + 1           # old task becomes stale by construction
             run["lease"] = None
-            self.store.save(run)
+            self._save(run)                   # no lease from here: a crash before the push is an orphan
             self.queue.push(run_id, step, attempt + 1, now, delay=2 ** attempt)
             return "retry"
 
@@ -149,17 +149,17 @@ class Engine:
         if kind == "wait":
             run["status"], run["lease"] = "WAITING", None
             run["wait"] = {"key": value, "then": outcome[2], "timeout": now + 3 * 86400}
-            self.store.save(run)              # no task is enqueued: sleeping costs nothing
+            self._save(run)                   # no task is enqueued: sleeping costs nothing
             return "waiting"
         run["step"] = value
         run["attempts"][value] = run["attempts"].get(value, 0) + 1
-        self.store.save(run)                  # checkpoint first (the lease stays set until we are done) ...
+        self._save(run)                       # checkpoint first (the lease stays set until we are done) ...
         if self.crash_before_enqueue:
             self.crash_before_enqueue = False
             raise Crash("died after the checkpoint, before the enqueue")
         self.queue.push(run_id, value, run["attempts"][value], self.clock())   # ... then enqueue
         run["lease"] = None
-        self.store.save(run)                  # ... then release the lease
+        self._save(run)                       # ... then release the lease
         return "ok"
 
     def resume(self, run_id, key, payload):
@@ -171,19 +171,26 @@ class Engine:
         run["state"].setdefault("events", {})[key] = payload
         run["status"], run["wait"], run["step"] = "RUNNING", None, then
         run["attempts"][then] = run["attempts"].get(then, 0) + 1
-        self.store.save(run)
+        self._save(run)                       # RUNNING with no lease: a crash before the push is an orphan
         self.queue.push(run_id, then, run["attempts"][then], self.clock())
         return run
 
     def reap(self):
-        """Repair job (Cloud Scheduler -> /reap): expired leases and timed-out waits."""
+        """Repair job (Cloud Scheduler -> /reap): expired leases, orphans and timed-out waits.
+
+        expired  RUNNING, lease past its TTL: the worker died mid-step or before the enqueue
+        orphan   RUNNING, no lease, untouched for 2 x lease_ttl: start(), resume() or a retry
+                 checkpointed without a lease and died before its enqueue, so nothing will expire
+        """
         now, repaired = self.clock(), []
         for run in self.store.active():
-            if run["status"] == "RUNNING" and run["lease"] and run["lease"] <= now:
+            expired = run["lease"] is not None and run["lease"] <= now
+            orphaned = run["lease"] is None and now - (run.get("updated") or 0) >= 2 * self.lease_ttl
+            if run["status"] == "RUNNING" and (expired or orphaned):
                 run["lease"] = None
-                self.store.save(run)
+                self._save(run)
                 self.queue.push(run["id"], run["step"], run["attempts"][run["step"]], now)  # dedup makes this safe
-                repaired.append(("lease", run["id"]))
+                repaired.append(("lease" if expired else "orphan", run["id"]))
             elif run["status"] == "WAITING" and run["wait"]["timeout"] <= now:
                 self._finish(run, "FAILED", error=f"timed out waiting for {run['wait']['key']}")
                 repaired.append(("timeout", run["id"]))
@@ -191,8 +198,12 @@ class Engine:
 
     def _finish(self, run, status, result=None, error=None):
         run.update(status=status, step=None, lease=None, wait=None, result=result, error=error)
-        self.store.save(run)
+        self._save(run)
         return status.lower()
+
+    def _save(self, run):
+        run["updated"] = self.clock()         # the orphan rule measures staleness from here
+        return self.store.save(run)
 
 
 def drain(engine, queue, clock):

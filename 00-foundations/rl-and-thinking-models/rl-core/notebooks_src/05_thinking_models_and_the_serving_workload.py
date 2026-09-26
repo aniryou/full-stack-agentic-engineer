@@ -77,8 +77,8 @@ med, sig = 1500, 1.0
 print(f"mean {w.lognormal_mean(med, sig):,.0f}; " + ", ".join(
     f"p{int(p * 100)} {w.lognormal_quantile(med, sig, p):,.0f}" for p in (0.5, 0.9, 0.99)))
 kv = w.kv_per_token_kb(w.QWEN3_0_6B, "fp16")
-print(f"Qwen3-0.6B: {kv:.0f} KiB of KV per token ({kv * 1024:,.0f} B); an 8K-token trace holds "
-      f"{8192 * kv * 1024 / 1e9:.2f} GB, against {w.weight_gb(w.QWEN3_0_6B, 'fp16'):.2f} GB of weights")
+print(f"Qwen3-0.6B: {kv:.0f} kB of KV per token ({kv * 1000:,.0f} B); an 8K-token trace holds "
+      f"{8192 * kv * 1000 / 1e9:.2f} GB, against {w.weight_gb(w.QWEN3_0_6B, 'fp16'):.2f} GB of weights")
 
 # %% [markdown]
 # The mean is 1.6× the median and the p99 ten times it. Size `max_model_len` and preemption headroom for the tail,
@@ -109,14 +109,14 @@ print(f"decode_aggregate alone would batch all 1,000 on one GPU: "
       f"{1000 * w.kv_per_session_gb(SMALL, 3000, 'fp8'):.0f} GB of KV on an 80 GB card")
 
 # %% [markdown]
-# Ten times the output tokens needs eighteen times the GPUs for memory (4.77 vs 0.26 at the SLO's TPOT, 2.57 vs
-# 0.14 at the step the fleet runs at): concurrency grows with the output (Little's law) and each live session holds
+# Ten times the output tokens needs eighteen times the GPUs for memory (5.12 vs 0.28 at the SLO's TPOT, 2.75 vs
+# 0.15 at the step the fleet runs at): concurrency grows with the output (Little's law) and each live session holds
 # 1.8× the KV (3,000 average context vs 1,650). The decode *throughput* need is not the binding constraint.
 #
 # Read the last two rows of `w.plan` with care: a 20 ms SLO halves the lifetime the convention assumes, so it needs
-# *fewer* GPUs (3) than the 40 ms SLO (5). That is an artefact. At 3 GPUs the fleet settles at 139 per GPU and
-# 16.7 ms a step, under both SLOs, so `w.plan_steady` needs 3 for both, and the tight SLO's need is the larger. With
-# a 20 ms ITL SLO the step time caps each GPU at 187 sessions, below the 209 that fit in HBM: ITL binds first.
+# *fewer* GPUs (3) than the 40 ms SLO (6). That is an artefact. At 3 GPUs the fleet settles at 154 per GPU and
+# 18.5 ms a step, under both SLOs, so `w.plan_steady` needs 3 for both, and the tight SLO's need is the larger. With
+# a 20 ms ITL SLO the step time caps each GPU at 174 sessions, below the 195 that fit in HBM: ITL binds first.
 #
 # ## Worked example 4 — KV working set: memory × time
 # A request holds P + t tokens of KV at decode step t, for L steps: Σ = P·L + L(L+1)/2.
@@ -206,7 +206,8 @@ print(f"✅ 10× the output, {ratio:.1f}× the KV-token-steps: the L²/2 term ta
 # %% [markdown]
 # ## Exercise 5.2 — size the thinking deployment by hand
 # The bank with thinking: 3,000 output tokens, 1,500 in, FP8, 80 GB H100 with 10% held back, 24 GB of weights,
-# 80 KiB of KV per token (FP8). Compute `live` (Little's law, with duration = TTFT + 3,000 × 40 ms),
+# 81.92 kB of KV per token (FP8: 2 × 40 layers × 8 KV heads × 128 × 1 byte; kB = 1,000 bytes, GB = 10⁹ as in
+# `capacity.py`). Compute `live` (Little's law, with duration = TTFT + 3,000 × 40 ms),
 # `per_gpu` (sessions per GPU at the average context 1,500 + 3,000/2) and `gpus` = live / per_gpu — the capacity
 # primer's convention. Then drop the convention: with `per_gpu` sessions in every GPU's batch a decode step takes
 # `step = (24 + per_gpu × KV per session) / 3,350` seconds (H100: 3.35 TB/s; memory-bound), a request lives
@@ -216,19 +217,19 @@ print(f"✅ 10× the output, {ratio:.1f}× the KV-token-steps: the L²/2 term ta
 ttft = w.ttft_s(24, 1500, H100)
 ### BEGIN SOLUTION
 live = rps * (ttft + 3000 * 0.040)
-per_gpu = (80 * 0.9 - 24) / (80 * 3000 / 1024 ** 2)
+per_gpu = (80 * 0.9 - 24) / (81.92 * 3000 / 1e6)
 gpus = live / per_gpu
-step = (24 + per_gpu * 80 * 3000 / 1024 ** 2) / 3350
+step = (24 + per_gpu * 81.92 * 3000 / 1e6) / 3350
 steady_gpus = rps * (ttft + 3000 * step) / per_gpu
 ### END SOLUTION
 
 # %% check
 p = w.plan(SMALL, H100, rps, 1500, 3000)
 assert abs(live - p["concurrency"]) < 1e-6 and abs(per_gpu - p["sessions_per_gpu"]) < 1e-6
-assert round(gpus, 2) == 4.77
+assert round(gpus, 2) == 5.12
 assert abs(steady_gpus - w.plan_steady(SMALL, H100, rps, 1500, 3000)["gpus"]["memory"]) < 1e-6
-print(f"✅ {live:,.0f} live sessions / {per_gpu:.1f} per GPU = {gpus:.2f} GPUs — vs 0.26 without thinking. With a full "
-      f"batch a step takes {step * 1e3:.1f} ms, not 40, so {steady_gpus:.2f} GPUs hold it steadily (vs 0.14): still 18×")
+print(f"✅ {live:,.0f} live sessions / {per_gpu:.1f} per GPU = {gpus:.2f} GPUs — vs 0.28 without thinking. With a full "
+      f"batch a step takes {step * 1e3:.1f} ms, not 40, so {steady_gpus:.2f} GPUs hold it steadily (vs 0.15): still 18×")
 
 # %% [markdown]
 # ## Exercise 5.3 — choose `max_model_len`

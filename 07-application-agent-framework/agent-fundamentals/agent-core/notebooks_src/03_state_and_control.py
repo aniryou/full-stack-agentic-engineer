@@ -109,7 +109,7 @@ print(f"✅ {expected_assistant_messages} model calls, done={expected_done} — 
 
 # %% [markdown]
 # ## The one-minute version
-# "State management" is on the rubric. Name the kinds: the **conversation** (the
+# Every design review asks about state. Name the kinds: the **conversation** (the
 # transcript), small **working state** (what stage a task is at), and **budgets**
 # (steps, and in production tokens and time). Say a loop without a step budget is a cost
 # incident waiting to happen — and that you cap it in code, not in the prompt.
