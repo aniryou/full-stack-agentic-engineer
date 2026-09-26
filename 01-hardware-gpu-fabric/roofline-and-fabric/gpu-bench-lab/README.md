@@ -36,7 +36,7 @@ on real hardware. Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.
 ```bash
 cd 01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                      # ~90 tests, a few seconds, no GPU
+python3 -m pytest -q                      # 97 tests (94 pass, 3 skip), ~35 s, no GPU
 python3 -m gpubench info                  # what is this machine?
 python3 -m gpubench run --out results     # the suite: results/gpubench-<host>-<backend>-<time>.{json,md}
 python3 -m jupyterlab notebooks           # the four fill-in notebooks (answers in solutions/)

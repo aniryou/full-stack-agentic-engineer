@@ -17,7 +17,7 @@ version (async, parallel tools, MCP, OAuth, evals, tracing) is
 ```bash
 cd mistral-agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 19 tests, ~0.1s
+python3 -m pytest -q                          # 27 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

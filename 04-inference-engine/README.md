@@ -55,13 +55,13 @@ attention backends (vllm-internals primer §6).
 ```bash
 cd flash-attention && python3 -m pytest -q                         # 49 tests, a few seconds (numpy)
 cd ../serving-engine/mini-engine-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 67 tests, ~5 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 75 tests, ~50 s
 cd ../vllm-serving-lab
-python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 66 tests, a few seconds, offline
+python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 74 tests, ~30 s, offline
 cd ../../quantization/quant-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 78 tests, ~7 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 86 tests, ~30 s
 cd ../quant-lab
-python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 86 tests, ~11 s, offline (one needs Terraform, else skipped)
+python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 94 tests, ~35 s, offline (one needs Terraform, else skipped)
 ```
 
 Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab links below. The

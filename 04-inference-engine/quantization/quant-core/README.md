@@ -9,7 +9,7 @@ small enough to read in a sitting (~640 lines of code, ~1,130 with docstrings).
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md): "The one-minute version", then §1 *Why quantize* and §2 *Number formats*.
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 78 tests in about 7 s. They include
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 86 tests in about 30 s. They include
    "GPTQ equals the reference implementation", "FP8 rounding is bit-identical to the published grid", and
    "every number the primer computes is still what the code computes".
 3. Open [`notebooks/01_number_formats_and_error.ipynb`](notebooks/01_number_formats_and_error.ipynb) and round a
@@ -36,7 +36,7 @@ curriculum).
 ```bash
 cd quant-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 78 tests, ~7 s
+python3 -m pytest -q                           # 86 tests, ~30 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -77,7 +77,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept: 78 tests, offline, about 7 s. The ones that carry the correctness
+`tests/` has one focused test per concept (78, plus 8 notebook-tooling checks): 86 tests, offline, about 30 s. The ones that carry the correctness
 claims:
 
 - **It reproduces the repo's published numbers with its own code** (`test_repo_numbers.py`). These are

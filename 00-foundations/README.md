@@ -50,11 +50,11 @@ the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.
 cd transformers && python3 -m pip install -r requirements.txt && python3 lessons/01_attention.py
 cd ../gpu-capacity-planning && python3 worked_example.py
 cd ../mixture-of-experts/moe-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 67 tests, ~7 s
-cd ../moe-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 118 tests; torch tests skip without torch
+python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 75 tests, ~30 s
+cd ../moe-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 126 tests; torch tests skip without torch
 cd ../../rl-and-thinking-models/rl-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 57 tests, ~30 s
-cd ../thinking-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 91 tests, offline; ~50 s with torch
+python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 65 tests, ~50 s
+cd ../thinking-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 99 tests, offline; ~80 s with torch
 ```
 
 Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab links below. The two labs run

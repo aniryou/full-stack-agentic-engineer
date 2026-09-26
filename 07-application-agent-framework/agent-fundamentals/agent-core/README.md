@@ -15,7 +15,7 @@ machinery. Learn it here first.
 ```bash
 cd agent-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 14 tests, ~0.1s
+python3 -m pytest -q                          # 22 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

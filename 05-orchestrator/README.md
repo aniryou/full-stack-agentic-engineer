@@ -31,7 +31,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 
 1. Read [`serving-orchestration/PRIMER.md`](serving-orchestration/PRIMER.md): "The one-minute version" and §1.
 2. `cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`
-   — 58 tests in about 5 s; then open
+   — 66 tests in about 30 s; then open
    [`01_why_llm_load_balancing_is_different`](serving-orchestration/orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb).
 3. Follow the step table in the topic [`README.md`](serving-orchestration/README.md): each primer section pairs
    with a core notebook and, where there is one, a lab notebook.

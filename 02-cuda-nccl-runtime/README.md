@@ -26,7 +26,7 @@ hardware (01) and any scheduler (03) or engine (04) above it.
 ## Start here
 
 1. Read the one-minute version of [`cuda-and-nccl/PRIMER.md`](cuda-and-nccl/PRIMER.md#the-one-minute-version) (a page).
-2. `cd cuda-and-nccl/cuda-nccl-core && python3 -m pytest -q` — 133 tests in under a second, numpy only.
+2. `cd cuda-and-nccl/cuda-nccl-core && python3 -m pytest -q` — 141 tests in about 30 s, numpy only.
 3. Open [`01_simt_warps_and_memory`](cuda-and-nccl/cuda-nccl-core/notebooks/01_simt_warps_and_memory.ipynb)
    locally, or through its Colab link below. The [topic README](cuda-and-nccl/README.md) has the full order.
 
@@ -45,9 +45,9 @@ multi-GPU box, rented for an hour (Kaggle's 2 × T4 is a free one); T3 = the Goo
 
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-core
-python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 133 tests, under a second
+python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 141 tests, ~30 s
 cd ../cuda-nccl-lab
-python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 123 pass, 2 skip; 15–30 s
+python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 130 pass, 3 skip; ~50 s
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M          # a real ring all-reduce, no GPU
 ```
 

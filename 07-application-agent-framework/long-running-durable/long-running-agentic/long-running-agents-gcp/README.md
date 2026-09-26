@@ -10,7 +10,7 @@ Long-running agents on Google Cloud, as a primer, a reference implementation and
 
 ```bash
 pip install -e ".[test]"         # what the offline tests need: the base dependencies + pytest (~220 MB)
-make test                        # 30 tests: crash-after-side-effect, duplicate delivery, lease expiry, HITL, saga, fan-in, ADK resume …
+make test                        # 38 tests (2 skip): crash-after-side-effect, duplicate delivery, lease expiry, HITL, saga, fan-in, ADK resume …
 pip install -e ".[dev]"          # adds Jupyter and nbconvert for the notebooks (~400 MB in all)
 jupyter lab notebooks/           # 4 worked notebooks (executed, with outputs) + 4 practice notebooks (fill in the blanks)
 ```
@@ -76,6 +76,6 @@ Deploy (after `terraform apply` in `infra/terraform`): `make deploy` — see `in
 
 ## What was verified, and what wasn't
 
-* **Verified locally:** all 30 tests; all four worked notebooks executed end to end (outputs are committed); practice notebooks fail only at their TODO cells with explicit messages; the ADK 2 Workflow demo (ADK 2.8.0) parks/resumes across four wake-ups with exactly one queue join and one purchase, routes to `abandon` on a sold-out staleness check, and reproduces the "new invocation instead of resume ⇒ second ticket" mistake.
+* **Verified locally:** all 38 tests (36 pass, 2 skip); all four worked notebooks executed end to end (outputs are committed); practice notebooks fail only at their TODO cells with explicit messages; the ADK 2 Workflow demo (ADK 2.8.0) parks/resumes across four wake-ups with exactly one queue join and one purchase, routes to `abandon` on a sold-out staleness check, and reproduces the "new invocation instead of resume ⇒ second ticket" mistake.
 * **Written against the docs but not run live** (needs a GCP project): `FirestoreRunStore`, `CloudTasksDispatcher`, `PubSubDispatcher`, `GeminiLLM`, the OIDC verifier, `adk/main.py` on Cloud Run, `deploy_agent_runtime.py`, the Terraform and the two Workflows YAMLs (parsed, not deployed).
 * **Moving targets:** ADK 2 resumability/compaction configs are pre-GA; Gemini model ids and the Agent Runtime naming change often. The primer ends with a "verify before relying on it" list.

@@ -13,13 +13,13 @@ with the same semantics, so the crash/resume/timeout behaviour is testable in se
 
 ```bash
 pip install -e ".[dev,services]"
-make test          # 34 pass, 5 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
+make test          # 40 pass, 7 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
 make demo          # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback, narrated
 make notebooks     # executes the worked notebooks headlessly
 ```
 
 The four GCP adapter tests (Cloud Tasks, Pub/Sub, Gemini, Firestore) drive fake clients but import the real Google
-libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (38 pass; the
+libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (44 pass; the
 ADK test still skips until the `adk` extra below is installed). No credentials are needed for either.
 
 Optional managed path (`pip install -e ".[adk]"`): `make adk-demo` runs the ADK 2 workflow, pauses at the review gate,
@@ -98,7 +98,7 @@ enabled in your project and set real prices in `GeminiLLM` before trusting `cost
 
 ## Status and caveats
 
-- Engine, adapters, services, patterns, examples, notebooks: tested locally (39 tests, 4 executed notebooks).
+- Engine, adapters, services, patterns, examples, notebooks: tested locally (47 tests, 4 executed notebooks).
 - GCP adapters are unit-tested against fake clients; Terraform is written but not applied here — review names, quotas and
   org policies before `terraform apply`.
 - ADK/Agent Engine code was verified against `google-adk 2.8` and `vertexai 2.1`; the Agent Engine deploy surface moves

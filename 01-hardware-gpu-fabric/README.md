@@ -34,7 +34,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough
 
 1. Read [`roofline-and-fabric/PRIMER.md`](roofline-and-fabric/PRIMER.md) §1–§2: spec-sheet literacy and the roofline.
 2. `cd roofline-and-fabric/roofline-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` —
-   58 tests, well under a second; then open
+   66 tests, ~30 s; then open
    [`01_spec_sheets_and_the_roofline`](roofline-and-fabric/roofline-core/notebooks/01_spec_sheets_and_the_roofline.ipynb).
 3. When you have any GPU (even a free Colab T4), measure the real thing with
    [`gpu-bench-lab/notebooks/01_measure_your_roofline`](roofline-and-fabric/gpu-bench-lab/notebooks/01_measure_your_roofline.ipynb);

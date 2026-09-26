@@ -31,8 +31,8 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
 ## Start here
 
 1. Read [`gpu-scheduling/PRIMER.md`](gpu-scheduling/PRIMER.md) §1: what Kubernetes sees.
-2. `cd gpu-scheduling/k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 51 tests,
-   a few seconds; then open
+2. `cd gpu-scheduling/k8s-gpu-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 59 tests,
+   ~25 s; then open
    [`01_how_kubernetes_sees_a_gpu`](gpu-scheduling/k8s-gpu-core/notebooks/01_how_kubernetes_sees_a_gpu.ipynb).
 3. Follow the step table in the topic [`README.md`](gpu-scheduling/README.md): each primer section pairs with a core
    notebook and, optionally, a lab notebook.

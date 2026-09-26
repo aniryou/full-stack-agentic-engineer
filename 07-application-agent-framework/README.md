@@ -35,8 +35,8 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
 
 ## Start here
 
-1. `cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 14
-   tests in well under a second; then open
+1. `cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 22
+   tests in about 30 s; then open
    [`01_the_agent_loop`](agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb).
 2. Work [`gcp-agent-platform-lab`](agent-fundamentals/gcp-agent-platform-lab/README.md) notebooks 00–14 in order,
    or at least 04 (context and caching), 08 (evals) and 09 (tracing) if time is short.
@@ -49,12 +49,12 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
 Each lab has its own environment and its own README; the commands below are the fastest check that one works.
 
 ```bash
-cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q        # 14 tests
-cd ../gcp-agent-platform-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                   # 147 unit tests + 15 notebook runs, ~50 s
-cd ../../sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q      # 81 tests, ~30 s
-cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                              # 112 tests, ~25 s, offline
+cd agent-fundamentals/agent-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q        # 22 tests
+cd ../gcp-agent-platform-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                   # 170 tests (147 unit, 15 notebook runs, 8 notebook-tooling), ~75 s
+cd ../../sandboxed-execution/sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q      # 89 tests, ~50 s
+cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                              # 120 tests, ~60 s, offline
 python3 -m sandboxlab env                                                                                    # which isolation levels this machine can run
-cd ../../long-running-durable/lra-core/lra-core && python3 -m pytest -q                                      # 12 tests, standard library
+cd ../../long-running-durable/lra-core/lra-core && python3 -m pip install pytest && python3 -m pytest -q     # 12 tests, standard library
 cd ../../../retrieval-rag/rag-from-scratch && python3 -m pip install -r requirements.txt && python3 -m pytest -q   # 12 tests
 ```
 
