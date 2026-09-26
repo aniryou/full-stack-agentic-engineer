@@ -1,0 +1,24 @@
+# The llm-d optimized-baseline shape (Sep 2026): a prefix-cache affinity *filter* keeps only
+# endpoints that already hold >= 80% of the prompt, unless their estimated prefill backlog is
+# more than maxTTFTPenaltyMs worse than the best other endpoint; a token-load scorer then
+# balances the survivors by uncached tokens in flight.
+# Calibrated for the lab's fake backend (emulated ~20k tokens/s prefill); upstream defaults are
+# peakPrefillThroughput 15928 (Qwen3-32B, 2xH100 TP=2) and maxTTFTPenaltyMs 18000.
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: approx-prefix-cache-producer
+- type: inflight-load-producer
+- type: prefix-cache-affinity-filter
+  parameters:
+    affinityThreshold: 0.80
+    maxTTFTPenaltyMs: 150
+    peakPrefillThroughput: 20000
+- type: token-load-scorer
+  parameters:
+    queueThresholdTokens: 16384
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefix-cache-affinity-filter
+  - pluginRef: token-load-scorer

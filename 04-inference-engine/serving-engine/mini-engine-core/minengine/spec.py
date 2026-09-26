@@ -98,7 +98,8 @@ def speculative_generate(target_probs, prompt, max_new_tokens: int, k: int = 4, 
                          ngram: int = 3, seed: int = 0):
     """Generate with speculation. target_probs(tokens) -> (T, V) distributions at every position
     (one pass); draft_probs(tokens) -> the draft's (T, V) likewise, called k times per round
-    (autoregressive drafting); if draft_probs is None, draft by n-gram prompt lookup instead."""
+    (autoregressive drafting); if draft_probs is None, draft by n-gram prompt lookup instead.
+    `seed` may be an int or a numpy Generator."""
     rng, out, st = np.random.default_rng(seed), list(prompt), SpecStats()
     while len(out) - len(prompt) < max_new_tokens:
         if draft_probs is None:

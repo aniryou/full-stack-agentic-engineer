@@ -57,7 +57,19 @@ class Scheduler:
             return Decision(pod, best, scores=scores)
         message = fit_error(len(nodes), reasons)
         if self.preemption and pod.preemption_policy != "Never":
-            candidates = {n.name: v for n in nodes if (v := select_victims(pod, n, self.filters))}
+            candidates, why = {}, {}
+            for n in nodes:
+                resolvable = reasons[n.name][0].startswith("Insufficient") and all(
+                    q <= n.allocatable.get(r, 0) for r, q in pod.requests.items())
+                victims = select_victims(pod, n, self.filters) if resolvable else None
+                if victims:
+                    candidates[n.name] = victims
+                elif not resolvable:
+                    why[n.name] = ["Preemption is not helpful for scheduling"]
+                elif not any(p.priority < pod.priority for p in n.pods):
+                    why[n.name] = ["No preemption victims found for incoming pod"]
+                else:
+                    why[n.name] = reasons[n.name]
             if candidates:
                 target = pick_preemption_node(candidates)
                 for v in candidates[target]:
@@ -65,7 +77,7 @@ class Scheduler:
                 self.cluster.bind(pod, target)
                 return Decision(pod, target, f"preempted {[v.name for v in candidates[target]]} on {target}",
                                 victims=candidates[target])
-            message += " preemption: 0 nodes had lower-priority pods whose removal would help."
+            message += " preemption: " + fit_error(len(nodes), why)
         return Decision(pod, None, message)
 
     def run(self, max_passes: int = 100) -> list:

@@ -94,7 +94,7 @@ class Engine:
     def step(self) -> list[RequestOutput]:
         """One iteration. Returns an output for every request that produced a token."""
         out = self.scheduler.schedule()
-        if not out.scheduled and self.scheduler.waiting and not self.scheduler.running:
+        if not (out.scheduled or out.preempted or self.scheduler.running) and self.scheduler.waiting:
             raise RuntimeError("the next waiting request can never fit in the KV cache: raise num_blocks")
         sampled = {}
         if out.scheduled:
@@ -166,3 +166,7 @@ class Engine:
 
     def trace(self, last: int | None = None) -> str:
         return "\n".join(str(r) for r in self.history[-last if last else 0:])
+
+    def blocks(self, rid: str) -> str:
+        """A live request's block table, e.g. [7:'The 'x2* 3:'engi'x1* 9:'ne'x1]."""
+        return self.kv.describe(rid, self.requests[rid].token_ids)

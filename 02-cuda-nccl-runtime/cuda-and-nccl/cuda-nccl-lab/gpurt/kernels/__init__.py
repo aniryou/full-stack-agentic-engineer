@@ -26,6 +26,11 @@ Which one you get is decided by :func:`gpurt.env.ensure_numba_mode`, called here
 
 from __future__ import annotations
 
+import sys
+import threading
+
+import numpy as np
+
 from gpurt.env import ensure_numba_mode, fast_simulator
 
 MODE = ensure_numba_mode()
@@ -39,6 +44,49 @@ def blocks_for(n: int, threads: int) -> int:
     if threads <= 0:
         raise ValueError("threads must be positive")
     return max(1, (n + threads - 1) // threads)
+
+
+def _serialise_simulator_shared_arrays() -> bool:
+    """Work around a race in Numba's simulator (built-in numba.cuda and numba-cuda alike).
+
+    The simulator creates a block's shared array lazily, keyed by the source line of the
+    ``cuda.shared.array(...)`` call, with an unlocked check-then-set. Two simulated threads that reach
+    that line together can each create a *private* array, and the kernel then silently computes
+    garbage — rare with CPython's default 5 ms GIL switch interval, frequent with
+    :func:`fast_simulator`. Doing the lookup under a lock restores "one array per block".
+    """
+    try:
+        from numba.core import types
+        from numba.cuda.simulator import kernelapi
+        from numba.np import numpy_support
+    except ImportError:  # a future simulator layout: leave it alone
+        return False
+    cls = kernelapi.FakeCUDAShared
+    if getattr(cls, "_gpurt_serialised", False):
+        return True
+    original = cls.array
+    lock = threading.Lock()
+
+    def array(self, shape, dtype, *args, **kwargs):
+        if shape == 0 or args or kwargs.get("alignment") is not None:
+            return original(self, shape, dtype, *args, **kwargs)  # dynamic smem / unsupported options
+        frame = sys._getframe(1)
+        caller = (frame.f_code.co_filename, frame.f_lineno)  # the kernel line, as the original keys it
+        with lock:
+            res = self._allocations.get(caller)
+            if res is None:
+                np_dtype = numpy_support.as_dtype(dtype) if isinstance(dtype, types.Type) else dtype
+                res = np.empty(shape, np_dtype)
+                self._allocations[caller] = res
+        return res
+
+    cls.array = array
+    cls._gpurt_serialised = True
+    return True
+
+
+if SIMULATOR:
+    _serialise_simulator_shared_arrays()
 
 
 __all__ = ["MODE", "SIMULATOR", "blocks_for", "cuda", "fast_simulator"]

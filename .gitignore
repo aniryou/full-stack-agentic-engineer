@@ -23,8 +23,11 @@ venv/
 .env
 !.env.example
 
-# Terraform
+# Terraform (never commit real variable files in a public repo; keep the .example templates)
 .terraform/
+terraform.tfvars
+*.auto.tfvars
+!terraform.tfvars.example
 *.tfstate
 *.tfstate.*
 

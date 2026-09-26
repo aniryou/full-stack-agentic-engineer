@@ -44,15 +44,13 @@ def nodes_needed(pod_gpus: list, gpus_per_node: int) -> int:
 def least_waste(pools: list, pod_gpus: list, in_use: dict | None = None) -> NodePool | None:
     """Expander: the pool whose new nodes leave the fewest idle GPUs. (The real least-waste expander
     ranks idle CPU, then memory; on GPU pools the GPU is the scarce resource, so we rank that.)"""
-    best = None
+    options = []
     for p in pools:
-        if max(pod_gpus) > p.gpus_per_node:
-            continue
-        n = nodes_needed(pod_gpus, p.gpus_per_node)
-        if (in_use or {}).get(p.name, 0) + n <= p.max_nodes:
-            key = (n * p.gpus_per_node - sum(pod_gpus), p.name)
-            best = min(best or (key, p), (key, p), key=lambda kp: kp[0])
-    return best[1] if best else None
+        if max(pod_gpus) <= p.gpus_per_node:
+            n = nodes_needed(pod_gpus, p.gpus_per_node)
+            if (in_use or {}).get(p.name, 0) + n <= p.max_nodes:
+                options.append((n * p.gpus_per_node - sum(pod_gpus), n, p.name, p))
+    return min(options)[3] if options else None
 
 
 def provision(pool: NodePool, n: int, tick_s: int = 30, seed: int = 0, max_wait_s: int = 24 * 3600) -> dict | None:
@@ -107,28 +105,35 @@ class Job:
 def simulate(pool: NodePool, jobs: list, until_s: int = 12 * 3600, tick_s: int = 30, unneeded_s: int = 600,
              spot_rate_per_node_hr: float = 0.0, seed: int = 0) -> dict:
     """A cluster-autoscaler loop for one pool and FIFO gang jobs (simulated). Each tick: finish jobs;
-    preempt Spot nodes (a lost node restarts its whole gang); start the head job if enough idle Ready
-    nodes exist; request the missing nodes; grant requests (all at once on a queued pool); remove
-    nodes idle for unneeded_s when nothing is waiting."""
+    reclaim Spot nodes (losing one node restarts its whole gang); start the head job if enough idle
+    Ready nodes exist; request the missing nodes (an ordinary pool asks for what fits under
+    max_nodes, a queued pool for all or nothing); grant requests; remove nodes idle for unneeded_s
+    while nothing waits."""
     rng = random.Random(seed)
     nodes = [{"ready": 0, "job": None, "idle": 0} for _ in range(pool.min_nodes)]
     queue, running, log = sorted(jobs, key=lambda j: j.arrive_s), [], []
     want = granted = node_s = busy_s = 0
+
+    def release(t):
+        for n in nodes:
+            if n["job"] is not None and n["job"] not in running:
+                n["job"], n["idle"] = None, t
+
     for t in range(0, until_s, tick_s):
         for j in [j for j in running if t >= j.end_s]:
             running.remove(j)
             log.append((t, f"{j.name} finished"))
+        release(t)
         if pool.spot and spot_rate_per_node_hr:
             for n in [n for n in nodes if rng.random() < spot_rate_per_node_hr * tick_s / 3600]:
                 nodes.remove(n)
-                log.append((t, "spot node reclaimed" + (f"; {n['job'].name} restarts" if n["job"] else "")))
-                if n["job"] in running:
-                    running.remove(n["job"])
-                    n["job"].restarts += 1
-                    queue.insert(0, n["job"])
-        for n in nodes:
-            if n["job"] is not None and n["job"] not in running:
-                n["job"], n["idle"] = None, t
+                j = n["job"] if n["job"] in running else None
+                if j:
+                    running.remove(j)
+                    j.restarts += 1
+                    queue.insert(0, j)
+                log.append((t, "Spot node reclaimed" + (f"; {j.name} restarts from scratch" if j else "")))
+            release(t)
         waiting = [j for j in queue if j.arrive_s <= t]
         idle = [n for n in nodes if n["job"] is None and n["ready"] <= t]
         if waiting and len(idle) >= waiting[0].nodes:
@@ -140,11 +145,14 @@ def simulate(pool: NodePool, jobs: list, until_s: int = 12 * 3600, tick_s: int =
             running.append(j)
             log.append((t, f"{j.name} started on {j.nodes} node(s)"))
         missing = sum(j.nodes for j in waiting) - sum(n["job"] is None for n in nodes) - want
-        if missing > 0 and len(nodes) + want + missing <= pool.max_nodes:
-            want += missing
-            log.append((t, f"scale-up: {missing} node(s) requested"))
+        ask = min(missing, pool.max_nodes - len(nodes) - want)
+        if ask > 0 and (ask == missing or not pool.queued):
+            want += ask
+            log.append((t, f"scale-up: {ask} node(s) requested"))
+        elif missing > 0 and pool.queued and not any("cannot" in m for _, m in log[-1:]):
+            log.append((t, f"queued request cannot be met: {missing} node(s) needed, max_nodes {pool.max_nodes}"))
         granted += sum(rng.random() >= pool.stockout for _ in range(want - granted))
-        create = want if (pool.queued and granted == want) else (0 if pool.queued else granted)
+        create = want if granted == want else (0 if pool.queued else granted)
         if create:
             nodes += [{"ready": t + pool.boot_s, "job": None, "idle": t + pool.boot_s} for _ in range(create)]
             want, granted = want - create, granted - create

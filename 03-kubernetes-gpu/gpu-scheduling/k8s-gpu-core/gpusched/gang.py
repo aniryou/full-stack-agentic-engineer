@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .cluster import Cluster, Node, Pod
+from .cluster import _clock, Cluster, Node, Pod
 from .plugins import FILTERS, run_filters
 
 
@@ -102,9 +102,13 @@ def admit_gangs(cluster: Cluster, gangs: list, **placement_kw) -> list:
 
 
 def interleave(*gangs) -> list:
-    """Round-robin arrival order (A1, B1, A2, B2, ...) - how pods of concurrent jobs reach a scheduler."""
+    """Round-robin creation order (A1, B1, A2, B2, ...), as when two job controllers create pods at
+    the same time; re-stamps each pod's creation order to match."""
     longest = max(len(g) for g in gangs)
-    return [g[i] for i in range(longest) for g in gangs if i < len(g)]
+    pods = [g[i] for i in range(longest) for g in gangs if i < len(g)]
+    for p in pods:
+        p.seq = next(_clock)
+    return pods
 
 
 def running(gang: list) -> bool:

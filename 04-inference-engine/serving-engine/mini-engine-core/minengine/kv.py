@@ -170,11 +170,13 @@ class KVCacheManager:
         for rid, t in self.tables.items():
             assert len(set(t)) == len(t), f"{rid} holds a block twice"
 
-    def describe(self, rid: str) -> str:
-        """One request's block table: physical id, contents, refcount, * if published in the cache."""
-        cells = []
-        for bid in self.tables.get(rid, []):
+    def describe(self, rid: str, tokens=None) -> str:
+        """One request's block table as `physical_id:'contents' x refcount`, `*` if published.
+        Pass the request's tokens to see partial blocks too (only full blocks record their tokens)."""
+        cells, B = [], self.block_size
+        for i, bid in enumerate(self.tables.get(rid, [])):
             b = self.blocks[bid]
-            txt = bytes(t for t in b.tokens if t < 256).decode("utf-8", "replace") if b.tokens else "..."
+            toks = b.tokens or (tuple(tokens[i * B:(i + 1) * B]) if tokens is not None else ())
+            txt = bytes(t for t in toks if t < 256).decode("utf-8", "replace") if toks else "?"
             cells.append(f"{bid}:{txt!r}x{b.ref_cnt}{'*' if b.block_hash else ''}")
         return "[" + " ".join(cells) + "]"
