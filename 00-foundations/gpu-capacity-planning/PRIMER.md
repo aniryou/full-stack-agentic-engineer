@@ -110,8 +110,10 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 
 **Parallelism rule of thumb:**
 1. Use the **smallest tensor-parallel (TP)** degree that fits weights + KV.
-2. TP only *inside* a node — it needs constant chatter over **NVLink (~900 GB/s)**;
-   never TP across **InfiniBand (~50 GB/s)**, ~18× slower.
+2. TP only *inside* a node — it needs constant chatter over **NVLink (H100: 450 GB/s
+   each way, marketed as 900 GB/s for both directions)**; never TP across **InfiniBand
+   (a 400 Gb/s NIC: 50 GB/s each way)**, ~9× less per direction
+   ([roofline primer §5.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#51-the-link-ladder)).
 3. Scale throughput with **replicas** (data parallelism), each a full copy.
 4. **Pipeline-parallel (PP) across nodes** only when a single node can't hold it.
 5. **Expert-parallel (EP)** spreads MoE experts across GPUs.

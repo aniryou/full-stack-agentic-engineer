@@ -154,5 +154,5 @@ print(f"                 / (8 x {H200.bw_tb_s} TB/s) = ~{step_ms:.0f} ms/step fl
 print("    => MoE wants BIG batches + expert parallelism to be worth it.")
 print()
 print("  Parallelism rule: smallest tensor-parallel degree that fits weights+KV")
-print("  (TP inside a node over NVLink @900GB/s; never TP across IB @~50GB/s),")
+print("  (TP inside a node over NVLink @450 GB/s each way; never TP across IB @~50 GB/s each way, ~9x less),")
 print("  then add replicas for throughput; pipeline across nodes only if forced.")

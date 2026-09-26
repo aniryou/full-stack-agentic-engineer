@@ -156,7 +156,7 @@ Modern frontier work does not treat a GPU as the unit of compute. The unit is a 
 ### Interconnect tiers
 
 - **Within a node**: **NVLink**. Direct GPU-to-GPU links at 1.8 TB/s per GPU on Blackwell, roughly 14× a PCIe Gen5 x16 slot. NVSwitch chips make it an all-to-all fabric rather than point-to-point.
-- **Across nodes**: InfiniBand or high-end Ethernet, roughly 400–800 Gb/s per GPU. An order of magnitude below NVLink.
+- **Across nodes**: InfiniBand or high-end Ethernet, roughly 400–800 Gb/s per GPU, 50–100 GB/s each way. Per direction and within one generation that is about 9× below NVLink (whose 1.8 TB/s is both directions added); see the [roofline primer §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder).
 
 That gap defines the standard vocabulary. **Scale-up** means growing the NVLink domain, the set of GPUs that can treat each other's memory as nearly local. **Scale-out** means adding nodes over the slower network. The dominant hardware trend of the last two years is scale-up domains getting dramatically larger: GB200 NVL72 puts 72 GPUs in one liquid-cooled NVLink domain, and Vera Rubin NVL144 extends that further. AMD is pursuing the same idea with its Helios rack and the open UALink standard as an NVLink alternative.
 
