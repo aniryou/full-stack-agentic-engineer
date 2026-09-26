@@ -29,12 +29,13 @@
 # ([`../../../serving-engine/PRIMER.md`](../../../serving-engine/PRIMER.md)).
 
 # %%
-import json, pathlib, tempfile
+import atexit, json, pathlib, tempfile
 from quantlab import compress as C, env, numerics as N, serve, stio, tinymodel as tm
 import numpy as np
 
 print(env.describe())
-OUT = pathlib.Path(tempfile.mkdtemp(prefix="quantlab-01-"))
+OUT = pathlib.Path(tempfile.mkdtemp(prefix="quantlab-01-"))   # removed at the end, or when the kernel exits
+atexit.register(C.clean, OUT)
 model = tm.load()
 print(f"{model.num_params():,} parameters;", {k: model.config[k] for k in ("hidden_size", "intermediate_size",
       "num_hidden_layers", "num_attention_heads", "num_key_value_heads", "vocab_size")})
@@ -305,6 +306,7 @@ if env.t1_allowed() and env.has("llmcompressor"):
 else:
     print("T0: llm-compressor not run here (needs a GPU, `pip install llmcompressor==0.14.0` and QUANTLAB_RUN_T1=1).")
 if (OUT / "Qwen2.5-0.5B-Instruct-FP8_DYNAMIC").exists():
+    atexit.unregister(C.clean)
     print(f"the real checkpoint is in {OUT}; serve it from there, then delete the directory")
 else:
     C.clean(OUT)                                     # the tiny checkpoints above lived in a temporary directory

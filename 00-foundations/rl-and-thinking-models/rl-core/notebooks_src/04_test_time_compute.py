@@ -74,8 +74,8 @@ print(f"{'scorer':>22}", "  ".join(f"n={n:<3}" for n in (1, 4, 16, 64)))
 print(f"{'verifier, exact':>22}", "  ".join(f"{1 - 0.7 ** n:.3f}" for n in (1, 4, 16, 64)))
 for noise, name in ((0.0, "verifier"), (0.5, "RM, noise 0.5"), (1.0, "RM, noise 1.0")):
     print(f"{name:>22}", "  ".join(f"{ttc.best_of_n_accuracy(0.3, n, noise, rng):.3f}" for n in (1, 4, 16, 64)))
-print("(the last three rows are Monte Carlo estimates, 20,000 trials each: the verifier row sits within ~0.003 "
-      "of the exact line)")
+print("(the last three rows are Monte Carlo estimates, 20,000 trials each: the verifier row differs from the exact "
+      "line only by sampling noise, about ±0.01)")
 
 # %% [markdown]
 # A noisy scorer turns "more samples" into "more chances to be fooled": gains flatten well below the verifier's

@@ -100,3 +100,21 @@ def test_metadata_probe_targets_a_standin_unless_opted_in(monkeypatch):
         assert params["metadata_port"] == h.metadata_listener.port
         v = run_probe(unsandboxed_for(h), "metadata", h, B)
     assert v.verdict == LEAKED and "stand-in" in v.evidence            # unsandboxed: the stand-in is reachable
+
+
+@pytest.mark.skipif(not LINUX, reason="Linux")
+def test_ssh_key_probe_never_reads_a_real_home(tmp_path):
+    # An executor that forgets to point HOME at the stand-in (here: HOME is a planted "real home")
+    # must not make the probe read that home's key; only the stand-in key path is ever opened.
+    from sandboxlab.probes import probe_code
+    from sandboxlab.process import Unsandboxed
+    real = tmp_path / "real-home"
+    (real / ".ssh").mkdir(parents=True)
+    (real / ".ssh" / "id_ed25519").write_text("REAL-PRIVATE-KEY")
+    with standin_host() as h:
+        code = probe_code(BY_NAME["ssh_key"], h.params("ssh_key", B))
+        res = Unsandboxed(env={"PATH": "/usr/bin:/bin", "HOME": str(real)}, cwd=str(tmp_path),
+                          harness_timeout_s=3).run(code, B)
+        naive = run_probe(unsandboxed_for(h), "ssh_key", h, B)
+    assert "REAL-PRIVATE-KEY" not in res.stdout and h.canary in res.stdout   # the absolute stand-in path still leaks
+    assert naive.verdict == LEAKED                                            # HOME = the stand-in home: still leaks
