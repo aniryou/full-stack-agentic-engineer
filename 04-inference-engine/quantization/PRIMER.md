@@ -533,7 +533,7 @@ model.
 Quantized and reference models answer the **same** items, so compare them paired. Only the items that flipped
 carry information, and McNemar's test on them is `z = (gained − lost) / sqrt(gained + lost)` (`eval.paired_z()`,
 the lab's notebook 03). On the tiny model, AWQ + GPTQ INT4 drops 0.9 points on 4,000 items: inside the unpaired
-bar of ±1.3, but 85 lost against 51 gained gives z = −2.9, a small loss that is real.
+bar of ±1.4, but 85 lost against 51 gained gives z = −2.9, a small loss that is real.
 
 **lm-evaluation-harness** (0.4.13, verify) is the standard runner:
 

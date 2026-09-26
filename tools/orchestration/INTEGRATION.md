@@ -82,3 +82,9 @@ Run `python3 tools/orchestration/mdlinks.py` on every file you touched.
 
 ## 8. Orchestrator-only (not the integrator): Colab index, site build (`python3 tools/site/build_site_content.py && mkdocs build --strict`),
 full test sweep, notebook count, commit, push, PR, merge, Pages verification.
+
+## 9. Known items from the baseline site build (2026-09-26 12:05, `mkdocs build --strict` passed, 347 notebooks)
+- `07-application-agent-framework/sandboxed-execution/sandbox-lab/notebooks_src/05_gke_sandbox_with_gvisor.py` links
+  `../../../07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/README.md` (resolves outside the repo from
+  `notebooks/`); it should be `../deploy/gcp/README.md`. Fix in the source, rebuild the notebooks, re-run the site generator (it reports
+  "missing targets" — must be 0).
