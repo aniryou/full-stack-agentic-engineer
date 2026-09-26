@@ -13,10 +13,13 @@ Two ways in:
   Secret mounted *only into the proxy*), and speaks HTTPS upstream if the route says so. The code
   never learns the key or even the upstream's hostname.
 * **Forward proxy.** ``HTTP_PROXY=http://egress-proxy:8080``: absolute-form requests to hosts on
-  ``forward_allow`` (exact names or ``*.suffix``), resolved and refused if they land on a private,
-  loopback or link-local address (DNS rebinding to 169.254.169.254). ``CONNECT`` is refused by
-  default: through an HTTPS tunnel the proxy can neither inject a credential nor see the request,
-  so it could only allow or deny a hostname.
+  ``forward_allow`` (exact names or ``*.suffix``), resolved once and refused if any address is
+  private, loopback or link-local (the metadata server at 169.254.169.254); the proxy then connects
+  to **the address it checked**, not the name, so a rebinding DNS answer (public on the first lookup,
+  169.254.169.254 on the second) cannot slip between the check and the connect. NetworkPolicy on the
+  proxy's own egress is the second guard. ``CONNECT`` is refused by default: through an HTTPS tunnel
+  the proxy can neither inject a credential nor see the request, so it could only allow or deny a
+  hostname.
 
 Every decision is one JSON line on stdout (``kubectl logs deploy/egress-proxy`` is the egress
 audit trail) in the shape of the identity lab's ``AuditEvent`` (``event_type: "egress"``).
@@ -53,6 +56,15 @@ REDACTED = "[REDACTED]"
 
 
 # ---- policy: pure functions, tested without sockets ----------------------------------------------------
+def resolve(host: str, port: int) -> set[str]:
+    """Every address ``host`` resolves to (one lookup; the forward proxy then connects to one of these)."""
+    return {ai[4][0] for ai in socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)}
+
+
+# The connection classes, by scheme (a seam the tests use to see where the proxy connects).
+CONNECTION_CLASSES = {"http": http.client.HTTPConnection, "https": http.client.HTTPSConnection}
+
+
 def normalise_host(host: str) -> str:
     return (host or "").strip().rstrip(".").lower()
 
@@ -261,6 +273,7 @@ class EgressProxy:
                 headers[inj.get("header", "Authorization")] = inj.get("format", "{}").format(secret)
                 secrets.append(secret)
             ctx = {"route": name, "upstream_host": host}
+            connect_to = host                                    # operator-configured upstream
         else:                                                    # absolute-form (forward proxy)
             u = urlsplit(h.path)
             if u.scheme != "http" or not u.hostname:
@@ -268,22 +281,24 @@ class EgressProxy:
             host = normalise_host(u.hostname)
             if not host_allowed(host, cfg["forward_allow"]):
                 return self._deny(h, 403, f"host {host!r} is not on the egress allowlist", host=host)
+            connect_to = host
             if cfg["block_private"]:
                 try:
-                    addrs = {ai[4][0] for ai in socket.getaddrinfo(host, u.port or 80, proto=socket.IPPROTO_TCP)}
+                    addrs = resolve(host, u.port or 80)
                 except OSError as e:
                     return self._deny(h, 502, f"cannot resolve {host}: {e}", host=host)
                 private = sorted(a for a in addrs if not is_public_ip(a))
                 if private:
                     return self._deny(h, 403, f"{host} resolves to non-public {private}", host=host)
+                connect_to = sorted(addrs)[0]          # connect to the vetted address: no second lookup
             scheme, port = "http", u.port or 80
             path = (u.path or "/") + (f"?{u.query}" if u.query else "")
             headers = clean_headers(h.headers, {"proxy-authorization"})
             ctx = {"host": host}
         try:
-            conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
+            conn_cls = CONNECTION_CLASSES[scheme]
             kw = {"context": ssl.create_default_context()} if scheme == "https" else {}
-            conn = conn_cls(host, port, timeout=cfg["timeout_s"], **kw)
+            conn = conn_cls(connect_to, port, timeout=cfg["timeout_s"], **kw)   # Host header carries the name
             conn.request(h.command, path, body=body, headers={**headers, "Host": host if port in (80, 443) else f"{host}:{port}"})
             resp = conn.getresponse()
             data = resp.read(cfg["max_response_bytes"] + 1)

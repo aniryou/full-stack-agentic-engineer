@@ -17,48 +17,55 @@ data:
     \ injects the real one (from a file or an env var \u2014 a Kubernetes\n  Secret mounted *only into the proxy*),\
     \ and speaks HTTPS upstream if the route says so. The code\n  never learns the key or even the upstream's hostname.\n\
     * **Forward proxy.** ``HTTP_PROXY=http://egress-proxy:8080``: absolute-form requests to hosts on\n  ``forward_allow``\
-    \ (exact names or ``*.suffix``), resolved and refused if they land on a private,\n  loopback or link-local address\
-    \ (DNS rebinding to 169.254.169.254). ``CONNECT`` is refused by\n  default: through an HTTPS tunnel the proxy\
-    \ can neither inject a credential nor see the request,\n  so it could only allow or deny a hostname.\n\nEvery\
-    \ decision is one JSON line on stdout (``kubectl logs deploy/egress-proxy`` is the egress\naudit trail) in the\
-    \ shape of the identity lab's ``AuditEvent`` (``event_type: \"egress\"``).\nResponses are capped and any occurrence\
-    \ of an injected secret is redacted: an upstream that\nechoes request headers back would otherwise hand the\
-    \ key to the sandbox.\n\nStandard library only and a single file, so it runs from a ConfigMap in ``python:3.12-slim``:\n\
-    \n    python3 server.py --config proxy.json --port 8080\n\"\"\"\nfrom __future__ import annotations\n\nimport\
-    \ argparse\nimport datetime as dt\nimport hashlib\nimport http.client\nimport ipaddress\nimport json\nimport\
-    \ os\nimport socket\nimport socketserver\nimport ssl\nimport sys\nimport threading\nimport time\nimport uuid\n\
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom urllib.parse import urlsplit\n\nHOP_BY_HOP\
-    \ = {\"connection\", \"keep-alive\", \"proxy-authenticate\", \"proxy-authorization\", \"te\", \"trailer\",\n\
-    \              \"transfer-encoding\", \"upgrade\", \"proxy-connection\"}\nCALLER_CREDENTIALS = {\"authorization\"\
-    , \"cookie\", \"proxy-authorization\", \"x-api-key\", \"x-goog-api-key\"}\nREDACTED = \"[REDACTED]\"\n\n\n#\
-    \ ---- policy: pure functions, tested without sockets ----------------------------------------------------\n\
-    def normalise_host(host: str) -> str:\n    return (host or \"\").strip().rstrip(\".\").lower()\n\n\ndef host_allowed(host:\
-    \ str, patterns: list[str]) -> bool:\n    \"\"\"Exact names, or ``*.example.com`` for subdomains only (not the\
-    \ apex, not ``evilexample.com``).\"\"\"\n    h = normalise_host(host)\n    if not h:\n        return False\n\
-    \    for p in patterns:\n        p = normalise_host(p)\n        if p.startswith(\"*.\"):\n            if h.endswith(p[1:])\
-    \ and h != p[2:]:\n                return True\n        elif h == p:\n            return True\n    return False\n\
-    \n\ndef is_public_ip(ip: str) -> bool:\n    a = ipaddress.ip_address(ip)\n    return not (a.is_private or a.is_loopback\
-    \ or a.is_link_local or a.is_multicast or a.is_reserved\n                or a.is_unspecified)\n\n\ndef split_route(path:\
-    \ str) -> tuple[str, str]:\n    \"\"\"``/api-stub/whoami?x=1`` -> ``(\"api-stub\", \"/whoami?x=1\")``.\"\"\"\
-    \n    rest = path.lstrip(\"/\")\n    name, _, tail = rest.partition(\"/\")\n    return name, \"/\" + tail\n\n\
-    \ndef clean_headers(headers, drop: set[str]) -> dict[str, str]:\n    \"\"\"Remove hop-by-hop headers, anything\
-    \ named in ``Connection``, and ``drop`` (caller creds).\"\"\"\n    named = {h.strip().lower() for h in (headers.get(\"\
-    Connection\") or \"\").split(\",\") if h.strip()}\n    return {k: v for k, v in headers.items() if k.lower()\
-    \ not in HOP_BY_HOP | named | drop and k.lower() != \"host\"}\n\n\ndef redact(data: bytes, secrets: list[str])\
-    \ -> tuple[bytes, int]:\n    n = 0\n    for s in secrets:\n        if s and s.encode() in data:\n          \
-    \  n += data.count(s.encode())\n            data = data.replace(s.encode(), REDACTED.encode())\n    return data,\
-    \ n\n\n\ndef read_secret(ref: str) -> str:\n    \"\"\"``env:NAME`` or ``file:/path`` (a mounted Secret; re-read\
-    \ per request, so rotation works).\"\"\"\n    kind, _, where = ref.partition(\":\")\n    if kind == \"env\"\
-    :\n        return os.environ.get(where, \"\")\n    if kind == \"file\":\n        try:\n            with open(where)\
-    \ as f:\n                return f.read().strip()\n        except OSError:\n            return \"\"\n    raise\
-    \ ValueError(f\"secret reference must be env:NAME or file:/path, got {ref!r}\")\n\n\ndef audit_event(decision:\
-    \ str, reasons: list[str], **extra) -> dict:\n    \"\"\"The identity lab's AuditEvent fields (agentsec.audit.log),\
-    \ event_type \"egress\".\"\"\"\n    return {\"event_type\": \"egress\", \"agent\": extra.pop(\"agent\", \"sandbox\"\
-    ), \"authority\": \"own\",\n            \"tool\": extra.pop(\"tool\", \"http\"), \"decision\": decision, \"\
-    reasons\": reasons,\n            \"latency_ms\": extra.pop(\"latency_ms\", None), \"ts\": dt.datetime.now(dt.timezone.utc).isoformat(),\n\
-    \            \"id\": uuid.uuid4().hex, \"extra\": extra}\n\n\nDEFAULT_CONFIG = {\"routes\": {}, \"forward_allow\"\
-    : [], \"allow_connect\": False, \"block_private\": True,\n                  \"max_request_bytes\": 65536, \"\
-    max_response_bytes\": 1048576, \"timeout_s\": 10.0}\n\n\n# ---- the server -----------------------------------------------------------------------------------------\n\
+    \ (exact names or ``*.suffix``), resolved once and refused if any address is\n  private, loopback or link-local\
+    \ (the metadata server at 169.254.169.254); the proxy then connects\n  to **the address it checked**, not the\
+    \ name, so a rebinding DNS answer (public on the first lookup,\n  169.254.169.254 on the second) cannot slip\
+    \ between the check and the connect. NetworkPolicy on the\n  proxy's own egress is the second guard. ``CONNECT``\
+    \ is refused by default: through an HTTPS tunnel\n  the proxy can neither inject a credential nor see the request,\
+    \ so it could only allow or deny a\n  hostname.\n\nEvery decision is one JSON line on stdout (``kubectl logs\
+    \ deploy/egress-proxy`` is the egress\naudit trail) in the shape of the identity lab's ``AuditEvent`` (``event_type:\
+    \ \"egress\"``).\nResponses are capped and any occurrence of an injected secret is redacted: an upstream that\n\
+    echoes request headers back would otherwise hand the key to the sandbox.\n\nStandard library only and a single\
+    \ file, so it runs from a ConfigMap in ``python:3.12-slim``:\n\n    python3 server.py --config proxy.json --port\
+    \ 8080\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport datetime as dt\nimport hashlib\n\
+    import http.client\nimport ipaddress\nimport json\nimport os\nimport socket\nimport socketserver\nimport ssl\n\
+    import sys\nimport threading\nimport time\nimport uuid\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n\
+    from urllib.parse import urlsplit\n\nHOP_BY_HOP = {\"connection\", \"keep-alive\", \"proxy-authenticate\", \"\
+    proxy-authorization\", \"te\", \"trailer\",\n              \"transfer-encoding\", \"upgrade\", \"proxy-connection\"\
+    }\nCALLER_CREDENTIALS = {\"authorization\", \"cookie\", \"proxy-authorization\", \"x-api-key\", \"x-goog-api-key\"\
+    }\nREDACTED = \"[REDACTED]\"\n\n\n# ---- policy: pure functions, tested without sockets ----------------------------------------------------\n\
+    def resolve(host: str, port: int) -> set[str]:\n    \"\"\"Every address ``host`` resolves to (one lookup; the\
+    \ forward proxy then connects to one of these).\"\"\"\n    return {ai[4][0] for ai in socket.getaddrinfo(host,\
+    \ port, proto=socket.IPPROTO_TCP)}\n\n\n# The connection classes, by scheme (a seam the tests use to see where\
+    \ the proxy connects).\nCONNECTION_CLASSES = {\"http\": http.client.HTTPConnection, \"https\": http.client.HTTPSConnection}\n\
+    \n\ndef normalise_host(host: str) -> str:\n    return (host or \"\").strip().rstrip(\".\").lower()\n\n\ndef\
+    \ host_allowed(host: str, patterns: list[str]) -> bool:\n    \"\"\"Exact names, or ``*.example.com`` for subdomains\
+    \ only (not the apex, not ``evilexample.com``).\"\"\"\n    h = normalise_host(host)\n    if not h:\n       \
+    \ return False\n    for p in patterns:\n        p = normalise_host(p)\n        if p.startswith(\"*.\"):\n  \
+    \          if h.endswith(p[1:]) and h != p[2:]:\n                return True\n        elif h == p:\n       \
+    \     return True\n    return False\n\n\ndef is_public_ip(ip: str) -> bool:\n    a = ipaddress.ip_address(ip)\n\
+    \    return not (a.is_private or a.is_loopback or a.is_link_local or a.is_multicast or a.is_reserved\n     \
+    \           or a.is_unspecified)\n\n\ndef split_route(path: str) -> tuple[str, str]:\n    \"\"\"``/api-stub/whoami?x=1``\
+    \ -> ``(\"api-stub\", \"/whoami?x=1\")``.\"\"\"\n    rest = path.lstrip(\"/\")\n    name, _, tail = rest.partition(\"\
+    /\")\n    return name, \"/\" + tail\n\n\ndef clean_headers(headers, drop: set[str]) -> dict[str, str]:\n   \
+    \ \"\"\"Remove hop-by-hop headers, anything named in ``Connection``, and ``drop`` (caller creds).\"\"\"\n  \
+    \  named = {h.strip().lower() for h in (headers.get(\"Connection\") or \"\").split(\",\") if h.strip()}\n  \
+    \  return {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP | named | drop and k.lower() != \"\
+    host\"}\n\n\ndef redact(data: bytes, secrets: list[str]) -> tuple[bytes, int]:\n    n = 0\n    for s in secrets:\n\
+    \        if s and s.encode() in data:\n            n += data.count(s.encode())\n            data = data.replace(s.encode(),\
+    \ REDACTED.encode())\n    return data, n\n\n\ndef read_secret(ref: str) -> str:\n    \"\"\"``env:NAME`` or ``file:/path``\
+    \ (a mounted Secret; re-read per request, so rotation works).\"\"\"\n    kind, _, where = ref.partition(\":\"\
+    )\n    if kind == \"env\":\n        return os.environ.get(where, \"\")\n    if kind == \"file\":\n        try:\n\
+    \            with open(where) as f:\n                return f.read().strip()\n        except OSError:\n    \
+    \        return \"\"\n    raise ValueError(f\"secret reference must be env:NAME or file:/path, got {ref!r}\"\
+    )\n\n\ndef audit_event(decision: str, reasons: list[str], **extra) -> dict:\n    \"\"\"The identity lab's AuditEvent\
+    \ fields (agentsec.audit.log), event_type \"egress\".\"\"\"\n    return {\"event_type\": \"egress\", \"agent\"\
+    : extra.pop(\"agent\", \"sandbox\"), \"authority\": \"own\",\n            \"tool\": extra.pop(\"tool\", \"http\"\
+    ), \"decision\": decision, \"reasons\": reasons,\n            \"latency_ms\": extra.pop(\"latency_ms\", None),\
+    \ \"ts\": dt.datetime.now(dt.timezone.utc).isoformat(),\n            \"id\": uuid.uuid4().hex, \"extra\": extra}\n\
+    \n\nDEFAULT_CONFIG = {\"routes\": {}, \"forward_allow\": [], \"allow_connect\": False, \"block_private\": True,\n\
+    \                  \"max_request_bytes\": 65536, \"max_response_bytes\": 1048576, \"timeout_s\": 10.0}\n\n\n\
+    # ---- the server -----------------------------------------------------------------------------------------\n\
     class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):\n    \"\"\"HTTP over a path-based\
     \ Unix socket. A path is a filesystem object, not part of a network\n    namespace: a process in an empty netns\
     \ (or a container with ``--network none`` and the socket\n    bind-mounted) can reach the proxy and nothing\
@@ -112,31 +119,33 @@ data:
     \                    return self._deny(h, 503, f\"route {name!r}: credential {inj['value_from']} is empty\"\
     , route=name)\n                headers[inj.get(\"header\", \"Authorization\")] = inj.get(\"format\", \"{}\"\
     ).format(secret)\n                secrets.append(secret)\n            ctx = {\"route\": name, \"upstream_host\"\
-    : host}\n        else:                                                    # absolute-form (forward proxy)\n\
-    \            u = urlsplit(h.path)\n            if u.scheme != \"http\" or not u.hostname:\n                return\
-    \ self._deny(h, 400, \"absolute-form http:// URL expected\")\n            host = normalise_host(u.hostname)\n\
-    \            if not host_allowed(host, cfg[\"forward_allow\"]):\n                return self._deny(h, 403, f\"\
-    host {host!r} is not on the egress allowlist\", host=host)\n            if cfg[\"block_private\"]:\n       \
-    \         try:\n                    addrs = {ai[4][0] for ai in socket.getaddrinfo(host, u.port or 80, proto=socket.IPPROTO_TCP)}\n\
-    \                except OSError as e:\n                    return self._deny(h, 502, f\"cannot resolve {host}:\
-    \ {e}\", host=host)\n                private = sorted(a for a in addrs if not is_public_ip(a))\n           \
-    \     if private:\n                    return self._deny(h, 403, f\"{host} resolves to non-public {private}\"\
-    , host=host)\n            scheme, port = \"http\", u.port or 80\n            path = (u.path or \"/\") + (f\"\
-    ?{u.query}\" if u.query else \"\")\n            headers = clean_headers(h.headers, {\"proxy-authorization\"\
-    })\n            ctx = {\"host\": host}\n        try:\n            conn_cls = http.client.HTTPSConnection if\
-    \ scheme == \"https\" else http.client.HTTPConnection\n            kw = {\"context\": ssl.create_default_context()}\
-    \ if scheme == \"https\" else {}\n            conn = conn_cls(host, port, timeout=cfg[\"timeout_s\"], **kw)\n\
-    \            conn.request(h.command, path, body=body, headers={**headers, \"Host\": host if port in (80, 443)\
-    \ else f\"{host}:{port}\"})\n            resp = conn.getresponse()\n            data = resp.read(cfg[\"max_response_bytes\"\
-    ] + 1)\n            conn.close()\n        except (OSError, http.client.HTTPException) as e:\n            return\
-    \ self._deny(h, 502, f\"upstream error: {type(e).__name__}: {e}\", **ctx)\n        truncated = len(data) > cfg[\"\
-    max_response_bytes\"]\n        data = data[: cfg[\"max_response_bytes\"]]\n        data, n_red = redact(data,\
-    \ secrets)\n        out_headers = {k: v for k, v in resp.getheaders() if k.lower() not in HOP_BY_HOP | {\"content-length\"\
-    }}\n        for k in list(out_headers):\n            out_headers[k], n = redact(out_headers[k].encode(\"latin-1\"\
-    , \"replace\"), secrets)\n            out_headers[k] = out_headers[k].decode(\"latin-1\")\n            n_red\
-    \ += n\n        reasons = [\"allowlisted route\" if \"route\" in ctx else \"allowlisted host\"]\n        if\
-    \ n_red:\n            reasons.append(f\"redacted {n_red} occurrence(s) of the injected credential from the response\"\
-    )\n        if truncated:\n            reasons.append(f\"response truncated to {cfg['max_response_bytes']} B\"\
+    : host}\n            connect_to = host                                    # operator-configured upstream\n \
+    \       else:                                                    # absolute-form (forward proxy)\n         \
+    \   u = urlsplit(h.path)\n            if u.scheme != \"http\" or not u.hostname:\n                return self._deny(h,\
+    \ 400, \"absolute-form http:// URL expected\")\n            host = normalise_host(u.hostname)\n            if\
+    \ not host_allowed(host, cfg[\"forward_allow\"]):\n                return self._deny(h, 403, f\"host {host!r}\
+    \ is not on the egress allowlist\", host=host)\n            connect_to = host\n            if cfg[\"block_private\"\
+    ]:\n                try:\n                    addrs = resolve(host, u.port or 80)\n                except OSError\
+    \ as e:\n                    return self._deny(h, 502, f\"cannot resolve {host}: {e}\", host=host)\n       \
+    \         private = sorted(a for a in addrs if not is_public_ip(a))\n                if private:\n         \
+    \           return self._deny(h, 403, f\"{host} resolves to non-public {private}\", host=host)\n           \
+    \     connect_to = sorted(addrs)[0]          # connect to the vetted address: no second lookup\n           \
+    \ scheme, port = \"http\", u.port or 80\n            path = (u.path or \"/\") + (f\"?{u.query}\" if u.query\
+    \ else \"\")\n            headers = clean_headers(h.headers, {\"proxy-authorization\"})\n            ctx = {\"\
+    host\": host}\n        try:\n            conn_cls = CONNECTION_CLASSES[scheme]\n            kw = {\"context\"\
+    : ssl.create_default_context()} if scheme == \"https\" else {}\n            conn = conn_cls(connect_to, port,\
+    \ timeout=cfg[\"timeout_s\"], **kw)   # Host header carries the name\n            conn.request(h.command, path,\
+    \ body=body, headers={**headers, \"Host\": host if port in (80, 443) else f\"{host}:{port}\"})\n           \
+    \ resp = conn.getresponse()\n            data = resp.read(cfg[\"max_response_bytes\"] + 1)\n            conn.close()\n\
+    \        except (OSError, http.client.HTTPException) as e:\n            return self._deny(h, 502, f\"upstream\
+    \ error: {type(e).__name__}: {e}\", **ctx)\n        truncated = len(data) > cfg[\"max_response_bytes\"]\n  \
+    \      data = data[: cfg[\"max_response_bytes\"]]\n        data, n_red = redact(data, secrets)\n        out_headers\
+    \ = {k: v for k, v in resp.getheaders() if k.lower() not in HOP_BY_HOP | {\"content-length\"}}\n        for\
+    \ k in list(out_headers):\n            out_headers[k], n = redact(out_headers[k].encode(\"latin-1\", \"replace\"\
+    ), secrets)\n            out_headers[k] = out_headers[k].decode(\"latin-1\")\n            n_red += n\n     \
+    \   reasons = [\"allowlisted route\" if \"route\" in ctx else \"allowlisted host\"]\n        if n_red:\n   \
+    \         reasons.append(f\"redacted {n_red} occurrence(s) of the injected credential from the response\")\n\
+    \        if truncated:\n            reasons.append(f\"response truncated to {cfg['max_response_bytes']} B\"\
     )\n        self.record(\"allow\", reasons, method=h.command, client=h.client_address[0], status=resp.status,\n\
     \                    bytes=len(data), injected=bool(secrets),\n                    path_sha256=hashlib.sha256(path.encode()).hexdigest()[:16],\n\
     \                    latency_ms=round((time.monotonic() - t0) * 1000, 1), **ctx)\n        h.send_response(resp.status)\n\
@@ -427,6 +436,7 @@ metadata:
   name: api-stub
   namespace: sandbox-upstream
 spec:
+  clusterIP: 10.96.0.201
   selector:
     app: api-stub
   ports:

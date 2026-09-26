@@ -71,11 +71,13 @@ def test_route_injects_and_the_caller_never_holds_the_key(stack):
     assert all(r["authorized"] for r in api.requests)
 
 
-def test_denials_are_audited(stack):
+def test_denials_are_audited(stack, monkeypatch):
     px, _ = stack
+    from sandboxlab.proxy import server
+    monkeypatch.setattr(server, "resolve", lambda host, port: {"169.254.169.254"})   # no real DNS in tests
     assert fetch(px.url, "/nope/x")[0] == 403
     assert fetch(px.url, "http://attacker.net/c?d=1")[0] == 403                  # forward form, not allowlisted
-    assert fetch(px.url, "http://metadata.example.com/")[0] in (403, 502)       # allowlisted name, but DNS/private check
+    assert fetch(px.url, "http://metadata.example.com/")[0] == 403              # allowlisted name, private address
     assert fetch(px.url, "/api/whoami", method="POST")[0] == 405
     assert fetch(px.url, "/api/whoami", method="GET", body=b"x" * 2048, headers={"Content-Length": "2048"})[0] == 413
     with socket.create_connection(("127.0.0.1", px.port)) as s:
@@ -96,3 +98,28 @@ def test_unix_socket_listener(tmp_path):
             assert px.url == f"unix:{path}" and oct(os.stat(path).st_mode)[-3:] == "666"
             assert fetch_json(px.url, "/api/whoami")[1]["authorized"] is True
         assert not os.path.exists(path)
+
+
+def test_dns_rebinding_cannot_slip_between_the_check_and_the_connect(stack, monkeypatch):
+    # A rebinding name answers a public address to the check and 169.254.169.254 to any later lookup.
+    # The proxy must connect to the address it vetted, never resolve the name a second time.
+    from sandboxlab.proxy import server
+    px, _ = stack
+    answers = iter([{"93.184.216.34"}])
+    lookups, connects = [], []
+
+    def rebinding(host, port):
+        lookups.append(host)
+        return next(answers, {"169.254.169.254"})
+
+    class Recorder:
+        def __init__(self, host, port, **kw):
+            connects.append(host)
+            raise OSError("test: not connecting anywhere")
+
+    monkeypatch.setattr(server, "resolve", rebinding)
+    monkeypatch.setitem(server.CONNECTION_CLASSES, "http", Recorder)
+    status, _ = fetch(px.url, "http://rebind.example.com/latest/meta-data/")
+    assert status == 502                                   # our Recorder refused to connect
+    assert lookups == ["rebind.example.com"]               # resolved exactly once
+    assert connects == ["93.184.216.34"]                   # to the vetted address, not the name

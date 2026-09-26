@@ -83,7 +83,7 @@ def test_agent_sandbox_objects_match_the_pinned_crds():
 
 def test_every_sandbox_pod_has_no_ambient_authority():
     specs = list(sandbox_pod_specs())
-    assert len(specs) == 5          # Job + warm pool on kind and on GKE, and the agent-sandbox template
+    assert len(specs) == 6          # Job + warm pool on kind and on GKE, kind's egress check, the agent-sandbox template
     for f, s in specs:
         assert s["automountServiceAccountToken"] is False and s["enableServiceLinks"] is False, f
         assert s["serviceAccountName"] == "sandbox-exec" and s["dnsPolicy"] == "None", f
@@ -104,7 +104,8 @@ def test_runtime_class_per_target_and_proxy_ip_inside_the_service_range():
     services = re.search(r'variable "services_cidr".*?default\s*=\s*"([^"]+)"', tf, re.S).group(1)
     kind_cfg = m.load_all(ROOT / "deploy/kind/kind-config.yaml")[0]
     for pol, cidr in ((KIND, kind_cfg["networking"]["serviceSubnet"]), (GKE, services)):
-        assert ipaddress.ip_address(pol.proxy_cluster_ip) in ipaddress.ip_network(cidr)
+        for ip in (pol.proxy_cluster_ip, pol.stub_cluster_ip, pol.dns_service_ip):
+            assert ipaddress.ip_address(ip) in ipaddress.ip_network(cidr)
     assert {s["runtimeClassName"] for f, s in sandbox_pod_specs() if f.startswith("deploy/kind")} == {"sandbox-runc"}
     assert {s["runtimeClassName"] for f, s in sandbox_pod_specs() if f.startswith("deploy/gke")} == {"gvisor"}
     rc = m.load_all(ROOT / "deploy/kind/manifests/05-runtimeclass.yaml")[0]
@@ -149,6 +150,13 @@ def test_admission_of_the_examples():
     assert not bad.admitted and {v.step for v in bad.violations} == {"pss", "vap"}
     job = A.admit(wl["91-rejected-job.yaml"][0], runtime_classes=RCS, allowed_runtime_classes=["sandbox-runc"])
     assert {v.rule for v in job.violations} == {"job-deadline", "job-no-retries", "job-ttl"}   # backoffLimit defaults to 6
+    egress = wl["93-egress-must-fail.yaml"][0]
+    chk = A.admit(egress, runtime_classes=RCS, allowed_runtime_classes=["sandbox-runc"], node_handlers={"runc"})
+    assert chk.admitted and chk.will_fail is None                              # a conforming pod: only the network says no
+    code = next(e["value"] for e in egress["spec"]["template"]["spec"]["containers"][0]["env"] if e["name"] == "SANDBOX_CODE")
+    assert KIND.stub_cluster_ip in code and KIND.dns_service_ip in code and "CONNECTED" in code
+    stub_svc = next(o for f, o in render.objects("kind") if o["kind"] == "Service" and o["metadata"]["name"] == "api-stub")
+    assert stub_svc["spec"]["clusterIP"] == KIND.stub_cluster_ip
     rc, pod = P.gvisor_in_kind()[1:]
     g = A.admit(pod, runtime_classes={"gvisor": rc}, allowed_runtime_classes=["gvisor"], node_handlers={"runc"})
     assert g.admitted and "runsc" in g.will_fail                                # admitted, then Failed

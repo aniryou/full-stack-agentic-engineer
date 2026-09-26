@@ -34,21 +34,32 @@ for k, v in sb.isolation_report().items():
 
 # %%
 import os
+import shutil
+import tempfile
+
+# A stand-in for the agent's home: a 0700 directory of ours holding a fake key (never the real ~).
+victim_home = tempfile.mkdtemp(prefix="victim-home-")
+with open(os.path.join(victim_home, "id_ed25519"), "w") as f:
+    f.write("STAND-IN KEY, not a real one")
 os.environ["DEMO_TOKEN"] = "sk-live-do-not-leak"
-probe = ("import os, pwd\n"
+probe = ("import os\n"
          "print('token:', os.environ.get('DEMO_TOKEN', 'ABSENT'))\n"
-         "home = pwd.getpwuid(os.getuid()).pw_dir\n"
-         "print('~ is', os.path.expanduser('~'), '| uid', os.getuid(), '| real home', home,\n"
-         "      '| readable:', os.access(home, os.R_OK))\n")
+         "print('~ is', os.path.expanduser('~'), '| running as uid', os.getuid())\n"
+         "try:\n"
+         f"    print('the key by absolute path:', open({victim_home + '/id_ed25519'!r}).read())\n"
+         "except OSError as e:\n"
+         "    print('the key by absolute path:', type(e).__name__)\n")
 for label, box in (("per-execution UID", sb),
                    ("drop_to_uid=None", ProcessSandbox(SandboxConfig(drop_to_uid=None, drop_to_gid=None)))):
     r = box.run(ExecutionRequest(code=probe, budgets=Budgets(cpu_s=1, wall_s=3)))
-    print(f"{label}:\n  " + r.stdout.strip().replace("\n", "\n  "))
+    print(f"{label}:\n  " + (r.stdout.strip() or r.stderr.strip()[-300:]).replace("\n", "\n  "))
+shutil.rmtree(victim_home)
 del os.environ["DEMO_TOKEN"]
 
 # %% [markdown]
-# The token is `ABSENT` either way. With the per-execution UID, a home it can find is a home it cannot read
-# (on a root host, root's home is 0700). Without it, the code runs as you: `~` moved, your files did not.
+# The token is `ABSENT` either way. With the per-execution UID the key is a path the code knows but cannot
+# open (a 0700 directory of another UID). Without it — any non-root laptop — the code runs as you: `~`
+# moved, your files did not.
 #
 # ## Worked example 2 — the resource limits, one at a time
 # Each budget maps to a POSIX `setrlimit` applied in the child, except the two the parent enforces while it

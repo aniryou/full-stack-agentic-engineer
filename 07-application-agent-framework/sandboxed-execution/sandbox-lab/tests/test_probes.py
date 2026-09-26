@@ -17,7 +17,8 @@ def test_every_probe_is_documented():
     assert len(PROBES) == len(BY_NAME) == 14
     for p in PROBES:
         assert p.attack and p.stopped_by and p.risk.startswith("ASI")
-        assert "P[" in p.body or p.name in ("infinite_loop", "sleep_forever", "metadata")   # parameters, not hard-coded values
+        assert "P[" in p.body or p.name in ("infinite_loop", "sleep_forever")   # parameters, not hard-coded values
+        assert "169.254.169.254" not in p.body                                 # the real metadata address only via P
 
 
 def test_standin_host_holds_only_canaries():
@@ -68,3 +69,22 @@ def test_sample_verdicts_are_labelled_and_complete():
     assert {r.probe for r in runs["docker:default"] if r.verdict == LEAKED} >= {"egress", "fork_bomb", "memory_hog"}
     table = verdict_table(runs)
     assert table.splitlines()[-1].split()[0] == "LEAKED"
+
+
+def test_metadata_probe_targets_a_standin_unless_opted_in(monkeypatch):
+    # The harness must not touch the real metadata server (node and pod credentials on a cloud VM) unasked.
+    import socket
+    real_connect = socket.create_connection
+
+    def guard(addr, *a, **k):
+        assert addr[0] != "169.254.169.254", "the real metadata server was contacted"
+        return real_connect(addr, *a, **k)
+
+    monkeypatch.delenv("SANDBOXLAB_PROBE_REAL_METADATA", raising=False)
+    monkeypatch.setattr(socket, "create_connection", guard)
+    with standin_host() as h:
+        params = h.params("metadata", B)
+        assert params["metadata_standin"] is True and params["metadata_hosts"] == ["127.0.0.1"]
+        assert params["metadata_port"] == h.metadata_listener.port
+        v = run_probe(unsandboxed_for(h), "metadata", h, B)
+    assert v.verdict == LEAKED and "stand-in" in v.evidence            # unsandboxed: the stand-in is reachable

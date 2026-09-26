@@ -6,7 +6,8 @@ platform: four namespaces with Pod Security `restricted`, a RuntimeClass `sandbo
 the tainted worker, default-deny NetworkPolicies with one way out (sandbox -> egress proxy:8080), the egress
 proxy and a stand-in upstream whose credential lives only in the proxy's Secret, a ResourceQuota and LimitRange,
 and two ValidatingAdmissionPolicies. `run-examples.sh` then runs one execution as a Job, one through the warm
-pool (`kubectl exec`), and three things that must fail.
+pool (`kubectl exec`), and four things that must fail — the last one checks, on your cluster, that the
+NetworkPolicies are actually enforced.
 
 **Cost.** $0: everything runs in Docker on your machine, about 2 GB of Docker memory.
 
@@ -21,7 +22,7 @@ pool (`kubectl exec`), and three things that must fail.
 # from the lab root (07-application-agent-framework/sandboxed-execution/sandbox-lab)
 DRY_RUN=1 deploy/kind/up.sh          # read the whole procedure; nothing is executed
 deploy/kind/up.sh                    # ~2 minutes with images cached
-deploy/kind/run-examples.sh          # a Job, a warm pod, and the three must-fail objects
+deploy/kind/run-examples.sh          # a Job, a warm pod, and the four must-fail checks (the last: NetworkPolicy)
 SANDBOXLAB_KUBE_CONTEXT=kind-sandbox-lab python3 -m jupyterlab notebooks   # notebook 02 drives this cluster
 deploy/kind/down.sh
 ```
@@ -34,17 +35,28 @@ deploy/kind/down.sh
 | `workloads/20-warm-pool.yaml` | two idle sandbox pods for `kubectl exec`; the runner deletes each after one use |
 | `workloads/90`, `91` | MUST FAIL at admission: a naive pod (Pod Security + policy) and a Job without budgets (policy) |
 | `workloads/92-gvisor-in-kind.yaml` | MUST FAIL at run time: RuntimeClass `gvisor` (handler `runsc`) is accepted and the pod ends `Failed` |
+| `workloads/93-egress-must-fail.yaml` | MUST FAIL on the network: a conforming sandbox Job that connects straight to the api-stub (`10.96.0.201:8081`) and kube-dns (`10.96.0.10:53`); `run-examples.sh` stops with an error if either prints `CONNECTED` |
 
 ## What kind reproduces, and what it does not
 
 | Real on kind | Not real on kind |
 |---|---|
 | Pod Security Admission, the ValidatingAdmissionPolicies, RuntimeClass scheduling merge | **gVisor or any VM isolation**: every sandbox pod runs under runc on your host kernel |
-| NetworkPolicy — kindnetd enforces it (kube-network-policies) | NetworkPolicy *as a security boundary*: kindnetd's policy dataplane fails **open** if it breaks |
+| NetworkPolicy — current kindnetd enforces it through kube-network-policies; that the pinned kind v0.33.0 ships it is `(verify)`, so step 6 of `run-examples.sh` proves it on your cluster | NetworkPolicy *as a security boundary*: kindnetd's policy dataplane fails **open** — if its controller cannot start it logs and carries on, and every policy here silently stops applying |
 | Jobs, deadlines, TTLs, quotas, `podPidsLimit`, emptyDir `sizeLimit` eviction | node pools, autoscaling from zero, Spot, the GKE metadata server |
 | the egress proxy, hostAliases instead of DNS, credential injection | private nodes and the absence of a route to the internet |
 
 kind is a place to learn the objects and watch the admission chain work, not a sandbox for untrusted code.
+
+**Which policies step 6 shows enforced.** A pass means: the sandbox namespace's default-deny egress (the
+kube-dns target has no ingress policy of its own, so only the sandbox's egress policy can drop it) and the
+api-stub's ingress-only-from-the-proxy plus the sandbox's egress-only-to-the-proxy (the direct stub target).
+It does not exercise the proxy namespace's own egress policy. **If it fails** (a `CONNECTED` line), policies
+are not enforced on this cluster: run `down.sh`; copy `kind-config.yaml` (keep the generated file as it is —
+a test checks it) and add `networking: {disableDefaultCNI: true}` to the copy; create the cluster yourself
+with `kind create cluster --name sandbox-lab --image <KIND_NODE_IMAGE from ../versions.env> --config <copy>`;
+install Calico by its quickstart (pin the version you verified); then run `up.sh` (it skips the create step
+for an existing cluster) and `run-examples.sh` again.
 
 ## Troubleshooting
 

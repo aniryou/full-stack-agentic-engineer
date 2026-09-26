@@ -28,7 +28,7 @@ def test_job_runner_runs_and_replays():
 def test_budgets_travel_into_the_pod():
     be = R.SimulatedBackend(POL, seed=0)
     r = R.JobRunner(POL, be).run("while True: pass", Budgets(cpu_s=1, wall_s=3))
-    assert r.exit_reason == "cpu_limit"
+    assert r.exit_reason == "cpu_time"
 
 
 def test_admission_rejection_is_a_sandbox_error():
@@ -48,8 +48,8 @@ def test_warm_pool_is_fast_until_it_runs_dry():
 
 
 @pytest.mark.parametrize("pod,job,reason", [
-    ({"status": {"containerStatuses": [{"state": {"terminated": {"reason": "OOMKilled", "exitCode": 137}}}]}}, None, "memory_limit"),
-    ({"status": {}}, {"status": {"conditions": [{"type": "Failed", "reason": "DeadlineExceeded"}]}}, "timeout"),
+    ({"status": {"containerStatuses": [{"state": {"terminated": {"reason": "OOMKilled", "exitCode": 137}}}]}}, None, "memory"),
+    ({"status": {}}, {"status": {"conditions": [{"type": "Failed", "reason": "DeadlineExceeded"}]}}, "wall_timeout"),
     ({"status": {"reason": "Evicted", "message": "Usage of EmptyDir volume work exceeds the limit 64Mi."}}, None, "disk_limit"),
     ({"status": {"containerStatuses": [{"state": {"waiting": {"reason": "ErrImagePull"}}}]}}, None, "sandbox_error"),
 ])

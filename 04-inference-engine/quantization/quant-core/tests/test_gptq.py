@@ -34,8 +34,9 @@ def test_gptq_beats_rtn_on_correlated_inputs_in_and_out_of_sample():
     assert Q.layer_loss(W, g, X_test) < 0.5 * Q.layer_loss(W, r, X_test)
 
 
-def _reference_blocked(W, H, bits, blocksize, percdamp=0.01):
-    """A direct transcription of IST-DASLab gptq.py fasterquant (per-channel, symmetric 'full' grid, lazy batch)."""
+def _reference_blocked(W, H, bits, blocksize, percdamp=0.01, groupsize=None):
+    """A direct transcription of IST-DASLab gptq.py fasterquant (symmetric 'full' grid, lazy batch; per channel, or
+    groups whose scale comes from `W[:, i1+i : i1+i+groupsize]` - the global W, without the block's in-flight updates)."""
     W = W.copy()
     n = W.shape[1]
     H = H.copy()
@@ -47,6 +48,8 @@ def _reference_blocked(W, H, bits, blocksize, percdamp=0.01):
         i2 = min(i1 + blocksize, n)
         W1, Err1, Hinv1 = W[:, i1:i2].copy(), np.zeros((W.shape[0], i2 - i1)), Hinv[i1:i2, i1:i2]
         for i in range(i2 - i1):
+            if groupsize and (i1 + i) % groupsize == 0:
+                scale = int_scale(np.abs(W[:, i1 + i:i1 + i + groupsize]).max(1), bits, "full")
             w = W1[:, i]
             q = dequantize_int(quantize_int(w, scale, bits, None, "full"), scale)
             err = (w - q) / Hinv1[i, i]
@@ -60,6 +63,18 @@ def test_matches_the_blocked_reference():
     X, W = _correlated(d=48)
     ref = _reference_blocked(W, Q.hessian(X), 4, blocksize=16)
     np.testing.assert_allclose(Q.gptq(W, X, bits=4, group_size=None).w_hat, ref, atol=1e-9)
+
+
+def test_grouped_matches_the_reference_only_when_groups_start_on_block_boundaries():
+    """The lazy batch is exact for the OBS updates; it is not exact for group scales that start mid-block."""
+    X, W = _correlated(d=96)
+    H, mine = Q.hessian(X), Q.gptq(W, X, bits=4, group_size=16).w_hat
+    np.testing.assert_allclose(mine, _reference_blocked(W, H, 4, blocksize=16, groupsize=16), atol=1e-9)
+    np.testing.assert_allclose(Q.gptq(W, X, bits=4, group_size=32).w_hat,
+                               _reference_blocked(W, H, 4, blocksize=16, groupsize=32), atol=1e-9)
+    stale = _reference_blocked(W, H, 4, blocksize=48, groupsize=16)       # groups at 16 and 32 start mid-block
+    assert not np.allclose(mine, stale, atol=1e-9)
+    assert abs(Q.layer_loss(W, mine, X) / Q.layer_loss(W, stale, X) - 1) < 0.25   # a different choice, not a worse one
 
 
 def test_actorder_and_dead_inputs():

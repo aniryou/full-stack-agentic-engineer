@@ -6,7 +6,7 @@ trained to share the work, which experts a batch of tokens actually reads at inf
 (fused kernels, expert parallelism, all-to-alls, offloading, quantized experts), and how to size and cost a
 deployment. Every formula has a worked number computed by the package `moecore` in [`moe-core/`](moe-core/README.md)
 (standard library + numpy; the function is named next to the number, and `moe-core/tests/test_primer_numbers.py`
-fails if the text and the code disagree). The lab in `moe-lab/` runs the same ideas on real GPUs. The transformer
+fails if the text and the code disagree). The lab in [`moe-lab/`](moe-lab/README.md) runs the same ideas on real GPUs. The transformer
 itself is in the [transformer primer](../transformers/docs/transformer-primer.md); memory and TTFT/TPOT sizing in
 the [capacity primer](../gpu-capacity-planning/PRIMER.md); the roofline in
 [layer 01](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). This primer links to those rather than
@@ -26,10 +26,12 @@ repeating them.
   every token. An auxiliary loss, capacity limits, or DeepSeek-V3's selection-only bias spread the work.
 - **A batch reads the union of its tokens' experts:** E(1 − (1 − k/E)^T) per layer, the formula layer 01 uses. So
   Mixtral decodes like a 13B model at batch 1 and streams nearly all 93 GB of its weights by batch 16, and decode turns
-  compute-bound only at a batch about total ÷ active times the dense one: 754 for Mixtral and 2,055 for
-  Qwen3-30B-A3B on an H200, against 207 for a dense 8B. MoE wants big batches.
-- **Big batches mean expert parallelism.** Each GPU holds some experts; each MoE layer does two all-to-alls
-  (dispatch tokens, combine results) and waits for its busiest GPU. Data-parallel attention plus EP ("wide-EP")
+  compute-bound only at a batch about total ÷ active (more precisely, weights streamed ÷ weights multiplied) times
+  the dense one: 754 for Mixtral and 2,055 for Qwen3-30B-A3B on an H200, against 207 for a dense 8B. MoE wants big
+  batches.
+- **Big batches mean expert parallelism.** Each GPU holds some experts; each MoE layer exchanges tokens (with
+  DeepEP-class kernels, two all-to-alls: dispatch tokens, combine results) and waits for its busiest GPU — in
+  prefill the GPU with the most rows, in decode the busiest link. Data-parallel attention plus EP ("wide-EP")
   spreads the experts thin and frees memory for KV.
 - **MoE does not change attention or the KV cache.** Prefix caching and KV sizing work exactly as for the dense
   model with the same attention; at long context the KV cache dominates again.
@@ -111,7 +113,7 @@ The families differ in how scores become weights, and the difference is visible 
 | Family (source) | Scores | Selection | Weights | Worked weights (k = 2) |
 |---|---|---|---|---|
 | Mixtral (`MixtralTopKRouter`) | softmax over E | top-k of the probabilities | renormalised to sum to 1 | [0.69, 0.31] |
-| Qwen3-MoE, OLMoE (`norm_topk_prob`, HF default False) | softmax over E | top-k | raw probabilities | [0.493, 0.221], sum 0.714 |
+| OLMoE; Qwen2/Qwen3-MoE at transformers' default (`norm_topk_prob` False) | softmax over E | top-k | raw probabilities | [0.493, 0.221], sum 0.714 |
 | Qwen2-MoE / Qwen1.5-MoE | softmax | top-k | raw; plus a shared expert × sigmoid(x · g) | — |
 | DeepSeek-V3 (`Gate`) | sigmoid | top-k of score + per-expert bias, inside the best 4 of 8 groups | *unbiased* scores, renormalised, × 2.5 (`route_scale`) | [1.335, 1.165], sum 2.5 |
 | gpt-oss, Granite | router with a bias (gpt-oss) | top-k of the logits | softmax over just the k logits | [0.69, 0.31] |
@@ -122,7 +124,8 @@ the exponent ratios are the same — so the family difference there is the route
 DeepSeek-V3's bias only **chooses**: with a bias of +1.0 on the last expert (logit −2.0), it enters the top-2 on its
 biased score, but its weight is its unbiased sigmoid, renormalised: 0.298 of the 2.5 (`moe-core` notebook 01). That
 separation is what makes auxiliary-loss-free balancing work (§3.4). transformers' `norm_topk_prob` defaults to False
-for Qwen2/Qwen3/OLMoE; the released Qwen3 MoE configs are reported to set it true (verify).
+for Qwen2/Qwen3/OLMoE and OLMoE uses False (`ROUTERS["olmoe"]`); the released Qwen3 MoE configs are reported to set
+it true (verify), which makes Qwen3 weight like Mixtral (`ROUTERS["qwen3-moe"]`). Read the checkpoint's config.
 
 ### 2.3 Shared experts and granularity
 
@@ -297,10 +300,12 @@ at most 4 nodes. Kimi K2 dropped expert grouping (384 experts, no groups, per it
 Training balances experts *on average over the training mix*. A serving workload is not the training mix: a
 code-heavy tenant, one language, or one long document favours a few experts. Model the skew as a Zipf popularity
 (a model, not a measurement; `touched.touched_mc()`, simulated): for Qwen3-30B-A3B at 16 tokens, s = 1.0 touches
-58.0 experts instead of 82.4 and loads the hottest one 13.4× the mean. On one GPU skew *helps* (fewer bytes; §5);
-across GPUs it hurts, because the step waits for the GPU holding the hot expert (§6.3). Measuring it needs a real
-router: the lab's `02_watch_the_router` records per-token expert choices with router hooks or vLLM's
-`--enable-return-routed-experts`.
+58.0 experts instead of 82.4 and loads the hottest one 13.4× the mean. On one GPU skew *helps* (fewer bytes; §5).
+Across GPUs it hurts where the rows set the time: in prefill, and in compute-bound decode at very large batches,
+the step waits for the GPU holding the hot experts; in ordinary memory-bound decode every GPU streams its touched
+experts whatever their rows, and the skew shows up in the exchange instead (§6.3). Measuring it needs a real
+router: the lab's [`02_watch_the_router`](moe-lab/notebooks/02_watch_the_router.ipynb) records per-token expert
+choices with router hooks or vLLM's `--enable-return-routed-experts`.
 
 ---
 
@@ -328,16 +333,19 @@ variants; at long context this choice matters more than the expert count (§7).
 
 **The toy, honestly.** `moecore.train` is full-batch Adam on 512 tokens, 300 steps, a quarter of a second per run.
 Plain SGD also collapses without balancing but converges too slowly on this badly scaled toy to show what balance
-buys; the torch version with a real tiny transformer is the lab's `01_a_tiny_moe_in_torch`.
+buys; the torch version with a real tiny transformer is the lab's
+[`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb).
 
 ---
 
 ## 5. MoE at inference: which experts a step touches
 
-Layer 01 derived the core result in
+Layer 01 states the core result in
 [PRIMER §3.6](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#36-moe-which-weights-a-step-streams) with
-`roofline.llm.experts_touched()`; `moecore.touched` reproduces it (a test pins the table below to the byte and
-checks that layer 01's primer still prints it) and extends it.
+`roofline.llm.experts_touched()`: its table of experts touched, step bytes and step time for Mixtral-8x7B and
+Qwen3-30B-A3B at batches 1–64, and the decode crossover batches. `moecore.touched` reproduces all of it
+(`tests/test_touched.py` pins the table to the byte and checks that layer 01's primer still prints it); this
+section derives the formula and extends it to fine-grained experts, skew, rows per expert and the KV share.
 
 **The union.** One token misses a given expert with probability 1 − k/E (it picks k distinct experts of E); T
 independent tokens miss it with (1 − k/E)^T. So one layer touches
@@ -349,15 +357,10 @@ experts_touched(E, k, T) = E · (1 − (1 − k/E)^T)
 distinct experts (`touched.experts_touched()`; a Monte Carlo draw, `touched.touched_mc()`, agrees within 2%).
 Every touched expert's weights are streamed from HBM once per step, whatever the number of rows it serves.
 
-| Batch (1K context) | Mixtral-8x7B (8 experts, top-2) | Step bytes on H200 | Step time | Qwen3-30B-A3B (128, top-8) |
-|---|---|---|---|---|
-| 1 | 2.00 experts/layer | 25.6 GB | 5.34 ms | 8.0 / 128 |
-| 4 | 5.47 | 65.1 GB | 13.57 ms | 29.1 |
-| 16 | 7.92 | 94.4 GB | 19.66 ms | 82.4 |
-| 64 | 8.00 | 101.7 GB | 21.20 ms | 125.9 |
-
-(`touched.decode_step()`, the same one-kernel roofline as `roofline.llm.decode()`: 25,631,531,008 bytes at batch 1,
-of which 25,497,182,208 are weights. All memory-bound: these are bounds, not measurements.) Mixtral touches 7.5 of
+The two ends of layer 01's table (1K context, H200; `touched.decode_step()`, the same one-kernel roofline as
+`roofline.llm.decode()`): at batch 1 Mixtral reads 2.00 of 8 experts per layer, 25,631,531,008 bytes of which
+25,497,182,208 are weights, in 5.34 ms; at batch 64 it reads 8.00 of 8, 101.7 GB, in 21.20 ms. Qwen3 reads 8.0 and
+125.9 of 128. All memory-bound: these are bounds, not measurements. Mixtral touches 7.5 of
 its 8 experts per layer from batch 10, Qwen3 120 of 128 from batch 43 (notebook 03, exercise 3.2). DeepSeek-V3 (256,
 top-8) touches 8.0, 57.4, 163.3, 251.6 and 255.9 experts at 1, 8, 32, 128 and 256 tokens: fine granularity keeps
 the saving to larger batches, but by typical decode batches every expert is read every step.
@@ -367,18 +370,13 @@ per layer instead of 82.4, a 1.36× faster step on one GPU (simulated; notebook 
 the conservative assumption for bytes; skew is the conservative assumption for expert-parallel balance.
 
 **The decode crossover.** FLOPs follow active × batch while the bytes approach total, so the batch at which a
-decode step turns compute-bound grows with the ratio of streamed to multiplied weights (`touched.decode_crossover_batch()`,
-bisection on the roofline; c = 0, H200, ridge 206):
-
-| Model | total ÷ active | streamed ÷ multiplied (no input embedding) | Crossover batch |
-|---|---|---|---|
-| Llama-3.1-8B (dense) | 1.0 | 1.0 | 207 |
-| Mixtral-8x7B | 3.6 | 3.7 | 754 |
-| Qwen3-30B-A3B | 9.1 | 9.9 | 2,055 |
-
-The input embedding is a gather, neither streamed nor multiplied, so it leaves both counts; Qwen3's large vocabulary
-at small d is why its two ratios differ. Predicting Qwen3's crossover from the dense one, 207 × 9.9 ≈ 2,057, is within
-1% of the bisection (notebook 03, exercise 3.4).
+decode step turns compute-bound grows with the ratio of weights streamed to weights multiplied. Layer 01's
+bisection (c = 0, H200, ridge 206; `touched.decode_crossover_batch()` reproduces it) gives 207 for Llama-3.1-8B,
+754 for Mixtral-8x7B and 2,055 for Qwen3-30B-A3B. The ratio that predicts them leaves out the input embedding — a
+gather, neither streamed nor multiplied: streamed ÷ multiplied is 3.7 for Mixtral and 9.9 for Qwen3, against
+total ÷ active of 3.6 and 9.1 (Qwen3's large vocabulary at small d is why its two ratios differ). Predicting
+Qwen3's crossover from the dense one, 207 × 9.9 ≈ 2,057, is within 1% of the bisection; 207 × 9.1 would be 8% low
+(notebook 03, exercise 3.4).
 
 **Why: each expert sees B·k/E of the batch.** Inside the step, an expert's GEMM has as many rows as tokens routed to
 it — on average B·k/E — and its arithmetic intensity is about that row count. At batch 256 that is 64 rows for
@@ -452,22 +450,41 @@ bytes of scales) = 7,569,408 B in 77 µs is **98.3 GB/s** (reported 98); the BF1
 
 ### 6.3 The slowest rank, and rebalancing
 
-All ranks wait for each other at every all-to-all, so a layer takes as long as the busiest rank's expert GEMMs plus
-the exchanges (`ep.exchange()`, `ep.layer_time()`). Qwen3-30B-A3B's 128 experts on 8 H100s, 128 tokens per GPU,
-simulated:
+All ranks wait for each other at every exchange, so a layer takes as long as the slowest rank's expert work plus
+the exchanges (`ep.layer_time()`). Each rank's expert work is a roofline of its own: its rows × 2 × expert
+parameters ÷ peak against its touched experts × expert bytes ÷ bandwidth (`ep.touched_per_rank()`). Qwen3-30B-A3B's
+128 experts on 8 H100s (16 per GPU), NVLink, all-to-all kernels, simulated:
 
-| Routing | Placement | Rows on the busiest rank ÷ mean | Layer time |
-|---|---|---|---|
-| uniform | linear | 1.04 | 30.6 µs |
-| Zipf s = 1.0 | linear (contiguous blocks, vLLM's default) | 1.63 | 37.8 µs |
-| Zipf s = 1.0 | round-robin | 1.48 | 35.6 µs |
+| Tokens per GPU | Routing | Placement | Rows on the busiest rank ÷ mean | Slowest rank bound by | Layer time | vs balanced |
+|---|---|---|---|---|---|---|
+| 128 (decode) | uniform | linear | 1.04 | weight reads | 65.9 µs | 1.01× |
+| 128 (decode) | Zipf s = 1.0 | linear (contiguous blocks, vLLM's default) | 1.63 | weight reads | 75.4 µs | 1.15× |
+| 4,096 (prefill chunk) | uniform | linear | 1.01 | FLOPs | 844.0 µs | 1.01× |
+| 4,096 (prefill chunk) | Zipf s = 1.0 | linear | 1.65 | FLOPs | 1,378.2 µs | 1.64× |
+| 4,096 (prefill chunk) | Zipf s = 1.0 | round-robin (not applied to this model; below) | 1.46 | FLOPs | 1,225.9 µs | 1.46× |
 
-The hot rank makes the layer 1.20× slower than a balanced one (notebook 04, exercise 4.4) — on every layer, every
-step. vLLM's `--expert-placement-strategy` (`linear` | `round_robin`) moves the hot spot; **EPLB** (`--enable-eplb`,
-window 1,000 steps, rebalance every 3,000 by default) measures load and re-places experts, replicating the hottest
-(`num_redundant_experts`). A greedy version (`ep.rebalance()`) brings the same skewed load from 1.077 to 1.012
-max/mean with 8 redundant experts. Replicas cost HBM: vLLM's EP guide gives ~2.4 GB for one redundant DeepSeek-V3
-expert per rank, which is 58 MoE layers × 44,040,192 B in FP8 = 2.38 GiB (`ep.wide_ep_weights(redundant=)`).
+**Decode: the skew moves to the exchange.** At 128 tokens per GPU each expert sees about 64 rows, far below the
+H100's ridge of 295, so every rank spends 45.1 µs streaming its 16 experts' weights whatever the skew; the hot
+rank's extra rows (16.0 µs of FLOPs against a mean of 9.8) hide under that read. What the skew costs in decode is
+the exchange: the hot rank's port receives the dispatch and sends the combine for 1.5× the mean traffic (15.2 µs per
+all-to-all against 10.2), so the layer is 1.15× slower. **Prefill: the rows set the time.** At 4,096 tokens per
+GPU the expert GEMMs are compute-bound, and the busiest rank's 1.65× rows make the layer 1.64× slower than a
+balanced one — on every layer of every prefill chunk (notebook 04, exercise 4.4). Decode behaves the same way once
+its batch pushes the experts past the ridge (§5).
+
+**Placement.** vLLM's `--expert-placement-strategy round_robin` puts expert e on rank e mod p instead of in
+contiguous blocks, which here would move the hot spot (1.65 → 1.46 rows) without removing it. vLLM v0.30.0 applies
+it only to models with more than one expert group (DeepSeek-V3's 8), no redundant experts and EPLB off — with
+all-to-all kernels, only on the DeepEP low-latency or NIXL-EP backends — and otherwise logs a warning and falls back
+to linear (`determine_expert_placement_strategy()` in `fused_moe/expert_map_manager.py`, v0.30.0 and main `a4eb3f2`;
+verify for your version). For Qwen3-30B-A3B, which has no expert groups, the round-robin row is a placement vLLM
+would not apply.
+
+**EPLB** (`--enable-eplb`, window 1,000 steps, rebalance every 3,000 by default) measures load and re-places
+experts, replicating the hottest (`num_redundant_experts`). A greedy version (`ep.rebalance()`) on the skewed decode
+batch: re-placement alone takes the busiest rank from 1.63 to 1.08 max/mean; eight redundant copies take it to 1.01.
+Replicas cost HBM: vLLM's EP guide gives ~2.4 GB for one redundant DeepSeek-V3 expert per rank, which is 58 MoE
+layers × 44,040,192 B in FP8 = 2.38 GiB (`ep.wide_ep_weights(redundant=)`).
 
 ### 6.4 TP vs EP for experts, and the hybrid
 
@@ -475,19 +492,36 @@ Without EP, experts are just MLPs and can be **tensor-parallel**: every GPU hold
 all tokens, and an all-reduce restores each layer's output (serving-engine
 [§9](../../04-inference-engine/serving-engine/PRIMER.md#9-parallelism-inside-the-engine)). With EP each GPU holds
 whole experts and ships only assignments. For a Mixtral MoE layer at batch 64 on 8 GPUs (`ep.moe_comm()`, simulated):
-TP's ring all-reduce sends 896 KiB per GPU in 30.0 µs; EP with data-parallel attention sends 224 KiB per GPU in
-4.5 µs. TP also splits each expert's GEMM p ways, making already-thin GEMMs thinner. The **hybrid** is the usual
-shape of a large deployment: attention replicated (or tensor-parallel inside each data-parallel group), experts
-expert-parallel across all the GPUs.
+TP's ring all-reduce sends 896 KiB per GPU in 30.0 µs; EP with data-parallel attention and dedicated all-to-all
+kernels (DeepEP, NIXL-EP, FlashInfer's; `mode="a2a"`) sends 224 KiB per GPU in 4.5 µs. TP also splits each
+expert's GEMM p ways, making already-thin GEMMs thinner. The **hybrid** is the usual shape of a large deployment:
+attention replicated (or tensor-parallel inside each data-parallel group), experts expert-parallel across all the
+GPUs.
 
 vLLM's semantics (v0.30.0): `--enable-expert-parallel` makes the MoE layers expert-parallel over **EP = TP × DP**
 ranks — EP size is not a flag of its own. Attention is replicated across DP ranks when `--tensor-parallel-size 1`
 and TP-sharded within each DP group when TP > 1. **Without** the flag, MoE layers run tensor-parallel over the same
 TP × DP group. `--all2all-backend` picks the exchange (default `allgather_reducescatter`; `deepep_low_latency` for
 decode and `deepep_high_throughput` for prefill across nodes; `pplx` and `naive` were removed; there is no
-`VLLM_ALL2ALL_BACKEND` environment variable) (verify against your version). SGLang and TensorRT-LLM serve large MoE
-models with the same two layouts under different flags; which engine to pick is the serving-engine primer's
-[§12](../../04-inference-engine/serving-engine/PRIMER.md#12-engines-and-where-to-run-them).
+`VLLM_ALL2ALL_BACKEND` environment variable) (verify against your version).
+
+**What vLLM actually puts on the wire.** All-to-all kernels run only with EP and DP > 1
+(`FusedMoEParallelConfig.use_all2all_kernels`, `fused_moe/config.py`, v0.30.0), which leaves three cases:
+
+- **TP × EP with DP = 1** (`--tensor-parallel-size 2 --enable-expert-parallel`): after attention every GPU already
+  holds every token, so there is no all-to-all at all. Each GPU runs its own experts on the tokens routed to them
+  and one all-reduce sums the outputs — TP's traffic (`mode="tp"`), EP's memory layout.
+- **DP > 1 with the default `allgather_reducescatter`**: every rank all-gathers every rank's tokens (tokens ×
+  hidden, not × k) and reduce-scatters the outputs back, (p − 1) × tokens per GPU × hidden × bytes each way — here
+  the same 896 KiB and 30.0 µs as TP (`mode="agrs"`).
+- **DP > 1 with an all-to-all backend** (`deepep_low_latency`, `deepep_high_throughput`, `nixl_ep`, …): the
+  dispatch and combine of §6.2, the 224 KiB. DeepEP needs SM90 or newer with NVLink and RDMA, so not a T4 or L4.
+
+So EP's traffic saving needs data-parallel attention *and* all-to-all kernels; on two PCIe GPUs what
+`--enable-expert-parallel` changes is the memory layout and the balance, not the bytes on the wire (the lab's
+[`04_expert_parallelism_on_two_gpus`](moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb) measures exactly
+that). SGLang and TensorRT-LLM serve large MoE models with the same two layouts under different flags; which engine
+to pick is the serving-engine primer's [§12](../../04-inference-engine/serving-engine/PRIMER.md#12-engines-and-where-to-run-them).
 
 ### 6.5 Data-parallel attention + EP (wide-EP)
 
@@ -505,10 +539,13 @@ shrink with EP (`ep.wide_ep_weights()`). DeepSeek-V3 in FP8 on H200s (141 GB):
 
 (`sizing.sessions(layout="ep")`.) 17.1B parameters are replicated on every rank; by EP 64 they are most of each
 GPU's weights (17.1 of 27.3 GB). Two consequences. First, DP ranks are not independent: forward passes are aligned, and an idle rank runs
-**dummy forward passes** while any rank has work (vLLM's DP coordinator). Second, EP 16 means two 8-GPU nodes, so the
-all-to-all crosses the scale-out network: DeepSeek-V3 at batch 512, 4K context, EP 16 spends 1.1 ms per step in
-all-to-alls on NVLink but 8.6 ms over 400 Gb/s InfiniBand, 38% of the step with no overlap (`ep.decode_on()`,
-simulated). Hence NVL72-class racks, DeepEP's RDMA kernels, and two-batch overlap (vLLM `--enable-dbo`, SGLang TBO).
+**dummy forward passes** while any rank has work (vLLM's DP coordinator). Second, EP 16 means two 8-GPU nodes, so
+half of each GPU's all-to-all traffic crosses the scale-out network. DeepSeek-V3 at batch 512, 4K context, EP 16,
+FP8 dispatch and BF16 combine: 0.9 ms of all-to-alls per step if all 16 GPUs shared one NVLink domain (an
+NVL72-class rack), 3.8 ms as two 8-GPU nodes — 7 peers over NVLink, 8 over one 400 Gb/s InfiniBand NIC per GPU —
+which is 22% of a 17.6 ms step with no overlap (`ep.decode_on(per_node=8, intra=...)`, simulated). Putting every
+peer behind the NIC, the upper bound, gives 6.6 ms. Hence NVL72-class racks, DeepEP's RDMA kernels, and two-batch
+overlap (vLLM `--enable-dbo`, SGLang TBO).
 llm-d's wide-EP guide runs DeepSeek-R1 on 32 H200 or B200 GPUs as 16-way DP prefill plus 16-way DP decode; SGLang's
 single-node form is `--tp 8 --dp-size 8 --ep 8 --enable-dp-attention --moe-a2a-backend deepep` (verify).
 
@@ -520,28 +557,35 @@ When the experts do not fit, keep some in CPU memory:
   addressing during each forward pass; `--cpu-offload-params experts` restricts it to expert weights (v0.30.0). The
   docs say offloaded weights are loaded "on the fly in each model forward pass" — count all of them per step as the
   upper bound (verify what a given kernel actually touches).
-- **llama.cpp** `--cpu-moe` keeps all expert weights on the CPU and `--n-cpu-moe N` the first N layers' experts;
-  the CPU computes those experts, so only activations cross PCIe.
+- **llama.cpp** `--cpu-moe` keeps all expert weights in CPU memory and `--n-cpu-moe N` the first N layers'
+  experts. In small-batch decode the CPU computes those experts, so mostly activations cross PCIe. For large
+  batches (prompt processing) llama.cpp by default copies the host-resident weights to the GPU and computes there
+  (`--op-offload`, default on; `--no-op-offload` keeps the work on the CPU), and then the weights do cross PCIe
+  (from `common/arg.cpp` and the buffer-override semantics; verify).
 
-The PCIe bill is brutal: OLMoE-1B-7B in fp16 (13.8 GB) on a 16 GB T4 has room for one 4K-token sequence; offloading
-1.48 GiB to fit four adds ~132 ms per step over PCIe Gen3 (~12 GB/s effective, verify) to a 9 ms step — about 16×
-slower (`sizing.offload_step_s()`, simulated). A 4-bit checkpoint, or computing offloaded experts on the CPU, is
-usually the better trade.
+The PCIe bill is brutal. Budget one small GPU the way vLLM does: 0.92 of the 15.0 GiB a T4 reports, minus ~1.5 GiB
+of activations and CUDA graphs (verify), is 12.3 GiB (`sizing.kv_room_gib()`, the same budget as the lab's
+`moelab.offload.fit`). OLMoE-1B-7B in fp16 is 13.8 GB = 12.9 GiB of weights, so on a 16 GB T4 it has no room for KV
+at all. The smallest offload that holds four 4K-token sequences is 3.0 GiB (`sizing.min_offload_gib()`, rounded up
+to 0.5 GiB; the lab prints `--cpu-offload-gb 3`). Streaming it over PCIe Gen3 (~12 GB/s effective, verify) adds
+~268 ms to every step, against a 26 ms step at batch 4 — about 11× slower (`sizing.offload_step_s()`,
+`touched.decode_step()`, simulated). A 4-bit checkpoint is usually the better trade: with 4-bit experts OLMoE is
+4.4 GB and leaves room for 67,377 tokens of KV on the same T4; so is computing the offloaded experts on the CPU.
+The lab's [`05_moe_on_a_small_gpu`](moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb) reads these numbers back from
+vLLM's start-up log and measures the step.
 
 ### 6.7 Quantized experts
 
-Experts are most of an MoE's bytes, so they are what quantization targets (the formats themselves are in the
-quantization topic, `04-inference-engine/quantization/`, and the serving-engine
-[§8](../../04-inference-engine/serving-engine/PRIMER.md#8-quantization)).
+Experts are most of an MoE's bytes, so they are what quantization targets. The formats (MXFP4 among them) are in
+the quantization primer's [§2](../../04-inference-engine/quantization/PRIMER.md#2-number-formats), why routers stay
+in 16-bit in its [§5](../../04-inference-engine/quantization/PRIMER.md#5-weight-and-activation-quantization), and
+calibrating rarely routed experts in its [§8](../../04-inference-engine/quantization/PRIMER.md#8-measuring-the-accuracy-you-pay)
+(llm-compressor's `moe_calibrate_all_experts`, and ignoring `mlp.gate`). The MoE-specific numbers:
 
-- **gpt-oss ships MXFP4 experts**: 4-bit values with a shared 8-bit scale per 32, 4.25 bits per weight, everything
-  else bf16. That makes gpt-oss-120b **65.2 GB** (one 80 GB GPU) and gpt-oss-20b **13.8 GB**
-  (`sizing.weight_bytes(expert_bits=4.25)`). vLLM's MXFP4 path requires compute capability 8.0 and bf16 activations — L4 and RTX 4090 yes, T4 no.
+- **gpt-oss ships MXFP4 experts** (4.25 bits per weight) and everything else in bf16. That makes gpt-oss-120b
+  **65.2 GB** (one 80 GB GPU) and gpt-oss-20b **13.8 GB** (`sizing.weight_bytes(expert_bits=4.25)`). vLLM's MXFP4
+  path requires compute capability 8.0 and bf16 activations — L4 and RTX 4090 yes, T4 no.
 - **DeepSeek-V3 ships FP8** weights with 128 × 128 block scales, activations quantized per 128 channels.
-- **Keep the router in high precision.** llm-compressor's MoE example ignores the gates
-  (`re:.*mlp.gate$`, `re:.*mlp.shared_expert_gate$`: "the MoE gate layers are sensitive to quantization") and
-  calibrates every expert, including rarely routed ones — a calibration set that never reaches an expert leaves it
-  with no activation statistics.
 
 ---
 
@@ -550,16 +594,21 @@ quantization topic, `04-inference-engine/quantization/`, and the serving-engine
 The recipe (`moecore.sizing`, notebook 05):
 
 1. **Memory by total + KV.** Weights at the chosen precision (`sizing.weight_bytes()`) plus the batch's KV cache
-   (`MoEConfig.kv_bytes_per_token()` × context × sequences), 10% headroom (`sizing.sessions()`).
+   (`MoEConfig.kv_bytes_per_token()` × context × sequences): 10% headroom on nominal GB for fleet sizing
+   (`sizing.sessions()`, layer 01's round budget); on one small GPU, where the margin is the question, vLLM's own
+   budget (`sizing.kv_room_gib()`, §6.6).
 2. **Prefill by active.** 2 × active × tokens (`sizing.prefill_flops()`), divided by an achieved fraction of the peak.
 3. **Decode by the bytes streamed at the batch.** Touched experts + everything else + KV (§5), per GPU in the chosen
-   layout (`ep.decode_on()`), plus two all-to-alls per MoE layer.
+   layout (`ep.decode_on()`), plus two exchanges per MoE layer (all-to-alls with DeepEP-class kernels, vLLM's
+   default all-gather and reduce-scatter otherwise; §6.4).
 4. **GPUs and EP degree.** The smallest count that holds weights + KV and meets the ITL target (`sizing.plan()`).
 5. **Cost.** GPUs × $/GPU-hour ÷ tokens per second (`sizing.usd_per_mtok()`).
 
 **Memory, worked.** Qwen3-30B-A3B is a 30B model for memory: 61.1 GB in bf16, 30.5 GB in FP8, 18.5 GB with 4.25-bit
-experts and the rest in bf16 — only the last fits a 24 GB L4, with room for 7 sequences of 4K tokens. Its 3B active
-count only helps the FLOPs.
+experts and the rest in bf16 — only the last fits a 24 GB L4. vLLM's budget (0.92 × 22.49 GiB − 1.5 GiB) then leaves
+2.0 GiB for KV: 21,593 tokens, five sequences of 4K (`sizing.kv_tokens()`; the lab's `python -m moelab fit` prints
+the same). The round 10%-headroom budget would say 7; on one small GPU the overheads are the whole margin. The 3B
+active count only helps the FLOPs.
 
 **Prefill, worked.** An 8,192-token prompt costs a dense Llama-3.1-70B 5.48× the FLOPs it costs Mixtral-8x7B; at
 50% of an H100's bf16 peak Mixtral prefills it in 427 ms (simulated). Prefill is where the FLOP saving shows in full.
@@ -569,15 +618,18 @@ all times simulated):
 
 | Case | Batch | ITL target | GPUs | Step | Tokens/s | $/M tokens at the placeholder price |
 |---|---|---|---|---|---|---|
-| Mixtral-8x7B, bf16, H100, DP attention + EP | 64 | 50 ms | 2 | 19.6 ms | 3,259 | 0.51 at $3/GPU-h |
+| Mixtral-8x7B, bf16, H100, DP attention + EP (all-to-all kernels) | 64 | 50 ms | 2 | 19.6 ms | 3,259 | 0.51 at $3/GPU-h |
 | Llama-3.1-70B, bf16, H100, tensor parallel | 64 | 50 ms | 4 | 19.3 ms | 3,322 | 1.00 at $3/GPU-h |
-| DeepSeek-V3, FP8, H200, wide-EP | 256 | 50 ms | 8 | 23.4 ms | 10,951 | 0.61 at $3/GPU-h |
-| Qwen3-30B-A3B, FP8, L4, wide-EP over PCIe | 32 | 60 ms | 4 | 36.9 ms | 867 | 0.90 at $0.7/GPU-h |
+| DeepSeek-V3, FP8, H200, wide-EP (all-to-all kernels, FP8 dispatch) | 256 | 50 ms | 8 | 23.2 ms | 11,046 | 0.60 at $3/GPU-h |
+| Qwen3-30B-A3B, FP8, L4, DP attention + EP (vLLM's default `allgather_reducescatter` over PCIe) | 32 | 60 ms | 4 | 41.0 ms | 780 | 1.00 at $0.7/GPU-h |
 
-At batch 64 Mixtral costs about half as much per token as the dense 70B; whether the two are of "similar quality"
+The H100 and H200 EP rows assume all-to-all kernels (DeepEP-class, which need Hopper with NVLink and RDMA); the L4
+row uses vLLM's default exchange, since DeepEP does not run on an L4, over an assumed PCIe peer-to-peer link of
+12 GB/s and α = 15 µs (`ep.LINKS["pcie-l4"]`, the lab's `pcie-2xL4` value; fit your own with layer 02's lab). At
+batch 64 Mixtral costs about half as much per token as the dense 70B; whether the two are of "similar quality"
 depends on versions and on your evals (verify) — the method, not the verdict, is the point. DeepSeek-V3's step
-(23.4 ms) sits above its all-experts floor (17.5 ms, `sizing.decode_floor()`) by each rank's KV reads, its replicated
-weights and 1.1 ms of all-to-alls.
+(23.2 ms) sits above its all-experts floor (17.5 ms, `sizing.decode_floor()`) by each rank's KV reads, its replicated
+weights and 0.9 ms of all-to-alls.
 
 **Long context, worked.** Mixtral on 2 H100s: at 4K context 88 sequences fit and batch 16 runs at 1,024 tokens/s;
 at 32K only 10 fit (497 tokens/s at batch 10); at 128K, 2 (166 tokens/s). The KV cache, not the experts, sets both
@@ -590,20 +642,20 @@ reports (no configs here: numbers cited, not recomputed, all verify):
 | Model | Routed E | k | Shared | d | Total / active | Source |
 |---|---|---|---|---|---|---|
 | Mixtral-8x7B | 8 | 2 | 0 | 4,096 | 46.70B / 12.88B | config |
-| OLMoE-1B-7B | 64 | 8 | 0 | 2,048 | 6.92B / 1.28B | config (expert width derived) |
+| OLMoE-1B-7B | 64 | 8 | 0 | 2,048 | 6.92B / 1.28B | config; expert width derived (verify, 2026-09-26) |
 | Qwen1.5-MoE-A2.7B | 60 | 4 | 1 (4× wide) | 2,048 | 14.32B / 2.69B | config |
 | Qwen3-30B-A3B | 128 | 8 | 0 | 2,048 | 30.53B / 3.35B | config |
-| Qwen3-235B-A22B | 128 | 8 | 0 | 4,096 (verify) | 235.09B / 22.19B | report |
-| gpt-oss-20b / 120b | 32 / 128 | 4 | 0 | 2,880 | 20.91B / 3.61B; 116.83B / 5.13B (head only) | reference code |
-| Llama 4 Scout / Maverick | 16 / 128 | 1 | 1 | 5,120 | 107.77B / 17.17B; 400.71B / 17.18B (text) | config, card |
+| Qwen3-235B-A22B | 128 | 8 | 0 | 4,096 | 235.09B / 22.19B | report; d and expert width 1,536 derived (verify, 2026-09-26) |
+| gpt-oss-20b / 120b | 32 / 128 | 4 | 0 | 2,880 | 20.91B / 3.61B; 116.83B / 5.13B (head only) | reference code; 20b's 24 layers derived (verify, 2026-09-26) |
+| Llama 4 Scout / Maverick | 16 / 128 | 1 | 1 | 5,120 | 107.77B / 17.17B; 400.71B / 17.18B (text) | Scout: config; Maverick: card 17B / 400B, MoE interleave and dense width 16,384 derived (verify, 2026-09-26) |
 | DeepSeek-V3 | 256 | 8 | 1 | 7,168 | 671.03B / 37.55B | config |
-| Kimi K2 | 384 | 8 | 1 | 7,168 | 1.04T / 32.6B | report |
-| Mistral Large 3 | — | — | — | — | 675B / 41B | capacity and open-weight primers |
-| DeepSeek V4-Pro / V4-Flash | — | — | — | — | 1.6T / ~49B; 284B / ~13B | open-weight primer |
-| Qwen3.8-2.4T-A95B | 512 | 10 | 1 | — | 2.4T / ~95B | open-weight primer |
-| Kimi K3 | 896 | 16 | yes | — | 2.8T / 104B | open-weight primer |
-| MiniMax M3; Nemotron 3 Nano / Super / Ultra | — | — | — | — | 428B / ~23B; ~31.6B / 3.2B, ~120B / 12B, ~550B / ~55B | open-weight primer |
-| Gemma 4 26B MoE | — | — | — | — | 26B / ~4B | open-weight primer |
+| Kimi K2 | 384 | 8 | 1 | 7,168 | 1.04T / 32.6B | report (README: 1T / 32B) |
+| Mistral Large 3 | — | — | — | — | 675B / 41B | capacity and open-weight primers (verify) |
+| DeepSeek V4-Pro / V4-Flash | — | — | — | — | 1.6T / ~49B; 284B / ~13B | open-weight primer (verify) |
+| Qwen3.8-2.4T-A95B | 512 | 10 | 1 | — | 2.4T / ~95B | open-weight primer (verify) |
+| Kimi K3 | 896 | 16 | yes | — | 2.8T / 104B | open-weight primer (verify) |
+| MiniMax M3; Nemotron 3 Nano / Super / Ultra | — | — | — | — | 428B / ~23B; ~31.6B / 3.2B, ~120B / 12B, ~550B / ~55B | open-weight primer (verify) |
+| Gemma 4 26B MoE | — | — | — | — | 26B / ~4B | open-weight primer (verify) |
 
 ---
 
@@ -611,13 +663,13 @@ reports (no configs here: numbers cited, not recomputed, all verify):
 
 | Failure mode | What you see | The number behind it | What to do |
 |---|---|---|---|
-| **MoE at batch 1** | a 47B model's memory, and decode slower than a dense model of the active size | Mixtral at batch 1 on an H200: 5.34 ms vs Llama-3.1-8B's 3.15 ms (1.69×), with 93 GB of weights resident | serve MoE where traffic gives big batches; for low, bursty traffic a dense model of the active size is cheaper |
-| **EP across a slow fabric** | tokens/s flat or falling as GPUs are added past one node | DeepSeek-V3, EP 16: all-to-alls 1.1 ms on NVLink vs 8.6 ms over 400 Gb/s IB (38% of the step) | keep EP inside the NVLink domain; DeepEP RDMA kernels; overlap (DBO/TBO); larger scale-up domains |
-| **Hot experts** | one GPU at 100% while others idle; step time tracks the busiest rank | Zipf-skewed Qwen3 layer: 1.63× rows on the busiest of 8 ranks, 1.20× layer time | EPLB with redundant experts (~2.4 GiB each for DeepSeek-V3 FP8), placement strategy, balance per tenant |
-| **MoE on one 24 GB GPU** | out of memory at load, or no KV room | Qwen3-30B-A3B: 61.1 GB bf16, 30.5 GB FP8, 18.5 GB with 4-bit experts (7 sequences of 4K) | quantize the experts; offload only if you can afford PCIe per step (OLMoE on a T4: ~16× slower) |
+| **MoE at batch 1** | a 47B model's memory for 13B-class decode speed; at small batches above 1, slower than a dense model of the active size | Mixtral on an H200 at batch 1: 5.34 ms, the same as a dense model of its 12.9B active size (`sizing.dense_equivalent()`), but 93 GB of weights resident against 26 GB; at batch 4 and 16 it streams 65.1 and 94.4 GB against 26.0 and 27.6 GB, 2.5× and 3.4× slower | serve MoE where traffic gives big batches; for low, bursty traffic a dense model of the active size is cheaper |
+| **EP across a slow fabric** | tokens/s flat or falling as GPUs are added past one node | DeepSeek-V3, EP 16 as two 8-GPU nodes on 400 Gb/s IB: all-to-alls 3.8 ms per step (22% of the step) against 0.9 ms in one NVLink domain | keep EP inside the NVLink domain; DeepEP RDMA kernels; overlap (DBO/TBO); larger scale-up domains |
+| **Hot experts** | in prefill, one GPU at 100% while others idle and the step tracks the busiest rank; in decode, one GPU's link the busiest | Zipf-skewed Qwen3 on 8 H100s: 1.65× rows on the busiest rank make a prefill layer 1.64× slower; in decode the weight reads stay balanced and the hot rank's port makes the layer 1.15× slower | EPLB with redundant experts (~2.4 GiB each for DeepSeek-V3 FP8), placement strategy (round-robin only for grouped models), balance per tenant |
+| **MoE on one 24 GB GPU** | out of memory at load, or no KV room | Qwen3-30B-A3B: 61.1 GB bf16, 30.5 GB FP8, 18.5 GB with 4-bit experts (5 sequences of 4K at vLLM's defaults) | quantize the experts; offload only if you can afford PCIe per step (OLMoE fp16 on a T4: 3 GiB offloaded, ~11× slower at batch 4) |
 | **Long context where KV dominates** | batch that fits collapses; the MoE's cost advantage shrinks | Mixtral on 2 H100s: 88 sequences at 4K, 10 at 32K, 2 at 128K | KV quantization, MLA-style attention, prefix caching, P/D disaggregation (layer 05) |
 | **Quantizing experts** | quality drops on some domains only | rarely routed experts get too few calibration tokens; the router is sensitive | keep gates in high precision; calibrate every expert (llm-compressor `load_context()`); evaluate per domain |
-| **Dense vs MoE for a workload** | the "cheaper" model is more expensive in production | at batch 64: Mixtral $0.51 vs dense 70B $1.00 per M tokens (placeholder prices); at batch 1 the MoE loses | decide with the plan: traffic (batch), hardware you can get (HBM, NVLink), context length, quality on your evals |
+| **Dense vs MoE for a workload** | the "cheaper" model is more expensive in production | at batch 64: Mixtral $0.51 vs dense 70B $1.00 per M tokens (placeholder prices); at batch 1 the MoE only matches a dense model of its active size, on 3.6× the memory | decide with the plan: traffic (batch), hardware you can get (HBM, NVLink), context length, quality on your evals |
 
 ---
 
@@ -628,11 +680,17 @@ are in [`COMPUTE.md`](../../COMPUTE.md).
 
 | To learn | T0 (laptop / Colab CPU, $0) | T1 (one small GPU) | T2 (two or more GPUs) | T3 (GCP, optional) |
 |---|---|---|---|---|
-| the layer, routers, parameter counts (§2) | `moe-core` notebook 01 | router hooks on a small open MoE (lab `02_watch_the_router`) | — | — |
-| balance and collapse (§3–4) | `moe-core` notebook 02 (numpy); lab `01_a_tiny_moe_in_torch` (torch on CPU) | the same, faster | — | — |
-| experts touched, decode vs batch (§5) | `moe-core` notebook 03 (simulated) | lab `03_batch_vs_weight_stream`: vLLM step time vs batch, MoE vs dense | — | — |
-| EP and all-to-all (§6.2–6.5) | `moe-core` notebook 04 (simulated) | — | lab `04_expert_parallelism_on_two_gpus`: Kaggle's free 2×T4 (PCIe), `--enable-expert-parallel` vs TP | the 02 lab's `l4x2` pool (2 × L4, PCIe) with the MoE lab's `deploy/gke/` manifests |
-| sizing, offload, INT4 experts (§6.6–7) | `moe-core` notebook 05 | lab `05_moe_on_a_small_gpu` | — | — |
+| the layer, routers, parameter counts (§2) | [`moe-core` notebook 01](moe-core/notebooks/01_the_moe_layer.ipynb) | router hooks on a small open MoE (lab [`02_watch_the_router`](moe-lab/notebooks/02_watch_the_router.ipynb)) | — | — |
+| balance and collapse (§3–4) | [`moe-core` notebook 02](moe-core/notebooks/02_routing_and_load_balance.ipynb) (numpy); lab [`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb) (torch on CPU) | the same, faster | — | — |
+| experts touched, decode vs batch (§5) | [`moe-core` notebook 03](moe-core/notebooks/03_which_experts_a_batch_touches.ipynb) (simulated) | lab [`03_batch_vs_weight_stream`](moe-lab/notebooks/03_batch_vs_weight_stream.ipynb): vLLM step time vs batch, MoE vs dense | — | — |
+| EP and all-to-all (§6.2–6.5) | [`moe-core` notebook 04](moe-core/notebooks/04_expert_parallelism_and_all_to_all.ipynb) (simulated) | — | lab [`04_expert_parallelism_on_two_gpus`](moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb): Kaggle's free 2×T4 (PCIe), `--enable-expert-parallel` vs TP | the 02 lab's `l4x2` pool (2 × L4, PCIe) with the MoE lab's [`deploy/gke/`](moe-lab/deploy/gke/README.md) manifests |
+| sizing, offload, INT4 experts (§6.6–7) | [`moe-core` notebook 05](moe-core/notebooks/05_sizing_and_cost.ipynb) | lab [`05_moe_on_a_small_gpu`](moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb) | — | — |
+
+**What the two-GPU runs show.** On two PCIe GPUs vLLM runs no dispatch/combine all-to-all (§6.4): TP × EP with
+DP = 1 all-reduces, and DP = 2 uses `allgather_reducescatter`. So the T2 and T3 EP runs compare memory layout
+(half the experts per GPU vs half of every expert), balance across the two GPUs, and the all-reduce vs
+all-gather/reduce-scatter traffic; dispatch and combine appear only with DP > 1 and DeepEP-class backends on
+Hopper-class GPUs.
 
 **Candidate models for T1** (ids and fits are verify): `allenai/OLMoE-1B-7B-0924` (6.9B; fp16 on a 24 GB GPU, or a
 T4 with `--cpu-offload-gb`), `Qwen/Qwen1.5-MoE-A2.7B` in INT4 (fits a T4), `Qwen/Qwen3-30B-A3B` in INT4 on a 24 GB GPU,
@@ -656,17 +714,18 @@ DeepSeek-V3's selection-only bias — or the router collapses onto a few experts
 the deployment: memory by the *total* plus KV, prefill by the *active*, and decode by what a step *streams*. A
 decode step reads every expert any token in the batch picked, E(1 − (1 − k/E)^T) per layer, so an MoE is a small
 model at batch 1 and streams nearly all its weights by batch 16–64, and it turns compute-bound only at batches
-total ÷ active times a dense model's — 754 for Mixtral on an H200. So we serve MoE at large batch with expert
-parallelism: each GPU owns some experts, each layer does two all-to-alls, and data-parallel attention keeps each
-rank's KV local. We keep EP inside the NVLink domain, rebalance hot experts with a few redundant copies, and
+about total ÷ active (more precisely, weights streamed ÷ weights multiplied) times a dense model's — 754 for
+Mixtral on an H200. So we serve MoE at large batch with expert parallelism: each GPU owns some experts, each layer
+exchanges tokens (two all-to-alls with DeepEP-class kernels), and data-parallel attention keeps each rank's KV
+local. We keep EP inside the NVLink domain, rebalance hot experts with a few redundant copies, and
 quantize experts but not the router. The KV cache is whatever the attention says; at long context it dominates
 again. For low-traffic workloads on one GPU, a dense model of the active size is usually the better choice."
 
 **Drill questions**
 
 1. *"Qwen3-30B-A3B is 3B active, so it runs on my 24 GB GPU."* — Memory follows the total: 61.1 GB in bf16, 30.5 GB
-   in FP8. Only 4-bit experts (18.5 GB) fit, leaving room for about 7 sequences of 4K tokens. The 3B helps FLOPs,
-   not memory.
+   in FP8. Only 4-bit experts (18.5 GB) fit, leaving room for about 5 sequences of 4K tokens at vLLM's defaults
+   (21,593 tokens of KV). The 3B helps FLOPs, not memory.
 2. *Why does decode turn compute-bound at batch 754 for Mixtral but 207 for Llama-3.1-8B on an H200?* — The step's
    weight bytes approach the total (all experts touched) while FLOPs follow the active parameters; the ratio of
    streamed to multiplied weights is 3.7, and each expert sees only B·k/E of the batch.
@@ -676,13 +735,15 @@ again. For low-traffic workloads on one GPU, a dense model of the active size is
 4. *Why does DeepSeek-V3's balancing bias not change the model's outputs directly?* — It is added to the scores
    only to choose experts; the combine weights come from the unbiased scores. It steers load without biasing the
    gradient of the task loss.
-5. *EP = 16 across two nodes is slower per token than EP = 8 in one. Why?* — The all-to-all now crosses the network
-   (for DeepSeek-V3 at batch 512: 8.6 ms of all-to-alls per step over 400 Gb/s vs 1.1 ms on NVLink), the replicated
-   attention weights are a bigger share of each GPU's bytes, and the busiest rank still sets the step.
-6. *A hot expert keeps one GPU at 100%. Three fixes and their costs?* — EPLB-style replication of hot experts (~2.4
-   GiB of HBM per redundant DeepSeek-V3 expert per GPU), a different placement (moves the hot spot, may not remove
-   it), or routing work by tenant or domain across replicas (layer 05) — and re-measure, since skew is a property of
-   the workload.
+5. *EP = 16 across two nodes is slower per token than EP = 8 in one. Why?* — Half of each GPU's all-to-all traffic
+   now crosses the network (for DeepSeek-V3 at batch 512: 3.8 ms of all-to-alls per step across two nodes on
+   400 Gb/s vs 0.9 ms in one NVLink domain), the replicated attention weights are a bigger share of each GPU's
+   bytes, and the busiest rank still sets the step.
+6. *A hot expert keeps one GPU at 100% during prefill. Three fixes and their costs?* — EPLB-style replication of
+   hot experts (~2.4 GiB of HBM per redundant DeepSeek-V3 expert per GPU), a different placement (moves the hot spot,
+   may not remove it, and vLLM applies round-robin only to grouped models), or routing work by tenant or domain
+   across replicas (layer 05) — and re-measure, since skew is a property of the workload. In memory-bound decode the
+   same skew shows up on the hot GPU's link rather than its GEMMs.
 
 ---
 
@@ -743,7 +804,7 @@ Code and docs read for this primer (September 2026):
   `vllm/config/offload.py`, `docs/serving/expert_parallel_deployment.md`, `docs/serving/data_parallel_deployment.md`, <https://github.com/vllm-project/vllm>.
 - DeepEP, <https://github.com/deepseek-ai/DeepEP> (README and `docs/legacy.md` for the V1 numbers).
 - SGLang docs, `advanced_features/expert_parallelism.mdx` and `dp_dpa_smg_guide.mdx`, <https://github.com/sgl-project/sglang>.
-- llama.cpp `common/arg.cpp` (`--cpu-moe`, `--n-cpu-moe`), <https://github.com/ggml-org/llama.cpp>.
+- llama.cpp `common/arg.cpp` (`--cpu-moe`, `--n-cpu-moe`, `--op-offload`), <https://github.com/ggml-org/llama.cpp>.
 - llm-compressor `examples/quantizing_moe/`, <https://github.com/vllm-project/llm-compressor>.
 - llm-d wide-EP guide (via layer 05), <https://github.com/llm-d/llm-d>.
 
@@ -754,6 +815,7 @@ and `roofline-core/roofline/llm.py`; [gpu-deployment §4](../../01-hardware-gpu-
 [cuda-and-nccl PRIMER §5](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives) and `cuda-nccl-core/gpusim/collectives.py`;
 [serving-engine PRIMER §9 and §12](../../04-inference-engine/serving-engine/PRIMER.md#12-engines-and-where-to-run-them);
 [serving-orchestration PRIMER §8](../../05-orchestrator/serving-orchestration/PRIMER.md#8-large-moe-topologies-wide-ep-in-brief);
+[quantization PRIMER §2, §5, §8](../../04-inference-engine/quantization/PRIMER.md#2-number-formats);
 [open-weight primer §4](../model-landscape/open-weight-llms-primer.md#4-the-families-vendor-by-vendor).
 
 ---
@@ -782,6 +844,13 @@ Dated 2026-09-26. Re-check before relying on any of these.
 - **Values from papers not readable here**: Switch's α = 0.01 and capacity factors 1.0–1.25; ST-MoE's z-loss 1e-3;
   DeepSeek-V3's sequence-wise α = 0.0001 and bias-rate schedule.
 - **Hardware and links**: GPU peaks and bandwidths (layer 01's catalogue); link α-β values are illustrative; PCIe
-  effective bandwidth ~25 GB/s (Gen4 x16) and ~12 GB/s (Gen3 x16, T4).
+  host-to-device bandwidth ~25 GB/s (Gen4 x16) and ~12 GB/s (Gen3 x16, T4); GPU-to-GPU NCCL over PCIe assumed
+  8 GB/s with α = 20 µs (T4s) and 12 GB/s with α = 15 µs (L4s), the lab's values — fit your own with layer 02's lab.
+  Memory the driver reports (T4 15.0 GiB, L4 22.49 GiB) and the ~1.5 GiB activation and CUDA-graph overhead in
+  `sizing.kv_room_gib()`.
+- **Expert placement**: `round_robin` honoured only with more than one expert group, no redundant experts, EPLB off
+  and (with all-to-all kernels) the DeepEP low-latency or NIXL-EP backend — read in v0.30.0 and main `a4eb3f2`.
+- **llama.cpp**: whether `--cpu-moe` experts are computed on the CPU in decode and copied to the GPU for large
+  batches (`--op-offload`, default on).
 - **Prices**: every $/GPU-hour here is a placeholder; current prices are in [`COMPUTE.md`](../../COMPUTE.md).
 - **GCP**: the cuda-and-nccl lab's `l4x2` pool (`g2-standard-24`, 2 × L4) and GKE's L4 Spot availability.

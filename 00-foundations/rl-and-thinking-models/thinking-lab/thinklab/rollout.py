@@ -202,7 +202,8 @@ def one_grpo_step(model: str = "Qwen/Qwen2.5-0.5B-Instruct", n_prompts: int = 8,
     """T1: one GRPO step with vLLM generating the rollouts and transformers computing the loss.
 
     Rollout (vLLM) → verify → advantages → trainer log-probs (the "old" policy) → mismatch vs the
-    sampler → surrogate loss × sequence-level truncated IS weight → one SGD step. The weights are *not*
+    sampler → surrogate loss × a sequence-level IS weight, zeroed above 3 (``is_ratios`` in TRL's default
+    ``sequence_mask`` mode) → one SGD step. The weights are *not*
     pushed back to vLLM here (TRL's colocate/server modes do that); the step reports where the time
     went and how far the two copies' log-probs are apart."""
     import time
@@ -239,7 +240,7 @@ def one_grpo_step(model: str = "Qwen/Qwen2.5-0.5B-Instruct", n_prompts: int = 8,
         logp = torch.log_softmax(logits, -1).gather(1, torch.tensor(ids, device="cuda")[:, None]).squeeze(1)
         diff = logp.detach() - torch.tensor(lps, device="cuda")
         mismatch.append(diff.abs().mean().item())
-        w = torch.exp(diff.sum()).clamp(max=3.0)                       # sequence-level truncated IS
+        w = is_ratios(lps, logp.detach().tolist(), mode="sequence_mask", c_max=3.0)[0]   # TRL's default mode
         loss = -(torch.exp(logp - logp.detach()) * a * w).sum() / (len(rollouts) * max_tokens)   # dr_grpo normaliser
         loss.backward()
         total += loss.item()

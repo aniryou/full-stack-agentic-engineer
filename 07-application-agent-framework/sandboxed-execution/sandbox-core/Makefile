@@ -3,7 +3,7 @@ PY ?= python3
 .PHONY: setup test notebooks check lab clean
 
 setup:
-	$(PY) -m pip install -r requirements.txt
+	$(PY) -m pip install -e ".[dev]"
 	$(PY) -m ipykernel install --user --name python3
 
 test:

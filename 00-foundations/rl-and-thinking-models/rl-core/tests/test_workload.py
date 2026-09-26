@@ -74,6 +74,33 @@ def test_a_tight_itl_slo_binds_before_hbm():
     assert w.decode_step_s(SMALL, H100, 187, 3000, "fp8") <= 0.020 < w.decode_step_s(SMALL, H100, 188, 3000, "fp8")
 
 
+def test_steady_plan_closes_littles_law_on_the_step_the_fleet_runs_at():
+    """plan() prices every token at the SLO's TPOT, so a 20 ms SLO needs fewer GPUs (3) than a 40 ms one (5).
+    At 3 GPUs the fleet settles at 139.1 per GPU and 16.7 ms a step — under both SLOs — so both need 3, and the
+    tight SLO's need is the larger. By hand (memory-bound step, FP8): c = rps·(TTFT + 3000·(24 + 0.2289·c/N)/3350)."""
+    loose = w.plan_steady(SMALL, H100, RPS, 1500, 3000, tpot_ms=40)
+    tight = w.plan_steady(SMALL, H100, RPS, 1500, 3000, tpot_ms=20)
+    assert loose["gpus_needed"] == tight["gpus_needed"] == 3
+    assert tight["gpus"]["itl_slots"] > loose["gpus"]["itl_slots"] and tight["binding"] == "itl_slots"
+    kv, ttft = w.kv_per_session_gb(SMALL, 3000, "fp8"), w.ttft_s(24, 1500, H100)
+    a, slope = RPS * (ttft + 3000 * 24 / 3350), RPS * 3000 * kv / 3350
+    c = a / (1 - slope / 3)                                              # the fixed point, solved by hand
+    assert loose["concurrency"] == pytest.approx(c, rel=1e-6) and round(c, 1) == 417.3
+    assert loose["step_s"] == pytest.approx((24 + kv * c / 3) / 3350, rel=1e-6) and round(loose["step_s"] * 1e3, 1) == 16.7
+    assert slope / 2 < 1 and a / (1 - slope / 2) / 2 > loose["sessions_per_gpu"]  # 2 GPUs settle past HBM: infeasible
+    for b in (50, 100, 150, 200):                                        # N(b) falls as b grows
+        assert w.gpus_for_batch(SMALL, H100, RPS, 1500, 3000, b) > w.gpus_for_batch(SMALL, H100, RPS, 1500, 3000, b + 1)
+    base = w.plan_steady(SMALL, H100, RPS, 1500, 300)
+    assert round(loose["gpus"]["memory"] / base["gpus"]["memory"]) == 18      # the 18× survives the convention
+
+
+def test_a_gpu_without_fp8_refuses_an_fp8_plan():
+    t4 = w.GPUS["T4"]
+    with pytest.raises(ValueError):
+        w.plan(w.QWEN3_0_6B, t4, 1.0, 500, 3000, dtype="fp8")
+    assert w.plan(w.QWEN3_0_6B, t4, 1.0, 500, 3000, dtype="fp16")["gpus_needed"] >= 1
+
+
 def test_kv_working_set_grows_with_the_square_of_output():
     assert w.kv_token_steps(1500, 300) == 1500 * 300 + 300 * 301 // 2 == 495_150
     assert round(w.kv_token_steps(1500, 3000) / w.kv_token_steps(1500, 300), 1) == 18.2

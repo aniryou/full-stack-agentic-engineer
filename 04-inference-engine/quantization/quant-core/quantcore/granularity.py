@@ -126,6 +126,15 @@ def output_error(X, W, W_hat, X_hat=None) -> float:
                  / np.linalg.norm(ref))
 
 
+def output_error_by_input(X, W, W_hat) -> np.ndarray:
+    """Where a layer's output error comes from, per input channel c: ||X[:, c]||^2 x ||W[:, c] - W_hat[:, c]||^2,
+    the energy of that channel's term in X (W - W_hat)^T (cross terms between channels left out). A column's
+    rounding error reaches the output multiplied by its input, so a channel with large activations owns the
+    error even when its weight column is ordinary - the case AWQ and SmoothQuant are for."""
+    X, E = np.asarray(X, float), np.asarray(W, float) - np.asarray(W_hat, float)
+    return (X ** 2).sum(0) * (E ** 2).sum(0)
+
+
 def argmax_agreement(ref_logits, test_logits) -> float:
     """Fraction of positions whose top-1 prediction is unchanged."""
     return float((np.argmax(ref_logits, -1) == np.argmax(test_logits, -1)).mean())

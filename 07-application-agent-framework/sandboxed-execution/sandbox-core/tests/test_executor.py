@@ -128,12 +128,17 @@ def test_a_different_uid_is_what_protects_your_files():
 
 
 def test_home_redirection_is_not_a_boundary():
-    # With our own UID, HOME points at the workspace but the real home still opens by absolute path.
-    import pwd
-    real_home = pwd.getpwuid(os.getuid()).pw_dir
-    r = run("import os, pwd; h = pwd.getpwuid(os.getuid()).pw_dir; "
-            "print(os.path.expanduser('~') != h, os.access(h, os.R_OK))", AS_ME, wall_s=3)
-    assert r.stdout.split() == ["True", str(os.access(real_home, os.R_OK))]
+    # With our own UID, HOME points at the workspace but a stand-in "home" still opens by absolute path.
+    victim = tempfile.mkdtemp(prefix="victim-home-")
+    key = os.path.join(victim, "id_ed25519")
+    with open(key, "w") as f:
+        f.write("STANDIN-KEY")
+    try:
+        r = run(f"import os; print(os.path.expanduser('~') != {victim!r}, open({key!r}).read())", AS_ME, wall_s=3)
+    finally:
+        import shutil
+        shutil.rmtree(victim, ignore_errors=True)
+    assert r.stdout.split() == ["True", "STANDIN-KEY"]
     assert ProcessSandbox(AS_ME).isolation_report()["filesystem_isolated"] is False
 
 

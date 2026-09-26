@@ -52,7 +52,7 @@ for bits in (8, 4, 3):
     report(f"RTN INT{bits} g32", quantize_model(m, "rtn", bits, 32))
 
 # %% [markdown]
-# INT8 is free; INT4 costs 5.5 points and INT3 23 on this small model (larger models tolerate RTN better — the
+# INT8 is free; INT4 costs 6.6 points and INT3 22 on this small model (larger models tolerate RTN better — the
 # GPTQ paper's LLaMA-7B loses 0.6 perplexity at 4-bit RTN and 20 at 3-bit, verify). Note the flips: accuracy is a
 # net of right answers lost and wrong answers gained, so it understates the churn — KL and top-1 agreement see it.
 #
@@ -85,7 +85,7 @@ print(f"act-order on blocks.0.down: output error {G.output_error(Xn, W, gptq.gpt
       f"-> {G.output_error(Xn, W, gptq.gptq(W, Xn, bits=4, group_size=32, actorder=True).w_hat):.4f}")
 
 # %% [markdown]
-# GPTQ recovers INT4 to within half a point and INT3 to 6 points. **Act-order** (visit the most-used inputs
+# GPTQ recovers INT4 to within a point and INT3 to 6 points. **Act-order** (visit the most-used inputs
 # first, while the most columns remain to absorb their error) helps a little more; with static groups the
 # checkpoint layout is unchanged.
 #
@@ -171,10 +171,14 @@ for label, C in (("only 2 of the 16 classes", Xa[ya < 2][:256]),
                  ("pure noise", np.random.default_rng(1).standard_normal((256, 64)) * 1.6)):
     r = E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=C).forward(X), y)
     print(f"GPTQ INT3 g32, 256 samples of {label:25}: acc {r['acc']:.1%}, KL {r['kl']:.3f}")
+draws = m.sample(768, "calib")[0].reshape(3, 256, -1)      # three more 256-sample draws, disjoint
+accs = [E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=D).forward(X), y)["acc"] for D in draws]
+print("GPTQ INT3 g32, three other 256-sample draws: acc " + ", ".join(f"{a:.1%}" for a in accs))
 
 # %% [markdown]
 # More samples help until H is well estimated (a few hundred here; recipes use 128–512 sequences of 512–2,048
-# tokens). A narrow or even random calibration set does surprisingly well on this toy, because what GPTQ and AWQ
+# tokens). Past that, *which* samples you drew matters about as much as how many: three other 256-sample draws
+# spread over about a point, more than the 0.6 points between 256 and 1,024 samples. A narrow or even random calibration set does surprisingly well on this toy, because what GPTQ and AWQ
 # need — which channels are large, how inputs correlate — comes mostly from the model's own weights and norm gains,
 # which any input reveals. Calibration data does not teach the model anything and cannot fix a format that is too
 # coarse. On real models the text still matters (chat templates, languages, long contexts shift activation
@@ -278,20 +282,26 @@ print("✅ AWQ helps exactly the layers whose inputs have outlier channels: it r
 
 # %% [markdown]
 # ## Exercise 3.5 — how much calibration data?
-# Find the smallest calibration size among 32, 64, 128, 256, 512 whose GPTQ INT3 g32 accuracy is within one
-# point of the 1,024-sample result. Set `n_enough`.
+# "Enough" means: more would not make a difference this eval can see. Find the smallest calibration size among
+# 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) whose GPTQ INT3 g32 accuracy is below the 1,024-sample
+# result by less than two standard errors of the *difference* between two such runs: `2 * E.diff_stderr(p, p, n)`
+# with `p` the 1,024-sample accuracy and `n` the number of test points. Set `n_enough`.
 
 # %% exercise
 ### BEGIN SOLUTION
 acc = lambda n: E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=m.sample(n, "calib")[0]).forward(X), y)["acc"]
-target = acc(1024)
-n_enough = next(n for n in (32, 64, 128, 256, 512) if acc(n) >= target - 0.01)
+p = acc(1024)
+n_enough = next(n for n in (32, 64, 128, 256, 512) if acc(n) > p - 2 * E.diff_stderr(p, p, len(y)))
 ### END SOLUTION
 
 # %% check
-assert n_enough == 256
-print(f"✅ {n_enough} samples: H for a 256-dim input needs a few hundred rows to be well conditioned (recipes use 128-512 "
-      "sequences of 512-2,048 tokens, i.e. far more token rows than this)")
+res = {n: E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=m.sample(n, "calib")[0]).forward(X), y)["acc"]
+       for n in (32, 64, 128, 256, 512, 1024)}
+bar = 2 * E.diff_stderr(res[1024], res[1024], len(y))
+assert n_enough == next(n for n in (32, 64, 128, 256, 512) if res[n] > res[1024] - bar) and n_enough in (128, 256), n_enough
+print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024, noise bar {bar:.1%}): once H for a 256-dim "
+      "input is estimated from a few hundred rows, more data moves accuracy less than the eval can see (recipes use "
+      "128-512 sequences of 512-2,048 tokens, i.e. far more token rows than this)")
 
 # %% [markdown]
 # ## In a design review

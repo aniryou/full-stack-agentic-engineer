@@ -8,7 +8,7 @@
     render [--check]            write (or check) the generated kind/GKE manifests and seccomp profile
     admit FILE [--target T]     predict what admission says about each object in a YAML file
     bench [--n N]               start-up latency by level (measured here; samples for the rest)
-    pool --rate R --exec S --cold S   warm-pool size by Little's law and Erlang C
+    pool --rate R --exec S --cold S   warm-pool mean occupancy (Little's law) and size (Erlang C)
     gke-review                  the GKE Sandbox Terraform checklist, read offline
     report [--out DIR]          probes + bench into JSON and Markdown
 """
@@ -122,10 +122,14 @@ def main(argv=None) -> int:
     elif a.cmd == "pool":
         from . import bench
         p = bench.littles_law_pool(a.rate, a.exec_s, a.cold)
-        print(f"busy {p['busy']:.1f} + warming {p['warming']:.1f} = {p['total']:.1f} sandboxes (Little's law, never wait on a cold start)")
-        c = bench.servers_for(a.rate, a.exec_s, max_mean_wait_s=0.1)
-        print(f"M/M/c: {c} running sandboxes keep the mean queueing delay <= 100 ms "
-              f"(P(wait) {bench.erlang_c(a.rate * a.exec_s, c):.3f}, E[Wq] {bench.mean_wait_s(a.rate, a.exec_s, c) * 1000:.0f} ms)")
+        print(f"busy {p['busy']:.1f} + warming {p['warming']:.1f} = {p['total']:.1f} slots on average "
+              "(Little's law: the floor, not the size)")
+        hold = a.exec_s + a.cold
+        c = bench.replace_after_use_slots(a.rate, a.exec_s, a.cold, 0.2)
+        print(f"replace-after-use: {c} slots keep P(wait for a warm sandbox) <= 0.2 "
+              f"(Erlang C on a = {a.rate * hold:.1f}; E[Wq] {bench.mean_wait_s(a.rate, hold, c) * 1000:.0f} ms)")
+        r = bench.servers_for(a.rate, a.exec_s, max_p_wait=0.2)
+        print(f"reuse pool (state carries between executions): {r} slots for the same target (a = {a.rate * a.exec_s:.1f})")
     elif a.cmd == "gke-review":
         from . import gke
         for c in gke.review():

@@ -34,9 +34,10 @@ class Model:
         self.active_b = self.params_b if self.active_b is None else self.active_b
 
 
-# Datasheet-level numbers (verify). H100 and Mistral Small are the capacity primer's; T4 has no FP8.
+# Datasheet-level numbers (verify). H100 and Mistral Small are the capacity primer's. The T4 has no FP8 (0 here:
+# asking for it raises) and 16 GB nominal, of which the driver reports ~15 GiB (servelab.sizing and PRIMER §9 use 15).
 GPUS = {"H100": GPU("H100", 80, 3.35, 990, 1979), "L4": GPU("L4", 24, 0.30, 121, 242),
-        "T4": GPU("T4", 16, 0.32, 65, 65)}
+        "T4": GPU("T4", 16, 0.32, 65, 0)}
 MISTRAL_SMALL = Model("Mistral Small 3 (24B dense)", 24, 40, 8, 128)
 QWEN3_0_6B = Model("Qwen3-0.6B", 0.596, 28, 8, 128)
 
@@ -55,7 +56,10 @@ def kv_per_session_gb(model: Model, context_tokens: float, dtype: str = "bf16") 
 
 
 def _tflops(gpu: GPU, dtype: str) -> float:
-    return gpu.fp8_tflops if dtype in ("fp8", "int8") else gpu.bf16_tflops
+    peak = gpu.fp8_tflops if dtype in ("fp8", "int8") else gpu.bf16_tflops
+    if not peak:
+        raise ValueError(f"{gpu.name} has no {dtype} tensor-core peak listed; plan in bf16/fp16")
+    return peak
 
 
 def ttft_s(active_b: float, prompt_tokens: int, gpu: GPU, dtype: str = "fp8", mfu: float = 0.5) -> float:
@@ -115,6 +119,35 @@ def plan(model: Model, gpu: GPU, rps: float, in_tokens: int, out_tokens: int, tp
     return {"duration_s": duration, "concurrency": conc, "avg_ctx": ctx, "sessions_per_gpu": mem,
             "itl_batch": itl, "batch": batch, "decode_tok_s_per_gpu": per_gpu, "gpus": need,
             "binding": binding, "gpus_needed": math.ceil(need[binding] - 1e-9)}
+
+
+def gpus_for_batch(model, gpu, rps, in_tokens, out_tokens, batch, dtype="fp8", mfu=0.5) -> float:
+    """Little's law read backwards: the fleet that holds a steady `batch` per GPU when each request lives
+    TTFT + out × the step *that batch* runs at. N = rps·(TTFT + out·step(batch))/batch falls as batch grows."""
+    step = decode_step_s(model, gpu, batch, in_tokens + out_tokens // 2, dtype, mfu)
+    return rps * (ttft_s(model.active_b, in_tokens, gpu, dtype, mfu) + out_tokens * step) / batch
+
+
+def plan_steady(model: Model, gpu: GPU, rps: float, in_tokens: int, out_tokens: int, tpot_ms: float = 40,
+                dtype: str = "fp8", mfu: float = 0.5) -> dict:
+    """plan() without its convention: a request lives as long as the step the fleet actually runs at, not the
+    SLO's TPOT (which makes a looser SLO look dearer). The fewest GPUs each cap allows is gpus_for_batch() at
+    that cap; decode throughput is then implied. Chunked prefill is assumed to ride in memory-bound decode
+    steps, so prefill is sized as in plan(). Also returns the operating point at the GPU count chosen."""
+    ctx = in_tokens + out_tokens // 2
+    mem = sessions_per_gpu(model, gpu, ctx, dtype)
+    itl = max_batch_for_itl(model, gpu, ctx, tpot_ms / 1000, dtype, mfu)
+    n_of = lambda b: gpus_for_batch(model, gpu, rps, in_tokens, out_tokens, b, dtype, mfu)
+    need = {"memory": n_of(mem), "itl_slots": n_of(itl) if itl else math.inf,
+            "prefill": rps * in_tokens / prefill_tok_s(model.active_b, gpu, dtype, mfu)}
+    binding = max(need, key=need.get)
+    n = math.ceil(need[binding] - 1e-9)
+    lo, hi = 1e-9, min(mem, itl)                      # n_of falls with b: bisect for the batch n GPUs settle at
+    for _ in range(200):
+        lo, hi = (lo, (lo + hi) / 2) if n_of((lo + hi) / 2) <= n else ((lo + hi) / 2, hi)
+    step = decode_step_s(model, gpu, hi, ctx, dtype, mfu)
+    return {"gpus": need, "binding": binding, "gpus_needed": n, "batch": hi, "step_s": step,
+            "concurrency": hi * n, "duration_s": hi * n / rps, "sessions_per_gpu": mem, "itl_batch": itl}
 
 
 def rl_step_time(model, gpu, n_gpus, prompt_tokens, out_lengths, dtype="bf16", mfu=0.5, mfu_train=0.4,

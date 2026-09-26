@@ -27,7 +27,7 @@ measures (the lab never imports it).
 
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
-| 01 | [`a_tiny_moe_in_torch`](notebooks/01_a_tiny_moe_in_torch.ipynb) | T0 (torch on CPU; bundled curves without) | router → top-k → combine, written the way HF v5 models are; total vs active; top-1 collapse (the busiest expert at ~2x its share) and two fixes — the Switch loss (k at balance, HF's normalisation) and DeepSeek-V3's choose-only bias; what imbalance costs an EP step; experts specialise by token far more than by domain | §2, §3, §4 | ~1.5 h |
+| 01 | [`a_tiny_moe_in_torch`](notebooks/01_a_tiny_moe_in_torch.ipynb) | T0 (torch on CPU; bundled curves without) | router → top-k → combine, written the way HF v5 models are; total vs active; top-1 collapse (the busiest expert at 6–7× its share, five or six of eight experts dead, a worse loss) and two fixes — the Switch loss (k at balance, HF's normalisation) and DeepSeek-V3's choose-only bias; what imbalance costs an EP step; experts specialise by token far more than by domain | §2, §3, §4 | ~1.5 h |
 | 02 | [`watch_the_router`](notebooks/02_watch_the_router.ipynb) | T1 (T0: illustrative traces) | capturing routing with forward hooks (three router output layouts) or vLLM's `--enable-return-routed-experts`; utilisation, EPLB's balancedness against a uniform baseline at the same sample size; domain divergence by layer; why the same routing hurts more at EP 16 than at EP 2 | §3.7, §6.3 | ~1.5 h |
 | 03 | [`batch_vs_weight_stream`](notebooks/03_batch_vs_weight_stream.ipynb) | T1 (T0: simulated) | experts touched E(1−(1−k/E)^T), closed form and skewed Monte Carlo; bytes per step and the crossover batch — layer 01's Mixtral table (25.6 GB, 5.34 ms; 754 vs 207) reproduced; OLMoE vs a dense 1.5B, step time vs batch; vLLM's `moe_align_block_size` padding; calibrating the simulation from two measured points | §5, §6.1 | ~2 h |
 | 04 | [`expert_parallelism_on_two_gpus`](notebooks/04_expert_parallelism_on_two_gpus.ipynb) | T2 (T0: simulated) | TP vs TP+EP vs DP+EP in vLLM: what each GPU holds, which collectives run (no all-to-all with DP = 1), latency-bound decode messages, all-to-all bytes checked against layer 02 and DeepEP; when hot experts slow a GPU (tokens in compute-bound steps, not bytes in decode); reading `vllm bench serve` | §6.2–§6.5, §8 | ~2 h |
@@ -109,9 +109,11 @@ make check                                              # all of the above + tes
   FLOP/s, 2.5 ms per step; `ep.LINKS` for PCIe pairs are assumptions) — notebook 03 shows how to calibrate them.
   *Illustrative* fixtures have the documented shape and were generated from the lab's own models, so agreeing with
   them proves only that the parsers work.
-- **The toy is a toy.** The tiny MoE's collapse (max/mean ~1.8–2.1 without balancing, ~1.1 with it, seeds 0–2) and
-  its token-over-domain specialisation are real outputs of this code on a toy task; they show the mechanism, not
-  the magnitude in a real model.
+- **The toy is a toy.** The tiny MoE's collapse (max/mean 5.9–6.8 and 5–6 dead experts without balancing,
+  1.04–1.17 with it, seeds 0–2) and its token-over-domain specialisation are real outputs of this code on a toy
+  task; they show the mechanism, not the magnitude in a real model. The collapse relies on a direction shared by
+  every token embedding (`TrainConfig.common`), as real hidden states share one; without it (`--common 0`) the toy
+  only drifts to ~2× on the busiest expert.
 - **What the step model leaves out.** Kernel efficiency at small GEMM shapes (TP's half-width experts), overlap of
   communication with compute, CUDA-graph and scheduler effects, prefill interference in decode — measurement is the
   judge.

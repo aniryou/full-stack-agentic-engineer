@@ -82,9 +82,9 @@ def result_from_pod(logs: str, pod: dict | None, job: dict | None, *, isolation:
     waiting = ((((pod or {}).get("status") or {}).get("containerStatuses") or [{}])[0].get("state") or {}).get("waiting") or {}
     pod_reason = ((pod or {}).get("status") or {}).get("reason")
     if term.get("reason") == "OOMKilled":
-        reason, msg = "memory_limit", "OOMKilled by the pod's memory cgroup"
+        reason, msg = "memory", "OOMKilled by the pod's memory cgroup"
     elif (jc.get("Failed") or {}).get("reason") == "DeadlineExceeded":
-        reason, msg = "timeout", "Job activeDeadlineSeconds exceeded (start-up included)"
+        reason, msg = "wall_timeout", "Job activeDeadlineSeconds exceeded (start-up included)"
     elif pod_reason == "Evicted":
         reason, msg = "disk_limit", (pod.get("status") or {}).get("message", "evicted")
     elif waiting.get("reason"):

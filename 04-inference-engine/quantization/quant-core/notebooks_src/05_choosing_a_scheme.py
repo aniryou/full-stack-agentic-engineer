@@ -60,16 +60,20 @@ show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 # step. `cost.gemm_time` reproduces it (W4A16 at 4.16 bits per weight, as that table counts).
 
 # %%
-for M in (1, 16, 64, 128, 256, 2048):
+for M in (1, 16, 64, 128, 256, 400, 462, 2048):
     row = [C.gemm_time(M, 14336, 4096, L4, s, w_bits=4.16 if s == "w4a16" else None) for s in ("bf16", "w4a16", "w8a8-fp8")]
-    print(f"M = {M:5d}: " + "  ".join(f"{s} {r['t'] * 1e6:7.0f} us ({r['bound'][:3]})" for s, r in zip(("BF16", "W4A16", "FP8"), row)))
+    print(f"M = {M:5d}: " + "  ".join(f"{s} {r['t'] * 1e6:7.0f} us ({r['bound'][:3]})" for s, r in zip(("BF16", "W4A16", "FP8"), row))
+          + f"   W4A16 speedup {row[0]['t'] / row[1]['t']:.2f}x")
 for g in (L4, H100):
-    print(f"{g.name}: W4A16 turns compute-bound above {C.crossover_tokens(14336, 4096, g, w_bits=4.16):.0f} tokens per step")
+    print(f"{g.name}: W4A16 turns compute-bound above {C.crossover_tokens(14336, 4096, g, w_bits=4.16):.0f} tokens per step, "
+          f"BF16 above {C.crossover_tokens(14336, 4096, g, 'bf16'):.0f}")
 
 # %% [markdown]
-# A weight-only kernel does BF16 math on dequantized weights, so its advantage is the byte ratio and it ends where
-# the BF16 math becomes the ceiling: ~120 tokens per step on an L4, ~85 on an H100. Above that — every prefill
-# chunk, and decode batches past ~100 — INT4 buys memory, not speed; real kernels also pay for dequantization
+# A weight-only kernel does BF16 math on dequantized weights. Up to ~120 tokens per step on an L4 (~85 on an H100)
+# it is byte-bound and keeps the full byte ratio, ~3.8×. There it hits the BF16 compute ceiling while BF16 itself is
+# still byte-bound, so from there its speedup shrinks — 1.7× at 256 tokens — and is gone where BF16 turns
+# compute-bound too, ~460 tokens on an L4 (~330 on an H100). So decode batches of a few hundred still gain from
+# INT4; long prefill chunks (512 and up) do not, and real kernels lose sooner because dequantization is not free
 # (NVIDIA's ModelOpt measured weight-only NVFP4 slower than BF16 in 10 of 12 shapes on Blackwell, its QAD note of
 # 2026-09-16, verify). FP8 W8A8 halves both ceilings and helps at every M.
 #
@@ -101,9 +105,12 @@ show(C.table(C.GPUS["B200"], m8, kv=(8,), schemes=["bf16", "w8a8-fp8", "w8a8-int
 
 # %% [markdown]
 # On a T4 a 1.5B model is small enough that quantization is about speed: INT4 for decode, INT8 W8A8 for prefill.
-# On an H100 a 70B model in 16-bit does not fit at all and in FP8 fits with no room for a single 4K session: on one
-# GPU only a 4-bit format serves it (or two GPUs with tensor parallelism, or an H200's 141 GB). On a B200, NVFP4
-# W4A4 is the first 4-bit format that also cuts prefill FLOPs.
+# On an H100 a 70B model in 16-bit does not fit at all. In FP8 it fits, but with this model's round memory inputs
+# (0.9 × 80 GB − 1 GB) there is no room left for a 4K session; at vLLM's defaults on the 79.65 GiB an H100 reports
+# (the lab's `quantlab.kv.size`) there is room for 2 such sessions, or 4 with FP8 KV — either way no useful
+# concurrency. On one GPU only a 4-bit format serves it; FP8 means two GPUs with tensor parallelism, or an H200's
+# 141 GB. On a B200, NVFP4 W4A4 is the 4-bit format that also cuts prefill FLOPs — if the model survives 4-bit
+# activations (notebook 04, worked example 4).
 #
 # ## Worked example 5 — what it costs per million tokens
 # `$/M tokens = $/GPU-hour ÷ (tokens/s × 3600 × utilisation) × 10⁶` (layer 01 §8.1). Prices are the research
@@ -121,12 +128,13 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 # %% [markdown]
 # Quantization lowers cost twice: fewer bytes per step, and more sessions, so a bigger batch shares each step.
 # On the L4 the batch is capped by KV memory (17 sessions in bf16), which is why FP8 weights plus FP8 KV cut the
-# cost per token ~6× there, not 2×: a 5× larger batch in a step that is no longer. On the H100 the batch is
-# capped at 256 here in both cases, and FP8 roughly halves the cost.
+# cost per token ~6× there, not 2×: a 5× larger batch in a step that is no longer. On the H100, BF16 fits 209
+# sessions and FP8 reaches the 256 cap used here; FP8 roughly halves the cost.
 #
 # ## Worked example 6 — the accuracy gate
 # The eval decides which rows are allowed at all. On the tiny model (notebook 03) with a budget of KL ≤ 0.05 nats
-# and an accuracy drop within two standard errors:
+# and an accuracy drop within two standard errors of the difference (`E.diff_stderr`, unpaired; the paired
+# McNemar z on the flips, `E.paired_z`, is the sharper test — primer §8):
 
 # %%
 tm = TinyModel()
@@ -136,11 +144,13 @@ ref = tm.forward(Xt)
 for label, q in (("INT8 RTN", quantize_model(tm, "rtn", 8, None)), ("INT4 RTN g32", quantize_model(tm, "rtn", 4, 32)),
                  ("INT4 GPTQ g32", quantize_model(tm, "gptq", 4, 32, calib=Xc))):
     r = E.compare(ref, q.forward(Xt), yt)
-    print(f"{label:14} KL {r['kl']:.4f}  acc {r['acc']:.1%} (fp {r['acc_ref']:.1%} ± {r['stderr']:.1%})  "
-          f"within budget: {E.within_budget(r, max_kl=0.05)}")
+    print(f"{label:14} KL {r['kl']:.4f}  acc {r['acc']:.1%} (fp {r['acc_ref']:.1%}; drop {r['acc_ref'] - r['acc']:+.1%} vs "
+          f"2 x {r['diff_stderr']:.1%})  paired z {r['paired_z']:+.1f}  within budget: {E.within_budget(r, max_kl=0.05)}")
 
 # %% [markdown]
-# INT4 is allowed only with GPTQ here — the recipe is part of the scheme. `choose(rows, allowed=...)` takes that set.
+# INT4 is allowed only with GPTQ here — the recipe is part of the scheme. GPTQ's 0.6-point drop is inside the
+# unpaired noise bar, while the paired flips (85 lost, 61 gained, z = −2.0) say it is a small but probably real loss:
+# a budget should say which test it means. `choose(rows, allowed=...)` takes that set.
 #
 # ## Exercise 5.1 — the W4A16 crossover by hand
 # For a linear with K inputs and N outputs, M tokens: FLOPs `2MKN`, bytes `K·N·w + M·(K·a + 2N)` with `w` bytes
@@ -159,7 +169,8 @@ m_l4, m_h100 = crossover(121, 0.30), crossover(989.4, 3.35)
 
 # %% check
 assert round(m_l4) == 120 and round(m_h100) == 85
-print(f"✅ {m_l4:.0f} tokens on an L4, {m_h100:.0f} on an H100: past that, W4A16 is a memory format, not a speed format")
+print(f"✅ {m_l4:.0f} tokens on an L4, {m_h100:.0f} on an H100: past that W4A16's edge shrinks, and where BF16 turns "
+      "compute-bound too (~460 and ~330) it is a memory format, not a speed format")
 
 # %% [markdown]
 # ## Exercise 5.2 — what does an FP8 W8A8 checkpoint run as?
@@ -224,8 +235,8 @@ smallest_ok = next(s for s in C.ACCURACY_ORDER if s in fits and fits[s] >= 32)
 
 # %% check
 assert fits == {"bf16": 0, "w8a8-fp8": 0, "w4a16": 48, "w4a4-nvfp4": 43} and smallest_ok == "w4a16"
-print("✅ 141 GB in bf16, 72.7 GB in FP8 (no room left), 39.5 GB in INT4: on one H100 a 70B model is a 4-bit model; "
-      "FP8 means two GPUs with tensor parallelism, or an H200")
+print("✅ 141 GB in bf16, 72.7 GB in FP8 (no room left at these round inputs; 2-4 sessions at vLLM's real budget), "
+      "39.5 GB in INT4: on one H100 a 70B model is a 4-bit model; FP8 means two GPUs with tensor parallelism, or an H200")
 
 # %% [markdown]
 # ## In a design review
@@ -234,13 +245,14 @@ print("✅ 141 GB in bf16, 72.7 GB in FP8 (no room left), 39.5 GB in INT4: on on
 # halves prefill on Ada's FP8 tensor cores, and an FP8 KV cache doubles the sessions — 87 instead of 17 for an 8B
 # model on a 24 GB L4, simulated — which is also what cuts cost per token ~6×: a bigger batch shares every weight
 # read. INT4 weight-only would decode faster still but does not speed prefill (above ~120 tokens per step on an L4
-# the GEMM is BF16-math-bound), so we keep it for memory-bound cases: a T4, or a 70B on one 80 GB GPU. We checked
+# its GEMM is BF16-math-bound, and by ~460 plain BF16 has caught up), so we keep it for memory-bound cases: a T4, or a 70B on one 80 GB GPU. We checked
 # what each checkpoint runs as on each generation — FP8 on an A100 is weight-only, NVFP4 is W4A4 only on Blackwell,
 # INT8 W8A8 disappears on Blackwell — and every scheme passed the eval budget before it reached this table."
 #
 # **Drills**
 # 1. *Why does INT4 give 3× faster decode but no faster prefill on an L4?* — Decode is a weight read (bytes ÷ 4);
-#    prefill is BF16 math on dequantized weights, compute-bound above ~120 tokens per step.
+#    prefill is BF16 math on dequantized weights: compute-bound above ~120 tokens per step, and no faster than
+#    BF16 past ~460, where BF16 is compute-bound too.
 # 2. *We have A100s. Is FP8 worth it?* — For memory and decode bytes, yes (weight-only FP8 via Marlin); for prefill
 #    no — A100s have no FP8 tensor cores; INT8 W8A8 (with SmoothQuant) is the A100 prefill lever.
 # 3. *Why did FP8 cut the L4's cost per token 6×, not 2×?* — Fewer bytes per step, and five times the sessions

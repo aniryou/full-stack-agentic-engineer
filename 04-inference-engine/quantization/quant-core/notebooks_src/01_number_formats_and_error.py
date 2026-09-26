@@ -143,8 +143,8 @@ for b in (2, 3, 4, 5, 6, 8):
 
 # %%
 rows = [("INT8 per channel (16-bit scale per 4,096)", F.bits_per_weight(8, 4096)),
-        ("INT4 g128 symmetric (GPTQ, W4A16 preset)", F.bits_per_weight(4, 128)),
-        ("INT4 g128 + 4-bit zero point (AWQ; servelab.sizing)", F.bits_per_weight(4, 128, zero_point_bits=4)),
+        ("INT4 g128 symmetric (compressed-tensors W4A16)", F.bits_per_weight(4, 128)),
+        ("INT4 g128 + 4-bit zero point (AWQ, GPTQ-format)", F.bits_per_weight(4, 128, zero_point_bits=4)),
         ("INT4 g32 symmetric", F.bits_per_weight(4, 32)),
         ("MXFP4 (E8M0 per 32)", F.bits_per_weight(4, 32, scale_bits=8)),
         ("NVFP4 (E4M3 per 16, + FP32 per tensor)", F.bits_per_weight(4, 16, scale_bits=8, tensor_scale_bits=32, numel=4096 * 4096)),
@@ -159,7 +159,8 @@ for name in ("qwen2.5-0.5b", "llama-3.1-8b"):
 
 # %% [markdown]
 # Two INT4 conventions live in this repo and both are right: `minengine.quant` counts 4.125 bits (symmetric,
-# a 16-bit scale per 128), `servelab.sizing` 4.156 (plus a 4-bit zero point). And the whole-model ratio is
+# a 16-bit scale per 128, as compressed-tensors' symmetric W4A16 stores it), `servelab.sizing` 4.156 (plus a
+# 4-bit zero point, as AWQ and every GPTQ-format checkpoint — AutoGPTQ/GPTQModel's packed `qzeros` — store). And the whole-model ratio is
 # far from 4×, because recipes leave the embedding and LM head in 16-bit: for Qwen2.5-0.5B, whose tied table
 # is 27.6% of its parameters, INT4 buys 2.16×.
 #
@@ -281,7 +282,23 @@ def mx_scale_codes(x):
 # %% check
 xb = rng.standard_normal(32 * 64) * np.repeat(2.0 ** rng.integers(-6, 6, 64), 32)
 assert np.array_equal(mx_scale_codes(xb), F.mxfp4(xb)[1].ravel())
-print("✅ E8M0 codes match; a block whose amax is 7.5 keeps exponent 0 and saturates to 6:", F.mxfp4(np.full(32, 7.5))[2][0])
+print("✅ E8M0 codes match; under the OCP rule a block whose amax is 7.5 keeps exponent 0 and saturates to",
+      F.mxfp4(np.full(32, 7.5))[2][0])
+
+# %% [markdown]
+# That is the OCP spec's rule. llm-compressor writes MXFP4 checkpoints with compressed-tensors' variant
+# (`round_to_power_2`): amax is rounded to a power of two first — up when its mantissa is ≥ 1.75 — so 7.5 = 1.875 × 2²
+# gets exponent 1, becomes 3.75 → 4 on the grid, and is stored as 8 instead of clipping to 6. The block max lands in
+# [3.5, 7) rather than [4, 8): less clipping, at the price of one step of scale for blocks just under a power of
+# two. `F.mxfp4(x, rule="compressed-tensors")` implements it, and the lab's `quantlab.fp4.mxfp4_scale_exponent`
+# (notebook 05) is the same rule.
+
+# %%
+Wmx = np.random.default_rng(0).standard_normal((256, 512)) * 0.02     # the primer §2 table's Gaussian weight
+for rule in ("ocp", "compressed-tensors"):
+    e, codes, xh = F.mxfp4(np.full(32, 7.5), rule=rule)
+    print(f"{rule:18}: E8M0 byte {int(codes.ravel()[0])}, 7.5 -> {xh[0]}; Gaussian weight relative error "
+          f"{G.error(Wmx, F.mxfp4(Wmx, rule=rule)[2])['rel']:.4f}")
 
 # %% [markdown]
 # ## Exercise 1.6 — pack INT4 codes the way a checkpoint does

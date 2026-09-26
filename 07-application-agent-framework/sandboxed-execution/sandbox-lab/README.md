@@ -7,7 +7,7 @@ then on a GKE Sandbox (gVisor) node pool. Every claim is a measured verdict, not
 
 ## Start here
 
-1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (25 min): the threat model and the isolation ladder.
+1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (30 min): the threat model and the isolation ladder.
 2. `pip install -e ".[dev]" && python3 -m sandboxlab probes --level process+netns` — under a minute:
    the attack probes through a process sandbox, each verdict `CONTAINED` or `LEAKED`, measured here.
 3. Open [`notebooks/01_hardened_containers.ipynb`](notebooks/01_hardened_containers.ipynb) (T0): run the

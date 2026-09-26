@@ -69,3 +69,13 @@ def test_dynamic_per_token_vs_static_activation_scales():
 def test_argmax_agreement():
     a = np.array([[1.0, 2.0], [3.0, 0.0]])
     assert G.argmax_agreement(a, a) == 1.0 and G.argmax_agreement(a, -a) == 0.0
+
+
+def test_output_error_follows_the_activation_not_the_weight():
+    """Two identical weight columns, one meeting 30x larger inputs: that channel owns ~900x the output error."""
+    rng = np.random.default_rng(0)
+    W = rng.standard_normal((64, 2))
+    W[:, 1] = W[:, 0]
+    X = rng.standard_normal((500, 2)) * [1.0, 30.0]
+    e = G.output_error_by_input(X, W, G.fake_quant(W, fmt="int4", granularity="channel"))
+    assert 700 < e[1] / e[0] < 1100

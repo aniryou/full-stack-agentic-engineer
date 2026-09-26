@@ -47,8 +47,10 @@ def run_code_tool(executor, budgets: Budgets | None = None, *, prelude: str = ""
 
 def fetch_url_tool(proxy_url: str, routes: dict[str, str]) -> Tool:
     """``fetch_url(url)`` through the proxy. ``routes`` maps URL prefixes the model may use to proxy
-    routes (``{"https://api.weather.example/": "api-stub"}``); anything else is sent to the proxy as
-    an absolute-form request, where the allowlist refuses it and the refusal is audited."""
+    routes (``{"https://api.weather.example/": "api-stub"}``); any other plain ``http://`` URL is sent
+    to the proxy as an absolute-form request (host and port kept), where the allowlist decides and the
+    decision is audited. An ``https://`` URL with no route is refused here: the proxy brokers TLS only
+    through a route, and quietly rewriting it to ``http://`` would send the request in cleartext."""
 
     def fn(args: dict, ctx: Context) -> dict:
         url = args["url"]
@@ -58,7 +60,14 @@ def fetch_url_tool(proxy_url: str, routes: dict[str, str]) -> Tool:
                 break
         else:
             u = urlsplit(url)
-            path = f"http://{u.hostname or ''}{u.path or '/'}" + (f"?{u.query}" if u.query else "")
+            if u.scheme != "http":
+                return {"ok": False, "error": "egress_denied",
+                        "message": f"{u.scheme or 'no'} scheme without a proxy route",
+                        "hint": "Only the allowlisted APIs are reachable; use one of their https:// URLs."}
+            netloc = u.hostname or ""
+            if u.port:
+                netloc += f":{u.port}"
+            path = f"http://{netloc}{u.path or '/'}" + (f"?{u.query}" if u.query else "")
         try:
             status, body = fetch(proxy_url, path)
         except OSError as e:

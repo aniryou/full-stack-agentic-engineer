@@ -114,8 +114,10 @@ def ladder(measured: list[Measurement], *, include_samples: bool = True) -> list
 
 # ---- sizing a pool -------------------------------------------------------------------------------------------
 def littles_law_pool(arrival_per_s: float, exec_s: float, cold_start_s: float) -> dict:
-    """Replace-after-use pool that never makes a request wait for a cold start: sandboxes busy
-    running code (lambda x t_exec) plus sandboxes being prepared to replace them (lambda x t_cold)."""
+    """The MEAN occupancy of a replace-after-use pool (PRIMER §6): sandboxes busy running code
+    (lambda x t_exec) plus replacements warming up (lambda x t_cold). It is the offered load in Erlangs — a
+    floor, not a size: with exactly this many slots the queue never clears. ``replace_after_use_slots``
+    sizes the pool for a wait target."""
     busy = arrival_per_s * exec_s
     warming = arrival_per_s * cold_start_s
     return {"busy": busy, "warming": warming, "total": busy + warming,
@@ -123,12 +125,21 @@ def littles_law_pool(arrival_per_s: float, exec_s: float, cold_start_s: float) -
 
 
 def erlang_c(offered_load: float, servers: int) -> float:
-    """P(an arrival waits) in M/M/c with offered load a = lambda/mu (Erlang C)."""
+    """P(an arrival waits) in M/M/c with offered load a = lambda/mu (Erlang C).
+
+    The terms a^k/k! are built by the recurrence term_k = term_(k-1) * a / k: ``a ** c`` as a float and
+    ``math.factorial(c)`` overflow long before a fleet's loads (a = 162.6 at the scaling primer's peak with
+    6 s holds). The same recurrence as ``sandboxcore.pool.erlang_c``; a test pins both.
+    """
     a, c = offered_load, servers
     if c <= a:
         return 1.0
-    top = a ** c / math.factorial(c) * c / (c - a)
-    return top / (sum(a ** k / math.factorial(k) for k in range(c)) + top)
+    term = s = 1.0
+    for k in range(1, c):
+        term *= a / k
+        s += term
+    last = term * (a / c) * (c / (c - a))
+    return last / (s + last)
 
 
 def mean_wait_s(arrival_per_s: float, exec_s: float, servers: int) -> float:
@@ -150,10 +161,18 @@ def servers_for(arrival_per_s: float, exec_s: float, *, max_p_wait: float | None
         c += 1
 
 
+def replace_after_use_slots(arrival_per_s: float, exec_s: float, cold_start_s: float, max_p_wait: float) -> int:
+    """Slots for a replace-after-use pool: each execution holds a slot for its run AND its replacement's
+    warm-up, so Erlang C runs on a = lambda x (t_exec + t_cold)."""
+    return servers_for(arrival_per_s, exec_s + cold_start_s, max_p_wait=max_p_wait)
+
+
 def cost_per_execution(held_s: float, node_usd_per_hour: float, sandboxes_per_node: int,
                        fixed_usd: float = 0.0) -> float:
     """Sandbox-seconds held x the per-second price of one sandbox's share of a node, plus any
-    per-execution fixed cost. Prices are inputs (see COMPUTE.md; mark any figure you use (verify))."""
+    per-execution fixed cost. For a one-shot sandbox (pod per call, replace-after-use) ``held_s`` includes
+    the cold start: the warm pool hides it from latency, not from the bill. Prices are inputs (see
+    COMPUTE.md; mark any figure you use (verify))."""
     return held_s * node_usd_per_hour / 3600.0 / sandboxes_per_node + fixed_usd
 
 

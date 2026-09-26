@@ -29,7 +29,13 @@ class GPU:
         return self.tflops[p] * 1e12
 
 
-GPUS = {   # (verify) - the same dense figures as roofline.specs.DEVICES
+# (verify) - the same dense figures as roofline.specs.DEVICES. mem_gb is the round marketing figure, used as
+# decimal GB (80 -> 80e9 B), like minengine.perf's round inputs; an "80 GB" H100 really has 80 GiB and its
+# driver reports 79.65 GiB (85.5e9 B). So kv_blocks() undercounts on large parts: for Llama-3.1-70B in FP8
+# with an FP8 KV cache on an H100 it finds 0 blocks where vLLM's defaults leave 1,047 (4 sessions of 4K).
+# vLLM's own budget (0.92 of the reported memory, profiled overheads) is modelled by servelab.sizing and
+# quantlab.kv.size; use those for a real deployment.
+GPUS = {
     "T4": GPU("T4", 7.5, 16, 0.32, {"fp16": 65, "int8": 130}),
     "A100-80GB": GPU("A100-80GB", 8.0, 80, 2.039, {"bf16": 312, "int8": 624}),
     "L4": GPU("L4", 8.9, 24, 0.30, {"bf16": 121, "fp8": 242.5, "int8": 242.5}),
@@ -115,7 +121,7 @@ class Model:
 
 MODELS = {   # from each model's config.json (verify)
     "llama-3.1-8b": Model("llama-3.1-8b", 8.03e9, 32, 32, 8, 128, 128256, 4096),
-    "llama-3.1-70b": Model("llama-3.1-70b", 70.6e9, 80, 64, 8, 128, 128256, 8192),
+    "llama-3.1-70b": Model("llama-3.1-70b", 70_553_706_496, 80, 64, 8, 128, 128256, 8192),
     "qwen2.5-0.5b": Model("qwen2.5-0.5b", 494_032_768, 24, 14, 2, 64, 151936, 896, tied=True),
     "qwen2.5-1.5b": Model("qwen2.5-1.5b", 1_543_714_304, 28, 12, 2, 128, 151936, 1536, tied=True),
 }
@@ -160,8 +166,9 @@ def step_cost(gpu: GPU, model: Model, scheme: str, chunks, kv_bits: float = 16, 
 
 def kv_blocks(gpu: GPU, model: Model, scheme: str, kv_bits: float = 16, util: float = 0.9,
               block: int = 16, reserve_bytes: float = 1e9) -> int:
-    """KV blocks left after weights and a flat activation reserve (minengine.perf.kv_cache_blocks's
-    round inputs; vLLM's own profiling is in servelab.sizing)."""
+    """KV blocks left after weights and a flat activation reserve: util x mem_gb x 1e9 - weights - 1 GB
+    (minengine.perf.kv_cache_blocks's round inputs, decimal GB; vLLM's own budget - 0.92 of the
+    driver-reported GiB minus profiled overheads - is servelab.sizing / quantlab.kv.size)."""
     free = gpu.mem_gb * 1e9 * util - model.weight_bytes(SCHEMES[scheme].w_bits) - reserve_bytes
     return max(0, int(free // (block * model.kv_bytes_per_token(kv_bits))))
 

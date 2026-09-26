@@ -46,6 +46,7 @@ def test_kind_dry_runs_print_the_procedure_in_order():
     assert "--from-file=token=" in out and "--from-literal" not in out
     ex = _dry(["deploy/kind/run-examples.sh"])
     assert "wait --for=condition=complete job/run-example-0001" in ex and "92-gvisor-in-kind.yaml" in ex
+    assert "93-egress-must-fail.yaml" in ex and "job/run-egress-check-0001" in ex    # NetworkPolicy checked, not assumed
     assert "kind delete cluster --name sandbox-lab" in _dry(["deploy/kind/down.sh"])
 
 

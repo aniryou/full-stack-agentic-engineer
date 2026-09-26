@@ -39,11 +39,16 @@ def test_bundled_curves_tell_the_story():
     runs = {(r["config"]["balance"], r["config"]["seed"]): r for r in doc["runs"]}
     assert len(runs) == 9
     for seed in (0, 1, 2):
-        none = load_stats(runs[("none", seed)]["load"][-1])["max_over_mean"]
+        none = load_stats(runs[("none", seed)]["load"][-1])
+        assert none["max_over_mean"] > 4 and none["dead"] >= 3           # collapse: a few experts carry it all
         for b in ("aux", "bias"):
-            assert load_stats(runs[(b, seed)]["load"][-1])["max_over_mean"] < min(none, 1.3)
+            bal = runs[(b, seed)]
+            assert load_stats(bal["load"][-1])["max_over_mean"] < 1.3 and load_stats(bal["load"][-1])["dead"] == 0
+            assert bal["ce"][-1] < runs[("none", seed)]["ce"][-1]         # and collapse costs loss
+            # a healthy router keys on the token in front of it far more than on the domain
+            assert specialisation(bal["token_expert"]) > 5 * specialisation(bal["domain_expert"])
     for r in runs.values():
-        assert specialisation(r["token_expert"]) > 5 * specialisation(r["domain_expert"])
+        assert r["config"]["common"] > 0
         assert len(r["load"]) == len(r["steps"]) and np.isclose(sum(r["load"][-1]), 1.0)
     assert "by token" in table(doc["runs"])
 
@@ -104,11 +109,35 @@ def test_aux_loss_values():
 @needs_torch
 def test_a_short_training_run_records_everything():
     from moelab.tinymoe.train import TrainConfig, train
-    run, model = train(TrainConfig(balance="bias", steps=30, log_every=10, eval_batch=32))
-    assert run.steps == [10, 20, 30] and len(run.load) == 3 and run.ce[-1] < run.ce[0] + 0.5
+    run, model = train(TrainConfig(balance="bias", steps=100, log_every=10, eval_batch=32))
+    assert run.steps == list(range(10, 101, 10)) and len(run.load) == 10
+    assert run.ce[-1] < 0.8 * run.ce[0]                                       # it learns (3.9 -> 2.8 nats)
     assert np.asarray(run.domain_expert).shape == (8, 8) and np.asarray(run.token_expert).shape == (48, 8)
     assert float(model.moes[0].router.bias.abs().sum()) > 0                 # the bias moved
     assert "specialisation" not in run.summary() and "by token" in run.summary()
+
+
+@needs_torch
+def test_live_training_collapses_without_balancing_and_balances_with_it():
+    """The bundled curves' story, from the code: 300 steps each, ~5 s on one CPU thread."""
+    from moelab.tinymoe.train import TrainConfig, train
+    none, _ = train(TrainConfig(balance="none", steps=300, eval_batch=32))
+    bias, _ = train(TrainConfig(balance="bias", steps=300, eval_batch=32))
+    s_none, s_bias = load_stats(none.final_load), load_stats(bias.final_load)
+    assert s_none["max_over_mean"] > s_bias["max_over_mean"] + 0.4
+    assert s_none["max_over_mean"] > 4 and s_none["dead"] >= 3 and s_bias["max_over_mean"] < 1.3
+    assert none.ce[-1] > bias.ce[-1]
+
+
+def test_the_cli_refuses_cleanly_without_torch(monkeypatch):
+    import subprocess
+    import sys
+    env_ = {**__import__("os").environ, "MOELAB_NO_TORCH": "1"}
+    root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    r = subprocess.run([sys.executable, "-m", "moelab.tinymoe", "--steps", "5"], capture_output=True, text=True,
+                       env=env_, cwd=root)
+    assert r.returncode == 1 and "torch is not available" in r.stderr and "load_bundled" in r.stderr
+    assert "Traceback" not in r.stderr
 
 
 def test_torch_parts_are_lazy(monkeypatch):

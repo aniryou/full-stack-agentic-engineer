@@ -74,6 +74,30 @@ def test_mxfp4_shared_exponent():
     assert np.all(sat == 6.0)                                              # 7.5 / 2^0 > 6 saturates: MX floors the exponent
 
 
+def test_mxfp4_compressed_tensors_rounds_the_exponent_up_at_1_75():
+    """compressed-tensors' round_to_power_2 (what llm-compressor writes): amax rounds up to the next power of two
+    when its mantissa is >= 1.75, so the block max lands in [3.5, 7) instead of the OCP rule's [4, 8)."""
+    for amax, ocp, ct in ((5.0, 127, 127), (7.0, 127, 128), (7.5, 127, 128), (6.9, 127, 127), (3.6, 126, 127)):
+        assert F.mxfp4(np.full(32, amax))[1].item() == ocp and F.mxfp4(np.full(32, amax), rule="compressed-tensors")[1].item() == ct
+    _, _, x_hat = F.mxfp4(np.full(32, 7.5), rule="compressed-tensors")
+    assert np.all(x_hat == 8.0)                                            # 7.5 / 2 = 3.75 -> 4, x 2: no saturation
+    W = np.random.default_rng(0).standard_normal((256, 512))
+    top = {r: np.abs(W.reshape(256, 16, 32)).max(-1) / 2.0 ** (F.mxfp4(W, rule=r)[1][..., 0].astype(float) - 127)
+           for r in ("ocp", "compressed-tensors")}
+    assert 4 <= top["ocp"].min() and top["ocp"].max() < 8 and 3.5 <= top["compressed-tensors"].min() and top["compressed-tensors"].max() < 7
+    with pytest.raises(ValueError):
+        F.mxfp4(W, rule="nearest")
+
+
+def test_the_full_convention_tie_does_not_depend_on_the_last_bit():
+    """Under the full convention -amax / scale is exactly -7.5 in exact arithmetic; one ulp either side must not
+    decide between -7 and -8 (that ulp differs between BLAS builds, and GPTQ propagates it)."""
+    s = F.int_scale(1.0, 4, "full")
+    x = np.array([-1.0, np.nextafter(-1.0, 0), np.nextafter(-1.0, -2), 2.5 * s, np.nextafter(2.5 * s, 0)])
+    np.testing.assert_array_equal(F.quantize_int(x, s, 4, convention="full"), [-8, -8, -8, 2, 2])
+    assert F.quantize_int(np.array([-1.0 + 1e-6]), s, 4, convention="full")[0] == -7    # a real difference still counts
+
+
 def test_nvfp4_two_level_scales_beat_mxfp4():
     rng = np.random.default_rng(0)
     for W in (rng.standard_normal((256, 512)) * 0.02, rng.standard_t(3, (256, 512)) * 0.02):

@@ -221,7 +221,8 @@ print(f"✅ 0.5B: {c['full_bytes'] / 1e9:.2f} GB per step ({c['full_s']:.3f} s) 
 # trainer copy fits beside it on a 15 GB T4 (verify)), generates 8 × 8 rollouts with `logprobs=0`
 # (the sampled token's log-prob at every position), scores them with the eval-set verifier, computes
 # advantages, recomputes log-probs with a float32 transformers copy, applies a sequence-level
-# truncated importance weight, and takes one SGD step. It reports rollout seconds against training
+# importance weight masked above 3 (`is_ratios(..., mode="sequence_mask")`, the function from
+# Exercise 5.2 and TRL's default), and takes one SGD step. It reports rollout seconds against training
 # seconds, the reward, the zero-std share and the sampler/trainer log-prob gap. It does not push the
 # weights back into vLLM. TRL's colocate mode does that every step; the configuration below is
 # where to start with TRL on a T4.
@@ -246,8 +247,10 @@ else:
 # masked above 3. Rollouts are most of the step time. A synchronous batch waits for its longest
 # completion, so with thinking-length tails most slots idle at the end; budgets, overlong
 # penalties and one-step-off rollouts attack that. The new weights go back to the engine every
-# step: a full copy is the model size, and delta sync cuts it by ~50×. The serving skills transfer
-# directly: batch shape, KV capacity, tail latency."
+# step: a full copy is the model size. Delta sync sends ~50× fewer bytes when 2% of the weights
+# change (Exercise 5.5), but verl measured 1.3–21× less wall time, because diffing, encoding and
+# fixed overheads remain (PRIMER §8 "The RL training stack in brief", verify). The serving skills
+# transfer directly: batch shape, KV capacity, tail latency."
 #
 # **Drill 1.** *Half our groups have all-correct rewards. Problem?* Those prompts are too easy for
 # the current policy and contribute no gradient. Filter them (dynamic sampling), raise difficulty, or

@@ -281,9 +281,22 @@ def test_s7_serving_numbers():
             "| GPUs by memory / ITL / decode / prefill | " + " | ".join(" / ".join(
                 f"{p['gpus'][c]:.2f}" for c in ("memory", "itl_slots", "decode", "prefill")) for p in plans) + " |")
     assert [p["gpus_needed"] for p in plans] == [1, 5, 3] and [p["binding"] for p in plans] == ["prefill", "memory", "itl_slots"]
-    present(f"({plans[1]['gpus']['memory']:.2f} vs {plans[0]['gpus']['memory']:.3f})",
+    steady = [w.plan_steady(S, H, rps, 1500, 300), w.plan_steady(S, H, rps, 1500, 3000),
+              w.plan_steady(S, H, rps, 1500, 3000, tpot_ms=20)]
+    present("| GPUs by memory / ITL / prefill | " + " | ".join(" / ".join(
+                f"{p['gpus'][c]:.2f}" for c in ("memory", "itl_slots", "prefill")) for p in steady) + " |",
+            "| GPUs needed (binding) | 1 (prefill) | 3 (memory) | 3 (ITL) |",
+            "| where it settles: batch per GPU; step; lifetime | " + " | ".join(
+                f"{p['batch']:.1f}; {p['step_s'] * 1e3:.1f} ms; {p['duration_s']:.2f} s" for p in steady) + " |")
+    assert [p["gpus_needed"] for p in steady] == [1, 3, 3] and [p["binding"] for p in steady] == ["prefill", "memory", "itl_slots"]
+    present(f"{plans[1]['gpus']['memory']:.2f} vs {plans[0]['gpus']['memory']:.3f} at the SLO's TPOT, "
+            f"{steady[1]['gpus']['memory']:.2f} vs {steady[0]['gpus']['memory']:.2f} at the step the fleet runs at",
+            f"({steady[2]['gpus']['itl_slots']:.2f} vs {steady[2]['gpus']['memory']:.2f}), as it should be",
+            f"a step takes {steady[1]['step_s'] * 1e3:.1f} ms, under both SLOs",
             f"{1000 * w.kv_per_session_gb(S, 3000, 'fp8'):.0f} GB of KV on an 80 GB card",
-            f"arrives {w.request_duration_s(24, 1500, 2700, H):.2f} s after the request")
+            f"arrives {w.request_duration_s(24, 1500, 2700, H):.2f} s after the request",
+            f"still {w.ttft_s(24, 1500, H) + 2700 * steady[1]['step_s']:.1f} s at the {steady[1]['step_s'] * 1e3:.1f} ms step",
+            f"ITL binds first ({steady[2]['gpus']['itl_slots']:.2f} GPUs against memory's {steady[2]['gpus']['memory']:.2f}")
     t1 = w.turn_prefills(1000, [(100, 800, 200)] * 4)
     t2 = w.turn_prefills(1000, [(100, 800, 200)] * 4, keep_thinking=True)
     present("| thinking dropped: prompt / prefilled | " + " | ".join(f"{p:,} / {p - h:,}" for p, h in t1) + " |",

@@ -61,6 +61,8 @@ class SandboxPolicy:
     job_ttl_s: int = 300                          # collect logs before this
     max_deadline_s: int = 600
     proxy_cluster_ip: str = "10.96.0.200"         # inside the Service CIDR; sandboxes reach it via hostAliases
+    stub_cluster_ip: str = "10.96.0.201"          # pinned so the must-fail egress check can aim at it directly
+    dns_service_ip: str = "10.96.0.10"            # kube-dns in kind's 10.96.0.0/16 (kubeadm's .10)
     allow_internet_from_proxy: bool = False
     pod_pids_limit: int = 128                     # kubelet podPidsLimit (kind patch / GKE node_config)
     warm_replicas: int = 2
@@ -77,6 +79,7 @@ class SandboxPolicy:
     def gke(cls, **kw) -> "SandboxPolicy":
         base = dict(target="gke", runtime_class="gvisor", runtime_handler="gvisor",
                     image=f"{AR_PLACEHOLDER}/python:3.12-slim", proxy_cluster_ip="10.30.0.200",
+                    stub_cluster_ip="10.30.0.201", dns_service_ip="10.30.0.10",
                     node_pool_selector={"sandbox.gke.io/runtime": "gvisor"}, node_pool_toleration=GKE_SANDBOX_TAINT)
         base.update(kw)
         return cls(**base)
@@ -257,7 +260,7 @@ def egress_proxy(p: SandboxPolicy) -> list[dict]:
             m.service("egress-proxy", EGRESS_NS, {"app": "egress-proxy"}, PROXY_PORT, cluster_ip=p.proxy_cluster_ip),
             m.config_map("api-stub-code", UPSTREAM_NS, {"stub.py": STUB_SRC.read_text()}),
             stub_dep,
-            m.service("api-stub", UPSTREAM_NS, {"app": "api-stub"}, STUB_PORT)]
+            m.service("api-stub", UPSTREAM_NS, {"app": "api-stub"}, STUB_PORT, cluster_ip=p.stub_cluster_ip)]
 
 
 def admission_policies(p: SandboxPolicy) -> list[dict]:
@@ -358,11 +361,31 @@ def render_all(p: SandboxPolicy) -> dict[str, tuple[str, list[dict]]]:
     return dict(sorted(files.items()))
 
 
+def egress_check_code(p: SandboxPolicy) -> str:
+    """The code of the must-fail egress Job: the proxy route must answer, and two direct connections that
+    bypass it must not — kube-dns (only the sandbox's egress policy stands in the way) and the api-stub
+    (egress and the stub's ingress policy). Connect-only, in-cluster targets, 2 s each; prints one line per
+    target so ``run-examples.sh`` can grep for CONNECTED."""
+    return ("import os, socket, urllib.request\n"
+            "try:\n"
+            "    r = urllib.request.urlopen(os.environ['SANDBOX_PROXY_URL'] + '/api-stub/whoami', timeout=4)\n"
+            "    print('via-proxy: reachable', r.status)\n"
+            "except Exception as e:\n"
+            "    print('via-proxy: FAILED', type(e).__name__)\n"
+            f"for name, host, port in (('direct-to-api-stub', {p.stub_cluster_ip!r}, {STUB_PORT}),\n"
+            f"                         ('direct-to-kube-dns', {p.dns_service_ip!r}, 53)):\n"
+            "    try:\n"
+            "        socket.create_connection((host, port), timeout=2).close()\n"
+            "        print(f'{name} {host}:{port}: CONNECTED')\n"
+            "    except OSError as e:\n"
+            "        print(f'{name} {host}:{port}: blocked ({type(e).__name__})')\n")
+
+
 def workloads(p: SandboxPolicy) -> dict[str, tuple[str, list[dict]]]:
     example = ("import json, os, urllib.request\n"
                "print(sum(range(10)))\n"
                "print(json.load(urllib.request.urlopen(os.environ['SANDBOX_PROXY_URL'] + '/api-stub/whoami')))\n")
-    return {
+    out = {
         "10-run-code-job.yaml": ("One execution as one Job (what the Runner creates). Its pod reaches only the proxy.",
                                  [run_code_job(p, example, "example-0001", "turn-1:step-1:call-0:9f2c")]),
         "20-warm-pool.yaml": ("A warm pool: idle sandbox pods for kubectl exec; each is deleted after one use.",
@@ -372,3 +395,10 @@ def workloads(p: SandboxPolicy) -> dict[str, tuple[str, list[dict]]]:
         "91-rejected-job.yaml": ("MUST FAIL: a Job without a deadline, with default retries and no TTL.",
                                  [rejected_job(p)]),
     }
+    if p.target == "kind":      # kindnetd's policy dataplane fails open: prove enforcement on each cluster
+        out["93-egress-must-fail.yaml"] = (
+            "MUST FAIL (the direct connections): a sandbox pod that reaches the api-stub and kube-dns directly, "
+            "bypassing the proxy.\nIf either prints CONNECTED, NetworkPolicy is not enforced on this cluster "
+            "(kindnetd fails open) - see README.",
+            [run_code_job(p, egress_check_code(p), "egress-check-0001")])
+    return out

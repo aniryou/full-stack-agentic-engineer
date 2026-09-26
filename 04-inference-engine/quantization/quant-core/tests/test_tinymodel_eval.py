@@ -52,6 +52,24 @@ def test_stderr_matches_lm_eval():
     assert round(E.accuracy_stderr(0.768, 250), 4) == 0.0268       # vLLM's FP8 gsm8k example: 0.768 +- 0.0268
 
 
+def test_a_difference_has_a_wider_error_bar_than_a_score():
+    """Unpaired: se_diff = sqrt(se_a^2 + se_b^2) = sqrt(2) x one score's se at equal p (the lab's evalharness.compare)."""
+    assert E.diff_stderr(0.768, 0.768, 250) == pytest.approx(np.sqrt(2) * E.accuracy_stderr(0.768, 250))
+    assert round(2 * E.diff_stderr(0.768, 0.768, 250), 3) == 0.076                  # 7.6 points on 250 items
+    n = next(n for n in range(1000, 100000) if 2 * E.diff_stderr(0.77, 0.77, n) <= 0.01)
+    assert n == 14169                                                             # 2 x 4 x 0.1771 / 1e-4 + 1
+    assert E.paired_z(10, 10) == 0 and E.paired_z(0, 0) == 0 and round(E.paired_z(64, 36), 1) == -2.8
+
+
+def test_paired_comparison_sees_what_the_unpaired_one_cannot(setup):
+    m, X, y, Xc, ref = setup
+    r = E.compare(ref, quantize_model(m, "awq+gptq", 4, 32, calib=Xc).forward(X), y)
+    assert r["n"] == len(y) and r["diff_stderr"] > r["stderr"]
+    drop = r["acc_ref"] - r["acc"]
+    assert drop < 2 * r["diff_stderr"] and E.within_budget(r, max_kl=0.05)      # unpaired: within noise
+    assert abs(r["paired_z"]) > 2                                                 # paired: the flips say it is real
+
+
 def test_kl_and_perplexity_basics():
     z = np.random.default_rng(0).standard_normal((10, 16))
     assert E.kl(z, z) == pytest.approx(0.0, abs=1e-12)

@@ -26,7 +26,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")   # small matrices: one BLAS 
 
 import numpy as np
 
-from quantcore import TinyModel, cost, eval as E, granularity as G, kvquant as K, quantize_model, w8a8
+from quantcore import TinyModel, cost, eval as E, formats as F, granularity as G, kvquant as K, quantize_model, smoothquant as S, w8a8
 
 rng = np.random.default_rng(0)
 
@@ -98,7 +98,59 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
 # already tiles by 128 can apply a per-tile scale for free (DeepGEMM, CUTLASS block-scaled GEMMs on SM90+; there
 # is no CUTLASS block-FP8 kernel for SM89 in vLLM's `scaled_mm_entry.cu`, verify).
 #
-# ## Worked example 4 — which layers stay in high precision
+# ## Worked example 4 — FP4 W4A4: sixteen activations share one scale
+# On Blackwell, NVFP4 W4A4 quantizes activations too: E2M1 values with one E4M3 scale per **16** channels of each
+# token. An outlier channel sets its block's scale at `amax / 6`. With an outlier 30× the typical value, a typical
+# neighbour lands at 6/30 = 0.2 on the E2M1 grid — below the 0.25 that rounds up to E2M1's smallest step, 0.5 — so
+# most of the 15 neighbours become **zero**. The tiny model's first up-projection input has its four outlier
+# channels in three of its four 16-channel blocks:
+
+# %%
+Au = m.calibration_inputs(Xc)["blocks.0.up"]
+Wu = m.weights["blocks.0.up"]
+au = np.abs(Au).max(0)
+hot = np.argsort(-au)[:4]
+ordinary = np.setdiff1d(np.arange(64), hot)
+nv = F.nvfp4(Au)[3]
+print(f"outlier channels {sorted(hot.tolist())} -> blocks {sorted(set((hot // 16).tolist()))}")
+free = np.array([c for c in range(64) if c // 16 not in set((hot // 16).tolist())])    # blocks with no outlier
+print(f"NVFP4 activations: ordinary channels {G.error(Au[:, ordinary], nv[:, ordinary])['rel']:.1%} error, "
+      f"{np.mean(nv[:, ordinary] == 0):.0%} of them flushed to zero; in the outlier-free block "
+      f"{G.error(Au[:, free], nv[:, free])['rel']:.1%}")
+s_up = S.smooth_scales(au, np.abs(Wu).max(0), 0.5)
+nvs = F.nvfp4(Au / s_up)[3]
+print(f"after SmoothQuant (alpha 0.5): ordinary channels {G.error(Au[:, ordinary] / s_up[ordinary], nvs[:, ordinary])['rel']:.1%}")
+refu = Au @ Wu.T
+w4a4 = lambda A_, W_: F.nvfp4(A_)[3] @ F.nvfp4(W_)[3].T
+print(f"layer output error, NVFP4 W4A4: {np.linalg.norm(w4a4(Au, Wu) - refu) / np.linalg.norm(refu):.1%}; "
+      f"smoothed first: {np.linalg.norm(w4a4(Au / s_up, Wu * s_up) - refu) / np.linalg.norm(refu):.1%}")
+
+
+def nvfp4_model(model, acts=True):
+    """Every hidden linear in NVFP4: weights always, activations too for W4A4; the head in 16-bit."""
+    wq = {n: F.nvfp4(model.weights[n])[3] for n in model.linears()}
+    aq = (lambda name, x: x if name == "head" else F.nvfp4(x)[3]) if acts else None
+    return model.forward(X, act_quant=aq, weights=wq)
+
+
+smooth = m
+for name in ("blocks.0.up", "blocks.1.up"):
+    A_ = smooth.calibration_inputs(Xc)[name]
+    smooth = smooth.with_weights(smooth.fold(name, S.smooth_scales(np.abs(A_).max(0), np.abs(smooth.weights[name]).max(0), 0.5)))
+for label, logits in (("NVFP4 weight-only (W4A16)", nvfp4_model(m, acts=False)), ("NVFP4 W4A4", nvfp4_model(m)),
+                      ("NVFP4 W4A4 + SmoothQuant 0.5", nvfp4_model(smooth))):
+    r = E.compare(ref, logits, y)
+    print(f"{label:29} KL {r['kl']:.3f}  top-1 {r['top1']:.1%}  acc {r['acc']:.1%} (fp {r['acc_ref']:.1%})")
+
+# %% [markdown]
+# Per-16 blocks help the blocks with no outlier (10% error there) and cannot help the ones that hold one: about
+# half of all ordinary activations become zero, and the model loses another 4 points on top of the 4-bit
+# weights. Moving the range into the weights first (SmoothQuant; AWQ-style scaling works the same way)
+# gives most of it back. The production mitigations are that, Hadamard rotations (llm-compressor's SpinQuant and
+# QuIP transforms spread an outlier over every channel of the block), and quantization-aware distillation (primer
+# §7). The lab's notebook 05 repeats this on its bundled model, where the gap is larger still.
+#
+# ## Worked example 5 — which layers stay in high precision
 # Recipes quantize the transformer blocks' linears and `ignore=["lm_head"]`. Quantize the tiny model's head too:
 
 # %%
@@ -110,7 +162,7 @@ r = E.compare(ref, quantize_model(m, "rtn", 4, None).forward(X), y)
 print(f"all four hidden linears, INT4 per channel: KL {r['kl']:.4f}, acc {r['acc']:.1%}")
 
 # %% [markdown]
-# One INT4 layer at the output costs 3.7 points, against 5.8 for all four hidden linears together: the head is
+# One INT4 layer at the output costs 4.0 points, against 6.0 for all four hidden linears together: the head is
 # the most sensitive single layer. Its errors land directly on the logits, with no later layer to average them;
 # in an LLM it is also one large GEMM per sampled token (the vocabulary is 128K–152K rows), which is why
 # keeping it 16-bit costs bytes at decode (serving-engine §8: 1.05 GB of Llama-3.1-8B's 5.70 GB INT4 weights).
@@ -118,7 +170,7 @@ print(f"all four hidden linears, INT4 per channel: KL {r['kl']:.4f}, acc {r['acc
 # **attention softmax** are tiny, and their range is exactly what low precision handles worst. MoE **routers**
 # (`mlp.gate`) are ignored too: a flipped top-k choice is a discrete error.
 #
-# ## Worked example 5 — an FP8 KV cache and its scale
+# ## Worked example 6 — an FP8 KV cache and its scale
 # One head's decode attention over 512 cached tokens: keys with four outlier channels (magnitude ~12, as KIVI
 # reports for real keys), values with a shared mean. Error = relative error of the attention output.
 
@@ -141,7 +193,7 @@ for f in (1e-3, 1e-2, 1.0, 1e2, 1e3):
 # checkpoint as `k_scale`/`v_scale` — and why the FlashAttention deep dive's §9.4 lists "scale choice" as an
 # error source.
 #
-# ## Worked example 6 — below 8 bits: KIVI
+# ## Worked example 7 — below 8 bits: KIVI
 # 2–4-bit KV needs finer scales. Keys: one scale and minimum per **channel** per group of 32 tokens (the outlier
 # channels get their own). Values: per **token** per group of 32 channels. The newest tokens stay 16-bit until a
 # group fills (the residual window).
@@ -202,7 +254,8 @@ k_max_full = (2 ** 31 - 1) // (128 * 128)
 # %% check
 assert k_max_restricted == 133144 and k_max_full == 131071
 print(f"✅ {k_max_restricted:,} and {k_max_full:,}: far above any hidden size (8,192-28,672), so INT32 accumulation "
-      "never overflows in practice; FP8 accumulates in FP32 for the same reason")
+      "never overflows in practice; FP8 accumulates in FP32 registers (on Hopper the tensor core's own FP8 "
+      "accumulation is narrower, so long-k kernels promote partial sums every 128 - primer §5)")
 
 # %% [markdown]
 # ## Exercise 4.3 — KIVI's keys: per channel, grouped over tokens
@@ -282,6 +335,6 @@ print(f"✅ v_scale {v_scale:.2e}: error {err_calibrated:.4f} vs {err_default:.4
 #    scale varies along the reduction axis, so it cannot be factored out of Σ qx·qw into the epilogue (SmoothQuant
 #    moves that variation into the weights instead).
 # 2. *FP8 KV on a model whose values have magnitude 1e-3, no calibration: what happens?* — With the default scale
-#    1.0 most values are E4M3 subnormals or zero; attention output error jumps from ~0.3% to ~5% (worked example 5).
+#    1.0 most values are E4M3 subnormals or zero; attention output error jumps from ~0.3% to ~5% (worked example 6).
 # 3. *Keys per channel, values per token — why the asymmetry?* — Keys have fixed outlier channels, so a per-token
 #    scale is set by them; values have no such channels and are consumed per token (a weighted sum over tokens).

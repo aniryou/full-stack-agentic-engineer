@@ -88,3 +88,14 @@ def test_skewed_touched_count_feeds_the_step():
     full, skew = T.decode_step(Q3, H200, 16, 1024), T.decode_step(Q3, H200, 16, 1024, touched=50.0)
     assert skew.bytes < full.bytes
     assert full.bytes - skew.bytes == pytest.approx(48 * (T.experts_touched(128, 8, 16) - 50) * Q3.expert_params() * 2)
+
+
+def test_attention_flops_per_position_follow_the_attention_type():
+    """MHA/GQA: 4 x heads x head_dim per layer per cached position (q.k and the weighted V sum).
+    Absorbed MLA (DeepSeek-V3) works in the latent: 2 x heads x (576 + 512), about 4x more."""
+    assert MIX.attn_flops_per_position() == 4 * 32 * 128
+    ds = MODELS["deepseek-v3"]
+    assert ds.attn_flops_per_position() == 128 * 2 * (576 + 512) == 278_528
+    s0, s4k = T.decode_step(ds, H200, 32, 0, 1), T.decode_step(ds, H200, 32, 4096, 1)
+    assert s4k.flops - s0.flops == 32 * 61 * 278_528 * 4096
+    assert s4k.bound == "memory"                                   # still bytes-bound at batch 32

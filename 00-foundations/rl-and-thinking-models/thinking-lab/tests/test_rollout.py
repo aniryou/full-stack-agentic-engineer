@@ -51,3 +51,12 @@ def test_trl_config_for_a_t4():
     assert c["fp16"] is True and c["bf16"] is False and c["use_vllm"] and c["vllm_mode"] == "colocate"
     assert c["per_device_train_batch_size"] * c["gradient_accumulation_steps"] % c["num_generations"] == 0
     assert "bf16" not in R.trl_grpo_config("L4")
+
+
+def test_rl_step_cli_prints_the_tier_message_without_a_gpu(capsys, monkeypatch):
+    """No GPU, vLLM or transformers: `python -m thinklab rl-step` explains and exits 2, never a raw traceback."""
+    from thinklab import __main__ as cli, env
+    monkeypatch.setattr(env, "gpu_name", lambda: None)
+    assert cli.main(["rl-step", "--prompts", "2", "-g", "2"]) == 2
+    err = capsys.readouterr().err
+    assert "rl-step is T1" in err and "an NVIDIA GPU" in err and "notebook 05" in err

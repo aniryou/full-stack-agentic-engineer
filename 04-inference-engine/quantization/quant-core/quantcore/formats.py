@@ -92,9 +92,18 @@ def asym_params(xmin, xmax, bits: int):
 
 
 def quantize_int(x, scale, bits: int, zero=None, convention: str = "restricted") -> np.ndarray:
-    """Codes: round(x / scale) (+ zero), clipped to the code range. `zero is None` means symmetric."""
+    """Codes: round(x / scale) (+ zero), clipped to the code range. `zero is None` means symmetric.
+
+    Ties go to even, as in torch.round. Under the 'full' convention the element at -amax lands exactly on
+    the tie -7.5 (INT4) in exact arithmetic, but in floating point x / scale can come out one ulp either
+    side, and that ulp depends on the BLAS/LAPACK build that produced x: -7 on one machine, -8 on another,
+    and GPTQ then propagates the difference. So a quotient within 1e-9 of a half-integer is snapped onto
+    it first: the result is the exact-arithmetic one (-8), on every machine."""
     lo, hi = int_range(bits, zero is None, convention)
-    q = np.round(np.asarray(x, float) / scale) + (0 if zero is None else zero)
+    q = np.asarray(x, float) / scale
+    half = np.round(2 * q)
+    q = np.where(np.abs(2 * q - half) < 1e-9, half / 2, q)
+    q = np.round(q) + (0 if zero is None else zero)
     return np.clip(q, lo, hi)
 
 
@@ -112,14 +121,21 @@ def _blocks(x, block: int):
     return x.reshape(*x.shape[:-1], x.shape[-1] // block, block)
 
 
-def mxfp4(x, block: int = 32):
-    """OCP MXFP4: E2M1 elements, one E8M0 scale (a power of two) per 32 along the last axis.
-    Shared exponent = floor(log2(block amax)) - 2 (2 = floor(log2(6)), E2M1's largest exponent), so the
-    block max lands in [4, 8) and anything above 6 saturates. Returns (elements, scale_code, x_hat);
-    scale_code is the E8M0 byte (exponent + 127) a checkpoint stores."""
+def mxfp4(x, block: int = 32, rule: str = "ocp"):
+    """MXFP4: E2M1 elements, one E8M0 scale (a power of two) per 32 along the last axis.
+    rule='ocp' (the OCP MX spec): shared exponent = floor(log2(block amax)) - 2 (2 = floor(log2(6)),
+    E2M1's largest exponent), so the block max lands in [4, 8): above 6 it saturates, near 4 the top codes
+    go unused. rule='compressed-tensors' (what llm-compressor writes, `round_to_power_2`): round amax to a
+    power of two first - down, unless its mantissa is >= 1.75, then up - so the block max lands in [3.5, 7):
+    less clipping, one more power of two of scale for blocks just under a power of two.
+    Returns (elements, scale_code, x_hat); scale_code is the E8M0 byte (exponent + 127) a checkpoint stores."""
+    if rule not in ("ocp", "compressed-tensors"):
+        raise ValueError(f"rule must be 'ocp' or 'compressed-tensors', not {rule!r}")
     xb = _blocks(x, block)
-    amax = np.abs(xb).max(-1, keepdims=True)
-    exp = np.clip(np.floor(np.log2(np.maximum(amax, 2.0 ** -127))) - 2, -127, 127)
+    amax = np.maximum(np.abs(xb).max(-1, keepdims=True), 2.0 ** -127)
+    mant, e = np.frexp(amax)                                  # amax = mant x 2^e, mant in [0.5, 1)
+    e = (e - 1) + ((2 * mant >= 1.75) if rule == "compressed-tensors" else 0)
+    exp = np.clip(e - 2, -127, 127).astype(float)
     elems = to_float(xb / 2.0 ** exp, E2M1)
     return elems, (exp + 127).astype(np.uint8), (elems * 2.0 ** exp).reshape(np.shape(x))
 

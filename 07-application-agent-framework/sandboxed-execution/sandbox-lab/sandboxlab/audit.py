@@ -127,16 +127,16 @@ def detect(events: list[AuditEvent], *, cpu_kills_threshold: int = 3) -> list[Al
         ex = [e for e in evs if e.event_type == "sandbox.execution"]
         for e in ex:
             used = e.budgets_used or {}
-            if e.exit_reason == "pids_limit" or "fork" in " ".join(e.reasons).lower():
+            if e.exit_reason == "pids" or "fork" in " ".join(e.reasons).lower():
                 out.append(Alert("high", "fork-bomb", sid, f"execution {e.invocation_id}: process limit hit"))
             if used.get("stragglers_killed"):
                 out.append(Alert("high", "escaped-process", sid,
                                  f"execution {e.invocation_id}: {used['stragglers_killed']} process(es) outlived the run"))
             if e.exit_reason == "output_limit":
                 out.append(Alert("low", "output-flood", sid, f"execution {e.invocation_id}: output limit"))
-            if e.exit_reason == "memory_limit":
+            if e.exit_reason == "memory":
                 out.append(Alert("low", "memory-limit", sid, f"execution {e.invocation_id}: memory limit"))
-        cpu_kills = sum(e.exit_reason in ("cpu_limit", "timeout") for e in ex)
+        cpu_kills = sum(e.exit_reason in ("cpu_time", "wall_timeout") for e in ex)
         if cpu_kills >= cpu_kills_threshold:
             out.append(Alert("medium", "repeated-cpu-kills", sid,
                              f"{cpu_kills} executions hit the CPU/wall limit (mining or a runaway loop)"))

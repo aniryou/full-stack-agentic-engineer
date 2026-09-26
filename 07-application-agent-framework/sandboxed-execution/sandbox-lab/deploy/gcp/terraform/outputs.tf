@@ -35,5 +35,5 @@ output "sandbox_pool_taint" {
 
 output "internet_egress" {
   description = "Whether anything in the cluster can reach the internet."
-  value       = var.enable_nat ? "Cloud NAT on: only NetworkPolicy and gVisor keep sandboxes off the internet" : "no route to the internet (no NAT, private nodes)"
+  value       = var.enable_nat ? "Cloud NAT on: only NetworkPolicy keeps sandboxes off the internet (gVisor's default network stack allows egress)" : "no route to the internet (no NAT, private nodes)"
 }

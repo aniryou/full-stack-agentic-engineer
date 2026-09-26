@@ -36,11 +36,42 @@ def test_exchange_counts_every_assignment_once():
     assert np.trace(m) / m.sum() == pytest.approx(1 / 8, abs=0.02)      # (p-1)/p leaves the GPU
 
 
-def test_the_slowest_rank_sets_the_layer_time():
-    m = np.array([[10, 10], [10, 70]])                                  # rank 1 holds a hot expert
-    lt = E.layer_time(m, 1e6, 1024, T.DEVICES["h100-sxm"], NV)
-    assert lt.compute[1] == 4 * lt.compute[0] and lt.imbalance == pytest.approx(1.6)
-    assert lt.total == pytest.approx(2 * lt.comm + lt.compute[1])
+def test_each_rank_is_its_own_roofline_and_the_slowest_sets_the_layer():
+    """Two ranks, two experts each; rank 1's expert 2 is hot. Rows: [2, 8]; touched: [2, 1]."""
+    idx = np.array([[0], [1], [2], [2], [2], [2], [2], [2], [2], [2]])
+    origin, where = np.array([0] * 5 + [1] * 5), np.array([0, 0, 1, 1])
+    dev = T.Device("toy", {"bf16": 1.0}, 1e-3, 1)                    # 1 TFLOP/s, 1 GB/s: ridge 1,000
+    lt = E.layer_time(idx, origin, where, 2, 1e6, 1024, dev, NV)
+    assert lt.rows.tolist() == [2, 8] and lt.imbalance == pytest.approx(1.6)
+    assert E.touched_per_rank(idx, where, 2).tolist() == [2, 1]
+    np.testing.assert_allclose(lt.compute, [2 * 2e6 / 1e12, 8 * 2e6 / 1e12])      # rows x 2P / peak
+    np.testing.assert_allclose(lt.memory, [2 * 2e6 / 1e9, 1 * 2e6 / 1e9])          # touched x P x 2 B / BW
+    np.testing.assert_allclose(lt.rank, lt.memory)                  # 8 rows << ridge: bytes, not FLOPs
+    assert lt.total == pytest.approx(2 * lt.comm + lt.memory[0])    # rank 0 reads two experts: it is slowest
+    # the busiest port: rank 1 receives 3 remote rows in dispatch (and sends them back in combine)
+    assert lt.comm == pytest.approx(2e-6 + 3 * 1024 * 2 / 450e9)
+    assert lt.comm_even == pytest.approx(2e-6 + 3 / 2 * 1024 * 2 / 450e9)    # 3 remote rows over 2 ports
+
+
+def test_skew_barely_moves_decode_gemms_but_slows_prefill():
+    """Qwen3-30B-A3B on 8 H100s (NVLink), Zipf s = 1.0 skew, vLLM's linear placement. At 128 tokens per
+    GPU each expert sees ~64 rows, far below the ridge (295): every rank streams its 16 experts in
+    45 us whatever the skew, and the skew's cost is the hot rank's port. At 4,096 tokens per GPU the
+    GEMMs are compute-bound and the busiest rank's 1.65x rows set the layer."""
+    q3, h100 = MODELS["qwen3-30b-a3b"], T.DEVICES["h100-sxm"]
+    pop = T.zipf_popularity(128, 1.0)[np.random.default_rng(0).permutation(128)]
+    res = {}
+    for tpg in (128, 4096):
+        idx = T.sample_routes(128, 8, 8 * tpg, pop, np.random.default_rng(1))
+        res[tpg] = E.layer_time(idx, np.repeat(np.arange(8), tpg), E.placement(128, 8), 8,
+                                q3.expert_params(), 2048, h100, NV)
+    dec, pre = res[128], res[4096]
+    assert dec.imbalance > 1.6 and pre.imbalance > 1.6                     # the same skew in rows
+    assert dec.bound == "memory" and np.ptp(dec.rank) == 0                 # decode: balanced expert time
+    assert dec.rank.max() == pytest.approx(16 * q3.expert_params() * 2 / h100.bandwidth())
+    assert dec.comm > 1.4 * dec.comm_even and 1.1 < dec.penalty < 1.2     # what skew costs: the exchange
+    assert pre.bound == "compute" and pre.penalty > 1.5                    # prefill: the rows
+    assert pre.rank.max() / pre.rank.mean() == pytest.approx(pre.imbalance)
 
 
 def test_placement_and_eplb_rebalance():
@@ -73,11 +104,30 @@ def test_wide_ep_replicates_everything_but_the_routed_experts():
 
 def test_tp_vs_ep_communication_for_one_mixtral_layer():
     """Batch 64 on 8 GPUs: TP all-reduces 64 x 4096 x 2 B = 512 KiB (ring, 30 us); EP with DP attention
-    ships 8 tokens x 2 x 4096 x 2 B = 128 KiB each way (direct, 2 x 2.25 us)."""
+    and all-to-all kernels ships 8 tokens x 2 x 4096 x 2 B = 128 KiB each way (direct, 2 x 2.25 us);
+    vLLM's default allgather_reducescatter moves TP's volume (all-gather 448 KiB + reduce-scatter 448 KiB)."""
     tp_b, tp_t = E.moe_comm(64, 2, 4096, 8, NV, "tp")
-    ep_b, ep_t = E.moe_comm(8, 2, 4096, 8, NV, "ep")
+    ep_b, ep_t = E.moe_comm(8, 2, 4096, 8, NV, "a2a")
+    ag_b, ag_t = E.moe_comm(8, 2, 4096, 8, NV, "agrs")
     assert tp_b == 2 * 7 / 8 * 524_288 and round(tp_t * 1e6, 1) == 30.0
     assert ep_b == 2 * 7 / 8 * 131_072 and round(ep_t * 1e6, 2) == 4.51
+    assert ag_b == tp_b == 2 * 7 * 8 * 4096 * 2 and ag_t == pytest.approx(tp_t)
+    with pytest.raises(ValueError):
+        E.moe_comm(8, 2, 4096, 8, NV, "ep")
+
+
+def test_fp8_dispatch_and_a_two_level_fabric():
+    """DeepSeek-V3 dispatches in FP8 (+ a 4-byte scale per 128) and combines in BF16. Across two 8-GPU
+    nodes (EP 16) a GPU's 7 node peers are on NVLink and only 8/16 of the traffic crosses the NIC."""
+    ib = E.LINKS["ib-ndr"]
+    _, bf16 = E.moe_comm(32, 8, 7168, 16, ib, "a2a")
+    _, fp8 = E.moe_comm(32, 8, 7168, 16, ib, "a2a", dispatch_elem=1, scale_block=128)
+    assert fp8 < bf16
+    s = E.dispatch_bytes(32, 8, 7168)
+    two = E.a2a_time(s, 16, ib, per_node=8, intra=NV)
+    assert two == pytest.approx(max(2e-6 + 7 / 16 * s / 450e9, 5e-6 + 8 / 16 * s / 50e9))
+    assert E.a2a_time(s, 16, NV) < two < E.a2a_time(s, 16, ib)
+    assert E.a2a_time(s, 8, ib, per_node=8, intra=NV) == E.a2a_time(s, 8, ib)   # one node: no split
 
 
 def test_one_gpu_decode_on_equals_the_single_device_roofline():

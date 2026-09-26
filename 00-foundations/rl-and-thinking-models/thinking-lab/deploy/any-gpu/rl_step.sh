@@ -18,7 +18,7 @@ DRY_RUN="${DRY_RUN:-0}"
 PY="${PY:-python3}"
 
 run() {
-  echo "+ $*"
+  printf '+'; printf ' %q' "$@"; printf '\n'      # shell-quoted: the printed line can be pasted as is
   if [[ "${DRY_RUN}" != "1" ]]; then "$@"; fi
 }
 

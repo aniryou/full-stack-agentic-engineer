@@ -5,9 +5,11 @@ import math
 from sandboxlab import bench
 
 
-def test_littles_law_pool():
+def test_littles_law_pool_is_the_mean_and_erlang_c_sizes_it():
     p = bench.littles_law_pool(5, 2, 3)          # lambda 5/s, 2 s runs, 3 s cold start
     assert (p["busy"], p["warming"], p["total_ceil"]) == (10, 15, 25)
+    assert bench.erlang_c(25, 25) == 1.0          # the mean occupancy as a size: the queue never clears
+    assert bench.replace_after_use_slots(5, 2, 3, 0.2) == 31      # the primer's §6 table (core pool.py pins it too)
 
 
 def test_erlang_c_table():
@@ -21,8 +23,15 @@ def test_erlang_c_table():
 def test_scaling_primer_rate():
     lam = round(27.1 * 0.2, 2)                   # scaling primer §3.2: 27.1 tool calls/s at peak, 20 % run_code
     assert lam == 5.42
-    assert bench.servers_for(lam, 2, max_mean_wait_s=0.1) == 15
-    assert bench.littles_law_pool(lam, 2, 3)["total_ceil"] == 28
+    assert bench.servers_for(lam, 2, max_mean_wait_s=0.1) == 15          # a reuse pool
+    assert bench.littles_law_pool(lam, 2, 3)["total_ceil"] == 28         # the floor
+    assert bench.replace_after_use_slots(lam, 2, 3, 0.2) == 34           # the size
+
+
+def test_erlang_c_does_not_overflow_at_fleet_loads():
+    # a = 27.1/s x 6 s = 162.6 Erlangs: a ** c / c! overflowed a float here (OverflowError)
+    assert bench.servers_for(27.1, 6.0, max_p_wait=0.05) == 186
+    assert bench.replace_after_use_slots(5, 2, 45, 0.2) == 252   # a 45 s gVisor-pod cold start: a = 235
 
 
 def test_cost_per_execution_by_hand():

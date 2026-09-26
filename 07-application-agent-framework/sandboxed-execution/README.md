@@ -9,7 +9,7 @@ Kubernetes that enforces it.
 
 1. Read [`PRIMER.md`](PRIMER.md) §1–§2 (30 min): why a code tool is the most dangerous tool, and the
    isolation ladder from process to microVM.
-2. `cd sandbox-core && python3 -m pytest -q` — 49 tests, ~7 s; then open
+2. `cd sandbox-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 75 tests, ~30 s; then open
    [`sandbox-core/notebooks/01_the_threat_model.ipynb`](sandbox-core/notebooks/01_the_threat_model.ipynb)
    and watch a secret leak from unsandboxed code, then get contained.
 3. When you have Docker or a cluster: [`sandbox-lab/`](sandbox-lab/) hardens a real container, runs a
@@ -17,26 +17,27 @@ Kubernetes that enforces it.
 
 ## What you get
 
-*Tiers: **T0** = laptop / Colab CPU / CI, free — everything conceptual is here; **T1** = one small box with
-Docker; **T3** = the Google Cloud deployment, optional.* Each notebook opens with "The one-minute version",
+*Tiers: **T0** = laptop / Colab CPU / CI, free — everything conceptual is here; **T0 + Docker** = the
+container rungs and kind on your own machine, still free; **T3** = the Google Cloud deployment, optional. No
+GPU anywhere, so the repo's T1/T2 (one or more GPUs) do not apply.* Each notebook opens with "The one-minute version",
 works examples against the code, sets exercises with a check that prints ✅, and closes with "In a design
 review". Finished versions are in [`sandbox-core/solutions/`](sandbox-core/solutions/).
 
 | Path | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
 | [`sandbox-core`](sandbox-core/) `01_the_threat_model` | name a code tool's blast radius; map each risk (secret, egress, fork bomb, disk, CPU, output) to the control that bounds it; see what leaks unsandboxed | §1 | 45 min | T0 |
-| `02_a_process_sandbox` | build the T0 boundary: clean env, ephemeral home, rlimits, a process-group wall-clock kill, output truncation; know what it cannot stop (network, and NPROC as root) | §2, §3 | 1 h | T0 |
+| `02_a_process_sandbox` | build the T0 boundary: clean env, a 0700 workspace, a UID per execution, rlimits, a wall-clock kill, streamed and capped output; know what it cannot stop (the network; without the UID, your files and `setsid()` escapes) | §2, §3 | 1 h | T0 |
 | `03_the_execution_contract_and_policies` | design the request/result contract with budgets and exit reasons; write policy as data; render Pod Security / NetworkPolicy / Job / admission YAML; key executions for safe replay | §3, §5 | 1 h | T0 |
-| `04_egress_and_secrets` | put an allowlisting egress proxy in front of the sandbox that injects a credential the code never holds; see why the network, not `HTTP_PROXY`, enforces it | §4 | 45 min | T0 |
-| `05_pools_latency_and_cost` | size a warm pool with Little's law and Erlang C; pick an isolation level for a latency budget; put a number on cost per action | §6 | 45 min | T0 |
-| [`sandbox-lab`](sandbox-lab/) | the same controls on real Docker, kind and GKE Sandbox (gVisor), with an agent whose `run_code`/`fetch_url` tools fail closed under injection | §2–§9 | 3–4 h | T0/T1/T3 |
+| `04_egress_and_secrets` | put an allowlisting egress proxy in front of the sandbox that injects a credential the code never holds and never follows a redirect; see why the network — not `HTTP_PROXY`, not a declared host — enforces egress | §4 | 45 min | T0 |
+| `05_pools_latency_and_cost` | see why Little's law is the floor and size a replace-after-use pool with Erlang C; pick an isolation level for a latency budget; put a number on cost per action | §6 | 45 min | T0 |
+| [`sandbox-lab`](sandbox-lab/) | the same controls on a process with a network namespace, real Docker, kind and GKE Sandbox (gVisor), with an agent whose `run_code`/`fetch_url` tools fail closed under injection where the host provides a network namespace | §2–§9 | ~8 h | T0, T0 + Docker, T3 |
 
 ## Run it
 
 ```bash
 cd sandbox-core
-python3 -m pip install -e .            # standard library only; pyyaml + kubernetes-validate for the manifest tests
-python3 -m pytest -q                    # 49 tests, ~7 s
+python3 -m pip install -e ".[dev]"     # the library is stdlib only; dev adds pytest, jupyter, pyyaml, kubernetes-validate
+python3 -m pytest -q                    # 75 tests, ~30 s
 python3 tools/build_notebooks.py        # (re)build notebooks/ and solutions/
 python3 -m jupyterlab notebooks         # do the exercises
 ```
@@ -72,9 +73,11 @@ learning path: [`CURRICULUM.md`](../../CURRICULUM.md).
 - **A process sandbox is not a security boundary against a determined attacker.** It contains resource abuse
   and removes ambient authority, but does not stop kernel exploits or the network. Real isolation is a
   container, then gVisor (`runsc`), then a microVM (Firecracker/Kata) — the lab.
-- **Root changes the story.** `RLIMIT_NPROC` is ignored for uid 0, so fork-bomb protection needs a UID drop
-  (which needs privilege). Colab and many CI containers run as root; the core reports this rather than
-  pretending. See the primer's §2 and Verify list.
+- **Root changes the story, both ways.** Three controls need the sandbox to run each execution as its own
+  UID, which needs root: `RLIMIT_NPROC` (ignored for uid 0, shared with your processes otherwise), keeping
+  your files unreadable (`HOME` redirection is not a boundary), and finding a process that left the group.
+  Colab and many CI containers run as root and get all three; a laptop user gets none, and the core reports
+  which rather than pretending. See the primer's §2 and Verify list.
 - **kind has no gVisor**, and Kata/Firecracker need `/dev/kvm` (not on Colab or most laptops). The lab says
   so plainly and uses GKE Sandbox for the gVisor path. Dated product facts are in the primer's Verify list
   (2026-09-26).

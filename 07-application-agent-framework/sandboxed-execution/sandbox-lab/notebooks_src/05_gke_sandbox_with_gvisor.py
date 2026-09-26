@@ -129,28 +129,36 @@ print("✅ no token, an unbound service account, and GKE_METADATA mode — not a
 # %% [markdown]
 # ## Exercise 5.4 — size the pool and the cost per execution
 #
-# With a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start, Little's law sizes
-# a warm pool that never waits on a cold start. Compute the pool size, and the cost of one execution
-# that holds a sandbox pod's share of an `e2-standard-2` for 2.5 s at a Spot price you look up
-# (mark it verify). See `COMPUTE.md` for prices.
+# With a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start, the lab's warm pool
+# is **replace-after-use**: the runner deletes each pod after one execution and the Deployment warms a
+# replacement, so every execution holds a slot for 2 s of work *and* 45 s of warm-up. Return the
+# Little's-law mean occupancy (the floor), the Erlang C slot count that keeps at most 20% of requests
+# waiting for a warm pod (`bench.replace_after_use_slots`), and the cost of one execution: a sandbox
+# pod's share of an `e2-standard-2` held for the run plus its replacement's warm-up, at a Spot price
+# you look up (mark it verify). See `COMPUTE.md` for prices.
 
 # %% exercise
 def pool_and_cost(rate: float, exec_s: float, cold_s: float, node_usd_per_hour: float) -> tuple:
-    """Return (pool_size, cost_per_execution_usd) for pods that share an e2-standard-2 (2 vCPU, 8 GiB)."""
+    """Return (mean_occupancy, slots, cost_per_execution_usd) for pods sharing an e2-standard-2 (2 vCPU, 8 GiB)."""
     ### BEGIN SOLUTION
-    pool = bench.littles_law_pool(rate, exec_s, cold_s)["total_ceil"]
+    mean = bench.littles_law_pool(rate, exec_s, cold_s)["total_ceil"]
+    slots = bench.replace_after_use_slots(rate, exec_s, cold_s, 0.2)
     fits = gke.pods_per_node(2, 8, 0.5, 0.3125)      # 500m CPU, 320Mi per sandbox pod, after reservations
-    cost = gke.cost_per_execution_usd(exec_s + 0.5, node_usd_per_hour, fits)   # held ~ run + teardown
-    return pool, cost
+    cost = gke.cost_per_execution_usd(exec_s + cold_s, node_usd_per_hour, fits)   # run + the replacement's warm-up
+    return mean, slots, cost
     ### END SOLUTION
 
 # %% check
-pool, cost = pool_and_cost(5, 2, 45, node_usd_per_hour=0.02)   # ~$0.02/h for a Spot e2-standard-2 (VERIFY)
-assert pool == bench.littles_law_pool(5, 2, 45)["total_ceil"] == 235   # 10 busy + 225 warming: a 45 s cold start dominates
-assert cost > 0
-print(f"✅ pool size {pool} (a 45 s cold start dominates — this is the case for a warm pool or snapshot/restore)")
-print(f"   cost per execution ~ ${cost:.6f} at $0.02/h per node share (VERIFY the price; see COMPUTE.md)")
-print("   the same rate with a sub-second warm-pool adoption needs ~11-14 running pods (M/M/c), not 235")
+mean, slots, cost = pool_and_cost(5, 2, 45, node_usd_per_hour=0.02)   # ~$0.02/h for a Spot e2-standard-2 (VERIFY)
+assert mean == bench.littles_law_pool(5, 2, 45)["total_ceil"] == 235   # 10 busy + 225 warming, on average
+assert slots == bench.servers_for(5, 47, max_p_wait=0.2) and slots > mean
+fits = gke.pods_per_node(2, 8, 0.5, 0.3125)
+assert abs(cost - gke.cost_per_execution_usd(47, 0.02, fits)) < 1e-12, "a one-shot pod pays its warm-up too"
+reuse = bench.servers_for(5, 2, max_p_wait=0.2)
+print(f"✅ replace-after-use: {mean} slots on average, {slots} for P(wait) <= 0.2 — a 45 s cold start dominates")
+print(f"   cost per execution ~ ${cost:.6f} at $0.02/h per node (VERIFY the price; see COMPUTE.md), 47 of it warm-up")
+print(f"   a reuse pool ({reuse} slots) or a snapshot restore cuts that — reuse carries state between executions,")
+print("   and one snapshot must never be restored into two tenants (PRIMER §2, §6)")
 
 # %% [markdown]
 # ## Deploying it (T3)
@@ -174,9 +182,10 @@ print("   the same rate with a sub-second warm-pool adoption needs ~11-14 runnin
 # under a user-space kernel, on nodes nothing else touches. GKE taints and labels those nodes and
 # creates the RuntimeClass, so a pod needs only the class name. I make the cluster private with no
 # Cloud NAT, so nothing has a route to the internet and images come from Artifact Registry over
-# Private Google Access; the egress proxy reaches only in-cluster upstreams unless I deliberately
-# turn NAT on, and even then NetworkPolicy on Dataplane V2 and gVisor keep the sandboxes off the
-# internet. The one thing a NetworkPolicy cannot do is block the node-local metadata server, so the
+# Private Google Access — which is still a path to Google APIs, so the sandbox's default-deny
+# NetworkPolicy closes it too. The egress proxy reaches only in-cluster upstreams unless I deliberately
+# turn NAT on, and even then NetworkPolicy on Dataplane V2 keeps the sandboxes off the internet —
+# gVisor is a kernel boundary, not a network one. The one thing a NetworkPolicy cannot do is block the node-local metadata server, so the
 # cloud-credential defence is `GKE_METADATA` mode, no mounted token, and a KSA with no IAM binding.
 # The pool is Spot and scales from zero, so it costs nothing idle; the trade is a 40-to-50-second
 # cold start on the first execution, which is why interactive traffic gets a warm pool. The manifests

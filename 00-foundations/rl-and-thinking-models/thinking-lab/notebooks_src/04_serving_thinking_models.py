@@ -106,7 +106,11 @@ print(f"memory: {views[1][1]['gpus_for_memory'] / views[0][1]['gpus_for_memory']
 
 # %% [markdown]
 # Ten times the output needs about 18 times the GPUs for KV. Duration grows 10×, so concurrency
-# grows 10×, and each session's average context nearly doubles (1,650 → 3,000 tokens). One
+# grows 10×, and each session's average context nearly doubles (1,650 → 3,000 tokens). These
+# formulas price every token at the SLO's 40 ms, which overstates the GPU count (5 here) and makes
+# a looser SLO look dearer; PRIMER §7 "What thinking does to serving" closes Little's law on the
+# step the fleet actually runs at (`rlcore.workload.plan_steady`: 3 GPUs) and still finds 18× the
+# GPUs for KV (2.57 vs 0.14). `derive_shape` below works the same way: ITL at the batch. One
 # caveat carries over from the primer: its `decode_aggregate` has no memory cap. At 1,000
 # concurrent sessions × 0.23 GB the KV alone is 229 GB, three H100s' worth, so the batch that
 # sets TPOT must be capped by the KV pool, as the next exercise does.
@@ -158,11 +162,15 @@ for rate in (2.0, 4.0):
 
 # %% [markdown]
 # Thinking multiplies ITL several times over, and the answer starts seconds rather than
-# milliseconds after the request. At 4/s the KV pool is full (peak ≈ 1.0): new requests wait for
-# blocks, running ones are occasionally preempted and recomputed, and the E2E tail runs to
-# minutes. The 512-token budget keeps the pool mostly empty and ITL close to the no-thinking value,
-# and it has the best accuracy per *token*. That is the capacity argument for budgets, on top of
-# the cost one.
+# milliseconds after the request. Unlimited thinking is already at saturation at 2/s: it asks for
+# about 2 × 1,184 ≈ 2,400 output tokens a second, close to the thinking shape's steady-state
+# throughput in the table above, so the KV pool peaks near 0.9 and the E2E p99 is minutes. At 4/s the pool is full (peak
+# 1.0): new requests wait for blocks, running ones are preempted and recomputed, and the tail
+# grows further. The 512-token budget keeps the pool at 5–11% and ITL close to the no-thinking
+# value, and among the thinking modes it costs less than half the tokens per correct answer (784
+# vs 1,692). Thinking off is cheapest per correct answer of all (364) but tops out at 0.28
+# accuracy. So the modes trade accuracy for cost, which Exercise 4.5 turns into a routing choice;
+# the budget's capacity argument (a pool that never fills) comes on top of its cost argument.
 #
 # ## Worked example: a live run, read from the engine's `/metrics`
 #

@@ -136,7 +136,9 @@ def _limits(b: dict, uid: int | None, gid: int | None, nproc: int | None):
 
 
 def classify(rc: int | None, preset: str | None, stderr_tail: str, cpu_s: float | None, cpu_budget: float) -> str:
-    """One exit reason per run (PRIMER §3). The order encodes which evidence wins."""
+    """One exit reason per run, in the primer's vocabulary (PRIMER §3; ``sandboxcore.contract.EXIT_REASONS``).
+    The order encodes which evidence wins. Reasons read from ``stderr_tail`` are the program's own say-so
+    (it can print ``MemoryError`` and exit 1); signals and the presets are observed by the wrapper."""
     if preset:
         return preset
     if rc is None:
@@ -146,16 +148,16 @@ def classify(rc: int | None, preset: str | None, stderr_tail: str, cpu_s: float 
     if rc < 0:
         sig = -rc
         if sig == signal.SIGXCPU or (sig == signal.SIGKILL and cpu_s is not None and cpu_s >= cpu_budget - 0.05):
-            return "cpu_limit"
+            return "cpu_time"
         if sig == getattr(signal, "SIGXFSZ", 25):
             return "file_too_large"
         return "killed"
     if "MemoryError" in stderr_tail or "Cannot allocate memory" in stderr_tail:
-        return "memory_limit"
+        return "memory"
     if "[Errno 27]" in stderr_tail or "File too large" in stderr_tail:
         return "file_too_large"
     if "[Errno 11]" in stderr_tail and ("fork" in stderr_tail or "BlockingIOError" in stderr_tail):
-        return "pids_limit"
+        return "pids"
     return "error"
 
 
@@ -214,7 +216,7 @@ def run(code: str, budgets: dict, workspace: str, *, uid: int | None = None, gid
         now = time.monotonic()
         remaining = deadline - now
         if remaining <= 0:
-            preset = "timeout"
+            preset = "wall_timeout"
             break
         if exited_at is None and p.poll() is not None:
             exited_at = now
@@ -253,7 +255,7 @@ def run(code: str, budgets: dict, workspace: str, *, uid: int | None = None, gid
     stderr_text = out["stderr"].decode("utf-8", "replace")
     oom_after = _oom_kills()
     if oom_before is not None and oom_after is not None and oom_after > oom_before and not preset:
-        preset = "memory_limit"         # the cgroup's OOM killer, not a budget the wrapper enforced
+        preset = "memory"               # the cgroup's OOM killer, not a budget the wrapper enforced
         notes.append(f"memory cgroup oom_kill {oom_before} -> {oom_after}")
     reason = classify(rc, preset, stderr_text[-2000:], cpu, float(b["cpu_s"]))
     return {"exit_reason": reason, "returncode": rc,

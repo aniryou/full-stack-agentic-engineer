@@ -89,8 +89,8 @@ def exit_reason_for(probe_name: str) -> str:
 # %% check
 reasons = {name: exit_reason_for(name) for name in ("infinite_loop", "sleep_forever", "memory_hog", "huge_output")}
 print(reasons)
-assert reasons == {"infinite_loop": "cpu_limit", "sleep_forever": "timeout",
-                   "memory_hog": "memory_limit", "huge_output": "output_limit"}
+assert reasons == {"infinite_loop": "cpu_time", "sleep_forever": "wall_timeout",
+                   "memory_hog": "memory", "huge_output": "output_limit"}
 print("✅ each abuse hits its own budget: CPU seconds, the wall clock, address space, output bytes")
 
 # %% [markdown]
@@ -106,8 +106,8 @@ def predict(code: str) -> tuple:
     """Return (exit_reason, approx_wall_s) for Budgets(cpu_s=1, wall_s=2)."""
     ### BEGIN SOLUTION
     if "sleep" in code:
-        return ("timeout", 2.0)      # sleeping uses no CPU, so only the wall clock catches it
-    return ("cpu_limit", 1.0)        # a busy loop burns a CPU second before the wall deadline
+        return ("wall_timeout", 2.0)      # sleeping uses no CPU, so only the wall clock catches it
+    return ("cpu_time", 1.0)        # a busy loop burns a CPU second before the wall deadline
     ### END SOLUTION
 
 # %% check

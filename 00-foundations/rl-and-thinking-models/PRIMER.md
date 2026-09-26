@@ -241,8 +241,9 @@ rewards/chosen −0.407, rewards/rejected −1.524, margins +1.118, accuracies 0
 - **It optimises the margin, not the likelihood.** Lowering both log-ratios — the rejected one faster — wins the
   loss, so rewards/chosen drifts negative (−0.407 above). A collapsing chosen log-probability is a sign of
   over-training.
-- **Deterministic preferences push the margin without bound** — the logistic loss keeps paying for a wider margin.
-  β is the only brake.
+- **Deterministic preferences push the margin without bound** — −log σ(β·margin) keeps paying for a wider margin
+  at every β, so π(rejected) is driven towards 0 whatever β is: the KL term stops regularising. β only rescales
+  how fast the loss saturates; the brakes in practice are early stopping, or IPO's fixed target margin below.
 - **No reward model is left behind** to rerank samples, monitor drift or reuse for best-of-n.
 
 **Three variants, one line each.** **IPO**: a squared loss toward a fixed margin 1/(2β) (5 at β = 0.1,
@@ -536,10 +537,17 @@ what explodes is how long it is held.
 an internal assistant with [`capacity.py`](../gpu-capacity-planning/capacity.py): 8.33 requests/s, 1,500 tokens in,
 300 out, 40 ms TPOT, Mistral Small 3 (24B) in FP8 on H100s. `workload.plan()` restates those formulas (Little's law,
 then GPUs per constraint) and reproduces the primer's numbers in a test; it adds what `decode_aggregate` leaves out —
-the batch per GPU is capped by HBM and by the ITL SLO, and the step is max(bytes/bandwidth, FLOPs/peak).
+the batch per GPU is capped by HBM and by the ITL SLO, and the step is max(bytes/bandwidth, FLOPs/peak). Like the
+primer, it assumes **every output token takes the SLO's TPOT**, so a request lives TTFT + out × 40 ms whatever the
+load. `workload.plan_steady()` drops that assumption: a request lives as long as the step the fleet actually runs
+at, and that step depends on the batch the lifetime produces. Read Little's law backwards — N = rps·(TTFT +
+out·step(b))/b GPUs hold a steady batch of b per GPU (`workload.gpus_for_batch()`) — and N falls as b grows, so the
+fewest GPUs each cap allows is N at that cap (chunked prefill is assumed to ride in the memory-bound decode steps,
+so prefill is sized separately, as in `plan()`).
 
 | | No thinking (the primer) | 2,700 thinking + 300 answer | Same, 20 ms ITL SLO |
 |---|---|---|---|
+| **At the SLO's TPOT (`plan()`, the primer's convention)** | | | |
 | request lifetime | 12.07 s | 120.07 s | 60.07 s |
 | live requests (Little's law) | 100.6 | 1,000.6 | 500.6 |
 | average context; KV per session (FP8) | 1,650; 0.126 GB | 3,000; 0.229 GB | 3,000; 0.229 GB |
@@ -547,20 +555,33 @@ the batch per GPU is capped by HBM and by the ITL SLO, and the step is max(bytes
 | batch per GPU within the ITL SLO | 824 | 480 | 187 |
 | GPUs by memory / ITL / decode / prefill | 0.26 / 0.12 / 0.27 / 0.61 | 4.77 / 2.08 / 2.57 / 0.61 | 2.39 / 2.68 / 2.67 / 0.61 |
 | GPUs needed (binding) | 1 (prefill) | 5 (memory) | 3 (ITL) |
+| **At the step the fleet runs at (`plan_steady()`)** | | | |
+| GPUs by memory / ITL / prefill | 0.14 / 0.12 / 0.61 | 2.57 / 2.08 / 0.61 | 2.57 / 2.67 / 0.61 |
+| GPUs needed (binding) | 1 (prefill) | 3 (memory) | 3 (ITL) |
+| where it settles: batch per GPU; step; lifetime | 20.4; 7.9 ms; 2.45 s | 139.1; 16.7 ms; 50.08 s | 139.1; 16.7 ms; 50.08 s |
 
-Ten times the output needs eighteen times the GPUs for memory (4.77 vs 0.264): concurrency grows 10× and each live
-session holds 1.8× the KV. The primer's `decode_aggregate` would put all 1,000 live requests in one batch — 229 GB
-of KV on an 80 GB card. Decode *throughput* is not the binding constraint.
+The convention has a paradox in its last column: a 20 ms SLO halves the lifetime it assumes, so it needs *fewer*
+GPUs (3) than the looser 40 ms SLO (5). A fleet does not run at its SLO. At 3 GPUs the batch settles at 139 per GPU
+and a step takes 16.7 ms, under both SLOs, so both need 3 GPUs — and the tight SLO's need is the larger (2.67 vs
+2.57), as it should be. The convention sizes for the slowest step the SLO allows, which is a safe margin for bursts
+but the wrong tool for comparing SLOs.
+
+Either way, ten times the output needs eighteen times the GPUs for memory — 4.77 vs 0.264 at the SLO's TPOT, 2.57 vs
+0.14 at the step the fleet runs at. Concurrency grows with the output and each live session holds 1.8× the KV: the
+18.2× of KV-token-steps above, showing through Little's law. The primer's `decode_aggregate` would put all 1,000
+live requests of the convention in one batch — 229 GB of KV on an 80 GB card. Decode *throughput* is not the
+binding constraint.
 
 **ITL is the binding SLO; TTFT less so.** Thinking leaves the prompt, and so TTFT, unchanged — but the user waits for
-the *answer*: with 2,700 thinking tokens at 40 ms each, the first answer token arrives 108.07 s after the request
-(`workload.request_duration_s()` with the thinking tokens as output). Streaming the reasoning, or a summary of it,
-is the UX answer; the capacity answer is that ITL, not tokens/s, governs how many sessions a GPU may hold. With a
-20 ms ITL SLO a GPU holds 187 sessions (`workload.max_batch_for_itl()`), below the 209 that fit in HBM: ITL binds
-first. Measure with the serving-engine primer's §11 method — open-loop load at realistic (here: heavy-tailed) output
-lengths, percentiles of ITL and TPOT, goodput against the SLO — and watch `vllm:inter_token_latency_seconds`,
-`vllm:kv_cache_usage_perc` and `vllm:num_preemptions`: a long-tail trace that outgrows the pool preempts the newest
-request.
+the *answer*: with 2,700 thinking tokens at the SLO's 40 ms each, the first answer token arrives 108.07 s after the
+request (`workload.request_duration_s()` with the thinking tokens as output), and still 45.1 s at the 16.7 ms step the
+3-GPU fleet runs at. Streaming the reasoning, or a summary of it, is the UX answer; the capacity answer is that ITL,
+not tokens/s, governs how many sessions a GPU may hold. With a 20 ms ITL SLO a GPU holds 187 sessions
+(`workload.max_batch_for_itl()`), below the 209 that fit in HBM: ITL binds first (2.67 GPUs against memory's 2.57 in
+`plan_steady()`). Measure with the serving-engine primer's §11 method — open-loop load at realistic (here:
+heavy-tailed) output lengths, percentiles of ITL and TPOT, goodput against the SLO — and watch
+`vllm:inter_token_latency_seconds`, `vllm:kv_cache_usage_perc` and `vllm:num_preemptions`: a long-tail trace that
+outgrows the pool preempts the newest request.
 
 **Thinking is dropped from history: prefix-cache implications.** Qwen3's template (and gpt-oss's: "CoT is dropped
 during all previous turns") renders earlier assistant turns without their reasoning (verify). Turn N's KV holds
@@ -623,7 +644,7 @@ cost real compute, and acceptance on reasoning text must be measured, not assume
 
 | Framework | Rollouts | Notes |
 |---|---|---|
-| TRL `GRPOTrainer` | `use_vllm=True`: `vllm_mode="colocate"` (vLLM in the trainer process, sharing the GPU; `vllm_gpu_memory_utilization` 0.3; sleep mode frees it during the optimizer step) or `"server"` (`vllm serve` on other GPUs, weights sent over NCCL) | train–inference log-prob mismatch corrected by truncated importance sampling (`vllm_importance_sampling_correction`, cap 3.0) (verify) |
+| TRL `GRPOTrainer` | `use_vllm=True`: `vllm_mode="colocate"` (vLLM in the trainer process, sharing the GPU; `vllm_gpu_memory_utilization` 0.3; sleep mode frees it during the optimizer step) or `"server"` (`vllm serve` on other GPUs, weights sent over NCCL) | train–inference log-prob mismatch corrected by a sequence-level importance weight, masked outside [C_min, 3.0] by default (`vllm_importance_sampling_mode="sequence_mask"`; truncation is the `*_truncate` modes) (verify) |
 | verl | `rollout.name`: `hf`, `vllm` or `sglang`; `rollout.n` samples per prompt; HybridFlow's `ActorRolloutRefWorker` colocates actor, rollout and reference on the same GPUs | `algorithm.adv_estimator=grpo`, `kl_loss_type=low_var_kl` (k3), `loss_agg_mode` (verify) |
 | OpenRLHF | Ray + vLLM; PPO, GRPO, REINFORCE++ | named only here (unverified) |
 
@@ -685,7 +706,8 @@ optimum without a reward model — and a length-controlled eval, because annotat
 an RL step is generation, so the rollout side is an inference-serving problem, and async rollouts trade throughput
 for staleness. Trained this way, models learned to think, and that changes serving: output-heavy, heavy-tailed
 traffic where concurrency scales with output length and KV per session grows while the model thinks, so memory and
-the ITL SLO set the GPU count — eighteen times the GPUs for ten times the output in the capacity primer's example.
+the ITL SLO set the GPU count — eighteen times the GPUs for memory for ten times the output in the capacity primer's
+example, whether a request is assumed to take the SLO's TPOT per token or the step the fleet actually runs at.
 We size `max_model_len` for the p99, enforce cost with a thinking budget rather than `max_tokens`, expect lower
 multi-turn prefix-cache hits because templates drop old thinking, and route effort per request class on cost per
 correct answer."
@@ -705,9 +727,10 @@ correct answer."
    gradient and raises truncation), `mask_truncated_completions`, a soft overlong penalty, and whether the reward
    charges anything for length.
 4. *We turned on thinking for our assistant at the same QPS. What happens to the fleet?* — Concurrency scales with
-   output length and KV per session with average context, so memory binds: 10× output needed 18× the GPUs in the
-   capacity primer's example (4.77 vs 0.26), and a tight ITL SLO caps the batch before HBM does. TTFT is unchanged;
-   time to the first answer token is not.
+   output length and KV per session with average context, so memory binds: 10× output needed 18× the GPUs for
+   memory in the capacity primer's example (4.77 vs 0.26 at the SLO's TPOT, 2.57 vs 0.14 at the step the fleet runs
+   at: 3 H100s instead of 1), and a tight ITL SLO caps the batch before HBM does. Beware sizing at the SLO's TPOT
+   when comparing SLOs: it makes the looser SLO look dearer. TTFT is unchanged; time to the first answer token is not.
 5. *Users get empty answers from the thinking model. Why, and the fix?* — `max_tokens` counts reasoning; requests
    still thinking at the cap return `finish_reason="length"` with empty content (17.7% at a 4K cap in §7's model).
    Raise `max_tokens`/`max_model_len` for the tail and enforce cost with `thinking_token_budget` or a two-call budget.
@@ -838,8 +861,8 @@ versions you pin.
   the thinking-budget phrase; post-training (GRPO on 3,995 query–verifier pairs; strong-to-weak distillation for
   small models). gpt-oss effort levels and the Harmony format.
 - **Sizing inputs:** the GPU figures in `workload.GPUS` (H100 as the capacity primer's; L4 24 GB, 0.30 TB/s,
-  121/242 TFLOP/s; T4 16 GB, 0.32 TB/s, 65 TFLOP/s); Qwen3-0.6B's config (28 layers, 8 KV heads, head_dim 128,
-  0.596 B parameters); the 04 lab's T4 prediction (6,969 blocks, 13.6 × 8K); the 06 lab's example prices ($1.50 /
+  121/242 TFLOP/s; T4 16 GB nominal (15 GiB usable), 0.32 TB/s, 65 TFLOP/s fp16, no FP8); Qwen3-0.6B's config (28
+  layers, 8 KV heads, head_dim 128, 0.596 B parameters); the 04 lab's T4 prediction (6,969 blocks, 13.6 × 8K); the 06 lab's example prices ($1.50 /
   $9.00 / $0.15 per 1M tokens, dated 2026-09-05 there).
 - **Where to run:** Colab/Kaggle T4 availability, rented 24 GB GPU prices and GCP deploy details — maintained in
   [`COMPUTE.md`](../../COMPUTE.md) and the 04 lab's deploy READMEs.

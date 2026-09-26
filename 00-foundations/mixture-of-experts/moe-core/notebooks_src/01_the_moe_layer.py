@@ -58,9 +58,11 @@ print("their experts                    :", flat[order].tolist())
 print("token of each slot (slot // k)   :", (order // 2).tolist())
 
 # %% [markdown]
-# ## Worked example 2 — five routers on the same scores
+# ## Worked example 2 — the routers on the same scores
 # One token's router logits, pushed through each family's rules (`moe.ROUTERS`). Watch the weights: Mixtral
-# renormalises to 1; Qwen3 and OLMoE (HF default `norm_topk_prob=False`) keep the raw softmax mass; gpt-oss picks
+# renormalises to 1; OLMoE (`norm_topk_prob=False`, also transformers' default for Qwen2/Qwen3-MoE) keeps the raw
+# softmax mass, while the released Qwen3 MoE configs are reported to set it true (verify: read the checkpoint's
+# config) and so weight like Mixtral; gpt-oss picks
 # on the logits and softmaxes just those k — which is *exactly* Mixtral's renormalised softmax (the exponent ratios
 # are the same); DeepSeek-V3 uses sigmoid scores, renormalises them and multiplies by 2.5; Llama 4 keeps one expert
 # and its sigmoid score scales the expert's *input*.
@@ -114,12 +116,12 @@ def topk_route(logits, k, renormalise=True):
 
 # %% check
 L = rng.standard_normal((50, 16))
-for renorm, fam in ((True, "mixtral"), (False, "qwen3")):
+for renorm, fam in ((True, "mixtral"), (False, "olmoe")):
     idx, w = topk_route(L, 4, renorm)
     ref = route(L, 4, **ROUTERS[fam])
     assert (idx == ref.idx).all() and np.allclose(w, ref.weights), fam
-print(f"✅ softmax -> top-k -> (renormalise): Mixtral's weights sum to 1; Qwen3's to "
-      f"{route(L, 4, **ROUTERS['qwen3']).weights.sum(1).mean():.2f} on average here")
+print(f"✅ softmax -> top-k -> (renormalise): Mixtral's weights sum to 1; OLMoE's to "
+      f"{route(L, 4, **ROUTERS['olmoe']).weights.sum(1).mean():.2f} on average here")
 
 # %% [markdown]
 # ## Exercise 1.2 — the sparse forward pass

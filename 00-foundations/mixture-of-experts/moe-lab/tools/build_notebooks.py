@@ -10,10 +10,13 @@ Source cells in ``notebooks_src/NN_name.py``:
 
 For each source, writes ``notebooks/NN_name.ipynb`` (solution blocks replaced by
 ``# YOUR CODE HERE`` + NotImplementedError) and ``solutions/NN_name.ipynb`` (blocks
-kept). A bootstrap cell makes ``import moelab`` work from a fresh checkout.
+kept). A bootstrap cell makes ``import moelab`` work from a fresh checkout. Cell ids
+are derived from the file name and position, so rebuilding unchanged sources leaves
+the committed notebooks byte-identical.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -103,6 +106,8 @@ def build(path: Path):
                 nb.cells.append(new_code_cell(strip_solution(src) if variant == "exercise" else keep_solution(src)))
             else:
                 nb.cells.append(new_code_cell(keep_solution(src)))
+        for i, cell in enumerate(nb.cells):   # deterministic ids: an unchanged source rebuilds byte-identical
+            cell["id"] = hashlib.sha1(f"{path.stem}:{variant}:{i}".encode()).hexdigest()[:12]
         out_dir.mkdir(parents=True, exist_ok=True)
         nbformat.write(nb, out_dir / f"{path.stem}.ipynb")
     print("built", path.stem)

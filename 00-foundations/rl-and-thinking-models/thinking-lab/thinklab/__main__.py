@@ -113,6 +113,16 @@ def main(argv=None) -> int:
             cfg.rl_steps = args.rl_steps
         print(show(run(cfg)))
     elif args.cmd == "rl-step":
+        import importlib.util
+        missing = [name for name, ok in (("an NVIDIA GPU", env.gpu_name() is not None), ("vllm", env.has_vllm()),
+                                         ("transformers", importlib.util.find_spec("transformers") is not None),
+                                         ("torch", env.has_torch())) if not ok]
+        if missing:
+            print(f"rl-step is T1 and needs {', '.join(missing)}: missing here ({env.describe()}).\n"
+                  "  On a T4 or 24 GB GPU: pip install -q \"vllm==0.30.0\" \"transformers>=4.56.2\" "
+                  "(or INSTALL=1 deploy/any-gpu/rl_step.sh).\n"
+                  "  At T0, run notebook 05 instead: the rollout bookkeeping on the tiny transformer.", file=sys.stderr)
+            return 2
         from .rollout import one_grpo_step
         one_grpo_step(args.model, n_prompts=args.prompts, n=args.g)
     return 0

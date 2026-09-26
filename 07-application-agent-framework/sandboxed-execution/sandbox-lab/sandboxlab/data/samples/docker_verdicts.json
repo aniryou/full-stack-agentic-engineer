@@ -51,8 +51,8 @@
    {
     "probe": "metadata",
     "isolation": "docker:default",
-    "verdict": "N/A",
-    "evidence": "no metadata server from this host (not a cloud VM)",
+    "verdict": "LEAKED",
+    "evidence": "reached the stand-in metadata endpoint via host.docker.internal (real one not probed)",
     "exit_reason": "ok",
     "wall_s": 0.52,
     "label": "sample output in the documented format (illustrative)"
@@ -179,8 +179,8 @@
    {
     "probe": "metadata",
     "isolation": "docker:runc",
-    "verdict": "N/A",
-    "evidence": "no metadata server from this host (not a cloud VM)",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror (stand-in metadata endpoint)",
     "exit_reason": "ok",
     "wall_s": 0.03,
     "label": "sample output in the documented format (illustrative)"
@@ -216,8 +216,8 @@
     "probe": "memory_hog",
     "isolation": "docker:runc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason memory_limit",
-    "exit_reason": "memory_limit",
+    "evidence": "exit reason memory",
+    "exit_reason": "memory",
     "wall_s": 0.05,
     "label": "sample output in the documented format (illustrative)"
    },
@@ -225,8 +225,8 @@
     "probe": "infinite_loop",
     "isolation": "docker:runc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason cpu_limit after 2.02 s",
-    "exit_reason": "cpu_limit",
+    "evidence": "exit reason cpu_time after 2.02 s",
+    "exit_reason": "cpu_time",
     "wall_s": 2.02,
     "label": "sample output in the documented format (illustrative)"
    },
@@ -234,8 +234,8 @@
     "probe": "sleep_forever",
     "isolation": "docker:runc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason timeout after 5.00 s",
-    "exit_reason": "timeout",
+    "evidence": "exit reason wall_timeout after 5.00 s",
+    "exit_reason": "wall_timeout",
     "wall_s": 5.0,
     "label": "sample output in the documented format (illustrative)"
    },
@@ -307,8 +307,8 @@
    {
     "probe": "metadata",
     "isolation": "docker:runsc",
-    "verdict": "N/A",
-    "evidence": "no metadata server from this host (not a cloud VM)",
+    "verdict": "CONTAINED",
+    "evidence": "127.0.0.1: ConnectionRefusedError; host.docker.internal: gaierror (stand-in metadata endpoint)",
     "exit_reason": "ok",
     "wall_s": 0.03,
     "label": "sample output in the documented format (illustrative)"
@@ -344,8 +344,8 @@
     "probe": "memory_hog",
     "isolation": "docker:runsc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason memory_limit",
-    "exit_reason": "memory_limit",
+    "evidence": "exit reason memory",
+    "exit_reason": "memory",
     "wall_s": 0.05,
     "label": "sample output in the documented format (illustrative)"
    },
@@ -353,8 +353,8 @@
     "probe": "infinite_loop",
     "isolation": "docker:runsc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason cpu_limit after 2.02 s",
-    "exit_reason": "cpu_limit",
+    "evidence": "exit reason cpu_time after 2.02 s",
+    "exit_reason": "cpu_time",
     "wall_s": 2.02,
     "label": "sample output in the documented format (illustrative)"
    },
@@ -362,8 +362,8 @@
     "probe": "sleep_forever",
     "isolation": "docker:runsc",
     "verdict": "CONTAINED",
-    "evidence": "exit reason timeout after 5.00 s",
-    "exit_reason": "timeout",
+    "evidence": "exit reason wall_timeout after 5.00 s",
+    "exit_reason": "wall_timeout",
     "wall_s": 5.0,
     "label": "sample output in the documented format (illustrative)"
    },

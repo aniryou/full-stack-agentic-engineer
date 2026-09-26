@@ -48,8 +48,9 @@ for fmt, gran, g, bits in [("int8", "tensor", None, 8), ("int8", "channel", None
 # channel, `(out, in/g)` per group.
 #
 # ## Worked example 2 — an outlier row, and an outlier column
-# First serving-engine §8's case: one output channel 100× larger. Then the case that matters more for LLM
-# weights: one **input** column 20× larger (the column that meets a large activation channel, notebook 03).
+# First serving-engine §8's case: one output channel 100× larger. Then the harder case for INT4 weights: one
+# weight **input column** 20× larger than the rest — a *weight* outlier. (Its cousin, an *activation* outlier
+# channel, is worked example 3: there the weight column is ordinary and the problem is a different one.)
 
 # %%
 rng = np.random.default_rng(1)
@@ -71,7 +72,9 @@ for gran, g in (("tensor", 0), ("channel", 0), ("group", 128), ("group", 64), ("
 # Aggregate metrics are dominated by the outlier and look fine while the ordinary values are wrecked. Per-channel
 # scales fix an outlier row completely and an outlier column not at all (it sets every row's scale); groups
 # shrink the damage to one group of each row — 61% error on the other columns per channel, 32% with groups of
-# 128, 18% with groups of 32.
+# 128, 18% with groups of 32. For a weight outlier the remedies work on `W`: groups confine it, GPTQ lets the
+# other columns compensate for its rounding (notebook 03), and a rotation spreads it over every column (primer §4).
+# AWQ does not apply — its scales come from activation magnitudes, and this column's inputs are ordinary.
 #
 # ## Worked example 3 — activations: the outlier channels are in every token
 # The tiny model's first up-projection reads `RMSNorm(x) × gain`, and four gains are 25–40×. That is how real
@@ -96,6 +99,24 @@ for label, Ah in (("INT8 per token (dynamic)", G.quantize_activations(A, "int8",
 # ~amax/127 — an 11% error on them, invisible in the 1.4% aggregate. FP8 per token keeps them at 2.7%: a float
 # grid's precision is *relative*, so small values keep their 3 mantissa bits. This is the argument for FP8
 # activations, and for SmoothQuant when the format is INT8.
+#
+# What about the **weights** those channels meet? Look at the up-projection's columns for the four outlier
+# channels, and at where its INT4 output error comes from (`G.output_error_by_input`: channel c contributes
+# `‖X[:, c]‖² · ‖W[:, c] − Ŵ[:, c]‖²`).
+
+# %%
+Wu0 = m.weights["blocks.0.up"]
+col = np.abs(Wu0).max(0)
+share = G.output_error_by_input(A, Wu0, G.fake_quant(Wu0, fmt="int4", granularity="group", group_size=32, convention="full"))
+print(f"weight-column absmax of the outlier channels {np.round(col[np.sort(out)], 3).tolist()}, median column "
+      f"{np.median(col):.3f}; share of the INT4 g32 output error from those 4 channels: {share[out].sum() / share.sum():.1%}")
+
+# %% [markdown]
+# The columns are ordinary — no weight granularity would single them out — yet they own 98% of the layer's output
+# error, because a column's rounding error reaches the output multiplied by its input. That is the *activation*
+# outlier case, and its remedies act on the activation side: AWQ scales exactly those columns up before rounding
+# (a finer grid relative to them, folded back into the norm), and SmoothQuant moves the activation range into them
+# for W8A8 (notebook 03). Weight outliers (worked example 2) and activation outliers are different problems.
 #
 # ## Worked example 4 — static vs dynamic activation scales
 # A static scale is one number per tensor, fixed at calibration — no max-reduction at run time, and the only
@@ -160,8 +181,11 @@ def group_int4(W, g):
 # %% check
 codes, scales = group_int4(Wc, 64)
 q = G.quantize(Wc, "int4", "group", group_size=64, convention="full")
-assert scales.shape == (256, 8) and codes.min() >= -8 and codes.max() <= 7
-assert np.allclose(scales, q.scale) and np.allclose((codes.reshape(256, 8, 64) * scales[..., None]).reshape(256, 512), q.w_hat)
+assert scales.shape == (256, 8) and codes.min() >= -8 and codes.max() <= 7 and np.allclose(scales, q.scale)
+# -amax / scale is exactly -7.5 in exact arithmetic, a tie; in floating point it can land one ulp either side, so
+# np.round may say -7 where quantcore (which resolves the tie the exact way, formats.quantize_int) says -8.
+tie = np.isclose(np.abs(Wc / np.repeat(scales, 64, axis=1)), 7.5, rtol=0, atol=1e-9)
+assert np.all((codes == q.codes.reshape(256, 512)) | tie)
 print(f"✅ codes {codes.shape}, scales {scales.shape}: {F.bits_per_weight(4, 64):.3f} bits per weight with fp16 scales")
 
 # %% [markdown]
@@ -181,8 +205,8 @@ choice = min(ok, key=lambda cb: cb[1])[0]
 
 # %% check
 assert choice == 32
-print("✅ g32 (4.5 bits): only groups this small keep one outlier column from coarsening its neighbours - or move the outlier "
-      "out of the weight's way first (AWQ scaling, rotations), which is notebook 03")
+print("✅ g32 (4.5 bits): only groups this small keep one outlier weight column from coarsening its neighbours - "
+      "the other levers are GPTQ, which lets the other columns absorb its rounding (notebook 03), and rotations")
 
 # %% [markdown]
 # ## Exercise 2.3 — predict the per-token damage
@@ -249,15 +273,18 @@ print(f"✅ 16 scales for a 512x512 weight; the hot tile's scale is {s[0, 0] / n
 # weights and groups of 128 for INT4, and we know what each does *not* protect against: per-channel scales
 # isolate an outlier row but not an outlier input column, which is in every row — groups confine it to one
 # group, and at 4 bits one bad column still leaves its neighbours at ~30% error with groups of 128, so we pair
-# INT4 with AWQ or GPTQ rather than shrink the groups. Activations are worse: LLMs have a few channels 20–40×
-# larger in every token, so a per-token INT8 scale leaves the other channels ~4 bits. Dynamic per-token FP8
+# INT4 with GPTQ rather than shrink the groups. Activation outliers are a different problem: LLMs have a few
+# channels 20–40× larger in every token. The weight columns they meet are ordinary, but their rounding error is
+# multiplied by those inputs (98% of our toy up-projection's error), which AWQ fixes; and a per-token INT8
+# activation scale set by them leaves the other channels ~4 bits. Dynamic per-token FP8
 # keeps them at 3 mantissa bits, which is why FP8 W8A8 usually needs no smoothing and INT8 W8A8 does. We
 # prefer dynamic activation scales; a static scale saturates whatever calibration missed. And we never trust an
 # aggregate error number: we look per channel."
 #
 # **Drills**
 # 1. *Why can't per-channel weight scales fix an outlier input column?* — The column is in every output row, so
-#    it sets every row's scale; only groups along the input dimension (or moving the outlier, AWQ) confine it.
+#    it sets every row's scale; only groups along the input dimension confine it (or GPTQ compensates for its
+#    rounding, or a rotation spreads it). AWQ is for the other kind of outlier: a large *activation* channel.
 # 2. *Your per-token INT8 activations show 1.4% error. Should you relax?* — Not yet: look at the ordinary
 #    channels. With an outlier channel at 30× they carry ~11% error while the aggregate hides it.
 # 3. *Static or dynamic activation scales for FP8 W8A8?* — Dynamic per token unless the kernel requires static:

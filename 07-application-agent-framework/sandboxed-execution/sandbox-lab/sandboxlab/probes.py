@@ -14,7 +14,10 @@ harness.
     print(verdict_table({"process": results}))
 
 A verdict is ``LEAKED`` (the attacker got it), ``CONTAINED`` (a control stopped it) or ``N/A``
-(the machine has nothing to leak, e.g. no cloud metadata server off-cloud). The lab's core
+(the machine has nothing to leak, e.g. no ``/proc`` on macOS). The cloud metadata probe targets a
+**stand-in** listener by default, like the egress probe; it touches the real 169.254.169.254 (connect
+only, nothing requested) only when ``SANDBOXLAB_PROBE_REAL_METADATA=1`` is set — on a cloud VM or Colab
+that endpoint is where node and pod credentials come from, so a harness never reaches it unasked. The lab's core
 package has its own probe set (``sandboxcore.threats``); this one adds the probes that separate
 containers from processes: ``/proc`` scanning, writes outside the workspace, escaping the
 process group, filling the disk with many small files.
@@ -38,6 +41,7 @@ from typing import Callable
 from .process import Budgets, ExecResult
 
 LEAKED, CONTAINED, NA = "LEAKED", "CONTAINED", "N/A"
+REAL_METADATA_ENV = "SANDBOXLAB_PROBE_REAL_METADATA"     # "1" = probe the real 169.254.169.254 (connect only)
 PRELUDE = "import json, os, sys, socket, time, signal\nP = json.loads({params!r})\n"
 
 
@@ -93,6 +97,8 @@ class Host:
     marker_dir: Path
     listener_hosts: list[str] = field(default_factory=lambda: ["127.0.0.1"])
     metadata_reachable: bool = False
+    metadata_listener: Listener | None = None          # the stand-in metadata endpoint (default)
+    real_metadata: bool = False                        # opted in to the real 169.254.169.254
 
     @property
     def key_path(self) -> Path:
@@ -107,11 +113,15 @@ class Host:
                 "outside_path": str(self.root / f"written-by-{name}.txt"),
                 "listener_hosts": self.listener_hosts, "listener_port": self.listener.port,
                 "marker_path": str(self.marker_dir / f"escaped-{self.canary}"), "escape_delay_s": 1.0,
+                "metadata_standin": not self.real_metadata,
+                "metadata_hosts": ["169.254.169.254"] if self.real_metadata else self.listener_hosts,
+                "metadata_port": 80 if self.real_metadata else self.metadata_listener.port,
                 "fork_target": max(64, 2 * budgets.pids), "disk_target_mib": max(16, 2 * budgets.file_mib),
                 "mem_target_mib": max(512, 2 * budgets.memory_mib), "output_target_mib": 4}
 
 
 def _metadata_reachable(timeout: float = 0.4) -> bool:
+    """Connect-only reachability of the real metadata server. Called only when REAL_METADATA_ENV is set."""
     try:
         with socket.create_connection(("169.254.169.254", 80), timeout=timeout):
             return True
@@ -123,7 +133,8 @@ def _metadata_reachable(timeout: float = 0.4) -> bool:
 def standin_host(bind: str = "127.0.0.1", listener_hosts: list[str] | None = None):
     """A temporary 'agent host': a 0700 directory with a stand-in SSH key, a stand-in agent process
     whose *initial* environment holds an API-key canary (what ``/proc/<pid>/environ`` shows), a
-    world-writable marker directory for the escape probe, and a canary listener."""
+    world-writable marker directory for the escape probe, a canary listener, and a second listener
+    standing in for the cloud metadata server (the real one only with SANDBOXLAB_PROBE_REAL_METADATA=1)."""
     canary = "LABCANARY-" + os.urandom(6).hex()
     root = Path(tempfile.mkdtemp(prefix="sbx-host-"))
     home = root / "home"
@@ -138,13 +149,17 @@ def standin_host(bind: str = "127.0.0.1", listener_hosts: list[str] | None = Non
                              env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LAB_CANARY_API_KEY": canary},
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     listener = Listener(bind)
+    metadata = Listener(bind)
+    real = os.environ.get(REAL_METADATA_ENV) == "1"
     host = Host(root=root, home=home, canary=canary, listener=listener, agent_pid=agent.pid,
                 marker_dir=marker_dir, listener_hosts=listener_hosts or ["127.0.0.1"],
-                metadata_reachable=_metadata_reachable())
+                metadata_reachable=_metadata_reachable() if real else False,
+                metadata_listener=metadata, real_metadata=real)
     try:
         yield host
     finally:
         listener.close()
+        metadata.close()
         agent.kill()
         agent.wait()
         shutil.rmtree(root, ignore_errors=True)
@@ -197,6 +212,10 @@ def _judge_egress(res, obs, host, p):
 
 
 def _judge_metadata(res, obs, host, p):
+    if p["metadata_standin"]:
+        if host.metadata_listener.got(host.canary):
+            return LEAKED, f"reached the stand-in metadata endpoint via {obs.get('reached', '?')} (real one not probed)"
+        return CONTAINED, (obs.get("error") or "no connection") + " (stand-in metadata endpoint)"
     if not host.metadata_reachable:
         return NA, "no metadata server from this host (not a cloud VM)"
     return (LEAKED, "TCP connect to 169.254.169.254:80 succeeded") if obs.get("reachable") else (CONTAINED, obs.get("error", "unreachable"))
@@ -283,11 +302,16 @@ PROBES: list[Probe] = [
           'print(json.dumps({"reached": reached, "errors": errors}))\n', _judge_egress),
     Probe("metadata", "reach the cloud metadata server (where node and pod credentials come from)", "ASI03, ASI05",
           "no network; on GKE, Workload Identity + a KSA with no IAM roles (NetworkPolicy cannot block it)",
-          '# connect only: reachability is the finding, nothing is requested\n'
-          'try:\n'
-          '    socket.create_connection(("169.254.169.254", 80), timeout=0.5).close()\n'
-          '    print(json.dumps({"reachable": True}))\n'
-          'except OSError as e:\n    print(json.dumps({"reachable": False, "error": type(e).__name__}))\n', _judge_metadata),
+          '# a stand-in listener by default; the real endpoint only on opt-in, and then connect-only\n'
+          'reached, errors = None, []\n'
+          'for h in P["metadata_hosts"]:\n'
+          '    try:\n'
+          '        s = socket.create_connection((h, P["metadata_port"]), timeout=0.5)\n'
+          '        if P["metadata_standin"]:\n            s.sendall(P["canary"].encode())\n'
+          '        s.close(); reached = h; break\n'
+          '    except OSError as e:\n        errors.append(f"{h}: {type(e).__name__}")\n'
+          'print(json.dumps({"reachable": reached is not None, "reached": reached, "error": "; ".join(errors)}))\n',
+          _judge_metadata),
     Probe("fork_bomb", "fork until the machine stops (bounded: 64 children that exit after 1.5 s)", "ASI08 (resource abuse)",
           "a process budget: RLIMIT_NPROC with a dedicated UID, --pids-limit, kubelet podPidsLimit",
           'kids, err = [], ""\n'
@@ -375,6 +399,8 @@ def run_probe(executor, probe: Probe | str, host: Host, budgets: Budgets | None 
     b = budgets or getattr(executor, "budgets", None) or Budgets()
     params = host.params(probe.name, b)
     host.listener.received.clear()          # a verdict is about this run only
+    if host.metadata_listener is not None:
+        host.metadata_listener.received.clear()
     res: ExecResult = executor.run(probe_code(probe, params), b)
     verdict, evidence = probe.judge(res, _obs(res), host, params)
     label = "simulated" if res.simulated else "measured on this machine"

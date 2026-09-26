@@ -37,13 +37,15 @@ def test_renormalisation_conventions_hand_computed():
     logits = np.array([[2.0, 1.0, 0.0, -1.0]])
     p = softmax(logits)[0]                                     # 0.6439, 0.2369, 0.0871, 0.0321
     mix = route(logits, 2, **ROUTERS["mixtral"])
-    qwen = route(logits, 2, **ROUTERS["qwen3"])
+    qwen = route(logits, 2, **ROUTERS["olmoe"])                  # norm_topk_prob False (HF default)
     oss = route(logits, 2, **ROUTERS["gpt-oss"])
     assert mix.idx.tolist() == [[0, 1]]
     np.testing.assert_allclose(mix.weights[0], [p[0] / (p[0] + p[1]), p[1] / (p[0] + p[1])])   # 0.731, 0.269
     np.testing.assert_allclose(qwen.weights[0], p[:2])                                        # 0.644, 0.237
     np.testing.assert_allclose(oss.weights[0], mix.weights[0])   # softmax of the top-k logits = renormalised top-k
     assert round(mix.weights[0, 0], 3) == 0.731 and round(qwen.weights[0].sum(), 3) == 0.881
+    released = route(logits, 2, **ROUTERS["qwen3-moe"])         # norm_topk_prob True: Mixtral's arithmetic
+    np.testing.assert_allclose(released.weights[0], mix.weights[0])
 
 
 def test_deepseek_bias_picks_but_never_weights():

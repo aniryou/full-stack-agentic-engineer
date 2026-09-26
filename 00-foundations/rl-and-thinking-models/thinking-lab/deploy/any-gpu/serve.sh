@@ -31,7 +31,7 @@ EXTRA_ARGS="${EXTRA_ARGS:-}"
 DRY_RUN="${DRY_RUN:-0}"
 
 run() {
-  echo "+ $*"
+  printf '+'; printf ' %q' "$@"; printf '\n'      # shell-quoted: the printed line can be pasted as is
   if [[ "${DRY_RUN}" != "1" ]]; then "$@"; fi
 }
 

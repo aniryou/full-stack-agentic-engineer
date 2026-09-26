@@ -65,15 +65,17 @@ data:
     \ 0)\n        if nproc is not None:\n            lim(resource.RLIMIT_NPROC, nproc)\n        _no_new_privs()\n\
     \        if gid is not None:\n            os.setgroups([])\n            os.setgid(gid)\n        if uid is not\
     \ None:\n            os.setuid(uid)\n    return apply\n\n\ndef classify(rc: int | None, preset: str | None,\
-    \ stderr_tail: str, cpu_s: float | None, cpu_budget: float) -> str:\n    \"\"\"One exit reason per run (PRIMER\
-    \ \xA73). The order encodes which evidence wins.\"\"\"\n    if preset:\n        return preset\n    if rc is\
-    \ None:\n        return \"sandbox_error\"\n    if rc == 0:\n        return \"ok\"\n    if rc < 0:\n        sig\
-    \ = -rc\n        if sig == signal.SIGXCPU or (sig == signal.SIGKILL and cpu_s is not None and cpu_s >= cpu_budget\
-    \ - 0.05):\n            return \"cpu_limit\"\n        if sig == getattr(signal, \"SIGXFSZ\", 25):\n        \
-    \    return \"file_too_large\"\n        return \"killed\"\n    if \"MemoryError\" in stderr_tail or \"Cannot\
-    \ allocate memory\" in stderr_tail:\n        return \"memory_limit\"\n    if \"[Errno 27]\" in stderr_tail or\
-    \ \"File too large\" in stderr_tail:\n        return \"file_too_large\"\n    if \"[Errno 11]\" in stderr_tail\
-    \ and (\"fork\" in stderr_tail or \"BlockingIOError\" in stderr_tail):\n        return \"pids_limit\"\n    return\
+    \ stderr_tail: str, cpu_s: float | None, cpu_budget: float) -> str:\n    \"\"\"One exit reason per run, in the\
+    \ primer's vocabulary (PRIMER \xA73; ``sandboxcore.contract.EXIT_REASONS``).\n    The order encodes which evidence\
+    \ wins. Reasons read from ``stderr_tail`` are the program's own say-so\n    (it can print ``MemoryError`` and\
+    \ exit 1); signals and the presets are observed by the wrapper.\"\"\"\n    if preset:\n        return preset\n\
+    \    if rc is None:\n        return \"sandbox_error\"\n    if rc == 0:\n        return \"ok\"\n    if rc < 0:\n\
+    \        sig = -rc\n        if sig == signal.SIGXCPU or (sig == signal.SIGKILL and cpu_s is not None and cpu_s\
+    \ >= cpu_budget - 0.05):\n            return \"cpu_time\"\n        if sig == getattr(signal, \"SIGXFSZ\", 25):\n\
+    \            return \"file_too_large\"\n        return \"killed\"\n    if \"MemoryError\" in stderr_tail or\
+    \ \"Cannot allocate memory\" in stderr_tail:\n        return \"memory\"\n    if \"[Errno 27]\" in stderr_tail\
+    \ or \"File too large\" in stderr_tail:\n        return \"file_too_large\"\n    if \"[Errno 11]\" in stderr_tail\
+    \ and (\"fork\" in stderr_tail or \"BlockingIOError\" in stderr_tail):\n        return \"pids\"\n    return\
     \ \"error\"\n\n\ndef run(code: str, budgets: dict, workspace: str, *, uid: int | None = None, gid: int | None\
     \ = None,\n        use_nproc: bool = False, kill_uid: bool = False, extra_env: dict | None = None,\n       \
     \ python: str | None = None) -> dict:\n    b = {**DEFAULTS, **(budgets or {})}\n    os.makedirs(workspace, exist_ok=True)\n\
@@ -100,8 +102,8 @@ data:
     \    sel = selectors.DefaultSelector()\n    sel.register(p.stdout, selectors.EVENT_READ, \"stdout\")\n    sel.register(p.stderr,\
     \ selectors.EVENT_READ, \"stderr\")\n    deadline = t0 + float(b[\"wall_s\"])\n    preset = None\n    exited_at\
     \ = None\n    while sel.get_map():\n        now = time.monotonic()\n        remaining = deadline - now\n   \
-    \     if remaining <= 0:\n            preset = \"timeout\"\n            break\n        if exited_at is None\
-    \ and p.poll() is not None:\n            exited_at = now\n        if exited_at is not None and now - exited_at\
+    \     if remaining <= 0:\n            preset = \"wall_timeout\"\n            break\n        if exited_at is\
+    \ None and p.poll() is not None:\n            exited_at = now\n        if exited_at is not None and now - exited_at\
     \ > 0.3:\n            # the main process is gone but something it started still holds stdout/stderr open\n \
     \           notes.append(\"a background process kept the output pipes open after the main process exited\")\n\
     \            break\n        for key, _ in sel.select(timeout=min(remaining, 0.25)):\n            chunk = os.read(key.fileobj.fileno(),\
@@ -117,7 +119,7 @@ data:
     \ before is None or after is None else round(after[0] - before[0], 3)\n    rss = None if after is None else\
     \ after[1]\n    stderr_text = out[\"stderr\"].decode(\"utf-8\", \"replace\")\n    oom_after = _oom_kills()\n\
     \    if oom_before is not None and oom_after is not None and oom_after > oom_before and not preset:\n      \
-    \  preset = \"memory_limit\"         # the cgroup's OOM killer, not a budget the wrapper enforced\n        notes.append(f\"\
+    \  preset = \"memory\"               # the cgroup's OOM killer, not a budget the wrapper enforced\n        notes.append(f\"\
     memory cgroup oom_kill {oom_before} -> {oom_after}\")\n    reason = classify(rc, preset, stderr_text[-2000:],\
     \ cpu, float(b[\"cpu_s\"]))\n    return {\"exit_reason\": reason, \"returncode\": rc,\n            \"stdout\"\
     : out[\"stdout\"].decode(\"utf-8\", \"replace\"), \"stderr\": stderr_text,\n            \"stdout_bytes\": total[\"\

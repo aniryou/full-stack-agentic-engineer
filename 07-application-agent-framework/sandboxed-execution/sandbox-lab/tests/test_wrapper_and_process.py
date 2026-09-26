@@ -22,13 +22,13 @@ def sb():
 def test_classify_is_pure_and_ordered():
     assert classify(0, None, "", 0.1, 1) == "ok"
     assert classify(1, None, "Traceback\nZeroDivisionError", 0.1, 1) == "error"
-    assert classify(-signal.SIGXCPU, None, "", 1.0, 1) == "cpu_limit"
-    assert classify(-signal.SIGKILL, None, "", 1.99, 2) == "cpu_limit"          # the hard limit, one second later
+    assert classify(-signal.SIGXCPU, None, "", 1.0, 1) == "cpu_time"
+    assert classify(-signal.SIGKILL, None, "", 1.99, 2) == "cpu_time"          # the hard limit, one second later
     assert classify(-signal.SIGKILL, None, "", 0.1, 2) == "killed"              # not ours
-    assert classify(1, None, "MemoryError", 0.1, 1) == "memory_limit"
+    assert classify(1, None, "MemoryError", 0.1, 1) == "memory"
     assert classify(1, None, "OSError: [Errno 27] File too large", 0.1, 1) == "file_too_large"
     assert classify(-25, None, "", 0.1, 1) == "file_too_large"                  # SIGXFSZ: a non-Python child
-    assert classify(None, "timeout", "", None, 1) == "timeout"                  # a preset reason wins
+    assert classify(None, "wall_timeout", "", None, 1) == "wall_timeout"                  # a preset reason wins
 
 
 def test_parse_wrapper_output_finds_the_last_marker_line():
@@ -41,9 +41,9 @@ def test_parse_wrapper_output_finds_the_last_marker_line():
 @pytest.mark.parametrize("code,reason", [
     ("print('hi')", "ok"),
     ("1/0", "error"),
-    ("while True: pass", "cpu_limit"),
-    ("import time; time.sleep(60)", "timeout"),
-    ("x = bytearray(600 * 2**20)", "memory_limit"),
+    ("while True: pass", "cpu_time"),
+    ("import time; time.sleep(60)", "wall_timeout"),
+    ("x = bytearray(600 * 2**20)", "memory"),
     ("open('big', 'wb').write(b'0' * (9 * 2**20))", "file_too_large"),
     ("import sys; sys.stdout.write('A' * (2 * 2**20))", "output_limit"),
 ])

@@ -29,15 +29,17 @@ from . import env as _env
 WRAPPER = Path(__file__).with_name("wrapper.py")
 MARKER = "@@SANDBOX_RESULT@@"
 
-# The exit reasons of the contract, and what an agent should do about each (PRIMER §3).
+# The exit reasons of the contract, and what an agent should do about each. The names are the primer's
+# vocabulary (PRIMER §3, sandboxcore.contract.EXIT_REASONS), so a model or a dashboard keyed on them reads
+# the core and the lab alike; harness_timeout exists only for the deliberately unbudgeted contrast executor.
 EXIT_REASONS: dict[str, str] = {
     "ok": "exited 0",
     "error": "exited non-zero: a bug in the code; show the model stderr",
-    "timeout": "wall-clock budget exhausted (sleeping, blocked or just slow code); the process group was killed",
-    "cpu_limit": "CPU-seconds budget exhausted (SIGXCPU, then SIGKILL)",
-    "memory_limit": "address-space or memory budget exhausted (MemoryError, or the OOM killer)",
+    "wall_timeout": "wall-clock budget exhausted (sleeping, blocked or just slow code); the process group was killed",
+    "cpu_time": "CPU-seconds budget exhausted (SIGXCPU, then SIGKILL)",
+    "memory": "address-space or memory budget exhausted (MemoryError, or the OOM killer)",
     "file_too_large": "a file exceeded the per-file budget (EFBIG, or SIGXFSZ for non-Python children)",
-    "pids_limit": "could not create another process (fork returned EAGAIN)",
+    "pids": "could not create another process (fork returned EAGAIN)",
     "output_limit": "printed more than the output budget; killed",
     "disk_limit": "the workspace volume filled up or the pod was evicted for exceeding its sizeLimit",
     "killed": "killed by a signal the sandbox did not send for a budget",
@@ -118,9 +120,9 @@ class ExecResult:
         if self.ok:
             return {"ok": True, "data": data}
         hint = {"error": "Read stderr, fix the code, and call run_code again.",
-                "timeout": "Make it faster or smaller; the budget will not grow.",
-                "cpu_limit": "Make it faster or smaller; the budget will not grow.",
-                "memory_limit": "Use less memory (stream, chunk, or sample the data).",
+                "wall_timeout": "Make it faster or smaller; the budget will not grow.",
+                "cpu_time": "Make it faster or smaller; the budget will not grow.",
+                "memory": "Use less memory (stream, chunk, or sample the data).",
                 "output_limit": "Print a summary, not the data.",
                 "sandbox_error": "Infrastructure failure: retrying the same call may succeed."}.get(
                     self.exit_reason, "Do not retry the same code.")
@@ -168,7 +170,7 @@ class Unsandboxed:
         wall = time.monotonic() - t0
         err_text = err.decode("utf-8", "replace")
         if reason is None:
-            reason = "ok" if rc == 0 else ("memory_limit" if "MemoryError" in err_text else "error")
+            reason = "ok" if rc == 0 else ("memory" if "MemoryError" in err_text else "error")
         return ExecResult(exit_reason=reason, returncode=rc, stdout=out.decode("utf-8", "replace"), stderr=err_text,
                           stdout_bytes=len(out), stderr_bytes=len(err), wall_s=round(wall, 4), total_s=round(wall, 4),
                           isolation=self.name, notes=["no budgets: the agent's env, files, UID and network"])

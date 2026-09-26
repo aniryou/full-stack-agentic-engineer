@@ -3,15 +3,21 @@
 One idea: nothing in next-token loss asks the router to spread tokens. With top-1 routing the
 expert that happens to be chosen early gets the gradient, gets better, gets chosen more — the
 rich get richer, and some experts starve (their parameters are memory you pay for and never use).
+What starts it is that the router sees nearly the same input for every token: real transformer
+hidden states share a large common direction (they are anisotropic), so at initialisation most
+tokens score the same few experts highest. ``common`` adds such a direction (a fixed random unit
+vector times ``common``) to every token embedding; with the default the unbalanced run collapses
+onto one or two experts, and with ``common=0`` the same toy shows only mild imbalance.
 Two fixes, both run here: the Switch auxiliary loss (alpha x E x sum f_e P_e, which only pushes the
 *probabilities* P), and DeepSeek-V3's auxiliary-loss-free bias (after every step, raise the bias of
 under-loaded experts and lower it for over-loaded ones by a fixed step; the bias only picks experts,
 it never weights them — so it cannot bend the model's outputs the way a loss term can).
 
-CPU minutes at most: the defaults train in seconds per run. ``record()`` writes the curves that
+CPU minutes at most: the defaults train in about five seconds per run. ``record()`` writes the curves that
 ship in ``fixtures/tinymoe_curves.json`` for machines without torch.
 
     python -m moelab.tinymoe --steps 400 --seeds 0 1 2              # print the three runs
+    python -m moelab.tinymoe --common 0                              # no shared direction: mild imbalance
     python -m moelab.tinymoe --record                               # rewrite the bundled curves
 """
 from __future__ import annotations
@@ -44,6 +50,7 @@ class TrainConfig:
     top_k: int = 1
     d_model: int = 32
     expert_ff: int = 16
+    common: float = 12.0           # a direction every token embedding shares at init (0 = none)
     aux_alpha: float = 0.1         # larger than the usual 0.01: a 300-step run has little time
     bias_rate: float = 0.01        # DeepSeek-V3 used 0.001 over a far longer run (verify)
     z_coef: float = 0.0            # router z-loss weight (1e-3 is the usual starting point)
@@ -77,7 +84,12 @@ class Run:
 
 def build(task: ToyTask, cfg: TrainConfig) -> TinyMoETransformer:
     torch.manual_seed(cfg.seed)
-    return TinyMoETransformer(task.vocab, task.seq_len, cfg.d_model, 1, cfg.n_experts, cfg.top_k, cfg.expert_ff)
+    model = TinyMoETransformer(task.vocab, task.seq_len, cfg.d_model, 1, cfg.n_experts, cfg.top_k, cfg.expert_ff)
+    if cfg.common:                     # the shared direction real hidden states have (anisotropy)
+        with torch.no_grad():
+            u = torch.randn(cfg.d_model)
+            model.emb.weight += cfg.common * u / u.norm()
+    return model
 
 
 def train(cfg: TrainConfig | None = None, task: ToyTask | None = None, **overrides) -> tuple[Run, TinyMoETransformer]:
@@ -170,6 +182,8 @@ def main(argv=None):
     p.add_argument("--steps", type=int, default=400)
     p.add_argument("--seeds", type=int, nargs="+", default=[0])
     p.add_argument("--balance", nargs="+", default=["none", "aux", "bias"])
+    p.add_argument("--common", type=float, default=TrainConfig.common,
+                   help="size of the direction every token embedding shares at init (0 = none)")
     p.add_argument("--record", action="store_true", help="rewrite fixtures/tinymoe_curves.json (seeds 0 1 2)")
     a = p.parse_args(argv)
     if a.record:
@@ -177,6 +191,6 @@ def main(argv=None):
         return 0
     for b in a.balance:
         for s in a.seeds:
-            run, _ = train(TrainConfig(balance=b, seed=s, steps=a.steps))
+            run, _ = train(TrainConfig(balance=b, seed=s, steps=a.steps, common=a.common))
             print(run.summary())
     return 0

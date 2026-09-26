@@ -39,9 +39,12 @@ python3 -m sandboxlab gke-review                  # the design-review checklist,
   (`--sandbox type=gvisor`). GKE Sandbox needs a second node pool (the first cannot be sandboxed), and GKE adds
   the node label and taint `sandbox.gke.io/runtime=gvisor` itself and creates RuntimeClass `gvisor` (verify),
   so no taint is declared here and pods need only `runtimeClassName: gvisor`.
-* **No egress by default** — private nodes and no NAT: the only destinations are Google APIs over Private Google
-  Access (verify that it covers `*.pkg.dev` for your setup). With `enable_nat = true` the whole subnet gets a
-  route out; from then on NetworkPolicy (Dataplane V2) and gVisor keep sandboxes off the internet.
+* **No internet egress by default** — private nodes and no NAT: the only destinations are Google APIs over
+  Private Google Access (verify that it covers `*.pkg.dev` for your setup). Those APIs are still a way out (an
+  attacker's bucket is a Google API), so the sandbox namespace's default-deny NetworkPolicy (or VPC Service
+  Controls) is what closes them. With `enable_nat = true` the whole subnet gets a route out; from then on only
+  NetworkPolicy (Dataplane V2) keeps sandboxes off the internet — gVisor does not: its default
+  `--network=sandbox` gives the workload a full userspace network stack.
 * **Metadata server** — a NetworkPolicy cannot block the node-local metadata path (verify); the defence is
   `GKE_METADATA` mode, `automountServiceAccountToken: false` and a KSA with no IAM binding.
 * **Agent Sandbox add-on** — `enable_agent_sandbox_addon` turns on GKE's managed kubernetes-sigs/agent-sandbox

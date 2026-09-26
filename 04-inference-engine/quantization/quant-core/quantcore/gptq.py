@@ -10,7 +10,12 @@ keeps H invertible when some inputs never fire. The output is an ordinary INT4 c
 format and kernels as RTN, better-chosen codes.
 
 This is the reference algorithm (`gptq.py: fasterquant`, IST-DASLab) without its "lazy batch" trick,
-which defers updates to columns beyond a 128-column block for GPU efficiency and gives the same result.
+which defers updates to columns beyond a 128-column block for GPU efficiency. The OBS updates are the
+same either way; the results are identical per channel, or when every group starts on a block boundary.
+For groups smaller than the block, the reference computes a mid-block group's scale from the global W,
+which lacks that block's in-flight updates, while this loop uses the fully updated weights - a slightly
+different (not worse) choice of scales (tests/test_gptq.py shows both). llm-compressor's GPTQModifier
+does neither: its group scales come from the weight observer on the original weights, before the loop.
 """
 from __future__ import annotations
 
@@ -44,7 +49,8 @@ def gptq(W, X=None, H=None, bits: int = 4, group_size: int | None = 128, symmetr
          percdamp: float = 0.01, actorder: bool = False, convention: str = "full") -> Quantized:
     """GPTQ on W (out, in) with calibration inputs X (n, in) or a precomputed Hessian H.
     Group parameters are computed when the loop reaches a group, on the already-updated weights (the
-    reference behaviour). actorder: visit columns by decreasing H_jj (the most-used inputs first, while
+    reference's behaviour when groups align with its 128-column blocks; see the module docstring).
+    actorder: visit columns by decreasing H_jj (the most-used inputs first, while
     the most columns remain to absorb their error), with each group's parameters fixed up front from
     the original weights ('static groups') so the checkpoint layout does not change."""
     W = np.asarray(W, float).copy()
