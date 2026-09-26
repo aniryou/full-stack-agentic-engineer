@@ -3,14 +3,11 @@ import importlib.util
 import math
 from pathlib import Path
 
-from servelab import SAMPLES_DIR
-
 import pytest
 
+from servelab import SAMPLES_DIR as FIX
 from servelab import sizing
 from servelab.sizing import GiB, kv_bytes_per_token, load_config, param_count, size
-
-FIX = SAMPLES_DIR
 
 
 def test_kv_bytes_per_token_by_hand():

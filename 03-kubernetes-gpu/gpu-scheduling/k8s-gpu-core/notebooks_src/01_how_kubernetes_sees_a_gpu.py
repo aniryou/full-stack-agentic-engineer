@@ -135,9 +135,9 @@ print("✅ integers only, requests == limits: no fractional GPUs and no overcomm
 # %% [markdown]
 # **Why no fractions?** The scheduler and kubelet only count. A GPU shared by several pods must
 # therefore be *advertised as several units* by the device plugin (time-slicing, MPS) or *split
-# into real partitions* (MIG, each partition its own device). Notebook 02 of the lab and primer §9
-# cover that. Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a
-# structured claim; here is the claim you would write instead of `limits: {nvidia.com/gpu: 1}`:
+# into real partitions* (MIG, each partition its own device) — primer §9, with the mechanics in layer
+# 02. Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a structured
+# claim; here is the claim you would write instead of `limits: {nvidia.com/gpu: 1}`:
 
 # %%
 claim_template = {

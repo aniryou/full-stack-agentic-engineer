@@ -65,6 +65,7 @@ LLMS = {   # from each model's config.json (verify)
     "qwen2.5-0.5b": LLM("qwen2.5-0.5b", 0.494e9, 24, 14, 2, 64),
     "qwen3-0.6b": LLM("qwen3-0.6b", 0.596e9, 28, 16, 8, 128),
     "qwen2.5-1.5b": LLM("qwen2.5-1.5b", 1.54e9, 28, 12, 2, 128),
+    "llama-3.2-1b": LLM("llama-3.2-1b", 1.24e9, 16, 32, 8, 64),     # a draft for llama-3.1-8b (same tokenizer)
     "llama-3.1-8b": LLM("llama-3.1-8b", 8.03e9, 32, 32, 8, 128),
 }
 

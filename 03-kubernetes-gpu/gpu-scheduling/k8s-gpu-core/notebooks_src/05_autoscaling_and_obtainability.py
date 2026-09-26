@@ -34,6 +34,12 @@ for pending in ([1, 1, 1], [3, 3, 3], [4, 2, 1, 1], [8, 8, 8]):
           f"({nodes_needed(pending, pool.gpus_per_node)} node(s))" if pool else "(no pool can take them)")
 
 # %% [markdown]
+# Look at the third line: least-waste compares *idle resources*, not prices. For 4 + 2 + 1 + 1 GPUs one
+# 8-GPU H100 node and two 4-GPU L4 nodes are equally wasteful (zero idle GPUs), and the tie-break (fewer
+# nodes) picks the H100. (The real expander ranks idle CPU, then memory; either way, not dollars.) Pods
+# therefore select a GPU type with a node selector, and cost preferences go into a `price` or `priority`
+# expander or a GKE ComputeClass.
+#
 # ## Exercise 5.1 — how many new nodes?
 #
 # The autoscaler's estimate is a bin-packing of the pending pods onto empty copies of the pool's

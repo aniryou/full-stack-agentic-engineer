@@ -17,7 +17,7 @@ concept primer both share is [`../PRIMER.md`](../PRIMER.md).
 ```bash
 cd 03-kubernetes-gpu/gpu-scheduling/k8s-gpu-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks/tests
-python3 -m pytest -q                          # 31 tests, well under a second
+python3 -m pytest -q                          # 34 tests, well under a second
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 

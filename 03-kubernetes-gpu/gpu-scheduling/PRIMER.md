@@ -359,8 +359,8 @@ A gang also needs a workload API that treats its pods as one thing:
 * **JobSet** (`jobset.x-k8s.io/v1alpha2`) — a group of Jobs for training and HPC: `replicatedJobs`
   (e.g. one driver, N workers), a headless Service for stable hostnames, `failurePolicy.maxRestarts`
   (a failed Job recreates the whole set — resume from checkpoint), `successPolicy`,
-  `startupPolicy.startupPolicyOrder: InOrder`, and `alpha.jobset.sigs.k8s.io/exclusive-topology` to give each child Job a whole topology
-  domain. Kueue admits a JobSet as one Workload.
+  `startupPolicy.startupPolicyOrder: InOrder`, and `alpha.jobset.sigs.k8s.io/exclusive-topology` to give
+  each child Job a whole topology domain. Kueue admits a JobSet as one Workload.
 * **LeaderWorkerSet** (`leaderworkerset.x-k8s.io/v1`) — replicas that are **groups** of pods, for
   multi-host inference: `leaderWorkerTemplate.size` pods per group (one leader, size−1 workers, optional
   separate `leaderTemplate`), `restartPolicy: RecreateGroupOnPodRestart` so a failed shard restarts its
@@ -456,7 +456,7 @@ The scheduler decides where a pod runs. **Kueue** (`kueue.x-k8s.io/v1beta2`, rel
 | Object | Scope | Purpose |
 |---|---|---|
 | `ResourceFlavor` | cluster | a kind of capacity: node labels, taints/tolerations, optional `topologyName` (e.g. `h100-spot`, `h100-reserved`, `l4`) |
-| `ClusterQueue` | cluster | quota per flavor and resource (`resourceGroups[].flavors[].resources[]`: `nominalQuota`, `borrowingLimit`, `lendingLimit`), `cohortName`, `preemption`, `queueingStrategy`, `admissionChecks`, `fairSharing` |
+| `ClusterQueue` | cluster | quota per flavor and resource (`resourceGroups[].flavors[].resources[]`: `nominalQuota`, `borrowingLimit`, `lendingLimit`), `cohortName`, `preemption`, `queueingStrategy`, `admissionChecksStrategy`, `fairSharing` |
 | `LocalQueue` | namespace | a team's entry point; points at one ClusterQueue |
 | `Workload` | namespace | Kueue's view of one job: pod sets × requests, priority, admission status |
 | `WorkloadPriorityClass` | cluster | queueing/preemption priority (label `kueue.x-k8s.io/priority-class`), independent of pod priority |
@@ -567,10 +567,11 @@ pending pods ─► simulate them on each node pool's template node ─► bin-p
   (`autoscaler.nodes_needed()`, first-fit decreasing): pods of 4, 4, 2, 2, 1, 1, 1, 1 GPUs need **2**
   8-GPU nodes; three 5-GPU pods need **3** and strand 3 GPUs on each.
 * **Which pool** — the expander: `least-waste` (the default: least idle CPU, then memory), `random`,
-  `most-pods`, `least-nodes`, `price`, `priority`, `grpc`, chainable. Least-waste is price-blind: asked
-  for 4 + 2 + 1 + 1 GPUs, it prefers one 8-GPU H100 node over two 4-GPU L4 nodes, both with zero waste
-  (`autoscaler.least_waste()`, which counts idle GPUs) — pods pin a GPU type with a node selector, and a
-  `priority` expander or ComputeClass (7.3) encodes cost.
+  `most-pods`, `least-nodes`, `price`, `priority`, `grpc`, chainable. Least-waste compares idle
+  resources, not dollars. The simulator's version (`autoscaler.least_waste()`) ranks idle GPUs, and asked
+  for 4 + 2 + 1 + 1 GPUs it finds one 8-GPU H100 node and two 4-GPU L4 nodes equally wasteful (zero idle
+  GPUs) and takes the H100 on its tie-break. So pods pin a GPU type with a node selector, and a `price` or
+  `priority` expander or a ComputeClass (7.3) encodes cost.
 * **Down again** — a node goes after it has been unneeded for `--scale-down-unneeded-time` (10 min) and
   no scale-up happened for `--scale-down-delay-after-add` (10 min); for GPU nodes only GPU utilisation
   counts against `--scale-down-gpu-utilization-threshold` (0.5). Nodes that do not register within
@@ -711,8 +712,8 @@ Every mechanism in this primer except real devices and real provisioning can run
 ### 10.1 kind with fake GPU capacity
 
 A kind cluster (Kubernetes in Docker) runs the real scheduler, real Kueue, JobSet and LWS. Extended
-resources can be **advertised by hand** — a node-status patch sets capacity, and the kubelet reports it as
-allocatable:
+resources can be **advertised by hand** — a node-status patch sets capacity, and the kubelet derives
+allocatable from capacity on its next status update:
 
 ```bash
 kubectl patch node kind-worker --subresource=status --type=json \

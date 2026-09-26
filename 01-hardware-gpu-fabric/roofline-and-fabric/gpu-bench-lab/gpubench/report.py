@@ -67,14 +67,34 @@ def _xfer_cols(stat):
             ("note", lambda m: m.note)]
 
 
+def _chain_cols(stat):
+    return [("variant", lambda m: m.op.split(".", 1)[1]),
+            ("elements", lambda m: f"{m.params['n']:,}"),
+            ("ops (k)", lambda m: m.params["k"]),
+            ("block", lambda m: si(m.extras["block_bytes"], "B") if m.extras.get("block_bytes") else "whole array"),
+            ("DRAM bytes/call", lambda m: si(m.cost.bytes, "B")),
+            ("time", lambda m: si(m.seconds(stat), "s")),
+            ("DRAM rate", lambda m: si(m.bytes_per_s(stat), "B/s")),
+            ("FLOP/s", lambda m: si(m.flops_per_s(stat), "FLOP/s"))]
+
+
+def _ladder_cols(stat):
+    return [("working set", lambda m: si(m.params["working_set"], "B")),
+            ("time per call", lambda m: si(m.seconds(stat), "s")),
+            ("moved (best)", lambda m: si(m.bytes_per_s("best"), "B/s")),
+            ("moved (median)", lambda m: si(m.bytes_per_s("median"), "B/s"))]
+
+
 def measurements_markdown(ms, stat: str = "best") -> str:
     """Group measurements by family and render one table per family."""
     families = {"GEMM": [m for m in ms if m.op == "gemm"],
                 "Memory bandwidth (STREAM)": [m for m in ms if m.op.startswith("stream.")],
-                "Other memory experiments": [m for m in ms if m.op.startswith(("chain.", "ladder"))],
+                "Fusion (k elementwise ops)": [m for m in ms if m.op.startswith("chain.")],
+                "Cache ladder": [m for m in ms if m.op == "ladder"],
                 "Transfers and copies": [m for m in ms if m.op in ("memcpy", "h2d", "d2h") or m.op.startswith("p2p")],
-                "Weights loading": [m for m in ms if m.op.startswith(("load.", "file_to_device"))]}
-    cols = {"GEMM": _gemm_cols, "Memory bandwidth (STREAM)": _stream_cols}
+                "Weights loading": [m for m in ms if m.op.startswith("load.")]}
+    cols = {"GEMM": _gemm_cols, "Memory bandwidth (STREAM)": _stream_cols, "Fusion (k elementwise ops)": _chain_cols,
+            "Cache ladder": _ladder_cols}
     parts = []
     for title, rows in families.items():
         if rows:

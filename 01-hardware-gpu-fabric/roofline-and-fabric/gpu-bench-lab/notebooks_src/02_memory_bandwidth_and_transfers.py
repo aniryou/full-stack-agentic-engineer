@@ -243,8 +243,8 @@ print(f"smallest working set: {si(lad[0].seconds(), 's')} per call — that is m
 #
 # Time a copy over a range of sizes and fit `t(n) = α + n/β`: α is the fixed cost of *any* copy
 # (a call, a descriptor, a launch), β the bandwidth of the slowest link on the path, and `n½ = α·β`
-# the size at which you get half of β (primer §5). On T0 we time host `memcpy`; the method is the
-# same one you would use on PCIe, NVLink or a network.
+# the size at which you get half of β (primer §5). On T0 we time host `memcpy` of cache-cold data;
+# the method is the same one you would use on PCIe, NVLink or a network.
 #
 # ## Exercise 2.5 — fit α and β
 #
@@ -287,10 +287,13 @@ for (op, pinned), series in transfer.series(copies).items():
               f"   model {si(ab.bandwidth(m.params['nbytes']), 'B/s'):>10}")
 
 # %% [markdown]
-# Where measured and model disagree, the model is telling you something: a `memcpy` sweep crosses
-# cache levels (small copies run at L1/L2 speed, large ones at DRAM speed), so no single β fits —
-# α-β assumes **one** bottleneck. Over PCIe the link is the bottleneck at every size above a few KB,
-# and the fit is much tighter.
+# Each copy here reads bytes that are not in cache (the op cycles through a pool 4× the last-level
+# cache), like a real transfer. Where measured and model disagree, the model is telling you
+# something: α-β assumes **one** bottleneck, and a CPU copy has several regimes. The usual one to
+# spot is at the largest sizes: glibc's `memcpy` switches to non-temporal (streaming) stores once a
+# copy is a sizeable fraction of the last-level cache, which skips the write-allocate read of
+# section 4 — so big copies can run *faster* than the fit. Over PCIe the link is the bottleneck at
+# every size above a few KB, and the fit is much tighter.
 #
 # ## 8 · Host ↔ device: pinned vs pageable (T1)
 #

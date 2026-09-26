@@ -166,10 +166,30 @@ class NumpyBackend:
         return Op(fn, chain_cost(n, dt.itemsize, k, fused), extras=extras,
                   verify=lambda: bool(np.all(x == 1.0)))
 
-    def make_memcpy(self, nbytes: int) -> Op:
-        """Host-to-host copy of ``nbytes``: the T0 stand-in for a host-to-device transfer."""
-        src = np.ones(nbytes, dtype=np.uint8)
-        dst = np.zeros(nbytes, dtype=np.uint8)
-        return Op(lambda: np.copyto(dst, src), transfer_cost(nbytes),
-                  note="host memcpy (RAM to RAM), not PCIe", extras={"stream_bytes": 2 * nbytes},
-                  verify=lambda: bool(dst[0] == 1 and dst[-1] == 1))
+    def make_memcpy(self, nbytes: int, cold: bool = True, pool_bytes: int | None = None) -> Op:
+        """Host-to-host copy of ``nbytes``: the T0 stand-in for a host-to-device transfer.
+
+        ``cold=True`` (default) cycles through a pool of at least 4× the last-level cache, so every
+        call copies bytes that are *not* in cache — like a real transfer, whose source has not just
+        been touched. ``cold=False`` copies the same buffer every time (it stays in cache when small).
+        """
+        if cold:
+            if pool_bytes is None:
+                from ..inventory import cache_sizes
+                pool_bytes = 4 * max(list(cache_sizes().values()) + [16 << 20])
+            slots = max(1, pool_bytes // nbytes)
+        else:
+            slots = 1
+        src = np.ones(slots * nbytes, dtype=np.uint8)
+        dst = np.full(slots * nbytes, 2, dtype=np.uint8)      # touch every destination page now
+        views = [(dst[i * nbytes:(i + 1) * nbytes], src[i * nbytes:(i + 1) * nbytes]) for i in range(slots)]
+        state = [0]
+
+        def fn():
+            d, s = views[state[0]]
+            state[0] = (state[0] + 1) % slots
+            np.copyto(d, s)
+
+        return Op(fn, transfer_cost(nbytes), note="host memcpy (RAM to RAM), not PCIe" + (", cache-cold" if cold else ""),
+                  extras={"stream_bytes": 2 * nbytes, "pool_slots": slots},
+                  verify=lambda: bool(views[0][0][0] == 1 and views[0][0][-1] == 1))
