@@ -33,6 +33,16 @@ def init_block(d, h, std=None):
 def mlp(x, p):
     return gelu(x @ p["W1"]) @ p["W2"]
 
+def not_blank(*fns):
+    """Each check calls this first: stop with a clear message while an exercise still has `...` blanks."""
+    def has_blank(consts):
+        return any(c is ... or (isinstance(c, tuple) and has_blank(c)) or
+                   (hasattr(c, "co_consts") and has_blank(c.co_consts)) for c in consts)
+    for fn in fns:
+        if has_blank(fn.__code__.co_consts):
+            raise NotImplementedError(f"{fn.__name__}() still has `...` blanks: fill them in, "
+                                      "run its cell, then run this check again")
+
 print("ready")'''
 
 # Each exercise: (title/markdown, solution code, practice code, check code)
@@ -46,11 +56,13 @@ The max-subtraction is already done for you; it changes nothing mathematically a
     x = x - x.max(axis=axis, keepdims=True)   # stability trick (given)
     e = np.exp(x)                              # exponentiate
     return e / e.sum(axis=axis, keepdims=True) # normalise: each row sums to 1''',
-'''def softmax(x, axis=-1):
+'''# YOUR CODE HERE: replace each `...` below
+def softmax(x, axis=-1):
     x = x - x.max(axis=axis, keepdims=True)   # stability trick (given)
     e = ...                                    # exponentiate
     return ...                                 # normalise: each row sums to 1''',
-'''s = softmax(np.array([[2.0, 0.0, 0.0]]))
+'''not_blank(softmax)
+s = softmax(np.array([[2.0, 0.0, 0.0]]))
 assert np.allclose(s.sum(axis=-1), 1), f"rows must sum to 1, got {s}"
 assert np.allclose(s, [[0.787, 0.107, 0.107]], atol=1e-3), f"expected [0.79 0.11 0.11], got {s}"
 assert np.allclose(softmax(np.array([[1000.0, 1000.0]])), [[0.5, 0.5]]), "must not overflow on large inputs"
@@ -72,7 +84,8 @@ print("✅ softmax")''',
     weights = softmax(scores)                     # each row is a distribution
     out = weights @ V                             # weighted average of values
     return out, weights''',
-'''def attention(Q, K, V, mask=None):
+'''# YOUR CODE HERE: replace each `...` below
+def attention(Q, K, V, mask=None):
     d_k = Q.shape[-1]
     scores = ...                                  # (n, m): every query against every key, scaled by sqrt(d_k)
     if mask is not None:
@@ -80,7 +93,8 @@ print("✅ softmax")''',
     weights = ...                                 # each row is a distribution
     out = ...                                     # weighted average of values
     return out, weights''',
-'''Q = np.array([[2.0, 0.0]]) * np.sqrt(2)          # scaled so the scores come out as [2, 0, 0]
+'''not_blank(attention)
+Q = np.array([[2.0, 0.0]]) * np.sqrt(2)          # scaled so the scores come out as [2, 0, 0]
 K = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
 V = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
 out, w = attention(Q, K, V)
@@ -99,9 +113,11 @@ Return an `(n, n)` boolean array that is `True` where token *i* is allowed to at
 a token may look at itself and at everything before it, never ahead.""",
 '''def causal_mask(n):
     return np.tril(np.ones((n, n), dtype=bool))''',
-'''def causal_mask(n):
+'''# YOUR CODE HERE: replace each `...` below
+def causal_mask(n):
     return ...   # (n, n) bool: True where j <= i''',
-'''m = causal_mask(3)
+'''not_blank(causal_mask)
+m = causal_mask(3)
 assert m.dtype == bool and m.shape == (3, 3), "must be an (n, n) boolean array"
 assert m.tolist() == [[True, False, False], [True, True, False], [True, True, True]], f"got {m.astype(int)}"
 X = rng.standard_normal((5, 4))
@@ -122,14 +138,16 @@ Heads are just slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/
 def merge_heads(x):
     h, n, dh = x.shape
     return x.transpose(1, 0, 2).reshape(n, h * dh)       # (h, n, dh) -> (n, h, dh) -> (n, d)''',
-'''def split_heads(x, h):
+'''# YOUR CODE HERE: replace each `...` below
+def split_heads(x, h):
     n, d = x.shape
     return ...   # (n, d) -> (h, n, d // h)
 
 def merge_heads(x):
     h, n, dh = x.shape
     return ...   # (h, n, dh) -> (n, h * dh)''',
-'''X = rng.standard_normal((5, 8))
+'''not_blank(split_heads, merge_heads)
+X = rng.standard_normal((5, 8))
 S = split_heads(X, 2)
 assert S.shape == (2, 5, 4), f"expected (2, 5, 4), got {S.shape}"
 assert np.allclose(S[0], X[:, :4]), "head 0 should be the first half of the features"
@@ -151,7 +169,8 @@ merge the heads, and apply the output projection `Wo`.""",
     heads = [attention(Q[i], K[i], V[i], mask)[0] for i in range(h)]   # one attention per head
     out = merge_heads(np.stack(heads))
     return out @ p["Wo"]''',
-'''def multi_head_attention(x, p, causal=True):
+'''# YOUR CODE HERE: replace each `...` below
+def multi_head_attention(x, p, causal=True):
     n, d = x.shape
     h = p["h"]
     Q, K, V = ..., ..., ...                                    # project x with Wq, Wk, Wv
@@ -160,7 +179,8 @@ merge the heads, and apply the output projection `Wo`.""",
     heads = [attention(Q[i], K[i], V[i], mask)[0] for i in range(h)]   # one attention per head (given)
     out = merge_heads(np.stack(heads))
     return ...                                                 # output projection''',
-'''def _reference_mha(x, p, causal=True):
+'''not_blank(multi_head_attention)
+def _reference_mha(x, p, causal=True):
     n, d = x.shape; h = p["h"]; dh = d // h
     Q, K, V = (split_heads(x @ p[k], h) for k in ("Wq", "Wk", "Wv"))
     s = Q @ K.transpose(0, 2, 1) / np.sqrt(dh)
@@ -185,11 +205,13 @@ Two residual updates to the stream, each on a normalised copy of it (pre-norm):
     x = x + multi_head_attention(layer_norm(x), p)   # mix across positions
     x = x + mlp(layer_norm(x), p)                     # compute within each position
     return x''',
-'''def block(x, p):
+'''# YOUR CODE HERE: replace each `...` below
+def block(x, p):
     x = x + ...     # attention over the normalised stream
     x = x + ...     # MLP over the normalised stream
     return x''',
-'''p = init_block(d=16, h=4)
+'''not_blank(block)
+p = init_block(d=16, h=4)
 X = rng.standard_normal((6, 16))
 Y = block(X, p)
 assert Y.shape == X.shape, "a block keeps the shape (n, d)"
@@ -212,12 +234,14 @@ Per block: attention has four `d × d` matrices, the MLP has `d × 4d` and `4d �
     embeddings = vocab * d * (1 if tied else 2)
     positions = ctx * d
     return L * per_block + embeddings + positions''',
-'''def gpt_params(d, L, vocab, ctx, tied=True):
+'''# YOUR CODE HERE: replace each `...` below
+def gpt_params(d, L, vocab, ctx, tied=True):
     per_block = ...                              # attention + MLP
     embeddings = ...                             # token table, twice if untied
     positions = ...
     return L * per_block + embeddings + positions''',
-'''small = gpt_params(768, 12, 50257, 1024)
+'''not_blank(gpt_params)
+small = gpt_params(768, 12, 50257, 1024)
 assert abs(small - 124.4e6) < 0.5e6, f"GPT-2 small should be ~124M, got {small / 1e6:.1f}M"
 xl = gpt_params(1600, 48, 50257, 1024)
 assert abs(xl - 1.56e9) < 0.05e9, f"GPT-2 XL should be ~1.56B, got {xl / 1e9:.2f}B"
@@ -267,7 +291,7 @@ def build(solution):
     intro = """Companion to `docs/transformer-primer.md` (Sections 2, 3, 8) and `lessons/01_attention.py`, `lessons/02_block.py`.
 
 Each exercise has a cell with `...` blanks to fill in, followed by a check cell. Run the check; it prints ✅ when your
-implementation is right and tells you what's off when it isn't. Later exercises use earlier ones, so go in order.
+implementation is right, tells you what's off when it isn't, and stops with `NotImplementedError` while blanks remain. Later exercises use earlier ones, so go in order.
 Solutions are in `attention_solutions.ipynb`; try to get each check to pass before looking."""
     cells = [_inject.make_cell(HERE.relative_to(REPO).as_posix()), md(title + "\n\n" + intro), md("## Setup"), code(SETUP)]
     for text, sol, prac, check in EXERCISES:
