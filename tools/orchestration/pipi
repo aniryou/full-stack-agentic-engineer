@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# serialized pip install (several agents share one environment): pipi <pip install args>
+exec flock ${PIP_LOCK:-/tmp/pip.lock} python3 -m pip install -q --disable-pip-version-check "$@"

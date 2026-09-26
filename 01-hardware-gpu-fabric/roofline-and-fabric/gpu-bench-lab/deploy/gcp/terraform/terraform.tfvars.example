@@ -1,0 +1,29 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+
+project_id = "my-gpu-lab" # a project with billing (not Free Trial) and GPU quota
+
+# The zone must offer the GPU; Spot capacity varies by zone and hour.
+region = "us-central1"
+zone   = "us-central1-a"
+
+# --- pick one machine ---------------------------------------------------------------------------
+# 1x L4 24 GB (Ada, sm_89: FP8 GEMMs run). Cheapest current-generation option.
+machine_type = "g2-standard-4"
+
+# 2x A100 40GB joined by NVLink, for notebook 03's P2P matrix. Spot capacity is scarce: if the
+# create fails, try another zone or provisioning_model = "STANDARD" (much pricier — watch the clock).
+# machine_type = "a2-highgpu-2g"
+
+# 1x T4 16 GB on N1 (Turing: no BF16/TF32/FP8). N1 takes the GPU as a separate accelerator.
+# machine_type      = "n1-standard-8"
+# accelerator_type  = "nvidia-tesla-t4"
+# accelerator_count = 1
+
+# --- cost guards --------------------------------------------------------------------------------
+provisioning_model       = "SPOT"
+max_run_duration_seconds = 3600     # a VM still RUNNING after an hour (a hung run) is deleted; one that
+                                    # powered itself off stays, with its disk, until terraform destroy
+termination_action       = "DELETE"
+
+# --- what to run --------------------------------------------------------------------------------
+gpubench_args = "" # "--full" for bigger sizes (about 10-20 minutes on an L4)
