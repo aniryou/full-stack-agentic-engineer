@@ -96,3 +96,16 @@ def test_triton_kernels_are_optional_and_lazy():
     if importlib.util.find_spec("torch") is None or importlib.util.find_spec("triton") is None:
         assert triton_kernels.available() is False  # notebook 02 then prints what it would run
     assert "triton" not in triton_kernels.__dict__ and callable(triton_kernels.softmax)  # nothing imported yet
+
+
+def test_bench_cli_without_a_gpu_is_one_clear_line(monkeypatch, capsys, tmp_path):
+    """`python -m gpurt.kernels.bench --quick` on a laptop: exit 2 and one line on stderr, no traceback."""
+    from gpurt.kernels import bench
+
+    monkeypatch.setattr(bench, "SIMULATOR", True)
+    out = tmp_path / "out" / "kernels.json"
+    assert bench.main(["--quick", "--json", str(out)]) == 2
+    err = capsys.readouterr().err.strip()
+    assert err.startswith("error: gpurt.kernels.bench needs a real GPU")
+    assert "notebook 02's T0 path" in err and "Traceback" not in err and len(err.splitlines()) == 1
+    assert not out.parent.exists()
