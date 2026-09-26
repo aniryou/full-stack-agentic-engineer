@@ -1,6 +1,6 @@
 """The Mistral provider and the self-hosted backends: one test per concept.
 
-These are the cases of the former agentic-scaling-lab-mistral suite, run against the merged package:
+These are the cases of the suite of the former Mistral copy of this lab, run against the merged package:
 its capacity model is now ``scalelab.mistral``, its fake model ``fake_model("mistral")``, and its hosted
 simulations pass ``provider="mistral"``. The cases that were identical to tests/test_scalelab.py (token
 bucket, backoff, breaker, retries, the turn's budget, crash-and-resume, degrade level 2, hysteresis) run
