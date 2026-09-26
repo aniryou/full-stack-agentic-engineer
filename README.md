@@ -66,7 +66,8 @@ One entry per layer: what you will be able to do, then its topic folders.
   Topic: [`gpu-scheduling/`](03-kubernetes-gpu/gpu-scheduling/README.md).
 - **04 · Inference engine** — [`04-inference-engine/`](04-inference-engine/README.md). Build an engine's step loop,
   scheduler and prefix cache; size a KV cache; tune a real vLLM against an SLO; choose a quantization scheme.
-  Topics: `kv-cache/`, `paged-attention/`, `flash-attention/`,
+  Topics: `kv-cache/`, `paged-attention/`, `flash-attention/` with their numpy core
+  [`kernel-core/`](04-inference-engine/kernel-core/README.md),
   [`serving-engine/`](04-inference-engine/serving-engine/README.md),
   [`quantization/`](04-inference-engine/quantization/README.md),
   [`vllm-internals/`](04-inference-engine/vllm-internals/README.md).
