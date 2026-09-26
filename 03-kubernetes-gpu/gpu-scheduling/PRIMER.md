@@ -13,8 +13,10 @@ how the scheduler places pods on those numbers and why that fragments GPUs, why 
 placed all-or-nothing and close together, how Kueue shares a fleet between teams with quotas that borrow
 and reclaim, and how GPU capacity is obtained, started and shared. It is written for an engineer who
 knows Kubernetes basics (pods, nodes, labels) and wants to explain a GPU platform's design in a review.
-The detailed lab, [`k8s-gpu-lab`](k8s-gpu-lab), takes the same ideas to manifests, a kind cluster with
-fake GPUs and Kueue, and GKE.
+The short version of this layer is "Kubernetes specifics" in §7 of the
+[GPU deployment primer](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md); this is the
+long one. The detailed lab, [`k8s-gpu-lab`](k8s-gpu-lab), takes the same ideas to manifests, a kind cluster
+with fake GPUs and Kueue, and GKE.
 
 ---
 
@@ -93,8 +95,8 @@ device plugin                                   kubelet (device manager)
 (capacity counts every device, allocatable only healthy ones — as the kubelet's `GetCapacity` does), and
 `Kubelet.admit()`. With the NVIDIA plugin's default `envvar` strategy, `Allocate` answers with
 `NVIDIA_VISIBLE_DEVICES=<device UUIDs>`, and the NVIDIA Container Toolkit injects device nodes and driver
-libraries when the container is created — the container half is layer 02 (`02-cuda-nccl-runtime`, the
-*cuda-and-nccl* primer, §6 *How a container gets a GPU*).
+libraries when the container is created — the container half is layer 02
+([cuda-and-nccl primer](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §6 *How a container gets a GPU*).
 
 Two consequences are worth saying in a review:
 
@@ -296,8 +298,10 @@ Sixteen GPUs are free on the left and none is usable by an 8-GPU pod. A useful c
 `Σ_nodes (free_n mod k)` — and **fragmentation** = stranded / free (`scheduler.stranded_gpus()`,
 `scheduler.fragmentation()`): 16 and 100% on the left, 0 and 0% on the right. Track it per pod shape
 you care about, next to utilisation: a cluster can be 50% utilised and 100% fragmented for its largest
-jobs. Other levers: separate node pools per pod shape, pod shapes that divide the node (a 5-GPU pod
-strands 3 GPUs on every 8-GPU node), and defragmentation by rescheduling (the descheduler, or Kueue
+jobs. The shapes themselves come from model sizing — how many GPUs one replica needs for its weights and
+KV cache ([capacity-planning primer](../../00-foundations/gpu-capacity-planning/PRIMER.md)). Other levers:
+separate node pools per pod shape, pod shapes that divide the node (a 5-GPU pod strands 3 GPUs on every
+8-GPU node), and defragmentation by rescheduling (the descheduler, or Kueue
 preemption) — the scheduler itself never moves a running pod.
 
 ### 3.5 Priority and preemption
@@ -343,7 +347,7 @@ does not break the tie. Admitting each job **whole** runs A on 8 GPUs while B wa
 
 | Mechanism | How | Notes |
 |---|---|---|
-| **Kueue** (job level) | Kueue's webhook suspends queued Jobs on creation (`spec.suspend: true`; plain pods get the scheduling gate `kueue.x-k8s.io/admission`); Kueue admits the whole Workload against quota, then unsuspends it and injects the flavor's node selectors | quota is *logical*: an admitted job's pods may still not all fit on real nodes (fragmentation, pods Kueue does not manage). `waitForPodsReady` (default timeout 30 min) evicts and requeues a job whose pods are not all Ready, with backoff; `blockAdmission` admits one at a time; TAS (section 5) and ProvisioningRequest (section 7) check physical capacity |
+| **Kueue** (job level) | Kueue's webhook suspends queued Jobs on creation (`spec.suspend: true`; plain pods get the scheduling gate `kueue.x-k8s.io/admission`); Kueue admits the whole Workload against quota, then unsuspends it and injects the flavor's node selectors | quota is *logical*: an admitted job's pods may still not all fit on real nodes (fragmentation, pods Kueue does not manage). `waitForPodsReady` (opt-in in Kueue's Configuration; default timeout 30 min) evicts and requeues a job whose pods are not all Ready, with backoff; `blockAdmission` admits one at a time; TAS (section 5) and ProvisioningRequest (section 7) check physical capacity |
 | **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | a `PodGroup` with `minMember`; the **Permit** stage holds reserved pods until `minMember` are reserved, else rejects after a timeout | runs inside a second scheduler profile; PodGroup API `scheduling.x-k8s.io/v1alpha1` (verify) |
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler; common in HPC-style clusters |
 | **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`; the scheduler places a pod group together | alpha in 1.35 behind the `GenericWorkload` feature gate, beta targeted for 1.37 (verify the version you run); Kueue plans to integrate |
@@ -379,7 +383,7 @@ A gang also needs a workload API that treats its pods as one thing:
 
 ```
 block ──────────── spine links (oversubscribed)
- ├─ sub-block ──── rail-aligned leaf switches: full bandwidth inside
+ ├─ sub-block ──── hosts on the same leaf switches: full bandwidth inside
  │   ├─ host ───── NVLink / NVSwitch between its 8 GPUs (hundreds of GB/s per GPU)
  │   │   └─ GPU
  │   └─ host
@@ -387,7 +391,7 @@ block ──────────── spine links (oversubscribed)
 ```
 
 The bandwidth of each level, and what a tensor-parallel all-reduce costs across it, is layer 01
-(`01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md`, §5.3 and §5.4). The design rule that follows
+([roofline-and-fabric primer](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), §5.3 and §5.4). The design rule that follows
 here: keep tensor-parallel and expert-parallel groups inside the NVLink domain, and keep every gang in the
 **smallest** domain that holds it. Inside one node the same rule applies to devices — the device plugin's
 `GetPreferredAllocation` keeps a container on one NVLink island (`DevicePlugin.get_preferred_allocation()`),
@@ -548,7 +552,9 @@ spec:
 
 Serving keeps 8 GPUs at home, lends the other 8, and recalls them at once when it scales up; batch
 (`borrowingLimit: 8`, `withinClusterQueue: LowerPriority`) fills idle quota and sorts itself out by
-priority.
+priority. The same idea one layer up — admit whole units of work against a budget, shed or queue the
+rest — is the gateway's admission control
+([agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3).
 
 ---
 
@@ -683,7 +689,9 @@ and why "scale to zero" is a cost decision with a latency price.
 ## 9. Sharing GPUs at the cluster level
 
 Because a GPU is an integer, sharing one means the node advertises *more integers*. The mechanics of each
-method (MIG profiles and their placement, MPS, time-slicing latency) are layer 02 §7; the cluster view:
+method (MIG profiles and their placement, MPS, time-slicing latency) are layer 02
+([cuda-and-nccl primer](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §7 *Sharing a GPU*); the cluster
+view:
 
 | Method | What the node advertises | Isolation | Good for |
 |---|---|---|---|

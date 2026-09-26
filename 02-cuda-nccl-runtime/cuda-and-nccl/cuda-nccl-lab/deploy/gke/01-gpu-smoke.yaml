@@ -1,0 +1,41 @@
+# Smoke test + probe: one L4, nvidia-smi, and deploy/any-gpu/probe.sh (mounted from the ConfigMap
+# `gpurt-probe`, which run.sh creates). Save the log and explain it offline:
+#   ./run.sh smoke  ->  out/gpu-smoke.log  ->  python -m gpurt.container --log out/gpu-smoke.log
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke
+  namespace: gpu-lab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: gpu-smoke
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      tolerations:
+        - key: nvidia.com/gpu # GKE taints GPU nodes; GKE also adds this toleration to GPU pods itself
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: probe
+          image: nvidia/cuda:12.8.1-base-ubuntu24.04 # VERIFY: tag exists; any CUDA base image works
+          command: ["bash", "/probe/probe.sh"]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              nvidia.com/gpu: 1
+              memory: 512Mi
+          volumeMounts:
+            - name: probe
+              mountPath: /probe
+      volumes:
+        - name: probe
+          configMap:
+            name: gpurt-probe

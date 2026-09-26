@@ -1,7 +1,7 @@
 """How a GPU pod is admitted, filtered, scored and preempted - pinned to upstream behaviour."""
 import pytest
 
-from gpusched import (GPU, GPU_TAINT, Cluster, Node, Pod, Scheduler, Taint, Toleration, effective_requests,
+from gpusched import (GPU, Cluster, Node, Pod, Scheduler, Taint, Toleration, effective_requests,
                       fit_error, fragmentation, gpu_node, gpu_pod, least_allocated, make_cluster, most_allocated,
                       pick_preemption_node, run_filters, select_victims, stranded_gpus)
 
@@ -97,12 +97,3 @@ def test_preemption_counts_victims_before_summing_priorities():
     y = [Pod("y0", priority=0, started=3)]
     # plain sums would favour x (-5 < 0); the 2**31 offset makes the single victim on y cheaper
     assert pick_preemption_node({"x": x, "y": y}) == "y"
-
-
-def test_pod_manifest_is_valid_kubernetes():
-    kv = pytest.importorskip("kubernetes_validate")
-    pod = gpu_pod("trainer", 8, node_selector={"cloud.google.com/gke-accelerator": "nvidia-h100-80gb"})
-    manifest = pod.manifest()
-    assert manifest["spec"]["containers"][0]["resources"]["limits"] == {GPU: 8}
-    kv.validate(manifest, "1.34.0", strict=True)
-    assert GPU_TAINT.key == GPU

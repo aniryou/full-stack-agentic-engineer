@@ -85,11 +85,11 @@ print("admitted:", admit_gangs(again, [[gpu_pod(f"a{i}", 2, gang="A") for i in r
 # %% [markdown]
 # ## Topology: *where* the gang runs matters
 #
-# A data-center GPU fleet is a tree: GPUs in a host share NVLink; hosts in a **sub-block** share a
-# rail-aligned network segment; sub-blocks form a **block**; blocks talk through oversubscribed
+# A data-center GPU fleet is a tree: GPUs in a host share NVLink; hosts in a **sub-block** share leaf
+# switches (full bandwidth inside); sub-blocks form a **block**; blocks talk through oversubscribed
 # spine links. A tensor-parallel all-reduce that crosses a slow level runs at that level's speed
 # (layer 01 has the numbers). GCE exposes the tree as node labels
-# (`cloud.google.com/gce-topology-block`, `-subblock`, `-host`); Kueue's `Topology` object lists
+# (`cloud.google.com/gce-topology-block`, `-subblock`, `-host` — verify); Kueue's `Topology` object lists
 # them as levels, and a pod template asks for one with an annotation:
 #
 # ```yaml
@@ -159,6 +159,9 @@ print("✅ BestFit:", bestfit(rack, 7), "| LeastFreeCapacity would take", least_
 # `preferred="subblock"` (no sub-block holds 5, so it widens to a block).
 
 # %% exercise
+# subblock_for_3 = ...   a sub-block name such as "b0-s0"
+# subblock_for_2 = ...
+# block_for_5 = ...      a block name such as "b0"
 ### BEGIN SOLUTION
 subblock_for_3 = "b0-s1"         # the only sub-block with exactly 3 (b1-s1 has 4: not the tightest)
 subblock_for_2 = "b1-s0"         # h0 full, h1 has 1 GPU busy: 2 whole hosts left
@@ -188,6 +191,7 @@ print("✅ gang of 5 (preferred) ->", sorted(subblocks(g5)), "= 4 in the empty s
 # * **batch-eval** — 200 independent 1-GPU pods scoring a dataset; no communication at all.
 
 # %% exercise
+# choices = {"serving": ..., "pretraining": ..., "batch-eval": ...}
 ### BEGIN SOLUTION
 choices = {
     "serving": ("required", "subblock"),     # a slow replica is worse than a late one: wait for a good spot

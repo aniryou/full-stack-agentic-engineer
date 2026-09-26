@@ -95,6 +95,14 @@ def test_busbw_of_a_bandwidth_optimal_algorithm_is_the_link_bandwidth(op, algo):
 
 def test_latency_bandwidth_crossover():
     assert C.crossover_bytes("all_reduce", "ring", 8, 1e-6, 400e9) == pytest.approx(3.2e6)
+    assert C.crossover_bytes("all_reduce", "ring", 8, 2e-6, 450e9) == pytest.approx(7.2e6)   # PRIMER §5.5
+
+
+def test_optimal_pipeline_depth():
+    k = C.optimal_chunks(2 ** 27, 2e-6, 450e9)            # 128 MiB: sqrt(134217728 / 900000) = 12.2
+    assert k == 12
+    t = lambda kk: C.model_time("all_reduce", "switch", 2 ** 27, 8, 2e-6, 450e9, kk)
+    assert t(k) <= min(t(k - 4), t(k + 4), t(1), t(64))
 
 
 def test_tp_decode_all_reduce_is_latency_bound_and_prefill_is_not():

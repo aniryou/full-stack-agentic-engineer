@@ -15,7 +15,7 @@ scheduler and Kueue (T0 + Docker). GKE is the optional production step (T3).
 |---|---|---|
 | [`PRIMER.md`](PRIMER.md) | the concept primer shared by core and lab: ten numbered sections, a design-review walkthrough with drill questions, glossary, sources and a dated verify list | – |
 | [`k8s-gpu-core/`](k8s-gpu-core/) | **minimal**: `gpusched`, a pure-Python simulator of the device plugin, scheduler, gangs + Kueue TAS, Kueue quotas and a GPU cluster autoscaler; five fill-in notebooks | T0 |
-| [`k8s-gpu-lab/`](k8s-gpu-lab/) | **detailed**: `k8sgpu` — typed manifest builders (Job, JobSet, LWS, Kueue, DRA, ComputeClass), a GPU pod-spec linter, a "why is my pod Pending?" analyser, a capacity-type chooser; `deploy/kind` (fake GPUs, Kueue, JobSet, LWS), `deploy/gcp/terraform` and `deploy/gke` | T0 → T3 |
+| [`k8s-gpu-lab/`](k8s-gpu-lab/) | **detailed**: `k8sgpu` — typed manifest builders (Job, JobSet, LWS, Kueue, DRA, ComputeClass), a GPU pod-spec linter, a "why is my pod Pending?" analyser, a capacity-type chooser; [`deploy/kind`](k8s-gpu-lab/deploy/kind/) (fake GPUs, Kueue, JobSet, LWS), [`deploy/gcp`](k8s-gpu-lab/deploy/gcp/) (Terraform) and [`deploy/gke`](k8s-gpu-lab/deploy/gke/) (manifests) | T0 → T3 |
 
 ## Order to work it
 
@@ -51,8 +51,8 @@ course: [`CURRICULUM.md`](../../CURRICULUM.md).
   (fabric bandwidth: why topology matters), §6 (cold-start arithmetic), §7 (checkpoint intervals), §10
   (GPU families and obtainability); [`gpu-deployment-primer.md`](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md)
   §4 and §7 (the parallelism menu; Kubernetes specifics in brief).
-* Layer 02 — `02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md` §6 (how a container gets a GPU), §7 (MIG,
-  time-slicing, MPS mechanics), §8 (health and DCGM).
+* Layer 02 — [`cuda-and-nccl/PRIMER.md`](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §6 (how a
+  container gets a GPU), §7 (MIG, time-slicing, MPS mechanics), §8 (health and DCGM).
 * Layer 05 — the orchestrator that scales LeaderWorkerSet groups and replicas on queue and SLO signals.
 * Layer 06 — [`agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/): admission
   control and cost at the gateway, the same "shape demand to capacity" idea one layer up.

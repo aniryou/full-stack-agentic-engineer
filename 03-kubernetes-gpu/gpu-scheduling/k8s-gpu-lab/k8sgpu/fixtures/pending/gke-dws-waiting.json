@@ -1,0 +1,81 @@
+{
+ "description": "A 2-node gang behind the DWS ProvisioningRequest admission check: quota reserved, capacity not yet provisioned.",
+ "source": "GKE event/condition text in the documented format (sample output in the documented format (illustrative); verify against your cluster)",
+ "expect": {
+  "gate": "kueue",
+  "category": "admission-check"
+ },
+ "workload": {
+  "apiVersion": "kueue.x-k8s.io/v1beta2",
+  "kind": "Workload",
+  "metadata": {
+   "name": "job-dws-l4-gang-7b2c1",
+   "namespace": "ml",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "kueue.x-k8s.io/job-uid": "5a1e0000-0000-4000-8000-000000000001"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "dws-l4-gang",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "queueName": "gpu-queue",
+   "priority": 0,
+   "podSets": [
+    {
+     "name": "main",
+     "count": 2,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 1
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "conditions": [
+    {
+     "type": "QuotaReserved",
+     "status": "True",
+     "reason": "QuotaReserved",
+     "message": "Quota reserved in ClusterQueue gke-gpu",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    },
+    {
+     "type": "Admitted",
+     "status": "False",
+     "reason": "UnsatisfiedAdmissionChecks",
+     "message": "The workload has not all admission checks Ready",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ],
+   "admissionChecks": [
+    {
+     "name": "dws-prov",
+     "state": "Pending",
+     "lastTransitionTime": "2026-09-26T09:00:04Z",
+     "message": "Waiting for resources. Currently there are not enough resources available to fulfill the request."
+    }
+   ]
+  }
+ }
+}

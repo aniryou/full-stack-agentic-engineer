@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 02 · Chunked prefill and the token budget
 #
-# **Tier:** T0 — CPU only, no network, about fifteen seconds. Every latency in this notebook is **SIMULATED**
+# **Tier:** T0 — CPU only, no network, about twenty seconds. Every latency in this notebook is **SIMULATED**
 # by a roofline model (`minengine.perf`) driving the real scheduler; measure the real curve with vLLM in
 # `vllm-serving-lab` (notebook `03_knobs_and_tradeoffs`, T1).
 #
@@ -12,10 +12,12 @@
 # every request decoding alongside it sees one huge gap between two tokens — prefill **interferes** with decode.
 # **Chunked prefill** caps the tokens per step (`max_num_batched_tokens`) and splits long prompts across steps,
 # so decodes keep flowing (Sarathi-Serve's "stall-free batching"). The budget is the knob: bigger means better
-# prefill efficiency and lower TTFT, smaller means smoother inter-token latency (ITL). You will be able to put
-# numbers on all of that.
+# prefill efficiency and lower TTFT, smaller means smoother inter-token latency (ITL). The *other* budget is KV
+# memory: when running requests outgrow the block pool, the newest is **preempted** and later recomputed. You will
+# be able to put numbers on all of that.
 #
-# Primer: §3 *Chunked prefill and prefill/decode interference*, §11 *Measuring an engine* (`../../PRIMER.md`).
+# Primer: §3 *Chunked prefill and prefill/decode interference*, §4 *KV cache management revisited*,
+# §11 *Measuring an engine* (`../../PRIMER.md`).
 
 # %%
 import math
@@ -97,6 +99,30 @@ for r in results:
 # * Below the knee (256) steps are memory-bound: ITL is smoothest, but prefill runs in small inefficient
 #   pieces and TTFT doubles. vLLM's defaults (2,048 on an L4/A100-class GPU, 8,192 on H100-class for the API
 #   server, as of Sep 2026, verify) sit between the extremes.
+#
+# ## Worked example 4 — when blocks run out: preemption by recompute
+# The budget limits tokens per step; the KV pool limits tokens in flight. Four requests that each grow to ~9
+# blocks share a 16-block pool. When a running request needs a block and none is free, the scheduler preempts the
+# **newest** running request: frees its blocks, resets it to zero computed tokens and puts it at the front of the
+# queue. Its generated tokens are kept; later it is re-prefilled ("recompute") and continues.
+
+# %%
+prompts = ["The engine runs a loop", "Each step it picks the", "When memory runs out,", "A request that finishes"]
+eng = Engine(model, num_blocks=16, block_size=4, max_num_batched_tokens=32, max_num_seqs=4)
+outs = eng.generate(prompts, SamplingParams(max_tokens=20, temperature=0))
+for rec in eng.history:
+    if rec.preempted or any(kind == "recompute" for _, kind, *_ in rec.batch):
+        print(rec)
+print("\npreemptions:", eng.scheduler.num_preemptions, "(vLLM exports this as vllm:num_preemptions)")
+print("outputs identical to the dense reference:",
+      all(o.token_ids == model.generate_dense(encode(p), 20) for p, o in zip(prompts, outs)))
+
+# %% [markdown]
+# Look at the `recompute` lines: `r1` restarts at position 20, not 0. Its freed blocks were still in the prefix cache
+# (Notebook 03), so only the tail had to be recomputed. Preemption is correct — the outputs match — but costly:
+# the victim's work is redone and every request waits while memory is short. vLLM V1 preempts by recompute only;
+# swapping blocks to CPU memory was a V0 mode (verify). Preemptions in production are a sizing signal: more KV
+# memory (`gpu_memory_utilization`, FP8 KV, a smaller model), fewer concurrent sequences, or more replicas.
 #
 # ## Exercise 2.1 — the chunk schedule
 # A `prompt_len`-token prompt is admitted while `num_decodes` requests decode (1 token each per step, scheduled
@@ -218,6 +244,32 @@ print(f"✅ normal ITL {normal:.1f} ms; unchunked stall {stall_ms:.0f} ms; "
       f"chunked: {chunked_steps} steps, worst gap {worst_chunked_ms:.1f} ms - SIMULATED")
 
 # %% [markdown]
+# ## Exercise 2.6 — size the KV cache so nobody is preempted
+# H100 + Llama-3.1-8B, 200 requests at 6/s, prompts 500–3,000 tokens, outputs 100–400 (below). Find the smallest
+# `num_blocks` (16 tokens each) among `candidates` for which the simulated run has **zero** preemptions, and
+# `kv_gb`, the KV memory that takes in GB (`perf.LLMS["llama-3.1-8b"].kv_bytes_per_token` bytes per token).
+
+# %%
+g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
+load = perf.Workload(n_requests=200, rate=6, prompt_len=(500, 3000), output_len=(100, 400), seed=2)
+candidates = [2000, 3000, 4000, 5000, 6000, 8000]
+
+# %% exercise
+### BEGIN SOLUTION
+runs = {nb: perf.simulate(g, m, load, num_blocks=nb) for nb in candidates}
+min_blocks = min(nb for nb, r in runs.items() if r.preemptions == 0)
+kv_gb = min_blocks * 16 * m.kv_bytes_per_token / 1e9
+### END SOLUTION
+
+# %% check
+assert min_blocks == 5000 and abs(kv_gb - 10.49) < 0.01
+for nb in [3000, min_blocks]:
+    r = perf.simulate(g, m, load, num_blocks=nb, label=f"{nb} blocks")
+    print(r.summary())
+print(f"✅ {min_blocks} blocks = {kv_gb:.1f} GB of KV; an H100 left ~{perf.kv_cache_blocks(g, m)} blocks after the "
+      "weights - short KV memory shows up first as preemptions and exploding TTFT, not as errors")
+
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "A forward pass is memory-bound until a few hundred tokens — the weight read
 # dominates — and compute-bound after. So decode tokens batch almost for free, and a long prompt is expensive in
@@ -225,12 +277,15 @@ print(f"✅ normal ITL {normal:.1f} ms; unchunked stall {stall_ms:.0f} ms; "
 # it: on an L4 with a 1.5B model their 17 ms token gap becomes about 420 ms. Chunked prefill caps each step at
 # `max_num_batched_tokens`; decodes are scheduled first and the prompt gets the rest, so the worst gap stays near
 # 30 ms at a 512 budget, at the price of a slightly later first token for the long prompt. The budget trades TTFT
-# against ITL; throughput barely changes. I pick the largest budget whose worst step meets the ITL SLO, and if
-# prefill and decode SLOs still conflict at our scale, that is the argument for disaggregating them (05)."
+# against ITL; throughput barely changes. I pick the largest budget whose worst step meets the ITL SLO. The second
+# budget is KV memory: if running requests outgrow the block pool, the newest is preempted and recomputed — outputs
+# stay correct, but TTFT explodes long before anything errors. So we size KV for the peak working set and alert on
+# `vllm:num_preemptions`; if prefill and decode SLOs still conflict at our scale, that is the argument for
+# disaggregating them (05)."
 #
 # **Drill questions**
 # 1. *Why doesn't a larger batch make decode slower?* — Below the knee a step is the weight read; tokens share it.
 # 2. *Chunked prefill is on, yet p99 ITL is bad. What do you check?* — The budget: if it is far past the knee,
 #    each step is still long; lower it until the worst step meets the SLO.
-# 3. *What does a very small budget cost?* — TTFT: long prompts need many steps and each chunk is below the knee,
-#    so prefill runs inefficiently.
+# 3. *`vllm:num_preemptions` is climbing. What does it mean and what do you change?* — Running requests outgrow the
+#    KV pool; each preemption throws work away. Add KV memory (utilisation, FP8 KV), cap `max_num_seqs`, or scale out.

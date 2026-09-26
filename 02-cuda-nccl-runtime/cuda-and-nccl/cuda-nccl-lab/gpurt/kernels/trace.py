@@ -90,7 +90,8 @@ class Trace:
 
     def __init__(self, warp_size: int = 32, sector_bytes: int = 32):
         self.warp_size, self.sector_bytes = warp_size, sector_bytes
-        self.records: list[tuple] = []  # (block, thread_id, array, kind, seq, byte_addr)
+        self.records: list[tuple] = []  # (launch, block, thread_id, array, kind, seq, byte_addr)
+        self.launches = 0
         self._seq: dict[tuple, int] = {}
         self._itemsize: dict[str, int] = {}
 
@@ -103,17 +104,17 @@ class Trace:
             raise RuntimeError("TracedArray accessed outside a simulated CUDA thread")
         b = t.blockIdx
         block = (b.x, b.y, b.z)
-        key = (block, t.thread_id, array, kind)
+        key = (self.launches, block, t.thread_id, array, kind)
         seq = self._seq.get(key, 0)  # only this simulated thread touches this key
         self._seq[key] = seq + 1
         self._itemsize[array] = itemsize
-        self.records.append((block, t.thread_id, array, kind, seq, byte_addr))
+        self.records.append((self.launches, block, t.thread_id, array, kind, seq, byte_addr))
 
     # -- analysis ----------------------------------------------------------------------------
     def _requests(self):
         groups: dict[tuple, list[int]] = defaultdict(list)
-        for block, tid, array, kind, seq, addr in self.records:
-            groups[(array, kind, block, tid // self.warp_size, seq)].append(addr)
+        for launch, block, tid, array, kind, seq, addr in self.records:
+            groups[(array, kind, launch, block, tid // self.warp_size, seq)].append(addr)
         return groups
 
     def stats(self) -> list[ArrayStats]:
@@ -138,10 +139,12 @@ class Trace:
     def accesses(self) -> dict[tuple[str, str], int]:
         return {(s.array, s.kind): s.accesses for s in self.stats()}
 
-    def warp_request(self, array: str, kind: str, block=(0, 0, 0), warp: int = 0, seq: int = 0) -> list[int]:
+    def warp_request(self, array: str, kind: str, block=(0, 0, 0), warp: int = 0, seq: int = 0,
+                     launch: int = 1) -> list[int]:
         """Element indices one warp request touched, in lane order — to *look at* a pattern."""
-        rows = sorted((tid, addr) for b, tid, a, k, s, addr in self.records
-                      if a == array and k == kind and b == tuple(block) and tid // self.warp_size == warp and s == seq)
+        rows = sorted((tid, addr) for n, b, tid, a, k, s, addr in self.records
+                      if n == launch and a == array and k == kind and b == tuple(block)
+                      and tid // self.warp_size == warp and s == seq)
         item = self._itemsize.get(array, 4)
         return [addr // item for _, addr in rows]
 
@@ -154,15 +157,19 @@ class Trace:
         return "\n".join(lines)
 
 
-def trace_launch(kernel, grid, block, *args, names: list[str] | None = None, warp_size: int = 32) -> Trace:
+def trace_launch(kernel, grid, block, *args, names: list[str] | None = None, warp_size: int = 32,
+                 trace: Trace | None = None) -> Trace:
     """Launch ``kernel[grid, block](*args)`` in the simulator with every NumPy array argument traced.
 
     Arrays are updated in place (outputs appear in the arrays you passed). Scalars pass through.
+    Pass ``trace=`` to accumulate several launches (e.g. the four kernels of an unfused softmax)
+    into one set of statistics; give the same array the same name in each launch.
     """
     if not SIMULATOR:
         raise RuntimeError("tracing needs the CUDA simulator (NUMBA_ENABLE_CUDASIM=1 before importing "
                            "numba). On a real GPU, use Nsight Compute's sectors/requests metrics instead.")
-    trace = Trace(warp_size=warp_size)
+    trace = trace if trace is not None else Trace(warp_size=warp_size)
+    trace.launches += 1
     arrays = [i for i, a in enumerate(args) if isinstance(a, np.ndarray)]
     names = list(names) if names is not None else [f"arg{i}" for i in arrays]
     if len(names) != len(arrays):

@@ -1,0 +1,14 @@
+# nccl-tests in a container: the CUDA devel image carries nvcc and NCCL; the host driver is injected at
+# `docker run --gpus all` time by the NVIDIA Container Toolkit (primer §6).
+#   docker build -f Dockerfile.nccl-tests -t nccl-tests .
+#   docker run --rm --gpus all --shm-size=1g nccl-tests all_reduce_perf -b 8 -e 256M -f 2 -g 2
+FROM nvidia/cuda:12.8.1-devel-ubuntu24.04
+# VERIFY: the tag above; pass --build-arg NCCL_TESTS_REF=<release tag> for reproducible builds.
+ARG NCCL_TESTS_REF=
+RUN apt-get update && apt-get install -y --no-install-recommends git make \
+ && (test -f /usr/include/nccl.h || apt-get install -y --no-install-recommends libnccl2 libnccl-dev) \
+ && rm -rf /var/lib/apt/lists/* \
+ && git clone --depth 1 ${NCCL_TESTS_REF:+--branch "$NCCL_TESTS_REF"} https://github.com/NVIDIA/nccl-tests.git /opt/nccl-tests \
+ && make -C /opt/nccl-tests -j"$(nproc)" MPI=0 CUDA_HOME=/usr/local/cuda
+ENV PATH=/opt/nccl-tests/build:${PATH}
+CMD ["all_reduce_perf", "-b", "8", "-e", "256M", "-f", "2", "-g", "1"]

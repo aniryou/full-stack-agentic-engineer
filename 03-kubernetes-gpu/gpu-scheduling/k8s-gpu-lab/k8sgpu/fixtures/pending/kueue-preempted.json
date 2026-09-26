@@ -1,0 +1,81 @@
+{
+ "description": "Low-priority job evicted for a high-priority one in the same queue (s4, a-low-2).",
+ "source": "Workload trimmed to the fields that matter; condition text in the format of Kueue v0.19's flavor assigner/TAS as predicted by k8sgpu.kindsim for the kind lab (sample output in the documented format (illustrative))",
+ "expect": {
+  "gate": "kueue",
+  "category": "preempted"
+ },
+ "workload": {
+  "apiVersion": "kueue.x-k8s.io/v1beta2",
+  "kind": "Workload",
+  "metadata": {
+   "name": "job-a-low-2-7b2c1",
+   "namespace": "team-a",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "kueue.x-k8s.io/job-uid": "5a1e0000-0000-4000-8000-000000000001"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "a-low-2",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "queueName": "gpu-queue",
+   "priority": 100,
+   "podSets": [
+    {
+     "name": "main",
+     "count": 1,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 4
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "conditions": [
+    {
+     "type": "QuotaReserved",
+     "status": "False",
+     "reason": "Pending",
+     "message": "couldn't assign flavors to pod set main: insufficient unused quota for nvidia.com/gpu in flavor gpu-l4, 4 more needed",
+     "lastTransitionTime": "2026-09-26T09:00:04Z",
+     "observedGeneration": 1
+    },
+    {
+     "type": "Evicted",
+     "status": "True",
+     "reason": "Preempted",
+     "message": "Preempted to accommodate a workload (UID: 9d0c0000-0000-4000-8000-000000000002, JobUID: 1b0a0000-0000-4000-8000-000000000003) due to prioritization in the ClusterQueue; preemptor path: /team-a-cq; preemptee path: /team-a-cq",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    },
+    {
+     "type": "Preempted",
+     "status": "True",
+     "reason": "InClusterQueue",
+     "message": "Preempted to accommodate a workload (UID: 9d0c0000-0000-4000-8000-000000000002, JobUID: 1b0a0000-0000-4000-8000-000000000003) due to prioritization in the ClusterQueue; preemptor path: /team-a-cq; preemptee path: /team-a-cq",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ]
+  }
+ }
+}

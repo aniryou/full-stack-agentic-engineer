@@ -16,9 +16,9 @@
 # after sitting idle (10 minutes by default). GPUs add two problems CPUs rarely have: **capacity may
 # not exist** (stockouts; Spot reclaims) and **gangs need every node at once** — a job needing 16
 # nodes that receives 11 pays for 11 idle nodes. Queued, all-or-nothing provisioning (Kueue
-# ProvisioningRequest, GKE DWS flex-start) fixes the second; Spot math decides the first. After
-# this notebook you can estimate time-to-capacity and idle cost, and pick a capacity type per
-# workload.
+# ProvisioningRequest, GKE DWS flex-start) fixes the second; choosing the capacity type per workload
+# (on-demand, Spot, reservation, flex-start) is how you manage the first. After this notebook you can
+# estimate time-to-capacity and idle cost, and pick a capacity type per workload.
 #
 # Primer: §7 *Getting capacity* and §8 *Startup latency* in `../../PRIMER.md`.
 
@@ -96,6 +96,9 @@ print(f"billed {run['node_h']:.2f} node-h, busy {run['busy_node_h']:.2f} node-h,
 # node-hours.
 
 # %% exercise
+# predicted_start_s = ...     seconds
+# predicted_removed_s = ...   seconds
+# predicted_node_h = ...      node-hours billed
 ### BEGIN SOLUTION
 predicted_start_s = 420                        # waits for the node to boot
 predicted_removed_s = 420 + 7200 + 600         # finish + unneeded time
@@ -150,6 +153,7 @@ def expected_hours(work_h: float, nodes: int, rate: float, restart_h: float = 0.
     return (math.exp(lam * work_h) - 1) * (1 / lam + restart_h)
     ### END SOLUTION
 
+# slowdown_16 = ...   a ratio: expected wall-clock / work hours
 ### BEGIN SOLUTION
 slowdown_16 = expected_hours(24, 16, 0.005, 0.25) / 24
 ### END SOLUTION
@@ -223,6 +227,7 @@ print("✅ the ordinary pool paid for", round(ordinary["waiting_node_h"] - queue
 # * **flagship** — 24/7 serving at steady high utilisation for a year.
 
 # %% exercise
+# capacity = {"chat": ..., "finetune": ..., "embeddings": ..., "flagship": ...}
 ### BEGIN SOLUTION
 capacity = {
     "chat": "on-demand",          # must appear in minutes when traffic comes; can add a Spot tier behind it

@@ -90,7 +90,14 @@ print(kueue.explain(a1))
 
 # %% [markdown]
 # Nothing happens: with the default `reclaimWithinCohort: Never`, **nominal quota is not a
-# guarantee** — team A waits until B's borrowing job finishes on its own. Turn reclaim on:
+# guarantee** — team A waits until B's borrowing job finishes on its own, however long that takes:
+
+# %%
+kueue.finish("b3")
+print("after b3 finishes:", kueue.schedule())
+
+# %% [markdown]
+# Now turn reclaim on and replay the same arrivals:
 
 # %%
 kueue = research_cohort(reclaim_within_cohort="Any")
@@ -134,6 +141,8 @@ print("✅ reclaim from borrowers first, cheapest first, newest first (it has do
 # (8 GPUs), `big` (16), `small-2` (8). Predict which are admitted under each queueing strategy.
 
 # %% exercise
+# admitted_strict = [...]        workload names, in admission order
+# admitted_best_effort = [...]
 ### BEGIN SOLUTION
 admitted_strict = ["small-1"]                  # big cannot fit behind small-1 and blocks small-2
 admitted_best_effort = ["small-1", "small-2"]  # small-2 may pass the blocked big job
@@ -159,6 +168,8 @@ print("✅ StrictFIFO keeps order at the cost of idle quota; BestEffortFIFO fill
 # Build `serving_cq` and `batch_cq` with `ClusterQueue(...)` and `Quota(...)`.
 
 # %% exercise
+# serving_cq = ClusterQueue("serving-cq", {"h100": {GPU: Quota(...)}}, cohort="shared", ...)
+# batch_cq = ClusterQueue("batch-cq", ...)
 ### BEGIN SOLUTION
 serving_cq = ClusterQueue("serving-cq", {"h100": {GPU: Quota(16, lending_limit=8)}}, cohort="shared",
                           reclaim_within_cohort="Any", within_cluster_queue="Never")

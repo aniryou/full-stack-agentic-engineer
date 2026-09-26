@@ -112,6 +112,24 @@ def parse(text: str, op: str | None = None, nranks: int | None = None) -> NcclTe
     return res
 
 
+def split_runs(text: str) -> list[str]:
+    """One log often holds several runs (all_reduce_perf, then all_gather_perf, ...). Split at each
+    "Collective test starting" line, or else at each "# nThread" header."""
+    lines = text.splitlines()
+    marks = [i for i, line in enumerate(lines) if "Collective test starting" in line]
+    if not marks:
+        marks = [i for i, line in enumerate(lines) if line.lstrip().startswith("# nThread")]
+    if len(marks) < 2:
+        return [text]
+    marks[0] = 0  # any preamble belongs to the first run
+    return ["\n".join(lines[a:b]) for a, b in zip(marks, marks[1:] + [len(lines)])]
+
+
+def parse_many(text: str, nranks: int | None = None) -> list[NcclTestsResult]:
+    """Parse every run in a log; chunks without result rows are dropped."""
+    return [r for r in (parse(chunk, nranks=nranks) for chunk in split_runs(text)) if r.rows]
+
+
 def recheck(res: NcclTestsResult, rel_tol: float = 0.02, abs_tol: float = 0.011) -> list[str]:
     """Recompute algbw and busbw from size and time; return a list of disagreements (empty = consistent).
     Printed values are rounded (two decimals, time to 3-4 significant digits), hence the tolerances."""
@@ -168,7 +186,14 @@ def main(argv=None) -> int:
     p.add_argument("--nranks", type=int)
     a = p.parse_args(argv)
     with open(a.path, encoding="utf-8") as f:
-        res = parse(f.read(), a.op, a.nranks)
+        text = f.read()
+    runs = parse_many(text, a.nranks) if a.op is None and len(split_runs(text)) > 1 else [parse(text, a.op, a.nranks)]
+    for res in runs:
+        _print_summary(res)
+    return 0
+
+
+def _print_summary(res: NcclTestsResult) -> None:
     s = summarize(res)
     print(f"{s['op']} over {s['nranks']} ranks ({s['backend']}), {s['points']} sizes")
     print(f"  peak busbw {s['peak_busbw_gbps']:.2f} GB/s at {s['peak_at_bytes']} B; latency floor {s['min_time_us']:.1f} µs")
@@ -179,7 +204,6 @@ def main(argv=None) -> int:
         issues = recheck(res)
         print("  recheck: " + ("algbw/busbw consistent with size/time and the factor" if not issues
                               else f"{len(issues)} disagreement(s), first: {issues[0]}"))
-    return 0
 
 
 if __name__ == "__main__":

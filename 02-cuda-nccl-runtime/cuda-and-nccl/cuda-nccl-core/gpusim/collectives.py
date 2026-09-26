@@ -312,6 +312,12 @@ def model_time(op: str, algo: str, size: float, p: int, alpha: float, bw: float,
     return a * alpha + c * size / bw
 
 
+def optimal_chunks(size: float, alpha: float, bw: float) -> int:
+    """Pipeline depth minimising (k+1)(alpha + S/(k*B)): k* = sqrt(S / (alpha*B)). More chunks add
+    alpha-steps; fewer leave bandwidth idle while the pipeline fills and drains."""
+    return max(1, round(math.sqrt(size / (alpha * bw))))
+
+
 def crossover_bytes(op: str, algo: str, p: int, alpha: float, bw: float, chunks: int = 1) -> float:
     """The message size where latency and bandwidth terms are equal. Below it the collective is
     latency-bound; above it, bandwidth-bound. Ring all-reduce: S* = p*alpha*B."""

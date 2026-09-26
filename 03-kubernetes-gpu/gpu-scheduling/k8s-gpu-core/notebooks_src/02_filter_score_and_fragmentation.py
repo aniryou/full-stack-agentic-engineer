@@ -20,7 +20,7 @@
 
 # %%
 from gpusched import (GPU, Cluster, Node, Pod, Scheduler, fit_error, fragmentation, gpu_node, gpu_pod,
-                      least_allocated, make_cluster, most_allocated, run_filters, select_victims, stranded_gpus)
+                      make_cluster, most_allocated, run_filters, select_victims, stranded_gpus)
 
 cluster = make_cluster(hosts=4)                          # 4 nodes x 8 GPUs, cpu 96 cores, 768 GiB each
 sched = Scheduler(cluster)                               # upstream defaults: LeastAllocated on cpu+memory
@@ -138,6 +138,9 @@ print("✅ spread cluster:", free_now, "-> stranded", stranded(free_now, 8), "of
 # `why`. The check replays the arrivals with your choice.
 
 # %% exercise
+# strategy = ...     "LeastAllocated" or "MostAllocated"
+# resources = ...    a tuple of (resource name, weight) pairs, e.g. (("cpu", 1), ("memory", 1))
+# why = ...          one sentence
 ### BEGIN SOLUTION
 strategy = "MostAllocated"
 resources = (("cpu", 1), ("memory", 1), (GPU, 5))
@@ -185,6 +188,7 @@ for n in shop.nodes.values():
 # strings sorted.
 
 # %% exercise
+# predicted = "0/4 nodes are available: ..."
 ### BEGIN SOLUTION
 predicted = ("0/4 nodes are available: 1 Insufficient nvidia.com/gpu, 1 node(s) were unschedulable, "
              "2 node(s) didn't match Pod's node affinity/selector.")

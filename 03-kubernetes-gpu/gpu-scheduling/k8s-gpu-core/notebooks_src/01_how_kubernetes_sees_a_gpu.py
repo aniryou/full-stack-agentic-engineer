@@ -45,7 +45,7 @@ print("devices pinned per container:", kubelet.assigned)
 # %% [markdown]
 # ## Exercise 1.1 — taints and tolerations
 #
-# GPU nodes are tainted (GKE uses `nvidia.com/gpu=present:NoSchedule`) so that ordinary pods stay
+# GPU nodes are tainted (GKE uses `nvidia.com/gpu=present:NoSchedule` — verify) so that ordinary pods stay
 # off expensive nodes. A pod may land on a tainted node only if one of its tolerations *tolerates*
 # the taint. Implement the upstream rule `tolerates(tol, taint)`:
 #
@@ -211,6 +211,10 @@ print("✅ selector, taints and integer resources decide feasibility; nothing el
 # * whether the kubelet can admit a new 2-GPU pod.
 
 # %% exercise
+# predicted_capacity = ...              an int
+# predicted_allocatable = ...           an int
+# predicted_free_for_scheduler = ...    an int
+# predicted_two_gpu_pod_admitted = ...  True or False
 ### BEGIN SOLUTION
 predicted_capacity = 8        # capacity counts every device the plugin reports
 predicted_allocatable = 7     # allocatable counts healthy ones only

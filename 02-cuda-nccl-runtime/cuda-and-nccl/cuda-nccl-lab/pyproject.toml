@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpurt"
+version = "0.1.0"
+description = "The GPU software substrate, hands-on: Numba CUDA kernels that run in a simulator or on a GPU, collectives measured like nccl-tests, and how a container gets a GPU."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24", "numba>=0.59", "pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "kubernetes-validate>=1.30"]
+gpu = ["numba-cuda[cu12]>=0.20"]      # NVIDIA's CUDA target for Numba — real GPUs (T1/T2)
+torch = ["torch>=2.4"]                 # gloo/NCCL sweeps and CUDA Graphs; install the CUDA build matching your driver
+triton = ["triton>=3.0"]               # optional Triton kernels (T1)
+
+[project.scripts]
+gpurt-container = "gpurt.container:main"
+gpurt-nccltests = "gpurt.nccltests:main"
+gpurt-dist-bench = "gpurt.dist.bench:main"
+gpurt-kernel-bench = "gpurt.kernels.bench:main"
+
+[tool.setuptools.packages.find]
+include = ["gpurt*"]
+
+[tool.setuptools.package-data]
+gpurt = ["fixtures/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

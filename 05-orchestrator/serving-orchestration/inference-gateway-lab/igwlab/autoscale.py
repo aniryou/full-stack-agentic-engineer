@@ -348,12 +348,16 @@ def hpa_manifest(name: str, deployment: str, metric: str, target_average_value, 
 # ------------------------------------------------------------------ a fluid model to drive the loop (simulated)
 @dataclass
 class FluidPool:
-    """A deliberately simple *simulated* serving pool: each ready replica completes `mu` req/s;
-    unserved requests queue; new replicas become ready `cold_start_s` after being requested."""
+    """A deliberately simple *simulated* serving pool. Each ready replica completes `mu` requests/s,
+    each request occupies a batch slot for `service_s` seconds (so a replica has mu x service_s
+    slots), unserved requests queue, and a new replica becomes ready `cold_start_s` after it is
+    requested (node provisioning + image pull + weight load)."""
     mu: float = 2.0
+    service_s: float = 4.0
     cold_start_s: float = 120.0
     ready: int = 1
     backlog: float = 0.0
+    served_rate: float = 0.0
     pending: list = field(default_factory=list)       # ready-at timestamps
 
     def replicas(self) -> int:
@@ -375,21 +379,29 @@ class FluidPool:
         self.pending = [t for t in self.pending if t > now]
         served = min(self.backlog + arrival_rate * dt, self.ready * self.mu * dt)
         self.backlog = max(0.0, self.backlog + arrival_rate * dt - served)
+        self.served_rate = served / dt
 
     def waiting_per_pod(self) -> float:
+        """vllm:num_requests_waiting, averaged over ready pods."""
         return self.backlog / max(1, self.ready)
 
-    def busy_fraction(self, arrival_rate: float) -> float:
-        """A GPU-utilization-like signal: 1.0 whenever there is a queue or demand >= capacity."""
-        if self.backlog > 0:
-            return 1.0
-        return min(1.0, arrival_rate / max(1e-9, self.ready * self.mu))
+    def running_per_pod(self) -> float:
+        """vllm:num_requests_running, averaged over ready pods (Little's law, capped at the slots)."""
+        per_pod = self.served_rate / max(1, self.ready)
+        return min(self.mu * self.service_s, per_pod * self.service_s)
+
+    def gpu_busy(self) -> float:
+        """Duty-cycle 'GPU utilization' as nvidia-smi reports it: 1.0 whenever anything runs."""
+        return 1.0 if self.served_rate > 0 else 0.0
 
 
-def simulate(load, target_waiting: float = 5.0, hpa: HPARecommender | None = None, pool: FluidPool | None = None,
+def simulate(load, targets=None, hpa: HPARecommender | None = None, pool: FluidPool | None = None,
              dt: float = 1.0, sync_s: int = SYNC_PERIOD_S):
-    """Replay `load(t) -> requests/s` through FluidPool + HPA on `vllm:num_requests_waiting`
-    (AverageValue target). Returns a list of dict rows, one per HPA sync (simulated)."""
+    """Replay `load(t) -> requests/s` (with a `horizon` attribute, seconds) through FluidPool and
+    an HPA with one `type: Pods` AverageValue metric per entry of `targets`
+    ({"waiting": ..} and/or {"running": ..}); the HPA takes the max proposal, as the controller
+    does. Returns one dict per HPA sync. Everything here is *simulated*."""
+    targets = targets or {"waiting": 5.0}
     hpa = hpa or HPARecommender(1, 10)
     pool = pool or FluidPool()
     rows, t = [], 0.0
@@ -398,18 +410,23 @@ def simulate(load, target_waiting: float = 5.0, hpa: HPARecommender | None = Non
         lam = load(t)
         pool.advance(t, lam, dt)
         if int(t) % sync_s == 0:
-            pods = [PodSample(f"p{i}", pool.waiting_per_pod()) for i in range(pool.ready)]
-            pods += [PodSample(f"pending{i}", None, phase="Pending") for i in range(len(pool.pending))]
             cur = pool.replicas()
-            try:
-                proposal, avg = plain_metric_replicas(pods, cur, target_waiting)
-            except MetricError:
-                proposal, avg = None, float("nan")
+            proposals = {}
+            for name, target in targets.items():
+                v = pool.waiting_per_pod() if name == "waiting" else pool.running_per_pod()
+                pods = [PodSample(f"p{i}", v) for i in range(pool.ready)]
+                pods += [PodSample(f"pending{i}", None, phase="Pending") for i in range(len(pool.pending))]
+                try:
+                    proposals[name] = plain_metric_replicas(pods, cur, target)[0]
+                except MetricError:
+                    pass
+            proposal = max(proposals.values()) if proposals else None
             step = hpa.reconcile(t, cur, proposal)
             if step.desired != cur:
                 pool.scale_to(step.desired, t)
             rows.append({"t": t, "load_rps": lam, "ready": pool.ready, "replicas": pool.replicas(),
-                         "waiting_per_pod": avg, "busy": pool.busy_fraction(lam), "proposal": proposal,
-                         "desired": step.desired, "why": step.limited or step.reason})
+                         "waiting_per_pod": pool.waiting_per_pod(), "running_per_pod": pool.running_per_pod(),
+                         "gpu_busy": pool.gpu_busy(), "proposals": proposals, "desired": step.desired,
+                         "why": step.limited or step.reason})
         t += dt
     return rows

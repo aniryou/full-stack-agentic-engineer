@@ -90,19 +90,6 @@ class Pod:
     def gpus(self) -> int:
         return self.requests.get(GPU, 0)
 
-    def manifest(self, image: str = "nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04") -> dict:
-        """The core/v1 Pod you would write for this simulated pod (GPUs go in limits)."""
-        limits = {r: q for r, q in self.requests.items() if is_extended(r)}
-        requests = {r: f"{q}m" if r == "cpu" else f"{q}Mi" for r, q in self.requests.items()
-                    if r in ("cpu", "memory")}
-        spec = {"containers": [{"name": "main", "image": image,
-                                "resources": {"requests": requests, "limits": limits}}]}
-        if self.tolerations:
-            spec["tolerations"] = [{k: v for k, v in vars(t).items() if v} for t in self.tolerations]
-        if self.node_selector:
-            spec["nodeSelector"] = dict(self.node_selector)
-        return {"apiVersion": "v1", "kind": "Pod", "metadata": {"name": self.name}, "spec": spec}
-
 
 def extended_resource_toleration(pod: Pod) -> Pod:
     """What the ExtendedResourceToleration admission plugin does: tolerate a taint keyed by each
@@ -165,14 +152,8 @@ class Cluster:
         self.nodes[pod.node].pods.remove(pod)
         pod.node = None
 
-    def pods(self) -> list:
-        return [p for n in self.nodes.values() for p in n.pods]
-
     def free(self, resource: str = GPU) -> int:
         return sum(n.free(resource) for n in self.nodes.values())
-
-    def capacity(self, resource: str = GPU) -> int:
-        return sum(n.allocatable.get(resource, 0) for n in self.nodes.values())
 
     def show(self, resource: str = GPU) -> str:
         """One line per node: `#` = allocated, `.` = free."""

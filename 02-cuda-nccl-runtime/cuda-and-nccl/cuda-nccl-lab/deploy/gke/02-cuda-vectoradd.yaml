@@ -1,0 +1,29 @@
+# A prebuilt CUDA sample: if this prints "Test PASSED", driver, device plugin and a CUDA userland all
+# agree. The image carries the CUDA runtime; libcuda comes from the node (primer §6).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cuda-vectoradd
+  namespace: gpu-lab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vectoradd
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0 # VERIFY: current tag on NGC
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              nvidia.com/gpu: 1
+              memory: 512Mi

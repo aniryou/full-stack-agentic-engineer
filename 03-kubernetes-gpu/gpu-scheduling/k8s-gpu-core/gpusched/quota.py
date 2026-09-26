@@ -251,12 +251,7 @@ class Kueue:
         return "couldn't assign flavors to pod set main: " + "; ".join(msgs) if msgs else "fits"
 
     def table(self, res: str = "nvidia.com/gpu") -> str:
-        rows = []
-        for cq in self.cqs.values():
-            for flavor in cq.quotas:
-                q = cq.quota(flavor, res)
-                if q:
-                    use = cq.usage.get((flavor, res), 0)
-                    rows.append(f"{cq.name:<14} {flavor:<10} used {use:>3} / nominal {q.nominal:>3}"
-                                f"  borrowed {max(0, use - q.nominal):>3}  available {self.available(cq, flavor, res):>3}")
-        return "\n".join(rows)
+        return "\n".join(f"{cq.name:<14} {f:<10} used {cq.usage.get((f, res), 0):>3} / nominal {q.nominal:>3}  "
+                         f"borrowed {max(0, cq.usage.get((f, res), 0) - q.nominal):>3}  "
+                         f"available {self.available(cq, f, res):>3}"
+                         for cq in self.cqs.values() for f in cq.quotas if (q := cq.quota(f, res)))

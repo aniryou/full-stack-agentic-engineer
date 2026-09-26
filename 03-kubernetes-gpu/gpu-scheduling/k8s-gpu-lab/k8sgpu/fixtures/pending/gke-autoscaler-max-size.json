@@ -1,0 +1,115 @@
+{
+ "description": "Spot L4 pool already at max nodes; the autoscaler will not add another.",
+ "source": "GKE event/condition text in the documented format (sample output in the documented format (illustrative); verify against your cluster)",
+ "expect": {
+  "gate": "cluster-autoscaler",
+  "category": "max-size"
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "name": "finetune-9a5c0",
+   "namespace": "ml",
+   "uid": "9a5c0001-0000-4000-8000-000000000000",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "batch.kubernetes.io/job-name": "finetune",
+    "job-name": "finetune"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "finetune",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "restartPolicy": "Never",
+   "terminationGracePeriodSeconds": 5,
+   "nodeSelector": {
+    "cloud.google.com/gke-nodepool": "l4-spot",
+    "cloud.google.com/gke-accelerator": "nvidia-l4"
+   },
+   "tolerations": [
+    {
+     "key": "nvidia.com/gpu",
+     "operator": "Exists",
+     "effect": "NoSchedule"
+    }
+   ],
+   "containers": [
+    {
+     "name": "train",
+     "image": "us-docker.pkg.dev/example/train:1",
+     "resources": {
+      "requests": {
+       "cpu": "3",
+       "memory": "12Gi",
+       "nvidia.com/gpu": 1
+      },
+      "limits": {
+       "memory": "12Gi",
+       "nvidia.com/gpu": 1
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "phase": "Pending",
+   "qosClass": "Burstable",
+   "conditions": [
+    {
+     "type": "PodScheduled",
+     "status": "False",
+     "reason": "Unschedulable",
+     "message": "0/3 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 2 Insufficient nvidia.com/gpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ]
+  }
+ },
+ "events": [
+  {
+   "apiVersion": "v1",
+   "kind": "Event",
+   "type": "Warning",
+   "reason": "FailedScheduling",
+   "message": "0/3 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 2 Insufficient nvidia.com/gpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.",
+   "involvedObject": {
+    "kind": "Pod",
+    "name": "finetune-9a5c0",
+    "namespace": "ml"
+   },
+   "reportingComponent": "default-scheduler",
+   "source": {
+    "component": "default-scheduler"
+   },
+   "firstTimestamp": "2026-09-26T09:00:04Z",
+   "lastTimestamp": "2026-09-26T09:00:04Z",
+   "count": 1
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Event",
+   "type": "Normal",
+   "reason": "NotTriggerScaleUp",
+   "message": "pod didn't trigger scale-up: 1 max node group size reached, 1 node(s) didn't match Pod's node affinity/selector",
+   "involvedObject": {
+    "kind": "Pod",
+    "name": "finetune-9a5c0",
+    "namespace": "ml"
+   },
+   "reportingComponent": "cluster-autoscaler",
+   "source": {
+    "component": "cluster-autoscaler"
+   },
+   "firstTimestamp": "2026-09-26T09:00:04Z",
+   "lastTimestamp": "2026-09-26T09:03:10Z",
+   "count": 1
+  }
+ ]
+}

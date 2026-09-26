@@ -1,0 +1,11 @@
+# The library needs numpy, numba (its CUDA simulator runs on any CPU) and pyyaml.
+numpy>=1.24
+numba>=0.59
+pyyaml>=6.0
+# Notebooks and tests:
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# On a GPU box (T1/T2) also:  pip install "numba-cuda[cu12]"  and a CUDA build of torch (see README).

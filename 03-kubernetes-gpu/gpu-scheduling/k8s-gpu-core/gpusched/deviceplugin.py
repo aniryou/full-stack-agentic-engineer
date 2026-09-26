@@ -104,6 +104,3 @@ class Kubelet:
         ids = self.plugin.get_preferred_allocation(free, [], count)
         self.assigned[pod] = ids
         return self.plugin.allocate(ids)
-
-    def release(self, pod: str) -> None:
-        self.assigned.pop(pod, None)

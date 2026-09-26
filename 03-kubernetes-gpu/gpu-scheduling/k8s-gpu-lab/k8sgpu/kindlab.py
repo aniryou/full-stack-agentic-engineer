@@ -156,7 +156,9 @@ def compare(observed: dict[str, dict], predicted: dict[str, dict]) -> list[str]:
 def reset(k: Kubectl, timeout_s: int = 180) -> None:
     """Delete every lab workload (not the queues) and wait for the pods to go."""
     for ns in LAB_NAMESPACES:
-        k.run("delete", WORKLOAD_KINDS, "--all", "-n", ns, "--ignore-not-found", "--wait=true", check=False)
+        for kind in WORKLOAD_KINDS.split(","):   # one kind at a time: a missing CRD must not abort the rest
+            k.run("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=true", check=False,
+                  quiet=kind != "jobs.batch")
     if k.dry_run:
         return
     deadline = time.time() + timeout_s

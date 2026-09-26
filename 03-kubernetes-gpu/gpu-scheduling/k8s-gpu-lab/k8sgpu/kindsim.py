@@ -77,7 +77,8 @@ def kwok_nodes(blocks: int = 2, subblocks: int = 4, hosts: int = 4, gpus: int = 
         for s in range(1, subblocks + 1):
             for h in range(1, hosts + 1):
                 name = f"kwok-b{b}-s{s}-h{h}"
-                out.append(Node(name, {m.HOSTNAME: name, "type": "kwok", m.GKE_ACCELERATOR: "nvidia-h100-80gb",
+                out.append(Node(name, {m.HOSTNAME: name, "type": "kwok", m.GKE_NODEPOOL: "kwok-h100",
+                                       m.GKE_ACCELERATOR: "nvidia-h100-80gb",
                                        m.TOPOLOGY_BLOCK: f"kwok-b{b}", m.TOPOLOGY_SUBBLOCK: f"kwok-b{b}-s{s}",
                                        m.TOPOLOGY_HOST: name},
                                 [dict(GPU_TAINT), {"key": "kwok.x-k8s.io/node", "value": "fake", "effect": "NoSchedule"}],

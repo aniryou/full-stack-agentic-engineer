@@ -58,7 +58,8 @@ def grid(**axes) -> list:
 # ---------------------------------------------------------------------------------------------
 # Backends
 # ---------------------------------------------------------------------------------------------
-_PROFILE_KNOBS = {"gpu_memory_utilization", "max_model_len", "block_size", "kv_cache_dtype", "quantization", "dtype"}
+_PROFILE_KNOBS = {"gpu_memory_utilization", "max_model_len", "block_size", "kv_cache_dtype", "quantization", "dtype",
+                  "num_gpu_blocks_override"}
 _ENGINE_KNOBS = {"max_num_seqs", "max_num_batched_tokens", "enable_prefix_caching", "enable_chunked_prefill",
                  "long_prefill_token_threshold"}
 # Draft time per proposed token, as a fraction of the target's weight-read time (assumptions).
@@ -80,8 +81,10 @@ class FakeBackend:
         unknown = set(config) - _PROFILE_KNOBS - _ENGINE_KNOBS - {"speculative_config"}
         if unknown:
             raise ValueError(f"the fake backend does not model {sorted(unknown)}")
-        prof = named_profile(self.profile_name, **{**self.profile_overrides,
-                                                   **{k: v for k, v in config.items() if k in _PROFILE_KNOBS}})
+        knobs = {k: v for k, v in config.items() if k in _PROFILE_KNOBS}
+        if "num_gpu_blocks_override" in knobs:          # vLLM's flag for testing preemption
+            knobs["num_blocks"] = knobs.pop("num_gpu_blocks_override")
+        prof = named_profile(self.profile_name, **{**self.profile_overrides, **knobs})
         ecfg = EngineConfig(**{k: v for k, v in config.items() if k in _ENGINE_KNOBS})
         spec = config.get("speculative_config")
         if spec:

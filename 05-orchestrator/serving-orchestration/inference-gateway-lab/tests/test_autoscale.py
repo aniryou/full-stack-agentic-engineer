@@ -109,9 +109,13 @@ def test_manifest_and_simulation_shapes():
         pass
 
     class Step:
-        horizon = 600
+        horizon = 900
         def __call__(self, t):
-            return 1.0 if t < 60 else 6.0
-    rows = simulate(Step(), target_waiting=5, pool=FluidPool(mu=2.0, cold_start_s=60))
-    assert rows[0]["replicas"] == 1 and max(r["replicas"] for r in rows) >= 3
-    assert all(r["busy"] == 1.0 for r in rows if r["waiting_per_pod"] and r["waiting_per_pod"] > 0)
+            return 3.0 if t < 120 else 11.0
+
+    queue_only = simulate(Step(), {"waiting": 5}, pool=FluidPool(ready=2))
+    both = simulate(Step(), {"waiting": 5, "running": 6}, pool=FluidPool(ready=2))
+    late = lambda rows: [r["ready"] for r in rows if r["t"] >= 780]
+    assert min(late(both)) >= 6                                  # running holds ~ lam*S/6 = 7.3 replicas
+    assert min(late(queue_only)) < 6                             # queue-only collapsed after draining
+    assert all(r["gpu_busy"] == 1.0 for r in both)               # duty cycle says nothing about need
