@@ -1,7 +1,7 @@
-# CLAUDE.md — how to work in `~/code/learning`
+# CLAUDE.md — how to work in this repository
 
 This is a **single mono-repo** that mirrors the LLM inference / serving stack, from physical GPUs
-at the bottom to the agent application at the top. New material lands in `raw/` and gets filed into
+at the bottom to agents and applications at the top. New material lands in `raw/` and gets filed into
 the layer it belongs to. This file tells you (Claude) how to keep it consistent.
 
 - **Incoming-content guidelines:** [`raw/README.md`](raw/README.md).
@@ -17,13 +17,14 @@ the layer it belongs to. This file tells you (Claude) how to keep it consistent.
 ## The stack (bottom-up: 01 = hardware, 07 = application)
 
 ```
-  ┌─ 07-application-agent-framework   Application / agent framework
-  │  06-gateway                       auth, rate limits, routing, quotas, observability, cost
-  │  05-orchestrator                  Dynamo, llm-d, Ray Serve (routing, autoscaling, disaggregation)
-  │  04-inference-engine              vLLM / SGLang / TensorRT-LLM
-  │  03-kubernetes-gpu                Kubernetes + GPU Operator + scheduler
-  │  02-cuda-nccl-runtime             container runtime, NCCL, CUDA, driver
-  └─ 01-hardware-gpu-fabric           GPUs, NVLink, NICs, storage, cooling
+  ┌─ 07-application-agent-framework   Agents and applications
+  │  06-gateway                       Gateway (auth, rate limits, routing, quotas, observability, cost)
+  │  05-orchestrator                  Orchestrator (Dynamo, llm-d, Ray Serve: routing, autoscaling, disaggregation)
+  │  04-inference-engine              Inference engine (vLLM / SGLang / TensorRT-LLM)
+  │  03-kubernetes-gpu                Kubernetes and GPU scheduling
+  │  02-cuda-nccl-runtime             CUDA and NCCL runtime
+  └─ 01-hardware-gpu-fabric           Hardware and GPU fabric (GPUs, NVLink, NICs, storage, cooling)
+  (00-foundations sits below the stack.) These are the canonical layer names; every README, the curriculum and the site use them.
 ```
 
 | # | Folder | What belongs here | Signal keywords |
@@ -39,7 +40,7 @@ the layer it belongs to. This file tells you (Claude) how to keep it consistent.
 
 Each layer folder has a `README.md` with full scope + current contents. Plus **`00-foundations/`** (below the stack) for model-level material that underpins every layer. Every layer
 has content; layers 01–05 each hold a primer + core + lab topic (and layer 04 two deep dives), and so do 00 (two:
-`mixture-of-experts`, `rl-and-thinking-models`), 04 (`quantization`) and 07 (`sandboxed-execution`), all logged below. The root
+`mixture-of-experts`, `rl-and-thinking-models`), 04 (`quantization`, plus `kernel-core`, the numpy core behind the three kernel topics) and 07 (`sandboxed-execution`), all logged below. The root
 [`CURRICULUM.md`](CURRICULUM.md) (learning path) and [`COMPUTE.md`](COMPUTE.md) (tiers, hardware, cost) are the entry points across layers.
 
 ## Within a layer: topic sub-folders
@@ -66,11 +67,20 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
 - **Every notebook is Colab-ready.** Its first cell (tagged `colab-bootstrap`) is a no-op locally, and
   on Colab clones this repo (public, so a plain shallow clone), `cd`s into the notebook's dir, and pip-installs the nearest lab; see `COLAB.md`.
   Two mechanisms, both baking in the repo URL:
-  - Percent-source labs (`agent-core`, `gcp-agent-platform-lab`, every core and lab in layers 01–05, and the cores and labs of `mixture-of-experts`, `rl-and-thinking-models`, `quantization` and `sandboxed-execution`): the
+  - Percent-source labs (`agent-core`, `mistral-agent-core`, `gcp-agent-platform-lab`, every core and lab in layers 01–05, and the cores and labs of `mixture-of-experts`, `rl-and-thinking-models`, `quantization` and `sandboxed-execution`): the
     `BOOTSTRAP` constant in their `tools/build_notebooks.py`. Change it there, then regenerate: `python3 tools/build_notebooks.py`.
+    Three more builders — `00-foundations/transformers/practice/build_notebooks.py`, `long-running-agents-gcp/tools/build_notebooks.py`,
+    `lra-gcp/scripts/build_notebooks.py` — import the injector's `make_cell`, so they emit the same cell and the injector is a no-op on them.
+    Every builder writes stable cell ids: rebuilding an unchanged lab is a no-op (`git status --porcelain` empty), and each of these
+    labs carries `tests/test_notebook_tooling.py` (8 tests) pinning that, the Colab cell and the `run_notebooks.py --expect-fail`
+    verdicts (an exercise stop is `NotImplementedError`; a missing module or a leftover `...` is `FAIL(env)`).
   - All other notebooks: `python3 tools/inject_colab_bootstrap.py <lab-dir> …` (stdlib-only, idempotent —
     re-running replaces the cell, never duplicates it, never touches a lab's own cells).
   - After any change, regenerate: `python3 tools/gen_colab_index.py` (rewrites each layer README's Colab-links section, between `<!-- colab-links -->` markers, plus the `COLAB.md` setup guide).
+- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the notebook rebuilds (they
+  must be no-ops), the Colab-link and site generators and the link check on every push and pull request;
+  `tools/ci/run_local.sh <lab-id>|--notebooks|--docs|--colab-index` runs the same thing locally. A new lab with tests must be
+  added to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies), or the "lab list complete" job goes red.
 - **Redo an exercise:** `git restore <notebook>` returns it to the committed blank; for percent-source
   labs, re-run `python3 tools/build_notebooks.py`. (This is why exercises are committed blank.)
 
@@ -80,13 +90,14 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
 3. **Propose the mapping to the user; confirm anything ambiguous.**
 4. `mkdir -p` layer/topic folders; **`mv -n`** items in (whole folders, so nothing is half-moved).
 5. Strip any per-item `.git` and build junk the drop brought in (it's a mono-repo).
-6. Make notebooks Colab-ready (injector or build-script) and regenerate the per-layer Colab links (`tools/gen_colab_index.py`).
+6. Make notebooks Colab-ready (injector or build-script) and regenerate the per-layer Colab links (`tools/gen_colab_index.py`);
+   add any lab with tests to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies).
 7. Update affected layer `README.md`s, this file's decisions log, root `README.md`.
 8. `git add -A && git commit` and `git push`. Verify `raw/` holds only `.DS_Store` + `README.md`.
 
 Handy:
 ```bash
-cd ~/code/learning
+cd <repo root>
 python3 tools/inject_colab_bootstrap.py <layer>/<topic>/<lab>   # colab-ify hand-written notebooks
 python3 tools/gen_colab_index.py                                # rebuild per-layer Colab links + COLAB.md
 find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
@@ -122,7 +133,35 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
 
 - **2026-09-26 — four more topics: MoE, RL and thinking models, quantization, sandboxed execution.** Built, adversarially reviewed and validated on `claude/four-new-topics`, merged through its own PR, each in the primer + core + lab shape of layers 01–05 and percent-source. `00-foundations/mixture-of-experts/` (module 00.4): `PRIMER.md` (why sparsity, the MoE layer and counting parameters, routing and load balance, training in brief, which experts a step touches, fused kernels / expert parallelism / wide-EP / offload / quantized experts, sizing and cost, failure modes, where to run it), `moe-core` (package `moecore`, numpy; 5 notebooks, 67 tests; reproduces layer 01's MoE table and layer 02's all-to-all numbers) and `moe-lab` (package `moelab`: a tiny MoE in torch, router hooks, decode step time vs batch in vLLM, TP vs EP on two GPUs, offload and 4-bit experts; `deploy/any-gpu`, `deploy/gke` on layer 02's `l4x2` pool; 5 notebooks, 118 tests). `00-foundations/rl-and-thinking-models/` (00.5): `PRIMER.md` (post-training, policy gradients, preferences and DPO, GRPO with verifiable rewards, thinking models, test-time compute, what thinking does to serving, the RL training stack), `rl-core` (package `rlcore`, numpy; 5 notebooks, 57 tests; reproduces the capacity primer's bank example) and `thinking-lab` (package `thinklab`: GRPO on a tiny transformer in torch, Qwen3 in vLLM with `--reasoning-parser`, best-of-n, one GRPO step with vLLM rollouts, a fake vLLM for T0; `deploy/any-gpu`, `deploy/gcp` pointing at the 04 serving lab's Cloud Run/GKE; 5 notebooks, 91 tests). `04-inference-engine/quantization/` (04.9, the deep dive behind serving-engine §8): `PRIMER.md` (formats to the bit, granularity, GPTQ/AWQ/kernels, W8A8 and SmoothQuant, KV-cache quantization, QAT/QLoRA in brief, measuring accuracy, producing a checkpoint, choosing a scheme), `quant-core` (package `quantcore`, numpy; 5 notebooks, 78 tests; reproduces `minengine.quant`, `servelab.sizing` and vllm-internals §8.1) and `quant-lab` (package `quantlab`: compressed-tensors checkpoints, llm-compressor recipes, FP16 vs INT4 vs FP8 in vLLM, lm-eval, FP8 KV, NVFP4/MXFP4, a bundled tiny model and fake server for T0; `deploy/any-gpu`, `deploy/gcp` pointing at the serving lab's Terraform; 5 notebooks, 86 tests, one needs Terraform). `07-application-agent-framework/sandboxed-execution/` (07.5): `PRIMER.md` (threat model, the isolation ladder process → container → gVisor → microVM, the execution contract, network and secrets, sandboxes on Kubernetes, latency and cost per action, audit, where to run it), `sandbox-core` (package `sandboxcore`, standard library; 5 notebooks, 81 tests) and `sandbox-lab` (package `sandboxlab`: a network namespace, hardened Docker and gVisor, pod-per-execution on kind, an egress proxy that injects credentials, an agent whose code tools fail closed; `deploy/docker`, `deploy/kind`, `deploy/gcp/terraform` (GKE Sandbox gVisor pool, private nodes, no NAT) and `deploy/gke`; 5 notebooks, 112 tests). **Tiers:** every core T0; MoE lab T0 → T2 (Kaggle 2×T4 for EP), thinking and quantization labs T0 → T1 (FP8 on Ada or newer, NVFP4 on a rented Blackwell), sandbox lab T0, T0 + Docker, T3; no new Terraform except the sandbox lab's. `tools/orchestration/SPEC.md` gained §6b (existing material is a hard prerequisite: reuse and reproduce `roofline.llm`, `capacity.py`, `minengine.quant`, `servelab.sizing` in tests; torch on CPU allowed but optional; no network in tests; no Terraform in 00 labs). Each topic ran `tools/orchestration/build_topic.js` (a research agent writing a dated fact sheet, now in `tools/orchestration/facts/`, then primer + core and lab builders in parallel) and the nested `review_workflow.js` (concepts, runnability and pedagogy reviewers → a fixer that verifies each finding → an independent validator): 30, 28, 33 and 58 findings, all fixed, none rejected, all four validated. At integration the existing primers took one-line cross-links (transformer §6.3 and §9, capacity planning's MoE section and a thinking-models line, roofline §3.6, cuda-and-nccl §5, serving-engine §8/§9/§11, vllm-internals §8.3/§9 — its GGUF/bitsandbytes open item answered: out-of-tree plugins — serving-orchestration §8, the identity primer §6.2, gpu-scheduling §10.1), the sandbox lab's notebook 05 got a repo-relative link fixed, and `CURRICULUM.md` (modules 00.4, 00.5, 04.9, 07.5; four cross-layer drills; about 254 hours), `COMPUTE.md` (§6 tables for the four labs, §9 dated items) and the layer and root READMEs were updated; layer 00's README was restyled to `README-STYLE.md`. **New baseline: 347 notebooks.**
 
+- **2026-09-26 — adversarial review of the whole repository, and its fixes.** Eleven reviewers went through the tree at `3be2bb0`
+  (content, structure, presentation; PR #13); the review is filed at `tools/orchestration/reviews/2026-09-26-adversarial-review.md`
+  and every finding is mapped to a package, branch and PR in `2026-09-26-fix-plan.md` beside it. The fixes ran as sixteen
+  packages with disjoint file ownership, each fixed by one agent and verified adversarially by a second (fix → verify → re-fix),
+  each its own squash-merged PR (#15–#28, #30, #32). What changed: a root MIT `LICENSE` (the 15 lab licences' wording; two labs stay
+  Apache-2.0); `CURRICULUM.md` §2 lists the real remaining gaps per layer, names a canonical module per cross-layer concept, and totals
+  about 269 h (07.4 = 28 h); the six dead T0 paths are gone — the Mistral durable lab says Python 3.12–3.14 and its stdlib half
+  installs on 3.11, lra-gcp's quick start passes, rag-from-scratch has a labelled hashing-embedder fallback (the ~90 MB model needs
+  `requirements-full.txt`), the kv-cache notebooks run on numpy through the new `04-inference-engine/kernel-core/` (`kerncore`,
+  51 tests, so module 04.0 is fully T0), the transformers README names its torch files, the flaky scaling test runs on a seeded
+  virtual clock; every check the review found accepting a wrong or empty answer now compares against the core/lab model over
+  many inputs, hides its answer, or stops without a ✅; the technical errors are fixed with pinned tests (NVLink-vs-NIC ≈ 9× per
+  direction, Mistral Small 4 as a 119B-total MoE `(verify)`, DPoP only for `cnf.jkt`, the identity core checks `aud`, requires
+  an `actor_token` and honours `may_act`, lra-core's reaper re-drives lease-less RUNNING runs, HNSW layer 0 uses M0 = 2M,
+  DynamicResources has no Score, the KEDA queue path needs the `flowControl` gate, occupancy rows for CC 10.3/12.0, capacity
+  planning in one unit (GB = 1e9; the bank example is 88.8/355.1 sessions), the MCP `UnsupportedProtocolVersion` code is −32022
+  and results carry `resultType: complete`, OTel GenAI attribute names follow the current convention); hygiene — the client
+  workbooks and deck are gone, vendor/customer/interview wording is rewritten for a design review, the sandbox paths and stale
+  rows left `tools/orchestration/`; builders mint stable ids and emit the Colab cell; `--expect-fail` tells an exercise stop from
+  an environment failure; the site typesets no price as math, derives nav titles from README H1s, keeps plumbing pages out of the
+  nav, excludes solutions from search, has 0 dead notebook anchors and weighs 77 MB (was 456); the 00/06/07 layer READMEs follow
+  `README-STYLE.md`, 06 has topic READMEs, every surface uses one name per layer, and every test count and time was re-measured
+  after the tooling tests landed. Not done, by decision (see the fix plan): consolidating the 07 durable sub-tree, folding the
+  Mistral variants into adapters, standardising the notebook directory conventions (the generators now recognise all of them),
+  and the two new topics the review asks for (an LLM gateway in 06, agent memory in 07). **Baseline unchanged: 347 notebooks.**
+
 ## Housekeeping
-- `07-.../long-running-durable/00_primer.md` is byte-identical to the primer inside
-  `long-running-agentic/`. Kept as the topic entry point; dedupe if desired.
+- Deduped 2026-09-26: `07-.../long-running-durable/00_primer.md` is the only copy of the durable-execution primer, and
+  `lra/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
+- Both scaling labs' packages are named `scalelab` (install one at a time, or use `PYTHONPATH`); the rename waits for the
+  Mistral-fold decision in `tools/orchestration/reviews/2026-09-26-fix-plan.md`.
 - Root `.gitignore` keeps caches/venvs/`.DS_Store` out; per-lab `.gitignore` files are retained too.

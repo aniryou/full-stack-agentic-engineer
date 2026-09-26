@@ -107,7 +107,7 @@ full test sweep, notebook count, commit, push, PR, merge, Pages verification.
   `tools/orchestration/facts/quantization.md`; mark it `(verify, 2026-09-26)`. Do not change the serving lab's `--quantization fp8` flag
   (it is correct at the pinned v0.30.0); the quantization primer §9 already notes the `fp8_per_tensor` form for newer vLLM.
 - `tools/orchestration/README.md`: add rows for `build_topic.js`, `review_workflow.js` (now takes `sp`/`repo`/`topic` in args), `INTEGRATION.md`,
-  `facts/`, and note `tfcheck.sh` needs `ORCH_SCRATCH` (default `/tmp/claude-0/orch`) plus `TERRAFORM_BIN`/`TF_CLI_CONFIG_FILE`.
+  `facts/`, and note `tfcheck.sh` needs `ORCH_SCRATCH` (default `/tmp/orch`) plus `TERRAFORM_BIN`/`TF_CLI_CONFIG_FILE`.
 - After every edit batch: `python3 tools/orchestration/mdlinks.py <files you touched>`; at the end `python3 tools/gen_colab_index.py`, then
   `python3 tools/site/build_site_content.py` (must report 0 missing targets; it rewrites the nav block in mkdocs.yml — keep that change).
   Do NOT run `mkdocs build` (the orchestrator does) and do NOT run git commands.

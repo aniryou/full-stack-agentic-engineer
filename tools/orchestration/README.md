@@ -14,7 +14,7 @@ from any checkout, and so the validation steps stay reproducible.
 | `INTEGRATION.md` | The checklist the integrator followed to land the four §6b topics: layer READMEs, cross-links, `CURRICULUM.md`, `COMPUTE.md`, root README, `CLAUDE.md`, this folder, the site build. |
 | `README-STYLE.md` | The README style guide every integrator applies (human-first structure: promise → start here → what you get → run it → how it fits). |
 | `STATUS.md` | Per-layer progress: built / reviewed / merged, with the next step. Update it whenever a layer changes state. |
-| `tfcheck.sh <dir>` | `terraform fmt -check` + `init` (offline, filesystem provider mirror) + `validate` on a copy of a Terraform directory. Reads `ORCH_SCRATCH` (default `/tmp/claude-0/orch`, where the mirror lives), `TERRAFORM_BIN` (default `terraform`) and `TF_CLI_CONFIG_FILE` (default `$ORCH_SCRATCH/tf/terraformrc`); set all three as below. |
+| `tfcheck.sh <dir>` | `terraform fmt -check` + `init` (offline, filesystem provider mirror) + `validate` on a copy of a Terraform directory. Reads `ORCH_SCRATCH` (default `/tmp/orch`, where the mirror lives), `TERRAFORM_BIN` (default `terraform`) and `TF_CLI_CONFIG_FILE` (default `$ORCH_SCRATCH/tf/terraformrc`); set all three as below. |
 | `tfattrs.py <resource> [filter...] [--desc]` | Look up Terraform attribute paths from a `terraform providers schema -json` dump (set `TF_SCHEMA_JSON`). |
 | `mdlinks.py <paths...>` | Check that relative Markdown links and images resolve. |
 | `pipi <pip args>` | `pip install` serialised through a lock file, for several agents sharing one environment. |
