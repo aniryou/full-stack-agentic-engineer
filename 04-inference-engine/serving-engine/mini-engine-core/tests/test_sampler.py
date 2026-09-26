@@ -21,6 +21,18 @@ def test_top_k_top_p_min_p_hand_computed():
     np.testing.assert_allclose(probs(top_k_filter(LOGITS, 2))[:2], [0.625, 0.375])   # renormalised
 
 
+def test_order_of_operations_matches_vllm():
+    """temperature -> min-p -> top-k -> top-p (vLLM V1's Sampler). Each case keeps a different set
+    under the wrong order, so a reordered pipeline fails here."""
+    # T = 2 first: probs ~ sqrt(p) = .379 .294 .208 .120; min-p 0.35 x .379 = .133 keeps {0, 1, 2}
+    # (min-p on the raw probs would keep only {0, 1}: 0.15 < 0.35 x 0.5)
+    assert kept(process_logits(LOGITS, SamplingParams(temperature=2.0, min_p=0.35))) == {0, 1, 2}
+    # top-k 2 first renormalises to .625 / .375; top-p 0.6 then keeps {0} (top-p first would keep {0, 1})
+    assert kept(process_logits(LOGITS, SamplingParams(top_k=2, top_p=0.6))) == {0}
+    # T = 0.5 first: probs ~ p^2 = .685 .247 .062 .007; top-p 0.6 keeps {0} (on the raw probs {0, 1})
+    assert kept(process_logits(LOGITS, SamplingParams(temperature=0.5, top_p=0.6))) == {0}
+
+
 def test_temperature_and_greedy():
     p = SamplingParams(temperature=2.0)
     np.testing.assert_allclose(probs(process_logits(LOGITS, p)), probs(LOGITS / 2))

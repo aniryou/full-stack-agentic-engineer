@@ -71,6 +71,16 @@ def test_hit_accounting_is_in_tokens():
     assert kv.stats.hit_rate == 0.4
 
 
+def test_readmissions_after_preemption_are_counted_apart():
+    kv = KVCacheManager(16, block_size=4)
+    _admit(kv, "a", list(range(10)))                          # computed 2 full blocks, then preempted
+    kv.free("a")
+    hits = kv.lookup(list(range(10)))
+    assert kv.allocate_slots("a", list(range(10)), 8, 2, hits, preempted=True) is not None
+    assert (kv.stats.queries, kv.stats.hits) == (10, 0)        # what vllm:prefix_cache_* export
+    assert (kv.stats.preempted_queries, kv.stats.preempted_hits) == (10, 8)
+
+
 def _oracle_run(hash_fn, seed=0, rounds=400):
     """Random prompts over a 3-letter alphabet (so blocks repeat under different prefixes). An
     oracle remembers which full token prefix each block's K/V was computed from; every hit is

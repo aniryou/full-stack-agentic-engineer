@@ -2,6 +2,7 @@
 import pytest
 
 from minengine import EOS, Engine, SamplingParams, TinyLM, encode
+from minengine.sampler import log_softmax
 
 MODEL = TinyLM()
 PROMPTS = ["The engine runs a loop. ", "When two prompts start with the same text", "A"]
@@ -26,6 +27,22 @@ def test_prefix_caching_changes_cost_not_tokens():
     assert [o.token_ids for o in runs[True]] == [o.token_ids for o in runs[False]]
     assert [o.num_cached_tokens for o in runs[True]] == [0, 64, 64]          # 16 full blocks of the system prompt
     assert all(o.num_cached_tokens == 0 for o in runs[False])
+
+
+def test_a_burst_sharing_a_prefix_hits_within_one_step():
+    """Requests admitted in the SAME step share the prefix a previous one is computing right then
+    (blocks are published at scheduling time, as in vLLM), and the K/V they read is exact."""
+    system = "The engine runs a loop. Each step it picks the requests to run. "
+    prompts = [system + q for q in ("Why?", "How often?", "What next?")]
+    eng = Engine(MODEL, num_blocks=64, block_size=4, max_num_batched_tokens=256)
+    outs = eng.generate(prompts, SamplingParams(max_tokens=6, temperature=0))
+    assert eng.history[0].num_batched_tokens == 68 + 10 + 10                   # all three in step 1
+    assert [o.num_cached_tokens for o in outs] == [0, 64, 64]
+    for p, o in zip(prompts, outs):
+        ids = encode(p)
+        ref = MODEL.forward_dense(ids + o.token_ids)
+        for i, ((lp, _), t) in enumerate(zip(o.logprobs, o.token_ids)):
+            assert abs(lp - log_softmax(ref[len(ids) - 1 + i])[t]) < 1e-9          # paged + shared == dense
 
 
 def test_stop_conditions():

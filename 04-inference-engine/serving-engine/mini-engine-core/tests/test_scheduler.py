@@ -13,9 +13,12 @@ def _drive(sched, reqs, seed=0):
     rng = random.Random(seed)
     for r in reqs:
         sched.add_request(r)
-    trace = []
+    trace, B = [], sched.kv.block_size
     while sched.has_unfinished():
+        published = set(sched.kv.cached)
         out = sched.schedule()
+        filled = {b for r, n in out.scheduled for b in sched.kv.tables[r.request_id][:(r.num_computed_tokens + n) // B]}
+        assert all(b in filled for name, b in sched.kv.cached.items() if name not in published)   # only what this step computes
         assert out.num_batched_tokens <= sched.cfg.max_num_batched_tokens
         assert len(sched.running) <= sched.cfg.max_num_seqs
         assert len({id(r) for r, _ in out.scheduled}) == len(out.scheduled)
@@ -131,3 +134,19 @@ def test_preemption_does_not_change_seeded_sampling_either():
     outs = tight.generate(prompts, params)
     assert tight.scheduler.num_preemptions > 0
     assert [o.token_ids for o in outs] == [o.token_ids for o in roomy]   # one draw per sampled token, same logits
+
+
+def test_whole_prompt_check_and_watermark_reduce_preemptions():
+    """Without the whole-prompt check, chunked prefill admits prompts memory cannot finish and preempts
+    them a few steps later; a watermark keeps headroom for running requests to grow into."""
+    def run(whole, watermark):
+        rng = random.Random(1)
+        reqs = [Request(f"r{i}", [rng.randrange(50) for _ in range(rng.randrange(20, 40))],
+                        SamplingParams(max_tokens=rng.randrange(5, 25))) for i in range(30)]
+        sched = Scheduler(SchedulerConfig(8, 8, max_model_len=64, admit_whole_prompt=whole, watermark_blocks=watermark),
+                          KVCacheManager(24, block_size=4))
+        _drive(sched, reqs)
+        assert all(r.status.finished for r in reqs) and sched.kv.num_free_blocks == 24
+        return sched.num_preemptions
+    no_check, check, check_and_watermark = run(False, 0), run(True, 0), run(True, 4)
+    assert check_and_watermark < check < no_check / 2                   # 0 < 8 < 20 on this workload

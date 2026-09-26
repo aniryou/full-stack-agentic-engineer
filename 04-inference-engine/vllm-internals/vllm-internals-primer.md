@@ -1063,8 +1063,8 @@ is compute-bound and the gain shrinks or inverts, which `num_speculative_tokens_
 varying `k` with batch size (`dynamic_sd_lookup` in `Scheduler.__init__`). Measure it with
 `vllm:spec_decode_num_drafts`, `_num_draft_tokens`, `_num_accepted_tokens`, `_num_accepted_tokens_per_pos` and the
 "Mean acceptance length" log line (`vllm/v1/spec_decode/metrics.py`): mean acceptance length is the measured
-counterpart of the 2.53 (and per-position acceptance shows whether the independence assumption holds; it usually
-decays with position).
+counterpart of the 2.53, and the per-position counts test the independence assumption: under it, each position's
+accepted count is α times the previous position's (0.7, 0.49, 0.34 of the drafts here).
 
 ---
 
@@ -1092,20 +1092,56 @@ CUTLASS, torch `_scaled_mm` variants, then Marlin (`_POSSIBLE_FP8_KERNELS`); on 
 `Fp8LinearMethod` falls back to Marlin weight-only FP8 (`fp8.py`). The choice is logged once ("Using
 MarlinLinearKernel for AutoGPTQLinearMethod").
 
+**What the two kernel families do differently.** A weight-only (W4A16) kernel such as Marlin reads packed 4-bit
+weights and their per-group FP16 scales from HBM, dequantizes them to FP16/BF16 **in registers**, and feeds the
+ordinary 16-bit tensor-core MMA; activations stay 16-bit and accumulation is FP32. It moves a quarter of the weight
+bytes but does exactly the BF16 math. A W8A8 FP8 kernel quantizes the activations to FP8 as well (a per-tensor
+or per-token scale, static from the checkpoint or computed on the fly) and runs FP8 MMA at twice the BF16 rate,
+applying `scale_a × scale_w` to the FP32 accumulator in the epilogue. `process_weights_after_loading` is where each
+method prepares its layout: the Marlin path repacks the checkpoint's int32-packed weights into Marlin's tile order
+(`ops.gptq_marlin_repack`) and permutes the scales to match (`marlin_permute_scales`,
+`vllm/model_executor/kernels/linear/mixed_precision/marlin.py`); the FP8 path, when a fused layer such as
+`qkv_proj` arrives as three shards with three per-tensor scales, requantizes them as one weight with one scale
+("torch._scaled_mm needs per tensor", `process_fp8_weight_tensor_strategy` in `fp8.py`).
+
+Roofline time of one GEMM, Llama-3.1-8B's `down_proj` (K = 14,336, N = 4,096, 58.7 M weights), for M tokens in the
+step: FLOPs `2·M·K·N`, bytes `K·N·w + M·K·a + M·N·2` with `w`, `a` the weight and activation bytes (W4A16 counts
+group scales: 4.16 bits per weight). Peaks from `roofline.specs` in
+[`../../01-hardware-gpu-fabric/roofline-and-fabric/`](../../01-hardware-gpu-fabric/roofline-and-fabric/)
+(L4: 0.30 TB/s, 121 BF16 and 242.5 FP8 dense TFLOP/s `(verify)`); time is `max(FLOPs / peak, bytes / bandwidth)`:
+
+| M (tokens in the step) | BF16 | W4A16 (Marlin) | W8A8 FP8 | bound |
+|---|---|---|---|---|
+| 1 (one decode) | 392 µs | 102 µs | 196 µs | memory, all three |
+| 256 (a full decode batch) | 423 µs | 249 µs | 215 µs | BF16 and FP8 memory; W4A16 compute (BF16 math) |
+| 2,048 (a prefill chunk) | 1,988 µs | 1,988 µs | 992 µs | compute, all three |
+
+W4A16's advantage is the byte ratio (3.85× at M = 1) and disappears once the step carries more than about 120
+tokens on an L4 (85 on an H100), where the BF16 math becomes the ceiling; dequantization adds real cost on top,
+which is why weight-only INT4 can be *slower* than BF16 in large prefills. FP8 W8A8 halves both ceilings, so it
+helps at every M, and it needs FP8 tensor cores (Ada, Hopper, Blackwell). The notebook's last section recomputes
+this table.
+
 ### 8.2 What quantization buys, worked
 
-Decode re-reads every weight each step, so weight bytes set a floor on ITL:
+Decode re-reads every weight each step, except the input embedding, which is only gathered by row; so the bytes
+streamed per step set a floor on ITL. Typical FP8 and GPTQ/AWQ checkpoints quantize only the linear layers and
+keep `embed_tokens`, `lm_head` and the norms in BF16 (llm-compressor recipes list `lm_head` under `ignore`;
+embeddings are not linear layers; check your checkpoint's `quantization_config`). For Llama-3.1-8B that leaves
+1.05 B of the 8.03 B parameters in BF16. Byte counts come from `servelab.sizing.weight_bytes` (INT4 at 4.16 bits
+per weight with group-128 scales and zero points), freed blocks from `size(...).num_blocks` against the BF16 row of
+Section 4.7:
 
-| Llama-3.1-8B weights | Bytes | Floor per decode step, L4 (300 GB/s `(verify)`) | H100 SXM (3.35 TB/s `(verify)`) | KV blocks freed on L4 |
-|---|---|---|---|---|
-| BF16 | 16.06 GB | 53.5 ms | 4.8 ms | — |
-| FP8 (W8A8) | 8.03 GB | 26.8 ms | 2.4 ms | +3,829 (61,264 tokens) |
-| INT4 group-128 (≈ 4.25 bits/weight) | ≈ 4.27 GB | 14.2 ms | 1.3 ms | +5,624 (89,984 tokens) |
+| Llama-3.1-8B weights | Bytes | Streamed per decode step | Floor, L4 (300 GB/s `(verify)`) | H100 SXM (3.35 TB/s `(verify)`) | KV blocks freed on L4 |
+|---|---|---|---|---|---|
+| BF16 | 16.06 GB | 15.01 GB | 50.0 ms | 4.48 ms | — |
+| FP8 (W8A8) linear layers | 9.08 GB | 8.03 GB | 26.8 ms | 2.40 ms | +3,328 (53,248 tokens) |
+| INT4 group-128 linear layers | 5.73 GB | 4.68 GB | 15.6 ms | 1.40 ms | +4,927 (78,832 tokens) |
 
-Faster decode and a bigger KV pool compound; on a 24 GB card the pool is often the larger win. Prefill is
-compute-bound: W8A8 FP8 speeds it up on Ada/Hopper/Blackwell tensor cores, while weight-only INT4 does not cut
-FLOPs and can slow large-batch prefill through dequantization. `--kv-cache-dtype fp8` is independent and halves
-KV bytes (Section 4.7). Accuracy must be measured per model and task (serving-engine primer).
+Faster decode and a bigger KV pool compound; on a 24 GB card the pool is often the larger win (FP8 weights more
+than double the L4's 2,363 blocks). Prefill is compute-bound: W8A8 FP8 speeds it up on Ada/Hopper/Blackwell tensor
+cores, while weight-only INT4 does not cut FLOPs (the table above). `--kv-cache-dtype fp8` is independent and
+halves KV bytes (Section 4.7). Accuracy must be measured per model and task (serving-engine primer).
 
 ### 8.3 The loading path
 
