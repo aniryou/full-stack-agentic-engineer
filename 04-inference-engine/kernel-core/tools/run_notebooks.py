@@ -35,7 +35,9 @@ def run(path: Path, write: bool = False):
     try:
         NotebookClient(nb, timeout=300, kernel_name="python3",
                        resources={"metadata": {"path": str(path.parent)}}).execute()
-        if write:                          # commit the executed outputs (worked notebooks only)
+        if write:                          # commit the executed outputs (worked notebooks only),
+            for cell in nb.cells:          # without nbclient's per-cell timestamps
+                cell.metadata.pop("execution", None)
             nbformat.write(nb, path)
         return True, False, False, "ok"
     except CellExecutionError as e:
