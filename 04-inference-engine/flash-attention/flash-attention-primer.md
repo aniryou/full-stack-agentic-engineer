@@ -172,13 +172,13 @@ That last point deserves emphasis. Around 2020–2021 there was a wave of "effic
 
 **FlashAttention-1** (Dao et al., 2022) — tiling, online softmax, backward recomputation. Established the approach.
 
-**FlashAttention-2** (2023) — mostly a work-partitioning rewrite. Three changes mattered: swapping the loop order so the outer loop runs over `Q` blocks (each output block is then owned by one thread block, no cross-block accumulation); parallelizing over the sequence dimension, not just batch × heads, which matters when batch is small and `N` is large; and minimizing non-matmul FLOPs. That last one is subtler than it sounds — on an A100, tensor-core matmul runs at 312 TFLOP/s while general FP32 arithmetic runs at 19.5, so a non-matmul FLOP costs ~16× a matmul FLOP. Deferring the rescaling division to the end of the loop instead of doing it per block is worth real percentage points. Result: ~2× over FA1, ~70% of A100 peak.
+**FlashAttention-2** (2023) — mostly a work-partitioning rewrite. Three changes mattered: swapping the loop order so the outer loop runs over `Q` blocks (each output block is then owned by one thread block, no cross-block accumulation); parallelizing over the sequence dimension, not just batch × heads, which matters when batch is small and `N` is large; and minimizing non-matmul FLOPs. That last one is subtler than it sounds — on an A100, tensor-core matmul runs at 312 TFLOP/s while general FP32 arithmetic runs at 19.5, so a non-matmul FLOP costs ~16× a matmul FLOP. Deferring the rescaling division to the end of the loop instead of doing it per block is worth real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
 
-**FlashAttention-3** (2024) — Hopper-specific. Exploits asynchrony: TMA for background global↔shared copies, warp specialization into producer (loading) and consumer (computing) roles, and a ping-pong schedule that overlaps the softmax of one block with the matmul of another so the slow exponential units hide behind the tensor cores. Adds FP8 with incoherent processing (a Hadamard rotation to spread outliers before quantization). Reached roughly 740 TFLOP/s at 75% utilization on H100.
+**FlashAttention-3** (2024) — Hopper-specific. Exploits asynchrony: TMA for background global↔shared copies, warp specialization into producer (loading) and consumer (computing) roles, and a ping-pong schedule that overlaps the softmax of one block with the matmul of another so the slow exponential units hide behind the tensor cores. Adds FP8 with incoherent processing (a Hadamard rotation to spread outliers before quantization). Reached roughly 740 TFLOP/s at 75% utilization on H100 (paper figure, verify).
 
-**FlashAttention-4** (paper published March 2026) — Blackwell. The framing is what the authors call **asymmetric hardware scaling**: tensor core throughput doubles while other functional units — shared memory bandwidth, exponential units — scale more slowly or not at all. Dense BF16 tensor core throughput went from roughly 1 PFLOPS to 2.25 PFLOPS, and the hardware added new tensor core instructions (TCGEN05), a new memory space called Tensor Memory for tensor core intermediates, and a fully asynchronous MMA execution model. So the bottleneck moved, and the kernel had to move with it. The responses are worth knowing because they're so specific: a software emulation of the exponential via polynomial approximation on the FMA units, to relieve pressure on the dedicated exponential hardware, plus conditional online softmax rescaling; and on the backward pass, storing intermediates in tensor memory to relieve shared-memory traffic combined with Blackwell's 2-CTA MMA mode. Two query tiles of 128 tokens each are computed per CTA and alternated in a ping-pong schedule. It's also written entirely in CuTe-DSL embedded in Python, achieving 20–30× faster compile times than C++ template-based approaches — anyone who has waited on a `flash-attn` build will appreciate that. Performance: up to 1605 TFLOP/s on B200 with BF16, 71% utilization, 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
+**FlashAttention-4** (paper published March 2026) — Blackwell. The framing is what the authors call **asymmetric hardware scaling**: tensor core throughput doubles while other functional units — shared memory bandwidth, exponential units — scale more slowly or not at all. Dense BF16 tensor core throughput went from roughly 1 PFLOPS to 2.25 PFLOPS (datasheet, verify), and the hardware added new tensor core instructions (TCGEN05), a new memory space called Tensor Memory for tensor core intermediates, and a fully asynchronous MMA execution model. So the bottleneck moved, and the kernel had to move with it. The responses are worth knowing because they're so specific: a software emulation of the exponential via polynomial approximation on the FMA units, to relieve pressure on the dedicated exponential hardware, plus conditional online softmax rescaling; and on the backward pass, storing intermediates in tensor memory to relieve shared-memory traffic combined with Blackwell's 2-CTA MMA mode. Two query tiles of 128 tokens each are computed per CTA and alternated in a ping-pong schedule. It's also written entirely in CuTe-DSL embedded in Python, with 20–30× faster compile times than C++ template-based approaches (paper figure, verify) — anyone who has waited on a `flash-attn` build will appreciate that. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, 71% utilization, 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
 
-One instructive footnote from the FA4 rollout: for *inference decode*, FlashAttention-4 was initially slower than FlashAttention-2 on B200s until split-KV was ported over. Generating one token at a time is a different regime — a single query row against a long KV cache leaves most SMs idle unless you split along the key dimension and reduce afterwards. Worth remembering that "the fastest attention kernel" is always shape-dependent.
+One instructive footnote from the FA4 rollout (verify): for *inference decode*, FlashAttention-4 was initially slower than FlashAttention-2 on B200s until split-KV was ported over. Generating one token at a time is a different regime — a single query row against a long KV cache leaves most SMs idle unless you split along the key dimension and reduce afterwards. Worth remembering that "the fastest attention kernel" is always shape-dependent.
 
 ---
 
@@ -189,7 +189,7 @@ The online-softmax accumulator turned out to be a reusable primitive. Once you k
 - **Flash-Decoding / split-KV** — split the KV cache across SMs during autoregressive decode, merge with the same correction. Essential for long-context inference.
 - **Ring Attention** — run the same accumulation across *devices*, passing KV blocks around a ring while overlapping communication with compute. Extends context length beyond a single GPU's memory.
 - **PagedAttention** (vLLM) — orthogonal, but complementary: virtual-memory-style paging of the KV cache to eliminate fragmentation.
-- **FlexAttention** (PyTorch) — write a custom `score_mod` or `mask_mod` in a few lines of Python and get a compiled flash-style kernel, so you don't need bespoke CUDA for every masking variant. Now backed by FA4 on Blackwell.
+- **FlexAttention** (PyTorch) — write a custom `score_mod` or `mask_mod` in a few lines of Python and get a compiled flash-style kernel, so you don't need bespoke CUDA for every masking variant. Now backed by FA4 on Blackwell (verify).
 
 ---
 
@@ -223,4 +223,24 @@ If you take one transferable thing from this: **on modern accelerators, look at 
 - Williams et al., *Roofline* (2009) — the performance model underneath all of this.
 - The `Dao-AILab/flash-attention` repo — the CuTeDSL rewrite is far more approachable than the old C++ templates.
 
-Given the home cluster: the online-softmax accumulator is genuinely worth implementing yourself in ~50 lines of PyTorch and checking against `F.softmax`. It takes an afternoon and the idea stops being abstract.
+Worth doing on any machine, no GPU needed: implement the online-softmax accumulator yourself in ~50 lines of numpy (or PyTorch) and check it against a reference softmax. It takes an afternoon and the idea stops being abstract; [`flash_attention_minimal.py`](flash_attention_minimal.py) is one answer to compare with.
+
+---
+
+## Verify list (dated 2026-09-26)
+
+Product and paper facts this primer states; every other number on the page is derived from them. The
+[deep dive](flash-attention-deep-dive.md) re-derives most of them and keeps its own verify list.
+
+| Item | Value used | Why it needs checking |
+|---|---|---|
+| H100 memory hierarchy (§2) | ~256 KB registers and ~256 KB shared memory/L1 per SM, ~33 MB SRAM total, 80 GB HBM at ~3.3 TB/s | rounded datasheet figures; the SXM part is 3.35 TB/s and 228 KB of it is usable shared memory |
+| Peak bf16 matmul (§2) | H100 ~990 TFLOP/s; ridge ~300 FLOP/B; A100 ~200 FLOP/B (the 40 GB part) | dense datasheet peaks; the A100 80 GB (2.0 TB/s) gives ~153 |
+| A100 matmul vs FP32 (§8) | 312 vs 19.5 TFLOP/s | datasheet |
+| FA1 traffic saving (§7) | up to 9× fewer HBM accesses on GPT-2 shapes | FA1 paper |
+| FA2 (§8) | ~2× over FA1, ~70% of A100 peak | FA2 paper; the deep dive gives the 50–73% range |
+| FA3 (§8) | ~740 TFLOP/s bf16, 75% of H100 | FA3 paper |
+| B200 tensor throughput (§8) | dense bf16 ~2.25 PFLOP/s, up from ~1 | datasheet |
+| FA4 (§8) | paper March 2026; up to 1605 TFLOP/s bf16 on B200 (71%), 1.3× cuDNN 9.13, 2.7× Triton; 20–30× faster compiles with CuTe-DSL | FA4 paper; not fetched on this date |
+| FA4 decode (§8) | initially slower than FA2 on B200 until split-KV was ported | project history; check the current release notes |
+| FlexAttention (§9) | backed by FA4 on Blackwell | PyTorch release in use |

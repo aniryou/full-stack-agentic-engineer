@@ -1,14 +1,14 @@
 # Scaling Agentic Solutions on Google Cloud
 
-**A primer for architects and engineering leads.** An agent system is scaled by bounding tokens, not by adding servers. This document works that idea end to end — the arithmetic, the reference architecture, the mechanisms and the failure modes — on a customer-service agent running on Cloud Run and Gemini.
+**The long-form companion to [the primer](01-scaling-primer.md), for an engineer walking the design through a review.** An agent system is scaled by bounding tokens, not by adding servers. This document works that idea end to end — the arithmetic, the reference architecture, the mechanisms and the failure modes — on a customer-service agent running on Cloud Run and Gemini.
 
-*Platform facts verified September 2026. Every figure in Part 3 comes from a single capacity model, so the arithmetic is internally consistent; the behavioural findings come from load tests against a simulated model pool. Sections are numbered so they can be referenced individually in design reviews.*
+*Platform facts and prices as of September 2026 (verify). The rates, tokens, concurrency, cost, Provisioned Throughput and what-breaks-first figures in Part 3 are computed by this lab's capacity model, `scalelab.capacity` (`python -m scalelab.capacity`, output in [03-capacity-plan.md](03-capacity-plan.md)); the tool-call, gateway-instance, Firestore, Redis and Pub/Sub rows are the same arithmetic done by hand (§3 says which is which); the behavioural findings are simulated, from `scalelab.sim` load tests against a simulated model pool. Sections are numbered so they can be referenced individually in design reviews.*
 
-Four kinds of callout appear throughout:
+Five kinds of callout appear throughout:
 
-- **In practice** — how a principle shows up in a real build, and how to explain it to a stakeholder.
+- **In practice** — how a principle shows up in a real build, and how to say it in a design review.
 - **Scenario** — a concrete situation that makes the mechanism tangible.
-- **Key figures** — numbers worth keeping at hand during a capacity conversation.
+- **Key figures** — numbers worth keeping at hand during a capacity review.
 - **Confirm before committing** — facts that move: prices, model identifiers, platform limits.
 - **Common misstep** — the mistake that shows up most often in real designs.
 
@@ -24,9 +24,9 @@ The design work therefore has three parts:
 - **Make the system degrade rather than collapse** when demand exceeds supply — degradation levels, load shedding, model fallbacks.
 - **Make every turn survive failure**, because a long, multi-step unit of work that writes to systems of record invites failure — checkpoints, idempotency keys, at-least-once delivery.
 
-> **In practice** — Open any capacity conversation with the unit of work and the binding constraint. "The unit of work is a *turn*. Each turn is two to three model calls of roughly five thousand tokens. So 100,000 conversations a day is about fourteen million input tokens a minute at peak, which is above our tier baseline — that is the constraint the design has to respect. Cloud Run is not going to be the problem." Saying this first reframes the whole discussion away from server counts.
+> **In practice** — Open any capacity review with the unit of work and the binding constraint. "The unit of work is a *turn*. Each turn is two to three model calls of roughly five thousand tokens. So 100,000 conversations a day is about fourteen million input tokens a minute at peak, which is above our tier baseline — that is the constraint the design has to respect. Cloud Run is not going to be the problem." Saying this first reframes the whole discussion away from server counts.
 
-How to read this document. Part 1 explains why agent workloads scale differently from web or classic ML workloads. Part 2 is the discovery checklist that shapes the design. Part 3 is the arithmetic, worked on a concrete example. Part 4 is the reference architecture. Part 5 walks through each scaling mechanism with the numbers that justify it. Parts 6 and 7 cover failure modes and the staged growth path. Part 8 describes how to run a capacity review. The appendices hold the configuration detail, the Google Cloud service mapping and the reference figures.
+How to read this document. Part 1 explains why agent workloads scale differently from web or classic ML workloads. Part 2 is the discovery checklist that shapes the design. Part 3 is the arithmetic, worked on a concrete example. Part 4 is the reference architecture. Part 5 walks through each scaling mechanism with the numbers that justify it. Parts 6 and 7 cover failure modes and the staged growth path. Part 8 walks through a capacity review. The appendices hold the configuration detail, the Google Cloud service mapping and the reference figures.
 
 ---
 
@@ -92,7 +92,7 @@ More load → more `429`s from the shared pool → retries and longer model call
 
 Without a circuit breaker on that loop, an agent system under overload does not fail fast. It slows down for everyone until turn deadlines fire and users give up — having consumed the tokens anyway. This is the most expensive failure mode there is, because you pay for all of it and satisfy nobody.
 
-Load testing reproduces it in seconds. With 120 virtual users against a simulated 3 M TPM pool, retries alone take p95 turn latency from 5.8 s to roughly 40 s, with hundreds of rate-limited calls and a few dozen hard failures. Adding degradation levels and a circuit breaker, but no concurrency cap, converts that into 120 fast failures. Adding an in-flight cap of 30 — derived from the pool's token budget — produces a different outcome entirely: no turn fails, no call is rate-limited, admitted turns finish at a p95 of 3.6 s, and 17 % of attempts are shed immediately with a `Retry-After` header.
+A simulated load test reproduces it in seconds (`scalelab.sim`, the lab's notebook 04; simulated numbers). With 120 virtual users against a simulated 3 M TPM pool, retries alone take p95 turn latency from 5.8 s to roughly 40 s, with hundreds of rate-limited calls and a few dozen hard failures. Adding degradation levels and a circuit breaker, but no concurrency cap, converts that into 120 fast failures. Adding an in-flight cap of 30 — derived from the pool's token budget — produces a different outcome entirely: no turn fails, no call is rate-limited, admitted turns finish at a p95 of 3.6 s, and 17 % of attempts are shed immediately with a `Retry-After` header.
 
 **Shedding quickly is kinder than queueing slowly**, and it is the only way to keep the turns you do admit inside their latency budget.
 
@@ -133,7 +133,7 @@ Work down this list early. For each dimension: the question that changes the des
 
 The worked example is a fictional mid-size insurer, Meridian Assurance, with a policyholder service agent in its mobile app and web portal. The agent answers coverage and billing questions, retrieves policy documents, quotes renewals and registers notifications of loss. The assumptions below are deliberately ordinary; the method is the point.
 
-Every figure in this part is reproduced as a live model in the accompanying workbook, `agent-cost-capacity-calculator.xlsx`. All the assumptions sit on a single highlighted Inputs sheet, so the baseline, peak and incident scenarios recalculate against a client's own volumes, turn shape, prices and tier baseline.
+The rates, tokens, concurrency, cost, Provisioned Throughput and what-breaks-first figures in this part are the output of `scalelab.capacity.plan()` with its default `Scenario` — the same model as [03-capacity-plan.md](03-capacity-plan.md), whose customer profile service and policy administration system appear there as the CRM and the billing system (same 200 and 40 QPS ceilings) — and `tests/test_scalelab.py` pins them. To rework the example for other volumes, turn shapes or prices, change the `Scenario` and re-run it. The rows for tool calls, gateway instances, Firestore, Redis and Pub/Sub are the same arithmetic done by hand.
 
 ### 3.1 Assumptions
 
@@ -189,7 +189,7 @@ The token budget also caps concurrency, and this is the number that matters most
 | All 3.5 Flash, prefix cached | $0.0070 | $0.092 | $281 k |
 | 35 % of calls on 3.5 Flash-Lite, prefix cached | — | **$0.068** | **$206 k** |
 
-The working: a 3.5 Flash call with 2,000 uncached input tokens at $1.50/M, 3,000 cached at $0.15/M and 350 output at $9/M costs $0.0030 + $0.00045 + $0.00315 ≈ $0.0070. Thirteen calls per conversation ≈ $0.092. Routing a third of them to Flash-Lite brings it to $0.068.
+The working: a 3.5 Flash call with 2,300 uncached input tokens at $1.50/M, 2,700 cached (the 3,000-token prefix at a 90 % hit rate) at $0.15/M and 350 output at $9/M costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070. Thirteen calls per conversation ≈ $0.092. Routing a third of them to Flash-Lite brings it to $0.068.
 
 Against a human-handled contact at several dollars, all three rows are cheap. Against each other they differ by 2×, which at this volume is $220,000 a month — a number worth an afternoon of engineering.
 
@@ -212,7 +212,7 @@ So Provisioned Throughput is not a discount unless you commit for a year *and* k
 
 What Provisioned Throughput really buys is an SLA and immunity from contention on the shared pool for the traffic that matters most. That is why the request headers let you specify, per call, "dedicated only", "spill over to Priority" or "bypass PT entirely".
 
-> **In practice** — "Provisioned Throughput for the base load on a long term, spill-over for the peak, and traffic *shaping* for the major event. We would want to walk through the break-even utilisation before signing anything, because a one-month term is never cheaper than pay-as-you-go."
+> **In practice** — "Provisioned Throughput for the base load on a long term, spill-over for the peak, and traffic *shaping* for the major event. Check the break-even utilisation before committing to a term, because a one-month term is never cheaper than pay-as-you-go."
 
 ### 3.6 The rest of the estate
 
@@ -334,7 +334,7 @@ Two details separate a working implementation from a diagram. The level needs **
 
 The loop checkpoints every step in Firestore *before* acting on its result: the model's response after a model call — including the parts the next call must echo back, such as Gemini 3's thought signatures — and the tool results, compacted, after a tool step.
 
-On redelivery, the orchestrator replays the turn from its checkpoint, skipping completed steps. The tool executor keys every write by turn, step, call index and a hash of the arguments, and stores the result under that key for a day. So a redelivered turn that has already registered a notification of loss gets the same claim reference back rather than creating a second one. A crash test that kills the process immediately after the claim is checkpointed shows one claim after redelivery, with four of five steps resumed from the checkpoint.
+On redelivery, the orchestrator replays the turn from its checkpoint, skipping completed steps. The tool executor keys every write by turn, step, call index and a hash of the arguments, and stores the result under that key for a day. So a redelivered turn that has already registered a notification of loss gets the same claim reference back rather than creating a second one. A simulated crash test (the lab's notebook 02) that kills the process immediately after the claim is checkpointed shows one claim after redelivery, with four of five steps resumed from the checkpoint.
 
 The queue contract is the other half. Pub/Sub push acknowledges on any `2xx` and redelivers on anything else, with a push backoff growing from 100 ms to 60 s; the subscription's own retry policy adds a 10–600 s exponential backoff; after five attempts the message goes to a dead-letter topic with its own alert.
 
@@ -368,7 +368,7 @@ Tool services run as their own Cloud Run services with their own service account
 
 Server-sent events over HTTP/1.1 chunked transfer is the right transport for a chat agent on Cloud Run: it passes every proxy, supports resume natively through `Last-Event-ID`, and is a plain request — which means it counts against instance concurrency and is subject to the request timeout (default 5 minutes, maximum 60). Clients must therefore reconnect with the last sequence number, and the relay must serve from the stream rather than from memory. Responses without chunked encoding are capped at 32 MiB; streams are not. WebSockets work too, but need session affinity, which is best-effort, and cross-instance fan-out through Redis either way.
 
-Time-to-first-token as the user experiences it arrives only after plan → tools → answer — about four seconds in load tests. A two-second TTFT target is attainable only by streaming *progress* events ("checking your policy documents…") from the tool steps, which the event stream already carries. This is worth designing deliberately: the perceived responsiveness of the agent is set by the first progress event, not the first token of the answer.
+Time-to-first-token as the user experiences it arrives only after plan → tools → answer — about four seconds in the simulated load tests. A two-second TTFT target is attainable only by streaming *progress* events ("checking your policy documents…") from the tool steps, which the event stream already carries. This is worth designing deliberately: the perceived responsiveness of the agent is set by the first progress event, not the first token of the answer.
 
 ### 5.8 Budgets, multi-agent topologies and tenancy
 
@@ -425,7 +425,7 @@ Each step should be triggered by a measurement, and the design should name it in
 | Phase | What happens |
 |---|---|
 | Frame | Restate the goal; name the unit of work (the turn) and the binding constraint (tokens per minute). Agree what "working" means. |
-| Discover | Walk the dimension checklist in Part 2, offering defaults so the conversation can move: volume, peak ratio, event behaviour, turn shape, latency budget, residency, tenancy. |
+| Discover | Walk the dimension checklist in Part 2, stating a default for each unknown so the review can move: volume, peak ratio, event behaviour, turn shape, latency budget, residency, tenancy. |
 | Calculate | Do the arithmetic from Part 3 in the open: rates → tokens → Little's law → TPM versus tier → cost per conversation → what breaks first. |
 | Design | Walk the architecture with the specifics in each box, and say plainly which parts are routine and which are hard. |
 | Deep-dive | Pick two areas by risk. Usually admission control and durable execution; sometimes quota strategy or context and cost. |
@@ -443,17 +443,17 @@ Seven questions do most of the work:
 - **How many brands or tenants share this?** → fairness and per-tenant quotas.
 - **What must never happen twice?** → the scope of idempotency.
 
-### 8.3 Two worked situations
+### 8.3 Two worked design changes
 
-**"Take the service agent from 5,000 to 500,000 conversations a day."**
+**Growing the service agent from 5,000 to 500,000 conversations a day.**
 
-Do the arithmetic first. 500,000 a day is five times the worked example, so roughly 70 M input TPM at peak — seven times the tier-3 baseline. No tier fits, so the design is Provisioned Throughput for the base on a one-year term (around 350 GSUs of Flash — quote the monthly figure), a custom tier negotiated for spill-over, and a serious programme to cut tokens per call (explicit caches, compaction, Lite routing above 50 %).
+Do the arithmetic first. 500,000 a day is five times the worked example, so roughly 70 M input TPM at peak — seven times the tier-3 baseline. No tier fits, so the design is Provisioned Throughput for the base on a one-year term (around 350 GSUs of Flash — state the monthly figure), a custom tier negotiated for spill-over, and a serious programme to cut tokens per call (explicit caches, compaction, Lite routing above 50 %).
 
 Then concurrency: 625 in-flight turns at peak and about 2,000 during an event, which means 12–40 orchestrator instances — still small. Redis and Firestore are fine. But the policy administration system at 87 QPS during an event is *over* its 40 QPS ceiling, so a document cache and level-2 degradation become mandatory rather than optional.
 
 Then the operational layer: per-tenant quotas if brands are involved, multi-region if residency or availability demands it, cost allocation per brand. Close with what you would validate first — a load test that reproduces the event intent mix, not just the event volume.
 
-**"The agent costs $0.30 per turn and p95 is 20 seconds in the morning peak. Fix it."**
+**An agent that costs $0.30 per turn with a 20-second p95 in the morning peak.**
 
 Look at the traces first and establish where tokens and seconds actually go, step by step. The usual findings, and their fixes, in the order worth applying them:
 
@@ -482,7 +482,7 @@ Expected effect: cost down four to five times, p95 down to six to eight seconds,
 
 **When would we move to Agent Runtime?** When the agent is Python-first on ADK and the team wants managed sessions, memory and identity rather than running the queue and stores — after raising the default quotas.
 
-> **Common misstep** — Quoting a p95 without a per-step breakdown, a cost without the token shape behind it, or "we will shed load" without saying what the user sees and when they can retry.
+> **Common misstep** — Stating a p95 without a per-step breakdown, a cost without the token shape behind it, or "we will shed load" without saying what the user sees and when they can retry.
 
 ---
 

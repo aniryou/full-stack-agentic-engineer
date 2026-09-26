@@ -25,8 +25,14 @@ One platform subtlety worth knowing: an *unexpected* exception in workflow code 
 
 ## Run it
 
+**Python:** the stdlib core (`durable.py`), the adapter (`mistral_model.py`) and their 15 tests run on Python 3.11+.
+The Workflows edition needs **Python 3.12–3.14**: `mistralai-workflows` 3.15 declares `Requires-Python >=3.12,<3.15`
+(checked 2026-09-26, verify). On 3.11, `pip install -r requirements.txt` skips it, `tests/test_workflow.py` skips with
+that reason, and `python demo.py workflow` exits with the same message. The workflow tests and demo also download a
+Temporal dev server on first use, so they need network access to `temporal.download`.
+
 ```bash
-pip install -r requirements.txt       # mistralai, mistralai-workflows[mistralai], pytest (the core needs nothing)
+pip install -r requirements.txt       # mistralai, pytest, and on Python 3.12+ mistralai-workflows[mistralai] (the core needs nothing)
 
 python demo.py            # stdlib core: happy path · crash after the charge + retry · human gate · slow tool
 python demo.py kill       # charges the card, then dies (exit 137) before the checkpoint
@@ -34,11 +40,13 @@ python demo.py resume     # a *different process* finds the run in runs.json and
 python demo.py workflow   # the same agent on Mistral Workflows, on a local Temporal dev server (auto-downloaded)
 python demo.py live       # durable.py with a real Mistral model deciding — export MISTRAL_API_KEY first
 
-python -m pytest tests -q # 19 tests: 10 core · 5 adapter (offline, fake client) · 4 workflow (local dev server, ~10 s each)
-jupyter lab notebooks/    # 01_worked.ipynb (executed) · 02_practice.ipynb (6 graded exercises)
+python -m pytest tests -q # 19 tests: 10 core · 5 adapter (offline, fake client) · 4 workflow (Python 3.12+, local dev server, ~10 s each)
+jupyter lab notebooks/    # 01_worked.ipynb (executed) · 02_practice.ipynb (6 graded exercises); their workflow sections need Python 3.12+
 ```
 
 ## The Mistral setup, piece by piece
+
+Product facts in this table (APIs, SDK names, preview status, limits) are as of 2026-09-26 (verify).
 
 | Need | Mistral piece | In this repo |
 |---|---|---|

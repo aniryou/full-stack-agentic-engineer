@@ -1,4 +1,4 @@
-"""Prompt-injection defences (Primer §4.5).
+"""Prompt-injection defences (notebook 11).
 
 **The prompt is not a security boundary.** A model can be talked into anything by text it
 reads, and *indirect* injection puts that text where the developer never looks: inside a

@@ -6,7 +6,7 @@ from agentlab.estimation import (PRICES, Scenario, Segment, ci_half_width, compo
 
 
 def support(**overrides) -> Scenario:
-    """Primer §5.3: 50k conversations/day × 8 calls × (6k in, 400 out)."""
+    """Notebook 12's support scenario: 50k conversations/day × 8 calls × (6k in, 400 out)."""
     base = dict(name="support", units_per_day=50_000, calls_per_unit=8, in_tokens=6_000, out_tokens=400)
     base.update(overrides)
     return Scenario(**base)
@@ -24,23 +24,23 @@ def test_token_cost_components_cache_batch_and_long_context_tier():
         token_cost(1, 1, pro, cached_share=1.5)
 
 
-def test_primer_scenario_a_all_pro():
+def test_worked_scenario_a_all_pro():
     a = support()
     assert round(a.daily_cost(), 2) == 6_720.00
     assert round(a.cost_per_unit(), 4) == 0.1344
     assert round(a.annual_cost(), 2) == 2_452_800.00
 
 
-def test_primer_scenario_b_all_flash_and_c_mix():
+def test_worked_scenario_b_all_flash_and_c_mix():
     assert round(support(model_mix={"gemini-3-flash": 1.0}).daily_cost(), 2) == 1_680.00
     assert round(support(model_mix={"gemini-3-flash": 0.7, "gemini-3.1-pro": 0.3}).daily_cost(), 2) == 3_192.00
 
 
-def test_primer_scenario_d_context_caching():
+def test_worked_scenario_d_context_caching():
     assert round(support(cached_share=4_000 / 6_000).daily_cost(), 2) == 3_840.00
 
 
-def test_primer_peak_rates_and_concurrency():
+def test_worked_peak_rates_and_concurrency():
     a = support()
     assert a.calls_per_day == 400_000
     assert round(a.avg_calls_per_sec(), 2) == 4.63
@@ -50,7 +50,7 @@ def test_primer_peak_rates_and_concurrency():
     assert round(a.concurrency()) == 56 and littles_law(a.peak_calls_per_sec(), 4.0) == pytest.approx(55.56, abs=0.01)
 
 
-def test_primer_document_backlog_online_batch_and_throughput():
+def test_worked_document_backlog_online_batch_and_throughput():
     # 20M documents × 3 calls × 1,000 input tokens, 300 output tokens per document (100 per call)
     backlog = Scenario("backlog", 20_000_000, 3, 1_000, 100, model_mix={"gemini-3.5-flash-lite": 1.0})
     assert round(backlog.daily_cost(), 2) == 33_000.00
@@ -73,7 +73,7 @@ SEQUENTIAL = [Segment("plan", 1.1), Segment("lookup_a", 0.4), Segment("lookup_b"
 PARALLEL = [Segment("plan", 1.1), Segment("lookup_a", 0.4, "tools"), Segment("lookup_b", 0.5, "tools"), Segment("answer", 2.7)]
 
 
-def test_primer_latency_sequential_vs_parallel_tools():
+def test_worked_latency_sequential_vs_parallel_tools():
     seq = latency_budget(SEQUENTIAL, first_token_segment="answer", first_token_offset_s=0.7)
     par = latency_budget(PARALLEL, first_token_segment="answer", first_token_offset_s=0.7)
     assert (round(seq.total_s, 2), round(seq.first_token_s, 2)) == (4.7, 2.7)

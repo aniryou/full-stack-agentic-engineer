@@ -1,4 +1,4 @@
-"""Workflow agents: deterministic control flow around agents (Primer §2.2).
+"""Workflow agents: deterministic control flow around agents (notebook 02).
 
 Use code where the logic is known; use the model where judgement is needed.
 """

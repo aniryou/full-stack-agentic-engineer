@@ -1,0 +1,5 @@
+# minifaiss/ and minigraphrag/ are standard library + numpy only.
+numpy>=1.24
+pytest>=8
+# Only for demo_gutenberg.py (fetches the public-domain Gutenberg corpus): python gutenberg_corpus.py
+nltk>=3.9

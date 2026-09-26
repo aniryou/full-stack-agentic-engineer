@@ -1,4 +1,7 @@
-"""A toy OAuth 2.1 authorization server and the client-side discovery chain (Primer §3.3).
+"""A toy OAuth 2.1 authorization server and the client-side discovery chain (notebook 06).
+
+The identity-and-security primer covers the same standards in its §3.5 and §7.1
+(06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md).
 
 Everything is in-process and uses only stdlib crypto so the *shapes* stay in
 focus:

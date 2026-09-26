@@ -6,8 +6,9 @@ import pytest
 
 from agentlab.agents import Budget, LlmAgent, Runner, tool
 from agentlab.llm import FakeLLM, KeywordPlanner, Rule, StreamChunk, Usage, call, calls, text
-from agentlab.observability import (DEFAULT_PRICES, GEN_AI_INPUT_TOKENS, GEN_AI_OPERATION_NAME, GEN_AI_OUTPUT_TOKENS,
-                                  GEN_AI_REQUEST_MODEL, TOOL_NAME, AlertRule, Price, PriceTable, RedactingExporter,
+from agentlab.observability import (DEFAULT_PRICES, GEN_AI_CACHED_TOKENS, GEN_AI_FINISH_REASONS, GEN_AI_INPUT_MESSAGES,
+                                  GEN_AI_INPUT_TOKENS, GEN_AI_OPERATION_NAME, GEN_AI_OUTPUT_TOKENS,
+                                  GEN_AI_REQUEST_MODEL, TOOL_CALL_ID, TOOL_NAME, AlertRule, Price, PriceTable, RedactingExporter,
                                   Tracer, TraceSummary, agent_metrics, cost_per_resolved, evaluate_alerts, now_ms,
                                   percentile, redact, reported_latency_ms, rule, summarize_latencies, tokens_per_task,
                                   ttft_and_tps, wrong_tool_rate)
@@ -41,7 +42,7 @@ def bank_agent(llm=None):
 def model_span(tracer, clock, model="fake-flash", inp=1000, out=200, cached=0, seconds=0.5):
     with tracer.span("model.generate", kind="model", **{GEN_AI_REQUEST_MODEL: model}) as s:
         clock.tick(seconds)
-        s.set(**{GEN_AI_INPUT_TOKENS: inp, GEN_AI_OUTPUT_TOKENS: out, "gen_ai.usage.cached_tokens": cached})
+        s.set(**{GEN_AI_INPUT_TOKENS: inp, GEN_AI_OUTPUT_TOKENS: out, GEN_AI_CACHED_TOKENS: cached})
     return s
 
 
@@ -124,11 +125,41 @@ async def test_tracer_attached_to_runner_sees_model_and_tool_spans():
     kinds = [s.kind for s in trace.spans]
     assert kinds == ["agent", "model", "tool", "model"]
     model_spans = trace.by_kind("model")
-    assert model_spans[0].attrs["gen_ai.response.finish_reason"] == "tool_calls"
+    assert model_spans[0].attrs["gen_ai.response.finish_reasons"] == ["tool_calls"]
     assert model_spans[1].attrs[GEN_AI_INPUT_TOKENS] > model_spans[0].attrs[GEN_AI_INPUT_TOKENS]
     assert trace.by_kind("tool")[0].attrs["tool.ok"] is True
     tree = tracer.render_tree()
     assert "tool get_balance [tool]" in tree and "model.generate [model]" in tree and "$" in tree
+
+
+def test_attribute_names_follow_the_otel_genai_conventions():
+    # Names as registered in open-telemetry/semantic-conventions-genai, September 2026 (verify).
+    assert GEN_AI_CACHED_TOKENS == "gen_ai.usage.cache_read.input_tokens"
+    assert GEN_AI_FINISH_REASONS == "gen_ai.response.finish_reasons"
+    assert GEN_AI_INPUT_MESSAGES == "gen_ai.input.messages"
+    assert (TOOL_NAME, TOOL_CALL_ID) == ("gen_ai.tool.name", "gen_ai.tool.call.id")
+
+
+async def test_loop_writes_convention_attributes_on_model_and_tool_spans():
+    tracer = Tracer()
+    await Runner(bank_agent(), tracer=tracer).run("s1", "what is my balance?")
+    (trace,) = tracer.traces()
+    m = trace.by_kind("model")[0].attrs
+    assert isinstance(m[GEN_AI_FINISH_REASONS], list), "finish_reasons is a string array"
+    assert GEN_AI_CACHED_TOKENS in m and "gen_ai.usage.cached_tokens" not in m
+    assert "gen_ai.response.finish_reason" not in m
+    t = trace.by_kind("tool")[0].attrs
+    assert t[TOOL_NAME] == "get_balance" and t[TOOL_CALL_ID] and "tool.name" not in t
+
+
+def test_spans_written_with_the_old_names_still_price_and_render():
+    tracer = Tracer(clock=FakeClock())
+    with tracer.span("model.generate", kind="model", **{GEN_AI_REQUEST_MODEL: "fake-flash"}) as s:
+        s.set(**{GEN_AI_INPUT_TOKENS: 1000, GEN_AI_OUTPUT_TOKENS: 10, "gen_ai.usage.cached_tokens": 400,
+                 "gen_ai.response.finish_reason": "stop"})
+    from agentlab.observability import span_usage
+    assert span_usage(s).cached_tokens == 400
+    assert "(cached 400)" in tracer.render_tree() and "stop" in tracer.render_tree()
 
 
 def test_render_tree_and_json_export_with_exact_durations():
@@ -163,12 +194,12 @@ def test_redact_scrubs_emails_cards_and_bearer_tokens_recursively():
 
 def test_redacting_exporter_scrubs_copies_and_drops_attributes():
     tracer = Tracer()
-    with tracer.span("tool create_case", kind="tool", **{"case.details": "refund to jane@example.com", "gen_ai.prompt": "secret"}):
+    with tracer.span("tool create_case", kind="tool", **{"case.details": "refund to jane@example.com", GEN_AI_INPUT_MESSAGES: "secret"}):
         pass
     seen = []
-    exporter = RedactingExporter(drop_attrs=("gen_ai.prompt",), sink=seen.append)
+    exporter = RedactingExporter(drop_attrs=(GEN_AI_INPUT_MESSAGES,), sink=seen.append)
     out = exporter.export(tracer)
-    assert out[0]["attrs"]["case.details"] == "refund to <email>" and "gen_ai.prompt" not in out[0]["attrs"]
+    assert out[0]["attrs"]["case.details"] == "refund to <email>" and GEN_AI_INPUT_MESSAGES not in out[0]["attrs"]
     assert tracer.spans[0].attrs["case.details"] == "refund to jane@example.com", "the tracer keeps the original"
     assert seen == out == exporter.exported
     assert exporter.scrub({"events": [{"content": "card 5500000000000004"}]}) == {"events": [{"content": "card <card>"}]}

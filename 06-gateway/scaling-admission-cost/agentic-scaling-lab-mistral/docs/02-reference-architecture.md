@@ -5,7 +5,7 @@ each part scales, what its limits are and why the alternatives were not chosen. 
 `01-scaling-primer.md`; the numbers are in `03-capacity-plan.md` (computed by `python -m scalelab.capacity`,
 measured by `scalelab/sim.py`); the mapping to Kubernetes, to Mistral's hosted API and to the hyperscalers is
 in `04-platform-mapping.md`. Product facts were checked on 19 September 2026. The design is cloud-neutral:
-AKS, EKS, GKE, a partner GPU cloud or the customer's own cluster.
+AKS, EKS, GKE, an in-country GPU cloud or the operator's own cluster.
 
 ## 1. Context and requirements
 
@@ -16,10 +16,10 @@ auditable transcript per session and one tenant in v1. The traffic shape is the 
 a day of 6 turns, 2.2 model calls per turn, 5,000 input tokens per call of which 2,700 are a stable cached
 prefix, 200 output tokens with reasoning off, a 6 s hosted turn, 60 s of think time.
 
-**The residency requirement.** The customer's risk function has stated that customer personal data stays in
+**The residency requirement.** Meridian's risk function has stated that customer personal data stays in
 Singapore. Singapore has no general localisation mandate; the drivers are the MAS guidelines on AI risk
-management (consulted November 2025 to January 2026, toolkit released 20 March 2026) and the customer's own
-governance, which is what discovery surfaces. The requirement decides the model path: Mistral's API is
+management (consulted November 2025 to January 2026, toolkit released 20 March 2026) and Meridian's own
+governance, which is what the requirements review surfaces. The requirement decides the model path: Mistral's API is
 EU-hosted by default with EU and US regional endpoints and no APAC endpoint, and the APAC marketplace rows
 fetched (Bedrock Tokyo, Mumbai, Sydney; watsonx Sydney) are in region but not in Singapore. So the primary
 path is a self-hosted vLLM fleet in Singapore and the hosted API is spill-over for traffic the data policy
@@ -37,7 +37,7 @@ allows to leave.
 | Security | identity at the edge; least-privilege workload identities; guardrails on input | section 7 |
 | Operability | one dashboard, seven alerts, canary by session hash, a cost kill switch | section 3.8 |
 
-**Constraints and incident behaviour.** Kubernetes is the customer's standard; the billing mainframe accepts
+**Constraints and incident behaviour.** Kubernetes is Meridian's standard; the billing mainframe accepts
 40 QPS and the CRM 200; Python 3.11. Paid-tier limits on Mistral's API are console-only, so the plan assumes
 a negotiated 20 M TPM and 60 RPS (verify). At ×10 the hosted RPS limit is exceeded 2.55×, the TPM limit
 2.38× and a peak-sized fleet 2.31×, so no Kubernetes scaling answers an incident: admitted turns still
@@ -203,7 +203,7 @@ the CRM 48.6 against 200 (0.24×).
 ### 3.6 State
 
 Postgres holds everything durable; Redis everything hot. Both are the cloud's managed service or, on a
-partner cloud, the CloudNativePG operator and Redis Sentinel.
+sovereign GPU cloud, the CloudNativePG operator and Redis Sentinel.
 
 ```sql
 sessions(id, tenant, customer_ref, summary, context jsonb, usage jsonb, version int,
@@ -381,9 +381,9 @@ from the cloud's secret manager through the External Secrets Operator. Guardrail
 the fleet, Shieldstral 1.0 (Apache 2.0, compact multimodal moderation) self-hosted in Singapore; on the hosted
 path, Mistral Moderation 2 (`mistral-moderation-2603`, free, 128 k context, jailbreak detection). Tool results
 are data, truncated and never executed; the model cannot call a tool outside the registry for its level; a
-write requires the customer's confirming turn. The PII policy for spill-over is enforced at admission (intent
+write requires the user's confirming turn. The PII policy for spill-over is enforced at admission (intent
 plus a PII detector sets `spill_allowed`) and again at routing, and the audit is the `turns` table itself
-(model id, prompt version, `served_by`, `spill_allowed`, level, usage), exported nightly to the customer's
+(model id, prompt version, `served_by`, `spill_allowed`, level, usage), exported nightly to Meridian's
 immutable log store.
 
 ## 8. Deployment
@@ -395,7 +395,7 @@ not the ingress: a new model version, prompt version or vLLM image gets 10 % of 
 then 50 %, then 100 %, gated on cached-token share, p95 and cost per conversation; a second `InferencePool`
 carries a new vLLM build so that rollback is a routing change, and rollback of a service is the previous Helm
 revision. What stays manual: the rate-limit request to Mistral's support, the GPU capacity reservation
-(Capacity Blocks, an on-demand capacity reservation, a future reservation or the partner's contract), the
+(Capacity Blocks, an on-demand capacity reservation, a future reservation or the GPU cloud's contract), the
 Priority Tier entitlement, the zero-data-retention request, the licences (NIM at $1 per GPU-hour if used; a
 commercial licence for Medium 3.5, whose Modified MIT licence requires one above $20 M of monthly revenue, if
 it is ever self-hosted), DNS and the IdP registration.
@@ -404,7 +404,7 @@ it is ever self-hosted), DNS and the IdP registration.
 
 | Decision | Chosen | Alternatives | Why |
 |---|---|---|---|
-| Runtime | Kubernetes, cloud-neutral | Mistral AI Studio managed (Agent Runtime on Temporal; dedicated or self-hosted via sales); a hyperscaler's serverless containers | the residency path needs GPUs the customer controls; every mechanism stays visible; Studio has no public pricing (verify) |
+| Runtime | Kubernetes, cloud-neutral | Mistral AI Studio managed (Agent Runtime on Temporal; dedicated or self-hosted by contract with Mistral); a hyperscaler's serverless containers | the residency path needs GPUs the operator controls; every mechanism stays visible; Studio has no public pricing (verify) |
 | Queue | RabbitMQ quorum queues | Kafka; NATS JetStream; the cloud's managed queue | per-session ordering, delivery limit and DLX built in; tens of messages a second do not need Kafka; the managed queue is the swap on a single cloud |
 | Durable state | Postgres | a document database | relational audit queries, `unique (session_id, seq)`, TTL by job, one operator everywhere |
 | Serving stack | plain vLLM behind the Gateway API Inference Extension | llm-d / KServe `LLMInferenceService`; NIM; SGLang; TensorRT-LLM | ≤ 14 single-GPU replicas need no disaggregation; llm-d when Small 4 or a prefill/decode split arrives; NIM for a supported container; SGLang and TRT-LLM when a benchmark proves the gain |
@@ -417,7 +417,7 @@ it is ever self-hosted), DNS and the IdP registration.
 
 No voice; no multi-region; no Agents & Conversations API (beta-labelled, stateful, absent from regional
 endpoints and from zero data retention; the orchestrator owns state); no fine-tuning (the API is deprecated;
-Forge is a services engagement); no self-hosted Medium 3.5 or Large 3; no prefill/decode disaggregation; no
+Forge is a services offering, not an API); no self-hosted Medium 3.5 or Large 3; no prefill/decode disaggregation; no
 GPU sharing (MIG cannot hold Ministral 14B with useful KV; time-slicing removes isolation); no per-tenant
 fleet partition; no long-term memory beyond the session summary; no autonomous multi-step writes without a
 confirming turn. Each has a documented trigger in the primer's growth path.
