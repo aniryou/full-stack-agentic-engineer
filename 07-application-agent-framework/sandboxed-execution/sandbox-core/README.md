@@ -108,7 +108,8 @@ or from upstream specs, labelled so. Simulator output is labelled SIMULATED. A p
 boundary against a kernel exploit or the network — real isolation is a container, then gVisor, then a
 microVM, which is the lab ([`../sandbox-lab`](../sandbox-lab/)). And three of its controls need root to
 switch each execution to its own UID: `RLIMIT_NPROC` does nothing as root and is shared with your own
-processes as a user, your files stay readable by absolute path, and a `setsid()` escapee cannot be found.
+processes as a user (so the parent counts the run's own process tree instead and keeps `RLIMIT_NPROC` as a
+backstop), your files stay readable by absolute path, and a `setsid()` escapee cannot be found.
 The core reports which of these hold (`isolation_report()`) rather than pretending.
 
 ## Regenerating notebooks

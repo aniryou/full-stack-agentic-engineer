@@ -141,7 +141,7 @@ execution **its own unprivileged UID** — and that one control carries three mo
 0700 home; setting `HOME` elsewhere hides nothing), and after the run the sandbox can kill every process of
 that UID — including one that called `setsid()` to leave the group — and remove what it left in `/tmp`.
 With a per-execution UID it contains every probe except egress; as a non-root user it cannot switch UID, and
-the key read and the escape get through (and the process limit is shared with your own processes). It runs
+the key read and the escape get through (the process budget then holds because the parent counts the run's own process tree, with the shared `RLIMIT_NPROC` only a backstop). It runs
 anywhere, including Colab and CI. What it never does: it shares the host kernel (a kernel exploit escapes it)
 and it does not touch the network. The sharp edges are in §2's box below and §3.
 
@@ -247,7 +247,7 @@ resource the code could exhaust**, plus the policy that applies. The budget is t
 | `cpu_s` | `RLIMIT_CPU` | 2 |
 | `wall_s` | an external wall-clock kill | 5 |
 | `memory_mb` | `RLIMIT_AS` (virtual) + the container `--memory`/limit | 256 |
-| `pids` | `RLIMIT_NPROC` (off root) / kubelet `podPidsLimit` / `--pids-limit` | 16 |
+| `pids` | `RLIMIT_NPROC` under the run's own UID (as a user: the parent's count of the run's process tree) / kubelet `podPidsLimit` / `--pids-limit` | 16 |
 | `file_mb` | `RLIMIT_FSIZE` (largest single file, not a disk quota) | 8 |
 | `disk_mb` | measured after the run; `emptyDir.sizeLimit` in K8s | 16 |
 | `output_bytes` | the parent reads as it streams and keeps this much per stream | 16,384 |
@@ -278,9 +278,9 @@ exit reason lives in `sandboxcore.executor._classify` (a signal: `SIGXCPU` → `
 with `EFBIG` rather than dying of `SIGXFSZ` (a shell child dies of the signal) — the executor maps both to
 `file_too_large`. **Only some of these can be trusted.** A reason read from stderr is the untrusted program's
 own say-so — code can print `MemoryError` and exit 1 — so it is labelled `reason_source: code`: fine as a
-hint to the model, not as evidence. `wall_timeout` and `output_limit` (the parent enforced them) and a
+hint to the model, not as evidence. `wall_timeout` and `output_limit` (the parent enforced them), a `pids` from the parent's count of the process tree and a
 `cpu_time` the parent's `wait4` measurement confirms are `parent`; a bare signal is `signal` (the code could
-have sent it to itself).
+have sent it to itself). When more than one holds, the parent's verdicts win in a fixed order — `wall_timeout`, `pids`, `output_limit` (`executor.PARENT_VERDICT_ORDER`) — and any of them beats one read from the exit status.
 
 **Idempotency and safe re-execution.** Side effects mean at-least-once delivery (the scaling primer's §1.5:
 "at-least-once means idempotency"), so a code tool needs the same discipline as any write. `idempotency_key(
