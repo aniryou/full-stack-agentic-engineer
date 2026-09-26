@@ -1,0 +1,32 @@
+# One MIG slice of an A100 (pool created with gpu_partition_size = "1g.5gb", off by default in the
+# Terraform): each slice is its own nvidia.com/gpu with dedicated SMs, L2 and memory. nvidia-smi -L
+# inside the pod shows a "MIG 1g.5gb Device". Needs A100 quota — the hardest part of this example.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mig-1g5gb
+  namespace: gpu-lab
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-a100
+        cloud.google.com/gke-gpu-partition-size: 1g.5gb # VERIFY: partition sizes GKE supports
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: cuda
+          image: nvidia/cuda:12.8.1-base-ubuntu24.04 # VERIFY: tag
+          command: ["bash", "-c", "nvidia-smi -L && nvidia-smi"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              nvidia.com/gpu: 1
+              memory: 128Mi

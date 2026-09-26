@@ -7,6 +7,7 @@ build can be resumed from any checkout, and so the validation steps stay reprodu
 |---|---|
 | `SPEC.md` | The shared contract every builder and reviewer followed: goal, run tiers T0–T3, fixed paths, conventions, per-layer plan. |
 | `FACTS.md` | Product facts verified on 2026-09-26 (API versions, metric names, prices, obtainability) — the source of truth for `(verify)` items. |
+| `README-STYLE.md` | The README style guide every integrator applies (human-first structure: promise → start here → what you get → run it → how it fits). |
 | `STATUS.md` | Per-layer progress: built / reviewed / merged, with the next step. Update it whenever a layer changes state. |
 | `tfcheck.sh <dir>` | `terraform fmt -check` + `init` (offline, filesystem provider mirror) + `validate` on a copy of a Terraform directory. |
 | `tfattrs.py <resource> [filter...] [--desc]` | Look up Terraform attribute paths from a `terraform providers schema -json` dump (set `TF_SCHEMA_JSON`). |

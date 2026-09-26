@@ -1,0 +1,27 @@
+# SAMPLE OUTPUT in the documented format of deploy/any-gpu/probe.sh (illustrative, not captured from a real cluster).
+# Scenario: deploy/gke/01-gpu-smoke.yaml on a GKE g2-standard-4 node (one L4) with GKE-managed driver install;
+# GKE's device plugin exposes the device nodes and mounts the host driver directory at /usr/local/nvidia. (verify)
+=== gpurt-probe v1 ===
+2026-09-20T10:05:00Z
+=== env ===
+CUDA_VERSION=12.8.1
+LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+NVIDIA_DRIVER_CAPABILITIES=compute,utility
+NVIDIA_REQUIRE_CUDA=cuda>=12.8 brand=tesla,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536
+NVIDIA_VISIBLE_DEVICES=all
+=== dev ===
+crw-rw-rw- 1 root root 237,   0 Sep 20 10:04 /dev/nvidia-uvm
+crw-rw-rw- 1 root root 237,   1 Sep 20 10:04 /dev/nvidia-uvm-tools
+crw-rw-rw- 1 root root 195,   0 Sep 20 10:04 /dev/nvidia0
+crw-rw-rw- 1 root root 195, 255 Sep 20 10:04 /dev/nvidiactl
+=== mountinfo ===
+1432 1398 8:1 /home/kubernetes/bin/nvidia /usr/local/nvidia ro,nosuid,nodev,relatime - ext4 /dev/sda1 rw,commit=30
+=== proc-driver-version ===
+NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  570.172.08  (illustrative build string)
+=== nvidia-smi ===
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.172.08             Driver Version: 570.172.08     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+=== gpus ===
+0, NVIDIA L4, 8.9, 23034 MiB
+=== end ===
