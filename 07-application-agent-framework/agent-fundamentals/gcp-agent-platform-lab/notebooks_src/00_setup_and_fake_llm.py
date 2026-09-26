@@ -6,7 +6,7 @@
 # identity, evaluation, cost — without an API key. When you have a key, `agentlab.llm.gemini.GeminiLLM`
 # is a drop-in replacement (see `docs/GEMINI_ADAPTER.md`).
 #
-# **Primer sections:** 0 (how the loop is scored), 2.1 (the single-agent loop), 5.2 (token anchors).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md).
 #
 # In this notebook you will:
 # 1. drive a `FakeLLM` three ways (scripted queue, policy function, `KeywordPlanner`);
@@ -49,7 +49,7 @@ print("latency of the last call (ms):", round(r2.latency_ms, 1))
 #
 # Real models bill the *stable prefix* of a prompt at a steep discount when it repeats.
 # `FakeLLM` mimics that: identical leading messages across calls are reported as `cached_tokens`.
-# This is why prompt **layout** (stable material first) is a cost lever — Primer §2.5 and §5.3.
+# This is why prompt **layout** (stable material first) is a cost lever — Notebooks 04 and 12 measure it.
 
 # %%
 policy_text = "Refund policy: " + "items may be returned within 30 days with proof of purchase. " * 40
