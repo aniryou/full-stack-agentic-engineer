@@ -53,6 +53,9 @@ def test_practice_notebook_is_committed_blank_and_every_blank_stops():
     names = re.findall(r'NotImplementedError\("BLANK ([A-D]):', "\n".join(src(c) for c in blanks))
     assert sorted(names) == ["A", "B", "C", "D"]
     assert all("# YOUR CODE HERE" in src(c) for c in blanks)
+    # Blank C: recomputing the whole sequence gives the same output, so Test 1 must also check the cached path
+    test1 = next(src(c) for c in code if "Test 1" in src(c))
+    assert "all(n == 1 for n, _ in decode)" in test1 and "range(len(prompt), len(prompt) + 31)" in test1
 
 
 @pytest.mark.parametrize("path", [WORKED, PRACTICE], ids=lambda p: p.name)
