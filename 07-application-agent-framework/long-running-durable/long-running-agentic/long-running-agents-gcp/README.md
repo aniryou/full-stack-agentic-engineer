@@ -7,10 +7,16 @@ Long-running agents on Google Cloud, as a primer, a reference implementation and
 ## Start here (5 minutes)
 
 ```bash
-pip install -e ".[dev]"          # or: pip install -r <(python -c "import tomllib;print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))")
+pip install -e ".[test]"         # what the offline tests need: the base dependencies + pytest (~220 MB)
 make test                        # 30 tests: crash-after-side-effect, duplicate delivery, lease expiry, HITL, saga, fan-in, ADK resume …
+pip install -e ".[dev]"          # adds Jupyter and nbconvert for the notebooks (~400 MB in all)
 jupyter lab notebooks/           # 4 worked notebooks (executed, with outputs) + 4 practice notebooks (fill in the blanks)
 ```
+
+The "offline" tests need no credentials and no network, but they are not a small install: the base dependencies
+include `google-adk[db]` (the ADK 2 workflow tests and notebook 04 run it offline), FastAPI (the service tests) and
+the Firestore, Cloud Tasks and Pub/Sub clients (imported lazily, only used in `gcp` mode). Sizes measured on
+Python 3.11, 2026-09-26. The `gcp` extra adds `google-cloud-aiplatform` for the Agent Runtime deploy.
 
 Read in this order:
 
