@@ -155,8 +155,8 @@ balanced. The SFT reference passes it 72.7% of the time and is right 29.7%. Afte
 
 At depth 0, `)` is an instant pass from every state, so gradient ascent finds it. The KL-regularised optimum
 multiplies every passing string by the same exp(1/β), so it keeps the reference's share of honest strings among
-those that pass: 40.9% as β → 0 (notebook 01, exercise 1.6). The penalty is a leash, not a fix. The fixes are the verifier and evals of the
-true objective. DeepSeek-R1 used rule-based rewards and avoided neural reward models partly for this reason (verify).
+those that pass: 40.9% as β → 0 (notebook 01, exercise 1.6). The penalty is a leash, not a fix. The fixes are
+the verifier and evals of the true objective. DeepSeek-R1 used rule-based rewards and avoided neural reward models partly for this reason (verify).
 
 **Length bias.** RL also lengthens whatever the reward does not charge for. In `ThinkTask` the policy emits "think"
 tokens until it answers, and P(correct | L) = 1 − e0·(1 − q)^L (§6 explains the form). With reward = correct − c·L
@@ -682,8 +682,8 @@ loading, and the metrics of the serving-engine primer §11.
 
 **Agentic RL.** Multi-turn rollouts with tools make each trajectory a loop of generate → tool call → observation →
 generate: environments must be reset and isolated per rollout (code execution belongs in a sandbox — the
-[sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md)), tool latency adds its own tail to the step, and credit
-assignment spans turns. Reward design and evals are the same discipline as 07's platform lab
+[sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md)), tool latency
+adds its own tail to the step, and credit assignment spans turns. Reward design and evals are the same discipline as 07's platform lab
 ([`08_evals_trajectory_judge_gates`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks_src/08_evals_trajectory_judge_gates.py):
 golden sets, run-to-run noise, Wilson intervals, release gates): the training reward is a proxy and the eval is how
 you notice it being gamed.
