@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in. Everything else has cheap defaults (zonal, L4 Spot, 0 -> 2 nodes).
+project_id = "my-project-id"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+# gpu_spot      = false          # on-demand if Spot capacity is scarce (about 3x the price)
+# gpu_max_nodes = 2
+# monitoring_components = ["SYSTEM_COMPONENTS", "DCGM"]

@@ -1,0 +1,15 @@
+# Managed Service for Prometheus: scrape vLLM's /metrics from every vllm-qwen pod every 15 s.
+# The series land in Cloud Monitoring as prometheus.googleapis.com/<name>/<kind>, which the
+# Custom Metrics Stackdriver Adapter exposes to the HPA (hpa.yaml).
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: vllm-qwen
+spec:
+  selector:
+    matchLabels:
+      app: vllm-qwen
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
