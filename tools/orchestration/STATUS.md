@@ -7,7 +7,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 |---|---|---|---|
 | 01 roofline-and-fabric | `01-hardware-gpu-fabric/roofline-and-fabric/` (PRIMER, `roofline-core`, `gpu-bench-lab`) | MERGED to main (PR #2, f36a55f) | readability pass rides the -l03 PR |
 | 02 cuda-and-nccl | `02-cuda-nccl-runtime/cuda-and-nccl/` (PRIMER, `cuda-nccl-core`, `cuda-nccl-lab`) | MERGED to main (PR #4, 9ca4a04) | — |
-| 03 gpu-scheduling | `03-kubernetes-gpu/gpu-scheduling/` (PRIMER, `k8s-gpu-core`, `k8s-gpu-lab`) | PRIMER+core REVIEWED ✓ (27 findings, 49 tests); lab REVIEWED ✓ (34 findings, 118 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l03 (stacked on -l01) → PR → merge |
+| 03 gpu-scheduling | `03-kubernetes-gpu/gpu-scheduling/` (PRIMER, `k8s-gpu-core`, `k8s-gpu-lab`) | MERGED to main (PR #5, 5af4925; incl. README readability pass for root/01/03/05) | — |
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | PRIMER+core REVIEWED ✓ (29 findings, 67 tests); lab REVIEWED ✓ (41 findings incl. 1 blocking, 65 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l04 (with vllm-internals + FA deep dive) → PR → merge |
 | 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | MERGED to main (PR #3, fb09cfc) | — |
 | vLLM internals primer | `04-inference-engine/vllm-internals/` (primer, source-map, 1 notebook) | REVIEWED ✓ (34 findings incl. 9 blocking fixed; ~60 source refs verified at main@5840d95) | integrator: list in 04 README + Colab index; merge with layer 04 |
