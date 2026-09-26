@@ -6,7 +6,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | Layer / item | Paths | State | Next step |
 |---|---|---|---|
 | 01 roofline-and-fabric | `01-hardware-gpu-fabric/roofline-and-fabric/` (PRIMER, `roofline-core`, `gpu-bench-lab`) | MERGED to main (PR #2, f36a55f) | readability pass rides the -l03 PR |
-| 02 cuda-and-nccl | `02-cuda-nccl-runtime/cuda-and-nccl/` (PRIMER, `cuda-nccl-core`, `cuda-nccl-lab`) | PRIMER+core REVIEWED ✓ (23 findings, 128 tests); lab REVIEWED ✓ (42 findings incl. 2 blocking, 122 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l02 → PR → merge |
+| 02 cuda-and-nccl | `02-cuda-nccl-runtime/cuda-and-nccl/` (PRIMER, `cuda-nccl-core`, `cuda-nccl-lab`) | merged (PR pending): integrated on branch `claude/gifted-johnson-9gjwzc-l02` with main merged in (deferred primer items applied, Alertmanager example moved to `deploy/gke/alertmanager/`, READMEs per `README-STYLE.md`, root README row, 223 notebooks, CLAUDE.md log, Colab links; 128 + 122 tests, 5/5 + 6/6 notebooks, TF and manifests valid) | PR → merge to main. When layers 03/04 and `COMPUTE.md`/`CURRICULUM.md` land, re-link their plain-text mentions (PRIMER intro, §6.3, §7.2, §9; topic, layer, core and lab READMEs) |
 | 03 gpu-scheduling | `03-kubernetes-gpu/gpu-scheduling/` (PRIMER, `k8s-gpu-core`, `k8s-gpu-lab`) | PRIMER+core REVIEWED ✓ (27 findings, 49 tests); lab REVIEWED ✓ (34 findings, 118 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l03 (stacked on -l01) → PR → merge |
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | PRIMER+core REVIEWED ✓ (29 findings, 67 tests); lab REVIEWED ✓ (41 findings incl. 1 blocking, 65 tests) | integrating on branch claude/gifted-johnson-9gjwzc-l04 (with vllm-internals + FA deep dive) → PR → merge |
 | 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | MERGED to main (PR #3, fb09cfc) | — |
@@ -24,7 +24,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 ## Notes for the review / integration passes
 - Layer 04 lab, free-T4 path: vLLM on Turing (compute capability 7.5) needs `--dtype half` and a non-FlashAttention backend; confirm the pinned vLLM
   release still supports 7.5 and say so in the README `(verify)`. Kaggle's P100 (capability 6.0) is below vLLM's minimum — the Kaggle recipe must pick "GPU T4 x2".
-- Root `README.md` and the layer READMEs still describe 02/03/05 as empty; the integration pass rewrites them and regenerates Colab links.
+- Root `README.md` and the layer READMEs still describe 03 as empty (01, 02, 05 rewritten at their integrations); the integration pass rewrites them and regenerates Colab links.
 - `.gitignore` now excludes `terraform.tfvars` / `*.auto.tfvars` (COMPUTE.md tells learners to check with `git check-ignore`).
 - vLLM `main` (commit 5840d95, 2026-09-25; PyPI 0.30.0): Model Runner V2 and async scheduling are default-on; `VLLM_USE_V1` and `VLLM_ATTENTION_BACKEND` were removed. The layer-04 lab review must check the lab's env vars/flags against this.
 - DONE by the vLLM review validator: §6.4 71.1× like-for-like figure added; §6.3 FP8-KV condition (FA3 on SM90 / FA4) added.
