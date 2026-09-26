@@ -127,11 +127,13 @@ def tp_allreduce_bytes(model: ModelConfig, tokens: int, act_bytes: float = 2) ->
     return tokens * model.d_model * act_bytes
 
 
+ALLREDUCE = {"ring": ring_allreduce_time, "recursive-doubling": recursive_doubling_allreduce_time}
+
+
 def tp_comm_time(model: ModelConfig, tokens: int, tp: int, link: Link,
                  act_bytes: float = 2, algo: str = "ring") -> float:
     """Communication time of one forward step under TP=tp (not overlapped with compute)."""
-    f = ring_allreduce_time if algo == "ring" else recursive_doubling_allreduce_time
-    return tp_allreduces_per_step(model) * f(tp_allreduce_bytes(model, tokens, act_bytes), tp, link)
+    return tp_allreduces_per_step(model) * ALLREDUCE[algo](tp_allreduce_bytes(model, tokens, act_bytes), tp, link)
 
 
 # -- topology ------------------------------------------------------------------------------
