@@ -567,7 +567,7 @@ classifies any path as host-injected or image.
 
 The device plugin advertises `nvidia.com/gpu` as an extended resource. At pod admission its `Allocate` call
 returns the device IDs, environment variables, mounts or CDI device names for the chosen GPUs, and the container
-runtime injects them as above ([layer 03](../../03-kubernetes-gpu/gpu-scheduling/) §1). On GKE, Google manages
+runtime injects them as above ([layer 03 §1](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md#1-what-kubernetes-sees)). On GKE, Google manages
 the device plugin and installs the driver on the node (§9). With the NVIDIA GPU Operator, the operator
 installs the driver, toolkit, plugin and DCGM exporter as pods.
 
@@ -621,7 +621,8 @@ A100 80 GB has the same shapes, A100 40 GB halves the memory (1g.5gb ... 7g.40gb
 
 So plan a layout per node pool and create instances with explicit placements. Kubernetes exposes MIG either
 as plain `nvidia.com/gpu` with one profile per node ("single" strategy) or as `nvidia.com/mig-1g.10gb`-style
-resources ("mixed"). GKE sets one partition size per node pool (§9). A 7g instance is not the whole GPU: in MIG
+resources ("mixed"). GKE sets one partition size per node pool (§9); layer 03 covers sharing at cluster level
+([§9](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md#9-sharing-gpus-at-the-cluster-level)). A 7g instance is not the whole GPU: in MIG
 mode each slice gets a fixed number of SMs, so an A100's 7g has 98 of its 108 SMs (verify).
 
 ### 7.3 MPS: overlap

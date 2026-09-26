@@ -199,7 +199,10 @@ async def _request(http, url: str, body: dict, rec: Record, headers: dict | None
                     if ev is None or ev == "DONE":
                         continue
                     for ch in ev.get("choices") or []:
-                        piece = (ch.get("delta") or {}).get("content") or ch.get("text") or ""
+                        delta = ch.get("delta") or {}
+                        piece = delta.get("content") or ch.get("text") or ""
+                        if not piece and delta.get("tool_calls"):      # a model (or simulator) calling a tool
+                            piece = json.dumps(delta["tool_calls"], separators=(",", ":"))
                         if piece:
                             if rec.ttft is None:
                                 rec.ttft = time.perf_counter() - t0
