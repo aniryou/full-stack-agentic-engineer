@@ -80,7 +80,7 @@ print("\n" + ProcessSandbox(BUDGETS).describe())
 def exit_reason_for(probe_name: str) -> str:
     from sandboxlab.probes import BY_NAME, probe_code
     ### BEGIN SOLUTION
-    sb = ProcessSandbox(Budgets(cpu_s=1, wall_s=2), netns=False)
+    sb = ProcessSandbox(Budgets(cpu_s=1, wall_s=5), netns=False)
     with standin_host() as host:
         code = probe_code(BY_NAME[probe_name], host.params(probe_name, sb.budgets))
         return sb.run(code).exit_reason
@@ -98,26 +98,35 @@ print("✅ each abuse hits its own budget: CPU seconds, the wall clock, address 
 #
 # A CPU-seconds limit (`RLIMIT_CPU`) never fires on code that sleeps; a wall-clock timeout never
 # fires on code that is genuinely fast but loops forever on one CPU only if you have no CPU limit.
-# You need both. Predict, for a 1 s CPU / 2 s wall budget, the exit reason and whether the run ends
-# in about 1 s or about 2 s, for `while True: pass` and for `time.sleep(60)`.
+# You need both. Predict, for a 1 s CPU / 5 s wall budget, the exit reason and which budget runs out
+# after how many seconds, for `while True: pass` and for `time.sleep(60)`.
+#
+# Why 5 s of wall for 1 s of CPU: a busy loop accrues CPU seconds only while it is scheduled. On a
+# loaded laptop or a shared CI runner it may get half a core, so its 1 s of CPU takes 2 s of wall; a
+# wall limit twice the CPU budget would then catch the loop first and report `wall_timeout`. Keep the
+# wall limit several times the CPU budget, so each budget catches its own abuse on a busy machine too.
 
 # %% exercise
 def predict(code: str) -> tuple:
-    """Return (exit_reason, approx_wall_s) for Budgets(cpu_s=1, wall_s=2)."""
+    """Return (exit_reason, approx_s) for Budgets(cpu_s=1, wall_s=5): approx_s is the budget that ran
+    out, in its own unit — CPU seconds for `cpu_time`, wall seconds for `wall_timeout`."""
     ### BEGIN SOLUTION
     if "sleep" in code:
-        return ("wall_timeout", 2.0)      # sleeping uses no CPU, so only the wall clock catches it
+        return ("wall_timeout", 5.0)      # sleeping uses no CPU, so only the wall clock catches it
     return ("cpu_time", 1.0)        # a busy loop burns a CPU second before the wall deadline
     ### END SOLUTION
 
 # %% check
-sb = ProcessSandbox(Budgets(cpu_s=1, wall_s=2), netns=False)
+sb = ProcessSandbox(Budgets(cpu_s=1, wall_s=5), netns=False)
 for code in ("while True: pass", "import time; time.sleep(60)"):
     reason, approx = predict(code)
     r = sb.run(code)
     assert r.exit_reason == reason, (code, r.exit_reason)
-    assert abs(r.wall_s - approx) < 0.6, (code, r.wall_s)
-print("✅ CPU seconds catch the loop at ~1 s; the wall clock catches the sleep at ~2 s. Keep both.")
+    used = r.cpu_s if reason == "cpu_time" else r.wall_s
+    assert used is not None and abs(used - approx) < 0.6, (code, used)
+    print(f"  {code:<28} {r.exit_reason:<12} cpu {r.cpu_s or 0:.2f} s  wall {r.wall_s:.2f} s")
+print("✅ CPU seconds catch the loop after ~1 CPU s (more wall time on a busy machine); the wall clock")
+print("   catches the sleep at ~5 s. Keep both, with the wall limit well above the CPU budget.")
 
 # %% [markdown]
 # ## Exercise 1.3 — the hardened `docker run`, flag by flag
