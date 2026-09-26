@@ -150,3 +150,37 @@ def test_an_ordinary_pool_scales_up_a_gang_it_cannot_finish():
 def test_startup_latency_is_a_sum_of_stages():
     s = startup_latency(node_s=240, driver_s=60, image_gb=10, pull_GBps=0.5, weights_gb=16, load_GBps=1)
     assert s["image"] == 20 and s["weights"] == 16 and s["total"] == 336
+
+
+def _loaded(policy):
+    """16 one-replica pods round robin over 8 GPUs, then both pods on GPU-fake-0003 finish."""
+    plugin, kubelet = DevicePlugin(make_gpus(8), replicas=10, allocation_policy=policy), Kubelet()
+    kubelet.register(plugin)
+    for i in range(16):
+        kubelet.admit(f"p{i}", 1)
+    del kubelet.assigned["p3"], kubelet.assigned["p11"]
+    return kubelet
+
+
+def test_allocation_policies_for_time_sliced_replicas():
+    # NVIDIA k8s-device-plugin internal/rm/allocate.go allocationComparators (distributed and packed
+    # since v0.20.0, spread on main): the same loaded node, one 2-replica request
+    envs = {p: _loaded(p).admit("two-slices", 2)["envs"]["NVIDIA_VISIBLE_DEVICES"]
+            for p in ("distributed", "packed", "spread")}
+    assert envs == {"distributed": "GPU-fake-0003",                 # least loaded GPU, twice
+                    # packed put the 16 pods 10 + 6 on GPUs 0 and 1: it tops up GPU 0, then GPU 1
+                    "packed": "GPU-fake-0000,GPU-fake-0001",
+                    "spread": "GPU-fake-0000,GPU-fake-0003"}        # two distinct physical GPUs
+    fresh = Kubelet()
+    fresh.register(DevicePlugin(make_gpus(8), replicas=10, allocation_policy="packed"))
+    assert fresh.admit("a", 1)["envs"]["NVIDIA_VISIBLE_DEVICES"] == "GPU-fake-0000"
+    assert fresh.admit("b", 3)["envs"]["NVIDIA_VISIBLE_DEVICES"] == "GPU-fake-0000"   # packed fills GPU 0 first
+    with pytest.raises(ValueError, match="invalid --shared-devices-allocation-policy option: tight"):
+        DevicePlugin(make_gpus(8), replicas=10, allocation_policy="tight")
+
+
+def test_plugin_options_and_prestart():
+    plugin = DevicePlugin(make_gpus(8))
+    assert plugin.register_request()["options"] == plugin.get_device_plugin_options() == \
+        {"pre_start_required": False, "get_preferred_allocation_available": True}
+    assert plugin.pre_start_container(["GPU-fake-0000"]) == {}

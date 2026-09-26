@@ -6,8 +6,8 @@ container why it does or does not see its GPU; and read DCGM metrics without bei
 
 ## Start here
 
-1. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 122 tests pass and 2 skip (they need
-   torch or numba-cuda) in about 20 s, simulator only.
+1. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 123 tests pass and 2 skip (they need
+   torch or numba-cuda) in 15–30 s, simulator only.
 2. `python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M` — a real ring all-reduce across two OS
    processes, printed in nccl-tests' layout, in about a second.
 3. Open [`notebooks/01_kernels_in_the_simulator.ipynb`](notebooks/01_kernels_in_the_simulator.ipynb): real
@@ -53,7 +53,7 @@ What each tier adds:
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab
 python3 -m pip install -r requirements.txt      # numpy, numba, pyyaml + notebook/test tooling
-python3 -m pytest -q                            # 122 pass, 2 skip without torch / numba-cuda; ~20 s, simulator only
+python3 -m pytest -q                            # 123 pass, 2 skip without torch / numba-cuda; 15–30 s, simulator only
 python3 -m gpurt.env                            # tier, GPUs, numba mode
 python3 -m gpurt.container                      # how this process sees a GPU (on a laptop: it doesn't — and why)
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M   # a real ring all-reduce over pipes

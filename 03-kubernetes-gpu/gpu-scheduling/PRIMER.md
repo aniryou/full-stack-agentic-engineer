@@ -79,17 +79,26 @@ as a DaemonSet and talks gRPC (`deviceplugin/v1beta1`) over Unix sockets:
 ```
 device plugin                                   kubelet (device manager)
      │  Register(version=v1beta1, endpoint,              │
-     │           resource_name=nvidia.com/gpu) ─────────►│  /var/lib/kubelet/device-plugins/kubelet.sock
+     │           resource_name=nvidia.com/gpu,           │
+     │           options) ──────────────────────────────►│  /var/lib/kubelet/device-plugins/kubelet.sock
+     │  GetDevicePluginOptions() answers the same:       │  NVIDIA: GetPreferredAllocationAvailable=true,
+     │  which optional calls the kubelet should make     │          PreStartRequired=false
      │◄──────────────────────────── ListAndWatch() ───── │
      │  stream: [{ID, health: Healthy|Unhealthy}] ─────► │  capacity = all IDs, allocatable = healthy IDs
      │                                                   │  → Node.status  → scheduler sees an integer
      │   (pod bound here, container starting)            │
-     │◄──── GetPreferredAllocation(available, size) ──── │  topology hint: keep GPUs on one NVLink island
+     │◄──── GetPreferredAllocation(available, size) ──── │  only if GetPreferredAllocationAvailable;
+     │                                                   │  topology hint: keep GPUs on one NVLink island
      │◄──── Allocate([device IDs]) ───────────────────── │
-     │  env / mounts / device nodes / CDI devices ─────► │  container created with those devices
+     │  env / mounts / device nodes / CDI devices ─────► │
+     │◄──── PreStartContainer([device IDs]) ──────────── │  only if PreStartRequired (reset or initialise
+     │                                                   │  a device); NVIDIA's plugin does not ask for it
+     │                                                   │  container created with those devices
 ```
 
-`gpusched.deviceplugin` models the contract: `DevicePlugin.list_and_watch()`, `Kubelet.node_status()`
+The `DevicePlugin` service has five calls — `GetDevicePluginOptions`, `ListAndWatch`, `GetPreferredAllocation`,
+`Allocate`, `PreStartContainer` — and the kubelet makes the two optional ones only when the options sent with
+`Register` ask for them. `gpusched.deviceplugin` models the contract: `DevicePlugin.list_and_watch()`, `Kubelet.node_status()`
 (capacity counts every device, allocatable only healthy ones — as the kubelet's `GetCapacity` does), and
 `Kubelet.admit()`. With the NVIDIA plugin's default `envvar` strategy, `Allocate` answers with
 `NVIDIA_VISIBLE_DEVICES=<device UUIDs>`, and the NVIDIA Container Toolkit injects device nodes and driver
@@ -196,16 +205,24 @@ that stays in that state usually means a driver install failure.
 ### 3.1 One pod at a time
 
 ```
- queue ─► PreEnqueue ─► QueueSort ─► PreFilter ─► Filter ─► PostFilter ─► PreScore ─► Score ─► Reserve ─► Permit ─► PreBind ─► Bind
-          (scheduling    (priority,               (per node:  (no node?    (0-100 per plugin,              (can hold a pod:
-           gates)         then age)                pass/fail)  preemption)  weighted sum)                   gangs, §4)
+ scheduling cycle, one pod at a time
+ queue ─► PreEnqueue  ─► QueueSort  ─► PreFilter ─► Filter     ─► PostFilter  ─► PreScore ─► Score        ─► NormalizeScore  ─► Reserve    ─► Permit
+          (scheduling    (priority,                 (per node:    (no node?                  (per plugin,    (to 0-100; then    (claim        (can hold a pod:
+          gates)         then age)                  pass/fail)    preemption)                per node)       × weight, sum)     resources)    gangs, §4)
+
+ binding cycle, off the main loop; a failure from Reserve on runs Unreserve and requeues the pod
+   ─► PreBind   ─► Bind      ─► PostBind
+      (volumes,    (sets        (informational,
+      DRA)         nodeName)    cleanup)
 ```
 
 kube-scheduler takes the highest-priority pending pod (then the oldest), runs the **filter** plugins
 against every node, **scores** the survivors, and binds the pod to the best one. Then the next pod. It
 never considers two pods together, never looks ahead, and never moves a running pod — three facts that
 explain fragmentation (3.4), preemption's limits (3.5) and gang deadlock (4.1). The default plugin set
-and score weights (upstream `getDefaultPlugins`):
+and score weights (upstream `getDefaultPlugins`, release-1.34; DynamicResources is added when the
+DynamicResourceAllocation feature is on, the default since DRA went GA in 1.34, and has no weight because
+it implements no Score):
 
 | Plugin | Filter | Score weight | Relevance to GPUs |
 |---|---|---|---|
@@ -214,7 +231,7 @@ and score weights (upstream `getDefaultPlugins`):
 | NodeAffinity | nodeSelector / required affinity | 2 | GPU model selection |
 | NodeResourcesFit | requests ≤ allocatable − requested | 1 | **the only place GPUs are counted** |
 | PodTopologySpread, InterPodAffinity | spread / affinity rules | 2, 2 | replica spreading |
-| DynamicResources | DRA claims allocatable | 2 | section 1.5 |
+| DynamicResources | DRA claims allocatable (also PostFilter, Reserve, PreBind) | – (no Score) | section 1.5 |
 | NodeResourcesBalancedAllocation, ImageLocality | – | 1, 1 | pull toward spreading and cached images |
 | DefaultPreemption | PostFilter | – | section 3.5 |
 
@@ -720,9 +737,14 @@ view:
 
 The trap with time-slicing: a container that requests 2 "GPUs" may get two slices of the **same** physical
 GPU — the NVIDIA plugin takes replicas from the least-loaded GPUs, so on a busy node one lightly used GPU
-supplies both (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). `failRequestsGreaterThanOne` fails
-such a container at admission (`DevicePlugin(fail_requests_greater_than_one=True)`); on GKE time-sharing
-nodes a container may request at most one `nvidia.com/gpu` (the GKE device plugin enforces it). MIG
+supplies both (`DevicePlugin(replicas=10)`, notebook 01, exercise 1.6). That is the plugin's default
+`distributed` allocation policy. Its `--shared-devices-allocation-policy` flag (v0.20.0 and later, verify)
+also offers `packed`, which fills the busiest GPU first — fewer GPUs touched, and a multi-replica request
+lands on one GPU whenever it has room — and the main branch adds `spread`, which gives a request distinct
+physical GPUs while there are enough (not in a release as of 2026-09-26; verify)
+(`DevicePlugin(allocation_policy=...)`). None of the three gives isolation. `failRequestsGreaterThanOne`
+fails such a container at admission instead (`DevicePlugin(fail_requests_greater_than_one=True)`); on GKE
+time-sharing nodes a container may request at most one `nvidia.com/gpu` (the GKE device plugin enforces it). MIG
 partition counts are fixed per profile — an A100 40 GB offers seven `1g.5gb`, three `2g.10gb` or two
 `3g.20gb` slices; H100 80 GB seven `1g.10gb` (per GKE's device plugin; verify for your GPU and driver).
 Node-level sharing settings are per node pool on GKE (`gpu_sharing_config.gpu_sharing_strategy`,

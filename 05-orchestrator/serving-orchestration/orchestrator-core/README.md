@@ -7,7 +7,7 @@ spend GPU hours.
 
 ## Start here
 
-1. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 57 tests in about 4 s, offline.
+1. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 58 tests in about 5 s, offline.
 2. Run the [snippet below](#run-it): power of two choices against the llm-d-style endpoint picker on agent sessions;
    it prints hit rate and TTFT p95 (simulated) in under a second.
 3. Open [`notebooks/01_why_llm_load_balancing_is_different.ipynb`](notebooks/01_why_llm_load_balancing_is_different.ipynb)
@@ -36,7 +36,7 @@ prints ✅, and "In a design review" drills; worked answers are in [`solutions/`
 ```bash
 cd orchestrator-core
 python3 -m pip install -r requirements.txt   # only to run the notebooks and tests; the library is stdlib-only
-python3 -m pytest -q                          # 57 tests, ~4 s
+python3 -m pytest -q                          # 58 tests, ~5 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
