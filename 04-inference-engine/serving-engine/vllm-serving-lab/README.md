@@ -1,17 +1,39 @@
-# vllm-serving-lab
+# vllm-serving-lab — size, measure and tune a real vLLM server against an SLO
 
-**Serve, measure, size and tune a real inference engine.** The concepts of this topic's
-[primer](../PRIMER.md) — continuous batching, the token budget, prefix caching, speculation,
-quantization, measuring an engine — applied to **vLLM** through the four things an engineer
-actually does with it: size it before paying for a GPU, measure it the way everyone else does,
-read its own `/metrics`, and choose its flags against an SLO. The minimal from-scratch engine is
-next door in [`../mini-engine-core/`](../mini-engine-core/); this lab never imports it.
+After this lab you can say how many sessions a model fits on a GPU before paying for it, measure TTFT, ITL and
+goodput the way `vllm bench serve` defines them, read vLLM's own `/metrics`, and choose its flags against an SLO —
+first against a bundled fake vLLM on a laptop, then against a real `vllm serve` on a GPU, Cloud Run or GKE.
 
-Everything runs on a laptop first: `servelab.fakeserver` is a **fake vLLM** — the same
-OpenAI-compatible streaming API and the same `vllm:*` Prometheus metrics, over an engine emulator
-with continuous batching, a block-hash prefix cache, preemption and a roofline step-time model. Its
-numbers are labelled *simulated*. Point the same code at a real `vllm serve` (Colab T4, a rented
-GPU) or at Cloud Run / GKE, and the numbers become measurements.
+## Start here
+
+1. `python3 -m pip install -e ".[dev]" && python3 -m servelab size --model llama-3.1-8b-instruct --gpu L4 --max-model-len 16384`
+   — under a second: the KV blocks and concurrency an 8B model gets on a 24 GB L4, line by line.
+2. Open [`notebooks/01_size_before_you_serve.ipynb`](notebooks/01_size_before_you_serve.ipynb) (T0) — every
+   assumption behind that number, and how to calibrate it against vLLM's startup log.
+3. Start the fake vLLM and measure it: `python3 -m servelab fake --port 8000 &`, then
+   [`notebooks/02_serve_and_measure.ipynb`](notebooks/02_serve_and_measure.ipynb).
+
+## What you get
+
+*Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
+rented for an hour; T3 = the Google Cloud deployment, optional.* Each notebook opens with *the one-minute version*,
+works examples against the library, then 3–6 exercises (implement the key function, predict a number, pick a setting)
+each followed by a check that prints ✅, and closes with *in a design review*. Answers are in
+[`solutions/`](solutions/). Times are rough (about 12 h in all, from the repo's curriculum).
+
+| # | Notebook | Tier | You will be able to explain | Primer | Time |
+|---|---|---|---|---|---|
+| 01 | [`size_before_you_serve`](notebooks/01_size_before_you_serve.ipynb) | T0 (+T1 log) | KV bytes per token from `config.json`; blocks and "Maximum concurrency"; ~18 concurrent 2K-token sessions of an 8B model on an L4, and every assumption behind that number; why its 128K context does not start; what FP8 buys; calibrating from the startup log | §4 | ~1.5 h |
+| 02 | [`serve_and_measure`](notebooks/02_serve_and_measure.ipynb) | T0 / T1 / T3 | TTFT, ITL, TPOT, E2E, throughput and goodput as `vllm bench serve` defines them (one stated difference); histogram quantiles; open vs closed loop and the backlog an open loop builds; Little's law against the engine's gauges; warm-up, burstiness and long-tailed lengths | §11 | ~1.5 h |
+| 03 | [`knobs_and_tradeoffs`](notebooks/03_knobs_and_tradeoffs.ipynb) | T0 / T1 (+T2) | why batching is nearly free; the latency-throughput knee; `max-num-batched-tokens` as a TTFT-versus-ITL-tail trade; choosing `max-num-seqs` by goodput; capacity at an SLO; KV blocks and preemption; tensor parallelism on two T4s | §2, §3, §9, §11 | ~3 h |
+| 04 | [`prefix_caching_for_agents`](notebooks/04_prefix_caching_for_agents.ipynb) | T0 / T1 | block-hash chains; the hit accounting rules; hit rate from `/metrics`, predicted from the prompt layout before it is measured; prompt layouts that keep (or kill) the cache for agents; what a hit is worth in TTFT | §5 | ~2 h |
+| 05 | [`speculation_and_quantization_in_vllm`](notebooks/05_speculation_and_quantization_in_vllm.ipynb) | T0 (+T1 flags) | tokens per verify step `(1-a^(k+1))/(1-a)`; acceptance from vLLM's counters; why speculation fades at high batch and short context; what INT4 vs FP8 buys for prefill vs decode | §7, §8 | ~2 h |
+| 06 | [`deploy_on_cloud_run_gpu`](notebooks/06_deploy_on_cloud_run_gpu.ipynb) | T3 (plannable at T0) | cold-start anatomy and the startup-probe budget; setting Cloud Run `concurrency` from a measurement, and what happens above `max-num-seqs`; cost per million tokens; scale-to-zero vs warm | §12 | ~2 h |
+
+Everything runs on a laptop first: `servelab.fakeserver` is a **fake vLLM** — the same OpenAI-compatible streaming
+API and the same `vllm:*` Prometheus metrics, over an engine emulator with continuous batching, a block-hash prefix
+cache, preemption and a roofline step-time model. Its numbers are labelled *simulated*. Point the same code at a real
+`vllm serve` and the numbers become measurements.
 
 | Tier | Where | What runs | In this lab |
 |---|---|---|---|
@@ -20,16 +42,16 @@ GPU) or at Cloud Run / GKE, and the numbers become measurements.
 | **T2** | two GPUs: Kaggle "GPU T4 x2" (free, PCIe) or a rented pair | `vllm serve --tensor-parallel-size 2` | notebook 03 exercise 3.6 (predicted at T0, measured with `SERVELAB_START_VLLM=1`), [`deploy/any-gpu/`](deploy/any-gpu/) |
 | **T3** | GCP | vLLM on Cloud Run (L4, scale to zero) or GKE (L4 Spot) | [`deploy/gcp/cloud-run/`](deploy/gcp/cloud-run/), [`deploy/gcp/gke/`](deploy/gcp/gke/) |
 
-vLLM v0.30.0 needs compute capability 7.5 or newer: a T4 works, Kaggle's P100 does not. Collective
-bandwidth and multi-GPU topology themselves are layers 01-02; prices and where to get GPUs:
-[`COMPUTE.md`](../../../COMPUTE.md).
+vLLM v0.30.0 needs compute capability 7.5 or newer: a T4 works, Kaggle's P100 does not. The minimal from-scratch
+engine is next door in [`../mini-engine-core/`](../mini-engine-core/); this lab never imports it. Prices and where
+to get GPUs: `COMPUTE.md` at the repo root.
 
-## Quick start (T0, no GPU)
+## Run it
 
 ```bash
 cd vllm-serving-lab
 python3 -m pip install -e ".[dev]"             # aiohttp + prometheus_client; dev: pytest, jupyter, numpy, pyyaml
-python3 -m pytest -q                           # ~65 tests, a few seconds, offline
+python3 -m pytest -q                           # 66 tests, a few seconds, offline
 python3 -m servelab fake --port 8000 &         # a fake vLLM (simulated T4 + Qwen2.5-0.5B)
 python3 -m servelab bench --url http://127.0.0.1:8000 --rate 5 -n 60 --slo-ttft-ms 300 --slo-tpot-ms 30
 python3 -m servelab metrics --url http://127.0.0.1:8000
@@ -44,20 +66,6 @@ service). The notebooks detect it and measure it — a `servelab fake` server in
 recognised by its `/version` and stays labelled simulated; with a GPU, vLLM installed and
 `SERVELAB_START_VLLM=1`, notebook 03's sweeps restart a real `vllm serve` per configuration.
 
-## The notebooks
-
-Each opens with *the one-minute version*, works examples against the library, then 3-6 exercises
-(implement the key function, predict a number, pick a setting) each followed by a check that prints ✅,
-and closes with *in a design review*: a two-minute walkthrough and drill questions with answers.
-
-| # | Notebook | Tier | You will be able to explain | Primer |
-|---|---|---|---|---|
-| 01 | `size_before_you_serve` | T0 (+T1 log) | KV bytes per token from `config.json`; blocks and "Maximum concurrency"; ~18 concurrent 2K-token sessions of an 8B model on an L4, and every assumption behind that number; why its 128K context does not start; what FP8 buys; calibrating from the startup log | §4 |
-| 02 | `serve_and_measure` | T0 / T1 / T3 | TTFT, ITL, TPOT, E2E, throughput and goodput as `vllm bench serve` defines them (one stated difference); histogram quantiles; open vs closed loop and the backlog an open loop builds; Little's law against the engine's gauges; warm-up, burstiness and long-tailed lengths | §11 |
-| 03 | `knobs_and_tradeoffs` | T0 / T1 (+T2) | why batching is nearly free; the latency-throughput knee; `max-num-batched-tokens` as a TTFT-versus-ITL-tail trade; choosing `max-num-seqs` by goodput; capacity at an SLO; KV blocks and preemption; tensor parallelism on two T4s | §2, §3, §9, §11 |
-| 04 | `prefix_caching_for_agents` | T0 / T1 | block-hash chains; the hit accounting rules; hit rate from `/metrics`, predicted from the prompt layout before it is measured; prompt layouts that keep (or kill) the cache for agents; what a hit is worth in TTFT | §5 |
-| 05 | `speculation_and_quantization_in_vllm` | T0 (+T1 flags) | tokens per verify step `(1-a^(k+1))/(1-a)`; acceptance from vLLM's counters; why speculation fades at high batch and short context; what INT4 vs FP8 buys for prefill vs decode | §7, §8 |
-| 06 | `deploy_on_cloud_run_gpu` | T3 (plannable at T0) | cold-start anatomy and the startup-probe budget; setting Cloud Run `concurrency` from a measurement, and what happens above `max-num-seqs`; cost per million tokens; scale-to-zero vs warm | §12 |
 
 ## The library (`servelab/`, ~3,000 lines)
 
@@ -115,7 +123,7 @@ L4, scale to zero, weights from Hugging Face or a GCS mount, HF token from Secre
 Managed Prometheus). Each has a README with cost and cleanup. This lab's Terraform is the Cloud Run
 service (`deploy/gcp/cloud-run/terraform/`); GKE here is a `gcloud` script plus manifests, and the
 cluster as Terraform lives in layer 03's
-[`k8s-gpu-lab`](../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) and layer 05's
+`k8s-gpu-lab` (`03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/`) and layer 05's
 [`inference-gateway-lab`](../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/).
 
 ## Regenerating notebooks
@@ -129,6 +137,17 @@ python3 tools/run_notebooks.py solutions                # solutions must run cle
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 make check                                              # all of the above + tests + bash -n
 ```
+
+## Caveats
+
+- **Simulated vs measured.** The fake server's numbers are simulated and every report says so (it also answers
+  `/version` as a fake, even behind `SERVELAB_URL`). Only a real `vllm serve` gives measurements.
+- **Sizing is an estimate.** `sizing.size()` models vLLM v0.30.0's defaults (0.92 of the driver-reported total,
+  profiled activation, CUDA-graph and non-torch overheads estimated); the startup log's `Available KV cache memory`
+  is the measurement, and notebook 01 calibrates against it. [`../PRIMER.md`](../PRIMER.md) §4 compares these inputs
+  with the mini engine's round ones.
+- **Checked by construction.** The deploy paths are checked with `bash -n`, `DRY_RUN=1`, Terraform `validate` and
+  Kubernetes schema checks, not run on real infrastructure here.
 
 ## Verify list (facts dated Sep 2026 that move)
 

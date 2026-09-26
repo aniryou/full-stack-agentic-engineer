@@ -1,16 +1,37 @@
-# mini-engine-core
+# mini-engine-core — build an inference engine's step loop, scheduler and KV cache in numpy
 
-The inside of an inference engine, small enough to read in a sitting: **a numpy "nano-vLLM"** with the step
-loop, continuous batching, a paged KV cache, hash-chained prefix caching, chunked prefill, preemption by
-recompute, a full sampler with structured-output masks, exact speculative decoding, quantization, and a
-roofline performance model that drives the real scheduler to produce **simulated** TTFT and ITL under load.
-About 960 lines of library code (1,440 with docstrings), standard library + numpy, six fill-in notebooks.
+After this you can explain every decision an engine like vLLM makes in one step — who runs, how many tokens, which
+KV blocks, which request is preempted, which cached prefix is reused — because you will have filled in the code
+that makes it, in `minengine`, a numpy "nano-vLLM" small enough to read in a sitting (~960 lines).
 
-**Tier: T0.** Laptop, Colab CPU or CI; no GPU, no network. This is where the concepts of
-[`../PRIMER.md`](../PRIMER.md) are learned. The step-up is [`../vllm-serving-lab/`](../vllm-serving-lab/): the
-same ideas measured on a real vLLM server (T1 on one GPU, T3 on Cloud Run or GKE, with a T0 fake server).
+## Start here
 
-## Quick start
+1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (anatomy of an engine, continuous batching).
+2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 67 tests in about 15 s, including
+   "paged attention equals dense attention to 1e-10".
+3. Open [`notebooks/01_the_step_loop_and_continuous_batching.ipynb`](notebooks/01_the_step_loop_and_continuous_batching.ipynb)
+   and take one engine step apart.
+
+## What you get
+
+*Tier T0 = laptop or Colab CPU, free: everything here runs with no GPU and no network.* Each notebook opens with
+"The one-minute version", works examples against the code, sets exercises with a check cell that prints ✅, and ends
+with "In a design review". Finished versions are in [`solutions/`](solutions/). About 11 hours in all with the
+primer (the repo's curriculum, modules 04.1–04.6).
+
+| Notebook | You will be able to… | Primer | Time | Tier |
+|---|---|---|---|---|
+| [`01_the_step_loop_and_continuous_batching`](notebooks/01_the_step_loop_and_continuous_batching.ipynb) | take one step apart (the flat batch, slot mapping); compare static and continuous batching; count peak KV blocks per request and concurrency from KV blocks; split one MLP across two "GPUs" (tensor parallelism and its all-reduces) | §1, §2, §9 | ~2 h | T0 |
+| [`02_chunked_prefill_and_the_token_budget`](notebooks/02_chunked_prefill_and_the_token_budget.ipynb) | find the knee of the step-time curve; show prefill/decode interference and what chunked prefill does; sweep the token budget at moderate load and at saturation, with goodput (simulated); choose a budget for an ITL SLO; size KV to avoid preemption; show what the whole-prompt admission check buys | §3, §4, §11 | ~2 h | T0 |
+| [`03_prefix_caching`](notebooks/03_prefix_caching.ipynb) | name blocks by a chained hash and say why the parent is in the name; share a system prompt with refcounts, within one step; evict LRU; predict a hit rate; lay out an agent prompt for 80%+ hits; compare a radix tree with block hashing | §5 | ~2 h | T0 |
+| [`04_sampling_and_structured_output`](notebooks/04_sampling_and_structured_output.ipynb) | implement temperature, top-k/p, min-p, penalties, seeds and raw logprobs; force valid JSON with an FSM mask (syntax, not sense); compile a JSON-schema automaton into per-state masks over multi-character tokens | §6 | ~1.5 h | T0 |
+| [`05_speculative_decoding`](notebooks/05_speculative_decoding.ipynb) | prove the rejection rule exact; measure α and tokens per pass on a draft/target pair (and why the formula over-predicts deep k); use prompt lookup for copy-heavy outputs; say when speculation stops paying (simulated) | §7 | ~2 h | T0 |
+| [`06_quantization`](notebooks/06_quantization.ipynb) | quantize to INT8/INT4/FP8 at each scale granularity; handle outliers with SmoothQuant; measure model-level damage; say what each scheme and FP8 KV buys for decode, prefill and concurrency on an L4 (simulated) | §8 | ~1.5 h | T0 |
+
+Multi-LoRA (primer §10) has no notebook: its numbers come from `perf.lora_params()` and the adapter-salted block
+names, pinned in `tests/test_perf.py` and `tests/test_kv.py`.
+
+## Run it
 
 ```bash
 cd mini-engine-core
@@ -74,7 +95,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
   tokens `(1 − α^(k+1)) / (1 − α)`, bits per weight, the FP8 grid, hit accounting with preempted re-lookups kept
   apart (`test_perf.py`, `test_spec.py`, `test_quant.py`, `test_kv.py`).
 
-## What is faithful to vLLM, and what is simplified
+## Caveats: what is faithful to vLLM, and what is simplified
 
 Faithful (checked against vLLM's V1 source, Sep 2026 — see the primer's Verify list): unified scheduling on
 `num_computed_tokens`; running before waiting; no admissions in a step that preempted; FCFS victim = the newest
@@ -89,28 +110,9 @@ speculation runs outside the engine loop (`spec.py`) rather than as lookahead sl
 draft distribution q — sampled, or one-hot for greedy drafting, which is vLLM's default); the model is float64
 numpy.
 
-## The notebooks
-
-Each opens with its tier and "The one-minute version", works examples against the code, sets exercises with a
-check cell that prints ✅, and ends with "In a design review". Solutions are in `solutions/`.
-
-1. **`01_the_step_loop_and_continuous_batching`** — one step taken apart; the flat batch and slot mapping;
-   static vs continuous batching; peak KV blocks per request; concurrency from KV blocks; one MLP split across two
-   "GPUs" (tensor parallelism and its all-reduces).
-2. **`02_chunked_prefill_and_the_token_budget`** — the knee of the step-time curve; prefill/decode interference
-   and chunked prefill; a budget sweep at moderate load and at saturation, with goodput (simulated); choosing the
-   budget for an ITL SLO; preemption by recompute; sizing KV to avoid it; the whole-prompt admission check.
-3. **`03_prefix_caching`** — chained block names; shared system prompts and refcounts; a burst sharing a prefix
-   within one step; LRU eviction; why the parent is in the name; what it buys on an H100 (simulated); hit
-   prediction; agent prompt layout (0% vs 80%+ hits); radix tree vs block hashing.
-4. **`04_sampling_and_structured_output`** — temperature, top-k/p, min-p, penalties, seeds and batch invariance,
-   raw logprobs; FSM masks that force valid JSON (and why that guarantees syntax, not sense); compiling a
-   JSON-schema automaton into per-state masks over multi-character tokens.
-5. **`05_speculative_decoding`** — the rule and its exactness; α and tokens per pass on a real draft/target pair
-   (and why the formula over-predicts deep k); prompt lookup for copy-heavy outputs; when speculation stops paying,
-   and how much that rests on the overhead assumption (simulated).
-6. **`06_quantization`** — INT8/INT4/FP8 and scale granularity; outliers and SmoothQuant; model-level damage; FP8
-   KV; what each scheme buys for decode, prefill and concurrency on an L4 (simulated).
+Every latency and throughput `minengine.perf` prints is **simulated** (a roofline model driving this package's real
+scheduler on a virtual clock) and labelled so; its KV sizing uses round inputs (0.9 of the GPU's datasheet memory
+minus a flat 1 GB), which [`../PRIMER.md`](../PRIMER.md) §4 compares with vLLM v0.30.0's defaults.
 
 ## Regenerating notebooks
 
@@ -130,6 +132,7 @@ this package (see [`../../../COLAB.md`](../../../COLAB.md)).
 
 Go to [`../vllm-serving-lab/`](../vllm-serving-lab/) to size a real model before serving it, drive vLLM with an
 open-loop load generator, read its `/metrics`, sweep the same knobs against an SLO, and deploy it on Cloud Run
-GPU or GKE. For many replicas — routing, autoscaling, disaggregation — continue to
-[`05-orchestrator`](../../../05-orchestrator/). Where each tier runs and what it costs: [`COMPUTE.md`](../../../COMPUTE.md).
-MIT licensed.
+GPU or GKE; read the real scheduler and block pool in [`../../vllm-internals/`](../../vllm-internals/README.md). For
+many replicas — routing, autoscaling, disaggregation — continue to
+[`05-orchestrator`](../../../05-orchestrator/README.md). Where each tier runs and what it costs: `COMPUTE.md` at the
+repo root. MIT licensed.
