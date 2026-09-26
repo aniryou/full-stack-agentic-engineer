@@ -12,10 +12,13 @@ docs_dir: site
 site_dir: site_build
 exclude_docs: |
   .gitignore
+  overrides/
 
 theme:
   name: material
   custom_dir: site/overrides
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
   features:
     - navigation.tabs
     - navigation.sections
@@ -27,11 +30,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode

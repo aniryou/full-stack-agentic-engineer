@@ -118,3 +118,10 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
 - `07-.../long-running-durable/00_primer.md` is byte-identical to the primer inside
   `long-running-agentic/`. Kept as the topic entry point; dedupe if desired.
 - Root `.gitignore` keeps caches/venvs/`.DS_Store` out; per-lab `.gitignore` files are retained too.
+- **Guide site (GitHub Pages).** `https://aniryou.github.io/full-stack-agentic-engineer/` is built by
+  `.github/workflows/pages.yml` on every push to `main`: `tools/site/build_site_content.py` (stdlib) generates
+  `site/layers/**` and `site/guide/{curriculum,compute,colab}.md` from the repo (gitignored), rewrites relative links
+  (site page if one exists, else GitHub), and refreshes the `nav:` between `# nav-layers:` markers in `mkdocs.yml`;
+  then `mkdocs build --strict` (MkDocs Material + mkdocs-jupyter, pinned in `requirements-site.txt`). Hand-written:
+  `site/index.md`, `site/overrides/`, `site/stylesheets/`, `site/assets/`, `site/guide/{how-to-use,about}.md`.
+  After content lands, re-run the generator and commit the updated nav. Preview: `tools/site/README.md`.

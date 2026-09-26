@@ -261,7 +261,7 @@ def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str
 
 
 LINK = re.compile(r"(!?\[((?:[^\[\]]|\[[^\]]*\])*)\])\(\s*(<[^>]*>|[^()\s]*(?:\([^()\s]*\)[^()\s]*)*)(\s+\"[^\"]*\")?\s*\)")
-REFDEF = re.compile(r"^(\s{0,3}\[[^\]]+\]:\s*)(\S+)(.*)$")
+REFDEF = re.compile(r"^(\s{0,3}\[[^\]]+\]:[ \t]*)(\S+)(.*)$", re.M)
 HTMLATTR = re.compile(r"\b(src|href)=\"([^\"]+)\"")
 CODESPAN = re.compile(r"(`+)(.+?)\1")
 
@@ -281,32 +281,41 @@ def rewrite_segment(s: str, fn) -> str:
 
 
 def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False) -> str:
+    """Rewrite link targets in Markdown, outside fenced code and inline code; links may span lines."""
     fn = lambda t: rewrite_target(t, src_repo, src_site, html)  # noqa: E731
-    out, in_fence = [], None
+    out: list[str] = []
+    prose: list[str] = []
+
+    def flush():
+        if not prose:
+            return
+        block = "\n".join(prose)
+        prose.clear()
+        block = REFDEF.sub(lambda r: r.group(1) + fn(r.group(2)) + r.group(3), block)
+        spans: list[str] = []            # mask inline code so links inside it stay as written
+
+        def mask(c):
+            spans.append(c.group(0))
+            return f"\x00{len(spans) - 1}\x00"
+        masked = rewrite_segment(CODESPAN.sub(mask, block), fn)
+        out.append(re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], masked))
+
+    in_fence = None
     for line in text.split("\n"):
         m = FENCE.match(line)
         if m:
+            flush()
             tok = m.group(1)
             if in_fence is None:
                 in_fence = tok[0] * 3
             elif tok.startswith(in_fence):
                 in_fence = None
             out.append(line)
-            continue
-        if in_fence:
+        elif in_fence:
             out.append(line)
-            continue
-        r = REFDEF.match(line)
-        if r:
-            out.append(r.group(1) + fn(r.group(2)) + r.group(3))
-            continue
-        parts, pos = [], 0
-        for c in CODESPAN.finditer(line):
-            parts.append(rewrite_segment(line[pos:c.start()], fn))
-            parts.append(c.group(0))
-            pos = c.end()
-        parts.append(rewrite_segment(line[pos:], fn))
-        out.append("".join(parts))
+        else:
+            prose.append(line)
+    flush()
     return "\n".join(out)
 
 
@@ -380,8 +389,13 @@ def build_pages() -> None:
             head = (f"[![Open In Colab]({BADGE})]({colab(rp)}) &nbsp; "
                     f"[View on GitHub]({GITHUB}/blob/{BRANCH}/{rp})")
             stats["colab"] += 1
-        nb.setdefault("cells", []).insert(0, {"cell_type": "markdown", "metadata": {"tags": ["site-header"]},
-                                              "source": head})
+        if (nb.get("nbformat", 4), nb.get("nbformat_minor", 0)) >= (4, 5):
+            for i, c in enumerate(nb.get("cells", [])):
+                c.setdefault("id", f"cell-{i}")
+        cell = {"cell_type": "markdown", "metadata": {"tags": ["site-header"]}, "source": head}
+        if (nb.get("nbformat", 4), nb.get("nbformat_minor", 0)) >= (4, 5):
+            cell["id"] = "site-header"
+        nb.setdefault("cells", []).insert(0, cell)
         write(site_path, json.dumps(nb, ensure_ascii=False, indent=1))
         notebooks[rp] = site_path
         stats["notebooks"] += 1
