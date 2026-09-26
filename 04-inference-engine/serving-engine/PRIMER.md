@@ -197,7 +197,7 @@ the ITL SLO, then check capacity under a saturating load. With 64 requests decod
 a 25 ms p99 ITL target: 512 tokens gives a 14.4 ms step, 1,024 gives 26.7 ms → choose 512 (notebook 02, exercise
 2.4). vLLM adds finer knobs — `long_prefill_token_threshold` (cap the chunk of a long prompt so several prompts
 progress together; 0 = off by default) with an `_adaptive` variant, and `max_num_active_seqs` (cap RUNNING below
-`max_num_seqs`) (verify).
+`max_num_seqs`); the last two are on `main` after 0.30.0, not in the 0.30.0 wheel (verify).
 
 **When chunking is not enough.** Every chunk still shares its step with decodes, so a prefill-heavy mix (RAG, agents
 re-reading long contexts) makes ITL and TTFT fight for the same GPUs. Running prefill and decode on separate pools
@@ -861,8 +861,8 @@ main branch source on that date — re-check them against the release you pin.
   API-server defaults for `max_num_batched_tokens` / `max_num_seqs` (2,048/256 below 70 GB or on A100; 8,192/1,024
   H100/H200-class; 16,384/1,024 at ≥160 GB); chunked prefill on by default and `max_num_batched_tokens ≥
   max_model_len` required without it; `long_prefill_token_threshold` (default 0 = off),
-  `long_prefill_token_threshold_adaptive` and `max_num_active_seqs` in `SchedulerConfig` (no partial-prefill cap
-  on main); preemption by recompute only in V1 and `kv_offloading_size` for CPU offload;
+  `long_prefill_token_threshold_adaptive` and `max_num_active_seqs` in `SchedulerConfig` on main after 0.30.0, absent
+  at the v0.30.0 tag (no partial-prefill cap on main); preemption by recompute only in V1 and `kv_offloading_size` for CPU offload;
   `max_cache_hit_length = num_tokens − 1`; blocks cached inside `KVCacheManager.allocate_slots` (scheduling time);
   prefix-cache stats recorded with a `preempted` flag, preempted re-lookups kept out of
   `vllm:prefix_cache_queries/_hits`; tail-first freeing into an LRU free queue; the start-up error when one
