@@ -9,6 +9,7 @@ for a in sys.argv[1:]:
 for f in files:
     text = f.read_text(encoding="utf-8")
     text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = re.sub(r"`[^`\n]*`", "", text)  # inline code shows link syntax; it is not a link
     for m in re.finditer(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)", text):
         link = m.group(1)
         if re.match(r"^(https?:|mailto:|#)", link): continue

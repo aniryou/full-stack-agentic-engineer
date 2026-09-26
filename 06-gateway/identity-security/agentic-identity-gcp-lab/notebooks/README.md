@@ -53,7 +53,7 @@ Conventions inside the notebooks:
 * Notebook 05 contains a guarded `ModelArmorScreener(template)` cell (`RUN_ON_GCP = False`) showing the
   one-line swap from the local screener to Model Armor on a real project.
 
-To verify that the worked and solution notebooks still execute (what CI would run):
+To verify that the worked and solution notebooks still execute (what the manual `solutions` job of the root [`tests` workflow](../../../../.github/workflows/tests.yml) runs):
 
 ```bash
 mkdir -p /tmp/nb-out
