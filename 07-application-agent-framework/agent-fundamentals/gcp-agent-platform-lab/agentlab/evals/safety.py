@@ -1,4 +1,4 @@
-"""Injection suites: does the harness catch a forbidden call? (Primer §4.1, §3.1)
+"""Injection suites: does the harness catch a forbidden call? (notebooks 08 and 11)
 
 Indirect prompt injection arrives through *tool results* — a transaction memo,
 a support ticket, a web page — that the model reads as if it were trusted

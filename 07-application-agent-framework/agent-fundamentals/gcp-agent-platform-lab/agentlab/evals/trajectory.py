@@ -1,4 +1,4 @@
-"""Trajectory metrics: grade *how* the agent got there, not only what it said (Primer §4.1).
+"""Trajectory metrics: grade *how* the agent got there, not only what it said (notebook 08).
 
 The final answer of a bank assistant can read perfectly while the agent
 skipped the balance lookup and guessed, or blocked a card nobody asked about.

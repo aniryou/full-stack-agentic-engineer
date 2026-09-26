@@ -1,6 +1,9 @@
-"""Wire shapes of the Model Context Protocol, 2026-07-28 revision (Primer §3.2).
+"""Wire shapes of the Model Context Protocol, 2026-07-28 revision (notebook 05).
 
-Teaching subset, not a conformant implementation. It keeps exactly the parts an
+Checked against the revision's changelog and schema in the
+modelcontextprotocol/modelcontextprotocol repository on 2026-09-26 (verify);
+``docs/MCP_REVISIONS.md`` says what differs from the 2025 revisions and where
+this subset departs from the spec. Teaching subset, not a conformant implementation. It keeps exactly the parts an
 architect has to reason about in a design discussion:
 
 * JSON-RPC 2.0 request / result / error envelopes (no batches, no notifications);
@@ -47,16 +50,20 @@ INVALID_REQUEST = -32600
 METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
-HEADER_MISMATCH = -32020                 # the revision's HeaderMismatch error
-UNSUPPORTED_PROTOCOL_VERSION = -32021    # the revision names it UnsupportedProtocolVersion; the number is this lab's
-UNAUTHORIZED = -32001                    # lab codes: the HTTP status carries the OAuth meaning (401 / 403)
+# The 2026-07-28 revision reserves -32020..-32099 for codes the spec defines (verify):
+HEADER_MISMATCH = -32020                 # HeaderMismatch
+MISSING_REQUIRED_CLIENT_CAPABILITY = -32021   # MissingRequiredClientCapability (defined, not raised here)
+UNSUPPORTED_PROTOCOL_VERSION = -32022    # UnsupportedProtocolVersion
+# Lab codes in the legacy -32000..-32019 range, which the revision says new implementations
+# SHOULD NOT use; the HTTP status (401 / 403) and WWW-Authenticate carry the OAuth meaning.
+UNAUTHORIZED = -32001
 FORBIDDEN = -32003
 
 # HTTP status that accompanies each JSON-RPC error on the HTTP transport.
 HTTP_STATUS_FOR_CODE = {
     PARSE_ERROR: 400, INVALID_REQUEST: 400, INVALID_PARAMS: 400,
     METHOD_NOT_FOUND: 404, INTERNAL_ERROR: 500,
-    HEADER_MISMATCH: 400, UNSUPPORTED_PROTOCOL_VERSION: 400,
+    HEADER_MISMATCH: 400, MISSING_REQUIRED_CLIENT_CAPABILITY: 400, UNSUPPORTED_PROTOCOL_VERSION: 400,
     UNAUTHORIZED: 401, FORBIDDEN: 403,
 }
 

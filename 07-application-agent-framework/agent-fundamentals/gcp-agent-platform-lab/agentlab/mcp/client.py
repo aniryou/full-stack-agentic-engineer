@@ -1,4 +1,4 @@
-"""An MCP client (Primer §3.2) and the adapter that makes remote tools look local. Teaching subset.
+"""An MCP client (notebook 05) and the adapter that makes remote tools look local. Teaching subset.
 
 ``McpClient`` does the three things a host needs: it stamps every request with
 the ``_meta`` block and the mirrored headers, it turns the two embedded

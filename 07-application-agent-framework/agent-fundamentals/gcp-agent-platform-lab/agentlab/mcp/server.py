@@ -1,4 +1,4 @@
-"""An MCP server over agentlab tools (Primer §3.2, §3.3). Teaching subset, not a conformant implementation.
+"""An MCP server over agentlab tools (notebook 05). Teaching subset, not a conformant implementation.
 
 Read top to bottom:
 

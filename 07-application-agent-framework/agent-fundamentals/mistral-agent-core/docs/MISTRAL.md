@@ -40,9 +40,10 @@ call is `client.chat.complete(model=..., messages=..., tools=..., tool_choice="a
 `tool_choice` accepts `"auto"`, `"any"` (force a tool), or `"none"`. The SDK surface
 moves — check https://docs.mistral.ai if a call fails.
 
-## Choosing a model (September 2026 — verify before quoting)
+## Choosing a model (September 2026, verify)
 
-Prices are per million tokens and illustrative; confirm on the pricing page.
+Prices are per million tokens, illustrative and dated September 2026 (verify); confirm
+on the pricing page before relying on them.
 
 | Model string | Use for | ~Input / Output | Context | Deployment |
 |--------------|---------|-----------------|---------|------------|
@@ -58,16 +59,16 @@ Prices are per million tokens and illustrative; confirm on the pricing page.
 
 Rule of thumb for an agent: `mistral-large` for the hard multi-step tool loop, route
 routine turns to `mistral-small`, reach for `magistral` only where reasoning earns its
-cost, and offer a self-hosted `small` / `ministral` when data cannot leave the
-customer's environment.
+cost, and self-host `small` / `ministral` when the data must not leave your own
+environment.
 
-**Deployment posture.** Mistral's differentiator is not only model quality but where the model can run. The
-small models are open-weight, so the same agent can run on `la Plateforme`, in a
-customer's VPC, or fully on-prem. For regulated APAC accounts (banking, public sector,
-telco) that data-sovereignty story is often the reason Mistral is chosen. When you design an
-agent, name the deployment options alongside the model choice: managed
-API for speed, private/VPC for control, self-hosted open weights for sovereignty — and
-say which you would pick for a given customer and why.
+**Deployment posture.** Where the model can run is a design input, not an afterthought.
+The small models are open-weight, so the same agent can call the managed API
+(`la Plateforme`), run on weights deployed in your own VPC, or run fully on-prem. When the
+data is regulated (banking, health, public sector) or must stay in one jurisdiction, that
+choice can decide the model. In a design review, name the deployment options alongside the
+model choice — managed API for speed, private/VPC for control, self-hosted open weights for
+data residency — and say which one the requirements pick and why.
 
 ## The rest of the stack (worth a sentence each)
 
@@ -79,5 +80,6 @@ say which you would pick for a given customer and why.
 - **Structured outputs / JSON mode** — for tools whose results a program consumes.
 
 This lab stays deliberately at the level of the loop. The production step-up
-(async, parallel tools, MCP, OAuth, evals, tracing) is the `gcp-agent-platform-lab` repo;
+(async, parallel tools, MCP, OAuth, evals, tracing) is the
+[`gcp-agent-platform-lab`](../../gcp-agent-platform-lab/README.md) next to it in this repo;
 the same adapter idea applies there.

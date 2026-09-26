@@ -1,4 +1,4 @@
-"""Circuit breaker, bulkhead and deadlines: stop a sick dependency from taking the agent down (Primer §4.4).
+"""Circuit breaker, bulkhead and deadlines: stop a sick dependency from taking the agent down (notebook 10).
 
 * A **circuit breaker** fails fast once a dependency keeps failing, so callers stop piling
   timeouts onto it and it gets room to recover; after a cooling period one probe decides

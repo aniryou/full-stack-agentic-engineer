@@ -4,8 +4,9 @@
 
 Three files, ~200 lines, pure standard library, synchronous. Read them in this
 order: fake_llm.py, tools.py, agent.py. When you want the production version
-(async, parallel tools, MCP, OAuth, evals, tracing), that is the separate
-`gcp-agent-platform-lab` repository — this is the concept it is built on.
+(async, parallel tools, MCP, OAuth, evals, tracing), that is `gcp-agent-platform-lab`,
+next to this lab in 07-application-agent-framework/agent-fundamentals/ — this is the
+concept it is built on.
 """
 from .agent import Agent, Result
 from .fake_llm import FakeLLM, Response, ToolCall, call, calls, text

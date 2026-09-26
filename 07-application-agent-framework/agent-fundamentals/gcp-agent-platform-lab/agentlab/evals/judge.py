@@ -1,4 +1,4 @@
-"""LLM-as-judge, with the calibration that makes it trustworthy (Primer §4.1).
+"""LLM-as-judge, with the calibration that makes it trustworthy (notebook 08).
 
 A judge scores an answer 1–5 against a rubric. Judges are cheap and scale;
 they are also biased, and the biases are known:

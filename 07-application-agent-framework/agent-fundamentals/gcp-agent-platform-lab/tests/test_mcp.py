@@ -126,12 +126,19 @@ async def test_header_mismatch_is_32020_and_http_400():
     assert e.value.code == HEADER_MISMATCH
 
 
+def test_error_codes_match_the_2026_07_28_allocation():
+    # The revision's reserved range: HeaderMismatch -32020, MissingRequiredClientCapability -32021,
+    # UnsupportedProtocolVersion -32022 (verify). -32021 is not the version error.
+    assert (p.HEADER_MISMATCH, p.MISSING_REQUIRED_CLIENT_CAPABILITY, p.UNSUPPORTED_PROTOCOL_VERSION) == (-32020, -32021, -32022)
+    assert UNSUPPORTED_PROTOCOL_VERSION == -32022
+
+
 async def test_unsupported_version_and_unknown_method():
     server = make_server()
     old = McpClient(InProcessTransport(server), protocol_version="2025-11-25")
     with pytest.raises(McpError) as e:
         await old.discover()
-    assert e.value.code == UNSUPPORTED_PROTOCOL_VERSION and e.value.http_status == 400
+    assert e.value.code == UNSUPPORTED_PROTOCOL_VERSION == -32022 and e.value.http_status == 400
     assert e.value.data["supportedVersions"] == ["2026-07-28"]
     with pytest.raises(McpError) as e:
         await McpClient(InProcessTransport(server)).request("resources/list")
