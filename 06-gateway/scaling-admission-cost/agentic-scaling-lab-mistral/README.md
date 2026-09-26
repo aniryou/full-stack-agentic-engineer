@@ -19,7 +19,7 @@ Nothing here needs cloud credentials or a GPU; simulations run 50× faster than 
 | `docs/04-platform-mapping.md` | Each concept → Kubernetes component / Mistral API feature → the setting that matters; vLLM settings; notes for Azure, AWS, Google Cloud and a sovereign cloud. |
 | `scalelab/` | **The core concepts in code** — one module per idea, each readable in five minutes. |
 | `notebooks/` | **Four worked-example notebooks with fill-in-the-blank exercises**; solutions in `notebooks/solutions/`. |
-| `tests/` | One test per concept (`pytest -q`, ~8 s). |
+| `tests/` | One test per concept (`pytest -q`, ~2 s; the load simulation runs on a virtual-time event loop, so it is deterministic). |
 
 ## The core concepts (`scalelab/`)
 
@@ -42,7 +42,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"             # its own venv: see the note below
 python -m scalelab.capacity        # the capacity plan, both ways of paying
 python -m scalelab.serving         # one replica per model and GPU
-pytest -q                          # 19 tests, ~8 s
+pytest -q                          # 19 tests, ~2 s
 jupyter lab notebooks/             # start with 01_scaling_math.ipynb
 ```
 
