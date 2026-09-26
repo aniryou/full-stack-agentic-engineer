@@ -159,9 +159,10 @@ print("objectives created by the chart:", values["router"]["inferenceObjectives"
 # ## Exercise 4.2 — same config, same behaviour?
 #
 # For each situation, decide how the EPP on kind (llm-d-router v0.10.0) and the lab router compare.
-# Answer `"same"` (same decisions, apart from how exact ties are broken), `"differs"` (both accept it
-# but behave differently) or `"lab-rejects"` (the lab router refuses the config). The lab's README
-# lists its deliberate differences; the modules state them too.
+# Answer `"same"` (same plugins, weights and formulas: they part only on exact ties and when the
+# prefix index runs out of room), `"differs"` (both accept it but behave differently in normal
+# operation) or `"lab-rejects"` (the lab router refuses the config). The lab's README lists its
+# deliberate differences; the modules state them too.
 #
 # | | situation |
 # |---|---|

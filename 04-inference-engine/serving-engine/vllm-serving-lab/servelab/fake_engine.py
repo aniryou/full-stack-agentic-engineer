@@ -16,8 +16,9 @@ hits that shorten prefill, preemptions when blocks run out, speculation that pay
 :func:`simulate` runs it in virtual time for tests.
 
 Simplifications (outputs are always labelled "simulated"): FCFS only, attention FLOPs ignored,
-no CUDA-graph padding, preemption always by recompute, speculative acceptance as independent
-coin flips with probability ``spec_acceptance``. The real scheduler is
+no CUDA-graph padding, preemption always by recompute, every block usable (vLLM keeps one back as
+its null block), speculative acceptance as independent coin flips with probability
+``spec_acceptance``. The real scheduler is
 ``vllm/v1/core/sched/scheduler.py``; a from-scratch engine with a real model is this topic's
 ``mini-engine-core``.
 """
