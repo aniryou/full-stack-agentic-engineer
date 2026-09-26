@@ -101,6 +101,17 @@ def test_preemption_by_recompute_when_kv_runs_out():
         rep.enqueue(_req(2, 300, 10), 0.0)          # can never fit: refused up front
 
 
+def test_lora_request_without_a_free_slot_is_skipped_not_blocking():
+    rep = Replica(0, dataclasses.replace(L4_8B, max_loras=1))
+    a, b, c = _req(0, 32, 40, seg_id=1), _req(1, 32, 5, seg_id=2), _req(2, 32, 5, seg_id=3)
+    a.lora, b.lora = "x", "y"                        # one slot: "y" must wait until "x" has no running request
+    for r in (a, b, c):
+        rep.enqueue(r, 0.0)
+    _drain(rep)
+    assert c.t_first < b.t_first                     # the adapter-free request overtook the stuck one
+    assert b.t_first >= a.t_done and tuple(rep.loras) == ("y",)    # "x" evicted only once idle
+
+
 def test_chat_lengths_have_the_requested_mean():
     reqs = chat(20.0, 200, seed=4, system=0, user=200, output=150, cv=0.6)
     assert abs(sum(r.output for r in reqs) / len(reqs) - 150) < 10

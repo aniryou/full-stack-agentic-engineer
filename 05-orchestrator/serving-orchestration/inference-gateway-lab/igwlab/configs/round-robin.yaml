@@ -1,5 +1,7 @@
-# Round-robin, expressed as an EPP config: with no scorers every endpoint totals 0.0, and
-# max-score-picker rotates ties with a per-request counter -> exact round-robin.
+# Round-robin in the lab router: with no scorers every endpoint totals 0.0, and the lab's
+# max-score-picker rotates the name-sorted tie with a per-request counter -> exact round-robin.
+# (The real EPP rotates a map-ordered, i.e. random, candidate list: the same config there breaks
+# ties effectively at random — even on average.)
 apiVersion: llm-d.ai/v1
 kind: EndpointPickerConfig
 plugins:

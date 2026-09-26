@@ -12,6 +12,7 @@ another one explicitly, and it only deletes objects in the lab's namespaces.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -157,8 +158,7 @@ def reset(k: Kubectl, timeout_s: int = 180) -> None:
     """Delete every lab workload (not the queues) and wait for the pods to go."""
     for ns in LAB_NAMESPACES:
         for kind in WORKLOAD_KINDS.split(","):   # one kind at a time: a missing CRD must not abort the rest
-            k.run("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=true", check=False,
-                  quiet=kind != "jobs.batch")
+            k.run("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=true", check=False)
     if k.dry_run:
         return
     deadline = time.time() + timeout_s
@@ -201,7 +201,7 @@ def run_scenario(key: str, *, k: Kubectl | None = None, dry_run: bool = False, d
         reset(k)
     for i, st in enumerate(sc.steps):
         printer(f"\n-- step {i + 1}/{len(sc.steps)}: {st.action} {st.file or st.target} {('- ' + st.note) if st.note else ''}")
-        path = f"deploy/kind/workloads/{st.file}"
+        path = os.path.relpath(kindsim.KIND_DIR / "workloads" / st.file) if st.file else ""   # right from any cwd
         if st.action == "apply":
             k.run("apply", "-f", path)
         elif st.action == "delete":

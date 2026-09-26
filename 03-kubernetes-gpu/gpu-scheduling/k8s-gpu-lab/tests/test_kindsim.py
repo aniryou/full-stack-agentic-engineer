@@ -1,0 +1,93 @@
+"""The predictor agrees with the answer key, and its pieces match Kueue / kube-scheduler rules."""
+from collections import Counter
+
+import pytest
+
+from k8sgpu import kindsim, scenarios
+from k8sgpu import manifests as m
+
+
+@pytest.mark.parametrize("sid", sorted(scenarios.EXPECTED))
+def test_predictions_match_the_answer_key(sid):
+    outs = kindsim.predict_all_steps(sid)
+    for step, expected in scenarios.EXPECTED[sid].items():
+        assert kindsim.check_expectation(outs[step - 1], expected) == [], (sid, step)
+
+
+def _leaves(caps: dict[tuple, int]) -> tuple[list[kindsim.Node], dict[str, int]]:
+    """Nodes from {(block, subblock, host): free pods}."""
+    nodes, cap = [], {}
+    for (b, s, h), c in caps.items():
+        n = kindsim.Node(h, {m.TOPOLOGY_BLOCK: b, m.TOPOLOGY_SUBBLOCK: s, m.TOPOLOGY_HOST: h, m.HOSTNAME: h}, [], 4)
+        nodes.append(n)
+        cap[h] = c
+    return nodes, cap
+
+
+LEVELS = m.GKE_TOPOLOGY_LEVELS
+
+
+def test_best_fit_picks_the_smallest_domain_that_fits():
+    nodes, cap = _leaves({("b", "s1", "h1"): 4, ("b", "s1", "h2"): 4, ("b", "s2", "h3"): 3, ("b", "s2", "h4"): 1})
+    # subblocks: s1 = 8, s2 = 4 -> a 4-pod gang takes s2 (the tighter fit), leaving s1 whole
+    got = kindsim.tas_assign(nodes, LEVELS, cap, 4, "required", m.TOPOLOGY_SUBBLOCK)
+    assert got == {"h3": 3, "h4": 1}
+
+
+def test_required_level_that_cannot_fit_reports_the_best_domain():
+    nodes, cap = _leaves({("b", "s1", "h1"): 2, ("b", "s2", "h2"): 1})
+    assert kindsim.tas_assign(nodes, LEVELS, cap, 4, "required", m.TOPOLOGY_SUBBLOCK) == (None, 2)
+
+
+def test_preferred_climbs_a_level_then_spreads():
+    nodes, cap = _leaves({("b1", "s1", "h1"): 2, ("b1", "s2", "h2"): 2, ("b2", "s3", "h3"): 1})
+    got = kindsim.tas_assign(nodes, LEVELS, cap, 4, "preferred", m.TOPOLOGY_SUBBLOCK)
+    assert got == {"h1": 2, "h2": 2}          # no subblock holds 4; block b1 does
+
+
+def test_unconstrained_uses_least_free_capacity():
+    nodes, cap = _leaves({("b", "s", "h1"): 4, ("b", "s", "h2"): 1, ("b", "s", "h3"): 2})
+    assert kindsim.tas_assign(nodes, LEVELS, cap, 2, "unconstrained", m.HOSTNAME) == {"h3": 2}
+    assert kindsim.tas_assign(nodes, LEVELS, cap, 1, "unconstrained", m.HOSTNAME) == {"h2": 1}
+
+
+def test_fit_error_message_format():
+    msg = kindsim.fit_error(3, Counter({"Insufficient nvidia.com/gpu": 2,
+                                        "node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }": 1}),
+                            {"cp": True, "a": False, "b": False})
+    assert msg == ("0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, "
+                   "2 Insufficient nvidia.com/gpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful "
+                   "for scheduling, 2 No preemption victims found for incoming pod.")
+
+
+def test_quota_arithmetic_matches_kueue():
+    sim = kindsim.new_sim()
+    a = sim.cfg.cqs["team-a-cq"]
+    assert sim.max_capacity(a) == 12                  # nominal 8 + min(borrowingLimit 4, team-b's 8)
+    assert sim.available(a) == 12                     # nothing in use yet
+    sim.apply(m.job("x", "team-a", scenarios.lab_template(4), queue="gpu-queue", parallelism=3))
+    assert sim.usage("team-a-cq") == 12 and sim.available(a) == 0
+    assert sim.available(sim.cfg.cqs["team-b-cq"]) == 4   # team-b: cohort has 16 - 12 left
+
+
+def test_topology_file_matches_the_kind_config():
+    nodes = kindsim.read_topology()
+    workers = [n for n in nodes if "control-plane" not in n.name]
+    config = (kindsim.KIND_DIR / "kind-config.yaml").read_text()
+    assert config.count("- role: worker") == len(workers) == 5
+    assert sum(n.gpus for n in nodes) == 16
+    assert all(n.taints == [kindsim.GPU_TAINT] for n in nodes if n.gpus)
+
+
+def test_kwok_fleet_shape():
+    fleet = kindsim.kwok_nodes()
+    assert len(fleet) == 32 and sum(n.gpus for n in fleet) == 256
+    assert fleet[0].labels[m.TOPOLOGY_SUBBLOCK] == "kwok-b1-s1" and fleet[0].name == "kwok-b1-s1-h1"
+
+
+def test_nodes_from_kubectl_json():
+    items = [{"metadata": {"name": "n1", "labels": {m.HOSTNAME: "n1"}},
+              "spec": {"taints": [{"key": m.GPU, "value": "present", "effect": "NoSchedule"}]},
+              "status": {"allocatable": {m.GPU: "4"}}}]
+    n = kindsim.nodes_from_k8s(items)[0]
+    assert (n.name, n.gpus, n.taints[0]["value"]) == ("n1", 4, "present")

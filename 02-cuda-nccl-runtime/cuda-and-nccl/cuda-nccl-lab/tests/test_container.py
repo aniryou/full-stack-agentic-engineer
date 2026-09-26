@@ -72,3 +72,12 @@ def test_device_nodes_and_ls_parsing(tmp_path):
 def test_live_probe_runs_anywhere():
     rep = c.probe(driver=False)  # no GPU here: a report that says so, not an exception
     assert "Device nodes" in c.explain(rep)
+
+
+def test_libcuda_baked_into_an_image_is_flagged(tmp_path):
+    injected_dir, baked = tmp_path / "injected", tmp_path / "image"
+    injected_dir.mkdir(), baked.mkdir()
+    (injected_dir / "libcuda.so.570.172.08").write_text("")
+    (baked / "libcuda.so.535.104.05").write_text("")
+    mounts = [c.InjectedFile(str(injected_dir / "libcuda.so.570.172.08"), "driver API (libcuda)", "/")]
+    assert c.stray_libcuda(mounts, lib_dirs=(str(injected_dir), str(baked))) == [str(baked / "libcuda.so.535.104.05")]

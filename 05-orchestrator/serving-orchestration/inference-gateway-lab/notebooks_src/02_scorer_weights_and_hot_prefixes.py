@@ -25,7 +25,7 @@ import threading
 import time
 
 from igwlab.bench import agentic_sessions, ascii_bars, burst, compare
-from igwlab.router import RouterSettings, load_config
+from igwlab.router import load_config
 from igwlab.stack import LocalStack
 
 # %% [markdown]
@@ -127,7 +127,8 @@ def herd_experiment(config, n=12, settings=None):
         s.run(s.router.scraper.refresh())                   # one scrape sees them...
         s.run(s.router.scraper.stop())                      # ...then the view is frozen (a long scrape interval)
         view = s.call(lambda: {e.name: (e.metrics.running, round(e.metrics.kv_usage, 4)) for e in s.router.ds.list()})
-        bodies = [{"model": "lab/llm", "messages": [{"role": "user", "content": f"burst {i}"}], "max_tokens": 8,
+        # 64 output tokens (~0.3 s): no burst request can finish while the burst is still being dispatched
+        bodies = [{"model": "lab/llm", "messages": [{"role": "user", "content": f"burst {i}"}], "max_tokens": 64,
                    "stream": True} for i in range(n)]
         recs = burst(s.router_url, bodies)
         for t in load:

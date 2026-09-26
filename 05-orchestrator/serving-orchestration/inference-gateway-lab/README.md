@@ -24,7 +24,7 @@ both: nothing here imports the core.
 ```bash
 cd inference-gateway-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                     # ~70 tests, a few seconds, offline
+python3 -m pytest -q                     # 64 tests, a few seconds, offline
 python3 -m jupyterlab notebooks          # exercises; worked answers in solutions/
 ```
 
@@ -51,7 +51,7 @@ never as GPU numbers.
 | 01 | `01_router_in_process` | T0 | prefix hashing and the index, queue/KV scores, the weighted pick; why round-robin loses on agent traffic (measured) | §1 Why a layer above the engine, §2 Routing signals and algorithms |
 | 02 | `02_scorer_weights_and_hot_prefixes` | T0 | the locality-vs-load trade-off in numbers, hot prefixes, the scrape-lag herd, choosing an affinity threshold, saturation shedding | §2, §3 Flow control and priorities |
 | 03 | `03_autoscaling_recommender` | T0 | the exact HPA algorithm (tolerance, stabilization, policies, unready pods); which vLLM signals to scale on and why queue alone collapses | §4 Autoscaling |
-| 04 | `04_local_stack_with_llm_d` | T0 walkthrough / T1-local (Docker, kind; CPU) | InferencePool semantics, the llm-d Router standalone mode, the simulator's latency model; benchmarks a running stack if there is one | §9 The Kubernetes-native stack, Sep 2026, §10 Where to run it |
+| 04 | `04_local_stack_with_llm_d` | T0 walkthrough / T1-local (Docker, kind; CPU) | InferencePool semantics, the llm-d Router standalone mode, the simulator's latency model; benchmarks a running stack if there is one | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
 | 05 | `05_gke_inference_gateway` | T3 (offline plan/inspect is T0) | the GKE Inference Gateway object graph, CRD validation, GMP → HPA plumbing, what an hour costs | §9, §10 |
 
 Every notebook opens with "The one-minute version", works examples, has 4–5 exercises each followed
@@ -87,8 +87,8 @@ changes into this directory and `pip install -e .`s it.
 | `metrics-data-source` + `core-metrics-extractor` | `router/datalayer.py` | `vllm:num_requests_waiting/running`, `kv_cache_usage_perc`, `lora_requests_info`, `cache_config_info`; 50 ms default |
 | `prefix-cache-scorer`, `queue-scorer`, `kv-cache-utilization-scorer`, `running-requests-size-scorer`, `active-request-scorer`, `token-load-scorer`, `lora-affinity-scorer` | `router/plugins.py` | formulas pinned in `tests/test_plugins.py` |
 | `utilization-filter`, `prefix-cache-affinity-filter` | `router/plugins.py` | affinity filter supports `ttftSource: prefillThroughput` only |
-| `max-score-picker`, `random-picker`, `weighted-random-picker` | `router/plugins.py` | ties rotate round-robin, so *no scorers* = round-robin |
-| legacy admission + `utilization-detector` | `Router.pool_saturation` | priority < 0 → 429 `rejected-saturated` when saturation ≥ 1.0 |
+| `max-score-picker`, `random-picker`, `weighted-random-picker` | `router/plugins.py` | ties rotate by a request counter over a name-sorted list, so *no scorers* = round-robin here; upstream's list is map-ordered, so its ties are effectively random |
+| legacy admission + `utilization-detector` | `Router.pool_saturation` | priority < 0 → 429 when saturation ≥ 1.0 (the lab also sets `x-llm-d-request-dropped-reason: rejected-saturated`, the reason string flow control uses) |
 | `InferenceObjective` priority | `RouterSettings.objectives` | selected by header `x-llm-d-inference-objective` |
 
 Deliberate differences: one scheduling profile only (no P/D disaggregation); flow-control *queueing*

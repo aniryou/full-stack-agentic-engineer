@@ -3,7 +3,7 @@ import pytest
 
 from igwlab.autoscale import (DEFAULT_BEHAVIOR, Behavior, FluidPool, HPARecommender, MetricError, PodSample,
                               ScalingPolicy, ScalingRules, Tolerances, external_per_pod_replicas, hpa_manifest,
-                              milli, plain_metric_replicas, simulate, usage_ratio_replicas)
+                              milli, plain_metric_replicas, recommend_from_scrapes, simulate, usage_ratio_replicas)
 
 
 def pods(*vals, pending=0):
@@ -119,3 +119,14 @@ def test_manifest_and_simulation_shapes():
     assert min(late(both)) >= 6                                  # running holds ~ lam*S/6 = 7.3 replicas
     assert min(late(queue_only)) < 6                             # queue-only collapsed after draining
     assert all(r["gpu_busy"] == 1.0 for r in both)               # duty cycle says nothing about need
+
+
+def test_recommendation_from_scraped_vllm_metrics():
+    def page(waiting, running):
+        return (f'vllm:num_requests_waiting{{engine="0",model_name="m"}} {waiting}\n'
+                f'vllm:num_requests_running{{engine="0",model_name="m"}} {running}\n')
+    scrapes = {"p0": page(9, 8), "p1": page(11, 8), "p2": "# a pod that exports nothing yet\n"}
+    best, per = recommend_from_scrapes(scrapes, {"vllm:num_requests_waiting": 5, "vllm:num_requests_running": 6}, 3)
+    # waiting: ratio 10/5 = 2; p2 missing counts as 0 on a scale-up: 6.666/5 = 1.333 -> ceil(3.9996) = 4
+    # running: ratio 8/6 = 1.333; with p2 at 0 it becomes 5.333/6 = 0.889 -> direction would flip -> keep 3
+    assert per["vllm:num_requests_waiting"][0] == 4 and per["vllm:num_requests_running"][0] == 3 and best == 4

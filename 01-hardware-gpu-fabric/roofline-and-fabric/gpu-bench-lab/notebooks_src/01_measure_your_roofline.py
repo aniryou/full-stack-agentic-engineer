@@ -114,8 +114,9 @@ print(f"→ {si(m.flops_per_s(), 'FLOP/s')} best, {si(m.flops_per_s('median'), '
 # Square GEMMs over a range of sizes and every dtype this backend supports. Expect FLOP/s to rise
 # with size (small GEMMs cannot keep every core/SM busy, and fixed costs are not amortised), and
 # each halving of the element width to help: twice the SIMD lanes on a CPU, the next tensor-core
-# rate on a GPU. numpy's float16 has **no BLAS path** at all — it is an emulated loop, and the
-# number you are about to see is what "no hardware support for this dtype" means.
+# rate on a GPU (fp16/bf16 run 8–16× faster than IEEE fp32 there; TF32 sits in between). On the
+# CPU, numpy's float16 has **no BLAS path** at all — it is an emulated loop, and its row shows what
+# "no hardware support for this dtype" costs. (On a T4, bf16 is the same story: no native support.)
 
 # %%
 skipped = []

@@ -16,6 +16,7 @@ import tempfile
 
 from . import __version__, gemm, inventory, loading, membw, p2p, topo, transfer
 from .backends import get_backend
+from .measure import measure
 from .report import Report
 from .roofline import measured_roofline, spec_roofline
 from .specs import cpu_peak_flops, lookup
@@ -117,6 +118,7 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
     if "load" in suites:
         log("weights loading ...")
         tmp = workdir or tempfile.mkdtemp(prefix="gpubench-")
+        os.makedirs(tmp, exist_ok=True)
         path = os.path.join(tmp, "synthetic.safetensors")
         try:
             info = loading.synthetic_checkpoint(path, (4 << 20) if tiny else (256 << 20) if quick else (2 << 30),
@@ -125,7 +127,6 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
             rep.extend(loading.bench_load(path, threads=(4,) if quick else (4, 8), skipped=rep.skipped,
                                           repeats=2 if tiny else 3))
             if be.is_gpu:
-                from .measure import measure
                 for cold in (True, False):
                     setup = (lambda: loading.drop_page_cache(path)) if cold else None
                     op = be.make_file_to_device(path, setup=setup)

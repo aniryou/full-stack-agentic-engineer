@@ -38,6 +38,11 @@ class Result:
 
 
 class Fleet:
+    """`replicas` engines of one `profile` behind `router`. Optional: an `autoscaler` (ticks every sync period;
+    new replicas serve after `cold_start_s`), `metrics_age` (max age of scraped metrics), a prefill pool of
+    `prefill` replicas joined to the rest by a `link_gbps` link, and `sample_s` (timeline rows without an
+    autoscaler). One `run()` per Fleet."""
+
     def __init__(self, profile: EngineProfile, replicas=4, router=None, *, autoscaler=None, cold_start_s=0.0,
                  metrics_age=0.05, prefill=0, link_gbps=100.0, link_latency_s=0.001, pd_threshold=0,
                  prefill_router=None, sample_s=0.0):
@@ -163,7 +168,8 @@ class Fleet:
             self._resize(t, desired)
             row["desired"] = desired
         self.timeline.append(row)
-        if self.done < self.total or (self.horizon and t + self.sample_s <= self.horizon):
+        unfinished = self.done < self.total and (self._heap or self.autoscaler)    # else nothing can finish them
+        if unfinished or (self.horizon and t + self.sample_s <= self.horizon):
             self._push(t + self.sample_s, TICK, None)
 
     def _resize(self, t, desired):

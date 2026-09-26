@@ -80,3 +80,12 @@ def test_ring_over_pipes_is_correct(op, n):
 def test_pipes_backend_refuses_alltoall_cleanly():
     with pytest.raises(RuntimeError, match="all-pairs"):
         pipes.run("alltoall", 2, sizes=[64], iters=1, warmup=0, timeout=120)
+
+
+def test_ring_schedule_sends_2_n_minus_1_chunks_per_rank_and_ends_complete():
+    n = 4
+    sched = semantics.ring_schedule(n)
+    for r in range(n):
+        assert sum(1 for _, _, rank, _, _ in sched if rank == r) == 2 * (n - 1)  # the busbw factor, counted
+    for phase, s, r, send, recv in sched:  # what r receives is what r-1 sends in the same step
+        assert recv == semantics.ring_chunks((r - 1) % n, s, n, phase)[0]

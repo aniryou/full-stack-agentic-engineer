@@ -25,12 +25,13 @@ def test_summary_keys():
 
 def test_launch_model_hand_computed():
     m = LaunchModel(launch_us=5.0, graph_launch_us=10.0, node_gap_us=1.0)
-    assert m.eager_us(100, 2.0) == 500.0  # launch-bound: 100 x max(2, 5)
+    assert m.eager_us(100, 2.0) == 500.0  # launch-bound: 100 x max(2 + 1, 5)
     assert m.graph_us(100, 2.0) == 310.0  # 10 + 100 x (2 + 1)
     assert m.speedup(100, 2.0) == pytest.approx(500 / 310)
     assert m.launch_bound(2.0) and not m.launch_bound(50.0)
     assert m.gpu_idle_fraction(2.0) == pytest.approx(0.6)
-    assert m.eager_us(100, 50.0) == 5000.0  # compute-bound: the CPU keeps ahead
+    assert m.eager_us(100, 50.0) == 5100.0  # compute-bound: the CPU keeps ahead ...
+    assert m.graph_us(100, 50.0) == 5110.0  # ... so a graph buys nothing
 
 
 def test_torch_paths_are_optional():

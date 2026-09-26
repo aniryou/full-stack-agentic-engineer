@@ -19,7 +19,7 @@
 #
 # The way to choose is to measure **goodput at your SLO** for each setting on your workload, and to
 # find the highest request rate that still meets the SLO. Concepts: PRIMER §2 "Continuous batching",
-# §3 "Chunked prefill and prefill/decode interference", §11 "Measuring an engine" ([`../PRIMER.md`](../PRIMER.md)).
+# §3 "Chunked prefill and prefill/decode interference", §11 "Measuring an engine" ([`PRIMER.md`](../../PRIMER.md)).
 
 # %%
 import math, os

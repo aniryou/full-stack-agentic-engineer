@@ -5,8 +5,8 @@
 (package `fleetsim`; the function is named next to the number) or cited. Numbers from the simulator are
 labelled **simulated**: they come from an engine model built from spec-sheet arithmetic, not from a GPU.*
 
-One inference engine (vLLM, SGLang, TensorRT-LLM) turns a GPU into a token server; layer 04 is about what happens
-inside it. This layer is about many of them: which replica gets a request, how many replicas exist, and whether
+One inference engine (vLLM, SGLang, TensorRT-LLM) turns a GPU into a token server; layer 04
+([`serving-engine`](../../04-inference-engine/serving-engine/README.md)) is about what happens inside it. This layer is about many of them: which replica gets a request, how many replicas exist, and whether
 one request's prefill and decode should even run on the same GPU. It covers routing signals and algorithms, flow
 control, autoscaling, prefill/decode disaggregation, KV-cache tiers beyond HBM, multi-model and LoRA routing, and
 the Kubernetes-native stack that implements all of it in 2026 (Gateway API Inference Extension, the llm-d Router,
@@ -251,9 +251,9 @@ detector is `utilization-detector`; the flow-control guide recommends `concurren
 in-flight requests or tokens, e.g. `maxConcurrency: 8` as the guide's example) to avoid telemetry lag. The queue is
 bounded (`maxRequests`, `maxBytes`) and requests expire (`defaultRequestTTL`).
 
-Little's law sizes the cap: in-flight = arrival rate × time in system. Four endpoints capped at 8 hold 32 requests;
-if each takes 10 s end to end, the pool completes about 3.2 req/s, and anything above that waits in the router,
-where it costs nothing but time.
+Little's law sizes the cap: in-flight = arrival rate × time in system (notebook 01 checks it against the simulator's
+occupancy). Four endpoints capped at 8 hold 32 requests; if each takes 10 s end to end, the pool completes about
+3.2 req/s, and anything above that waits in the router, where it costs nothing but time.
 
 ### 3.2 Priorities: `InferenceObjective`
 
@@ -294,9 +294,10 @@ Worked (`pods_metric_replicas()`): 3 pods at 200m against a 100m target → 6; 4
 1.08 → 5 (inside the band). Then:
 
 1. **Not-ready and missing pods.** Pods with no metric count as using the target on a scale-down and 0 on a scale-up;
-   pods not yet ready count as 0 on a scale-up. Two ready pods with 10 queued each (target 2) want 10 replicas — but
-   once 8 more are starting, `(10 + 10 + 0 × 8) ÷ 10 ÷ 2 = 1.0` is inside the band and the HPA holds at 10. Replicas
-   still loading weights damp the next decision instead of doubling it.
+   pods not yet ready count as 0 on a scale-up. Two ready pods with 10 queued each (target 2) want 10 replicas; once 8
+   more are starting, `(10 + 10 + 0 × 8) ÷ 10 ÷ 2 = 1.0` is inside the band and the HPA holds at 10 — the starting pods
+   count as capacity on its way. (Reading the headline formula naively — all 10 replicas × the ready pods' ratio of
+   5 — would ask for 50.) The flip side: a capped metric cannot outrun its own cold starts (§4.2).
 2. **Multiple metrics:** compute each, take the largest.
 3. **Stabilization** (`HPA.step()`): scale-down uses the **maximum** recommendation of the last
    `stabilizationWindowSeconds` (default 300); scale-up the minimum over its window (default 0).
@@ -345,16 +346,17 @@ variants scale on the ratio of estimated or measured TTFT to the SLO.
 
 From "the HPA said +1" to "the replica serves" (`fleetsim.autoscale.ColdStart`): **node** (0 if a GPU node is free;
 minutes if the cluster autoscaler must create one — or longer if the GPU is not obtainable, layer 03 §7), **image**
-(serving images are around 10 GB), **weights** (bytes ÷ storage bandwidth, layer 01 §6), **engine warm-up** (KV
-allocation, CUDA-graph capture, compilation). `ColdStart.estimate()` with a free node, a 10 GB image at 0.25 GB/s,
-16 GB of weights at 0.5 GB/s and 30 s of warm-up gives 40 + 32 + 30 = **102 s** (assumptions to replace with
-measurements). The Kubernetes-side fixes — image streaming, secondary boot disks, GCS FUSE, Hyperdisk ML, startup
+(serving images with CUDA libraries run to many gigabytes), **weights** (bytes ÷ storage bandwidth, layer 01 §6),
+**engine warm-up** (KV allocation, CUDA-graph capture, compilation). `ColdStart.estimate()` with a free node, a 10 GB
+image at 0.25 GB/s, 16 GB of weights at 0.5 GB/s and 30 s of warm-up gives 40 + 32 + 30 = **102 s** (assumptions to
+replace with measurements). The Kubernetes-side fixes — image streaming, secondary boot disks, GCS FUSE, Hyperdisk ML, startup
 probes — are layer 03 §8.
 
-The cold start sets how much queues during a step: `backlog = (peak − capacity now) × cold start`. With the
-in-flight signal (simulated, notebook 03): cold start 0 s → TTFT p95 0.32 s; 30 s → 3.6 s; 120 s → 75 s; and 120 s
-with `minReplicas: 3` → 0.29 s on *fewer* GPU-hours (0.75 vs 1.36), because the reactive fleet over-scaled to drain
-its backlog. Warm headroom is a cost-and-latency decision, not a waste line.
+The cold start sets how much queues during a step: `backlog = (peak − capacity now) × cold start` (notebook 03's
+`cold_start_backlog`: 408 requests for a 7.5 req/s step on one replica that holds the SLO to 3.5 req/s, with the
+102 s start above). With the in-flight signal (simulated, notebook 03): cold start 0 s → TTFT p95 0.32 s; 30 s →
+3.6 s; 120 s → 75 s; and 120 s with `minReplicas: 3` → 0.29 s on *fewer* GPU-hours (0.75 vs 1.36), because the
+reactive fleet over-scaled to drain its backlog. Warm headroom is a cost-and-latency decision, not a waste line.
 
 ### 4.4 Scale to zero, and KEDA
 
@@ -509,8 +511,8 @@ recomputed-token floor (~18 % here) is the new tool output every turn must prefi
   model name in the body (body-based routing, now in `llm-d-inference-payload-processor`).
 - **Adapters ride the base model.** LoRA adapters are small next to the base weights, so one replica can hold many,
   but a batch mixes only a few (vLLM `--max-loras`) and loading one takes time. Routing therefore prefers replicas
-  with the adapter already resident, then replicas with a free slot (`LoraAffinityFilter`; the engine side is
-  `Replica._lora_slot`, which skips — rather than blocks on — a request whose adapter has no slot, like vLLM).
+  with the adapter already resident, then replicas with a free slot (`LoraAffinityFilter`; on the engine side
+  `Replica.start_step` skips — rather than blocks on — a waiting request whose adapter has no slot, as vLLM does).
   `vllm:lora_requests_info` reports running and waiting adapters.
 - **Model rewrite and canaries.** `InferenceModelRewrite` (llm-d Router) rewrites the requested model name — a stable
   public name mapped to versioned adapters or models — which is how A/B tests and canary rollouts are expressed.
@@ -606,8 +608,8 @@ offload tier on every replica and session-sticky routing — or a shared KV stor
    the prefix score, or sticky-until-saturated with a TTFT penalty gate. Pure prefix hashing hit 48.7 s p95 in the
    notebook-02 test.
 3. *What does the HPA do with 2 ready pods at 10 queued each (target 2) while 8 new pods start?* It counts the starting
-   pods as 0 on a scale-up: (20 + 0) ÷ 10 ÷ 2 = 1.0, inside the tolerance band, so it holds at 10 instead of asking
-   for 50.
+   pods as 0 on a scale-up: (20 + 0) ÷ 10 ÷ 2 = 1.0, inside the tolerance band, so it holds at 10 — the demand is
+   20 ÷ 2 = 10 pods' worth and 10 exist or are coming. A naive 10 × (10 ÷ 2) would have asked for 50.
 4. *Why not autoscale on `num_requests_waiting` alone?* It is ~0 whenever capacity suffices, so the HPA scales down,
    the queue returns, and the fleet saws; pair it with running requests (the HPA takes the max over metrics) or
    scale on in-flight work.

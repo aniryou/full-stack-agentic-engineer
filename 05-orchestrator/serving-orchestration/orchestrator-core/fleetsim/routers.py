@@ -21,6 +21,8 @@ from .workload import mix64
 
 
 class Router:
+    """Base class: pick(req, replicas, now) returns one routable replica. The on_* hooks keep the router's own,
+    always-fresh counters: requests in flight and uncached prompt tokens not yet prefilled, per replica."""
     name = "router"
 
     def __init__(self, seed: int = 0):
@@ -61,7 +63,7 @@ class Router:
 
 
 class RoundRobin(Router):
-    """Next replica in turn. Fair in request count, blind to a 100x spread in request cost."""
+    """Next replica in turn. Fair in request count, blind to an order-of-magnitude spread in request cost."""
     name = "round-robin"
 
     def __init__(self, seed=0):

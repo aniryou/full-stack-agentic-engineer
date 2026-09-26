@@ -71,3 +71,9 @@ def test_prefix_caching_cuts_ttft_for_a_shared_system_prompt():
 
 def test_a_small_kv_cache_forces_preemptions():
     assert _sim(num_blocks=600).preemptions > 0 and _sim().preemptions == 0
+
+
+def test_tensor_parallel_and_lora_sizing():
+    assert perf.tp_allreduces(80, 8192, 64) == (160, 64 * 8192 * 2)       # a 70B model, 64 decodes: 1 MiB each
+    llama8b = [(4096, 4096), (4096, 1024), (4096, 1024), (4096, 4096), (4096, 14336), (4096, 14336), (14336, 4096)]
+    assert perf.lora_params(llama8b, 16, 32) == 41_943_040                # ~84 MB in bf16, ~0.5% of the base

@@ -27,6 +27,7 @@ import threading
 import numpy as np
 
 from . import busbw as bw
+from .semantics import ring_chunks
 from .sweep import Row, default_sizes, spawn, sweep
 
 PIPELINE_BYTES = 256 * 1024  # broadcast chunk: small enough to pipeline, large enough to amortise α
@@ -82,7 +83,7 @@ class PipesComm:
         """n-1 steps; returns the chunk this rank now owns fully reduced: (rank + 1 + shift) mod n."""
         n, r = self.world_size, self.rank
         for s in range(n - 1):
-            send_c, recv_c = (r - s + shift) % n, (r - s - 1 + shift) % n
+            send_c, recv_c = ring_chunks(r, s, n, "rs", shift)
             self._isend(buf[bounds[send_c]:bounds[send_c + 1]])
             tmp = self._scratch(bounds[recv_c + 1] - bounds[recv_c], buf.dtype)
             self._recv_into(tmp)
@@ -94,7 +95,7 @@ class PipesComm:
         """n-1 steps, starting from the one chunk this rank owns."""
         n = self.world_size
         for s in range(n - 1):
-            send_c, recv_c = (owned - s) % n, (owned - s - 1) % n
+            send_c, recv_c = ring_chunks(owned - 1, s, n, "ag")  # "ag" starts from rank + 1 = owned
             self._isend(buf[bounds[send_c]:bounds[send_c + 1]])
             self._recv_into(buf[bounds[recv_c]:bounds[recv_c + 1]])
             self._wait_sends()

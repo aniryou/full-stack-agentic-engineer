@@ -20,7 +20,7 @@
 # After this notebook you can say, before renting anything, whether a model fits a GPU, how many
 # requests of a given length it can hold at once, and which knob — `max_model_len`,
 # `kv_cache_dtype`, `quantization`, `tensor_parallel_size`, `gpu_memory_utilization` — buys what.
-# Concepts: PRIMER §4 "KV cache management revisited" ([`../PRIMER.md`](../PRIMER.md)); the same
+# Concepts: PRIMER §4 "KV cache management revisited" ([`PRIMER.md`](../../PRIMER.md)); the same
 # per-token formula in `00-foundations/gpu-capacity-planning/`.
 
 # %%

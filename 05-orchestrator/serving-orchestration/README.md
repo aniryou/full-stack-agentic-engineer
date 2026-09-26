@@ -49,8 +49,9 @@ python3 -m jupyterlab notebooks                # do the exercises; finished vers
 ## Builds on, and leads to
 
 - Below: the engine (`04-inference-engine/` — [KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md),
-  [paged attention](../../04-inference-engine/paged-attention/paged-attention-primer.md), and the `serving-engine`
-  topic for batching, chunked prefill and prefix caching), Kubernetes GPU scheduling and startup latency
+  [paged attention](../../04-inference-engine/paged-attention/paged-attention-primer.md), and the
+  [`serving-engine`](../../04-inference-engine/serving-engine/README.md) topic for batching, chunked prefill and
+  prefix caching), Kubernetes GPU scheduling and startup latency
   ([`03-kubernetes-gpu/gpu-scheduling`](../../03-kubernetes-gpu/gpu-scheduling/PRIMER.md)), fabrics and cold start
   ([`01-hardware-gpu-fabric/roofline-and-fabric`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)),
   prefill vs decode and disaggregation in one page

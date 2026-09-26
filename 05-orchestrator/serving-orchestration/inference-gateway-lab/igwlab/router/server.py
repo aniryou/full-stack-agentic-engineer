@@ -21,7 +21,6 @@ Its own `/metrics` mirror a subset of the EPP's `llm_d_epp_*` series under an `i
 """
 from __future__ import annotations
 
-import asyncio
 import collections
 import json
 import time
@@ -215,13 +214,15 @@ class Router:
         raw = await request.read()
         try:
             body = json.loads(raw)
-            assert isinstance(body, dict)
-        except Exception:
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
             return self._error(400, "request body must be a JSON object", "", "invalid_request")
         ctx = self.build_ctx(body, request.headers)
         model = ctx.model
 
-        # ---- admission (llm-d's legacy controller: only sheddable traffic is ever rejected here)
+        # ---- admission (llm-d's legacy controller: only sheddable traffic is ever rejected here).
+        # Upstream answers 429 (ResourceExhausted) without a reason header; the header is a lab addition.
         if ctx.priority < 0 and self.pool_saturation() >= 1.0:
             return self._error(429, "system saturated, sheddable request dropped", model, "rejected_saturated",
                                "rejected-saturated")
@@ -248,7 +249,7 @@ class Router:
         fwd_headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP}
         resp = None
         try:
-            async with self.session.post(ep.url + request.path, data=raw, headers=fwd_headers) as up:
+            async with self.session.post(ep.url + request.path_qs, data=raw, headers=fwd_headers) as up:
                 out_headers = {k: v for k, v in up.headers.items() if k.lower() not in HOP_BY_HOP}
                 out_headers[DESTINATION_HEADER] = ep.name
                 resp = web.StreamResponse(status=up.status, headers=out_headers)
@@ -262,13 +263,8 @@ class Router:
                 await resp.write_eof()
             self.m_requests.labels(model_name=model, endpoint=ep.name).inc()
             return resp
-        except (ConnectionError, asyncio.TimeoutError, OSError) as e:
+        except Exception as e:                            # connection errors, timeouts, aiohttp.ClientError
             if resp is not None and resp.prepared:        # client went away or backend died mid-stream
-                self.m_errors.labels(model_name=model, error_code="stream_interrupted").inc()
-                return resp
-            return self._error(502, f"backend {ep.name} failed: {type(e).__name__}", model, "bad_gateway")
-        except Exception as e:                            # aiohttp.ClientError and friends
-            if resp is not None and resp.prepared:
                 self.m_errors.labels(model_name=model, error_code="stream_interrupted").inc()
                 return resp
             return self._error(502, f"backend {ep.name} failed: {type(e).__name__}", model, "bad_gateway")

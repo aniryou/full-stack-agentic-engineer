@@ -18,7 +18,7 @@
 #   tool results and the model's own reply — if the client resends them byte for byte.
 #
 # The engine counts it: `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (tokens).
-# Concepts: PRIMER §5 "Prefix caching" ([`../PRIMER.md`](../PRIMER.md)); paging and sharing in
+# Concepts: PRIMER §5 "Prefix caching" ([`PRIMER.md`](../../PRIMER.md)); paging and sharing in
 # `04-inference-engine/paged-attention/`.
 
 # %%

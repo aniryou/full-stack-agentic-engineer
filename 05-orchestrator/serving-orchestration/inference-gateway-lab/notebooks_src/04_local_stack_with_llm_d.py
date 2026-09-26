@@ -21,7 +21,7 @@
 #
 # The EndpointPickerConfig is the same document in all three (the kind Helm values embed the lab's
 # `default-weighted` preset verbatim), and the simulator is configured with the same latency model
-# as the fake backend. Background: [PRIMER §9 The Kubernetes-native stack, Sep 2026 and §10 Where to
+# as the fake backend. Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and §10 Where to
 # run it](../../PRIMER.md).
 
 # %%

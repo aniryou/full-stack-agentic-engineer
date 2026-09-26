@@ -16,6 +16,7 @@ case "${PROFILE}" in sim|fake) ;; *) echo "PROFILE must be sim or fake"; exit 2 
 step "1/3 checking prerequisites"
 if [[ "${DRY_RUN}" != "1" ]]; then
   command -v docker >/dev/null || { echo "docker not found; rerun with DRY_RUN=1 to see the steps"; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "the docker CLI is installed but no daemon answers (start Docker Desktop/dockerd)"; exit 1; }
   docker compose version >/dev/null || { echo "the 'docker compose' plugin is required"; exit 1; }
 fi
 

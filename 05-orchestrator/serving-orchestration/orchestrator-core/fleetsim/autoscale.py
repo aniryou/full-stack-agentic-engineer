@@ -10,7 +10,7 @@ Every 15 s (sync period) the HPA controller does, per metric:
 
 This mirrors kube-controller-manager (pkg/controller/podautoscaler: replica_calculator.go, horizontal.go):
 milli-unit averaging, strict time windows, and the conservative treatment of pods that are not ready yet
-(counted as using 0 on a scale-up, so replicas still loading weights damp the next decision).
+(counted as using 0 on a scale-up: replicas still loading weights count as capacity already on its way).
 """
 from __future__ import annotations
 
@@ -135,18 +135,19 @@ class Autoscaler:
     kind='pods' averages per ready pod; kind='external' scales on the pool total including requests held at the
     gateway while nothing is ready (the KEDA pattern) — the only kind that may scale to zero."""
 
+    METRICS = ("waiting", "running", "inflight", "kv", "gpu_util")
+
     def __init__(self, hpa: HPA, metric="waiting", target=4.0, kind="pods"):
+        if metric not in self.METRICS or kind not in ("pods", "external"):
+            raise ValueError(f"metric must be one of {self.METRICS}; kind 'pods' or 'external'")
         if hpa.min_replicas == 0 and kind != "external":
             raise ValueError("minReplicas: 0 needs an Object or External metric (the API server rejects it)")
         self.hpa, self.metric, self.target, self.kind = hpa, metric, target, kind
 
     def value(self, r, util: float) -> float:
-        if self.metric == "gpu_util":
-            return util
-        if self.metric == "kv":
-            return r.pool.usage()
-        m = {"waiting": len(r.waiting), "running": len(r.running)}
-        return m[self.metric] if self.metric in m else m["waiting"] + m["running"]
+        """This replica's sample of the metric (`util` = its busy fraction over the last sync period)."""
+        return {"waiting": len(r.waiting), "running": len(r.running), "inflight": len(r.waiting) + len(r.running),
+                "kv": r.pool.usage(), "gpu_util": util}[self.metric]
 
     def decide(self, now, current, values, unready, pool_total) -> int:
         tol = dict(tol_up=self.hpa.up.tolerance, tol_down=self.hpa.down.tolerance)

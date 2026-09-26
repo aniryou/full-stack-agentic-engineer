@@ -24,9 +24,9 @@ import threading
 import time
 
 from igwlab.autoscale import (DEFAULT_BEHAVIOR, Behavior, FluidPool, HPARecommender, PodSample, ScalingPolicy,
-                              ScalingRules, hpa_manifest, plain_metric_replicas, simulate)
-from igwlab.bench import agentic_sessions, ascii_bars, run_bench
-from igwlab.promtext import Families
+                              ScalingRules, hpa_manifest, plain_metric_replicas, pods_from_scrapes,
+                              recommend_from_scrapes, simulate)
+from igwlab.bench import agentic_sessions, run_bench
 from igwlab.stack import LocalStack
 
 # %% [markdown]
@@ -151,34 +151,33 @@ print("✅ scale_up_limit matches the controller's default policies")
 # ## Live: what the engines' metrics say under load
 #
 # Now the signals themselves. 40 agent sessions hit 3 fake backends with 8 batch slots each (24
-# slots), so requests queue. Every 0.2 s we scrape the backends — exactly what Managed Prometheus
-# would do every 15 s — and compute what an HPA would propose from each signal (current = 3 pods).
+# slots), so requests queue. Every 0.2 s we scrape the backends — what Managed Prometheus would do
+# every 15 s — and `recommend_from_scrapes` computes what an HPA with one `type: Pods` metric per
+# signal would propose (current = 3 pods; the HPA takes the largest valid proposal).
 # "gpu busy" is the duty cycle `nvidia-smi` reports: 1.0 whenever anything runs.
 
 # %%
 samples = []
 sessions = agentic_sessions(n_sessions=40, turns=3, n_agents=4, system_words=1200, tool_words=400, seed=1)
+targets = {"vllm:num_requests_waiting": 2, "vllm:num_requests_running": 6, "vllm:kv_cache_usage_perc": 0.6}
 with LocalStack(3, "default-weighted") as s:
-    runner = threading.Thread(target=lambda: samples.append(("bench", run_bench(s.router_url, sessions, stagger_s=0.2))))
+    runner = threading.Thread(target=lambda: run_bench(s.router_url, sessions, stagger_s=0.2))
     t0 = time.perf_counter()
     runner.start()
     while runner.is_alive():
-        fams = [Families.from_text(txt) for txt in s.backend_metrics().values()]
-        w = [f.sum("vllm:num_requests_waiting") for f in fams]
-        r = [f.sum("vllm:num_requests_running") for f in fams]
-        kv = [f.max("vllm:kv_cache_usage_perc") for f in fams]
-        samples.append((time.perf_counter() - t0, w, r, kv))
+        samples.append((time.perf_counter() - t0, s.backend_metrics()))     # {pod: /metrics text}
         time.sleep(0.2)
     runner.join()
 
-print(f"{'t(s)':>5} {'waiting/pod':>12} {'running/pod':>12} {'kv/pod':>7} {'gpu busy':>9} | proposal: waiting@2 running@6 kv@0.6")
-for t, w, r, kv in [x for x in samples if x[0] != "bench"][::2]:
-    avg = lambda xs: sum(xs) / len(xs)
-    busy = sum(1.0 for x in r if x > 0) / len(r)
-    p_w = plain_metric_replicas(pods(*w), 3, 2)[0]
-    p_r = plain_metric_replicas(pods(*r), 3, 6)[0]
-    p_kv = plain_metric_replicas(pods(*kv), 3, 0.6)[0]
-    print(f"{t:>5.1f} {avg(w):>12.2f} {avg(r):>12.2f} {avg(kv):>7.3f} {busy:>9.2f} | {p_w:>17} {p_r:>9} {p_kv:>6}")
+print(f"{'t(s)':>5} {'waiting/pod':>12} {'running/pod':>12} {'kv/pod':>7} {'gpu busy':>9} | proposals (current 3): "
+      "waiting@2 running@6 kv@0.6 -> HPA")
+for t, scrapes in samples[::2]:
+    best, per = recommend_from_scrapes(scrapes, targets, 3)
+    avg = {m: sum(p.value for p in pods_from_scrapes(scrapes, m)) / 3 for m in targets}
+    busy = sum(p.value > 0 for p in pods_from_scrapes(scrapes, "vllm:num_requests_running")) / 3
+    print(f"{t:>5.1f} {avg['vllm:num_requests_waiting']:>12.2f} {avg['vllm:num_requests_running']:>12.2f} "
+          f"{avg['vllm:kv_cache_usage_perc']:>7.3f} {busy:>9.2f} | "
+          + " ".join(f"{per[m][0]:>9}" for m in targets) + f" -> {best}")
 
 # %% [markdown]
 # While the burst lasts, the queue and running-slot signals ask for more replicas and relax as the

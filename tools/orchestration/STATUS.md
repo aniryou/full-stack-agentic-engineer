@@ -9,7 +9,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 | 02 cuda-and-nccl | `02-cuda-nccl-runtime/cuda-and-nccl/` (PRIMER, `cuda-nccl-core`, `cuda-nccl-lab`) | PRIMER+core built (111 tests, 5/5 nbs), review running (wf_ac9a606c-57a); lab building | fix → validate → merge core; lab review when built |
 | 03 gpu-scheduling | `03-kubernetes-gpu/gpu-scheduling/` (PRIMER, `k8s-gpu-core`, `k8s-gpu-lab`) | PRIMER+core built (33 tests, 5/5 nbs), review running (wf_e879c959-09f); lab building | fix → validate → merge core; lab review when built |
 | 04 serving-engine | `04-inference-engine/serving-engine/` (PRIMER, `mini-engine-core`, `vllm-serving-lab`) | building | builder reports → review workflow |
-| 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | building | builder reports → review workflow |
+| 05 serving-orchestration | `05-orchestrator/serving-orchestration/` (PRIMER, `orchestrator-core`, `inference-gateway-lab`) | PRIMER+core built (43 tests, 5/5 nbs), review running; lab building | fix → validate → merge core; lab review when built |
 | vLLM internals primer | `04-inference-engine/vllm-internals/` | building | review → merge with layer 04 |
 | FlashAttention deep dive | `04-inference-engine/flash-attention/` (deep-dive.md, fa_calculators.py + 25 tests, deep_dive notebook) | built; review running | fix pre-existing broken practice notebook in review; Colab-inject the new notebook at integration; merge with layer 04 |
 | Root docs | `CURRICULUM.md`, `COMPUTE.md` | built | reconcile with what was actually built, then merge last |

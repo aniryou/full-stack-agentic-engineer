@@ -118,8 +118,16 @@ for ctx in [200, 2000, 8000]:
     cells = [f"B={B}: " + (f"{spec_speedup(B, ctx):.2f}x" if B * (ctx + 5) <= kv_tokens else "--")
              for B in [1, 16, 64, 128, 256, 512]]
     print(f"context {ctx:5d}  " + "  ".join(cells), " (SIMULATED)")
+c_draft = perf.step_time(G, D, [(1000, 1)]) / perf.step_time(G, T, [(1000, 1)])
+print(f"draft cost c = {c_draft:.2f} of a target step; an EAGLE-like head with c = 0.05 would give "
+      f"{spec.speedup(0.7, 4, 0.05):.2f}x at batch 1")
 
 # %% [markdown]
+# Even at batch 1 the gain is only ~1.1×, and the draft is why: four steps of a 1B model (plus a fixed per-step
+# overhead each) cost about 38% of an 8B step apiece, so `c ≈ 0.38`. Draft heads that ride on the target's own
+# hidden states (EAGLE, MTP) cost a few percent of a target step: with `c = 0.05` the same `α` and `k` give the
+# 2.31× printed above — which is why they, not separate draft models, dominate in practice.
+#
 # At short contexts the verify pass (`B × 5` tokens) crosses the compute knee as the batch grows, and speculation
 # becomes a **slow-down** past ~100 requests: the "free" positions are no longer free. At long contexts decode
 # stays memory-bound on the KV read, so speculation keeps paying — and memory caps the batch before compute does.

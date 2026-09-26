@@ -77,6 +77,24 @@ def sendrecv(xs):
     return [xs[(r - 1) % n].copy() for r in range(n)]
 
 
+def ring_chunks(rank: int, step: int, n: int, phase: str, shift: int = 0) -> tuple[int, int]:
+    """(chunk sent to rank+1, chunk received from rank-1) at one step of a ring.
+
+    ``phase`` is "rs" (reduce-scatter: the receiver *adds*) or "ag" (all-gather: it *copies*).
+    With ``shift=0`` — ring all-reduce — rank r owns the reduced chunk (r+1) mod n after the n-1
+    reduce-scatter steps, which the all-gather then circulates; ``shift=-1`` makes rank r end with
+    chunk r, the reduce-scatter collective's contract. ``gpurt.dist.pipes`` runs exactly this schedule.
+    """
+    first = rank + shift if phase == "rs" else rank + 1 + shift
+    return (first - step) % n, (first - step - 1) % n
+
+
+def ring_schedule(n: int) -> list[tuple[str, int, int, int, int]]:
+    """Every (phase, step, rank, send_chunk, recv_chunk) of a ring all-reduce over n ranks."""
+    return [(phase, s, r, *ring_chunks(r, s, n, phase)) for phase in ("rs", "ag")
+            for s in range(n - 1) for r in range(n)]
+
+
 def expected(op: str, xs, root: int = 0):
     """Dispatch by nccl-tests op name (see ``gpurt.dist.busbw.OPS``)."""
     table = {"all_reduce": all_reduce, "all_gather": all_gather, "reduce_scatter": reduce_scatter,

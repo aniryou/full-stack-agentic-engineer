@@ -118,10 +118,11 @@ async def open_loop(url: str, requests: list, rate: float = math.inf, burstiness
 
 
 async def closed_loop(url: str, requests: list, concurrency: int, think_time_s: float = 0.0, *,
-                      model: str | None = None, headers: dict | None = None, warmup: int = 0,
+                      ramp_s: float = 0.0, model: str | None = None, headers: dict | None = None, warmup: int = 0,
                       ignore_eos: bool = True) -> BenchRun:
     """``concurrency`` users; each sends its next request when its previous answer is complete
-    (plus ``think_time_s``)."""
+    (plus ``think_time_s``). ``ramp_s`` staggers the users' first requests over that many seconds:
+    N users starting in the same instant is a burst of N prefills that no real traffic produces."""
     async with _session() as http:
         model, sim = await _prepare(http, url, model, headers)
         await _warmup(http, url, model, requests, warmup, headers, ignore_eos)
@@ -129,17 +130,19 @@ async def closed_loop(url: str, requests: list, concurrency: int, think_time_s: 
         results: list = []
         t0 = time.perf_counter()
 
-        async def user():
+        async def user(i: int):
+            if ramp_s:
+                await asyncio.sleep(i * ramp_s / concurrency)
             while queue:
                 req = queue.pop()
                 results.append(await stream_request(http, url, model, req, headers=headers, ignore_eos=ignore_eos))
                 if think_time_s:
                     await asyncio.sleep(think_time_s)
 
-        await asyncio.gather(*(user() for _ in range(concurrency)))
+        await asyncio.gather(*(user(i) for i in range(concurrency)))
         duration = time.perf_counter() - t0
     return BenchRun(results, duration, "closed-loop", {"concurrency": concurrency, "think_time_s": think_time_s,
-                                                       "n": len(requests)}, url, model, sim)
+                                                       "ramp_s": ramp_s, "n": len(requests)}, url, model, sim)
 
 
 async def sessions(url: str, agent_sessions: list, session_rate: float = math.inf, burstiness: float = 1.0,

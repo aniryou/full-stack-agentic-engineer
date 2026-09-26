@@ -193,7 +193,7 @@ def parse_proc_driver_version(text: str) -> str | None:
 DRIVER_BRANCH_CUDA = {450: "11.0", 455: "11.1", 460: "11.2", 465: "11.3", 470: "11.4", 495: "11.5",
                       510: "11.6", 515: "11.7", 520: "11.8", 525: "12.0", 530: "12.1", 535: "12.2",
                       545: "12.3", 550: "12.4", 555: "12.5", 560: "12.6", 565: "12.7", 570: "12.8",
-                      575: "12.9", 580: "13.0"}
+                      575: "12.9", 580: "13.0", 590: "13.1"}
 # Minimum Linux driver for minor-version compatibility within a CUDA major. (verify)
 MIN_DRIVER_MINOR_COMPAT = {11: "450.80.02", 12: "525.60.13", 13: "580.65.06"}
 # Compute capability -> architecture and example GPUs. (verify newer entries)
@@ -275,17 +275,18 @@ def compat_verdicts(driver_cuda: str | None, runtime_cuda: str | None, cc: tuple
     elif r[0] > d[0]:
         if forward_compat:
             out.append(Verdict("warn", "driver/runtime", f"runtime CUDA {runtime_cuda} > driver's {driver_cuda}: works only through "
-                               "the CUDA forward-compatibility package (cuda-compat), on datacenter GPUs and supported driver branches"))
+                               "the CUDA forward-compatibility package (cuda-compat), on datacenter GPUs and supported driver branches "
+                               "(otherwise error 804 on other GPUs, 803 on an unsupported branch)"))
         else:
             out.append(Verdict("fail", "driver/runtime", f"runtime CUDA {runtime_cuda} needs a newer driver than one supporting CUDA "
                                f"{driver_cuda}: 'CUDA driver version is insufficient for CUDA runtime version' "
-                               "(cudaErrorInsufficientDriver). Upgrade the driver, use an image built for an older CUDA, "
+                               "(error 35, cudaErrorInsufficientDriver). Upgrade the driver, use an image built for an older CUDA, "
                                "or (datacenter GPUs) the forward-compatibility package"))
     elif r[:2] > d[:2]:
         newer_runtime = True
         msg = (f"runtime CUDA {runtime_cuda} > driver's {driver_cuda}, same major: minor-version compatibility — "
                "prebuilt SASS runs; PTX produced by the newer toolkit cannot be JIT-compiled by this driver "
-               "(CUDA_ERROR_UNSUPPORTED_PTX_VERSION), and APIs newer than the driver return cudaErrorCallRequiresNewerDriver")
+               "(error 222), and APIs newer than the driver fail with error 36 (cudaErrorCallRequiresNewerDriver)")
         floor = MIN_DRIVER_MINOR_COMPAT.get(r[0])
         dv = vtuple(driver_version)
         if floor and dv and dv < vtuple(floor):
@@ -310,7 +311,7 @@ def compat_verdicts(driver_cuda: str | None, runtime_cuda: str | None, cc: tuple
                                    "PTX at first launch — slow start, cached in ~/.nv/ComputeCache"))
         else:
             out.append(Verdict("fail", "architecture", f"'no kernel image is available for execution on the device' "
-                               f"(cudaErrorNoKernelImageForDevice): binary has {', '.join(archs)}, GPU is sm_{cc[0]}{cc[1]} ({name}). "
+                               f"(error 209): binary has {', '.join(archs)}, GPU is sm_{cc[0]}{cc[1]} ({name}). "
                                "Install a build that includes this architecture"))
     return out
 
@@ -452,6 +453,24 @@ def _finish(rep: ContainerReport, archs=()) -> ContainerReport:
     return rep
 
 
+LIB_DIRS = ("/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/usr/lib64", "/usr/lib",
+            "/usr/local/cuda/lib64", "/usr/local/cuda/compat")
+
+
+def stray_libcuda(injected: list[InjectedFile], lib_dirs=LIB_DIRS) -> list[str]:
+    """``libcuda.so.<version>`` files that were *not* injected at start — i.e. baked into the image. If one
+    shadows the host's driver, CUDA fails with error 803 (user-mode and kernel-mode driver disagree).
+    ``/usr/local/cuda/compat`` is the deliberate exception: the forward-compatibility package."""
+    mounted = [f.mount_point for f in injected]
+    found = []
+    for d in lib_dirs:
+        for p in sorted(glob.glob(os.path.join(d, "libcuda.so.*[0-9]"))):
+            if os.path.islink(p) or p in mounted or any(p.startswith(m.rstrip("/") + "/") for m in mounted):
+                continue
+            found.append(p)
+    return found
+
+
 def probe(dev_dir: str = "/dev", mountinfo: str = "/proc/self/mountinfo", driver: bool = True, archs=()) -> ContainerReport:
     """Inspect *this* process's view: nodes, mounts, env, driver (via a child process), image."""
     from .env import in_container
@@ -474,7 +493,15 @@ def probe(dev_dir: str = "/dev", mountinfo: str = "/proc/self/mountinfo", driver
         if d.get("error"):
             rep.notes.append(f"driver API: {d['error']}")
     rep.image = image_cuda()
-    return _finish(rep, archs)
+    rep = _finish(rep, archs)
+    if rep.in_container and rep.injected:
+        for p in stray_libcuda(rep.injected):
+            level = "warn" if "/compat" not in p else "ok"
+            msg = ("forward-compatibility driver from the cuda-compat package" if level == "ok" else
+                   "libcuda baked into the image, not injected from the host: if the loader picks it and its "
+                   "version differs from the host driver, CUDA fails with error 803")
+            rep.verdicts.append(Verdict(level, "image", f"{p}: {msg}"))
+    return rep
 
 
 def parse_probe_log(text: str) -> dict[str, str]:

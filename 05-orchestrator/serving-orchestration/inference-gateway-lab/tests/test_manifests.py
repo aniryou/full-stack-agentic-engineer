@@ -34,7 +34,7 @@ def all_k8s_docs():
     return out
 
 
-def test_api_versions_match_facts():
+def test_api_versions_match_the_upstream_apis():
     kinds = set()
     for p, d in all_k8s_docs():
         if d["kind"] in EXPECTED_API:

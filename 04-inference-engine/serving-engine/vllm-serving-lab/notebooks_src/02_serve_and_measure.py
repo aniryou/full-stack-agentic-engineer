@@ -22,7 +22,7 @@
 # The engine's own `/metrics` gives the server-side view: queue depth, batch size, KV usage and
 # latency *histograms*, whose percentiles are interpolations inside buckets. How requests are sent
 # matters as much as how they are timed: an **open loop** exposes overload, a **closed loop** hides
-# it. Concepts: PRIMER §11 "Measuring an engine" ([`../PRIMER.md`](../PRIMER.md)).
+# it. Concepts: PRIMER §11 "Measuring an engine" ([`PRIMER.md`](../../PRIMER.md)).
 
 # %%
 import json, math, threading, time, urllib.request

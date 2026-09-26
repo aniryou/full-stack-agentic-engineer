@@ -164,7 +164,8 @@ print("✅ queue_scores normalizes like queue-scorer")
 # The scheduler adds, for each endpoint, `weight × clamp(score, 0, 1)` over all scorers (an
 # unscored endpoint contributes 0 for that scorer) and the `max-score-picker` takes the highest
 # total. Implement `pick(scores, weights)` → the winning endpoint name; break exact ties by the
-# alphabetically smallest name (the real picker rotates ties round-robin instead).
+# alphabetically smallest name (the lab's picker rotates ties round-robin; in the real EPP the
+# candidate order is randomized, so ties there land effectively at random).
 
 # %% exercise
 def pick(scores: dict, weights: dict) -> str:

@@ -20,7 +20,7 @@
 #   FLOP/s on GPUs that have FP8 units (faster prefill); FP8 KV halves the KV cache. Accuracy must
 #   be measured on your own evals.
 #
-# Concepts: PRIMER §7 "Speculative decoding" and §8 "Quantization" ([`../PRIMER.md`](../PRIMER.md));
+# Concepts: PRIMER §7 "Speculative decoding" and §8 "Quantization" ([`PRIMER.md`](../../PRIMER.md));
 # the exact rejection sampler is implemented from scratch in this topic's `mini-engine-core`.
 
 # %%

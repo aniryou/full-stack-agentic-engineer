@@ -21,4 +21,15 @@ from .routers import (ApproxPrefixIndex, ConsistentHashBoundedLoad, HashRing, KV
 from .sim import Fleet, Result
 from .workload import HashChain, Request, agentic, arrivals, burst, chat, expand, mix, mix64, rag
 
-__all__ = [n for n in dir() if not n.startswith("_")]
+__all__ = [
+    "HPA", "Autoscaler", "ColdStart", "Policy", "Rules", "external_metric_replicas", "pods_metric_replicas",
+    "decode_step_s", "kv_bytes", "max_decode_batch", "pd_plan", "run_pd", "search_pd", "transfer_s",
+    "Tier", "TieredKV", "breakeven_gb_s", "onload_s", "recompute_s", "simulate_sessions", "working_set_gb",
+    "imbalance", "percentile", "sparkline", "summarize", "table",
+    "H100_8B", "L4_8B", "LLAMA_8B_KV", "BlockPool", "EngineProfile", "Replica", "engine_profile", "step_time",
+    "ApproxPrefixIndex", "ConsistentHashBoundedLoad", "HashRing", "KVCacheUtilizationScorer", "LeastOutstanding",
+    "LoraAffinityFilter", "PowerOfTwo", "PrefixAffinityFilter", "PrefixCacheScorer", "PrefixHash", "PreciseIndex",
+    "QueueScorer", "RoundRobin", "Router", "TokenLoadScorer", "WeightedScorer", "epp", "sticky_until_saturated",
+    "Fleet", "Result",
+    "HashChain", "Request", "agentic", "arrivals", "burst", "chat", "expand", "mix", "mix64", "rag",
+]

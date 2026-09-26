@@ -113,6 +113,18 @@ def knee_tokens(gpu: GPU, llm: LLM, flop_eff=1.0, bw_eff=1.0) -> float:
     return gpu.peak_flops * llm.compute_scale * flop_eff * llm.bytes_per_param / (2 * gpu.hbm_bw * bw_eff)
 
 
+def tp_allreduces(n_layers: int, d_model: int, tokens: int, bytes_per_value: float = 2) -> tuple:
+    """Tensor parallelism (Megatron split): each layer ends attention and the MLP with a row-parallel matmul
+    whose partial sums are all-reduced - 2 all-reduces per layer, each of tokens x d_model activations.
+    Returns (all-reduces per forward pass, bytes per all-reduce). Their time is layer 02's alpha-beta model."""
+    return 2 * n_layers, tokens * d_model * bytes_per_value
+
+
+def lora_params(shapes, rank: int, n_layers: int) -> int:
+    """A rank-r LoRA adapter on a (d_in, d_out) matrix adds B (d_in x r) and A (r x d_out): r (d_in + d_out)."""
+    return n_layers * sum(rank * (d_in + d_out) for d_in, d_out in shapes)
+
+
 def kv_cache_blocks(gpu: GPU, llm: LLM, gpu_memory_utilization=0.9, block_size=16, reserve_bytes=1e9) -> int:
     """Blocks left for KV after weights and an activation/workspace reserve - roughly what vLLM's
     memory profiling computes at start-up (vllm-serving-lab's sizing.py does it from a real config)."""

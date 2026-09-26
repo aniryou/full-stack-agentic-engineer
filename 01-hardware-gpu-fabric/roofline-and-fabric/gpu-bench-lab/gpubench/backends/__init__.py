@@ -43,14 +43,18 @@ def get_backend(name: str = "auto", verbose: bool = True, **kwargs):
 def gpu_available() -> bool:
     """True when the torch backend would work (PyTorch installed and a CUDA device visible)."""
     try:
-        import torch  # noqa: F401  (lazy: only probed, never required)
+        import torch  # lazy: probed here, never required
     except ImportError:
         return False
     return bool(torch.cuda.is_available())
 
 
 def gpu_count() -> int:
-    return 0 if not gpu_available() else __import__("torch").cuda.device_count()
+    """CUDA devices PyTorch can see (0 without PyTorch or a GPU)."""
+    if not gpu_available():
+        return 0
+    import torch
+    return torch.cuda.device_count()
 
 
 __all__ = ["BackendUnavailable", "get_backend", "gpu_available", "gpu_count"]

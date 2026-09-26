@@ -17,8 +17,11 @@ Semantics worth knowing by heart (all pinned in tests/test_plugins.py):
 * `active-request-scorer`    <= idleThreshold -> 1.0 else (max - n)/max * maxBusyScore  (router-local counts)
 * `token-load-scorer`        1 - min(1, inflight_uncached_tokens / queueThresholdTokens)
 * `lora-affinity-scorer`     1.0 adapter active | 0.8 room for one more | 0.6 adapter waiting | 0.0
-* `max-score-picker`         highest total; ties broken by a round-robin rotation (so with *no*
-                             scorers at all the EPP degenerates to exact round-robin)
+* `max-score-picker`         highest total; a tie tier is rotated by a per-request counter. Here the
+                             candidates are name-sorted first, so with *no* scorers the lab router is
+                             exact round-robin. Upstream rotates the same way, but its candidate list
+                             comes from a Go map (random order), so in the real EPP ties land
+                             effectively at random — even on average, not strictly alternating.
 """
 from __future__ import annotations
 
@@ -378,7 +381,8 @@ class Picker(Plugin):
 
 
 class MaxScorePicker(Picker):
-    """Sort by score (desc, then name for determinism) and rotate each tie tier by a counter."""
+    """Sort by score (desc, then name — the lab's deterministic base order) and rotate each tie
+    tier by a per-request counter (upstream: same rotation over a map-ordered, i.e. random, list)."""
     TYPE = "max-score-picker"
 
     def validate(self):

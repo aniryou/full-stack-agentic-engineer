@@ -115,7 +115,8 @@ def evaluate_option(need: Need, opt: CapacityOption, price_usd_h: float | None =
     price = (price_usd_h if price_usd_h is not None else ON_DEMAND_USD_H[need.machine]) * opt.price_multiplier
     notes: list[str] = []
     rate = gang_rate(opt.interruptions_per_node_h, need.nodes)
-    run = expected_runtime_h(need.work_h, rate, need.checkpoint_every_h, need.restart_h)
+    # a server is not a job that "finishes later": interruptions are outages, not extra hours
+    run = need.work_h if need.serving else expected_runtime_h(need.work_h, rate, need.checkpoint_every_h, need.restart_h)
     wait = expected_wait_h(opt)
     feasible = True
     if opt.max_runtime_h and run > opt.max_runtime_h:
@@ -138,7 +139,7 @@ def evaluate_option(need: Need, opt: CapacityOption, price_usd_h: float | None =
         notes.append("leases end: nodes recycle every few days")
     if not opt.atomic and need.nodes > 1:
         notes.append("nodes arrive one by one: a gang can sit half-provisioned")
-    if rate > 0 and need.checkpoint_every_h is None:
+    if rate > 0 and need.checkpoint_every_h is None and not need.serving:
         notes.append("no checkpoints: every interruption restarts from zero")
     cost = price * need.nodes * billed_h
     if need.deadline_h is not None and wait + run > need.deadline_h:

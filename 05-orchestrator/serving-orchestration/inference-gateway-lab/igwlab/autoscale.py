@@ -26,7 +26,8 @@ from dataclasses import dataclass, field
 
 __all__ = ["Tolerances", "ScalingPolicy", "ScalingRules", "Behavior", "DEFAULT_BEHAVIOR", "PodSample",
            "MetricError", "milli", "plain_metric_replicas", "usage_ratio_replicas", "external_per_pod_replicas",
-           "HPARecommender", "Step", "hpa_manifest", "FluidPool", "simulate"]
+           "pods_from_scrapes", "recommend_from_scrapes", "HPARecommender", "Step", "hpa_manifest", "FluidPool",
+           "simulate"]
 
 SYNC_PERIOD_S = 15                   # --horizontal-pod-autoscaler-sync-period
 DOWNSCALE_STABILIZATION_S = 300      # --horizontal-pod-autoscaler-downscale-stabilization
@@ -126,6 +127,28 @@ def external_per_pod_replicas(status_replicas: int, values, target_average: floa
     if not tol.is_within(ratio):
         return min(INT32_MAX, math.ceil(usage / milli(target_average)))
     return status_replicas
+
+
+def pods_from_scrapes(scrapes: dict, metric: str) -> list[PodSample]:
+    """{pod name: /metrics text} -> one PodSample per pod for `metric` (summed over its label sets,
+    e.g. data-parallel engines; None when the pod does not export it). This is what Managed
+    Prometheus + a custom-metrics adapter hand the HPA for a `type: Pods` metric."""
+    from .promtext import Families
+    return [PodSample(name, Families.from_text(text).sum(metric)) for name, text in sorted(scrapes.items())]
+
+
+def recommend_from_scrapes(scrapes: dict, targets: dict, current_replicas: int,
+                           tol: Tolerances = Tolerances()) -> tuple[int | None, dict]:
+    """Per-metric proposals from live scrapes (`targets`: {vLLM metric name: AverageValue}) and
+    their max, as computeReplicasForMetrics takes the largest valid proposal."""
+    proposals = {}
+    for metric, target in targets.items():
+        try:
+            proposals[metric] = plain_metric_replicas(pods_from_scrapes(scrapes, metric), current_replicas, target, tol)
+        except MetricError as e:
+            proposals[metric] = (None, str(e))
+    valid = [p for p, _ in proposals.values() if p is not None]
+    return (max(valid) if valid else None), proposals
 
 
 # ------------------------------------------------------------------ behavior (autoscaling/v2)

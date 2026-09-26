@@ -25,7 +25,7 @@ import yaml
 
 CRD_DIR = Path(__file__).resolve().parent / "crds"
 
-# apiVersion/kind pairs this lab emits (FACTS, Sep 2026)
+# apiVersion/kind pairs this lab emits (upstream APIs as of Sep 2026)
 INFERENCE_POOL = ("inference.networking.k8s.io/v1", "InferencePool")
 INFERENCE_OBJECTIVE = ("llm-d.ai/v1alpha2", "InferenceObjective")
 GATEWAY = ("gateway.networking.k8s.io/v1", "Gateway")

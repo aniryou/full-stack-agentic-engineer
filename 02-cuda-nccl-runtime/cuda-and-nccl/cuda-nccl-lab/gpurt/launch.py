@@ -11,8 +11,10 @@ does for you (primer §4).
 
 A two-pipeline model (T0) — the slower pipeline sets the pace:
 
-    eager step ~ n * max(k, L)          n kernels of k µs each, L µs of CPU per launch
-    graph step ~ G + n * (k + g)        one graph launch G, a small per-node gap g on the GPU
+    eager step ~ n * max(k + g, L)      n kernels of k µs, a GPU-side gap g between kernels, L µs of CPU per launch
+    graph step ~ G + n * (k + g)        one graph launch G; the GPU-side gaps remain
+
+so graphs help exactly when the step is launch-bound (L > k + g) and change nothing when it is not.
 
 ``L``, ``G`` and ``g`` below are *assumptions* of the right order of magnitude, not measurements;
 :func:`measure_graph_vs_eager` measures them on a real GPU (T1, torch + CUDA).
@@ -27,10 +29,10 @@ from dataclasses import dataclass
 class LaunchModel:
     launch_us: float = 6.0  # CPU cost per eager launch (assumption — measure yours)
     graph_launch_us: float = 8.0  # one cudaGraphLaunch (assumption)
-    node_gap_us: float = 1.0  # GPU-side gap between graph nodes (assumption)
+    node_gap_us: float = 1.0  # GPU-side gap between consecutive kernels (assumption)
 
     def eager_us(self, n_kernels: int, kernel_us: float) -> float:
-        return n_kernels * max(kernel_us, self.launch_us)
+        return n_kernels * max(kernel_us + self.node_gap_us, self.launch_us)
 
     def graph_us(self, n_kernels: int, kernel_us: float) -> float:
         return self.graph_launch_us + n_kernels * (kernel_us + self.node_gap_us)
@@ -40,11 +42,11 @@ class LaunchModel:
 
     def launch_bound(self, kernel_us: float) -> bool:
         """True when the GPU would wait for the CPU in eager mode."""
-        return kernel_us < self.launch_us
+        return kernel_us + self.node_gap_us < self.launch_us
 
     def gpu_idle_fraction(self, kernel_us: float) -> float:
-        """Share of an eager step during which the GPU has nothing to run."""
-        return max(0.0, 1.0 - kernel_us / max(kernel_us, self.launch_us))
+        """Share of an eager step during which the GPU is not running a kernel."""
+        return max(0.0, 1.0 - kernel_us / max(kernel_us + self.node_gap_us, self.launch_us))
 
 
 def measure_graph_vs_eager(n_kernels: int = 200, numel: int = 1024, iters: int = 50, warmup: int = 5) -> dict:

@@ -24,7 +24,7 @@
 # Terraform owns the cluster (zonal, Gateway API on, Managed Prometheus on), the proxy-only subnet and
 # an L4 Spot node pool that autoscales 0 → 2. Helm installs the EPP (and, from the same values, the
 # InferencePool and InferenceObjectives). Plain manifests add vLLM, the Gateway/HTTPRoute, the
-# PodMonitoring and the HPA. Background: [PRIMER §9 The Kubernetes-native stack, Sep 2026 and
+# PodMonitoring and the HPA. Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and
 # §10 Where to run it](../../PRIMER.md).
 
 # %%
@@ -157,7 +157,7 @@ print("✅", hpa_metric_name("vllm:num_requests_waiting", "gauge"))
 
 # %% exercise
 PRICES = {                         # USD per hour — VERIFY before relying on them
-    "g2-standard-4": 0.70,         # on-demand (FACTS); Spot is 60-91% cheaper
+    "g2-standard-4": 0.70,         # on-demand, ~Sep 2026 (verify); Spot is 60-91% cheaper
     "spot_discount": 0.60,         # assume the *smallest* Spot discount
     "e2-standard-4": 0.134,        # system node (verify)
     "lb_forwarding_rule": 0.025,   # regional external ALB, first rule (verify)

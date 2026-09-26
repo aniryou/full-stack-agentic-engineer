@@ -220,7 +220,7 @@ class Replica:
             else:
                 self.itl.append(now - s.last)
             s.last = now
-            if self.role == "prefill" or s.out >= r.output:
+            if self.role == "prefill" or s.out >= r.output:   # (a real prefill node frees after the KV pull)
                 self.running.remove(s)
                 s.running = False
                 self.pool.release(s.blocks)
