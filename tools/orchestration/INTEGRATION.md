@@ -25,13 +25,13 @@ dirs except to fix a broken link you introduced.
 - Then `python3 tools/gen_colab_index.py` (rewrites the Colab sections of every layer README and COLAB.md).
 
 ## 2. Cross-links from existing material (surgical one-line edits; do not restructure)
-- `00-foundations/transformers/docs/transformer-primer.md` §9 MoE row → "worked in depth in [mixture-of-experts](../../mixture-of-experts/PRIMER.md)";
+- `00-foundations/transformers/docs/transformer-primer.md` §9 MoE row → "worked in depth in mixture-of-experts" linking `00-foundations/mixture-of-experts/PRIMER.md`;
   §6 (training) → one sentence pointing at rl-and-thinking-models §1–4 for post-training.
 - `00-foundations/gpu-capacity-planning/PRIMER.md`: the Mistral Large 3 MoE section → link the MoE primer §5/§7; add one line on thinking models
   (long outputs) → rl-and-thinking-models §7.
 - `01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md` §3.6 → "the router and the experts themselves: 00-foundations/mixture-of-experts".
 - `02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md` §5 expert-parallelism paragraph → link MoE primer §6.
-- `04-inference-engine/serving-engine/PRIMER.md` §8 → "deep dive: [quantization](../quantization/PRIMER.md)"; §9 EP → MoE §6; §6/§11 → one line to
+- `04-inference-engine/serving-engine/PRIMER.md` §8 → "deep dive: quantization" linking `04-inference-engine/quantization/PRIMER.md`; §9 EP → MoE §6; §6/§11 → one line to
   rl-and-thinking-models §7 (thinking workloads). `04-inference-engine/serving-engine/README.md` caveats or "How it fits" → link quantization.
 - `04-inference-engine/vllm-internals/vllm-internals-primer.md` §9 → link MoE §6 and rl §7 (reasoning parsers) in one line each.
 - `05-orchestrator/serving-orchestration/PRIMER.md` §8 → link MoE §6.
