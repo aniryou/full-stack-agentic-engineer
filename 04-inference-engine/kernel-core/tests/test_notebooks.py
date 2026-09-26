@@ -42,7 +42,7 @@ def test_worked_notebook_is_committed_executed_and_matches_kerncore():
     for tokens, batch in ((8192, 1), (128_000, 1), (8192, 32)):
         assert kv.fmt_bytes(kv.kv_cache_bytes(32, 8, 128, tokens, batch)) in out
     assert "131,072 bytes = 128 KiB" in out and "at most 59" in out and "at most 119" in out
-    assert "cached does ~135x less token work" in out
+    assert "cached:    271 token-passes" in out and "cached does ~136x less token work" in out
     assert any("image/png" in o.get("data", {}) for c in code for o in c["outputs"]), "the cost plot is missing"
 
 

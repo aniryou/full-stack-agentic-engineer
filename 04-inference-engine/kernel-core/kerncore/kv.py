@@ -267,9 +267,11 @@ def compare(model: TinyDecoder, prompt, n_new: int, atol: float = 1e-9) -> dict:
 
 
 def token_passes(prompt_len: int, n_new: int) -> tuple[int, int]:
-    """Tokens pushed through the model to generate n_new: naive reprocesses the t-token sequence at
-    every step; cached pushes the prompt once and then one token per step (counted as P + N)."""
-    return sum(range(prompt_len, prompt_len + n_new)), prompt_len + n_new
+    """Tokens pushed through the model to generate n_new, as generate_naive and generate_cached do it:
+    naive re-feeds the whole sequence for every new token (P, P + 1, ..., P + N - 1 tokens); cached
+    feeds the prompt once (the prefill, which already yields the first new token) and then one token
+    for each of the other N - 1, so P + N - 1 in all."""
+    return sum(range(prompt_len, prompt_len + n_new)), prompt_len + n_new - 1
 
 
 def per_step_costs(costs: list[dict], key: str = "macs") -> np.ndarray:
