@@ -91,7 +91,8 @@ def sim_ttft(args, prompt_tokens: int, cached_tokens: int) -> float:
 # %% check
 from igwlab.fakebackend import EngineProfile
 p = EngineProfile()
-kind_args = yaml.safe_load((DEPLOY / "kind/sim-deployment.yaml").read_text())["spec"]["template"]["spec"]["containers"][0]["args"]
+deployment = next(yaml.safe_load_all((DEPLOY / "kind/sim-deployment.yaml").read_text()))   # first document
+kind_args = deployment["spec"]["template"]["spec"]["containers"][0]["args"]
 for args in (compose["services"]["sim-a"]["command"], kind_args, p.sim_args()):
     for n, c in ((2000, 0), (2000, 1600), (64, 0)):
         assert abs(sim_ttft(args, n, c) - p.prefill_seconds(n, c)) < 1e-12
