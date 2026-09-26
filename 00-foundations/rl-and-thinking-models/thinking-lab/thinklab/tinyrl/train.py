@@ -235,11 +235,15 @@ def warm_start(cfg: TinyRLConfig | None = None, log=print):
 
 
 def make_rollouts(model: TinyGPT, task: DigitSum, prompts: int = 8, generations: int = 8, seed: int = 0,
-                  sampler_dtype=torch.bfloat16) -> list:
+                  sampler_dtype=None) -> list:
     """Rollouts as an RL trainer receives them from an inference engine: the *engine* copy samples in
-    ``sampler_dtype`` (bfloat16, as serving kernels do) and reports its log-probs; the *trainer*
+    ``sampler_dtype`` (default bfloat16, as serving kernels do; float16 on a GPU without bf16 such as a
+    T4) and reports its log-probs; the *trainer*
     recomputes them in float32. The two disagree slightly — the train–inference mismatch that
     importance-sampling corrections exist for. Returns JSON-ready dicts."""
+    if sampler_dtype is None:
+        cuda_no_bf16 = _DEVICE == "cuda" and not torch.cuda.is_bf16_supported()
+        sampler_dtype = torch.float16 if cuda_no_bf16 else torch.bfloat16
     rng, gen = random.Random(seed), torch.Generator(device=_DEVICE).manual_seed(seed)
     engine = copy.deepcopy(model).to(sampler_dtype).eval()
     probs = [task.sample(rng) for _ in range(prompts)]

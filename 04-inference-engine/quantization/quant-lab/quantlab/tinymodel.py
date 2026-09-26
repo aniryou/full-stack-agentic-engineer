@@ -2,7 +2,7 @@
 
 One idea: to *see* what quantization costs you need a model with a task it can fail. The bundled
 checkpoint (``data/tiny-adder/``: a Hugging Face-style ``config.json`` + ``model.safetensors`` in
-bf16, 304 K parameters) is a 2-layer Llama — RMSNorm, RoPE, grouped-query attention, SwiGLU, an
+bf16, 299,648 parameters) is a 2-layer Llama — RMSNorm, RoPE, grouped-query attention, SwiGLU, an
 untied LM head, the same tensor names as ``LlamaForCausalLM`` — trained by ``tools/train_tiny.py``
 on two tasks with exact answers:
 

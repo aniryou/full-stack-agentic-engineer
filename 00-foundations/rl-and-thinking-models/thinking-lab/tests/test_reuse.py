@@ -15,6 +15,11 @@ from thinklab.thinking import ttc
 REPO = Path(__file__).resolve().parents[4]
 
 
+@pytest.fixture(autouse=True)
+def _no_bytecode_outside_this_lab(monkeypatch):
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)      # never write __pycache__ into other labs
+
+
 def _load(path: Path, name: str):
     if not path.exists():
         pytest.skip(f"{path} not in this checkout")

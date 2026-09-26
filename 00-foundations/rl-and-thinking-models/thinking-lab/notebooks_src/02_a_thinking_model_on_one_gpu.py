@@ -265,7 +265,8 @@ for name, fn in (("max_tokens=64 (trap)", lambda: B.truncate(client, hard.messag
 # `rows` is an accuracy-vs-budget sweep (`budget=None` is unlimited thinking). Write
 # `pick_budget(rows, tolerance)`: the *smallest* budget whose accuracy is within `tolerance`
 # (absolute) of the unlimited row. Then report output tokens per correct answer for it and for
-# unlimited thinking.
+# unlimited thinking. (Against a real T4 the sweep sends 180 requests, some of them thousands of
+# tokens long. Expect it to take several minutes.)
 
 # %% exercise
 def pick_budget(rows: list, tolerance: float = 0.05):

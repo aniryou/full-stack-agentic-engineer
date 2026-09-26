@@ -174,13 +174,19 @@ def trl_grpo_config(gpu: str = "T4", model: str = "Qwen/Qwen2.5-0.5B-Instruct") 
 # --- T1: the engine as rollout generator (lazy imports; needs a GPU, vllm and transformers) --------
 def vllm_rollouts(model: str, prompts: list, n: int = 8, max_tokens: int = 256, temperature: float = 1.0,
                   gpu_memory_utilization: float = 0.3, dtype: str = "auto", seed: int = 0) -> tuple:
-    """Generate ``n`` completions per chat prompt with vLLM's offline API and return
-    ``(llm, [[(text, token_ids, sampler_logps)] per prompt])``. ``logprobs=0`` returns the sampled
-    token's log-prob at every position."""
+    """Generate ``n`` completions per chat prompt with vLLM's offline API. Returns
+    ``(llm, [[(text, token_ids, sampler_logps, prompt_token_ids)] per prompt], generation_seconds)``.
+    ``logprobs=0`` returns the sampled token's log-prob at every position (raw log-probs by default;
+    at temperature 1 with no top-k/top-p they equal the processed ones TRL asks for). The seed goes to
+    the engine, not to each request, so the n samples of a prompt differ."""
+    import time
+
     from vllm import LLM, SamplingParams       # noqa: PLC0415 — T1 only
     llm = LLM(model=model, dtype=dtype, gpu_memory_utilization=gpu_memory_utilization, max_model_len=2048, seed=seed)
-    sp = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens, logprobs=0, seed=seed)
+    sp = SamplingParams(n=n, temperature=temperature, max_tokens=max_tokens, logprobs=0)
+    t0 = time.perf_counter()
     outs = llm.chat([[{"role": "user", "content": p}] for p in prompts], sp, use_tqdm=False)
+    gen_s = time.perf_counter() - t0
     result = []
     for o in outs:
         group = []
@@ -188,7 +194,7 @@ def vllm_rollouts(model: str, prompts: list, n: int = 8, max_tokens: int = 256, 
             lps = [pos[t].logprob for pos, t in zip(c.logprobs, c.token_ids)]
             group.append((c.text, list(c.token_ids), lps, list(o.prompt_token_ids)))
         result.append(group)
-    return llm, result
+    return llm, result, gen_s
 
 
 def one_grpo_step(model: str = "Qwen/Qwen2.5-0.5B-Instruct", n_prompts: int = 8, n: int = 8, max_tokens: int = 256,
@@ -196,8 +202,9 @@ def one_grpo_step(model: str = "Qwen/Qwen2.5-0.5B-Instruct", n_prompts: int = 8,
     """T1: one GRPO step with vLLM generating the rollouts and transformers computing the loss.
 
     Rollout (vLLM) → verify → advantages → trainer log-probs (the "old" policy) → mismatch vs the
-    sampler → clipped loss × IS weight → one SGD step. The weights are *not* pushed back to vLLM here
-    (TRL's colocate/server modes do that); the step reports where the time and memory went."""
+    sampler → surrogate loss × sequence-level truncated IS weight → one SGD step. The weights are *not*
+    pushed back to vLLM here (TRL's colocate/server modes do that); the step reports where the time
+    went and how far the two copies' log-probs are apart."""
     import time
 
     import torch                                                      # noqa: PLC0415
@@ -206,44 +213,43 @@ def one_grpo_step(model: str = "Qwen/Qwen2.5-0.5B-Instruct", n_prompts: int = 8,
     from .thinking.evalset import make_evalset, verify
     probs = make_evalset(n_prompts, seed=seed, difficulties=(1, 2))
     t0 = time.perf_counter()
-    llm, groups = vllm_rollouts(model, [p.prompt for p in probs], n=n, max_tokens=max_tokens, seed=seed,
-                                dtype="half" if not torch.cuda.is_bf16_supported() else "auto")
+    llm, groups, gen_s = vllm_rollouts(model, [p.prompt for p in probs], n=n, max_tokens=max_tokens, seed=seed,
+                                       dtype="half" if not torch.cuda.is_bf16_supported() else "auto")
     t1 = time.perf_counter()
     rollouts = []
     for p, g in zip(probs, groups):
         for text, ids, lps, prompt_ids in g:
             rollouts.append((p.id, float(verify(p, text.split("</think>")[-1])), ids, lps, prompt_ids))
     by = group_by_prompt([Rollout(pid, len(ids), r) for pid, r, ids, _, _ in rollouts])
-    adv = {}
-    for pid, g in by.items():
-        for r, a in zip(g, group_advantages([x.reward for x in g])):
-            adv.setdefault(pid, []).append(a)
+    adv = {pid: group_advantages([x.reward for x in g]) for pid, g in by.items()}
     policy = AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch.float32).cuda()
     policy.gradient_checkpointing_enable()
+    policy.train()
     opt = torch.optim.SGD(policy.parameters(), lr=lr)                 # no optimizer state: fits next to vLLM on 15 GB (verify)
     total, mismatch, used = 0.0, [], {k: 0 for k in adv}
+    t2 = time.perf_counter()
     opt.zero_grad()
     for pid, r, ids, lps, prompt_ids in rollouts:
         a = adv[pid][used[pid]]
         used[pid] += 1
         if a == 0 or not ids:
-            continue
+            continue                                                  # zero advantage: no gradient
         seq = torch.tensor([prompt_ids + ids], device="cuda")
         logits = policy(seq).logits[0, len(prompt_ids) - 1:-1].float()
         logp = torch.log_softmax(logits, -1).gather(1, torch.tensor(ids, device="cuda")[:, None]).squeeze(1)
-        diff = (logp.detach() - torch.tensor(lps, device="cuda"))
+        diff = logp.detach() - torch.tensor(lps, device="cuda")
         mismatch.append(diff.abs().mean().item())
         w = torch.exp(diff.sum()).clamp(max=3.0)                       # sequence-level truncated IS
         loss = -(torch.exp(logp - logp.detach()) * a * w).sum() / (len(rollouts) * max_tokens)   # dr_grpo normaliser
         loss.backward()
         total += loss.item()
     opt.step()
-    t2 = time.perf_counter()
-    rewards = [r for _, r, *_ in rollouts]
-    res = {"rollouts": len(rollouts), "mean_reward": statistics.fmean(rewards), "frac_zero_std": frac_zero_std(by),
-           "mean_completion_tokens": statistics.fmean(len(x[2]) for x in rollouts),
+    t3 = time.perf_counter()
+    res = {"rollouts": len(rollouts), "mean_reward": statistics.fmean(r for _, r, *_ in rollouts),
+           "frac_zero_std": frac_zero_std(by), "mean_completion_tokens": statistics.fmean(len(x[2]) for x in rollouts),
            "sampler_trainer_abs_logp_diff": statistics.fmean(mismatch) if mismatch else 0.0,
-           "rollout_s": t1 - t0, "train_s": t2 - t1, "loss": total,
-           "gpu_mem_gb": torch.cuda.max_memory_allocated() / 1e9}
+           "vllm_startup_s": t1 - t0 - gen_s, "rollout_generation_s": gen_s, "trainer_load_s": t2 - t1,
+           "train_step_s": t3 - t2, "loss": total,
+           "trainer_peak_gpu_gb": torch.cuda.max_memory_allocated() / 1e9}   # vLLM V1's engine core is another process
     log(res)
     return res
