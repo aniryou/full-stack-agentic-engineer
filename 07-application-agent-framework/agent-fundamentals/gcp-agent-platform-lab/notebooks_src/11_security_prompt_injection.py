@@ -6,7 +6,7 @@
 # do not depend on the model's judgement: provenance-labelled data, screening, per-agent allowlists,
 # identity scopes and confirmation.
 #
-# **Primer sections:** 4.5 (prompt injection and defences), with §3.1 (tool contracts) and §3.3 (identity).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §6 (tool-call safety and prompt injection) and the [sandbox primer](../../../sandboxed-execution/PRIMER.md) §1 (the threat model).
 #
 # In this notebook you will:
 # 1. run an *indirect* injection end to end — unguarded (the refund happens) and guarded (it is blocked and logged);

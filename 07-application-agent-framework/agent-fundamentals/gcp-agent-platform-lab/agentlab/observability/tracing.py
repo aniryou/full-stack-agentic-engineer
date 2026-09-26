@@ -65,23 +65,11 @@ TOOL_OK = "tool.ok"
 TOOL_LATENCY_MS = "tool.latency_ms"
 TOOL_ERROR = "tool.error"
 
-# Attribute names older code in this lab wrote before it followed the convention.
-# Read-only fallbacks, so spans written that way still price and render correctly.
-_LEGACY_ATTRS = {GEN_AI_CACHED_TOKENS: "gen_ai.usage.cached_tokens",
-                 GEN_AI_FINISH_REASONS: "gen_ai.response.finish_reason"}
-
 SPAN_KINDS = ("agent", "model", "tool", "retrieval", "internal")
 
 # ``gen_ai.operation.name`` values per span kind (all four are well-known values of
 # the convention); "internal" spans carry none.
 _OPERATION_BY_KIND = {"agent": "invoke_agent", "model": "chat", "tool": "execute_tool", "retrieval": "retrieval"}
-
-
-def _attr(span: "Span", name: str, default: Any = None) -> Any:
-    """``span.attrs[name]``, falling back to the pre-convention name this lab used."""
-    if name in span.attrs:
-        return span.attrs[name]
-    return span.attrs.get(_LEGACY_ATTRS.get(name, name), default)
 
 
 def _new_id() -> str:
@@ -132,7 +120,7 @@ def span_usage(span: Span) -> Usage:
     return Usage(
         input_tokens=int(a.get(GEN_AI_INPUT_TOKENS, 0)),
         output_tokens=int(a.get(GEN_AI_OUTPUT_TOKENS, 0)),
-        cached_tokens=int(_attr(span, GEN_AI_CACHED_TOKENS, 0)),
+        cached_tokens=int(a.get(GEN_AI_CACHED_TOKENS, 0)),
     )
 
 
@@ -288,7 +276,7 @@ def _span_detail(span: Span, price_table: Any) -> str:
     if span.kind == "model":
         u = span_usage(span)
         parts.append(f"in {u.input_tokens} (cached {u.cached_tokens}) · out {u.output_tokens}")
-        reasons = _attr(span, GEN_AI_FINISH_REASONS)
+        reasons = span.attrs.get(GEN_AI_FINISH_REASONS)
         if reasons is not None:
             parts.append(",".join(reasons) if isinstance(reasons, (list, tuple)) else str(reasons))
         cost = _cost_of(span, price_table)
