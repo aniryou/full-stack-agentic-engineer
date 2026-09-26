@@ -1,6 +1,6 @@
 # Open-Weight LLMs: A Primer
 
-**State of play as of 29 August 2026.** This field moves in weeks. Specs, dates and benchmark figures below reflect the best public sources at time of writing, with primary sources where they exist and vendor claims flagged as such. Verify any number before it goes into a client deck or a procurement document.
+**State of play as of 29 August 2026.** This field moves in weeks. Specs, dates and benchmark figures below reflect the best public sources at time of writing, with primary sources where they exist and vendor claims flagged as such. Verify any number before it goes into a design document or a sizing decision.
 
 ---
 
@@ -138,11 +138,11 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 
 ### 4.6 Mistral AI (France)
 
-**Current lineup:** Mistral Large 3 (2 Dec 2025) — 675B total / 41B active MoE, Apache 2.0, still the largest Apache-licensed MoE from a Western lab. Mistral Small 4 (16 Mar 2026) folds reasoning (Magistral), vision (Pixtral) and coding (Devstral) into one ~24B model. Ministral 3 at 3B / 8B / 14B, all Apache 2.0 — the 14B reasoning variant hits 85% on AIME 2025. Plus specialists: Devstral 2 (code), Voxtral (audio/TTS), Leanstral 1.5 (Lean 4 formal proofs), Mistral OCR, and Shieldstral (a 3B open-weights multimodal safety classifier that accepts plain-language policies at inference time and runs on a single 16 GB GPU). Mistral Medium 3.5 is closed.
+**Current lineup:** Mistral Large 3 (2 Dec 2025) — 675B total / 41B active MoE, Apache 2.0, still the largest Apache-licensed MoE from a Western lab. Mistral Small 4 (16 Mar 2026) folds reasoning (Magistral), vision (Pixtral) and coding (Devstral) into one model: a 119B-total, ~6.5B-active MoE under Apache 2.0 (Hugging Face `mistralai/Mistral-Small-4-119B-2603`; verify, 2026-09). "Small" is now the name of the tier, not the footprint: its FP8 weights are about 120 GB, two H100s or one H200, where Small 3.x was a 24B dense model that fits one. Ministral 3 at 3B / 8B / 14B, all Apache 2.0 — the 14B reasoning variant hits 85% on AIME 2025. Plus specialists: Devstral 2 (code), Voxtral (audio/TTS), Leanstral 1.5 (Lean 4 formal proofs), Mistral OCR, and Shieldstral (a 3B open-weights multimodal safety classifier that accepts plain-language policies at inference time and runs on a single 16 GB GPU). Mistral Medium 3.5 is closed.
 
 **What's coming:** Mensch has confirmed a new open-weight family — described as "fat but sparse" MoE — in **early access since July 2026**, with a broader release expected. Parameter count, benchmarks and license terms remain undisclosed. Separately, the **first Nemotron Coalition model is a base model co-developed by Mistral and NVIDIA on DGX Cloud, to be open-sourced on completion and to underpin Nemotron 4**.
 
-**Position:** the sovereignty play. Mistral is the only European frontier lab betting on open weights at scale, is a signatory to the EU GPAI Code of Practice, and has the compliance posture EU-regulated buyers want. Commercially: ARR above $400M in early 2026 (from ~$20M a year earlier), targeting $1B by year end; €1.7B Series C led by ASML at a €11.7B valuation, with later discussions reported above $23B; a €4B data-centre buildout.
+**Position:** the European open-weight option. Mistral is the only European frontier lab releasing open weights at scale and is a signatory to the EU GPAI Code of Practice, which matters when a deployment falls under EU rules or requires the weights to be hosted in a specific jurisdiction.
 
 **Honest read on capability:** Large 3 is a strong non-reasoning model (MMLU-Pro ~73.1, MATH-500 ~93.6 on independent evaluation) but scores far lower on reasoning-heavy benchmarks (~40% AIME 2025, ~44% GPQA Diamond) and is slow for its class at ~38 tok/s. The summer release is what will settle whether Mistral is at the open frontier or one tier below it.
 
@@ -172,7 +172,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 
 **Current:** the Nemotron 3 family — Nano (~31.6B total / 3.2B active), Super (~120B / 12B active), and **Ultra (4 Jun 2026, ~550B total / up to ~55B active)**, plus Nemotron 3.5 Lightning (Aug 2026) for high-volume always-on agents and specialist models for robotics, AVs, drug discovery and voice.
 
-**Position:** the most genuinely open of the big-lab releases. NVIDIA publishes **weights, training data and recipes**, with technical reports sufficient to recreate the models — the closest thing to OSI-style openness at this scale. That is a materially different governance proposition for regulated buyers.
+**Position:** the most genuinely open of the big-lab releases. NVIDIA publishes **weights, training data and recipes**, with technical reports sufficient to recreate the models — the closest thing to OSI-style openness at this scale. That is a materially different governance proposition for a regulated deployment.
 
 **Innovations that matter:**
 - **Hybrid Mamba-2 + Transformer MoE.** Mamba-2 state-space layers give linear-time complexity over sequence length, which is what makes a 1M-token context economical for long-running agents rather than merely possible.
@@ -188,7 +188,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 
 **Current:** **Inkling** (15 Jul 2026) — 975B total / ~41B active MoE, **Apache 2.0**, trained on 45 trillion tokens of text, image, audio and video, reasoning natively across all four, 1M context, controllable thinking effort. Built in nine months on NVIDIA GB300 NVL72 systems. **Inkling-Small** (30 Jul) — 276B total / 12B active, also Apache 2.0.
 
-**Why it matters:** this is the most credible US open-weight entrant of 2026 and the clearest articulation of an alternative business model. Mira Murati's lab explicitly states Inkling is "not the strongest overall model available today, open or closed" and does not monetize the model at all — revenue comes from **Tinker**, its fine-tuning platform (customers include Bridgewater). The bet is that "good enough + fully customizable + free" beats "smartest but locked up."
+**Why it matters:** this is the most credible US open-weight entrant of 2026 and the clearest articulation of an alternative business model. Mira Murati's lab explicitly states Inkling is "not the strongest overall model available today, open or closed" and does not monetize the model at all — revenue comes from **Tinker**, its fine-tuning platform. The bet is that "good enough + fully customizable + free" beats "smartest but locked up."
 
 **The interesting result:** Inkling-Small **beats its own parent** on reasoning and agentic rows — HLE 31.6 vs 29.7, SWE-bench Verified 80.2 vs 77.6, Terminal-Bench 2.1 64.7, Toolathlon Verified 54.4 vs 45.5, ARC-AGI-2 40.1 vs 36.5, GPQA Diamond 89.5, AIME 2026 95.5 — while losing badly on factuality (SimpleQA Verified 20.6 vs 43.9; AA-Omniscience −9.0 vs 2.1). It was distilled from an Inkling checkpoint and then given two further weeks of agentic-coding RL. That is a clean, public demonstration of the current frontier trade: **RL on a smaller student buys agentic capability and costs you world knowledge.** Plan your routing accordingly.
 
@@ -278,7 +278,7 @@ There is no convergence yet, and the choice directly determines your serving cos
 - **Open is at parity or ahead** on agentic coding (multiple open models above 80% SWE-bench Verified), computer use and desktop control (Qwen3.8-Max reportedly at 86.1 OSWorld-Verified, ahead of GPT-5.6 Sol Max and Fable 5), instruction following, long-context retrieval, extraction, classification and most multilingual work.
 - **Open is behind** on hard knowledge reasoning and abstract problem solving: Humanity's Last Exam (Qwen3.8-27B 30.8 vs Opus 4.6 Max 40.0; Fable 5 at 53.3), GPQA Diamond, ARC-AGI-2/3, research synthesis, and reliability on genuinely novel tasks.
 - **Open has won on price and forced the closed tier to respond.** Open API list prices run ~8x below closed on average, DeepSeek's ~30x below on output tokens. On 30 July OpenAI cut Terra 20% and Luna 80% citing serving-cost improvements — the steepest cut of the year from a US lab, and a direct answer to the Chinese open tier.
-- **Usage and procurement still diverge.** Chinese models were reported at ~61% of OpenRouter traffic in June 2026; Menlo's enterprise survey put Chinese open models at ~1% of enterprise LLM API usage. Both are true — different populations.
+- **Usage and enterprise adoption still diverge.** Chinese models were reported at ~61% of OpenRouter traffic in June 2026; Menlo's enterprise survey put Chinese open models at ~1% of enterprise LLM API usage. Both are true — different populations.
 
 **The three structural shifts to take away:**
 
@@ -307,7 +307,7 @@ There is no convergence yet, and the choice directly determines your serving cos
 
 1. **Scale and revenue thresholds** — MAU, monthly revenue, TTM revenue including affiliates, and what happens when you cross them. Three of 2026's flagship open models have these.
 2. **Field-of-use restrictions** — the Qwen3.8-Max MaaS clause is the clearest example; if you resell inference, read it first.
-3. **Acceptable-use policies** — can the provider update them unilaterally, and do they bind your customers?
+3. **Acceptable-use policies** — can the provider update them unilaterally, and do they bind your downstream users?
 4. **Attribution and naming** — "Built with X" in product names or docs.
 5. **Outputs** — ownership, and whether you may train other models on them.
 6. **Derivatives** — can you ship fine-tuned weights, and under what license?

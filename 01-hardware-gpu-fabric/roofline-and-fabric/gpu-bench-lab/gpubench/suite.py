@@ -19,7 +19,7 @@ from . import __version__, gemm, inventory, loading, membw, p2p, topo, transfer
 from .backends import get_backend
 from .measure import measure
 from .report import Report
-from .roofline import measured_roofline, spec_roofline
+from .roofline import measured_roofline, noise_warnings, spec_roofline
 from .specs import cpu_peak_flops, lookup
 
 ALL = ("inventory", "gemm", "stream", "transfer", "p2p", "load")
@@ -94,6 +94,11 @@ def run_suite(backend="auto", quick: bool = True, suites=ALL, workdir=None, log=
             rep.extend(ms)
     if gemms and streams:
         rep.analyses["roofline"] = rooflines(be, gemms, streams)
+        warns = noise_warnings(gemms, streams, be.is_gpu)
+        if warns:
+            rep.meta["noise_warnings"] = warns
+            for w in warns:
+                log(f"WARNING: {w}")
 
     if "transfer" in suites:
         log("transfers ...")

@@ -156,7 +156,7 @@ Modern frontier work does not treat a GPU as the unit of compute. The unit is a 
 ### Interconnect tiers
 
 - **Within a node**: **NVLink**. Direct GPU-to-GPU links at 1.8 TB/s per GPU on Blackwell, roughly 14× a PCIe Gen5 x16 slot. NVSwitch chips make it an all-to-all fabric rather than point-to-point.
-- **Across nodes**: InfiniBand or high-end Ethernet, roughly 400–800 Gb/s per GPU. An order of magnitude below NVLink.
+- **Across nodes**: InfiniBand or high-end Ethernet, roughly 400–800 Gb/s per GPU, 50–100 GB/s each way. Per direction and within one generation that is about 9× below NVLink (whose 1.8 TB/s is both directions added); see the [roofline primer §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder).
 
 That gap defines the standard vocabulary. **Scale-up** means growing the NVLink domain, the set of GPUs that can treat each other's memory as nearly local. **Scale-out** means adding nodes over the slower network. The dominant hardware trend of the last two years is scale-up domains getting dramatically larger: GB200 NVL72 puts 72 GPUs in one liquid-cooled NVLink domain, and Vera Rubin NVL144 extends that further. AMD is pursuing the same idea with its Helios rack and the open UALink standard as an NVLink alternative.
 
@@ -211,11 +211,13 @@ This matters for you specifically: it is the first structural change to the CUDA
 | Generation | Parts | Memory | Notes |
 |---|---|---|---|
 | Hopper (2022) | H100, H200 | 80 GB HBM3 / 141 GB HBM3e | FP8, TMA, thread block clusters |
-| Blackwell (2024–25) | B200, GB200 | 192 GB HBM3e | FP4, dual-die, NVL72 racks |
+| Blackwell (2024–25) | B200, GB200 | 192 GB HBM3e physical; 180 GB usable per B200 in HGX, 186 GB per GB200 GPU (verify, 2026-09) | FP4, dual-die, NVL72 racks |
 | Blackwell Ultra (2025) | B300, GB300 | 288 GB HBM3e | current volume part |
 | **Rubin** (2026) | Rubin + Vera CPU | 288 GB HBM4 | in production, volume H2 2026 |
 | Rubin CPX | long-context prefill SKU | — | expected end of 2026 |
 | Rubin Ultra → Feynman | 2027+ | — | announced roadmap only |
+
+The usable figures are the ones the [roofline primer's catalogue](../roofline-and-fabric/PRIMER.md#9-the-accelerator-landscape-september-2026-snapshot) (`roofline.specs`) plans with; size memory from them, not from the physical stack count.
 
 Rubin entered full production around CES 2026 with volume shipments targeting the second half of this year, so it is arriving right now but supply is constrained by HBM4 yields and TSMC N3 capacity, and hyperscalers absorb most early allocation. NVIDIA's claimed gains over Blackwell are roughly 3.5× training and 5× inference per GPU, with a 10× reduction in cost per token. Treat vendor multipliers as marketing until MLPerf lands, but the direction is real.
 

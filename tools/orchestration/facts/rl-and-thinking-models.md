@@ -298,14 +298,14 @@ Paths are relative to `$SP/ref/` unless they start with a repo dir (`00-…`, `0
   `decode_tok_s_single(weight_gb, gpu)`, `decode_aggregate(model, gpu, batch, context_tokens, dtype)` → (agg, per_user), `roofline_batch(gpu)`
   (H100 ≈ 296), `prefill_flops`, `ttft_s(active_b, prompt_tokens, gpu, dtype="fp8", mfu=0.5)`, `prefill_tok_s`, `request_duration_s(active_b,
   in_tokens, out_tokens, gpu, tpot_ms=40, dtype="fp8", mfu=0.5)`, `concurrency(rps, duration_s)`, `provision(raw_gpus, util=0.7, redundancy=1)`.
-  Units: GB = 1e9 in weights but `kv_per_session_gb` divides KB by 1024² (mixed; keep as is to reproduce).
+  Units (updated 2026-09-26): GB = 1e9 bytes everywhere — weights, HBM and KV alike; `kv_per_token_kb` is in kB = 1e3 bytes.
 - Its bank example (`worked_example.py` B; the no-thinking baseline `rlcore.workload` must reproduce): 10,000 staff × 0.10 × 0.5/min →
   **8.33 RPS**; 1,500 in / 300 out; `AVG_CTX = IN + OUT//2 = 1650`; TPOT 40 ms; fp8; TTFT(24B, 1500) = 0.0728 s; duration **12.07 s**;
-  concurrency **100.6**; sessions/GPU bf16 **95.3** (1.06 GPU), fp8 **381.3** (0.26 GPU); decode need 2,500 tok/s vs **9,156**/GPU;
+  concurrency **100.6**; sessions/GPU bf16 **88.8** (1.13 GPU), fp8 **355.1** (0.28 GPU); decode need 2,500 tok/s vs **8,929**/GPU;
   prefill need 12,500 vs **20,615**/GPU.
 - Same formulas with 10× output (3,000 tokens of thinking+answer, computed today): duration **120.07 s**, concurrency **1,000.6**,
-  AVG_CTX 3,000, KV/session fp8 0.2289 GB, sessions/GPU fp8 **209.7** → **4.77 GPUs** for memory (18× the baseline's 0.264); decode need
-  25,000 tok/s. Caveat: `decode_aggregate` does not cap batch by HBM or the roofline (batch 1,000 × 0.229 GB = 229 GB KV > 80 GB HBM);
+  AVG_CTX 3,000, KV/session fp8 0.2458 GB, sessions/GPU fp8 **195.3** → **5.12 GPUs** for memory (18× the baseline's 0.283); decode need
+  25,000 tok/s. Caveat: `decode_aggregate` does not cap batch by HBM or the roofline (batch 1,000 × 0.246 GB = 246 GB KV > 80 GB HBM);
   the new `workload.py` must enforce memory and the compute roofline itself.
 - KV×time grows faster than tokens: a request's KV-token-seconds ∝ ∫(P + t)dt over L output tokens = P·L + L²/2 (derivation; builders compute
   their own 5–20× working-set figure from the core rather than quoting one).
@@ -374,7 +374,7 @@ Paths are relative to `$SP/ref/` unless they start with a repo dir (`00-…`, `0
    `scale_rewards="group"`; set them explicitly when reproducing "GRPO". std uses Bessel's correction and +1e-4.
 9. GRPOConfig sets `bf16=True` unless `fp16` is set — a T4 has no bf16. vLLM server mode must use different GPUs from the trainer.
 10. Groups with all-equal rewards give zero advantage and zero gradient (`frac_reward_zero_std`); DAPO's dynamic sampling resamples them.
-11. `decode_aggregate` in `capacity.py` has no memory or roofline cap; `kv_per_session_gb` uses 1024² while weights use 1e9 — reproduce, don't "fix".
+11. `decode_aggregate` in `capacity.py` has no memory or roofline cap; since 2026-09-26 `kv_per_session_gb` uses 1e9 like the weights (it used 1024² before; `rlcore.workload` follows).
 12. Qwen3-0.6B's head_dim (128) ≠ hidden/heads (64): always read `head_dim` from config (sizing.py comment).
 13. Structured output with a reasoning parser applies after `</think>` unless `enable_in_reasoning=True`; tool calls parse only from `content`.
 14. pass@k needs n ≥ k samples and the unbiased estimator (not 1−(1−p̂)^k); pass^k is the all-k-succeed reliability metric (τ-bench).

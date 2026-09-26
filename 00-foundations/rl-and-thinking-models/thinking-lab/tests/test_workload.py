@@ -27,11 +27,11 @@ def test_capacity_primer_numbers_by_hand():
     rps = 10_000 * 0.10 * 0.5 / 60
     base, think = W.capacity_primer_view(rps, 1500, 300), W.capacity_primer_view(rps, 1500, 3000)
     assert base["ttft_s"] == pytest.approx(0.0728, abs=1e-4) and base["duration_s"] == pytest.approx(12.07, abs=0.01)
-    assert base["concurrency"] == pytest.approx(100.6, abs=0.1) and base["sessions_per_gpu"] == pytest.approx(381.3, abs=0.1)
-    assert base["gpus_for_memory"] == pytest.approx(0.264, abs=0.001)
+    assert base["concurrency"] == pytest.approx(100.6, abs=0.1) and base["sessions_per_gpu"] == pytest.approx(355.1, abs=0.1)
+    assert base["gpus_for_memory"] == pytest.approx(0.283, abs=0.001)
     assert think["duration_s"] == pytest.approx(120.07, abs=0.01) and think["concurrency"] == pytest.approx(1000.6, abs=0.1)
-    assert think["kv_per_session_gb"] == pytest.approx(0.2289, abs=1e-4) and think["sessions_per_gpu"] == pytest.approx(209.7, abs=0.1)
-    assert think["gpus_for_memory"] == pytest.approx(4.77, abs=0.01) and think["decode_tok_s_needed"] == 25_000
+    assert think["kv_per_session_gb"] == pytest.approx(0.2458, abs=1e-4) and think["sessions_per_gpu"] == pytest.approx(195.3, abs=0.1)
+    assert think["gpus_for_memory"] == pytest.approx(5.12, abs=0.01) and think["decode_tok_s_needed"] == 25_000
 
 
 def test_derive_shape_is_consistent_with_the_engine_profile():

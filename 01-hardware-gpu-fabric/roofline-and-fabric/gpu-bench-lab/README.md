@@ -36,7 +36,7 @@ on real hardware. Prices and where to get GPUs: [`COMPUTE.md`](../../../COMPUTE.
 ```bash
 cd 01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab
 python3 -m pip install -r requirements.txt && python3 -m pip install -e .
-python3 -m pytest -q                      # 97 tests (94 pass, 3 skip), ~35 s, no GPU
+python3 -m pytest -q                      # 100 tests (97 pass, 3 skip), ~35 s, no GPU
 python3 -m gpubench info                  # what is this machine?
 python3 -m gpubench run --out results     # the suite: results/gpubench-<host>-<backend>-<time>.{json,md}
 python3 -m jupyterlab notebooks           # the four fill-in notebooks (answers in solutions/)
@@ -69,7 +69,10 @@ Every timing reports **best** (what the machine can do) and **median** (what you
 several samples, after warm-up; GPU work is timed with CUDA events or with every device synchronised.
 Copies are timed two ways on a GPU: back to back (the α-β fit's α is then a per-copy *issue* cost,
 because asynchronous copies overlap) and one synchronised copy per sample (α is the *latency* a
-dependent step pays). "Cold" disk reads are only reported when the page cache can really be dropped —
+dependent step pays). When the samples behind a roof scatter (coefficient of variation above 15%), or a
+CPU's float32 peak comes out below its float64 peak, the run prints and the report heads with a
+**noisy measurement (shared CPU?)** warning (`roofline.noise_warnings`): that roofline describes the other
+load on the machine, so re-run on an idle one. "Cold" disk reads are only reported when the page cache can really be dropped —
 not for a file on tmpfs — and a `--tiny` report says in bold that it is a plumbing check.
 
 ## The library

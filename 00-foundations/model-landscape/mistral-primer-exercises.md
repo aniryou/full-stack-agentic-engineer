@@ -7,7 +7,7 @@ Companion to the Mistral section of [`open-weight-llms-primer.md`](open-weight-l
 ## Part A — Exercises
 
 ### 1. Cost model
-A customer runs document summarisation at scale: **400M input tokens** and **40M output tokens** per month. No agentic tool use, no complex reasoning, but long documents.
+A team runs document summarisation at scale: **400M input tokens** and **40M output tokens** per month. No agentic tool use, no complex reasoning, but long documents.
 
 - (a) Compute monthly API cost on Small 4, Large 3 and Medium 3.5.
 - (b) Recompute assuming 60% of input is cacheable (shared system prompt and policy corpus).
@@ -21,7 +21,7 @@ Design the Mistral component at each stage of an insurance claims pipeline:
 Name the model or product per stage, and say specifically **which output signal decides what goes to a human**.
 
 ### 3. Migration case
-A customer built in mid-2025 on **Magistral Medium 1.2** (reasoning) + **Devstral Small 2** (coding agents) + **Pixtral** (vision), with a routing layer in front.
+A team built in mid-2025 on **Magistral Medium 1.2** (reasoning) + **Devstral Small 2** (coding agents) + **Pixtral** (vision), with a routing layer in front.
 
 - (a) What is the migration path today?
 - (b) What do they gain?
@@ -32,18 +32,18 @@ For each, state whether it's permissible, and on which model:
 
 | # | Use case |
 |---|---|
-| a | Commercial TTS voice agent shipped to customers |
+| a | Commercial TTS voice agent shipped to end users |
 | b | Fine-tune a model and resell it as a vertical product |
 | c | Content moderation on an air-gapped network |
 | d | On-prem code completion in an IDE, no internet egress |
 | e | Vision model on a battery-powered edge device |
 
 ### 5. Sovereign architecture
-A Singapore bank under MAS technology risk and outsourcing guidelines requires that **no customer data leaves Singapore**. They want document intelligence over internal credit policies plus an internal assistant.
+A Singapore bank under MAS technology risk and outsourcing guidelines requires that **no personal data leaves Singapore**. It wants document intelligence over internal credit policies plus an internal assistant.
 
 - (a) Design the stack.
 - (b) **Trap:** why do Mistral Regional Endpoints not solve this on their own?
-- (c) Name a plausible delivery and infrastructure partner, and say what each contributes.
+- (c) Which components must run in-country, and what would you check about the infrastructure before signing off the design?
 
 ### 6. Explain-it drill
 In five sentences, no notes: why does Agentic Search beat one-shot RAG? Then name the five tools in order.
@@ -80,9 +80,9 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 - **Indexing:** Mistral Search Toolkit over the policy corpus; OCR 4 output feeds the ingestion pipeline directly as citation-ready structured blocks.
 - **Validation:** Agentic Search against that index — this is exactly the case one-shot RAG fails, since the answer sits in a specific clause or table rather than a top-*k* chunk.
 - **Adjudication draft:** Small 4 with `reasoning_effort` scaled to claim complexity; Medium 3.5 only if the workflow calls multiple tools over a long horizon.
-- **Safety:** Shieldstral if outputs are customer-facing and the deployment is isolated; Moderation 2 if API is acceptable (it's free).
+- **Safety:** Shieldstral if outputs reach end users and the deployment is isolated; Moderation 2 if API is acceptable (it's free).
 
-**The signal that routes to a human is OCR 4's confidence score** — per-page and per-word — combined with block type. That's the answer being tested; most people say "the model's uncertainty," which OCR 4 makes unnecessary.
+**The signal that routes to a human is OCR 4's confidence score** — per-page and per-word — combined with block type. It is a better routing signal than asking the model for its own uncertainty, which OCR 4's calibrated per-word scores make unnecessary.
 
 ### 3. Migration case
 
@@ -92,7 +92,7 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 
 **(c) Two non-obvious breaks:**
 - **Verbosity changes.** `reasoning_effort="high"` approximates old Magistral verbosity and `"none"` approximates Small 3.2 chat style — but anything tuned to a specific output length, latency budget or token cost needs re-benchmarking, not just re-pointing.
-- **Infrastructure shape changes.** Devstral Small was a small dense model; Small 4 is a 119B MoE with a floor of 4× HGX H100, 2× HGX H200 or 1× DGX B200. A customer self-hosting Devstral Small on modest hardware may need to re-provision entirely — or drop to Ministral 3 14B and accept the capability trade.
+- **Infrastructure shape changes.** Devstral Small was a 24B dense model that fits one GPU; Small 4 is a 119B-total, ~6.5B-active MoE (verify, 2026-09). All 119B parameters must sit in memory: about 240 GB in BF16 and 120 GB in FP8 (params × bytes, [capacity primer](../gpu-capacity-planning/PRIMER.md)), so two H100s or one H200 in FP8 before any KV cache. A team self-hosting Devstral Small on one modest GPU may need to re-provision entirely — or drop to Ministral 3 14B and accept the capability trade.
 
 ### 4. Licensing triage
 
@@ -108,9 +108,9 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 
 **(a)** Open-weight models self-hosted in-country — Small 4 or Large 3 for the assistant, Ministral 3 if the footprint must be small. OCR 4 in a single container on the bank's own infrastructure. Search Toolkit index built and held in-country. Forge for domain adaptation on internal credit policy language, with versioning, lineage and rollback for the audit trail.
 
-**(b) The trap:** Regional Endpoints let you choose **Europe or the US**. Neither is Singapore. For a no-data-leaves-Singapore constraint, regional endpoints are irrelevant — you need self-hosting or a Singapore-resident partner cloud. Anyone who answers "just use regional endpoints" has misread the feature.
+**(b) The trap:** Regional Endpoints let you choose **Europe or the US**. Neither is Singapore. For a no-data-leaves-Singapore constraint, regional endpoints are irrelevant — you need self-hosting or a cloud region inside Singapore. "Just use regional endpoints" misreads the feature.
 
-**(c)** Infrastructure: Singtel Digital InfraCo's **RE:AI** sovereign AI cloud, which runs on Nxera capacity in Singapore. Delivery: **NCS** or **Accenture** — both are in the published partner tiers and both hold the banking relationships. Mistral contributes models, Forge and engineering; the partner contributes delivery, integration and regulatory familiarity.
+**(c)** In-country: the GPUs serving the models, the weights, the OCR container, the search index, the fine-tuning data and Forge's artefacts, and the logs and traces, because prompts and outputs contain the personal data too. Options for the GPUs are the bank's own data centre, a hyperscaler region in Singapore, or a sovereign-cloud offering. Before signing off, check: every data centre the offering may place the workload in (some regional sovereign clouds span Singapore and neighbouring countries), GPU availability and lead time in that region, where support staff and telemetry pipelines can reach the data, and whether the model licence allows self-hosting (Apache 2.0 for Small 4, Large 3 and Ministral 3; verify).
 
 ### 6. Explain-it drill
 
