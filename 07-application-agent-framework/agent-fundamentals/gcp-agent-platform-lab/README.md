@@ -6,7 +6,7 @@ Gemini — so you practise the mechanisms (tool contracts, loops, state, identit
 tracing, reliability, cost) rather than API plumbing. When you have a key, one import swaps in the
 real model.
 
-    83 exercises · 15 notebooks · 6.5k lines of library · 146 unit tests · every solution notebook executes clean
+    83 exercises · 15 notebooks · 6.5k lines of library · 147 unit tests · every solution notebook executes clean
 
 ## Quick start
 
@@ -98,8 +98,10 @@ to ADK are in `docs/GEMINI_ADAPTER.md`.
   evaluation, tracing — which is where production agent systems succeed or fail. Real-model behaviour
   (and real prompt-injection susceptibility) is out of scope.
 - MCP here follows the 2026-07-28 revision's shape (stateless per-request metadata, mirrored headers,
-  embedded server-to-client interactions, the Tasks extension). Many deployed servers still speak the
-  2025 revisions; notebook 05 says what differs.
+  embedded server-to-client interactions, the Tasks extension), checked against the spec repository on
+  2026-09-26 (verify). Many deployed servers still speak the 2025 revisions;
+  [`docs/MCP_REVISIONS.md`](docs/MCP_REVISIONS.md) says what differs from 2025-03-26, 2025-06-18 and
+  2025-11-25, and where the lab's subset departs from the spec.
 
 ## Layout
 
