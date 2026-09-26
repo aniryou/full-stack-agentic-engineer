@@ -118,12 +118,18 @@ def tile_smem_bytes(tile_m: int, tile_n: int, tile_k: int, bytes_per_el: float =
     return stages * (tile_m + tile_n) * tile_k * bytes_per_el
 
 
-def fusion_bytes(n: int, n_ops: int, bytes_per_el: float = 2, fused: bool = True) -> float:
-    """HBM traffic of a chain of n_ops elementwise ops on n elements (one in, one out each).
+def fusion_bytes(n: int, n_ops: int, bytes_per_el: float = 2, fused: bool = True,
+                 extra_inputs: int = 0) -> float:
+    """HBM traffic of a chain of n_ops elementwise ops on n elements.
 
-    Unfused, every op round-trips through HBM: 2 n b n_ops. Fused: 2 n b once.
+    Each op reads the running tensor and writes one; `extra_inputs` of them also read a
+    second full tensor (a residual add). Unfused, every op round-trips through HBM:
+    (2 n_ops + extra_inputs) n b. Fused, each distinct input is read once and the result
+    written once: (2 + extra_inputs) n b. Bias, GELU, dropout, residual (one extra input):
+    9 tensor passes unfused, 3 fused -- fusion removes two thirds of the bytes.
     """
-    return 2 * n * bytes_per_el * (1 if fused else n_ops)
+    passes = 2 + extra_inputs if fused else 2 * n_ops + extra_inputs
+    return passes * n * bytes_per_el
 
 
 # -- a dependency-free picture ----------------------------------------------------------

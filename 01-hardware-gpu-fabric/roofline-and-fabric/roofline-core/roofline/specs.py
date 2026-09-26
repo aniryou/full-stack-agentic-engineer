@@ -134,12 +134,14 @@ DEVICES: dict[str, Device] = {
                     tflops={"fp32": 90, "tf32": 1250, "fp16": 2500, "bf16": 2500, "fp8": 5000,
                             "fp4": 10000, "int8": 5000},
                     scaleup_gbs=1800, scaleup_domain=72, host_link="NVLink-C2C to Grace", tdp_w=1200,
-                    gcp="A4X (GB200 NVL72)", notes="rack-scale NVLink domain of 72 GPUs"),
+                    gcp="A4X (GB200 NVL72)",
+                    notes="rack-scale NVLink domain of 72 GPUs; 186 GB = 13.4 TB HBM / 72 GPUs (verify)"),
     "gb300": Device(name="NVIDIA GB300 (per GPU, NVL72)", vendor="NVIDIA", arch="Blackwell Ultra",
                     year=2025, memory_gb=288, memory_tbs=8.0, memory_type="HBM3e",
                     tflops={"fp16": 2500, "bf16": 2500, "fp8": 5000, "fp4": 15000},
                     scaleup_gbs=1800, scaleup_domain=72, host_link="NVLink-C2C to Grace", tdp_w=1400,
-                    gcp="A4X Max (GB300 NVL72)", notes="1.5x Blackwell dense FP4; INT8/FP64 cut"),
+                    gcp="A4X Max (GB300 NVL72)",
+                    notes="1.5x Blackwell dense FP4; INT8/FP64 cut; 1,400 W TDP (verify)"),
     "rtx-pro-6000": Device(name="NVIDIA RTX PRO 6000 Blackwell Server", vendor="NVIDIA", arch="Blackwell",
                            year=2025, memory_gb=96, memory_tbs=1.6, memory_type="GDDR7", l2_mb=128,
                            tflops={"fp32": 120, "fp16": 500, "bf16": 500, "fp8": 1000, "fp4": 2000},
@@ -193,12 +195,17 @@ def get(name: str) -> Device:
 
 
 def table(keys=None, precision: str = "bf16") -> str:
-    """The landscape as a Markdown table (dense peaks; ridge computed, not quoted)."""
-    rows = ["| Device | Mem GB | TB/s | bf16/fp16 TF | fp8 TF | fp4 TF | Ridge FLOP/B | Scale-up GB/s (domain) | TDP W |",
+    """The landscape as a Markdown table (dense peaks; ridge computed, not quoted).
+
+    The main TF column and the ridge use `precision`, falling back to bf16 then fp16 for
+    parts without it (a TPU has no fp16, a T4 no bf16 or fp8).
+    """
+    main = "bf16/fp16" if precision == "bf16" else f"{precision} (else bf16/fp16)"
+    rows = [f"| Device | Mem GB | TB/s | {main} TF | fp8 TF | fp4 TF | Ridge FLOP/B | Scale-up GB/s (domain) | TDP W |",
             "|---|---|---|---|---|---|---|---|---|"]
     for k in keys or DEVICES:
         d = DEVICES[k]
-        p = precision if d.supports(precision) else "fp16"
+        p = next(x for x in (precision, "bf16", "fp16") if d.supports(x))
         fmt = lambda x: "–" if x is None else f"{x:,.0f}" if x >= 100 else f"{x:g}"
         up = "PCIe only" if d.scaleup_gbs is None else f"{d.scaleup_gbs:,.0f} ({d.scaleup_domain})"
         rows.append(f"| {d.name} | {d.memory_gb:g} | {d.memory_tbs:g} | {fmt(d.tflops.get(p))} | "

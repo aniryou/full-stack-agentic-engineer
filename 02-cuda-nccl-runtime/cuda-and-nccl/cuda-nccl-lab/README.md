@@ -27,7 +27,7 @@ Prices and obtainability: [COMPUTE.md](../../../COMPUTE.md).
 ```bash
 cd 02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab
 python3 -m pip install -r requirements.txt      # numpy, numba, pyyaml + notebook/test tooling
-python3 -m pytest -q                            # ~85 tests, ~25 s, simulator only
+python3 -m pytest -q                            # ~90 tests, ~25 s, simulator only
 python3 -m gpurt.env                            # tier, GPUs, numba mode
 python3 -m gpurt.container                      # how this process sees a GPU (on a laptop: it doesn't — and why)
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M   # a real ring all-reduce over pipes

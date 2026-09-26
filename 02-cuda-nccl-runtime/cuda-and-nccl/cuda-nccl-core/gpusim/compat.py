@@ -7,27 +7,42 @@
 2. The binary must carry a *kernel image* this GPU can run: SASS for its compute capability
    (same major, equal or lower minor), or PTX that the driver can JIT-compile.
 
-`check()` walks both gates and names the exact error you would see. `explain_container()` adds
-the container failure modes. The tables are dated Sep 2026 and marked (verify): they list the
-minimum Linux x86_64 drivers from the CUDA Toolkit release notes.
+`check()` walks both gates and names the exact error you would see, or says it cannot judge
+when the driver is older than its table. `explain_container()` adds the container failure modes.
+The tables are dated Sep 2026 and marked (verify): minimum Linux x86_64 drivers from the CUDA
+Toolkit release notes, and the kernel-driver branches each cuda-compat package accepts.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-# CUDA toolkit (GA) -> minimum Linux x86_64 driver. Release notes, "CUDA Toolkit and
-# Corresponding Driver Versions" (verify). 13.2+ are branch numbers only: they are inferred from
-# NVIDIA's R595/R610/R615 NVML releases, so check the exact minimum in the release notes.
+# CUDA toolkit (GA) -> minimum Linux x86_64 driver: the release notes' "Toolkit Driver Version"
+# table (verify; checked 2026-09-26 against the copy in meson's cuda module, which has 13.2/13.3).
 CUDA_MIN_DRIVER = {
-    "11.4": "470.42.01", "11.8": "520.61.05",
+    "9.0": "384.81", "9.1": "390.46", "9.2": "396.26",
+    "10.0": "410.48", "10.1": "418.39", "10.2": "440.33",
+    "11.0": "450.51.05", "11.1": "455.23", "11.2": "460.27.03", "11.3": "465.19.01",
+    "11.4": "470.42.01", "11.5": "495.29.05", "11.6": "510.39.01", "11.7": "515.43.04",
+    "11.8": "520.61.05",
     "12.0": "525.60.13", "12.1": "530.30.02", "12.2": "535.54.03", "12.3": "545.23.06",
     "12.4": "550.54.14", "12.5": "555.42.02", "12.6": "560.28.03", "12.8": "570.26",
-    "12.9": "575.51.03", "13.0": "580.65.06", "13.1": "590.44.01",
-    "13.2": "595", "13.3": "610", "13.4": "615",
+    "12.9": "575.51.03", "13.0": "580.65.06", "13.1": "590.44.01", "13.2": "595.45.04",
+    "13.3": "610.43.02", "13.4": "615",
 }
-# Minor-version compatibility: any runtime of major M runs on a driver >= this floor (verify 13).
+# Rows that are a driver *branch* only, inferred rather than read from the release notes: 13.4 from
+# NVIDIA's R615 NVML binding (nvidia-ml-py 13.615.71). The exact minimum is some 615.x.
+INFERRED = {"13.4"}
+# Minor-version compatibility: any runtime of major M runs on a driver >= this floor (release
+# notes: 11.x >= 450.80.02, 12.x >= 525, 13.x >= 580; verify).
 MINOR_COMPAT_FLOOR = {11: "450.80.02", 12: "525.60.13", 13: "580.65.06"}
+# Forward compatibility: the kernel-driver branches a cuda-compat package runs over. Read from the
+# NVIDIA_REQUIRE_CUDA constraints of NVIDIA's nvidia/cuda images (brand=tesla,driver>=B,driver<B+1);
+# the authoritative list is the CUDA Compatibility guide (verify). Other versions: not tabulated.
+COMPAT_BRANCHES = {
+    "12.4": (470, 525, 535), "12.8": (470, 535, 550, 560, 565),
+    "13.0": (535, 550, 565, 570, 575), "13.1": (535, 550, 570, 575, 580),
+}
 
 # GPU -> (compute capability, architecture, data-center class). Verify the Blackwell rows.
 GPUS = {
@@ -115,16 +130,22 @@ def sass_runs_on(target: str, cc: str) -> bool:
 
 
 def ptx_jits_to(target: str, cc: str) -> bool:
-    """PTX for compute_XY can be JIT-compiled for any GPU with CC >= X.Y, across majors too
-    (arch-specific 'a' PTX only for exactly X.Y). The driver's JIT must be at least as new as
+    """PTX for compute_XY can be JIT-compiled for any GPU with CC >= X.Y, across majors too.
+    Arch-specific 'a' PTX only for exactly X.Y; family-specific 'f' PTX only within the family,
+    i.e. the same major with minor >= Y (verify). The driver's JIT must be at least as new as
     the toolkit that produced the PTX."""
     (major, minor), suffix = _arch(target)
-    return ver(cc) == (major, minor) if suffix == "a" else ver(cc) >= (major, minor)
+    dev = ver(cc)
+    if suffix == "a":
+        return dev == (major, minor)
+    if suffix == "f":
+        return dev[0] == major and dev[1] >= minor
+    return dev >= (major, minor)
 
 
 @dataclass
 class Verdict:
-    ok: bool
+    ok: bool | None           # None: outside the tables, the engine cannot judge
     code: int | None = None
     reasons: list = field(default_factory=list)
 
@@ -133,38 +154,55 @@ class Verdict:
         return None if self.code is None else f"{ERRORS[self.code][0]} ({self.code}): {ERRORS[self.code][1]}"
 
     def __str__(self) -> str:
-        lines = ["OK" if self.ok else f"FAILS with {self.error}"] + [f"  - {r}" for r in self.reasons]
+        head = "OK" if self.ok else "CANNOT JUDGE" if self.ok is None else f"FAILS with {self.error}"
+        lines = [head] + [f"  - {r}" for r in self.reasons]
         return "\n".join(lines + ([f"  fix: {ERRORS[self.code][2]}"] if self.code else []))
 
 
 def check(app_cuda: str, driver: str, gpu: str | None = None, cc: str | None = None,
           targets: str | None = None, compat_cuda: str | None = None,
-          compat_branch_ok: bool = True, datacenter: bool | None = None) -> Verdict:
+          compat_branch_ok: bool | None = None, datacenter: bool | None = None) -> Verdict:
     """Will an app built with CUDA `app_cuda`, carrying kernel `targets`, run on `gpu` (or CC
-    `cc`) under host `driver`? `compat_cuda` = the cuda-compat package's version, if loaded."""
+    `cc`) under host `driver`? `compat_cuda` = the cuda-compat package's version, if loaded.
+    `compat_branch_ok` overrides the COMPAT_BRANCHES lookup for the driver's branch."""
     if gpu is not None:
         cc, _, dc = GPUS[gpu]
         datacenter = dc if datacenter is None else datacenter
     datacenter = True if datacenter is None else datacenter
     drv = driver_cuda(driver)
-    why = [f"driver {driver} supports CUDA up to {drv or 'an older version than this table'}"]
+    if drv is None:
+        oldest = min(CUDA_MIN_DRIVER, key=ver)
+        return Verdict(None, None, [f"driver {driver} is older than this table's oldest row (CUDA {oldest} "
+                                    f"needs {CUDA_MIN_DRIVER[oldest]}), so neither gate can be judged here"])
+    why = [f"driver {driver} supports CUDA up to {drv}"]
+    if drv in INFERRED:
+        why[0] += f" (inferred from the R{CUDA_MIN_DRIVER[drv]} branch; verify the exact minimum)"
 
     first = FIRST_CUDA.get(cc)                                    # gate 0: does the driver know the GPU?
-    if first and (drv is None or ver(first) > ver(drv)):
-        why.append(f"CC {cc} first shipped with CUDA {first}; this driver predates it, so the kernel "
-                   "module does not bind the GPU (nvidia-smi: 'No devices were found')")
+    if first and ver(first) > ver(drv):
+        why.append(f"CC {cc} is first targeted by CUDA {first}; this driver's branch predates that "
+                   "toolkit, and drivers that old generally do not know the GPU, so the kernel module "
+                   "does not bind it (nvidia-smi: 'No devices were found'; verify the GPU's minimum driver)")
         return Verdict(False, 100, why)
 
     effective = drv                                               # gate 1: driver API version
+    if compat_cuda and ver(compat_cuda)[:2] <= ver(drv)[:2]:
+        why.append(f"the driver already supports CUDA {compat_cuda}: cuda-compat is not needed here")
+        compat_cuda = None
     if compat_cuda:
         if not datacenter:
             return Verdict(False, 804, why + ["cuda-compat only works on data-center GPUs"])
-        if not compat_branch_ok:
-            return Verdict(False, 803, why + ["cuda-compat does not support this kernel-driver branch"])
+        branch = ver(driver)[0]
+        listed = COMPAT_BRANCHES.get(".".join(str(x) for x in ver(compat_cuda)[:2]))
+        if compat_branch_ok is None and listed is not None:
+            compat_branch_ok = branch in listed
+        if compat_branch_ok is False:
+            return Verdict(False, 803, why + [f"cuda-compat {compat_cuda} does not support kernel-driver "
+                                              f"branch R{branch} (supported: {listed or 'see the guide'})"])
         effective = compat_cuda
-        why.append(f"cuda-compat {compat_cuda} supplies a newer user-mode libcuda over kernel module {driver}")
-    if effective is None:
-        return Verdict(False, 35, why)
+        why.append(f"cuda-compat {compat_cuda} supplies a newer user-mode libcuda over kernel module {driver}"
+                   + ("" if compat_branch_ok else
+                      f"; branch R{branch} assumed supported, not in this table (verify)"))
     app, eff = ver(app_cuda)[:2], ver(effective)[:2]
     minor_compat = False
     if app[0] > eff[0]:
@@ -189,8 +227,8 @@ def check(app_cuda: str, driver: str, gpu: str | None = None, cc: str | None = N
         return Verdict(True, None, why + [f"SASS {best} runs natively on CC {cc}"])
     jit = [p for p in ptx if ptx_jits_to(p, cc)]
     if not jit:
-        return Verdict(False, 209, why + [f"no SASS for CC {cc} among {sass or 'none'} and no PTX at or "
-                                          f"below compute_{cc.replace('.', '')} among {ptx or 'none'}"])
+        return Verdict(False, 209, why + [f"no SASS for CC {cc} among {sass or 'none'} and no PTX that "
+                                          f"can JIT to CC {cc} among {ptx or 'none'}"])
     best = max(jit, key=lambda p: _arch(p)[0])
     if minor_compat:
         return Verdict(False, 222, why + [f"only PTX {best} fits, it was generated by CUDA {app_cuda}, "

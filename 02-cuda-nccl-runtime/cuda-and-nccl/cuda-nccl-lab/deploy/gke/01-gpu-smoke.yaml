@@ -18,7 +18,7 @@ spec:
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-l4
       tolerations:
-        - key: nvidia.com/gpu # GKE taints GPU nodes; GKE also adds this toleration to GPU pods itself
+        - key: nvidia.com/gpu # GKE taints GPU nodes; it may also add this toleration itself (verify) - explicit is portable
           operator: Exists
           effect: NoSchedule
       containers:

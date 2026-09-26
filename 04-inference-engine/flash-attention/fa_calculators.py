@@ -2,20 +2,29 @@
 
 One idea: attention cost is a bookkeeping problem. Count the FLOPs, count the bytes that
 cross HBM under a given loop schedule, divide by the machine's two peaks, and you know
-which wall a kernel hits before you run it. Every number in the deep dive that is derived
-rather than cited comes from a function here, and test_fa_calculators.py pins them.
+which wall a kernel hits before you run it. The derived numbers in the deep dive come from
+functions here (test_fa_calculators.py pins them); the few that are a one-line product of
+numbers already on the page are worked inline in the text, and the notebook prints them.
 
 Contents
   DEVICES                      peak dense bf16 FLOP/s and HBM bandwidth (dated; verify)
+  PER_SM_CLOCK                 per-SM, per-clock unit throughputs (tensor, FP32, MUFU)
   attention_flops              the 4*Nq*Nk*d convention, causal and backward factors
   naive_traffic                HBM bytes of the unfused S -> P -> O schedule
   flash_traffic                HBM bytes of the FA1 / FA2 tiled schedules (no-L2 model)
+  fa1_block_sizes, io_saving   the paper's block sizes and the constant-aware traffic saving
   roofline                     compute time vs memory time vs the bound
+  clocks_per_score             why the exponential matters: per-unit clocks for one score
+  fa3_registers                FA3's per-thread register budget and the per-SM total
   causal_tiles, window_tiles   tiles a causal / sliding-window kernel visits and masks
   num_splits_heuristic         FlashAttention-2's split-KV chooser (ported from flash_api.cpp)
   fa2_decode_splits            ... applied to a decode batch the way mha_fwd_kvcache does
+  fa3_num_splits_heuristic     FlashAttention-3's chooser (hopper/heuristics.h)
+  fa3_decode_splits            ... plus the per-sequence dynamic split vLLM's FA3 path uses
+  split_partials_bytes         fp32 partial results a split-KV launch writes and reads back
   decode_*                     bytes and arithmetic intensity of decode attention
-  mla_decode_intensity         intensity of absorbed-weight MLA decode
+  mla_*                        absorbed-weight MLA: decode intensity, cache ratio, prefill cost
+  padding_waste                padded vs ragged (varlen) score pairs and tile utilisation
   softmax state algebra        (m, l, o) states, merge, LSE form, a traced 2-block example
   round_to_e4m3, hadamard      FP8 emulation and the rotation used by incoherent processing
 
@@ -56,6 +65,15 @@ DEVICES = {
     "A100": Device("NVIDIA A100 SXM 80GB", 312.0, 2.039, 108, 164, 40),
     "H100": Device("NVIDIA H100 SXM", 989.4, 3.35, 132, 228, 50),
     "B200": Device("NVIDIA B200", 2250.0, 8.0, 148, 228, 126),
+}
+
+# Per SM per clock: dense bf16 tensor-core FLOPs, FP32 FMA instructions, MUFU (EX2) instructions.
+# CUDA programming guide throughput tables and datasheet peaks divided by SMs x boost clock;
+# the B200 row is an estimate (verify).
+PER_SM_CLOCK = {
+    "A100": {"mma_flops": 2048, "fp32_instr": 64, "mufu": 16},
+    "H100": {"mma_flops": 4096, "fp32_instr": 128, "mufu": 16},
+    "B200": {"mma_flops": 8192, "fp32_instr": 128, "mufu": 16},
 }
 
 

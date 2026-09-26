@@ -27,8 +27,11 @@ import numpy as np
 
 from gpurt import env
 
+# This notebook is about the simulator (the tracer below needs it), so force it even on a GPU machine.
+# It must happen before numba.cuda is imported; in a kernel that already imported it, restart the kernel.
+env.ensure_numba_mode(simulator=True)
 print(env.describe())
-from gpurt.kernels import MODE, SIMULATOR, blocks_for, cuda  # noqa: E402  (decides simulator vs GPU first)
+from gpurt.kernels import MODE, SIMULATOR, blocks_for, cuda  # noqa: E402
 
 print("numba CUDA mode:", MODE, "- every CUDA thread is a Python thread" if SIMULATOR else "- compiled for this GPU")
 # The simulator releases threads from cuda.syncthreads() by polling; with CPython's default 5 ms GIL

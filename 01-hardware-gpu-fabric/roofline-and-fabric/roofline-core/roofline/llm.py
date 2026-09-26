@@ -14,6 +14,13 @@ Model of one step (all layers, one forward pass):
   bytes = weights streamed once (+ LM head) + KV read + KV written
 Activations are assumed fused/on-chip (not counted); efficiencies default to 1
 (the ideal roofline). Numbers are bounds, not predictions.
+
+prefill() and decode() treat the whole step as one kernel, max(sum F / peak,
+sum B / BW): the bound if GEMM math overlapped attention's KV streaming perfectly.
+An engine runs the kernels one after another, so decode_split() prices the weight
+GEMMs (intensity ~ batch) and attention (intensity ~ 2 x GQA group / KV bytes,
+never compute-bound) separately and adds them. The two agree while both kernels
+are memory-bound and part once the GEMMs cross the ridge.
 """
 from __future__ import annotations
 
@@ -182,10 +189,67 @@ def decode(model: ModelConfig, device: Device, batch: int, context: int, *,
                  precision, compute_eff, memory_eff)
 
 
+@dataclass(frozen=True)
+class SplitStep:
+    """A decode step as the two kinds of kernel an engine runs one after another."""
+    gemms: Step          # weight GEMMs + LM head: stream the weights, intensity ~ batch
+    attention: Step      # each sequence reads its own KV cache: intensity independent of batch
+
+    @property
+    def time(self) -> float:
+        """Kernels run in sequence: the sum of per-kernel roofline times."""
+        return self.gemms.time + self.attention.time
+
+
+def decode_split(model: ModelConfig, device: Device, batch: int, context: int, *,
+                 weight_bytes: float = 2, kv_bytes: float = 2, precision: str = "bf16",
+                 compute_eff: float = 1.0, memory_eff: float = 1.0) -> SplitStep:
+    """decode() priced per kernel: the same FLOPs and bytes, split in two.
+
+    GEMMs: batch x (2 matmul params + 2 LM head) FLOPs over the streamed weights, so
+    their intensity grows with batch at any context and crosses the ridge near
+    batch ~ ridge x weight_bytes / 2. Attention: 4 L h dh (c + 1) FLOPs over (c + 1)
+    KV entries per sequence, ~2 x (heads / kv_heads) / kv_bytes = 4 FLOP/B for
+    Llama-3.1-8B in bf16, whatever the batch. Llama-3.1-8B, H100, FP8, 2K context,
+    batch 400: GEMMs 3.03 ms compute-bound + attention 16.03 ms memory-bound = 19.07 ms,
+    where the one-kernel decode() says 18.27 ms, memory-bound.
+    """
+    gemm_flops = batch * (2 * model.matmul_params_per_token() + 2 * model.lm_head_params())
+    attn_flops = batch * 4 * model.n_layers * model.n_heads * model.head_dim * (context + 1)
+    kv = batch * (context + 1) * model.kv_bytes_per_token(kv_bytes)
+    args = (device, precision, compute_eff, memory_eff)
+    return SplitStep(_step("decode GEMMs", batch, gemm_flops, streamed_weight_bytes(model, batch, weight_bytes), *args),
+                     _step("decode attention", batch, attn_flops, kv, *args))
+
+
+def gemm_crossover_batch(model: ModelConfig, device: Device, max_batch: int = 1 << 20, **kw) -> int | None:
+    """Smallest batch at which decode's weight GEMMs are compute-bound (context does not matter).
+
+    Llama-3.1-8B on an H100: 296 in bf16 and in FP8 (half the bytes, twice the peak).
+    This is the planning rule 'decode turns compute-bound at batch ~ ridge'.
+    """
+    def compute_bound(b):
+        return decode_split(model, device, b, 0, **kw).gemms.bound == "compute"
+
+    hi = 1
+    while not compute_bound(hi):
+        hi *= 2
+        if hi > max_batch:
+            return None
+    lo = hi // 2
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        lo, hi = (lo, mid) if compute_bound(mid) else (mid, hi)
+    return hi
+
+
 def decode_crossover_batch(model: ModelConfig, device: Device, context: int,
                            max_batch: int = 1 << 20, **kw) -> int | None:
-    """Smallest batch at which a decode step is compute-bound, or None if it never is.
+    """Smallest batch at which a whole decode step (one-kernel view) is compute-bound, or None.
 
+    This blends GEMMs and attention into one average intensity, so it rises with
+    context and vanishes past ~392 tokens for Llama-3.1-8B on an H100; per kernel,
+    the GEMMs still cross at gemm_crossover_batch() whatever the context.
     Dense closed form: B* = ridge W / (F_tok - ridge (c+1) kv_tok). When each
     sequence's KV bytes x ridge exceed its FLOPs the denominator is <= 0: batching
     can never reach the ridge. t_compute - t_memory crosses zero once, so bisect.

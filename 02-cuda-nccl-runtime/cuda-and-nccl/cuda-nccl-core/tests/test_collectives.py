@@ -105,6 +105,40 @@ def test_optimal_pipeline_depth():
     assert t(k) <= min(t(k - 4), t(k + 4), t(1), t(64))
 
 
+@pytest.mark.parametrize("size", [8, 2 ** 19, 2 ** 20, 2 ** 27, 2 ** 30, 3 * 10 ** 9])
+@pytest.mark.parametrize("op,algo", [("all_reduce", "switch"), ("broadcast", "ring")])
+def test_pipeline_chunks_is_the_integer_argmin(size, op, algo):
+    a, bw, p = 2e-6, 450e9, 8
+    k = C.pipeline_chunks(op, algo, size, p, a, bw)
+    brute = min(range(1, 400), key=lambda kk: C.model_time(op, algo, size, p, a, bw, kk))
+    assert C.model_time(op, algo, size, p, a, bw, k) == pytest.approx(C.model_time(op, algo, size, p, a, bw, brute))
+    assert C.model_time(op, algo, size, p, a, bw, None) == C.model_time(op, algo, size, p, a, bw, k)
+
+
+def test_primer_section_5_4_and_5_5_numbers():
+    """Every collective number quoted in PRIMER §5.4-§5.6 (8 GPUs, alpha = 2 us, B = 450 GB/s)."""
+    a, bw, p = 2e-6, 450e9, 8
+    t = C.model_time("all_reduce", "ring", 2 ** 30, p, a, bw)                     # §5.4: 1 GiB ring
+    assert round(t * 1e3, 2) == 4.20 and round(C.algbw(2 ** 30, t) / 1e9) == 255
+    assert round(C.busbw("all_reduce", 2 ** 30, t, p) / 1e9) == 447
+    assert C.pipeline_chunks("all_reduce", "switch", 2 ** 30, p, a, bw) == 35       # §5.4: 1 GiB NVLS
+    t = C.model_time("all_reduce", "switch", 2 ** 30, p, a, bw, None)
+    assert round(C.busbw("all_reduce", 2 ** 30, t, p) / 1e9) == 744
+    assert 1.75 * bw / 1e9 == 787.5                                                # the model's NVLS ceiling
+    small = {algo: round(x * 1e6, 1) for x, algo in C.best_algorithm("all_reduce", 2 ** 19, p, a, bw)}
+    assert list(small) == ["two_shot", "switch", "one_shot", "tree", "ring"]       # §5.5: 512 KiB
+    assert small == {"two_shot": 6.0, "switch": 6.3, "one_shot": 10.2, "tree": 19.0, "ring": 30.0}
+    big = C.best_algorithm("all_reduce", 2 ** 27, p, a, bw)                         # §5.5: 128 MiB
+    assert [x for _, x in big][:3] == ["switch", "two_shot", "ring"]
+    assert [round(x * 1e6) for x, _ in big][:3] == [349, 526, 550]
+    assert round(dict((x, t) for t, x in big)["one_shot"] * 1e3, 1) == 2.1
+    ring = {n: C.tp_comm(80, n, 8192, p, a, bw, "ring") for n in (32, 8192)}        # §5.6
+    two = {n: C.tp_comm(80, n, 8192, p, a, bw, "two_shot") for n in (32, 8192)}
+    assert round(ring[32]["total_s"] * 1e3, 2) == 4.81 and round(ring[8192]["total_s"] * 1e3, 1) == 88.0
+    assert round(two[32]["total_s"] * 1e3, 2) == 0.97 and round(two[8192]["total_s"] * 1e3, 1) == 84.2
+    assert round(ring[32]["latency_share"], 2) == 0.93 and round(ring[8192]["latency_share"], 2) == 0.05
+
+
 def test_tp_decode_all_reduce_is_latency_bound_and_prefill_is_not():
     decode = C.tp_comm(layers=80, tokens=32, hidden=8192, p=8, alpha=1e-6, bw=400e9)
     prefill = C.tp_comm(layers=80, tokens=8192, hidden=8192, p=8, alpha=1e-6, bw=400e9)

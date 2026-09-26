@@ -307,15 +307,36 @@ def cost_terms(op: str, algo: str, p: int, chunks: int = 1) -> tuple:
     }[(op, algo)]
 
 
-def model_time(op: str, algo: str, size: float, p: int, alpha: float, bw: float, chunks: int = 1) -> float:
+def model_time(op: str, algo: str, size: float, p: int, alpha: float, bw: float,
+               chunks: int | None = 1) -> float:
+    """T = a*alpha + c*S/B. chunks=None pipelines at the best depth (`pipeline_chunks()`)."""
+    if chunks is None:
+        chunks = pipeline_chunks(op, algo, size, p, alpha, bw)
     a, c = cost_terms(op, algo, p, chunks)
     return a * alpha + c * size / bw
 
 
-def optimal_chunks(size: float, alpha: float, bw: float) -> int:
-    """Pipeline depth minimising (k+1)(alpha + S/(k*B)): k* = sqrt(S / (alpha*B)). More chunks add
-    alpha-steps; fewer leave bandwidth idle while the pipeline fills and drains."""
-    return max(1, round(math.sqrt(size / (alpha * bw))))
+def optimal_chunks(size: float, alpha: float, bw: float, fill: int = 1) -> int:
+    """Pipeline depth k minimising k*alpha + fill*S/(k*B), the k-dependent part of a pipelined
+    collective's time. In-switch all-reduce, (k+1)(alpha + S/(k*B)), has fill = 1, so
+    k* = sqrt(S / (alpha*B)); a chain broadcast has fill = p-2. More chunks add alpha-steps; fewer
+    leave links idle while the pipeline fills and drains. Returns the best integer k."""
+    if fill <= 0 or size <= 0:
+        return 1
+    x = math.sqrt(fill * size / (alpha * bw)) if alpha > 0 else float("inf")
+    if math.isinf(x):
+        raise ValueError("with alpha = 0 more chunks are always better: pass chunks explicitly")
+    cands = {max(1, math.floor(x)), max(1, math.ceil(x))}
+    return min(cands, key=lambda k: (k * alpha + fill * size / (k * bw), k))
+
+
+def pipeline_chunks(op: str, algo: str, size: float, p: int, alpha: float, bw: float) -> int:
+    """The chunk count that minimises this algorithm's alpha-beta time (1 if it does not pipeline)."""
+    if (op, algo) == ("all_reduce", "switch"):
+        return optimal_chunks(size, alpha, bw)
+    if (op, algo) == ("broadcast", "ring"):
+        return optimal_chunks(size, alpha, bw, fill=p - 2)
+    return 1
 
 
 def crossover_bytes(op: str, algo: str, p: int, alpha: float, bw: float, chunks: int = 1) -> float:
@@ -343,8 +364,9 @@ def busbw(op: str, size: float, seconds: float, p: int) -> float:
 
 
 def sweep(op: str = "all_reduce", algo: str = "ring", p: int = 8, alpha: float = 5e-6,
-          bw: float = 100e9, sizes=None, chunks: int = 1) -> list:
-    """A simulated nccl-tests sweep: time, algbw and busbw from the alpha-beta model."""
+          bw: float = 100e9, sizes=None, chunks: int | None = None) -> list:
+    """A simulated nccl-tests sweep: time, algbw and busbw from the alpha-beta model. Pipelined
+    algorithms use the best chunk count per size unless `chunks` is given."""
     sizes = sizes or [2 ** e for e in range(10, 31, 2)]
     rows = []
     for s in sizes:
@@ -359,8 +381,11 @@ def format_sweep(rows) -> str:
     return "\n".join(out)
 
 
-def best_algorithm(op: str, size: float, p: int, alpha: float, bw: float, algos=None, chunks: int = 8) -> list:
-    """(time, algo) pairs, fastest first: a toy version of what NCCL's tuner decides per call."""
+def best_algorithm(op: str, size: float, p: int, alpha: float, bw: float, algos=None,
+                   chunks: int | None = None) -> list:
+    """(time, algo) pairs, fastest first: a toy version of what NCCL's tuner decides per call.
+    Pipelined algorithms (in-switch all-reduce, chain broadcast) get their best chunk count for
+    this size (`pipeline_chunks()`) unless `chunks` fixes it."""
     algos = algos or [a for (o, a) in _ALGOS if o == op]
     return sorted((model_time(op, a, size, p, alpha, bw, chunks), a) for a in algos)
 
@@ -372,10 +397,12 @@ _ALGOS = [("all_reduce", a) for a in ("ring", "tree", "one_shot", "two_shot", "s
 
 
 def tp_comm(layers: int, tokens: int, hidden: int, p: int, alpha: float, bw: float,
-            algo: str = "ring", dtype_bytes: int = 2, per_layer: int = 2, chunks: int = 8) -> dict:
+            algo: str = "ring", dtype_bytes: int = 2, per_layer: int = 2, chunks: int | None = None) -> dict:
     """Tensor-parallel all-reduce cost of one forward step: `per_layer` all-reduces per layer
     (after attention's output projection and after the MLP), each of tokens x hidden x bytes."""
     size = tokens * hidden * dtype_bytes
+    if chunks is None:
+        chunks = pipeline_chunks("all_reduce", algo, size, p, alpha, bw)
     t = model_time("all_reduce", algo, size, p, alpha, bw, chunks)
     a, _ = cost_terms("all_reduce", algo, p, chunks)
     return {"message_bytes": size, "calls": per_layer * layers, "per_call_s": t,

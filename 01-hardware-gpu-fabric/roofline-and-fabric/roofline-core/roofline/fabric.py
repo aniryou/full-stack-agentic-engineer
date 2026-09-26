@@ -3,9 +3,13 @@
 The one idea: moving n bytes over a link costs  t = alpha + n / beta  -- a fixed
 per-message latency plus a bandwidth term. Small messages (a decode step's
 tensor-parallel all-reduces) are latency-bound; large ones (prefill, gradients)
-are bandwidth-bound; and per-direction bandwidth drops by ~10x at each step down
-NVLink -> PCIe -> RDMA NIC. That is why tensor parallelism stays inside the
-NVLink domain and why cluster networks are built as rails of non-blocking trees.
+are bandwidth-bound. Per-direction bandwidth per GPU drops ~7x from NVLink 4
+(450 GB/s) to PCIe Gen5 x16 (63) and ~9x to a 400 Gb/s NIC (50) -- and a NIC is
+about as fast as the PCIe link that feeds it, which is why GPUDirect wants the NIC
+on the GPU's PCIe switch. Tensor parallelism's all-reduce cost does not shrink as
+the TP degree grows while each GPU's compute does, and past the node every GPU's
+share rides a NIC: that is why TP stays inside the NVLink domain, and why cluster
+networks give every GPU its own NIC on rails of non-blocking trees.
 
 Bandwidths are theoretical and PER DIRECTION (a ring sends and receives at
 once). Latencies (alpha) are illustrative per-step figures that include
@@ -132,8 +136,29 @@ ALLREDUCE = {"ring": ring_allreduce_time, "recursive-doubling": recursive_doubli
 
 def tp_comm_time(model: ModelConfig, tokens: int, tp: int, link: Link,
                  act_bytes: float = 2, algo: str = "ring") -> float:
-    """Communication time of one forward step under TP=tp (not overlapped with compute)."""
+    """Communication time of one forward step under TP=tp (not overlapped with compute).
+
+    Every ring hop runs over `link`: right for TP inside one NVLink domain. With a NIC
+    as `link` it is a flat ring in which every hop crosses the network (one GPU per
+    node, or one NIC shared by a whole ring) -- the worst case, not a rail-optimized
+    cluster; for that use tp_comm_time_across_nodes().
+    """
     return tp_allreduces_per_step(model) * ALLREDUCE[algo](tp_allreduce_bytes(model, tokens, act_bytes), tp, link)
+
+
+def tp_comm_time_across_nodes(model: ModelConfig, tokens: int, gpus_per_node: int, nodes: int,
+                              intra: Link, inter: Link, nics_per_node: int | None = None,
+                              act_bytes: float = 2) -> float:
+    """TP = gpus_per_node x nodes: every all-reduce runs hierarchically, as NCCL does.
+
+    Reduce-scatter inside each node over `intra`, all-reduce each GPU's n/g share across
+    nodes over `inter` (its own NIC with rails; a shared one with fewer NICs), all-gather
+    inside the node. 70B, 4K-token prefill, TP=16 over two H100 nodes with 8 x 400 Gb/s
+    NICs each: ~75 ms per step, against ~37 ms of compute per GPU.
+    """
+    n = tp_allreduce_bytes(model, tokens, act_bytes)
+    return tp_allreduces_per_step(model) * hierarchical_allreduce_time(n, gpus_per_node, nodes, intra, inter,
+                                                                       nics_per_node)
 
 
 # -- topology ------------------------------------------------------------------------------

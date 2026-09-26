@@ -2,7 +2,7 @@ locals {
   node_scopes = ["https://www.googleapis.com/auth/cloud-platform"] # access is governed by the SA's roles
 
   # Every GPU pool autoscales 0 -> max_nodes, so an idle cluster costs only the control plane and the
-  # system node. GKE taints GPU nodes (nvidia.com/gpu=present:NoSchedule) and installs the driver.
+  # system node. GKE installs the driver and taints GPU nodes nvidia.com/gpu=present:NoSchedule (verify).
   # VERIFY: machine types and accelerators offered in var.zone; Spot availability for each GPU type.
   #
   #   pool       machine          GPUs/node  sharing                     used by (deploy/gke)
