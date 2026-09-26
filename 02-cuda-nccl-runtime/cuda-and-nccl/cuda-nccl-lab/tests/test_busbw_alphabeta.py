@@ -21,11 +21,18 @@ def test_algbw_and_busbw_hand_computed():
 
 
 def test_plan_sizes_buffers_like_nccl_tests():
-    p = bw.plan("all_gather", 4000, 3)  # 1000 elements -> 333 per rank
-    assert (p.send_count, p.recv_count, p.param_count, p.size) == (333, 999, 333, 3996)
+    # nccl-tests v2.20.0 all_gather.cu: base = (count/nranks) & ~(16/eltSize - 1)
+    p = bw.plan("all_gather", 4000, 3)  # 1000 floats -> 333 per rank -> 332 (a 16-byte multiple)
+    assert (p.send_count, p.recv_count, p.param_count, p.size) == (332, 996, 332, 3984)
     p = bw.plan("reduce_scatter", 4096, 4)
     assert (p.send_count, p.recv_count, p.param_count, p.size) == (1024, 256, 256, 4096)
+    p = bw.plan("alltoall", 4000, 3)
+    assert (p.send_count, p.recv_count, p.param_count, p.size) == (996, 996, 332, 3984)
     assert bw.plan("all_reduce", 4096, 8).param_count == 1024
+    assert bw.plan("all_reduce", 4000, 3).param_count == 1000  # no split, no rounding
+    assert bw.plan("all_gather", 8, 2).param_count == 0  # 1 float per rank < 16 B: nccl-tests' size 0
+    assert bw.per_rank_count(1000, 3, itemsize=8) == 332 and bw.per_rank_count(1001, 3, itemsize=8) == 332
+    assert bw.per_rank_count(999, 3, itemsize=2) == 328  # 333 halves -> multiple of 8
 
 
 def test_op_names_are_canonicalised():

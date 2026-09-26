@@ -1,7 +1,10 @@
 # Two pods, one physical L4: a node pool with gpu_sharing_config TIME_SHARING and
 # max_shared_clients_per_gpu = 2 advertises nvidia.com/gpu: 2 per physical GPU. Both pods print the
 # same GPU UUID. No memory or fault isolation between them (primer §7); compare MIG (05-mig.yaml).
-# Scale to 3 replicas to watch the third stay Pending.
+# Scale to 3 replicas and the third does NOT fit this node (2 advertised nvidia.com/gpu): it is Pending only
+# until the cluster autoscaler adds a second l4-shared node (the pool scales 0 -> gpu_max_nodes = 2), because
+# scheduling counts advertised GPUs, not physical ones. To watch a pod stay Pending, scale past
+# 2 x gpu_max_nodes (5 replicas with the defaults) or set gpu_max_nodes = 1 for the experiment.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

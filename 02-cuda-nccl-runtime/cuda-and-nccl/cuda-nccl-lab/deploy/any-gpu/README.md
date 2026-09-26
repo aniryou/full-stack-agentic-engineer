@@ -9,7 +9,8 @@ rented 24 GB GPU and $2–25 for an hour on a multi-GPU NVLink box. Prices move 
 compute guide and check the provider (verify).
 
 **Cleanup:** stop or terminate the notebook/pod/VM when you are done (billing runs while it exists),
-then delete `out/` and the `nccl-tests/` build directory if you ran the scripts locally.
+then delete `out/` (gitignored) and the nccl-tests build in `~/.cache/nccl-tests-v2.20.0` if you ran
+the scripts locally; `docker rm -f dcgm-exporter` if you started it.
 
 | File | What it is |
 |---|---|
@@ -17,6 +18,7 @@ then delete `out/` and the `nccl-tests/` build directory if you ran the scripts 
 | `run_nccl_tests.sh` | builds NVIDIA/nccl-tests against the NCCL you already have (system or PyTorch's pip wheel) and sweeps `all_reduce`/`all_gather` on every local GPU; `DRY_RUN=1` prints the steps |
 | `Dockerfile.nccl-tests` | the same in a CUDA *devel* image (nvcc + NCCL inside) |
 | `Dockerfile.lab` | the lab on `python:3.12-slim` — no CUDA in the base image: the CUDA userland comes from pip wheels, `libcuda` from the host |
+| `dcgm-counters.csv` | dcgm-exporter collectors: the stock defaults plus the fields `gpurt.dcgm` needs (clock-event reasons, SM active, SM occupancy) |
 
 ## 1. Any GPU box, plain pip (VM, rented container, your workstation)
 
@@ -24,9 +26,10 @@ then delete `out/` and the `nccl-tests/` build directory if you ran the scripts 
 git clone --depth 1 https://github.com/aniryou/full-stack-agentic-engineer.git
 cd full-stack-agentic-engineer/02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab
 pip install -e ".[dev,gpu]"                 # numba-cuda[cu12]: NVIDIA's CUDA target for Numba
+mkdir -p out                                # results land here (gitignored); the notebooks look for them
 python -m gpurt.env                         # tier, GPUs, numba mode
 python -m gpurt.container                   # how this process sees the GPU, and the compat verdicts
-python -m gpurt.kernels.bench --quick --json out/kernels.json   # notebook 02's measurements
+python -m gpurt.kernels.bench --quick --json out/kernels.json   # notebook 02 prints this file if present
 ```
 
 With two or more GPUs and a CUDA build of PyTorch (T2):
@@ -39,15 +42,16 @@ python -m gpurt.nccltests out/all_reduce_2gpu.log
 ```
 
 `ar.log` (our sweep) and `all_reduce_2gpu.log` (nccl-tests) print the same table layout, so notebook 04
-reads either. They should agree on the plateau busbw; if ours is lower at small sizes, that is the
+reads either from `out/`. They should agree on the plateau busbw; if ours is lower at small sizes, that is the
 Python-side launch overhead of `torch.distributed` — the α term.
 
 ## 2. Colab (one T4, free)
 
 *Runtime → Change runtime type → T4 GPU*, then open any notebook through the Colab links in the layer
-README; the first cell clones the repo and installs the lab. If `from numba import cuda;
-cuda.is_available()` is `False` on a GPU runtime, run `!pip install -q "numba-cuda[cu12]"` and restart
-the session (whether Colab preinstalls numba-cuda changes over time — verify). Colab gives one GPU: T1 only.
+README; the first cell clones the repo and installs the lab. If Numba cannot use the GPU (numba-cuda or
+its NVVM missing, or a driver/toolkit mismatch), `gpurt.kernels` notices before choosing its mode, falls
+back to the simulator and prints why: run `!pip install -q "numba-cuda[cu12]"` and restart the session
+(whether Colab preinstalls numba-cuda changes over time — verify). Colab gives one GPU: T1 only.
 
 ## 3. Kaggle, two T4s (free T2 — collectives over PCIe)
 
@@ -70,12 +74,21 @@ the session (whether Colab preinstalls numba-cuda changes over time — verify).
    ```python
    !OUT=/kaggle/working/out bash deploy/any-gpu/run_nccl_tests.sh
    ```
-5. Kernels on one T4: `!python -m gpurt.kernels.bench --quick`.
-6. Download `/kaggle/working/*.log` and feed them to notebooks 03–04 (`gpurt.nccltests.parse`).
+5. Kernels on one T4: `!python -m gpurt.kernels.bench --quick --json /kaggle/working/out/kernels.json`.
+6. Download `/kaggle/working/out/` and put it in the lab's `out/` at home: notebook 04 reads the logs,
+   notebook 02 the kernel JSON (`gpurt.nccltests.parse` works on any single log).
+
+The two T4s sit on **PCIe with no NVLink** (`nvidia-smi topo -m` shows a PCIe path such as `PIX`, `PHB`
+or `SYS` between them, never `NV#`). The busbw plateau is therefore bounded by PCIe Gen3 x16 — 15.75 GB/s
+per direction on paper, less in practice — and lower still if NCCL has to go through host memory (`via
+SHM` in `NCCL_DEBUG=INFO`). Measure it rather than trusting these bounds; notebook 04's exercise 4.5
+compares your plateau with the link. The same all-reduce on an NVLink box is one to two orders of
+magnitude faster.
 
 ## 4. Docker on a machine you control (driver + NVIDIA Container Toolkit installed)
 
 ```bash
+mkdir -p out
 docker run --rm --gpus all -v "$PWD/deploy/any-gpu":/w nvidia/cuda:12.8.1-base-ubuntu24.04 bash /w/probe.sh > out/probe.log
 python -m gpurt.container --log out/probe.log      # bind-mounted libcuda.so.<driver>, nvidia-smi, /dev/nvidia*
 
@@ -101,13 +114,64 @@ Docker's default 64 MB `/dev/shm`: pass `--shm-size=1g` or `--ipc=host`.
   the T2 collective sweeps meaningful (`nvidia-smi topo -m` shows `NV#` between GPUs).
 * **Lambda** (and GCP VMs) give a full VM with the driver installed: recipe 1, or recipe 4 with Docker.
 
+## 6. DCGM, MIG and MPS on a GPU VM you control (T1/T2)
+
+Needs a *VM* (Lambda, a GCP GPU VM, your workstation) with Docker and the NVIDIA Container Toolkit;
+RunPod/Vast containers cannot run Docker or change GPU modes.
+
+**DCGM metrics without Kubernetes.** The stock exporter leaves out fields the lab reads, so give it the
+lab's collectors file; profiling (`DCGM_FI_PROF_*`) fields need `SYS_ADMIN`:
+
+```bash
+mkdir -p out
+docker run -d --name dcgm-exporter --gpus all --cap-add SYS_ADMIN -p 9400:9400 \
+  -v "$PWD/deploy/any-gpu/dcgm-counters.csv":/etc/dcgm-exporter/lab-counters.csv:ro \
+  -e DCGM_EXPORTER_COLLECTORS=/etc/dcgm-exporter/lab-counters.csv \
+  nvcr.io/nvidia/k8s/dcgm-exporter:4.6.1-4.8.4-distroless     # VERIFY: tag (the Helm chart's default, 2026-09-26)
+python -m gpurt.kernels.bench --quick &                        # something to watch
+sleep 20 && curl -s localhost:9400/metrics > out/dcgm.prom
+python -m gpurt.dcgm < out/dcgm.prom                           # notebook 06 reads out/*.prom too
+docker rm -f dcgm-exporter
+```
+
+On a consumer GPU (RTX 4090) the profiling fields may be missing — DCGM's profiling support is
+data-center-GPU oriented (verify); `gpurt.dcgm.report` says which rules then cannot fire.
+
+**MIG by hand (A100/H100 VM, root).** MIG mode needs the GPU idle, and on some systems a reset:
+
+```bash
+sudo nvidia-smi -i 0 -mig 1                  # enable MIG mode on GPU 0 (then reset/reboot if it asks)
+sudo nvidia-smi mig -lgip                    # the GPU-instance profiles this GPU offers, with IDs
+sudo nvidia-smi mig -i 0 -cgi 1g.10gb,1g.10gb,3g.40gb -C   # profile names from -lgip (A100 80GB shown; 40GB: 1g.5gb, 3g.20gb)
+nvidia-smi -L                                # MIG devices, each with its own UUID
+CUDA_VISIBLE_DEVICES=MIG-<uuid> python -m gpurt.kernels.bench --quick   # one slice: its own SMs and memory
+sudo nvidia-smi mig -dci && sudo nvidia-smi mig -dgi && sudo nvidia-smi -i 0 -mig 0   # undo
+```
+
+**MPS and plain time-slicing.** Two processes on one GPU without MPS take turns (time-slicing, the
+default); with the MPS daemon their kernels can run concurrently:
+
+```bash
+python -m gpurt.kernels.bench --quick > out/solo.txt                        # alone
+(python -m gpurt.kernels.bench --quick > out/ts_a.txt & python -m gpurt.kernels.bench --quick > out/ts_b.txt; wait)
+nvidia-cuda-mps-control -d                                                  # start MPS (same user as the clients)
+(python -m gpurt.kernels.bench --quick > out/mps_a.txt & python -m gpurt.kernels.bench --quick > out/mps_b.txt; wait)
+echo quit | nvidia-cuda-mps-control                                         # stop MPS
+```
+
+Compare the copy bandwidth and launch overhead in the three pairs (primer §7): time-slicing roughly
+halves each process's throughput; MPS recovers some of it when neither process fills the GPU alone.
+
 ## What to bring back to the notebooks
+
+Put everything in the lab's `out/` directory (gitignored); the notebooks look there.
 
 | Output | Notebook |
 |---|---|
-| `gpurt.kernels.bench --json` | 02 — memory-bound kernels on a real GPU |
-| `gpurt.dist.bench` / `run_nccl_tests.sh` logs | 03 — collectives, 04 — busbw and the α-β fit |
-| `probe.sh` output | 05 — how a container sees a GPU |
+| `gpurt.kernels.bench --json out/kernels.json` | 02 — memory-bound kernels on a real GPU |
+| `gpurt.dist.bench` / `run_nccl_tests.sh` logs (`out/*.log`) | 04 — busbw and the α-β fit (it parses every log it finds) |
+| `probe.sh` output | 05 — how a container sees a GPU (`python -m gpurt.container --log out/probe.log`) |
+| `out/dcgm.prom` | 06 — DCGM fields, readings and which alert rules can fire |
 
 Concepts behind each step: [the primer](../../../PRIMER.md) §1 (compatibility), §5 (collectives),
 §6 (containers).

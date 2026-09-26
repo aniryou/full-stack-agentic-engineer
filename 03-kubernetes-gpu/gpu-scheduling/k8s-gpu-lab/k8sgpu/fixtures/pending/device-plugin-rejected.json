@@ -1,6 +1,6 @@
 {
  "description": "The scheduler counted the GPUs, but the kubelet's device manager could not allocate them (a GPU went unhealthy).",
- "source": "kubelet admission failure written in the documented format - sample output in the documented format (illustrative)",
+ "source": "kubelet admission failure written by hand for this lab - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kubelet",
   "category": "device-allocation"

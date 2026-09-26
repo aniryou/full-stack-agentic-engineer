@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -77,8 +78,10 @@ def _dev(shape, fill=None):
 
 
 def bandwidth_sweep(kind: str = "vec_add", sizes=None, threads: int = 256) -> list[dict]:
-    """Effective bandwidth of a streaming kernel from 4 KB to 256 MB of traffic: small sizes are
-    latency (launch)-bound, large ones bandwidth-bound — fit the α-β model to see both."""
+    """Effective bandwidth of a streaming kernel over vectors of 2^10 to 2^26 floats (4 KiB to 256 MiB
+    each), i.e. 8 KiB to 512 MiB of traffic for copy (8 B/element) and 12 KiB to 768 MiB for vec_add
+    (12 B/element): small sizes are latency (launch)-bound, large ones bandwidth-bound — fit the α-β
+    model to see both."""
     require_gpu()
     sizes = sizes or [2 ** k for k in range(10, 27, 2)]
     sms = device_info()["sms"]
@@ -247,6 +250,8 @@ def main(argv=None) -> int:
     p.add_argument("--quick", action="store_true", help="smaller sizes (~20 s)")
     p.add_argument("--json", help="write raw results to this file")
     a = p.parse_args(argv)
+    if a.json:  # fail before a minutes-long benchmark, not after it
+        Path(a.json).parent.mkdir(parents=True, exist_ok=True)
     r = run_all(quick=a.quick)
     print(format_report(r))
     if a.json:

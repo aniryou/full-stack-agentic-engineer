@@ -57,6 +57,11 @@ see the upstream [dra-example-driver](https://github.com/kubernetes-sigs/dra-exa
 
 ## The cluster and the queues
 
+The block/subblock/host labels below are faked for teaching: real L4 (G2) nodes on GKE are not
+known to carry GCE topology labels (Google's TAS examples use them on A3/A4/A4X; verify), so
+the lab's GKE flavors are plain quota. The mechanism you practise here is the one those
+families use.
+
 ```text
 gpu-lab-control-plane                     (control-plane taint)
 gpu-lab-worker   pool=system              no GPUs, no taint: Kueue/JobSet/LWS controllers run here

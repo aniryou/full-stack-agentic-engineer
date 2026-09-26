@@ -16,10 +16,15 @@
 # the engine exposes — `vllm:num_requests_waiting` (queue) **and** `vllm:num_requests_running`
 # (occupied batch slots). Queue alone is a trap: once capacity catches up the queue drains to 0, the
 # HPA proposes the minimum, and the pool oscillates. Cold starts of minutes (node + image + weights)
-# make every scale-up late, so overshoot is the norm and rate limits trade overshoot for drain time.
-# Background: [PRIMER §4 Autoscaling](../../PRIMER.md).
+# make every scale-up late, so overshoot is the norm; scale-up rate limits trade GPU-hours and
+# overshoot for a longer backlog. The targets come from the engine you deploy — its batch slots and
+# its time per request — not from a rule of thumb. The basic rule, stabilization and the default
+# policies are exercises in the core's notebook 03; here you work the parts the core leaves out:
+# missing and starting pods, legacy vs `behavior`, live scrapes, and a queue target from a latency
+# budget. Background: [PRIMER §4 Autoscaling](../../PRIMER.md).
 
 # %%
+import pathlib
 import threading
 import time
 
@@ -46,37 +51,56 @@ print("2 ready + 1 starting, 12 waiting    ->",
       "(the starting pod counts as 0 on a scale-up)")
 
 # %% [markdown]
-# The last line is how the HPA avoids stampeding while new pods start: an unready pod is assumed to
-# carry **zero** load on a scale-up (and a pod with *missing* metrics is assumed to be exactly at
-# target on a scale-down). With multi-minute LLM cold starts this damping matters.
+# The last line is how the HPA avoids stampeding while new pods start. The rules
+# (`calcPlainMetricReplicas`, ported in `plain_metric_replicas`):
 #
-# ## Exercise 3.1 — the proportional step
+# 1. The average and the proposal `ceil(ratio × n)` use only the **ready pods that reported** the metric.
+# 2. If some pods are **not ready** and the ratio says *scale up*, recompute with each of them at **0**.
+# 3. If some pods have **no metric**: on a scale-*down* assume each is exactly **at target**, on a
+#    scale-*up* assume **0**; recompute.
+# 4. After 2–3, keep the current count if the new ratio is within the ±10 % band **or points the other
+#    way** (the fill flipped the direction), or if the new count would move against the direction.
 #
-# Implement the common case (every pod ready and reporting): `desired(current, avg, target, tol)`
-# returns `current` if `1 - tol <= avg/target <= 1 + tol`, else `ceil(current × avg / target)`.
-# (Write the band exactly like that: `abs(1 - ratio) <= tol` differs at the edge in floating point —
-# `abs(1 - 1.1)` is `0.10000000000000009` — and the controller keeps the replica count at exactly 10%.)
+# With multi-minute LLM cold starts, rules 2–4 are what stop a pool from over- or under-shooting on
+# pods that are still loading weights or have not been scraped yet.
+#
+# ## Exercise 3.1 — predict the controller
+#
+# Predict the proposal for each case (target 5 waiting per pod). `None` = the pod has not reported
+# the metric (a new pod GMP has not scraped yet); `"Pending"` = not ready (still loading weights).
+# Write the four integers into `predicted`; a naive `ceil(current × average / target)` gets three
+# of them wrong.
+#
+# | case | pods (waiting per pod) | current replicas |
+# |---|---|---|
+# | a | 1, 1, `None` | 3 |
+# | b | 6, `None` | 2 |
+# | c | 10 (target **2** here), `Pending`, `Pending`, `Pending` | 4 |
+# | d | 3.9, 3.9, 3.9, 3.9, `None` | 5 |
 
 # %% exercise
 import math
 
-def desired(current: int, avg: float, target: float, tol: float = 0.1) -> int:
-    ### BEGIN SOLUTION
-    ratio = avg / target
-    if 1.0 - tol <= ratio <= 1.0 + tol:
-        return current
-    return math.ceil(current * ratio)
-    ### END SOLUTION
+predicted = []          # four integers: cases a, b, c, d
+### BEGIN SOLUTION
+predicted = [2,         # a: 0.2 -> scale-down; None at target: (1+1+5)/3 = 2.33 -> ceil(0.467 x 3) = 2 (naive: 1)
+             2,         # b: 1.2 -> scale-up; None at 0: 3/5 = 0.6 flips the direction -> keep 2 (naive: 3)
+             5,         # c: 5.0 -> scale-up; Pending at 0: 10/4 = 2.5 -> ceil(1.25 x 4) = 5 (naive: 20)
+             5]         # d: 0.78 -> scale-down; None at 5: 4.12 -> ceil(0.824 x 5) = 5, no change (naive: 4)
+### END SOLUTION
 
 # %% check
-import random
-rng = random.Random(3)
-for _ in range(500):
-    n = rng.randint(1, 12)
-    avg = round(rng.uniform(0, 30), 1)
-    tgt = rng.choice([1, 2, 5, 8])
-    assert desired(n, avg, tgt) == plain_metric_replicas(pods(*[avg] * n), n, tgt)[0], (n, avg, tgt)
-print("✅ desired() agrees with the controller port on 500 random cases")
+def _pods(*values):
+    return [PodSample(f"pending-{i}", None, phase="Pending") if v == "Pending" else PodSample(f"pod-{i}", v)
+            for i, v in enumerate(values)]
+cases = [(_pods(1, 1, None), 3, 5), (_pods(6, None), 2, 5), (_pods(10, "Pending", "Pending", "Pending"), 4, 2),
+         (_pods(3.9, 3.9, 3.9, 3.9, None), 5, 5)]
+want = [plain_metric_replicas(p, cur, tgt)[0] for p, cur, tgt in cases]
+assert predicted == want, f"controller says {want}"
+naive = [math.ceil(cur * (sum(x.value for x in p if x.value is not None) / sum(x.value is not None for x in p)) / tgt)
+         for p, cur, tgt in cases]
+print("controller:", want, "| naive ceil(current x avg / target):", naive)
+print("✅ missing pods damp scale-downs, starting pods damp scale-ups, and a flipped direction means no change")
 
 # %% [markdown]
 # ## Stabilization and rate limits
@@ -97,55 +121,31 @@ for label, hpa in (("behavior unset", HPARecommender(1, 12)), ("default behavior
         cur = step.desired
 
 # %% [markdown]
-# ## Exercise 3.2 — the scale-down stabilization window
+# ## Exercise 3.2 — legacy path or `behavior`?
 #
-# Legacy path: the controller keeps every recommendation it made (seeded with the replica count at
-# its first reconcile) and returns `max(desired, max of recommendations recorded at t >= now - window)`.
-# Implement it; `history` is a list of `(t, replicas)` recorded *before* this reconcile.
+# An HPA without a `behavior` block takes the *legacy* path: one sync may scale up to
+# `max(2 × current, 4)`. Setting `behavior` — even to the API defaults — switches to the policies:
+# `max(+4 pods, +100 %)` per 15 s, counted from the replica count at the start of the period. The
+# two agree once the pool has 4 or more replicas, and differ below. Both HPAs start at **2**
+# replicas (min 1, max 50) and see a proposal of **30** at t = 0, 15, 30 and 45 s. Predict the
+# replica count each one sets at each sync.
 
 # %% exercise
-def stabilized_down(history, now: float, desired: int, window: float = 300) -> int:
-    ### BEGIN SOLUTION
-    recent = [r for t, r in history if t >= now - window]
-    return max([desired] + recent)
-    ### END SOLUTION
+legacy_seq, behavior_seq = [], []          # four integers each
+### BEGIN SOLUTION
+legacy_seq = [4, 8, 16, 30]                # max(2x2, 4) = 4, then doubling, then the proposal caps it
+behavior_seq = [6, 12, 24, 30]             # max(2+4, 2x2) = 6: +4 pods wins at small counts; then +100 %
+### END SOLUTION
 
 # %% check
-hpa = HPARecommender(1, 20)
-rng = random.Random(7)
-cur, t = 6, 0
-for i in range(60):
-    prop = rng.randint(1, 12)
-    history = [tuple(r) for r in hpa.recommendations] or [(t, cur)]
-    step = hpa.reconcile(t, cur, prop)
-    assert step.stabilized == stabilized_down(history, t, prop), (t, history, prop)
-    cur = step.desired
-    t += rng.choice([15, 15, 30, 120])
-print("✅ stabilized_down reproduces the controller's window on 60 random reconciles")
-
-# %% [markdown]
-# ## Exercise 3.3 — the default scale-up limit
-#
-# With `behavior` set, the default scale-up rules are `Pods: 4 per 15 s` and `Percent: 100 per 15 s`
-# with `selectPolicy: Max`. Each policy starts from the replica count at the *start of its period*
-# (`current - added in the last 15 s`); `Pods` adds its value, `Percent` multiplies and rounds **up**;
-# `Max` takes the larger. Write `scale_up_limit(current, added_last_15s)`.
-
-# %% exercise
-def scale_up_limit(current: int, added_last_15s: int = 0) -> int:
-    ### BEGIN SOLUTION
-    start = current - added_last_15s
-    return max(start + 4, math.ceil(start * 2))
-    ### END SOLUTION
-
-# %% check
-assert scale_up_limit(1) == 5 and scale_up_limit(3) == 7 and scale_up_limit(10) == 20
-assert scale_up_limit(5, added_last_15s=4) == 5          # 4 already added this period: start = 1 -> limit 5
-for cur in range(1, 30):
-    for added in range(0, cur):
-        want = HPARecommender._up_limit(cur, [[100.0, added, False]] if added else [], [], DEFAULT_BEHAVIOR.scale_up, 101.0)
-        assert scale_up_limit(cur, added) == want
-print("✅ scale_up_limit matches the controller's default policies")
+for label, beh, mine in (("legacy", None, legacy_seq), ("behavior", DEFAULT_BEHAVIOR, behavior_seq)):
+    h, cur, seen = HPARecommender(1, 50, behavior=beh), 2, []
+    for t in (0, 15, 30, 45):
+        cur = h.reconcile(t, cur, 30).desired
+        seen.append(cur)
+    assert mine == seen, (label, seen)
+print("✅ legacy", legacy_seq, "vs behavior", behavior_seq, "— the same 30 is reached in the same four syncs,"
+      " but from 2 replicas the policies add 4 pods where the legacy path adds 2")
 
 # %% [markdown]
 # ## Live: what the engines' metrics say under load
@@ -159,6 +159,8 @@ print("✅ scale_up_limit matches the controller's default policies")
 # %%
 samples = []
 sessions = agentic_sessions(n_sessions=40, turns=3, n_agents=4, system_words=1200, tool_words=400, seed=1)
+# targets sized for THIS fake engine (8 batch slots): running 6 = 75 % of them. A real deployment
+# derives its own from its --max-num-seqs and measured request times (Exercise 3.4, deploy/gke/hpa.yaml).
 targets = {"vllm:num_requests_waiting": 2, "vllm:num_requests_running": 6, "vllm:kv_cache_usage_perc": 0.6}
 with LocalStack(3, "default-weighted") as s:
     runner = threading.Thread(target=lambda: run_bench(s.router_url, sessions, stagger_s=0.2))
@@ -185,24 +187,80 @@ for t, scrapes in samples[::2]:
 # KV usage stays low here because the fake backend's KV pool is large relative to these prompts — on
 # a real L4 with long agent contexts it is often the first signal to saturate.
 #
-# ## Exercise 3.4 — a queue target from a latency budget
+# ## Exercise 3.3 — from raw scrapes to the HPA's proposal
 #
-# On one replica, prefills run (roughly) one after another, so a request that finds `N` requests
-# waiting ahead of it pays about `N × prefill_time` of queueing before its own prefill. If the TTFT
-# SLO leaves `budget_s` for queueing and an average prefill takes `prefill_s`, the HPA should keep
-# the average waiting count per pod at most `floor(budget_s / prefill_s)` — but never below 1.
+# This is the path Managed Prometheus + the custom-metrics adapter + the HPA take, in one function.
+# Write `hpa_proposal(scrapes, targets, current)`: `scrapes` is `{pod: /metrics text}`, `targets` is
+# `{vLLM metric name: AverageValue target}`. Per metric, each pod's value is the sum of its series
+# (one per engine rank) or `None` if the pod does not export it; get the metric's proposal from
+# `plain_metric_replicas` (it raises `MetricError` when no pod reported); the HPA takes the **largest
+# valid** proposal and ignores failed metrics — `None` if none is valid.
 
 # %% exercise
-def waiting_target(budget_s: float, prefill_s: float) -> int:
+from igwlab.autoscale import MetricError
+from igwlab.promtext import Families
+
+def hpa_proposal(scrapes: dict, targets: dict, current: int):
     ### BEGIN SOLUTION
-    return max(1, math.floor(budget_s / prefill_s))
+    valid = []
+    for metric, target in targets.items():
+        pods_ = [PodSample(name, Families.from_text(text).sum(metric)) for name, text in sorted(scrapes.items())]
+        try:
+            valid.append(plain_metric_replicas(pods_, current, target)[0])
+        except MetricError:
+            continue
+    return max(valid) if valid else None
     ### END SOLUTION
 
 # %% check
-assert waiting_target(0.3, 0.06) == 5
-assert waiting_target(0.05, 0.08) == 1
-assert waiting_target(2.0, 0.25) == 8
-print("✅ a 300 ms queueing budget with 60 ms prefills -> target 5 waiting per pod (deploy/gke/hpa.yaml uses 5)")
+for t, scrapes in samples:
+    assert hpa_proposal(scrapes, targets, 3) == recommend_from_scrapes(scrapes, targets, 3)[0], t
+page = 'vllm:num_requests_waiting{engine="0"} 9\nvllm:num_requests_waiting{engine="1"} 3\n'
+assert hpa_proposal({"p0": page, "p1": "# not exporting yet\n"}, {"vllm:num_requests_waiting": 5,
+                                                                    "vllm:kv_cache_usage_perc": 0.6}, 2) == 3
+print(f"✅ hpa_proposal matches the controller on all {len(samples)} live scrapes (and on a pod that exports nothing)")
+
+# %% [markdown]
+# ## Exercise 3.4 — a queue target from a latency budget
+#
+# `vllm:num_requests_waiting` counts requests that have **no batch slot yet**. Once all `slots`
+# (vLLM's `--max-num-seqs`) are busy, a slot frees whenever a running request finishes; if each
+# request holds its slot for `service_s` seconds, slots free at `slots / service_s` per second (Little's
+# law). A request that finds `N` waiting ahead of it therefore waits about `N × service_s / slots`
+# for its slot. If the TTFT SLO leaves `budget_s` for that wait, keep the average waiting count per
+# pod at most `floor(budget_s × slots / service_s)` — never below 1. (Waiting is not a queue of
+# prefills: it is a queue for slots, which free at the pace of whole requests, decode included.)
+
+# %% exercise
+def waiting_target(budget_s: float, service_s: float, slots: int) -> int:
+    ### BEGIN SOLUTION
+    return max(1, math.floor(budget_s * slots / service_s + 1e-9))
+    ### END SOLUTION
+
+# %% check
+import yaml
+from igwlab import autoscale
+assert waiting_target(0.5, 3.0, 32) == 5                     # floor(5.33)
+assert waiting_target(0.05, 4.0, 8) == 1                     # never below 1
+for args in ((0.3, 0.25, 8), (1.0, 2.2, 16), (0.2, 0.9, 256)):
+    assert waiting_target(*args) == autoscale.waiting_target(*args), args
+# the fake engine, measured in the live run above (emulated timing): mean time a request holds a slot
+last = Families.from_text("".join(samples[-1][1].values()))
+e2e = last.sum("vllm:e2e_request_latency_seconds_sum") / last.sum("vllm:e2e_request_latency_seconds_count")
+queued = last.sum("vllm:request_queue_time_seconds_sum") / last.sum("vllm:request_queue_time_seconds_count")
+print(f"fake engine (emulated): S = {e2e - queued:.3f} s per request in the batch, 8 slots "
+      f"-> 0.3 s budget gives target {waiting_target(0.3, e2e - queued, 8)}")
+# the GKE deployment: slots from vllm.yaml, S = 3 s ASSUMED for Qwen2.5-1.5B on an L4 (verify by measuring)
+LAB = pathlib.Path.cwd().resolve()
+while not (LAB / "igwlab").exists():
+    LAB = LAB.parent
+vllm_args = next(yaml.safe_load_all((LAB / "deploy/gke/vllm.yaml").read_text()))["spec"]["template"]["spec"]["containers"][0]["args"]
+gke_slots = int(next(a.split("=")[1] for a in vllm_args if a.startswith("--max-num-seqs=")))
+gke_hpa = yaml.safe_load((LAB / "deploy/gke/hpa.yaml").read_text())
+gke_waiting = float(gke_hpa["spec"]["metrics"][0]["pods"]["target"]["averageValue"])
+assert gke_waiting == waiting_target(0.5, 3.0, gke_slots)
+print(f"✅ GKE: {gke_slots} slots, 0.5 s budget, S ~ 3 s (assumed) -> target {waiting_target(0.5, 3.0, gke_slots)}"
+      " = deploy/gke/hpa.yaml")
 
 # %% [markdown]
 # ## A simulated pool with cold starts
@@ -263,32 +321,51 @@ print("✅ queue + running: steady", min(steady), "-", max(steady), "ready repli
 # Both signals still overshoot the ~8 replicas needed, because the backlog built during the 120 s
 # cold start keeps the queue proposal high until the new replicas are ready. The levers: faster
 # cold starts (image streaming, weight caching — layer 03), a buffer (`minReplicas` above the
-# trough), or rate limits (`behavior.scaleUp.policies`) that trade overshoot for a longer drain.
+# trough), or scale-up rate limits (`behavior.scaleUp.policies`). What a rate limit buys, with room
+# to overshoot (maxReplicas 16):
 
 # %%
-slow_up = Behavior(scale_up=ScalingRules(0, "Max", (ScalingPolicy("Pods", 2, 60),)))
-for label, hpa in (("default behavior", HPARecommender(1, 10, behavior=DEFAULT_BEHAVIOR)),
-                   ("scaleUp 2 pods / 60 s", HPARecommender(1, 10, behavior=slow_up))):
-    rows = simulate(StepLoad(), my_targets(), hpa=hpa, pool=FluidPool(ready=2))
-    drained = next((r["t"] for r in rows if r["t"] > 150 and r["waiting_per_pod"] < 1 and r["load_rps"] > 5), None)
-    print(f"{label:<24} peak replicas {max(r['replicas'] for r in rows):>2} | backlog drained at t={drained:.0f}s | "
-          f"max waiting/pod {max(r['waiting_per_pod'] for r in rows):.0f}")
+def gpu_hours(rows, sync_s=15):
+    return sum(r["replicas"] for r in rows) * sync_s / 3600
+
+limits = {"default behavior": DEFAULT_BEHAVIOR,
+          "scaleUp 2 pods / 60 s": Behavior(scale_up=ScalingRules(0, "Max", (ScalingPolicy("Pods", 2, 60),))),
+          "scaleUp 1 pod / 60 s": Behavior(scale_up=ScalingRules(0, "Max", (ScalingPolicy("Pods", 1, 60),)))}
+runs = {}
+for label, beh in limits.items():
+    rows = simulate(StepLoad(), my_targets(), hpa=HPARecommender(1, 16, behavior=beh), pool=FluidPool(ready=2))
+    drained = next(r["t"] for r in rows if r["t"] > 150 and r["waiting_per_pod"] < 1 and r["load_rps"] > 5)
+    runs[label] = (max(r["replicas"] for r in rows), gpu_hours(rows), drained, max(r["waiting_per_pod"] for r in rows))
+    print(f"{label:<22} peak replicas {runs[label][0]:>2} | GPU-hours {runs[label][1]:.2f} | backlog drained at "
+          f"t={drained:.0f}s | max waiting/pod {runs[label][3]:.0f}   (simulated)")
+peaks, hours, drains, worst = zip(*runs.values())
+assert list(peaks) == sorted(peaks, reverse=True) and list(hours) == sorted(hours, reverse=True)
+assert list(drains) == sorted(drains) and len(set(worst)) == 1
+
+# %% [markdown]
+# Slower scale-up means fewer replicas at the peak and fewer GPU-hours, paid for with a backlog that
+# drains minutes later. It does **not** change the worst queue: that builds during the first cold
+# start, before any new replica exists, whatever the policy. Only a faster cold start or a buffer
+# of warm capacity touches it.
 
 # %% [markdown]
 # ## The manifest
 #
-# The same policy as an `autoscaling/v2` HPA. On GKE the metric name is the Managed Prometheus series
-# as the Custom Metrics Stackdriver Adapter exposes it (`deploy/gke/hpa.yaml`; naming marked VERIFY).
+# The policy as an `autoscaling/v2` HPA for the GKE deployment: both metrics, with targets derived
+# from that deployment's 32 batch slots (running: 75 % of them; waiting: Exercise 3.4), not the fake
+# engine's 8. On GKE the metric names are the Managed Prometheus series as the Custom Metrics
+# Stackdriver Adapter exposes them (naming marked VERIFY). The cell checks that this is exactly what
+# `deploy/gke/hpa.yaml` ships.
 
 # %%
-import yaml
-m = hpa_manifest("vllm-qwen", "vllm-qwen", "prometheus.googleapis.com|vllm:num_requests_waiting|gauge", 5,
-                 min_replicas=1, max_replicas=4, behavior=Behavior(
+gp = "prometheus.googleapis.com|{}|gauge"
+m = hpa_manifest("vllm-qwen", "vllm-qwen", gp.format("vllm:num_requests_waiting"), waiting_target(0.5, 3.0, gke_slots),
+                 extra_metrics={gp.format("vllm:num_requests_running"): int(0.75 * gke_slots)},
+                 min_replicas=1, max_replicas=2, behavior=Behavior(
                      scale_up=ScalingRules(0, "Max", (ScalingPolicy("Pods", 1, 60),)),
                      scale_down=ScalingRules(300, "Max", (ScalingPolicy("Pods", 1, 120),))))
-m["spec"]["metrics"].append({"type": "Pods", "pods": {"metric": {"name": "prometheus.googleapis.com|vllm:num_requests_running|gauge"},
-                                                      "target": {"type": "AverageValue", "averageValue": "6"}}})
 print(yaml.safe_dump(m, sort_keys=False))
+assert m["spec"] == gke_hpa["spec"], "deploy/gke/hpa.yaml drifted from the derivation"
 try:
     import kubernetes_validate
     kubernetes_validate.validate(m, "1.34.0", strict=True)
@@ -298,22 +375,26 @@ except ImportError:
 
 # %% [markdown]
 # **Scale to zero.** `minReplicas: 0` needs the `HPAScaleToZero` feature gate, still alpha and off
-# in Kubernetes 1.34 — and with 0 pods there is no per-pod metric to scale *up* from anyway (the
-# controller reports `ScalingDisabled` when the target is at 0). Scale-from-zero needs a signal that
+# in Kubernetes 1.34 — and with 0 pods there is no per-pod metric to scale *up* from anyway (with
+# `minReplicas` ≥ 1 the controller reports `ScalingDisabled` when the target has been scaled to 0;
+# with the gate and `minReplicas: 0` it computes from Object/External metrics). Scale-from-zero needs a signal that
 # exists without pods — a router-side queue (e.g. the EPP's flow-control queue) exported as an
 # `External` metric — and a controller that owns the 0↔1 step, such as KEDA. See `usage_ratio_replicas`
 # for the controller's from-zero arithmetic (`ceil(usage / target)`).
 #
 # ## In a design review
 #
-# **Two-minute walkthrough.** "We scale vLLM on two per-pod metrics from its own `/metrics`: waiting
-# requests (target 5, from a 300 ms queueing budget and ~60 ms prefills) and running requests (target
-# 6 of 8 batch slots). The HPA takes the larger proposal: the queue reacts to bursts, the running
-# count holds capacity once the queue has drained — queue alone collapses the pool at full load. Not
-# GPU utilization: it is 100% whenever any request runs. Scale-up is rate-limited to one pod per
-# minute because each new L4 node needs minutes to pull the image and load weights, and faster
-# scaling only overshoots; scale-down waits 300 s and removes one pod per two minutes. Minimum is one
-# replica; scale-to-zero would need a router-side queue metric and KEDA."
+# **Two-minute walkthrough.** "We scale vLLM on two per-pod metrics from its own `/metrics`, with
+# targets derived from the engine we deploy: 32 batch slots (`--max-num-seqs`, set explicitly).
+# Running requests, target 24 — 75 % of the slots — holds capacity once the queue has drained;
+# queue alone proposes the minimum at full load and collapses the pool. Waiting requests, target 5
+# — Little's law: a waiting request needs a slot, slots free at 32 per ~3 s (an assumption we
+# re-measure), so 5 waiting cost ~0.5 s of our TTFT budget. The HPA takes the larger proposal. Not
+# GPU utilization: it is 100% whenever any request runs. Scale-up adds one pod a minute: each pod
+# needs a new L4 Spot node, which quota and Spot obtainability limit anyway, and a slower ramp buys
+# fewer GPU-hours for a longer backlog — it cannot shorten the queue built during the first cold
+# start. Scale-down waits 300 s and removes one pod per two minutes. Minimum is one replica;
+# scale-to-zero would need a router-side queue metric and KEDA."
 #
 # **Drill questions**
 #

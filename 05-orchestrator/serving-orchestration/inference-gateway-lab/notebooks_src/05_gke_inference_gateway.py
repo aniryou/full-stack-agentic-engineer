@@ -17,7 +17,7 @@
 #                │                     ├─ selector app=vllm-qwen, targetPorts [8000]  → vLLM pods on L4 Spot
 #                │                     └─ endpointPickerRef vllm-qwen-epp:9002        → llm-d EPP (ext-proc)
 #                └─ per request: LB ──ext-proc──▶ EPP: "which pod?" (prefix/queue/KV scores) ──▶ pod
-# Managed Prometheus scrapes vLLM /metrics (PodMonitoring) → Custom Metrics Adapter → HPA on the queue
+# Managed Prometheus scrapes vLLM /metrics (PodMonitoring) → Custom Metrics Adapter → HPA on waiting + running
 # InferenceObjective premium(100) / standard(0) / batch(-10) ← header x-llm-d-inference-objective
 # ```
 #
@@ -28,6 +28,7 @@
 # §10 Where to run it](../../PRIMER.md).
 
 # %%
+import json
 import os
 import re
 import shutil
@@ -75,77 +76,156 @@ for f in ("gke/gateway.yaml", "gke/podmonitoring-vllm.yaml", "gke/rendered/infer
     print(f"{f:<42}", {f"{kind}/{name}": errs or "valid" for (kind, name), errs in k8s.check_file(DEPLOY / f, schemas).items()})
 
 # %% [markdown]
-# ## Exercise 5.1 — the InferencePool
+# ## Exercise 5.1 — what the API server catches, and what it lets through
 #
-# Build (as a plain dict, without `k8s.inference_pool`) the InferencePool the chart creates for the
-# Helm release `vllm-qwen`: it selects pods labelled `app: vllm-qwen`, targets port 8000 over plain
-# HTTP (`appProtocol: http`), and points at the EPP Service `vllm-qwen-epp` on port 9002 with
-# `failureMode: FailClose` (if the EPP is down, fail the request rather than route blind).
+# A schema check stops some mistakes at `kubectl apply`; others apply cleanly and break the data
+# path. Below are six variants of the lab's objects (the shipped ones are in `deploy/gke/`: the
+# InferencePool as the chart renders it, the HTTPRoute in `gateway.yaml`; the vLLM pods are
+# labelled `app: vllm-qwen`). For each, predict one of:
+#
+# * `"rejected"` — the API server refuses it (CRD schema or CEL rule);
+# * `"no-endpoints"` — it applies, but the pool contains no pod, so every request fails;
+# * `"no-epp"` — it applies and traffic flows, but the load balancer never asks the EPP (no prefix
+#   affinity, no queue awareness, no objectives or shedding);
+# * `"ok"`.
+
+# %%
+import copy
+
+pool = yaml.safe_load((DEPLOY / "gke/rendered/inferencepool.yaml").read_text())
+route = [d for d in yaml.safe_load_all((DEPLOY / "gke/gateway.yaml").read_text()) if d["kind"] == "HTTPRoute"][0]
+
+def variant(obj, edit):
+    o = copy.deepcopy(obj)
+    edit(o["spec"])
+    return o
+
+described = {
+    "A": ("InferencePool, endpointPickerRef.failureMode: FailClosed (the chart README's spelling)",
+          variant(pool, lambda s: s["endpointPickerRef"].update(failureMode="FailClosed"))),
+    "B": ("InferencePool, 9 targetPorts 8000-8008 (one per data-parallel rank)",
+          variant(pool, lambda s: s.update(targetPorts=[{"number": 8000 + i} for i in range(9)]))),
+    "C": ("InferencePool, endpointPickerRef without a port",
+          variant(pool, lambda s: s["endpointPickerRef"].pop("port"))),
+    "D": ("InferencePool, selector app: vllm",
+          variant(pool, lambda s: s["selector"].update(matchLabels={"app": "vllm"}))),
+    "E": ("HTTPRoute, backendRefs: [{name: vllm-qwen-svc, port: 8000}] (a Service selecting the vLLM pods)",
+          variant(route, lambda s: s["rules"][0].update(backendRefs=[{"name": "vllm-qwen-svc", "port": 8000}]))),
+    "F": ("HTTPRoute as shipped (backendRef group inference.networking.k8s.io, kind InferencePool)", route),
+}
+variants = {k: obj for k, (_, obj) in described.items()}
+for k, (text, _) in described.items():
+    print(k, text)
 
 # %% exercise
-def my_inference_pool() -> dict:
-    ### BEGIN SOLUTION
-    return {"apiVersion": "inference.networking.k8s.io/v1", "kind": "InferencePool",
-            "metadata": {"name": "vllm-qwen"},
-            "spec": {"targetPorts": [{"number": 8000}], "appProtocol": "http",
-                     "selector": {"matchLabels": {"app": "vllm-qwen"}},
-                     "endpointPickerRef": {"name": "vllm-qwen-epp", "port": {"number": 9002}, "failureMode": "FailClose"}}}
-    ### END SOLUTION
+verdicts = {}          # {"A": ..., ..., "F": ...}
+### BEGIN SOLUTION
+verdicts = {"A": "rejected",       # failureMode enum is FailOpen | FailClose
+            "B": "rejected",       # targetPorts: 1..8 items
+            "C": "rejected",       # CEL: a Service endpointPickerRef needs a port
+            "D": "no-endpoints",   # valid, but selects no pod: the EPP has nothing to pick -> errors
+            "E": "no-epp",         # group/kind default to core Service: the LB balances on its own
+            "F": "ok"}
+### END SOLUTION
 
 # %% check
-mine = my_inference_pool()
-assert k8s.check(mine, schemas) == [], k8s.check(mine, schemas)
-rendered = yaml.safe_load((DEPLOY / "gke/rendered/inferencepool.yaml").read_text())
-assert mine == rendered, "compare with deploy/gke/rendered/inferencepool.yaml"
-broken = {**mine, "spec": {**mine["spec"], "endpointPickerRef": {"name": "vllm-qwen-epp", "failureMode": "FailClosed"}}}
-print("the chart README's spelling would be rejected:", k8s.check(broken, schemas))
-print("✅ InferencePool v1 is valid and matches what the chart renders")
+vllm_labels = next(yaml.safe_load_all((DEPLOY / "gke/vllm.yaml").read_text()))["spec"]["template"]["metadata"]["labels"]
+for k, obj in variants.items():
+    errs = k8s.check(obj, schemas)
+    assert (verdicts[k] == "rejected") == bool(errs), (k, verdicts[k], errs)
+    if obj["kind"] == "InferencePool" and not errs:
+        selects = all(vllm_labels.get(a) == b for a, b in obj["spec"]["selector"]["matchLabels"].items())
+        assert (verdicts[k] == "no-endpoints") == (not selects), k
+    if obj["kind"] == "HTTPRoute":
+        ref = obj["spec"]["rules"][0]["backendRefs"][0]
+        assert (verdicts[k] == "no-epp") == (ref.get("kind", "Service") != "InferencePool"), k
+print("rejections:", {k: k8s.check(o, schemas) for k, o in variants.items() if k8s.check(o, schemas)})
+print("✅ the schema stops A-C at apply time; D and E apply cleanly and fail later — that is what the"
+      " route/pool status conditions and a smoke request are for")
 
 # %% [markdown]
-# ## Exercise 5.2 — route traffic to the pool
+# ## Exercise 5.2 — pick the failure mode
 #
-# Write the HTTPRoute (dict) named `vllm-qwen` that attaches to the Gateway `inference-gateway` and
-# sends every path (`PathPrefix /`) to the InferencePool `vllm-qwen`. The backendRef must name the
-# InferencePool's API group and kind; it needs no port (the pool's `targetPorts` decide).
+# `endpointPickerRef.failureMode` decides what the load balancer does when it cannot reach the EPP:
+# `FailOpen` forwards the request to some pod of the pool without asking; `FailClose` fails it. Pick
+# the mode for each pool and justify it to yourself (the solution states the reasoning):
+#
+# * `"chat"` — every pod serves the same model; the product prefers a slower answer to an error.
+# * `"adapters"` — requests name LoRA adapters, and each adapter is loaded (statically,
+#   `--lora-modules`) on only some pods; the EPP's LoRA affinity is what sends a request to a pod
+#   that has its adapter. A pod without it answers 404 "model does not exist".
 
 # %% exercise
-def my_route() -> dict:
-    ### BEGIN SOLUTION
-    return {"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute", "metadata": {"name": "vllm-qwen"},
-            "spec": {"parentRefs": [{"name": "inference-gateway"}],
-                     "rules": [{"matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
-                                "backendRefs": [{"group": "inference.networking.k8s.io", "kind": "InferencePool",
-                                                 "name": "vllm-qwen"}]}]}}
-    ### END SOLUTION
+failure_mode = {}      # {"chat": "FailOpen" | "FailClose", "adapters": ...}
+### BEGIN SOLUTION
+failure_mode = {"chat": "FailOpen",       # any pod gives a correct answer; the EPP only makes it faster
+                "adapters": "FailClose"}  # a blind pick is usually WRONG (404), not slow; a fast 503 is
+                                          # retryable and pages someone, a 404 looks like a client bug
+### END SOLUTION
 
 # %% check
-route = my_route()
-assert k8s.check(route, schemas) == []
-ref = route["spec"]["rules"][0]["backendRefs"][0]
-assert (ref["group"], ref["kind"], ref["name"]) == ("inference.networking.k8s.io", "InferencePool", "vllm-qwen")
-on_disk = [d for d in yaml.safe_load_all((DEPLOY / "gke/gateway.yaml").read_text()) if d["kind"] == "HTTPRoute"][0]
-assert route == on_disk
-print("✅ HTTPRoute -> InferencePool (a Service backendRef would bypass the EPP entirely)")
+assert failure_mode == {"chat": "FailOpen", "adapters": "FailClose"}, failure_mode
+shipped = pool["spec"]["endpointPickerRef"]["failureMode"]
+print(f"✅ FailOpen when routing only optimizes, FailClose when it decides correctness. The lab ships "
+      f"{shipped}: one base model, so FailOpen would also be defensible — and either way run 2+ EPP replicas.")
 
 # %% [markdown]
-# ## Exercise 5.3 — from Prometheus series to an HPA metric name
+# ## From Prometheus series to an HPA metric name
 #
-# Managed Service for Prometheus stores a scraped series `NAME` of kind `KIND` (`gauge`, `counter`, …)
-# in Cloud Monitoring as the metric type `prometheus.googleapis.com/NAME/KIND`. The Custom Metrics
-# Stackdriver Adapter exposes metric types to the HPA with `/` replaced by `|` (a metric name cannot
-# contain `/`). Write `hpa_metric_name(name, kind)` and check it against `deploy/gke/hpa.yaml`.
-# *(The adapter naming is marked VERIFY in the manifest — confirm it against current GKE docs.)*
+# Managed Service for Prometheus stores a scraped series `NAME` of kind `KIND` in Cloud Monitoring as
+# the metric type `prometheus.googleapis.com/NAME/KIND`; the Custom Metrics Stackdriver Adapter
+# exposes metric types to the HPA with `/` replaced by `|` (its README says so; the GMP naming is
+# marked VERIFY in the manifest). The shipped HPA uses two of them:
 
-# %% exercise
-def hpa_metric_name(name: str, kind: str) -> str:
-    ### BEGIN SOLUTION
-    return f"prometheus.googleapis.com/{name}/{kind}".replace("/", "|")
-    ### END SOLUTION
-
-# %% check
+# %%
 hpa = yaml.safe_load((DEPLOY / "gke/hpa.yaml").read_text())
-assert hpa_metric_name("vllm:num_requests_waiting", "gauge") == hpa["spec"]["metrics"][0]["pods"]["metric"]["name"]
-print("✅", hpa_metric_name("vllm:num_requests_waiting", "gauge"))
+for m in hpa["spec"]["metrics"]:
+    name = m["pods"]["metric"]["name"]
+    assert name == f"prometheus.googleapis.com/{name.split('|')[1]}/gauge".replace("/", "|")
+    print(f"{name:<58} target {m['pods']['target']['averageValue']} per pod")
+
+# %% [markdown]
+# ## Exercise 5.3 — how late is the first extra replica?
+#
+# A burst starts at t = 0 and pushes `vllm:num_requests_waiting` far above target. Predict the
+# **worst-case** time until a new vLLM pod receives traffic. The chain, in order, and where each
+# number comes from:
+#
+# | step | worst case | source |
+# |---|---|---|
+# | GMP scrapes the pod | one full scrape interval (the burst lands just after a scrape) | `podmonitoring-vllm.yaml` |
+# | the sample reaches the HPA through Cloud Monitoring and the adapter | `ADAPTER_LAG_S` | assumption (verify) |
+# | the HPA controller's next sync | one full sync period, 15 s | kube-controller-manager default |
+# | a new L4 Spot node is provisioned and joins | `NODE_S` | assumption (verify; Spot may not be obtainable at all) |
+# | the vLLM image is pulled | `PULL_S` | assumption (verify; image streaming shortens it) |
+# | weights download + load, until `/health` answers | `LOAD_S` | assumption (verify) |
+# | the readiness probe notices | one full probe period | `vllm.yaml` |
+#
+# (The scale-up policy — 1 pod per 60 s — does not delay the *first* pod.) Write `worst_case_s()`
+# reading the two intervals from the files; it returns seconds.
+
+# %%
+ADAPTER_LAG_S = 60      # Cloud Monitoring ingestion + adapter read (assumption, verify)
+NODE_S = 120            # L4 Spot VM create + GKE node registration (assumption, verify)
+PULL_S = 150            # vllm/vllm-openai is several GB (assumption, verify)
+LOAD_S = 60             # Qwen2.5-1.5B: ~3 GB of weights from Hugging Face + load (assumption, verify)
+podmon = yaml.safe_load((DEPLOY / "gke/podmonitoring-vllm.yaml").read_text())
+vllm_dep = next(yaml.safe_load_all((DEPLOY / "gke/vllm.yaml").read_text()))
+
+# %% exercise
+def worst_case_s() -> float:
+    ### BEGIN SOLUTION
+    scrape = float(podmon["spec"]["endpoints"][0]["interval"].rstrip("s"))
+    probe = vllm_dep["spec"]["template"]["spec"]["containers"][0]["readinessProbe"]["periodSeconds"]
+    return scrape + ADAPTER_LAG_S + 15 + NODE_S + PULL_S + LOAD_S + probe
+    ### END SOLUTION
+
+# %% check
+assert worst_case_s() == 15 + 60 + 15 + 120 + 150 + 60 + 5, worst_case_s()
+detect = 15 + ADAPTER_LAG_S + 15
+print(f"✅ ~{worst_case_s() / 60:.1f} min worst case (assumptions); only {detect} s of it is detection — "
+      f"the rest is capacity arriving, so the queue built meanwhile is what minReplicas, a warm node or "
+      f"faster cold starts (image streaming, cached weights: layer 03) must absorb")
 
 # %% [markdown]
 # ## Exercise 5.4 — what an hour of the lab costs
@@ -176,12 +256,16 @@ def lab_cost(hours: float, gpu_nodes: int, prices: dict = PRICES) -> float:
 assert lab_cost(1, 1) == round(0.28 + 0.134 + 0.025, 4) == 0.439
 assert lab_cost(2, 2) == round(2 * (0.56 + 0.134 + 0.025), 4)
 assert lab_cost(1, 0) == 0.159                           # GPU pool at zero: you still pay for the rest
-print(f"✅ one hour with one L4 Spot node ≈ ${lab_cost(1, 1):.2f} (assumed prices); an idle day with the GPU pool at 0 ≈ ${lab_cost(24, 0):.2f}")
+print(f"✅ installed, busy or idle: ≈ ${lab_cost(1, 1):.2f}/h with its one L4 Spot node (assumed prices); "
+      f"uninstalled but not destroyed, a forgotten day still costs ≈ ${lab_cost(24, 0):.2f}")
 
 # %% [markdown]
-# The last number is the reason for `uninstall.sh` **and** `terraform destroy`: scale-to-zero of the
-# GPU pool removes the expensive part, but the system node, the load balancer and any disks keep
-# billing until the cluster is gone.
+# Read the three states apart. **Installed and idle**: `lab_cost(1, 1)` ≈ $0.44/h, because the
+# HPA's `minReplicas: 1` keeps one vLLM pod and so one L4 Spot node up — the GPU pool never reaches
+# 0 while the workloads exist (that needs scale-to-zero: KEDA or the alpha `HPAScaleToZero`).
+# **After `uninstall.sh`**: the pool drains to 0 and `lab_cost(1, 0)` ≈ $0.16/h remains — the system
+# node, the load balancer (until the Gateway is gone) and disks. **After `terraform destroy`**: $0.
+# That last step is the one people forget.
 #
 # ## The plan
 #
@@ -210,7 +294,8 @@ else:
     print("offline: to deploy, run (see deploy/gcp/terraform/README.md and deploy/gke/README.md)")
     print("  cd deploy/gcp/terraform && cp terraform.tfvars.example terraform.tfvars && terraform init && terraform apply")
     print("  PROJECT_ID=<id> ZONE=us-central1-a deploy/gke/install.sh")
-    print("then re-run this notebook with IGW_GKE=1 for live status, and tear down with deploy/gke/uninstall.sh + terraform destroy")
+    print("then re-run this notebook with IGW_GKE=1 for live status, and tear down with "
+          "PROJECT_ID=<id> deploy/gke/uninstall.sh + terraform destroy")
 
 # %% [markdown]
 # ## In a design review
@@ -222,8 +307,12 @@ else:
 # InferencePool that selects the vLLM pods and our three InferenceObjectives. A Gateway of class
 # `gke-l7-regional-external-managed` with an HTTPRoute to the InferencePool makes the load balancer
 # ask the EPP for a pod on every request. Managed Prometheus scrapes vLLM, the custom-metrics adapter
-# exposes `vllm:num_requests_waiting` to the HPA, and the HPA adds one replica a minute. An idle hour
-# costs cents because the GPU pool is at zero; a busy hour is dominated by the Spot L4."
+# exposes `vllm:num_requests_waiting` and `vllm:num_requests_running` to the HPA — the queue for
+# bursts, the occupied batch slots so it does not scale away capacity once the queue drains — and the
+# HPA adds at most one replica a minute; the first extra replica still arrives minutes after a burst,
+# because a Spot node, the image and the weights come first. With one replica always up, an idle
+# hour costs about $0.44 (one L4 Spot node plus the fixed parts); only uninstalling the workloads
+# brings the GPU pool to zero, and only `terraform destroy` stops the rest."
 #
 # **Drill questions**
 #

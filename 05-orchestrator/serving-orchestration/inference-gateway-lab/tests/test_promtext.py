@@ -45,3 +45,17 @@ def test_rendered_histogram_buckets_are_cumulative():
     f = Families.from_text(r.render())
     assert f.buckets("lat") == [(0.01, 1.0), (0.1, 2.0), (1.0, 3.0), (math.inf, 4.0)]
     assert f.value("lat_count") == 4.0 and f.value("lat_sum") == pytest.approx(5.555)
+
+
+def test_extract_vllm_sums_ranks_but_the_epp_reads_the_first_series():
+    from igwlab.router import extract_vllm
+    text = ('vllm:num_requests_waiting{engine="0"} 2\nvllm:num_requests_waiting{engine="1"} 7\n'
+            'vllm:num_requests_running{engine="0"} 4\nvllm:num_requests_running{engine="1"} 8\n'
+            'vllm:kv_cache_usage_perc{engine="0"} 0.25\nvllm:kv_cache_usage_perc{engine="1"} 0.75\n')
+    lab = extract_vllm(Families.from_text(text))                       # the lab router: sum ranks, worst KV
+    epp = extract_vllm(Families.from_text(text), aggregate="first")    # llm-d-router v0.10.0 getLatestMetric
+    assert (lab.waiting, lab.running, lab.kv_usage) == (9, 12, 0.75)
+    assert (epp.waiting, epp.running, epp.kv_usage) == (2, 4, 0.25)
+    one = 'vllm:num_requests_waiting{engine="0"} 3\nvllm:gpu_cache_usage_perc{engine="0"} 0.5\n'
+    assert extract_vllm(Families.from_text(one)).waiting == extract_vllm(Families.from_text(one), "first").waiting == 3
+    assert extract_vllm(Families.from_text(one), "first").kv_usage == 0.5          # pre-V1 KV gauge name

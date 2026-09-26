@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import socket
+from pathlib import Path
 
 import numpy as np
 
@@ -203,6 +204,7 @@ def main(argv=None) -> int:
     if rows:
         print(format_table(rows))
         if a.json:
+            Path(a.json).parent.mkdir(parents=True, exist_ok=True)
             with open(a.json, "w", encoding="utf-8") as f:
                 json.dump([r.as_dict() for r in rows], f, indent=2)
     return 0

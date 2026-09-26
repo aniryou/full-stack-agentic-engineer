@@ -4,13 +4,14 @@
 #
 #   ./run.sh status | smoke | vectoradd | nccl | timeshare | mig | rules | clean
 #   DRY_RUN=1 ./run.sh nccl          # print every command, run nothing
-#   TIMEOUT=2400s ./run.sh nccl      # scale-from-zero plus a devel-image pull can take 10+ minutes
+#   TIMEOUT=2400 ./run.sh nccl       # seconds; scale-from-zero plus a devel-image pull can take 10+ minutes
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NS=gpu-lab
 OUT="${OUT:-$PWD/out}"
-TIMEOUT="${TIMEOUT:-1800s}"
+TIMEOUT="${TIMEOUT:-1800}"
+TIMEOUT="${TIMEOUT%s}" # accept 1800 or 1800s
 
 run() {
   echo "+ $*" >&2
@@ -27,12 +28,33 @@ save_logs() { # $1 = job name
   kubectl -n "${NS}" logs "job/$1" | tee "${OUT}/$1.log"
 }
 
-job() { # $1 = manifest, $2 = job name: recreate, wait, save logs
+wait_job() { # $1 = job name: poll until Complete or Failed, so a failed Job does not block until TIMEOUT
+  echo "+ wait for job/$1: Complete or Failed (timeout ${TIMEOUT}s)" >&2
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then return 0; fi
+  local deadline=$((SECONDS + TIMEOUT)) conds
+  while ((SECONDS < deadline)); do
+    conds="$(kubectl -n "${NS}" get job "$1" -o jsonpath='{.status.conditions[?(@.status=="True")].type}' 2> /dev/null || true)"
+    case " ${conds} " in
+      *" Complete "*) return 0 ;;
+      *" Failed "*)
+        echo "== job/$1 failed" >&2
+        return 1
+        ;;
+    esac
+    sleep 10
+  done
+  echo "== job/$1 not finished after ${TIMEOUT}s (kubectl -n ${NS} describe job/$1)" >&2
+  return 1
+}
+
+job() { # $1 = manifest, $2 = job name: recreate, wait, save logs (also when the Job failed)
   run kubectl -n "${NS}" delete job "$2" --ignore-not-found
   run kubectl apply -f "${HERE}/$1"
   echo "== waiting for $2 (a GPU node may be scaling up from zero)" >&2
-  run kubectl -n "${NS}" wait --for=condition=complete "job/$2" --timeout="${TIMEOUT}"
-  save_logs "$2"
+  local rc=0
+  wait_job "$2" || rc=$?
+  save_logs "$2" || true
+  return "${rc}"
 }
 
 case "${1:-}" in
@@ -62,7 +84,7 @@ case "${1:-}" in
   timeshare)
     namespace
     run kubectl apply -f "${HERE}/04-time-sharing.yaml"
-    run kubectl -n "${NS}" rollout status deployment/timeshare-demo --timeout="${TIMEOUT}"
+    run kubectl -n "${NS}" rollout status deployment/timeshare-demo --timeout="${TIMEOUT}s"
     run kubectl -n "${NS}" get pods -l app=timeshare-demo -o wide
     run kubectl -n "${NS}" logs -l app=timeshare-demo --prefix
     ;;
@@ -71,8 +93,10 @@ case "${1:-}" in
     job 05-mig.yaml mig-1g5gb
     ;;
   rules)
-    namespace
-    run kubectl apply -f "${HERE}/06-dcgm-alert-rules.yaml"
+    run kubectl apply -f "${HERE}/06-dcgm-alert-rules.yaml" # ClusterRules: cluster-scoped, no namespace
+    echo "== rules only evaluate; firing alerts go to GMP's managed Alertmanager. Give it receivers:" >&2
+    echo "   edit alertmanager.example.yaml, then: kubectl -n gmp-public create secret generic alertmanager \\" >&2
+    echo "     --from-file=alertmanager.yaml=${HERE}/alertmanager.example.yaml --dry-run=client -o yaml | kubectl apply -f -" >&2
     ;;
   clean)
     run kubectl delete namespace "${NS}" --ignore-not-found

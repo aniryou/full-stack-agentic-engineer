@@ -56,8 +56,9 @@ that nothing on the CPU stalls the GPU:
 **One step** is: `schedule()` → build the flat batch → one forward pass → sample → `update()`. In
 `minengine.engine.Engine.step()` that is thirty lines:
 
-1. **Schedule.** The scheduler decides, per request, how many new tokens run this step and makes sure the KV cache
-   manager has blocks for them (`Scheduler.schedule()`, §2).
+1. **Schedule.** The scheduler decides, per request, how many new tokens run this step, makes sure the KV cache
+   manager has blocks for them, and publishes the blocks those tokens will fill to the prefix cache
+   (`Scheduler.schedule()`, §2 and §5).
 2. **Flatten.** Every scheduled token of every request goes into one array — no padding — with its position, its
    **slot** (where its K and V are written: `block_table[pos // B] × B + pos % B`) and, per request, the block table
    and context length (`Engine.build_batch()`, the vLLM "attention metadata").
@@ -67,18 +68,20 @@ that nothing on the CPU stalls the GPU:
    check it against `forward_dense()` to 1e-10.
 4. **Sample.** Only requests whose computed tokens reach the end of their sequence get a token; a prefill chunk that
    stops short samples nothing (§6).
-5. **Update.** Advance `num_computed_tokens`, publish newly full blocks to the prefix cache (§5), append tokens,
-   finish requests that hit EOS, a stop token or `max_tokens`, and free their blocks.
+5. **Update.** Advance `num_computed_tokens`, append tokens, finish requests that hit EOS, a stop token or
+   `max_tokens`, and free their blocks.
 
 **What a step costs.** Llama-3.1-8B in bf16 on an H100 streams 15.0 GB of weights per step (the untied input
-embedding is a gather, not a stream): 4.5 ms at 3.35 TB/s — the floor for *any* step, however few tokens it carries.
-Sixty-four requests decoding at 2K context add 16.8 GB of KV reads: 9.5 ms. A 2,048-token prefill does 29.7 TFLOP:
-30 ms, compute-bound (`perf.step_cost()` with ideal efficiencies; these match layer 01's `roofline.llm`,
-[roofline-and-fabric §3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)). The rest of this primer is
-about packing work into those steps well.
+embedding is a gather, not a stream): 4.5 ms at 3.35 TB/s — the floor for *any* step, however few tokens it carries
+(why HBM bandwidth, not FLOPs, sets it: the [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md),
+§3). Sixty-four requests decoding at 2,048 tokens of context add 17.2 GB of KV reads (5.1 ms), for a 9.6 ms step.
+A 2,048-token prefill does 29.7 TFLOP: 30 ms, compute-bound (`perf.step_cost()` with ideal efficiencies; these
+match layer 01's `roofline.llm`, [roofline-and-fabric §3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)).
+The rest of this primer is about packing work into those steps well.
 
 **Request states.** `WAITING` → `RUNNING` → `FINISHED_{STOPPED, LENGTH_CAPPED, ABORTED}`, with `RUNNING → PREEMPTED
-→ WAITING` when memory runs out (§4) — vLLM's names; the core's `scheduler.Status` mirrors them. Stop strings are
+→ WAITING` when memory runs out (§4) — vLLM's `RequestStatus` names (it has a few more, e.g. for requests waiting
+on a grammar or a remote KV transfer); the core's `scheduler.Status` mirrors these six. Stop strings are
 the detokenizer's job: they need text, and the engine core only sees token ids. Aborts (client disconnects) must
 free blocks — the core's tests check that nothing leaks.
 
@@ -109,7 +112,7 @@ for req in running (admission order):                     # decodes and unfinish
 if nobody was preempted this step:
     for req in waiting (FCFS):                             # while budget, max_num_seqs and blocks allow
         num_cached = prefix-cache hit (§5); n = min(req.num_tokens - num_cached, budget)
-        admit if its blocks fit; budget -= n
+        admit if its blocks fit, publishing the full blocks it will compute (§5); budget -= n
 ```
 
 That is `minengine.scheduler.Scheduler.schedule()`. Worked: budget 16, `r0` has an 11-token prompt, `r1` a 20-token
@@ -163,22 +166,34 @@ keeps streaming. vLLM V1 has chunked prefill on by default; turning it off requi
 max_model_len`, because a whole prompt must then fit in one step (the core enforces the same rule in
 `SchedulerConfig`).
 
-**The budget is a TTFT-vs-ITL knob.** 200 requests, Poisson at 6/s, prompts 500–6,000 tokens, outputs 100–400, H100
-+ Llama-3.1-8B (SIMULATED, `perf.simulate()`, notebook 02):
+**The budget trades TTFT against ITL — and, under saturation, sets capacity.** 200 requests, prompts 500–6,000
+tokens, outputs 100–400, H100 + Llama-3.1-8B (SIMULATED, `perf.simulate()`, notebook 02 worked example 3). The
+latency columns and goodput (requests per second meeting a 1 s TTFT and a 50 ms TPOT SLO, §11) are for an
+open-loop Poisson stream at 6/s; the last column sends all 200 at once, which saturates the engine and so measures
+its capacity:
 
-| Setting | TTFT p50 | TTFT p99 | ITL p50 | ITL p99 | Throughput |
-|---|---|---|---|---|---|
-| no chunking | 128 ms | 572 ms | 13.2 ms | 150 ms | 1,320 tok/s |
-| budget 8,192 | 137 ms | 655 ms | 13.2 ms | 210 ms | 1,319 tok/s |
-| budget 2,048 | 151 ms | 625 ms | 12.9 ms | 56.7 ms | 1,325 tok/s |
-| budget 512 | 169 ms | 760 ms | 12.3 ms | 16.3 ms | 1,333 tok/s |
-| budget 256 | 331 ms | 1,444 ms | 10.1 ms | 11.5 ms | 1,327 tok/s |
+| Setting | TTFT p50 | TTFT p99 | ITL p50 | ITL p99 | Goodput at 6/s | Capacity (saturated) |
+|---|---|---|---|---|---|---|
+| no chunking | 128 ms | 572 ms | 13.2 ms | 150 ms | 5.18 req/s | 1,948 tok/s |
+| budget 8,192 | 137 ms | 655 ms | 13.2 ms | 210 ms | 5.17 req/s | 1,907 tok/s |
+| budget 2,048 | 151 ms | 625 ms | 12.9 ms | 56.7 ms | 5.20 req/s | 2,157 tok/s |
+| budget 512 | 169 ms | 760 ms | 12.3 ms | 16.3 ms | 5.23 req/s | 2,261 tok/s |
+| budget 256 | 331 ms | 1,444 ms | 10.1 ms | 11.5 ms | 4.66 req/s | 1,706 tok/s |
 
-Throughput does not move: the knob only moves latency between the first token and the gaps. Below the knee (256)
-prefill runs in inefficient slivers and TTFT doubles. **Choosing it:** take the largest budget whose worst step —
-all running decodes plus a full prefill chunk — meets the ITL SLO. With 64 requests decoding at 2K context and a 25
-ms p99 ITL target: 512 tokens gives a 14.4 ms step, 1,024 gives 26.7 ms → choose 512 (notebook 02, exercise 2.4).
-vLLM adds finer knobs — `long_prefill_token_threshold`, a cap on concurrent partial prefills (verify).
+At 6/s every row delivers the same ~1,320 tok/s — not because the knob is free, but because an open-loop load
+below capacity finishes exactly what it is offered; such a run cannot show a throughput effect. Saturated, the
+budget matters. At 512 each step mixes a prompt chunk (compute-bound) with the running decodes' KV reads
+(memory-bound), so tensor cores and HBM are busy at once — Sarathi-Serve's case for hybrid batches; whole prompts
+or 8,192-token steps alternate compute-heavy prefill steps with memory-bound decode steps and leave one resource
+idle in each. At 256 a step sits just above the knee (~221 tokens with these efficiencies): its time is mostly
+the weight read, the decodes' KV reads and the 2 ms overhead, and after the decodes take their share the prompt
+gets small, poorly amortised chunks — so TTFT doubles at 6/s, goodput drops ~10%, and capacity drops by a quarter.
+**Choosing it:** take the largest budget whose worst step — all running decodes plus a full prefill chunk — meets
+the ITL SLO, then check capacity under a saturating load. With 64 requests decoding at 2,000 tokens of context and
+a 25 ms p99 ITL target: 512 tokens gives a 14.4 ms step, 1,024 gives 26.7 ms → choose 512 (notebook 02, exercise
+2.4). vLLM adds finer knobs — `long_prefill_token_threshold` (cap the chunk of a long prompt so several prompts
+progress together; 0 = off by default) with an `_adaptive` variant, and `max_num_active_seqs` (cap RUNNING below
+`max_num_seqs`) (verify).
 
 **When chunking is not enough.** Every chunk still shares its step with decodes, so a prefill-heavy mix (RAG, agents
 re-reading long contexts) makes ITL and TTFT fight for the same GPUs. Running prefill and decode on separate pools
@@ -214,7 +229,9 @@ H100 (80 GB), same model                                                        
 thrashing: an optional **watermark** (a fraction of blocks kept free when admitting new or preempted requests; vLLM
 default 0, verify) and a **whole-prompt check** (admit only if the full prompt, not just its first chunk, fits;
 vLLM's `scheduler_reserve_full_isl`, default on, verify). Without the latter, chunked prefill admits prompts it
-cannot finish and preempts them a few steps later (`KVCacheManager.allocate_slots(..., admit_whole_prompt=True)`).
+cannot finish and preempts them a few steps later (`KVCacheManager.allocate_slots(..., admit_whole_prompt=True)`):
+in notebook 02's exercise 2.6, 22 preemptions at 2,000 blocks with the check, 87 without (SIMULATED); the core's
+tests pin both effects on a tight pool.
 
 **Growth and preemption.** Decodes take a new block every 16 tokens. When a running request needs one and the free
 queue is empty, the scheduler **preempts** the lowest-priority running request — under FCFS the most recently
@@ -264,10 +281,19 @@ hence collision resistance and salts.
 **Lookup, adopt, publish.** A new request walks its prompt's chain until the first miss and **adopts** every hit:
 refcount + 1, no compute, no new memory (`KVCacheManager.lookup()`, `allocate_slots(..., hits)`). The hit is capped
 at `(len(prompt) − 1) // B` blocks: the last token must be computed to get logits, so two identical 20-token prompts
-with B = 4 share 16 tokens, not 20 (vLLM: `max_cache_hit_length = num_tokens − 1`). Blocks are **published** once
-full — vLLM does it at scheduling time, which is safe because every layer writes the step's K/V before any request
-attends; the core publishes after the step that computed them (`cache_blocks()`), one step later and simpler to
-reason about.
+with B = 4 share 16 tokens, not 20 (vLLM: `max_cache_hit_length = num_tokens − 1`). A block is **published** as
+soon as the scheduler schedules the tokens that fill it — vLLM does it inside `allocate_slots`, the core in
+`Scheduler.schedule()` (`cache_blocks()`) — not after the step. That is safe because every layer writes the whole
+step's K/V before any request attends at that layer, and it matters for agents: requests admitted in the same step
+share a prefix that one of them is computing right then, so a burst of N parallel calls behind one system prompt
+prefills it once and holds one copy (notebook 03, worked example 3: three requests, one step, `[0, 176, 176]`
+tokens from cache). The core publishes a running request's blocks only once no request can be preempted in that
+step any more, so a request taken out of the batch never names blocks it will not compute.
+
+**No copy-on-write.** Only full, immutable blocks are shared, the hit stops short of the last prompt token, and a
+request always writes its new tokens into blocks of its own — so block-hash prefix caching never copies a shared
+block. Copy-on-write (the [paged-attention primer](../paged-attention/paged-attention-primer.md)) matters when
+sequences fork mid-block: parallel sampling and beam search.
 
 **Freed but still hittable.** A finished request's blocks go to the back of an LRU **free queue** with their names
 intact. They count as free — `vllm:kv_cache_usage_perc` does not include them — and they keep producing hits until
@@ -276,12 +302,15 @@ first**, so the private end of a prompt is evicted before the shared head: in no
 request evicted 13 blocks, the first 32 tokens of the system prompt were still cached. Prefix caching therefore
 costs no memory; it uses memory nobody else needs yet.
 
-**Hit accounting** is in tokens: `vllm:prefix_cache_queries` counts prompt tokens looked up,
-`vllm:prefix_cache_hits` those found (`CacheStats`). Three requests sharing a 183-token system prompt: the second
-and third hit 176 tokens (its 11 full blocks) of their 205–210 prompt tokens. The payoff is TTFT and prefill
-compute: 60 requests with 2,000–2,200-token prompts that share their first 1,800 tokens, H100 + Llama-3.1-8B — hit
-rate 84%, **TTFT p50 13 ms vs 74 ms** without caching, and the shared blocks cut peak KV use from 7% to 1% of the
-pool (SIMULATED).
+**Hit accounting** is in tokens: `vllm:prefix_cache_queries` counts prompt tokens looked up by new requests,
+`vllm:prefix_cache_hits` those found; a preempted request's re-lookup is counted apart (`preempted_queries` /
+`preempted_hits`, not exported), so a victim re-hitting its own blocks does not inflate the hit rate (`CacheStats`).
+Three requests sharing a 183-token system prompt: the second and third hit 176 tokens (its 11 full blocks) of
+their 205–210 prompt tokens. The payoff is TTFT and prefill compute: 60 requests with 2,000–2,200-token prompts
+that share their first 1,800 tokens, H100 + Llama-3.1-8B, arriving at 6/s — hit rate 84%, **TTFT p50 13 ms vs
+74 ms** without caching, and the shared blocks cut peak KV use from 7% to 1% of the pool; all 60 at once — TTFT
+p50 0.32 s vs 1.6 s (SIMULATED, notebook 03 worked example 6: `perf.Workload(n_requests=60, rate=6,
+prompt_len=(2000, 2200), output_len=(40, 80), shared_prefix=1800)`).
 
 **The radix-tree alternative.** SGLang's RadixAttention keeps cached prefixes in a radix tree at token granularity
 with LRU eviction of leaves. It reuses the partial last block too — always less than one block per request more than
@@ -301,9 +330,9 @@ Notebook 03's four-turn support session: a clock at the top of the system prompt
 same content append-only gives 81–86% from the second turn on (and more as the history grows). Two traps: the same
 text re-tokenized can yield different tokens at a boundary (so keep token ids or render deterministically), and
 across replicas the next turn must reach the replica that holds the prefix — prefix-affinity routing, 05. The
-agent-side view of context layout and caching is in
-[`07-application-agent-framework`](../../07-application-agent-framework/) (the platform lab's context-engineering
-notebook).
+agent-side view of context layout and caching is the platform lab's [context-engineering
+notebook](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/04_context_engineering_and_caching.ipynb)
+in [`07-application-agent-framework`](../../07-application-agent-framework/).
 
 ## 6. Sampling and structured output
 
@@ -343,13 +372,18 @@ default).
 compiled to an automaton; each step, the tokens that would leave the grammar get −∞ before sampling, and the
 automaton advances on the token drawn (`ChoiceFSM`: `start()`, `allowed(state)`, `advance(state, token)`). With a
 byte vocabulary that is trivial; with a 100k-token BPE vocabulary each token spans several characters, so the hard
-part is computing, per grammar state, which of 100k tokens keep the text legal — fast enough to overlap with the
-GPU's forward pass. That is what the backends optimise (vLLM: `xgrammar`, `guidance`/llguidance, `outlines`,
-`lm-format-enforcer`, `auto`, verify); SGLang adds "jump-forward" decoding through stretches the grammar fully
-determines. The guarantee is **syntax, not sense**: in notebook 04 the tiny model produces valid `{"answer": "yes"}`
-every time, while its own log-probability of that text is −124 nats — the grammar forced every character, and it
-would force a confident-looking answer from a model that knows nothing. Validate values downstream; watch the
-logprobs of constrained fields.
+part is computing, per grammar state, which of 100k tokens keep the text legal — a token is legal only if every
+one of its characters is, starting from that state — fast enough to overlap with the GPU's forward pass. Notebook
+04 (worked example 6, exercise 4.6) compiles the schema `{"n": <non-negative integer>}` into a 10-state character
+automaton and precomputes the next state of each of 36 multi-character tokens in each state: the token `{"n": `
+jumps six states at once, `07` is legal after `{"n": 1` but not right after `{"n": `, the text `{"n": 0}` comes
+out as 19 different token sequences in 300 samples (the re-tokenization trap of §5), and a `max_tokens` cap leaves
+a legal prefix that does not parse — check `finish_reason`. That precomputation is what the backends optimise
+(vLLM: `xgrammar`, `guidance`/llguidance, `outlines`, `lm-format-enforcer`, `auto`, verify); SGLang adds
+"jump-forward" decoding through stretches the grammar fully determines. The guarantee is **syntax, not sense**: in notebook 04 the tiny
+model produces a valid `{"answer": "yes"}` or `{"answer": "no"}` every time, while its own log-probability of that
+text is about −123 nats — the grammar forced every character, and it would force a confident-looking answer from a
+model that knows nothing. Validate values downstream; watch the logprobs of constrained fields.
 
 ## 7. Speculative decoding
 
@@ -383,32 +417,48 @@ E[tokens per pass] = 1 + α + α² + … + α^k = (1 − α^(k+1)) / (1 − α) 
 
 If one draft step costs c target steps, a round costs k c + 1, so `speedup = E / (k c + 1)` (`spec.speedup()`). For
 α = 0.8, c = 0.1 the best depth is k = 6 at 2.47× (k = 4, 5, 6, 7 give 2.40, 2.46, 2.47, 2.45 — a shallow optimum;
-`spec.best_k()`). In notebook 05 the tiny target and a 10× smaller draft agree with α ≈ 0.72 per position and the
-measured tokens per pass track the formula.
+`spec.best_k()`). In notebook 05 the tiny target and a 10× smaller draft agree with α ≈ 0.72 per position on
+average; the measured tokens per pass match the formula at k = 1 and 2 but fall short at k = 4 (2.61 vs 2.90).
+The formula assumes every position is accepted independently with one α; real acceptance varies by position (p10
+0.53, p90 0.87 there) and is correlated, so it over-predicts deep speculation — measure acceptance per position
+(vLLM: `vllm:spec_decode_num_accepted_tokens_per_pos`) before choosing k.
+
+**What vLLM measures.** vLLM's draft models draft **greedily** by default (`draft_sample_method="greedy"`, verify):
+x is the draft's argmax and the rejection sampler treats q as one-hot. The rule is still exact — accept x with
+probability p(x), otherwise resample from p with x removed — but the acceptance rate is then p(x), not Σ min(p, q);
+`"probabilistic"` samples x ~ q and uses the full q. Exactness also holds only for the `standard` rejection method:
+vLLM's `synthetic` method accepts with a calibrated probability to benchmark speed and does not preserve the
+distribution (verify).
 
 **Proposers** (vLLM's methods include `ngram`, `suffix`, `draft_model`, `eagle`, `eagle3`, `medusa`,
 `mlp_speculator` and model-specific MTP, verify):
 
 | Proposer | How it drafts | Cost c | When it wins |
 |---|---|---|---|
-| draft model | a small model with the **same tokenizer** runs k steps | ~0.1–0.4 (a 1B draft is ~0.38 of an 8B step here) | a good same-family small model exists |
+| draft model | a small model with the **same tokenizer** runs k steps | ~0.1–0.4 (a 1B draft is ~0.19 of an 8B step here, SIMULATED) | a good same-family small model exists |
 | n-gram / prompt lookup | copy what followed the last occurrence of the current n-gram in the context | ~0 | outputs quote the input: code edits, tool results, RAG answers |
 | EAGLE / EAGLE-3 | a light head on the target's own hidden states drafts features, then tokens | a few % | general chat; the common production choice |
 | MTP | extra prediction heads trained with the model (e.g. DeepSeek-V3) | a few % | models that ship them |
 
-**When it stops paying** (SIMULATED, notebook 05: Llama-3.1-8B target, Llama-3.2-1B draft, H100, α = 0.7, k = 4).
-The verify pass carries (k + 1) × batch tokens; once that crosses the knee, the extra positions cost real FLOPs:
+**When it stops paying** (SIMULATED, `perf.spec_speedup()`, notebook 05: Llama-3.1-8B target, Llama-3.2-1B draft,
+H100, α = 0.7, k = 4). A round is one engine step: it pays the step's fixed overhead (2 ms, as everywhere in this
+primer) once, k draft forwards at their roofline time plus an assumed 0.5 ms each (a CUDA-graph replay and a draft
+sample), and a verify pass of (k + 1) × batch tokens with logits at every position. Once the verify pass crosses
+the knee, the extra positions cost real FLOPs:
 
 | Context | B = 1 | B = 16 | B = 64 | B = 128 | B = 256 |
 |---|---|---|---|---|---|
-| 200 tokens | 1.09× | 1.10× | 1.04× | 0.81× | 0.60× |
-| 2,000 tokens | 1.09× | 1.13× | 1.21× | 1.26× | KV does not fit |
+| 200 tokens | 1.58× | 1.58× | 1.38× | 0.97× | 0.65× |
+| 2,000 tokens | 1.58× | 1.55× | 1.49× | 1.45× | KV does not fit |
 
-At short contexts speculation turns into a slow-down around 100 concurrent requests. At long contexts decode stays
-bound by KV reads, which verification amortises, so it keeps paying — and memory caps the batch first. The 1B
-draft's own cost (c ≈ 0.38) is why even batch 1 gains only ~1.1× here; an EAGLE-like head at c = 0.05 would give
-2.31×. Treat speculation as a per-workload setting: enable it for latency-sensitive, low-concurrency or copy-heavy
-traffic, and watch acceptance rate and ITL.
+The robust conclusion is the shape: at short contexts speculation turns into a slow-down past ~100–250 concurrent
+requests (128 here; 256 if a draft forward cost only its roofline time); at long contexts decode stays bound by KV
+reads, which verification amortises, so it keeps paying — and memory caps the batch first. The batch-1 figure
+rests on the overhead assumption: the draft costs c ≈ 0.19 of a target step here (its weights are 17% of the
+target's, plus the 0.5 ms), giving ~1.6×; with no per-draft overhead c ≈ 0.12 and ~1.9×; if every draft forward
+paid a full 2 ms step overhead, c ≈ 0.38 and only ~1.1×. Measure c on your stack before quoting a number. An
+EAGLE-like head at c = 0.05 would give 2.31×. Treat speculation as a per-workload setting: enable it for
+latency-sensitive, low-concurrency or copy-heavy traffic, and watch acceptance rate and ITL.
 
 **Inside the engine** the verify pass is just a (k + 1)-token chunk: the scheduler reserves "lookahead" slots for
 the draft tokens, and rejected positions are rolled back by lowering `num_computed_tokens` — their K/V slots are
@@ -435,7 +485,11 @@ won: one outlier stretches a shared scale and erases everyone else's resolution.
 | INT4 groups of 32 | 4.5 | 9.8% | 20.2 dB |
 
 Each bit is worth ~6 dB. Scales are not free: a 16-bit scale per group of 128 adds 16/128 bits, so INT4 g128 costs
-**4.125 bits per weight** and an 8B model 4.14 GB (`quant.bits_per_weight()`, `quant.weight_gb()`). On well-behaved
+**4.125 bits per weight** (`quant.bits_per_weight()`). Nor is every weight quantized: GPTQ, AWQ and FP8 checkpoints
+quantize the transformer blocks' linear layers and keep the embedding table and LM head in 16-bit. For
+Llama-3.1-8B that is 6.98 B weights at 4.125 bits (3.60 GB) plus an untied 128,256 × 4,096 embedding and LM head
+in bf16 (2.10 GB): **5.70 GB**, not the 4.14 GB that 8.03 B × 4.125 bits suggests (`quant.weight_gb(...,
+keep16_params=)`, `perf.LLM.weight_bytes`; published checkpoint sizes, verify). On well-behaved
 weights INT8 per channel beats FP8 (43 vs 32 dB); FP8's strength is range, which matters for activations. With one
 output channel 100× larger than the rest, per-tensor INT8 reports a 3.4% aggregate error while the 31 normal
 channels are at 62% — **aggregate metrics hide per-channel damage** (notebook 06).
@@ -449,19 +503,20 @@ and folds `s` into the weights, leaving `XW` unchanged (`quant.smoothquant_scale
 notebook 06).
 
 **What each buys** — Llama-3.1-8B on a 24 GB L4, decode at 1K context, an 1,800-token prefill, sessions of 1,800 +
-200 tokens (SIMULATED, notebook 06):
+200 tokens; embedding and LM head in bf16 throughout (SIMULATED, notebook 06):
 
 | Scheme | Weights | Decode, batch 1 | Decode, batch 32 | Prefill 1.8K | Sessions that fit |
 |---|---|---|---|---|---|
 | bf16 | 16.1 GB | 65 ms | 82 ms | 360 ms | 17 |
-| INT8 weight-only | 8.0 GB | 34 ms | 51 ms | 360 ms | 47 |
-| INT4 weight-only g128 | 4.1 GB | 19 ms | 36 ms | 360 ms | 62 |
-| FP8 W8A8 | 8.0 GB | 34 ms | 51 ms | 181 ms | 47 |
-| FP8 W8A8 + FP8 KV | 8.0 GB | 34 ms | 42 ms | 181 ms | 95 |
-| INT4 weight-only + FP8 KV | 4.1 GB | 18 ms | 27 ms | 360 ms | 125 |
+| INT8 weight-only | 9.1 GB | 36 ms | 53 ms | 360 ms | 43 |
+| INT4 weight-only g128 | 5.7 GB | 22 ms | 39 ms | 360 ms | 56 |
+| FP8 W8A8 | 9.1 GB | 36 ms | 53 ms | 181 ms | 43 |
+| FP8 W8A8 + FP8 KV | 9.1 GB | 36 ms | 44 ms | 181 ms | 87 |
+| INT4 weight-only + FP8 KV | 5.7 GB | 22 ms | 30 ms | 360 ms | 113 |
 
-Decode is the weight read, so INT4 weight-only is ~3.5× faster at batch 1 (not 3.9×: the KV read and per-step
-overhead do not shrink). Prefill is compute-bound, so only FP8 W8A8 speeds it up — and only on FP8 hardware (the
+Decode is the weight read, so INT4 weight-only is ~3× faster at batch 1 — not the 3.9× its linear layers' bytes
+suggest, because the 16-bit LM head (1.05 GB, read every step), the KV read and the per-step overhead do not
+shrink. Prefill is compute-bound, so only FP8 W8A8 speeds it up — and only on FP8 hardware (the
 core refuses FP8 compute on a T4 or A100). The **KV cache** is quantized separately (`--kv-cache-dtype fp8`, e4m3 or
 e5m2, per-tensor scales that default to 1.0 unless calibrated, verify): half the bytes, twice the sessions — the
 core's FP8 KV emulation costs 2e-5 nats of KL and 1% of top-1 agreement on the tiny model. On a small GPU,
@@ -485,7 +540,9 @@ and expert parallelism inside the NVLink domain, pipeline and data parallelism a
 MLP's gate/up: each GPU computes a slice of the output features, no communication) with a *row-parallel* one (the
 attention output projection, the MLP's down projection: each GPU holds a slice of the input features and produces a
 partial sum). One **all-reduce** after each row-parallel matmul restores the full activation — **two all-reduces per
-layer per forward pass**, each of `tokens × d_model` values (`perf.tp_allreduces()`). A 70B model (80 layers, d =
+layer per forward pass**, each of `tokens × d_model` values (`perf.tp_allreduces()`; notebook 01's exercise 1.6
+splits the tiny model's MLP across two "ranks" in numpy and checks that the sum of their partials is the dense
+output). A 70B model (80 layers, d =
 8,192): 160 all-reduces per step; at 64 decoding requests each is 1 MiB (latency-bound: the α term dominates, which
 is why engines use custom all-reduce kernels and NVLink), at a 4,096-token prefill chunk 64 MiB (bandwidth-bound).
 Heads are split across GPUs, so the KV cache is too: with 8 KV heads, TP = 8 puts one KV head on each GPU; beyond
@@ -506,10 +563,11 @@ linearly; what matters is routing requests to the replica that holds their prefi
 
 **Choosing.** Use the smallest TP that fits weights plus the KV cache you need; add replicas for throughput. An 8B
 model fits one 24 GB GPU (§4); a 70B model needs 141 GB in bf16 — TP = 2 on 80 GB GPUs leaves almost nothing for KV,
-TP = 4 leaves ~37 GB per GPU for KV at 90% utilisation, or INT4 (36 GB, exercise 6.3) fits one GPU. vLLM's flags:
+TP = 4 leaves ~37 GB per GPU for KV at 90% utilisation, or INT4 (39.5 GB with its 16-bit embedding and LM head,
+exercise 6.3) fits one GPU. vLLM's flags:
 `--tensor-parallel-size`, `--pipeline-parallel-size`, `--data-parallel-size`, `--enable-expert-parallel` (verify).
-To try TP yourself you need two GPUs (tier T2): Kaggle's free 2×T4 shows the mechanics over PCIe, a rented NVLink
-pair shows the speed ([`COMPUTE.md`](../../COMPUTE.md)).
+The split itself is learnable at T0 (exercise 1.6); to measure it you need two GPUs (tier T2): Kaggle's free 2×T4
+shows the mechanics over PCIe, a rented NVLink pair shows the speed ([`COMPUTE.md`](../../COMPUTE.md)).
 
 ## 10. Multi-LoRA serving
 
@@ -550,7 +608,9 @@ What the engine manages:
 | **goodput** | requests per second that met *every* SLO (DistServe's definition) | computed by the load generator |
 
 Report percentiles (p50, p90, p99), never averages: the tail is what users feel and what SLOs bind. Goodput is the
-honest summary — throughput measured while TTFT is ten seconds is not capacity (`SimResult.goodput()`).
+honest summary — throughput measured while TTFT is ten seconds is not capacity (`SimResult.goodput()`; in notebook
+02 a saturated engine streams 1,700–2,300 tok/s while serving at most 0.5 requests/s within a 1 s TTFT and 50 ms
+TPOT SLO, SIMULATED).
 
 **How to load an engine.**
 
@@ -571,7 +631,7 @@ honest summary — throughput measured while TTFT is ten seconds is not capacity
 
 | Knob (vLLM flag) | Raises | Costs |
 |---|---|---|
-| `max_num_batched_tokens` | prefill efficiency, TTFT | ITL tail (§3) |
+| `max_num_batched_tokens` | TTFT; capacity, up to a few hundred tokens past the knee (§3) | ITL tail (§3) |
 | `max_num_seqs` | throughput (bigger batches) | ITL, KV pressure, preemptions |
 | `gpu_memory_utilization` | KV blocks → concurrency | headroom for activations and other processes (OOM risk) |
 | `max_model_len` | longest request served | KV per request; with no chunking, the budget |
@@ -612,7 +672,7 @@ consume.
 | §1–8 mechanics | `mini-engine-core` notebooks; the lab's fake server | — | — |
 | real TTFT/ITL, knobs, prefix caching | the lab's T0 fake server (labelled) | Colab / Kaggle T4 (free, fp16 only — no bf16 on Turing), RunPod / Vast.ai 24 GB GPU (containers, ~$0.3–0.4/hr), Lambda (VMs) | a `g2-standard-4` L4 VM (Spot) |
 | FP8 (sm_89+) | FP8 emulation in `quant.py` | an RTX 4090 / L4 / H100 rental | L4 (G2) or H100 (A3) |
-| tensor parallelism (§9) | `perf.tp_allreduces()` arithmetic | Kaggle 2×T4 (PCIe), a rented 2–8× NVLink box | A2/A3 multi-GPU shapes |
+| tensor parallelism (§9) | notebook 01 exercise 1.6 (a column/row-parallel MLP in numpy); `perf.tp_allreduces()` | Kaggle 2×T4 (PCIe), a rented 2–8× NVLink box | A2/A3 multi-GPU shapes |
 | serve an endpoint | — | `docker run vllm/vllm-openai` on any GPU box | **Cloud Run with GPUs** (L4 or RTX PRO 6000; per-second billing; scale to zero) · **GKE** (vLLM Deployment on an L4 node pool; autoscaling and routing in 05) · **Vertex AI** (Model Garden deploys open models on managed endpoints with vLLM-based containers, verify) |
 | TPUs | — | — | GKE with TPU v5e/v6e or v7 "Ironwood" (GA 2026-04-22); vLLM's TPU backend (verify name and status) |
 
@@ -644,9 +704,10 @@ at realistic lengths and report goodput against the SLO."
 1. *Why does adding requests to a decode batch barely slow it down, and when does that stop?* — Below the knee (~300
    tokens on an H100 in bf16; `peak × bytes_per_param / (2 × bandwidth)`) a step is the weight read, shared by every
    token in it. It stops when the batch's tokens pass the knee, or earlier at long contexts, where each request's KV
-   read adds bytes (64 decodes at 2K context add 16.8 GB to the 15 GB of weights).
+   read adds bytes (64 decodes at 2,048 tokens of context add 17.2 GB to the 15 GB of weights).
 2. *p99 ITL spikes whenever a long document arrives. Diagnose and fix.* — Prefill/decode interference: the prompt's
-   step is long and every co-scheduled decode waits for it (367 ms vs 17 ms on an L4 for an 8K prompt). Check that
+   step is long and every co-scheduled decode waits for it (the roofline model, §3: 367 ms vs 17 ms on an L4 for
+   an 8K prompt, SIMULATED). Check that
    chunked prefill is on and lower `max_num_batched_tokens` until the worst step (all decodes + one full chunk)
    meets the SLO; if prefill-heavy traffic still hurts decode, disaggregate prefill and decode (05).
 3. *`vllm:num_preemptions` rises at peak and TTFT p99 is 5×. What is happening?* — Running requests outgrow the KV
@@ -661,12 +722,13 @@ at realistic lengths and report goodput against the SLO."
 5. *Does speculative decoding change model outputs? When would you turn it off?* — No: accept with min(1, p/q) and
    resample rejections from the normalised residual max(0, p − q), and the emitted tokens are distributed exactly as
    the target's. Turn it off (or lower k) at high concurrency with short contexts, where the verify pass's extra
-   positions cost real compute — the simulation turns into a slow-down around 100 concurrent requests at 200-token
-   contexts.
+   positions cost real compute — the roofline simulation (§7) turns it into a slow-down past ~100–250 concurrent
+   requests at 200-token contexts.
 6. *INT4 or FP8 for an 8B model on a 24 GB L4 that must hold 48 concurrent 2K-token sessions and prefill 1.8K tokens
-   in 300 ms?* — FP8 W8A8 with an FP8 KV cache: it halves prefill (FP8 tensor cores; 181 ms) and holds 95 sessions.
-   INT4 weight-only wins decode (3.5×) and memory but its prefill stays at 360 ms, because weight-only formats cut
-   bytes, not FLOPs. Then gate the choice on task evals against bf16.
+   in 300 ms?* — FP8 W8A8 with an FP8 KV cache: it halves prefill (FP8 tensor cores) and doubles KV capacity —
+   181 ms and 87 sessions in the roofline model (§8, SIMULATED). INT4 weight-only wins decode (~3×) and memory but
+   its prefill stays at 360 ms, because weight-only formats cut bytes, not FLOPs. Then gate the choice on task
+   evals against bf16.
 
 ---
 
@@ -693,7 +755,7 @@ at realistic lengths and report goodput against the SLO."
 | Top-p / min-p | keep the smallest set reaching mass p / tokens with prob ≥ min_p × the top token's |
 | Structured output | masking logits with a grammar automaton so every output parses |
 | Speculative decoding | drafting k tokens cheaply and verifying them in one target pass with exact rejection sampling |
-| Acceptance rate α | Σ min(p, q) = 1 − TV(p, q): the chance a draft token survives |
+| Acceptance rate α | Σ min(p, q) = 1 − TV(p, q) for a sampled draft (p(x) for a greedy one): the chance a draft token survives |
 | EAGLE / MTP | draft heads on the target's hidden states / multi-token prediction heads trained with the model |
 | Weight-only quantization | low-bit weights dequantized inside the GEMM (W4A16, W8A16): saves bytes, not FLOPs |
 | W8A8 | weights and activations in 8 bits (FP8 or INT8), computed natively by the tensor cores |
@@ -767,23 +829,31 @@ main branch source on that date — re-check them against the release you pin.
   0.92 on main; `watermark` 0.0; `scheduler_reserve_full_isl` true; policies `fcfs` and `priority` (lower first);
   API-server defaults for `max_num_batched_tokens` / `max_num_seqs` (2,048/256 below 70 GB or on A100; 8,192/1,024
   H100/H200-class; 16,384/1,024 at ≥160 GB); chunked prefill on by default and `max_num_batched_tokens ≥
-  max_model_len` required without it; `long_prefill_token_threshold`; preemption by recompute only in V1 and
-  `kv_offloading_size` for CPU offload; `max_cache_hit_length = num_tokens − 1`; tail-first freeing into an LRU free
-  queue; the start-up error when one `max_model_len` sequence cannot fit the KV cache; `async_scheduling` on unless
-  disabled; `include_stop_str_in_output` false by default.
+  max_model_len` required without it; `long_prefill_token_threshold` (default 0 = off),
+  `long_prefill_token_threshold_adaptive` and `max_num_active_seqs` in `SchedulerConfig` (no partial-prefill cap
+  on main); preemption by recompute only in V1 and `kv_offloading_size` for CPU offload;
+  `max_cache_hit_length = num_tokens − 1`; blocks cached inside `KVCacheManager.allocate_slots` (scheduling time);
+  prefix-cache stats recorded with a `preempted` flag, preempted re-lookups kept out of
+  `vllm:prefix_cache_queries/_hits`; tail-first freeing into an LRU free queue; the start-up error when one
+  `max_model_len` sequence cannot fit the KV cache; `async_scheduling` on unless disabled;
+  `include_stop_str_in_output` false by default; `RequestStatus` names (`FINISHED_STOPPED`,
+  `FINISHED_LENGTH_CAPPED`, `FINISHED_ABORTED`, …).
 - **vLLM sampling and outputs:** the sampler order (allowed tokens/bad words/logit bias → penalties → greedy below
   1e-5 → temperature → min-p → top-k/top-p); `logprobs_mode` default `raw_logprobs`; `top_k` 0 or −1 disables;
   batch-invariant mode; structured-output backends `auto`, `xgrammar`, `guidance`, `outlines`, `lm-format-enforcer`;
   speculative methods (`ngram`, `suffix`, `draft_model`, `eagle`, `eagle3`, `medusa`, `mlp_speculator`, MTP
-  variants); quantization methods (`awq`, `gptq`, `fp8`, `compressed-tensors`, `modelopt_fp4`, `mxfp4`, …);
+  variants); `draft_sample_method` default `greedy` (or `probabilistic`); `rejection_sample_method` default
+  `standard` (also `synthetic`, `block`); `vllm:spec_decode_num_accepted_tokens_per_pos`; quantization methods (`awq`, `gptq`, `fp8`, `compressed-tensors`, `modelopt_fp4`, `mxfp4`, …);
   `kv_cache_dtype` values (`fp8` = `fp8_e4m3`, `fp8_e5m2`) and default KV scales of 1.0; LoRA flags `max_loras`,
   `max_cpu_loras`, `max_lora_rank`; parallelism flags.
 - **vLLM metric names** (FACTS, from `vllm/v1/metrics/loggers.py`); `vllm:e2e_request_latency_seconds` read from the
   same file.
 - **GPU figures in `perf.GPUS`** (dense 16-bit tensor FLOP/s, memory bandwidth, capacity, FP8 support): T4 65
   TFLOP/s, 320 GB/s, 16 GB; L4 121 TFLOP/s (242 sparse), 300 GB/s, 24 GB; A100-80GB SXM 312 TFLOP/s, 2.039 TB/s;
-  H100 SXM 989 TFLOP/s, 3.35 TB/s, 80 GB. The efficiencies (60% FLOPs, 80% bandwidth) and the 2 ms per-step overhead
-  are assumptions.
+  H100 SXM 989 TFLOP/s, 3.35 TB/s, 80 GB. The efficiencies (60% FLOPs, 80% bandwidth), the 2 ms per-step overhead
+  and the 0.5 ms per draft forward in `perf.spec_speedup()` are assumptions.
+- **Quantized checkpoints** keep the embedding table and LM head in 16-bit (GPTQ/AWQ leave `lm_head` unquantized;
+  FP8 compressed-tensors checkpoints list it under `ignore`); published sizes of specific checkpoints.
 - **Model configs in `perf.LLMS`:** Qwen2.5-0.5B (24 layers, 14 heads, 2 KV heads, head_dim 64, tied), Qwen3-0.6B
   (28, 16, 8, 128, tied), Qwen2.5-1.5B (28, 12, 2, 128, tied), Llama-3.2-1B (16, 32, 8, 64, tied), Llama-3.1-8B (32,
   32, 8, 128, untied, vocab 128,256); the 70B figures (80 layers, d = 8,192, 70.6 B parameters).

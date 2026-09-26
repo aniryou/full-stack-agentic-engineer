@@ -12,12 +12,18 @@
 #
 # | Metric | Definition | What it is about |
 # |---|---|---|
-# | **TTFT** | first token chunk − send time | queueing + prefill (+ network) |
-# | **ITL** | gaps between consecutive chunks | one decode step, stalls when a prefill shares the step |
+# | **TTFT** | first chunk carrying a token − send time | queueing + prefill (+ network) |
+# | **ITL** | gaps between consecutive token-carrying chunks | one decode step, stalls when a prefill shares the step |
 # | **TPOT** | (E2E − TTFT) / (output tokens − 1), per request | the per-token pace a user feels |
 # | **E2E** | last chunk − send time | the whole request |
 # | **throughput** | tokens (or requests) / wall time of the run | capacity |
 # | **goodput** | requests meeting *every* SLO / wall time | capacity you can sell |
+#
+# One deliberate difference from `vllm bench serve`: a chat stream opens with a role-only chunk
+# (`"delta": {"role": "assistant", "content": ""}`), sent just before the first token. vLLM's
+# benchmark counts it as a chunk, so its TTFT comes from it and each chat request's ITL list gets
+# one extra ~0 ms gap; this lab skips it, so TTFT is the same and chat ITL has one fewer,
+# near-zero entry (the mean reads higher by ~1/n for n tokens). For completions they are identical.
 #
 # The engine's own `/metrics` gives the server-side view: queue depth, batch size, KV usage and
 # latency *histograms*, whose percentiles are interpolations inside buckets. How requests are sent
@@ -27,7 +33,8 @@
 # %%
 import json, math, threading, time, urllib.request
 from servelab import env, metrics as M
-from servelab.bench import (SLO, Lengths, random_requests, run_closed_loop, run_open_loop, run_sync, summarize)
+from servelab.bench import (SLO, Lengths, arrival_times, random_requests, run_closed_loop, run_open_loop, run_sync,
+                            summarize, warm_up)
 from servelab.bench.client import RequestResult, stream_request
 from servelab.bench.runner import _session
 from servelab.fake_engine import EngineConfig
@@ -76,11 +83,17 @@ print(f"output tokens {r.output_tokens}, E2E {r.latency * 1e3:.1f} ms, TPOT {r.t
 # %% [markdown]
 # ## Worked example: an open-loop run, with the engine's view of the same window
 #
-# 40 requests at 6 req/s (Poisson arrivals), 512-token prompts, 64 output tokens. We scrape
-# `/metrics` before and after, so the engine's counters describe exactly this run.
+# 40 requests at 6 req/s (Poisson arrivals), 512-token prompts, 64 output tokens. First two
+# warm-up requests: on a real engine the first requests pay one-off costs (connections,
+# tokenizer and sampler initialisation, lazily compiled paths) that do not belong in a steady-state
+# number; the fake server has none, but the habit is the same at every tier. They go out *before*
+# the "before" scrape, and `warm_up` changes their first token so they cannot leave prefix-cache
+# hits behind for the measured prompts. Then we scrape `/metrics` before and after, so the
+# engine's counters describe exactly this run.
 
 # %%
 reqs = random_requests(40, Lengths.fixed(512), Lengths.fixed(64), seed=1)
+warm_up(URL, reqs, 2, headers=H)
 before = M.scrape(URL, headers=H)
 run = run_open_loop(URL, reqs, rate=6.0, seed=1, headers=H)
 after = M.scrape(URL, headers=H)
@@ -113,7 +126,7 @@ assert math.isnan(request_metrics(0.0, [0.1], 1)["tpot"])
 x = run.results[0]
 mine = request_metrics(x.start, x.chunk_times, x.output_tokens)
 assert math.isclose(mine["ttft"], x.ttft) and math.isclose(mine["tpot"], x.tpot) and len(mine["itl"]) == len(x.itl)
-print("✅ request_metrics matches the benchmark's definitions (and vLLM's)")
+print("✅ request_metrics matches the benchmark's definitions (vLLM's, minus the chat role-only chunk)")
 
 # %% [markdown]
 # ## Exercise 2.2 — goodput
@@ -219,13 +232,22 @@ print(f"[SIMULATED] closed loop, 4 users: {cs.request_throughput:.2f} req/s, TTF
       f"mean E2E {cs.e2el.mean:.0f} ms")
 
 # %% [markdown]
-# ## Exercise 2.4 — capacity from Little's law, and which loop tells the truth
+# ## Exercise 2.4 — capacity from Little's law, and the queue an open loop builds
 #
 # Little's law says requests in the system = arrival rate × time each spends there. With at most
 # `max_num_seqs` requests running, each taking `mean_e2e_s`, the engine completes at most
-# `capacity_rps = max_num_seqs / mean_e2e_s` requests per second. Implement it, then predict: if we
-# now send the *same* requests **open-loop at twice that capacity**, which run shows the larger TTFT
-# p99? Return `"open"` or `"closed"` from `predict_worse_tail()`.
+# `capacity_rps = max_num_seqs / mean_e2e_s` requests per second. Implement it; the check feeds it
+# the closed loop's mean E2E.
+#
+# Then predict what an **open loop** faster than that capacity does. `n` requests arrive over
+# `n / rate` seconds, but the engine admits a waiting request only when a running one finishes, and
+# finishes them at `capacity` per second. So the last request is admitted when request
+# `n − max_num_seqs` completes — about `(n − max_num_seqs) / capacity` seconds after the start —
+# although it arrived at `n / rate`. Write `last_request_wait_s(n, rate, capacity, max_num_seqs)`
+# (0 when the engine keeps up). The check sends 40 more requests of the same shape (fresh prompts,
+# so the prefix cache cannot help) open-loop at twice the capacity: the served throughput should
+# match your capacity (derived from a *different* run), and the worst TTFT your wait — seconds,
+# where the closed loop on the same server showed tens of milliseconds.
 
 # %% exercise
 def capacity_rps(max_num_seqs: int, mean_e2e_s: float) -> float:
@@ -233,24 +255,27 @@ def capacity_rps(max_num_seqs: int, mean_e2e_s: float) -> float:
     return max_num_seqs / mean_e2e_s
     ### END SOLUTION
 
-def predict_worse_tail() -> str:
+def last_request_wait_s(n: int, rate: float, capacity: float, max_num_seqs: int) -> float:
     ### BEGIN SOLUTION
-    return "open"
+    return max(0.0, (n - max_num_seqs) / capacity - n / rate)
     ### END SOLUTION
 
-worse_tail = predict_worse_tail()
-
 # %% check
+assert last_request_wait_s(10, 1.0, 2.0, 4) == 0.0 and math.isclose(last_request_wait_s(40, 8.0, 4.0, 4), 4.0)
 cap = capacity_rps(4, cs.e2el.mean / 1000)
-assert abs(cap / cs.request_throughput - 1) < 0.25, (cap, cs.request_throughput)
-opened = run_open_loop(SMALL, work(2), rate=2 * cap, seed=3)
+opened = run_open_loop(SMALL, work(3), rate=2 * cap, seed=3)
 os_ = opened.summary()
-print(f"[SIMULATED] open loop at {2 * cap:.1f} req/s: TTFT p99 {os_.ttft.p[99]:.0f} ms vs closed {cs.ttft.p[99]:.0f} ms; "
-      f"throughput {os_.request_throughput:.2f} vs {cs.request_throughput:.2f} req/s")
-assert worse_tail == ("open" if os_.ttft.p[99] > cs.ttft.p[99] else "closed")
-assert worse_tail == "open"
+wait = last_request_wait_s(40, 2 * cap, cap, 4)
+worst = max(r.ttft for r in opened.results if r.ok)
+print(f"[SIMULATED] capacity {cap:.2f} req/s (closed loop, Little's law); open loop at {2 * cap:.1f} req/s served "
+      f"{os_.request_throughput:.2f} req/s")
+print(f"[SIMULATED] predicted wait of the last request {wait:.2f} s; worst TTFT measured {worst:.2f} s "
+      f"(closed loop TTFT p99 {cs.ttft.p[99] / 1000:.3f} s)")
+assert abs(os_.request_throughput / cap - 1) < 0.25, (os_.request_throughput, cap)
+assert abs(worst / wait - 1) < 0.25, (worst, wait)
+assert os_.ttft.p[99] > 10 * cs.ttft.p[99]
 small.stop()
-print("✅ same server, same capacity: the closed loop slowed its own arrivals and hid the queue")
+print("✅ same server, same capacity: the open loop queues the excess; the closed loop slowed its own arrivals and hid it")
 
 # %% [markdown]
 # ## Exercise 2.5 — Little's law against the engine's gauges
@@ -289,6 +314,46 @@ observed = sum(samples) / len(samples)
 assert abs(predicted / observed - 1) < 0.35, (predicted, observed)
 print(f"✅ Little's law: predicted {predicted:.2f} in flight, engine gauges averaged {observed:.2f}")
 
+# %% [markdown]
+# ## Exercise 2.6 — the workload's shape: burstiness and long tails
+#
+# Two runs at the same mean rate can load an engine very differently. `vllm bench serve
+# --burstiness b` (and `arrival_times` here) draws the gaps between requests from a Gamma
+# distribution with shape `b` and mean `1 / rate`, whose coefficient of variation (std / mean) is
+# `1 / sqrt(b)`: 1 for Poisson, 2 at `b = 0.25`. Write `gap_cv(burstiness)`. The check samples the
+# gaps, then runs the same mean rate four ways — Poisson versus bursty arrivals, fixed 512-token
+# prompts versus a lognormal with the same median (most prompts short, a few 5x longer) — and
+# compares the medians with the tails.
+
+# %% exercise
+def gap_cv(burstiness: float) -> float:
+    ### BEGIN SOLUTION
+    return 1.0 / math.sqrt(burstiness)
+    ### END SOLUTION
+
+# %% check
+for b in (1.0, 0.25):
+    ts = arrival_times(4000, rate=10.0, burstiness=b, seed=11)
+    gaps = [y - x for x, y in zip([0.0] + ts, ts)]
+    mean = sum(gaps) / len(gaps)
+    sampled = (sum((g - mean) ** 2 for g in gaps) / len(gaps)) ** 0.5 / mean
+    assert abs(sampled / gap_cv(b) - 1) < 0.1, (b, sampled)
+shapes = {}
+for i, (name, lengths, burst) in enumerate((("fixed, Poisson", Lengths.fixed(512), 1.0),
+                                            ("fixed, bursty b=0.25", Lengths.fixed(512), 0.25),
+                                            ("lognormal, Poisson", Lengths.lognormal(512, 0.8, lo=16, hi=3000), 1.0))):
+    # fresh prompts per run (a repeated prompt would hit the prefix cache), the same arrival seed
+    shp = run_open_loop(URL, random_requests(48, lengths, Lengths.fixed(64), seed=21 + i), rate=8.0,
+                        burstiness=burst, seed=21, headers=H).summary()
+    shapes[name] = shp
+    print(f"[{LABEL}] {name:22s} TTFT p50 {shp.ttft.median:7.1f} ms  p99 {shp.ttft.p[99]:7.1f} ms  "
+          f"| ITL p99 {shp.itl.p[99]:6.1f} ms")
+if target.simulated:      # on a real engine, print and judge: 48 requests are a small sample
+    assert shapes["fixed, bursty b=0.25"].ttft.p[99] > shapes["fixed, Poisson"].ttft.p[99]
+    assert shapes["lognormal, Poisson"].ttft.p[99] > shapes["fixed, Poisson"].ttft.p[99]
+print(f"✅ gap CV {gap_cv(1.0):.0f} (Poisson) and {gap_cv(0.25):.0f} (b=0.25): same mean rate, bursts and long prompts "
+      "move the tail — so a capacity number must say which arrival process and length distribution it assumes")
+
 # %%
 target.stop()
 
@@ -313,3 +378,7 @@ target.stop()
 #
 # **Drill 3.** *Why is ITL not the same as TPOT?* — ITL is per chunk; one chunk can carry several
 # tokens (speculative decoding, `--stream-interval`), and TPOT averages the whole decode per token.
+#
+# **Drill 4.** *A vendor quotes 12 req/s at p99 TTFT 300 ms. What do you ask?* — Open or closed
+# loop; arrival process (Poisson, burstiness); prompt and output length distributions (fixed 512
+# or long-tailed); warm-up; and whether TTFT was measured at the client. Each changes the tail.

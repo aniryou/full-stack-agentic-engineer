@@ -34,6 +34,18 @@ def test_generated_manifests_are_up_to_date():
     assert render.stale() == [], "run: python3 tools/render_manifests.py"
 
 
+def test_render_check_catches_orphans(tmp_path):
+    for rel, text in render.rendered_files().items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text)
+    assert render.stale(tmp_path) == []
+    orphan = tmp_path / "deploy/kind/workloads/s9-renamed/10-old.yaml"      # a scenario renamed in scenarios.py
+    orphan.parent.mkdir(parents=True)
+    orphan.write_text("apiVersion: batch/v1\nkind: Job\n")
+    assert render.orphans(tmp_path) == ["deploy/kind/workloads/s9-renamed/10-old.yaml"]
+    assert any("orphan" in s for s in render.stale(tmp_path))
+
+
 def test_every_object_uses_a_pinned_api_version():
     objs = list(all_objects())
     assert len(objs) > 50
@@ -116,6 +128,9 @@ def test_compute_class_uses_documented_fields():
             assert set(o["spec"]) <= top, f
             for p in o["spec"]["priorities"]:
                 assert set(p) <= rung, (f, p)
+                assert set(p.get("gpu", {})) <= {"type", "count", "driverVersion", "gpuSharing"}, (f, p)
+                # the vLLM image is a CUDA 13 build (driver >= 580): auto-created pools must not get "default"
+                assert p.get("gpu", {}).get("driverVersion") == "latest", (f, p)
             assert o["spec"]["whenUnsatisfiable"] in ("DoNotScaleUp", "ScaleUpAnyway")
 
 
@@ -178,6 +193,12 @@ def test_other_scripts_dry_run():
     assert "name: kwok-b1-s1-h1" in kw and "32 fake nodes x 8 GPUs" in kw
     assert "kwok/releases/download/v0.8.0/kwok.yaml" in kw and "delete stage pod-complete" in kw
     assert "kind delete cluster --name gpu-lab" in _dry(["deploy/kind/down.sh"])
+    vm = _dry(["deploy/gpu-vm/up.sh"], TIME_SLICING_REPLICAS="4")
+    assert "INSTALL_K3S_CHANNEL=v1.34" in vm and "--version 0.20.1 --set runtimeClassName=nvidia --set gfd.enabled=true" in vm
+    assert "replicas: 4" in vm and "config.map.config=" in vm and "10-smoke.yaml" in vm
+    assert "replicas:" not in _dry(["deploy/gpu-vm/up.sh"])            # whole GPUs by default
+    assert "k3s-uninstall.sh" in _dry(["deploy/gpu-vm/down.sh"])
+    assert "50-time-sharing-l4.yaml" in _dry(["deploy/gke/apply-examples.sh", "sharing"], KUBE_CONTEXT="gke_p_z_gpu-lab")
     gk = _dry(["deploy/gke/install-addons.sh"], KUBE_CONTEXT="gke_p_z_gpu-lab")
     assert "--context gke_p_z_gpu-lab apply --server-side" in gk and "10-kueue-gke.yaml" in gk
     assert "00-smoke-l4.yaml" in _dry(["deploy/gke/apply-examples.sh", "smoke"], KUBE_CONTEXT="gke_p_z_gpu-lab")
@@ -188,8 +209,9 @@ def test_versions_are_pinned_once():
                if "=" in line and not line.startswith("#"))
     assert env["KUEUE_VERSION"] == "v0.19.6" and env["JOBSET_VERSION"] == "v0.12.0" and env["LWS_VERSION"] == "v0.11.0"
     assert env["KIND_NODE_IMAGE"].startswith("kindest/node:v1.34.") and "@sha256:" in env["KIND_NODE_IMAGE"]
+    assert env["K3S_CHANNEL"] == "v1.34" and env["NVDP_CHART_VERSION"] == "0.20.1"
     for s in SCRIPTS:   # no script hard-codes a release
-        assert not re.search(r"v0\.19\.6|v0\.12\.0|v0\.11\.0", s.read_text()), s
+        assert not re.search(r"v0\.19\.6|v0\.12\.0|v0\.11\.0|0\.20\.1|v1\.34\b", s.read_text()), s
 
 
 def test_terraform_contract():
@@ -203,5 +225,15 @@ def test_terraform_contract():
     assert example <= declared
     pools = (tf / "node_pools.tf").read_text()
     for needle in ("spot            = var.gpu_spot", "min_node_count = 0", "gpu_driver_version = var.gpu_driver_version",
-                   "flex_start      = true", "queued_provisioning", 'consume_reservation_type = "NO_RESERVATION"'):
+                   "flex_start      = true", "queued_provisioning", 'consume_reservation_type = "NO_RESERVATION"',
+                   'gpu_sharing_strategy       = "TIME_SHARING"', "max_shared_clients_per_gpu = var.max_shared_clients_per_gpu",
+                   "count              = var.enable_time_sharing_pool ? 1 : 0"):
         assert needle in pools, needle
+
+
+def test_time_slicing_config_has_one_source():
+    from k8sgpu import gpuvm
+    script = (DEPLOY / "gpu-vm" / "up.sh").read_text()
+    heredoc = script.split('cat >"$cfg" <<EOF\n', 1)[1].split("\nEOF", 1)[0] + "\n"
+    assert heredoc == gpuvm.TIME_SLICING_CONFIG.format(replicas="$REPLICAS")
+    assert gpuvm.time_sliced_allocatable(8, 10) == 80                    # the device plugin README's example

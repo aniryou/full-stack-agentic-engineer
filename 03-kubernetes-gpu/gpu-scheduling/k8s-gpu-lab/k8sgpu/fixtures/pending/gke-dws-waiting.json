@@ -1,6 +1,6 @@
 {
  "description": "A 2-node gang behind the DWS ProvisioningRequest admission check: quota reserved, capacity not yet provisioned.",
- "source": "GKE event/condition text written in the documented format - sample output in the documented format (illustrative); verify against your cluster",
+ "source": "GKE event/condition text written by hand for this lab - sample output in the documented format (illustrative); verify against your cluster",
  "expect": {
   "gate": "kueue",
   "category": "admission-check"

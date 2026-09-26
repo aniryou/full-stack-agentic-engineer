@@ -138,12 +138,16 @@ class Router:
                                              connector=aiohttp.TCPConnector(limit=0))
         interval = self.config.scrape_interval_s or self.settings.scrape_interval_s
         self.scraper = Scraper(self.ds, self.session, interval_s=interval, path=self.config.metrics_path)
-        await self.scraper.refresh()                 # one synchronous scrape so the first request has data
-        self.scraper.start()
-        self._runner = web.AppRunner(self.make_app(), access_log=None)
-        await self._runner.setup()
-        site = web.TCPSite(self._runner, host, port)
-        await site.start()
+        try:
+            await self.scraper.refresh()             # one synchronous scrape so the first request has data
+            self.scraper.start()
+            self._runner = web.AppRunner(self.make_app(), access_log=None)
+            await self._runner.setup()
+            site = web.TCPSite(self._runner, host, port)
+            await site.start()                       # e.g. OSError: the port is taken
+        except BaseException:
+            await self.stop()
+            raise
         actual = site._server.sockets[0].getsockname()[1]
         self.url = f"http://{host}:{actual}"
         return self.url

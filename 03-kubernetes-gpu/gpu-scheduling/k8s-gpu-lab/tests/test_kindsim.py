@@ -91,3 +91,31 @@ def test_nodes_from_kubectl_json():
               "status": {"allocatable": {m.GPU: "4"}}}]
     n = kindsim.nodes_from_k8s(items)[0]
     assert (n.name, n.gpus, n.taints[0]["value"]) == ("n1", 4, "present")
+
+
+def test_quota_message_names_only_the_pod_sets_that_do_not_fit():
+    # Kueue v0.19 assignFlavors: pod sets in order, assumed usage carried forward; Message() skips fits.
+    sim = kindsim.new_sim()
+    tmpl = scenarios.lab_template(4)
+    two = m.jobset("two", "team-b", [m.replicated_job("head", tmpl), m.replicated_job("tail", tmpl)], queue="gpu-queue")
+    sim.apply(m.job("fill", "team-b", scenarios.lab_template(4), parallelism=2, queue="gpu-queue"))   # 8 of 8
+    sim.apply(two)                                                     # 4 borrowable: head fits, tail does not
+    msg = sim.workloads["JobSet/team-b/two"].message
+    assert msg == ("couldn't assign flavors to pod set tail: insufficient unused quota for nvidia.com/gpu "
+                   "in flavor gpu-l4, 4 more needed")
+    # grouped pod sets (podset-group-name) are assigned together and share one status: s3 lists both
+    s3 = kindsim.predict("s3")["LeaderWorkerSet/team-b/llm-multihost#1"]["message"]
+    assert s3.count("4 more needed") == 2 and "pod set leader" in s3 and "pod set worker" in s3
+
+
+def test_victim_order_puts_evicting_workloads_first():
+    sim = kindsim.new_sim()
+    for i in range(2):
+        sim.apply(m.job(f"low-{i}", "team-a", scenarios.lab_template(4), queue="gpu-queue", priority_class="low"))
+    sim.apply(m.job("b", "team-b", scenarios.lab_template(4), parallelism=2, queue="gpu-queue"))
+    older = sim.workloads["Job/team-a/low-0"]
+    older.evicting = True                                              # evicted but still holding quota
+    w = kindsim.Workload("Job/team-a/hi", "team-a", "gpu-queue", 1000, kindsim._podsets(
+        m.job("hi", "team-a", scenarios.lab_template(4))), 99)
+    victims = sim._find_victims(w, sim.cfg.cqs["team-a-cq"])
+    assert victims == [older]                                          # not the newer low-1

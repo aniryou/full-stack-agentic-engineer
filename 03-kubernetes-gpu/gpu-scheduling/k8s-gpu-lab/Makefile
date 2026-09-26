@@ -27,7 +27,7 @@ lab:
 # CRD kinds against the pinned upstream CRDs (downloads them; needs network).
 validate:
 	kubernetes-validate --strict --quiet -k 1.34.0 $$(find deploy -name '*.yaml' | sort)
-	bash -n deploy/lib.sh deploy/kind/*.sh deploy/gke/*.sh
+	bash -n deploy/lib.sh deploy/kind/*.sh deploy/gke/*.sh deploy/gpu-vm/*.sh
 
 check-crds:
 	$(PY) tools/check_crds.py

@@ -11,7 +11,7 @@
 #   never overcommitted, so request == limit (primer §1 *What Kubernetes sees*);
 # * a **toleration** for the `nvidia.com/gpu` taint and a **selector** for the accelerator model;
 # * **CPU/memory requests sized to the per-GPU share** of the node, or the node's other GPUs are
-#   stranded (primer §3 *The scheduling cycle*);
+#   stranded (primer §3.4 *Fragmentation, measured*, generalised below);
 # * a **startup probe** that outlasts the weight load (primer §8 *Startup latency*);
 # * for gangs, a **queue label** and a **topology annotation** that Kueue reads (primer §4 *Gangs*,
 #   §5 *Topology-aware placement*).
@@ -34,7 +34,9 @@ print(m.to_yaml(job))
 # Read the `resources` block: the GPU appears in **limits** and **requests** with the same whole
 # number; CPU has a request but no limit (a CFS limit throttles the process that feeds the GPU);
 # memory has both. The pod spec carries the toleration and the accelerator selector — the builder
-# added them because a GPU pod without them is Pending on most clusters.
+# adds them because without the toleration a GPU pod stays Pending on clusters that taint GPU
+# nodes and do not run the ExtendedResourceToleration admission plugin (kind, kubeadm defaults;
+# GKE enables the plugin, verify), and without the selector it can land on any GPU model.
 #
 # ## What the API server rejects — and what it does not
 # `nvidia.com/gpu` is an extended resource: whole units, no overcommit. The API server enforces
@@ -101,9 +103,10 @@ print("✅ gpu_resources_ok agrees with the API server on", len(cases), "cases")
 # times, the container is killed and the load starts again — forever.
 #
 # Budget = `failureThreshold × periodSeconds`. Write `failure_threshold(load_s, period_s,
-# margin=1.5)`: the smallest integer threshold whose budget covers `load_s × margin`. Then
-# compute `load_s` for an 8B model in bf16 (16 GB) read at 400 MB/s plus 60 s of engine init
-# (CUDA graphs, warm-up), and the threshold for a 10 s period.
+# margin=1.5)`: the smallest integer threshold whose budget covers `load_s × margin`. Then set
+# two variables: `load_s`, the load time of an 8B model in bf16 (16 GB) read at 400 MB/s plus
+# 60 s of engine init (CUDA graphs, warm-up), and `threshold`, the failure threshold for it with
+# a 10 s period.
 
 # %% exercise
 import math
@@ -125,15 +128,32 @@ print(f"✅ load {load_s:.0f} s -> failureThreshold {threshold} x 10 s = {thresh
 
 # %% [markdown]
 # ## Stranded GPUs: the CPU request is a GPU decision
-# A node is a bundle. `g2-standard-48` has 4 L4s and 48 vCPUs; after GKE's reservations about
-# 47.8 vCPUs and 181 GiB are allocatable (`k8sgpu.machines.allocatable`, formula marked *verify*).
-# If each 1-GPU pod asks for 16 vCPUs, only two pods fit and two GPUs idle — paid for, unusable.
+# GPUs strand in two ways, and one formula covers both. For a pod shape of *k* GPUs, the pods
+# that still fit a node are the minimum over resources of ⌊free / request⌋, and the stranded
+# GPUs are the free GPUs minus *k* × that:
+#
+# * **GPU-count fragmentation** — only GPUs bind: stranded = `free mod k` per node, the count
+#   primer §3.4 *Fragmentation, measured* tracks (a 3-GPU pod shape leaves 2 of 8 GPUs idle).
+# * **Resource-bundle stranding** — CPU or memory binds first. A node is a bundle:
+#   `g2-standard-48` has 4 L4s and 48 vCPUs; after GKE's reservations about 47.8 vCPUs and
+#   181 GiB are allocatable (`k8sgpu.machines.allocatable`, formula marked *verify*). If each
+#   1-GPU pod asks for 16 vCPUs, only two pods fit and two GPUs idle — paid for, unusable.
+#
+# The per-GPU share is the budget before anything else runs on the node. DaemonSets (logging,
+# monitoring, the device plugin) and injected sidecars (GKE's GCS FUSE sidecar, a service-mesh
+# proxy) take from the same bundle, so size pods against what is left; the numbers below use an
+# illustrative 0.5 vCPU / 1 GiB DaemonSet budget (read yours from `kubectl describe node`).
 
 # %%
 for name in ("g2-standard-4", "g2-standard-48", "a3-highgpu-8g"):
     a, share = machines.allocatable(name), machines.per_gpu_share(name)
+    ds = machines.per_gpu_share(name, daemonset_cpu=0.5, daemonset_mem_gib=1.0)
     print(f"{name:15} allocatable cpu {a.cpu:7.2f}  mem {a.memory_gib:8.1f} GiB  gpus {a.gpus}"
-          f"   -> per-GPU share: cpu {share.cpu:6.2f}, mem {share.memory_gib:7.1f} GiB")
+          f"   -> per-GPU share: cpu {share.cpu:6.2f}, mem {share.memory_gib:7.1f} GiB"
+          f"   (after DaemonSets: cpu {ds.cpu:6.2f}, mem {ds.memory_gib:7.1f})")
+# the same function, when only GPUs bind, is primer §3.4's free mod k:
+three_gpu = machines.stranded_gpus(machines.allocatable("a3-highgpu-8g"), pod_cpu=0, pod_mem_gib=0, pod_gpus=3)
+print("a3-highgpu-8g packed with 3-GPU pods strands", three_gpu, "GPUs =", 8 % 3, "= 8 mod 3")
 
 # %% [markdown]
 # ## Exercise 1.3 — how many GPUs does a request strand?
@@ -159,6 +179,7 @@ max_cpu = max(c for c in range(1, 49) if stranded(a48.cpu, a48.memory_gib, 4, c,
 assert stranded(a48.cpu, a48.memory_gib, 4, 16, 40, 1) == 2
 assert stranded(a48.cpu, a48.memory_gib, 4, 11, 40, 1) == 0
 assert stranded(a48.cpu, a48.memory_gib, 4, 4, 100, 1) == 3          # memory can strand too
+assert stranded(8, 1000, 8, 0.001, 0.001, 3) == 2                     # only GPUs bind: 8 mod 3
 assert max_cpu == 11
 print(f"✅ a 1-GPU pod on g2-standard-48 can ask for at most {max_cpu} vCPUs; 16 would strand 2 GPUs")
 
@@ -208,7 +229,10 @@ print(m.to_yaml(gang)[:600], "...")
 # The Deployment below serves a model on a `g2-standard-8` (1 L4, 8 vCPUs, 32 GB). Its weights
 # take about 240 s to load. Edit `broken` **in place** (it is a plain dict) until
 # `lint.lint(broken, machine="g2-standard-8", expected_load_s=240)` returns no errors and no
-# warnings. Every finding names its fix.
+# warnings. Every finding names its fix. One of them is a trade-off, not a bug: a rolling update
+# surges an extra GPU pod by default. `maxSurge: 0, maxUnavailable: 1` avoids needing a spare GPU,
+# but with one replica every rollout is an outage lasting a whole cold start. That is fine for a
+# lab; production runs at least two replicas (on on-demand capacity first) or keeps surge headroom.
 
 # %%
 print(lint.format_findings(lint.lint(

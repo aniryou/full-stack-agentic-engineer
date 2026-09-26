@@ -1,4 +1,6 @@
 """The Pending-pod explainer: parsing, classification, and every fixture's verdict."""
+import json
+
 import pytest
 
 from k8sgpu import pending
@@ -50,3 +52,48 @@ def test_every_fixture_gets_its_expected_verdict(name):
 def test_enough_fixtures_to_cover_each_gate():
     gates = {pending.load_fixture(n)["expect"]["gate"] for n in pending.fixture_names()}
     assert gates == {"kueue", "kube-scheduler", "cluster-autoscaler", "kubelet"}
+
+
+class _FakeKubectl:
+    """Answers the four reads diagnose_live makes, from the lws-group-gated fixture."""
+
+    def __init__(self, fx):
+        self.fx, self.asked = fx, []
+
+    def run(self, *args, quiet=False, check=True):
+        self.asked.append(args)
+        if args[:2] == ("get", "pod"):
+            return json.dumps(self.fx["pod"])
+        if args[:2] == ("get", "workloads.kueue.x-k8s.io"):
+            return json.dumps(self.fx["workload"]) if args[2] == self.fx["workload"]["metadata"]["name"] else ""
+        return ""
+
+    def get_json(self, what, *rest):
+        return {"items": self.fx.get("events", []) if what == "events" else []}
+
+
+def test_live_diagnosis_finds_the_workload_of_a_gated_lws_pod():
+    # LWS / pod-group pods name their Workload with kueue.x-k8s.io/prebuilt-workload-name (an annotation
+    # while WorkloadIdentifierAnnotations is on, the v0.19 default; a label otherwise) - not kueue.x-k8s.io/workload
+    fx = pending.load_fixture("lws-group-gated")
+    ann = fx["pod"]["metadata"]["annotations"]
+    assert pending.WORKLOAD_ANNOTATION not in ann and pending.PREBUILT_WORKLOAD in ann
+    k = _FakeKubectl(fx)
+    d = pending.diagnose_live(fx["pod"]["metadata"]["name"], "team-b", kubectl=k)
+    assert (d.gate, d.category) == ("kueue", "waiting-for-quota"), str(d)
+    as_label = {"metadata": {"labels": {pending.PREBUILT_WORKLOAD: "wl-1"}}}
+    assert pending.workload_name_of(as_label) == "wl-1"
+
+
+def test_cli_labels_fixture_output(capsys):
+    from k8sgpu.__main__ import main
+    assert main(["pending", "--fixture", "gke-stockout"]) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("(fixture: ") and "sample output in the documented format (illustrative)" in first
+
+
+def test_fixture_sources_are_not_nested():
+    for name in pending.fixture_names():
+        src = pending.load_fixture(name)["source"]
+        assert src.count("in the documented format") == 1 and src.count("(illustrative)") == 1, name
+        assert "simulated by k8sgpu.kindsim" in src or "written by hand" in src, name

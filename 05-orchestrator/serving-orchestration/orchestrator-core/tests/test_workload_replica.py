@@ -110,8 +110,25 @@ def test_lora_request_without_a_free_slot_is_skipped_not_blocking():
     _drain(rep)
     assert c.t_first < b.t_first                     # the adapter-free request overtook the stuck one
     assert b.t_first >= a.t_done and tuple(rep.loras) == ("y",)    # "x" evicted only once idle
+    assert rep.stats["lora_loads"] == 2                              # x, then y: each load stalls a step
 
 
 def test_chat_lengths_have_the_requested_mean():
     reqs = chat(20.0, 200, seed=4, system=0, user=200, output=150, cv=0.6)
     assert abs(sum(r.output for r in reqs) / len(reqs) - 150) < 10
+
+
+def test_kv_ready_admission_reuses_the_cached_prefix():
+    """P/D: a request whose KV arrives over the link still takes its cached prefix from the local pool."""
+    rep = Replica(0, L4_8B)
+    first = _req(0, 3200, 4, seg_id=7)
+    rep.enqueue(first, 0.0)
+    t = _drain(rep)
+    ch = HashChain(16).extend(7, 3200).extend(99, 800).extend(98, 4)
+    second = Request(1, t, 4000, 4, ch.hashes, 4004 // 16, 16)
+    second.t_first = t                                   # its first token came with the transferred KV
+    rep.enqueue(second, t, kv_ready=True)
+    rep.start_step(t)
+    prefix = rep.pool.match(second.hashes, 200)          # the 3,200 shared tokens: 200 blocks
+    assert len(prefix) == 200 and rep.running[0].blocks[:200] == prefix
+    assert all(rep.pool.ref[b] == 1 for b in prefix)     # shared, not duplicated

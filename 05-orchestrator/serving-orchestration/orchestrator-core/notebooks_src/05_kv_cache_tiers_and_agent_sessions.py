@@ -82,6 +82,11 @@ print(f"10k tokens on an H100: recompute {recompute_s(n, H100_8B.compute_tok_s) 
 print("✅ the faster the GPU, the faster the tier must be to be worth it")
 
 # %% [markdown]
+# One caveat on the break-even: `recompute_s` is linear in tokens, like the simulator's prefill. Attention adds
+# FLOPs that grow with context — for an 8B model about +16 % at 10k tokens and +50 % at 30k — so real long-context
+# recompute is slower than this and fetching wins by more. The tier bandwidths are assumptions to measure.
+
+# %% [markdown]
 # ## Exercise 5.2 — two tiers, demote on evict
 # Implement the core of an offloading cache: `put(key, gb)` inserts into the fast tier as most recently used; while
 # the fast tier is over capacity, its least recently used entry is **demoted** to the slow tier; while the slow tier
@@ -131,38 +136,65 @@ print("✅ TwoTier works — the same demotion chain as fleetsim.TieredKV")
 # 600 agent sessions arrive at 1/s on four H100 replicas; each keeps ~8 GB of HBM for idle sessions (the rest serves
 # running requests — an assumption). `simulate_sessions` replays every turn: where is the session's context now,
 # and what does bringing it back cost? It scores resumed turns only; its floor is the new tool-result tokens that
-# must be prefilled anyway.
+# must be prefilled anyway. (Its tiers are exclusive — an evicted session moves down a tier. Real offload keeps a
+# copy in the lower tier as KV is written, so count a DRAM tier's capacity alone, not HBM + DRAM.) First, HBM only:
 
 # %%
 common = dict(kv_bytes_per_token=LLAMA_8B_KV, prefill_tok_s=H100_8B.compute_tok_s, replicas=4, session_rate=1.0,
               seed=3)
 HBM = Tier("HBM", 8, 3350.0)
+SHARED = Tier("shared", 1000, 20.0, 0.002)          # a 1 TB store at 20 GB/s (an RDMA-class assumption)
 
 
 def dram(gb):
     return Tier("DRAM", gb, 50.0, 0.0005)
 
 
-rows = []
-for gb in (0, 16, 64):
-    for sticky in (True, False):
-        r = simulate_sessions(600, tiers=[HBM] + ([dram(gb)] if gb else []), sticky=sticky, **common)
-        rows.append({"tiers": f"HBM + {gb} GB DRAM" if gb else "HBM only", "routing": "sticky" if sticky else "random",
-                     **r})
-shared = simulate_sessions(600, tiers=[HBM], sticky=False, shared=Tier("shared", 1000, 20.0, 0.002), **common)
-rows.append({"tiers": "HBM + shared 1 TB store", "routing": "random", **shared})
+def replay(gb=0, sticky=True, shared=None):
+    return simulate_sessions(600, tiers=[HBM] + ([dram(gb)] if gb else []), sticky=sticky, shared=shared, **common)
+
+
 cols = ["tiers", "routing", "share_HBM", "share_DRAM", "share_shared", "share_recompute", "recompute_token_share",
         "prefix_cost_p95_s"]
+rows = [{"tiers": "HBM only", "routing": "sticky" if st else "random", **replay(0, st)} for st in (True, False)]
 print(table([{c: r.get(c, 0.0) for c in cols} for r in rows], cols,
             title="simulated: where each resumed turn found its KV (share of turns)"))
 
 # %% [markdown]
-# HBM alone serves a minority of resumed turns even with sticky routing. A modest DRAM tier with sticky routing
-# serves nearly all of them, at a few tens of milliseconds instead of a full re-prefill. Random routing wastes most
-# of that tier — each replica only holds the sessions it happened to serve — unless the tier is **shared**, in
-# which case routing is free to chase load again.
+# HBM alone serves a minority of resumed turns even with sticky routing.
 #
-# ## Exercise 5.3 — size the DRAM tier
+# ## Exercise 5.3 — predict what a tier buys
+# Before running them, **predict**: of `"sticky + DRAM"` (64 GB of DRAM per replica, session-sticky routing),
+# `"random + DRAM"` (the same tiers, random routing) and `"random + shared"` (HBM plus the shared 1 TB store,
+# random routing), which recomputes the largest share of resumed prompt tokens? And does the shared tier get within
+# 2 percentage points of sticky routing's recomputed-token share?
+
+# %% exercise
+most_recompute = None
+shared_matches_sticky = None
+### BEGIN SOLUTION
+most_recompute = "random + DRAM"      # each replica's DRAM only holds sessions it served itself
+shared_matches_sticky = True          # any replica can pull any session's KV
+### END SOLUTION
+
+# %% check
+runs = {"sticky + DRAM": replay(64, True), "random + DRAM": replay(64, False), "random + shared": replay(0, False, SHARED)}
+rows += [{"tiers": f"HBM + {gb} GB DRAM", "routing": "sticky" if st else "random", **replay(gb, st)}
+         for gb in (16, 64) for st in (True, False)]
+rows.append({"tiers": "HBM + shared 1 TB store", "routing": "random", **runs["random + shared"]})
+print(table([{c: r.get(c, 0.0) for c in cols} for r in rows], cols,
+            title="simulated: where each resumed turn found its KV (share of turns)"))
+got = {k: v["recompute_token_share"] for k, v in runs.items()}
+assert most_recompute == max(got, key=got.get), got
+assert shared_matches_sticky == (abs(got["random + shared"] - got["sticky + DRAM"]) <= 0.02), got
+print("✅", {k: round(v, 3) for k, v in got.items()})
+
+# %% [markdown]
+# A modest DRAM tier with sticky routing serves nearly all resumed turns, at a few tens of milliseconds instead of a
+# full re-prefill. Random routing wastes most of that tier — each replica only holds the sessions it happened to
+# serve — unless the tier is **shared**, in which case routing is free to chase load again.
+#
+# ## Exercise 5.4 — size the DRAM tier
 # The floor is what sticky routing reaches with unlimited DRAM. Write `smallest_dram(candidates, recompute_share,
 # tolerance)`: return the smallest candidate size whose recomputed-token share is within `tolerance` of the floor
 # (`recompute_share(gb)` runs the simulation for one size).
@@ -176,40 +208,13 @@ def smallest_dram(candidates, recompute_share, tolerance=0.01):
 
 # %% check
 def recompute_share(gb):
-    tiers_ = [HBM] + ([dram(gb)] if gb else [])
-    return simulate_sessions(600, tiers=tiers_, sticky=True, **common)["recompute_token_share"]
+    return replay(gb, True)["recompute_token_share"]
 
 
 pick = smallest_dram([0, 2, 4, 8, 16, 32, 64], recompute_share)
 ok = [gb for gb in [0, 2, 4, 8, 16, 32, 64] if recompute_share(gb) <= recompute_share(10_000) + 0.01]
 assert pick == min(ok)
 print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload — size from a replay, not a guess")
-
-# %% [markdown]
-# ## Exercise 5.4 — what does a shared tier buy?
-# Answer from the table: which configuration recomputes the most (`"sticky + DRAM"`, `"random + DRAM"`,
-# `"random + shared"`)? And does the shared tier get within 2 percentage points of sticky routing's recomputed-token
-# share (with 64 GB of DRAM)?
-
-# %% exercise
-most_recompute = None
-shared_matches_sticky = None
-### BEGIN SOLUTION
-most_recompute = "random + DRAM"      # each replica's DRAM only holds sessions it served itself
-shared_matches_sticky = True          # any replica can pull any session's KV
-### END SOLUTION
-
-# %% check
-def share(sticky, gb=64, shared_tier=None):
-    tiers_ = [HBM] + ([dram(gb)] if gb else [])
-    return simulate_sessions(600, tiers=tiers_, sticky=sticky, shared=shared_tier, **common)["recompute_token_share"]
-
-
-got = {"sticky + DRAM": share(True), "random + DRAM": share(False),
-       "random + shared": share(False, gb=0, shared_tier=Tier("shared", 1000, 20.0, 0.002))}
-assert most_recompute == max(got, key=got.get), got
-assert shared_matches_sticky == (abs(got["random + shared"] - got["sticky + DRAM"]) <= 0.02), got
-print("✅", {k: round(v, 3) for k, v in got.items()})
 
 # %% [markdown]
 # ## In a design review

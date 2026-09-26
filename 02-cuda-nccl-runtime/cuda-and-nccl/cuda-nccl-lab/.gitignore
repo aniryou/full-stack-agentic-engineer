@@ -17,3 +17,7 @@ _run_outputs/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+# Results of the GPU recipes (deploy/any-gpu, deploy/gke/run.sh) and an nccl-tests checkout, should SRC
+# point here: never commit them (the checkout is a git repository of its own).
+out/
+nccl-tests/

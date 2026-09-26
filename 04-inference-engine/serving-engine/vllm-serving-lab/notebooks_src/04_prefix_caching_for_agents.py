@@ -3,7 +3,8 @@
 #
 # **Tier:** T0 — the fake vLLM implements vLLM's block-hash prefix cache (results **simulated**).
 # T1/T3: point `SERVELAB_URL` at a real vLLM; the hit rate comes from its `/metrics` either way, and
-# per-request cached tokens appear when the server runs with `--enable-prompt-tokens-details` (verify).
+# per-request cached tokens appear when the server runs with `--enable-prompt-tokens-details` (a
+# `vllm serve` flag in v0.30.0, checked against its source).
 #
 # ## The one-minute version
 #
@@ -19,7 +20,9 @@
 #
 # The engine counts it: `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (tokens).
 # Concepts: PRIMER §5 "Prefix caching" ([`PRIMER.md`](../../PRIMER.md)); paging and sharing in
-# `04-inference-engine/paged-attention/`.
+# [`04-inference-engine/paged-attention`](../../../paged-attention/paged-attention-primer.md). The
+# agent loops that produce these prompts — long stable prefixes, tool results appended turn after
+# turn — are built in [`07-application-agent-framework`](../../../../07-application-agent-framework/).
 
 # %%
 import math
@@ -139,34 +142,65 @@ assert math.isnan(hit_rate(s1, s1))
 print(f"✅ [{LABEL}] the repeated request hit {hit_rate(s0, s1):.1%} of its prompt tokens in the cache")
 
 # %% [markdown]
-# ## Exercise 4.3 — three prompt layouts for the same agent
+# ## Exercise 4.3 — three prompt layouts for the same agent, predicted then measured
 #
 # Six agent sessions, three turns each (the user's request, then two tool results; the model's reply
 # is appended after every turn). Same content, three layouts (see `agent_sessions`):
 # `"stable"` (shared system prompt and tool list, append-only history), `"shuffled_tools"` (each
 # session lists the tools in its own order), `"timestamp_first"` (a fresh timestamp on the first
-# line of every request). Return the three layout names from `predict_ranking()`, highest expected
-# hit rate first.
+# line of every request).
+#
+# Predict each layout's hit rate *as a number* before measuring it. Write
+# `predicted_hit_rate(requests, block_size)` for `requests = [(prompt_ids, output_ids), ...]` in
+# arrival order: every earlier request left its prompt *and* output in the cache (assume nothing is
+# evicted — the pool is far bigger than this workload), so a request hits the longest prefix it
+# shares with any earlier one, under the rules of exercise 4.1 (reuse `expected_cached_tokens`).
+# Return total hits / total prompt tokens — what `vllm:prefix_cache_hits / queries` measures.
 
 # %% exercise
-def predict_ranking() -> list:
+def predicted_hit_rate(requests: list, block_size: int = 16) -> float:
     ### BEGIN SOLUTION
-    return ["stable", "shuffled_tools", "timestamp_first"]
+    seen, hits, total = [], 0, 0
+    for prompt, output in requests:
+        hits += max((expected_cached_tokens(prev, prompt, block_size) for prev in seen), default=0)
+        total += len(prompt)
+        seen.append(list(prompt) + list(output))
+    return hits / total if total else math.nan
     ### END SOLUTION
 
-ranking = predict_ranking()
-
 # %% check
-rates, ttft = {}, {}
+assert predicted_hit_rate([([1] * 40, [2] * 5), ([1] * 40 + [3] * 8, [])], 16) == 32 / 88
+
+def requests_of(sessions, run):
+    """Rebuild what each request sent (toy token ids) and got back, in the order they were sent."""
+    got = {(r.session, r.turn): r for r in run.results}
+    out = []
+    for s in sessions:
+        history = []
+        for k, content in enumerate(s.turns):
+            history.append({"role": "user", "content": content})
+            r = got[(s.sid, k)]
+            out.append((r.start, textgen.chat_tokens([{"role": "system", "content": s.system(k)}] + history),
+                         textgen.tokenize(r.text)))
+            history.append({"role": "assistant", "content": r.text})
+    return [(prompt, output) for _, prompt, output in sorted(out, key=lambda x: x[0])]
+
+rates, predicted, ttft = {}, {}, {}
 for i, layout in enumerate(("stable", "shuffled_tools", "timestamp_first")):
+    sessions = agent_sessions(6, turns=3, layout=layout, seed=100 + i)
     before = M.scrape(URL, headers=H)
-    run = run_sessions(URL, agent_sessions(6, turns=3, layout=layout, seed=100 + i), session_rate=3.0, headers=H)
+    run = run_sessions(URL, sessions, session_rate=3.0, headers=H)
     rates[layout] = hit_rate(before, M.scrape(URL, headers=H))
+    predicted[layout] = predicted_hit_rate(requests_of(sessions, run))
     ttft[layout] = run.summary().ttft.mean
-    print(f"[{LABEL}] {layout:16s} hit rate {rates[layout]:6.1%}   mean TTFT {ttft[layout]:6.1f} ms")
-assert sorted(rates, key=rates.get, reverse=True) == ranking
+    print(f"[{LABEL}] {layout:16s} predicted {predicted[layout]:6.1%}  measured {rates[layout]:6.1%}   "
+          f"mean TTFT {ttft[layout]:6.1f} ms")
+assert predicted["stable"] > predicted["shuffled_tools"] > predicted["timestamp_first"] == 0.0
+if target.simulated:        # at T1 the prediction uses toy token counts, the engine real ones: compare by eye
+    assert all(abs(predicted[k] - rates[k]) < 0.05 for k in rates), (predicted, rates)
 assert rates["timestamp_first"] < 0.05 and ttft["stable"] < ttft["timestamp_first"]
-print("✅ one timestamp on line 1 costs the whole cache; a reordered tool list costs the cross-session share")
+print("✅ the hit rate is predictable from the prompt layout alone: one timestamp on line 1 costs the whole cache; "
+      "a reordered tool list costs the cross-session share")
 
 # %% [markdown]
 # ## Exercise 4.4 — fix the template
@@ -270,9 +304,14 @@ target.stop()
 # The prompt template: something dynamic moved into the prefix (a timestamp, a request id, a
 # shuffled tool list, a changed chat template). Diff the first blocks of two consecutive requests.
 #
-# **Drill 2.** *Does caching change the model's output?* — No: the cached KV is exactly what
-# recomputation would produce for the same tokens (vLLM also salts the hash with LoRA ids and an
-# optional per-request `cache_salt` so different adapters or tenants never share blocks; verify).
+# **Drill 2.** *Does caching change the model's output?* — Semantically no: a hit reuses the K/V of
+# exactly the same tokens (vLLM also salts the hash with LoRA ids and an optional per-request
+# `cache_salt`, so different adapters or tenants never share blocks; verify). Bitwise, not
+# guaranteed: the cached K/V were computed in a different batch and chunk shape than a
+# recomputation would use, and floating-point reductions in another order can differ in the last
+# bits — enough to flip a near-tie in greedy decoding now and then. If you need bit-reproducible
+# outputs, turn on vLLM's batch-invariant mode (`VLLM_BATCH_INVARIANT=1` in v0.30.0; verify its
+# cost and coverage for your model).
 #
 # **Drill 3.** *Why is the hit on a fully repeated prompt one block short?* — The last token is
 # always recomputed to produce logits, so at most `(len - 1) // 16` blocks can hit.

@@ -1,18 +1,20 @@
 # deploy/gcp — a GKE cluster shaped for GPU scheduling (Terraform)
 
 **What it does.** `terraform/` creates one **zonal GKE Standard** cluster in its own VPC with
-three node pools — one per way of getting GPU capacity (primer §7):
+node pools for each way of getting GPU capacity (primer §7), plus an optional shared one (§9):
 
 | Pool | Shape | Capacity type | Scales |
 |---|---|---|---|
 | `system` | 1 x `e2-standard-4` | on-demand | fixed; runs kube-system, Kueue, JobSet |
 | `l4-spot` | `g2-standard-4` + 1 x L4 | **Spot**, GKE-installed driver (`LATEST`) | **0 → 2**, autoscaler adds a node only for a Pending GPU pod |
 | `l4-flex` (off by default) | `g2-standard-4` + 1 x L4 | **DWS flex-start, queued provisioning** | 0 → 2, all nodes of a request at once, via Kueue's ProvisioningRequest check |
+| `l4-shared` (off by default) | `g2-standard-4` + 1 x L4 | Spot, **GPU time-sharing**: each L4 advertised as `max_shared_clients_per_gpu` (4) `nvidia.com/gpu` | 0 → 1 |
 
 plus: Workload Identity, the Cloud Storage FUSE CSI driver, image streaming (GCFS), managed
 Prometheus, a weights bucket readable by exactly one Kubernetes ServiceAccount (`serving/model-reader`,
 through a Workload Identity Federation `principal://` binding — no keys). Both GPU pools carry
-the `nvidia.com/gpu=present:NoSchedule` taint.
+the `nvidia.com/gpu=present:NoSchedule` taint. The driver is `LATEST` because the lab's vLLM
+v0.30.0 image is a CUDA 13.0 build that needs an R580+ driver; `DEFAULT` may be older (verify).
 
 | File | Contents |
 |---|---|
@@ -20,7 +22,7 @@ the `nvidia.com/gpu=present:NoSchedule` taint.
 | `variables.tf` | every knob, with the cheapest defaults |
 | `apis.tf`, `network.tf` | services; a VPC + subnet with pod/service secondary ranges |
 | `cluster.tf` | the zonal cluster: release channel, Workload Identity, GCS FUSE, managed Prometheus, image streaming |
-| `node_pools.tf` | the three pools |
+| `node_pools.tf` | the pools: system, l4-spot, and the optional l4-flex and l4-shared |
 | `storage.tf` | weights bucket + `roles/storage.objectViewer` for the serving KSA |
 | `outputs.tf` | `get_credentials`, pool names, bucket, next steps |
 

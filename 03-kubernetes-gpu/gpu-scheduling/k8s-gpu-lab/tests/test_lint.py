@@ -110,3 +110,40 @@ def test_the_labs_own_manifests_are_lint_clean():
                 if x.severity != "info":
                     seen.add((f"{o['kind']}/{o['metadata']['name']}", x.rule))
     assert seen == intended
+
+
+def test_toleration_rule_uses_real_matching():
+    c = {"name": "c", "image": "x", "resources": {"requests": {"cpu": "1", "memory": "1Gi"},
+                                                  "limits": {"memory": "1Gi", m.GPU: 1}}}
+    sel = {m.GKE_ACCELERATOR: "nvidia-l4"}
+    wrong_value = job_with(c, nodeSelector=sel,
+                           tolerations=[{"key": m.GPU, "operator": "Equal", "value": "true", "effect": "NoSchedule"}])
+    f = [x for x in lint.lint(wrong_value) if x.rule == "gpu-toleration"]
+    assert f and "Equal needs the same value" in f[0].message        # Pending on nvidia.com/gpu=present
+    wrong_effect = job_with(c, nodeSelector=sel, tolerations=[{"key": m.GPU, "operator": "Exists", "effect": "NoExecute"}])
+    assert "gpu-toleration" in rules(lint.lint(wrong_effect), "warning")
+    for ok in ({"key": m.GPU, "operator": "Equal", "value": "present", "effect": "NoSchedule"},
+               {"key": m.GPU, "operator": "Exists"}, {"operator": "Exists"}):
+        assert "gpu-toleration" not in rules(lint.lint(job_with(c, nodeSelector=sel, tolerations=[ok]))), ok
+
+
+def test_shm_larger_than_the_memory_limit_is_flagged():
+    small = m.job("j", "ns", m.pod_template(m.pod_spec([m.GPUContainer(gpus=2, memory="64Mi")], shm_size="256Mi")))
+    f = [x for x in lint.lint(small) if x.rule == "shm-memory-limit"]
+    assert f and f[0].severity == "warning" and "256Mi" in f[0].message
+    big = m.job("j", "ns", m.pod_template(m.pod_spec([m.GPUContainer(gpus=2, memory="320Mi")], shm_size="256Mi")))
+    assert "shm-memory-limit" not in rules(lint.lint(big))
+    no_limit = small["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]
+    no_limit.pop("memory")                                              # no limit: tmpfs is bounded by the node
+    assert "shm-memory-limit" not in rules(lint.lint(small))
+
+
+def test_gcsfuse_sidecar_requests_count_toward_the_bundle():
+    # g2-standard-4 allocatable: 3.92 cpu, 13.30 GiB. 3.5 cpu fits; + the 500m sidecar does not.
+    c = m.GPUContainer(gpus=1, cpu="3500m", memory="8Gi")
+    plain = m.job("j", "ns", m.pod_template(m.pod_spec([c])))
+    assert "strands-gpus" not in rules(lint.lint(plain, machine="g2-standard-4"))
+    fuse = m.job("j", "ns", m.pod_template(m.pod_spec([c]), annotations={
+        "gke-gcsfuse/volumes": "true", "gke-gcsfuse/cpu-request": "500m", "gke-gcsfuse/memory-request": "1Gi"}))
+    f = [x for x in lint.lint(fuse, machine="g2-standard-4") if x.rule == "strands-gpus"]
+    assert f and f[0].severity == "error" and "cpu 4" in f[0].message

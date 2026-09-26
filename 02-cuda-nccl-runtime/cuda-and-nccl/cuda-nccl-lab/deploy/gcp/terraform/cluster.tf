@@ -25,9 +25,11 @@ resource "google_container_cluster" "lab" {
   }
 
   # DCGM: GKE runs the exporter on GPU nodes and ships DCGM_FI_* metrics to Cloud Monitoring via
-  # Managed Prometheus (query them with PromQL; alert with deploy/gke/06-dcgm-alert-rules.yaml).
-  # VERIFY: the minimum GKE version and node image (COS) for the DCGM package, and which DCGM_FI_PROF_*
-  # fields it exports on your GPU type.
+  # Managed Prometheus (query them with PromQL). Alert rules: deploy/gke/06-dcgm-alert-rules.yaml
+  # (ClusterRules; firing alerts go to GMP's managed Alertmanager, see deploy/gke/README.md).
+  # VERIFY: the minimum GKE version and node image (COS) for the DCGM package, and its field list: Google's
+  # GMP DCGM example exports no XID, row-remap or clock-event fields, so the health rules may need a
+  # self-managed exporter with deploy/any-gpu/dcgm-counters.csv (gpurt.dcgm.rules_that_cannot_fire()).
   monitoring_config {
     enable_components = var.enable_dcgm ? ["SYSTEM_COMPONENTS", "DCGM"] : ["SYSTEM_COMPONENTS"]
 

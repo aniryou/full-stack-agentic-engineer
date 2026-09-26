@@ -91,38 +91,50 @@ print("✅ all_gather(reduce_scatter(x)) == all_reduce(x): the decomposition eve
 # %% [markdown]
 # ## The ring schedule
 #
-# Cut the buffer into n chunks. In reduce-scatter step s, rank r sends chunk (r − s) mod n to its right
-# neighbour and adds the chunk arriving from its left; after n−1 steps rank r owns the fully reduced chunk
-# (r + 1) mod n. All-gather then circulates the finished chunks for n−1 more steps. This is the schedule
-# `gpurt.dist.pipes` executes (`semantics.ring_chunks`).
+# Cut the buffer into n chunks and number the steps from 1, as primer §5.2 does. In reduce-scatter step
+# s = 1 … n−1, rank r sends chunk (r − s) mod n to its right neighbour and adds the chunk arriving from its
+# left; after n−1 steps rank r owns the fully reduced chunk r. The all-gather then circulates the finished
+# chunks for n−1 more steps: rank r first sends its own finished chunk r, then forwards whatever arrived
+# last. This is the schedule `gpurt.dist.pipes` executes (`semantics.ring_chunks`); for 4 ranks it is the
+# primer's trace, step for step.
 
 # %%
 n = 4
 print("phase step | rank 0 sends | rank 1 sends | rank 2 sends | rank 3 sends")
 for phase in ("rs", "ag"):
-    for s in range(n - 1):
+    for s in range(1, n):
         sends = [semantics.ring_chunks(r, s, n, phase)[0] for r in range(n)]
         print(f"  {phase}   {s}   |" + "|".join(f"   chunk {c}    " for c in sends))
 
 # %% [markdown]
-# ## Exercise 3.2 — derive the busbw factor by counting
+# ## Exercise 3.2 — write the ring schedule yourself
 #
-# Using `semantics.ring_schedule(n)` (one row per rank per step), write
-# `ring_bytes_sent_per_rank(n, size_bytes)`: how many bytes one rank sends during a ring all-reduce of a
-# `size_bytes` buffer (each chunk is `size_bytes / n`). Compare with the busbw factor.
+# Implement `my_ring_chunks(rank, step, n, phase)` returning `(send_chunk, recv_chunk)` for steps
+# 1 … n−1 of phase `"rs"` (the receiver adds what arrives) or `"ag"` (the receiver copies it), without
+# looking at `semantics.ring_chunks`. Two hints: what a rank receives in a step is exactly what its left
+# neighbour sends in that step; and a rank's first all-gather send must be a chunk it has *finished*.
+#
+# The check executes your schedule on real buffers — `semantics.ring_all_reduce(xs, chunks=my_ring_chunks)`
+# refuses a step where sender and receiver disagree — compares the result with the all-reduce, and counts
+# the bytes each rank sent: the busbw factor, derived from your own schedule.
 
 # %% exercise
-def ring_bytes_sent_per_rank(n: int, size_bytes: float) -> float:
+def my_ring_chunks(rank: int, step: int, n: int, phase: str) -> tuple[int, int]:
     ### BEGIN SOLUTION
-    sends = sum(1 for _, _, rank, _, _ in semantics.ring_schedule(n) if rank == 0)
-    return sends * size_bytes / n
+    first = rank if phase == "rs" else rank + 1  # "ag": start from the chunk this rank finished (chunk rank)
+    return (first - step) % n, (first - step - 1) % n
     ### END SOLUTION
 
 # %% check
-for n_ranks in (2, 4, 8):
-    assert ring_bytes_sent_per_rank(n_ranks, 1e9) == bw.bytes_sent_per_rank("all_reduce", 1e9, n_ranks)
-    assert ring_bytes_sent_per_rank(n_ranks, 1e9) / 1e9 == bw.bus_factor("all_reduce", n_ranks)
-print("✅ 2(n-1)/n of the buffer leaves each rank: 1.0x for 2 ranks, 1.75x for 8 — busbw = algbw x that factor")
+gen = np.random.default_rng(1)
+for n_ranks in (2, 3, 4, 8):
+    xs_n = [gen.integers(0, 9, 8 * n_ranks).astype(np.float32) for _ in range(n_ranks)]
+    out, sent = semantics.ring_all_reduce(xs_n, chunks=my_ring_chunks)
+    assert all(np.array_equal(a, b) for a, b in zip(out, semantics.all_reduce(xs_n))), f"wrong sums for n = {n_ranks}"
+    ratio = [b / xs_n[0].nbytes for b in sent]
+    assert all(abs(x - bw.bus_factor("all_reduce", n_ranks)) < 1e-12 for x in ratio), ratio
+    print(f"n = {n_ranks}: correct; every rank sent {ratio[0]:.3f} x the buffer = 2(n-1)/n")
+print("✅ your schedule all-reduces exactly, every link busy every step: busbw = algbw x 2(n-1)/n")
 
 # %% [markdown]
 # ## A real sweep

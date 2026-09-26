@@ -1,4 +1,6 @@
 """The numpy backend computes what it claims and charges exactly the accounted bytes."""
+import os
+
 import numpy as np
 import pytest
 
@@ -84,7 +86,7 @@ def test_stream_arrays_are_sized_from_every_last_level_cache():
     if total:
         assert n * 8 >= 4 * total                                  # fp64 arrays, 4× the summed LLC
     assert membw.stream_elems(be, llc_bytes=64 << 20) == 4 * (64 << 20) // 8
-    assert 1 <= inventory.usable_cpus() <= (__import__("os").cpu_count() or 1)
+    assert 1 <= inventory.usable_cpus() <= (os.cpu_count() or 1)          # the affinity mask, never more
 
 
 def test_small_suites_produce_labelled_measurements():

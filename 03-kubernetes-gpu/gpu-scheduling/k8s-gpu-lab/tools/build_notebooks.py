@@ -14,6 +14,7 @@ kept). A bootstrap cell makes ``import k8sgpu`` work from a fresh checkout.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -103,6 +104,8 @@ def build(path: Path):
                 nb.cells.append(new_code_cell(strip_solution(src) if variant == "exercise" else keep_solution(src)))
             else:
                 nb.cells.append(new_code_cell(keep_solution(src)))
+        for i, cell in enumerate(nb.cells):   # stable ids: rebuilding unchanged sources is a no-op
+            cell.id = hashlib.sha1(f"{path.stem}/{i}".encode()).hexdigest()[:12]
         out_dir.mkdir(parents=True, exist_ok=True)
         nbformat.write(nb, out_dir / f"{path.stem}.ipynb")
     print("built", path.stem)

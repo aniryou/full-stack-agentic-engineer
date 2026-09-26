@@ -15,8 +15,29 @@ separate decision: drain a node, reset a GPU, or fix an application (primer §8)
 
 This module parses the Prometheus text the exporter serves (``curl localhost:9400/metrics``), groups
 it per GPU, derives signals, triages XIDs and evaluates alert rules offline. Each rule carries the
-PromQL you would deploy (Google Managed Prometheus ``Rules`` or a ``PrometheusRule``) and a Python
-check that encodes the same condition, so the fixture exercises both.
+PromQL you would deploy (Google Managed Prometheus ``ClusterRules`` or a ``PrometheusRule``) and a
+Python check that encodes the same condition, so the fixture exercises both.
+
+**Prerequisite: the exporter must export the fields.** No exporter configuration serves all of them
+by default (upstream files read 2026-09-26; verify for your versions — :data:`EXPORTED_BY`):
+
+* stock dcgm-exporter (``etc/default-counters.csv``) leaves out ``DCGM_FI_DEV_CLOCKS_EVENT_REASONS``
+  and has ``DCGM_FI_PROF_SM_ACTIVE``/``SM_OCCUPANCY`` commented out: the thermal and HW-slowdown
+  rules cannot fire, nor can the busy-but-underfilled rule, and :func:`bottleneck` answers "unknown";
+* Google's GMP DCGM example list (which GKE's managed DCGM package resembles — verify its field list)
+  has the profiling fields but no XID, row-remap, clock-event or DRAM fields: none of the health rules
+  can fire on it;
+* ``deploy/any-gpu/dcgm-counters.csv`` is stock plus the three missing fields: pass it to a
+  self-managed exporter (``-f``/``--collectors`` or ``DCGM_EXPORTER_COLLECTORS``; profiling fields need
+  ``SYS_ADMIN``). :func:`rules_that_cannot_fire` tells you which rules a given scrape can never trigger.
+
+**Deploying the rules.** Rules only *evaluate*; firing alerts go to an Alertmanager (GMP's managed one,
+configured by a Secret in ``gmp-public``; see ``deploy/gke/README.md``), not to Cloud Monitoring
+alerting policies. On GMP a namespaced ``Rules`` object only sees metrics from its own namespace, and
+the exporter never runs in the workload namespace, so :func:`rules_manifest` emits the cluster-scoped
+``ClusterRules``. When a Prometheus scrapes the exporter, its own target labels (``namespace``,
+``pod``) win and the exporter's workload labels become ``exported_namespace``/``exported_pod``
+(Prometheus ``honor_labels: false``, the default in GMP and in the dcgm-exporter Helm chart — verify).
 """
 
 from __future__ import annotations
@@ -66,7 +87,7 @@ def parse_prometheus(text: str) -> tuple[list[Sample], dict]:
 
 
 # --------------------------------------------------------------------------- per-GPU snapshots
-POD_LABELS = ("pod", "namespace", "container")
+POD_LABELS = ("pod", "namespace", "container", "exported_pod", "exported_namespace", "exported_container")
 
 
 @dataclass
@@ -101,8 +122,11 @@ def snapshots(samples: list[Sample]) -> list[GpuSnapshot]:
         key = (host, s.labels.get("gpu", "?"), s.labels.get("GPU_I_ID"))
         snap = out.setdefault(key, GpuSnapshot(*key))
         snap.labels.update({k: v for k, v in s.labels.items() if k not in POD_LABELS})
-        if s.labels.get("pod"):
-            snap.pods.add(f"{s.labels.get('namespace', '')}/{s.labels['pod']}")
+        # the exporter's own text says pod/namespace; after a Prometheus scrape they are exported_*
+        pod = s.labels.get("exported_pod") or s.labels.get("pod")
+        if pod:
+            ns = s.labels.get("exported_namespace", s.labels.get("namespace", ""))
+            snap.pods.add(f"{ns}/{pod}")
         snap.fields[s.name] = s.value
     return list(out.values())
 
@@ -209,6 +233,7 @@ XIDS = {
     95: ("uncontained ECC error", "hardware", "every application on the GPU is affected: drain and reset now"),
 }
 SEVERITY = {"hardware": "critical", "node": "warning", "application": "info"}  # page / ticket / notify
+UNKNOWN_XID = ("not in this table", "node", "look it up in NVIDIA's XID catalogue; collect nvidia-bug-report.sh")
 
 
 def xids_owned_by(owner: str) -> list[int]:
@@ -216,20 +241,34 @@ def xids_owned_by(owner: str) -> list[int]:
 
 
 def triage_xid(code: int) -> dict:
-    meaning, owner, action = XIDS.get(int(code), ("unknown XID", "unknown", "look it up in NVIDIA's XID catalogue"))
-    return {"xid": int(code), "meaning": meaning, "owner": owner, "severity": SEVERITY.get(owner, "warning"),
-            "action": action}
+    """Owner, severity and action for an XID. Codes missing from the table go to the node operator at
+    warning (as ``gpusim.health.triage_xid`` does): never silently to an application team."""
+    meaning, owner, action = XIDS.get(int(code), UNKNOWN_XID)
+    return {"xid": int(code), "meaning": meaning, "owner": owner, "severity": SEVERITY[owner],
+            "action": action, "known": int(code) in XIDS}
 
 
 # --------------------------------------------------------------------------- alert rules
+_FIELD = re.compile(r"\bDCGM_[A-Z0-9_]+")
+
+
 @dataclass(frozen=True)
 class Rule:
     name: str
-    expr: str  # PromQL, as deployed
+    expr: str  # PromQL; <pod> and <namespace> stand for the workload labels as your Prometheus stores them
     for_: str
     severity: str
     summary: str
     check: Callable[[Signals], bool]  # the same condition, evaluated on one snapshot
+
+    @property
+    def fields(self) -> frozenset:
+        """The DCGM fields the rule reads: if the exporter does not export one, the rule can never fire."""
+        return frozenset(_FIELD.findall(self.expr))
+
+    def render(self, pod_label: str = "exported_pod", namespace_label: str = "exported_namespace") -> tuple[str, str]:
+        sub = lambda t: t.replace("<pod>", pod_label).replace("<namespace>", namespace_label)  # noqa: E731
+        return sub(self.expr), sub(self.summary)
 
 
 def _bit(field_name: str, bit: int, width: int = 1) -> str:
@@ -237,21 +276,37 @@ def _bit(field_name: str, bit: int, width: int = 1) -> str:
     return f"floor({field_name} / {bit}) % {2 ** width} > 0"
 
 
+XID_WINDOW = "15m"
+# DCGM_FI_DEV_XID_ERRORS is a gauge holding the *last* XID seen; it does not go back to 0 when the GPU is
+# fixed (verify for your DCGM version), so an alert on the value alone would never resolve. Each XID rule
+# therefore also requires the value to have changed within the window: it fires when the XID appears and
+# resolves XID_WINDOW later (the drain, not the alert, carries the node's state). A repeat of the *same*
+# code does not change the gauge: where the exporter offers the counter DCGM_EXP_XID_ERRORS_TOTAL (opt-in
+# in default-counters.csv), alert on increase() of it instead (verify its labels).
+_XID_RECENT = f"changes(DCGM_FI_DEV_XID_ERRORS[{XID_WINDOW}]) > 0"
+
+
 def _xid_in(codes: list[int]) -> str:
-    return " or ".join(f"DCGM_FI_DEV_XID_ERRORS == {c}" for c in codes)
+    return "(" + " or ".join(f"DCGM_FI_DEV_XID_ERRORS == {c}" for c in codes) + ")"
+
+
+def _xid_rule(codes_expr: str) -> str:
+    return f"{codes_expr} and {_XID_RECENT}"  # parenthesised: PromQL's `and` binds tighter than `or`
 
 
 RULES = [
-    Rule("GpuXidHardware", _xid_in(xids_owned_by("hardware")), "0m", "critical",
+    Rule("GpuXidHardware", _xid_rule(_xid_in(xids_owned_by("hardware"))), "0m", "critical",
          "Hardware XID {{ $value }} on {{ $labels.Hostname }} gpu {{ $labels.gpu }}: drain now",
-         lambda s: triage_xid(s.xid)["owner"] == "hardware"),
-    Rule("GpuXidNode", _xid_in(xids_owned_by("node")), "0m", "warning",
+         lambda s: s.xid in xids_owned_by("hardware")),
+    Rule("GpuXidNode", _xid_rule(_xid_in(xids_owned_by("node"))), "0m", "warning",
          "XID {{ $value }} on {{ $labels.Hostname }}: drain and reset the GPU when convenient",
-         lambda s: triage_xid(s.xid)["owner"] == "node"),
-    Rule("GpuXidApplication", "DCGM_FI_DEV_XID_ERRORS > 0 unless (" + _xid_in(
-        xids_owned_by("hardware") + xids_owned_by("node")) + ")", "0m", "info",
-         "XID {{ $value }} on {{ $labels.Hostname }}: usually the application; tell its owner",
-         lambda s: s.xid > 0 and triage_xid(s.xid)["owner"] not in ("hardware", "node")),
+         lambda s: s.xid in xids_owned_by("node")),
+    Rule("GpuXidApplication", _xid_rule(_xid_in(xids_owned_by("application"))), "0m", "info",
+         "XID {{ $value }} on {{ $labels.Hostname }}: an application fault; tell its owner",
+         lambda s: s.xid in xids_owned_by("application")),
+    Rule("GpuXidUnknown", _xid_rule(f"(DCGM_FI_DEV_XID_ERRORS > 0 unless {_xid_in(sorted(XIDS))})"), "0m", "warning",
+         "XID {{ $value }} on {{ $labels.Hostname }} is not in the lab's table: look it up, collect nvidia-bug-report.sh",
+         lambda s: s.xid > 0 and s.xid not in XIDS),
     Rule("GpuRowRemapFailure", "DCGM_FI_DEV_ROW_REMAP_FAILURE > 0", "0m", "critical",
          "Row remapping failed: the GPU cannot repair its memory, replace it",
          lambda s: s.row_remap_failure > 0),
@@ -268,15 +323,56 @@ RULES = [
     Rule("GpuBusyButUnderfilled", "DCGM_FI_DEV_GPU_UTIL > 90 and on (Hostname, gpu) DCGM_FI_PROF_SM_ACTIVE < 0.3",
          "15m", "info", "GPU_UTIL high but few SMs busy: batch more, fuse kernels, or capture CUDA Graphs",
          lambda s: (s.gpu_util or 0) > 0.9 and s.sm_active is not None and s.sm_active < 0.3),
-    Rule("GpuIdleWhileAllocated", 'DCGM_FI_DEV_GPU_UTIL{pod!=""} < 5', "30m", "info",
-         "A pod holds a GPU it is not using: {{ $labels.namespace }}/{{ $labels.pod }}",
+    Rule("GpuIdleWhileAllocated", 'DCGM_FI_DEV_GPU_UTIL{<pod>!=""} < 5', "30m", "info",
+         "A pod holds a GPU it is not using: {{ $labels.<namespace> }}/{{ $labels.<pod> }}",
          lambda s: bool(s.pods) and s.gpu_util is not None and s.gpu_util < 0.05),
 ]
 
+# Fields each exporter configuration serves by default (enabled lines of the upstream files, read
+# 2026-09-26 — verify for your versions). "lab" is deploy/any-gpu/dcgm-counters.csv (a test keeps it in sync).
+_STOCK = frozenset({
+    "DCGM_FI_DEV_SM_CLOCK", "DCGM_FI_DEV_MEM_CLOCK", "DCGM_FI_DEV_MEMORY_TEMP", "DCGM_FI_DEV_GPU_TEMP",
+    "DCGM_FI_DEV_POWER_USAGE", "DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION", "DCGM_FI_DEV_PCIE_REPLAY_COUNTER",
+    "DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_MEM_COPY_UTIL", "DCGM_FI_DEV_ENC_UTIL", "DCGM_FI_DEV_DEC_UTIL",
+    "DCGM_FI_DEV_XID_ERRORS", "DCGM_FI_DEV_FB_FREE", "DCGM_FI_DEV_FB_USED", "DCGM_FI_DEV_FB_RESERVED",
+    "DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL", "DCGM_FI_DEV_VGPU_LICENSE_STATUS",
+    "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS", "DCGM_FI_DEV_CORRECTABLE_REMAPPED_ROWS",
+    "DCGM_FI_DEV_ROW_REMAP_FAILURE", "DCGM_FI_DRIVER_VERSION", "DCGM_FI_PROF_GR_ENGINE_ACTIVE",
+    "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE", "DCGM_FI_PROF_DRAM_ACTIVE", "DCGM_FI_PROF_PCIE_TX_BYTES",
+    "DCGM_FI_PROF_PCIE_RX_BYTES"})
+EXPORTED_BY = {
+    "stock dcgm-exporter (etc/default-counters.csv)": _STOCK,
+    "GMP DCGM example (prometheus-engine examples/nvidia-dcgm)": frozenset({
+        "DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_MEM_COPY_UTIL", "DCGM_FI_DEV_GPU_TEMP", "DCGM_FI_DEV_MEMORY_TEMP",
+        "DCGM_FI_DEV_POWER_USAGE", "DCGM_FI_PROF_SM_ACTIVE", "DCGM_FI_PROF_SM_OCCUPANCY",
+        "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE", "DCGM_FI_PROF_PIPE_FP64_ACTIVE", "DCGM_FI_PROF_PIPE_FP32_ACTIVE",
+        "DCGM_FI_PROF_PIPE_FP16_ACTIVE", "DCGM_FI_DEV_FB_FREE", "DCGM_FI_DEV_FB_USED", "DCGM_FI_DEV_FB_TOTAL",
+        "DCGM_FI_PROF_PCIE_TX_BYTES", "DCGM_FI_PROF_PCIE_RX_BYTES", "DCGM_FI_PROF_NVLINK_TX_BYTES",
+        "DCGM_FI_PROF_NVLINK_RX_BYTES"}),
+    "lab (deploy/any-gpu/dcgm-counters.csv)": _STOCK | {
+        "DCGM_FI_DEV_CLOCKS_EVENT_REASONS", "DCGM_FI_PROF_SM_ACTIVE", "DCGM_FI_PROF_SM_OCCUPANCY"},
+}
+# What derive()/bottleneck() read, besides the rules' fields.
+SIGNAL_FIELDS = frozenset({"DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_PROF_SM_ACTIVE", "DCGM_FI_PROF_SM_OCCUPANCY",
+                           "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE", "DCGM_FI_PROF_DRAM_ACTIVE", "DCGM_FI_DEV_FB_USED",
+                           "DCGM_FI_DEV_FB_FREE", "DCGM_FI_DEV_GPU_TEMP", "DCGM_FI_DEV_POWER_USAGE",
+                           "DCGM_FI_DEV_CLOCKS_EVENT_REASONS", "DCGM_FI_DEV_XID_ERRORS",
+                           "DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS", "DCGM_FI_DEV_ROW_REMAP_FAILURE"})
+
+
+def rules_that_cannot_fire(exported, rules=RULES) -> list[str]:
+    """Rules reading a field that ``exported`` (field names) lacks. The older name
+    DCGM_FI_DEV_CLOCK_THROTTLE_REASONS counts as the new DCGM_FI_DEV_CLOCKS_EVENT_REASONS."""
+    have = set(exported)
+    if THROTTLE_FIELDS[1] in have:
+        have.add(THROTTLE_FIELDS[0])
+    return [r.name for r in rules if not r.fields <= have]
+
 
 def evaluate(snaps: list[GpuSnapshot], rules=RULES) -> list[tuple[str, str, str]]:
-    """(rule, severity, gpu) for every rule whose condition holds in this single snapshot. Rules with
-    a ``for`` duration would be *pending* until the condition has held that long."""
+    """(rule, severity, gpu) for every rule whose condition holds in this single snapshot. What one
+    snapshot cannot show: a ``for`` duration (the alert would be *pending* until the condition has held
+    that long) and the XID rules' "changed within the window" (a live XID is assumed to be recent)."""
     fired = []
     for snap in snaps:
         sig = derive(snap)
@@ -284,27 +380,42 @@ def evaluate(snaps: list[GpuSnapshot], rules=RULES) -> list[tuple[str, str, str]
     return fired
 
 
-def rules_manifest(rules=RULES, name: str = "gpu-health", namespace: str = "gpu-lab", kind: str = "gmp") -> str:
-    """YAML for Google Managed Prometheus (``monitoring.googleapis.com/v1`` Rules) or the Prometheus
-    Operator (``monitoring.coreos.com/v1`` PrometheusRule). apiVersions: (verify) for your cluster."""
+def rules_manifest(rules=RULES, name: str = "gpu-health", kind: str = "gmp", namespace: str = "monitoring",
+                   pod_label: str = "exported_pod", namespace_label: str = "exported_namespace") -> str:
+    """YAML for Google Managed Prometheus (``monitoring.googleapis.com/v1`` **ClusterRules**:
+    cluster-scoped, because a namespaced ``Rules`` only sees its own namespace's metrics) or the
+    Prometheus Operator (``monitoring.coreos.com/v1`` PrometheusRule, in ``namespace``).
+    ``pod_label``/``namespace_label``: the workload labels as your Prometheus stores them (verify)."""
     import yaml
 
-    api = {"gmp": ("monitoring.googleapis.com/v1", "Rules"),
+    api = {"gmp": ("monitoring.googleapis.com/v1", "ClusterRules"),
            "prometheus-operator": ("monitoring.coreos.com/v1", "PrometheusRule")}[kind]
     group_rules = []
     for r in rules:
-        entry = {"alert": r.name, "expr": r.expr}
+        expr, summary = r.render(pod_label, namespace_label)
+        entry = {"alert": r.name, "expr": expr}
         if r.for_ not in ("0m", "0s", ""):
             entry["for"] = r.for_
         entry["labels"] = {"severity": r.severity}
-        entry["annotations"] = {"summary": r.summary}
+        entry["annotations"] = {"summary": summary}
         group_rules.append(entry)
-    doc = {"apiVersion": api[0], "kind": api[1], "metadata": {"name": name, "namespace": namespace},
+    metadata = {"name": name} if kind == "gmp" else {"name": name, "namespace": namespace}
+    doc = {"apiVersion": api[0], "kind": api[1], "metadata": metadata,
            "spec": {"groups": [{"name": name, "interval": "60s", "rules": group_rules}]}}
-    header = ("# Generated by gpurt.dcgm.rules_manifest(): edit RULES in gpurt/dcgm.py, not this file.\n"
-              f"# {api[1]} for {'Google Managed Prometheus' if kind == 'gmp' else 'the Prometheus Operator'}.\n"
-              "# VERIFY: the apiVersion, and the DCGM field names your exporter version exposes\n"
-              "# (DCGM_FI_DEV_CLOCKS_EVENT_REASONS was DCGM_FI_DEV_CLOCK_THROTTLE_REASONS in older DCGM).\n")
+    header = (
+        "# Generated by gpurt.dcgm.rules_manifest(): edit RULES in gpurt/dcgm.py, not this file.\n"
+        + (f"# {api[1]} for Google Managed Prometheus: cluster-scoped, because a namespaced Rules object only\n"
+           "# evaluates metrics from its own namespace and the DCGM exporter runs elsewhere (GKE system or gmp-public).\n"
+           if kind == "gmp" else f"# {api[1]} for the Prometheus Operator.\n")
+        + "# Firing alerts go to Alertmanager (GMP: the managed one, configured by a Secret in gmp-public;\n"
+        "# see deploy/gke/README.md), not to Cloud Monitoring alerting policies.\n"
+        "# Field prerequisites: stock dcgm-exporter lacks DCGM_FI_DEV_CLOCKS_EVENT_REASONS and DCGM_FI_PROF_SM_ACTIVE;\n"
+        "# Google's GMP DCGM example list (which GKE's managed package resembles, verify) lacks the XID, remap and\n"
+        "# clock fields. deploy/any-gpu/dcgm-counters.csv has them all (self-managed exporter);\n"
+        "# gpurt.dcgm.rules_that_cannot_fire(fields) lists the rules a given exporter can never trigger.\n"
+        f"# VERIFY: the apiVersion; the workload labels ({pod_label}, {namespace_label}: a scraper's own target labels\n"
+        "# pod/namespace take precedence); the field names your exporter version exposes\n"
+        "# (DCGM_FI_DEV_CLOCKS_EVENT_REASONS was DCGM_FI_DEV_CLOCK_THROTTLE_REASONS in older DCGM).\n")
     return header + yaml.safe_dump(doc, sort_keys=False, width=1000, allow_unicode=True)
 
 
@@ -312,6 +423,11 @@ def report(text: str) -> str:
     """One paragraph per GPU: signals, reading, XID triage, alerts."""
     samples, _ = parse_prometheus(text)
     lines = []
+    exported = {smp.name for smp in samples}
+    blind = rules_that_cannot_fire(exported)
+    if blind:
+        missing = sorted(set().union(*(r.fields for r in RULES if r.name in blind)) - exported)
+        lines.append(f"not in this scrape: {', '.join(missing)} -> rules that cannot fire: {', '.join(blind)}")
     for snap in snapshots(samples):
         s = derive(snap)
         pct = lambda v: "n/a" if v is None else f"{v:.0%}"  # noqa: E731

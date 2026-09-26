@@ -158,11 +158,15 @@ print("✅ five Kueue blockers, five different conversations with the queue owne
 # %% [markdown]
 # ## The whole diagnosis, every fixture
 # `pending.diagnose()` walks the four gates in order and names the fix. The autoscaler's events
-# override the scheduler's verdict when they explain it (a pool at max size, a stockout).
+# override the scheduler's verdict when they explain it (a pool at max size, a stockout). Each
+# diagnosis is printed under its fixture's provenance: simulated by the predictor, or written by
+# hand in the documented format — none of it is output recorded from a cluster.
 
 # %%
 for name in pending.fixture_names():
-    print(pending.diagnose(pending.load_fixture(name)), "\n")
+    fx = pending.load_fixture(name)
+    print(name, pending.fixture_label(fx))
+    print(pending.diagnose(fx), "\n")
 
 # %% [markdown]
 # ## Exercise 3.4 — pick the fix

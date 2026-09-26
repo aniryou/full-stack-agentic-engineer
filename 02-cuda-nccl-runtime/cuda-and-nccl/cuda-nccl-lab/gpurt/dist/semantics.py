@@ -77,22 +77,57 @@ def sendrecv(xs):
     return [xs[(r - 1) % n].copy() for r in range(n)]
 
 
-def ring_chunks(rank: int, step: int, n: int, phase: str, shift: int = 0) -> tuple[int, int]:
-    """(chunk sent to rank+1, chunk received from rank-1) at one step of a ring.
+def ring_chunks(rank: int, step: int, n: int, phase: str) -> tuple[int, int]:
+    """(chunk sent to rank+1, chunk received from rank-1) at ``step`` = 1 … n-1 of a ring all-reduce.
 
-    ``phase`` is "rs" (reduce-scatter: the receiver *adds*) or "ag" (all-gather: it *copies*).
-    With ``shift=0`` — ring all-reduce — rank r owns the reduced chunk (r+1) mod n after the n-1
-    reduce-scatter steps, which the all-gather then circulates; ``shift=-1`` makes rank r end with
-    chunk r, the reduce-scatter collective's contract. ``gpurt.dist.pipes`` runs exactly this schedule.
+    Steps are numbered from 1, as in primer §5.2. ``phase`` "rs" is the reduce-scatter (the receiver
+    *adds* the incoming chunk into its own copy): rank r sends chunk (r - step) mod n, so after n-1 steps
+    it holds the finished chunk r — the reduce-scatter contract. ``phase`` "ag" is the all-gather (the
+    receiver *copies*): rank r starts by sending its finished chunk r and then forwards what it last
+    received, so it sends chunk (r - step + 1) mod n. ``gpurt.dist.pipes`` runs exactly this schedule,
+    and :func:`ring_all_reduce` executes any schedule in NumPy to check it.
     """
-    first = rank + shift if phase == "rs" else rank + 1 + shift
+    if not 1 <= step <= n - 1:
+        raise ValueError(f"ring steps run 1 … {n - 1} for n = {n}, got {step}")
+    first = rank if phase == "rs" else rank + 1
     return (first - step) % n, (first - step - 1) % n
 
 
 def ring_schedule(n: int) -> list[tuple[str, int, int, int, int]]:
     """Every (phase, step, rank, send_chunk, recv_chunk) of a ring all-reduce over n ranks."""
     return [(phase, s, r, *ring_chunks(r, s, n, phase)) for phase in ("rs", "ag")
-            for s in range(n - 1) for r in range(n)]
+            for s in range(1, n) for r in range(n)]
+
+
+def ring_all_reduce(xs, chunks=ring_chunks):
+    """Execute a ring schedule step by step on per-rank NumPy buffers: ``(buffers, bytes_sent_per_rank)``.
+
+    ``chunks(rank, step, n, phase) -> (send_chunk, recv_chunk)`` is the schedule (default: the lab's).
+    Every step is synchronous — all ranks send from their buffers as they were at the start of the step
+    — and consistency is checked on the way: what rank r expects to receive must be the chunk rank r-1
+    sends, or ``ValueError``. A wrong schedule that is consistent still fails the final comparison with
+    :func:`all_reduce` — which is how a notebook exercise checks a schedule you write.
+    """
+    bufs = [np.array(x, copy=True) for x in _stack(xs)]
+    n = len(bufs)
+    bounds = [(i * bufs[0].shape[0]) // n for i in range(n + 1)]
+    sl = [slice(bounds[c], bounds[c + 1]) for c in range(n)]
+    sent = [0] * n
+    for phase in ("rs", "ag"):
+        for step in range(1, n):
+            plan = [chunks(r, step, n, phase) for r in range(n)]
+            payload = [bufs[r][sl[plan[r][0]]].copy() for r in range(n)]  # sends read pre-step state
+            for r in range(n):
+                left = (r - 1) % n
+                send_c, recv_c = plan[left][0], plan[r][1]
+                if send_c != recv_c:
+                    raise ValueError(f"{phase} step {step}: rank {r} expects chunk {recv_c}, rank {left} sends {send_c}")
+                sent[left] += payload[left].nbytes
+                if phase == "rs":
+                    bufs[r][sl[recv_c]] += payload[left]
+                else:
+                    bufs[r][sl[recv_c]] = payload[left]
+    return bufs, sent
 
 
 def expected(op: str, xs, root: int = 0):

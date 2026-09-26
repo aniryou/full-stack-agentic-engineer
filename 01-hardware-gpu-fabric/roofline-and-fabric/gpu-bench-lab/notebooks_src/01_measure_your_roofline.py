@@ -290,7 +290,7 @@ if be.is_gpu:
     if spec:
         print(f"{'memory':>14}: measured {si(bw.bytes_per_s(), 'B/s'):>13}   spec {si(spec.mem_bw, 'B/s'):>13}"
               f"   {bw.bytes_per_s() / spec.mem_bw:5.1%}")
-    half = next((d for d in ("bfloat16", "float16") if d in main), None)
+    half = next((d for d in ("float16", "bfloat16") if d in main), None)     # fp16: every tensor-core GPU has it
     if half and "float32" in main:
         ratio = gemm.best(gemms, half).flops_per_s() / gemm.best(gemms, "float32").flops_per_s()
         exp = spec.peak_flops(half) / spec.peak_flops("float32") if spec and spec.peak_flops(half) else None

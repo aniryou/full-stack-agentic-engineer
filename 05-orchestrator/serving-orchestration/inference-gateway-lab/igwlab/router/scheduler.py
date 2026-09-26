@@ -5,7 +5,8 @@ The one idea: one routing decision =
     1. producers   compute per-request data for every candidate (prefix matches, in-flight load)
     2. filters     run in order; each narrows the set (an empty set means HTTP 503)
     3. scorers     each returns scores in [0,1] for the survivors; total = sum(weight * score)
-    4. picker      turns totals into a choice (max score, ties broken round-robin)
+    4. picker      turns totals into a choice (max score; the lab rotates ties round-robin,
+                   llm-d-router v0.10.0 breaks them at random)
     5. pre-request producers record the choice (the prefix index learns "E has this prefix now")
 
 `Decision.table()` prints the per-scorer columns so you can see *which* signal won — the most

@@ -8,16 +8,20 @@
 #
 # NCCL is taken from $NCCL_HOME, else the system (libnccl-dev: /usr/include/nccl.h), else the pip wheel
 # that PyTorch installs (nvidia-nccl-cu12) — so the test uses the same NCCL your framework does.
-# Logs land in $OUT (default ./out); parse them with:  python -m gpurt.nccltests out/all_reduce_2gpu.log
+# Logs land in $OUT (default ./out, gitignored); parse them with:  python -m gpurt.nccltests out/all_reduce_2gpu.log
+# The nccl-tests checkout lives outside the repository ($SRC, default ~/.cache/nccl-tests-<ref>): it is a git
+# clone of its own and must not end up inside this mono-repo.
 set -euo pipefail
 
 OUT="${OUT:-$PWD/out}"
-SRC="${SRC:-$PWD/nccl-tests}"
+# VERIFY: v2.20.0 is the latest nccl-tests tag as of 2026-09-26; gpurt.nccltests and gpurt.dist.busbw.plan
+# mirror its output layout and buffer sizing. Override with NCCL_TESTS_REF=<tag>.
+REF="${NCCL_TESTS_REF:-v2.20.0}"
+SRC="${SRC:-${XDG_CACHE_HOME:-$HOME/.cache}/nccl-tests-${REF}}"
 CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 MIN_BYTES="${MIN_BYTES:-8}"
 MAX_BYTES="${MAX_BYTES:-256M}"
 OPS="${OPS:-all_reduce all_gather}"
-REF="${NCCL_TESTS_REF:-}" # VERIFY: set to a release tag of NVIDIA/nccl-tests for reproducible builds
 
 step() {
   echo "+ $*" >&2
@@ -40,7 +44,7 @@ echo "== ${NGPUS} GPU(s), compute capability ${CC:-unknown}; logs -> ${OUT}" >&2
 if [[ -z "${NCCL_HOME:-}" && ! -f /usr/include/nccl.h ]]; then
   WHEEL="$(python3 -c 'import nvidia.nccl as m; print(list(m.__path__)[0])' 2> /dev/null || true)"
   if [[ -n "${WHEEL}" && -f "${WHEEL}/include/nccl.h" ]]; then
-    NCCL_HOME="${SRC}/.nccl" # the wheel ships libnccl.so.2 only; give the linker a libnccl.so
+    NCCL_HOME="${SRC}-nccl" # the wheel ships libnccl.so.2 only; give the linker a libnccl.so (beside, not in, the clone)
     step mkdir -p "${NCCL_HOME}/lib"
     step ln -sfn "${WHEEL}/include" "${NCCL_HOME}/include"
     step ln -sf "${WHEEL}/lib/libnccl.so.2" "${NCCL_HOME}/lib/libnccl.so"
@@ -57,7 +61,8 @@ fi
 
 # -- build ----------------------------------------------------------------------------------------
 if [[ ! -d "${SRC}/.git" ]]; then
-  step git clone --depth 1 ${REF:+--branch "${REF}"} https://github.com/NVIDIA/nccl-tests.git "${SRC}"
+  step mkdir -p "$(dirname "${SRC}")"
+  step git clone --depth 1 --branch "${REF}" https://github.com/NVIDIA/nccl-tests.git "${SRC}"
 fi
 step make -C "${SRC}" -j"$(nproc)" MPI=0 CUDA_HOME="${CUDA_HOME}" ${NCCL_HOME:+NCCL_HOME="${NCCL_HOME}"} \
   ${GENCODE:+NVCC_GENCODE="${GENCODE}"}

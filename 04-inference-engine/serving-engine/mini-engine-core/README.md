@@ -4,7 +4,7 @@ The inside of an inference engine, small enough to read in a sitting: **a numpy 
 loop, continuous batching, a paged KV cache, hash-chained prefix caching, chunked prefill, preemption by
 recompute, a full sampler with structured-output masks, exact speculative decoding, quantization, and a
 roofline performance model that drives the real scheduler to produce **simulated** TTFT and ITL under load.
-About 930 lines of library code (1,390 with docstrings), standard library + numpy, six fill-in notebooks.
+About 960 lines of library code (1,440 with docstrings), standard library + numpy, six fill-in notebooks.
 
 **Tier: T0.** Laptop, Colab CPU or CI; no GPU, no network. This is where the concepts of
 [`../PRIMER.md`](../PRIMER.md) are learned. The step-up is [`../vllm-serving-lab/`](../vllm-serving-lab/): the
@@ -15,7 +15,7 @@ same ideas measured on a real vLLM server (T1 on one GPU, T3 on Cloud Run or GKE
 ```bash
 cd mini-engine-core
 python3 -m pip install -r requirements.txt    # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 59 tests, ~10 s
+python3 -m pytest -q                           # 67 tests, ~15 s
 python3 -m jupyterlab notebooks                # do the exercises
 ```
 
@@ -39,45 +39,55 @@ Read the modules in this order; each opens with a docstring stating the one idea
 | File | Lines | What it teaches |
 |------|------:|-----------------|
 | [`minengine/model.py`](minengine/model.py) | ~230 | a tiny Llama-style decoder (byte vocabulary, RMSNorm, RoPE, GQA, SwiGLU) whose attention reads K/V **through block tables** from a flat batch of many requests' tokens; `forward_dense` is the textbook reference |
-| [`minengine/kv.py`](minengine/kv.py) | ~180 | the KV cache manager: block pool, refcounts, prefix cache keyed by `hash(parent, tokens, extra)`, LRU free queue with tail-first freeing, hit accounting in tokens, an invariant checker |
-| [`minengine/scheduler.py`](minengine/scheduler.py) | ~210 | continuous batching: one token budget per step, running requests first, chunked prefill, FCFS admission with a whole-prompt check and watermark, preemption by recompute, stop conditions |
+| [`minengine/kv.py`](minengine/kv.py) | ~200 | the KV cache manager: block pool, refcounts, prefix cache keyed by `hash(parent, tokens, extra)`, LRU free queue with tail-first freeing, hit accounting in tokens (re-admissions after preemption kept apart), an invariant checker |
+| [`minengine/scheduler.py`](minengine/scheduler.py) | ~210 | continuous batching: one token budget per step, running requests first, chunked prefill, FCFS admission with a whole-prompt check and watermark, preemption by recompute, publishing full blocks at scheduling time, stop conditions |
 | [`minengine/sampler.py`](minengine/sampler.py) | ~130 | penalties → greedy/temperature → min-p → top-k → top-p → a seeded draw; raw logprobs; `ChoiceFSM`, a structured-output token mask |
 | [`minengine/engine.py`](minengine/engine.py) | ~170 | the loop: schedule → build the flat batch (tokens, positions, slot mapping, block tables) → one forward pass → sample → update; `add_request`, `step`, `generate`, traces |
 | [`minengine/spec.py`](minengine/spec.py) | ~120 | speculative decoding: exact accept/recover/bonus rejection sampling, α, expected tokens per pass, speed-up and best k, n-gram prompt lookup |
 | [`minengine/quant.py`](minengine/quant.py) | ~80 | INT8 per-tensor/per-channel, INT4 group-wise, FP8-E4M3 emulation, SmoothQuant scales, error metrics, bits per weight |
-| [`minengine/perf.py`](minengine/perf.py) | ~230 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models, KV capacity, and `simulate()`: this package's scheduler on a virtual clock under Poisson load — every output labelled SIMULATED |
+| [`minengine/perf.py`](minengine/perf.py) | ~260 | `max(bytes/BW, FLOPs/peak) + overhead` per step for real GPUs and models (quantized weights keep a 16-bit embedding and LM head), KV capacity, the speculation cost model, and `simulate()`: this package's scheduler on a virtual clock under Poisson load — every output labelled SIMULATED |
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (59, offline, ~10 s). The ones that carry the correctness claims:
+`tests/` has one focused test per concept (67, offline, ~15 s). The ones that carry the correctness claims:
 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10; the engine's greedy tokens equal `generate_dense` — including under
-  preemption and with prefix-cache hits — and seeded sampled outputs do not change under preemption either
-  (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
+  preemption and with prefix-cache hits — and seeded sampled outputs do not change under preemption either; a
+  burst of three requests sharing a prefix hits within one step (`[0, 64, 64]`) and every logprob still equals
+  the dense reference to 1e-9 (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
 - **The prefix cache never serves a block computed under a different prefix.** An oracle records the full token
   prefix behind every block and checks every hit over hundreds of random prompts; the same harness shows that
   a block name *without* the parent does serve wrong K/V (`test_kv.py`).
 - **Speculative decoding is exact.** A chi-square test over all 64 three-token outcomes matches the target's
   joint distribution, and the same test rejects a plausible wrong implementation (resampling from `p` instead
   of the residual) — the test has power (`test_spec.py`).
-- **Scheduler invariants.** Token budget and sequence limit hold every step; refcounts, free queue and cache map
-  stay consistent after every step; no block leaks after preemption, finish or abort; a victim already in the
-  batch gives its tokens back (`test_scheduler.py`).
+- **Scheduler invariants.** Token budget and sequence limit hold every step; a block is published only if a
+  request in that step's batch is scheduled to fill it; refcounts, free queue and cache map stay consistent after
+  every step; no block leaks after preemption, finish or abort; a victim already in the batch gives its tokens
+  back; the whole-prompt check and the watermark each cut preemptions on a tight pool (`test_scheduler.py`).
+- **The sampler's order.** Three settings pairs whose kept sets differ under any other order pin temperature →
+  min-p → top-k → top-p, as in vLLM's `Sampler`; a reordered pipeline fails (`test_sampler.py`).
 - **Formulas pinned to hand-computed values:** KV bytes per token, the decode step as weight read, prefill FLOPs,
-  the knee, KV blocks, expected tokens `(1 − α^(k+1)) / (1 − α)`, bits per weight, the FP8 grid (`test_perf.py`,
-  `test_spec.py`, `test_quant.py`).
+  the knee, KV blocks, quantized weight bytes with a 16-bit embedding and LM head (5.70 GB for Llama-3.1-8B INT4),
+  LM-head FLOPs per verified position, the speculation cost model against `E / (k c + 1)`, goodput, expected
+  tokens `(1 − α^(k+1)) / (1 − α)`, bits per weight, the FP8 grid, hit accounting with preempted re-lookups kept
+  apart (`test_perf.py`, `test_spec.py`, `test_quant.py`, `test_kv.py`).
 
 ## What is faithful to vLLM, and what is simplified
 
 Faithful (checked against vLLM's V1 source, Sep 2026 — see the primer's Verify list): unified scheduling on
 `num_computed_tokens`; running before waiting; no admissions in a step that preempted; FCFS victim = the newest
-running request; `max_cache_hit_length = num_tokens − 1`; chained block hashes with extra keys; tail-first
-freeing into an LRU free queue with lazy eviction; hits counted in tokens; the sampler's order; raw logprobs;
-the accepted/recovered/bonus rejection rule. Simplified: one KV cache group (no hybrid or sliding-window models);
-blocks are published to the prefix cache after the step that computes them (vLLM publishes at scheduling time);
-no async scheduling, CUDA graphs, tensor parallelism or LoRA; speculation runs outside the engine loop (`spec.py`)
-rather than as lookahead slots in the scheduler; the model is float64 numpy.
+running request; `max_cache_hit_length = num_tokens − 1`; chained block hashes with extra keys; blocks published
+at scheduling time, so requests admitted in the same step share a prefix (the core publishes a running request's
+blocks once the running pass is final, so a request preempted later in that pass never names blocks it will not
+compute); tail-first freeing into an LRU free queue with lazy eviction; hits counted in tokens, with preempted
+re-lookups kept out of the exported counters; the sampler's order; raw logprobs; the accepted/recovered/bonus
+rejection rule; `RequestStatus`-style names. Simplified: one KV cache group (no hybrid or sliding-window models);
+no async scheduling, CUDA graphs, tensor parallelism or LoRA (TP appears as a numpy exercise in notebook 01);
+speculation runs outside the engine loop (`spec.py`) rather than as lookahead slots in the scheduler (it takes any
+draft distribution q — sampled, or one-hot for greedy drafting, which is vLLM's default); the model is float64
+numpy.
 
 ## The notebooks
 
@@ -85,16 +95,20 @@ Each opens with its tier and "The one-minute version", works examples against th
 check cell that prints ✅, and ends with "In a design review". Solutions are in `solutions/`.
 
 1. **`01_the_step_loop_and_continuous_batching`** — one step taken apart; the flat batch and slot mapping;
-   static vs continuous batching; peak KV blocks per request; concurrency from KV blocks.
+   static vs continuous batching; peak KV blocks per request; concurrency from KV blocks; one MLP split across two
+   "GPUs" (tensor parallelism and its all-reduces).
 2. **`02_chunked_prefill_and_the_token_budget`** — the knee of the step-time curve; prefill/decode interference
-   and chunked prefill; a budget sweep (simulated); choosing the budget for an ITL SLO; preemption by recompute;
-   sizing KV to avoid it.
-3. **`03_prefix_caching`** — chained block names; shared system prompts and refcounts; LRU eviction; why the
-   parent is in the name; hit prediction; agent prompt layout (0% vs 80%+ hits); radix tree vs block hashing.
+   and chunked prefill; a budget sweep at moderate load and at saturation, with goodput (simulated); choosing the
+   budget for an ITL SLO; preemption by recompute; sizing KV to avoid it; the whole-prompt admission check.
+3. **`03_prefix_caching`** — chained block names; shared system prompts and refcounts; a burst sharing a prefix
+   within one step; LRU eviction; why the parent is in the name; what it buys on an H100 (simulated); hit
+   prediction; agent prompt layout (0% vs 80%+ hits); radix tree vs block hashing.
 4. **`04_sampling_and_structured_output`** — temperature, top-k/p, min-p, penalties, seeds and batch invariance,
-   raw logprobs; FSM masks that force valid JSON (and why that guarantees syntax, not sense).
-5. **`05_speculative_decoding`** — the rule and its exactness; α and tokens per pass on a real draft/target pair;
-   prompt lookup for copy-heavy outputs; when speculation stops paying (simulated).
+   raw logprobs; FSM masks that force valid JSON (and why that guarantees syntax, not sense); compiling a
+   JSON-schema automaton into per-state masks over multi-character tokens.
+5. **`05_speculative_decoding`** — the rule and its exactness; α and tokens per pass on a real draft/target pair
+   (and why the formula over-predicts deep k); prompt lookup for copy-heavy outputs; when speculation stops paying,
+   and how much that rests on the overhead assumption (simulated).
 6. **`06_quantization`** — INT8/INT4/FP8 and scale granularity; outliers and SmoothQuant; model-level damage; FP8
    KV; what each scheme buys for decode, prefill and concurrency on an L4 (simulated).
 

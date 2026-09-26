@@ -1,6 +1,6 @@
 {
  "description": "DRA: the ResourceClaimTemplate's CEL selector matches no device in any ResourceSlice.",
- "source": "kube-scheduler DynamicResources message written in the documented format - sample output in the documented format (illustrative)",
+ "source": "kube-scheduler DynamicResources message written by hand for this lab - sample output in the documented format (illustrative)",
  "expect": {
   "gate": "kube-scheduler",
   "category": "dra"

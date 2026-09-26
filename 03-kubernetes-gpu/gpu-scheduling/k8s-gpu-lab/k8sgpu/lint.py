@@ -403,7 +403,8 @@ def rollout_surge(ctx: Context):
     yield Finding("rollout-surge", "info", f"{ctx.kind}/{ctx.name} spec.strategy",
                   "a rolling update surges extra GPU pods (default maxSurge 25%); with no spare GPUs the "
                   "rollout stalls with the new pod Pending",
-                  "maxSurge: 0, maxUnavailable: 1 — or keep headroom / a ComputeClass that can scale up")
+                  "maxSurge: 0, maxUnavailable: 1 (with one replica every rollout is then an outage: fine for a "
+                  "lab, not production) — or run >= 2 replicas, keep a spare GPU, or use a ComputeClass that can scale up")
 
 
 # ---- entry points ------------------------------------------------------------------------------

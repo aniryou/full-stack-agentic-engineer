@@ -11,7 +11,8 @@
 # stretches the scale and wrecks everyone else's resolution; per output channel isolates outlier rows; groups of
 # 32–128 inputs (the usual INT4 recipe, GPTQ/AWQ) isolate them further for a few extra bits per group. What it buys
 # depends on the bottleneck: **decode is memory-bound**, so fewer weight bytes are faster tokens (weight-only INT4
-# ≈ 3.5× on one request); **prefill is compute-bound**, so only formats the tensor cores compute in natively (FP8
+# ≈ 3× on one request for an 8B model — not 3.9×, because the embedding and LM head stay in 16-bit and the KV read
+# does not shrink); **prefill is compute-bound**, so only formats the tensor cores compute in natively (FP8
 # W8A8 on Ada/Hopper/Blackwell, INT8 W8A8) make it faster. Quantizing the **KV cache** (FP8) halves its bytes, which
 # doubles how many sessions fit. And it always costs some accuracy — measure it on your own evals.
 #
@@ -134,7 +135,10 @@ print(f"FP8 KV cache: KL {c['kl']:.5f} nats, top-1 {c['top1']:.1%}, and half the
 # %% [markdown]
 # ## Worked example 7 — what each scheme buys on an L4 (SIMULATED)
 # Llama-3.1-8B on a 24 GB L4; decode at 1,000 tokens of context; an 1,800-token prefill; sessions of 1,800 + 200
-# tokens. "Weight-only" formats are dequantized to bf16 inside the GEMM, so they save bytes but not FLOPs.
+# tokens. "Weight-only" formats are dequantized to bf16 inside the GEMM, so they save bytes but not FLOPs. As in
+# real GPTQ/AWQ/FP8 checkpoints, only the transformer blocks' linear layers are quantized: the embedding table and
+# the untied LM head (2 × 128,256 × 4,096 = 1.05 B parameters, 2.1 GB) stay in 16-bit (`perf.LLM.weight_bytes`),
+# and the LM head is read every step.
 
 # %%
 G, base = perf.GPUS["L4"], perf.LLMS["llama-3.1-8b"]
@@ -154,9 +158,10 @@ for name, L in options.items():
 print("(SIMULATED: roofline model, 80% bandwidth / 60% FLOPs, 2 ms per step overhead)")
 
 # %% [markdown]
-# Read the columns: weight-only INT4 makes single-stream decode ~3.5× faster and frees memory for KV, but its
-# prefill is no faster. FP8 W8A8 halves prefill time (FP8 tensor cores) and halves weight bytes. FP8 KV doubles the
-# sessions that fit. On a small GPU, quantization is a **concurrency** lever before it is a speed lever.
+# Read the columns: weight-only INT4 makes single-stream decode ~3× faster and frees memory for KV, but its
+# prefill is no faster. FP8 W8A8 halves prefill time (FP8 tensor cores) and halves the linear layers' bytes. FP8
+# KV doubles the sessions that fit. On a small GPU, quantization is a **concurrency** lever before it is a speed
+# lever.
 #
 # ## Exercise 6.1 — symmetric per-channel INT8
 # For `w` of shape `(d_in, d_out)`, one scale per output column: `scale = max|w[:, j]| / 127`,
@@ -199,35 +204,46 @@ print(f"✅ int4 g32 error {quant.error(w, int4_groupwise(w, 32))['rel']:.3f} < 
 
 # %% [markdown]
 # ## Exercise 6.3 — what the weights weigh
-# Write `weights_gb(params, bits, group_size=None, scale_bits=16)` including the scales, then decide which of these
-# fit on **one 80 GB GPU** with at least 20% of it left for the KV cache: Llama-3.1-8B (8.03B), a 70B model, both
-# in bf16 and INT4 g128. Fill `fits`.
+# Write `weights_gb(params, bits, group_size=None, scale_bits=16, keep16_params=0)` including the scales, with
+# `keep16_params` of the parameters left in 16-bit (the embedding table and LM head, which quantized checkpoints
+# do not quantize). Then decide which of these fit on **one 80 GB GPU** with at least 20% of it left for the KV
+# cache: Llama-3.1-8B (8.03B parameters, untied 128,256 × 4,096 embedding and LM head) and Llama-3.1-70B (70.6B,
+# untied 128,256 × 8,192), each in bf16 and INT4 g128. Fill `fits`.
 
 # %% exercise
-def weights_gb(params, bits, group_size=None, scale_bits=16):
+def weights_gb(params, bits, group_size=None, scale_bits=16, keep16_params=0):
     ### BEGIN SOLUTION
-    return params * (bits + (scale_bits / group_size if group_size else 0)) / 8 / 1e9
+    per_weight = bits + (scale_bits / group_size if group_size else 0)
+    return ((params - keep16_params) * per_weight + keep16_params * 16) / 8 / 1e9
     ### END SOLUTION
 
 
+MODELS = {"8B": (8.03e9, 2 * 128256 * 4096), "70B": (70.6e9, 2 * 128256 * 8192)}   # (params, embedding + LM head)
 fits = {("8B", "bf16"): None, ("8B", "int4"): None, ("70B", "bf16"): None, ("70B", "int4"): None}
 ### BEGIN SOLUTION
-for size, params in [("8B", 8.03e9), ("70B", 70.6e9)]:
+for size, (params, tables) in MODELS.items():
     fits[(size, "bf16")] = weights_gb(params, 16) <= 0.8 * 80
-    fits[(size, "int4")] = weights_gb(params, 4, 128) <= 0.8 * 80
+    fits[(size, "int4")] = weights_gb(params, 4, 128, keep16_params=tables) <= 0.8 * 80
 ### END SOLUTION
 
 # %% check
 assert abs(weights_gb(8e9, 4, 128) - 4.125) < 1e-9 and abs(weights_gb(8e9, 16) - 16) < 1e-9
+assert abs(weights_gb(8.03e9, 4, 128, keep16_params=MODELS["8B"][1]) - quant.weight_gb(8.03e9, 4, 128,
+           keep16_params=MODELS["8B"][1])) < 1e-9
+int4_8b = weights_gb(8.03e9, 4, 128, keep16_params=MODELS["8B"][1])
+assert abs(int4_8b * 1e9 - options["int4 weight-only (g128)"].weight_bytes) < 1e3          # same as perf.LLM
 assert fits == {("8B", "bf16"): True, ("8B", "int4"): True, ("70B", "bf16"): False, ("70B", "int4"): True}
-print(f"✅ 70B: {weights_gb(70.6e9, 16):.0f} GB in bf16 (two GPUs, tensor parallel) vs "
-      f"{weights_gb(70.6e9, 4, 128):.1f} GB in INT4 g128 (one GPU)")
+p70, t70 = MODELS["70B"]
+print(f"✅ 70B: {weights_gb(p70, 16):.0f} GB in bf16 (two GPUs, tensor parallel) vs "
+      f"{weights_gb(p70, 4, 128, keep16_params=t70):.1f} GB in INT4 g128 (one GPU; "
+      f"{weights_gb(p70, 4, 128, keep16_params=t70) - weights_gb(p70, 4, 128):.1f} GB more than if the embedding "
+      "and LM head were quantized too)")
 
 # %% [markdown]
 # ## Exercise 6.4 — predict the decode speed-up
-# Single-stream decode on an L4 is the weight read. Predict the INT4-g128 vs bf16 speed-up from bytes alone
-# (`bytes_ratio`), then compute what the roofline model says (`modelled`, decode at batch 1, context 1,000).
-# Why are they different?
+# Single-stream decode on an L4 is the weight read. Predict the INT4-g128 vs bf16 speed-up from the bytes of a
+# quantized weight alone (`bytes_ratio`), then compute what the roofline model says (`modelled`, decode at batch 1,
+# context 1,000). Why are they different?
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -236,9 +252,9 @@ modelled = perf.step_time(G, base, [(1000, 1)]) / perf.step_time(G, options["int
 ### END SOLUTION
 
 # %% check
-assert abs(bytes_ratio - 3.88) < 0.01 and 3.3 < modelled < 3.7
-print(f"✅ bytes say {bytes_ratio:.2f}x, the model says {modelled:.2f}x - the KV read and the fixed per-step "
-      "overhead do not shrink (SIMULATED)")
+assert abs(bytes_ratio - 3.88) < 0.01 and 2.8 < modelled < 3.1
+print(f"✅ bytes say {bytes_ratio:.2f}x, the model says {modelled:.2f}x - the 16-bit LM head (1.05 GB read every "
+      "step), the KV read and the fixed per-step overhead do not shrink (SIMULATED)")
 
 # %% [markdown]
 # ## Exercise 6.5 — pick a scheme
@@ -260,9 +276,9 @@ print("✅", choice, "- INT4 wins memory and decode but not prefill; FP8 W8A8 ne
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Quantization trades bits for accuracy, and what it buys depends on the bottleneck.
-# Decode is memory-bound: weight-only INT4 with group-wise scales cuts the bytes per token by almost 4× and single-
-# stream latency by ~3.5×, but prefill is compute-bound, so only W8A8 formats that run natively on the tensor
-# cores — FP8 on Ada, Hopper and Blackwell — make prefill faster. Separately, an FP8 KV cache halves the KV bytes
+# Decode is memory-bound: weight-only INT4 with group-wise scales cuts the linear layers' bytes by almost 4× and
+# single-stream latency by ~3× for an 8B model (its 16-bit LM head stays), but prefill is compute-bound, so only
+# W8A8 formats that run natively on the tensor cores — FP8 on Ada, Hopper and Blackwell — make prefill faster. Separately, an FP8 KV cache halves the KV bytes
 # and doubles the sessions per GPU, which on a 24 GB card matters more than speed. Granularity is where accuracy
 # is won: per-channel for INT8, groups of 32–128 for INT4, and outlier handling like SmoothQuant or AWQ for
 # activations. We quantize, then gate on task-level evals against the bf16 baseline, not on perplexity alone."

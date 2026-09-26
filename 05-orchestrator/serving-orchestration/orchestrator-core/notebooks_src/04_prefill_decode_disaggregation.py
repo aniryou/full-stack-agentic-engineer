@@ -21,8 +21,9 @@
 # %%
 import dataclasses
 
-from fleetsim import (H100_8B, L4_8B, LLAMA_8B_KV, PowerOfTwo, chat, expand, mix, pd_plan, rag, run_pd, search_pd,
-                      step_time, table)
+from fleetsim import (H100_8B, L4_8B, LLAMA_8B_KV, PowerOfTwo, chat, decode_step_s, max_decode_batch, mix, pd_plan,
+                      rag, run_pd, search_pd, step_time, table)
+import math
 
 p = L4_8B
 
@@ -85,7 +86,8 @@ print(f"✅ L4 (prefill {6000 / L4_8B.compute_tok_s:.2f} s): {on_l4}\n   H100 (p
 # %% [markdown]
 # ## Worked example — every split of eight GPUs
 # Eight L4 replicas, 1.2 req/s of ~6k-token prompts, 100 Gb/s link. `search_pd` runs every xPyD split (0 prefill =
-# aggregated) on the same traffic; the SLO is TTFT <= 3 s and TPOT <= 80 ms. Next to it, the analytic plan.
+# aggregated) on the same traffic; the SLO is TTFT <= 3 s and TPOT <= 80 ms. Next to it, the analytic plan. (The
+# fleets here are fixed-size: `fleetsim` does not autoscale P/D pools — the planners of primer §4.5 do.)
 
 # %%
 def heavier():
@@ -102,22 +104,43 @@ print({k: round(v, 2) for k, v in plan.items()})
 # Everything else is lopsided: too few prefill replicas and TTFT explodes in the prefill queue; too few decode
 # replicas and TPOT does. Aggregated serving meets the TTFT SLO but not the tight TPOT one, because of the chunk stall.
 #
-# ## Exercise 4.3 — the P:D ratio from first principles
-# Prefill replicas needed = prefill tokens per second demanded / (prefill tokens per second one replica sustains x a
-# utilisation cap). Decode replicas needed = output tokens per second demanded / output tokens per second one decode
-# replica sustains at the ITL SLO. Write `pd_ratio(rate, isl, osl, prefill_tok_s, util, decode_tok_s)` returning
-# `(prefill_replicas, decode_replicas)`.
+# ## Exercise 4.3 — the decode side of the plan
+# The prefill side is division: 1.2 req/s x 6,060 tokens over 3,781 tok/s at a 0.7 utilisation cap is 2.75
+# replicas. The decode side hinges on one number — how many requests a decode replica can batch — and that is capped
+# three ways: `profile.max_seqs`; the KV pool, which must hold every request's context (`profile.kv_blocks` blocks
+# of `profile.block` tokens; `ctx` tokens of context plus the next token need ceil((ctx + 1) / block) blocks); and
+# the ITL SLO, which one decode step for the whole batch, `decode_step_s(profile, batch, ctx)`, must meet. Write
+# `largest_decode_batch(profile, ctx, itl_slo_s)` (0 if even one request misses the SLO), and **predict** which cap
+# binds for the plan above — `ctx` = 6,060 + 250 / 2 = 6,185 on the L4 with an 80 ms SLO: `"kv"` or `"itl"`.
 
 # %% exercise
-def pd_ratio(rate, isl, osl, prefill_tok_s, util, decode_tok_s):
+def largest_decode_batch(profile, ctx, itl_slo_s):
     ### BEGIN SOLUTION
-    return rate * isl / (prefill_tok_s * util), rate * osl / decode_tok_s
+    fits = min(profile.max_seqs, profile.kv_blocks // math.ceil((ctx + 1) / profile.block))
+    b = 0
+    while b < fits and decode_step_s(profile, b + 1, ctx) <= itl_slo_s:
+        b += 1
+    return b
     ### END SOLUTION
 
+
+binding = None      # "kv" or "itl"
+### BEGIN SOLUTION
+binding = "kv"      # 2,193 blocks // 387 per request = 5, while the ITL alone would allow 8
+### END SOLUTION
+
 # %% check
-n_p, n_d = pd_ratio(1.2, 6060, 250, p.compute_tok_s, 0.7, plan["decode_tok_s_per_replica"])
-assert abs(n_p - plan["prefill_replicas"]) < 1e-9 and abs(n_d - plan["decode_replicas"]) < 1e-9
-print(f"✅ {n_p:.2f} prefill : {n_d:.2f} decode — round to the split that keeps both pools under their limits")
+for prof, ctx, slo in ((L4_8B, 6185, 0.08), (L4_8B, 500, 0.07), (L4_8B, 6185, 0.05), (H100_8B, 6185, 0.012),
+                       (H100_8B, 2000, 0.03)):
+    assert largest_decode_batch(prof, ctx, slo) == max_decode_batch(prof, ctx, slo), (prof.name, ctx, slo)
+b = largest_decode_batch(p, 6185, 0.08)
+kv_fit = p.kv_blocks // math.ceil(6186 / p.block)
+itl_fit = largest_decode_batch(dataclasses.replace(p, kv_blocks=10**9), 6185, 0.08)
+assert binding == ("kv" if kv_fit < itl_fit else "itl"), (kv_fit, itl_fit)
+n_d = 1.2 * 250 / (b / decode_step_s(p, b, 6185))           # output tok/s demanded / per-replica decode tok/s
+assert abs(n_d - plan["decode_replicas"]) < 1e-9
+print(f"✅ batch {b} (KV fits {kv_fit}, the ITL SLO alone {itl_fit}) -> {n_d:.2f} decode replicas against "
+      f"{plan['prefill_replicas']:.2f} prefill: 3P5D")
 
 # %% [markdown]
 # ## Worked example — try smaller prefill chunks first
@@ -135,16 +158,18 @@ print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep
 
 # %% [markdown]
 # On this model and GPU the chunk-budget knob does as well as the best split — one pool, no network, no ratio to
-# maintain. The simulator's step model has no per-chunk efficiency loss, so treat this as the optimistic end; real
-# engines lose some prefill efficiency at small chunks, and bigger models make each decode step shorter relative to
-# a chunk — which is where disaggregation pulls ahead (DistServe, Splitwise, the llm-d P/D guide: medium-large models,
-# long inputs).
+# maintain. Two things the step model leaves out make this the optimistic end: it has no per-chunk efficiency loss
+# (real engines lose some prefill efficiency at small chunks), and its prefill compute is linear in tokens (no
+# attention FLOPs — about +10 % for these 6k-token prompts, more for longer ones), which flatters every row's TTFT.
+# Bigger models make each decode step shorter relative to a chunk — which is where disaggregation pulls ahead
+# (DistServe, Splitwise, the llm-d P/D guide: medium-large models, long inputs).
 #
 # ## Exercise 4.4 — disaggregate only the prompts worth it
-# Real traffic mixes short chat turns with long RAG prompts. llm-d's P/D sidecar can serve a request locally on its
-# decode replica when the uncached prompt is short (`pd_threshold` here). **Predict** which threshold gives a 2P6D
-# fleet the best SLO attainment on this mix: `0` (disaggregate everything), `2048` (only long prompts) or `100_000`
-# (never — the prefill pool idles).
+# Real traffic mixes short chat turns with long RAG prompts. In llm-d the endpoint picker decides per request: it
+# picks the decode pod first, then its `prefix-based-pd-decider` sends the prompt to a prefill pod only if at least
+# `nonCachedTokens` of it are not cached on that decode pod (`pd_threshold` here); the decode pod's sidecar carries
+# the decision out. **Predict** which threshold gives a 2P6D fleet the best SLO attainment on this mix: `0`
+# (disaggregate everything), `2048` (only long prompts) or `100_000` (never — the prefill pool idles).
 
 # %% exercise
 best_threshold = None

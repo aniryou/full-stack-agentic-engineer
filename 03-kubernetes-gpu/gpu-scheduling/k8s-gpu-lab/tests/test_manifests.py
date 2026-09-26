@@ -114,3 +114,23 @@ def test_yaml_round_trip_keeps_order_and_header():
     text = m.to_yaml(o, o, header="two jobs")
     assert text.startswith("# two jobs\napiVersion: batch/v1\nkind: Job\n")
     assert m.loads_all(text) == [o, o]
+
+
+def test_toleration_matching_is_kubernetes_rule():
+    # k8s.io/api core/v1 Toleration.ToleratesTaint (v1.34): effect, then key, then Exists / Equal(value)
+    taint = m.GPU_TAINT                                                    # nvidia.com/gpu=present:NoSchedule
+    assert m.toleration_tolerates({"key": m.GPU, "operator": "Exists", "effect": "NoSchedule"}, taint)
+    assert m.toleration_tolerates({"operator": "Exists"}, taint)           # empty key + Exists = everything
+    assert m.toleration_tolerates({"key": m.GPU, "value": "present"}, taint)   # operator defaults to Equal
+    assert not m.toleration_tolerates({"key": m.GPU, "operator": "Equal", "value": "true"}, taint)
+    assert not m.toleration_tolerates({"key": m.GPU, "operator": "Equal"}, taint)   # Equal with no value
+    assert not m.toleration_tolerates({"key": m.GPU, "operator": "Exists", "effect": "NoExecute"}, taint)
+    assert not m.toleration_tolerates({"key": "other", "operator": "Exists"}, taint)
+
+
+def test_compute_class_gpu_driver_and_pod_runtime_class():
+    rung = m.compute_class_priority(machine_type="g2-standard-4", gpu_type="nvidia-l4", gpu_driver_version="latest")
+    assert rung["gpu"] == {"type": "nvidia-l4", "count": 1, "driverVersion": "latest"}
+    spec = m.pod_spec([m.GPUContainer()], runtime_class="nvidia", accelerator=None,
+                      affinity={"nodeAffinity": {}})
+    assert spec["runtimeClassName"] == "nvidia" and spec["affinity"] == {"nodeAffinity": {}}

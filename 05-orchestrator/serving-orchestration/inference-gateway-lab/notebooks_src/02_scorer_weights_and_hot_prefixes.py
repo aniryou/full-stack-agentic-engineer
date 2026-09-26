@@ -269,13 +269,25 @@ print(f"✅ with the default 0.80, turn(s) {below} fall below the threshold and 
       "(a turn passes 0.80 only if its new tokens are at most 20% of its prompt)")
 
 # %%
+from igwlab.router import RouterSettings
+
 tuned = copy.deepcopy(load_config("sticky-until-saturated").raw)          # the preset as a dict
 tuned["plugins"][2]["parameters"]["affinityThreshold"] = round(thr, 2)
-res = {}
+res, pinned = {}, {}
 for label, cfg in (("sticky 0.80", "sticky-until-saturated"), (f"sticky {thr:.2f}", tuned)):
-    with LocalStack(3, cfg) as s:
+    with LocalStack(3, cfg, settings=RouterSettings(decisions_kept=1000)) as s:
         res[label] = s.bench(uniform, label=label)
+        decisions = s.call(lambda: list(s.router.decisions))
+    pinned[label] = sum(len(d.stages[0][1]) < len(d.candidates) for d in decisions)
 print(compare(res.values()))
+print("decisions the affinity filter narrowed to sticky replicas:", pinned, f"(of {len(decisions)})")
+
+# %% [markdown]
+# The lower threshold makes the filter pin many more turns — the first resumed turn of every session
+# now counts as sticky. The hit rate moves less than that count suggests (and can even tie on a
+# given run): when the filter keeps every replica, `token-load-scorer` charges each one only this
+# request's *uncached* tokens, so it usually picks the replica that holds the history anyway. The
+# threshold is the explicit rule; the prefix-aware load score is the safety net behind it.
 
 # %% [markdown]
 # ## Exercise 2.5 — saturation and shedding
@@ -334,8 +346,9 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 # route on scraped metrics alone: they are up to one scrape interval stale, so a burst herds onto
 # whoever looked idlest; we combine them with the router's own in-flight counts. Thresholds come
 # from the workload: our agents' first resumed turn shares only ~73% of its blocks with the turn
-# before, so the affinity threshold is 0.7, not 0.8. Under saturation only sheddable
-# (negative-priority) objectives are dropped, with a 429."
+# before, so we set the affinity threshold to 0.7, not 0.8, and the prefix-aware token-load scorer
+# covers the turns the filter lets through. Under saturation only sheddable (negative-priority)
+# objectives are dropped, with a 429."
 #
 # **Drill questions**
 #

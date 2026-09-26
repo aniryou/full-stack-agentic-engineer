@@ -58,8 +58,9 @@ def test_speculation_cost_model_matches_the_formula_at_batch_1_and_stops_paying_
     one = perf.spec_speedup(H100, LLAMA, draft, 1, 200, 0.7, 4)
     assert abs(one - spec.speedup(0.7, 4, c)) < 0.02                  # batch 1: verify ~ one target step
     assert 1.5 < one < 1.7 and 0.18 < c < 0.2                         # ~1.6x with a 0.19 draft (SIMULATED)
-    assert perf.spec_speedup(H100, LLAMA, draft, 128, 200, 0.7, 4) < 1 < perf.spec_speedup(H100, LLAMA, draft, 64, 200, 0.7, 4)
-    assert perf.spec_speedup(H100, LLAMA, draft, 128, 2000, 0.7, 4) > 1.3   # long context: KV-bound, keeps paying
+    at = lambda batch, ctx: perf.spec_speedup(H100, LLAMA, draft, batch, ctx, 0.7, 4)
+    assert at(128, 200) < 1 < at(64, 200)                             # short contexts: a slow-down at high load
+    assert at(128, 2000) > 1.3                                        # long context: KV-bound, keeps paying
 
 
 def test_goodput_counts_only_requests_that_meet_both_slos():

@@ -1,4 +1,6 @@
 # SAMPLE OUTPUT in the documented dcgm-exporter Prometheus text format (illustrative values, not a real scrape).
+# Fields as served with deploy/any-gpu/dcgm-counters.csv: the stock default counters plus CLOCKS_EVENT_REASONS,
+# PROF_SM_ACTIVE and PROF_SM_OCCUPANCY, which stock dcgm-exporter does not export (gpurt.dcgm.EXPORTED_BY).
 # Four GPUs, one lesson each: A = LLM decode (memory-bound), B = busy-but-underfilled (time-shared node),
 # C = idle GPU held by a pod after an application XID, D = thermal slowdown + a remapped row on an A100.
 # HELP DCGM_FI_DEV_SM_CLOCK SM clock frequency (in MHz).

@@ -64,3 +64,41 @@ def test_gke_helpers_read_the_terraform():
     assert "l4-spot" in gke.plan_summary(v)
     cmds = gke.gcloud_equivalents({**v, "enable_flex_start_pool": True})
     assert any("--flex-start --enable-queued-provisioning" in c for c in cmds)
+
+
+def test_checkpoint_cost_and_young_interval():
+    # C = 3 min: each 1 h segment needs 1.05 h unbroken -> 10 x 6.5 x (e^0.168 - 1) = 11.891 h
+    assert math.isclose(capacity.expected_runtime_h(10, 0.16, 1.0, 0.25, 0.05), 11.8909, rel_tol=1e-4)
+    assert capacity.expected_runtime_h(10, 0.0, 1.0, checkpoint_cost_h=0.05) == 10.5   # 10 writes, no failures
+    tau = capacity.young_interval_h(0.05, 0.16)                        # sqrt(2 x 0.05 / 0.16) = 0.7906 h
+    assert math.isclose(tau, 0.7906, rel_tol=1e-4)
+    near = capacity.expected_runtime_h(10, 0.16, tau, 0.25, 0.05)
+    assert all(near <= capacity.expected_runtime_h(10, 0.16, t, 0.25, 0.05) for t in (0.4, 0.6, 1.0, 1.5, 3.0))
+
+
+def test_probability_capacity_arrives_in_time():
+    flex = capacity.OPTIONS["flex-start"]                              # queued: exponential wait, mean 1 h
+    assert math.isclose(capacity.p_capacity_within(flex, 24), 1 - math.exp(-24), rel_tol=1e-12)
+    slow = capacity.CapacityOption("q", 0.5, 1.0, 12.0, 0.0, 168.0, True, False)
+    assert math.isclose(capacity.p_capacity_within(slow, 24), 1 - math.exp(-2), rel_tol=1e-12)   # 0.865
+    assert math.isclose(24 / math.log(20), 8.0114, rel_tol=1e-4)      # mean wait at which P(24 h) = 0.95
+    od = capacity.OPTIONS["on-demand"]                                 # retried hourly, p = 0.9 each
+    assert math.isclose(capacity.p_capacity_within(od, 1.5), 1 - 0.1 ** 2, rel_tol=1e-12)
+    assert capacity.p_capacity_within(capacity.OPTIONS["reservation"], 0) == 1.0
+    assert capacity.p_capacity_within(flex, -1) == 0.0
+
+
+def test_ties_are_reported_not_hidden():
+    serve = capacity.Need("serve", "g2-standard-4", nodes=2, work_h=730, serving=True, checkpoint_every_h=None)
+    evs = {e.option: e for e in capacity.evaluate(serve)}
+    assert evs["on-demand"].cost_usd == evs["reservation"].cost_usd == 1022.0      # 0.70 x 2 x 730
+    assert set(capacity.defensible(serve)) == {"on-demand", "reservation"}
+    assert not any("one by one" in n for n in evs["on-demand"].notes)              # servers are not gangs
+    pretrain = capacity.Need("pretrain", "a3-highgpu-8g", nodes=8, work_h=72, checkpoint_every_h=None, deadline_h=96)
+    assert capacity.defensible(pretrain) == ["flex-start"]                         # P(start in 24 h) ~ 1 at mean 1 h
+    slow = dict(capacity.OPTIONS, **{"flex-start": capacity.CapacityOption(
+        "flex-start", 0.50, 1.00, 12.0, 0.0, 168.0, True, False)})
+    ranked = capacity.evaluate(pretrain, slow)
+    flex = next(e for e in ranked if e.option == "flex-start")
+    assert flex.p_on_time == round(1 - math.exp(-2), 4) and ranked[0].option == "reservation"
+    assert set(capacity.defensible(pretrain, options=slow)) == {"reservation", "on-demand"}

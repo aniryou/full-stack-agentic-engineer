@@ -2,7 +2,9 @@
 # image (which ships NCCL), prints the GPU topology NCCL sees, then all_reduce and all_gather sweeps.
 # NCCL_DEBUG=INFO shows the transport NCCL picked (P2P or SHM through host memory).
 #   ./run.sh nccl  ->  out/nccl-tests-2gpu.log  ->  python -m gpurt.nccltests out/nccl-tests-2gpu.log
-# (the log holds both sweeps; the parser splits them at the "Collective test starting" lines).
+# (the log holds both sweeps; nccl-tests prints "# nccl-tests version" and "# Collective test starting" at the
+# top of each, and the parser splits the log there). nccl-tests is pinned to a release tag: its output layout
+# and buffer sizing are what gpurt.nccltests and gpurt.dist.busbw.plan mirror.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -36,14 +38,12 @@ spec:
               set -euo pipefail
               apt-get update -qq && apt-get install -y -qq git make > /dev/null
               [ -f /usr/include/nccl.h ] || apt-get install -y -qq libnccl2 libnccl-dev > /dev/null
-              # VERIFY: pin a release tag of NVIDIA/nccl-tests for reproducible builds
-              git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git /opt/nccl-tests
+              # VERIFY: v2.20.0 is the latest nccl-tests tag as of 2026-09-26; bump deliberately
+              git clone --depth 1 --branch v2.20.0 https://github.com/NVIDIA/nccl-tests.git /opt/nccl-tests
               make -C /opt/nccl-tests -j"$(nproc)" MPI=0 CUDA_HOME=/usr/local/cuda \
                 NVCC_GENCODE="-gencode=arch=compute_89,code=sm_89" > /dev/null
               nvidia-smi topo -m
-              echo "# Collective test starting: all_reduce_perf"
               /opt/nccl-tests/build/all_reduce_perf -b 8 -e 512M -f 2 -g 2
-              echo "# Collective test starting: all_gather_perf"
               /opt/nccl-tests/build/all_gather_perf -b 8 -e 512M -f 2 -g 2
           resources:
             requests:

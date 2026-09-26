@@ -5,6 +5,9 @@
 #
 # Labels are GKE-style: cloud.google.com/gke-nodepool, cloud.google.com/gke-accelerator and the
 # GCE placement labels cloud.google.com/gce-topology-{block,subblock,host} that Kueue TAS reads.
+# The topology values are FAKED to teach TAS: on GCP those labels come with the accelerator-optimized
+# families (Google's TAS examples use them on A3/A4/A4X), not with G2/L4 nodes (verify), which is
+# why the lab's GKE L4 flavors are plain quota (deploy/gke/README.md).
 # "-" = not a GPU node (no GPUs, no accelerator/topology labels, no GPU taint).
 #
 # kind-suffix  pool    gpus  accelerator  block    subblock     host

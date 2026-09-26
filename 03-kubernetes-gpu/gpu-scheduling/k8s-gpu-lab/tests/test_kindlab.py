@@ -133,3 +133,14 @@ def test_workload_state_vocabulary():
         {"type": "QuotaReserved", "status": "False", "message": "couldn't assign flavors"}]}})
     assert st == "pending" and msg.startswith("couldn't")
     assert kindlab.workload_state({"status": {"conditions": [{"type": "QuotaReserved", "status": "True"}]}})[0] == "reserved"
+
+
+def test_missing_kubectl_is_a_clear_error_not_a_traceback(capsys):
+    k = kindlab.Kubectl(binary="kubectl-that-does-not-exist", echo=lambda s: None)
+    with pytest.raises(kindlab.KubectlMissing, match="not found"):
+        k.run("get", "nodes")
+    from k8sgpu.__main__ import main
+    if kindlab.shutil.which("kubectl") is None:          # the CLI falls back to the T0 hint
+        assert main(["kind", "observe", "s2"]) == 2
+        assert main(["pending", "--live", "p", "-n", "zoo"]) == 2
+        assert "T0 path" in capsys.readouterr().err

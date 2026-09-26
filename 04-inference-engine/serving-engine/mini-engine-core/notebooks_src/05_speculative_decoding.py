@@ -67,9 +67,10 @@ print("greedy speculation == greedy decoding:", out == target.generate_dense(pro
 
 # %% [markdown]
 # Two things to notice. The measured tokens per pass match the formula at k = 1 and 2, within the noise of ~50
-# passes, but fall short of it at k = 4. That is not only noise: `(1 − α^(k+1)) / (1 − α)` assumes every position is accepted independently with the same
-# α, while real acceptance varies by position (p10 to p90 above) and is correlated — a stretch the draft finds hard
-# rejects early and often — so the formula over-predicts deep speculation. Measure acceptance per position (vLLM
+# passes, but fall short of it at k = 4. That is not only noise: `(1 − α^(k+1)) / (1 − α)` assumes every position
+# is accepted independently with the same α, while real acceptance varies by position (p10 to p90 above) and is
+# correlated — a stretch the draft finds hard rejects early and often — so the formula over-predicts deep
+# speculation. Measure acceptance per position (vLLM
 # exports `vllm:spec_decode_num_accepted_tokens_per_pos`) before choosing k. And greedy speculation is not "close
 # to" greedy decoding — it is identical, token for token, because with temperature 0 both distributions are
 # one-hot and the rule reduces to "accept iff the draft's argmax equals the target's".

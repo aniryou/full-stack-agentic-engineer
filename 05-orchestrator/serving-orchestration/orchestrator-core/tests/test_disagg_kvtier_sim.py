@@ -1,9 +1,11 @@
 """P/D and KV-tier math pinned to hand-computed numbers; the simulator is deterministic and obeys Little's law."""
 import pytest
 
-from fleetsim import (L4_8B, H100_8B, LLAMA_8B_KV, Autoscaler, Fleet, HPA, PowerOfTwo, Tier, TieredKV, agentic,
-                      breakeven_gb_s, chat, decode_step_s, expand, kv_bytes, max_decode_batch, onload_s, pd_plan,
-                      percentile, rag, recompute_s, run_pd, simulate_sessions, transfer_s, working_set_gb)
+from fleetsim import (L4_8B, H100_8B, LLAMA_8B_KV, Autoscaler, Fleet, FlowControl, HPA, LeastOutstanding, PowerOfTwo,
+                      Tier, TieredKV, agentic, breakeven_gb_s, chat, decode_step_s, expand, kv_bytes, max_decode_batch,
+                      onload_s, pd_plan, percentile, rag, recompute_s, run_pd, simulate_sessions, transfer_s,
+                      working_set_gb)
+from fleetsim.workload import HashChain, Request
 
 
 def test_kv_transfer_bytes_and_time():
@@ -83,6 +85,59 @@ def test_disaggregation_removes_the_prefill_stall_from_decode():
     agg = run_pd(L4_8B, reqs(), 0, 4, router=PowerOfTwo(seed=1)).summary()
     pd = run_pd(L4_8B, reqs(), 1, 3, router=PowerOfTwo(seed=1)).summary()
     assert agg["itl_p99"] > 0.5 and pd["itl_p99"] < 0.1           # a 2,048-token chunk stalls decodes 0.54 s
+
+
+def _shared_prefix(rid, arrival, prompt):
+    """Requests whose prompts all start with the same 3,200 tokens (then a unique tail)."""
+    ch = HashChain(16).extend(7, 3200).extend(1000 + rid, prompt - 3200).extend(2000 + rid, 4)
+    return Request(rid, arrival, prompt, 4, ch.hashes, (prompt + 4) // 16, 16)
+
+
+def test_pd_ttft_carries_the_kv_transfer_of_what_decode_lacks():
+    def ttft(gbps):
+        a, b = _shared_prefix(0, 0.0, 3200 + 16), _shared_prefix(1, 30.0, 4000)
+        run_pd(L4_8B, [a, b], 1, 1, link_gbps=gbps, link_latency_s=0.0)
+        return a.t_first - a.arrival, b.t_first - b.arrival
+    (a1, b1), (a400, b400) = ttft(1.0), ttft(400.0)
+    assert a1 - a400 == pytest.approx(transfer_s(3216, LLAMA_8B_KV, 1) - transfer_s(3216, LLAMA_8B_KV, 400))
+    # b finds a's 3,200-token prefix cached on the decode replica: only its last 800 tokens cross the link
+    assert b1 - b400 == pytest.approx(transfer_s(800, LLAMA_8B_KV, 1) - transfer_s(800, LLAMA_8B_KV, 400))
+
+
+def test_pd_fleet_needs_a_decode_replica():
+    with pytest.raises(ValueError):
+        Fleet(L4_8B, 2, PowerOfTwo(), prefill=2)
+
+
+def _burst(n, prio_every=3):
+    reqs = chat([(0, 40.0), (n / 40, 0.0)], 60, seed=5, system=500, user=200, output=100)
+    for i, r in enumerate(reqs):
+        r.priority = 1 if i % prio_every == 0 else 0
+    return reqs
+
+
+def test_flow_control_caps_each_endpoint_and_serves_priority_first():
+    reqs = _burst(60)
+    res = Fleet(L4_8B, 2, LeastOutstanding(), flow_control=FlowControl(max_concurrency=3), sample_s=0.5).run(reqs)
+    assert max(row["queued"] for row in res.timeline) > 0
+    assert all(row["waiting"] + row["running"] <= 2 * 3 for row in res.timeline)      # never above the cap
+    queued = [r for r in reqs if r.t_dispatch > r.arrival]
+    for hi in (r for r in queued if r.priority == 1):                                  # no low-priority request
+        assert all(lo.t_dispatch >= hi.t_dispatch for lo in queued                     # overtakes a waiting
+                   if lo.priority == 0 and lo.arrival <= hi.arrival)                  # high-priority one
+    mean = lambda xs: sum(xs) / len(xs)                                               # noqa: E731
+    assert mean([r.t_first - r.arrival for r in reqs if r.priority]) < mean([r.t_first - r.arrival for r in reqs
+                                                                               if not r.priority])
+
+
+def test_flow_control_sheds_on_ttl_and_on_a_full_queue():
+    reqs = _burst(60)
+    s = Fleet(L4_8B, 1, LeastOutstanding(), flow_control=FlowControl(2, ttl_s=5.0)).run(reqs).summary()
+    assert s["shed"] > 0 and s["requests"] + s["shed"] == len(reqs)
+    reqs = _burst(60)
+    s = Fleet(L4_8B, 1, LeastOutstanding(), flow_control=FlowControl(2, max_queue=10)).run(reqs).summary()
+    assert max(r.arrival for r in reqs) < min(r.t_done for r in reqs if r.t_done)   # all arrive before one finishes
+    assert s["shed"] == len(reqs) - 2 - 10                         # 2 in flight + 10 queued; the rest rejected
 
 
 def test_scale_to_zero_holds_requests_until_a_replica_is_ready():

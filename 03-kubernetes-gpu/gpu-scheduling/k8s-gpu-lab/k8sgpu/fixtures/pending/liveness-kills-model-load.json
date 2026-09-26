@@ -1,6 +1,6 @@
 {
  "description": "vLLM without a startup probe: liveness fails during the weight load and the kubelet restarts it, forever.",
- "source": "GKE event/condition text written in the documented format - sample output in the documented format (illustrative); verify against your cluster",
+ "source": "GKE event/condition text written by hand for this lab - sample output in the documented format (illustrative); verify against your cluster",
  "expect": {
   "gate": "kubelet",
   "category": "probe-kills-startup"

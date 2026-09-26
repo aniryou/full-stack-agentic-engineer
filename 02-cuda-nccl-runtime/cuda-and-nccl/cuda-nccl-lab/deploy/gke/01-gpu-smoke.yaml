@@ -17,6 +17,7 @@ spec:
       restartPolicy: Never
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-l4
+        gpu-lab/pool: l4 # the lab's 1-GPU pool (node label set in node_pools.tf); without it a scale-up may pick the 2-GPU node. Drop it on another cluster.
       tolerations:
         - key: nvidia.com/gpu # GKE taints GPU nodes; it may also add this toleration itself (verify) - explicit is portable
           operator: Exists

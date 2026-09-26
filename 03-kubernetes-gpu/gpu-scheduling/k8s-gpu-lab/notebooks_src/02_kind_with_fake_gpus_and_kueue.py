@@ -112,7 +112,7 @@ def admission(usage: int, request: int, nominal: int, borrowing_limit: int, coho
 assert admission(0, 4, 8, 4, 16) == "fits"
 assert admission(8, 4, 8, 4, 8) == "borrows"      # s5: a-job-3 borrows team-b's idle GPUs
 assert admission(12, 4, 8, 4, 4) == "waits"       # s5: a-job-4, team-a at nominal + borrowingLimit
-assert admission(0, 4, 8, 4, 0) == "waits"        # nothing unused anywhere (s4's a-high: preempt instead)
+assert admission(8, 4, 8, 4, 0) == "waits"        # s4's a-high: team-a at nominal, cohort full -> preempt instead
 sim = kindsim.new_sim()
 assert sim.available(sim.cfg.cqs["team-a-cq"]) == min(8 + 4 - 0, 16)
 print("✅ the admission arithmetic Kueue applies before it looks at nodes")
@@ -131,6 +131,32 @@ print("✅ the admission arithmetic Kueue applies before it looks at nodes")
 
 # %%
 scenario("s2")
+
+# %% [markdown]
+# ### Admission is not placement — except where Kueue checks placement
+# Kueue admits against **quota**. Two things make an admitted gang also *fit*: a **TAS flavor**
+# (this kind lab's `gpu-l4`), where admission picks a domain with free capacity for every pod,
+# and a **ProvisioningRequest admission check** (GKE's `l4-flex` flavor, notebook 04), where
+# admission waits until DWS has created every node. A **plain-quota flavor** — GKE's `l4-spot` in
+# `deploy/gke/10-kueue-gke.yaml` — promises neither: admission means "the quota is yours", the
+# pods then wait for the cluster autoscaler, nodes arrive one at a time, and a Spot stockout can
+# leave half the gang Running and holding GPUs while the rest is Pending.
+#
+# Kueue's safety net is **`waitForPodsReady`**: if an admitted workload's pods are not all Ready
+# within `timeout`, Kueue evicts it (releasing the GPUs) and requeues it with exponential backoff.
+# In Kueue v0.19 it is **on by default** — the v1beta2 Configuration defaults it to a 30 min
+# `timeout`, `recoveryTimeout` equal to it and `blockAdmission: false`
+# (`apis/config/v1beta2/defaults.go` at v0.19.6; the shipped config file only shows it commented
+# out, as an example of the knobs). Tune it in the `kueue-manager-config` ConfigMap
+# (`kueue-system` namespace, key `controller_manager_config.yaml`), then
+# `kubectl -n kueue-system rollout restart deployment/kueue-controller-manager`:
+#
+# ```yaml
+# waitForPodsReady:
+#   timeout: 10m              # a GPU node from zero plus the driver takes minutes: not too short
+#   blockAdmission: true      # admit one gang at a time until its pods are Ready
+#   requeuingStrategy: {backoffLimitCount: 5}
+# ```
 
 # %% [markdown]
 # ## Exercise 2.3 — BestFit
@@ -166,30 +192,37 @@ scenario("s3")
 # ## s4 — priority preemption, inside the queue
 # Both teams fill their nominal quota. A `high` WorkloadPriorityClass job arrives in team-a: it
 # cannot borrow (team-b uses all of its own quota), so Kueue looks for victims. With
-# `withinClusterQueue: LowerPriority`, candidates are team-a's lower-priority workloads,
-# ordered: other queues first, then **lowest priority**, then **most recently admitted**.
+# `withinClusterQueue: LowerPriority`, candidates are team-a's lower-priority workloads. Kueue
+# v0.19 orders candidates (`preemption/common/ordering.go`, `CandidatesOrdering`): workloads
+# **already being evicted** first (they are giving their quota back anyway), then **other
+# queues'** workloads, then — only with admission fair sharing — lower LocalQueue usage, then
+# **lowest priority**, then **most recently admitted**. (The predictor evicts instantly, so the
+# first rule never separates its candidates, and fair sharing is off in this lab.)
 #
 # ## Exercise 2.4 — order the candidates
 # Write `order_victims(candidates, preemptor_queue)` where each candidate is a dict with
-# `name`, `queue`, `priority` and `admitted` (a clock value; larger = later). Return the names
-# in the order Kueue considers them.
+# `name`, `queue`, `priority`, `admitted` (a clock value; larger = later) and `evicted` (bool).
+# Return the names in the order Kueue considers them (fair sharing off).
 
 # %% exercise
 def order_victims(candidates: list[dict], preemptor_queue: str) -> list[str]:
     ### BEGIN SOLUTION
-    ranked = sorted(candidates, key=lambda c: (c["queue"] == preemptor_queue, c["priority"], -c["admitted"]))
+    ranked = sorted(candidates, key=lambda c: (not c["evicted"], c["queue"] == preemptor_queue,
+                                               c["priority"], -c["admitted"]))
     return [c["name"] for c in ranked]
     ### END SOLUTION
 
 # %% check
-s4 = [{"name": "a-low-1", "queue": "team-a-cq", "priority": 100, "admitted": 3},
-      {"name": "a-low-2", "queue": "team-a-cq", "priority": 100, "admitted": 4}]
+s4 = [{"name": "a-low-1", "queue": "team-a-cq", "priority": 100, "admitted": 3, "evicted": False},
+      {"name": "a-low-2", "queue": "team-a-cq", "priority": 100, "admitted": 4, "evicted": False}]
 assert order_victims(s4, "team-a-cq")[0] == "a-low-2"                  # the most recent low goes first
-s5 = [{"name": "a-job-1", "queue": "team-a-cq", "priority": 0, "admitted": 1},
-      {"name": "a-job-3", "queue": "team-a-cq", "priority": 0, "admitted": 3},
-      {"name": "b-other", "queue": "team-b-cq", "priority": 0, "admitted": 5}]
+s5 = [{"name": "a-job-1", "queue": "team-a-cq", "priority": 0, "admitted": 1, "evicted": False},
+      {"name": "a-job-3", "queue": "team-a-cq", "priority": 0, "admitted": 3, "evicted": False},
+      {"name": "b-other", "queue": "team-b-cq", "priority": 0, "admitted": 5, "evicted": False}]
 assert order_victims(s5, "team-b-cq") == ["a-job-3", "a-job-1", "b-other"]   # reclaim: the borrower's newest
-print("✅ Kueue's victim order: other queues, lowest priority, newest admission")
+s5[1]["evicted"] = False; s5[2]["evicted"] = True                            # b-other is already on its way out
+assert order_victims(s5, "team-b-cq")[0] == "b-other"
+print("✅ Kueue's victim order: already evicting, other queues, lowest priority, newest admission")
 
 # %%
 scenario("s4")
@@ -262,3 +295,10 @@ print(kindsim.describe(kindsim.predict("k1")))
 #
 # **Drill 3.** *team-a's job was preempted though nobody in team-a had higher priority.* It was
 # running on borrowed quota; the lender reclaimed it (`InCohortReclamation`).
+#
+# **Drill 4.** *Kueue admitted an 8-node gang on a Spot pool, three pods run and five have been
+# Pending for 20 minutes on a stockout. What happens next, and what would have avoided it?* The
+# flavor is plain quota, so admission never checked capacity. `waitForPodsReady` (on by default,
+# 30 min) evicts the gang, frees the three nodes' GPUs and requeues it with backoff. Admission
+# that checks capacity avoids the half-started state: a ProvisioningRequest check (DWS
+# flex-start: every node or none) or, on a fixed fleet, TAS.

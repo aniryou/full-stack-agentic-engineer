@@ -324,20 +324,21 @@ print("tokens allowed per state:", {s: len(allowed(s)) for s in STATES}, f"(of {
 rng, runs = np.random.default_rng(0), []
 for _ in range(300):                                  # a "model" with no opinion: uniform over the legal tokens
     state, toks = 0, []
-    while state != ACCEPT and len(toks) < 40:
+    while state != ACCEPT and len(toks) < 12:         # max_tokens = 12
         t = int(rng.choice([t for t, q in enumerate(table[state]) if q is not None]))
         toks.append(t)
         state = table[state][t]
-    runs.append((tuple(toks), state == ACCEPT))
-texts = ["".join(VOCAB_TXT[t] for t in toks) for toks, done in runs if done]
-assert len(texts) >= 290 and all(re.fullmatch(r'\{"n": (0|[1-9][0-9]*)\}', x) for x in texts)
-assert all(isinstance(json.loads(x)["n"], int) for x in texts)
+    runs.append(("".join(VOCAB_TXT[t] for t in toks), tuple(toks), state == ACCEPT))
+done = [x for x, _, ok in runs if ok]
+cut = [x for x, _, ok in runs if not ok]
+assert all(re.fullmatch(r'\{"n": (0|[1-9][0-9]*)\}', x) and isinstance(json.loads(x)["n"], int) for x in done)
+assert cut and all(re.fullmatch(r'\{"n": (0|[1-9][0-9]*)', x) for x in cut)   # legal so far, but unfinished
 spellings = {}
-for toks, done in runs:
-    spellings.setdefault("".join(VOCAB_TXT[t] for t in toks), set()).add(toks)
+for x, toks, _ in runs:
+    spellings.setdefault(x, set()).add(toks)
 top = max(spellings, key=lambda x: len(spellings[x]))
-print(f"✅ {len(texts)} of 300 constrained outputs parse as the schema; {300 - len(texts)} hit the 40-token cap "
-      "mid-number")
+print(f"✅ {len(done)} of 300 constrained outputs parse as the schema; {len(cut)} hit max_tokens mid-number, "
+      f"e.g. {cut[0]!r} - a legal prefix that does not parse")
 print(f"   {top!r} came out as {len(spellings[top])} different token sequences, e.g.",
       " / ".join("|".join(VOCAB_TXT[t] for t in seq) for seq in sorted(spellings[top], key=len)[:2]))
 
@@ -346,8 +347,9 @@ print(f"   {top!r} came out as {len(spellings[top])} different token sequences, 
 # `{"n": 1` and illegal right after `{"n": `, so the engine needs the automaton's state for every request, every
 # step. **One text, many token sequences**: the grammar allows all of them, so a constrained model can be pushed
 # into tokenizations it rarely saw in training, and a client that re-tokenizes the returned text gets different
-# ids — different block names in the prefix cache (primer §5). **A length cap can cut a legal prefix**: grammar
-# masking guarantees the output *so far* is legal, not that it finishes — check `finish_reason` before parsing.
+# ids — different block names in the prefix cache (primer §5). **A length cap cuts a legal prefix**: grammar
+# masking guarantees the output *so far* is legal, not that it finishes — check `finish_reason` (vLLM: `length`)
+# before parsing.
 #
 # ## In a design review
 # **The two-minute version.** "The engine's sampler is a pipeline over logits: grammar mask, penalties, then greedy

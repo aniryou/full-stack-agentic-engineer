@@ -45,8 +45,11 @@ def time_sliced_allocatable(physical_gpus: int, replicas: int) -> int:
 
 
 def _smi_job(name: str, parallelism: int, sleep_s: int) -> dict:
+    # nvidia-smi comes from the host driver mount; skip the image's "cuda>=12.9" driver check so an
+    # older driver still passes the smoke test (NVIDIA Container Toolkit env var; verify)
     c = m.GPUContainer(name="smi", image=CUDA_IMAGE, cpu="250m", memory="256Mi",
-                       command=["bash", "-c", f"nvidia-smi -L && sleep {sleep_s}"])
+                       command=["bash", "-c", f"nvidia-smi -L && sleep {sleep_s}"],
+                       env={"NVIDIA_DISABLE_REQUIRE": "true"})
     spec = m.pod_spec([c], accelerator=None, runtime_class=RUNTIME_CLASS, affinity=_GFD_LABELLED,
                       termination_grace_s=None)
     return m.job(name, "default", m.pod_template(spec), parallelism=parallelism,

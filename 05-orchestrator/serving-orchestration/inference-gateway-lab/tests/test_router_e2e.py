@@ -172,3 +172,17 @@ def test_router_in_front_of_already_running_backends():
             assert s.routed() == {"a": 2, "b": 2}
             m = s.backend_metrics()                                   # fetched over HTTP
             assert set(m) == {"a", "b"} and all("vllm:num_requests_running" in v for v in m.values())
+
+
+def test_a_router_that_cannot_bind_releases_its_session():
+    async def go():
+        first = Router("round-robin", [])
+        url = await first.start()
+        second = Router("round-robin", [])
+        try:
+            with pytest.raises(OSError):
+                await second.start(port=int(url.rsplit(":", 1)[1]))      # the port is taken
+            return second.session.closed and second.scraper._task is None
+        finally:
+            await first.stop()
+    assert asyncio.run(go())

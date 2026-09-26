@@ -6,7 +6,7 @@ import yaml
 
 GKE = pathlib.Path(__file__).resolve().parents[1] / "deploy" / "gke"
 ALLOWED = {("v1", "Namespace"), ("batch/v1", "Job"), ("apps/v1", "Deployment"),
-           ("monitoring.googleapis.com/v1", "Rules")}  # the last is a GMP CRD: checked here, not by schema
+           ("monitoring.googleapis.com/v1", "ClusterRules")}  # the last is a GMP CRD: checked here, not by schema
 
 
 def docs():
@@ -56,3 +56,21 @@ def test_core_kinds_pass_strict_schema_validation():
         if d["apiVersion"] == "monitoring.googleapis.com/v1":
             continue  # CRD: no bundled schema
         kv.validate(d, "1.34.0", strict=True)
+
+
+def test_alertmanager_example_routes_every_rule_severity():
+    from gpurt import dcgm
+
+    cfg = yaml.safe_load((GKE / "alertmanager.example.yaml").read_text())
+    receivers = {r["name"] for r in cfg["receivers"]}
+    route = cfg["route"]
+    assert route["receiver"] in receivers and all(r["receiver"] in receivers for r in route["routes"])
+    routed = {r["matchers"][0].split('"')[1]: r["receiver"] for r in route["routes"]}
+    assert routed == {"critical": "page", "warning": "ticket"}  # info falls through to the default: notify
+    assert {r.severity for r in dcgm.RULES} <= set(routed) | {"info"}
+
+
+def test_one_gpu_jobs_pin_the_one_gpu_pool():
+    specs = dict(pod_specs())
+    for name in ("01-gpu-smoke.yaml", "02-cuda-vectoradd.yaml"):  # not the 2-GPU or time-shared nodes
+        assert specs[name]["nodeSelector"]["gpu-lab/pool"] == "l4", name

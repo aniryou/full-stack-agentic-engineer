@@ -4,9 +4,10 @@ from collections import Counter
 
 import pytest
 
-from fleetsim import (L4_8B, ConsistentHashBoundedLoad, HashChain, HashRing, KVCacheUtilizationScorer,
-                      LeastOutstanding, LoraAffinityFilter, PowerOfTwo, PrefixAffinityFilter, PrefixCacheScorer,
-                      PrefixHash, PreciseIndex, QueueScorer, Replica, RoundRobin, WeightedScorer)
+from fleetsim import (L4_8B, ApproxPrefixIndex, ConsistentHashBoundedLoad, Fleet, HashChain, HashRing,
+                      KVCacheUtilizationScorer, LeastOutstanding, LoraAffinityFilter, PowerOfTwo, PrefixAffinityFilter,
+                      PrefixCacheScorer, PrefixHash, PreciseIndex, QueueScorer, Replica, RoundRobin, TokenLoadScorer,
+                      WeightedScorer, agentic, chat, epp)
 from fleetsim.workload import Request
 
 
@@ -105,7 +106,8 @@ def test_weighted_scorer_trades_cache_for_queue():
     prefix, queue = Fixed({0: 1.0, 1: 0.0}), Fixed({0: 0.0, 1: 1.0})
     assert WeightedScorer([(prefix, 3), (queue, 2)]).pick(req(), reps, 0).rid == 0     # 3 > 2: go where it's cached
     assert WeightedScorer([(prefix, 1), (queue, 2)]).pick(req(), reps, 0).rid == 1     # 1 < 2: go where it's quiet
-    assert WeightedScorer([(Fixed({0: 7.0, 1: 0.5}), 1)]).pick(req(), reps, 0).rid == 0  # clamped to [0, 1]
+    # clamped to [0, 1]: 1 x 1 vs 2 x 1 picks replica 1; unclamped, 7 vs 2 would pick replica 0
+    assert WeightedScorer([(Fixed({0: 7.0, 1: 0.0}), 1), (Fixed({0: 0.0, 1: 1.0}), 2)]).pick(req(), reps, 0).rid == 1
 
 
 def test_lora_affinity_filter():
@@ -125,3 +127,49 @@ def test_affinity_filter_sticks_until_saturated():
     assert [r.rid for r in f.filter(req(), reps, router, 0)] == [0]               # sticky
     router.inflight_tokens[0] = 2500                                                # 2.5 s of estimated TTFT
     assert f.filter(req(), reps, router, 0) == reps                                 # > 2 s penalty: spread
+    assert dict(f.decisions) == {"sticky": 1, "load_override": 1}                  # the upstream decision counter
+    always = PrefixAffinityFilter(Idx(), max_ttft_penalty_s=0, peak_prefill_tok_s=1000.0)
+    assert [r.rid for r in always.filter(req(), reps, router, 0)] == [0]            # penalty 0: always stick
+
+
+class WarmOn0(LeastOutstanding):
+    """A router that believes replica 0 caches the whole prompt and replica 1 nothing."""
+    def cached_estimate(self, rq, r):
+        return rq.prompt if r.rid == 0 else 0
+
+
+def test_token_load_scorer_counts_in_flight_plus_this_requests_uncached_tokens():
+    reps, router, tl = [Stub(0), Stub(1)], WarmOn0(), TokenLoadScorer()
+    router.inflight_tokens.update({0: 2_097_152, 1: 2_097_152 - 100})
+    scores = tl.score(req(prompt=160), reps, router, 0)
+    assert scores[0] == 0.5                                     # (2,097,152 + 0) / 4,194,304: the README's midpoint
+    assert scores[1] == 1 - (2_097_052 + 160) / 4_194_304       # 100 fewer in flight, but 160 uncached here
+    assert scores[0] > scores[1]                                # the warm endpoint wins in the same units
+    router.inflight_tokens[1] = 5_000_000
+    assert tl.score(req(prompt=160), reps, router, 0)[1] == 0.0  # past queueThresholdTokens: clamped
+
+
+def test_router_releases_in_flight_tokens_at_first_token():
+    router = epp()
+    Fleet(L4_8B, 3, router).run(agentic(0.3, 60, seed=9))
+    assert all(v == 0 for v in router.inflight_tokens.values()) and all(v == 0 for v in router.outstanding.values())
+
+
+def test_approximate_index_is_lru_bounded():
+    ix, r = ApproxPrefixIndex(capacity=2), Stub(0)
+    a = req(rid=1, seg=1, prompt=48)                            # 3 blocks: the oldest one falls out of a 2-block index
+    ix.record(a, r)
+    assert list(ix.lru[0]) == a.hashes[1:3] and ix.match(a, r) == 0     # block 0 forgotten: no prefix matches
+    b = req(rid=2, seg=2, prompt=32)
+    ix.record(b, r)
+    assert ix.match(b, r) == 2 and list(ix.lru[0]) == b.hashes[:2]
+
+
+def test_stale_metrics_make_argmin_herd_but_not_p2c():
+    bursts = [(t, 16.0 if (t // 5) % 4 == 1 else 2.0) for t in range(0, 240, 5)]
+
+    def p95(router, age):
+        reqs = chat(bursts, 240, seed=21, system=800, user=250)
+        return Fleet(L4_8B, 4, router, metrics_age=age).run(reqs).summary()["ttft_p95"]
+    assert p95(LeastOutstanding(load="running"), 10.0) > 2 * p95(LeastOutstanding(load="running"), 0.05)
+    assert p95(PowerOfTwo(load="running", seed=1), 10.0) < 1.6 * p95(PowerOfTwo(load="running", seed=1), 0.05)

@@ -27,7 +27,7 @@
 import math
 from servelab import env, metrics as M, sizing
 from servelab.bench import Lengths, random_requests, run_closed_loop
-from servelab.fake_engine import EngineConfig, FakeEngine, build_profile, simulate, tiny_profile
+from servelab.fake_engine import EngineConfig, FakeEngine, build_profile, profile, simulate, tiny_profile
 from servelab.tune import FakeBackend, sweep, to_cli_flags, trials_table
 
 print(env.describe())
@@ -38,8 +38,8 @@ for a in (0.5, 0.7, 0.9):
 
 # %% [markdown]
 # Diminishing returns in `k`: at α = 0.7 the 5th to 8th draft tokens add only 0.4 tokens per step,
-# while the verifier must process all of them. vLLM flags for the three families (verify names
-# against your vLLM version):
+# while the verifier must process all of them. vLLM flags for the three families (method names as
+# in vLLM v0.30.0's `SpeculativeConfig`; they change between releases):
 
 # %%
 for spec in ({"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max": 4},
@@ -75,16 +75,22 @@ print(f"✅ formula {expected_tokens(0.7, 4):.3f} vs simulated {observed:.3f} to
 # %% [markdown]
 # ## Worked example: speculation on the fake engine, one user versus eight
 #
-# `FakeBackend` turns vLLM's `speculative_config` into the emulator's knobs; the acceptance rate is
-# an assumption you pass (0.7 here) — on a real engine it is a property of your traffic and the
-# draft method, which is why you read it from `/metrics` rather than assume it.
+# `FakeBackend` turns vLLM's `speculative_config` into the emulator's knobs. The acceptance rate is
+# an assumption passed to the backend, `FakeBackend(spec_acceptance=0.7)`, and never put into the
+# config, which stays one `vllm serve --speculative-config` accepts. On a real engine acceptance is
+# a property of your traffic and the draft method, which is why you read it from `/metrics` rather
+# than assume it. (To load-test a real engine at a *chosen* acceptance, vLLM v0.30.0 has a synthetic
+# mode: `"rejection_sample_method": "synthetic"` with `"synthetic_acceptance_length"` — outputs are
+# then not the target model's; for benchmarking only.) The fake engine has no one-off start-up
+# costs, so these sweeps skip warm-up.
 
 # %%
 work = lambda: random_requests(12, Lengths.fixed(256), Lengths.fixed(96), seed=9)  # noqa: E731
-SPEC = {"speculative_config": {"method": "ngram", "num_speculative_tokens": 4, "acceptance": 0.7}}
+SPEC = {"speculative_config": {"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max": 4}}
 results = {}
 for users in (1, 8):
-    results[users] = sweep(FakeBackend("t4-qwen2.5-0.5b"), [{}, SPEC], work, concurrency=users, warmup=0)
+    results[users] = sweep(FakeBackend("t4-qwen2.5-0.5b", spec_acceptance=0.7), [{}, SPEC], work,
+                           concurrency=users, warmup=0)
     print(f"[SIMULATED] {users} concurrent user(s)")
     print(trials_table(results[users]))
 spec_trial = results[1][1]
@@ -137,6 +143,8 @@ print(f"✅ [SIMULATED] acceptance rate {rate:.1%}, mean acceptance length {leng
 # per token (one verify step + drafting, divided by the expected tokens per step). Use the roofline
 # as in notebook 03: `overhead + max(2·P·tokens / FLOP/s, (weights + batch·context·kv) / bandwidth)`.
 # Predict first: at which batch sizes does speculation stop paying, and why does context length matter?
+# (Every operating point in the check must fit the profile's KV cache — a batch that cannot be
+# held says nothing about a real engine.)
 
 # %% exercise
 def spec_speedup(p, batch: int, context: int, alpha: float, k: int, draft_cost: float = 0.0) -> float:
@@ -152,13 +160,18 @@ def spec_speedup(p, batch: int, context: int, alpha: float, k: int, draft_cost: 
 
 # %% check
 L4_8B = build_profile("llama-3.1-8b-instruct", "L4", quantization="fp8", kv_cache_dtype="fp8", max_model_len=8192)
+slots = lambda p: p.num_blocks * p.block_size  # noqa: E731 — KV token slots of the profile
 sp = {b: spec_speedup(L4_8B, b, 256, 0.7, 4, draft_cost=0.05) for b in (1, 8, 32, 128, 256, 512)}
+assert all(b * 256 <= slots(L4_8B) for b in sp), "every batch x context must fit the L4's KV cache"
 for b, v in sp.items():
-    print(f"   batch {b:>3}, 256-token context: speedup {v:4.2f}x")
+    print(f"   L4 FP8, batch {b:>3}, 256-token context: speedup {v:4.2f}x")
 assert sp[1] > 2.0 and sp[128] < sp[1] and sp[256] < 1.0 and sp[512] < sp[256]
-long_ctx = spec_speedup(L4_8B, 256, 2048, 0.7, 4, draft_cost=0.05)
-print(f"   batch 256, 2,048-token context: speedup {long_ctx:4.2f}x (KV reads keep the step memory-bound)")
-assert long_ctx > sp[256]
+H100_8B = profile("h100-llama3.1-8b")     # bf16 on an H100: enough KV for 256 sequences of 1,024 tokens
+assert 256 * 1024 <= slots(H100_8B) and 256 * 2048 > slots(H100_8B)
+short_ctx, long_ctx = (spec_speedup(H100_8B, 256, c, 0.7, 4, draft_cost=0.05) for c in (256, 1024))
+print(f"   H100 bf16, batch 256: 256-token context {short_ctx:4.2f}x, 1,024-token context {long_ctx:4.2f}x "
+      f"(KV reads keep the step memory-bound); 2,048 would not fit ({slots(H100_8B):,} slots)")
+assert long_ctx > short_ctx
 print("✅ speculation is a latency tool while decode is memory-bound; once the verify step is compute-bound it costs throughput")
 
 # %% [markdown]
@@ -168,7 +181,10 @@ print("✅ speculation is a latency tool while decode is memory-bound; once the 
 # (4-bit weights, 16-bit compute). Write `decode_ms(weight_bytes, bw)` — one batch-1 decode step
 # is a weight read (ignore overhead and KV) — and `prefill_ms(active_params, tokens, tflops)` —
 # `2 × params × tokens` FLOPs at `tflops` effective TFLOP/s. The check builds the three cases from
-# `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s, 80% of bandwidth).
+# `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s, 80% of bandwidth). AWQ computes
+# in 16-bit, so it gets the bf16 FLOP/s; what dequantizing the weights costs on top depends on the
+# kernel (Marlin-style kernels hide most of it at large batch) and is left out — an assumption to
+# check on your GPU (verify), not a result.
 
 # %% exercise
 def decode_ms(weight_bytes: float, bw_bytes_per_s: float) -> float:
@@ -187,14 +203,16 @@ P8 = sizing.param_count(m8).active
 bw = L4.mem_bw_gbs * 1e9 * 0.8
 cases = {"bf16": (sizing.weight_bytes(m8), L4.bf16_tflops * 0.5),
          "fp8 (W8A8)": (sizing.weight_bytes(m8, quantization="fp8"), L4.fp8_tflops * 0.5),
-         "awq (W4A16)": (sizing.weight_bytes(m8, quantization="awq"), L4.bf16_tflops * 0.5 * 0.9)}
+         "awq (W4A16)": (sizing.weight_bytes(m8, quantization="awq"), L4.bf16_tflops * 0.5)}
 res = {k: (decode_ms(w, bw), prefill_ms(P8, 2048, tf)) for k, (w, tf) in cases.items()}
 for k, (d, pf) in res.items():
     print(f"   {k:12s} weights {cases[k][0] / 1e9:5.2f} GB  decode step {d:5.1f} ms  prefill(2,048) {pf:6.0f} ms")
 assert math.isclose(res["bf16"][0], sizing.weight_bytes(m8) / bw * 1e3)
 assert 0.5 < res["fp8 (W8A8)"][0] / res["bf16"][0] < 0.6 and math.isclose(res["fp8 (W8A8)"][1] / res["bf16"][1], 0.5, rel_tol=0.01)
-assert res["awq (W4A16)"][0] / res["bf16"][0] < 0.4 and res["awq (W4A16)"][1] > res["bf16"][1]
+assert res["awq (W4A16)"][0] / res["bf16"][0] < 0.4 and res["awq (W4A16)"][1] >= res["bf16"][1]
 print("✅ INT4 weight-only wins decode (bytes) but not prefill (still 16-bit math); FP8 W8A8 halves both on an L4")
+print(f"   AWQ decode is {res['bf16'][0] / res['awq (W4A16)'][0]:.1f}x faster, not 16/4 = 4x: the embeddings and lm_head "
+      f"({sizing.param_count(m8).embedding / 1e9:.2f} B params) stay 16-bit in real AWQ/GPTQ/FP8 checkpoints")
 
 # %% [markdown]
 # ## On a real GPU (T1)
@@ -207,7 +225,12 @@ print("✅ INT4 weight-only wins decode (bytes) but not prefill (still 16-bit ma
 #
 # A T4 (compute capability 7.5) has no bfloat16 and no FP8 units: serve 16-bit models with
 # `--dtype half`, prefer AWQ/GPTQ checkpoints for memory, and expect FP8 options to be unavailable
-# or weight-only there (verify for your vLLM version). N-gram speculation needs repetitive text
+# or weight-only there (verify for your vLLM version). Attention on a T4 runs on vLLM's Triton
+# backend, which v0.30.0 selects by itself (its FlashAttention backend needs sm_80+); no flag needed.
+#
+# The quantized sizes here keep embeddings and `lm_head` in 16-bit, as real checkpoints do, so
+# AWQ decode comes out ~2.8x faster than bf16; PRIMER §8's table quantizes every parameter (4.1 GB,
+# ~3.5x). Same physics, different bookkeeping — use the checkpoint's real size. N-gram speculation needs repetitive text
 # (code edits, extraction, RAG answers that quote the context) to reach a useful acceptance rate;
 # measure it with exercise 5.2 against your own traffic before turning it on.
 
@@ -225,12 +248,13 @@ else:
 # **Two minutes:** "Decode is a weight-streaming problem, so we have two levers. Speculative
 # decoding produces several tokens per weight read: with a draft acceptance of 0.7 and four drafts
 # a step yields 2.8 tokens, and the rejection sampler keeps the output distribution identical to
-# the target model's. It is a latency tool for small batches — at batch 256 the verify step is
-# compute-bound and speculation slows us down — so we enable it for interactive traffic and watch
-# the mean acceptance length on vLLM's counters. Quantization cuts the bytes: for an 8B model on an
-# L4, AWQ INT4 makes batch-1 decode ~2.8x faster but prefill slightly slower; FP8 W8A8 almost halves
-# decode, halves prefill and frees room for KV, and FP8 KV doubles the tokens we can hold. Each gets
-# an accuracy gate on our evals before it ships."
+# the target model's. It is a latency tool for small batches — at batch 256 with short contexts
+# the verify step is compute-bound and speculation slows us down (long contexts keep the step
+# memory-bound longer) — so we enable it for interactive traffic and watch the mean acceptance
+# length on vLLM's counters. Quantization cuts the bytes: for an 8B model on an L4, AWQ INT4 makes
+# batch-1 decode ~2.8x faster but does not speed up prefill; FP8 W8A8 almost halves decode, halves
+# prefill and frees room for KV, and FP8 KV doubles the tokens we can hold. Each gets an accuracy
+# gate on our evals before it ships."
 #
 # **Drill 1.** *Acceptance rate is 40%. Is speculation working?* — Look at the mean acceptance
 # length instead (1 + accepted/drafts): 40% per draft token with k = 4 can still mean ~2.6 tokens
@@ -240,5 +264,7 @@ else:
 # accept with probability min(1, p/q), resample from the normalized residual max(0, p − q) on
 # rejection, and the emitted tokens follow the target distribution.
 #
-# **Drill 3.** *Why did AWQ make our long-prompt TTFT worse?* — Prefill is compute-bound and AWQ
-# still computes in 16-bit, with dequantization on top; the win is in decode and memory.
+# **Drill 3.** *AWQ did nothing for our long-prompt TTFT (on one GPU it even got worse). Why?* —
+# Prefill is compute-bound and W4A16 still multiplies in 16-bit, so there is no FLOP saving; the
+# dequantization on top costs whatever the kernel makes it cost (small with Marlin-style kernels at
+# large batch, visible with others). The win is in decode and memory — measure TTFT per kernel.

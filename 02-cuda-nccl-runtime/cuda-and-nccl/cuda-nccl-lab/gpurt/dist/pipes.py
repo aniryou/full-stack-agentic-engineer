@@ -3,14 +3,15 @@
 The one idea: **ring all-reduce = reduce-scatter + all-gather.** n processes sit on a ring and the
 buffer is cut into n chunks. In each of n-1 reduce-scatter steps every rank sends one chunk to its
 right neighbour while receiving one from its left and adding it in; afterwards rank r owns the fully
-reduced chunk (r+1) mod n. n-1 all-gather steps then circulate the finished chunks. Every link is
-busy in every step, and each rank sends 2(n-1)/n x S bytes in total — the busbw factor, observed.
+reduced chunk r. n-1 all-gather steps then circulate the finished chunks. Every link is busy in every
+step, and each rank sends 2(n-1)/n x S bytes in total — the busbw factor, observed. The schedule is
+``semantics.ring_chunks``, numbered like primer §5.2 (steps from 1; rank r sends chunk r - s):
 
     step (n = 3)      rank 0 sends   rank 1 sends   rank 2 sends
-    RS 0              chunk 0        chunk 1        chunk 2      (each receiver adds)
-    RS 1              chunk 2        chunk 0        chunk 1      -> rank r owns chunk r+1
-    AG 0              chunk 1        chunk 2        chunk 0      (each receiver copies)
-    AG 1              chunk 0        chunk 1        chunk 2      -> everyone has everything
+    RS 1              chunk 2        chunk 0        chunk 1      (each receiver adds)
+    RS 2              chunk 1        chunk 2        chunk 0      -> rank r owns chunk r
+    AG 1              chunk 0        chunk 1        chunk 2      (each receiver copies)
+    AG 2              chunk 2        chunk 0        chunk 1      -> everyone has everything
 
 The "links" are ``multiprocessing`` pipes (kernel-mediated memory copies) and each rank has a sender
 thread, so a step's send and receive overlap (full duplex) instead of deadlocking or serialising.
@@ -79,23 +80,23 @@ class PipesComm:
     def _bounds(count: int, n: int) -> list[int]:
         return [(i * count) // n for i in range(n + 1)]
 
-    def _reduce_scatter_ring(self, buf: np.ndarray, bounds, shift: int) -> int:
-        """n-1 steps; returns the chunk this rank now owns fully reduced: (rank + 1 + shift) mod n."""
+    def _reduce_scatter_ring(self, buf: np.ndarray, bounds) -> int:
+        """n-1 steps; afterwards this rank owns chunk ``rank`` fully reduced (returned)."""
         n, r = self.world_size, self.rank
-        for s in range(n - 1):
-            send_c, recv_c = ring_chunks(r, s, n, "rs", shift)
+        for s in range(1, n):
+            send_c, recv_c = ring_chunks(r, s, n, "rs")
             self._isend(buf[bounds[send_c]:bounds[send_c + 1]])
             tmp = self._scratch(bounds[recv_c + 1] - bounds[recv_c], buf.dtype)
             self._recv_into(tmp)
             buf[bounds[recv_c]:bounds[recv_c + 1]] += tmp
             self._wait_sends()
-        return (r + 1 + shift) % n
+        return r
 
-    def _all_gather_ring(self, buf: np.ndarray, bounds, owned: int) -> None:
-        """n-1 steps, starting from the one chunk this rank owns."""
-        n = self.world_size
-        for s in range(n - 1):
-            send_c, recv_c = ring_chunks(owned - 1, s, n, "ag")  # "ag" starts from rank + 1 = owned
+    def _all_gather_ring(self, buf: np.ndarray, bounds) -> None:
+        """n-1 steps, starting from chunk ``rank`` (which this rank must already hold)."""
+        n, r = self.world_size, self.rank
+        for s in range(1, n):
+            send_c, recv_c = ring_chunks(r, s, n, "ag")
             self._isend(buf[bounds[send_c]:bounds[send_c + 1]])
             self._recv_into(buf[bounds[recv_c]:bounds[recv_c + 1]])
             self._wait_sends()
@@ -128,19 +129,19 @@ class PipesComm:
 
     def run(self, op: str, send: np.ndarray, recv: np.ndarray, root: int = 0) -> None:
         n, r = self.world_size, self.rank
-        if op == "all_reduce":  # in place
+        if op == "all_reduce":  # in place: reduce-scatter, then all-gather
             bounds = self._bounds(recv.size, n)
-            owned = self._reduce_scatter_ring(recv, bounds, shift=0)
-            self._all_gather_ring(recv, bounds, owned)
+            self._reduce_scatter_ring(recv, bounds)
+            self._all_gather_ring(recv, bounds)
         elif op == "reduce_scatter":
             work = send.copy()  # out of place: leave the input untouched
             bounds = self._bounds(work.size, n)
-            owned = self._reduce_scatter_ring(work, bounds, shift=-1)  # rank r ends owning chunk r
+            owned = self._reduce_scatter_ring(work, bounds)  # rank r ends owning chunk r
             recv[...] = work[bounds[owned]:bounds[owned + 1]]
         elif op == "all_gather":
             bounds = self._bounds(recv.size, n)
             recv[bounds[r]:bounds[r + 1]] = send
-            self._all_gather_ring(recv, bounds, owned=r)
+            self._all_gather_ring(recv, bounds)
         elif op == "broadcast":  # in place
             self._broadcast_chain(recv, root)
         elif op == "sendrecv":
@@ -159,7 +160,7 @@ class PipesComm:
     def allreduce_scalar(self, x: float, how: str = "avg") -> float:
         vals = np.zeros(self.world_size, np.float64)
         vals[self.rank] = x
-        self._all_gather_ring(vals, list(range(self.world_size + 1)), owned=self.rank)
+        self._all_gather_ring(vals, list(range(self.world_size + 1)))
         return {"avg": vals.mean(), "sum": vals.sum(), "min": vals.min(), "max": vals.max(),
                 "rank0": vals[0]}[how].item()
 

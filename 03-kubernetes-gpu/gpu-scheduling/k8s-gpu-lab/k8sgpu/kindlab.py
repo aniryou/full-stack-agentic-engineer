@@ -228,7 +228,7 @@ def run_scenario(key: str, *, k: Kubectl | None = None, dry_run: bool = False, d
                 if w and not w.queue and w.any_node and o.get("hosts"):
                     sim_pin(sim, w, o["hosts"])
             predicted = sim.outcome()
-        printer("   predicted:\n" + _indent(kindsim.describe(predicted)))
+        printer("   predicted (k8sgpu.kindsim, simulated):\n" + _indent(kindsim.describe(predicted)))
         step = {"step": i + 1, "predicted": predicted}
         if live:
             printer("   observed:\n" + _indent(kindsim.describe(observed)))

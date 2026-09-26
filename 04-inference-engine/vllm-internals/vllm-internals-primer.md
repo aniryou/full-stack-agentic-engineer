@@ -15,8 +15,8 @@ release at fetch time was **0.30.0** (2026-09-22), and `pyproject.toml` pins `to
 build. Paths were checked at that commit; anything not confirmed in source is marked `(verify)`.
 
 **Conventions.** `(path: Class.method)` means "read it there"; paths are relative to the vLLM repository
-root. [`source-map.md`](source-map.md) lists the same files with line numbers at `5840d95` and a three-hour
-reading order. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
+root. [`source-map.md`](source-map.md) lists the same files with line numbers at `5840d95` and a reading
+plan in three two-hour sittings. **Tier:** reading this and the source is **T0** (no GPU); observing the behaviour
 (metrics, log lines, preemptions) is **T1** in the serving lab.
 
 ---
@@ -108,8 +108,9 @@ default** when Triton is available and nothing unsupported is requested; it fall
 others, the `ngram`, `ngram_gpu`, `draft_model`, `suffix` and `medusa` speculative methods, stock
 `torch.compile`, and sequence parallelism with TP > 1 (`_get_v2_model_runner_unsupported_features`).
 Three exceptions to "default": on ROCm, the architectures in `ROCM_DEFAULT_MRV1_ARCHITECTURES` (DeepSeek-V3.2,
-DeepSeek-V4, GLM-MoE-DSA) default to MRV1 ("Defaulting to V1 model runner on ROCm"), and HiSparse attention
-and watermarking force MRV2 even over `VLLM_USE_V2_MODEL_RUNNER=0`. Otherwise `VLLM_USE_V2_MODEL_RUNNER=0|1`
+DeepSeek-V4, GLM-MoE-DSA) default to MRV1 ("Defaulting to V1 model runner on ROCm") unless MRV1 cannot serve
+the configuration; HiSparse attention requires MRV2 and rejects `VLLM_USE_V2_MODEL_RUNNER=0`; watermarking forces
+MRV2 over it. Otherwise `VLLM_USE_V2_MODEL_RUNNER=0|1`
 forces the choice; the worker logs "Using V2 Model Runner" (`vllm/v1/worker/gpu_worker.py`) or the config logs
 the fallback reason. A source comment in `_get_v1_model_runner_unsupported_features` already calls MRV1
 "deprecated". **This primer traces the default, MRV2**, and names the MRV1 equivalent where it differs;
@@ -382,8 +383,10 @@ on the admission rule of Section 3.6, and the worked example shows it often does
 
 Worked example with `--num-gpu-blocks-override 300` (documented in `CacheConfig` as "used for testing
 preemption"; 299 usable blocks because block 0 is the null block). Two requests with 2,000-token prompts and
-long `max_tokens`, FCFS, synchronous accounting (async scheduling shifts each count by the one in-flight token
-without changing the outcome). "Free" is `get_num_free_blocks()`, which counts cached, unreferenced blocks.
+long `max_tokens`, FCFS, synchronous accounting. Under the default async scheduling the one in-flight token shifts
+some counts by one, and until R2's in-flight output drains (a step) the waiting pass parks it in `skipped_waiting`
+with `continue` (the `num_stale_output_tokens` check), which can let that step's admissions past it; the outcome is
+the same. "Free" is `get_num_free_blocks()`, which counts cached, unreferenced blocks.
 
 | Moment | R1 | R2 | Free |
 |---|---|---|---|
@@ -396,8 +399,8 @@ without changing the outcome). "Free" is `get_num_free_blocks()`, which counts c
 | R1 finishes, having taken *j* blocks after the preemption | frees 150 + *j* blocks | re-admitted: hits the 149 − *j* surviving blocks, recomputes 16*j* + 1 tokens | 299, then 149 once R2 holds 150 |
 
 So one preemption, no ping-pong: the victim cannot come back while the request that displaced it runs, because it
-needs one block more than exists outside that request, and every block the survivor takes comes from the
-victim's cached tail. Meanwhile the victim sits at the head of `waiting` and, because the waiting pass stops at
+needs 150 blocks and at most 149 exist outside that request (one fewer every time R1 grows), and every block the
+survivor takes comes from the victim's cached tail. Meanwhile the victim sits at the head of `waiting` and, because the waiting pass stops at
 the first request that does not fit (`break`), **no request behind it is admitted either**: the engine serializes
 on R1, and TTFT for everything queued grows by R1's remaining decode time. The notebook replays this at small
 scale ([`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb), exercise 4).
@@ -699,7 +702,7 @@ processes:
 | default when (`ParallelConfig.__post_init__`) | world size > 1 and it fits on this node, or `--nnodes > 1` on CUDA | already inside a Ray placement group, `--data-parallel-backend ray`, or `--distributed-executor-backend ray`; the only option on TPU per the config docstring |
 | multi-node | you start `vllm serve` on every node with `--nnodes`, `--node-rank`, `--master-addr`, `--master-port`; something else (a script, Kubernetes LeaderWorkerSet) owns the processes | `initialize_ray_cluster` creates or reuses a placement group; Ray starts one actor per bundle on whichever nodes hold the GPUs |
 | GPU assignment | local rank → device on each node | `RayWorkerProc` discovers the physical GPU Ray bound to its bundle and never rewrites `CUDA_VISIBLE_DEVICES`, so several engines can share a node through externally managed placement groups (class docstring) |
-| failure handling | worker processes are children of EngineCore | a monitor thread `ray.wait`s on every actor's `run()` reference and shuts the executor down when one dies (`start_worker_monitor`) |
+| failure handling | `start_worker_monitor` waits on the local worker processes' sentinels; a death shuts the executor down and fails the engine | the same policy, but the monitor thread `ray.wait`s on every actor's `run()` reference, so it also sees workers on other nodes (`RayExecutorV2.start_worker_monitor`) |
 | costs | nothing extra | a Ray installation and cluster, actor start-up before model load, logs and stack traces spread across Ray's per-actor logs |
 
 Pick `mp` for one node, and for multi-node when an orchestrator already places the pods; pick Ray when a Ray
@@ -987,8 +990,8 @@ not drawn from a random-number generator but computed as a **counter-based hash*
 `murmur3_uniform32/64`). The docstring gives the reason: "`keys` indexes the noise, so the same token draws the same
 noise wherever it appears; `pos` and `seed` place the draw in the request's stream, which is what lets a draft and
 its verification agree." It also makes seeded requests free: a seed is just a per-slot number, with no
-`torch.Generator` per request. (Philox, via `tl.rand` in `tl_rand32`, survives only for the uniform in the
-rejection test, Section 7.4.)
+`torch.Generator` per request. (Philox, via `tl.rand` in `tl_rand32`, remains for the uniform of the rejection
+test, Section 7.4, and in the watermarking sampler.)
 
 MRV1's `random_sample` (`vllm/v1/sample/ops/topk_topp_sampler.py`) uses the exponential-race form of the same
 trick, `argmax(probs / q)` with `q ~ Exp(1)`; seeded requests get their own `torch.Generator`, applied row by row
@@ -1127,8 +1130,8 @@ this table.
 
 Decode re-reads every weight each step, except the input embedding, which is only gathered by row; so the bytes
 streamed per step set a floor on ITL. Typical FP8 and GPTQ/AWQ checkpoints quantize only the linear layers and
-keep `embed_tokens`, `lm_head` and the norms in BF16 (llm-compressor recipes list `lm_head` under `ignore`;
-embeddings are not linear layers; check your checkpoint's `quantization_config`). For Llama-3.1-8B that leaves
+keep `embed_tokens`, `lm_head` and the norms in BF16 (llm-compressor recipes list `lm_head` under `ignore`
+`(verify)`; embeddings are not linear layers; check your checkpoint's `quantization_config`). For Llama-3.1-8B that leaves
 1.05 B of the 8.03 B parameters in BF16. Byte counts come from `servelab.sizing.weight_bytes` (INT4 at 4.16 bits
 per weight with group-128 scales and zero points), freed blocks from `size(...).num_blocks` against the BF16 row of
 Section 4.7:

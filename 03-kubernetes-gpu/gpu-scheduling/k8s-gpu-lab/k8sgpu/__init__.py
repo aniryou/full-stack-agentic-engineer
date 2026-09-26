@@ -11,8 +11,11 @@ Modules, in the order the notebooks use them:
 * ``pending``   — "why is my pod Pending?" from kubectl JSON (fixtures included)
 * ``capacity``  — on-demand vs Spot vs flex-start vs reservations; ComputeClass fallback; cold start
 * ``gke``       — the GKE manifests and offline readers for the Terraform
+* ``gpuvm``     — the same GPU pod on a GPU VM with k3s and the real device plugin (T1/T2)
+* ``render``    — writes every generated manifest under ``deploy/`` and checks for drift and orphans
 
-Only PyYAML is required. See the lab README for the tiers (T0 offline, kind with Docker, T3 GKE).
+Only PyYAML is required. See the lab README for the tiers (T0 offline, kind with Docker, T1/T2 a
+GPU VM, T3 GKE).
 """
 from . import capacity, lint, machines, manifests, pending  # noqa: F401
 
