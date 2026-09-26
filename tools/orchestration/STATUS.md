@@ -24,7 +24,7 @@ WIP snapshots are pushed to `claude/gifted-johnson-9gjwzc` (draft PR). Reviewed 
 ## Notes for the review / integration passes
 - Layer 04 lab, free-T4 path: vLLM on Turing (compute capability 7.5) needs `--dtype half` and a non-FlashAttention backend; confirm the pinned vLLM
   release still supports 7.5 and say so in the README `(verify)`. Kaggle's P100 (capability 6.0) is below vLLM's minimum — the Kaggle recipe must pick "GPU T4 x2".
-- Root `README.md` and the layer READMEs still describe layer 04's new topics as in progress (01, 02, 03 and 05 are integrated); the integration pass rewrites them and regenerates Colab links.
+- DONE in the final pass: root `README.md` and the layer READMEs still describe layer 04's new topics as in progress (01, 02, 03 and 05 are integrated); the integration pass rewrites them and regenerates Colab links.
 - `.gitignore` now excludes `terraform.tfvars` / `*.auto.tfvars` (COMPUTE.md tells learners to check with `git check-ignore`).
 - vLLM `main` (commit 5840d95, 2026-09-25; PyPI 0.30.0): Model Runner V2 and async scheduling are default-on; `VLLM_USE_V1` and `VLLM_ATTENTION_BACKEND` were removed. The layer-04 lab review must check the lab's env vars/flags against this.
 - DONE by the vLLM review validator: §6.4 71.1× like-for-like figure added; §6.3 FP8-KV condition (FA3 on SM90 / FA4) added.

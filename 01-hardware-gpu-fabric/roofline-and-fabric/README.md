@@ -31,7 +31,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 | [`roofline-core/`](roofline-core/README.md) | **predict** step times, collective costs, cold starts, failure rates and $/M tokens with the minimal implementation: package `roofline`, seven standard-library modules (`specs`, `roofline`, `llm`, `fabric`, `storage`, `reliability`, `cost`) and four fill-in notebooks | ~8 h with the primer | T0 |
 | [`gpu-bench-lab/`](gpu-bench-lab/README.md) | **measure** the machine you have with the detailed lab, package `gpubench`: numpy (CPU) and torch (CUDA) backends for GEMM throughput, memory bandwidth, host↔device and GPU↔GPU transfers, weight loading; `nvidia-smi` topology and inventory parsers; Docker and GCP Terraform deploys | ~5 h | T0 → T3 |
 
-Times are rough and come from the repo's curriculum (`CURRICULUM.md` at the repo root, modules 01.1–01.5).
+Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../../CURRICULUM.md), modules 01.1–01.5).
 
 ### Work it in this order
 

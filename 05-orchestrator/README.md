@@ -58,7 +58,7 @@ decide whether a request runs before the router decides where, and to the agent 
 [`07-application-agent-framework`](../07-application-agent-framework/README.md), whose multi-turn sessions shape
 every routing and caching decision here.
 
-> Note: `06-gateway/scaling-admission-cost/agentic-scaling-lab` touches this layer
+> Note: [`06-gateway/scaling-admission-cost/agentic-scaling-lab`](../06-gateway/scaling-admission-cost/agentic-scaling-lab) touches this layer
 > (capacity planning, autoscaling) but is filed under Gateway — see the root CLAUDE.md.
 
 ## Caveats

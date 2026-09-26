@@ -3,7 +3,7 @@
 **Tier:** T3 (GCP). One vLLM replica on a Spot L4 node that the autoscaler creates on demand, and a
 `PodMonitoring` so the same `vllm:*` series this lab parses locally land in Cloud Monitoring.
 Routing across replicas and autoscaling on engine signals are the next layer:
-`05-orchestrator/serving-orchestration/` (see [`05-orchestrator/`](../../../../../../05-orchestrator/)).
+[`05-orchestrator/serving-orchestration/`](../../../../../../05-orchestrator/serving-orchestration/).
 
 This directory is the minimal **gcloud** path: one script and two manifests keep the engine the
 subject. The same kind of cluster as **Terraform** — zonal GKE Standard, an L4 Spot pool that scales

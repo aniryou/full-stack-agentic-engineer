@@ -20,7 +20,7 @@ Kueue quotas, and how to get GPU capacity — from zero, on Spot or through queu
 
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
 rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + Docker" is a laptop with Docker, still free.
-Times are rough and come from the repo's curriculum (`CURRICULUM.md` at the repo root, modules 03.1–03.6).
+Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 03.1–03.6).
 
 ## Start here
 

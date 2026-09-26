@@ -893,7 +893,7 @@ Product facts in this primer and in `roofline-core/roofline/specs.py`, as of Sep
   DWS flex-start (up to 7 days) and calendar mode, Cloud Run GPU types, TPU7x GA date (2026-04-22), quota
   behaviour for new accounts.
 - Free and cheap tiers: Colab (T4, hours per week), Kaggle (2×T4 or P100, 30 GPU-hours per week), Vast.ai,
-  RunPod, Lambda, Modal offerings — maintained in `COMPUTE.md`.
+  RunPod, Lambda, Modal offerings — maintained in [`COMPUTE.md`](../../COMPUTE.md).
 - The Run:ai Model Streamer as a vLLM load format; loader behaviour of safetensors.
 - The Llama 3 interruption figures (419 unexpected in 54 days on 16,384 GPUs; ~78% hardware).
 - Assumptions, not product facts (replace with your own): α values, storage tier bandwidths, cold-start
