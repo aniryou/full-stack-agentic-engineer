@@ -1,6 +1,6 @@
 # Adversarial review of `full-stack-agentic-engineer`
 
-*Reviewed at commit `3be2bb0` (main) on 2026-09-26. This file is untracked: keep, move or delete it as you like.*
+*Reviewed at commit `3be2bb0` (main) on 2026-09-26. Filed under `tools/orchestration/reviews/` with the fix plan that tracks each finding: [`2026-09-26-fix-plan.md`](2026-09-26-fix-plan.md).*
 
 ## How this was done
 
