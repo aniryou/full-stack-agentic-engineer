@@ -1,4 +1,8 @@
 """How a container sees its GPU: mounts, device nodes, driver versions and the compatibility rules."""
+import importlib.util
+import pathlib
+import sys
+
 import pytest
 
 from gpurt import container as c
@@ -21,9 +25,27 @@ def test_gke_device_plugin_from_the_gke_sample(fixture_text):
     assert rep.verdicts[0].level == "ok"
 
 
-def test_driver_branch_to_cuda_version():
-    assert [c.cuda_of_driver(v) for v in ("470.82.01", "535.104.05", "550.54.15", "580.65.06")] == \
-        ["11.4", "12.2", "12.4", "13.0"]
+def test_driver_to_cuda_version():
+    drivers = ("470.82.01", "535.104.05", "550.54.15", "565.57.01", "580.65.06", "595.45.04", "610.43.02")
+    assert [c.cuda_of_driver(v) for v in drivers] == ["11.4", "12.2", "12.4", "12.6", "13.0", "13.2", "13.3"]
+    assert c.cuda_of_driver("580.65.05") == "12.9" and c.cuda_of_driver("440.33") == "10.2"
+    assert c.cuda_of_driver("375.26") is None  # older than the table
+    # a CUDA 13.3 image on a driver that supports it: no false "minor-version compatibility" warning
+    assert [v.level for v in c.compat_verdicts(c.cuda_of_driver("610.43.02"), "13.3")] == ["ok"]
+
+
+def test_driver_table_matches_the_core(monkeypatch):
+    """primer §1.2 cites gpusim.compat.CUDA_MIN_DRIVER; the lab must give the same answers."""
+    core = pathlib.Path(__file__).resolve().parents[2] / "cuda-nccl-core" / "gpusim" / "compat.py"
+    if not core.exists():
+        pytest.skip("cuda-nccl-core not next to the lab")
+    spec = importlib.util.spec_from_file_location("_core_compat", core)
+    mod = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, mod)  # dataclasses resolve their module by name
+    spec.loader.exec_module(mod)
+    assert c.CUDA_MIN_DRIVER == mod.CUDA_MIN_DRIVER and c.INFERRED == mod.INFERRED
+    for drv in ("450.80.02", "535.54.03", "565.57.01", "570.172.08", "580.65.06", "595.45.04", "610.43.02", "615.10"):
+        assert c.cuda_of_driver(drv) == mod.driver_cuda(drv), drv
 
 
 def test_proc_version_strings_proprietary_and_open():

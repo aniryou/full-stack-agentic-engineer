@@ -189,11 +189,22 @@ def parse_proc_driver_version(text: str) -> str | None:
 
 
 # --------------------------------------------------------------------------- versions and rules
-# Driver branch -> newest CUDA version it supports (the "CUDA Version" in nvidia-smi's header). (verify)
-DRIVER_BRANCH_CUDA = {450: "11.0", 455: "11.1", 460: "11.2", 465: "11.3", 470: "11.4", 495: "11.5",
-                      510: "11.6", 515: "11.7", 520: "11.8", 525: "12.0", 530: "12.1", 535: "12.2",
-                      545: "12.3", 550: "12.4", 555: "12.5", 560: "12.6", 565: "12.7", 570: "12.8",
-                      575: "12.9", 580: "13.0", 590: "13.1"}
+# Minimum Linux x86-64 driver per CUDA toolkit release (CUDA release notes; the same table as the core's
+# gpusim.compat.CUDA_MIN_DRIVER and primer §1.2, and a test keeps the two in step). Dated 2026-09 (verify).
+# There was no CUDA 12.7 toolkit: R565 drivers print "CUDA Version: 12.7" in nvidia-smi (verify), which
+# changes no verdict here, since the 12.8 toolkit needs 570.26 either way.
+CUDA_MIN_DRIVER = {
+    "9.0": "384.81", "9.1": "390.46", "9.2": "396.26",
+    "10.0": "410.48", "10.1": "418.39", "10.2": "440.33",
+    "11.0": "450.51.05", "11.1": "455.23", "11.2": "460.27.03", "11.3": "465.19.01",
+    "11.4": "470.42.01", "11.5": "495.29.05", "11.6": "510.39.01", "11.7": "515.43.04",
+    "11.8": "520.61.05",
+    "12.0": "525.60.13", "12.1": "530.30.02", "12.2": "535.54.03", "12.3": "545.23.06",
+    "12.4": "550.54.14", "12.5": "555.42.02", "12.6": "560.28.03", "12.8": "570.26",
+    "12.9": "575.51.03", "13.0": "580.65.06", "13.1": "590.44.01", "13.2": "595.45.04",
+    "13.3": "610.43.02", "13.4": "615",
+}
+INFERRED = {"13.4"}  # a driver *branch* only (R615, from NVIDIA's NVML binding), not a release-notes minimum
 # Minimum Linux driver for minor-version compatibility within a CUDA major. (verify)
 MIN_DRIVER_MINOR_COMPAT = {11: "450.80.02", 12: "525.60.13", 13: "580.65.06"}
 # Compute capability -> architecture and example GPUs. (verify newer entries)
@@ -211,12 +222,13 @@ def vtuple(v: str | None) -> tuple[int, ...] | None:
 
 
 def cuda_of_driver(driver_version: str | None) -> str | None:
-    """Newest CUDA version a driver supports, from its branch (e.g. 550.54.15 -> 12.4)."""
+    """Newest CUDA toolkit whose minimum driver this driver meets (550.54.15 -> 12.4; 610.43.02 -> 13.3).
+    None for a driver older than the table (below 384.81) or an unparseable version."""
     t = vtuple(driver_version)
     if not t:
         return None
-    branches = [b for b in DRIVER_BRANCH_CUDA if b <= t[0]]
-    return DRIVER_BRANCH_CUDA[max(branches)] if branches else None
+    ok = [c for c, d in CUDA_MIN_DRIVER.items() if t >= vtuple(d)]
+    return max(ok, key=vtuple) if ok else None
 
 
 _ARCH = re.compile(r"^(sm|compute)_(\d+)([af]?)$")

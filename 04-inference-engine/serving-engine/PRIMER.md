@@ -368,22 +368,22 @@ model believed, before temperature, penalties or masks. They are the cheapest mo
 stop *strings* in the detokenizer, which then aborts the request (the stop string is excluded from the output by
 default).
 
-**Structured output** is sampling with a grammar-shaped mask. A JSON schema, regex or context-free grammar is
-compiled to an automaton; each step, the tokens that would leave the grammar get −∞ before sampling, and the
-automaton advances on the token drawn (`ChoiceFSM`: `start()`, `allowed(state)`, `advance(state, token)`). With a
-byte vocabulary that is trivial; with a 100k-token BPE vocabulary each token spans several characters, so the hard
-part is computing, per grammar state, which of 100k tokens keep the text legal — a token is legal only if every
-one of its characters is, starting from that state — fast enough to overlap with the GPU's forward pass. Notebook
-04 (worked example 6, exercise 4.6) compiles the schema `{"n": <non-negative integer>}` into a 10-state character
-automaton and precomputes the next state of each of 36 multi-character tokens in each state: the token `{"n": `
-jumps six states at once, `07` is legal after `{"n": 1` but not right after `{"n": `, the text `{"n": 0}` comes
-out as 19 different token sequences in 300 samples (the re-tokenization trap of §5), and a `max_tokens` cap leaves
-a legal prefix that does not parse — check `finish_reason`. That precomputation is what the backends optimise
-(vLLM: `xgrammar`, `guidance`/llguidance, `outlines`, `lm-format-enforcer`, `auto`, verify); SGLang adds
-"jump-forward" decoding through stretches the grammar fully determines. The guarantee is **syntax, not sense**: in notebook 04 the tiny
-model produces a valid `{"answer": "yes"}` or `{"answer": "no"}` every time, while its own log-probability of that
-text is about −123 nats — the grammar forced every character, and it would force a confident-looking answer from a
-model that knows nothing. Validate values downstream; watch the logprobs of constrained fields.
+**Structured output** is sampling with a grammar-shaped mask. A JSON schema, regex or context-free grammar is compiled
+to an automaton; each step, the tokens that would leave the grammar get −∞ before sampling, and the automaton advances
+on the token drawn (`ChoiceFSM`: `start()`, `allowed(state)`, `advance(state, token)`). With a byte vocabulary that is
+trivial; with a 100k-token BPE vocabulary each token spans several characters, so the hard part is computing, per
+grammar state, which of 100k tokens keep the text legal — a token is legal only if every one of its characters is,
+starting from that state — fast enough to overlap with the GPU's forward pass. Notebook 04 (worked example 6, exercise
+4.6) compiles the schema `{"n": <non-negative integer>}` into a 10-state character automaton and precomputes, for each
+state, the next state after each of 36 tokens (single characters and multi-character merges): the token `{"n": ` jumps
+six states at once, `07` is legal after `{"n": 1` but not right after `{"n": `, the text `{"n": 0}` comes out as 19
+different token sequences in 300 samples (the re-tokenization trap of §5), and a `max_tokens` cap leaves a legal
+prefix that does not parse — check `finish_reason`. That precomputation is what the backends optimise (vLLM:
+`xgrammar`, `guidance`/llguidance, `outlines`, `lm-format-enforcer`, `auto`, verify); SGLang adds "jump-forward"
+decoding through stretches the grammar fully determines. The guarantee is **syntax, not sense**: in notebook 04 the
+tiny model produces a valid `{"answer": "yes"}` or `{"answer": "no"}` every time, while its own log-probability of
+that text is about −123 nats — the grammar forced every character, and it would force a confident-looking answer from
+a model that knows nothing. Validate values downstream; watch the logprobs of constrained fields.
 
 ## 7. Speculative decoding
 
