@@ -142,13 +142,13 @@ def capacity_primer_view(rps: float, in_tokens: int, out_tokens: int, *, params_
                          tpot_ms: float = 40, mfu: float = 0.5, overhead: float = 0.10) -> dict:
     """The capacity primer's worked arithmetic (``00-foundations/gpu-capacity-planning/capacity.py``,
     its "Singapore bank" example: Mistral Small 3 24B on H100, fp8), re-implemented so this lab stays
-    standalone — ``tests/test_reuse.py`` checks it against ``capacity.py`` itself. Units as there:
-    weights in 1e9 bytes, KV per session in KB/1024² (the primer's mixed convention, kept on purpose)."""
+    standalone — ``tests/test_reuse.py`` checks it against ``capacity.py`` itself. Units as there: every memory
+    quantity (weights, HBM, KV per session) in GB = 1e9 bytes."""
     ttft = 2 * params_b * 1e9 * in_tokens / (fp8_tflops * 1e12 * mfu)
     duration = ttft + out_tokens * tpot_ms / 1000
     conc = rps * duration
     avg_ctx = in_tokens + out_tokens // 2
-    kv_session_gb = (2 * layers * kv_heads * head_dim * 1.0 / 1024) * avg_ctx / (1024 * 1024)
+    kv_session_gb = 2 * layers * kv_heads * head_dim * 1.0 * avg_ctx / 1e9
     spare = hbm_gb * (1 - overhead) - params_b * 1.0
     sessions = spare / kv_session_gb
     return {"ttft_s": ttft, "duration_s": duration, "concurrency": conc, "avg_ctx": avg_ctx,

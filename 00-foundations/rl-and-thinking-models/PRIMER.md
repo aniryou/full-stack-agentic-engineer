@@ -79,8 +79,8 @@ In the core's toy, a weak SFT model (two steps of `pg.sft_step()` on the 14 bala
 compute-bound, about 6·N FLOPs per token — but first those tokens must be *generated*, one decode step at a time,
 memory-bound, and the batch lives until its longest completion finishes. `rlcore.workload.rl_step_time()` models one
 synchronous step at DAPO's batch shape — 512 prompts × 16 samples = 8,192 completions — for a 7.6B policy on 64
-H100s with lognormal lengths (median 4,000 tokens, capped at 20,480): generation 139 s, training 137 s, so rollouts
-are 50% of the step, and the generation batch is only 25% occupied on average because the last few long completions
+H100s with lognormal lengths (median 4,000 tokens, capped at 20,480): generation 142 s, training 137 s, so rollouts
+are 51% of the step, and the generation batch is only 25% occupied on average because the last few long completions
 decode almost alone. That model is optimistic; verl reports ~70% of step time in rollouts for DAPO-32B (verify). The
 rollout generator is an inference engine with all the concerns of the
 [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md): continuous batching (§2), KV capacity
@@ -528,7 +528,7 @@ checker — measure it on your evals.
 **Output-heavy, decode-dominant, heavy-tailed.** A chat request is prompt-heavy; a thinking request spends most of
 its life in decode, and its length depends on how hard the question is. A lognormal with median 1,500 thinking tokens
 and σ = 1 has mean 2,473, p90 5,403 and p99 15,361 (`workload.lognormal_mean()`, `workload.lognormal_quantile()`):
-the p99 is ten times the median. On a small model one trace's KV is the size of the model: Qwen3-0.6B holds 112 KiB
+the p99 is ten times the median. On a small model one trace's KV is the size of the model: Qwen3-0.6B holds 115 kB
 of KV per token in fp16 (114,688 B, `workload.kv_per_token_kb()`), so an 8K-token trace holds 0.94 GB against 1.19
 GB of weights.
 
@@ -561,34 +561,34 @@ so prefill is sized separately, as in `plan()`).
 | **At the SLO's TPOT (`plan()`, the primer's convention)** | | | |
 | request lifetime | 12.07 s | 120.07 s | 60.07 s |
 | live requests (Little's law) | 100.6 | 1,000.6 | 500.6 |
-| average context; KV per session (FP8) | 1,650; 0.126 GB | 3,000; 0.229 GB | 3,000; 0.229 GB |
-| sessions per GPU by HBM | 381.3 | 209.7 | 209.7 |
-| batch per GPU within the ITL SLO | 824 | 480 | 187 |
-| GPUs by memory / ITL / decode / prefill | 0.26 / 0.12 / 0.27 / 0.61 | 4.77 / 2.08 / 2.57 / 0.61 | 2.39 / 2.68 / 2.67 / 0.61 |
-| GPUs needed (binding) | 1 (prefill) | 5 (memory) | 3 (ITL) |
+| average context; KV per session (FP8) | 1,650; 0.135 GB | 3,000; 0.246 GB | 3,000; 0.246 GB |
+| sessions per GPU by HBM | 355.1 | 195.3 | 195.3 |
+| batch per GPU within the ITL SLO | 813 | 447 | 174 |
+| GPUs by memory / ITL / decode / prefill | 0.28 / 0.12 / 0.28 / 0.61 | 5.12 / 2.24 / 2.75 / 0.61 | 2.56 / 2.88 / 2.86 / 0.61 |
+| GPUs needed (binding) | 1 (prefill) | 6 (memory) | 3 (ITL) |
 | **At the step the fleet runs at (`plan_steady()`)** | | | |
-| GPUs by memory / ITL / prefill | 0.14 / 0.12 / 0.61 | 2.57 / 2.08 / 0.61 | 2.57 / 2.67 / 0.61 |
+| GPUs by memory / ITL / prefill | 0.15 / 0.12 / 0.61 | 2.75 / 2.24 / 0.61 | 2.75 / 2.87 / 0.61 |
 | GPUs needed (binding) | 1 (prefill) | 3 (memory) | 3 (ITL) |
-| where it settles: batch per GPU; step; lifetime | 20.4; 7.9 ms; 2.45 s | 139.1; 16.7 ms; 50.08 s | 139.1; 16.7 ms; 50.08 s |
+| where it settles: batch per GPU; step; lifetime | 20.6; 8.0 ms; 2.47 s | 154.1; 18.5 ms; 55.49 s | 154.1; 18.5 ms; 55.49 s |
 
 The convention has a paradox in its last column: a 20 ms SLO halves the lifetime it assumes, so it needs *fewer*
-GPUs (3) than the looser 40 ms SLO (5). A fleet does not run at its SLO. At 3 GPUs the batch settles at 139 per GPU
-and a step takes 16.7 ms, under both SLOs, so both need 3 GPUs — and the tight SLO's need is the larger (2.67 vs
-2.57), as it should be. The convention sizes for the slowest step the SLO allows, which is a safe margin for bursts
+GPUs (3) than the looser 40 ms SLO (6). A fleet does not run at its SLO. At 3 GPUs the batch settles at 154 per GPU
+and a step takes 18.5 ms, under both SLOs, so both need 3 GPUs — and the tight SLO's need is the larger (2.87 vs
+2.75), as it should be. The convention sizes for the slowest step the SLO allows, which is a safe margin for bursts
 but the wrong tool for comparing SLOs.
 
-Either way, ten times the output needs eighteen times the GPUs for memory — 4.77 vs 0.264 at the SLO's TPOT, 2.57 vs
-0.14 at the step the fleet runs at. Concurrency grows with the output and each live session holds 1.8× the KV: the
+Either way, ten times the output needs eighteen times the GPUs for memory — 5.12 vs 0.283 at the SLO's TPOT, 2.75 vs
+0.15 at the step the fleet runs at. Concurrency grows with the output and each live session holds 1.8× the KV: the
 18.2× of KV-token-steps above, showing through Little's law. The primer's `decode_aggregate` would put all 1,000
-live requests of the convention in one batch — 229 GB of KV on an 80 GB card. Decode *throughput* is not the
+live requests of the convention in one batch — 246 GB of KV on an 80 GB card. Decode *throughput* is not the
 binding constraint.
 
 **ITL is the binding SLO; TTFT less so.** Thinking leaves the prompt, and so TTFT, unchanged — but the user waits for
 the *answer*: with 2,700 thinking tokens at the SLO's 40 ms each, the first answer token arrives 108.07 s after the
-request (`workload.request_duration_s()` with the thinking tokens as output), and still 45.1 s at the 16.7 ms step the
+request (`workload.request_duration_s()` with the thinking tokens as output), and still 49.9 s at the 18.5 ms step the
 3-GPU fleet runs at. Streaming the reasoning, or a summary of it, is the UX answer; the capacity answer is that ITL,
-not tokens/s, governs how many sessions a GPU may hold. With a 20 ms ITL SLO a GPU holds 187 sessions
-(`workload.max_batch_for_itl()`), below the 209 that fit in HBM: ITL binds first (2.67 GPUs against memory's 2.57 in
+not tokens/s, governs how many sessions a GPU may hold. With a 20 ms ITL SLO a GPU holds 174 sessions
+(`workload.max_batch_for_itl()`), below the 195 that fit in HBM: ITL binds first (2.87 GPUs against memory's 2.75 in
 `plan_steady()`). Measure with the serving-engine primer's §11 method — open-loop load at realistic (here:
 heavy-tailed) output lengths, percentiles of ITL and TPOT, goodput against the SLO — and watch
 `vllm:inter_token_latency_seconds`, `vllm:kv_cache_usage_perc` and `vllm:num_preemptions`: a long-tail trace that
@@ -740,7 +740,7 @@ correct answer."
    charges anything for length.
 4. *We turned on thinking for our assistant at the same QPS. What happens to the fleet?* — Concurrency scales with
    output length and KV per session with average context, so memory binds: 10× output needed 18× the GPUs for
-   memory in the capacity primer's example (4.77 vs 0.26 at the SLO's TPOT, 2.57 vs 0.14 at the step the fleet runs
+   memory in the capacity primer's example (5.12 vs 0.28 at the SLO's TPOT, 2.75 vs 0.15 at the step the fleet runs
    at: 3 H100s instead of 1), and a tight ITL SLO caps the batch before HBM does. Beware sizing at the SLO's TPOT
    when comparing SLOs: it makes the looser SLO look dearer. TTFT is unchanged; time to the first answer token is not.
 5. *Users get empty answers from the thinking model. Why, and the fix?* — `max_tokens` counts reasoning; requests

@@ -46,6 +46,13 @@
    "test": "python -m pytest -q"
   },
   {
+   "id": "gpu-capacity-planning",
+   "dir": "00-foundations/gpu-capacity-planning",
+   "python": "3.11",
+   "install": "python -m pip install pytest",
+   "test": "python -m pytest -q test_capacity.py"
+  },
+  {
    "id": "gpu-bench-lab",
    "dir": "01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab",
    "python": "3.11",

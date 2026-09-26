@@ -113,12 +113,12 @@ print(f"memory: {views[1][1]['gpus_for_memory'] / views[0][1]['gpus_for_memory']
 # %% [markdown]
 # Ten times the output needs about 18 times the GPUs for KV. Duration grows 10×, so concurrency
 # grows 10×, and each session's average context nearly doubles (1,650 → 3,000 tokens). These
-# formulas price every token at the SLO's 40 ms, which overstates the GPU count (5 here) and makes
+# formulas price every token at the SLO's 40 ms, which overstates the GPU count (6 here) and makes
 # a looser SLO look dearer; PRIMER §7 "What thinking does to serving" closes Little's law on the
 # step the fleet actually runs at (`rlcore.workload.plan_steady`: 3 GPUs) and still finds 18× the
-# GPUs for KV (2.57 vs 0.14). `derive_shape` below works the same way: ITL at the batch. One
+# GPUs for KV (2.75 vs 0.15). `derive_shape` below works the same way: ITL at the batch. One
 # caveat carries over from the primer: its `decode_aggregate` has no memory cap. At 1,000
-# concurrent sessions × 0.23 GB the KV alone is 229 GB, three H100s' worth, so the batch that
+# concurrent sessions × 0.246 GB the KV alone is 246 GB, over three H100s' worth, so the batch that
 # sets TPOT must be capped by the KV pool, as the next exercise does.
 #
 # ## Exercise 4.2 — the batch the KV pool allows, and the ITL it produces
