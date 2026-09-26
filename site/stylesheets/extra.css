@@ -1,13 +1,13 @@
 /* full-stack-agentic-engineer guide site: theme tokens and the landing page.
  *
  * Tokens (prefix --fse-): cool blue-grey neutrals and two accents.
- *   cobalt  = the stack: layer numbers, links, the primary button when the palette opts in
- *   copper  = what moves or gets checked: the request arrow, the check output, tier T0
+ *   cobalt  = the stack: layer numbers, links
+ *   copper  = what moves: the request arrow on the landing page's stack map, and tier T0
  * Light values live on :root; Material's dark scheme ([data-md-color-scheme="slate"], set on <body>)
  * redefines the same tokens. Components read tokens only.
  *
- * Content pages keep Material's defaults (one exception: code in table cells wraps at word boundaries). Everything
- * else below the palette section is scoped under .fse-home, except the opt-in palette (applies only if mkdocs.yml sets primary/accent: custom).
+ * Content pages keep Material's defaults except for code in table cells and a few phone-width rules (tables,
+ * notebooks, display maths). Everything under "landing page" is scoped under .fse-home.
  */
 
 :root {
@@ -105,7 +105,8 @@
 .fse-home {
   color: var(--fse-ink);
   display: grid;
-  gap: var(--fse-space-5);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--fse-space-4);
   padding-block: var(--fse-space-2) var(--fse-space-4);
 }
 .fse-home a:focus-visible {
@@ -116,412 +117,177 @@
   font-family: var(--fse-font-mono);
 }
 
-/* shared headings and text */
+.md-typeset .fse-home .fse-title {
+  font-family: var(--fse-font-display);
+  font-stretch: 112%;
+  font-weight: 700;
+  font-size: var(--fse-step-3);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--fse-ink);
+  margin: 0 0 var(--fse-space-3);
+}
+.md-typeset .fse-home .fse-intro p {
+  max-width: 40rem;
+  margin: 0;
+}
 .md-typeset .fse-home .fse-h2 {
   font-family: var(--fse-font-display);
   font-stretch: 112%;
   font-weight: 700;
   font-size: var(--fse-step-2);
   line-height: 1.25;
-  letter-spacing: -0.005em;
   color: var(--fse-ink);
-  text-wrap: balance;
   margin: 0 0 var(--fse-space-2);
 }
-.md-typeset .fse-home .fse-lede {
-  max-width: 38rem;
-  color: var(--fse-muted);
-  margin: 0 0 var(--fse-space-3);
+.md-typeset .fse-home .fse-h3 {
+  font-family: var(--fse-font-display);
+  font-stretch: 112%;
+  font-weight: 600;
+  font-size: var(--fse-step-1);
+  color: var(--fse-ink);
+  margin: var(--fse-space-4) 0 var(--fse-space-1);
 }
 .md-typeset .fse-home .fse-note {
-  max-width: 38rem;
-  font-size: var(--fse-step--1);
+  font-size: var(--fse-step-0);
   color: var(--fse-muted);
-  margin: var(--fse-space-3) 0 0;
-}
-.md-typeset .fse-home .fse-eyebrow {
-  font-family: var(--fse-font-mono);
-  font-size: var(--fse-step--1);
-  letter-spacing: 0.04em;
-  color: var(--fse-cobalt);
   margin: 0 0 var(--fse-space-2);
 }
 .fse-home .fse-tier {
   font-family: var(--fse-font-mono);
   font-weight: 500;
-  padding: 0 0.3em;
+  padding: 0.05em 0.35em;
   border-radius: 3px;
   background: var(--fse-cobalt-soft);
   color: var(--fse-cobalt);
 }
+.fse-home .fse-tier--free {
+  background: var(--fse-copper-soft);
+  color: var(--fse-copper);
+}
 
-/* reset Material's list styling for the page's own lists */
-.md-typeset .fse-home ul.fse-steps,
-.md-typeset .fse-home ol.fse-steps,
-.md-typeset .fse-home ul.fse-tiers,
-.md-typeset .fse-home ul.fse-layers,
-.md-typeset .fse-home ul.fse-checks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  /* Material sets display: flow-root on typeset lists; these lists are grids */
+.fse-columns {
   display: grid;
-}
-.md-typeset .fse-home .fse-steps > li,
-.md-typeset .fse-home .fse-tiers > li,
-.md-typeset .fse-home .fse-layers > li,
-.md-typeset .fse-home .fse-checks > li {
-  margin: 0;
-}
-
-/* hero */
-.fse-hero {
-  display: grid;
-  gap: var(--fse-space-4);
-  align-items: center;
-}
-.md-typeset .fse-home .fse-hero__title {
-  font-family: var(--fse-font-display);
-  font-stretch: 112%;
-  font-weight: 700;
-  font-size: var(--fse-step-3);
-  line-height: 1.08;
-  letter-spacing: -0.015em;
-  color: var(--fse-ink);
-  text-wrap: balance;
-  margin: 0 0 var(--fse-space-3);
-}
-.md-typeset .fse-home .fse-hero__promise {
-  font-size: var(--fse-step-1);
-  line-height: 1.55;
-  max-width: 34rem;
-  margin: 0 0 var(--fse-space-2);
-}
-.md-typeset .fse-home .fse-hero__who {
-  color: var(--fse-muted);
-  max-width: 34rem;
-  margin: 0 0 var(--fse-space-3);
-}
-.fse-cta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--fse-space-2);
-}
-.md-typeset .fse-cta .md-button {
-  margin: 0;
-}
-/* the custom primary is a dark navy: in slate, draw the buttons from the tokens so both stay visible */
-[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button {
-  color: var(--fse-ink);
-  border-color: var(--fse-rule);
-}
-[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button--primary {
-  background-color: var(--fse-cobalt);
-  border-color: var(--fse-cobalt);
-  color: #141c26;
-}
-[data-md-color-scheme="slate"] .md-typeset .fse-cta .md-button:is(:hover, :focus) {
-  background-color: var(--fse-copper);
-  border-color: var(--fse-copper);
-  color: #141c26;
-}
-
-/* stack map */
-.md-typeset .fse-home .fse-stack {
-  margin: 0;
-  max-width: 100%;
-}
-.fse-stack__svg {
-  display: block;
-  width: 100%;
-  max-width: 26rem;
-  height: auto;
-  margin-inline: auto;
-}
-.fse-stack__band {
-  fill: var(--fse-surface);
-  stroke: var(--fse-rule);
-  stroke-width: 1;
-}
-.fse-stack__band--base {
-  fill: transparent;
-  stroke-dasharray: 5 4;
-}
-.fse-stack__num {
-  font-family: var(--fse-font-mono);
-  font-size: 15px;
-  font-weight: 500;
-  fill: var(--fse-cobalt);
-}
-.fse-stack__name {
-  font-family: var(--fse-font-display);
-  font-size: 17px;
-  font-weight: 600;
-  fill: var(--fse-ink);
-}
-.fse-stack__note {
-  font-family: var(--fse-font-mono);
-  font-size: 12px;
-  fill: var(--fse-muted);
-}
-.fse-stack__arrow {
-  stroke: var(--fse-copper);
-  stroke-width: 2;
-  fill: none;
-}
-.fse-stack__arrowhead {
-  fill: var(--fse-copper);
-}
-.fse-stack__link:hover .fse-stack__band,
-.fse-stack__link:focus-visible .fse-stack__band {
-  fill: var(--fse-cobalt-soft);
-  stroke: var(--fse-cobalt);
-}
-.fse-stack__link:focus-visible {
-  outline: none;
-}
-.md-typeset .fse-home .fse-stack figcaption {
-  max-width: 26rem;
-  margin: var(--fse-space-2) auto 0;
-  font-size: var(--fse-step--1);
-  color: var(--fse-muted);
-  text-align: left;
-}
-
-/* how a topic works */
-.fse-steps {
-  display: grid;
-  gap: var(--fse-space-3);
-}
-.fse-step {
-  background: var(--fse-surface);
-  border: 1px solid var(--fse-rule);
-  border-radius: var(--fse-radius);
-  padding: var(--fse-space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--fse-space-1);
-}
-.md-typeset .fse-home .fse-step p {
-  margin: 0;
-}
-.md-typeset .fse-home .fse-step__label {
-  font-family: var(--fse-font-mono);
-  font-size: var(--fse-step--1);
-  letter-spacing: 0.04em;
-  color: var(--fse-cobalt);
-}
-.md-typeset .fse-home .fse-step__title {
-  font-family: var(--fse-font-display);
-  font-stretch: 112%;
-  font-weight: 600;
-  font-size: var(--fse-step-1);
-  color: var(--fse-ink);
-  margin: 0 0 var(--fse-space-1);
-}
-.md-typeset .fse-home .fse-step__meta {
-  margin-top: auto;
-  padding-top: var(--fse-space-2);
-  font-size: var(--fse-step--1);
-  color: var(--fse-muted);
-}
-
-/* you will be tested */
-.fse-tested {
-  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--fse-space-4);
   align-items: start;
 }
-.md-typeset .fse-home .fse-checks {
-  display: grid;
-  gap: var(--fse-space-2);
-  max-width: 36rem;
-}
-.md-typeset .fse-home .fse-snippet {
-  /* Material centres figures; code reads left-aligned */
-  display: block;
-  margin: 0;
-  min-width: 0;
-  text-align: left;
-}
-.md-typeset .fse-home .fse-snippet figcaption {
-  font-size: var(--fse-step--1);
-  color: var(--fse-muted);
-  text-align: left;
-  margin: 0 0 var(--fse-space-1);
-  max-width: none;
-}
-.md-typeset .fse-home .fse-snippet .highlight {
-  margin: 0;
-}
-.md-typeset .fse-home .fse-snippet pre {
-  margin: 0;
-}
-.md-typeset .fse-home .fse-snippet pre > code {
-  overflow-x: auto;
-}
-.fse-c {
-  color: var(--md-code-hl-comment-color, var(--fse-muted));
-}
-.md-typeset .fse-home .fse-snippet__out {
-  margin: 0;
-  padding: var(--fse-space-1) var(--fse-space-2);
-  border: 1px solid var(--fse-rule);
-  border-top: 0;
-  border-radius: 0 0 var(--fse-radius) var(--fse-radius);
-  font-family: var(--fse-font-mono);
-  font-size: var(--fse-step--1);
-  color: var(--fse-copper);
-  background: var(--fse-copper-soft);
-}
-.fse-snippet__prompt {
-  color: var(--fse-muted);
-  margin-right: 0.6em;
-}
 
-/* tiers */
-.fse-tiers {
+/* stack map: a list of bands; the copper rule on the right is the request going down 07 -> 01 */
+.md-typeset .fse-home ol.fse-stack {
+  list-style: none;
+  margin: 0 0 var(--fse-space-2);
+  padding: 0 1.1rem 0 0;
   display: grid;
-  gap: var(--fse-space-2);
+  gap: 0.35rem;
+  position: relative;
 }
-.fse-tiercard {
-  border-top: 2px solid var(--fse-rule);
-  padding-top: var(--fse-space-2);
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+.md-typeset .fse-home ol.fse-stack::after {
+  content: "";
+  position: absolute;
+  right: 0.35rem;
+  top: 0.3rem;
+  bottom: 0.5rem;
+  border-right: 2px solid var(--fse-copper);
 }
-.fse-tiercard--free {
-  border-top-color: var(--fse-copper);
+.md-typeset .fse-home ol.fse-stack::before {
+  content: "";
+  position: absolute;
+  right: 0.07rem;
+  bottom: 0;
+  border: 0.32rem solid transparent;
+  border-top: 0.45rem solid var(--fse-copper);
 }
-.md-typeset .fse-home .fse-tiercard p {
+.md-typeset .fse-home ol.fse-stack > li {
   margin: 0;
-  font-size: var(--fse-step--1);
-  color: var(--fse-muted);
 }
-.md-typeset .fse-home .fse-tiercard .fse-tiercard__tier {
-  font-family: var(--fse-font-mono);
-  font-size: var(--fse-step-1);
-  font-weight: 500;
-  color: var(--fse-cobalt);
+.md-typeset .fse-home .fse-base {
+  margin: 0 1.1rem var(--fse-space-2) 0;
 }
-.md-typeset .fse-home .fse-tiercard--free .fse-tiercard__tier {
-  color: var(--fse-copper);
-}
-.md-typeset .fse-home .fse-tiercard .fse-tiercard__where {
-  font-size: var(--fse-step-0);
-  font-weight: 600;
-  color: var(--fse-ink);
-}
-.md-typeset .fse-home .fse-tiercard .fse-tiercard__cost {
-  color: var(--fse-ink);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: var(--fse-space-1);
-}
-
-/* layers */
-.fse-layers {
+.md-typeset .fse-home a.fse-band {
   display: grid;
-  gap: var(--fse-space-2);
-}
-.md-typeset .fse-home a.fse-layer {
-  display: grid;
-  grid-template-columns: 2.2rem 1fr;
-  column-gap: var(--fse-space-2);
-  row-gap: 0.2rem;
-  height: 100%;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  column-gap: var(--fse-space-1);
+  row-gap: 0.1rem;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.7rem;
   box-sizing: border-box;
-  padding: var(--fse-space-2) var(--fse-space-3) var(--fse-space-2) var(--fse-space-2);
   background: var(--fse-surface);
   border: 1px solid var(--fse-rule);
   border-radius: var(--fse-radius);
   color: var(--fse-ink);
 }
-.md-typeset .fse-home a.fse-layer--base {
+.md-typeset .fse-home a.fse-band--base {
   background: transparent;
   border-style: dashed;
 }
-.md-typeset .fse-home a.fse-layer:hover {
+.md-typeset .fse-home a.fse-band:hover {
   border-color: var(--fse-cobalt);
+  background: var(--fse-cobalt-soft);
   color: var(--fse-ink);
 }
-.fse-layer__num {
-  grid-row: 1 / span 3;
+.fse-band__num {
+  grid-row: 1 / span 2;
   font-family: var(--fse-font-mono);
   font-weight: 500;
-  font-size: var(--fse-step-1);
+  font-size: var(--fse-step-0);
   color: var(--fse-cobalt);
 }
-.fse-layer__name {
+.fse-band__name {
   font-family: var(--fse-font-display);
   font-stretch: 112%;
   font-weight: 600;
   font-size: var(--fse-step-0);
 }
-.fse-layer__what {
-  font-size: var(--fse-step--1);
+.fse-band__what {
+  font-size: var(--fse-step-0);
   color: var(--fse-muted);
 }
-.fse-layer__topics {
-  font-family: var(--fse-font-mono);
-  font-size: 0.6rem;
-  color: var(--fse-muted);
-  overflow-wrap: anywhere;
+
+/* how to use it */
+.md-typeset .fse-home ol.fse-use {
+  margin: 0;
+  padding-left: 1.3em;
+}
+.md-typeset .fse-home ol.fse-use > li {
+  margin: 0 0 var(--fse-space-1);
+}
+.md-typeset .fse-home dl.fse-tiers {
+  margin: 0 0 var(--fse-space-2);
+  display: grid;
+  gap: var(--fse-space-1);
+}
+.md-typeset .fse-home dl.fse-tiers > div {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  gap: var(--fse-space-1);
+  align-items: baseline;
+}
+.md-typeset .fse-home dl.fse-tiers :is(dt, dd) {
+  margin: 0;
 }
 
-/* built with Claude */
-.fse-claude__body {
-  max-width: 38rem;
-  border-left: 2px solid var(--fse-copper);
-  padding-left: var(--fse-space-3);
-}
-.md-typeset .fse-home .fse-claude__body > :first-child {
-  margin-top: 0;
-}
-.md-typeset .fse-home .fse-claude__body > :last-child {
-  margin-bottom: 0;
-}
-
-/* footer strip */
+/* closing line */
 .fse-foot {
   border-top: 1px solid var(--fse-rule);
   padding-top: var(--fse-space-3);
-  font-size: var(--fse-step--1);
   color: var(--fse-muted);
 }
 .md-typeset .fse-home .fse-foot p {
-  margin: 0 0 var(--fse-space-1);
+  margin: 0;
+  max-width: 44rem;
 }
 
 /* wider screens (em = 16px in media queries) */
-@media (min-width: 36em) {
-  .fse-tiers,
-  .fse-layers {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (min-width: 48em) {
-  .fse-hero {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  }
-  .fse-steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
 @media (min-width: 60em) {
-  .fse-tested {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  }
-  .fse-tiers {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--fse-space-3);
+  .fse-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--fse-space-5);
   }
 }
 
-/* motion only for those who have not asked for less */
 @media (prefers-reduced-motion: no-preference) {
-  .fse-stack__band,
-  .md-typeset .fse-home a.fse-layer {
-    transition: fill 120ms ease, stroke 120ms ease, border-color 120ms ease;
+  .md-typeset .fse-home a.fse-band {
+    transition: background-color 120ms ease, border-color 120ms ease;
   }
 }
