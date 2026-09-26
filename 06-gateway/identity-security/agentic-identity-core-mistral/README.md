@@ -16,7 +16,7 @@ yours — or your cloud's, when you self-host.
 | Move | In this file | On Mistral | On Google Cloud (for contrast) |
 |---|---|---|---|
 | 1. Identity | `AgentIdentity` — one agent, one principal; the key is read at use, never stored | a **service account** in a Studio **workspace** with its own key (keys are workspace-scoped; connector scope *shared connectors only*); self-hosted, your platform's workload identity (SPIFFE / cloud IAM) | Agent Identity (SPIFFE, certificate-bound tokens) |
-| 2. Authority | `Issuer.exchange` — user token + agent → one token with `sub`=user, `act`=agent, one `aud`, narrowed scope, 5-minute life | **your STS** for your own tool servers. For Studio connectors, Mistral brokers credentials with `consumer_scope` `user` / `workspace` / `organization`; end users authorize OAuth connectors via `connectors.get_auth_url`; the agent never sees the token | Auth Manager (3LO/2LO/API key providers) |
+| 2. Authority | `Issuer.exchange` — user token + the agent's own token (`actor_token`) → one token with `sub`=user, `act`=agent, one `aud`, narrowed scope, 5-minute life; the STS checks the user token's `aud` and `may_act` and verifies the agent's token first | **your STS** for your own tool servers. For Studio connectors, Mistral brokers credentials with `consumer_scope` `user` / `workspace` / `organization`; end users authorize OAuth connectors via `connectors.get_auth_url`; the agent never sees the token | Auth Manager (3LO/2LO/API key providers) |
 | 3. Policy | `Policy.evaluate` before every tool call: deny by default, tiers, scopes, argument envelope, human confirmation showing the real tool + args | the model only *proposes* `tool_calls`; you decide. Studio's `tool_configuration.include / exclude / requires_confirmation` on a connector and `Confirmation` allow/deny are the same idea for connector tools | ADK `before_tool_callback`, Agent Gateway |
 | 4. Resource | `ToolServer.call` verifies `aud` + scope, then authorizes by the **verified subject** | a registered MCP connector with an auth method (`bearer`, `none`, `oauth2` authorization_code / client_credentials); the connector calls your server with the brokered credential | MCP server on Cloud Run behind Agent Gateway / IAP |
 | 5. Audit | `AuditLog` — one event per decision, both identities | Studio **Observability** (traces, spans, logs) + **AI Registry**; Le Chat Enterprise audit logs for the chat product | Cloud Audit Logs, Agent Observability |
@@ -28,11 +28,11 @@ yours — or your cloud's, when you self-host.
 pip install -r requirements.txt
 python agentsec_core_mistral.py                       # offline: scripted model, local screener
 MISTRAL_API_KEY=... python agentsec_core_mistral.py   # live: mistral-medium-latest + moderation-2603
-pytest -q                                             # 13 offline tests (+1 live test when the key is set)
+pytest -q                                             # 16 offline tests (+1 live test when the key is set)
 jupyter lab core_mistral_walkthrough.ipynb
 ```
 
-`core_mistral_walkthrough.ipynb` is the worked version; `core_mistral_practice.ipynb` has 21
+`core_mistral_walkthrough.ipynb` is the worked version; `core_mistral_practice.ipynb` has 20
 blanks with self-checking asserts; `core_mistral_solution.ipynb` is the filled-in practice.
 
 The live path was validated against the SDK's own request/response models (`mistralai` 2.10):
@@ -49,10 +49,11 @@ refund 35         → allowed (destructive, inside the pre-approved envelope ≤
 refund 60         → human confirmation, then allowed; the approval is in the audit log
 refund Ben's T-3  → the SERVER refuses: Ana's token says who she is, not the request body
 replay the token at another API → rejected: wrong audience
+another agent asks to act for Ana → rejected: her token's may_act names only the support agent
 "Ignore previous instructions…"  → blocked by moderation (`jailbreaking`) before the model runs
 ```
 
-## Where this sits when you deploy Mistral for a customer
+## Where this sits in a Mistral deployment
 
 - **Studio (SaaS)** — the agent runs your code (or the Agents/Conversations API) with a
   service-account key from a dedicated workspace; connectors carry the per-user or per-workspace

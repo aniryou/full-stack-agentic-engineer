@@ -6,7 +6,9 @@ The whole idea in five moves (each is a class below):
                    never a shared "app" credential.                         → Google: Agent Identity
   2. AUTHORITY     Every action runs under an explicit authority: the agent's OWN, or one
                    DELEGATED by a user. A delegated token names BOTH (sub=user, act=agent),
-                   for ONE audience, with narrow scope, short-lived.          → Auth Manager / STS
+                   for ONE audience, with narrow scope, short-lived. The STS checks the
+                   user token's audience, authenticates the agent by its own token, and
+                   honours the user's may_act.                               → Auth Manager / STS
   3. POLICY        Enforced OUTSIDE the model, before every tool call: deny by default,
                    tiers, scopes, human confirmation.                        → ADK before_tool_callback
   4. RESOURCE      Tool servers verify the token was issued FOR THEM (audience) with the
@@ -59,6 +61,9 @@ class User:
 # ==============================================================================================
 
 
+APP_AUDIENCE = "https://app.acme.example"  # the front end the user signed in to
+
+
 class TokenError(Exception):
     pass
 
@@ -70,8 +75,9 @@ class Issuer:
     you can see exactly what a resource server checks.
     """
 
-    def __init__(self, issuer: str = "https://sts.acme.example"):
+    def __init__(self, issuer: str = "https://sts.acme.example", *, subject_audiences: frozenset[str] = frozenset({APP_AUDIENCE})):
         self.issuer = issuer
+        self.subject_audiences = subject_audiences  # whose user tokens this STS will exchange
         self._key = rsa.generate_private_key(65537, 2048)
 
     def mint(
@@ -99,19 +105,29 @@ class Issuer:
             claims["act"] = {"sub": actor}  # RFC 8693: "acting on behalf of sub"
         return jwt.encode(claims, self._key, algorithm="RS256")
 
-    def exchange(self, user_token: str, *, agent: AgentIdentity, audience: str, scope: set[str]) -> str:
-        """User token + agent → ONE delegated token for ONE audience, no wider than the user had."""
-        user = self.verify(user_token)  # any audience: the STS is the trusted party here
-        narrowed = scope & set(user["scope"].split())  # an agent can never widen a user's grant
-        return self.mint(
-            subject=user["sub"],
-            audience=audience,
-            scope=narrowed,
-            actor=agent.spiffe_id,
-            email=user.get("email"),
-        )
+    def mint_agent_token(self, agent: AgentIdentity, ttl: int = 300) -> str:
+        """The agent's OWN credential, good only at this STS (aud = the STS itself).
 
-    def verify(self, token: str, *, audience: str | None = None, required: set[str] = frozenset()) -> dict:
+        In production the platform attests the workload and issues it (a certificate-bound
+        Agent Identity token, a SPIFFE SVID, a service-account credential); here the issuer
+        mints it so that `exchange` has an actor to authenticate.
+        """
+        return self.mint(subject=agent.spiffe_id, audience=self.issuer, scope=set(), ttl=ttl)
+
+    def exchange(self, user_token: str, *, actor_token: str, audience: str, scope: set[str]) -> str:
+        """RFC 8693: user token (subject) + the agent's own token (actor) → ONE delegated token
+        for ONE audience, no wider than the user had. Every input is verified, none is trusted."""
+        user = self.verify(user_token, audience=self.subject_audiences)  # minted for an app we serve
+        actor = self.verify(actor_token, audience=self.issuer)  # the agent authenticates to the STS
+        if "act" in actor or not actor["sub"].startswith("spiffe://"):
+            raise TokenError("invalid actor_token: not an agent's own credential")
+        may_act = user.get("may_act")  # RFC 8693 §4.4: who the user allows to act for them
+        if may_act is not None and may_act.get("sub") != actor["sub"]:
+            raise TokenError(f"may_act does not name the actor {actor['sub']}")
+        narrowed = scope & set(user["scope"].split())  # an agent can never widen a user's grant
+        return self.mint(subject=user["sub"], audience=audience, scope=narrowed, actor=actor["sub"], email=user.get("email"))
+
+    def verify(self, token: str, *, audience: str | frozenset[str] | None = None, required: set[str] = frozenset()) -> dict:
         try:
             claims = jwt.decode(
                 token,
@@ -297,12 +313,13 @@ class Agent:
     audit: AuditLog
     ask_human: Callable[[str, dict], bool]  # the confirmation UI: shows the REAL tool + args
     tool_calls: list[dict] = field(default_factory=list)
+    credential: str = ""  # the agent's OWN token (the actor_token at the STS), issued by the platform
 
     def run(self, user_token: str, message: str, plan: list[tuple[str, dict]]) -> list[dict]:
         """`plan` stands in for the model's proposed tool calls (a real model would produce them)."""
         # Authority for this whole run is fixed up front from the user's verified token —
         # nothing the model or a tool does later can change who is acting.
-        claims = self.issuer.verify(user_token)
+        claims = self.issuer.verify(user_token, audience=APP_AUDIENCE)  # minted for our front end
         user = User(claims["sub"], claims.get("email", claims["sub"]))
         authority = Authority(Mode.DELEGATED, self.identity, user, frozenset(claims["scope"].split()))
 
@@ -325,8 +342,8 @@ class Agent:
 
             # Scoped credential per call: ONE audience, only the scope this tool needs, 5 minutes.
             needed = self.policy.rules[tool].scopes
-            token = self.issuer.exchange(user_token, agent=self.identity, audience=self.server.audience, scope=needed)
             try:
+                token = self.issuer.exchange(user_token, actor_token=self.credential, audience=self.server.audience, scope=needed)
                 result = self.server.call(token, tool, args)
             except TokenError as e:
                 result = {"error": str(e)}
@@ -360,9 +377,11 @@ def build_demo(approve: bool = True):
         print(f"  [confirmation UI] approve {tool}{args}? → {'yes' if approve else 'no'}")
         return approve
 
-    agent = Agent(AgentIdentity("support-agent"), policy, issuer, server, audit, human)
-    # The front-end authenticated Ana and holds a token for HER, scoped to what she consented to.
-    ana_token = issuer.mint(subject="u-ana", audience="https://app.acme.example", scope={"tickets:read", "tickets:write"}, email="ana@customer.example")
+    identity = AgentIdentity("support-agent")
+    agent = Agent(identity, policy, issuer, server, audit, human, credential=issuer.mint_agent_token(identity))
+    # The front-end authenticated Ana and holds a token for HER, scoped to what she consented to,
+    # naming the one agent she lets act for her (RFC 8693 may_act).
+    ana_token = issuer.mint(subject="u-ana", audience=APP_AUDIENCE, scope={"tickets:read", "tickets:write"}, email="ana@customer.example", may_act={"sub": identity.spiffe_id})
     return issuer, server, agent, ana_token
 
 
@@ -380,13 +399,19 @@ def demo() -> None:
         print(" ", r)
 
     print("\n== a delegated token, inspected ==")
-    tok = issuer.exchange(ana_token, agent=agent.identity, audience=server.audience, scope={"tickets:read"})
+    tok = issuer.exchange(ana_token, actor_token=agent.credential, audience=server.audience, scope={"tickets:read"})
     claims = jwt.decode(tok, options={"verify_signature": False})
     print("  sub =", claims["sub"], "| act =", claims["act"]["sub"].rsplit("/", 1)[-1], "| aud =", claims["aud"], "| scope =", claims["scope"])
 
     print("\n== the same token replayed against another API ==")
     try:
         issuer.verify(tok, audience="https://payments.acme.example")
+    except TokenError as e:
+        print("  rejected:", e)
+
+    print("\n== another agent asks the STS to act for Ana ==")
+    try:
+        issuer.exchange(ana_token, actor_token=issuer.mint_agent_token(AgentIdentity("marketing-agent")), audience=server.audience, scope={"tickets:read"})
     except TokenError as e:
         print("  rejected:", e)
 

@@ -22,6 +22,7 @@ from agentsec.identity import (
     PrincipalSet,
     ProviderKind,
     ReplayDetected,
+    TokenError,
     TokenIssuer,
     UserPrincipal,
     build_boundary,
@@ -195,6 +196,79 @@ def test_token_exchange_records_actor_and_narrows_scope(
     ).actor_chain
     assert chain == [sub2.spiffe_id, agent.spiffe_id]
     assert jwt.get_unverified_header(id_token)["typ"] == "at+jwt"
+
+
+def test_exchange_honours_may_act(
+    issuer: TokenIssuer, agent: AgentIdentity, other_agent: AgentIdentity, ana: UserPrincipal
+):
+    """RFC 8693 §4.4: a subject token's may_act names the only actor allowed to act for it."""
+    subject_token = issuer.mint(
+        subject=ana.subject,
+        audience="https://app.acme.example",
+        scope="tickets:read",
+        extra={"may_act": {"sub": agent.spiffe_id}},
+    )
+    common = dict(
+        subject_token=subject_token,
+        subject_token_audience="https://app.acme.example",
+        actor_token_audience=issuer.issuer,
+        audience="https://tickets.example/mcp",
+        scope="tickets:read",
+    )
+    named = issuer.mint(subject=agent.spiffe_id, audience=issuer.issuer)
+    resp = issuer.exchange(actor_token=named, **common)
+    assert issuer.verify(resp["access_token"], audience="https://tickets.example/mcp").actor == (
+        agent.spiffe_id
+    )
+    stranger = issuer.mint(subject=other_agent.spiffe_id, audience=issuer.issuer)
+    with pytest.raises(TokenError, match="may_act"):
+        issuer.exchange(actor_token=stranger, **common)
+
+
+def test_exchange_token_type_follows_binding_kind(
+    issuer: TokenIssuer, ca: LocalRuntimeCA, agent: AgentIdentity, ana: UserPrincipal
+):
+    """RFC 9449 §5: token_type is "DPoP" only for a cnf.jkt binding. A certificate-bound token
+    (RFC 8705, cnf.x5t#S256) is presented as Bearer over mTLS, and an unbound one is Bearer."""
+    subject_token = issuer.mint(
+        subject=ana.subject, audience="https://app.acme.example", scope="tickets:read"
+    )
+    common = dict(
+        subject_token=subject_token,
+        subject_token_audience="https://app.acme.example",
+        actor_token_audience=issuer.issuer,
+        audience="https://tickets.example/mcp",
+        scope="tickets:read",
+    )
+    # Certificate-bound actor → delegated token keeps cnf.x5t#S256, token_type Bearer.
+    cert = ca.issue(agent)
+    resp = issuer.exchange(
+        actor_token=issuer.mint_agent_token(cert, audience=issuer.issuer),
+        presented_thumbprint=cert.thumbprint,
+        **common,
+    )
+    assert resp["token_type"] == "Bearer"
+    cnf = issuer.verify(
+        resp["access_token"],
+        audience="https://tickets.example/mcp",
+        presented_thumbprint=cert.thumbprint,
+    ).cnf
+    assert "x5t#S256" in cnf and "jkt" not in cnf
+    # DPoP-bound actor → delegated token keeps cnf.jkt, token_type DPoP.
+    key = DPoP.generate_key()
+    dpop_actor = issuer.mint_dpop_bound_token(
+        subject=agent.spiffe_id, audience=issuer.issuer, dpop_public_jwk=public_jwk(key)
+    )
+    resp = issuer.exchange(actor_token=dpop_actor, **common)
+    assert resp["token_type"] == "DPoP"
+    assert issuer.verify(
+        resp["access_token"],
+        audience="https://tickets.example/mcp",
+        presented_jkt=jwk_thumbprint(public_jwk(key)),
+    ).cnf == {"jkt": jwk_thumbprint(public_jwk(key))}
+    # Unbound actor → Bearer.
+    plain_actor = issuer.mint(subject=agent.spiffe_id, audience=issuer.issuer)
+    assert issuer.exchange(actor_token=plain_actor, **common)["token_type"] == "Bearer"
 
 
 def test_dpop_proof_binding_and_replay(issuer: TokenIssuer):

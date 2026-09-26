@@ -469,6 +469,7 @@ nav:
                       - "Reference architecture": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/02-reference-architecture.md"
                       - "Capacity plan — 100,000 conversations/day": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/03-capacity-plan.md"
                       - "From the core concepts to Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/04-gcp-mapping.md"
+                      - "Scaling Agentic Solutions on Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/scaling-agentic-solutions-on-google-cloud.md"
                   - "Notebooks":
                       - "01 · The arithmetic of agent scale": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/01_scaling_math.ipynb"
                       - "02 · The turn: budgets, checkpoints and idempotency": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/02_turn_loop_and_durability.ipynb"
