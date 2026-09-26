@@ -10,6 +10,7 @@ faster at T1); absent, notebooks load the recorded curves.
     THINKLAB_URL=http://127.0.0.1:8000       a running server to measure (vLLM, SGLang, the fake one)
     THINKLAB_API_KEY=...                     sent as "Authorization: Bearer ..." (vllm --api-key)
     THINKLAB_BEARER=$(gcloud auth print-identity-token)   for a private Cloud Run service
+    THINKLAB_NO_TORCH=1                      behave as if torch were absent (the recorded-run path)
 """
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ from dataclasses import dataclass
 
 
 def has_torch() -> bool:
+    if os.environ.get("THINKLAB_NO_TORCH") == "1":
+        return False
     return importlib.util.find_spec("torch") is not None
 
 

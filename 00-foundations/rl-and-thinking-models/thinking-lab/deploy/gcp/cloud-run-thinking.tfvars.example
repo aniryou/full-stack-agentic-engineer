@@ -1,0 +1,32 @@
+# Variables for the 04 serving lab's Cloud Run Terraform, set up for a thinking model.
+# Use it from that directory (this lab adds no Terraform of its own):
+#   cd ../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/terraform
+#   cp <this file> thinking.tfvars   # edit project_id and invoker_members
+#   terraform init && terraform apply -var-file=thinking.tfvars
+# Every key below is a variable of that module (tests/test_deploy.py checks it).
+
+project_id   = "my-serving-lab"
+region       = "us-central1" # a region with Cloud Run L4 GPUs (verify)
+service_name = "vllm-thinking-l4"
+labels       = { app = "thinking-lab", layer = "00-foundations" }
+
+# Qwen3-4B in bf16 is 8.0 GB on a 24 GB L4; predicted 5,504 KV blocks (88,064 tokens) at max_model_len 16384
+# (servelab.sizing; verify against the startup log).
+model                  = "Qwen/Qwen3-4B"
+max_model_len          = 16384
+gpu_memory_utilization = 0.92
+extra_args = [
+  "--reasoning-parser", "qwen3",
+  "--reasoning-config", "{\"reasoning_start_str\": \"<think>\", \"reasoning_end_str\": \"I have to give the solution based on the reasoning directly now.</think>\"}",
+  "--enable-prompt-tokens-details",
+  "--max-num-seqs", "32",
+]
+
+# Thinking requests stream for minutes: allow long requests, and send fewer at once than for chat
+# (each holds thousands of KV tokens). Scale to zero when idle.
+request_timeout = "1800s" # Cloud Run's maximum request timeout is 60 minutes (verify)
+concurrency     = 16
+min_instances   = 0
+max_instances   = 1
+
+invoker_members = ["user:you@example.com"]

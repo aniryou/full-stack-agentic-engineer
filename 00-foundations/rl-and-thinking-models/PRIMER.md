@@ -341,7 +341,7 @@ changes and no KL term:
 | Technique | What it does | Core / TRL |
 |---|---|---|
 | clip-higher | ε_low 0.2, ε_high 0.28 | `GRPOConfig(epsilon_high=0.28)` |
-| dynamic sampling | over-sample; drop groups with all-equal rewards; refill the batch | `grpo_step(..., dynamic_sampling)`; no TRL flag (it logs `frac_reward_zero_std`) |
+| dynamic sampling | over-sample; drop groups with all-equal rewards; refill the batch | `GRPOConfig(dynamic_sampling=True)` in the core; no TRL flag (it logs `frac_reward_zero_std`) |
 | token-level loss | 1/Σ\|o_i\| | `loss_type="dapo"` |
 | overlong shaping | mask truncated completions; soft penalty near the cap | `mask_truncated_completions=True`; `grpo.soft_overlong_penalty()`, TRL `get_soft_overlong_punishment` |
 
@@ -659,16 +659,16 @@ you notice it being gamed.
 
 | To learn | T0 (laptop / Colab CPU) | T1: free Colab / Kaggle T4 | T1: rented 24 GB GPU | T3: GCP |
 |---|---|---|---|---|
-| §2–4 policy gradients, DPO, GRPO | `rl-core` notebooks 01–03 | `thinking-lab` 01: a tiny transformer trained from scratch with SFT then GRPO in torch (also runs on CPU, slower) | same, faster | — |
+| §2–4 policy gradients, DPO, GRPO | `rl-core` notebooks 01–03 | `thinking-lab` 01: a tiny transformer trained from scratch with SFT then GRPO in torch — about a minute on a laptop CPU, so T0 too | same, faster | — |
 | §5, §7 a real thinking model | `rl-core` notebook 05; the lab's fake server (labelled simulated) | `Qwen/Qwen3-0.6B` in vLLM 0.30 with `--reasoning-parser qwen3 --dtype half`; `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` with `deepseek_r1` | `Qwen/Qwen3-4B`, `Qwen/Qwen3-4B-Thinking-2507` in bf16 | the 04 lab's [Cloud Run and GKE deploys](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/) with a thinking model and `--reasoning-parser` |
 | §6 test-time compute | `rl-core` notebook 04 | best-of-n and majority vote on Qwen3-0.6B (lab 03) | a 4B model | — |
-| §8 one RL step with an engine | the lab's rollout bookkeeping on the toy | TRL 1.14 + vLLM 0.30, colocated, fp16, a 0.5–0.6B policy (lab 05; fit to 15 GB is verify) | same, with room | — |
+| §8 one RL step with an engine | the lab's rollout bookkeeping on the tiny transformer | vLLM 0.30 generates the rollouts for `Qwen/Qwen2.5-0.5B-Instruct`, transformers takes the step (lab 05); TRL 1.14's `GRPOTrainer` with colocated vLLM in fp16 is the packaged alternative (fit to 15 GB: verify) | same, with room | — |
 
 A T4 has 15 GiB usable, no bf16 and no FP8; vLLM 0.30 needs compute capability 7.5 and uses the Triton attention
 backend there (verify). The 04 lab's `servelab.sizing.size()` predicts 6,969 KV blocks for Qwen3-0.6B at
 `max_model_len=8192` on a T4 — 13.6 concurrent 8K-token requests — and no room at all for Qwen3-8B in fp16. Kaggle's
-free 2×T4 does not change the picture for thinking models; a rented 24 GB L4 or RTX 4090 runs a 4B thinking model
-with room for long traces. GCP is one target, never a prerequisite: the lab adds no Terraform of its own and points at
+free 2×T4 does not change the picture for thinking models; a rented 24 GB L4 or RTX 4090 — containers on RunPod or
+Vast.ai, VMs on Lambda or a GCP `g2-standard-4` Spot L4 — runs a 4B thinking model with room for long traces. GCP is one target, never a prerequisite: the lab adds no Terraform of its own and points at
 the 04 serving lab's. Prices, quotas and obtainability: [`COMPUTE.md`](../../COMPUTE.md).
 
 ---

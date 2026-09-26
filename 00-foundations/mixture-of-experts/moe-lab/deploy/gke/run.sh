@@ -95,7 +95,7 @@ case "${1:-}" in
     run kubectl delete namespace "${NS}" --ignore-not-found
     ;;
   *)
-    sed -n '2,13p' "$0"
+    sed -n '2,12p' "$0"
     exit 2
     ;;
 esac

@@ -166,7 +166,7 @@ class StreamSplitter:
 
 # --- answers ----------------------------------------------------------------------------------
 _BOXED = re.compile(r"\\boxed\{([^{}]*)\}")
-_ANSWER = re.compile(r"(?:final answer|answer)\s*(?:is)?\s*[:=]?\s*\**\s*([-\w./]+)", re.I)
+_ANSWER = re.compile(r"(?:final answer|answer)\s*(?:is\b|[:=])\s*\**\s*([-\w./]+)", re.I)
 
 
 def extract_answer(content: str | None) -> str | None:

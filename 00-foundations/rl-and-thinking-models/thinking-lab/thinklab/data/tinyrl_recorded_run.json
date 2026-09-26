@@ -24,7 +24,8 @@
   "log_every": 5,
   "eval_prompts": 256,
   "seed": 0,
-  "threads": 2
+  "threads": 2,
+  "device": "auto"
  },
  "params": 101632,
  "sft": [
@@ -442,9 +443,9 @@
   }
  },
  "timing_s": {
-  "sft": 25.6,
-  "rl": 6.4
+  "sft": 27.8,
+  "rl": 5.7
  },
- "machine": "x86_64 / torch 2.14.0+cu130 / 2 CPU threads",
- "recorded": "2026-09-26, `python -m thinklab tinyrl` defaults, CPU (shared 4-core container), torch 2.14 CPU build"
+ "machine": "x86_64 CPU / torch 2.14.0+cu130 / 2 threads",
+ "recorded": "2026-09-26, `python -m thinklab tinyrl` defaults, CPU (shared 4-core container), torch CPU execution"
 }

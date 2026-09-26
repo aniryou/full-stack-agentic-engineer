@@ -80,7 +80,7 @@ and needs no offload.
 * **RunPod / Vast.ai** give a *container*: pick the `vllm/vllm-openai:v0.30.0` image, put the model
   and flags in the container arguments, expose port 8000, and set `--api-key` (the port is public).
   A 24 GB RTX 4090 is ~$0.3–0.4/hr and a 2-GPU pod a little over twice that (verify in
-  [`COMPUTE.md`](../../../../COMPUTE.md)).
+  [`COMPUTE.md`](../../../../../COMPUTE.md)).
 * **Lambda** and Compute Engine give a *VM*: install the NVIDIA Container Toolkit (layer 02) or
   `pip install "vllm==0.30.0"`, then run the scripts here.
 * Benchmark from the same machine (`127.0.0.1`) unless you want the network in your TTFT.

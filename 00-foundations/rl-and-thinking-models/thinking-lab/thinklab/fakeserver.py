@@ -148,6 +148,14 @@ class FakeServer:
         self.reg.gauge(M.CACHE_CONFIG_INFO, "Information of the LLMEngine CacheConfig", 1,
                        {"block_size": str(self.p.block_size), "num_gpu_blocks": str(self.p.num_blocks),
                         "simulated": "true"})
+        for name, doc in ((M.PREEMPTIONS, "Cumulative number of preemption from the engine."),   # exported from start, as vLLM does
+                          (M.PROMPT_TOKENS, "Number of prefill tokens processed."),
+                          (M.GENERATION_TOKENS, "Number of generation tokens processed."),
+                          (M.PREFIX_QUERIES, "Prefix cache queries, in terms of number of queried tokens."),
+                          (M.PREFIX_HITS, "Prefix cache hits, in terms of number of cached tokens.")):
+            self.reg.counter(name, doc, 0.0)
+        for reason in ("stop", "length", "abort"):
+            self.reg.counter(M.REQUEST_SUCCESS, "Count of successfully processed requests.", 0.0, {"finished_reason": reason})
         self._streams: dict = {}
         self._counter = 0
         self._loop = self._thread = self._stopping = self._runner = None
@@ -173,14 +181,19 @@ class FakeServer:
     # -- HTTP -----------------------------------------------------------------------------------
     def app(self) -> web.Application:
         app = web.Application()
-        app.router.add_get("/health", lambda r: web.Response(status=200, headers=SIM))
-        app.router.add_get("/version", lambda r: web.json_response(
-            {"version": "thinklab-fakeserver", "simulated": True, "time_scale": self.time_scale,
-             "reasoning_parser": self.parser, "profile": self.p.name}))
+        app.router.add_get("/health", self._health)
+        app.router.add_get("/version", self._version)
         app.router.add_get("/v1/models", self._models)
         app.router.add_get("/metrics", self._metrics)
         app.router.add_post("/v1/chat/completions", self._chat)
         return app
+
+    async def _health(self, request):
+        return web.Response(status=200, headers=SIM)
+
+    async def _version(self, request):
+        return web.json_response({"version": "thinklab-fakeserver", "simulated": True, "time_scale": self.time_scale,
+                                  "reasoning_parser": self.parser, "profile": self.p.name})
 
     async def _models(self, request):
         return web.json_response({"object": "list", "data": [{

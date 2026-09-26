@@ -125,8 +125,13 @@ class ServePlan:
         return " ".join(["vllm serve", self.model, *self.flags])
 
     def docker(self, image: str = IMAGE, port: int = 8000) -> str:
-        return (f"docker run --rm --gpus all --ipc=host -p {port}:8000 -v $HOME/.cache/huggingface:/root/.cache/huggingface "
-                f"{image} {self.model} {' '.join(self.flags)}".strip())
+        """``docker run`` for this plan; a local checkpoint (``./dir``) is mounted at ``/ckpt/dir``."""
+        vols, model = "-v $HOME/.cache/huggingface:/root/.cache/huggingface", self.model
+        if model.startswith(("./", "/")):
+            name = model.rstrip("/").split("/")[-1]
+            vols += f" -v {'$PWD/' + model[2:] if model.startswith('./') else model}:/ckpt/{name}"
+            model = f"/ckpt/{name}"
+        return f"docker run --rm --gpus all --ipc=host -p {port}:8000 {vols} {image} {model} {' '.join(self.flags)}".strip()
 
     def table_row(self) -> str:
         return (f"| {self.gpu} | {self.scheme} | {'yes' if self.supported else 'no'} | {self.compute} | "

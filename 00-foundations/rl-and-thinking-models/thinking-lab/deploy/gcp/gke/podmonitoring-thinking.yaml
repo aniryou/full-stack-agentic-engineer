@@ -1,0 +1,13 @@
+# Google Cloud Managed Service for Prometheus: scrape the thinking model's /metrics every 15 s.
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: vllm-thinking
+spec:
+  selector:
+    matchLabels:
+      app: vllm-thinking
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

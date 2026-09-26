@@ -100,7 +100,7 @@ def main(argv=None) -> int:
         print(table(rows, title=f"SIMULATED: {args.n} requests at {args.rate}/s on {args.profile}"))
     elif args.cmd == "tinyrl":
         if not env.has_torch():
-            print("torch is not installed: `pip install torch` (CPU is enough), or read the recorded run:")
+            print("torch is not available (pip install torch; the CPU build is enough). The recorded run:")
             from .tinyrl.curves import load_recorded, show
             print(show(load_recorded()))
             return 0
