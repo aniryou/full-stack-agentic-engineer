@@ -177,12 +177,16 @@ class Unsandboxed:
 
 
 def _world_ok(path: str) -> bool:
-    """Can an arbitrary UID execute ``path`` (every parent traversable, file world r-x)?"""
-    p = Path(os.path.realpath(path))
+    """Can an arbitrary UID execute ``path`` (every parent traversable, file world r-x)?
+
+    Both the path as the child will exec it and the file it resolves to are checked: a venv's
+    ``bin/python`` is a symlink to a world-executable system python, but exec walks the venv's own
+    directories first, so a venv under ``/root`` or a 0700 temp directory fails with EACCES."""
+    given, real = Path(os.path.abspath(path)), Path(os.path.realpath(path))
     try:
-        if (p.stat().st_mode & 0o005) != 0o005:
+        if (real.stat().st_mode & 0o005) != 0o005:
             return False
-        return all(parent.stat().st_mode & 0o001 for parent in p.parents)
+        return all(parent.stat().st_mode & 0o001 for parent in (*given.parents, *real.parents))
     except OSError:
         return False
 
