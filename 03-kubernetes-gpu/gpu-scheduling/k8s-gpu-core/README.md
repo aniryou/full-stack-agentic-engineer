@@ -96,7 +96,7 @@ To redo an exercise, `git restore notebooks/<name>.ipynb` returns it to the comm
 Every worked number in the notebooks and in `../PRIMER.md` is computed by this package, with inputs
 stated next to it; product facts (defaults, versions, discounts, MIG profiles) are cited in the
 primer's Sources and Verify list instead. Durations, prices, stockout and preemption rates are
-**illustrative inputs** (prices and obtainability: `COMPUTE.md` at the repo root);
+**illustrative inputs** (prices and obtainability: [`COMPUTE.md`](../../../COMPUTE.md));
 outputs are **simulated**. Formulas and reason strings are pinned to upstream sources in `tests/`;
 `tests/test_docs.py` also validates the primer's DRA manifest with `kubernetes-validate` (installed by
 `requirements.txt` and the `dev` extra; the test skips without it).

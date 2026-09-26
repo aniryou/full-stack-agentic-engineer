@@ -94,7 +94,7 @@ device plugin                                   kubelet (device manager)
 `Kubelet.admit()`. With the NVIDIA plugin's default `envvar` strategy, `Allocate` answers with
 `NVIDIA_VISIBLE_DEVICES=<device UUIDs>`, and the NVIDIA Container Toolkit injects device nodes and driver
 libraries when the container is created — the container half is layer 02
-(`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md` §6 *How a container gets a GPU*).
+([`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §6 *How a container gets a GPU*).
 
 Two consequences are worth saying in a review:
 
@@ -380,7 +380,7 @@ A gang also needs a workload API that treats its pods as one thing:
   separate `leaderTemplate`), `restartPolicy: RecreateGroupOnPodRestart` so a failed shard restarts its
   group, `startupPolicy: LeaderCreated | LeaderReady`, environment `LWS_LEADER_ADDRESS`, `LWS_GROUP_SIZE`,
   `LWS_WORKER_INDEX`, `leaderworkerset.sigs.k8s.io/exclusive-topology` to keep a group in one domain,
-  and a scale subresource so an HPA scales *groups* (`05-orchestrator/serving-orchestration/PRIMER.md`
+  and a scale subresource so an HPA scales *groups* ([`05-orchestrator/serving-orchestration/PRIMER.md`](../../05-orchestrator/serving-orchestration/PRIMER.md)
   §4 *Autoscaling*). Its sibling **DisaggregatedSet** coordinates prefill and decode LWSs (same primer, §5).
 
 ---
@@ -613,7 +613,7 @@ GPUs are the resource a cloud may not have. The capacity types, and how each fai
 | DWS calendar mode (GCP) | a future fixed-duration block (verify) | plan ahead | planned runs |
 
 Two account facts gate all of it on GCP: GPUs are not usable on a Free Trial billing account, and GPU quota
-often starts at zero. Machine families and prices are layer 01 §10.1 and `COMPUTE.md` at the repo root.
+often starts at zero. Machine families and prices are layer 01 §10.1 and [`COMPUTE.md`](../../COMPUTE.md).
 
 **Spot and gangs.** With independent reclaims at rate λ per node-hour, a gang of N nodes survives T hours
 with probability `e^(−N·λ·T)` (`autoscaler.gang_survival()`); if every reclaim restarts it from scratch,
@@ -695,10 +695,10 @@ fast cache (4 GB/s), takes **70 s**, most of it warm-up. The levers, stage by st
   layer 01 §6.1 has the parallel-read arithmetic.
 * **Warm-up** — a **startup probe** long enough for load + CUDA-graph capture so the kubelet does not kill
   a slow-loading pod, and a readiness probe so traffic arrives only when the engine is serving (what the
-  engine does at start-up: `04-inference-engine/serving-engine/PRIMER.md` §1).
+  engine does at start-up: [`04-inference-engine/serving-engine/PRIMER.md`](../../04-inference-engine/serving-engine/PRIMER.md) §1).
 
 A cold start of minutes is why autoscaling LLM replicas needs headroom and scale-ahead signals
-(`05-orchestrator/serving-orchestration/PRIMER.md` §4.3 *Cold start
+([`05-orchestrator/serving-orchestration/PRIMER.md`](../../05-orchestrator/serving-orchestration/PRIMER.md) §4.3 *Cold start
 anatomy*), and why "scale to zero" is a cost decision with a latency price.
 
 ---
@@ -707,7 +707,7 @@ anatomy*), and why "scale to zero" is a cost decision with a latency price.
 
 Because a GPU is an integer, sharing one means the node advertises *more integers*. The mechanics of each
 method (MIG profiles and their placement, MPS, time-slicing latency) are layer 02
-(`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md` §7 *Sharing a GPU*); the cluster
+([`02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §7 *Sharing a GPU*); the cluster
 view:
 
 | Method | What the node advertises | Isolation | Good for |
@@ -780,8 +780,8 @@ Discovery labels, MIG and Prometheus metrics, so dashboards and label-based plac
 | sharing (MIG, time-slicing) | notebook 01, exercise 1.6 (time-slicing replicas) | the lab's `deploy/gpu-vm` (time-slicing with the real device plugin); an A100/H100 VM for MIG | node-pool sharing settings (the lab's `deploy/gke/50-time-sharing-l4.yaml`) | GPU Operator configs |
 
 Colab and Kaggle give you notebooks, not clusters: they run the core (T0) but not kind, which needs a Docker
-daemon. Prices, free tiers and how obtainable each GPU is: `COMPUTE.md` at the repo root. The order to
-work the whole curriculum: `CURRICULUM.md` at the repo root.
+daemon. Prices, free tiers and how obtainable each GPU is: [`COMPUTE.md`](../../COMPUTE.md). The order to
+work the whole curriculum: [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ---
 

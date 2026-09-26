@@ -627,7 +627,7 @@ $/M tokens = ($/GPU-hr × GPUs) / (tokens/s × 3600 × utilisation) × 10⁶    
 
 With decode throughput from §3 (an upper bound, so these are lower bounds on cost) and GCP list prices
 from the research snapshot — L4 ~$0.70/hr, H100 ~$11/GPU-hr on demand, ~$3.7/GPU-hr Spot, us-central1,
-September 2026 (verify; current prices in `COMPUTE.md` at the repo root) — Llama-3.1-8B at 2K context.
+September 2026 (verify; current prices in [`COMPUTE.md`](../../COMPUTE.md)) — Llama-3.1-8B at 2K context.
 One rule sets every batch: the largest that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 HBM (`best_batch_under_itl()`):
 
@@ -728,7 +728,7 @@ How to read it, for inference:
 
 Every concept in this topic is learnable at T0; hardware is for measuring it. What each tier buys here:
 
-| Tier | Where | What you can see | Cost (verify; see `COMPUTE.md`) |
+| Tier | Where | What you can see | Cost (verify; see [`COMPUTE.md`](../../COMPUTE.md)) |
 |---|---|---|---|
 | T0 | laptop, Colab CPU, CI | the core notebooks; your CPU's own roofline and disk throughput with `gpu-bench-lab` (numpy backend) | $0 |
 | T1 | Colab or Kaggle T4 (free, not guaranteed); a rented 24 GB GPU; GCP L4 Spot or Cloud Run L4 | a real GPU roofline (GEMM sweep by dtype), HBM bandwidth, pinned vs pageable host copies, weight loading | free – ~$0.7/hr |
@@ -762,7 +762,7 @@ individual account.
 and **RunPod** (per-second) rent single GPUs and multi-GPU NVLink boxes as containers — no driver or kernel
 control, no Kubernetes; **Lambda** rents full VMs; **Modal** runs serverless Python on GPUs with monthly free
 credits. A local kind cluster serves the Kubernetes layers (03, 05) without GPUs. Prices and quotas move
-monthly: the maintained list is `COMPUTE.md` at the repo root; the learning order is `CURRICULUM.md`.
+monthly: the maintained list is [`COMPUTE.md`](../../COMPUTE.md); the learning order is [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ---
 
@@ -895,7 +895,7 @@ Product facts in this primer and in `roofline-core/roofline/specs.py`, as of Sep
   DWS flex-start (up to 7 days) and calendar mode, Cloud Run GPU types, TPU7x GA date (2026-04-22), quota
   behaviour for new accounts.
 - Free and cheap tiers: Colab (T4, hours per week), Kaggle (2×T4 or P100, 30 GPU-hours per week), Vast.ai,
-  RunPod, Lambda, Modal offerings — maintained in `COMPUTE.md`.
+  RunPod, Lambda, Modal offerings — maintained in [`COMPUTE.md`](../../COMPUTE.md).
 - The Run:ai Model Streamer as a vLLM load format; loader behaviour of safetensors.
 - The Llama 3 interruption figures (419 unexpected in 54 days on 16,384 GPUs; ~78% hardware).
 - Assumptions, not product facts (replace with your own): α values, storage tier bandwidths, cold-start

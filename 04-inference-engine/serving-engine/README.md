@@ -26,8 +26,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 ### Work it in this order
 
 Read the primer sections, do the core notebook (T0), then run the lab notebook — at T0 against its fake server
-first, then on a GPU if you have one. Module numbers and times come from the repo's curriculum (`CURRICULUM.md` at
-the repo root, modules 04.1–04.7).
+first, then on a GPU if you have one. Module numbers and times come from the repo's curriculum ([`CURRICULUM.md`](../../CURRICULUM.md), modules 04.1–04.7).
 
 | Module | Primer | Core notebook (T0) | Lab notebook | Tier |
 |---|---|---|---|---|
@@ -66,7 +65,7 @@ On Colab, every notebook's first cell clones the repo and installs its lab; the 
 | **T2** | optional: tensor parallelism across two GPUs (§9, the lab's exercise 3.6) | Kaggle 2×T4 (PCIe) or a rented NVLink pair |
 | **T3** | the lab's Cloud Run GPU deployment (scale to zero) and GKE Deployment | GCP, pay per use; see the lab's `deploy/` READMEs for cleanup |
 
-Prices, free tiers and how to obtain GPUs on GCP and elsewhere: `COMPUTE.md` at the repo root.
+Prices, free tiers and how to obtain GPUs on GCP and elsewhere: [`COMPUTE.md`](../../COMPUTE.md).
 
 ## How it fits
 

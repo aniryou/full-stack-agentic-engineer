@@ -26,7 +26,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + Docker" i
 | [`04_local_stack_with_llm_d`](notebooks/04_local_stack_with_llm_d.ipynb) | InferencePool semantics, the llm-d Router standalone mode, what the EPP reads that the lab router does not, the simulator's latency model; benchmarks a running stack, or the lab router in front of real vLLM | ~1.5 h | T0 walkthrough; T0 + Docker (compose or kind); **T1/T2** with a GPU (real vLLM, `deploy/any-gpu`) | §9 The Kubernetes-native stack, September 2026, §10 Where to run it |
 | [`05_gke_inference_gateway`](notebooks/05_gke_inference_gateway.ipynb) | the GKE Inference Gateway object graph, CRD validation, GMP → HPA plumbing, what an hour costs | ~2 h | T3 (offline plan/inspect is T0) | §9, §10 |
 
-Times are rough: the repo's curriculum (`CURRICULUM.md` at the repo root) budgets about 6 hours for notebooks 01–04
+Times are rough: the repo's curriculum ([`CURRICULUM.md`](../../../CURRICULUM.md)) budgets about 6 hours for notebooks 01–04
 and 2 for 05. Every notebook opens with "The one-minute version", works examples, has 4–5 exercises each followed by
 a check (✅), and ends with "In a design review". Blanks are in `notebooks/`, answers in [`solutions/`](solutions/),
 sources in `notebooks_src/` (percent format).
@@ -89,7 +89,7 @@ curl -s localhost:9000/v1/chat/completions -H 'Content-Type: application/json' \
 | `deploy/gcp/terraform` | T3 | zonal GKE, Gateway API, proxy-only subnet, L4 Spot pool 0→2, Managed Prometheus | ~$0.16/h with the GPU pool at 0, ~$0.44/h with one L4 Spot node (assumed prices, verify) | [`deploy/gcp/terraform/README.md`](deploy/gcp/terraform/README.md) |
 | `deploy/gke` | T3 | vLLM on L4, EPP + InferencePool + objectives (Helm), Gateway + HTTPRoute, HPA on vLLM's waiting **and** running requests | ~$0.44/h even when idle while installed (`minReplicas: 1` keeps one L4 node) | [`deploy/gke/README.md`](deploy/gke/README.md) |
 
-Prices and GPU availability for GCP and non-GCP options: `COMPUTE.md` at the repo root.
+Prices and GPU availability for GCP and non-GCP options: [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## How the router maps to llm-d (llm-d-router v0.10.0, the pinned release)
 

@@ -55,7 +55,7 @@ Or open any notebook below in Colab: its first cell clones the repo and installs
 - **Builds on** layer 01 ([`01-hardware-gpu-fabric`](../01-hardware-gpu-fabric/README.md)): the roofline,
   the memory hierarchy, link rates and the α-β model in
   [roofline-and-fabric](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2, §4 and §5.
-- **Leads to** layer 03 (`03-kubernetes-gpu/`: the device plugin, MIG and time-sharing per node pool),
+- **Leads to** layer 03 ([`03-kubernetes-gpu/`](../03-kubernetes-gpu/): the device plugin, MIG and time-sharing per node pool),
   layer 04 ([`04-inference-engine`](../04-inference-engine/README.md): kernels, CUDA Graphs and TP
   all-reduces inside an engine) and layer 05 ([`05-orchestrator`](../05-orchestrator/README.md): KV transfer over the same fabrics).
 
@@ -65,7 +65,7 @@ Or open any notebook below in Colab: its first cell clones the repo and installs
   predictions and its sample tool outputs as illustrative. Real measurements need a GPU: free on Colab or
   Kaggle (2 × T4, PCIe only), roughly $2–25 for an hour on a rented NVLink box (verify).
 - The GKE deployment is optional: GPU pools scale from zero, the idle cluster costs a few dollars a day
-  (verify), and `terraform destroy` ends it. Prices: `COMPUTE.md` at the repo root.
+  (verify), and `terraform destroy` ends it. Prices: [`COMPUTE.md`](../COMPUTE.md).
 - Driver tables, MIG profiles, DCGM field lists and versions are dated 2026-09-26 and marked (verify).
 
 ## Scope of this layer

@@ -29,7 +29,7 @@ so. The lab measures real (or explicitly emulated) servers.
 ### Work it in this order
 
 Read the primer section, then do the matching core notebook, then the lab notebook where there is one. Times are
-rough and cover the whole row; they come from the repo's curriculum (`CURRICULUM.md` at the repo root, modules
+rough and cover the whole row; they come from the repo's curriculum ([`CURRICULUM.md`](../../CURRICULUM.md), modules
 05.1–05.6).
 
 | Step | Primer | Core notebook (T0) | Lab notebook | Time |
@@ -67,7 +67,7 @@ On Colab, every notebook's first cell clones the repo and installs its lab; the 
 | **T1/T2** | the lab's router and autoscaler in front of real vLLM on one or two GPUs | Colab/Kaggle T4, or any rented GPU box | free on Colab/Kaggle; a rented 24 GB GPU ~$0.3–0.7/h (verify) |
 | **T3** | GKE Inference Gateway: InferencePool, the endpoint picker, InferenceObjective priorities, an HPA on Managed Prometheus metrics, an L4 Spot pool that scales from zero | GCP, via the lab's Terraform and manifests | ~$0.16/h with the GPU pool at 0, ~$0.44/h with one L4 Spot node (assumed prices, verify) |
 
-Prices and where to get GPUs: `COMPUTE.md` at the repo root.
+Prices and where to get GPUs: [`COMPUTE.md`](../../COMPUTE.md).
 
 ## How it fits
 
@@ -79,7 +79,7 @@ admission and cost to the gateway.
 | before | [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) | prefill vs decode, TTFT and TPOT |
 | before | the [KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md) and [paged attention](../../04-inference-engine/paged-attention/paged-attention-primer.md) primers | the blocks a replica caches and reuses |
 | before | [`roofline-and-fabric`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md); the [GPU deployment primer](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md) §2 and §8 | fabrics and cold start; prefill vs decode and disaggregation in one page |
-| beside | layer 04's `serving-engine` topic (`04-inference-engine/serving-engine/`) and layer 03's `gpu-scheduling` topic (`03-kubernetes-gpu/gpu-scheduling/`) | batching, chunked prefill and prefix caching inside one engine; pods, GPUs and startup latency |
+| beside | layer 04's `serving-engine` topic ([`04-inference-engine/serving-engine/`](../../04-inference-engine/serving-engine/)) and layer 03's `gpu-scheduling` topic ([`03-kubernetes-gpu/gpu-scheduling/`](../../03-kubernetes-gpu/gpu-scheduling/)) | batching, chunked prefill and prefix caching inside one engine; pods, GPUs and startup latency |
 | after | [`06-gateway/scaling-admission-cost/agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) | admission control, rate limits and cost per conversation |
 | after | [`07-application-agent-framework`](../../07-application-agent-framework/README.md) | the agent sessions whose shared prompts and growing histories shape every routing and caching decision |
 

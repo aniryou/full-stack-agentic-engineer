@@ -27,7 +27,7 @@ every simulation a few seconds on a CPU.
 | [`05_kv_cache_tiers_and_agent_sessions`](notebooks/05_kv_cache_tiers_and_agent_sessions.ipynb) | size an agent fleet's KV working set; show why routing cannot fix a capacity problem; decide fetch vs recompute; run a two-tier LRU; predict sticky vs random vs shared tiers; size DRAM from a replay | ~2 h | T0 |
 
 Times are rough, include the matching [PRIMER](../PRIMER.md) section, and together come to roughly the 9 hours the
-repo's curriculum (`CURRICULUM.md` at the repo root) budgets for the primer and this core. Each notebook has a **Tier**
+repo's curriculum ([`CURRICULUM.md`](../../../CURRICULUM.md)) budgets for the primer and this core. Each notebook has a **Tier**
 line, "The one-minute version", worked examples, exercises with `# YOUR CODE HERE` followed by a check cell that
 prints ✅, and "In a design review" drills; worked answers are in [`solutions/`](solutions/).
 
