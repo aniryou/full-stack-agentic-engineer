@@ -108,6 +108,19 @@
   max-width: 100%;
 }
 
+/* Sidebar on desktop (Material's 76.25em breakpoint). With navigation.tabs + navigation.sections, Material keeps
+   the active tab's title ("Layers") sticky at the top of the sidebar. Once the sidebar auto-scrolls to the current
+   page, that title sits on top of the first layer heading ("00 · Foundations"), and 00's topics read as if they were
+   filed under "Layers". The title scrolls away with the list instead, so every layer keeps its own heading.
+   (Making each layer heading sticky instead would break Material's scroll-to-active: a sticky ancestor becomes the
+   offsetParent its sidebar code measures from, so a layer's index page would leave its heading off-screen.) */
+@media screen and (min-width: 76.25em) {
+  .md-nav--lifted > .md-nav__list > .md-nav__item--active > .md-nav__link {
+    position: static;
+    box-shadow: none;
+  }
+}
+
 /* ------------------------------------------------------------------ landing page */
 
 .fse-home {
