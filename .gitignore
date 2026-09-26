@@ -31,3 +31,7 @@ venv/
 # Inbox: keep the folder's README, ignore dropped content until it's sorted into a layer
 /raw/*
 !/raw/README.md
+
+# notebook runner scratch + terraform lockfiles from local validation
+_run_outputs/
+.terraform.lock.hcl
