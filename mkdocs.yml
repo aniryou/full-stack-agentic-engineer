@@ -534,10 +534,11 @@ nav:
               - "Agent Platform Lab (Google Cloud)":
                   - "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/index.md"
                   - "Docs":
-                      - "Primer ↔ lab map": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/PRIMER_MAP.md"
+                      - "Concept map: where each idea is practised": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/PRIMER_MAP.md"
                       - "Working in this repository": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/CONTRIBUTING.md"
                       - "Using a real Gemini model": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/GEMINI_ADAPTER.md"
                       - "From the lab to ADK (and back)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/LAB_TO_ADK.md"
+                      - "MCP revisions": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/MCP_REVISIONS.md"
                   - "Notebooks":
                       - "00 · Setup and the fake model": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/00_setup_and_fake_llm.ipynb"
                       - "01 · The agent loop and tool contracts": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/01_agent_loop_and_tools.ipynb"
