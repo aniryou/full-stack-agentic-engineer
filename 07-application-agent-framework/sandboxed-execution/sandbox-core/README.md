@@ -10,7 +10,7 @@ about 2,000 lines you can read in an afternoon, plus five fill-in notebooks.
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (why a code tool is the most dangerous tool; the isolation ladder).
-2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 89 tests, ~50 s, including "with its own
+2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 100 tests, ~60 s, including "with its own
    UID every probe is contained except egress", "an undeclared exfiltration leaks through a process
    sandbox" and "the rendered manifests validate against Kubernetes 1.34".
 3. Open [`notebooks/01_the_threat_model.ipynb`](notebooks/01_the_threat_model.ipynb) and watch a secret leak
@@ -36,7 +36,7 @@ About 4 hours with the primer (module 07.5).
 ```bash
 cd sandbox-core
 python3 -m pip install -e ".[dev]"     # the library is stdlib only; dev adds pytest, jupyter, pyyaml, kubernetes-validate
-python3 -m pytest -q                    # 89 tests, ~50 s
+python3 -m pytest -q                    # 100 tests, ~60 s
 python3 tools/build_notebooks.py        # rebuild notebooks/ and solutions/
 python3 -m jupyterlab notebooks         # do the exercises
 ```
@@ -68,7 +68,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (81, plus 8 notebook-tooling checks; offline, ~50 s in all):
+`tests/` has one focused test per concept (92, plus 8 notebook-tooling checks; offline, ~60 s in all):
 
 - **What the process sandbox contains depends on its UID, and egress is never contained.**
   `test_threats.py` runs every probe: with a per-execution UID (as root) all are contained except
@@ -81,7 +81,10 @@ Read the modules in this order; each opens with a docstring stating the one idea
   call open and is swept by UID, a flood ends as `output_limit` within wall_s + 1 s without growing the
   parent's memory, a key opens by absolute path unless the UID differs, the workspace is 0700, a forged
   `MemoryError` is labelled `reason_source: code`, and CPU and peak memory are measured per execution (with
-  `wait4`, so a child that exits while the parent is still reading does not lose them).
+  `wait4`, so a child that exits while the parent is still reading does not lose them). Without a UID
+  switch the `pids` budget is the run's own process tree: a busy user's other threads do not count, a fork
+  burst between two 50 ms counts runs on to the `RLIMIT_NPROC` backstop (32 tasks past the budget, plus any
+  the user's other processes free during the run) and is still reported as `pids`, and `wall_timeout` beats `pids` beats `output_limit` when more than one holds.
 - **The rendered manifests validate against Kubernetes 1.34 and would be admitted** (`test_manifests.py`):
   restricted Pod Security labels, the RuntimeClass, a non-retrying Job whose deadline allows for a cold start
   while `timeout` enforces the wall budget in the pod, every request ≤ its limit, `automountServiceAccountToken:
@@ -108,7 +111,10 @@ or from upstream specs, labelled so. Simulator output is labelled SIMULATED. A p
 boundary against a kernel exploit or the network — real isolation is a container, then gVisor, then a
 microVM, which is the lab ([`../sandbox-lab`](../sandbox-lab/)). And three of its controls need root to
 switch each execution to its own UID: `RLIMIT_NPROC` does nothing as root and is shared with your own
-processes as a user, your files stay readable by absolute path, and a `setsid()` escapee cannot be found.
+processes as a user (so the parent counts the run's own process tree every 50 ms instead, and a fork burst
+between two counts runs on to the `RLIMIT_NPROC` backstop: 32 tasks past the budget plus any your other
+processes free while it runs), your files stay
+readable by absolute path, and a `setsid()` escapee cannot be found.
 The core reports which of these hold (`isolation_report()`) rather than pretending.
 
 ## Regenerating notebooks

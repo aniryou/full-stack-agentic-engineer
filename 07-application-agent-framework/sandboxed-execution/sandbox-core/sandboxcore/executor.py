@@ -15,6 +15,15 @@ This module has two runners on purpose:
   0700 home — pointing ``HOME`` elsewhere hides nothing), and a sweep after the run that kills any process
   of that UID (code can ``setsid()`` out of the process group) and removes files it left in ``/tmp``.
 
+Without root, ``RLIMIT_NPROC`` is shared with every process of your UID, so it can only be a backstop:
+the process budget is then the run's own — the parent counts the tasks in the run's process tree (its group,
+its session and every descendant still linked to it) and ends the run as ``pids`` past the budget. That
+count is sampled (every ``TREE_POLL_S``, and once more when the run ends), so a burst of forks between two
+counts runs on until the backstop makes ``fork`` fail. The backstop is set once, at the start, to what the UID
+holds then plus the budget plus ``NPROC_BACKSTOP_SLACK``, and the kernel checks it against the whole UID: a
+burst can pass the budget by the slack **plus every task the rest of your UID frees while the run goes on**
+(at most all it held at the start). Only a UID of the run's own makes the limit exact.
+
 What it does not stop, stated in ``isolation_report()``: the **network** (rlimits never touch sockets), the
 **host kernel** (every syscall reaches it), and — without root — your files and a ``setsid`` escape.
 
@@ -49,6 +58,8 @@ IS_LINUX = sys.platform.startswith("linux")
 PER_EXECUTION = "per-execution"      # SandboxConfig.drop_to_uid: a fresh UID for every run (when root)
 UID_BASE, UID_SPAN = 62000, 997       # the per-execution UID range (the lab uses 61000-61996)
 SWEEP_DIRS = ("/tmp", "/var/tmp", "/dev/shm")   # world-writable places a sandbox UID can persist files
+TREE_POLL_S = 0.05                    # how often the parent counts the run's process tree (as our own UID)
+NPROC_BACKSTOP_SLACK = 32             # RLIMIT_NPROC room left for the rest of our UID while a run goes on
 
 # Runs in the child's own interpreter: lower the rlimits, set no_new_privs, then execute the code. The UID
 # switch and the new session have already happened (in C, inside Popen), so nothing here needs privilege.
@@ -113,12 +124,17 @@ def rlimits_for(budgets: Budgets, nproc: int | None) -> list[tuple[str, int, int
 
 
 def _world_executable(path: str) -> bool:
-    """Can an arbitrary UID run ``path`` (file world r-x, every parent directory world-traversable)?"""
-    p = Path(os.path.realpath(path))
+    """Can an arbitrary UID run ``path`` (file world r-x, every parent directory world-traversable)?
+
+    Both the path as given and the file it resolves to: a virtualenv's ``bin/python`` is a symlink to a
+    system interpreter, but the sandbox UID starts it by the link's own path, so a venv under a 0700
+    directory (``/root``, a private scratch dir) is unusable even though its target is world-executable.
+    """
+    given, real = Path(os.path.abspath(path)), Path(os.path.realpath(path))
     try:
-        if (p.stat().st_mode & 0o005) != 0o005:
+        if (real.stat().st_mode & 0o005) != 0o005:
             return False
-        return all(parent.stat().st_mode & 0o001 for parent in p.parents)
+        return all(parent.stat().st_mode & 0o001 for parent in (*given.parents, *real.parents))
     except OSError:
         return False
 
@@ -140,6 +156,65 @@ def _uid_pids(uid: int, *, zombies: bool = False) -> list[int] | None:
         except (OSError, KeyError, ValueError, IndexError):
             continue
     return out
+
+
+def _uid_tasks(uid: int) -> int | None:
+    """What the kernel charges ``uid`` for ``RLIMIT_NPROC``: every **task** (each thread of each process)
+    whose real UID is ``uid`` — zombies not yet reaped and this process included. None where there is no
+    ``/proc``. Counting processes instead undercounts: one threaded daemon of the same UID (a CI agent, a
+    browser) holds dozens of tasks, and a limit set from the process count trips on the run's first fork."""
+    if not os.path.isdir("/proc/self"):
+        return None
+    total = 0
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/status") as f:
+                fields = dict(line.split(":", 1) for line in f if ":" in line)
+            if int(fields["Uid"].split()[0]) == uid:
+                total += max(int(fields.get("Threads", "1").split()[0]), 1)
+        except (OSError, KeyError, ValueError, IndexError):
+            continue
+    return total
+
+
+def _proc_stat(pid: str) -> tuple[int, int, int, int] | None:
+    """``(ppid, pgrp, session, tasks)`` of one process from ``/proc/<pid>/stat``; None if it has gone."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            raw = f.read()
+        rest = raw[raw.rindex(b")") + 2:].split()         # the command name may hold spaces and ")"
+        return int(rest[1]), int(rest[2]), int(rest[3]), max(int(rest[17]), 1)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _tree_tasks(leader: int) -> int | None:
+    """Tasks in the run's process tree: its process group and its session (both ``leader``: the child is
+    started with ``start_new_session``), plus every descendant still linked to them by parent pid — which
+    catches a child that called ``setsid()`` while its parent lives. Threads and unreaped zombies count, as
+    they do for ``RLIMIT_NPROC`` and a pids cgroup. Nothing outside the tree counts, whoever owns it. None
+    where there is no ``/proc``."""
+    if not os.path.isdir("/proc/self"):
+        return None
+    table = {}
+    for pid in os.listdir("/proc"):
+        if pid.isdigit():
+            st = _proc_stat(pid)
+            if st is not None:
+                table[int(pid)] = st
+    children: dict[int, list[int]] = {}
+    for pid, (ppid, _pg, _sid, _n) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    members = {pid for pid, (_pp, pg, sid, _n) in table.items() if leader in (pid, pg, sid)}
+    stack = list(members)
+    while stack:
+        for child in children.get(stack.pop(), ()):
+            if child not in members:
+                members.add(child)
+                stack.append(child)
+    return sum(table[pid][3] for pid in members)
 
 
 def _next_uid() -> int:
@@ -288,6 +363,11 @@ class ProcessSandbox:
             # RLIMIT_NPROC counts every process of the real UID and is ignored for uid 0.
             "nproc_enforced": bool(hasattr(resource, "RLIMIT_NPROC") and (dropped or (not root and has_proc))),
             "nproc_shared": bool(not dropped or mode == "fixed"),   # budget shared with other processes of that UID
+            # Whose tasks the `pids` budget counts: the run's own UID (the kernel limit is exact), a UID shared
+            # by concurrent runs, the run's process tree (counted by the parent, with RLIMIT_NPROC only as a
+            # backstop: our own UID) or nothing (root without a UID switch ignores RLIMIT_NPROC).
+            "pids_scope": ("uid" if per_exec else "shared-uid" if dropped else
+                           "tree" if (not root and has_proc and hasattr(resource, "RLIMIT_NPROC")) else "none"),
             # setsid() leaves the process group; only a per-execution UID lets the sweep find the escapee.
             "escapes_swept": per_exec and has_proc,
             "limits_raisable_by_code": bool(root and not dropped),  # root can raise its own hard limits
@@ -297,8 +377,11 @@ class ProcessSandbox:
                      + ("Each execution runs as its own UID: files, process count and leftovers are bounded."
                         if per_exec else
                         "No UID drop here (not root, or disabled): the code runs as YOUR UID, so it can read "
-                        "your files by absolute path, RLIMIT_NPROC is shared with your processes (or ignored "
-                        "as root), a process that calls setsid() can outlive the call, and files it writes "
+                        "your files by absolute path, RLIMIT_NPROC is shared with your processes (the parent "
+                        f"counts the run's own process tree instead, every {TREE_POLL_S * 1000:.0f} ms, so a "
+                        f"burst of forks can pass the budget by {NPROC_BACKSTOP_SLACK} tasks plus any your other "
+                        "processes free during the run) or ignored "
+                        "as root, a process that calls setsid() can outlive the call, and files it writes "
                         "outside the workspace (e.g. in /tmp) stay behind.")),
         }
 
@@ -332,20 +415,30 @@ class ProcessSandbox:
             env["OPENBLAS_NUM_THREADS"] = "1"       # keep BLAS from mmap'ing huge arenas under RLIMIT_AS
             env["HOME"] = work if self.config.isolate_home else os.environ.get("HOME", work)
             env["TMPDIR"] = work
-            nproc = None
+            nproc = tree_budget = None
             if hasattr(resource, "RLIMIT_NPROC"):
                 if uid is not None:
                     nproc = req.budgets.pids                 # a fresh UID: the budget is exactly this run's
                 elif not running_as_root():
-                    mine = _uid_pids(os.getuid())
-                    if mine is not None:                     # our UID's processes + the budget (shared!)
-                        nproc = len(mine) + req.budgets.pids
+                    held = _uid_tasks(os.getuid())
+                    if held is not None:
+                        # As our own UID the kernel limit is shared, so it is only a backstop: every task the
+                        # UID holds now, the budget, and slack for our other processes' threads. The budget
+                        # itself is the run's: the parent counts its process tree (_tree_tasks).
+                        nproc = held + req.budgets.pids + NPROC_BACKSTOP_SLACK
+                        tree_budget = req.budgets.pids
+                        report["pids_backstop"] = nproc      # for the whole UID, not the run: see _spawn's note
+                        hard = resource.getrlimit(resource.RLIMIT_NPROC)[1]
+                        if hard != resource.RLIM_INFINITY and hard < nproc:
+                            notes.append(f"your RLIMIT_NPROC hard limit ({hard}) is below what the run needs "
+                                         f"({nproc} tasks for your UID): a fork may fail early")
             popen_kwargs: dict = {"start_new_session": True, "umask": 0o077}
             if uid is not None:
                 popen_kwargs.update(user=uid, group=gid, extra_groups=[])
             cmd = [python, "-I", "-c", _LAUNCHER, json.dumps(rlimits_for(req.budgets, nproc)), req.code]
             return _spawn(cmd, env, work, req.budgets, popen_kwargs=popen_kwargs, isolation=report,
-                          sweep_uid=uid if mode == "per-execution" else None, notes=notes)
+                          sweep_uid=uid if mode == "per-execution" else None, notes=notes,
+                          tree_budget=tree_budget)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -387,9 +480,27 @@ def _classify(rc: int, err_text: str, cpu_s: float, budgets: Budgets) -> tuple[s
     return "error", "code"
 
 
+PARENT_VERDICT_ORDER = ("wall_timeout", "pids", "output_limit")
+
+
+def _parent_verdict(**holds: bool) -> str | None:
+    """The parent's own verdict at one check, by name (``wall_timeout=``, ``pids=``, ``output_limit=``), taken
+    in ``PARENT_VERDICT_ORDER``; the first that holds ends the run. Past the deadline the run is over whatever
+    else it did, so ``wall_timeout`` comes first; then a process tree over its ``pids`` budget; then the
+    output cap. A parent verdict always wins over a reason read from the exit status: a fork that failed with
+    ``EAGAIN`` is reported as ``pids`` (source ``code``) only if the child exited before the deadline and the
+    parent's count never saw the tree over budget — if it caught the error and slept on, it is ``wall_timeout``.
+    """
+    unknown = set(holds) - set(PARENT_VERDICT_ORDER)
+    if unknown:
+        raise ValueError(f"not a parent verdict: {sorted(unknown)}")
+    return next((reason for reason in PARENT_VERDICT_ORDER if holds.get(reason)), None)
+
+
 def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sweep_uid=None,
-           notes=None) -> ExecutionResult:
-    """Start the child, read its output as it streams, enforce wall time and output, collect usage."""
+           notes=None, tree_budget=None) -> ExecutionResult:
+    """Start the child, read its output as it streams, enforce wall time, output and — when ``tree_budget``
+    is set (our own UID) — the process tree's task count, then collect usage."""
     notes = list(notes or [])
     out, err = _Truncator(budgets.output_bytes), _Truncator(budgets.output_bytes)
     start = time.monotonic()
@@ -406,10 +517,16 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
     sel.register(proc.stderr, selectors.EVENT_READ, err)
     exited_at = None
     leader_ru = None
+    tree_peak, next_count = 0, start
     while sel.get_map():
         now = time.monotonic()
-        if now >= deadline:
-            preset = "wall_timeout"
+        if tree_budget is not None and exited_at is None and now >= next_count:
+            tree_peak = max(tree_peak, _tree_tasks(proc.pid) or 0)
+            next_count = now + TREE_POLL_S
+        preset = _parent_verdict(wall_timeout=now >= deadline,
+                                 pids=tree_budget is not None and tree_peak > tree_budget,
+                                 output_limit=out.total + err.total > budgets.output_kill_bytes)
+        if preset:
             break
         if exited_at is None:
             exited, leader_ru = _try_reap(proc)
@@ -418,16 +535,36 @@ def _spawn(cmd, env, work, budgets: Budgets, *, popen_kwargs, isolation=None, sw
         if exited_at is not None and now - exited_at > 0.2:
             notes.append("a background process held the output pipes after the main process exited")
             break
-        for key, _ in sel.select(timeout=min(deadline - now, 0.1)):
+        for key, _ in sel.select(timeout=min(deadline - now, TREE_POLL_S if tree_budget else 0.1)):
             chunk = os.read(key.fileobj.fileno(), 65536)
             if not chunk:
                 sel.unregister(key.fileobj)
                 continue
             key.data.feed(chunk)                       # keeps output_bytes, counts the rest
-        if out.total + err.total > budgets.output_kill_bytes:
-            preset = "output_limit"
+        preset = _parent_verdict(wall_timeout=time.monotonic() >= deadline,
+                                 output_limit=out.total + err.total > budgets.output_kill_bytes)
+        if preset:
             break
     sel.close()
+    burst = False
+    if tree_budget is not None and not preset:
+        # One last count before the group kill: a burst of forks between two counts ran on until the shared
+        # RLIMIT_NPROC backstop stopped it; its processes are still in the run's group, so the parent sees it.
+        final = _tree_tasks(proc.pid) or 0
+        burst = final > tree_budget and final > tree_peak
+        tree_peak = max(tree_peak, final)
+        preset = _parent_verdict(pids=tree_peak > tree_budget)
+    if preset == "pids" and tree_budget is not None:
+        backstop = (isolation or {}).get("pids_backstop")
+        notes.append(f"the run's process tree held {tree_peak} tasks (budget {tree_budget})"
+                     + ("; the last count, as the run ended, caught a burst of forks between two counts"
+                        if burst else "")
+                     + f"; the tree is counted every {TREE_POLL_S * 1000:.0f} ms and forks between two counts "
+                       "are stopped only by the shared RLIMIT_NPROC backstop"
+                     + (f" ({backstop} tasks for your UID: what it held at the start, the budget and "
+                        f"{NPROC_BACKSTOP_SLACK} of slack)" if backstop is not None else "")
+                     + f", so a burst can pass the budget by {NPROC_BACKSTOP_SLACK} tasks plus any your other "
+                       "processes free during the run")
     _kill_group(proc)            # the leader on timeout/limit, and anything still in its group either way
     ru = leader_ru if proc.returncode is not None else _reap(proc)
     wall = time.monotonic() - start
