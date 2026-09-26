@@ -1,48 +1,52 @@
-# Long-Running Agents on Google Cloud (`lra`)
+# lra-gcp — a durable-execution engine for long-running agents, run locally and on Google Cloud
 
-A primer on long-running agentic workflows and their design patterns, with a working implementation on GCP:
-a durable-execution engine (Firestore + Cloud Tasks + Cloud Run + Pub/Sub + Gemini), a Cloud Workflows version of
-the same flow, and an ADK 2 `Workflow` for Vertex AI Agent Engine. Everything runs locally on in-memory adapters
-with the same semantics, so the crash/resume/timeout behaviour is testable in seconds.
+After this lab you can run, break and repair a long-running agent end to end: child runs that fan out and fan in, a
+human gate that sleeps for days, sagas that undo themselves, budgets that fail closed, scheduled ticks, slow tools,
+a loop in which the model chooses the next tool, and the same engine on Firestore, Cloud Tasks, Pub/Sub and Cloud Run.
 
-**Start here:** [`docs/primer.md`](docs/primer.md) → `notebooks/practice/00_core_idea.ipynb` → the rest (answers in `notebooks/worked/`).
+## Start here
 
-**Time and tier:** ~8 h after `lra-core` (rough); module 07.3 in [`CURRICULUM.md`](../../../../CURRICULUM.md). T0 = a laptop or Colab CPU, free: in-memory adapters with the same semantics, no key, no cloud project. A Google Cloud project adds the optional T3 deploy (Terraform in `infra/terraform/`), billed per use; the `adk` extra adds the ADK 2 workflow.
+1. Read the topic primer [`../PRIMER.md`](../PRIMER.md) §2–§4 (40 min), then this lab's design notes
+   [`docs/primer.md`](docs/primer.md) §2–§3 (the engine's three invariants and its pattern catalogue).
+2. `python3 -m pip install -e ".[dev,services]" && python3 scripts/local_demo.py` — fan-out → crash → reaper →
+   3-day wait → approval → saga rollback, narrated, in a few seconds.
+3. Open [`notebooks/00_core_idea.ipynb`](notebooks/00_core_idea.ipynb) and work through 00 → 05; the worked answers
+   are in [`solutions/`](solutions/) under the same names.
 
-## Quick start (no GCP needed)
+## What you get
+
+*T0 = a laptop or Colab CPU, free: in-memory adapters with the same semantics, a scripted model, no key, no cloud
+project. T3 = the Google Cloud deployment (Terraform in `infra/terraform/`), optional, billed per use.* Time: about
+8 h after [`lra-core`](../lra-core/README.md) (rough); module 07.3 in [`CURRICULUM.md`](../../../CURRICULUM.md).
+Each blank in `notebooks/` stops at its first exercise until you fill it in.
+
+| Path | You will be able to… | Time | Tier |
+|---|---|---|---|
+| `00_core_idea` | build the store, the named-task queue and the worker from scratch, then break them with a crash and a duplicate delivery | 45 min | T0 |
+| `01_durable_execution` | drive the engine one task at a time: explicit retries, chaos hooks at each crash window, leases between two workers | 1 h | T0 |
+| `02_human_in_the_loop` | suspend for days, resume idempotently by key, reject, time out through the reaper, auto-approve, cancel | 45 min | T0 |
+| `03_fanout_saga_reflection` | fan out into child runs, treat partial failure as data, write the fan-in counter, compensate a saga in reverse, bound a reflection loop, fail closed on budget and deadline | 1 h | T0 |
+| `04_adk_workflow` | run the same shapes on ADK 2's `Workflow` (interrupts, resume, routing, the staleness guard, the new-invocation mistake) and build the graph yourself | 45 min | T0 with the `adk` extra |
+| `05_tool_loop_and_mistral` | journal a model's decision before acting on it, approve exactly what runs, then swap in Mistral (function calling, the `LLM` port) and see the loop on Mistral Workflows | 1 h | T0 |
+| [`docs/`](docs/) | [`primer.md`](docs/primer.md) (the engine's design notes: 13 patterns with GCP mappings, reference architecture, scale and cost, security, testing), [`code-evaluation-drills.md`](docs/code-evaluation-drills.md), [`runbook.md`](docs/runbook.md), [`gcp-cheatsheet.md`](docs/gcp-cheatsheet.md) (delivery semantics, limits, CLI and SDK snippets, IAM), [`mistral.md`](docs/mistral.md) | 2 h | T0 |
+| `src/lra/` | `core/` (engine, models, workflow DSL, ports), `adapters/memory`, `adapters/gcp` (Firestore, Cloud Tasks, Pub/Sub, Gemini), `adapters/mistral` (optional), `patterns/` (hitl, reflection, orchestrator_worker, saga, scheduled, async_tool), `examples/` (research pipeline, procurement saga, tool agent) | — | T0 |
+| `services/`, `workflows/`, `infra/terraform/` | Cloud Run `api` and `worker`, the same flow in Cloud Workflows (`parallel`, callbacks, compensation), Terraform for all of it | 1 h to read; deploy ~15 min | T3 |
+| `examples/adk_agent_engine/`, `examples/adk_ticket_queue/` | ADK 2 `Workflow` graphs, a model-backed agent with a long-running tool, a Cloud Run `/wake` endpoint, an Agent Engine deploy | 1 h | T0 with the `adk` extra, T3 |
+
+## Run it
 
 ```bash
-pip install -e ".[dev,services]"
-make test          # 40 pass, 7 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
-make demo          # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback, narrated
-make notebooks     # executes the worked notebooks headlessly
+python3 -m pip install -e ".[dev,services]"
+python3 -m pytest -q          # 70 tests: 64 pass, 6 skip (Google Cloud clients, ADK 2, Mistral Workflows), ~15 s
+python3 scripts/local_demo.py
+make notebooks                # the solutions run clean; each blank stops at its first exercise
 ```
 
-The four GCP adapter tests (Cloud Tasks, Pub/Sub, Gemini, Firestore) drive fake clients but import the real Google
-libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (44 pass; the
-ADK test still skips until the `adk` extra below is installed). No credentials are needed for either.
-
-Optional managed path (`pip install -e ".[adk]"`): `make adk-demo` runs the ADK 2 workflow, pauses at the review gate,
-and resumes it from a **new process**.
-
-## What's in the box
-
-| Path | What |
-|---|---|
-| `docs/primer.md` | The primer: failure model, the core idea in 40 lines, 13 patterns with GCP mappings and trade-offs, reference architecture, engine vs Workflows vs Agent Engine, scale/cost, security, testing |
-| `docs/code-evaluation-drills.md` | Six find-the-bug snippets (each a real defect found while building this) + design-round prompts |
-| `docs/runbook.md` | Deploy/rollback, dashboards, common incidents, manual operations |
-| `src/lra/core/` | Engine (`engine.py`), domain model (`models.py`), workflow DSL (`workflow.py`), ports (`ports.py`) |
-| `src/lra/adapters/memory/` | In-memory store/queue/bus, scripted LLM, controllable clock, `LocalRunner` (drives tasks like Cloud Tasks, including redelivery after a crash) |
-| `src/lra/adapters/gcp/` | `FirestoreStateStore`, `CloudTasksQueue`, `PubSubEventBus`, `GeminiLLM`, `build_gcp_engine` |
-| `src/lra/patterns/` | `hitl`, `reflection`, `orchestrator_worker`, `saga` |
-| `src/lra/examples/` | `research_pipeline` (uses every pattern), `procurement_saga`, scripted model routes |
-| `services/` | Cloud Run `api` (start/inspect/events/cancel) and `worker` (Cloud Tasks target, reaper, Pub/Sub push), one Dockerfile |
-| `workflows/research_approval.yaml` | Same flow in Cloud Workflows: `parallel`, `retry`, `create_callback_endpoint`/`await_callback`, try/except compensation |
-| `examples/adk_agent_engine/` | ADK 2 `Workflow` (parallel workers, routing loop, interrupt/resume) + Agent Engine deploy wrapper |
-| `infra/terraform/` | Firestore, Cloud Tasks queue, Pub/Sub (+DLQ, optional BigQuery sink), Cloud Run ×2, Scheduler reaper, Workflows, IAM |
-| `notebooks/worked/`, `notebooks/practice/` | Four pairs: core idea from scratch, durable execution, HITL, fan-out/saga/reflection/budgets. Practice = same notebook with `____` blanks; the worked one is the solution |
-| `tests/` | Chaos-hook tests for each crash window, HITL, fan-out/saga/budget/versioning, services, adapters with fake clients, ADK flow |
+The optional extras add paths, never requirements: `pip install -e ".[dev,services,gcp]"` runs the four Google Cloud
+adapter tests against fake clients (no credentials); `".[adk]"` (ADK 2 and the Google Cloud clients, about 220 MB,
+measured 2026-09-26, verify) runs the two ADK test files, notebook 04 and `make adk-demo`; `".[mistral]"` adds the
+`mistralai` SDK and, on Python 3.12–3.14, Mistral Workflows (see [`docs/mistral.md`](docs/mistral.md)). With every
+extra on Python 3.12 the suite runs all 70 tests.
 
 ## The engine in one picture
 
@@ -96,10 +100,14 @@ gcloud workflows run research-approval --data='{"goal":"...","subtopics":["a","b
 Set `LRA_BACKEND=gcp` and the variables in `.env.example`; both services read them. Pin `LRA_GEMINI_MODEL` to a model
 enabled in your project and set real prices in `GeminiLLM` before trusting `cost_usd`.
 
-## Status and caveats
+## Caveats
 
-- Engine, adapters, services, patterns, examples, notebooks: tested locally (47 tests, 4 executed notebooks).
-- GCP adapters are unit-tested against fake clients; Terraform is written but not applied here — review names, quotas and
-  org policies before `terraform apply`.
-- ADK/Agent Engine code was verified against `google-adk 2.8` and `vertexai 2.1`; the Agent Engine deploy surface moves
-  between releases, so confirm `AdkApp`/`agent_engines.create` against current docs.
+- Engine, adapters, services, patterns, examples and notebooks are tested locally; the Google Cloud adapters are
+  unit-tested against fake clients, and the Terraform is written and validated but not applied here: review names,
+  quotas and org policies before `terraform apply`.
+- The ADK and Agent Engine code was verified against `google-adk` 2.10 offline (the ticket-queue graph and its
+  grader) and 2.8 for the Agent Engine example; the Agent Engine deploy surface moves between releases, so confirm
+  `AdkApp` and `agent_engines.create` against current docs (verify). `examples/adk_ticket_queue/main.py` and
+  `agent.py` are written against the ADK docs and not run live here.
+- Costs in the notebooks are simulated (illustrative per-token prices in `FakeLLM`, `GeminiLLM` and `MistralLLM`); pin
+  real prices before trusting `cost_usd`.

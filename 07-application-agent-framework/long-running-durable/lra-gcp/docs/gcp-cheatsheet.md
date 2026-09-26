@@ -1,6 +1,6 @@
 # GCP cheat sheet for long-running agents
 
-Numbers as verified on 5 Sep 2026 from the linked docs. Quote the semantics; re-check the digits before relying on them.
+The limits, delivery semantics, CLI and SDK snippets and IAM roles the topic [`PRIMER.md`](../../PRIMER.md) §5 relies on. Numbers as verified on 5 Sep 2026 from the linked docs (verify). Quote the semantics; re-check the digits before relying on them.
 
 ## Delivery semantics (the thing to say first)
 
@@ -60,13 +60,13 @@ from google.adk.events.request_input import RequestInput
 app = App(name="x", root_agent=root, resumability_config=ResumabilityConfig(is_resumable=True),
           events_compaction_config=EventsCompactionConfig(compaction_interval=10, overlap_size=1))
 
-@node(rerun_on_resume=True)          # re-check the world on every wake-up
-def check(ctx):
+@node(rerun_on_resume=True)          # this node interrupts: re-run it (re-check the world) on every wake-up;
+def check(ctx):                      # False would mark it done and take the resume input as its output
     if not ready(): return RequestInput(interrupt_id="wake", message="not yet")
     ctx.route = "ready"
 
-@node(rerun_on_resume=False)         # side effect: never repeat on resume
-def act(ctx): ...
+@node                                # side effect: finished nodes are never replayed by a resume of the same
+def act(ctx): ...                    # invocation (a new invocation replays them), and it carries an idempotency key
 
 wf = Workflow(name="w", edges=[(START, check, {"ready": act, "wait": park})])
 # resume: runner.run_async(user_id, session_id, invocation_id=inv, new_message=Content(parts=[Part(function_response=FunctionResponse(id="wake", name="adk_request_input", response={...}))]))
