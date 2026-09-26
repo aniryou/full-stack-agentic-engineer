@@ -1,4 +1,4 @@
-<!--
+{#-
   Landing page for the guide site. Used by site/index.md (template: home.html); the Markdown body of index.md is
   rendered in the closing credit line.
 
@@ -9,7 +9,8 @@
   - Layout: one column on phones; from 60em the stack map sits beside "How to use it".
   - The stack map is an ordered list of links, 07 at the top to 01, with 00 dashed beneath; a copper line on its
     right edge shows a request going down. Every rule for this page is scoped under .fse-home.
--->
+  (A Jinja comment, not an HTML one: an HTML comment here would be sent before <!doctype html>.)
+-#}
 {% extends "main.html" %}
 
 {% block extrahead %}

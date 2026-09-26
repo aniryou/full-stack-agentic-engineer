@@ -46,6 +46,10 @@ theme:
 extra_css:
   - stylesheets/extra.css
 
+# Appends a content hash to extra_css URLs so a deploy never pairs new HTML with a cached, older stylesheet.
+hooks:
+  - tools/site/hooks.py
+
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
