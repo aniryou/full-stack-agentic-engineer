@@ -1,0 +1,11 @@
+# Pure locality: always go where the longest prefix is cached. Wins on hit rate, loses on
+# hot prefixes (every request for the popular prefix lands on one replica).
+apiVersion: llm-d.ai/v1
+kind: EndpointPickerConfig
+plugins:
+- type: prefix-cache-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefix-cache-scorer
+    weight: 1
