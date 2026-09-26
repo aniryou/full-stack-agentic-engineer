@@ -168,7 +168,8 @@ max_model_len`, because a whole prompt must then fit in one step (the core enfor
 `SchedulerConfig`).
 
 **The budget trades TTFT against ITL — and, under saturation, sets capacity.** 200 requests, prompts 500–6,000
-tokens, outputs 100–400, H100 + Llama-3.1-8B (SIMULATED, `perf.simulate()`, notebook 02 worked example 3). The
+tokens, outputs 100–400, H100 + Llama-3.1-8B (SIMULATED, `perf.simulate()` on `perf.Workload(..., seed=1)`, notebook 02
+worked example 3; another seed draws other prompts and moves every figure). The
 latency columns and goodput (requests per second meeting a 1 s TTFT and a 50 ms TPOT SLO, §11) are for an
 open-loop Poisson stream at 6/s; the last column sends all 200 at once, which saturates the engine and so measures
 its capacity:
@@ -228,7 +229,7 @@ vLLM v0.30.0 starts from different ones; the lab's `sizing.size()` models them f
 
 | Input | The core (`perf.kv_cache_blocks()`) | vLLM v0.30.0 defaults (the lab's `sizing.size()`) |
 |---|---|---|
-| total memory | 24 GB, the datasheet figure | 22.49 GiB = 24.15 GB, the L4's total as `nvidia-smi` reports it; vLLM uses the total CUDA reports, often a few hundred MiB lower (verify on your card) |
+| total memory | 24 GB, the datasheet figure | 22.49 GiB = 24.15 GB, the L4's total as `nvidia-smi` reports it; vLLM multiplies the total CUDA reports (`torch.cuda.mem_get_info()[1]`), which may sit slightly below it, and refuses to start if CUDA's *free* figure, lower by the CUDA context (a few hundred MiB) and any other process, is below that share (verify on your card) |
 | `gpu_memory_utilization` | 0.9, vLLM's default for a long time | 0.92 (`vllm/config/cache.py`) |
 | overhead | a flat 1 GB | profiled at start-up: the activation peak of a 2,048-token pass, CUDA graphs, non-torch buffers — ~1.2 GB by the lab's estimate |
 | KV budget → blocks | 4.54 GB → 2,164 | 4.96 GB → 2,363 |
@@ -659,7 +660,7 @@ TPOT SLO, SIMULATED).
 
 **The knobs and what each trades.**
 
-| Knob (vLLM flag) | Raises | Costs |
+| Knob (vLLM flag) | Improves | Costs |
 |---|---|---|
 | `max_num_batched_tokens` | TTFT; capacity, up to a few hundred tokens past the knee (§3) | ITL tail (§3) |
 | `max_num_seqs` | throughput (bigger batches) | ITL, KV pressure, preemptions |
@@ -856,8 +857,8 @@ main branch source on that date — re-check them against the release you pin.
 - **vLLM defaults and behaviour:** V1 as the architecture (separate API-server and engine-core processes, async
   scheduling); `block_size` 16; `enable_prefix_caching` true; `prefix_caching_hash_algo` `sha256` (options
   `sha256_cbor`, `xxhash`, `xxhash_cbor`); `cache_salt` in the first block's extra keys; `gpu_memory_utilization`
-  0.92 on main and in v0.30.0 (the core keeps 0.9, §4); the L4's 22.49 GiB total as `nvidia-smi` reports it and how
-  far below it CUDA's total sits; `watermark` 0.0; `scheduler_reserve_full_isl` true; policies `fcfs` and `priority` (lower first);
+  0.92 on main and in v0.30.0 (the core keeps 0.9, §4); the L4's 22.49 GiB total as `nvidia-smi` reports it and where CUDA's total and
+  free figures sit below it; `watermark` 0.0; `scheduler_reserve_full_isl` true; policies `fcfs` and `priority` (lower first);
   API-server defaults for `max_num_batched_tokens` / `max_num_seqs` (2,048/256 below 70 GB or on A100; 8,192/1,024
   H100/H200-class; 16,384/1,024 at ≥160 GB); chunked prefill on by default and `max_num_batched_tokens ≥
   max_model_len` required without it; `long_prefill_token_threshold` (default 0 = off),

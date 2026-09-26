@@ -41,8 +41,10 @@ INT4_GROUP_OVERHEAD = 2.5 / 128
 class GPU:
     """Datasheet numbers (dense, no sparsity). ``memory_gib`` is the total the driver reports
     (``nvidia-smi --query-gpu=memory.total``). vLLM multiplies the total seen by CUDA
-    (``torch.cuda.mem_get_info()[1]``) by ``gpu_memory_utilization``; that total is typically a
-    few hundred MiB below nvidia-smi's (verify on your GPU), which on a 24 GB card is worth ~1
+    (``torch.cuda.mem_get_info()[1]``) by ``gpu_memory_utilization``; that total may sit slightly
+    below nvidia-smi's, and CUDA's *free* figure (``mem_get_info()[0]``) is lower still, by the
+    CUDA context (a few hundred MiB) and any other process, and vLLM refuses to start if it is
+    below the requested share (verify on your GPU). A few hundred MiB on a 24 GB card is worth ~1
     concurrent 2K-token session of an 8B model — so for exact planning pass ``gpu_memory_bytes=``
     measured on your GPU, or calibrate from the startup log (:func:`calibrate`).
     All values (verify) against the vendor datasheet."""
