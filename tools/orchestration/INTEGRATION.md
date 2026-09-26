@@ -88,3 +88,26 @@ full test sweep, notebook count, commit, push, PR, merge, Pages verification.
   `../../../07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/README.md` (resolves outside the repo from
   `notebooks/`); it should be `../deploy/gcp/README.md`. Fix in the source, rebuild the notebooks, re-run the site generator (it reports
   "missing targets" — must be 0).
+
+## 10. Additions after the builds (read before starting)
+- All four topics passed their adversarial review and independent validation (see `$SP/BUILD-REPORT.md`, regenerate it with
+  `python3 $SP/buildreport.py`). Their per-lab test counts are the ones to quote: count them yourself at the end of your pass with
+  `python3 -m pytest -q --collect-only -p no:cacheprovider | tail -1` in each core and lab (run with the terraform env vars from FACTS.md
+  exported so the quant-lab deploy test is collected, not skipped), and the notebook count with
+  `find . -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l` from the repo root.
+- Do the RL-and-thinking-models rows last and re-read its README/PRIMER right before writing them (its validator may still be finishing when
+  you start). Its lab is `thinking-lab`, package `thinklab`; its core is `rl-core`, package `rlcore`.
+- You MAY edit inside the topic dirs for exactly these items: (a) the §9 broken link in `sandbox-lab/notebooks_src/05_gke_sandbox_with_gvisor.py`
+  (then `python3 tools/build_notebooks.py` in that lab so notebooks/ and solutions/ match — rebuilds are byte-identical when nothing changed);
+  (b) turning plain-text or directory references between the four new topics into links now that all four PRIMER.md files exist
+  (each topic README and PRIMER mentions its siblings; builders were told to use plain paths while the siblings were unwritten).
+  Nothing else inside the topic dirs.
+- Cross-link opportunities the research surfaced (one line each, only if the target section exists): vllm-internals primer §8.3 / Verify list:
+  the open item on GGUF and bitsandbytes is answered — both are out-of-tree plugins now (`vllm-gguf-plugin`, `vllm-bnb-plugin`), per
+  `tools/orchestration/facts/quantization.md`; mark it `(verify, 2026-09-26)`. Do not change the serving lab's `--quantization fp8` flag
+  (it is correct at the pinned v0.30.0); the quantization primer §9 already notes the `fp8_per_tensor` form for newer vLLM.
+- `tools/orchestration/README.md`: add rows for `build_topic.js`, `review_workflow.js` (now takes `sp`/`repo`/`topic` in args), `INTEGRATION.md`,
+  `facts/`, and note `tfcheck.sh` needs `ORCH_SCRATCH` (default `/tmp/claude-0/orch`) plus `TERRAFORM_BIN`/`TF_CLI_CONFIG_FILE`.
+- After every edit batch: `python3 tools/orchestration/mdlinks.py <files you touched>`; at the end `python3 tools/gen_colab_index.py`, then
+  `python3 tools/site/build_site_content.py` (must report 0 missing targets; it rewrites the nav block in mkdocs.yml — keep that change).
+  Do NOT run `mkdocs build` (the orchestrator does) and do NOT run git commands.
