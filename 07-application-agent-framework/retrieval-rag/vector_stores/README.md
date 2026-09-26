@@ -1,4 +1,44 @@
-# minifaiss
+# vector_stores — vector search and GraphRAG, rebuilt from scratch in numpy
+
+After this lab you can explain how FAISS's index families (flat, IVF, PQ, IVFPQ, LSH, HNSW) trade memory, speed and
+recall, measure that trade-off yourself, and trace a GraphRAG pipeline from chunks to a community-summary answer.
+
+## Start here
+
+1. Install and run the tests (below): 50 tests, about 25 s on a laptop CPU.
+2. `python demo.py` — a recall@10 table for every index on seeded synthetic data (~20 s).
+3. Read [`minifaiss/hnsw.py`](minifaiss/hnsw.py) or [`minifaiss/pq.py`](minifaiss/pq.py) next to the matching section
+   of the [vector databases primer](../vector-databases-primer.md); then [`minigraphrag/`](minigraphrag/README.md).
+
+## What you get
+
+| Path | You will be able to… | Time | Tier |
+|---|---|---|---|
+| [`minifaiss/`](minifaiss/) + `demo.py` | build and tune each FAISS index family and read the recall/memory table | 2–3 h | T0 |
+| `demo_gutenberg.py` | run the same indexes on real text (TF-IDF over Project Gutenberg) | 30 min | T0 (downloads the corpus once) |
+| [`minigraphrag/`](minigraphrag/README.md) + `demo_graphrag.py` | trace GraphRAG: extraction, graph, communities, local and global search | 2 h | T0 (offline mock model) |
+| `tests/` | check every index against exact search | — | T0 |
+
+T0 = a laptop or Colab CPU, free: no GPU, no API key.
+
+## Run it
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt       # numpy and pytest; nltk only for the Gutenberg demo
+python -m pytest tests -q             # 49 passed, 1 skipped (the corpus loader test runs once the corpus is fetched)
+python demo.py                        # synthetic recall@10 table
+python gutenberg_corpus.py            # one-time corpus fetch; non-interactive (nltk.download(quiet=True))
+python demo_gutenberg.py              # semantic-ish search + recall/memory/time per index on real passages
+```
+
+Do not use `python -m nltk.downloader gutenberg`: when a download fails it prompts "Retry? [n/y/e]" and dies in a
+non-interactive shell. Recent NLTK releases also refuse to download through an HTTP(S) proxy; if yours is trusted, set
+`NLTK_ALLOW_PROXIED_URLOPEN=1` for the fetch (checked with NLTK 3.10.3 on 2026-09-26, verify).
+
+---
+
+## minifaiss
 
 An **educational** reimplementation of the core ideas of
 [FAISS](https://github.com/facebookresearch/faiss) (Facebook AI Similarity
@@ -114,8 +154,9 @@ low unless heavily tuned.
 
 ### HNSW — hierarchical navigable small world (`hnsw.py`)
 Builds a layered proximity graph: sparse upper layers act as express lanes, and
-layer 0 holds everyone. Search greedy-descends the upper layers, then beam-
-searches layer 0. Stores full vectors plus the graph. **Space:** high (vectors +
+layer 0 holds everyone. Each node keeps up to `M` neighbours per upper layer and
+`M0 = 2M` on layer 0, as in the HNSW paper and `faiss.IndexHNSWFlat`. Search
+greedy-descends the upper layers, then beam-searches layer 0. Stores full vectors plus the graph. **Space:** high (vectors +
 edges). **Speed:** very fast. **Recall:** high, tuned by `efSearch`.
 
 ---
@@ -162,14 +203,15 @@ grep -rn "# PERF:" minifaiss/
    time** against that exact baseline.
 
 ```bash
-# one-time: fetch the corpus into the venv
-./.venv/bin/python -m nltk.downloader gutenberg
+# one-time: fetch the corpus (non-interactive; see "Run it" if you are behind a proxy)
+python gutenberg_corpus.py
 
-# run it (deterministic, ~2s; add --no-hnsw to skip the slowest build)
-./.venv/bin/python demo_gutenberg.py
+# run it (deterministic; add --no-hnsw to skip the slowest build)
+python demo_gutenberg.py
 ```
 
-Example (1500 passages, d=256, cosine):
+Example (1500 passages, d=256, cosine; recall is deterministic, the timings are from a
+shared 4-vCPU machine on 2026-09-26 and will differ on yours):
 
 ```
 Query: "murder of the king and the bloody crown"
@@ -179,12 +221,12 @@ Query: "murder of the king and the bloody crown"
 
 index                                  bytes/vec  recall@10  build s search s
 -----------------------------------------------------------------------------
-IndexFlatIP (exact)                         1024      1.000     0.00    0.002
-IndexIVFFlat(nlist=48,nprobe=8)             1024      0.765     0.06    0.014
-IndexPQ(m=8)                                   8      0.611     0.20    0.006
-IndexIVFPQ(nlist=48,m=8,nprobe=8)              8      0.570     0.25    0.036
-IndexLSH(nbits=256)                           32      0.411     0.00    0.011
-IndexHNSWFlat(M=16)                         1024      0.979     0.59    0.057
+IndexFlatIP (exact)                         1024      1.000     0.00    0.022
+IndexIVFFlat(nlist=48,nprobe=8)             1024      0.765     0.82    0.183
+IndexPQ(m=8)                                   8      0.611     4.77    0.368
+IndexIVFPQ(nlist=48,m=8,nprobe=8)              8      0.570     6.65    0.088
+IndexLSH(nbits=256)                           32      0.407     0.01    0.173
+IndexHNSWFlat(M=16)                         1024      0.985     1.69    0.212
 ```
 
 The trade-off reads straight off the table: `IndexFlatIP` and `HNSW` keep the
@@ -204,10 +246,10 @@ weakest.
 
 ```bash
 # Synthetic demo: clustered Gaussian blobs, recall@10 table vs exact search.
-./.venv/bin/python demo.py
+python demo.py
 
 # Tests:
-./.venv/bin/python -m pytest tests -q
+python -m pytest tests -q
 ```
 
 The synthetic `demo.py` is deterministic (seeded). Example output:
@@ -217,8 +259,8 @@ index                               bytes/vec   recall@10
 ---------------------------------  ----------  ----------
 IndexFlatL2                               128       1.000
 IndexIVFFlat(nlist=64,nprobe=8)           128       0.999
-IndexPQ(m=8)                                8       0.548
+IndexPQ(m=8)                                8       0.535
 IndexIVFPQ(nlist=64,m=8,nprobe=8)           8       0.755
-IndexLSH(nbits=64)                          8       0.108
-IndexHNSWFlat(M=16)                       128       0.955
+IndexLSH(nbits=64)                          8       0.107
+IndexHNSWFlat(M=16)                       128       0.969
 ```

@@ -11,10 +11,14 @@ with the same semantics, so the crash/resume/timeout behaviour is testable in se
 
 ```bash
 pip install -e ".[dev,services]"
-make test          # 39 tests: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services, ADK
+make test          # 34 pass, 5 skip: crash windows, duplicate delivery, leases, HITL, fan-out, saga, budgets, services
 make demo          # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback, narrated
 make notebooks     # executes the worked notebooks headlessly
 ```
+
+The four GCP adapter tests (Cloud Tasks, Pub/Sub, Gemini, Firestore) drive fake clients but import the real Google
+libraries, so they skip without the `gcp` extra; `pip install -e ".[dev,services,gcp]"` runs them too (38 pass; the
+ADK test still skips until the `adk` extra below is installed). No credentials are needed for either.
 
 Optional managed path (`pip install -e ".[adk]"`): `make adk-demo` runs the ADK 2 workflow, pauses at the review gate,
 and resumes it from a **new process**.

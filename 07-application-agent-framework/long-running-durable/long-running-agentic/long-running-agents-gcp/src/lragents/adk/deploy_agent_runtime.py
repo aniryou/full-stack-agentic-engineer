@@ -4,7 +4,7 @@ formerly Vertex AI Agent Engine) with managed Sessions + Memory Bank.
     pip install "google-cloud-aiplatform[agent_engines,adk]"
     python -m lragents.adk.deploy_agent_runtime
 
-Trade-off vs Cloud Run (see docs/00_primer.md §6): Agent Runtime gives you
+Trade-off vs Cloud Run (see long-running-durable/00_primer.md §6): Agent Runtime gives you
 managed sessions, memory bank, scaling and a query API with no container to
 own; but you drive wake-ups from *outside* (Cloud Scheduler → its query
 endpoint) because the ADK trigger routes only exist when you host the FastAPI
