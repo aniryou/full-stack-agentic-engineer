@@ -2,7 +2,7 @@
 
 **Scope.** This is the second FlashAttention document in this folder. [The primer](flash-attention-primer.md) builds the idea from zero (what attention computes, why the naive schedule is slow, online softmax, the lineage). This page assumes you have read it, or can explain those ideas yourself, and goes to the depth needed to defend a kernel or backend choice in a design review: exact byte counts, the algebra with numerical safety, what each FlashAttention generation changed and why the hardware forced it, why decode needs a different kernel, how paged KV reaches the kernel in vLLM and FlashInfer, what each attention variant costs, numerics, how to measure honestly, and how to write the forward pass yourself in Triton.
 
-**Tier.** Everything here is learnable on a CPU (T0). The companion notebook [`flash_attention_deep_dive.ipynb`](flash_attention_deep_dive.ipynb) and the calculators in [`fa_calculators.py`](fa_calculators.py) (pinned by [`test_fa_calculators.py`](test_fa_calculators.py)) reproduce every derived number on this page with numpy. Running a real kernel (section 10, section 11) is T1: any 24 GB GPU; see [COMPUTE.md](../../COMPUTE.md) for where to get one. On a free Colab T4, note that FlashAttention-2 does not support Turing (section 7.4).
+**Tier.** Everything here is learnable on a CPU (T0). The companion notebook [`flash_attention_deep_dive.ipynb`](flash_attention_deep_dive.ipynb) and the calculators in [`fa_calculators.py`](fa_calculators.py) (pinned by [`test_fa_calculators.py`](test_fa_calculators.py)) reproduce every derived number on this page with numpy. Running a real kernel (sections 10 and 11) is T1: one small GPU, such as a free Colab or Kaggle T4 or any rented 24 GB card; see [COMPUTE.md](../../COMPUTE.md) for where to get one. On a T4, note that FlashAttention-2 does not support Turing (section 7.4).
 
 **Sources.** Grounded in the upstream code, fetched on 2026-09-26 (listed under Sources): the FlashAttention repo (FA2 CUDA kernels, FA3 Hopper kernels, FA4 CuTe-DSL kernels, the Triton version), vLLM's attention backends, and FlashInfer. The papers could not be fetched from this environment (arXiv is blocked), so figures quoted from them carry **(verify)**. Every other performance number is derived on this page from stated assumptions.
 
@@ -26,7 +26,7 @@ The roofline itself (arithmetic intensity, ridge point, attainable FLOP/s) is co
 
 ### 1.1 FLOPs
 
-Per head, `S = τ·QKᵀ` is an `N×d` by `d×N` product: `N²·d` multiply-adds, `2N²d` FLOPs. `O = PV` is another `2N²d`. Softmax adds roughly 5 operations per score (max, subtract, exponentiate, sum, divide). The convention every FlashAttention benchmark uses, and this page uses, counts the two matrix products only:
+Per head, `S = τ·QKᵀ` is an `N×d` by `d×N` product: `N²·d` multiply-adds, `2N²d` FLOPs. `O = PV` is another `2N²d`. Softmax adds roughly 5 operations per score (max, subtract, exponentiate, sum, divide). The convention FlashAttention's own benchmarks and the Triton tutorial use, and this page uses, counts the two matrix products only:
 
 ```
 FLOPs(forward, one head) = 4 · N_q · N_k · d          causal: × 0.5        backward: × 2.5
@@ -240,7 +240,7 @@ Two things to notice, both of which FA2 changes: the output accumulator makes a 
 
 ### 3.2 Block sizes from SRAM
 
-With `M` elements of on-chip SRAM, the paper sets `B_c = ⌈M/(4d)⌉` and `B_r = min(⌈M/(4d)⌉, d)`: `K_j` and `V_j` take `2·B_c·d ≈ M/2`, `Q_i` and `O_i` take `2·B_r·d ≤ M/2`, and the `B_r × B_c` score tile fits in what is left. On an H100 (228 KB of SMEM per SM, 116,736 bf16 elements) with `d = 128`, that gives `B_c = 228` and `B_r = 128`.
+With `M` elements of on-chip SRAM, the paper sets `B_c = ⌈M/(4d)⌉` and `B_r = min(⌈M/(4d)⌉, d)`: `K_j` and `V_j` take `2·B_c·d ≈ M/2`, `Q_i` and `O_i` at most as much, and the score tile `B_r·B_c ≤ d·M/(4d) = M/4`. Everything is `O(M)`, which is all the analysis needs; the constant factors are why real kernels tune tile sizes by hand. On an H100 (228 KB of SMEM per SM, 116,736 bf16 elements) with `d = 128`, that gives `B_c = 228` and `B_r = 128`.
 
 Production kernels use the same reasoning with two refinements: tile sizes are rounded to shapes the MMA instructions like, and the score tile and the output accumulator live in *registers*, so SMEM holds only the Q, K and V tiles. FA2's H100/A100 configuration for `d = 128` is `B_r × B_c = 128 × 64`, which needs `(128 + 2·64)·128·2 B = 64 KB` of SMEM (section 4.5 has the full table from the source).
 
@@ -365,7 +365,7 @@ Why a few elementwise operations matter against 512 matmul FLOPs per score: the 
 | FP32 FMA instructions | 64 | 128 | 128 |
 | MUFU instructions (EX2) | 16 | 16 | 16 |
 
-Per score, with `d = 128`: `4d = 512` MMA FLOPs, one EX2, and about 5 FP32 instructions (FFMA for scale-and-subtract, max, add into `l`, the `O` rescale amortized as `d/B_c` = 2 FMULs at `B_c = 64`, a conversion). Clocks per score if each unit ran alone:
+Per score, with `d = 128`: `4d = 512` MMA FLOPs, one EX2, and about 5 FP32 instructions (FFMA for scale-and-subtract, max, add into `l`, the `O` rescale amortized as `d/B_c` = 2 FMULs at `B_c = 64`, and a conversion that handles two values per instruction). Clocks per score if each unit ran alone:
 
 | | A100 | H100 | B200 |
 |---|---|---|---|
@@ -522,7 +522,7 @@ FLOPs = 4·L·d·g                     g query heads share this KV head (GQA)
 I     = 2g / b                      FLOP/byte:  MHA bf16 = 1,  g = 4 -> 4,  g = 8 -> 8;  FP8 KV doubles it
 ```
 
-Every one of those is two orders of magnitude below the ridge (295 on an H100, 403 on an L4). Decode attention is pure bandwidth: its time is bytes divided by achieved bandwidth, and nothing else matters to first order. For a Llama-3-8B-shaped layer (32 query heads, 8 KV heads, `d = 128`) at `L = 32,768`: 134 MB of K/V and 537 MFLOP per layer, 40 µs at 3.35 TB/s, 1.28 ms per token across 32 layers for a single sequence (`fa_calculators.decode_intensity()`).
+Every one of those is one to two orders of magnitude below the ridge (295 on an H100, 403 on an L4). Decode attention is pure bandwidth: its time is bytes divided by achieved bandwidth, and nothing else matters to first order. For a Llama-3-8B-shaped layer (32 query heads, 8 KV heads, `d = 128`) at `L = 32,768`: 134 MB of K/V and 537 MFLOP per layer, 40 µs at 3.35 TB/s, 1.28 ms per token across 32 layers for a single sequence (`fa_calculators.decode_intensity()`).
 
 ### 6.2 Why the prefill kernel is the wrong shape
 
@@ -621,7 +621,7 @@ block_table_offset = n_block * kBlockN - block_table_idx * page_block_size
 K tile pointer     = k_ptr + block_table[block_table_idx] * k_batch_stride + block_table_offset * k_row_stride
 ```
 
-The page size constrains the load path. FA2's public `flash_attn_with_kvcache` requires `page_block_size` to be a multiple of 256, so a K/V tile never straddles two pages. FA3 accepts any page size ("page_block_size can be arbitrary (e.g, 1, 2, 3, 64, etc.)"), but small pages break the TMA's rectangular tile loads, so it falls back to per-row asynchronous copies (`paged_kv_non_TMA`), which also shrinks the tile (section 5.5). vLLM's FlashAttention backend accepts block sizes that are multiples of 16 through its own build of the kernels (`vllm.vllm_flash_attn`). The paged-attention primer quotes 20–26% kernel overhead for the original vLLM paged kernel; how much a given kernel pays depends on how contiguous each page's K/V rows are, which is a layout decision (next sections).
+The page size constrains the load path. FA2's public `flash_attn_with_kvcache` requires `page_block_size` to be a multiple of 256, so a K/V tile never straddles two pages. FA3 accepts any page size ("page_block_size can be arbitrary (e.g, 1, 2, 3, 64, etc.)"), but small pages break the TMA's rectangular tile loads, so it falls back to per-row asynchronous copies (`paged_kv_non_TMA`), which also shrinks the tile (section 5.5). vLLM's FlashAttention backend accepts block sizes that are multiples of 16 through its own build of the kernels (`vllm.vllm_flash_attn`). The paged-attention primer quotes 20–26% kernel overhead for the original vLLM paged kernel; how much a given kernel pays depends on how contiguous each page's K/V rows are, which is a layout decision (vLLM's layout is at the end of section 7.4).
 
 ### 7.2 FlashAttention's serving APIs
 
@@ -709,8 +709,8 @@ A production attention kernel is a family of template instantiations. Each varia
 |---|---|---|---|
 | Causal | loop stops at the diagonal; diagonal tiles masked (section 4.4) | saves ≈ 50% of FLOPs at large `N`; creates load imbalance | bottom-right aligned when `N_q ≠ N_k` (v2.1) |
 | Sliding window `(left, right)` | `n_block_min` and `n_block_max` bound the loop | work ∝ `N·W` instead of `N²/2`: at `N = 32k`, `W = 4,096`, 128 × 64 tiles, 15,840 tiles instead of 65,792 (24%) | FA2 v2.3 (Mistral 7B); FA3; FlashInfer `window_left` |
-| ALiBi | adds `−slope·|i + N_k − N_q − j|` to each score | one FMA per score, nothing extra to load | FA2 only: vLLM forces FA2 when ALiBi is on |
-| Softcapping | `s ← c·tanh(s/c)` before the softmax (Gemma-2, Grok) | one `tanh` per score on the same MUFU as `exp2`, the unit that section 4.3 shows is already the bottleneck | FA2 v2.6, FA3 (smaller tiles with softcap + local), FlashInfer `logits_soft_cap` |
+| ALiBi | adds `−slope·|i + N_k − N_q − j|` to each score | one FMA per score, nothing extra to load | vLLM falls back to FA2 when ALiBi is on ("Cannot use FA version 3 with ALiBi") |
+| Softcapping | `s ← c·tanh(s/c)` before the softmax (Gemma-2, Grok) | one `tanh` per score on the same MUFU as `exp2`, the unit that section 4.3 shows is already the bottleneck | FA2 v2.6, FA3 (smaller FP8 tiles with softcap + local), FlashInfer `logits_soft_cap` |
 | Dropout (training) | Philox random numbers generated per score in the kernel; the backward regenerates them from the saved seed and offset (`rng_state`) | RNG instructions per score; no mask stored | split-KV is not implemented with dropout ("SplitKV is not implemented for dropout") |
 | MQA / GQA | K/V head index = `bidh / h_h_k_ratio` | free in prefill; decode gains come from packing (section 6.4) | query heads must be a multiple of KV heads |
 | Head dim 64 / 128 / 256 | SMEM per tile ∝ `d`, accumulator registers ∝ `B_r·d` | larger `d` means smaller tiles and fewer CTAs per SM (FA2 on H100: 128 × 64 at `d = 128`, 64 × 64 at `d = 256`; FA3: 128 × 176 vs 128 × 80); the per-tile intensity `2B_r/b` does not depend on `d` | FA2 supports `d ≤ 256`; vLLM's FA backend `d % 8 == 0` |
@@ -770,7 +770,7 @@ For an H100 over NVLink (≈ 450 GB/s per direction, **(verify)**): `N/P ≥ 2,1
 
 ### 9.1 bf16 in, fp32 accumulate
 
-The tensor cores take bf16 or fp16 operands and accumulate in fp32, so `S` and the output accumulator are fp32 in registers (or TMEM). Two roundings to the input dtype happen per tile: `P` is converted before the `P·V` multiply (`convert_type<Element>(acc_s)` in FA2), and `O` is converted once at the end. The first dominates. bf16 keeps 8 significant bits, a unit roundoff of `2^−8 ≈ 0.39%` per probability; fp16 keeps 11 bits, `2^−11 ≈ 0.05%`. For attention, fp16 is the more accurate input format whenever its range suffices.
+The tensor cores take bf16 or fp16 operands and accumulate in fp32, so `S` and the output accumulator are fp32 in registers (or TMEM). Two roundings to the input dtype happen: `P` is converted before every `P·V` multiply (`convert_type<Element>(acc_s)` in FA2), and `O` once at the end. The first dominates. bf16 keeps 8 significant bits, a unit roundoff of `2^−8 ≈ 0.39%` per probability; fp16 keeps 11 bits, `2^−11 ≈ 0.05%`. For attention, fp16 is the more accurate input format whenever its range suffices.
 
 A kernel therefore cannot match an fp32 reference bit for bit, and it should not be expected to match another kernel either (different tile sizes sum in different orders). FlashAttention's own test criterion is the one to adopt: compare the kernel and a plain PyTorch implementation *in the same dtype* against an fp32 reference, and require the kernel's maximum error to be at most twice the baseline's (README: "the maximum numerical error of FlashAttention is at most twice the numerical error of a baseline implementation in Pytorch").
 
@@ -1003,7 +1003,7 @@ s = s.masked_fill(torch.ones(1000, 1000, dtype=torch.bool, device="cuda").triu(1
 assert torch.allclose(lse.view(2, 8, 1000) * math.log(2), torch.logsumexp(s, dim=-1), atol=1e-3)   # base 2 -> natural
 ```
 
-Then vary `block_m`/`block_n` (the result must not depend on them beyond rounding), `causal`, `N` (1, a tile multiple, a tile multiple plus one), and time it with the procedure of section 10.3. On a T4, use fp16 (no bf16 tensor cores) **(verify)** that Triton's `tl.dot` targets its tensor cores.
+Then vary `block_m`/`block_n` (the result must not depend on them beyond rounding), `causal`, `N` (1, a tile multiple, a tile multiple plus one), and time it with the procedure of section 10.3. On a T4, use fp16 (it has no bf16 tensor cores) and check that Triton's `tl.dot` uses its tensor cores there **(verify)**.
 
 ---
 

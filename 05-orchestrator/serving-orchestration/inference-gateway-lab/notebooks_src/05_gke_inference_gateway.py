@@ -153,7 +153,7 @@ print("✅", hpa_metric_name("vllm:num_requests_waiting", "gauge"))
 # Write `lab_cost(hours, gpu_nodes, prices)` in dollars for `hours` of: `gpu_nodes` L4 Spot VMs, one
 # system VM, the regional load balancer's forwarding rule, and the cluster management fee minus the
 # free-tier credit (which covers one zonal cluster, so the fee nets to 0 here). The prices below are
-# **assumptions to verify** (us-central1, Sep 2026), not quotes — see `../../../COMPUTE.md`.
+# **assumptions to verify** (us-central1, Sep 2026), not quotes — see [COMPUTE.md](../../../../COMPUTE.md).
 
 # %% exercise
 PRICES = {                         # USD per hour — VERIFY before relying on them
