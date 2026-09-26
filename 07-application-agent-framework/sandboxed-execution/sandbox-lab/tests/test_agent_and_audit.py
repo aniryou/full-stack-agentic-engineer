@@ -107,7 +107,7 @@ def test_execution_events_feed_detection():
 def test_execution_events_feed_detection_on_a_starved_cpu():
     # Regression: on a shared 2-vCPU CI runner one busy loop reached a 2 s wall limit before its 1 s
     # CPU budget (wall_timeout, not cpu_time). Here the loops share one CPU with a competing busy loop,
-    # so each gets about half a core; the verdicts must be exactly those of an idle machine.
+    # so each gets at most about half a core; the verdicts must be exactly those of an idle machine.
     with cpu_contention(loops=1):
         log = _detection_scenario()
     burns = [e.budgets_used for e in log.events if e.exit_reason in ("cpu_time", "wall_timeout")]
