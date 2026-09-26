@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpubench"
+version = "0.1.0"
+description = "Measure the machine you have: GEMM throughput, memory bandwidth, transfers, P2P, weights loading and your own roofline, on a CPU (numpy) or a CUDA GPU (PyTorch)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # the library needs numpy only; PyTorch is optional (tiers T1/T2)
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+gpu = ["torch>=2.3"]                   # CUDA wheels from PyPI; preinstalled on Colab and Kaggle
+safetensors = ["safetensors>=0.4"]     # optional: cross-check the from-scratch safetensors reader
+
+[project.scripts]
+gpubench = "gpubench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gpubench*"]
+
+[tool.setuptools.package-data]
+gpubench = ["fixtures/*.txt", "fixtures/*.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+index, name, pci.bus_id, driver_version, compute_cap, memory.total [MiB], memory.used [MiB], power.limit [W], power.default_limit [W], clocks.max.sm [MHz], clocks.max.memory [MHz], pcie.link.gen.current, pcie.link.gen.max, pcie.link.width.current, pcie.link.width.max, temperature.gpu, ecc.mode.current, persistence_mode
+0, NVIDIA H100 80GB HBM3, 00000000:18:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 31, Enabled, Enabled
+1, NVIDIA H100 80GB HBM3, 00000000:2A:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 34, Enabled, Enabled
+2, NVIDIA H100 80GB HBM3, 00000000:3A:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 37, Enabled, Enabled
+3, NVIDIA H100 80GB HBM3, 00000000:5D:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 500.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 33, Enabled, Enabled
+4, NVIDIA H100 80GB HBM3, 00000000:9A:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 36, Enabled, Enabled
+5, NVIDIA H100 80GB HBM3, 00000000:AB:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 8, 16, 32, Enabled, Enabled
+6, NVIDIA H100 80GB HBM3, 00000000:BA:00.0, 570.133.20, 9.0, 81559 MiB, 18432 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 35, Enabled, Enabled
+7, NVIDIA H100 80GB HBM3, 00000000:DB:00.0, 570.133.20, 9.0, 81559 MiB, 1 MiB, 700.00 W, 700.00 W, 1980 MHz, 2619 MHz, 5, 5, 16, 16, 31, Enabled, Enabled

@@ -6,7 +6,7 @@ foundations underneath (`00`). Each layer holds self-contained labs: a primer, r
 worked notebooks, and fill-in-the-blank exercises with solutions. Several topics are worked on more
 than one vendor stack (Google Cloud, Mistral) so the same concepts can be compared across providers.
 
-**165 notebooks**, all runnable in Google Colab with one click.
+**181 notebooks**, all runnable in Google Colab with one click.
 
 ## How to use it
 
@@ -44,7 +44,7 @@ than one vendor stack (Google Cloud, Mistral) so the same concepts can be compar
 | Layer | Topics | Labs |
 |---|---|---|
 | **`00-foundations/`** | Transformer internals, GPU capacity planning, the open-weight model landscape | `transformers/` (attention → block → tiny GPT, primer + practice), `gpu-capacity-planning/` (memory and bandwidth constraints, TTFT/TPOT, sizing formulas), `model-landscape/` (open-weight LLM primer, Mistral cost/routing exercises) |
-| **`01-hardware-gpu-fabric/`** | Why a GPU is shaped the way it is; scale-up vs scale-out fabrics | `gpu-primer/`, `gpu-deployment/` (NVLink vs InfiniBand/RoCE and what it means for serving) |
+| **`01-hardware-gpu-fabric/`** | Why a GPU is shaped the way it is; scale-up vs scale-out fabrics; rooflines, fabrics and the cost of a token | `gpu-primer/`, `gpu-deployment/` (NVLink vs InfiniBand/RoCE and what it means for serving). `roofline-and-fabric/`: a primer (spec sheets, the roofline, LLM inference on the roofline, the memory hierarchy, fabrics and collective cost, cold start, reliability, cost per token, the accelerator landscape), `roofline-core/` (the calculators, standard library only), `gpu-bench-lab/` (measure the machine you have — GEMM, memory bandwidth, transfers, P2P, weight loading — on a laptop CPU or a GPU; Docker recipes and a Spot L4 VM on Google Cloud via Terraform) |
 | **`02-cuda-nccl-runtime/`** | Driver, CUDA, NCCL collectives, container runtime, MIG | _scaffolded, awaiting content_ |
 | **`03-kubernetes-gpu/`** | GPU Operator, device plugins, gang and topology-aware scheduling | _scaffolded, awaiting content_ |
 | **`04-inference-engine/`** | Attention kernels, KV cache, paging | `flash-attention/`, `paged-attention/`, `kv-cache/` (minimal implementations + practice notebooks) |
@@ -60,7 +60,7 @@ Each layer's `README.md` has the full scope, its current contents, and the Colab
 .
 ├── 00-foundations/ … 07-application-agent-framework/   one folder per layer; labs in topic sub-folders
 ├── raw/            inbox for new material (gitignored except its README); sorted into a layer, never copied
-├── tools/          inject_colab_bootstrap.py, gen_colab_index.py
+├── tools/          inject_colab_bootstrap.py, gen_colab_index.py; orchestration/ (build spec, facts, status)
 ├── COLAB.md        running notebooks in Colab
 ├── CLAUDE.md       how the repo is organised and how new content gets sorted
 └── README.md       this file
