@@ -8,7 +8,8 @@ def test_expected_tokens_and_speedup_hand_computed():
     assert np.isclose(spec.expected_tokens(0.8, 4), (1 - 0.8 ** 5) / 0.2) and np.isclose(spec.expected_tokens(0.8, 4), 3.3616)
     assert spec.expected_tokens(1.0, 4) == 5 and spec.expected_tokens(0.0, 4) == 1
     assert np.isclose(spec.speedup(0.8, 4, 0.1), 3.3616 / 1.4)       # E[tokens] / (k c + 1)
-    assert spec.best_k(0.8, 0.1) == 4 and spec.best_k(0.95, 0.02) > spec.best_k(0.6, 0.02)
+    # k = 4, 5, 6, 7 -> 2.401, 2.460, 2.470, 2.448: the optimum is shallow
+    assert spec.best_k(0.8, 0.1) == 6 and spec.best_k(0.95, 0.02) > spec.best_k(0.6, 0.02)
 
 
 def test_acceptance_rate_is_one_minus_total_variation():

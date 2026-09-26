@@ -113,3 +113,12 @@ class LocalStack:
 
     def last_decision(self):
         return self.call(lambda: self.router.decisions[-1] if self.router.decisions else None)
+
+    def bench(self, sessions, label: str | None = None, **kw):
+        """Run the closed-loop agentic benchmark (igwlab.bench) against this stack's router."""
+        from .bench import run_bench
+        return run_bench(self.router_url, sessions, label=label or str(self.config), endpoints=self.names, **kw)
+
+    def routed(self) -> dict:
+        """Requests the router has sent to each endpoint so far."""
+        return self.call(lambda: {e.name: e.routed_total for e in self.router.ds.list()})

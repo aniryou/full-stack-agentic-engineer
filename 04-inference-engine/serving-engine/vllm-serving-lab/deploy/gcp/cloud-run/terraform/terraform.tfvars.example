@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars (git-ignored) and edit.
+
+project_id = "my-serving-lab"
+region     = "us-central1" # a region with Cloud Run L4 GPUs (verify)
+
+# The model: an open 1.5B model needs no token. For a gated model (e.g. meta-llama/Llama-3.1-8B-Instruct)
+# create the secret first and name it here:
+#   printf %s "$HF_TOKEN" | gcloud secrets create hf-token --data-file=-
+model              = "Qwen/Qwen2.5-1.5B-Instruct"
+hf_token_secret_id = null
+
+# Or serve weights from Cloud Storage (faster, repeatable cold starts):
+# model_source          = "gcs"
+# weights_bucket        = "my-serving-lab-weights"
+# create_weights_bucket = true
+# model                 = "Qwen2.5-1.5B-Instruct"   # path inside the bucket
+
+# Engine flags: size first (python -m servelab size --model qwen2.5-1.5b-instruct --gpu L4 --max-model-len 8192)
+max_model_len          = 8192
+gpu_memory_utilization = 0.92
+extra_args             = ["--max-num-seqs", "64"]
+
+# Cost knobs: scale to zero, at most one L4.
+min_instances = 0
+max_instances = 1
+concurrency   = 32
+
+invoker_members = ["user:you@example.com"]

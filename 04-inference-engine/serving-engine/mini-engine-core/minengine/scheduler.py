@@ -43,6 +43,7 @@ class Request:
     params: SamplingParams = field(default_factory=SamplingParams)
     arrival_time: float = 0.0
     cache_extra: object = None                   # e.g. a LoRA id: part of every block name
+    priority: int = 0                            # lower = more important (only custom victim policies use it)
     eos_token_id: int | None = None
     num_prompt_tokens: int = -1
     num_computed_tokens: int = 0
@@ -94,6 +95,9 @@ class SchedulerOutput:
 
 class Scheduler:
     def __init__(self, config: SchedulerConfig, kv: KVCacheManager):
+        if config.max_model_len > kv.num_blocks * kv.block_size:     # vLLM refuses to start in this case
+            raise ValueError(f"max_model_len {config.max_model_len} exceeds the KV cache "
+                             f"({kv.num_blocks * kv.block_size} tokens): one sequence could never finish")
         self.cfg, self.kv = config, kv
         self.waiting: deque[Request] = deque()
         self.running: list[Request] = []

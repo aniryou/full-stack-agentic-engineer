@@ -80,7 +80,7 @@ def diagnose(sample: dict) -> list:
     util, sm = g("DCGM_FI_DEV_GPU_UTIL", 0) / 100, g("DCGM_FI_PROF_SM_ACTIVE")
     tensor, dram = g("DCGM_FI_PROF_PIPE_TENSOR_ACTIVE"), g("DCGM_FI_PROF_DRAM_ACTIVE")
     out = []
-    if util >= 0.9 and sm is not None and sm < 0.5:
+    if util >= 0.8 and sm is not None and sm < 0.5:
         out.append(f"busy but mostly empty: GPU util {util:.0%} yet SM active {sm:.0%}: too few blocks "
                    "(small batch, launch-bound, serial kernels); GPU util overstates the load")
     if sm is not None and sm > 0.5 and tensor is not None and tensor < 0.05:

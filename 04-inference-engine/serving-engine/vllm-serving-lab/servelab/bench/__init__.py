@@ -6,13 +6,14 @@
 """
 from .client import RequestResult, SSEParser, stream_request
 from .report import compare, curve, table
-from .runner import BenchRun, closed_loop, open_loop, run_closed_loop, run_open_loop, run_sessions, run_sync, sessions
+from .runner import (BenchRun, closed_loop, open_loop, run_closed_loop, run_open_loop, run_sessions, run_sync,
+                     sessions, warm_up)
 from .summary import SLO, Stat, Summary, littles_law, percentile, summarize
 from .workload import AgentSession, Lengths, Request, agent_sessions, arrival_times, mixed_requests, random_requests
 
 __all__ = [
     "RequestResult", "SSEParser", "stream_request", "compare", "curve", "table", "BenchRun", "closed_loop",
-    "open_loop", "run_closed_loop", "run_open_loop", "run_sessions", "run_sync", "sessions", "SLO", "Stat",
+    "open_loop", "run_closed_loop", "run_open_loop", "run_sessions", "run_sync", "sessions", "warm_up", "SLO", "Stat",
     "Summary", "littles_law", "percentile", "summarize", "AgentSession", "Lengths", "Request", "agent_sessions",
     "arrival_times", "mixed_requests", "random_requests",
 ]

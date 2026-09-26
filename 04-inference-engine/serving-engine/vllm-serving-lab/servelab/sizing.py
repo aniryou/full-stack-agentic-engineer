@@ -327,6 +327,8 @@ def size(model, gpu_name=None, *, gpu_memory_utilization: float = 0.92, max_mode
     to pin the block arithmetic, or to replay vLLM's logged "Available KV cache memory")."""
     m = load_config(model)
     g = gpu(gpu_name) if gpu_name is not None else None
+    if g is None and gpu_memory_bytes is None:
+        raise ValueError("give a GPU name (see sizing.GPUS) or gpu_memory_bytes=")
     total = int(gpu_memory_bytes if gpu_memory_bytes is not None else g.memory_gib * GiB)
     max_len = int(max_model_len or m.max_position_embeddings)
     requested = math.ceil(total * gpu_memory_utilization)

@@ -158,15 +158,17 @@ def softmax_reference(x) -> np.ndarray:
     return e / e.sum(axis=1, keepdims=True)
 
 
-def run_softmax_unfused(d_x, threads: int = 128):
-    """Four launches on a device array; returns the device output (and the intermediates' device
-    arrays, so a tracer or a benchmark can see them)."""
+def unfused_buffers(rows: int, cols: int):
+    """Device buffers ``(m, e, s, out)`` for the unfused path — allocate once, outside any timing loop."""
+    return (cuda.device_array(rows, dtype=np.float32), cuda.device_array((rows, cols), dtype=np.float32),
+            cuda.device_array(rows, dtype=np.float32), cuda.device_array((rows, cols), dtype=np.float32))
+
+
+def run_softmax_unfused(d_x, threads: int = 128, buffers=None):
+    """Four launches on a device array; returns the device output."""
     rows, cols = d_x.shape
     row_max, row_sum = make_row_reductions(threads)
-    d_m = cuda.device_array(rows, dtype=np.float32)
-    d_e = cuda.device_array((rows, cols), dtype=np.float32)
-    d_s = cuda.device_array(rows, dtype=np.float32)
-    d_out = cuda.device_array((rows, cols), dtype=np.float32)
+    d_m, d_e, d_s, d_out = buffers if buffers is not None else unfused_buffers(rows, cols)
     grid, block = elementwise_grid(rows, cols)
     row_max[rows, threads](d_x, d_m)
     sub_exp[grid, block](d_x, d_m, d_e)

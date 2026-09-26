@@ -52,8 +52,9 @@ def _serialise_simulator_shared_arrays() -> bool:
     The simulator creates a block's shared array lazily, keyed by the source line of the
     ``cuda.shared.array(...)`` call, with an unlocked check-then-set. Two simulated threads that reach
     that line together can each create a *private* array, and the kernel then silently computes
-    garbage — rare with CPython's default 5 ms GIL switch interval, frequent with
-    :func:`fast_simulator`. Doing the lookup under a lock restores "one array per block".
+    garbage. It is rare (about 1 launch in 300 in a stress test with a 1 µs GIL switch interval) and
+    gets likelier as the switch interval shrinks, which :func:`fast_simulator` does. Doing the lookup
+    under a lock restores "one array per block".
     """
     try:
         from numba.core import types

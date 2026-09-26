@@ -35,20 +35,20 @@ def _random_requests(n, seed=0, shared=12):
                     SamplingParams(max_tokens=rng.randrange(1, 20))) for i in range(n)]
 
 
-@pytest.mark.parametrize("blocks,budget,chunked", [(40, 16, True), (14, 8, True), (60, 64, False), (12, 32, True)])
+@pytest.mark.parametrize("blocks,budget,chunked", [(40, 16, True), (16, 8, True), (60, 64, False), (16, 32, True)])
 def test_budget_seq_limit_and_block_accounting_hold_every_step(blocks, budget, chunked):
     kv = KVCacheManager(blocks, block_size=4)
     sched = Scheduler(SchedulerConfig(budget, 4, chunked, max_model_len=64), kv)
     reqs = _random_requests(25, seed=blocks)
     _drive(sched, reqs)
     assert all(r.status.finished for r in reqs)
-    assert all(len(r.output_token_ids) == r.params.max_tokens for r in reqs)
+    assert all(len(r.output_token_ids) == r.params.max_tokens for r in reqs)   # 64-token cap never binds here
     assert kv.num_free_blocks == blocks and not kv.tables          # nothing leaked
 
 
 def test_chunked_prefill_splits_a_long_prompt_around_decodes():
     kv = KVCacheManager(64, block_size=4)
-    sched = Scheduler(SchedulerConfig(16, 4), kv)
+    sched = Scheduler(SchedulerConfig(16, 4, max_model_len=64), kv)
     trace = _drive(sched, [Request("a", [1] * 3, SamplingParams(max_tokens=8)),
                            Request("b", [2] * 40, SamplingParams(max_tokens=2))])
     assert trace[0] == [("a", 3), ("b", 13)]                        # budget 16: a's prompt, b's first chunk
@@ -66,7 +66,7 @@ def test_without_chunking_a_prompt_runs_whole_and_budget_must_cover_max_model_le
 
 def test_fcfs_admission_and_newest_is_preempted():
     kv = KVCacheManager(6, block_size=4)
-    sched = Scheduler(SchedulerConfig(32, 4, admit_whole_prompt=False), kv)
+    sched = Scheduler(SchedulerConfig(32, 4, max_model_len=24, admit_whole_prompt=False), kv)
     reqs = [Request(f"r{i}", [i] * 7, SamplingParams(max_tokens=9)) for i in range(3)]
     for r in reqs:
         sched.add_request(r)
@@ -92,19 +92,31 @@ def test_preemption_by_recompute_does_not_change_outputs():
     assert [o.token_ids for o in outs] == ref
 
 
-def test_a_custom_victim_already_in_the_batch_gives_its_tokens_back():
-    class OldestFirst(Scheduler):                                   # a deliberately odd victim policy
+def test_a_victim_already_in_this_batch_gives_its_tokens_back():
+    class ByPriority(Scheduler):              # vLLM's priority policy: evict the least important, newest last
         def pick_victim(self):
-            return self.running[0]
-    kv = KVCacheManager(10, block_size=4)
-    sched = OldestFirst(SchedulerConfig(16, 4, admit_whole_prompt=False), kv)
-    reqs = _random_requests(12, seed=7, shared=0)
-    _drive(sched, reqs)
-    assert sched.num_preemptions > 0 and all(r.status.finished for r in reqs)
-    assert kv.num_free_blocks == 10
+            return max(self.running, key=lambda r: (r.priority, r.arrival_time))
+    kv, rng = KVCacheManager(10, block_size=4), random.Random(3)
+    sched = ByPriority(SchedulerConfig(16, 4, max_model_len=40, admit_whole_prompt=False), kv)
+    reqs = _random_requests(16, seed=7, shared=0)
+    for i, r in enumerate(reqs):
+        r.priority, r.arrival_time = rng.randrange(3), i
+        sched.add_request(r)
+    in_batch_victims = 0
+    while sched.has_unfinished():
+        before = list(sched.running)
+        out = sched.schedule()
+        assert out.num_batched_tokens <= 16 and not ({id(v) for v in out.preempted} & {id(r) for r, _ in out.scheduled})
+        in_batch_victims += sum(any(before.index(v) < before.index(r) for r, _ in out.scheduled if r in before)
+                                for v in out.preempted if v in before)
+        sched.update(out, {r.request_id: 0 for r, n in out.scheduled if r.num_computed_tokens + n == r.num_tokens})
+        kv.check()
+    assert in_batch_victims > 0 and all(r.status.finished for r in reqs) and kv.num_free_blocks == 10
 
 
-def test_prompt_longer_than_max_model_len_is_rejected():
+def test_limits_are_enforced_up_front():
     sched = Scheduler(SchedulerConfig(max_model_len=16), KVCacheManager(8, 4))
     with pytest.raises(ValueError):
-        sched.add_request(Request("big", [1] * 16))
+        sched.add_request(Request("big", [1] * 16))            # a prompt must leave room for one token
+    with pytest.raises(ValueError):
+        Scheduler(SchedulerConfig(max_model_len=64), KVCacheManager(8, 4))   # 64 tokens > a 32-token cache

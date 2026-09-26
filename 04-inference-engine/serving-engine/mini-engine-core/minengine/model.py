@@ -20,6 +20,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .quant import fake_quant, fp8_e4m3
+
 EOS = 256           # byte ids are 0..255; one extra id ends a sequence
 VOCAB = 257
 
@@ -121,7 +123,6 @@ class PagedKVCache:
 
     def write(self, layer, slots, k, v):
         if self.kv_dtype == "fp8":
-            from .quant import fp8_e4m3
             k, v = fp8_e4m3(k / self.kv_scale) * self.kv_scale, fp8_e4m3(v / self.kv_scale) * self.kv_scale
         self.k[layer, slots], self.v[layer, slots] = k, v
 
@@ -216,7 +217,6 @@ class TinyLM:
     # -- variants used by the speculative-decoding and quantization notebooks ---------------------
     def quantized(self, **kw) -> "TinyLM":
         """A copy whose linear weights went through quant.fake_quant(**kw) (embeddings kept, as usual)."""
-        from .quant import fake_quant
         m = copy.deepcopy(self)
         for L in m.layers:
             for name in L:

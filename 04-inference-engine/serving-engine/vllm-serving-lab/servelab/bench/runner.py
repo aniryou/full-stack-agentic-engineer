@@ -72,9 +72,21 @@ async def _prepare(http, url, model, headers):
     return model, await is_simulated(http, url, headers)
 
 
+def warmup_request(req: Request, i: int) -> Request:
+    """A short copy of ``req`` whose *first* token differs, so warm-up cannot leave prefix-cache
+    hits behind for the measured requests (a warm-up that replays measured prompts flatters TTFT)."""
+    tag = f"warmup{i} "
+    if req.messages is not None:
+        msgs = [dict(m) for m in req.messages]
+        msgs[0]["content"] = tag + str(msgs[0].get("content") or "")
+        return Request(messages=msgs, max_tokens=min(req.max_tokens, 16), tag="warmup")
+    return Request(prompt=tag + (req.prompt or ""), max_tokens=min(req.max_tokens, 16), tag="warmup")
+
+
 async def _warmup(http, url, model, requests, n, headers, ignore_eos):
-    for r in requests[:n]:
-        await stream_request(http, url, model, r, headers=headers, ignore_eos=ignore_eos)
+    """First requests pay one-off costs (connection setup, lazy compilation, cold caches)."""
+    for i, r in enumerate(requests[:n]):
+        await stream_request(http, url, model, warmup_request(r, i), headers=headers, ignore_eos=ignore_eos)
 
 
 async def open_loop(url: str, requests: list, rate: float = math.inf, burstiness: float = 1.0, seed: int = 0, *,
@@ -169,6 +181,17 @@ async def sessions(url: str, agent_sessions: list, session_rate: float = math.in
 
 
 # -- sync wrappers (scripts, tests, notebooks) ---------------------------------------------------
+def warm_up(url: str, requests: list, n: int = 2, *, model: str | None = None, headers: dict | None = None,
+            ignore_eos: bool = True) -> None:
+    """Send ``n`` warm-up requests (distinct prompts, see :func:`warmup_request`) and wait for them.
+    Do this *before* taking the "before" /metrics scrape so warm-up stays out of the window."""
+    async def go():
+        async with _session() as http:
+            m = model or await discover_model(http, url, headers)
+            await _warmup(http, url, m, requests, n, headers, ignore_eos)
+    run_sync(go())
+
+
 def run_open_loop(url: str, requests: list, rate: float = math.inf, **kw) -> BenchRun:
     return run_sync(open_loop(url, requests, rate, **kw))
 

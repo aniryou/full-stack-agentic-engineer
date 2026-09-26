@@ -8,4 +8,5 @@ nbclient>=0.9
 ipykernel>=6.25
 jupyterlab>=4.0
 numpy>=1.24
+pyyaml>=6.0
 # T1 only (GPU box, not needed for T0):  pip install "vllm>=0.30"

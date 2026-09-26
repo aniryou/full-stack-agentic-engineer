@@ -52,8 +52,7 @@ def test_abort_frees_blocks_and_trace_records_steps():
     assert eng.kv.num_free_blocks == 16 and eng.output(rid).finish_reason == "finished_aborted"
 
 
-def test_a_request_that_can_never_fit_raises():
-    eng = Engine(MODEL, num_blocks=2, block_size=4)
-    eng.add_request("far too long for two blocks")
-    with pytest.raises(RuntimeError):
-        eng.step()
+def test_a_prompt_that_cannot_fit_is_rejected_at_the_door():
+    eng = Engine(MODEL, num_blocks=2, block_size=4)                 # max_model_len defaults to the 8-token cache
+    with pytest.raises(ValueError):
+        eng.add_request("far too long for two blocks")

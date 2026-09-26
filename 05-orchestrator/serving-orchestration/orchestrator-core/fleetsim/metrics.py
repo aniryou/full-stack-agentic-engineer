@@ -56,7 +56,7 @@ def summarize(res, ttft_slo: float = 2.0, tpot_slo: float = 0.15) -> dict:
 def table(rows, cols=None, title="simulated") -> str:
     """Format a list of dicts as a fixed-width text table (floats to 3 significant figures)."""
     cols = cols or list(rows[0])
-    fmt = lambda v: f"{v:.3g}" if isinstance(v, float) else str(v)      # noqa: E731
+    fmt = lambda v: (f"{v:,.0f}" if abs(v) >= 1000 else f"{v:.3g}") if isinstance(v, float) else str(v)  # noqa: E731
     cells = [[fmt(r.get(c, "")) for c in cols] for r in rows]
     w = [max(len(c), *(len(row[i]) for row in cells)) for i, c in enumerate(cols)]
     line = lambda vals: "  ".join(v.rjust(w[i]) for i, v in enumerate(vals))     # noqa: E731

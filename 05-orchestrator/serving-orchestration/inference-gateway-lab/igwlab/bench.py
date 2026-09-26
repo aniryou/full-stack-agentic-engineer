@@ -135,13 +135,14 @@ class BenchResult:
     label: str
     records: list = field(default_factory=list)
     wall_s: float = 0.0
+    endpoints: list = field(default_factory=list)     # all endpoint names (so idle ones count as 0)
 
     @property
     def ok(self) -> list:
         return [r for r in self.records if r.status == 200 and not r.error]
 
     def per_endpoint(self) -> dict:
-        out: dict = {}
+        out: dict = {e: 0 for e in self.endpoints}
         for r in self.ok:
             out[r.endpoint] = out.get(r.endpoint, 0) + 1
         return dict(sorted(out.items(), key=lambda kv: str(kv[0])))
@@ -216,12 +217,13 @@ async def _request(http, url: str, body: dict, rec: Record, headers: dict | None
 
 async def run_sessions(url: str, sessions: list, turns: int | None = None, max_tokens: int = 24,
                        think_s: tuple = (0.0, 0.02), stagger_s: float = 0.5, model: str = "lab/llm",
-                       headers: dict | None = None, seed: int = 0, label: str = "") -> BenchResult:
+                       headers: dict | None = None, seed: int = 0, label: str = "",
+                       endpoints=()) -> BenchResult:
     """Closed-loop sessions: each starts at a random offset in [0, stagger_s) and sends its
     next turn when the previous reply has fully arrived (+ a uniform tool time in think_s)."""
     import aiohttp
     rng = random.Random(seed)
-    res = BenchResult(label=label)
+    res = BenchResult(label=label, endpoints=list(endpoints))
     endpoint = url.rstrip("/") + "/v1/chat/completions"
     starts = [rng.uniform(0, stagger_s) for _ in sessions]
     thinks = [[rng.uniform(*think_s) for _ in range(64)] for _ in sessions]

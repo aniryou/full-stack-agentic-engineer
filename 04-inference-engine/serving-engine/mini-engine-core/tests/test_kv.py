@@ -88,7 +88,8 @@ def _oracle_run(hash_fn, seed=0, rounds=400):
         for i in range(len(hits), len(toks) // B):            # blocks this request computed itself
             oracle[kv.tables[rid][i]] = tuple(toks[:(i + 1) * B])
         live.append(rid)
-        kv.check()
+        if hash_fn is hash_block:
+            kv.check()                                        # (a broken hash even adopts one block twice)
     return wrong
 
 

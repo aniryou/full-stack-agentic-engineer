@@ -1,0 +1,2 @@
+index, name, pci.bus_id, driver_version, compute_cap, memory.total [MiB], memory.used [MiB], power.limit [W], power.default_limit [W], clocks.max.sm [MHz], clocks.max.memory [MHz], pcie.link.gen.current, pcie.link.gen.max, pcie.link.width.current, pcie.link.width.max, temperature.gpu, ecc.mode.current, persistence_mode
+0, Tesla T4, 00000000:00:04.0, 550.54.15, 7.5, 15360 MiB, 0 MiB, 70.00 W, 70.00 W, 1590 MHz, 5001 MHz, 1, 3, 16, 16, 43, Enabled, Disabled

@@ -51,6 +51,8 @@ class Fleet:
         self._ids = itertools.count()
         self.all = [self._new(0.0, True, "prefill" if i < prefill else "both") for i in range(replicas)]
         self.replicas, self.pending, self.timeline = list(self.all), [], []
+        if autoscaler:                                 # warm start: as if it had been recommending this size
+            autoscaler.hpa.recs.append((0.0, replicas))
 
     def _new(self, now, ready, role="both"):
         return Replica(next(self._ids), self.p, role=role, now=now, ready=ready, max_age=self.metrics_age)

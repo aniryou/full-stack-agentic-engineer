@@ -136,7 +136,7 @@ class Replica:
     # -- what a router or autoscaler can observe ---------------------------------------------------------
     def metrics(self, now: float) -> dict:
         """A scrape of the engine's /metrics, at most `max_age` s old (vLLM names in comments)."""
-        if self._snap is None or now - self._snap_t > self.max_age:
+        if self._snap is None or self.max_age <= 0 or now - self._snap_t > self.max_age:
             self._snap = {"waiting": len(self.waiting),          # vllm:num_requests_waiting
                           "running": len(self.running),          # vllm:num_requests_running
                           "kv": self.pool.usage(),               # vllm:kv_cache_usage_perc
@@ -160,30 +160,37 @@ class Replica:
     # -- one engine step ---------------------------------------------------------------------------------
     def start_step(self, now: float) -> float | None:
         """Pick this step's batch (running first, then waiting FCFS) and return its duration; None if idle."""
-        batch, budget, self._lora_s = [], self.p.max_tokens, 0.0
+        batch, budget, self._lora_s, B = [], self.p.max_tokens, 0.0, self.p.block
         for s in list(self.running):
             if budget <= 0:
                 break
             if not s.running:                           # preempted a moment ago to make room
                 continue
             n = 1 if s.computed >= s.target else min(s.target - s.computed, budget)
-            if self._grow(s, s.ctx + n):
+            if s.ctx + n <= len(s.blocks) * B or self._grow(s, s.ctx + n):     # a new block only every B tokens
                 batch.append((s, n))
                 budget -= n
+        skipped = []
         while self.waiting and budget > 0 and len(self.running) < self.p.max_seqs:
-            s = self.waiting[0]
-            if (s.req.lora and not self._lora_slot(s.req.lora)) or not self._admit(s, budget):
-                break                                   # FCFS: the head blocks the queue
-            self.waiting.popleft()
+            s = self.waiting.popleft()
+            if s.req.lora and not self._lora_slot(s.req.lora):
+                skipped.append(s)                       # no adapter slot free: let later requests go first
+                continue
+            if not self._admit(s, budget):
+                self.waiting.appendleft(s)              # no KV room: FCFS, the head blocks the queue
+                break
             self.running.append(s)
             s.running = True
             n = 1 if s.computed >= s.target else min(s.target - s.computed, budget)
             batch.append((s, n))
             budget -= n
+        self.waiting.extendleft(reversed(skipped))
         if not batch:
             return None
-        tokens = sum(n for _, n in batch)
-        dur = step_time(self.p, tokens, sum(s.ctx + n for s, n in batch)) + self._lora_s
+        tokens = kv_tokens = 0
+        for s, n in batch:
+            tokens, kv_tokens = tokens + n, kv_tokens + s.ctx + n      # attention reads the whole context
+        dur = step_time(self.p, tokens, kv_tokens) + self._lora_s
         self._batch, self._t0 = batch, now
         self.busy_time += dur
         self.stats["tokens"] += tokens
@@ -193,19 +200,20 @@ class Replica:
     def end_step(self, now: float) -> list[tuple[str, object]]:
         """Apply the step: prefill progress, one token per decoding request. Returns (event, request) pairs:
         'first' (first token), 'done' (finished), 'handoff' (a prefill-only replica finished the prompt)."""
-        events = []
+        events, B = [], self.p.block
         for s, n in self._batch:
             r = s.req
             if s.computed < s.target:
                 s.computed += n
                 s.ctx = s.computed
+                self._register(s)
                 if s.computed < s.target:               # more prompt chunks to go
-                    self._register(s)
                     continue
             else:
                 s.ctx += 1
+                if s.ctx % B == 0:                      # a decode block just filled: now it is cacheable
+                    self._register(s)
             s.out += 1
-            self._register(s)
             if r.t_first is None:
                 r.t_first = now
                 events.append(("first", r))

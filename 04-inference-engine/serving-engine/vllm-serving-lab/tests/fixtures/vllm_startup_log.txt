@@ -1,0 +1,10 @@
+# Illustrative excerpt in the format of a `vllm serve` startup log (vLLM >= 0.10 wording).
+# Values are made up but self-consistent for Qwen2.5-0.5B-Instruct, --dtype half, --max-model-len 4096 on a T4.
+INFO 09-26 10:00:01 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-26 10:00:03 [model.py:547] Resolved architecture: Qwen2ForCausalLM
+INFO 09-26 10:00:03 [model.py:1510] Using max model len 4096
+INFO 09-26 10:00:09 [gpu_model_runner.py:2602] Model loading took 0.93 GiB memory and 4.512345 seconds
+INFO 09-26 10:00:17 [gpu_worker.py:298] Available KV cache memory: 11.84 GiB
+INFO 09-26 10:00:17 [kv_cache_utils.py:1087] GPU KV cache size: 1,034,592 tokens, Maximum concurrency for 4,096 tokens per request: 252.59x
+INFO 09-26 10:00:31 [core.py:210] init engine (profile, create kv cache, warmup model) took 21.07 s
+INFO 09-26 10:00:32 [api_server.py:1634] Starting vLLM API server 0 on http://0.0.0.0:8000

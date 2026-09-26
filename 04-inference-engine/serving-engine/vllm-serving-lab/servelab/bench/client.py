@@ -14,8 +14,11 @@ consequences worth saying out loud: TTFT includes network, HTTP, tokenization an
 and ITL is per *chunk*, so with speculative decoding or ``--stream-interval`` > 1 one chunk can
 carry several tokens — then ITL and TPOT differ, and TPOT is the per-token number.
 
-A server that sends an empty role-only chunk long before the first token would make TTFT look
-better than it is; pass ``ttft_on_content=True`` to start TTFT at the first non-empty text.
+One deliberate difference: a chat stream opens with a role-only chunk (``delta: {"role":
+"assistant", "content": ""}``). vLLM sends it together with the first token, and its benchmark
+counts it as a token, which adds a ~0 ms gap to every request's ITL list. Here role-only chunks
+are not token events, so TTFT is unchanged and ITL has no artifact. Pass ``ttft_on_content=True``
+to also ignore empty-text chunks before the first real token (servers that send one early).
 """
 from __future__ import annotations
 
@@ -106,7 +109,10 @@ async def stream_request(session: aiohttp.ClientSession, base_url: str, model: s
                     choices = data.get("choices")
                     if choices:
                         c0 = choices[0]
-                        piece = c0.get("text") if "text" in c0 else (c0.get("delta") or {}).get("content")
+                        delta = c0.get("delta") or {}
+                        piece = c0.get("text") if "text" in c0 else delta.get("content")
+                        if "role" in delta and not piece and c0.get("finish_reason") is None:
+                            continue                      # role-only chat chunk: not a token
                         if ttft_on_content and not res.chunk_times and not piece:
                             continue
                         now = time.perf_counter()

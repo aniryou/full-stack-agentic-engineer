@@ -266,11 +266,15 @@ class EngineSnapshot:
     prompt_tokens: float
     generation_tokens: float
     requests_finished: float
-    ttft_p50: float
+    ttft_mean: float           # exact: _sum / _count
+    ttft_p50: float            # interpolated inside a bucket
     ttft_p99: float
+    itl_mean: float
     itl_p50: float
     itl_p99: float
+    e2e_mean: float
     e2e_p50: float
+    queue_mean: float
     queue_p50: float
     queue_p99: float
     window_s: float | None = None
@@ -292,10 +296,10 @@ class EngineSnapshot:
                                           f"{f(self.prefix_cache_queries)} tokens)"),
                 ("preemptions", f(self.preemptions)),
                 ("requests finished", f(self.requests_finished)),
-                ("TTFT p50 / p99 (server)", f"{f(self.ttft_p50, 'ms')} / {f(self.ttft_p99, 'ms')}"),
-                ("ITL  p50 / p99 (server)", f"{f(self.itl_p50, 'ms')} / {f(self.itl_p99, 'ms')}"),
-                ("queue p50 / p99", f"{f(self.queue_p50, 'ms')} / {f(self.queue_p99, 'ms')}"),
-                ("E2E p50", f(self.e2e_p50, "ms"))]
+                ("TTFT mean | p50 / p99", f"{f(self.ttft_mean, 'ms')} | {f(self.ttft_p50, 'ms')} / {f(self.ttft_p99, 'ms')}"),
+                ("ITL  mean | p50 / p99", f"{f(self.itl_mean, 'ms')} | {f(self.itl_p50, 'ms')} / {f(self.itl_p99, 'ms')}"),
+                ("queue mean | p50 / p99", f"{f(self.queue_mean, 'ms')} | {f(self.queue_p50, 'ms')} / {f(self.queue_p99, 'ms')}"),
+                ("E2E  mean | p50", f"{f(self.e2e_mean, 'ms')} | {f(self.e2e_p50, 'ms')}")]
         if self.generation_tps is not None:
             rows.append(("generation tokens/s", f(self.generation_tps)))
         if self.spec_acceptance_rate is not None:
@@ -303,7 +307,8 @@ class EngineSnapshot:
                          f"{f(self.spec_acceptance_rate, '%')} / {f(self.spec_mean_acceptance_length)}"))
         w = max(len(k) for k, _ in rows)
         head = f"window {self.window_s:.1f} s" if self.window_s else "since server start"
-        return "\n".join([f"engine /metrics ({head})"] + [f"  {k:<{w}}  {v}" for k, v in rows])
+        return "\n".join([f"engine /metrics ({head}; means are exact, percentiles are bucket interpolations)"]
+                         + [f"  {k:<{w}}  {v}" for k, v in rows])
 
 
 def snapshot(later: Scrape, earlier: Scrape | None = None) -> EngineSnapshot:
@@ -330,9 +335,9 @@ def snapshot(later: Scrape, earlier: Scrape | None = None) -> EngineSnapshot:
         prefix_cache_queries=q, prefix_cache_hits=h, prefix_hit_rate=(h / q) if q else math.nan,
         preemptions=first(PREEMPTIONS, default=0.0), prompt_tokens=first(PROMPT_TOKENS, default=0.0),
         generation_tokens=gen, requests_finished=first(REQUEST_SUCCESS, default=0.0),
-        ttft_p50=ttft.quantile(0.5), ttft_p99=ttft.quantile(0.99), itl_p50=itl.quantile(0.5),
-        itl_p99=itl.quantile(0.99), e2e_p50=e2e.quantile(0.5), queue_p50=queue.quantile(0.5),
-        queue_p99=queue.quantile(0.99), window_s=window,
+        ttft_mean=ttft.mean, ttft_p50=ttft.quantile(0.5), ttft_p99=ttft.quantile(0.99), itl_mean=itl.mean,
+        itl_p50=itl.quantile(0.5), itl_p99=itl.quantile(0.99), e2e_mean=e2e.mean, e2e_p50=e2e.quantile(0.5),
+        queue_mean=queue.mean, queue_p50=queue.quantile(0.5), queue_p99=queue.quantile(0.99), window_s=window,
         generation_tps=(gen / window) if window else None,
         spec_acceptance_rate=spec_rate, spec_mean_acceptance_length=spec_len,
     )

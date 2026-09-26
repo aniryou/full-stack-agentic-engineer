@@ -22,11 +22,11 @@ def test_int8_per_channel_error_is_at_most_half_a_step():
 def test_one_outlier_ruins_per_tensor_but_not_per_channel():
     w = np.random.default_rng(1).standard_normal((64, 32)) * 0.02
     w[:, 3] *= 100                                                   # one outlier output channel
-    per_tensor = error(w, fake_quant(w, fmt="int8", granularity="tensor"))["rel"]
-    per_channel = error(w, fake_quant(w, fmt="int8", granularity="channel"))["rel"]
-    ok_cols = [c for c in range(32) if c != 3]
-    tensor_rest = error(w[:, ok_cols], fake_quant(w, fmt="int8", granularity="tensor")[:, ok_cols])["rel"]
-    assert tensor_rest > 0.2 and per_channel < 0.01 and per_tensor < tensor_rest
+    tensor, channel = fake_quant(w, fmt="int8", granularity="tensor"), fake_quant(w, fmt="int8", granularity="channel")
+    rest = [c for c in range(32) if c != 3]
+    assert error(w, tensor)["rel"] < 0.05                            # the aggregate looks fine...
+    assert error(w[:, rest], tensor[:, rest])["rel"] > 0.5           # ...while 31 of 32 channels are wrecked
+    assert error(w, channel)["rel"] < 0.01
 
 
 def test_int4_groups_beat_int4_per_channel():

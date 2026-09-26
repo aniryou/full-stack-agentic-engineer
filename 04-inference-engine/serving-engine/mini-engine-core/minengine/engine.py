@@ -38,7 +38,7 @@ class StepRecord:
     preempted: list
     finished: list
     waiting: list
-    kv_used: int
+    kv_used: int                         # blocks held by requests while this step ran (its working set)
     num_blocks: int
 
     @property
@@ -61,11 +61,12 @@ class StepRecord:
 class Engine:
     def __init__(self, model: TinyLM | None = None, *, num_blocks: int = 64, block_size: int = 16,
                  max_num_batched_tokens: int = 64, max_num_seqs: int = 8, enable_chunked_prefill: bool = True,
-                 enable_prefix_caching: bool = True, max_model_len: int = 512, watermark_blocks: int = 0,
+                 enable_prefix_caching: bool = True, max_model_len: int | None = None, watermark_blocks: int = 0,
                  admit_whole_prompt: bool = True, kv_dtype: str = "float64", hash_fn=hash_block, seed: int = 0):
         self.model = model or TinyLM()
         self.kv = KVCacheManager(num_blocks, block_size, enable_prefix_caching, hash_fn)
         self.cache = PagedKVCache(self.model.cfg, num_blocks, block_size, kv_dtype)
+        max_model_len = max_model_len or min(512, num_blocks * block_size)
         self.scheduler = Scheduler(SchedulerConfig(max_num_batched_tokens, max_num_seqs, enable_chunked_prefill,
                                                    max_model_len, watermark_blocks, admit_whole_prompt), self.kv)
         self.requests: dict[str, Request] = {}
@@ -96,7 +97,7 @@ class Engine:
         out = self.scheduler.schedule()
         if not (out.scheduled or out.preempted or self.scheduler.running) and self.scheduler.waiting:
             raise RuntimeError("the next waiting request can never fit in the KV cache: raise num_blocks")
-        sampled = {}
+        kv_used, sampled = self.kv.num_blocks - self.kv.num_free_blocks, {}
         if out.scheduled:
             logits = self.model.forward(self.build_batch(out.scheduled), self.cache)
             for (req, n), row in zip(out.scheduled, logits):
@@ -122,8 +123,7 @@ class Engine:
                 finished.append(req)
         self.history.append(StepRecord(out.step, batch_log, [r.request_id for r in out.preempted],
                                        [r.request_id for r in finished],
-                                       [r.request_id for r in self.scheduler.waiting],
-                                       self.kv.num_blocks - self.kv.num_free_blocks, self.kv.num_blocks))
+                                       [r.request_id for r in self.scheduler.waiting], kv_used, self.kv.num_blocks))
         return [self.output(rid) for rid in sampled]
 
     def generate(self, prompts, params=None) -> list[RequestOutput]:

@@ -161,11 +161,15 @@ class Router:
         app.router.add_post("/v1/completions", self.handle_inference)
         app.router.add_get("/v1/models", self.handle_models)
         app.router.add_get("/metrics", self.handle_metrics)
-        app.router.add_get("/health", lambda r: web.json_response({"status": "ok"}))
+        app.router.add_get("/health", self.handle_health)
         app.router.add_get("/debug/state", self.handle_state)
         return app
 
     # ------------------------------------------------------------------ handlers
+    async def handle_health(self, request):
+        from aiohttp import web
+        return web.json_response({"status": "ok"})
+
     async def handle_metrics(self, request):
         from aiohttp import web
         self._refresh_gauges()

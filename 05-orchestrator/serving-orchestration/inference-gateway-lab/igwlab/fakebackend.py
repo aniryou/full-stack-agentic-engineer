@@ -387,8 +387,8 @@ class FakeBackend:
         app.router.add_post("/v1/chat/completions", self.handle)
         app.router.add_post("/v1/completions", self.handle)
         app.router.add_get("/v1/models", self.handle_models)
-        app.router.add_get("/metrics", lambda r: web.Response(text=self.engine.metrics_text(), content_type="text/plain"))
-        app.router.add_get("/health", lambda r: web.Response(text=""))
+        app.router.add_get("/metrics", self.handle_metrics)
+        app.router.add_get("/health", self.handle_health)
         return app
 
     async def start(self, host: str = "127.0.0.1", port: int = 0) -> str:
@@ -403,6 +403,14 @@ class FakeBackend:
     async def stop(self):
         if self._runner:
             await self._runner.cleanup()
+
+    async def handle_metrics(self, request):
+        from aiohttp import web
+        return web.Response(text=self.engine.metrics_text(), content_type="text/plain")
+
+    async def handle_health(self, request):
+        from aiohttp import web
+        return web.Response(text="")
 
     async def handle_models(self, request):
         from aiohttp import web
