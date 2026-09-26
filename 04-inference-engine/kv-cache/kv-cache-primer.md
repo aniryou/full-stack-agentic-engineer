@@ -2,7 +2,7 @@
 
 *Assumes no prior knowledge of attention internals. Builds up to why the KV cache is the single biggest constraint in LLM serving.*
 
-**Tier and notebooks.** Reading this is T0. The two notebooks, [`01_kv_cache_worked.ipynb`](01_kv_cache_worked.ipynb) and [`02_kv_cache_practice.ipynb`](02_kv_cache_practice.ipynb), import **PyTorch** and matplotlib: they run on a CPU (T0 + torch), so use a Colab CPU runtime, where both are preinstalled, or `pip install torch matplotlib` locally. A GPU is optional; the timing cells use CUDA when one is present. Sizes below are in binary units (1 KiB = 1,024 bytes, 1 GiB = 2³⁰ bytes) with decimal GB in brackets; the notebooks print decimal GB (1 GB = 10⁹ bytes).
+**Tier and notebooks.** Everything here is T0. The two notebooks, [`01_kv_cache_worked.ipynb`](01_kv_cache_worked.ipynb) and [`02_kv_cache_practice.ipynb`](02_kv_cache_practice.ipynb), run on numpy and matplotlib through [`kernel-core`](../kernel-core/README.md) (`kerncore.kv`), on a laptop or a Colab CPU runtime, with no GPU and no PyTorch; torch is optional, for one clearly labelled comparison cell at the end of 01 that skips itself when torch is not installed. Sizes are in binary units (1 KiB = 1,024 bytes, 1 GiB = 2³⁰ bytes) with decimal GB (1 GB = 10⁹ bytes) in brackets, here and in the notebooks; `kernel-core/tests/test_primer_numbers.py` pins every size on this page.
 
 ---
 
@@ -93,6 +93,8 @@ per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 | 32 users, 8K context each | 32 GiB (34.4 GB) |
 
 The model's *weights* are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users has already consumed more memory than the model itself. The cache is the part that scales with your traffic and your context lengths — the weights just sit there.
+
+Turned around: the ~64 GB an 80 GB H100 has left after the weights holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). That is an upper bound: an engine also reserves memory for activations and its allocator.
 
 **Now remove the architectural trick.** Llama 2 13B uses full multi-head attention — 40 layers, 40 KV heads:
 
