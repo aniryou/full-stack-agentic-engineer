@@ -116,18 +116,18 @@ def quantize_model(model: TinyModel, method: str = "rtn", bits: int = 4, group_s
     'rtn': round to nearest, no data. 'gptq': each layer calibrated on the inputs produced by the layers
     already quantized (llm-compressor's sequential pipeline). 'awq': a transform, then RTN - search and
     fold each layer's scale on the still-full-precision model, then round everything (AWQModifier
-    followed by QuantizationModifier)."""
+    followed by QuantizationModifier). 'awq+gptq': the same transform, then GPTQ (AWQModifier + GPTQModifier)."""
     from .awq import search_scale
     from .gptq import gptq, rtn
 
     targets = targets or model.linears()
-    if method == "awq":
+    if method in ("awq", "awq+gptq"):
         m = model
         for name in targets:
             X = m.calibration_inputs(calib)[name]
             s, _, _ = search_scale(m.weights[name], X, bits, group_size, symmetric=symmetric)
             m = m.with_weights(m.fold(name, s))
-        return quantize_model(m, "rtn", bits, group_size, symmetric=symmetric, targets=targets)
+        return quantize_model(m, "rtn" if method == "awq" else "gptq", bits, group_size, calib, symmetric, targets)
     q = model
     for name in targets:
         if method == "rtn":
@@ -136,6 +136,6 @@ def quantize_model(model: TinyModel, method: str = "rtn", bits: int = 4, group_s
             w_hat = gptq(q.weights[name], q.calibration_inputs(calib)[name], bits=bits,
                          group_size=group_size, symmetric=symmetric).w_hat
         else:
-            raise ValueError(f"method must be 'rtn', 'gptq' or 'awq', not {method!r}")
+            raise ValueError(f"method must be 'rtn', 'gptq', 'awq' or 'awq+gptq', not {method!r}")
         q = q.with_weights({name: w_hat})
     return q

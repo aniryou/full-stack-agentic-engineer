@@ -122,7 +122,7 @@ def grpo_step(policy: Policy, task, rng, cfg: GRPOConfig, prompts=(0,), ref: Pol
             r = r + np.array([soft_overlong_penalty(t.length, max_len, cfg.overlong_cache) for t in trajs])
         seen.append((trajs, r))
         if cfg.dynamic_sampling and r.std() == 0:
-            queue.append(p)                               # uninformative: sample the prompt again later
+            queue.append(int(rng.integers(task.n_prompts)))   # uninformative: draw another prompt instead
             continue
         groups.append(trajs)
         rewards.append(r)
@@ -164,11 +164,13 @@ def grpo_step(policy: Policy, task, rng, cfg: GRPOConfig, prompts=(0,), ref: Pol
 
 
 def train_grpo(policy: Policy, task, rng, cfg: GRPOConfig, steps: int = 200, prompts=(0,),
-               ref: Policy | None = None, log_every: int = 10) -> list[dict]:
-    """Repeated grpo_step; returns the logged statistics with their step numbers."""
+               ref: Policy | None = None, log_every: int = 10, batch_prompts: int | None = None) -> list[dict]:
+    """Repeated grpo_step on `prompts`, or on `batch_prompts` prompts drawn from the task's dataset each step;
+    returns the logged statistics with their step numbers."""
     hist = []
     for step in range(steps):
-        s = grpo_step(policy, task, rng, cfg, prompts, ref)
+        ps = [int(x) for x in rng.integers(task.n_prompts, size=batch_prompts)] if batch_prompts else prompts
+        s = grpo_step(policy, task, rng, cfg, ps, ref)
         if step % log_every == 0 or step == steps - 1:
             hist.append({"step": step, **s})
     return hist

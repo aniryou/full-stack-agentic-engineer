@@ -204,7 +204,8 @@ class Verdict:
         return self.contained and not self.leaked
 
 
-def run_probe(probe: Probe, executor, *, secret: str = "SECRET-planted-by-harness") -> Verdict:
+def run_probe(probe: Probe, executor, *, secret: str = "SECRET-planted-by-harness",
+              budgets=None) -> Verdict:
     """Run one probe through an executor (Unsafe or ProcessSandbox) against harmless stand-ins.
 
     Plants a fake credential in the environment and a fake ``~/.ssh`` key in the workspace, starts a
@@ -213,7 +214,8 @@ def run_probe(probe: Probe, executor, *, secret: str = "SECRET-planted-by-harnes
     """
     from .contract import Budgets, ExecutionRequest
 
-    budgets = Budgets(cpu_s=1, wall_s=3, memory_mb=256, pids=16, file_mb=8, disk_mb=16, output_bytes=4096)
+    budgets = budgets or Budgets(cpu_s=1, wall_s=2, memory_mb=256, pids=16, file_mb=8,
+                                 disk_mb=16, output_bytes=4096)
     # The secret lives in the *caller's* environment and home, never in the workspace. An unsafe run
     # inherits both (env passthrough, HOME points at the victim dir); the process sandbox scrubs the
     # env and points HOME at the empty workspace, so there is nothing to read.

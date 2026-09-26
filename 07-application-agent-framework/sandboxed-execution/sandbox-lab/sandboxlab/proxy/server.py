@@ -37,6 +37,7 @@ import ipaddress
 import json
 import os
 import socket
+import socketserver
 import ssl
 import sys
 import threading
@@ -126,10 +127,23 @@ DEFAULT_CONFIG = {"routes": {}, "forward_allow": [], "allow_connect": False, "bl
 
 
 # ---- the server -----------------------------------------------------------------------------------------
-class EgressProxy:
-    """Holds the config and the audit trail; ``serve()`` runs a ThreadingHTTPServer in a thread."""
+class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    """HTTP over a path-based Unix socket. A path is a filesystem object, not part of a network
+    namespace: a process in an empty netns (or a container with ``--network none`` and the socket
+    bind-mounted) can reach the proxy and nothing else."""
+    daemon_threads = True
 
-    def __init__(self, config: dict, *, host: str = "127.0.0.1", port: int = 0, emit=None):
+    def get_request(self):
+        req, _ = super().get_request()
+        return req, ("unix", 0)
+
+
+class EgressProxy:
+    """Holds the config and the audit trail; ``serve()`` runs the HTTP server in a thread.
+    Listens on TCP (``host``/``port``) or, with ``unix_path``, on a Unix socket (mode 0666)."""
+
+    def __init__(self, config: dict, *, host: str = "127.0.0.1", port: int = 0, emit=None,
+                 unix_path: str | None = None):
         self.config = {**DEFAULT_CONFIG, **config}
         self.events: list[dict] = []
         self._emit = emit
@@ -151,10 +165,19 @@ class EgressProxy:
 
             do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = _any
 
-        self.httpd = ThreadingHTTPServer((host, port), Handler)
-        self.httpd.daemon_threads = True
-        self.port = self.httpd.server_address[1]
-        self.url = f"http://{host}:{self.port}"
+        self.unix_path = unix_path
+        if unix_path:
+            if os.path.exists(unix_path):
+                os.unlink(unix_path)
+            self.httpd = _UnixHTTPServer(unix_path, Handler)
+            os.chmod(unix_path, 0o666)
+            self.port = None
+            self.url = f"unix:{unix_path}"
+        else:
+            self.httpd = ThreadingHTTPServer((host, port), Handler)
+            self.httpd.daemon_threads = True
+            self.port = self.httpd.server_address[1]
+            self.url = f"http://{host}:{self.port}"
         self._thread: threading.Thread | None = None
 
     # -- lifecycle
@@ -166,6 +189,8 @@ class EgressProxy:
     def close(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+        if self.unix_path and os.path.exists(self.unix_path):
+            os.unlink(self.unix_path)
 
     def __enter__(self):
         return self.serve()
@@ -298,6 +323,7 @@ def main(argv=None) -> int:
     ap.add_argument("--config", required=True, help="JSON: routes, forward_allow, limits")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8080)
+    ap.add_argument("--unix", help="listen on this Unix socket path instead of TCP")
     a = ap.parse_args(argv)
     with open(a.config) as f:
         cfg = json.load(f)
@@ -306,8 +332,8 @@ def main(argv=None) -> int:
         sys.stdout.write(json.dumps(ev, separators=(",", ":")) + "\n")
         sys.stdout.flush()
 
-    proxy = EgressProxy(cfg, host=a.host, port=a.port, emit=emit)
-    sys.stdout.write(json.dumps({"event_type": "proxy.start", "port": proxy.port,
+    proxy = EgressProxy(cfg, host=a.host, port=a.port, emit=emit, unix_path=a.unix)
+    sys.stdout.write(json.dumps({"event_type": "proxy.start", "listen": proxy.url,
                                  "routes": sorted(proxy.config["routes"]),
                                  "forward_allow": proxy.config["forward_allow"]}) + "\n")
     sys.stdout.flush()

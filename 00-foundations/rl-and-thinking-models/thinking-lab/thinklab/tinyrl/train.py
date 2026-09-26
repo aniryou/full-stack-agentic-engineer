@@ -11,9 +11,10 @@ One idea: GRPO is "sample a group, score it, push up what beat the group's avera
 The names and defaults follow TRL's ``GRPOConfig`` (v1.14.0): ``num_generations``, ``beta``
 (0.0 there: no reference model), ``epsilon`` / ``epsilon_high``, ``num_iterations`` (μ; with 1 the
 ratio is exactly 1 and the clip never binds), ``loss_type`` (``grpo`` / ``dr_grpo`` / ``dapo``) and
-``scale_rewards``. Before RL a short SFT warm-up teaches the *format* from demonstrations with every
-scratchpad length 0..K equally often — the "cold start" of the R1 recipe (PRIMER §5) — so RL starts
-from a policy that sometimes thinks and sometimes does not, and has to discover which pays.
+``scale_rewards``. Before RL a short SFT warm-up teaches the *format* (and the running sums) from
+demonstrations — half of them with no scratchpad at all, half with the full one — the "cold start" of the
+R1 recipe (PRIMER §5 "Thinking models"). RL therefore starts from a policy that thinks about half the
+time and has to discover, from the verifier's 0/1 rewards alone, that thinking pays.
 
 Everything returned is what *this run* measured on *this machine*: curves, timings and the
 accuracy-by-scratchpad-length table. ``thinklab.tinyrl.curves`` holds a recorded copy for
@@ -37,17 +38,18 @@ from .task import VOCAB, DigitSum, parse, reward, sft_batch
 @dataclass
 class TinyRLConfig:
     k: int = 6                      # digits per problem (the "depth" of the problem)
-    base: int = 10                  # the answer is the sum mod base
+    base: int = 5                   # the answer is the sum mod base (chance = 1/base)
     d: int = 64
     n_layers: int = 2
     n_heads: int = 4
-    sft_steps: int = 400
+    sft_mix: str = "none_or_full"   # demonstrations: "none_or_full" (scratchpad 0 or K, half each) | "uniform" (0..K)
+    sft_steps: int = 700
     sft_batch: int = 128
-    sft_lr: float = 3e-3
-    rl_steps: int = 60
-    prompts_per_step: int = 32      # B
+    sft_lr: float = 1e-3
+    rl_steps: int = 40
+    prompts_per_step: int = 16      # B
     num_generations: int = 8        # G (TRL default 8)
-    rl_lr: float = 1e-3
+    rl_lr: float = 3e-4
     beta: float = 0.0               # KL weight to the SFT reference (TRL default 0.0; R1 used 0.001)
     epsilon: float = 0.2            # ε_low
     epsilon_high: float = 0.2       # ε_high (DAPO "clip-higher": 0.28)
@@ -55,7 +57,7 @@ class TinyRLConfig:
     loss_type: str = "dapo"         # "grpo" | "dr_grpo" | "dapo"
     scale_rewards: str = "group"    # "group" | "batch" | "none" (Dr. GRPO)
     temperature: float = 1.0
-    eval_every: int = 5
+    log_every: int = 5
     eval_prompts: int = 256
     seed: int = 0
     threads: int = 2                # torch CPU threads (the machine may be shared)
@@ -70,8 +72,13 @@ def sft(model: TinyGPT, task: DigitSum, cfg: TinyRLConfig, rng: random.Random, l
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.sft_lr)
     curve = []
     model.train()
+    weights = None
+    if cfg.sft_mix == "none_or_full":
+        weights = [1.0] + [0.0] * (task.k - 1) + [1.0]
+    elif cfg.sft_mix != "uniform":
+        raise ValueError(cfg.sft_mix)
     for step in range(cfg.sft_steps + 1):
-        batch = sft_batch(task, cfg.sft_batch, rng)
+        batch = sft_batch(task, cfg.sft_batch, rng, weights)
         prompts = _tensor([p.prompt for p, _ in batch])
         comps = [c for _, c in batch]
         width = task.max_completion
@@ -167,11 +174,11 @@ def grpo(model: TinyGPT, ref: TinyGPT, task: DigitSum, cfg: TinyRLConfig, gen: t
             opt.zero_grad()
             loss.backward()
             opt.step()
-        if step % cfg.eval_every == 0 or step == cfg.rl_steps:
-            row = {"step": step, "reward": round(rewards.mean().item(), 4),
-                   "length": round(mask.sum(1).mean().item(), 3), "frac_zero_std": round(zero_std, 3),
-                   "kl": round(st["kl"], 5), "clip_frac": round(st["clip_frac"], 4)}
-            curve.append(row)
+        row = {"step": step, "reward": round(rewards.mean().item(), 4),
+               "length": round(mask.sum(1).mean().item(), 3), "frac_zero_std": round(zero_std, 3),
+               "kl": round(st["kl"], 5), "clip_frac": round(st["clip_frac"], 4)}
+        curve.append(row)
+        if step % cfg.log_every == 0 or step == cfg.rl_steps:
             log(f"  rl step {step:4d}  reward {row['reward']:.3f}  length {row['length']:.2f}  "
                 f"zero-std groups {row['frac_zero_std']:.2f}  kl {row['kl']:.4f}")
     return curve
@@ -202,3 +209,37 @@ def run(cfg: TinyRLConfig | None = None, log=print) -> dict:
             "sft": sft_curve, "rl": rl_curve, "before": before, "after": after,
             "timing_s": {"sft": round(t1 - t0, 1), "rl": round(t2 - t1, 1)},
             "machine": f"{platform.machine()} / torch {torch.__version__} / {cfg.threads} CPU threads"}
+
+
+def warm_start(cfg: TinyRLConfig | None = None, log=print):
+    """Only the SFT warm-up: returns ``(model, task)`` — the starting policy for rollout experiments."""
+    cfg = cfg or TinyRLConfig()
+    torch.set_num_threads(cfg.threads)
+    torch.manual_seed(cfg.seed)
+    task = DigitSum(cfg.k, cfg.base)
+    model = TinyGPT(VOCAB, cfg.d, cfg.n_layers, cfg.n_heads, task.seq_len)
+    sft(model, task, cfg, random.Random(cfg.seed), log)
+    return model, task
+
+
+def make_rollouts(model: TinyGPT, task: DigitSum, prompts: int = 8, generations: int = 8, seed: int = 0,
+                  sampler_dtype=torch.bfloat16) -> list:
+    """Rollouts as an RL trainer receives them from an inference engine: the *engine* copy samples in
+    ``sampler_dtype`` (bfloat16, as serving kernels do) and reports its log-probs; the *trainer*
+    recomputes them in float32. The two disagree slightly — the train–inference mismatch that
+    importance-sampling corrections exist for. Returns JSON-ready dicts."""
+    rng, gen = random.Random(seed), torch.Generator().manual_seed(seed)
+    engine = copy.deepcopy(model).to(sampler_dtype).eval()
+    probs = [task.sample(rng) for _ in range(prompts)]
+    P = _tensor([p.prompt for p in probs for _ in range(generations)])
+    comps, s_lp, mask = sample(engine, P, task.max_completion, 1.0, gen)
+    with torch.no_grad():
+        t_lp = token_logprobs(model.float().eval(), P, comps)
+    out = []
+    for i, (c, sl, tl, m) in enumerate(zip(comps.tolist(), s_lp.float().tolist(), t_lp.tolist(), mask.tolist())):
+        n = int(sum(m))
+        p = probs[i // generations]
+        out.append({"prompt_id": f"p{i // generations}", "prompt": p.prompt, "completion": c[:n],
+                    "reward": reward(p, c), "sampler_logps": [round(x, 5) for x in sl[:n]],
+                    "trainer_logps": [round(x, 5) for x in tl[:n]], "length": n})
+    return out

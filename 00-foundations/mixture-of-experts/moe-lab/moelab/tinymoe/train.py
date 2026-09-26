@@ -11,7 +11,7 @@ it never weights them — so it cannot bend the model's outputs the way a loss t
 CPU minutes at most: the defaults train in seconds per run. ``record()`` writes the curves that
 ship in ``fixtures/tinymoe_curves.json`` for machines without torch.
 
-    python -m moelab.tinymoe --steps 300 --seeds 0 1 2              # print the three runs
+    python -m moelab.tinymoe --steps 400 --seeds 0 1 2              # print the three runs
     python -m moelab.tinymoe --record                               # rewrite the bundled curves
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "tinymoe_curves.jso
 @dataclass
 class TrainConfig:
     balance: str = "none"          # "none" | "aux" | "bias"
-    steps: int = 300
+    steps: int = 400
     batch: int = 32
     lr: float = 3e-3
     seed: int = 0
@@ -59,6 +59,7 @@ class Run:
     aux: list = field(default_factory=list)          # Switch loss value (logged even when unused)
     load: list = field(default_factory=list)         # per-expert share of assignments over the window
     domain_expert: list = field(default_factory=list)  # final [domains, experts] assignment counts
+    token_expert: list = field(default_factory=list)   # final [content tokens, experts] assignment counts
     seconds: float = 0.0
     bayes_ce: float = 0.0
 
@@ -68,10 +69,10 @@ class Run:
 
     def summary(self) -> str:
         s = load_stats(self.final_load)
-        spec = specialisation(np.asarray(self.domain_expert))
+        by_dom, by_tok = specialisation(self.domain_expert), specialisation(self.token_expert)
         return (f"{self.config['balance']:5s} seed {self.config['seed']}: ce {self.ce[-1]:.3f} "
-                f"(floor {self.bayes_ce:.3f})  max/mean load {s['max_over_mean']:.2f}  "
-                f"dead experts {s['dead']}  specialisation {spec:.2f}  [{self.seconds:.1f} s]")
+                f"(floor {self.bayes_ce:.3f})  max/mean load {s['max_over_mean']:.2f}  dead experts {s['dead']}  "
+                f"expert explained by domain {by_dom:.2f}, by token {by_tok:.2f}  [{self.seconds:.1f} s]")
 
 
 def build(task: ToyTask, cfg: TrainConfig) -> TinyMoETransformer:
@@ -83,7 +84,15 @@ def train(cfg: TrainConfig | None = None, task: ToyTask | None = None, **overrid
     """Train one run; returns the recorded curves and the model."""
     cfg = cfg or TrainConfig(**overrides)
     task = task or ToyTask()
-    torch.set_num_threads(min(4, torch.get_num_threads()))
+    threads = torch.get_num_threads()
+    torch.set_num_threads(1)          # tiny matmuls: one thread is fastest, and immune to a busy machine
+    try:
+        return _train(cfg, task)
+    finally:
+        torch.set_num_threads(threads)
+
+
+def _train(cfg: TrainConfig, task: ToyTask) -> tuple[Run, TinyMoETransformer]:
     rng = np.random.default_rng(cfg.seed)
     model = build(task, cfg)
     moe = model.moes[0]
@@ -114,26 +123,31 @@ def train(cfg: TrainConfig | None = None, task: ToyTask | None = None, **overrid
         window += counts
         if step % cfg.log_every == 0:
             run.steps.append(step)
-            run.ce.append(float(ce))
-            run.aux.append(float(aux))
+            run.ce.append(ce.item())
+            run.aux.append(aux.item())
             run.load.append((window / window.sum()).tolist())
             window.zero_()
     run.seconds = time.perf_counter() - t0
-    run.domain_expert = domain_expert_counts(model, task, cfg.eval_batch, cfg.seed + 1000).tolist()
+    by_domain, by_token = routing_counts(model, task, cfg.eval_batch, cfg.seed + 1000)
+    run.domain_expert, run.token_expert = by_domain.tolist(), by_token.tolist()
     return run, model
 
 
 @torch.no_grad()
-def domain_expert_counts(model: TinyMoETransformer, task: ToyTask, n: int = 256, seed: int = 1) -> np.ndarray:
-    """``[domains, experts]``: how often each domain's content tokens pick each expert (all k slots)."""
+def routing_counts(model: TinyMoETransformer, task: ToyTask, n: int = 256, seed: int = 1):
+    """How often content tokens pick each expert (all k slots), tallied two ways:
+    ``[domains, experts]`` by the sequence's domain and ``[content tokens, experts]`` by the token itself."""
     x, dom = task.batch(np.random.default_rng(seed), n)
     model(torch.from_numpy(x))
     moe = model.moes[0]
     idx = moe.last["indices"].reshape(n, task.seq_len, -1)[:, 1:, :].numpy()   # skip the tag position
-    out = np.zeros((task.n_domains, moe.n_experts), dtype=np.int64)
-    for d in range(task.n_domains):
-        out[d] = np.bincount(idx[dom == d].ravel(), minlength=moe.n_experts)
-    return out
+    tok = np.repeat((x[:, 1:] - task.n_domains)[..., None], idx.shape[-1], axis=-1)
+    dom3 = np.broadcast_to(dom[:, None, None], idx.shape)
+    by_domain = np.zeros((task.n_domains, moe.n_experts), dtype=np.int64)
+    by_token = np.zeros((task.n_content, moe.n_experts), dtype=np.int64)
+    np.add.at(by_domain, (dom3.ravel(), idx.ravel()), 1)
+    np.add.at(by_token, (tok.ravel(), idx.ravel()), 1)
+    return by_domain, by_token
 
 
 def record(seeds=(0, 1, 2), balances=("none", "aux", "bias"), path: Path = FIXTURE, **kw) -> dict:
@@ -153,7 +167,7 @@ def record(seeds=(0, 1, 2), balances=("none", "aux", "bias"), path: Path = FIXTU
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m moelab.tinymoe", description=__doc__.split("\n\n")[0])
-    p.add_argument("--steps", type=int, default=300)
+    p.add_argument("--steps", type=int, default=400)
     p.add_argument("--seeds", type=int, nargs="+", default=[0])
     p.add_argument("--balance", nargs="+", default=["none", "aux", "bias"])
     p.add_argument("--record", action="store_true", help="rewrite fixtures/tinymoe_curves.json (seeds 0 1 2)")

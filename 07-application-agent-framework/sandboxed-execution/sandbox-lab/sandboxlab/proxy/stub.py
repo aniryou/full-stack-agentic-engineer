@@ -4,7 +4,8 @@ One idea: to show that the sandbox never holds the key, you need an upstream tha
 key and one that *misbehaves*. ``/whoami`` answers whether the expected bearer token arrived
 (and never echoes it); ``/echo`` returns the request headers verbatim — the reflection channel an
 attacker would use to read an injected credential back through the proxy; ``/data`` returns a
-small JSON document for the agent demos. Standard library only, one file (it runs from a
+small JSON document for the agent demos; ``/page/<name>`` serves text an attacker wrote (the
+prompt-injection payloads of ``agent/scenarios.py``). Standard library only, one file (it runs from a
 ConfigMap in kind/GKE as the ``api-stub`` Deployment).
 
     python3 stub.py --port 8081 --token-file /etc/stub/token
@@ -25,8 +26,9 @@ DATA = {"city": "Lisbon", "forecast": [{"day": "Mon", "high_c": 24}, {"day": "Tu
 
 class StubAPI:
     def __init__(self, token: str | None = None, *, token_file: str | None = None, host: str = "127.0.0.1",
-                 port: int = 0):
+                 port: int = 0, pages: dict[str, str] | None = None):
         self._token, self._token_file = token, token_file
+        self.pages = dict(pages or {})           # /page/<name>: text an attacker controls (the injection)
         self.requests: list[dict] = []          # what arrived (header *names* only, never values)
         stub = self
 
@@ -71,6 +73,8 @@ class StubAPI:
             body, status = {"headers": dict(h.headers.items())}, 200
         elif path == "/data":
             body, status = (DATA, 200) if ok else ({"error": "unauthorized"}, 401)
+        elif path.startswith("/page/") and path[6:] in self.pages:
+            body, status = {"url": path, "text": self.pages[path[6:]]}, 200
         else:
             body, status = {"error": "not found"}, 404
         raw = json.dumps(body).encode()

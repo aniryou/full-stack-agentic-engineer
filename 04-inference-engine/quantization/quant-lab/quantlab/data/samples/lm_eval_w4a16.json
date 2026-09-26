@@ -1,0 +1,38 @@
+{
+  "_note": "sample output in the documented format (illustrative): an lm-eval 0.4.13 results file (verify the schema), values made up. Not a measurement.",
+  "results": {
+    "gsm8k": {
+      "alias": "gsm8k",
+      "exact_match,strict-match": 0.272,
+      "exact_match_stderr,strict-match": 0.0282,
+      "exact_match,flexible-extract": 0.292,
+      "exact_match_stderr,flexible-extract": 0.0288
+    }
+  },
+  "group_subtasks": {
+    "gsm8k": []
+  },
+  "versions": {
+    "gsm8k": 3
+  },
+  "n-shot": {
+    "gsm8k": 5
+  },
+  "higher_is_better": {
+    "gsm8k": {
+      "exact_match": true
+    }
+  },
+  "n-samples": {
+    "gsm8k": {
+      "original": 1319,
+      "effective": 250
+    }
+  },
+  "config": {
+    "model": "vllm",
+    "model_args": "pretrained=./Qwen2.5-0.5B-Instruct-W4A16-gptq,add_bos_token=True,gpu_memory_utilization=0.8",
+    "batch_size": "auto",
+    "limit": 250.0
+  }
+}

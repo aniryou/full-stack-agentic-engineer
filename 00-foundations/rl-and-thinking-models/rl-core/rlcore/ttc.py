@@ -85,18 +85,24 @@ def sample_accuracy(qs: dict, L) -> np.ndarray:
     return 1.0 - qs["e0"] * (1.0 - qs["a"] * (1.0 - (1.0 - qs["q"]) ** L))
 
 
-def accuracy(qs: dict, L, n: int = 1, method: str = "single", wrong=(0.25, 0.25, 0.25, 0.25)) -> float:
+def accuracy(qs: dict, L, n: int = 1, method: str = "single", wrong=(0.25, 0.25, 0.25, 0.25), trials: int = 200,
+             seed: int = 0) -> float:
     """Mean accuracy over the questions at L thinking tokens per sample and n samples per question.
     "single": one sample; "verifier": any of n correct (a perfect checker picks it); "vote": majority of n,
-    with the wrong mass split over distinct wrong answers in the proportions `wrong`."""
+    wrong mass split over distinct wrong answers in the proportions `wrong` (seeded Monte Carlo, `trials` votes
+    per question; `majority_accuracy` is the exact version for one question)."""
     p = sample_accuracy(qs, L)
     if method == "single" or n == 1:
         return float(p.mean())
     if method == "verifier":
         return float((1.0 - (1.0 - p) ** n).mean())
-    grid = np.linspace(0, 1, 101)                      # tabulate the vote on a grid of p, then interpolate
-    table = [majority_accuracy(x, [w * (1 - x) for w in wrong], n) for x in grid]
-    return float(np.interp(p, grid, table).mean())
+    rng = np.random.default_rng(seed)
+    cum = np.cumsum(np.column_stack([p] + [w * (1 - p) for w in wrong]), axis=1)[:, :-1]   # (Q, m) thresholds
+    answer = (rng.random((len(p), trials, n))[..., None] > cum[:, None, None, :]).sum(-1)   # 0 = right
+    counts = np.stack([(answer == k).sum(-1) for k in range(len(wrong) + 1)], axis=-1)
+    top = counts.max(-1)
+    wins = (counts[..., 0] == top) / (counts == top[..., None]).sum(-1)                     # ties split evenly
+    return float(wins.mean())
 
 
 def allocate(qs: dict, budget: int, answer_tokens: int = 50, ns=(1, 2, 4, 8, 16), method: str = "verifier"):

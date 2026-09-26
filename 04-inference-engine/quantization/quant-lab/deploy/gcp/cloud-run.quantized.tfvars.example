@@ -1,0 +1,37 @@
+# Variables for the SERVING LAB's Cloud Run Terraform — this lab adds no Terraform of its own:
+#   cd ../../../../serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/terraform
+#   cp <this file> terraform.tfvars   # then edit project_id and invoker_members
+#   terraform init && terraform apply
+# Cloud Run GPUs here are L4s (sm_89): FP8 runs W8A8 on FP8 tensor cores, INT4 runs Marlin W4A16, and
+# FP8 KV works through FlashInfer. Regenerate the flags with:
+#   python -m quantlab plan --gpu L4 --scheme <scheme> [--kv-cache-dtype fp8]
+# Model ids are (verify); ./ paths in the comments come from deploy/any-gpu/compress.sh.
+
+project_id = "my-serving-lab"
+region     = "us-central1" # a region with Cloud Run L4 GPUs (verify)
+
+# --- Option A (default): a published INT4 AWQ checkpoint from Hugging Face; no --quantization flag,
+# vLLM reads quantization_config from its config.json. 1.5B in INT4 is ~1.1 GB of weights.
+model                  = "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
+max_model_len          = 8192
+gpu_memory_utilization = 0.92
+extra_args             = ["--kv-cache-dtype", "fp8"]
+
+# --- Option B: quantize the bf16 checkpoint to FP8 as it loads (no calibration, no new checkpoint).
+# model      = "Qwen/Qwen2.5-1.5B-Instruct"
+# extra_args = ["--quantization", "fp8_per_tensor", "--kv-cache-dtype", "fp8"]
+
+# --- Option C: your own checkpoint from compress.sh, uploaded to Cloud Storage (faster cold starts):
+#   gcloud storage cp -r ./Qwen2.5-1.5B-Instruct-FP8_DYNAMIC gs://my-serving-lab-weights/
+# model_source          = "gcs"
+# weights_bucket        = "my-serving-lab-weights"
+# create_weights_bucket = true
+# model                 = "Qwen2.5-1.5B-Instruct-FP8_DYNAMIC"   # path inside the bucket (mounted at /models)
+# extra_args            = ["--kv-cache-dtype", "fp8"]
+
+# Cost knobs, unchanged from the serving lab: scale to zero, at most one L4.
+min_instances = 0
+max_instances = 1
+concurrency   = 32
+
+invoker_members = ["user:you@example.com"]

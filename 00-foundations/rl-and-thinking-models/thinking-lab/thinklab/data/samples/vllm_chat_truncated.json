@@ -1,0 +1,28 @@
+{
+  "_thinklab_note": "sample output in the documented format (illustrative): max_tokens=64 ran out inside the thinking",
+  "id": "chatcmpl-c7d9e1a2b3f44a61",
+  "object": "chat.completion",
+  "created": 1790406005,
+  "model": "Qwen/Qwen3-0.6B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "reasoning": "Okay, let's see. Today is Tuesday and I need the day of the week 1960 days from now. Days repeat every 7, so I need 1960 mod 7. 7 * 280 = 1960, so the remainder is 0. Wait, let me check that: 7 * 28 = 196, so 7 * 280 = 1960. Yes, so",
+        "tool_calls": []
+      },
+      "logprobs": null,
+      "finish_reason": "length",
+      "stop_reason": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 41,
+    "total_tokens": 105,
+    "completion_tokens": 64,
+    "completion_tokens_details": {"reasoning_tokens": 63},
+    "prompt_tokens_details": {"cached_tokens": 32}
+  }
+}

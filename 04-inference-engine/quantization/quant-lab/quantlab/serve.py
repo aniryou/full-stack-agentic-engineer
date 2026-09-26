@@ -271,3 +271,33 @@ def cloud_run_tfvars(p: ServePlan, project_id: str = "my-project") -> str:
 def gke_container_args(p: ServePlan) -> list:
     """``args`` for the ``vllm`` container in the serving lab's ``deploy/gcp/gke/vllm.yaml``."""
     return [p.model, "--port=8000"] + [f"{f}={v}" for f, v in _pairs(p.flags)]
+
+
+# ---------------------------------------------------------------------------------------------
+# Reading the startup log: did vLLM do what the plan says?
+# ---------------------------------------------------------------------------------------------
+_LOG = {
+    "kernels": r"(?:Using|Selected) (\w+Kernel) for (\w+)",
+    "attention_backend": r"Using (\w+) attention backend",
+    "kv_cache_dtype": r"Using (\w+) data type to store kv cache",
+    "model_loading_gib": r"Model loading took ([\d.]+) GiB",
+    "available_kv_gib": r"Available KV cache memory: ([\d.]+) GiB",
+    "kv_cache_tokens": r"GPU KV cache size: ([\d,]+) tokens",
+    "max_concurrency": r"Maximum concurrency for [\d,]+ tokens per request: ([\d.]+)x",
+}
+
+
+def parse_startup_log(text: str) -> dict:
+    """The quantization-relevant lines of a ``vllm serve`` log (wording of v0.30.0, verify): the linear
+    kernels chosen (``Using MarlinLinearKernel for CompressedTensorsWNA16``), the attention backend, the
+    KV dtype, weight memory, KV memory and capacity."""
+    import re
+    out: dict = {"kernels": sorted(set(re.findall(_LOG["kernels"], text)))}
+    for key, pat in _LOG.items():
+        if key == "kernels":
+            continue
+        m = re.search(pat, text)
+        if m:
+            v = m.group(1).replace(",", "")
+            out[key] = v if key in ("attention_backend", "kv_cache_dtype") else (int(v) if key == "kv_cache_tokens" else float(v))
+    return out

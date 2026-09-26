@@ -54,7 +54,7 @@ print(f"z-loss of all-zero logits over 8 experts: (ln 8)^2 = {R.z_loss(np.zeros(
 # and pads each segment to a multiple of `BLOCK_SIZE_M` with a pad id (T·k), so no block GEMM mixes experts.
 
 # %%
-logits = rng.standard_normal((256, 8)) + np.array([1.5, 0.8, 0, 0, 0, 0, 0, 0])   # experts 0 and 1 are popular
+logits = np.random.default_rng(1).standard_normal((256, 8)) + np.array([1.5, 0.8, 0, 0, 0, 0, 0, 0])  # 0, 1 popular
 rr = route(logits, 2, **ROUTERS["mixtral"])
 print("assignments per expert:", R.load(rr.idx, 8).tolist())
 for factor in (1.0, 1.25, 2.0):
@@ -154,7 +154,7 @@ print(f"✅ factor 1.0 drops {drop_100:.1%}, 1.25 drops {drop_125:.1%}; nothing 
 # and the load of the last step. The weights would still come from `scores`: the bias only chooses.
 
 # %%
-scores = softmax(rng.standard_normal((512, 8)) + np.array([2.0, 1.0, 0, 0, 0, 0, 0, 0]))
+scores = softmax(np.random.default_rng(2).standard_normal((512, 8)) + np.array([2.0, 1.0, 0, 0, 0, 0, 0, 0]))
 print("load with no bias:", R.load(np.argsort(-scores, axis=1)[:, :2], 8).tolist())
 
 # %% exercise

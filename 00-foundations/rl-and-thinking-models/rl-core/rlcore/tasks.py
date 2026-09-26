@@ -42,13 +42,15 @@ class SeqTask:
 
     kind="brackets": tokens "(" and ")"; correct iff the string is balanced (never below zero depth, ends at 0).
     kind="sorted":   tokens 0..vocab-1; correct iff the run is non-decreasing.
-    verifier="buggy" scores with a checker that has a loophole (see `buggy_verify`); `info["correct"]` always
-    reports the true verifier, so the gap between reward and correctness is visible.
+    verifier="buggy" scores with a checker that has a loophole (see `buggy_verify`); reward_fn(seq) replaces the
+    verifier altogether (a reward model). `info["correct"]` always reports the true verifier, so the gap between
+    reward and correctness stays visible.
     """
 
-    def __init__(self, kind: str = "brackets", length: int = 8, vocab: int = 4, verifier: str = "true"):
+    def __init__(self, kind: str = "brackets", length: int = 8, vocab: int = 4, verifier: str = "true",
+                 reward_fn=None):
         assert kind in ("brackets", "sorted") and verifier in ("true", "buggy")
-        self.kind, self.length, self.verifier = kind, length, verifier
+        self.kind, self.length, self.verifier, self.reward_fn = kind, length, verifier, reward_fn
         self.n_actions = 2 if kind == "brackets" else vocab
         # per position: brackets track depth 0..length plus "broken" (went below zero);
         # sorted tracks the last token (or none yet) plus "broken" (a descent happened)
@@ -104,6 +106,7 @@ class SeqTask:
     def score(self, prompt: int, actions, rng=None):
         correct = self.verify(actions)
         reward = self.buggy_verify(actions) if self.verifier == "buggy" else correct
+        reward = self.reward_fn(actions) if self.reward_fn else reward
         return reward, {"correct": correct, "length": len(actions), "truncated": False}
 
     # -- enumeration (the space is small enough to compute every expectation exactly) ----------------

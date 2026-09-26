@@ -56,6 +56,9 @@ SCHEMES = {
     "W4A16_ASYM": {"weights": _args(4, "int", "group", symmetric=False, group_size=128), "input_activations": None},
     "NVFP4A16": {"weights": _args(4, "float", "tensor_group", group_size=16, scale_dtype="torch.float8_e4m3fn"),
                  "input_activations": None},
+    "NVFP4": {"weights": _args(4, "float", "tensor_group", group_size=16, scale_dtype="torch.float8_e4m3fn"),
+              "input_activations": _args(4, "float", "tensor_group", group_size=16, dynamic="local",
+                                         scale_dtype="torch.float8_e4m3fn", observer="static_minmax")},
 }
 
 
@@ -94,7 +97,7 @@ class Recipe:
     def needs_calibration(self) -> bool:
         """GPTQ/AWQ/SmoothQuant and static activation scales need data; RTN weights and dynamic activations do not."""
         a = self.scheme_args()["input_activations"]
-        return bool(self.algorithms) or (a is not None and a["dynamic"] is False)
+        return bool(self.algorithms) or (a is not None and a["dynamic"] is not True)
 
     @property
     def name(self) -> str:
@@ -326,6 +329,14 @@ def act_quant_fn(args: dict | None, static_scales: dict | None = None):
     if args is None:
         return None
 
+    if args["type"] == "float" and args["num_bits"] == 4:   # NVFP4 activations: E4M3 scale per 16, a global scale
+        def f4(name, x):
+            flat = x.reshape(-1, x.shape[-1])
+            gs = (static_scales or {}).get(name)            # calibrated input_global_scale, else from this batch
+            q = fp4.nvfp4_quantize(flat, group=args["group_size"], global_scale=gs)
+            return q.dequantize().reshape(x.shape)
+        return f4
+
     def f(name, x):
         if args["strategy"] == "token":            # dynamic: one scale per token (row), at run time
             amax = np.abs(x).max(-1, keepdims=True)
@@ -371,8 +382,10 @@ def quantize_model(model: TinyLM, recipe: Recipe, calib: dict | None = None) -> 
         err = float(np.linalg.norm(X @ w_hat.T - ref) / np.linalg.norm(ref))
         qm.layers[name] = LayerResult(name, codes, np.asarray(scale), zp, w_hat, err, gscale)
     a = s["input_activations"]
-    if a is not None and a["dynamic"] is False:
+    if a is not None and a["dynamic"] is False:            # FP8 static: input_scale = amax / 448
         qm.input_scales = {n: float(np.abs(np.concatenate(calib[n])).max() / 448.0) for n in qm.layers}
+    elif a is not None and a["dynamic"] == "local":        # NVFP4: input_global_scale = 448 * 6 / amax
+        qm.input_scales = {n: fp4.nvfp4_global_scale(np.abs(np.concatenate(calib[n])).max()) for n in qm.layers}
     return qm
 
 
@@ -406,6 +419,8 @@ def layer_tensors(name: str, lr: LayerResult, args: dict, fmt: str, input_scale:
     elif fmt == "nvfp4-pack-quantized":
         q = fp4.NVFP4Tensor(lr.codes, lr.scale, lr.global_scale, args["group_size"])
         out.update({name + k: v for k, v in fp4.nvfp4_checkpoint_tensors(q).items()})
+        if input_scale is not None:
+            out[name + ".input_global_scale"] = stio.Tensor("F32", np.array([input_scale], dtype=np.float32))
         return out
     else:
         raise ValueError(f"format {fmt} not written by this lab")
@@ -479,7 +494,8 @@ def load_checkpoint(path) -> tuple:
     layers = sorted({k.rsplit(".", 1)[0] for k in t if k.endswith((".weight_packed", ".weight_scale"))})
     for name in layers:
         dense[name + ".weight"] = _dequant_layer(t, name, group, fmt)
-    static = {n: float(t[n + ".input_scale"].numpy()[0]) for n in layers if n + ".input_scale" in t}
+    static = {n: float(t[n + suffix].numpy()[0]) for n in layers for suffix in (".input_scale", ".input_global_scale")
+              if n + suffix in t}
     return TinyLM({k: v for k, v in cfg.items() if k != "quantization_config"}, dense), \
         act_quant_fn(group.get("input_activations"), static)
 
@@ -579,23 +595,19 @@ def llmcompressor_script(recipe: Recipe, model_id: str = "Qwen/Qwen2.5-0.5B-Inst
         imports.append("from llmcompressor.modifiers.transform.smoothquant import SmoothQuantModifier")
     needs_data = recipe.needs_calibration
     ds, n, seqlen = LLMC_DATA.get(recipe.scheme, ("ultrachat_200k", 256, 1024))
-    call = (f"oneshot(model=model, recipe=recipe, dataset=\"{ds}\", splits=\"train_sft[:{n}]\",\n"
-            f"        num_calibration_samples={n}, max_seq_length={seqlen})") if needs_data else \
-        "oneshot(model=model, recipe=recipe)          # no calibration data needed"
-    return textwrap.dedent(f"""\
-        # llm-compressor 0.14 (verify): pip install llmcompressor  -- in an environment without vLLM
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        {chr(10).join(imports)}
-
-        MODEL_ID = "{model_id}"
-        model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype="auto")
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        recipe = [{", ".join(mods)}]
-        {call}
-        model.save_pretrained("{out_dir}", save_compressed=True)
-        tokenizer.save_pretrained("{out_dir}")
-        print("wrote {out_dir}; serve it with: vllm serve ./{out_dir}")
-        """)
+    call = [f'oneshot(model=model, recipe=recipe, dataset="{ds}", splits="train_sft[:{n}]",',
+            f"        num_calibration_samples={n}, max_seq_length={seqlen})"] if needs_data else \
+        ["oneshot(model=model, recipe=recipe)          # no calibration data needed"]
+    lines = ["# llm-compressor 0.14 (verify): pip install llmcompressor  -- in an environment without vLLM",
+             "from transformers import AutoModelForCausalLM, AutoTokenizer", *imports, "",
+             f'MODEL_ID = "{model_id}"',
+             'model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype="auto")',
+             "tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)",
+             f"recipe = [{', '.join(mods)}]", *call,
+             f'model.save_pretrained("{out_dir}", save_compressed=True)',
+             f'tokenizer.save_pretrained("{out_dir}")',
+             f'print("wrote {out_dir}; serve it with: vllm serve ./{out_dir}")']
+    return "\n".join(lines) + "\n"
 
 
 def gptqmodel_script(model_id: str = "Qwen/Qwen2.5-0.5B-Instruct", bits: int = 4, group_size: int = 128) -> str:

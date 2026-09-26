@@ -55,6 +55,17 @@ def gemm_time(M: int, K_: int, N_: int, gpu_name, scheme: str = "bf16") -> float
     return max(flops / g.peak(prec), byts / (g.mem_bw_gbs * 1e9))
 
 
+def compute_bound_tokens(K_: int, N_: int, gpu_name, scheme: str = "w4a16", max_m: int = 1 << 14) -> int:
+    """Smallest M at which the GEMM's FLOP time reaches its byte time (W4A16 on Llama-3.1-8B's down_proj:
+    ~120 tokens on an L4, ~85 on an H100 — above that its 16-bit math is the ceiling; vllm-internals §8.1)."""
+    g = _gpu(gpu_name)
+    w, a, prec = GEMM_PATH[scheme]
+    for m in range(1, max_m):
+        if 2.0 * m * K_ * N_ / g.peak(prec) >= (K_ * N_ * w + m * K_ * a + m * N_ * 2) / (g.mem_bw_gbs * 1e9):
+            return m
+    return max_m
+
+
 def crossover_tokens(K_: int, N_: int, gpu_name, fast: str = "w4a16", base: str = "bf16", max_m: int = 1 << 14) -> int:
     """Smallest M at which ``fast`` stops beating ``base`` (W4A16 vs BF16: ~120 tokens on an L4, ~85 on an H100)."""
     for m in range(1, max_m):

@@ -1,0 +1,14 @@
+# cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is git-ignored)
+project_id = "your-project-id"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+# Cheapest shape: one e2-standard-2 system node, a gVisor pool of Spot e2-standard-2 from 0 to 3 nodes.
+sandbox_spot      = true
+sandbox_max_nodes = 3
+
+# Your IP, to restrict the control plane endpoint (recommended).
+# authorized_networks = ["203.0.113.7/32"]
+
+# Only if the egress proxy must reach internet APIs (the sandboxes stay blocked by NetworkPolicy).
+enable_nat = false

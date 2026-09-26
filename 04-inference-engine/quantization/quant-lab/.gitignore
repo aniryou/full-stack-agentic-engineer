@@ -8,3 +8,5 @@ dist/
 .venv/
 _run_outputs/
 .DS_Store
+out/
+lm_eval_out/

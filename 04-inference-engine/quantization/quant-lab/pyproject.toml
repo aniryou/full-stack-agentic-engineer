@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantlab"
+version = "0.1.0"
+description = "Quantize a checkpoint, serve it, measure the speed and the accuracy it costs: compressed-tensors checkpoints, vLLM flags per GPU, a scheme-aware fake server, lm-eval, KV and FP4 calculators."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# The library (T0) needs numpy only: safetensors I/O, the tiny model, the fake server and the client
+# are written against the standard library.
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "pyyaml>=6.0"]
+# Optional cross-checks the tests run when present: the safetensors reader, torch's float8/bfloat16
+# casts, and Kubernetes schema validation of the GKE variant.
+check = ["safetensors>=0.4", "kubernetes-validate>=1.30"]
+# tools/train_tiny.py (re-creating the bundled tiny checkpoint) needs torch; CPU is enough.
+train = ["torch>=2.4"]
+# T1, each in its own environment (llm-compressor and vLLM pin different torch versions):
+compress = ["llmcompressor==0.14.0"]
+serve = ["vllm==0.30.0"]
+eval = ["lm_eval[vllm]==0.4.13"]
+
+[project.scripts]
+quantlab = "quantlab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["quantlab*"]
+
+[tool.setuptools.package-data]
+quantlab = ["data/configs/*.json", "data/samples/*", "data/tiny-adder/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
