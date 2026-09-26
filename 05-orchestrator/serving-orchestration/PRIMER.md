@@ -547,7 +547,7 @@ exercise): the KV pool caps it at 2,193 ÷ 387 = 5, while the ITL SLO alone woul
 ### 6.1 The working set of agent sessions
 
 An agent turn re-sends the whole history and then waits — for a tool, a sandbox, a human — before the next turn
-([07 long-running agents](../../07-application-agent-framework/long-running-durable/00_primer.md) describes the
+([07 long-running agents](../../07-application-agent-framework/long-running-durable/PRIMER.md) describes the
 workloads). `working_set_gb()`: 200 concurrent sessions at 30,000 tokens on an 8B model need
 200 × 30,000 × 131,072 B = **786 GB** of KV — 14.6 H100s' worth of KV pool (54 GB each on `H100_8B`), before any
 of them generates a token. HBM holds the running requests; idle sessions get whatever is left, and LRU evicts them

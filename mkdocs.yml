@@ -571,59 +571,42 @@ nav:
                       - "13 · Code review exercises — read, spot, rank, fix (solution)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/13_code_review_exercises.ipynb"
                       - "14 · Capstone: the bank customer-service agent (solution)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/14_capstone_bank_agent.ipynb"
           - "Long-running durable":
-              - "Long-Running Agentic Workflows on Google Cloud — A Primer": "layers/07-application-agent-framework/long-running-durable/00_primer.md"
-              - "Long-running agents":
-                  - "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/index.md"
-                  - "Notebooks":
-                      - "01 · Long-running agents — the core idea, worked": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/01_worked.ipynb"
-                      - "02 · Long-running agents — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agents-core/notebooks/02_practice.ipynb"
+              - "layers/07-application-agent-framework/long-running-durable/index.md"
+              - "Long-running durable primer": "layers/07-application-agent-framework/long-running-durable/PRIMER.md"
               - "LRA core":
-                  - "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/index.md"
-                  - "LRA core primer": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/PRIMER.md"
+                  - "layers/07-application-agent-framework/long-running-durable/lra-core/index.md"
+                  - "LRA core primer": "layers/07-application-agent-framework/long-running-durable/lra-core/PRIMER.md"
                   - "Notebooks":
-                      - "01 · The durable loop and its three invariants": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/01_durable_loop.ipynb"
-                      - "02 · Waiting for days, resuming from anywhere": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/02_wait_and_resume.ipynb"
-                      - "03 · Retries, crashes and the reaper": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/03_retry_and_reaper.ipynb"
-                      - "Solutions":
-                          - "01 · The durable loop and its three invariants (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/01_durable_loop.ipynb"
-                          - "02 · Waiting for days, resuming from anywhere (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/02_wait_and_resume.ipynb"
-                          - "03 · Retries, crashes and the reaper (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/lra-core/notebooks/solutions/03_retry_and_reaper.ipynb"
-              - "Long-running agentic workflows on Google Cloud":
-                  - "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/index.md"
+                      - "01 · The durable loop and its three invariants": "layers/07-application-agent-framework/long-running-durable/lra-core/notebooks/01_durable_loop.ipynb"
+                      - "02 · Waiting for days, resuming from anywhere": "layers/07-application-agent-framework/long-running-durable/lra-core/notebooks/02_wait_and_resume.ipynb"
+                      - "03 · Retries, crashes and the reaper": "layers/07-application-agent-framework/long-running-durable/lra-core/notebooks/03_retry_and_reaper.ipynb"
+                  - "Solutions":
+                      - "01 · The durable loop and its three invariants (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/solutions/01_durable_loop.ipynb"
+                      - "02 · Waiting for days, resuming from anywhere (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/solutions/02_wait_and_resume.ipynb"
+                      - "03 · Retries, crashes and the reaper (solution)": "layers/07-application-agent-framework/long-running-durable/lra-core/solutions/03_retry_and_reaper.ipynb"
+              - "LRA GCP":
+                  - "layers/07-application-agent-framework/long-running-durable/lra-gcp/index.md"
                   - "Docs":
-                      - "GCP cheat sheet for long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/01_gcp_cheatsheet.md"
-                      - "Design drills — long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/docs/02_design_drills.md"
+                      - "LRA GCP primer": "layers/07-application-agent-framework/long-running-durable/lra-gcp/docs/primer.md"
+                      - "Code-evaluation drills": "layers/07-application-agent-framework/long-running-durable/lra-gcp/docs/code-evaluation-drills.md"
+                      - "GCP cheat sheet for long-running agents": "layers/07-application-agent-framework/long-running-durable/lra-gcp/docs/gcp-cheatsheet.md"
+                      - "Mistral as the model provider, and Mistral Workflows as the orchestrator": "layers/07-application-agent-framework/long-running-durable/lra-gcp/docs/mistral.md"
+                      - "Runbook — operating long-running agent runs": "layers/07-application-agent-framework/long-running-durable/lra-gcp/docs/runbook.md"
+                  - "ADK 2 + Agent Engine": "layers/07-application-agent-framework/long-running-durable/lra-gcp/examples/adk_agent_engine/index.md"
                   - "Notebooks":
-                      - "01 · The Durable Agent Loop — worked example": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_worked.ipynb"
-                      - "02 · Orchestrator / workers (fan-out, fan-in) and the reflection loop — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_worked.ipynb"
-                      - "03 · Waiting for humans, undoing work, waking up on time": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_scheduled_worked.ipynb"
-                      - "04 · The same patterns with ADK 2 Workflow — worked": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_worked.ipynb"
-                      - "01 · Durable loop — practice (fill in the blanks)": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/01_durable_loop_practice.ipynb"
-                      - "02 · Fan-out / fan-in — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/02_fan_out_fan_in_practice.ipynb"
-                      - "03 · HITL + saga — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/03_hitl_saga_practice.ipynb"
-                      - "04 · ADK 2 Workflow — practice": "layers/07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks/04_adk_workflow_practice.ipynb"
-              - "Long-running agents (Mistral)":
-                  - "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/index.md"
-                  - "Notebooks":
-                      - "01 · Long-running agents": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/01_worked.ipynb"
-                      - "02 · Long-running agents — practice (Mistral edition)": "layers/07-application-agent-framework/long-running-durable/long-running-agents-mistral/notebooks/02_practice.ipynb"
-              - "Long-Running Agents on Google Cloud (lra)":
-                  - "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/index.md"
-                  - "Docs":
-                      - "Long-Running Agents on Google Cloud primer": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/primer.md"
-                      - "Code-evaluation drills": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/code-evaluation-drills.md"
-                      - "Runbook — operating long-running agent runs": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/docs/runbook.md"
-                  - "ADK 2 + Agent Engine": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/examples/adk_agent_engine/index.md"
-                  - "Practice":
-                      - "00 · The core idea — a durable agent loop in 60 lines": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/00_core_idea.ipynb"
-                      - "01 · Durable execution with the lra engine": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/01_durable_execution.ipynb"
-                      - "02 · Human-in-the-loop": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/02_human_in_the_loop.ipynb"
-                      - "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/practice/03_fanout_saga_reflection.ipynb"
-                  - "Worked":
-                      - "00 · The core idea — a durable agent loop in 60 lines (worked)": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/00_core_idea.ipynb"
-                      - "01 · Durable execution with the lra engine (worked)": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/01_durable_execution.ipynb"
-                      - "02 · Human-in-the-loop (worked)": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/02_human_in_the_loop.ipynb"
-                      - "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets (worked)": "layers/07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/03_fanout_saga_reflection.ipynb"
+                      - "00 · The core idea — a durable agent loop in 60 lines": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/00_core_idea.ipynb"
+                      - "01 · Durable execution with the lra engine": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/01_durable_execution.ipynb"
+                      - "02 · Human-in-the-loop": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/02_human_in_the_loop.ipynb"
+                      - "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/03_fanout_saga_reflection.ipynb"
+                      - "04 · The same patterns with ADK 2 Workflow (optional": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/04_adk_workflow.ipynb"
+                      - "05 · A model-chosen tool loop, and Mistral as the provider": "layers/07-application-agent-framework/long-running-durable/lra-gcp/notebooks/05_tool_loop_and_mistral.ipynb"
+                  - "Solutions":
+                      - "00 · The core idea — a durable agent loop in 60 lines (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/00_core_idea.ipynb"
+                      - "01 · Durable execution with the lra engine (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/01_durable_execution.ipynb"
+                      - "02 · Human-in-the-loop (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/02_human_in_the_loop.ipynb"
+                      - "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/03_fanout_saga_reflection.ipynb"
+                      - "04 · The same patterns with ADK 2 Workflow (optional (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/04_adk_workflow.ipynb"
+                      - "05 · A model-chosen tool loop, and Mistral as the provider (solution)": "layers/07-application-agent-framework/long-running-durable/lra-gcp/solutions/05_tool_loop_and_mistral.ipynb"
           - "Retrieval RAG":
               - "Vector Databases: A Comprehensive Primer": "layers/07-application-agent-framework/retrieval-rag/vector-databases-primer.md"
               - "Embeddings Lab":
