@@ -1,0 +1,9 @@
+# The library needs nothing. These are only to run the notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# the manifest tests parse the rendered YAML and validate it against the Kubernetes 1.34 schemas (skipped if absent)
+pyyaml>=6.0
+kubernetes-validate>=1.34
