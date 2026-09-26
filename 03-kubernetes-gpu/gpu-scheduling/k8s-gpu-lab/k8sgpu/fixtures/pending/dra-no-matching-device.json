@@ -1,0 +1,70 @@
+{
+ "description": "DRA: the ResourceClaimTemplate's CEL selector matches no device in any ResourceSlice.",
+ "source": "kube-scheduler DynamicResources message written by hand for this lab - sample output in the documented format (illustrative)",
+ "expect": {
+  "gate": "kube-scheduler",
+  "category": "dra"
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "name": "dra-l4",
+   "namespace": "default"
+  },
+  "spec": {
+   "containers": [
+    {
+     "name": "c",
+     "image": "nvidia/cuda:12.9.1-base-ubuntu24.04",
+     "resources": {
+      "claims": [
+       {
+        "name": "gpu"
+       }
+      ]
+     }
+    }
+   ],
+   "resourceClaims": [
+    {
+     "name": "gpu",
+     "resourceClaimTemplateName": "one-l4"
+    }
+   ]
+  },
+  "status": {
+   "phase": "Pending",
+   "conditions": [
+    {
+     "type": "PodScheduled",
+     "status": "False",
+     "reason": "Unschedulable",
+     "message": "0/5 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 cannot allocate all claims. preemption: 0/5 nodes are available: 5 Preemption is not helpful for scheduling.",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ]
+  }
+ },
+ "events": [
+  {
+   "apiVersion": "v1",
+   "kind": "Event",
+   "type": "Warning",
+   "reason": "FailedScheduling",
+   "message": "0/5 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 4 cannot allocate all claims. preemption: 0/5 nodes are available: 5 Preemption is not helpful for scheduling.",
+   "involvedObject": {
+    "kind": "Pod",
+    "name": "dra-l4",
+    "namespace": "default"
+   },
+   "reportingComponent": "default-scheduler",
+   "source": {
+    "component": "default-scheduler"
+   },
+   "firstTimestamp": "2026-09-26T09:00:04Z",
+   "lastTimestamp": "2026-09-26T09:00:04Z",
+   "count": 1
+  }
+ ]
+}

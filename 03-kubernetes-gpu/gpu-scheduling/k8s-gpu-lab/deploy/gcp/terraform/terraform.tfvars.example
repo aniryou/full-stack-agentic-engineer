@@ -1,0 +1,30 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+
+# --- required ---------------------------------------------------------------------------------
+project_id = "my-gpu-lab-project"
+
+# --- placement ---------------------------------------------------------------------------------
+region       = "us-central1"
+zone         = "us-central1-a" # must offer the GPU type (verify: gcloud compute accelerator-types list)
+cluster_name = "gpu-lab"
+
+# --- GPU pool: 1 x L4 per node, Spot, 0..2 nodes -------------------------------------------------
+gpu_machine_type   = "g2-standard-4"
+gpu_type           = "nvidia-l4"
+gpu_count          = 1
+gpu_spot           = true
+gpu_max_nodes      = 2
+gpu_driver_version = "LATEST"
+
+# --- optional: DWS flex-start pool with queued provisioning (for deploy/gke/20-dws-sample-job.yaml)
+enable_flex_start_pool = false
+flex_max_nodes         = 2
+
+# --- optional: GPU time-sharing pool (for deploy/gke/50-time-sharing-l4.yaml) -----------------------
+enable_time_sharing_pool   = false
+max_shared_clients_per_gpu = 4
+
+# --- startup latency and weights ------------------------------------------------------------------
+enable_image_streaming = true
+enable_gcs_fuse        = true
+create_weights_bucket  = true

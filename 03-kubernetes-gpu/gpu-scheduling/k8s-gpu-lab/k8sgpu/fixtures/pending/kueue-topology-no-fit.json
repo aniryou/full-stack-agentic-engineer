@@ -1,0 +1,67 @@
+{
+ "description": "A 4-pod gang that must share a subblock; quota is fine but no subblock has 4 free GPUs (s2, gang-waits).",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
+ "expect": {
+  "gate": "kueue",
+  "category": "topology"
+ },
+ "workload": {
+  "apiVersion": "kueue.x-k8s.io/v1beta2",
+  "kind": "Workload",
+  "metadata": {
+   "name": "jobset-gang-waits-7b2c1",
+   "namespace": "team-a",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "kueue.x-k8s.io/job-uid": "5a1e0000-0000-4000-8000-000000000001"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "jobset.x-k8s.io/v1alpha2",
+     "kind": "JobSet",
+     "name": "gang-waits",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "queueName": "gpu-queue",
+   "priority": 0,
+   "podSets": [
+    {
+     "name": "workers",
+     "count": 4,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 1
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "conditions": [
+    {
+     "type": "QuotaReserved",
+     "status": "False",
+     "reason": "Pending",
+     "message": "couldn't assign flavors to pod set workers: topology \"gke-default\" allows to fit only 2 out of 4 pod(s). Total nodes: 4; excluded: resource \"nvidia.com/gpu\": 3",
+     "lastTransitionTime": "2026-09-26T09:00:04Z",
+     "observedGeneration": 1
+    }
+   ]
+  }
+ }
+}

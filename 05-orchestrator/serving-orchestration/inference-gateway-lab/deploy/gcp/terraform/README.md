@@ -1,5 +1,11 @@
 # deploy/gcp/terraform — a cheap GKE cluster for the Inference Gateway (T3)
 
+**What it does.** Creates a zonal GKE Standard cluster with a system node and an L4 Spot pool that scales from zero,
+ready for [`../../gke`](../../gke/README.md) to install the Inference Gateway.
+
+**Cost and cleanup, in short.** ~$0.16/h with the GPU pool at 0, ~$0.28/h more per L4 Spot node (assumed us-central1
+prices, verify); `PROJECT_ID=<id> ../../gke/uninstall.sh`, then `terraform destroy`. Details below.
+
 | File | Creates |
 |---|---|
 | `apis.tf` | compute, container, monitoring APIs (never disabled on destroy) |

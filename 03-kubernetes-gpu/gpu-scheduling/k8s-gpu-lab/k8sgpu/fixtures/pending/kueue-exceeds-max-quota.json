@@ -1,0 +1,67 @@
+{
+ "description": "Kueue Job asking for 16 GPUs from a queue that can hold at most 12 (s6). The Job stays suspended: there is no pod.",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
+ "expect": {
+  "gate": "kueue",
+  "category": "exceeds-max-quota"
+ },
+ "workload": {
+  "apiVersion": "kueue.x-k8s.io/v1beta2",
+  "kind": "Workload",
+  "metadata": {
+   "name": "job-quota-too-big-7b2c1",
+   "namespace": "team-a",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "kueue.x-k8s.io/job-uid": "5a1e0000-0000-4000-8000-000000000001"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "quota-too-big",
+     "controller": true
+    }
+   ]
+  },
+  "spec": {
+   "queueName": "gpu-queue",
+   "priority": 0,
+   "podSets": [
+    {
+     "name": "main",
+     "count": 4,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 4
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "conditions": [
+    {
+     "type": "QuotaReserved",
+     "status": "False",
+     "reason": "Pending",
+     "message": "couldn't assign flavors to pod set main: insufficient quota for nvidia.com/gpu in flavor gpu-l4, previously considered podsets requests (0) + current podset request (16) > maximum capacity (12)",
+     "lastTransitionTime": "2026-09-26T09:00:04Z",
+     "observedGeneration": 1
+    }
+   ]
+  }
+ }
+}

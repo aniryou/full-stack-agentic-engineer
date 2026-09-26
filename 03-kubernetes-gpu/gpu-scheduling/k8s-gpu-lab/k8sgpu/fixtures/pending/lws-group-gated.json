@@ -1,0 +1,188 @@
+{
+ "description": "Scaling a LeaderWorkerSet to 2 groups: group 1's pods exist but are gated until Kueue admits the whole group (s3).",
+ "source": "Workload trimmed to the fields that matter; the condition text is simulated by k8sgpu.kindsim for the kind lab, in the format of Kueue v0.19's flavor assigner/TAS - sample output in the documented format (illustrative)",
+ "expect": {
+  "gate": "kueue",
+  "category": "waiting-for-quota"
+ },
+ "pod": {
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+   "name": "llm-multihost-1",
+   "namespace": "team-b",
+   "creationTimestamp": "2026-09-26T09:00:04Z",
+   "labels": {
+    "leaderworkerset.sigs.k8s.io/name": "llm-multihost",
+    "leaderworkerset.sigs.k8s.io/group-index": "1",
+    "leaderworkerset.sigs.k8s.io/worker-index": "0",
+    "kueue.x-k8s.io/queue-name": "gpu-queue"
+   },
+   "annotations": {
+    "kueue.x-k8s.io/podset-required-topology": "cloud.google.com/gce-topology-subblock",
+    "kueue.x-k8s.io/podset-group-name": "llm",
+    "kueue.x-k8s.io/prebuilt-workload-name": "leaderworkerset-llm-multihost-1-7b2c1"
+   }
+  },
+  "spec": {
+   "terminationGracePeriodSeconds": 5,
+   "nodeSelector": {
+    "cloud.google.com/gke-accelerator": "nvidia-l4"
+   },
+   "tolerations": [
+    {
+     "key": "nvidia.com/gpu",
+     "operator": "Exists",
+     "effect": "NoSchedule"
+    }
+   ],
+   "containers": [
+    {
+     "name": "worker",
+     "image": "busybox:1.38.0",
+     "command": [
+      "sh",
+      "-c",
+      "echo \"pod=$HOSTNAME node=$NODE_NAME gpus=$GPUS rank=${JOB_COMPLETION_INDEX:-${LWS_WORKER_INDEX:-0}}\"\nls /dev/nvidia* 2>/dev/null || echo \"no /dev/nvidia*: this GPU exists only as node capacity (simulated)\"\nsleep 3600\n"
+     ],
+     "env": [
+      {
+       "name": "GPUS",
+       "value": "4"
+      },
+      {
+       "name": "NODE_NAME",
+       "valueFrom": {
+        "fieldRef": {
+         "fieldPath": "spec.nodeName"
+        }
+       }
+      }
+     ],
+     "resources": {
+      "requests": {
+       "cpu": "100m",
+       "memory": "320Mi",
+       "nvidia.com/gpu": 4
+      },
+      "limits": {
+       "memory": "320Mi",
+       "nvidia.com/gpu": 4
+      }
+     },
+     "volumeMounts": [
+      {
+       "name": "dshm",
+       "mountPath": "/dev/shm"
+      }
+     ]
+    }
+   ],
+   "volumes": [
+    {
+     "name": "dshm",
+     "emptyDir": {
+      "medium": "Memory",
+      "sizeLimit": "256Mi"
+     }
+    }
+   ],
+   "schedulingGates": [
+    {
+     "name": "kueue.x-k8s.io/admission"
+    }
+   ]
+  },
+  "status": {
+   "phase": "Pending",
+   "conditions": [
+    {
+     "type": "PodScheduled",
+     "status": "False",
+     "reason": "SchedulingGated",
+     "message": "Scheduling is blocked due to non-empty scheduling gates",
+     "lastTransitionTime": "2026-09-26T09:00:04Z"
+    }
+   ]
+  }
+ },
+ "workload": {
+  "apiVersion": "kueue.x-k8s.io/v1beta2",
+  "kind": "Workload",
+  "metadata": {
+   "name": "leaderworkerset-llm-multihost-1-7b2c1",
+   "namespace": "team-b",
+   "creationTimestamp": "2026-09-26T09:00:00Z",
+   "labels": {
+    "kueue.x-k8s.io/job-uid": "5a1e0000-0000-4000-8000-000000000001"
+   },
+   "ownerReferences": [
+    {
+     "apiVersion": "leaderworkerset.x-k8s.io/v1",
+     "kind": "LeaderWorkerSet",
+     "name": "llm-multihost"
+    }
+   ]
+  },
+  "spec": {
+   "queueName": "gpu-queue",
+   "priority": 0,
+   "podSets": [
+    {
+     "name": "leader",
+     "count": 1,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 4
+          }
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "name": "worker",
+     "count": 1,
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "worker",
+         "image": "busybox:1.38.0",
+         "resources": {
+          "requests": {
+           "cpu": "100m",
+           "memory": "64Mi",
+           "nvidia.com/gpu": 4
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "status": {
+   "conditions": [
+    {
+     "type": "QuotaReserved",
+     "status": "False",
+     "reason": "Pending",
+     "message": "couldn't assign flavors to pod set leader: insufficient unused quota for nvidia.com/gpu in flavor gpu-l4, 4 more needed; couldn't assign flavors to pod set worker: insufficient unused quota for nvidia.com/gpu in flavor gpu-l4, 4 more needed",
+     "lastTransitionTime": "2026-09-26T09:00:04Z",
+     "observedGeneration": 1
+    }
+   ]
+  }
+ }
+}

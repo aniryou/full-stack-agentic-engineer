@@ -1,0 +1,18 @@
+# The kind cluster's worker nodes, one per line. Read by fake-gpus.sh (to label, taint and
+# advertise fake GPUs) and by k8sgpu.kindsim (to predict placements) - keep them in step by
+# editing only this file. kind names workers <cluster>-worker, <cluster>-worker2, ... in the
+# order kind-config.yaml lists them; the control-plane node is implicit.
+#
+# Labels are GKE-style: cloud.google.com/gke-nodepool, cloud.google.com/gke-accelerator and the
+# GCE placement labels cloud.google.com/gce-topology-{block,subblock,host} that Kueue TAS reads.
+# The topology values are FAKED to teach TAS: on GCP those labels come with the accelerator-optimized
+# families (Google's TAS examples use them on A3/A4/A4X), not with G2/L4 nodes (verify), which is
+# why the lab's GKE L4 flavors are plain quota (deploy/gke/README.md).
+# "-" = not a GPU node (no GPUs, no accelerator/topology labels, no GPU taint).
+#
+# kind-suffix  pool    gpus  accelerator  block    subblock     host
+worker         system  0     -            -        -            -
+worker2        gpu     4     nvidia-l4    block-a  subblock-a1  host-a1-1
+worker3        gpu     4     nvidia-l4    block-a  subblock-a1  host-a1-2
+worker4        gpu     4     nvidia-l4    block-a  subblock-a2  host-a2-1
+worker5        gpu     4     nvidia-l4    block-a  subblock-a2  host-a2-2

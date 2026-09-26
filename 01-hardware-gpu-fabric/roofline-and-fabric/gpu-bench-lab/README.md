@@ -1,17 +1,25 @@
 # gpu-bench-lab — measure the machine you have
 
-The detailed lab for **roofline-and-fabric**. The primer ([`../PRIMER.md`](../PRIMER.md)) derives the
-roofline, the memory hierarchy, the α-β model of links and the cold-start budget from first
-principles; the minimal core ([`../roofline-core/`](../roofline-core/)) turns them into calculators.
-This lab **measures** them: package `gpubench` benchmarks GEMM throughput, memory bandwidth,
-host↔device and GPU↔GPU transfers and weights loading, then builds the roofline those numbers imply
-— with the same code on a laptop CPU (numpy) and on a CUDA GPU (PyTorch).
+After this lab you can measure a machine's roofline, memory bandwidth, host↔device and GPU↔GPU transfers and
+weight-loading speed, set them beside what the spec sheet and the roofline predict, and explain the gap. It is the
+detailed lab for **roofline-and-fabric**: the primer ([`../PRIMER.md`](../PRIMER.md)) derives the roofline, the
+memory hierarchy, the α-β model of links and the cold-start budget from first principles; the minimal core
+([`../roofline-core/`](../roofline-core/)) turns them into calculators; package `gpubench` **measures** them — with
+the same code on a laptop CPU (numpy) and on a CUDA GPU (PyTorch).
 
-Measuring your own CPU's roofline is not a toy version of the GPU exercise: it has the same two roofs,
-the same ridge point, the same cache ladder and the same α-β copies, only 10–100× lower. Every concept
-below is learnable with no GPU at all; the GPU steps are optional and progressive.
+Measuring your own CPU's roofline is not a toy version of the GPU exercise: it has the same two roofs, the same ridge
+point, the same cache ladder and the same α-β copies, only 10–100× lower. Every concept below is learnable with no GPU
+at all; the GPU steps are optional and progressive.
 
-## Tiers
+## Start here
+
+1. Install and run the tests (below) — no GPU needed.
+2. `python3 -m gpubench info` then `python3 -m gpubench run --out results`: what this machine is, and a JSON +
+   Markdown report of what it can do.
+3. Open [`notebooks/01_measure_your_roofline.ipynb`](notebooks/01_measure_your_roofline.ipynb); it names the
+   roofline-core notebook that *predicted* what it measures.
+
+## What you get: tiers
 
 | Tier | Where | What runs | Cost |
 |---|---|---|---|
@@ -23,7 +31,7 @@ below is learnable with no GPU at all; the GPU steps are optional and progressiv
 The notebooks detect what they have: no GPU means the T0 path runs and the cell prints what to run
 on real hardware. Prices and where to get GPUs: `COMPUTE.md` at the repo root.
 
-## Quick start (T0)
+## Run it (T0)
 
 ```bash
 cd 01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab

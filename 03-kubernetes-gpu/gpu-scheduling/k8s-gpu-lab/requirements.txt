@@ -1,0 +1,9 @@
+# The library needs only PyYAML. The rest runs the notebooks and tests.
+pyyaml>=6.0
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# optional: strict schema validation of the core-kind manifests (tests skip when absent)
+kubernetes-validate>=1.34
