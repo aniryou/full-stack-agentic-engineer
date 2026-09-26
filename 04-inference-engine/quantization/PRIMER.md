@@ -81,7 +81,8 @@ the rate, but only on parts that have that datapath ([gpu-primer §4](../../01-h
 **What it cannot speed up.** Attention over the KV cache is not a weight GEMM: weight quantization leaves it alone,
 and only KV quantization shrinks its bytes. The step's fixed overheads (launches, sampling, scheduling) do not
 shrink. A 16-bit LM head is read every step: for Llama-3.1-8B it is 1.05 GB of the 4.65 GB an INT4 decode step
-streams (`cost.Model.streamed_bytes()`; the checkpoint is 5.70 GB with the input embedding, which is only gathered). serving-engine §8's L4 table shows the net effect — 3× faster single-stream decode, not 3.9×.
+streams (`cost.Model.streamed_bytes()`; the checkpoint is 5.70 GB with the input embedding, which is only
+gathered). serving-engine §8's L4 table shows the net effect — 3× faster single-stream decode, not 3.9×.
 
 **The accuracy budget.** Every scheme costs some accuracy, and the cost depends on the model, the task and the
 recipe. The rest of this primer is how to keep it small (§3–§6), how to measure it (§8), and how to trade it
@@ -307,15 +308,15 @@ compose, AWQ's scales first and then GPTQ's rounding (llm-compressor: an `AWQMod
 for the lowest KL of all: 0.0307 at INT4 g32. llm-awq also searches a per-group **clipping** threshold (amax ×
 1.00 down to 0.55) and skips q/k projections (verify). llm-compressor's "duo" variant divides by `w_mean^(1−α)`.
 
-**What calibration data does and does not do.** It supplies H (GPTQ) or activation statistics (AWQ, SmoothQuant).
-It teaches the model nothing, and it cannot rescue a format that is too coarse. On the tiny model, GPTQ INT3 gets
-78.4% with 16 samples, 82.4% with 64, 84.4% with 256 and 85.0% with 1,024. Three other 256-sample draws give
-83.4–84.6%: past a few hundred samples, which samples you drew matters as much as how many. With 256 samples from
-only 2 of the 16 classes it still gets 83.0%, and with 256 samples of pure noise 84.5%. Outlier channels and input correlations are
-properties of the weights and norm gains, and any input reveals them. On real models the text still matters: chat
-templates, languages and long contexts shift activation statistics. Calibrate on data that looks like your
-traffic. The recipes use 512 sequences × 2,048 tokens (GPTQ), 128–512 × 512 (AWQ) and 512 × 512 (SmoothQuant)
-(§9, verify).
+**What calibration data does and does not do.** It supplies H (GPTQ) or activation statistics (AWQ, SmoothQuant). It
+teaches the model nothing, and it cannot rescue a format that is too coarse. On the tiny model, GPTQ INT3 gets 78.4%
+with 16 samples, 82.4% with 64, 84.4% with 256 and 85.0% with 1,024. Three other 256-sample draws give 83.4–84.6%:
+past a few hundred samples, which samples you drew matters as much as how many. With 256 samples from only 2 of the
+16 classes it still gets 83.0%, and with 256 samples of pure noise 84.5%. Outlier channels and input correlations
+are properties of the weights and norm gains, and any input reveals them. On real models the text still matters:
+chat templates, languages and long contexts shift activation statistics. Calibrate on data that looks like your
+traffic. The recipes use 512 sequences × 2,048 tokens (GPTQ), 128–512 × 512 (AWQ) and 512 × 512 (SmoothQuant) (§9,
+verify).
 
 **Rotations** (QuaRot, SpinQuant, QuIP) multiply W and X by an orthogonal matrix, often a Hadamard, which leaves
 `X Wᵀ` unchanged and spreads an outlier's energy over all channels. The FlashAttention deep dive §9.4 measures it
@@ -390,12 +391,12 @@ per-channel and 128 × 128-block FP8 all give 3.7–3.9% output error, while INT
 already tiles by 128 can apply them for free. There is no CUTLASS block-FP8 kernel for SM89 (vLLM source, verify).
 
 **FP4 W4A4 (Blackwell).** NVFP4 weights, plus activations quantized per 16 at run time with a calibrated global
-scale (`dynamic="local"`; llm-compressor calibrates it with 20 samples). The tensor cores multiply E2M1 directly
-at twice the FP8 rate. Turing and Ampere had INT4 tensor cores, but no production serving stack ran LLMs on them;
-NVFP4 is the first 4-bit format vLLM runs natively on the tensor cores, so the first that speeds up prefill in
-production serving. Below SM100, vLLM runs NVFP4 checkpoints weight-only (verify). For Llama-3.1-8B on a B200, the roofline model gives a
-1,800-token prefill of 21 ms in BF16, 12 ms in FP8 and 7 ms in NVFP4 (`cost.table()`, SIMULATED, verify
-Blackwell figures).
+scale (`dynamic="local"`; llm-compressor calibrates it with 20 samples). The tensor cores multiply E2M1 directly at
+twice the FP8 rate. Turing and Ampere had INT4 tensor cores, but no production serving stack ran LLMs on them; NVFP4
+is the first 4-bit format vLLM runs natively on the tensor cores, so the first that speeds up prefill in production
+serving. Below SM100, vLLM runs NVFP4 checkpoints weight-only (verify). For Llama-3.1-8B on a B200, the roofline
+model gives a 1,800-token prefill of 21 ms in BF16, 12 ms in FP8 and 7 ms in NVFP4 (`cost.table()`, SIMULATED,
+verify Blackwell figures).
 
 **W4A4's accuracy risk is the activations.** Sixteen activations share one E4M3 scale, set by their largest.
 An outlier channel 30× the typical value sets that scale at 30/6 = 5 typical values per unit of the E2M1 grid.
@@ -411,8 +412,8 @@ W4A4 (full precision: 90.3%). The mitigations are the ones for INT8 activations,
   §4).
 - **Quantization-aware distillation** (§7).
 
-Gate W4A4 on an eval. The lab's notebook 05 shows a model that keeps less than half its accuracy without
-smoothing.
+Gate W4A4 on an eval. In the lab's notebook 05 a model that is 100% accurate falls to 42% and 51% on its two
+tasks with NVFP4 W4A4, and gets 99–100% back with SmoothQuant.
 
 **Which layers stay in high precision.** Recipes target the transformer blocks' linears and `ignore=["lm_head"]`:
 
@@ -713,17 +714,18 @@ model; there is no new Terraform.
 
 ## In a design review
 
-**The two-minute walkthrough.** "We quantize for three different reasons and pick the scheme per reason. Decode is
-a weight read, so fewer weight bytes are faster tokens — weight-only INT4 is ~3× at batch 1 for an 8B model. But
-its kernels do BF16 math on dequantized weights: on an L4 the GEMM hits that ceiling at ~120 tokens per step, its
-edge shrinks from there (1.7× at 256), and by ~460 it is no faster than BF16, so long prefill chunks gain nothing. Prefill gets faster only with formats the tensor cores multiply natively: FP8 W8A8 on Ada and
-Hopper, INT8 W8A8 on older parts, NVFP4 on Blackwell. The KV cache is the third lever: FP8 KV halves it, and on a
-24 GB card that doubles the sessions, which does more for cost per token than speed does — 6× cheaper for an 8B
-model on an L4 with FP8 weights and KV, simulated. We checked what each checkpoint runs as on our GPUs: an FP8
-checkpoint on an A100 is weight-only, and NVFP4 is W4A4 only on Blackwell. Accuracy comes from granularity and
-calibration. We use groups of 128 for INT4 with GPTQ or AWQ, dynamic per-token FP8 activations, calibrated KV
-scales, and we keep the LM head, embeddings, norms and routers in 16-bit. We gate on KL against the BF16 model
-and on task evals with their standard errors, against a budget we wrote down first."
+**The two-minute walkthrough.** "We quantize for three different reasons and pick the scheme per reason. Decode is a
+weight read, so fewer weight bytes are faster tokens — weight-only INT4 is ~3× at batch 1 for an 8B model. But its
+kernels do BF16 math on dequantized weights: on an L4 the GEMM hits that ceiling at ~120 tokens per step, its edge
+shrinks from there (1.7× at 256), and by ~460 it is no faster than BF16, so long prefill chunks gain nothing.
+Prefill gets faster only with formats the tensor cores multiply natively: FP8 W8A8 on Ada and Hopper, INT8 W8A8 on
+older parts, NVFP4 on Blackwell. The KV cache is the third lever: FP8 KV halves it, and on a 24 GB card that doubles
+the sessions, which does more for cost per token than speed does — 6× cheaper for an 8B model on an L4 with FP8
+weights and KV, simulated. We checked what each checkpoint runs as on our GPUs: an FP8 checkpoint on an A100 is
+weight-only, and NVFP4 is W4A4 only on Blackwell. Accuracy comes from granularity and calibration. We use groups of
+128 for INT4 with GPTQ or AWQ, dynamic per-token FP8 activations, calibrated KV scales, and we keep the LM head,
+embeddings, norms and routers in 16-bit. We gate on KL against the BF16 model and on task evals with their standard
+errors, against a budget we wrote down first."
 
 **Drill questions.**
 

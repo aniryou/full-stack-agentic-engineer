@@ -270,15 +270,15 @@ else:
 # %% [markdown]
 # ## Exercise 1.4 — train with your loss, and make the clip bind
 #
-# The next cell restarts GRPO from the same SFT model twice for 10 steps, both times minimising
+# The check below restarts GRPO from the same SFT model twice for 10 steps, both times minimising
 # *your* loss: once with `num_iterations = 1`, once with `num_iterations = 2` (each rollout batch
 # is used for two optimizer steps, as TRL does with μ > 1). Before you run it, predict:
 #
 # * `clip_mu1`: the `clip_frac` the μ = 1 run logs at every step (a number);
 # * `clip_binds_mu2`: will the μ = 2 run log `clip_frac > 0` at some step (`True` or `False`)?
 #
-# `clip_frac` is measured on the last pass over the batch. The check also confirms that your loss
-# actually trains the model.
+# `clip_frac` is measured on the last pass over the batch. The check runs both, prints them side by
+# side and confirms that your loss actually trains the model.
 
 # %% exercise
 clip_mu1 = None
@@ -288,8 +288,9 @@ clip_mu1 = 0.0          # one step per batch: π_θ = π_old when the loss is ta
 clip_binds_mu2 = True   # the second pass sees weights one step away from the ones that sampled
 ### END SOLUTION
 
-# %%
-if HAVE_TORCH:
+# %% check
+assert clip_mu1 == 0.0 and clip_binds_mu2 is True
+if HAVE_TORCH:                                                   # the runs: ~5 s on a laptop CPU
     SFT_MODEL, TASK = T.warm_start(cfg, log=lambda *a: None)    # RUN's SFT model (reused, not retrained)
     EXP = {mu: T.grpo_from(SFT_MODEL, TASK, replace(cfg, rl_steps=10, num_iterations=mu), loss_fn=my_grpo_loss,
                            log=lambda *a: None) for mu in (1, 2)}
@@ -299,9 +300,6 @@ if HAVE_TORCH:
 else:
     EXP = None
     print("torch is missing: no runs (the recorded run above has clip_frac 0 at every step, with μ = 1)")
-
-# %% check
-assert clip_mu1 == 0.0 and clip_binds_mu2 is True
 if EXP:
     assert all(r["clip_frac"] == clip_mu1 for r in EXP[1]["rl"])
     assert any(r["clip_frac"] > 0 for r in EXP[2]["rl"]) == clip_binds_mu2

@@ -248,12 +248,11 @@ p = serve.plan("fp8-online", "L4", kv_cache_dtype="fp8", model="meta-llama/Llama
 print(p.command(), "2>&1 | tee vllm.log")
 print(serve.plan("w4a16", "T4", kv_cache_dtype="fp8").notes[-1])
 pred = kv.size("llama-3.1-8b-instruct", "L4", weights="fp8", kv_cache_dtype="fp8", max_model_len=16384)
-log_path = os.environ.get("QUANTLAB_VLLM_LOG")
-if log_path:
-    got, label = serve.parse_startup_log(pathlib.Path(log_path).read_text()), f"MEASURED (startup log {log_path})"
-else:
-    got = serve.parse_startup_log((E.SAMPLES / "vllm_startup_fp8_fp8kv_l4.log").read_text())
-    label = "[sample output in the documented format (illustrative)]"
+log_path = pathlib.Path(os.environ.get("QUANTLAB_VLLM_LOG") or E.SAMPLES / "vllm_startup_fp8_fp8kv_l4.log")
+text = log_path.read_text()
+got = serve.parse_startup_log(text)
+label = ("[sample output in the documented format (illustrative)]" if text.startswith("# Sample output")
+         else f"MEASURED (startup log {log_path})")
 print(label, got)
 print(f"predicted for Llama-3.1-8B, FP8 weights + FP8 KV on an L4: {pred.kv_tokens:,} KV tokens, backend {pred.backend}; "
       f"the log says {got.get('kv_cache_tokens', 0):,} tokens, backend {got.get('attention_backend')}")

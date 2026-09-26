@@ -148,10 +148,10 @@ for k, q in runs.items():
     print(f"{k:20s} add {q.model().accuracy('add', 500):.1%}   reverse {q.model().accuracy('reverse', 500):.1%}")
 
 # %% [markdown]
-# Two things to notice. Per layer, g32 lowers RTN's error only a little on the projections whose inputs
-# carry the outlier channels (q/k/v, gate/up): a group is a run of *inputs within one output row*, and
-# the two shrunken columns are 18-24x smaller than their neighbours in every group, so they round to
-# zero at any group size. End to end, g32 is even *worse* than g128 here — the opposite of the usual
+# Two things to notice. Per layer, g32 barely changes RTN's error on the projections whose inputs carry
+# the outlier channels (q/k/v, gate/up: 8-12% at either group size): a group is a run of *inputs within
+# one output row*, and the two shrunken columns are 18-24x smaller than their neighbours in every group,
+# so they round to zero at any group size. End to end, g32 is even *worse* than g128 here — the opposite of the usual
 # rule (finer groups cost bits and buy accuracy; PRIMER §3). The next cell finds out why.
 #
 # ## Worked example: why finer groups lost accuracy on this model

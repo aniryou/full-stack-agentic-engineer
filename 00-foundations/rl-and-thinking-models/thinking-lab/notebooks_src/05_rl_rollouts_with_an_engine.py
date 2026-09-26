@@ -119,29 +119,6 @@ print(f"✅ [{LABEL.split(':')[0]}] mean |log p_trainer - log p_sampler| = {stat
 # dependent reductions, sampling tricks such as top-k or FP8 KV, and weights one step stale. TRL logs
 # it as `sampling/sampling_logp_difference/mean`.
 #
-# ## Exercise 5.3 — DAPO's soft overlong punishment
-#
-# Truncated completions have no answer and a misleading reward. DAPO first masks them from the loss
-# (`mask_truncated_completions=True` in TRL), then adds a length penalty in the last `cache` tokens
-# before `max_len`. It is 0 up to `max_len − cache`, falls linearly to −1 at `max_len`, and is −1
-# beyond.
-
-# %% exercise
-def my_soft_overlong(length: int, max_len: int, cache: int) -> float:
-    ### BEGIN SOLUTION
-    if length <= max_len - cache:
-        return 0.0
-    if length <= max_len:
-        return ((max_len - cache) - length) / cache
-    return -1.0
-    ### END SOLUTION
-
-# %% check
-assert [my_soft_overlong(l, 100, 20) for l in (80, 90, 100, 101)] == [0.0, -0.5, -1.0, -1.0]
-assert all(my_soft_overlong(l, 20480, 4096) == soft_overlong(l, 20480, 4096) for l in range(15000, 21000, 97))
-print("✅ DAPO's values (L_max 16,384 + 4,096 cache in the paper): 0 until the cache window, then a ramp to -1")
-
-# %% [markdown]
 # ## Worked example: the rollout phase is a serving problem with a straggler
 #
 # A synchronous GRPO step generates the whole batch, then trains. The batch shrinks as completions
@@ -155,7 +132,8 @@ from thinklab.workload import sample_lengths
 from thinklab.thinking.evalset import make_evalset
 PROF = engine.profile("t4-qwen3-0.6b")
 qs = [p.prompt for p in make_evalset(64, seed=9) for _ in range(8)]
-lens = [min(r + a, 8000) for r, a, _ in sample_lengths(qs, seed=0)]
+SAMPLES = sample_lengths(qs, seed=0)                              # (reasoning, answer, correct) per rollout
+lens = [min(r + a, 8000) for r, a, _ in SAMPLES]
 avg_ctx = 60 + statistics.fmean(lens) / 2
 step = lambda b: PROF.decode_step_s(b, b * avg_ctx)              # noqa: E731 — the roofline step at batch b
 ph = rollout_phase(lens, step, overlap_training_s=20.0)
@@ -163,6 +141,46 @@ print(table([{"rollouts": len(lens), "mean tokens": round(ph["mean"]), "longest"
               "phase s": round(ph["phase_s"], 1), "idle slot share": round(ph["idle_share"], 2),
               "sync step s (+20 s train)": round(ph["sync_step_s"], 1),
               "one-step-off step s": round(ph["overlapped_step_s"], 1)}], title="[SIMULATED] one rollout phase"))
+
+# %% [markdown]
+# ## Exercise 5.3 — pick a generation cap with DAPO's overlong shaping
+#
+# A lower `max_completion_length` trims the straggler tail above, but DAPO's soft overlong
+# penalty (rl-core notebook 03, exercise 3.5; `soft_overlong` here) charges completions in the last
+# `cache` tokens before the cap, and −1 beyond it, including ones that would have reached a correct
+# answer given room. The cap is a reward-shaping decision, not only a systems one. For each cap in
+# `CAPS`, with DAPO's proportions (cache = cap / 5, as 4,096 of 20,480), `overlong_view` returns the
+# share of these 512 simulated rollouts longer than the cap (`truncated`) and the share of the
+# rollouts that would have been correct (the simulated model's uncapped outcome) that get a penalty
+# below 0 (`hit_correct`). Then set `cap` to the smallest cap in `CAPS` that penalises at most 5% of
+# the would-be-correct rollouts.
+
+# %% exercise
+CAPS = (1024, 2048, 4096, 6144, 8192)
+RAW_LENS, CORRECT = [r + a for r, a, _ in SAMPLES], [c for _, _, c in SAMPLES]
+
+def overlong_view(lengths: list, correct: list, cap: int) -> dict:
+    ### BEGIN SOLUTION
+    pen = [soft_overlong(n, cap, cap // 5) for n in lengths]
+    return {"cap": cap, "truncated": statistics.fmean(n > cap for n in lengths),
+            "hit_correct": statistics.fmean(x < 0 for x, c in zip(pen, correct) if c)}
+    ### END SOLUTION
+
+cap = None
+### BEGIN SOLUTION
+cap = min(v["cap"] for v in (overlong_view(RAW_LENS, CORRECT, c) for c in CAPS) if v["hit_correct"] <= 0.05)
+### END SOLUTION
+
+# %% check
+v = overlong_view([100, 90, 50, 120], [True, True, True, False], 100)       # cache 20: 100 → −1, 90 → −0.5, 50 → 0
+assert v == {"cap": 100, "truncated": 0.25, "hit_correct": 2 / 3}
+views = [overlong_view(RAW_LENS, CORRECT, c) for c in CAPS]
+print(table([{k: (round(x, 3) if isinstance(x, float) else x) for k, x in v.items()} for v in views],
+            title="[SIMULATED] DAPO's soft overlong penalty at cache = cap / 5"))
+assert cap == min(v["cap"] for v in views if v["hit_correct"] <= 0.05) == 6144
+tight = next(v for v in views if v["cap"] == 2048)
+print(f"✅ cap {cap:,}: at 2,048 the penalty would push against {tight['hit_correct']:.0%} of the reasoning that was "
+      "on its way to a right answer, and teach the policy to stop early where it should not")
 
 # %% [markdown]
 # ## Exercise 5.4 — the idle share of a synchronous rollout batch

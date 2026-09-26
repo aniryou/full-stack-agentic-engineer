@@ -72,7 +72,7 @@ Read the modules in this order; each opens with a docstring stating the one idea
 | [`quantcore/w8a8.py`](quantcore/w8a8.py) | ~60 | the W8A8 GEMM with integer accumulation and the scale epilogue; static-scale saturation; DeepSeek-V3-style block FP8 |
 | [`quantcore/kvquant.py`](quantcore/kvquant.py) | ~85 | FP8 KV with default, calibrated and per-token scales; KIVI (keys per channel, values per token, residual window); attention-output error |
 | [`quantcore/tinymodel.py`](quantcore/tinymodel.py) | ~140 | a residual MLP stack whose norm gains create LLM-like outlier channels, a closed-form head, calibration capture, exact scale folding, and `quantize_model` (RTN, GPTQ, AWQ, AWQ then GPTQ) |
-| [`quantcore/eval.py`](quantcore/eval.py) | ~55 | KL, top-1 agreement, perplexity, task accuracy with flips both ways, lm-eval's standard error, a budget check |
+| [`quantcore/eval.py`](quantcore/eval.py) | ~55 | KL, top-1 agreement, perplexity, task accuracy with flips both ways, lm-eval's standard error, the unpaired difference's error bar and McNemar's paired z, a budget check |
 | [`quantcore/cost.py`](quantcore/cost.py) | ~210 | what a scheme runs as per GPU generation (vLLM's rules), one GEMM on the roofline and the W4A16 crossover, the step-time model of `minengine.perf`, KV blocks and sessions, the decision table, $/M tokens |
 
 ## What the tests prove
@@ -89,24 +89,28 @@ claims:
 - **The formats are the real formats.** The E4M3 grid enumerated from bit patterns has 253 distinct values and a
   top of 448. Rounding matches the nearest grid value everywhere and vLLM's FP4 tie thresholds exactly. INT4
   packing gives compressed-tensors' `0xfcba9810` and round-trips (`test_formats.py`).
-- **GPTQ is GPTQ.** It matches a line-by-line transcription of the reference's blocked "lazy batch" loop to 1e-9,
-  reduces to RTN exactly when inputs are uncorrelated, and beats RTN out of sample on correlated inputs
-  (`test_gptq.py`).
+- **GPTQ is GPTQ.** It matches a line-by-line transcription of the reference's blocked "lazy batch" loop to 1e-9
+  per channel and whenever groups start on block boundaries (a group that starts mid-block takes its scale from
+  weights the reference has not updated yet; the test shows that difference too), reduces to RTN exactly when
+  inputs are uncorrelated, and beats RTN out of sample on correlated inputs (`test_gptq.py`).
 - **Reparameterisations are exact.** SmoothQuant and AWQ folds leave the model's output unchanged to 1e-9, and
   α = 0 in AWQ's search is RTN (`test_awq_smoothquant.py`).
 - **The W8A8 epilogue is exact.** Integer-accumulated INT8 GEMMs and per-block FP8 GEMMs equal the fake-quantized
   products (`test_w8a8_kv.py`).
 - **The primer says what the code computes.** Every number `../PRIMER.md` attributes to `quantcore` is recomputed
-  and must appear in it verbatim (`test_primer_numbers.py`).
+  and must appear in it verbatim (`test_primer_numbers.py`). The numbers do not depend on the numpy or BLAS build:
+  INT4's full convention puts −amax exactly on the tie −7.5, which floating point can land an ulp either side of,
+  so `formats.quantize_int` snaps near-ties onto it first. The suite gives the same digits on numpy 1.26, 2.0 and
+  2.4.
 
 ## Caveats: what is faithful, and what is simplified
 
 Faithful to the sources (read at the commits listed in the primer's Sources; see its Verify list):
 
-- GPTQ's update, damping, group timing and act-order.
+- GPTQ's update, damping and act-order (group scales: see `gptq.py`'s docstring).
 - AWQ's statistic, normalisation and 20-point grid, and SmoothQuant's scale formula.
-- compressed-tensors' INT conventions, NVFP4 global scale and INT4/FP4 packing, and the OCP MX shared-exponent
-  rule.
+- compressed-tensors' INT conventions, NVFP4 global scale and INT4/FP4 packing, and both MXFP4 shared-exponent
+  rules (the OCP spec's floor and compressed-tensors' round-up at a mantissa of 1.75).
 - KIVI's key/value asymmetry, lm-eval's standard error, and vLLM's capability rules.
 
 Simplified:

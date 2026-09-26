@@ -62,30 +62,36 @@ print(f"log-normal fit of reasoning length: median {med:.0f} tokens, sigma {sigm
 print(histogram([c.completion_tokens for c in comps["on"]], bins=8, log=True, label="thinking on: output tokens (log bins)"))
 
 # %% [markdown]
-# ## Exercise 4.1 — KV × time grows faster than the output
+# ## Exercise 4.1 — KV × time from the measured lengths: the tail pays
 #
-# A request with prompt P emits L tokens. At decode step t (1…L) it holds KV for P + t tokens.
-# Write `kv_token_steps(P, L)`, the sum over its steps. Then compute how many times more KV × time
-# a 3,000-token output costs than a 300-token one, for a 1,500-token prompt (the capacity primer's
-# chat shape with 10× the output).
+# A request with prompt P that emits L tokens holds P + t tokens of KV at decode step t, so over its
+# life it costs `kv_token_steps(P, L) = P·L + L(L + 1)/2` token-steps (derived in rl-core notebook 05,
+# exercise 5.1; imported here). The formula is convex in L, so a heavy tail costs more than its mean
+# suggests. For a list of measured completions `cs` (each has `prompt_tokens` and
+# `completion_tokens`), return `(mean_kv, kv_at_means, top10_share)`: the mean over requests of
+# `kv_token_steps`, `kv_token_steps` at the mean prompt and mean completion length, and the share of
+# the total held by the 10% of requests with the largest KV × time (at least one request). Before
+# you run the check, guess the top-10% share with thinking on.
 
 # %% exercise
-def my_kv_token_steps(P: int, L: int) -> int:
+def kv_time(cs: list) -> tuple:
     ### BEGIN SOLUTION
-    return P * L + L * (L + 1) // 2
+    ok = [c for c in cs if c.ok]
+    kv = sorted((kv_token_steps(c.prompt_tokens, c.completion_tokens) for c in ok), reverse=True)
+    at_means = kv_token_steps(statistics.fmean(c.prompt_tokens for c in ok), statistics.fmean(c.completion_tokens for c in ok))
+    return statistics.fmean(kv), at_means, sum(kv[: max(1, len(kv) // 10)]) / sum(kv)
     ### END SOLUTION
 
-ratio_10x = None
-### BEGIN SOLUTION
-ratio_10x = my_kv_token_steps(1500, 3000) / my_kv_token_steps(1500, 300)
-### END SOLUTION
-
 # %% check
-assert my_kv_token_steps(0, 3) == 6 and my_kv_token_steps(10, 1) == 11
-assert all(my_kv_token_steps(P, L) == kv_token_steps(P, L) for P in (0, 60, 1500) for L in (1, 300, 3000))
-assert abs(ratio_10x - 9_001_500 / 495_150) < 1e-9
-print(f"✅ 10x the output costs {ratio_10x:.1f}x the KV x time (for a 60-token prompt it is "
-      f"{my_kv_token_steps(60, 3000) / my_kv_token_steps(60, 300):.0f}x)")
+res = {m: kv_time(cs) for m, cs in comps.items()}
+for m, (mean_kv, at_means, top) in res.items():
+    assert mean_kv >= at_means and 0.1 <= top <= 1.0
+    print(f"thinking {m:3}: mean KV x time {mean_kv:>12,.0f} token-steps = {mean_kv / at_means:.2f}x the value at the "
+          f"mean length; the top 10% of requests hold {top:.0%}")
+assert res["on"][2] > res["off"][2] and res["on"][0] / res["on"][1] > res["off"][0] / res["off"][1]
+print(f"✅ [{LABEL}] with thinking on, the mean output grows {statistics.fmean(c.completion_tokens for c in comps['on']) / statistics.fmean(c.completion_tokens for c in comps['off']):.0f}x "
+      f"but KV x time grows {res['on'][0] / res['off'][0]:.0f}x: size the KV pool and preemption headroom from the "
+      "distribution, not its mean")
 
 # %% [markdown]
 # ## Worked example: the capacity primer's arithmetic, with long outputs

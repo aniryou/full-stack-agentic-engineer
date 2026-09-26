@@ -10,7 +10,7 @@ about 2,000 lines you can read in an afternoon, plus five fill-in notebooks.
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (why a code tool is the most dangerous tool; the isolation ladder).
-2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 78 tests, ~30 s, including "with its own
+2. `python3 -m pip install -e ".[dev]" && python3 -m pytest -q` — 81 tests, ~30 s, including "with its own
    UID every probe is contained except egress", "an undeclared exfiltration leaks through a process
    sandbox" and "the rendered manifests validate against Kubernetes 1.34".
 3. Open [`notebooks/01_the_threat_model.ipynb`](notebooks/01_the_threat_model.ipynb) and watch a secret leak
@@ -36,7 +36,7 @@ About 4 hours with the primer (module 07.5).
 ```bash
 cd sandbox-core
 python3 -m pip install -e ".[dev]"     # the library is stdlib only; dev adds pytest, jupyter, pyyaml, kubernetes-validate
-python3 -m pytest -q                    # 78 tests, ~30 s
+python3 -m pytest -q                    # 81 tests, ~30 s
 python3 tools/build_notebooks.py        # rebuild notebooks/ and solutions/
 python3 -m jupyterlab notebooks         # do the exercises
 ```
@@ -68,13 +68,14 @@ Read the modules in this order; each opens with a docstring stating the one idea
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (78, offline, ~30 s):
+`tests/` has one focused test per concept (81, offline, ~30 s):
 
 - **What the process sandbox contains depends on its UID, and egress is never contained.**
   `test_threats.py` runs every probe: with a per-execution UID (as root) all are contained except
   `egress_connect`; with `drop_to_uid=None` (a laptop) the key read and the session escape leak; unsandboxed,
-  the secret, key, egress and escape probes all leak. A harmlessness test checks every probe's target comes
-  from the harness (loopback only) and every loop is bounded.
+  the secret, key, egress and escape probes all leak. Harmlessness tests check every probe's target comes
+  from the harness (loopback only), every loop is bounded, and the key probe never opens a real home
+  directory even when the executor passes `HOME` through.
 - **Limits, exit reasons and streaming are real.** `test_executor.py` shows a clean environment hides a
   planted secret, a wall-clock kill stops a sleeper and its grandchild, a `setsid()` escapee cannot hold the
   call open and is swept by UID, a flood ends as `output_limit` within wall_s + 1 s without growing the
