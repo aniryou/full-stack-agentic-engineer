@@ -22,14 +22,14 @@ This layer is one replica: it runs the model (00) on its GPUs (01, 02), inside a
 orchestrator's replicas (05).
 
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
-rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + torch" is T0 with CPU PyTorch installed
-(Colab has it). Times are rough and include the exercises.
+rented for an hour; T3 = the Google Cloud deployment, optional.* Times are rough and include the exercises.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook | ~2 h | T0 + torch (Colab CPU) |
+| [`kv-cache/`](kv-cache/kv-cache-primer.md) | compute KV bytes per token and per request, and say why decode rereads all of it every step — a primer, a worked notebook and a practice notebook (numpy via kernel-core; torch optional in one comparison cell) | ~2 h | T0 |
 | [`paged-attention/`](paged-attention/paged-attention-primer.md) | explain fragmentation and how block tables, refcounts and copy-on-write fix it — a primer, `paged_attention_minimal.py` and a practice notebook | ~1.5 h | T0 |
 | [`flash-attention/`](flash-attention/flash-attention-primer.md) | explain tiling and online softmax from zero ([primer](flash-attention/flash-attention-primer.md)), then defend a kernel or backend choice with exact byte counts, the FA2/FA3/FA4 changes, decode kernels, paged KV and a Triton forward pass ([deep dive](flash-attention/flash-attention-deep-dive.md)); `fa_calculators.py` computes every number (49 tests); two notebooks: [practice](flash-attention/flash_attention_practice.ipynb) (five exercises) and the [deep-dive companion](flash-attention/flash_attention_deep_dive.ipynb) | ~1.5 h primer + practice; ~4 h deep dive (rough) | T0 (kernel timing T1) |
+| [`kernel-core/`](kernel-core/README.md) | show in code that a KV cache changes cost not output, that block tables with refcounts and copy-on-write do not change attention, and that tiled online-softmax attention is exact; recompute every number of the three kernel primers — `kerncore` (numpy; kv, paged, flash; imports fa_calculators.py), 51 tests | ~2 h with the kv-cache notebooks | T0 |
 | [`serving-engine/`](serving-engine/README.md) | explain and simulate the engine itself — step loop, continuous batching, chunked prefill, KV management, prefix caching, sampling and structured output, speculative decoding, quantization, parallelism, LoRA, measurement — then size, measure and tune a real vLLM: a [PRIMER](serving-engine/PRIMER.md), [`mini-engine-core`](serving-engine/mini-engine-core/) (a numpy "nano-vLLM", 6 notebooks) and [`vllm-serving-lab`](serving-engine/vllm-serving-lab/) (sizing, a load generator, `/metrics`, a fake vLLM for T0, Cloud Run and GKE deploys, 6 notebooks) | ~11 h primer + core; ~12 h lab | T0 → T1 (T2, T3 optional) |
 | [`quantization/`](quantization/README.md) | say what INT4, FP8, NVFP4 or an FP8 KV cache buys for a given model on a given GPU — decode speed, prefill speed or concurrency — and what each runs as on that GPU generation; make 4 bits accurate with GPTQ, AWQ or SmoothQuant; then produce, serve and evaluate a real quantized checkpoint: a [PRIMER](quantization/PRIMER.md) (the deep dive behind serving-engine §8), [`quant-core`](quantization/quant-core/) (numpy formats, GPTQ, AWQ, SmoothQuant, KV quantization and a per-GPU cost model; 5 notebooks) and [`quant-lab`](quantization/quant-lab/) (llm-compressor checkpoints, FP16 vs INT4 vs FP8 in vLLM, lm-eval with error bars, FP8 KV, the NVFP4/MXFP4 layouts; a bundled tiny model and a fake server for T0; 5 notebooks) | ~10 h primer + core; ~9 h lab | T0 → T1 (T3 optional) |
 | [`vllm-internals/`](vllm-internals/README.md) | follow a request through vLLM's source: the process split, the token-budget scheduler, block-hash prefix caching and its eviction order, how the KV pool is sized, the model runner, backends and flags — a [deep primer](vllm-internals/vllm-internals-primer.md), a [source map](vllm-internals/source-map.md) with a reading plan, and a [notebook](vllm-internals/notebooks/01_block_hashes_and_eviction.ipynb) that re-implements the parts vLLM does differently | four ~2 h sittings (about 8.5 h) + the notebook | T0 (observing it T1) |
@@ -38,7 +38,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + torch" is
 
 1. Read the three kernel primers in order: [KV cache](kv-cache/kv-cache-primer.md) →
    [paged attention](paged-attention/paged-attention-primer.md) →
-   [FlashAttention](flash-attention/flash-attention-primer.md), doing each topic's practice notebook.
+   [FlashAttention](flash-attention/flash-attention-primer.md), doing each topic's practice notebook (all numpy, T0).
 2. `cd serving-engine/vllm-serving-lab && python3 -m pip install -e ".[dev]" && python3 -m servelab size --model llama-3.1-8b-instruct --gpu L4 --max-model-len 16384`
    — under a second, and it prints the KV blocks and concurrency an 8B model gets on a 24 GB L4.
 3. Work [`serving-engine/`](serving-engine/README.md) by its module table (primer section → core notebook → lab
@@ -53,7 +53,9 @@ attention backends (vllm-internals primer §6).
 ## Run it
 
 ```bash
-cd flash-attention && python3 -m pytest -q                         # 49 tests, a few seconds (numpy)
+cd kernel-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 51 tests, <1 s (numpy)
+cd ../flash-attention
+python3 -m pip install numpy pytest && python3 -m pytest -q         # 49 tests, a few seconds (numpy)
 cd ../serving-engine/mini-engine-core
 python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 75 tests, ~50 s
 cd ../vllm-serving-lab
@@ -64,8 +66,9 @@ cd ../quant-lab
 python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 94 tests, ~35 s, offline (one needs Terraform, else skipped)
 ```
 
-Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory, or the Colab links below. The
-vllm-internals notebook needs only the standard library plus the serving lab installed (`pip install -e` above).
+Then `python3 -m jupyterlab notebooks` in any serving-engine or quantization directory (from `kernel-core`,
+`python3 -m jupyterlab ../kv-cache` for the KV-cache notebooks), or the Colab links below. The vllm-internals
+notebook needs only the standard library plus the serving lab installed (`pip install -e` above).
 
 ## How it fits
 
