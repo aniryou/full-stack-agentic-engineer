@@ -1,0 +1,53 @@
+# The memory service, a fake OpenAI-compatible model server and (profile "pgvector") Postgres + pgvector,
+# all bound to 127.0.0.1. Start with ./up.sh (or ./up.sh --pgvector); stop and delete everything with ./down.sh.
+# The fake server's numbers are simulated; replace it with a real vLLM for T1 (deploy/any-gpu/README.md).
+name: memlab
+
+services:
+  memory:
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile
+    image: memlab:0.1.0
+    environment:
+      # a local-only default; set MEMLAB_TOKEN_KEY in your shell to mint tokens that match (python -m memlab token)
+      MEMLAB_TOKEN_KEY: ${MEMLAB_TOKEN_KEY:-local-dev-only-change-me}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - memlab-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  fake-llm:
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile
+    image: memlab:0.1.0
+    command: ["python", "-m", "memlab", "fake", "--host", "0.0.0.0", "--port", "8000", "--prompt-tokens-details"]
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  postgres:
+    profiles: ["pgvector"]
+    image: pgvector/pgvector:0.8.6-pg17
+    environment:
+      POSTGRES_USER: memlab
+      POSTGRES_PASSWORD: ${MEMLAB_PG_PASSWORD:-memlab-local-only}
+      POSTGRES_DB: memlab
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - memlab-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memlab -d memlab"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  memlab-data: {}
+  memlab-pg: {}

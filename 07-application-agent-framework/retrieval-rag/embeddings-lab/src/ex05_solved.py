@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 05 · Evaluation & fusion
 # The three functions every retrieval system owner ends up writing.
-# Solutions: `solutions/ex05_solutions.ipynb`.
+# Solutions: `../solutions/ex05.ipynb`.
 
 # %%
 import numpy as np

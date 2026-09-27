@@ -64,26 +64,17 @@ SKIP_DIRS = {".git", "__pycache__", ".ipynb_checkpoints", ".pytest_cache", ".myp
              "node_modules", ".terraform", ".venv", "venv", "_run_outputs", "site_build", ".eggs"}
 DATA_DIRS = {"data", "corpus"}          # Markdown under these is data a lab reads, not a document
 IMAGE_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
-NOTEBOOK_DIRS = {"notebooks": "Notebooks", "exercises": "Exercises", "practice": "Practice",
-                 "lessons": "Lessons"}
-# Notebooks with the answers filled in, in every convention the repo uses: a solutions/ or worked/ folder, or a
-# name like 01_x_solution(s), 01_x_solved, 01_x_practice_solved. A name ending in _worked (01_x_worked, 01_worked)
-# is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
-# same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
-# own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
-# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
-# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
-# Kept identical to tools/gen_colab_index.py.
-ROOT = REPO
-SOLUTION_DIRS = {"solutions", "worked"}
-SOLUTION_STEM = re.compile(r"(?:^|[_\-.])(?:solutions?|solved)(?:$|[_\-.])", re.I)
-WORKED_STEM = re.compile(r"(?:^|[_\-.])worked(?:$|[_\-.])", re.I)
-EXERCISE_STEM = re.compile(r"(?:^|[_\-.])(?:practice|exercises?)(?:$|[_\-.])", re.I)
+# One notebook layout in every lab (tools/ci/nb_layout.py guards it): <lab>/notebooks/ holds what a learner opens --
+# exercise blanks and lessons -- and <lab>/solutions/<name>.ipynb is the worked answer to notebooks/<name>.ipynb.
+# A notebook is an answer key exactly when its folder is solutions/. Kept identical to tools/gen_colab_index.py.
+NOTEBOOK_DIRS = {"notebooks": "Notebooks"}
+ANSWERS_DIR = "solutions"
+SOLUTION_DIRS = {ANSWERS_DIR}
 # Folders that are plumbing, not lessons: their Markdown still becomes pages (the lab READMEs link them), but they
 # are left out of the navigation and listed under `not_in_nav:` in mkdocs.yml.
 PLUMBING_DIRS = ("client", "deploy", "fixtures", "infra", "notebooks_src")
 # Folders whose name says nothing about the lesson: a primer inside one is named after the nearest real folder.
-GENERIC_DIRS = {"docs", "notebooks", "solutions", "worked", "exercises", "practice", "lessons"}
+GENERIC_DIRS = {"docs", "notebooks", "solutions"}
 
 stats = {"pages": 0, "notebooks": 0, "colab": 0, "images": 0, "to_page": 0, "to_github": 0,
          "anchors_kept": 0, "anchors_dropped": 0, "nb_anchors_kept": 0, "nb_anchors_dropped": 0,
@@ -107,61 +98,10 @@ pages: dict[str, str] = {}       # repo path (posix) -> site path of a Markdown 
 notebooks: dict[str, str] = {}   # repo path -> site path of a notebook page
 images: dict[str, str] = {}      # repo path -> site path of a copied image
 
-def _stem(path: str) -> str:
-    return path.replace(os.sep, "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
-
-
-def _folder(path: str) -> str:
-    path = path.replace(os.sep, "/")
-    return path.rsplit("/", 1)[0] if "/" in path else ""
-
-
-def _base(stem: str, token: re.Pattern) -> str:
-    """The stem with a worked/practice token taken out: 01_kv_cache_worked -> 01_kv_cache."""
-    return re.sub(r"^[_\-.]+|[_\-.]+$", "", token.sub("_", stem))
-
-
-def _number(stem: str) -> str | None:
-    m = re.match(r"^\d+", stem)
-    return m.group(0) if m else None
-
-
-def answers_elsewhere(folder: str, siblings=None) -> bool:
-    """True when `folder` keeps its exercises' answers in a solutions/ or worked/ folder of its own (on disk, or
-    among `siblings`, which may name any file): then a `*_worked` notebook beside them is a lesson."""
-    if any((ROOT / folder / d).is_dir() for d in SOLUTION_DIRS):
-        return True
-    return any(p.replace(os.sep, "/").startswith(f"{folder}/{d}/") for p in siblings or () for d in SOLUTION_DIRS)
-
-
-def has_exercise_twin(path: str, siblings=None) -> bool:
-    """True when a `*_worked` notebook has an exercise version in the same folder (see the rule above).
-    `siblings` is any iterable of notebook paths; by default the folder is listed on disk."""
-    folder = _folder(path)
-    if siblings is None:
-        d = ROOT / folder
-        siblings = [f"{folder}/{n}" for n in os.listdir(d) if n.endswith(".ipynb")] if d.is_dir() else []
-    base = _base(_stem(path), WORKED_STEM)
-    for other in siblings:
-        s = _stem(other)
-        if _folder(other) != folder or SOLUTION_STEM.search(s) or WORKED_STEM.search(s):
-            continue
-        exercise = bool(EXERCISE_STEM.search(s))
-        if s == base or (exercise and _base(s, EXERCISE_STEM) == base):
-            return True
-        if exercise and _number(base) and _number(s) == _number(base):
-            return True
-    return False
-
-
-def is_solution(path: str, siblings=None) -> bool:
-    """True for a notebook with the answers in it (see the rule above SOLUTION_DIRS)."""
+def is_solution(path: str) -> bool:
+    """True for a worked answer key: a notebook directly inside a solutions/ folder."""
     parts = path.replace(os.sep, "/").split("/")
-    stem = parts[-1].rsplit(".", 1)[0]
-    if SOLUTION_DIRS & set(parts[:-1]) or SOLUTION_STEM.search(stem):
-        return True
-    return (bool(WORKED_STEM.search(stem)) and has_exercise_twin(path, siblings)
-            and not answers_elsewhere(_folder(path), siblings))
+    return len(parts) >= 2 and parts[-2] == ANSWERS_DIR
 
 
 def is_plumbing(repo_path: str) -> bool:
@@ -635,9 +575,9 @@ ACRONYMS = {w.lower(): w for w in (
     "Mistral K8s").split()}
 COMPOUNDS = ("long-running",)          # hyphenated words that stay hyphenated in a title
 SLUGLIKE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
-# A folder named for a provider variant (agent-core vs mistral-agent-core) says so in its title.
+# A folder named for a provider variant (lab-mistral/ or mistral-lab/ beside lab/) says so in its title.
 VARIANTS = {"mistral": ("Mistral",), "gcp": ("GCP", "Google Cloud")}
-DIR_TITLES = {"docs": "Docs", "solutions": "Solutions", "worked": "Worked", **NOTEBOOK_DIRS}
+DIR_TITLES = {"docs": "Docs", ANSWERS_DIR: "Solutions", **NOTEBOOK_DIRS}
 TITLE_SPLIT = re.compile(r"\s+[—–]\s+|:\s+")
 
 
@@ -682,7 +622,7 @@ _dir_titles: dict[str, str] = {}
 
 
 def section_title(repo_dir: str) -> str:
-    """Sidebar title of a folder: its layer name, a fixed name for notebooks/solutions/docs folders, or the name part
+    """Sidebar title of a folder: its layer name, a fixed name for a notebooks, solutions or docs folder, or the name part
     of its README's H1 (humanised when that is just the folder name), or else the folder name humanised."""
     if repo_dir in _dir_titles:
         return _dir_titles[repo_dir]
@@ -734,9 +674,8 @@ def nb_title(rp: str) -> str:
     num = re.match(r"^(\d+)[_\-. ]", stem)
     if num and not title[:1].isdigit():
         title = f"{num.group(1)} · {title}"
-    if is_solution(rp) and not re.search(r"solution|solved|worked|answer", title, re.I):
-        worked = "worked" in rp.split("/")[:-1] or re.search(r"worked", stem, re.I)
-        title += " (worked)" if worked else " (solution)"
+    if is_solution(rp) and not re.search(r"solution|answer", title, re.I):
+        title += " (solution)"
     return title
 
 
@@ -769,8 +708,8 @@ def leaves(entries: list[tuple[str, str, str]]) -> list[dict]:
 
 def nav_for_dir(repo_dir: str) -> list:
     """Nav entries for one directory: README (section index) → primers → other docs → core → lab → notebooks →
-    solutions. Plumbing folders (PLUMBING_DIRS) are left out; a folder with nothing but one section or one page
-    collapses into it."""
+    solutions (a solutions/ folder is its own "Solutions" section). Plumbing folders (PLUMBING_DIRS) are left out; a
+    folder with nothing but one section or one page collapses into it."""
     items: list = []
     index = f"{repo_dir}/README.md"
     if index in pages:
@@ -778,13 +717,7 @@ def nav_for_dir(repo_dir: str) -> list:
     here_md = sorted((rp for rp in pages if posixpath.dirname(rp) == repo_dir and rp != index),
                      key=lambda rp: (0 if "primer" in rp.lower().rsplit("/", 1)[-1] else 1, rp.lower()))
     items += leaves([(md_title(rp), pages[rp], rp) for rp in here_md])
-    here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)
-    in_solutions_dir = posixpath.basename(repo_dir) in SOLUTION_DIRS
-    blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp, here_nb)]
-    # Worked lessons come before the exercises that follow them (long-running-agents-gcp: 01..04_*_worked, then
-    # 01..04_*_practice); elsewhere the file names already give that order.
-    blanks.sort(key=lambda rp: (not WORKED_STEM.search(posixpath.basename(rp)[:-len(".ipynb")]), rp))
-    sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp, here_nb)]
+    here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)   # file names give the order
     subdirs = sorted({rp[len(repo_dir) + 1:].split("/")[0] for rp in list(pages) + list(notebooks)
                       if rp.startswith(repo_dir + "/") and "/" in rp[len(repo_dir) + 1:]}, key=dir_rank)
     subdirs = [d for d in subdirs if d not in PLUMBING_DIRS]
@@ -799,34 +732,25 @@ def nav_for_dir(repo_dir: str) -> list:
             items.append({section_title(child): sub[0]})
         elif len(sub) == 1 and not has_readme:                 # a wrapper folder around one entry
             items.append(sub[0])
-        elif (d in NOTEBOOK_DIRS and not has_readme            # notebooks/ holding only practice/ and worked/
-              and all(isinstance(e, dict) and isinstance(next(iter(e.values())), list) for e in sub)):
-            items.extend(sub)
         else:
             items.append({section_title(child): sub})
 
     for d in [d for d in subdirs if dir_rank(d)[0] < 5]:
         add_dir(d)
-    items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in blanks])
+    items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in here_nb])
     for d in [d for d in subdirs if dir_rank(d)[0] >= 5]:
         add_dir(d)
-    if len(sols) == 1:                                         # one answer key: a page (its title says so)
-        items += leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])
-    elif sols:
-        worked_only = all("worked" in posixpath.basename(rp).lower() for rp in sols)
-        items.append({"Worked" if worked_only else "Solutions":
-                      leaves([(nb_title(rp), notebooks[rp], rp) for rp in sols])})
     return items
 
 
 def variant_of(repo_path: str) -> tuple[str, ...]:
-    """The provider a path's folders name (lab-mistral/, mistral-agent-core/ -> ("Mistral",)), if any."""
+    """The provider a path's folders name (lab-mistral/, mistral-lab/ -> ("Mistral",)), if any."""
     tokens = {t for part in repo_path.split("/")[:-1] for t in re.split(r"[-_]", part.lower())}
     return next((words for token, words in VARIANTS.items() if token in tokens), ())
 
 
 def mark_variant_duplicates(items: list) -> list:
-    """A page title used more than once in the nav (agent-core's and mistral-agent-core's "01 · The agent loop")
+    """A page title used more than once in the nav ("01 · The agent loop" in both lab/ and mistral-lab/)
     names its provider when its folder is a provider variant, so search results and tabs tell them apart."""
     counts: dict[str, int] = {}
 
@@ -849,7 +773,7 @@ def mark_variant_duplicates(items: list) -> list:
                 else:
                     words = variant_of(v[len("layers/"):]) if counts.get(t, 0) > 1 else ()
                     if words and not any(w.lower() in t.lower() for w in words):
-                        m = re.match(r"^(.*) \((solution|worked)\)$", t)
+                        m = re.match(r"^(.*) \((solution)\)$", t)
                         t = f"{m.group(1)} ({m.group(2)}, {words[0]})" if m else f"{t} ({words[0]})"
                     e = {t: v}
             out.append(e)

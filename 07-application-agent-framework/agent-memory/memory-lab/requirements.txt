@@ -1,0 +1,13 @@
+# The library (T0): numpy + aiohttp; SQLite with FTS5 comes with Python.
+numpy>=1.24
+aiohttp>=3.9
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+pyyaml>=6.0
+pglast>=7; platform_system != "Windows"    # offline check of the pgvector SQL (tests skip without it)
+# T0 + Docker (Postgres + pgvector): pip install "psycopg[binary]>=3.1"
+# T1 (a real model or embedder behind an OpenAI-compatible URL) needs no Python extras.

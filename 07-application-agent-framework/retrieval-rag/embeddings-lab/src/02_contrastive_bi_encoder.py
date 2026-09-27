@@ -180,5 +180,5 @@ print(dict(zip(taus, [round(r, 3) for r in recs])))
 # **Takeaways.** (1) The entire modern recipe — E5, BGE, CLIP — is this loop with
 # bigger encoders and more pairs. (2) In-batch negatives make batch size a quality
 # knob. (3) Alignment/uniformity are cheap diagnostics for your own fine-tunes.
-# → Exercises: `exercises/ex02.ipynb` (implement the loss+grad, mine hard
+# → Exercises: `ex02.ipynb` (implement the loss+grad, mine hard
 # negatives, and a Matryoshka variant).

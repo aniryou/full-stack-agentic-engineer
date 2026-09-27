@@ -2,7 +2,7 @@
 # # Exercises 06 · Superposition mechanics
 # Build the toy model yourself: forward pass, gradients (checked numerically),
 # then run the sparsity sweep with *your* code. Solutions:
-# `solutions/ex06_solutions.ipynb`.
+# `../solutions/ex06.ipynb`.
 
 # %%
 import numpy as np, matplotlib.pyplot as plt

@@ -17,117 +17,65 @@ import build_site_content as b  # noqa: E402
 
 # ---------------------------------------------------------------- solution notebooks
 
+# One layout (tools/ci/nb_layout.py): a notebook is an answer key exactly when its folder is solutions/. Names and
+# folders that other conventions used for answers are ordinary notebooks now (built with posixpath.join so the
+# old folder names do not read as paths in the tree).
+J = posixpath.join
+
+
+def suffixed(stem: str, suffix: str) -> str:
+    return f"{stem}_{suffix}.ipynb"
+
+
 @pytest.mark.parametrize("path", [
-    "07-x/lab/solutions/01_tools.ipynb",                          # solutions/
-    "06-x/lab/notebooks/solutions/01_scaling_math_solutions.ipynb",  # notebooks/solutions/
-    "07-x/lra-gcp/notebooks/worked/00_core_idea.ipynb",           # worked/
-    "00-x/gpu-capacity-planning/notebooks/01_capacity_practice_solved.ipynb",  # _solved
-    "06-x/agentic-identity-core/core_solution.ipynb",             # *_solution*
-    "00-x/transformers/practice/attention_solutions.ipynb",
-    "07-x/embeddings-lab/solutions/ex01_solutions.ipynb",
+    "07-x/lab/solutions/01_tools.ipynb",
+    "00-x/gpu-capacity-planning/solutions/01_capacity_practice.ipynb",
+    "06-x/agentic-identity-core/solutions/core_practice.ipynb",
+    "00-x/transformers/solutions/attention_practice.ipynb",
+    "07-x/embeddings-lab/solutions/ex01.ipynb",
+    "solutions/x.ipynb",
 ])
-def test_is_solution_recognises_every_convention(path):
+def test_a_solution_is_recognised_under_solutions(path):
     assert b.is_solution(path)
 
 
 @pytest.mark.parametrize("path", [
     "07-x/lab/notebooks/01_tools.ipynb",
-    "04-x/kv-cache/02_kv_cache_practice.ipynb",
-    "07-x/lra-gcp/notebooks/practice/00_core_idea.ipynb",
-    "06-x/agentic-identity-core/core_walkthrough.ipynb",
-    "07-x/embeddings-lab/exercises/ex01.ipynb",
-    "05-x/lab/notebooks/01_resolution_and_workers.ipynb",         # "solution" inside a word is not a solution
+    "04-x/kv-cache/notebooks/02_kv_cache_practice.ipynb",
+    "04-x/kv-cache/notebooks/01_kv_cache_worked.ipynb",            # a worked lesson, not an answer key
+    J("00-x", "gpu-capacity-planning", "notebooks", suffixed("01_capacity_practice", "solved")),
+    J("06-x", "agentic-identity-core", suffixed("core", "solution")),
+    J("07-x", "embeddings-lab", "notebooks", suffixed("ex01", "solutions")),
+    J("07-x", "lra-gcp", "worked", "00_core_idea.ipynb"),
+    J("06-x", "lab", "notebooks", "solutions", "deeper", "01_x.ipynb"),
+    "05-x/lab/notebooks/01_resolution_and_workers.ipynb",
+    "solutions.ipynb",
 ])
-def test_is_solution_leaves_exercises_alone(path):
+def test_a_solution_is_recognised_only_under_solutions(path):
     assert not b.is_solution(path)
 
 
-# A *_worked notebook is an answer key only beside its exercise twin, and only when the folder keeps no solutions/
-# of its own; otherwise it is a worked lesson.
-GCP = "07-x/long-running-agents-gcp/notebooks/"
-KV = "04-x/kv-cache/"
-CORE = "07-x/long-running-agents-core/notebooks/"
-FOLDERS = {
-    GCP: ["01_durable_loop_practice", "01_durable_loop_worked", "03_hitl_saga_practice", "03_hitl_saga_scheduled_worked"],
-    KV: ["01_kv_cache_worked", "02_kv_cache_practice"],
-    CORE: ["01_worked", "02_practice"],
-    "a/": ["01_x", "01_x_worked"],
-    "c/": ["02_z_practice", "02_z_worked", "03_w_exercise", "03_w_scheduled_worked"],
-}
-SIBLINGS = [f"{d}{n}.ipynb" for d, names in FOLDERS.items() for n in names]
-# long-running-agents-gcp keeps the practice answers as Python files in notebooks/solutions/ (README step 3).
-SIBLINGS_WITH_FILES = SIBLINGS + [GCP + "solutions/ex1_durable_loop.py"]
-
-
-@pytest.mark.parametrize("path, answers", [
-    ("c/02_z_worked.ipynb", True),                         # same stem as 02_z_practice
-    ("c/03_w_scheduled_worked.ipynb", True),               # same number as 03_w_exercise
-    ("a/01_x_worked.ipynb", True),                         # the exercise is plain 01_x
-    (GCP + "01_durable_loop_worked.ipynb", False),        # twin, but the answers are in notebooks/solutions/
-    (GCP + "03_hitl_saga_scheduled_worked.ipynb", False),
-    (KV + "01_kv_cache_worked.ipynb", False),             # lesson 01; the exercise is a different notebook, 02
-    (CORE + "01_worked.ipynb", False),                    # lesson 01 before 02_practice
-    ("b/01_y_worked.ipynb", False),                        # alone in its folder
-])
-def test_worked_is_an_answer_key_only_beside_its_exercise(path, answers):
-    assert b.is_solution(path, SIBLINGS_WITH_FILES) is answers
-
-
-def test_a_solutions_folder_makes_worked_notebooks_lessons():
-    """The same twin is an answer key until its folder gains a solutions/ (or worked/) folder."""
-    path = GCP + "01_durable_loop_worked.ipynb"
-    assert b.is_solution(path, SIBLINGS) is True
-    assert b.is_solution(path, SIBLINGS_WITH_FILES) is False
-    assert b.is_solution(path, SIBLINGS + [GCP + "worked/01_durable_loop.ipynb"]) is False
-
-
-def test_worked_rule_reads_the_folder_on_disk_by_default():
-    """With no sibling list the folder is listed; the repo's own notebooks are the fixture. Both are lessons:
-    kv-cache's has no twin, and long-running-agents-gcp's README reads the worked notebooks first and keeps the
-    practice answers in notebooks/solutions/."""
-    root = Path(b.ROOT)
-    kv = "04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
-    gcp_dir = ("07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/"
-               "notebooks")
-    gcp = f"{gcp_dir}/01_durable_loop_worked.ipynb"
-    if not ((root / kv).exists() and (root / gcp).exists() and (root / gcp_dir / "solutions").is_dir()):
-        pytest.skip("repo notebooks moved")
-    assert not b.is_solution(kv)
-    assert not b.is_solution(gcp)
-    assert b.is_solution("07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/"
-                         "00_core_idea.ipynb")
-
-
-def test_worked_lessons_come_before_the_exercises_in_the_nav(monkeypatch):
-    """long-running-agents-gcp's reading order: 01..04 worked, then 01..04 practice (README "Read in this order")."""
-    folder = "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks"
-    names = ["01_a_practice", "01_a_worked", "02_b_practice", "02_b_worked"]
+def test_a_folder_lists_its_notebooks_in_file_name_order(tmp_path, monkeypatch):
+    """No reordering by name suffix: a lesson and its practice twin sit side by side, in file-name order."""
+    folder = "06-x/lab/notebooks"
+    names = ["01_a", "01_a_practice", "02_b", "02_b_practice", "03_c_worked"]
     monkeypatch.setattr(b, "pages", {})
     monkeypatch.setattr(b, "notebooks", {f"{folder}/{n}.ipynb": f"layers/{folder}/{n}.ipynb" for n in names})
     monkeypatch.setattr(b, "nb_title", lambda rp: posixpath.basename(rp))
-    if not (Path(b.ROOT) / folder / "solutions").is_dir():
-        pytest.skip("repo notebooks moved")
     order = [next(iter(e.values())).rsplit("/", 1)[-1] for e in b.nav_for_dir(folder)]
-    assert order == ["01_a_worked.ipynb", "02_b_worked.ipynb", "01_a_practice.ipynb", "02_b_practice.ipynb"]
+    assert order == [f"{n}.ipynb" for n in names]
 
 
 def test_colab_index_uses_the_same_rule():
     """tools/gen_colab_index.py labels the same notebooks as worked answers as the site does."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     import gen_colab_index as g
-    for path in ("a/solutions/x.ipynb", "a/worked/x.ipynb", "a/01_x_worked.ipynb", "a/01_x_solved.ipynb",
-                 "a/core_solution.ipynb", "a/notebooks/01_x.ipynb", "a/practice/01_x.ipynb",
-                 "a/01_resolution.ipynb"):
+    for path in ("a/solutions/x.ipynb", J("a", "worked", "x.ipynb"), "a/notebooks/01_x_worked.ipynb",
+                 J("a", "notebooks", suffixed("01_x", "solved")), J("a", suffixed("core", "solution")), "a/notebooks/01_x.ipynb",
+                 J("a", "notebooks", "solutions", "x.ipynb"), "a/01_resolution.ipynb", "x.ipynb"):
         assert g.is_solution(path) == b.is_solution(path), path
-    for sibs in (SIBLINGS, SIBLINGS_WITH_FILES):
-        for path in SIBLINGS + ["b/01_y_worked.ipynb"]:
-            assert g.is_solution(path, sibs) == b.is_solution(path, sibs), path
-    for path in ("04-inference-engine/kv-cache/01_kv_cache_worked.ipynb",
-                 "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/"
-                 "notebooks/01_durable_loop_worked.ipynb"):
-        assert g.is_solution(path) == b.is_solution(path), path
-    assert (g.SOLUTION_DIRS, g.SOLUTION_STEM.pattern, g.WORKED_STEM.pattern, g.EXERCISE_STEM.pattern) == \
-        (b.SOLUTION_DIRS, b.SOLUTION_STEM.pattern, b.WORKED_STEM.pattern, b.EXERCISE_STEM.pattern)
+    assert g.ANSWERS_DIR == b.ANSWERS_DIR == "solutions"
+    assert g.NOTEBOOK_DIRS == {"notebooks"} | b.SOLUTION_DIRS and set(b.NOTEBOOK_DIRS) == {"notebooks"}
 
 
 # ---------------------------------------------------------------- math
@@ -241,10 +189,6 @@ def tree(tmp_path, monkeypatch):
         "07-x/topic/lab-mistral/notebooks/02_tools.ipynb": "# 02 · Tools",
         "07-x/topic/lab-mistral/solutions/01_loop.ipynb": "# 01 · The loop",
         "07-x/topic/lab-mistral/solutions/02_tools.ipynb": "# 02 · Tools",
-        "07-x/topic/lab-mistral/more/notebooks/practice/02_x_practice.ipynb": "# 02 · X",
-        "07-x/topic/lab-mistral/more/notebooks/practice/03_y_practice.ipynb": "# 03 · Y",
-        "07-x/topic/lab-mistral/more/notebooks/worked/02_x.ipynb": "# 02 · X",
-        "07-x/topic/lab-mistral/more/notebooks/worked/03_y.ipynb": "# 03 · Y",
         "07-x/topic/vllm-x/notebooks/01_only.ipynb": "# 01 · Only one",
     }
     for rp, text in files.items():
@@ -271,11 +215,10 @@ def test_nav_titles_structure_and_plumbing(tree):
     assert "Agent lab (Mistral)" in flat                         # the provider variant says so
     assert {"01 · The loop (solution)": "layers/07-x/topic/lab-mistral/solutions/01_loop.ipynb"} in \
         next(v for e in lab if isinstance(e, dict) for k, v in e.items() if k == "Solutions")
-    assert [next(iter(e)) for e in lab if isinstance(e, dict)] == ["More", "Notebooks", "Solutions"]
-    # notebooks/ holding only practice/ and worked/ is lifted into its parent
-    more = next(v for e in lab if isinstance(e, dict) for k, v in e.items() if k == "More")
-    assert [next(iter(e)) for e in more] == ["Practice", "Worked"]
-    assert {"02 · X (worked)": "layers/07-x/topic/lab-mistral/more/notebooks/worked/02_x.ipynb"} in more[1]["Worked"]
+    assert [next(iter(e)) for e in lab if isinstance(e, dict)] == ["Notebooks", "Solutions"]
+    notebooks = next(v for e in lab if isinstance(e, dict) for k, v in e.items() if k == "Notebooks")
+    assert notebooks == [{"01 · The loop": "layers/07-x/topic/lab-mistral/notebooks/01_loop.ipynb"},
+                         {"02 · Tools": "layers/07-x/topic/lab-mistral/notebooks/02_tools.ipynb"}]
     # folders around a single entry (vllm-x/ > notebooks/ > one notebook) collapse into it
     assert {"01 · Only one": "layers/07-x/topic/vllm-x/notebooks/01_only.ipynb"} in nav
     # a folder that only wraps one README is a page, titled from the H1's name part, humanised
@@ -294,33 +237,35 @@ def test_mkdocs_yml_blocks_are_rewritten_idempotently(tree, tmp_path, monkeypatc
     assert b.update_mkdocs_yml(["07-x"]) == "unchanged"
 
 
-def test_colab_index_marks_worked_answers_and_describes_every_layout():
+def test_colab_index_lists_answers_from_solutions_only_and_says_the_one_layout():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     import gen_colab_index as g
     out = g.layer_section("07-x", ["07-x/a/notebooks/01_x.ipynb", "07-x/a/notebooks/01_x_worked.ipynb",
-                                   "07-x/a/solutions/01_x.ipynb", "07-x/kv/01_kv_worked.ipynb",
-                                   "07-x/kv/02_kv_practice.ipynb"])
+                                   "07-x/a/solutions/01_x.ipynb", "07-x/kv/notebooks/01_kv_worked.ipynb",
+                                   "07-x/kv/notebooks/02_kv_practice.ipynb"])
     lines = out.splitlines()
     lab_a = next(ln for ln in lines if ln.startswith("- **`a/`**"))
     lab_kv = next(ln for ln in lines if ln.startswith("- **`kv/`**"))
     lessons_a, answers_a = lab_a.split(" — *answers:* ")
     assert "[01_x](" in lessons_a and "/a/notebooks/01_x.ipynb" in lessons_a     # the exercise
-    assert "01_x_worked" not in lessons_a                                          # its twin is an answer key
-    assert "/a/notebooks/01_x_worked.ipynb" in answers_a and "/a/solutions/01_x.ipynb" in answers_a
-    assert "*answers:*" not in lab_kv                                             # a worked lesson: a plain link
+    assert "[01_x_worked](" in lessons_a                                          # a name is not a folder: a lesson
+    assert "/a/solutions/01_x.ipynb" in answers_a and "01_x_worked" not in answers_a
+    assert "*answers:*" not in lab_kv                                             # no solutions/: plain links
     assert "[01_kv_worked](" in lab_kv and "[02_kv_practice](" in lab_kv
     assert len([ln for ln in lines if ln.startswith("- **")]) == 2                  # one line per lab
-    assert "Exercises are under `notebooks/` / `exercises/`" not in out
+    assert "`notebooks/`" in out and "`solutions/`" in out and "same file name" in out
+    for old in ("worked/", "_solved", "_solution`", "exercises/"):
+        assert old not in out, old
 
 
 def test_colab_index_groups_notebook_folders_under_their_lab():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     import gen_colab_index as g
     assert g.lab_of("a/lab/notebooks") == "a/lab"
-    assert g.lab_of("a/lab/notebooks/solutions") == "a/lab"
-    assert g.lab_of("a/lab/notebooks/practice") == "a/lab"
+    assert g.lab_of("a/lab/solutions") == "a/lab"
     assert g.lab_of("kv-cache") == "kv-cache"
     assert g.lab_of(".") == ""
+    assert g.lab_of(J("a", "lab", "practice")) == J("a", "lab", "practice")      # not a layout folder: its own line
 
 
 def test_colab_index_skips_run_outputs_and_checkpoints(tmp_path, monkeypatch):
@@ -344,16 +289,16 @@ def test_layer_names_match_the_colab_index():
 
 
 def test_duplicate_titles_in_provider_variants_name_the_provider():
-    nav = [{"Agent core": [{"01 · The loop": "layers/07-x/agent-core/notebooks/01_loop.ipynb"},
-                           {"01 · The loop (solution)": "layers/07-x/agent-core/solutions/01_loop.ipynb"}]},
-           {"Mistral agent core": [{"01 · The loop": "layers/07-x/mistral-agent-core/notebooks/01_loop.ipynb"},
-                                   {"01 · The loop (solution)": "layers/07-x/mistral-agent-core/solutions/01_loop.ipynb"},
-                                   {"05 · Going live on Mistral": "layers/07-x/mistral-agent-core/notebooks/05.ipynb"}]},
+    nav = [{"Agent lab": [{"01 · The loop": "layers/07-x/lab/notebooks/01_loop.ipynb"},
+                          {"01 · The loop (solution)": "layers/07-x/lab/solutions/01_loop.ipynb"}]},
+           {"Mistral agent lab": [{"01 · The loop": "layers/07-x/mistral-lab/notebooks/01_loop.ipynb"},
+                                  {"01 · The loop (solution)": "layers/07-x/mistral-lab/solutions/01_loop.ipynb"},
+                                  {"05 · Going live on Mistral": "layers/07-x/mistral-lab/notebooks/05.ipynb"}]},
            {"Long-running": [{"A primer": "layers/07-x/a/primer.md"}, {"A primer": "layers/07-x/b/primer.md"}]},
            {"GCP": [{"On Google Cloud": "layers/07-x/c/primer.md"}, {"On Google Cloud": "layers/07-x/c-gcp/p.md"}]}]
     out = json.dumps(b.mark_variant_duplicates(nav), ensure_ascii=False)
-    assert '"01 · The loop": "layers/07-x/agent-core/' in out
-    assert '"01 · The loop (Mistral)": "layers/07-x/mistral-agent-core/notebooks' in out
+    assert '"01 · The loop": "layers/07-x/lab/' in out
+    assert '"01 · The loop (Mistral)": "layers/07-x/mistral-lab/notebooks' in out
     assert '"01 · The loop (solution, Mistral)"' in out
     assert '"05 · Going live on Mistral"' in out                  # unique titles are left alone
     assert out.count('"A primer"') == 2                           # not a provider variant: unchanged

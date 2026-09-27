@@ -6,7 +6,9 @@ its layer's `README.md`. The repo is public, so there is nothing to set up. Each
 folder and pip-installs that lab's dependencies.
 
 ## Where the links are
-Each layer README ends with a *Run in Colab* section: one line per lab, exercises first, then the worked answers.
+Each layer README ends with a *Run in Colab* section: one line per lab, exercises and lessons first, then the worked
+answers. Every lab has the same two folders: `notebooks/` for what you open (exercise blanks, lessons and
+walkthroughs) and `solutions/` for the worked answer to a blank, under the same file name as the blank.
 
 - [00 · Foundations](00-foundations/README.md#run-in-colab) — 46 notebooks
 - [01 · Hardware and fabric](01-hardware-gpu-fabric/README.md#run-in-colab) — 16 notebooks
@@ -14,8 +16,8 @@ Each layer README ends with a *Run in Colab* section: one line per lab, exercise
 - [03 · Kubernetes and GPU scheduling](03-kubernetes-gpu/README.md#run-in-colab) — 18 notebooks
 - [04 · Inference engine](04-inference-engine/README.md#run-in-colab) — 50 notebooks
 - [05 · Orchestrator](05-orchestrator/README.md#run-in-colab) — 20 notebooks
-- [06 · Gateway](06-gateway/README.md#run-in-colab) — 49 notebooks
-- [07 · Agents and applications](07-application-agent-framework/README.md#run-in-colab) — 126 notebooks
+- [06 · Gateway](06-gateway/README.md#run-in-colab) — 43 notebooks
+- [07 · Agents and applications](07-application-agent-framework/README.md#run-in-colab) — 130 notebooks
 
 ## Keeping your work
 Colab opens a fresh copy from GitHub each time. To keep your edits, use *File -> Save a copy in Drive*

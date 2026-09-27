@@ -14,17 +14,17 @@ jupyter lab notebooks/
 ```
 
 Notebook 01 writes `artifacts/word_vectors.npz`, used by notebook 03 and
-exercises 01/03. A pre-built copy ships in the repo, so everything also works
+exercises ex01/ex03. A pre-built copy ships in the repo, so everything also works
 out of the box.
 
 ## How to work
 
 1. Read the worked notebook — outputs are baked in, so it reviews well even
    without running.
-2. Do the matching `exercises/exNN.ipynb`: fill each `YOUR CODE HERE` block.
+2. Do the matching `notebooks/exNN.ipynb`: fill each `YOUR CODE HERE` block.
    Every task has a self-check (hand-computable values, invariance properties,
    or finite-difference gradient checks) — run the cell to verify yourself.
-3. Compare with `solutions/exNN_solutions.ipynb` (executed).
+3. Compare with `solutions/exNN.ipynb` (executed; the same file name as the exercise).
 
 ## Map
 
@@ -49,8 +49,8 @@ out of the box.
 ## Rebuilding everything
 
 Notebooks are generated from `src/*.py` (jupytext percent format — the single
-source of truth). `python build.py` re-executes all worked and solution
-notebooks (verifying every assert) and re-strips the exercise notebooks.
+source of truth). `python build.py` re-executes the worked notebooks and the
+solutions (verifying every assert) and re-strips the exercise notebooks (`notebooks/exNN.ipynb`).
 Build-only deps: `pip install jupytext nbclient nbformat nbconvert ipykernel`.
 
 ## Deliberately missing

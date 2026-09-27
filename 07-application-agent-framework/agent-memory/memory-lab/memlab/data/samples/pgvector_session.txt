@@ -1,0 +1,43 @@
+# sample output in the documented format (illustrative) -- not a measurement.
+# What notebook 01's Postgres cell prints against deploy/local/compose.yaml (pgvector/pgvector:0.8.6-pg17),
+# shown with psql for readability. Scores come from ts_rank_cd and cosine distance, so they differ from the
+# SQLite store's bm25()-based ranking; the RRF formula (k = 60) is the same.
+
+memlab=# SELECT extversion FROM pg_extension WHERE extname = 'vector';
+ extversion
+------------
+ 0.8.6
+(1 row)
+
+memlab=# \d memories
+                            Table "public.memories"
+     Column      |       Type       | Nullable |              Default
+-----------------+------------------+----------+-----------------------------------
+ id              | text             | not null |
+ tenant          | text             | not null |
+ user_id         | text             | not null |
+ ...
+ embedding       | vector(1024)     | not null |
+ fts             | tsvector         |          | generated always as (to_tsvector('english'::regconfig, text)) stored
+Indexes:
+    "memories_pkey" PRIMARY KEY, btree (id)
+    "memories_deletion" btree (tenant, deletion_key)
+    "memories_fts" gin (fts)
+    "memories_hnsw" hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+    "memories_idempotency_key_key" UNIQUE CONSTRAINT, btree (idempotency_key)
+    "memories_partition" btree (tenant, user_id, status)
+
+-- the hybrid search for tenant acme, user u1: "Which city is my home city, and where did my trip go?"
+                 text                 |   score   | rank_vector | rank_fts
+--------------------------------------+-----------+-------------+----------
+ Home city: the user lives in Lisbon. | 0.0327869 |           0 |        0
+ Trip: the user took a trip to Kyoto. | 0.0322581 |           1 |        1
+ Employer: the user works at Globex.  | 0.0158730 |           2 |
+(3 rows)
+
+memlab=# DELETE FROM memories WHERE tenant = 'acme' AND deletion_key = 'acme/u1/home_city';
+DELETE 1
+memlab=# VACUUM (VERBOSE) memories;
+INFO:  vacuuming "memlab.public.memories"
+...
+VACUUM
