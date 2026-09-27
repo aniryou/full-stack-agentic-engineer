@@ -13,7 +13,7 @@
 #   time, compared with the datasheet peak. 80–90 % of peak means the kernel is done; the only way
 #   faster is to move fewer bytes (fusion, lower precision).
 # * Measure the kernel, not the plumbing: data already on the device, CUDA events, a warm-up launch.
-# * Small launches are **latency-bound**: `t = α + S/B` with α a few microseconds of launch overhead —
+# * Small launches are **latency-bound**: $t = \alpha + S/B$ with $\alpha$ a few microseconds of launch overhead —
 #   the same model notebook 04 fits to collectives.
 # * Access patterns and extra passes cost bandwidth: naive transpose ≪ tiled ≈ copy; fused softmax
 #   moves half the bytes of the unfused one.
@@ -96,8 +96,8 @@ print(f"✅ {gbps:.1f} GB/s = {frac:.0%} of peak: a streaming kernel at ~90 % ha
 # ## A bandwidth sweep: two regimes
 #
 # Time `copy` and `vec_add` on vectors of 2¹⁰ to 2²⁶ floats (4 KiB to 256 MiB each; 8 KiB–512 MiB of traffic
-# for copy, 12 KiB–768 MiB for vec_add). Small launches cost a roughly fixed α (launch + latency); large ones
-# approach the DRAM bandwidth B. On the T0 path we check correctness in the simulator and print what the α-β
+# for copy, 12 KiB–768 MiB for vec_add). Small launches cost a roughly fixed $\alpha$ (launch + latency); large ones
+# approach the DRAM bandwidth $B$. On the T0 path we check correctness in the simulator and print what the α-β
 # model *predicts* for the reference GPU — and, if you brought back `out/kernels.json` from a GPU box
 # (`deploy/any-gpu`), what was measured there.
 
@@ -132,10 +132,10 @@ else:
 # %% [markdown]
 # ## Exercise 2.2 — where launch overhead stops mattering
 #
-# The two terms of `t = α + S/B` are equal at `S½ = α·B`, where the kernel reaches half its asymptotic
-# bandwidth. Write `crossover_elements(alpha_s, bw_Bps, bytes_per_element)`: the vector length at which a
-# kernel moving `bytes_per_element` bytes per element reaches that point. Evaluate it for a copy-like
-# kernel with α = 5 µs and B = 256 GB/s (80 % of a T4).
+# The two terms of $t = \alpha + S/B$ are equal at $S_{1/2} = \alpha \cdot B$, where the kernel reaches half
+# its asymptotic bandwidth. Write `crossover_elements(alpha_s, bw_Bps, bytes_per_element)`: the vector length
+# at which a kernel moving `bytes_per_element` bytes per element reaches that point. Evaluate it for a
+# copy-like kernel with $\alpha$ = 5 µs and $B$ = 256 GB/s (80 % of a T4).
 
 # %% exercise
 def crossover_elements(alpha_s: float, bw_Bps: float, bytes_per_element: int) -> float:
@@ -173,8 +173,8 @@ else:
 # %% [markdown]
 # ## Exercise 2.3 — a no-cache model of the naive transpose
 #
-# Half the bytes are loads at full efficiency, half are stores at efficiency `e` (useful bytes ÷ bytes
-# moved; 1/8 for the naive transpose). If moving bytes runs at the copy bandwidth `B`, what effective
+# Half the bytes are loads at full efficiency, half are stores at efficiency $e$ (useful bytes ÷ bytes
+# moved; 1/8 for the naive transpose). If moving bytes runs at the copy bandwidth $B$, what effective
 # bandwidth does the transpose report? Write `naive_transpose_gbps(copy_gbps, store_efficiency)`.
 
 # %% exercise
@@ -287,9 +287,9 @@ else:
 # %% [markdown]
 # ## Launch overhead and CUDA Graphs
 #
-# `gpurt.launch.LaunchModel`: eager step ≈ `n·max(k + g, L)`, graph step ≈ `G + n·(k + g)` for `n`
-# kernels of `k` µs, a GPU-side gap `g`, CPU launch cost `L` and one graph launch `G`. On a GPU with
-# torch, `measure_graph_vs_eager()` measures the real thing.
+# `gpurt.launch.LaunchModel`: eager step $\approx n \cdot \max(k + g, L)$, graph step $\approx G + n \cdot (k + g)$
+# for $n$ kernels of $k$ µs, a GPU-side gap $g$, CPU launch cost $L$ and one graph launch $G$. On a GPU
+# with torch, `measure_graph_vs_eager()` measures the real thing.
 
 # %%
 from gpurt.launch import measure_graph_vs_eager  # noqa: E402
@@ -313,8 +313,8 @@ else:
 # A decode step runs `layers × kernels_per_layer` kernels. Write `decode_step(layers, kernels_per_layer,
 # kernel_us, model)` returning `(eager_us, graph_us, launch_bound)` with a `LaunchModel`. Evaluate primer
 # §4.2's scenario — 32 layers × 12 kernels = 384 kernels, ≈2 µs each at batch 1 and ≈20 µs at a large
-# batch, with its assumptions L = 5 µs, G = 10 µs and no GPU-side gap — and then add the gap the primer
-# leaves out: g = 1 µs between consecutive kernels.
+# batch, with its assumptions $L$ = 5 µs, $G$ = 10 µs and no GPU-side gap — and then add the gap the primer
+# leaves out: $g$ = 1 µs between consecutive kernels.
 
 # %% exercise
 def decode_step(layers: int, kernels_per_layer: int, kernel_us: float, model: LaunchModel):
