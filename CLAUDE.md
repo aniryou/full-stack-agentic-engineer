@@ -244,13 +244,15 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   vector-database, embeddings and identity primers) and the Markdown cells of every lab's notebooks (percent-source
   labs through `notebooks_src/` and a rebuild; hand-written ones edited as JSON) now typeset their formulas, split
   their walls of text at sentence boundaries with no word changed, and turn single-paragraph summaries into a lead
-  and bullets. Site-wide: 0 → 5,269 typeset formulas on 275 pages, paragraphs over 200 words 86 → 0 and over 120
+  and bullets. Site-wide: 0 → 5,271 typeset formulas on 275 pages, paragraphs over 200 words 86 → 0 and over 120
   words 729 → 220, tables overflowing the column 107 → 14 (the 9–11-column spec tables, which scroll), no MathJax
   errors and no raw TeX left. Fixed on the way: `S*`/`k*` italicising a sentence, single-letter italics used as
   variables, formula fences clipped at the column edge, six Markdown sections and a heading stuck in code cells for
   want of a `# %% [markdown]` marker, the identity lab's practice notebooks whose first cell was indented into a code
-  block, and paragraphs with two dollar prices (Jupyter and Colab typeset the text between them; the prices are now
-  `\$`). **distill-core's tests now hold trained-toy numbers to a tolerance.** CI's `tests (distill-core)` failed on
+  block, and paragraphs with two dollar prices, which MathJax's `$` delimiters pair into a formula: the prices are now
+  `\$` (a heading uses `&#36;`), which nbconvert, the site, GitHub and Colab show as a plain dollar; JupyterLab 4
+  renders Markdown first and lets MathJax scan the result, so it still pairs them (a `<span>$</span>` would be the
+  cure there, not applied). **distill-core's tests now hold trained-toy numbers to a tolerance.** CI's `tests (distill-core)` failed on
   GitHub's AMD runners and passed on its Intel ones: the seeded numpy training amplifies the last-bit differences
   between OpenBLAS kernels and numpy's SIMD paths, so 202 trained or sampled numbers (the KD students, drafts, GKD,
   pruning, exposure bias) differ in the third digit between CPU families and a few chaotic ones by 0.1–0.2. Exact
