@@ -87,6 +87,20 @@ docs.vllm.ai, kubernetes.io, llm-d.ai, download.pytorch.org, registry.terraform.
   Use `grep -rn` over these instead of guessing; cite the file path in the fact sheet. Missing repo? `flock $SP/ref/.lock git clone --depth 1 https://github.com/<org>/<repo> $SP/ref/<name>`.
 - Repo facts that the new topics must stay consistent with: vLLM pinned at 0.30.0 / main@5840d95 (verify); Kueue v0.19.6; K8s 1.34; the roofline core's model catalogue (`01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/roofline/llm.py`: Mixtral-8x7B 46.7 B total / 12.9 B active, Qwen3-30B-A3B 30.5 B / 3.35 B); the capacity primer's Mistral Large 3 (675 B MoE, 41 B active); `minengine.quant` formats (int8 per-channel, int4 group-wise, fp8-e4m3 emulation); `servelab.sizing` (KV blocks from config.json + gpu_memory_utilization).
 
+## Environment for the 2026-09-26 structure-plan builds (llm-gateway, agent-memory)
+- Python 3.11; ONE shared venv at `$SP/venv` (`source $SP/venv/bin/activate` first in every shell): numpy 2.x, pytest, nbformat, nbclient, ipykernel, matplotlib,
+  pyyaml, aiohttp, httpx, requests, kubernetes-validate (`kubernetes-validate --strict -k 1.34.0 <yaml>`). **torch is not installed; do not install it.**
+- No GPU, no Docker daemon, no kind/kubectl/helm, **no Terraform** — these two topics carry no Terraform (deploy/gcp is a README pointing at existing labs' deploys).
+  4 CPUs, ~15 GB RAM shared with other agents: keep tests < 60 s and notebook runs short.
+- Installs: `$SP/pipi <pkgs>` only (serialized pip into the active venv). Never torch, vllm, triton, flash-attn, or anything that downloads weights. No network in tests.
+- Network: `git clone https://github.com/<org>/<repo>` and `https://raw.githubusercontent.com/...` work; github.com web pages, docs sites, arxiv.org, huggingface.co
+  and download.pytorch.org are blocked. PyPI works. Clone sources under `$SP/ref/` with `flock $SP/ref/.lock git clone --depth 1 <url> $SP/ref/<name>`.
+- Git: your working copy is a worktree on the topic's own branch; agents never run git — the orchestrator commits, and a background job snapshots the worktree.
+- Repo facts to stay consistent with: vLLM pinned at 0.30.0 (verify); Kueue v0.19.6; K8s 1.34; the OpenTelemetry GenAI attribute names already used in
+  `07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab`; `06-gateway/scaling-admission-cost/agentic-scaling-lab` (`scalelab.admission`,
+  `scalelab.capacity`, `scalelab.resilience`); the identity primer `06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md`; the hashing embedder of
+  `07-application-agent-framework/retrieval-rag/rag-from-scratch`; `minifaiss` HNSW (M0 = 2M) in `retrieval-rag/vector_stores`; COMPUTE.md prices dated 2026-09-26 (verify).
+
 ## Per-topic fact sheets for the §6b topics (2026-09-26)
 Written by the research agents from the cloned upstream sources before the builders started; each fact names the file it was read
 from, and the unverified items are listed at the end of each sheet. They are the verification record behind those primers.

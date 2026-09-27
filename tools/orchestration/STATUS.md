@@ -1,7 +1,7 @@
-# Build status — layers 01–05 (+ deep primers) and the four §6b topics
+# Build status — layers 01–05 (+ deep primers) and the six §6b topics
 
 Legend: `building` (agents writing) → `built` (builder validation passed) → `reviewed` (adversarial review + fixes passed) → `merged` (on `main`).
-Everything below is on `main`. Each layer or topic was built on a WIP branch, reviewed there, and merged through its own branch/PR. The 2026-09-26 adversarial review of the whole repo and the packages fixing its findings are tracked in [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md).
+Everything below is on `main`. Each layer or topic was built on a WIP branch, reviewed there, and merged through its own branch/PR. The 2026-09-26 adversarial review of the whole repo and the packages fixing its findings are tracked in [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md); the structure plan that carried out the five decisions it left to the owner, in [`reviews/2026-09-26-structure-plan.md`](reviews/2026-09-26-structure-plan.md).
 
 | Layer / item | Paths | State | Next step |
 |---|---|---|---|
@@ -21,15 +21,21 @@ Everything below is on `main`. Each layer or topic was built on a WIP branch, re
 | 07 sandboxed-execution (07.5) | `07-application-agent-framework/sandboxed-execution/` (PRIMER, `sandbox-core` 81 tests, `sandbox-lab` 112 tests; 5 + 5 notebooks; GKE Sandbox Terraform) | REVIEWED (58 findings fixed, validator pass) → MERGED to main (PR #12, 2c9f667) | — |
 | Integration (four topics) | layer READMEs 00/04/07 (00 restyled), cross-links from existing primers, `CURRICULUM.md` (00.4, 00.5, 04.9, 07.5; drills 12–15), `COMPUTE.md` (§5.4, §6, §7, §9), root README, `CLAUDE.md` log, site landing text, Colab links | MERGED to main (PR #12): 347 notebooks, link check clean (one false positive: inline code in `README-STYLE.md`), site generator 0 missing targets; verified independently (the verifier added the `FACTS.md` pointer to `facts/` and removed a stray generated `04-inference-engine/quantization/COLAB.md`) | — |
 | Adversarial review fixes (2026-09-26) | whole repo; ledger `reviews/2026-09-26-fix-plan.md` | sixteen packages MERGED (PRs #15–#28, #30, #32): root LICENSE, curriculum gaps, six dead T0 paths, weak checks, technical errors, hygiene, idempotent builders + tooling tests, site, READMEs, `kernel-core`; CI (`tests.yml`, PR #29), the sandbox-core runner fix (PR #31) and the sandbox-lab timing fix (PR #33) MERGED — nineteen PRs in all; `main` is green under the new CI | DONE — the tracking PR #14 merged (`ade404c`, twenty PRs in all); the decisions left to the owner are listed in the ledger |
+| 06 llm-gateway (06.7) | `06-gateway/llm-gateway/` (PRIMER, `gateway-core` 109 tests + 1 skipped, `gateway-lab` 166 tests + 1 skipped with the `dpop` extra; 5 + 5 notebooks and their solutions; no Terraform) | BUILT and REVIEWED (39 findings fixed, none rejected; validator pass) → MERGED to main (PR #41, e3c468a) | — |
+| 07 agent-memory (07.6) | `07-application-agent-framework/agent-memory/` (PRIMER, `memory-core` 84 tests + 1 skipped, `memory-lab` 174 tests + 1 skipped; 5 + 5 notebooks and their solutions; no Terraform) | BUILT and REVIEWED (32 findings fixed, none rejected; validator pass) → MERGED to main (PR #39, 55d840b) | — |
+| Structure plan (2026-09-26 decisions) | the five decisions the fix plan left to the owner; ledger `reviews/2026-09-26-structure-plan.md`, scripts and briefs in `reviews/structure-plan/` | MERGED, six PRs: c1 durable consolidation (PR #37, d74de20), c2 Mistral adapters (PR #36, 399e4fe), c3 one notebook layout (PR #38, bbde7d5), c5 agent memory (PR #39, 55d840b), c4 LLM gateway (PR #41, e3c468a), `CONTRIBUTING.md` (PR #40, 5328ac1); 365 notebooks, 38 lab entries in `tools/ci/labs.json`, 28 builders | `c6-final` (these maintainer notes) is on the tracking branch; the tracking PR #35 merges last |
 
 The four §6b topics were built with `build_topic.js` (research → builders A ∥ B → nested `review_workflow.js`) on
-`claude/four-new-topics`; the integration checklist they followed is [`INTEGRATION.md`](INTEGRATION.md).
+`claude/four-new-topics`; the integration checklist they followed is [`INTEGRATION.md`](INTEGRATION.md). The two
+structure-plan topics (`llm-gateway`, `agent-memory`) were built with the same script, each in a worktree on its package
+branch, and integrated by an agent per topic (`tools/ci/labs.json`, `CURRICULUM.md`, `COMPUTE.md`, the layer README,
+`FACTS.md`) before its PR.
 
 ## Resuming after an interruption
-1. `git checkout main && git pull`; for the review-fix packages read [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md) (branch names, wave order, what is merged).
+1. `git checkout main && git pull`; for the review-fix packages read [`reviews/2026-09-26-fix-plan.md`](reviews/2026-09-26-fix-plan.md) (branch names, wave order, what is merged), and for the structure-plan packages [`reviews/2026-09-26-structure-plan.md`](reviews/2026-09-26-structure-plan.md).
 2. Read this file, then `SPEC.md` §7 for the report format builders/reviewers use.
 3. For any layer still `building`: run its validation (SPEC §4) to see what state the tree is in; finish or re-launch a builder with the SPEC §6 block for that layer.
-4. For `built` layers: run the review workflow (two adversarial reviewers — concepts and runnability — then a fixer), then integrate and merge.
+4. For `built` layers: run the review workflow (`review_workflow.js`: three adversarial reviewers — concepts, runnability, pedagogy — then a fixer and an independent validator), then integrate and merge.
 
 ## Notes for the review / integration passes
 - Layer 04 lab, free-T4 path: vLLM on Turing (compute capability 7.5) needs `--dtype half` and a non-FlashAttention backend; confirm the pinned vLLM

@@ -1,4 +1,4 @@
-# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, four more topics: §6b)
+# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, six more topics: §6b)
 
 Repo: `/home/user/full-stack-agentic-engineer` (read its `CLAUDE.md`; you already have it). Scratch: `$SP` (see FACTS.md).
 Read `$SP/FACTS.md` before writing anything product-specific. This file is the contract every builder and reviewer follows.
@@ -39,6 +39,8 @@ output is labelled "simulated"; sample tool output used as fixtures is labelled 
 | 00 | `00-foundations/mixture-of-experts` | `moe-core` (`moecore`) | `moe-lab` (`moelab`) |
 | 04 | `04-inference-engine/quantization` | `quant-core` (`quantcore`) | `quant-lab` (`quantlab`) |
 | 07 | `07-application-agent-framework/sandboxed-execution` | `sandbox-core` (`sandboxcore`) | `sandbox-lab` (`sandboxlab`) |
+| 06 | `06-gateway/llm-gateway` | `gateway-core` (`gwcore`) | `gateway-lab` (`gwlab`) |
+| 07 | `07-application-agent-framework/agent-memory` | `memory-core` (`memcore`) | `memory-lab` (`memlab`) |
 Root `CURRICULUM.md` and `COMPUTE.md` exist (the integrator updates them); you may link to them (from a topic dir:
 `../../CURRICULUM.md`, `../../COMPUTE.md`; from a core/lab dir: `../../../COMPUTE.md`) — the link checker may flag only those two.
 

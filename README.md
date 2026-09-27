@@ -4,7 +4,7 @@
 
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to agents and applications at the top. It is
-organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
+organised as eight layers and, within each layer, by topic: 365 notebooks (exercise and solution versions), all of
 which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Eleven topics come as a primer, a small
 from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
 (03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `llm-gateway` (06),
