@@ -32,7 +32,6 @@ def test_labs_json_is_complete_and_consistent():
             "long-running-agents-mistral", "long-running-agents-mistral-py312"} <= ids
 
 
-
 def test_one_pyproject_declares_each_package_name():
     """Two labs installing the same package name cannot share an environment (the old scalelab clash)."""
     files = subprocess.run(["git", "ls-files", "*pyproject.toml"], cwd=REPO, capture_output=True, text=True, check=True).stdout.split()
@@ -41,7 +40,9 @@ def test_one_pyproject_declares_each_package_name():
         m = re.search(r'(?m)^name\s*=\s*"([^"]+)"', (REPO / f).read_text())
         if m:
             names.setdefault(m.group(1), []).append(f)
-    assert names.get("scalelab") == ["06-gateway/scaling-admission-cost/agentic-scaling-lab/pyproject.toml"], names.get("scalelab")
+    assert {n: fs for n, fs in names.items() if len(fs) > 1} == {}
+    assert names.get("scalelab") == ["06-gateway/scaling-admission-cost/agentic-scaling-lab/pyproject.toml"]
+
 
 def test_check_passes_on_the_committed_tree():
     r = subprocess.run([sys.executable, str(REPO / "tools/ci/ci.py"), "check"], capture_output=True, text=True)

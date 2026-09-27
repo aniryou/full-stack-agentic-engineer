@@ -60,7 +60,7 @@ confirm what an alias points at, and the price, before relying on either.
 | Model string | Use for | Input / output ($ per 1M) | Weights |
 |--------------|---------|---------------------------|---------|
 | `mistral-large-latest` (Large 3, 675B MoE, 41B active) | hardest tasks and **agents / tool use**, long context | $0.50 / $1.50 | **open (Apache-2.0)** |
-| `mistral-medium-latest` (Medium 3.5, 128B dense) | frontier-class agentic work and coding | $1.50 / $7.50 | open (modified MIT: read the modification) |
+| `mistral-medium-latest` (Medium 3.5, 128B dense) | frontier-class agentic work and coding | $1.50 / $7.50 | published (modified MIT: a commercial licence above $20 M of monthly revenue, verify), so notebook 05's snapshot counts it as not self-hostable |
 | `mistral-small-latest` (Small 4, 119B MoE, 6.5B active) | cost-effective general work and tool use | $0.15 / $0.60 | **open (Apache-2.0)** |
 | `ministral-14b-2512` / `ministral-8b-2512` / `ministral-3b-2512` | on-device, cheap high-volume | $0.20 / $0.20, $0.15 / $0.15, $0.10 / $0.10 | **open (Apache-2.0)** |
 | `magistral-medium-latest` † | step-by-step **reasoning** | $2 / $5 | API |

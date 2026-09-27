@@ -125,8 +125,11 @@ print("✅ parsed the tool call:", name, args)
 # Part of the deployment story is choosing the *cheapest model that clears the bar* —
 # and, when the data must stay in your environment, only a model whose weights you can
 # run yourself. `CATALOGUE` is a snapshot of the table in `docs/MISTRAL.md` (list prices
-# per million tokens, 2026-09-19, illustrative — verify before quoting). The strings do
-# not matter; the rule does.
+# per million tokens, 2026-09-19, illustrative — verify before quoting). `open_weight`
+# here means "you may run it yourself without a separate licence": Medium's weights are
+# published, but its modified MIT licence asks for a commercial licence above a revenue
+# threshold (`docs/MISTRAL.md`), so the snapshot marks it false. The strings do not
+# matter; the rule does.
 #
 # Write `pick_model(catalogue, need, self_host=False, input_tokens=5_000, output_tokens=300)`
 # that returns the **name** of the model whose `can` set contains `need` (and, if
