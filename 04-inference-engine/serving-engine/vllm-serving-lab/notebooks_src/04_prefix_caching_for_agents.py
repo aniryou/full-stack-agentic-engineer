@@ -15,7 +15,7 @@
 #
 # * a hit needs an **identical prefix from token 0** — one changed token early (a timestamp in the
 #   system prompt, a reordered tool list) invalidates every block after it;
-# * an agent conversation is **append-only**, so turn *n+1* can reuse all of turn *n* — prompt,
+# * an agent conversation is **append-only**, so turn $n+1$ can reuse all of turn $n$ — prompt,
 #   tool results and the model's own reply — if the client resends them byte for byte.
 #
 # The engine counts it: `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (tokens).

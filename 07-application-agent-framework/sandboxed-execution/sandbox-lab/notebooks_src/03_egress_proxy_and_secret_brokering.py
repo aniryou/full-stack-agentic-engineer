@@ -179,19 +179,21 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "A sandbox that needs the network gets one reachable address — the egress proxy —
-# and the proxy owns every other decision. It is the gateway path from the identity design, one
-# layer down: the sandbox talks plain HTTP to the proxy, the proxy holds the credential in a Secret
-# mounted only into it, strips whatever the caller sent, injects the real key, and speaks HTTPS
-# upstream, so the code is authenticated to the API and never holds the key. It allowlists
-# destinations by route or host, refuses `CONNECT` because a TLS tunnel would hide the request from
-# it, guards against SSRF by refusing hosts that resolve to private or link-local addresses, and
-# redacts the injected secret from responses so a reflecting endpoint can't hand it back. Every
-# decision is one audit line, so a denied egress or a reflected credential becomes an alert. Two
-# honest caveats: this relocates credential risk into one box rather than removing it, and it only
-# works if the network actually forces the sandbox through the proxy — a Unix socket with no other
-# route on a laptop, a default-deny NetworkPolicy to the proxy on Kubernetes. `HTTP_PROXY` env vars
-# are advisory; enforcement is the network."
+# **Two minutes.** "A sandbox that needs the network gets one reachable address — the egress proxy — and the
+# proxy owns every other decision. It is the gateway path from the identity design, one layer down: the
+# sandbox talks plain HTTP to the proxy, the proxy holds the credential in a Secret mounted only into it,
+# strips whatever the caller sent, injects the real key, and speaks HTTPS upstream, so the code is
+# authenticated to the API and never holds the key.
+#
+# "It allowlists destinations by route or host, refuses `CONNECT` because a TLS tunnel would hide the request
+# from it, guards against SSRF by refusing hosts that resolve to private or link-local addresses, and redacts
+# the injected secret from responses so a reflecting endpoint can't hand it back. Every decision is one audit
+# line, so a denied egress or a reflected credential becomes an alert.
+#
+# "Two honest caveats: this relocates credential risk into one box rather than removing it, and it only works
+# if the network actually forces the sandbox through the proxy — a Unix socket with no other route on a
+# laptop, a default-deny NetworkPolicy to the proxy on Kubernetes. `HTTP_PROXY` env vars are advisory;
+# enforcement is the network."
 #
 # **Drill 1.** *Why not just give the sandbox the API key as an environment variable, scoped tight?*
 # — Then a prompt injection that runs `print(os.environ)` exfiltrates it, and it sits in every core

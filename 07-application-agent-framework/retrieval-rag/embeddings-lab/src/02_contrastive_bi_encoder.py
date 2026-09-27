@@ -44,10 +44,10 @@ print(f"train pairs {len(A_tr)}, test pairs {len(A_te)}, feature dim {V}")
 
 # %% [markdown]
 # ## Encoder + symmetric InfoNCE, gradients by hand
-# `E(x) = l2norm(x @ W)`, similarity matrix `S = Z_a Z_bᵀ / τ`. The loss is
+# $E(x) = \operatorname{l2norm}(xW)$, similarity matrix $S = Z_a Z_b^\top / \tau$. The loss is
 # cross-entropy toward the diagonal, in both directions. The gradient of
-# softmax-CE w.r.t. `S` is just `(softmax − I)/B`, then chain through the
-# l2-normalization: for `z = u/‖u‖`, `du = (dz − z(z·dz))/‖u‖`.
+# softmax-CE w.r.t. $S$ is just $(\mathrm{softmax} - I)/B$, then chain through the
+# l2-normalization: for $z = u/\lVert u \rVert$, $du = (dz - z\,(z \cdot dz))/\lVert u \rVert$.
 
 # %%
 def encode(X, W):
@@ -161,8 +161,8 @@ plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ## Temperature: the sharpness knob
-# Small τ focuses the softmax on the hardest negatives; too small is unstable,
-# too large under-trains. This is why every model card lists τ ≈ 0.02–0.05.
+# Small $\tau$ focuses the softmax on the hardest negatives; too small is unstable,
+# too large under-trains. This is why every model card lists $\tau \approx 0.02\text{–}0.05$.
 
 # %%
 taus, recs = [1.0, 0.3, 0.05, 0.01], []

@@ -90,6 +90,15 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
 - No emojis, except ✅ in the output of a check, and no marketing adjectives
   ([`README-STYLE.md`](tools/orchestration/README-STYLE.md), SPEC §3).
 - One name per layer: the one in the table above, in prose, headings and tables alike.
+- Mathematics is TeX, written the way GitHub renders it: `$...$` inline, `$$` on its own lines for display (an
+  `aligned` environment inside it for a derivation). No space just inside the dollars, no digit right after the
+  closing one, `\|` rather than `|` inside a table cell; a dollar price is never inside math. The site turns the
+  inline form into `\( \)` and leaves prices alone (`tools/site/README.md`, "Math"). Plain-text formulas
+  (`α·T²·KL(p_T ‖ q_T)`, `r_t = log π_T − log π_S`) render as raw underscores: do not write them.
+- Paragraphs carry one idea and stay under about 150 words; a summary of several bold terms is a list, one item
+  per term. Callouts are blockquotes with a bold lead-in (`> **Pitfall.**`, `> **Verify.**`, `> **In a design
+  review**`) or GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), which the site
+  renders as admonitions.
 
 ### Run tiers
 
@@ -116,11 +125,12 @@ that makes torch importable.
   requires it verbatim, so a changed formula fails until the primer follows.
 - A trained or sampled number (a seeded run of a tiny model, a sample drawn from one) is one CPU's run: numpy's
   OpenBLAS picks its matrix kernel per microarchitecture, the kernels round differently in the last bit, and a
-  few hundred Adam steps can grow that into a slightly different model. Pin such a number to the reference run's
-  value within a tolerance measured across kernels, never with exact equality, and keep the primer's qualitative
-  claim as its own assertion; the pattern is `distill-core`'s `tests/pins.py` (`near()`) with
-  `tools/host_sensitivity.py`, which recomputes the numbers under every OpenBLAS kernel and numpy SIMD level the
-  machine can force plus last-bit perturbations, and prints the spread.
+  few hundred Adam steps can grow that into a slightly different model. Hold such a number to the primer's value
+  within a tolerance measured across CPU variants, never with exact equality, and assert the primer's qualitative
+  claim outright; the pattern is `distill-core`'s `near()` in `tests/test_primer_numbers.py` (the primer's text
+  verbatim, each `#` a number within its tolerance) with `tools/host_sensitivity.py`, which recomputes the
+  numbers under every OpenBLAS kernel and numpy SIMD level the machine can force, plus last-bit perturbations,
+  and prints the spread.
 - When a formula or an explanation already has a home in the repo, cite it and reuse it; duplicating it is a major
   review finding (SPEC §6b and §6c). Labs are standalone packages (no lab's package imports another lab), so new code that
   needs such a formula re-implements it, and a test reproduces the home's numbers and says so
@@ -136,7 +146,10 @@ that makes torch importable.
   `# %% exercise` with `### BEGIN SOLUTION` / `### END SOLUTION`, and `# %% check`) and build them with
   `python3 tools/build_notebooks.py` in the lab. The builder writes both folders, puts the Colab bootstrap cell (its
   `BOOTSTRAP` constant) first and mints stable cell ids, so rebuilding a clean tree is a no-op. Never edit these
-  `.ipynb` files by hand; `python3 tools/ci/ci.py builders` lists every builder.
+  `.ipynb` files by hand; `python3 tools/ci/ci.py builders` lists every builder. A heading (`# ## …`) needs a
+  `# %% [markdown]` line of its own: after a code, exercise or check cell without one, the builder writes it and the
+  prose under it as comments at the end of that cell. [`tools/ci/nb_sources.py`](tools/ci/nb_sources.py) checks
+  every source for this through `tools/ci/ci.py check`.
 - **Hand-written notebooks** get their Colab cell from `python3 tools/inject_colab_bootstrap.py <lab-dir>`, which is
   idempotent and replaces only its own cell. Never run it on a percent-source lab.
 - **Exercises:** a blank stops at its first exercise with `NotImplementedError`, and every exercise is followed by a
@@ -203,7 +216,7 @@ MIT `LICENSE`, and a change is published under the licence of the files it touch
 
 | `tools/ci/run_local.sh` | What it checks | CI job |
 |---|---|---|
-| `--check` | every test file belongs to a lab in `tools/ci/labs.json`, every listed directory exists, every lab with a notebook runner has a solutions step, every notebook follows the layout; then the tests of `tools/ci` itself | lab list complete, CI helpers tested |
+| `--check` | every test file belongs to a lab in `tools/ci/labs.json`, every listed directory exists, every lab with a notebook runner has a solutions step, every notebook follows the layout, every heading in a percent-format notebook source is in a markdown cell; then the tests of `tools/ci` itself | lab list complete, CI helpers tested |
 | `<lab-id> …` | the lab installs as its README says, without torch, and its tests pass (`--list` prints the ids) | tests (`<lab-id>`) |
 | `--solutions <lab-id>` | every solution notebook runs clean and every blank stops at its first exercise | solutions (manual: Actions → tests → Run workflow) |
 | `--notebooks` | every notebook has a Colab setup cell, and every builder and the injector leave the committed tree unchanged (commit first: it needs a clean tree) | notebook rebuilds are no-ops |

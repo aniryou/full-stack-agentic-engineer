@@ -6,19 +6,22 @@
 #
 # ## The one-minute version
 #
-# Cache affinity and load balance pull in opposite directions. Pure affinity sends every request
-# for a popular prefix to the one replica that caches it — a **hot prefix** melts that replica while
-# the others idle. Pure load balancing ignores the cache. A weighted router sits in between, and the
-# weights decide exactly *how much* load a cache hit is worth: with prefix weight `wp` and load
-# weights summing to `W`, a fully cached replica keeps winning until its load scores fall more than
-# `wp` below a cold, idle replica's. The llm-d optimized baseline replaces the arithmetic with a
-# rule — **sticky until saturated**: filter to replicas holding ≥ 80% of the prompt unless their
-# estimated prefill backlog is too far behind the best other replica, then balance by tokens in
-# flight. Two more traps: **scrape lag** (every request between two scrapes sees the same stale
-# numbers and herds onto the replica that looked idlest) and **thresholds that ignore the workload**
-# (an 80% affinity threshold never fires for a turn whose new tokens are more than 20% of its
-# prompt — on this lab's agents, the first resumed turn of every session).
-# Background: [PRIMER §2 Routing signals and algorithms and §3 Flow control and priorities](../../PRIMER.md).
+# Cache affinity and load balance pull in opposite directions. Pure affinity sends every request for a popular
+# prefix to the one replica that caches it — a **hot prefix** melts that replica while the others idle. Pure
+# load balancing ignores the cache. A weighted router sits in between, and the weights decide exactly *how
+# much* load a cache hit is worth: with prefix weight $\mathit{wp}$ and load weights summing to $W$, a fully
+# cached replica keeps winning until its load scores fall more than $\mathit{wp}$ below a cold, idle
+# replica's.
+#
+# The llm-d optimized baseline replaces the arithmetic with a rule — **sticky until saturated**: filter to
+# replicas holding ≥ 80% of the prompt unless their estimated prefill backlog is too far behind the best other
+# replica, then balance by tokens in flight.
+#
+# Two more traps: **scrape lag** (every request between two scrapes sees the same stale numbers and herds onto
+# the replica that looked idlest) and **thresholds that ignore the workload** (an 80% affinity threshold never
+# fires for a turn whose new tokens are more than 20% of its prompt — on this lab's agents, the first resumed
+# turn of every session). Background:
+# [PRIMER §2 Routing signals and algorithms and §3 Flow control and priorities](../../PRIMER.md).
 
 # %%
 import copy
@@ -75,8 +78,8 @@ assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-onl
 #
 # ## Exercise 2.1 — when does affinity lose?
 #
-# A *sticky* replica S holds a fraction `r` of the prompt and has load scores `q_s` (queue) and
-# `kv_s` (KV); a *cold* replica C has no prefix but is idle (queue and KV scores both 1.0). Write
+# A *sticky* replica S holds a fraction $r$ of the prompt and has load scores $q_s$ (queue) and
+# $\mathit{kv}_s$ (KV); a *cold* replica C has no prefix but is idle (queue and KV scores both 1.0). Write
 # `sticky_wins(wp, wq, wkv, r, q_s, kv_s)` → `True` if S's weighted total is **strictly** higher than C's.
 
 # %% exercise
@@ -99,13 +102,12 @@ print("✅ sticky_wins: a half-cached replica with a half-full queue still beats
 #
 # ## Exercise 2.2 — the weight that makes affinity unconditional
 #
-# From the weighted sum itself: each load score lies in [0, 1], so load scorers whose weights sum
-# to `W` can move a total by at most `W`. A replica with prefix ratio `r` therefore beats *any*
-# cold replica regardless of load only if `wp · r > W`. (The `prefix-cache-affinity-filter` README
-# gives the consequence — a weighted prefix scorer with a max-score picker hot-spots popular
-# prefixes — as the reason the filter exists; the inequality is ours.) Write
-# `min_prefix_weight(W, r)`: the smallest weight for which a replica at ratio `r` cannot lose to a
-# cold one (use `>=`; at exact equality the tie is broken by the picker).
+# From the weighted sum itself: each load score lies in [0, 1], so load scorers whose weights sum to $W$ can
+# move a total by at most $W$. A replica with prefix ratio $r$ therefore beats *any* cold replica regardless
+# of load only if $\mathit{wp} \cdot r > W$. (The `prefix-cache-affinity-filter` README gives the consequence
+# — a weighted prefix scorer with a max-score picker hot-spots popular prefixes — as the reason the filter
+# exists; the inequality is ours.) Write `min_prefix_weight(W, r)`: the smallest weight for which a replica at
+# ratio $r$ cannot lose to a cold one (use `>=`; at exact equality the tie is broken by the picker).
 
 # %% exercise
 def min_prefix_weight(load_weight_sum: float, r: float) -> float:
@@ -225,12 +227,12 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
 # ## Exercise 2.4 — an affinity threshold that fits the workload
 #
 # `sticky-until-saturated` keeps only replicas whose prefix match ratio is ≥ `affinityThreshold`
-# (default 0.80). For an agent session, the ratio its *own* replica achieves at turn `t` is roughly
-# "blocks of turn t-1's prompt" / "blocks of turn t's prompt" — every turn adds a reply and a tool
+# (default 0.80). For an agent session, the ratio its *own* replica achieves at turn $t$ is roughly
+# "blocks of turn ${t-1}$'s prompt" / "blocks of turn $t$'s prompt" — every turn adds a reply and a tool
 # result. Compute those ratios with the router's own hashing, then pick the threshold.
 #
-# 1. `turn_ratios(prompts)`: given the request bodies of turns 0..T-1 of one session, return for each
-#    turn t ≥ 1 the ratio `leading equal block hashes (turn t-1 vs turn t) / blocks of turn t`
+# 1. `turn_ratios(prompts)`: given the request bodies of turns $0 \ldots T-1$ of one session, return for
+#    each turn $t \ge 1$ the ratio `leading equal block hashes (turn t-1 vs turn t) / blocks of turn t`
 #    (use `estimate_tokens` and `block_hashes(tokens, 64, model)`).
 # 2. `choose_threshold(ratios)`: the largest multiple of 0.05 that is ≤ the smallest ratio.
 
@@ -302,8 +304,12 @@ print("decisions the affinity filter narrowed to sticky replicas:", pinned, f"(o
 # priority band (with fairness and TTLs, [PRIMER §3](../../PRIMER.md)); the lab router accepts the
 # gate with a warning and keeps shedding. Saturation comes from the `utilization-detector`:
 #
-# `saturation = mean over endpoints of max(waiting / 5, kv_usage / 0.8)`, where an endpoint with
-# stale or missing metrics counts as 1.0 and an empty pool is 1.0.
+# $$
+# \text{saturation} = \text{mean over endpoints of }
+#   \max\left(\frac{\text{waiting}}{5}, \frac{\mathrm{kv\_usage}}{0.8}\right),
+# $$
+#
+# where an endpoint with stale or missing metrics counts as 1.0 and an empty pool is 1.0.
 #
 # Write `pool_saturation(endpoints)` for a list of `(waiting, kv_usage, fresh)` tuples, and
 # `shed(objectives, saturation)` → sorted names of objectives that would be rejected.
@@ -345,13 +351,13 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 # usage is ~50 points above the idle replica's. So load alone rarely pushes a hot prefix off its
 # replica; it spreads because other replicas served it too (early ties, partial matches), and then
 # several are sticky — and when that is not enough we use the optimized baseline's TTFT-gated
-# affinity filter. Pure affinity melts one replica; pure load re-prefills every history. We never
-# route on scraped metrics alone: they are up to one scrape interval stale, so a burst herds onto
-# whoever looked idlest; we combine them with the router's own in-flight counts. Thresholds come
-# from the workload: our agents' first resumed turn shares only ~73% of its blocks with the turn
-# before, so we set the affinity threshold to 0.7, not 0.8, and the prefix-aware token-load scorer
-# covers the turns the filter lets through. Under saturation only sheddable (negative-priority)
-# objectives are dropped, with a 429."
+# affinity filter. Pure affinity melts one replica; pure load re-prefills every history.
+#
+# "We never route on scraped metrics alone: they are up to one scrape interval stale, so a burst herds onto
+# whoever looked idlest; we combine them with the router's own in-flight counts. Thresholds come from the
+# workload: our agents' first resumed turn shares only ~73% of its blocks with the turn before, so we set the
+# affinity threshold to 0.7, not 0.8, and the prefix-aware token-load scorer covers the turns the filter lets
+# through. Under saturation only sheddable (negative-priority) objectives are dropped, with a 429."
 #
 # **Drill questions**
 #

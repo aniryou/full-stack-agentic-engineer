@@ -6,16 +6,22 @@
 #
 # ## The one-minute version
 #
-# A GPU running vLLM holds four things: **weights**, the **activation peak** of a profiling
-# forward pass, **CUDA graphs and other buffers**, and **KV blocks**. vLLM takes
-# `gpu_memory_utilization × total memory`, subtracts the first three, and turns *all* the rest into
-# fixed-size blocks (16 tokens each by default). From the model config alone you can predict:
+# A GPU running vLLM holds four things: **weights**, the **activation peak** of a profiling forward
+# pass, **CUDA graphs and other buffers**, and **KV blocks**. vLLM takes
+# $\mathtt{gpu\_memory\_utilization} \times{}$ $\text{total memory}$, subtracts the first three, and
+# turns *all* the rest into fixed-size blocks (16 tokens each by default). From the model config alone
+# you can predict:
 #
-# ```
-# KV bytes per token = 2 (K and V) × layers × kv_heads × head_dim × bytes      (per GPU: kv_heads / TP)
-# num_blocks         = floor(KV budget / (block_size × KV bytes per token))
-# max concurrency    = num_blocks / ceil(max_model_len / block_size)   <- "Maximum concurrency ... Nx"
-# ```
+# $$
+# \begin{aligned}
+# \text{KV bytes per token} &= 2\ (\text{K and V}) \times \text{layers} \times \mathtt{kv\_heads} \times \mathtt{head\_dim}
+#   \times \text{bytes} \\
+# &\qquad (\text{per GPU: } \mathtt{kv\_heads} / \mathrm{TP}) \\[4pt]
+# \mathtt{num\_blocks} &= \left\lfloor \frac{\text{KV budget}}{\mathtt{block\_size} \times \text{KV bytes per token}} \right\rfloor \\[4pt]
+# \text{max concurrency} &= \frac{\mathtt{num\_blocks}}{\lceil \mathtt{max\_model\_len} / \mathtt{block\_size} \rceil} \\
+# &\qquad \leftarrow \text{“Maximum concurrency ... Nx”}
+# \end{aligned}
+# $$
 #
 # After this notebook you can say, before renting anything, whether a model fits a GPU, how many
 # requests of a given length it can hold at once, and which knob — `max_model_len`,
@@ -96,11 +102,12 @@ print(f"PRIMER §4's inputs (24e9 B x 0.9 - 1e9 B reserve): {primer.num_blocks:,
 #
 # ## Exercise 1.1 — KV bytes per token, from a raw `config.json`
 #
-# Write `kv_bytes_per_token(cfg, kv_bytes=2, tp=1)` for a plain dict as read from `config.json`.
-# Two traps real configs set for you: `head_dim` may be given explicitly and differ from
-# `hidden_size / num_attention_heads` (Qwen3), and `num_key_value_heads` (GQA) — not
-# `num_attention_heads` — is what the cache stores. With tensor parallelism each GPU holds
-# `kv_heads / tp` heads, but never fewer than one (heads are replicated when `tp > kv_heads`).
+# Write `kv_bytes_per_token(cfg, kv_bytes=2, tp=1)` for a plain dict as read from `config.json`. Two
+# traps real configs set for you: `head_dim` may be given explicitly and differ from
+# $\mathtt{hidden\_size} / \mathtt{num\_attention\_heads}$ (Qwen3), and `num_key_value_heads` (GQA) —
+# not `num_attention_heads` — is what the cache stores. With tensor parallelism each GPU holds
+# $\mathtt{kv\_heads} / \mathtt{tp}$ heads, but never fewer than one (heads are replicated when
+# $\mathtt{tp} > \mathtt{kv\_heads}$).
 
 # %% exercise
 def kv_bytes_per_token(cfg: dict, kv_bytes: float = 2, tp: int = 1) -> int:
@@ -124,10 +131,11 @@ print("✅ kv_bytes_per_token agrees with the library on all", len(raw), "bundle
 # %% [markdown]
 # ## Exercise 1.2 — from a KV budget to the line vLLM logs
 #
-# Given the bytes left for KV, return `(num_blocks, max_concurrency, kv_cache_tokens)` exactly as
-# vLLM computes them: whole blocks only; a request of `max_model_len` tokens needs
-# `ceil(max_model_len / block_size)` blocks (a partial block still costs a whole one); the logged
-# token capacity is `int(max_concurrency × max_model_len)`.
+# Given the bytes left for KV, return `(num_blocks, max_concurrency, kv_cache_tokens)` exactly as vLLM
+# computes them: whole blocks only; a request of `max_model_len` tokens needs
+# $\lceil \mathtt{max\_model\_len} / \mathtt{block\_size} \rceil$ blocks (a partial block still costs a
+# whole one); the logged token capacity is
+# $\lfloor \mathtt{max\_concurrency} \times \mathtt{max\_model\_len} \rfloor$.
 
 # %% exercise
 def kv_capacity(kv_budget_bytes: int, kv_per_token: int, max_model_len: int, block_size: int = 16):
@@ -148,13 +156,13 @@ print("✅ kv_capacity reproduces vLLM's 'GPU KV cache size / Maximum concurrenc
 # ## Exercise 1.3 — pick `max_model_len` for an 8B model on one L4
 #
 # You serve `llama-3.1-8b-instruct` in bf16 on one L4 with the default utilization, and the design
-# requirement is: vLLM must start, and **at least 4 requests of the maximum length** must fit at
-# once. Return from `choose_max_model_len()` the largest multiple of 1,024 that satisfies it.
-# Invert the block formula yourself: take `num_blocks` from one `size()` report (the KV budget
-# does not depend on `max_model_len`, so any length will do), then find the largest `L` with
-# `4 × ceil(L / 16) <= num_blocks`. The check compares with `sizing.max_model_len_for`. Then read
-# the answer as a product decision: is that context length enough for your workload, or is it
-# time for FP8, a bigger GPU, or TP=2?
+# requirement is: vLLM must start, and **at least 4 requests of the maximum length** must fit at once.
+# Return from `choose_max_model_len()` the largest multiple of 1,024 that satisfies it. Invert the block
+# formula yourself: take `num_blocks` from one `size()` report (the KV budget does not depend on
+# `max_model_len`, so any length will do), then find the largest $L$ with
+# $4 \times \lceil L / 16 \rceil \le \mathtt{num\_blocks}$. The check compares with
+# `sizing.max_model_len_for`. Then read the answer as a product decision: is that context length enough
+# for your workload, or is it time for FP8, a bigger GPU, or TP=2?
 
 # %% exercise
 def choose_max_model_len() -> int:
@@ -278,24 +286,27 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Before choosing hardware I size it from `config.json`. Per token the KV cache
-# costs 2 × layers × KV heads × head dim × bytes — 12 KB for Qwen2.5-0.5B, 128 KB for Llama-3.1-8B.
-# vLLM reserves `gpu_memory_utilization` of the card, pays weights and overheads, and cuts the rest
-# into 16-token blocks. So an 8B model in bf16 on an L4 has about 4.6 GiB of KV: ~37K tokens —
-# about 18 concurrent 2K-token sessions at vLLM's default 0.92 utilization, and the default 128K
-# context does not even start; at 8K context only four requests fit in the worst case. FP8
-# weights plus FP8 KV give ~4.8x the concurrency: the 7 GB the weights shed grows the KV budget
-# from 4.6 to 11.1 GiB, and each token's KV halves.
-# I then check the prediction against the startup log's 'Available KV cache memory' and 'Maximum
-# concurrency' lines and plan other context lengths from the calibrated number."
+# **Two minutes:** "Before choosing hardware I size it from `config.json`. Per token the KV cache costs
+# $2 \times \text{layers} \times \text{KV heads} \times{}$ $\text{head dim} \times \text{bytes}$ — 12 KB
+# for Qwen2.5-0.5B, 128 KB for Llama-3.1-8B. vLLM reserves `gpu_memory_utilization` of the card, pays
+# weights and overheads, and cuts the rest into 16-token blocks. So an 8B model in bf16 on an L4 has
+# about 4.6 GiB of KV: ~37K tokens — about 18 concurrent 2K-token sessions at vLLM's default 0.92
+# utilization, and the default 128K context does not even start; at 8K context only four requests fit in
+# the worst case.
+#
+# "FP8 weights plus FP8 KV give ~4.8x the concurrency: the 7 GB the weights shed grows the KV budget
+# from 4.6 to 11.1 GiB, and each token's KV halves. I then check the prediction against the startup
+# log's 'Available KV cache memory' and 'Maximum concurrency' lines and plan other context lengths from
+# the calibrated number."
 #
 # **Drill 1.** *vLLM says "Maximum concurrency for 32,768 tokens per request: 1.5x". Can it serve
 # 10 users?* — Yes, if their requests are short: the figure is a worst case at `max_model_len`.
 # Blocks are allocated as tokens arrive; with 3K-token conversations roughly ten times more fit.
 # What caps concurrency then is `max_num_seqs` and the SLO, and preemption if lengths grow.
 #
-# **Drill 2.** *Why is `head_dim` a trap?* — Some configs (Qwen3) set it explicitly and it differs
-# from `hidden_size / num_attention_heads`; deriving it under-counts Qwen3-0.6B's KV by 2x.
+# **Drill 2.** *Why is `head_dim` a trap?* — Some configs (Qwen3) set it explicitly and it differs from
+# $\mathtt{hidden\_size} / \mathtt{num\_attention\_heads}$; deriving it under-counts Qwen3-0.6B's KV by
+# 2x.
 #
 # **Drill 3.** *Tensor parallelism 2 halves the weights per GPU. What does it do to KV per token per
 # GPU?* — Halves it too (KV heads are split), unless there are fewer KV heads than GPUs, in which

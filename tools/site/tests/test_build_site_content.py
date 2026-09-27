@@ -91,6 +91,12 @@ def test_dollar_amounts_stay_text(text):
     assert b.inline_tex_to_parens(text) == text
 
 
+def test_operator_spans_are_tex_but_prices_are_not():
+    out = b.inline_tex_to_parens("With $T > 1$, $E/p$, $n-1$ ranks and $k = 2$; a T4 is $0.35/h, $5/$10 a day, $100-$200 a month.")
+    assert "&#92;(T &gt; 1&#92;)" in out and "&#92;(E/p&#92;)" in out and "&#92;(n-1&#92;)" in out and "&#92;(k = 2&#92;)" in out
+    assert "$0.35/h, $5/$10 a day, $100-$200 a month." in out
+
+
 def test_inline_tex_becomes_parens_markdown_cannot_mangle():
     out = b.inline_tex_to_parens(r"The $\sqrt{d_k}$ keeps it; set to $-\infty$; costs $5 and $x$.")
     assert out == ("The &#92;(&#92;sqrt{d&#95;k}&#92;) keeps it; set to &#92;(-&#92;infty&#92;); "
@@ -102,6 +108,18 @@ def test_math_conversion_skips_code(tmp_path, monkeypatch):
     out = b.rewrite_markdown(md, "00-x/n.ipynb", "layers/00-x/n.ipynb", html=True, math=True)
     assert "`echo $x_1$`" in out and "print('$a_b$')" in out
     assert "but &#92;(a&#95;b&#92;) is math." in out
+
+
+def test_markdown_pages_get_plain_parens_for_arithmatex():
+    """Pages go through pymdownx.arithmatex, which takes \\( \\) before any other inline rule: no entities needed,
+    and $$ display blocks stay as written (arithmatex's dollar block syntax). Prices stay text."""
+    md = ("The loss is $\\alpha T^2\\,\\mathrm{KL}(p_T \\| q_T)$ and $x_1$; a T4 is $0.35/h and an L4 $0.7/h, "
+          "so $20 / $100 buys little.\n\n$$\nr_t = \\log \\pi_T - \\log \\pi_S\n$$\n\nSee `$HOME` and $5.")
+    out = b.rewrite_markdown(md, "00-x/PRIMER.md", "layers/00-x/PRIMER.md", math="page")
+    assert "\\(\\alpha T^2\\,\\mathrm{KL}(p_T \\| q_T)\\)" in out and "\\(x_1\\)" in out
+    assert "&#92;" not in out
+    assert "$0.35/h and an L4 $0.7/h" in out and "$20 / $100" in out and "`$HOME` and $5." in out
+    assert "$$\nr_t = \\log \\pi_T - \\log \\pi_S\n$$" in out
 
 
 # ---------------------------------------------------------------- notebook anchors

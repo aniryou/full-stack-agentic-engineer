@@ -3,21 +3,22 @@
 #
 # **Tier:** T0 (CPU, simulated ranks; numpy only). The real thing is in the lab's
 # `03_collectives_with_torch_distributed` (gloo on CPU at T0, NCCL at T1/T2) and
-# `04_busbw_and_the_alpha_beta_fit` (fits alpha and beta to nccl-tests output).
+# `04_busbw_and_the_alpha_beta_fit` (fits $\alpha$ and $\beta$ to nccl-tests output).
 #
 # ## The one-minute version
 # * A **collective** is defined by what every rank holds before and after. Broadcast,
 #   all-reduce, reduce-scatter, all-gather, all-to-all and send/recv are the ones inference uses.
-# * **All-reduce = reduce-scatter + all-gather.** On a ring of p ranks that is 2(p-1) steps, each
-#   moving S/p bytes, so `T = 2(p-1)*alpha + 2(p-1)/p * S/B`. That is bandwidth-optimal, but its
-#   latency term grows with p.
-# * Below a crossover size (`S* = p*alpha*B` for the ring) a collective is **latency-bound**.
+# * **All-reduce = reduce-scatter + all-gather.** On a ring of $p$ ranks that is ${2(p-1)}$ steps,
+#   each moving $S/p$ bytes, so $T = 2(p-1) \cdot \alpha + 2(p-1)/p \cdot S/B$. That is
+#   bandwidth-optimal, but its latency term grows with $p$.
+# * Below a crossover size ($S^{\ast} = p \cdot \alpha \cdot B$ for the ring) a collective is
+#   **latency-bound**.
 #   Tensor-parallel all-reduces during decode are a few hundred KB, which makes them
 #   latency-bound. During prefill they are tens of MB and bandwidth-bound. Different algorithms
 #   win in each regime.
-# * **busbw** (nccl-tests) = algbw x 2(p-1)/p for all-reduce. It turns "bytes per second of
-#   buffer" into "bytes per second per link", which you can compare with the NVLink or NIC spec
-#   whatever p is.
+# * **busbw** (nccl-tests) $= \text{algbw} \times 2(p-1)/p$ for all-reduce. It turns "bytes per
+#   second of buffer" into "bytes per second per link", which you can compare with the NVLink or NIC
+#   spec whatever $p$ is.
 # * NCCL matches collectives **by issue order**. One rank that issues a different call, or skips
 #   one, hangs all the others.
 #
@@ -40,11 +41,11 @@ for op in ("broadcast", "reduce", "all_reduce", "reduce_scatter", "all_gather", 
 # * **broadcast**: everyone ends with root's buffer. Used for weights or config from rank 0.
 # * **reduce**: root ends with the elementwise sum. Rare in inference.
 # * **all-reduce**: *everyone* ends with the sum. Tensor parallelism uses it twice per layer.
-# * **reduce-scatter**: rank r ends with *chunk r* of the sum. That is the first half of an
+# * **reduce-scatter**: rank $r$ ends with *chunk $r$* of the sum. That is the first half of an
 #   all-reduce, and sequence parallelism uses it.
 # * **all-gather**: everyone ends with the concatenation. That is the second half, and it
 #   gathers sharded weights or logits.
-# * **all-to-all**: rank r's chunk j goes to rank j, a transpose across ranks. MoE expert
+# * **all-to-all**: rank $r$'s chunk $j$ goes to rank $j$, a transpose across ranks. MoE expert
 #   parallelism uses it to dispatch and combine tokens.
 #
 # ## Exercise 3.1: ring reduce-scatter
@@ -52,11 +53,11 @@ for op in ("broadcast", "reduce", "all_reduce", "reduce_scatter", "all_gather", 
 # Implement it with the rules a ring imposes: in every step, **each rank sends exactly one
 # chunk to its right neighbour** `(r + 1) % p`, which **adds** it into its own copy of that chunk.
 # All sends in a step happen at once, so compute every message from the state at the *start* of
-# the step. After the last step, rank r must own the fully reduced chunk r.
+# the step. After the last step, rank $r$ must own the fully reduced chunk $r$.
 #
 # Return the chunks and the **schedule**: one list per step of the `(src, dst, chunk)` messages
 # sent in that step. The check replays your schedule on fresh buffers, so the schedule, not only
-# the final answer, has to be right. (Hint: at step s = 0, 1, ..., p-2, rank r sends chunk
+# the final answer, has to be right. (Hint: at step $s = 0, 1, \dots, p-2$, rank $r$ sends chunk
 # `(r - s - 1) % p`.)
 
 # %% exercise
@@ -112,8 +113,8 @@ print("✅ ring reduce-scatter: p-1 steps, one S/p chunk per rank per step to it
 # %% [markdown]
 # ## Exercise 3.2: ring all-gather, and all-reduce as the composition
 #
-# Now each rank r starts with only its own finished chunk. Each step, every rank forwards one
-# chunk to its right neighbour, which *stores* it. After p-1 steps everyone has every chunk.
+# Now each rank $r$ starts with only its own finished chunk. Each step, every rank forwards one
+# chunk to its right neighbour, which *stores* it. After ${p-1}$ steps everyone has every chunk.
 # Write `ring_all_gather(chunks)` returning the full buffers and its schedule, then
 # `ring_all_reduce(bufs)` built from the two, returning the full buffers and the combined
 # schedule (reduce-scatter steps first).
@@ -167,19 +168,19 @@ for algo in ("ring", "tree", "two_shot", "switch"):
     print(r.trace.table(), "\n   bytes sent per rank:", r.trace.sent_bytes(), "\n")
 
 # %% [markdown]
-# * **tree** (binomial): halves the active ranks each step, so 2*ceil(log2 p) steps instead of
-#   2(p-1). But every message is the *whole* buffer, which makes it latency-cheap and
-#   bandwidth-poor. NCCL's real tree is a *pipelined double binary tree*, which keeps the log-p
+# * **tree** (binomial): halves the active ranks each step, so $2\lceil \log_2 p \rceil$ steps instead
+#   of ${2(p-1)}$. But every message is the *whole* buffer, which makes it latency-cheap and
+#   bandwidth-poor. NCCL's real tree is a *pipelined double binary tree*, which keeps the $\log p$
 #   steps and recovers most of the bandwidth.
 # * **two_shot**: a direct reduce-scatter then a direct all-gather. That is 2 steps with the same
 #   bytes as the ring, but it needs every rank to reach every other at once (NVSwitch). This is
 #   what the custom all-reduce kernels in vLLM and TensorRT-LLM do for small and mid-size messages.
 # * **switch**: NVLS / SHARP in-network reduction. Each GPU sends its data *once* to the switch,
-#   which sums and multicasts the result back, so each GPU sends S instead of 2(p-1)/p * S.
+#   which sums and multicasts the result back, so each GPU sends $S$ instead of $2(p-1)/p \cdot S$.
 #
 # ## The alpha-beta model
-# Every step costs `alpha` (launch, synchronisation, hop latency) plus its busiest port's bytes
-# divided by `B`. The trace time equals the closed form exactly:
+# Every step costs $\alpha$ (launch, synchronisation, hop latency) plus its busiest port's bytes
+# divided by $B$. The trace time equals the closed form exactly:
 
 # %%
 S, alpha, bw = 8 * 2**20, 2e-6, 100e9                   # assumed parameters, not measurements
@@ -193,9 +194,9 @@ for algo in ("ring", "tree", "one_shot", "two_shot", "switch"):
 # ## Exercise 3.3: time and crossover of a ring all-reduce
 #
 # Write `ring_allreduce_time(S, p, alpha, bw)` from the step structure you implemented, and
-# `crossover_size(p, alpha, bw)`: the S at which the latency term equals the bandwidth term.
-# Then evaluate it for 8 GPUs with layer 01's illustrative NVLink 4 numbers: `alpha = 2 us` per step
-# and `B = 450 GB/s` per direction.
+# `crossover_size(p, alpha, bw)`: the $S$ at which the latency term equals the bandwidth term.
+# Then evaluate it for 8 GPUs with layer 01's illustrative NVLink 4 numbers: $\alpha$ = 2 us per step
+# and $B$ = 450 GB/s per direction.
 
 # %% exercise
 def ring_allreduce_time(S, p, alpha, bw):
@@ -218,17 +219,17 @@ print("   and the crossover grows with p: every extra rank adds two alpha-steps 
 
 # %% [markdown]
 # ## algbw vs busbw
-# nccl-tests reports two bandwidths. `algbw = S / t` is the buffer size over time. `busbw`
-# multiplies by a per-collective factor (2(p-1)/p for all-reduce; (p-1)/p for reduce-scatter,
+# nccl-tests reports two bandwidths. $\text{algbw} = S/t$ is the buffer size over time. `busbw`
+# multiplies by a per-collective factor ($2(p-1)/p$ for all-reduce; $(p-1)/p$ for reduce-scatter,
 # all-gather and all-to-all; 1 for broadcast and reduce) so that a bandwidth-optimal algorithm
-# reads the per-link bandwidth whatever p is. A simulated sweep in nccl-tests' shape:
+# reads the per-link bandwidth whatever $p$ is. A simulated sweep in nccl-tests' shape:
 
 # %%
 print(C.format_sweep(C.sweep("all_reduce", "ring", p=8, alpha=2e-6, bw=450e9,
                              sizes=[2**e for e in (10, 13, 16, 19, 20, 22, 24, 27, 30)])))
 
 # %% [markdown]
-# busbw climbs toward B (450 GB/s here) as messages grow and alpha stops mattering. On a real
+# busbw climbs toward $B$ (450 GB/s here) as messages grow and $\alpha$ stops mattering. On a real
 # system that plateau is what you compare with the fabric spec: NVLink, PCIe or the NIC line
 # rate. The size where busbw reaches half the plateau is about the crossover size.
 #
@@ -260,10 +261,10 @@ print("✅ busbw, not algbw, is the number to hold against the link spec")
 
 # %% [markdown]
 # ## How inference uses collectives
-# **Tensor parallelism** (Megatron-style) splits every layer's matmuls across p GPUs and
+# **Tensor parallelism** (Megatron-style) splits every layer's matmuls across $p$ GPUs and
 # all-reduces the activations twice per layer, after attention's output projection and after the
 # MLP. The message is `tokens x hidden x 2 bytes`. For a 70B-class dense model (hidden 8192, 80
-# layers) at TP=8, with the same illustrative alpha = 2 us and B = 450 GB/s (layer 01 §5.3 prices
+# layers) at TP=8, with the same illustrative $\alpha$ = 2 us and $B$ = 450 GB/s (layer 01 §5.3 prices
 # batch 1; here we compare batch 32 with prefill, and the ring with a two-shot all-reduce):
 
 # %%
@@ -274,7 +275,7 @@ for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
               f"{d['total_s'] * 1e3:7.2f} ms/step, latency share {d['latency_share']:.0%}")
 
 # %% [markdown]
-# Two regimes, from one formula. In decode, 93% of the ring's time is alpha. The fix is fewer
+# Two regimes, from one formula. In decode, 93% of the ring's time is $\alpha$. The fix is fewer
 # steps (two-shot or one-shot custom all-reduce, NVLS, tree), not more bandwidth, plus CUDA
 # graphs so the 160 launches per step cost nothing on the CPU. In prefill the messages are large
 # and bandwidth-bound, so the ring's optimal byte count is what matters, and so is overlapping
@@ -282,11 +283,11 @@ for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
 #
 # ## Exercise 3.5: the decode all-reduce you would ship
 #
-# Same model and TP=8, but a decode batch of **64** tokens. With the same assumed alpha and B,
+# Same model and TP=8, but a decode batch of **64** tokens. With the same assumed $\alpha$ and $B$,
 # compute `message_bytes`, `ring_ms_per_step` (all 160 all-reduces with a ring), and
 # `best_algo`, the fastest of `C.best_algorithm` for this message. (`best_algorithm` pipelines the
 # in-switch algorithm at its best depth for each size, `C.pipeline_chunks()`: for a 1 MiB message
-# that is a single chunk, because extra chunks only add alpha-steps.)
+# that is a single chunk, because extra chunks only add $\alpha$-steps.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -305,7 +306,7 @@ print(f"✅ 1 MiB per call; ring {ring_ms_per_step:.2f} ms/step; best is {best_a
 # %% [markdown]
 # **Expert parallelism** (MoE) moves tokens rather than partial sums. Each token goes to its
 # top-k experts' GPUs (all-to-all *dispatch*) and comes back (all-to-all *combine*). Per GPU and
-# direction that is `tokens x top_k x hidden x bytes`, of which (p-1)/p crosses the fabric. For
+# direction that is `tokens x top_k x hidden x bytes`, of which $(p-1)/p$ crosses the fabric. For
 # a Mixtral-like layer (hidden 4096, top-2) with 256 tokens per GPU in BF16:
 
 # %%
@@ -321,7 +322,7 @@ for algo in ("pairwise", "direct"):
 #
 # ## Exercise 3.6: find the hang
 #
-# NCCL has no names for collectives. The k-th call on a communicator on every rank is the *same*
+# NCCL has no names for collectives. The $k$-th call on a communicator on every rank is the *same*
 # collective. Write `first_bad_call(calls)`, where `calls[rank]` is that rank's list of
 # `(op, nbytes)`. Return `(index, sorted list of ranks that disagree with the majority)` for the
 # first mismatch (a missing call counts as disagreeing), or `None` if all ranks agree.
@@ -370,26 +371,25 @@ print("ring vs tree max |diff|    :", float(np.max(np.abs(ring_out[0] - tree_out
 # ## In a design review
 #
 # **The two-minute version.** "We serve with TP=8 inside one NVLink domain. Each layer
-# all-reduces twice, a message of tokens x hidden x 2 bytes. With alpha and B fitted from our own
-# nccl-tests run (here the illustrative 2 us and 450 GB/s), the crossover is about 7 MB
-# (S* = p x alpha x B), so decode
-# all-reduces, at 0.5 to 1 MB, are
-# latency-bound. We use an algorithm with few steps (a one-/two-shot custom all-reduce, or NVLS
-# where the switch supports it) and capture it in the decode CUDA graph. Prefill messages are
-# 100+ MB and bandwidth-bound, and there NCCL's ring or NVLS is at the link limit, which we
-# verify as busbw from nccl-tests against the NVLink spec. EP all-to-alls stay inside the NVLink
-# domain too. PP, which moves one activation per stage, is the only parallelism we let cross the
-# scale-out network."
+# all-reduces twice, a message of tokens x hidden x 2 bytes. With $\alpha$ and $B$ fitted from our
+# own nccl-tests run (here the illustrative 2 us and 450 GB/s), the crossover is about 7 MB
+# ($S^{\ast} = p \cdot \alpha \cdot B$), so decode all-reduces, at 0.5 to 1 MB, are latency-bound.
+# We use an algorithm with few steps (a one-/two-shot custom all-reduce, or NVLS where the switch
+# supports it) and capture it in the decode CUDA graph. Prefill messages are 100+ MB and
+# bandwidth-bound, and there NCCL's ring or NVLS is at the link limit, which we verify as busbw
+# from nccl-tests against the NVLink spec. EP all-to-alls stay inside the NVLink domain too. PP,
+# which moves one activation per stage, is the only parallelism we let cross the scale-out
+# network."
 #
 # **Drill questions**
 #
-# 1. *Why is all-reduce 2(p-1) steps and not p-1?* It is a reduce-scatter (p-1 steps to finish
-#    each chunk's sum) followed by an all-gather (p-1 steps to spread the finished chunks).
-#    Each rank sends 2(p-1)/p x S in total, and no algorithm that uses point-to-point sends can
-#    do less.
+# 1. *Why is all-reduce ${2(p-1)}$ steps and not ${p-1}$?* It is a reduce-scatter (${p-1}$ steps to
+#    finish each chunk's sum) followed by an all-gather (${p-1}$ steps to spread the finished
+#    chunks). Each rank sends $2(p-1)/p \cdot S$ in total, and no algorithm that uses point-to-point
+#    sends can do less.
 # 2. *Our 8-GPU all-reduce shows busbw of 419 GB/s but algbw of 240 GB/s. Which do we quote?*
-#    busbw: it equals algbw x 2(p-1)/p and is what the links actually carried per GPU. algbw
-#    depends on p.
+#    busbw: it equals $\text{algbw} \times 2(p-1)/p$ and is what the links actually carried per GPU.
+#    algbw depends on $p$.
 # 3. *The job hangs at step 1,000 on one rank's data-dependent branch. Why does NCCL not error?*
 #    Collectives are matched only by issue order. The other ranks sit in a call that will never
 #    be matched until a watchdog timeout fires. The fix is to make control flow rank-uniform

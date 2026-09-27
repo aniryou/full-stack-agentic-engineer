@@ -136,8 +136,8 @@ print(f"✅ Mixtral prefills {ratio:.1f}x cheaper than a dense 70B ({ttft_mixtra
 # %% [markdown]
 # ## Exercise 5.3 — the floor and the plan
 # For DeepSeek-V3 in FP8 on 8 H200s, set `floor_ms` (all weights streamed once across 8 GPUs) and `plan_ms` (the
-# `S.plan` step at batch 256, 4K context, 50 ms ITL, NVLink), then `overhead` = plan_ms − floor_ms. Explain where the
-# overhead comes from. (Use FP8 dispatch, `**FP8`, as in worked example 3.)
+# `S.plan` step at batch 256, 4K context, 50 ms ITL, NVLink), then `overhead` = `plan_ms` − `floor_ms`. Explain
+# where the overhead comes from. (Use FP8 dispatch, `**FP8`, as in worked example 3.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -212,10 +212,11 @@ print(f"✅ at batch 64 the MoE is {cost_ratio:.1f}x cheaper per token than the 
 # 30B-A3B model needs 61 GB in bf16, so a 24 GB card only works with 4-bit experts. Prefill is the active count: 2 ×
 # active × tokens, so Mixtral prefills about 5× cheaper than a dense 70B. Decode is the bytes streamed at our batch,
 # which approach the total by modest batches, so we run MoE at large batch on enough GPUs — the EP degree — to hold
-# weights and the batch's KV and meet the ITL; the exchanges come on top. At batch 64 that makes Mixtral about half
-# the cost per token of a dense 70B on H100s in this model; at batch 1 on one GPU it decodes like a dense 13B
-# while holding 47B, and offloading experts over PCIe makes it an order of magnitude slower. At long context the KV cache
-# dominates again, exactly as for a dense model."
+# weights and the batch's KV and meet the ITL; the exchanges come on top.
+#
+# "At batch 64 that makes Mixtral about half the cost per token of a dense 70B on H100s in this model; at batch 1 on
+# one GPU it decodes like a dense 13B while holding 47B, and offloading experts over PCIe makes it an order of
+# magnitude slower. At long context the KV cache dominates again, exactly as for a dense model."
 #
 # **Drill questions**
 # 1. *'It's only 3B active, it'll run on my 24 GB card.' Answer in numbers.* — 30.5B total = 61 GB bf16, 30.5 GB FP8;

@@ -24,24 +24,28 @@ audit event of the [identity primer](../../06-gateway/identity-security/agentic-
 ## The one-minute version
 
 An agent already has a memory: its **context window**, the transcript it is handed every turn. It is bounded by a
-token budget and it ends with the session. Long-term memory is what survives, in three kinds — **episodic** (what
-happened, timestamped), **semantic** (a distilled fact) and **procedural** (how to act for this user) — written as
-**one typed record** with a scope, a source, provenance, confidence, importance, a validity interval, a TTL and a
-deletion key.
+token budget and it ends with the session.
 
-What gets written is decided **in code**: extract candidates after the turn, pass them through a **write policy**
-(which kinds each source may write, a confidence floor, screening before persistence), **merge** against what is
-known (the same value is a no-op; a new value closes the old fact instead of deleting it; an older value arriving
-late becomes history, never the current fact), and give every write an **idempotency key** that names the step, not
-its content. Retrieval ranks the user's partition by **similarity, recency and importance** and packs the
-winners into a **per-turn token budget** — sized at the knee of recall against tokens, measured on a
-**planted-facts harness**. Where memory sits in the prompt decides the **prefix-cache** hit rate: re-retrieved
-memory placed before the history makes the whole conversation re-prefill every turn; a profile pinned per session,
-or per-turn memory at the tail, does not. **Consolidation** turns episodes into facts on a schedule, as a durable
-job. **Forgetting** is decay, TTL, the budget and a cap; **deletion** is a propagation problem that must reach every
-copy, down to cached prefixes, logs and backups. And memory is a **persistence channel for injected text**: writes
-inherit the trust of what the model read, tool output is quarantined, recalled memory is fenced as data, and scope
-comes from the verified principal. After this primer you can walk that design in a review and put numbers on it.
+- Long-term memory is what survives, in three kinds — **episodic** (what happened, timestamped), **semantic** (a
+  distilled fact) and **procedural** (how to act for this user) — written as **one typed record** with a scope, a
+  source, provenance, confidence, importance, a validity interval, a TTL and a deletion key.
+- What gets written is decided **in code**: extract candidates after the turn, pass them through a **write policy**
+  (which kinds each source may write, a confidence floor, screening before persistence), **merge** against what is
+  known (the same value is a no-op; a new value closes the old fact instead of deleting it; an older value arriving
+  late becomes history, never the current fact), and give every write an **idempotency key** that names the step,
+  not its content.
+- Retrieval ranks the user's partition by **similarity, recency and importance** and packs the winners into a
+  **per-turn token budget** — sized at the knee of recall against tokens, measured on a **planted-facts harness**.
+- Where memory sits in the prompt decides the **prefix-cache** hit rate: re-retrieved memory placed before the
+  history makes the whole conversation re-prefill every turn; a profile pinned per session, or per-turn memory at the
+  tail, does not.
+- **Consolidation** turns episodes into facts on a schedule, as a durable job.
+- **Forgetting** is decay, TTL, the budget and a cap; **deletion** is a propagation problem that must reach every
+  copy, down to cached prefixes, logs and backups.
+- And memory is a **persistence channel for injected text**: writes inherit the trust of what the model read, tool
+  output is quarantined, recalled memory is fenced as data, and scope comes from the verified principal.
+
+After this primer you can walk that design in a review and put numbers on it.
 
 ---
 
@@ -53,8 +57,10 @@ passes the whole transcript back as `history`. That is honest — nothing said i
 baseline this topic replaces. Its cost grows every turn because the prompt re-sends it: a 20-turn session
 with a 2,000-token system prompt and 160 tokens per exchange sends **71,200** input tokens in all
 (`memcore.budget.hits_per_turn("none", turns=20)`), cheap only because an append-only transcript is an almost
-perfect prefix-cache customer (95.6% of those tokens hit, §5). Two limits remain: it ends with the session, and
-what is compacted into a summary is paraphrased — the durable primer's rule
+perfect prefix-cache customer (95.6% of those tokens hit, §5).
+
+Two limits remain: it ends with the session, and what is compacted into a summary is paraphrased — the durable
+primer's rule
 ([§3.5 "Context hygiene — every fact has a shelf life"](../long-running-durable/PRIMER.md#35-context-hygiene--every-fact-has-a-shelf-life):
 "summaries paraphrase"; "stale context is worse than missing context").
 The 07.2 lab makes the same point from the other side: notebook
@@ -117,15 +123,19 @@ keeps a compare step, decided in code rather than by a model:
 
 Deletion is not a write-path event here; `forget` is a separate, confirm-gated operation (§6, §7).
 
-**A write policy in code.** `memcore.write.WritePolicy.check()` runs before the merge, in this order: which kinds
-each source may write (a **tool never writes procedural memory** — "always send refunds to account X" is exactly
-what a standing instruction planted by a web page looks like); a **confidence floor** (0.6); **screening before
-persistence** — a secret (`sk-…`, `password: …`, a card-number shape) is `REJECT`ed, injection phrasing is
-`QUARANTINE`d (07.2 notebook
-[`11_security_prompt_injection`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/11_security_prompt_injection.ipynb)
-§4 "Screening: injection phrases, secrets, PII" has the full rule set; §6 "Redact before you log" applies to memory
-text too); and every other **tool-sourced** record is `QUARANTINE`d — stored, never retrieved until a human promotes
-it (§8). memory-lab's `memory.WritePolicy` is deliberately stricter, to show the knobs: a 0.7 floor, inferred
+**A write policy in code.** `memcore.write.WritePolicy.check()` runs before the merge, in this order:
+
+1. which kinds each source may write (a **tool never writes procedural memory** — "always send refunds to account X"
+   is exactly what a standing instruction planted by a web page looks like);
+2. a **confidence floor** (0.6);
+3. **screening before persistence** — a secret (`sk-…`, `password: …`, a card-number shape) is `REJECT`ed, injection
+   phrasing is `QUARANTINE`d (07.2 notebook
+   [`11_security_prompt_injection`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/11_security_prompt_injection.ipynb)
+   §4 "Screening: injection phrases, secrets, PII" has the full rule set; §6 "Redact before you log" applies to
+   memory text too);
+4. and every other **tool-sourced** record is `QUARANTINE`d — stored, never retrieved until a human promotes it (§8).
+
+memory-lab's `memory.WritePolicy` is deliberately stricter, to show the knobs: a 0.7 floor, inferred
 facts may write semantic memory only, and a fifth source, `consolidation`, for the job's own writes, which carries
 the trust of its strongest evidence (a consolidated user statement is `user`, a model's insight `inferred`).
 
@@ -151,6 +161,7 @@ primer's [§3.2 "Idempotency — effectively-once, not exactly-once"](../long-ru
 re-asks the extraction model, which may phrase the
 fact differently, and a key with a content hash in it would then be new — exactly the "second, different side
 effect" the durable primer's [§1.3](../long-running-durable/PRIMER.md#13-the-model-is-a-non-deterministic-side-effect) warns about and §3.2 fixes.
+
 memcore's `memcore.write.idempotency_key(session, turn, index)` is `session:turn:index`
 (e.g. `s1:7:0`), unique per `(tenant, user)` partition; `Writer.write(rec, key)` journals the first result and
 returns it for a replay, and a *different* write under a known key raises `IdempotencyConflict` instead of writing
@@ -176,15 +187,18 @@ the harness measures on purpose (§4); a real embedder is the T1 swap. And even 
 
 **The generative-agents score.** Park et al. (2023) score each memory as
 
-    score = w_r · recency + w_i · importance + w_v · relevance,     each term min-max normalised to [0, 1]
+$$
+\text{score} = w_r \cdot \text{recency} + w_i \cdot \text{importance} + w_v \cdot \text{relevance},
+$$
 
-over the candidates (all equal → 0.5 each, as the reference code's `normalize_dict_floats` does). The paper and its
-code **differ**, and memcore implements both in `memcore.retrieve.score(..., form=...)`:
+each term min-max normalised to [0, 1] over the candidates (all equal → 0.5 each, as the reference code's
+`normalize_dict_floats` does). The paper and its code **differ**, and memcore implements both in
+`memcore.retrieve.score(..., form=...)`:
 
 | | `form="paper"` (the paper's description — unverified here, arXiv unreachable) | `form="code"` (`joonspk-research/generative_agents`, `retrieve.py`, read 2026-09-26) |
 |---|---|---|
 | weights (recency, importance, relevance) | 1, 1, 1 | 0.5, 2, 3 (`gw = [0.5, 3, 2]` in the order recency, relevance, importance) |
-| recency | 0.995 ^ (hours since last access) | 0.99 ^ rank, memories sorted by last access **oldest first** |
+| recency | $0.995^{\text{hours since last access}}$ | $0.99^{\text{rank}}$, memories sorted by last access **oldest first** |
 | effect | recent memories score higher | the **stalest** memory gets the largest recency term; an hour and a year apart score alike |
 
 Worked on three memories — A (last used 1 h ago, importance 2, cosine 0.80), B (24 h, 9, 0.50), C (72 h, 5, 0.20):
@@ -199,8 +213,9 @@ at a 60-token budget over the harness's 30 users, the code form answers **70.0%*
 the superseded value, the paper form **0.0%**; the code form's recall is higher (35.8% vs 17.6%, its relevance
 weight of 3 suits long episodes) — a single aggregate would pick the wrong one (`memcore.harness.evaluate`, notebook
 02). Those episode numbers lean on the harness's slot hints (§4): without them the code form serves the stale value
-on **26.7%** of knowledge updates and the paper form on 0.0% — smaller, same direction. Reads are writes in the
-reference code: retrieval moves `last_accessed` of what it returns to now, and so does
+on **26.7%** of knowledge updates and the paper form on 0.0% — smaller, same direction.
+
+Reads are writes in the reference code: retrieval moves `last_accessed` of what it returns to now, and so does
 `memcore.retrieve.retrieve()` unless `touch=False`.
 
 **Top-k in a token budget.** The ranked list is packed greedily — take each record that still fits, skip one that
@@ -212,10 +227,11 @@ fact that held at `t` — "where did the user live on day 2?" — including supe
 them. This is the valid-time half of a bi-temporal model (§7).
 
 **What is not new here.** Hybrid search (BM25 + vectors + reciprocal rank fusion, `ragkit.reference`,
-`reciprocal_rank_fusion(k=60)`, `1 / (k + rank + 1)` with rank from 0) is 07.4's topic and applies unchanged — note
-that Graphiti's `rrf` scores `1 / (rank + 1)` (`rank_const=1`, rank from 0), i.e. **k = 0** in ragkit's formula, where
-ragkit uses 60, so Graphiti weights the top of each list far more heavily (verify). An ANN index pays only at tenant
-or corpus scale: one user's memory is tens to thousands of
+`reciprocal_rank_fusion(k=60)`, $1/(k + \text{rank} + 1)$ with rank from 0) is 07.4's topic and applies unchanged —
+note that Graphiti's `rrf` scores $1/(\text{rank} + 1)$ (`rank_const=1`, rank from 0), i.e. **k = 0** in ragkit's
+formula, where ragkit uses 60, so Graphiti weights the top of each list far more heavily (verify).
+
+An ANN index pays only at tenant or corpus scale: one user's memory is tens to thousands of
 records, and a flat scan of one partition is exact and fast; `minifaiss`'s HNSW (`M0 = 2M`, 07.4
 `vector_stores`) has no delete at all, which is why `MemoryStore` keeps a flat index that removes the row (§7).
 
@@ -259,8 +275,8 @@ facts, about 66 tokens — small enough for a profile to hold nearly all of it (
 - **accuracy** with a **Wilson interval** (07.2 notebook
   [`08_evals_trajectory_judge_gates`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb)
   §4; restated as
-  `memcore.harness.wilson_interval` — centre `(p + z²/2n) / (1 + z²/n)`, half-width
-  `z·√(p(1−p)/n + z²/4n²) / (1 + z²/n)`, clipped to [0, 1] — and pinned to its numbers: 45/50 → (0.7864, 0.9565),
+  `memcore.harness.wilson_interval` — centre $(p + z^2/2n) / (1 + z^2/n)$, half-width
+  $z\sqrt{p(1-p)/n + z^2/4n^2} / (1 + z^2/n)$, clipped to [0, 1] — and pinned to its numbers: 45/50 → (0.7864, 0.9565),
   0/20 → (0.0, 0.1611));
 - **recall within the budget** — was every evidence value in the packed context?;
 - **stale answers** — the superseded value given for a knowledge update;
@@ -270,13 +286,16 @@ facts, about 66 tokens — small enough for a profile to hold nearly all of it (
 
 Over 30 users (390 questions) at a 60-token budget, consolidated facts score **92.3%** (Wilson **89.2%–94.6%**),
 recall **90.9%**, no stale answers, abstention 100%. For one user it is 12/13, a **67%–99%** interval — too wide to
-compare two designs. The Wilson interval treats the 390 questions as independent trials; they are not — thirteen per
-user share one store and one write path — and here the misses are not even random: every user misses the same
-question, the preference paraphrase. Resampling users instead (a per-user cluster bootstrap,
-`memcore.harness.cluster_interval`, reported by `summarize()` as `cluster`) gives 92.3%–92.3%: this harness's
-uncertainty lives in *which question types it asks*, not in which users. So compare designs per question type
-(`by_type`), and read any interval as a statement about this generator, not about your users. Recall against the
-budget (`memcore.harness.recall_vs_budget`):
+compare two designs.
+
+The Wilson interval treats the 390 questions as independent trials; they are not — thirteen per user share one store
+and one write path — and here the misses are not even random: every user misses the same question, the preference
+paraphrase. Resampling users instead (a per-user cluster bootstrap, `memcore.harness.cluster_interval`, reported by
+`summarize()` as `cluster`) gives 92.3%–92.3%: this harness's uncertainty lives in *which question types it asks*, not
+in which users. So compare designs per question type (`by_type`), and read any interval as a statement about this
+generator, not about your users.
+
+Recall against the budget (`memcore.harness.recall_vs_budget`):
 
 | Budget (tokens) | 15 | 30 | 45 | 60 | 90 | 120 |
 |---|---|---|---|---|---|---|
@@ -297,13 +316,17 @@ embedder's bill: at 30 tokens extraction questions score 100% and their paraphra
 **Recall against tokens has a knee (§4); tokens against the prefix cache has a cliff.** An engine reuses KV only for
 an **exact prefix, in full blocks** — the serving-engine primer's §5 "Prefix caching": each 16-token block is named
 by a hash chained to its parent, a new request adopts every block of its longest cached prefix, and at most
-`(len(prompt) − 1) // B` blocks hit because the last token is recomputed for its logits. vllm-serving-lab notebook
+`(len(prompt) − 1) // B` blocks hit because the last token is recomputed for its logits.
+
+vllm-serving-lab notebook
 [`04_prefix_caching_for_agents`](../../04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb)
 (exercise 4.1) turns this into three rules, restated as
 `memcore.budget.expected_cached_tokens(prev, new, B)` and pinned to its asserts: identical 64-token prompts hit
 **48**; a 40-token earlier request leaves **32**; divergence inside block 3 with B = 8 hits **16**.
 `memcore.budget.PrefixCache` implements the same rules as a block-hash cache and is tested against both
 `expected_cached_tokens` and `minengine.kv.KVCacheManager.lookup`.
+
+### Where memory sits in the prompt
 
 **Three layouts.** Memory retrieved for the current question changes every turn. Where it goes decides what the
 cache can reuse (`memcore.budget.hits_per_turn(layout)`; 2,000-token system prompt and tools, 400 tokens of memory,
@@ -325,10 +348,12 @@ tail           : [system][history ........][memory_t][user_t]   ADK's PreloadMem
 These are a **self-hosted engine's** numbers: vLLM caches from the first full block, and the lost hits cost prefill
 time (SIMULATED below) on your own GPUs. A hosted API bills differently (below).
 
-Every hit count is hand-computable from the rules — turn `t ≥ 2` caches 2,000 tokens before the history, `2,544 +
-160(t − 2)` pinned and `2,000 + 160(t − 2)` at the tail — and memory-core notebook 03 exercise 3.2 has you derive them.
-Memory before the history is the only layout whose damage **grows** with the conversation: the uncached part is the
-whole history. mini-engine-core notebook
+Every hit count is hand-computable from the rules — turn $t \ge 2$ caches 2,000 tokens before the history,
+$2{,}544 + 160(t - 2)$ pinned and $2{,}000 + 160(t - 2)$ at the tail — and memory-core notebook 03 exercise 3.2 has
+you derive them. Memory before the history is the only layout whose damage **grows** with the conversation: the
+uncached part is the whole history.
+
+mini-engine-core notebook
 [`03_prefix_caching`](../../04-inference-engine/serving-engine/mini-engine-core/notebooks/03_prefix_caching.ipynb)
 exercise 3.4 ("lay out an agent prompt for the cache") and 07.2 notebook
 [`04_context_engineering_and_caching`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/04_context_engineering_and_caching.ipynb)
@@ -336,35 +361,53 @@ exercise 3.4 ("lay out an agent prompt for the cache") and 07.2 notebook
 `agentlab.agents.context.ContextBuilder` lays a prompt out as `[system + static] [memory] [summary] [recent turns]
 [current turn]`: its `memory_provider` block is the **pinned** layout only if the provider returns the same bytes all
 session — its exercise 6.5 asks for at most three facts, sorted, byte-identical across turns — and becomes
-**before_history** the moment it re-retrieves per turn. ADK already uses the tail layout for preloaded memory,
-inserting it "at the current-turn boundary … before the latest ordinary user batch" so it never enters a reusable prefix
-(`google/adk-python` `models/llm_request.py`, ADK 2.10.0, verify).
+**before_history** the moment it re-retrieves per turn.
+
+ADK already uses the tail layout for preloaded memory, inserting it "at the current-turn boundary … before the latest
+ordinary user batch" so it never enters a reusable prefix (`google/adk-python` `models/llm_request.py`, ADK 2.10.0,
+verify).
+
+### What a turn costs
 
 **TTFT lost.** Prefill time comes from `memcore.budget.prefill_seconds`, a restatement of
-`minengine.perf.step_cost` for one chunk — `max(bytes / (0.8 · BW), FLOPs / (0.6 · peak)) + 2 ms`, SIMULATED — which
-reproduces its numbers: one 2,000-token prefill on an L4 with Qwen2.5-1.5B takes **78.7 ms** cold and **15.1 ms** with
-1,800 tokens cached (compute-bound vs memory-bound); **401.0** vs **65.6 ms** for Llama-3.1-8B; on an H100 **11.4**
-vs **3.2 ms** and **50.8** vs **7.7 ms**. Memory before the history costs **53.2 ms** of prefill at turn 8 on the L4
-(68.4 vs 15.3 ms) and 142.6 ms at turn 20. The capacity primer's compute-only estimate agrees on scale:
+`minengine.perf.step_cost` for one chunk —
+$\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$, SIMULATED —
+which reproduces its numbers: one 2,000-token prefill on an L4 with Qwen2.5-1.5B takes **78.7 ms** cold and
+**15.1 ms** with 1,800 tokens cached (compute-bound vs memory-bound); **401.0** vs **65.6 ms** for Llama-3.1-8B; on
+an H100 **11.4** vs **3.2 ms** and **50.8** vs **7.7 ms**. Memory before the history costs **53.2 ms** of prefill at
+turn 8 on the L4 (68.4 vs 15.3 ms) and 142.6 ms at turn 20.
+
+The capacity primer's compute-only estimate agrees on scale:
 `capacity.ttft_s(24, 2000, H100)` = **0.0970 s** for a 24B model (restated as `memcore.budget.compute_ttft`) at its
 default **FP8** (1,979 TFLOP/s dense, 50% MFU), i.e. about 49 ms per 1,000 uncached tokens on that model; at the
 bf16 peak the roofline above uses (989 TFLOP/s) the same formula gives 0.194 s, about 97 ms per 1,000
 ([capacity primer](../../00-foundations/gpu-capacity-planning/PRIMER.md), item 4 "Prefill — compute-bound": "RAG and
 agents are prefill-dominated, so prefix caching … is the biggest single win").
 
-**Dollars per turn, on a hosted API.** A call costs `(uncached input × input price + cached input × cached price +
-output × output price) / 10⁶`; `memcore.budget.call_cost` prices it with a dated table: the
+**Dollars per turn, on a hosted API.** A call costs
+
+$$
+\begin{aligned}
+\bigl(&\text{uncached input} \times \text{input price} \\
+&{}+ \text{cached input} \times \text{cached price} \\
+&{}+ \text{output} \times \text{output price}\bigr) / 10^{6};
+\end{aligned}
+$$
+
+`memcore.budget.call_cost` prices it with a dated table: the
 [scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)'s §3.4 "Cost
 per conversation" call — 5,000 input tokens of which 2,700 cached, 350 output, Gemini 3.5 Flash at $1.50 /
 $0.15 cached / $9.00 per M (5 Sep 2026, verify) — is **$0.007005** (reproducing `scalelab.capacity.cost_per_call`;
-the 07.2 lab's `token_cost` at its illustrative Gemini 3 Flash prices gives $0.002335 for the same shape). But a
-provider bills the cached rate only once a request clears its caching minimum — **4,096 tokens** on Gemini 3.x (the
-scaling primer §5.5; whether the minimum applies to the request or to the shared prefix is `(verify)`; its own §3.4
-call is consistent with "the request"). `memcore.budget.turn_cost` applies it (`billed_cached`), assuming the
-provider's cache hits the prefix vLLM's would. Every prompt of the session above is under 4,096 tokens (3,560 at turn
-8), so on Gemini **nothing is billed cached and the layout does not change the bill**; give the agent a 4,000-token
-system prompt (tools and policies — the scaling primer's support turn sends 4–6 k) and every turn from the second
-clears the minimum:
+the 07.2 lab's `token_cost` at its illustrative Gemini 3 Flash prices gives $0.002335 for the same shape).
+
+But a provider bills the cached rate only once a request clears its caching minimum — **4,096 tokens** on Gemini 3.x
+(the scaling primer §5.5; whether the minimum applies to the request or to the shared prefix is `(verify)`; its own
+§3.4 call is consistent with "the request"). `memcore.budget.turn_cost` applies it (`billed_cached`), assuming the
+provider's cache hits the prefix vLLM's would.
+
+Every prompt of the session above is under 4,096 tokens (3,560 at turn 8), so on Gemini **nothing is billed cached and
+the layout does not change the bill**; give the agent a 4,000-token system prompt (tools and policies — the scaling
+primer's support turn sends 4–6 k) and every turn from the second clears the minimum:
 
 | $ per 8-turn session, Gemini 3.5 Flash, 4,096-token minimum | none | before_history | pinned | tail |
 |---|---|---|---|---|
@@ -420,14 +463,17 @@ one task that silently needs the seat preference, and says thanks):
 Read it with the fixture in view, because its two decisive differences are built in. **Tools miss the task by
 construction**: the scripted model calls `recall` only when a turn names a slot (`UserTurn.ask`), and "book me a
 flight" names none — a rule we wrote, standing in for a model that did not think to look, not a behaviour we
-observed. And **the pinned lead is mostly a memory smaller than the profile**: a user's whole memory is about 66
+observed.
+
+And **the pinned lead is mostly a memory smaller than the profile**: a user's whole memory is about 66
 tokens (§4), so a 60-token profile holds nearly all of it (a 40-token profile scores 78.3%). Give each user thirty
 more facts of mixed importance (`compare_modes(extra_facts=30)`, "My favourite colour is teal.") and every mode drops
 and the lead disappears: tools **45.0%**, implicit 37.2%, pinned + `recall` **46.1%** — the profile now holds the
-most important facts, not the asked ones, and retrieval has to rank the rest. What survives is the shape: tools cost
-a round trip per recall, implicit retrieval pays on every turn and queries with the user's words, and a pinned
-profile is the same bytes every turn, which the prefix cache absorbs. The comparison that counts is a real
-tool-calling model on your own traffic — the lab's T1 path.
+most important facts, not the asked ones, and retrieval has to rank the rest.
+
+What survives is the shape: tools cost a round trip per recall, implicit retrieval pays on every turn and queries with
+the user's words, and a pinned profile is the same bytes every turn, which the prefix cache absorbs. The comparison
+that counts is a real tool-calling model on your own traffic — the lab's T1 path.
 
 **A pinned profile goes stale inside the session.** "I moved to Porto" updates the store, but the profile pinned at
 session start still says Lisbon — and stale context is worse than missing context (durable primer §3.5). Re-pin when a
@@ -435,6 +481,8 @@ write changes a pinned slot, at the price of one prefix-cache miss (`MemoryAgent
 them in `repins`), or mark the profile "as of session start" so the model prefers the conversation.
 
 ## 7. Consolidation, forgetting and deletion
+
+### Consolidation
 
 **Episodes become facts on a schedule.** Raw episodes are cheap to write and expensive to read: long, repetitive,
 full of values that have changed. Per `(user, window)`, `memcore.consolidate.Consolidator.run()` reads the episodes,
@@ -463,32 +511,53 @@ evidence — with the explicit exits of the lra-gcp primer's
 [§3.8 reflection loop](../long-running-durable/lra-gcp/docs/primer.md#38-reflection-evaluatoroptimizer-as-durable-steps): `below_trigger`, `done`,
 `max_insights`, `budget_exhausted`.
 
-**The job is a durable scheduled run.** A deterministic run id per window —
-`consolidate:acme:alice:day0-7`, the way the lra-gcp primer
-([§3.13 "Scheduled and event-triggered runs"](../long-running-durable/lra-gcp/docs/primer.md#313-scheduled-and-event-triggered-runs)) names
-`weekly-review-2026-W37` — so a double fire of the schedule is one run (the second reports `already done`); a
-**lease** with a TTL
-([§3.3 "Leases and the reaper"](../long-running-durable/lra-gcp/docs/primer.md#33-leases-and-the-reaper-crash-recovery)), so a worker that dies holding it blocks others only until it
-expires (a crash at t, a second worker refused at t + 30 s, admitted at t + 61 s with a 60 s lease); a **heartbeat**
-that renews the lease before every slot and a **fence** that checks it is still ours before writing — a worker that is
-slow rather than dead (90 s per slot against a 60 s lease) finds its run taken over and stops with `LeaseLost`
-instead of writing alongside its successor — the durable primer's
-[§3.3 "Exclusivity — leases, not locks"](../long-running-durable/PRIMER.md#33-exclusivity--leases-not-locks): "Long
-steps extend the lease (heartbeat)", and a check on every save is "the second half"; a **checkpoint** after
-every slot, so the resumed run skips finished slots; and fact ids derived from (run id, slot, position), so a slot
-re-applied after a crash overwrites instead of duplicating. The crash hook fires at the worst place — after a slot's
-writes, before its checkpoint — so the resumed run re-applies that slot: five facts after a crash and a resume, the
-same as a clean run, where random ids would leave seven. On GCP this is a Cloud Run job fired weekly by Cloud
-Scheduler (the lab's `deploy/gcp/` README).
+**The job is a durable scheduled run.**
+
+- A deterministic run id per window — `consolidate:acme:alice:day0-7`, the way the lra-gcp primer
+  ([§3.13 "Scheduled and event-triggered runs"](../long-running-durable/lra-gcp/docs/primer.md#313-scheduled-and-event-triggered-runs))
+  names `weekly-review-2026-W37` — so a double fire of the schedule is one run (the second reports `already done`);
+- a **lease** with a TTL
+  ([§3.3 "Leases and the reaper"](../long-running-durable/lra-gcp/docs/primer.md#33-leases-and-the-reaper-crash-recovery)),
+  so a worker that dies holding it blocks others only until it expires (a crash at t, a second worker refused at
+  t + 30 s, admitted at t + 61 s with a 60 s lease);
+- a **heartbeat** that renews the lease before every slot and a **fence** that checks it is still ours before
+  writing — a worker that is slow rather than dead (90 s per slot against a 60 s lease) finds its run taken over and
+  stops with `LeaseLost` instead of writing alongside its successor — the durable primer's
+  [§3.3 "Exclusivity — leases, not locks"](../long-running-durable/PRIMER.md#33-exclusivity--leases-not-locks): "Long
+  steps extend the lease (heartbeat)", and a check on every save is "the second half";
+- a **checkpoint** after every slot, so the resumed run skips finished slots;
+- and fact ids derived from (run id, slot, position), so a slot re-applied after a crash overwrites instead of
+  duplicating.
+
+The crash hook fires at the worst place — after a slot's writes, before its checkpoint — so the resumed run
+re-applies that slot: five facts after a crash and a resume, the same as a clean run, where random ids would leave
+seven. On GCP this is a Cloud Run job fired weekly by Cloud Scheduler (the lab's `deploy/gcp/` README).
 
 **Facts beat raw episodes at a fixed budget.** At 60 tokens, consolidated facts reach **90.9%** recall and raw
 episodes **17.6%** (§4's table): facts are short, deduplicated, and written in the vocabulary questions use; closed
 values stay out of normal queries.
 
-**Forgetting is four mechanisms** (`memcore.forget`): **decay** — `retention = importance / 10 × 0.5 ^ (days since last
-use / half-life)`; an importance-9 memory unused for 60 days with a 30-day half-life keeps **0.225**; **TTL**
-(`expire`); the **per-turn budget** (what does not fit is not seen); and a **cap per scope** (`cap`, lowest
-retention out). None of them is deletion.
+### Forgetting
+
+**Forgetting is four mechanisms** (`memcore.forget`):
+
+- **decay** —
+
+    $$
+    \text{retention} = \frac{\text{importance}}{10} \times 0.5^{\text{days since last use} / \text{half-life}};
+    $$
+
+    an importance-9 memory unused for 60 days with a 30-day half-life keeps **0.225**;
+
+- **TTL** (`expire`);
+
+- the **per-turn budget** (what does not fit is not seen);
+
+- and a **cap per scope** (`cap`, lowest retention out).
+
+None of them is deletion.
+
+### Deletion
 
 **Deletion is a propagation problem.** "Forget my address" must reach every copy:
 
@@ -514,15 +583,17 @@ retention out). None of them is deletion.
 records (the fact, the episode it came from, an insight quoting it), **3** vectors, **24** full-text postings, **1**
 log line and **1** eval case, rotates the tenant's salt over **2** cached prefix blocks, and reports as pending **3**
 copies in the backup and the 2 blocks (unreachable, resident until evicted). Values match on word boundaries, so
-forgetting a pet "cat" never touches "education" or "Catalyst". The employer fact extracted from the same episode is
-not deleted — it does not contain the data — but it is listed for **review**, because it derives from a deleted
-record: content matching finds only verbatim copies ("the user lives in Portugal's second city" does not contain
-"Porto"), and provenance is the rule that holds up under paraphrase. `memcore.forget.residue()` searches every surface
-afterwards — the only test of a deletion that means anything, and blind to paraphrase for the same reason. The
-naive delete (the record only) leaves 13 copies on 7 surfaces. mem0's `delete` is a cautionary example: it removes the
-vector but writes the old text into its SQLite `history` table as `old_memory` (mem0 2.2.1, verify). And embeddings
-are the data: a vector of a deleted text can be inverted ([embeddings primer
-§15](../retrieval-rag/embeddings-lab/docs/primer.md) "Security and governance").
+forgetting a pet "cat" never touches "education" or "Catalyst".
+
+The employer fact extracted from the same episode is not deleted — it does not contain the data — but it is listed for
+**review**, because it derives from a deleted record: content matching finds only verbatim copies ("the user lives in
+Portugal's second city" does not contain "Porto"), and provenance is the rule that holds up under paraphrase.
+`memcore.forget.residue()` searches every surface afterwards — the only test of a deletion that means anything, and
+blind to paraphrase for the same reason. The naive delete (the record only) leaves 13 copies on 7 surfaces.
+
+mem0's `delete` is a cautionary example: it removes the vector but writes the old text into its SQLite `history` table
+as `old_memory` (mem0 2.2.1, verify). And embeddings are the data: a vector of a deleted text can be inverted
+([embeddings primer §15](../retrieval-rag/embeddings-lab/docs/primer.md) "Security and governance").
 
 ## 8. Tenancy, trust and memory poisoning
 
@@ -558,7 +629,9 @@ audit log records the attempt.
 In memcore the agent is built for one principal: `recall` has no user argument and an extra one is ignored, and the
 store has no cross-partition search. `memcore.agent.fence()` renders recalled memory between `<<<MEMORY …>>>` and
 `<<<END MEMORY>>>` with a standing instruction, escaping any delimiter inside, so a stored `<<<END MEMORY>>>`
-cannot close the block. Audit events use the identity lab's `AuditEvent` field names (`event_type`, `agent`,
+cannot close the block.
+
+Audit events use the identity lab's `AuditEvent` field names (`event_type`, `agent`,
 `authority`, `user`, `tool`, `decision`, `reasons`, `args_hash`, `result_hash`, `provenance`, `session_id`,
 `invocation_id`) with new event types `memory.write`, `memory.read`, `memory.forget` and the lab's `args_digest`
 (sha256 of canonical JSON, 16 hex). OpenTelemetry's GenAI conventions now define memory operations —
@@ -570,14 +643,16 @@ sensitive.
 who sends the same prefix, and TTFT reveals a hit. vLLM's `cache_salt` enters the first block's hash only and the
 chain carries it (vllm-internals primer [§4.3 "Block hashes: a chain over the
 prefix"](../../04-inference-engine/vllm-internals/vllm-internals-primer.md)): with salts, a tenant re-sending a
-64-token prompt hits 48 tokens and another tenant sending the same prompt hits 0 (`memcore.budget.PrefixCache`). The
-salt must be secret and per tenant: `memcore.budget.cache_salt(secret, tenant, epoch)` is an HMAC-SHA256 of the tenant
-under a server-side secret, 32 hex. A salt made of the tenant's name is guessable, so anyone who can send requests
-could probe that tenant's cache; and `acme/alice` would be refused outright: vLLM v0.30.0's `validate_cache_salt`
-allows at most 128 characters (its schema says 1,024) and no `@`, `/`, `\` or NUL (verify). Per tenant, not per
-user: users of one tenant share the system prompt's blocks; salting per user closes the timing channel between them
-too, at the cost of that sharing. Rotating the tenant's epoch (`memcore.budget.Salts.rotate`) is also how a deletion
-reaches the cache (§7).
+64-token prompt hits 48 tokens and another tenant sending the same prompt hits 0 (`memcore.budget.PrefixCache`).
+
+The salt must be secret and per tenant: `memcore.budget.cache_salt(secret, tenant, epoch)` is an HMAC-SHA256 of the
+tenant under a server-side secret, 32 hex. A salt made of the tenant's name is guessable, so anyone who can send
+requests could probe that tenant's cache; and `acme/alice` would be refused outright: vLLM v0.30.0's
+`validate_cache_salt` allows at most 128 characters (its schema says 1,024) and no `@`, `/`, `\` or NUL (verify).
+
+Per tenant, not per user: users of one tenant share the system prompt's blocks; salting per user closes the timing
+channel between them too, at the cost of that sharing. Rotating the tenant's epoch (`memcore.budget.Salts.rotate`) is
+also how a deletion reaches the cache (§7).
 
 ## 9. Where to run it
 
@@ -613,23 +688,30 @@ Prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md). pgvector notes: `vec
 **The two-minute walkthrough.** "Our agent has two memories. Working memory is the context window — the transcript
 and a per-turn budget. Long-term memory is typed records — episodic, semantic, procedural — each with a scope whose
 tenant and user are a partition, a source and provenance, confidence and importance, a validity interval, a TTL and a
-deletion key. Writes are decided in code: we extract candidates after the turn, a write policy says which kinds each
+deletion key.
+
+"Writes are decided in code: we extract candidates after the turn, a write policy says which kinds each
 source may write, applies a confidence floor and screens for secrets and injection before persistence; tool output is
 quarantined and can never write procedural memory; a new value supersedes and closes the old one; every write has an
 idempotency key that names the step, and an older value arriving late becomes history, never the current fact.
-Retrieval scores the user's partition by similarity, recency and importance in the paper's form — the reference
+
+"Retrieval scores the user's partition by similarity, recency and importance in the paper's form — the reference
 code's form served stale facts on 70% of knowledge updates over raw episodes in our harness (27% without its slot
 hints) — and packs a 90-token budget,
 the knee of recall against tokens on our planted-facts harness, where we also read stale answers and abstention
-separately with Wilson intervals. We pin a profile per session in the stable prefix and give the model a `recall`
+separately with Wilson intervals.
+
+"We pin a profile per session in the stable prefix and give the model a `recall`
 tool for the rest, re-pinned when a write changes a pinned slot: memory re-retrieved before the history would
 re-prefill the conversation every turn, which in our model costs 53 ms of prefill at turn 8 on an L4 and, on a hosted
-API once the prompt clears its 4,096-token caching minimum, 46% more per session. Episodes become facts in a weekly
-consolidation job with a run id, a lease with a heartbeat, and checkpoints; forgetting is decay, TTL and caps; and a
-deletion follows provenance to every copy — records, vectors, full-text indexes, derived facts, logs, eval sets — lists
-derived records it cannot match for review, rotates the tenant's cache salt, and puts backups and unreachable-but-resident
-cache blocks on a stated expiry. Writes inherit the trust of what the model read, recalled memory is fenced as data, scope
-comes from the verified token, and every read, write and forget is audited."
+API once the prompt clears its 4,096-token caching minimum, 46% more per session.
+
+"Episodes become facts in a weekly consolidation job with a run id, a lease with a heartbeat, and checkpoints;
+forgetting is decay, TTL and caps; and a deletion follows provenance to every copy — records, vectors, full-text
+indexes, derived facts, logs, eval sets — lists derived records it cannot match for review, rotates the tenant's cache
+salt, and puts backups and unreachable-but-resident cache blocks on a stated expiry. Writes inherit the trust of what
+the model read, recalled memory is fenced as data, scope comes from the verified token, and every read, write and
+forget is audited."
 
 **Drill questions**
 
@@ -647,7 +729,7 @@ comes from the verified token, and every read, write and forget is audited."
    salt (vLLM cannot evict by salt), and test by searching every surface for the data.
 
 3. *We copied the generative-agents retrieval code, and knowledge updates got worse. Why?* — Its recency is
-   `0.99 ^ rank` over memories sorted by last access oldest first, so the stalest memory gets the largest recency
+   $0.99^{\text{rank}}$ over memories sorted by last access oldest first, so the stalest memory gets the largest recency
    term (70% stale answers on raw episodes in the harness). Use hours since last access with a decay per hour, and
    close superseded facts so normal queries never see them.
 

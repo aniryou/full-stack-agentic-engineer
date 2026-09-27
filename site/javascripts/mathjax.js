@@ -17,5 +17,13 @@ window.MathJax = {
     // Never look for math in code, program output or the navigation.
     skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code", "annotation", "annotation-xml"],
     ignoreHtmlClass: "md-nav|md-header|md-footer|jp-OutputArea|highlight-ipynb"
+  },
+  startup: {
+    // After typesetting, keep each inline formula on one line with the punctuation around it (tables.js).
+    pageReady: function () {
+      return MathJax.startup.defaultPageReady().then(function () {
+        if (window.fseGlueMath) { window.fseGlueMath(); }
+      });
+    }
   }
 };

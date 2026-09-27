@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""How far this lab's trained and sampled numbers move from one CPU to another — the evidence behind tests/pins.py.
+"""How far this lab's trained and sampled numbers move from one CPU to another — the evidence behind the tests' tolerances.
 
 A seeded run of a tiny numpy model is one CPU's run: numpy's bundled OpenBLAS picks a GEMM kernel per
 microarchitecture, its exp, tanh and reductions dispatch per SIMD level, the kernels round differently in the last
@@ -17,7 +17,10 @@ Zen runs too — and the host's own, SkylakeX on the reference machine) and the 
 (everything on; X86_V4 only; X86_V3 only, an AMD EPYC runner; the X86_V2 baseline). A kernel the host's OpenBLAS
 lacks is reported and skipped, so run this on an x86-64 machine with AVX-512 to cover all five. `--ulp SEED` flips
 the last bit of every np.exp / np.tanh result at random: a stand-in for kernels not on this machine (an ARM
-laptop, a future runner). A tolerance in tests/pins.py is at least twice the largest deviation in the table.
+laptop, a future runner). The tests hold a trained or sampled number to about three times the largest deviation
+seen across CPU variants (`near()` in tests/test_primer_numbers.py, `pytest.approx` in the other files), and to one
+unit of its last printed digit when it came out identical everywhere; rerun this after changing a model, a seed or a
+training loop, and widen a tolerance the table has outgrown.
 
 Measured 2026-09-27 on the reference machine (numpy 2.4.6, Python 3.11), 36 runs, largest |deviation| from the
 reference run — the numbers PRIMER.md quotes:

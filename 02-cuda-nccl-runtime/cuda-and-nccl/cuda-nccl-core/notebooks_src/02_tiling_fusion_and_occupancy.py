@@ -8,9 +8,9 @@
 # A memory-bound kernel takes *(bytes it moves) / (memory bandwidth)*, plus its launch. There
 # are four levers:
 #
-# * **Tiling.** A GEMM that stages `BM x BK` and `BK x BN` tiles in shared memory reloads A only
-#   `ceil(N/BN)` times and B only `ceil(M/BM)` times, instead of N and M times. Traffic falls by
-#   roughly the tile size.
+# * **Tiling.** A GEMM that stages $\mathit{BM} \times \mathit{BK}$ and $\mathit{BK} \times \mathit{BN}$ tiles in
+#   shared memory reloads $A$ only $\lceil N/\mathit{BN} \rceil$ times and $B$ only $\lceil M/\mathit{BM} \rceil$
+#   times, instead of $N$ and $M$ times. Traffic falls by roughly the tile size.
 # * **Fusion.** A softmax built from five kernels makes about eight matrix-sized passes through
 #   HBM. A fused one makes two, or three with online softmax when a row does not fit on chip.
 #   FlashAttention is this idea applied to attention.
@@ -39,10 +39,10 @@ for label, (bm, bn) in [("naive (1x1)", (1, 1)), ("tile 32x32", (32, 32)), ("til
     print(f"{label:>18}  {t['bytes'] / 1e9:>11.2f} GB  {t['intensity']:>9.1f}  {t['bytes'] / 3.35e12 * 1e3:>25.2f} ms")
 
 # %% [markdown]
-# The 4096^3 GEMM is 137 GFLOP, about 0.14 ms at ~990 TFLOP/s of dense BF16. Without reuse it
+# The $4096^3$ GEMM is 137 GFLOP, about 0.14 ms at ~990 TFLOP/s of dense BF16. Without reuse it
 # would stream 275 GB, 82 ms at H100 bandwidth. A 128x128 shared-memory tile cuts global
 # traffic by about 126x. The rest of the gap to the compulsory 0.1 GB is closed by **L2**: many
-# thread blocks reuse the same A and B panels while those panels are still in the 50 MB L2, so
+# thread blocks reuse the same $A$ and $B$ panels while those panels are still in the 50 MB L2, so
 # HBM sees far less than the "global traffic" column. (The roofline and ridge point are layer
 # 01's topic; here we count bytes.)
 #
@@ -60,9 +60,9 @@ print("exact:", np.array_equal(C, A @ B), "| counted:", counted,
 # ## Exercise 2.1: the tiled-GEMM traffic formula
 #
 # Write `tiled_traffic_bytes(M, N, K, BM, BN, dtype_bytes)`. Each output tile loads its full
-# `BM x K` panel of A and `K x BN` panel of B, and writes its `BM x BN` block of C once. Tiles at
-# the edges are partial, so count only real elements. Hint: each element of A is loaded once for
-# every *column* of tiles.
+# $\mathit{BM} \times K$ panel of $A$ and $K \times \mathit{BN}$ panel of $B$, and writes its
+# $\mathit{BM} \times \mathit{BN}$ block of $C$ once. Tiles at the edges are partial, so count only real
+# elements. Hint: each element of $A$ is loaded once for every *column* of tiles.
 
 # %% exercise
 def tiled_traffic_bytes(M, N, K, BM, BN, dtype_bytes=2):
@@ -80,12 +80,13 @@ assert tiled_traffic_bytes(96, 112, 80, 32, 32, 8) == (c["loads"] + c["stores"])
 print("✅ traffic = (M*K*ceil(N/BN) + K*N*ceil(M/BM) + M*N) x bytes, matching the simulated kernel")
 
 # %% [markdown]
-# Look at the last shape, `M = 8`: a decode-sized GEMM with 8 tokens against a 4096x4096
-# weight. Its traffic is dominated by reading B (the weights) once. That is the batch-1 decode
-# problem in one line: no tile size can raise the intensity above what M allows.
+# Look at the last shape, $M = 8$: a decode-sized GEMM with 8 tokens against a 4096x4096
+# weight. Its traffic is dominated by reading $B$ (the weights) once. That is the batch-1 decode
+# problem in one line: no tile size can raise the intensity above what $M$ allows.
 #
 # ## Tiles cost shared memory, and shared memory caps occupancy
-# A block computing a `BM x BN` tile stages `(BM*BK + BK*BN)` elements per pipeline stage:
+# A block computing a $\mathit{BM} \times \mathit{BN}$ tile stages
+# $(\mathit{BM} \cdot \mathit{BK} + \mathit{BK} \cdot \mathit{BN})$ elements per pipeline stage:
 
 # %%
 smem = tiling.tile_smem_bytes(128, 128, 32, dtype_bytes=2, stages=3)
@@ -100,11 +101,12 @@ for cc in ("8.9", "9.0"):
 # Registers are the most common occupancy limiter. On CC 7.x to 10.x an SM has 65,536 32-bit
 # registers split across **4 sub-partitions** of 16,384. They are allocated **per warp** in units
 # of 256 registers. Write `blocks_by_registers(threads_per_block, regs_per_thread)` using these
-# rules (assume regs_per_thread <= 255):
+# rules (assume $\mathtt{regs\_per\_thread} \le 255$):
 #
-# 1. registers per warp = `regs_per_thread x 32`, rounded up to a multiple of 256
-# 2. warps per sub-partition = `16384 // registers_per_warp`, and warps per SM = 4 x that
-# 3. blocks = `warps per SM // ceil(threads_per_block / 32)`
+# 1. registers per warp $= \mathtt{regs\_per\_thread} \times 32$, rounded up to a multiple of 256
+# 2. warps per sub-partition $= \lfloor 16384 / \text{registers per warp} \rfloor$, and warps per
+#    SM $= 4 \times$ that
+# 3. blocks $= \lfloor \text{warps per SM} / \lceil \mathtt{threads\_per\_block} / 32 \rceil \rfloor$
 
 # %% exercise
 def blocks_by_registers(threads_per_block, regs_per_thread):
@@ -125,7 +127,7 @@ print("   e.g. 80 regs, 32 threads:", blocks_by_registers(32, 80), "blocks (not 
 # %% [markdown]
 # ## Exercise 2.3: pick a GEMM tile for an L4
 #
-# You are choosing a tile for a 4096^3 BF16 GEMM on an L4 (CC 8.9). A block has 256 threads
+# You are choosing a tile for a $4096^3$ BF16 GEMM on an L4 (CC 8.9). A block has 256 threads
 # using 128 registers each. You want the **highest arithmetic intensity** (from
 # `tiling.gemm_traffic`) among the candidates that still fit **at least 2 blocks per SM**
 # (use `occ.occupancy` with `tiling.tile_smem_bytes`). Two resident blocks let one block's loads
@@ -169,9 +171,9 @@ for v in ("unfused", "fused", "online"):
 # Unfused, every step (max, subtract, exp, sum, divide) reads its input from HBM and writes its
 # output back, which is about 4x the traffic of a fused kernel, plus five launches instead of one.
 # When a row is too long to hold on chip, the **online** version streams the row once to build a
-# running max `m` and sum `s`, rescaling `s` by `exp(m_old - m_new)` when the max grows, then
-# streams it again to write the output. FlashAttention goes one step further: it fuses the
-# softmax *into* the QK^T and PV matmuls, so the score matrix never reaches HBM at all.
+# running max $m$ and sum $s$, rescaling $s$ by $\exp(m_{\text{old}} - m_{\text{new}})$ when the max
+# grows, then streams it again to write the output. FlashAttention goes one step further: it fuses
+# the softmax *into* the $QK^{\top}$ and ${PV}$ matmuls, so the score matrix never reaches HBM at all.
 #
 # ## Exercise 2.4: online softmax
 #
@@ -246,7 +248,7 @@ print(f"✅ eager {eager_us:.0f} us vs graph {graph_us:.0f} us ({eager_us / grap
 
 # %% [markdown]
 # ## Occupancy is a means: Little's law
-# To sustain bandwidth B with latency L, B x L bytes must be in flight at every instant. With an
+# To sustain bandwidth $B$ with latency $L$, $B \times L$ bytes must be in flight at every instant. With an
 # **assumed** 600 ns loaded DRAM latency, compare how many independent 4-byte loads each resident
 # thread must keep outstanding:
 
@@ -280,7 +282,7 @@ print("tail effect:", occ.waves(140, n_sms=132, blocks_per_sm=1), "<- 140 blocks
 # **Drill questions**
 #
 # 1. *FlashAttention does the same FLOPs. Why is it 2-4x faster?* Attention was memory-bound on
-#    the N x N score matrix going to HBM and back. Fusing QK^T, softmax and PV into one tiled
+#    the $N \times N$ score matrix going to HBM and back. Fusing $QK^{\top}$, softmax and ${PV}$ into one tiled
 #    kernel removes that traffic, so time drops to near the matmuls' own cost.
 # 2. *Profiling shows gaps between tiny kernels in decode. What do you try?* CUDA graphs (capture
 #    per batch-size bucket), fusing elementwise ops (torch.compile), and removing host syncs

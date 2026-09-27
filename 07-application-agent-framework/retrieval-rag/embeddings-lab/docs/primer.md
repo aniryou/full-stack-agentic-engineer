@@ -14,7 +14,7 @@
 - **Part VI — Frontier.** Open problems and the 2025–2026 research direction, a model-landscape snapshot, and a decision checklist.
 - **Appendices.** Formulas, worked numbers, reading list, glossary.
 
-Notation: `d` is embedding dimension, `N` corpus size, `q`/`d` query and document, `cos(a,b) = a·b / (‖a‖‖b‖)`, `τ` temperature, `|V|` vocabulary size.
+Notation: $d$ is embedding dimension, $N$ corpus size, $q$/$d$ query and document, $\cos(a,b) = a \cdot b \,/\, (\lVert a \rVert \, \lVert b \rVert)$, $\tau$ temperature, $\lvert V \rvert$ vocabulary size.
 
 ---
 
@@ -22,19 +22,19 @@ Notation: `d` is embedding dimension, `N` corpus size, `q`/`d` query and documen
 
 ## 1. What an embedding is (and isn't)
 
-An **embedding** is a learned map `f: X → ℝ^d` from a space of objects `X` (tokens, sentences, images, users, graph nodes, molecules, audio clips) into a vector space, constructed so that geometric relations in `ℝ^d` — inner products, distances, directions — encode the relations among objects that matter for some task.
+An **embedding** is a learned map $f\colon X \to \mathbb{R}^d$ from a space of objects $X$ (tokens, sentences, images, users, graph nodes, molecules, audio clips) into a vector space, constructed so that geometric relations in $\mathbb{R}^d$ — inner products, distances, directions — encode the relations among objects that matter for some task.
 
 Three ideas are hiding inside that sentence:
 
 1. **Continuity.** Discrete objects get placed in a continuous space where "similar" is computable and, crucially, differentiable. Gradients flow through the embedding, so it can be learned end-to-end with whatever consumes it.
-2. **Compression.** `d` is far smaller than the raw dimensionality. A 50k-word one-hot vocabulary is 50,000-dimensional and says nothing about similarity (every word is orthogonal to every other); a 300-d word vector says a great deal.
+2. **Compression.** $d$ is far smaller than the raw dimensionality. A 50k-word one-hot vocabulary is 50,000-dimensional and says nothing about similarity (every word is orthogonal to every other); a 300-d word vector says a great deal.
 3. **Relational encoding.** The coordinates themselves are arbitrary — an embedding space is meaningful only up to rotation and relative to itself. Vectors from two different models (or two versions of one model) are not comparable. This single fact drives a surprising amount of system design (section 14).
 
 ### Three things people mean by "embedding"
 
 | Term | What it is | Trained for |
 |---|---|---|
-| **Embedding layer / table** | A lookup matrix `E` of shape (vocabulary size × `d`) mapping ids (tokens, users, products) to vectors | Whatever the enclosing model is trained for; every transformer and recommender has one |
+| **Embedding layer / table** | A lookup matrix $E$ of shape (vocabulary size × $d$) mapping ids (tokens, users, products) to vectors | Whatever the enclosing model is trained for; every transformer and recommender has one |
 | **Embedding model / encoder** | A whole network mapping a variable-length object to one vector | Similarity, search, clustering — usually via a contrastive objective |
 | **Representation** | Any intermediate activation (a hidden state) | Nothing in particular — a by-product of the model's own objective |
 
@@ -52,23 +52,23 @@ It is a lossy summary optimized for a notion of similarity fixed at training tim
 
 **Sparse representations.** One-hot vectors, bag-of-words, TF-IDF weighting. Cosine on TF-IDF works well for lexical overlap but has no notion that *car* and *automobile* are related.
 
-**LSA / LSI (Deerwester et al., 1990).** Build the term–document matrix `X`, take the truncated SVD `X ≈ U_k Σ_k V_kᵀ`. Rows of `U_k Σ_k` are word embeddings; rows of `V_k Σ_k` are document embeddings. By Eckart–Young the rank-`k` truncation is the best least-squares approximation. Synonyms co-occur with the same documents and collapse into nearby directions. This is the prototype of every embedding method: **an implicit co-occurrence matrix plus a low-rank factorization.**
+**LSA / LSI (Deerwester et al., 1990).** Build the term–document matrix $X$, take the truncated SVD $X \approx U_k \Sigma_k V_k^{\top}$. Rows of $U_k \Sigma_k$ are word embeddings; rows of $V_k \Sigma_k$ are document embeddings. By Eckart–Young the rank-$k$ truncation is the best least-squares approximation. Synonyms co-occur with the same documents and collapse into nearby directions. This is the prototype of every embedding method: **an implicit co-occurrence matrix plus a low-rank factorization.**
 
-**PMI and PPMI.** Raw counts are dominated by frequency. Pointwise mutual information `PMI(w,c) = log P(w,c) / (P(w)P(c))` measures association beyond chance; PPMI clips negatives to zero. SVD of a PPMI matrix (Bullinaria & Levy, 2007) gives strong word vectors.
+**PMI and PPMI.** Raw counts are dominated by frequency. Pointwise mutual information $\operatorname{PMI}(w,c) = \log P(w,c) / (P(w)P(c))$ measures association beyond chance; PPMI clips negatives to zero. SVD of a PPMI matrix (Bullinaria & Levy, 2007) gives strong word vectors.
 
-**word2vec (Mikolov et al., 2013).** CBOW predicts a word from its context; skip-gram predicts context words from the center word. A full softmax over `|V|` is too expensive, so *skip-gram with negative sampling* (SGNS) turns it into binary classification: for each observed pair `(w, c)`, sample `k` random negative contexts from a smoothed unigram distribution (`P(w)^{3/4}`) and maximize
+**word2vec (Mikolov et al., 2013).** CBOW predicts a word from its context; skip-gram predicts context words from the center word. A full softmax over $\lvert V \rvert$ is too expensive, so *skip-gram with negative sampling* (SGNS) turns it into binary classification: for each observed pair ${(w, c)}$, sample $k$ random negative contexts from a smoothed unigram distribution ($P(w)^{3/4}$) and maximize
 
-```
-log σ(w·c) + Σ_{i=1..k} E_{c_i ~ P_n} [ log σ(−w·c_i) ]
-```
+$$
+\log \sigma(w \cdot c) + \sum_{i=1}^{k} \mathbb{E}_{c_i \sim P_n} \left[ \log \sigma(-w \cdot c_i) \right]
+$$
 
-**The key theoretical result (Levy & Goldberg, 2014).** At the optimum, SGNS satisfies `w·c = PMI(w,c) − log k`. word2vec implicitly factorizes a *shifted PMI matrix*. Neural word embeddings are LSA with a better matrix and a better loss (one that weights observed pairs and ignores the zeros). Follow-up work (Levy, Goldberg & Dagan, 2015) showed that hyperparameters — window size, subsampling, negative count, context-distribution smoothing — explain more of word2vec's advantage over count methods than the architecture does.
+**The key theoretical result (Levy & Goldberg, 2014).** At the optimum, SGNS satisfies $w \cdot c = \operatorname{PMI}(w,c) - \log k$. word2vec implicitly factorizes a *shifted PMI matrix*. Neural word embeddings are LSA with a better matrix and a better loss (one that weights observed pairs and ignores the zeros). Follow-up work (Levy, Goldberg & Dagan, 2015) showed that hyperparameters — window size, subsampling, negative count, context-distribution smoothing — explain more of word2vec's advantage over count methods than the architecture does.
 
-**GloVe (Pennington et al., 2014)** makes the factorization explicit: fit `w_i·c_j + b_i + b_j ≈ log X_ij` with a weighting `f(X_ij)` that caps high counts. Same family.
+**GloVe (Pennington et al., 2014)** makes the factorization explicit: fit $w_i \cdot c_j + b_i + b_j \approx \log X_{ij}$ with a weighting $f(X_{ij})$ that caps high counts. Same family.
 
 **fastText (Bojanowski et al., 2017)** represents a word as a bag of character n-grams and sums their vectors — handles morphology and out-of-vocabulary words, and is the conceptual ancestor of subword tokenization's role in modern models.
 
-**Analogies and linear structure.** `king − man + woman ≈ queen`. Why linear? If vectors are (approximately) factorizations of log co-occurrence, then relations that *multiply* co-occurrence ratios *add* in log space (Arora et al., 2016 give a generative model; Ethayarajh, Duvenaud & Hirst, 2019 tie it to co-occurrence shift). Caveats: the standard 3CosAdd evaluation excludes the input words from the candidate set, which inflates results (Linzen, 2016), and many analogy types fail. But the linear structure is real, and it reappears in LLMs (section 9).
+**Analogies and linear structure.** $\text{king} - \text{man} + \text{woman} \approx \text{queen}$. Why linear? If vectors are (approximately) factorizations of log co-occurrence, then relations that *multiply* co-occurrence ratios *add* in log space (Arora et al., 2016 give a generative model; Ethayarajh, Duvenaud & Hirst, 2019 tie it to co-occurrence shift). Caveats: the standard 3CosAdd evaluation excludes the input words from the candidate set, which inflates results (Linzen, 2016), and many analogy types fail. But the linear structure is real, and it reappears in LLMs (section 9).
 
 **Limits of static embeddings.** One vector per word type: *bank* is an average of river and finance. No composition beyond averaging, no word order.
 
@@ -80,15 +80,19 @@ log σ(w·c) + Σ_{i=1..k} E_{c_i ~ P_n} [ log σ(−w·c_i) ]
 
 **What lives where.** Probing studies (Tenney et al., 2019; Jawahar et al., 2019) found lower layers capture surface and lexical information, middle layers syntax, upper layers semantics — with the final layer specializing toward the pretraining objective. For similarity tasks the last layer of a *raw* model is often not the best; averaging the last few layers or using a middle-upper layer frequently helps. Modern embedding models make this moot by fine-tuning the pooled output directly.
 
-**Anisotropy — the narrow cone.** Ethayarajh (2019) showed contextual embeddings from BERT and GPT-2 occupy a narrow cone: two random words can have cosine > 0.6 in upper layers. Causes include a few "rogue" dimensions with huge variance (Timkey & van Schijndel, 2021), frequency effects that push frequent and rare tokens into different regions (Gao et al., 2019, "representation degeneration"), and the geometry induced by the softmax objective. Consequences: raw cosine similarities are uninformative and uncalibrated, and retrieval with raw BERT `[CLS]` vectors is often *worse* than averaged GloVe vectors (Reimers & Gurevych, 2019). Remedies: mean-centering plus removal of top principal components (*All-but-the-Top*, Mu & Viswanath, 2018), whitening (Su et al., 2021), flow-based mappings (BERT-flow), and — most effectively — contrastive fine-tuning, which pushes representations toward uniformity on the sphere (section 4).
+**Anisotropy — the narrow cone.** Ethayarajh (2019) showed contextual embeddings from BERT and GPT-2 occupy a narrow cone: two random words can have cosine > 0.6 in upper layers. Causes include a few "rogue" dimensions with huge variance (Timkey & van Schijndel, 2021), frequency effects that push frequent and rare tokens into different regions (Gao et al., 2019, "representation degeneration"), and the geometry induced by the softmax objective.
+
+Consequences: raw cosine similarities are uninformative and uncalibrated, and retrieval with raw BERT `[CLS]` vectors is often *worse* than averaged GloVe vectors (Reimers & Gurevych, 2019). Remedies: mean-centering plus removal of top principal components (*All-but-the-Top*, Mu & Viswanath, 2018), whitening (Su et al., 2021), flow-based mappings (BERT-flow), and — most effectively — contrastive fine-tuning, which pushes representations toward uniformity on the sphere (section 4).
 
 **Pooling.** `[CLS]` works only if the model was trained to use it (NSP or a contrastive head). Mean pooling over tokens is the robust default for bidirectional encoders. For **decoder-only (causal) models**, only the last token has attended to the whole input, so either use last-token pooling (typically an appended EOS after an instruction template) or convert the model to bidirectional attention and mean-pool (LLM2Vec, NV-Embed — section 4). Mean-pooling a causal model is subtly wrong: early tokens' states know nothing about later tokens.
 
-**Inside an LLM.** The embedding matrix `E ∈ ℝ^{|V|×d_model}` initializes the residual stream (`E[token]` plus positional information); attention and MLP blocks add to it layer by layer; the unembedding `W_U` maps the final residual to logits. Small models often tie `W_U = Eᵀ` (Press & Wolf, 2017). The *logit lens* (nostalgebraist, 2020) applies `W_U` to intermediate residuals to read off what the model "would predict" at each layer — evidence that the residual stream keeps a roughly consistent basis across depth. Undertrained rows of `E` produce *glitch tokens* (Rumbelow & Watkins, 2023, "SolidGoldMagikarp"): vocabulary entries rare in training data whose embeddings sit near initialization and trigger bizarre behavior.
+**Inside an LLM.** The embedding matrix $E \in \mathbb{R}^{\lvert V \rvert \times d_{\text{model}}}$ initializes the residual stream ($E[\text{token}]$ plus positional information); attention and MLP blocks add to it layer by layer; the unembedding $W_U$ maps the final residual to logits. Small models often tie $W_U = E^{\top}$ (Press & Wolf, 2017). The *logit lens* (nostalgebraist, 2020) applies $W_U$ to intermediate residuals to read off what the model "would predict" at each layer — evidence that the residual stream keeps a roughly consistent basis across depth.
+
+Undertrained rows of $E$ produce *glitch tokens* (Rumbelow & Watkins, 2023, "SolidGoldMagikarp"): vocabulary entries rare in training data whose embeddings sit near initialization and trigger bizarre behavior.
 
 **Tokenization determines what gets embedded.** Numbers, code identifiers, product codes, and rare names are split into fragments the model must recombine — part of why embedding models are weak on exact identifiers (section 15).
 
-**Positional embeddings.** Learned absolute (BERT, GPT-2); sinusoidal (original transformer); **RoPE** (rotary: rotate query/key pairs by an angle proportional to position so `q·k` depends only on relative offset — the default in modern LLMs and long-context embedders); **ALiBi** (a linear bias on attention scores, used by MosaicBERT and jina-embeddings-v2 for 8k context). RoPE extension methods (position interpolation, NTK-aware scaling, YaRN) matter when a long-context embedder is trained at one length and served at another — quality at the advertised maximum length is rarely equal to quality at 512 tokens.
+**Positional embeddings.** Learned absolute (BERT, GPT-2); sinusoidal (original transformer); **RoPE** (rotary: rotate query/key pairs by an angle proportional to position so $q \cdot k$ depends only on relative offset — the default in modern LLMs and long-context embedders); **ALiBi** (a linear bias on attention scores, used by MosaicBERT and jina-embeddings-v2 for 8k context). RoPE extension methods (position interpolation, NTK-aware scaling, YaRN) matter when a long-context embedder is trained at one length and served at another — quality at the advertised maximum length is rarely equal to quality at 512 tokens.
 
 ---
 # Part II — Modern text embedding models
@@ -97,8 +101,8 @@ log σ(w·c) + Σ_{i=1..k} E_{c_i ~ P_n} [ log σ(−w·c_i) ]
 
 ### Bi-encoders, cross-encoders, and what sits between
 
-- **Bi-encoder.** `f(q)` and `g(d)` are computed independently; `score = f(q)·g(d)`. Documents are pre-embedded and indexed; a query costs one forward pass plus an ANN lookup. Loses token-level interaction between query and document.
-- **Cross-encoder.** `h([q; d])` attends over both jointly. Far more accurate at relevance, but O(N) forward passes per query and nothing to index. Used as a *reranker* over the top-k from a first-stage retriever.
+- **Bi-encoder.** ${f(q)}$ and ${g(d)}$ are computed independently; $\text{score} = f(q) \cdot g(d)$. Documents are pre-embedded and indexed; a query costs one forward pass plus an ANN lookup. Loses token-level interaction between query and document.
+- **Cross-encoder.** ${h([q; d])}$ attends over both jointly. Far more accurate at relevance, but ${O(N)}$ forward passes per query and nothing to index. Used as a *reranker* over the top-k from a first-stage retriever.
 - **Late interaction** (ColBERT, section 5) pre-computes per-token document vectors and defers a cheap interaction to query time.
 
 Retrieve-then-rerank is the standard production pipeline (section 15).
@@ -120,15 +124,13 @@ E5, GTE, BGE, Nomic, Arctic, Jina, Qwen3-Embedding, and the hosted models all fo
 
 InfoNCE, also called NT-Xent or *multiple negatives ranking loss* in sentence-transformers:
 
-```
-L = −(1/B) Σ_i log  exp(s(q_i, d_i⁺)/τ)
-                     ─────────────────────────────────────────────────────────────
-                     exp(s(q_i, d_i⁺)/τ) + Σ_{j≠i} exp(s(q_i, d_j⁺)/τ) + Σ_h exp(s(q_i, d_h⁻)/τ)
-```
+$$
+L = -\frac{1}{B} \sum_i \log \frac{\exp(s(q_i, d_i^{+})/\tau)}{\exp(s(q_i, d_i^{+})/\tau) + \sum_{j \ne i} \exp(s(q_i, d_j^{+})/\tau) + \sum_h \exp(s(q_i, d_h^{-})/\tau)}
+$$
 
-- `s` is cosine (or dot product). **Temperature `τ`** is small for cosine (0.01–0.05): it sharpens the softmax so the loss concentrates on the hardest negatives. Too small → instability and hubness; learnable `τ` is common (CLIP).
+- $s$ is cosine (or dot product). **Temperature $\tau$** is small for cosine (0.01–0.05): it sharpens the softmax so the loss concentrates on the hardest negatives. Too small → instability and hubness; learnable $\tau$ is common (CLIP).
 - **In-batch negatives** make every other example's positive a free negative, so signal scales with batch size — hence the obsession with huge batches. **GradCache** (Gao et al., 2021) decouples batch size from GPU memory by caching representations and back-propagating in chunks.
-- **Hard negatives** are passages that look relevant but aren't. Sources: BM25 top-k (lexically similar), earlier-checkpoint dense retrieval (ANCE refreshes the negative index asynchronously during training), and cross-encoder-scored candidates. **False negatives** — "negatives" that are actually unlabeled positives — are the dominant noise source in retrieval training (RocketQA's *denoised* negatives discard candidates a cross-encoder scores as likely positives; a margin rule such as "skip if `s(neg) > s(pos) − margin`" is standard).
+- **Hard negatives** are passages that look relevant but aren't. Sources: BM25 top-k (lexically similar), earlier-checkpoint dense retrieval (ANCE refreshes the negative index asynchronously during training), and cross-encoder-scored candidates. **False negatives** — "negatives" that are actually unlabeled positives — are the dominant noise source in retrieval training (RocketQA's *denoised* negatives discard candidates a cross-encoder scores as likely positives; a margin rule such as "skip if $s(\text{neg}) > s(\text{pos}) - \text{margin}$" is standard).
 - **Symmetric vs asymmetric.** For STS and duplicate detection apply the loss in both directions; for retrieval, one direction plus a query-side prefix.
 - **Distillation variants.** Margin-MSE (Hofstätter et al., 2020) matches the teacher's score *gap* between positive and negative — smoother than hard labels; TAS-B composes batches from topically similar queries so in-batch negatives are hard; KL distillation from listwise reranker scores.
 
@@ -157,21 +159,23 @@ L = −(1/B) Σ_i log  exp(s(q_i, d_i⁺)/τ)
 
 ## 5. Representation formats beyond one dense vector
 
-**Learned sparse — SPLADE (Formal et al., 2021).** Use the MLM head to project every token onto the vocabulary, apply `log(1 + ReLU(·))`, max-pool over positions → a sparse `|V|`-dimensional vector with *learned term weights and term expansion* (a passage about "cardiac" activates "heart"). A FLOPS regularizer keeps it sparse. Runs on ordinary inverted indexes; combines BM25's exact-match strength with learned semantics; strong out of domain. SPLADE-v3, uniCOIL, and the sparse head of BGE-M3 are the usual choices.
+**Learned sparse — SPLADE (Formal et al., 2021).** Use the MLM head to project every token onto the vocabulary, apply $\log(1 + \operatorname{ReLU}(\cdot))$, max-pool over positions → a sparse $\lvert V \rvert$-dimensional vector with *learned term weights and term expansion* (a passage about "cardiac" activates "heart"). A FLOPS regularizer keeps it sparse. Runs on ordinary inverted indexes; combines BM25's exact-match strength with learned semantics; strong out of domain. SPLADE-v3, uniCOIL, and the sparse head of BGE-M3 are the usual choices.
 
 **Multi-vector / late interaction — ColBERT (Khattab & Zaharia, 2020).** Keep one vector per token (projected to ~128-d). Score is *MaxSim*:
 
-```
-score(q, d) = Σ_{i ∈ q}  max_{j ∈ d}  q_i · d_j
-```
+$$
+\operatorname{score}(q, d) = \sum_{i \in q} \max_{j \in d} q_i \cdot d_j
+$$
 
 Retains token-level matching — rare terms, entities, out-of-domain robustness — while remaining pre-computable. Cost is storage: tokens × 128 dims per document; ColBERTv2's residual compression brings it to ~20–36 bytes per token and PLAID makes search fast with centroid pruning. **ColPali (2024)** applied late interaction to *document page images* using a vision-language model (each patch becomes a vector) and beat OCR-then-embed pipelines on visually rich documents — tables, figures, slides, scanned forms (the ViDoRe benchmark). **MUVERA (Google, 2024)** maps multi-vector sets to fixed-dimensional encodings so standard MIPS indexes can serve them. jina-embeddings-v4 and several 2025–26 models emit single- and multi-vector outputs from one backbone.
 
-**Why multi-vector matters in theory.** Weller et al. (2025), *On the Theoretical Limitations of Embedding-Based Retrieval*, show that for single-vector embeddings of dimension `d`, the number of distinct top-k document subsets any query can retrieve is bounded (via the sign-rank of the query–document relevance matrix). Their **LIMIT** dataset — trivial queries such as "who likes quokkas?" over documents listing what people like — breaks state-of-the-art embedders (recall@100 strikingly low, often under 20%) while BM25 and multi-vector models do far better: the combinatorics of *which subset to return* exceed what a `d`-dimensional dot product can express. Implication: instruction-following and combinatorial retrieval ("docs mentioning A and B but not C") will not be solved by scaling single-vector embedders. Use sparse, multi-vector, or reasoning/agentic retrieval.
+**Why multi-vector matters in theory.** Weller et al. (2025), *On the Theoretical Limitations of Embedding-Based Retrieval*, show that for single-vector embeddings of dimension $d$, the number of distinct top-k document subsets any query can retrieve is bounded (via the sign-rank of the query–document relevance matrix). Their **LIMIT** dataset — trivial queries such as "who likes quokkas?" over documents listing what people like — breaks state-of-the-art embedders (recall@100 strikingly low, often under 20%) while BM25 and multi-vector models do far better: the combinatorics of *which subset to return* exceed what a $d$-dimensional dot product can express.
 
-**Hybrid dense + lexical.** BM25 remains a strong, sometimes winning baseline for out-of-domain retrieval (BEIR, Thakur et al., 2021), identifiers, and rare terms. Combine with **Reciprocal Rank Fusion** (`score = Σ_i 1/(k + rank_i)`, `k ≈ 60`) or a learned combination of normalized scores, then rerank. Production retrieval should be hybrid by default.
+Implication: instruction-following and combinatorial retrieval ("docs mentioning A and B but not C") will not be solved by scaling single-vector embedders. Use sparse, multi-vector, or reasoning/agentic retrieval.
 
-**Matryoshka Representation Learning (Kusupati et al., 2022).** Train the loss simultaneously on nested prefixes of the vector (first 64, 128, 256, … `d` dims) so truncated vectors are themselves good embeddings, with information front-loaded. Supported by OpenAI text-embedding-3, Nomic, Gemini Embedding, Jina, Cohere embed-v4, and most 2025–26 models. Enables *adaptive retrieval*: shortlist with 256-d vectors on a small fast index, rescore with full vectors. Truncating 1024 → 256 typically costs 1–3 nDCG points.
+**Hybrid dense + lexical.** BM25 remains a strong, sometimes winning baseline for out-of-domain retrieval (BEIR, Thakur et al., 2021), identifiers, and rare terms. Combine with **Reciprocal Rank Fusion** ($\text{score} = \sum_i 1/(k + \operatorname{rank}_i)$, $k \approx 60$) or a learned combination of normalized scores, then rerank. Production retrieval should be hybrid by default.
+
+**Matryoshka Representation Learning (Kusupati et al., 2022).** Train the loss simultaneously on nested prefixes of the vector (first 64, 128, 256, … $d$ dims) so truncated vectors are themselves good embeddings, with information front-loaded. Supported by OpenAI text-embedding-3, Nomic, Gemini Embedding, Jina, Cohere embed-v4, and most 2025–26 models. Enables *adaptive retrieval*: shortlist with 256-d vectors on a small fast index, rescore with full vectors. Truncating 1024 → 256 typically costs 1–3 nDCG points.
 
 **Model-level quantization.** int8 scalar quantization (4× smaller, ~0–1% loss); **binary** (32× smaller, Hamming distance; typically retains ~90–96% of quality if you rescore the top candidates with float vectors). Combined with MRL: 64–100× storage reduction. Distinct from index-level product quantization (section 13).
 
@@ -192,7 +196,7 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 3. Domain shift is large. On FinMTEB (finance), top MTEB models dropped ~8 points and the ranking changed; a 2026 production comparison found the winner on the team's own data (a BGE-large model) ranked eleventh on MTEB.
 4. **Reasoning-intensive retrieval** (BRIGHT, 2024 — queries whose relevant documents don't look like the query, e.g., a coding question answered by a post about a structurally similar but superficially different problem) leaves every embedder far below ceiling. **Instruction-following retrieval** (FollowIR) shows most models nearly ignore instructions.
 
-**Build your own eval.** 100–500 (query, relevant chunk) judgments from real query logs or SME-written questions; LLM-assisted relevance labeling with a human audit; measure Recall@k at the `k` you will actually pass to the LLM, with your chunking. Re-run on every change to chunker, model, or index parameters. This is the highest-leverage investment in a retrieval system, and the only defense against the leaderboard pathologies above.
+**Build your own eval.** 100–500 (query, relevant chunk) judgments from real query logs or SME-written questions; LLM-assisted relevance labeling with a human audit; measure Recall@k at the $k$ you will actually pass to the LLM, with your chunking. Re-run on every change to chunker, model, or index parameters. This is the highest-leverage investment in a retrieval system, and the only defense against the leaderboard pathologies above.
 
 **Component vs end-to-end.** The final RAG metric is answer quality, but retrieval recall is the cheap, measurable bottleneck that correlates with it. Track both; when answer quality moves, check recall first.
 
@@ -201,9 +205,9 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 ## 7. Similarity measures, normalization, calibration
 
-**The identity that ties the metrics together.** For any vectors, `‖a − b‖² = ‖a‖² + ‖b‖² − 2 a·b`; for unit vectors this is `2 − 2 cos(a, b)`. So on normalized vectors, nearest by Euclidean = nearest by cosine = nearest by dot product. Use the metric the model was trained with — most modern text embedders use cosine and emit unit vectors.
+**The identity that ties the metrics together.** For any vectors, $\lVert a - b \rVert^2 = \lVert a \rVert^2 + \lVert b \rVert^2 - 2\,a \cdot b$; for unit vectors this is $2 - 2\cos(a, b)$. So on normalized vectors, nearest by Euclidean = nearest by cosine = nearest by dot product. Use the metric the model was trained with — most modern text embedders use cosine and emit unit vectors.
 
-**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, item norm correlates with popularity (a useful prior). Some dense retrievers (DPR) were trained with dot product, and document norm ends up encoding "how many queries this could answer." Normalizing throws that away — which may be what you want or not. Maximum inner product search reduces to nearest-neighbor search by appending one coordinate (`√(M² − ‖x‖²)`, Bachrach et al., 2014; Shrivastava & Li, 2014), which is how graph indexes support dot product.
+**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, item norm correlates with popularity (a useful prior). Some dense retrievers (DPR) were trained with dot product, and document norm ends up encoding "how many queries this could answer." Normalizing throws that away — which may be what you want or not. Maximum inner product search reduces to nearest-neighbor search by appending one coordinate ($\sqrt{M^2 - \lVert x \rVert^2}$, Bachrach et al., 2014; Shrivastava & Li, 2014), which is how graph indexes support dot product.
 
 **Cosine is not a universal similarity.** Steck, Ekanadham & Kallus (2024) showed that for embeddings from regularized matrix factorization, cosine similarity can be arbitrary: the objective is invariant to per-dimension rescalings that cosine is not. The lesson generalizes — similarity is meaningful only under the geometry the training loss induced. Contrastive models trained with cosine are fine; embeddings pulled from a model trained for something else are not.
 
@@ -211,15 +215,15 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 ## 8. High-dimensional phenomena
 
-**Concentration of distances.** For high-dimensional data with roughly independent coordinates, the ratio of nearest to farthest neighbor distance tends to 1 (Beyer et al., 1999) — nearest neighbors become meaningless. Learned embeddings escape this because their coordinates are far from independent: the **intrinsic dimensionality** of text embeddings (estimated with TwoNN or MLE estimators) is typically in the tens even when `d` is 768–4096. This is also why aggressive truncation (MRL, PCA) works.
+**Concentration of distances.** For high-dimensional data with roughly independent coordinates, the ratio of nearest to farthest neighbor distance tends to 1 (Beyer et al., 1999) — nearest neighbors become meaningless. Learned embeddings escape this because their coordinates are far from independent: the **intrinsic dimensionality** of text embeddings (estimated with TwoNN or MLE estimators) is typically in the tens even when $d$ is 768–4096. This is also why aggressive truncation (MRL, PCA) works.
 
 **Hubness (Radovanović et al., 2010).** In high-d spaces some points become nearest neighbors of a disproportionate number of others (hubs), while others are never retrieved (anti-hubs). Hubs are usually points near the data mean. Severe in cross-modal and cross-lingual retrieval. Remedies: centering; **CSLS** (cross-domain similarity local scaling, Conneau et al., 2018 — penalize candidates that are close to everything); mutual nearest neighbors; inverted softmax. The production symptom: the same few chunks surface for every query.
 
 **Isotropy metrics.** Average cosine between random pairs (≈0 when isotropic); the spectrum of the covariance matrix (effective rank, participation ratio); IsoScore. Improving isotropy helps *raw* models; contrastive-trained models are already near the optimum for their task — perfect isotropy is not the goal, uniformity subject to alignment is.
 
-**Johnson–Lindenstrauss.** Any `n` points in `ℝ^d` can be projected by a random Gaussian matrix into `k = O(log n / ε²)` dimensions while preserving every pairwise distance within a factor of `(1 ± ε)`. Consequences: random projection to a few hundred dimensions is nearly free for nearest-neighbor purposes; PCA does better by using structure; MRL does better still by training for it. JL is also why LSH works, and why superposition (section 9) is possible.
+**Johnson–Lindenstrauss.** Any $n$ points in $\mathbb{R}^d$ can be projected by a random Gaussian matrix into $k = O(\log n / \varepsilon^2)$ dimensions while preserving every pairwise distance within a factor of $(1 \pm \varepsilon)$. Consequences: random projection to a few hundred dimensions is nearly free for nearest-neighbor purposes; PCA does better by using structure; MRL does better still by training for it. JL is also why LSH works, and why superposition (section 9) is possible.
 
-**Dimension is not quality.** A 4096-d vector from a 7B model is not proportionally "richer." `d` is mostly a capacity knob traded against storage and latency, with fast-diminishing returns above a few hundred dimensions — *except* that, by the Weller et al. bound, `d` sets a hard ceiling on combinatorial retrieval expressivity. That is the one principled argument for larger `d`.
+**Dimension is not quality.** A 4096-d vector from a 7B model is not proportionally "richer." $d$ is mostly a capacity knob traded against storage and latency, with fast-diminishing returns above a few hundred dimensions — *except* that, by the Weller et al. bound, $d$ sets a hard ceiling on combinatorial retrieval expressivity. That is the one principled argument for larger $d$.
 
 ## 9. Linear structure, features, superposition — where embeddings meet interpretability
 
@@ -227,7 +231,9 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 **Categorical and hierarchical concepts** (Park et al., 2024): under an appropriate "causal inner product" (a whitening of the unembedding space), categorical concepts such as {mammal, bird, fish} form simplices, and hierarchical relations (mammal ⊂ animal) become *orthogonal* directions. The geometry of an ontology is literally encoded as orthogonality in the model — a useful mental model for anyone who thinks about domain models and embeddings together.
 
-**Superposition** (Elhage et al., 2022, *Toy Models of Superposition*): a network with `d` dimensions can represent `m ≫ d` sparse features by assigning them nearly orthogonal (not exactly orthogonal) directions and tolerating small interference — JL guarantees exponentially many such directions exist. This explains polysemantic neurons and predicts that the "true" features are recoverable by sparse dictionary learning. **Sparse autoencoders** (Bricken et al., 2023; Templeton et al., 2024, *Scaling Monosemanticity*; Gao et al., 2024) decompose residual-stream activations into tens of thousands of interpretable features — an over-complete, sparse *re-embedding of the dense embedding*. Beyond interpretability, SAE features have been used for retrieval and controllable embeddings, and they let you audit what an embedding model is keying on: topic, style, formatting, or the thing you actually care about.
+**Superposition** (Elhage et al., 2022, *Toy Models of Superposition*): a network with $d$ dimensions can represent $m \gg d$ sparse features by assigning them nearly orthogonal (not exactly orthogonal) directions and tolerating small interference — JL guarantees exponentially many such directions exist. This explains polysemantic neurons and predicts that the "true" features are recoverable by sparse dictionary learning.
+
+**Sparse autoencoders** (Bricken et al., 2023; Templeton et al., 2024, *Scaling Monosemanticity*; Gao et al., 2024) decompose residual-stream activations into tens of thousands of interpretable features — an over-complete, sparse *re-embedding of the dense embedding*. Beyond interpretability, SAE features have been used for retrieval and controllable embeddings, and they let you audit what an embedding model is keying on: topic, style, formatting, or the thing you actually care about.
 
 **Universal geometry.** The **Platonic Representation Hypothesis** (Huh et al., 2024): representations of different models, even across modalities, become increasingly similar (measured by mutual kNN alignment) as they scale, converging toward a shared statistical model of the world. **vec2vec** (Jha et al., 2025) pushes to the strong form: an unsupervised translator (adversarial + cycle-consistency, no paired data) maps embeddings from model A's space into model B's with cosine up to ~0.9 — well enough to run attribute inference and inversion on the translated vectors. Two implications: (a) migrating between embedding models without full re-embedding may become feasible (today it is not production-reliable); (b) the obscurity of your embedding model is not a security control.
 
@@ -235,13 +241,15 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 ## 10. Non-Euclidean and structured embedding spaces
 
-**Hyperbolic embeddings.** Trees have exponentially many nodes at depth `r`; Euclidean balls grow polynomially in radius, hyperbolic balls exponentially — so hyperbolic space embeds hierarchies with low distortion in few dimensions. **Poincaré embeddings** (Nickel & Kiela, 2017) placed WordNet's noun hierarchy in 5–10 dimensions with lower distortion than Euclidean in 200; the Lorentz model (2018) trains more stably; hyperbolic GNNs and hyperbolic vision-language models (MERU, 2023) followed. Use when the data *is* a taxonomy, ontology, or org chart and you need is-a geometry: norm encodes depth/generality, angle encodes branch.
+**Hyperbolic embeddings.** Trees have exponentially many nodes at depth $r$; Euclidean balls grow polynomially in radius, hyperbolic balls exponentially — so hyperbolic space embeds hierarchies with low distortion in few dimensions. **Poincaré embeddings** (Nickel & Kiela, 2017) placed WordNet's noun hierarchy in 5–10 dimensions with lower distortion than Euclidean in 200; the Lorentz model (2018) trains more stably; hyperbolic GNNs and hyperbolic vision-language models (MERU, 2023) followed. Use when the data *is* a taxonomy, ontology, or org chart and you need is-a geometry: norm encodes depth/generality, angle encodes branch.
 
-**Order and box embeddings.** Represent concepts as regions so that containment models entailment and hypernymy: order embeddings (Vendrov et al., 2016), box embeddings (Vilnis et al., 2018). Probabilistic box lattices give calibrated `P(A | B)` from volume overlap — useful where "dog ⊂ mammal" must be transitive, which a symmetric cosine cannot express. **Gaussian embeddings** (Vilnis & McCallum, 2015; probabilistic CLIP variants) represent an object as a distribution; variance models ambiguity.
+**Order and box embeddings.** Represent concepts as regions so that containment models entailment and hypernymy: order embeddings (Vendrov et al., 2016), box embeddings (Vilnis et al., 2018). Probabilistic box lattices give calibrated $P(A \mid B)$ from volume overlap — useful where "dog ⊂ mammal" must be transitive, which a symmetric cosine cannot express. **Gaussian embeddings** (Vilnis & McCallum, 2015; probabilistic CLIP variants) represent an object as a distribution; variance models ambiguity.
 
-**Knowledge-graph embeddings.** Triples `(h, r, t)`. **TransE**: `h + r ≈ t` (elegant; fails on one-to-many and symmetric relations). **DistMult / ComplEx**: bilinear scoring; ComplEx handles asymmetry through complex conjugation. **RotatE**: `r` is a rotation in complex space, modeling symmetry, antisymmetry, inversion, and composition. Used for link prediction and as a similarity signal in entity resolution. Limits: transductive (new entities need retraining), blind to textual attributes. Modern practice combines text embeddings of entity descriptions with relational GNNs (R-GCN, CompGCN) or LLM-based completion. In an enterprise ontology, KGEs are a *signal* for completion and matching, never the source of truth.
+**Knowledge-graph embeddings.** Triples ${(h, r, t)}$. **TransE**: $h + r \approx t$ (elegant; fails on one-to-many and symmetric relations). **DistMult / ComplEx**: bilinear scoring; ComplEx handles asymmetry through complex conjugation. **RotatE**: $r$ is a rotation in complex space, modeling symmetry, antisymmetry, inversion, and composition. Used for link prediction and as a similarity signal in entity resolution. Limits: transductive (new entities need retraining), blind to textual attributes. Modern practice combines text embeddings of entity descriptions with relational GNNs (R-GCN, CompGCN) or LLM-based completion. In an enterprise ontology, KGEs are a *signal* for completion and matching, never the source of truth.
 
-**Graph node embeddings.** **DeepWalk / node2vec** (2014/2016): random walks produce "sentences" of nodes, then skip-gram; node2vec's return/in-out parameters `p, q` interpolate between BFS-like (structural role) and DFS-like (community) neighborhoods. Transductive. **GNNs** (GCN, GraphSAGE, GAT, GIN) compute *inductive* embeddings by message passing over node features — a `k`-layer GNN's node embedding summarizes a `k`-hop neighborhood. **Over-smoothing**: with depth, node embeddings converge and become indistinguishable — the graph analogue of anisotropy — mitigated by residual connections, normalization, or decoupling propagation from transformation. Graph transformers need positional/structural encodings (Laplacian eigenvectors, random-walk encodings): literal positional embeddings for graphs. In learned physics simulators (MeshGraphNets and successors), each mesh node's latent is an embedding of local physical state and geometry; the same over-smoothing and Weisfeiler–Lehman expressivity limits apply, which is why multi-scale and hierarchical message passing is used to capture long-range interactions.
+**Graph node embeddings.** **DeepWalk / node2vec** (2014/2016): random walks produce "sentences" of nodes, then skip-gram; node2vec's return/in-out parameters ${p, q}$ interpolate between BFS-like (structural role) and DFS-like (community) neighborhoods. Transductive. **GNNs** (GCN, GraphSAGE, GAT, GIN) compute *inductive* embeddings by message passing over node features — a $k$-layer GNN's node embedding summarizes a $k$-hop neighborhood.
+
+**Over-smoothing**: with depth, node embeddings converge and become indistinguishable — the graph analogue of anisotropy — mitigated by residual connections, normalization, or decoupling propagation from transformation. Graph transformers need positional/structural encodings (Laplacian eigenvectors, random-walk encodings): literal positional embeddings for graphs. In learned physics simulators (MeshGraphNets and successors), each mesh node's latent is an embedding of local physical state and geometry; the same over-smoothing and Weisfeiler–Lehman expressivity limits apply, which is why multi-scale and hierarchical message passing is used to capture long-range interactions.
 
 ---
 
@@ -267,9 +275,9 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 **Science.** Protein language models (ESM-2, ESM-3) yield residue- and sequence-level embeddings that predict structure and function; molecular embeddings from SMILES transformers (ChemBERTa) or GNNs over molecular graphs compete with classical fingerprints (ECFP remains a strong baseline); time-series foundation models (Chronos, MOMENT) produce window embeddings for similarity search and anomaly detection; geospatial embeddings (AlphaEarth Foundations, 2025) embed every 10-m pixel of the planet's surface.
 
-**Tabular and categorical.** *Entity embeddings* (Guo & Berkhahn, 2016) replace one-hot categoricals with learned vectors inside a neural net; the space often exposes structure (postal codes cluster geographically). Sizing rules of thumb: `d ≈ min(600, round(1.6 · n^0.56))` (fastai) or `∝ n^0.25`. For gradient-boosted trees, target encoding usually wins; embeddings matter when categoricals interact and cardinality is huge.
+**Tabular and categorical.** *Entity embeddings* (Guo & Berkhahn, 2016) replace one-hot categoricals with learned vectors inside a neural net; the space often exposes structure (postal codes cluster geographically). Sizing rules of thumb: $d \approx \min(600, \operatorname{round}(1.6 \cdot n^{0.56}))$ (fastai) or $\propto n^{0.25}$. For gradient-boosted trees, target encoding usually wins; embeddings matter when categoricals interact and cardinality is huge.
 
-**High-cardinality ids and the hashing trick.** With 10⁸–10⁹ ids (users, ads, URLs), embedding tables become the largest part of the model — terabytes in industrial recommenders. Hashing trick (Weinberger et al., 2009): hash the id into a smaller table and accept collision noise. **Quotient–remainder / compositional embeddings** (Shi et al., 2020): represent an id by combining rows from two small tables (`id mod m`, `id div m`). Mixed-dimension embeddings give popular ids more capacity; tensor-train compression (TT-Rec) shrinks the tables. Infrastructure (DLRM, TorchRec) shards tables across GPUs row- or table-wise, with all-to-all lookups the dominant communication cost.
+**High-cardinality ids and the hashing trick.** With 10⁸–10⁹ ids (users, ads, URLs), embedding tables become the largest part of the model — terabytes in industrial recommenders. Hashing trick (Weinberger et al., 2009): hash the id into a smaller table and accept collision noise. **Quotient–remainder / compositional embeddings** (Shi et al., 2020): represent an id by combining rows from two small tables ($\text{id} \bmod m$, $\text{id} \operatorname{div} m$). Mixed-dimension embeddings give popular ids more capacity; tensor-train compression (TT-Rec) shrinks the tables. Infrastructure (DLRM, TorchRec) shards tables across GPUs row- or table-wise, with all-to-all lookups the dominant communication cost.
 
 **Recommender systems are embedding systems.** Matrix factorization (Koren et al., 2009) *is* user and item embeddings with dot-product scoring. **Two-tower retrieval** (Covington et al., 2016; Yi et al., 2019) trains user and item towers with sampled softmax and a log-Q correction for the sampling bias of popular items; item2vec/prod2vec apply word2vec to sessions and baskets; sequential models (GRU4Rec, SASRec, BERT4Rec) produce a user embedding from a behavior sequence. Serving = ANN over item embeddings, then a heavier ranker. Recurring problems: popularity bias, cold start (fall back to content embeddings of item text/images), and drift of the embedding tables. The two-tower model is also the industrial ancestor of bi-encoder text retrieval.
 
@@ -278,11 +286,15 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 ## 13. Approximate nearest neighbor (ANN) search
 
-**Exact search first.** Brute force is O(N·d) per query. With SIMD or a GPU it is fine to roughly 10⁵–10⁶ vectors (FAISS flat on GPU handles millions at low-millisecond latency). Always benchmark exact: it is the recall ceiling and is often good enough.
+**Exact search first.** Brute force is $O(N \cdot d)$ per query. With SIMD or a GPU it is fine to roughly 10⁵–10⁶ vectors (FAISS flat on GPU handles millions at low-millisecond latency). Always benchmark exact: it is the recall ceiling and is often good enough.
 
-**Graph-based — HNSW** (Malkov & Yashunin, 2016/2018). A multi-layer proximity graph: sparse upper layers act as express lanes, the dense bottom layer holds every point; search is greedy best-first, descending layers. Parameters: `M` (edges per node; memory ∝ N·M), `efConstruction` (build quality), `efSearch` (query-time beam width — *the* recall/latency knob). Recall@10 of 0.95–0.99 at ~1 ms over millions of vectors in RAM. Downsides: RAM-resident (≈ `N × (4d + 8M)` bytes plus overhead — 10M × 1024-d is ~40 GB of raw vectors alone), slow builds, deletes via tombstones that degrade the graph until a rebuild. **DiskANN / Vamana** (Subramanya et al., 2019): a single-layer graph with a compressed in-memory copy and full vectors on SSD — billion-scale on one machine; FreshDiskANN handles updates.
+**Graph-based — HNSW** (Malkov & Yashunin, 2016/2018). A multi-layer proximity graph: sparse upper layers act as express lanes, the dense bottom layer holds every point; search is greedy best-first, descending layers. Parameters: `M` (edges per node; memory $\propto N \cdot M$), `efConstruction` (build quality), `efSearch` (query-time beam width — *the* recall/latency knob). Recall@10 of 0.95–0.99 at ~1 ms over millions of vectors in RAM. Downsides: RAM-resident (≈ $N \times (4d + 8M)$ bytes plus overhead — 10M × 1024-d is ~40 GB of raw vectors alone), slow builds, deletes via tombstones that degrade the graph until a rebuild.
 
-**Clustering and quantization — IVF and PQ.** *Inverted file* (IVF): k-means into `n_list` centroids; at query time scan only the `n_probe` nearest lists. *Product quantization* (Jégou et al., 2011): split `d` into `m` sub-vectors, k-means each into 256 centroids → one byte per sub-vector (a 4 KB fp32 vector becomes 64–128 bytes); distances via lookup tables (asymmetric distance computation). IVF-PQ with re-ranking by full vectors is the classical FAISS billion-scale configuration; OPQ rotates the space first for lower distortion. **ScaNN** (Guo et al., 2020) uses *anisotropic* quantization — penalize error in the direction parallel to the vector, which is what perturbs inner products — and is the reference design for MIPS at scale. **Scalar quantization** (int8, binary) is the simpler cousin, now standard in most vector stores, usually with rescoring of the top-k′ by full-precision vectors.
+**DiskANN / Vamana** (Subramanya et al., 2019): a single-layer graph with a compressed in-memory copy and full vectors on SSD — billion-scale on one machine; FreshDiskANN handles updates.
+
+**Clustering and quantization — IVF and PQ.** *Inverted file* (IVF): k-means into `n_list` centroids; at query time scan only the `n_probe` nearest lists. *Product quantization* (Jégou et al., 2011): split $d$ into $m$ sub-vectors, k-means each into 256 centroids → one byte per sub-vector (a 4 KB fp32 vector becomes 64–128 bytes); distances via lookup tables (asymmetric distance computation). IVF-PQ with re-ranking by full vectors is the classical FAISS billion-scale configuration; OPQ rotates the space first for lower distortion.
+
+**ScaNN** (Guo et al., 2020) uses *anisotropic* quantization — penalize error in the direction parallel to the vector, which is what perturbs inner products — and is the reference design for MIPS at scale. **Scalar quantization** (int8, binary) is the simpler cousin, now standard in most vector stores, usually with rescoring of the top-k′ by full-precision vectors.
 
 **LSH.** Random hyperplanes → binary codes. Theoretical guarantees, trivially shardable and streamable, but inferior recall/efficiency to graphs and IVF-PQ on static corpora. Still used for near-duplicate detection (SimHash) and streaming.
 
@@ -290,7 +302,7 @@ Retains token-level matching — rare terms, entities, out-of-domain robustness 
 
 | Method | Recall/latency | Memory | Updates | Notes |
 |---|---|---|---|---|
-| Exact (flat) | ceiling | N·d floats | trivial | fine to ~10⁶, GPU to ~10⁷ |
+| Exact (flat) | ceiling | $N \cdot d$ floats | trivial | fine to ~10⁶, GPU to ~10⁷ |
 | HNSW | best | highest | inserts OK, deletes degrade | rebuild periodically |
 | IVF-PQ | tunable | lowest | re-train on drift | needs representative training sample |
 | DiskANN | very good | SSD-resident | FreshDiskANN | billion-scale single node |
@@ -416,7 +428,7 @@ Retrieve top-50–200 from dense + BM25 (+ learned sparse) → RRF → cross-enc
 
 **Choosing a model.** Task type (asymmetric retrieval vs symmetric similarity vs clustering) · languages · domain · the input length you need and quality *at that length* · latency and throughput budget · hosted vs self-hosted (residency, deprecation) · license · dimensions and MRL/quantization support (do the storage math) · instruction/prefix format · multimodal needs · reranker pairing · fine-tuning feasibility.
 
-**Building the pipeline.** (1) Eval set → (2) chunker → (3) hybrid retrieval (dense + BM25/sparse) → (4) metadata filters → (5) reranker → (6) `k` tuned to the LLM → (7) monitoring canaries → (8) versioned index with blue/green swap.
+**Building the pipeline.** (1) Eval set → (2) chunker → (3) hybrid retrieval (dense + BM25/sparse) → (4) metadata filters → (5) reranker → (6) $k$ tuned to the LLM → (7) monitoring canaries → (8) versioned index with blue/green swap.
 
 **Pitfalls (each of these has cost someone a quarter).**
 
@@ -442,33 +454,35 @@ Retrieve top-50–200 from dense + BM25 (+ learned sparse) → RRF → cross-enc
 
 ## A. Key formulas
 
-```
-Cosine              cos(a,b) = a·b / (‖a‖ ‖b‖)
-Distance identity   ‖a − b‖² = ‖a‖² + ‖b‖² − 2 a·b   (= 2 − 2 cos(a,b) for unit vectors)
-PMI                 PMI(w,c) = log [ P(w,c) / (P(w) P(c)) ]
-SGNS optimum        w·c = PMI(w,c) − log k                      (Levy & Goldberg, 2014)
-GloVe               min Σ_ij f(X_ij) (w_i·c_j + b_i + b_j − log X_ij)²
-InfoNCE             L = −log [ e^{s(q,d⁺)/τ} / Σ_{d ∈ {d⁺} ∪ negatives} e^{s(q,d)/τ} ]
-Alignment           E_{(x,y)~pos} ‖f(x) − f(y)‖²
-Uniformity          log E_{x,y~data} e^{−2‖f(x) − f(y)‖²}
-MaxSim (ColBERT)    score = Σ_{i∈q} max_{j∈d} q_i·d_j
-RRF                 score(d) = Σ_{rankers i} 1 / (k + rank_i(d)),  k ≈ 60
-JL lemma            k = O(log n / ε²) dims preserve all pairwise distances within (1 ± ε)
-MIPS → NN           x' = [x, √(M² − ‖x‖²)],  q' = [q, 0]   (M ≥ max ‖x‖)
-```
+$$
+\begin{aligned}
+&\text{Cosine} && \cos(a,b) = a \cdot b \,/\, (\lVert a \rVert \, \lVert b \rVert) \\
+&\text{Distance identity} && \lVert a - b \rVert^2 = \lVert a \rVert^2 + \lVert b \rVert^2 - 2\,a \cdot b \quad (= 2 - 2\cos(a,b) \text{ for unit vectors}) \\
+&\text{PMI} && \operatorname{PMI}(w,c) = \log \bigl[ P(w,c) \,/\, (P(w)\,P(c)) \bigr] \\
+&\text{SGNS optimum} && w \cdot c = \operatorname{PMI}(w,c) - \log k \quad \text{(Levy }\&\text{ Goldberg, 2014)} \\
+&\text{GloVe} && \min \sum_{ij} f(X_{ij})\,(w_i \cdot c_j + b_i + b_j - \log X_{ij})^2 \\
+&\text{InfoNCE} && L = -\log \frac{e^{s(q,d^{+})/\tau}}{\sum_{d \in \lbrace d^{+} \rbrace \cup \text{negatives}} e^{s(q,d)/\tau}} \\
+&\text{Alignment} && \mathbb{E}_{(x,y) \sim \text{pos}} \lVert f(x) - f(y) \rVert^2 \\
+&\text{Uniformity} && \log \mathbb{E}_{x,y \sim \text{data}}\, e^{-2\lVert f(x) - f(y) \rVert^2} \\
+&\text{MaxSim (ColBERT)} && \text{score} = \sum_{i \in q} \max_{j \in d} q_i \cdot d_j \\
+&\text{RRF} && \operatorname{score}(d) = \sum_{\text{rankers } i} \frac{1}{k + \operatorname{rank}_i(d)}, \quad k \approx 60 \\
+&\text{JL lemma} && k = O(\log n / \varepsilon^2) \text{ dims preserve all pairwise distances within } (1 \pm \varepsilon) \\
+&\text{MIPS} \to \text{NN} && x' = \bigl[x,\ \sqrt{M^2 - \lVert x \rVert^2}\,\bigr], \quad q' = [q,\ 0] \quad (M \ge \max \lVert x \rVert)
+\end{aligned}
+$$
 
 ## B. Working defaults
 
 | Knob | Typical range | Notes |
 |---|---|---|
-| Contrastive temperature `τ` (cosine) | 0.02–0.05 | learnable in CLIP-style training |
+| Contrastive temperature $\tau$ (cosine) | 0.02–0.05 | learnable in CLIP-style training |
 | Fine-tuning LR | 1e-5 – 2e-5 | 1–3 epochs; warm-up 5–10% |
 | Hard negatives per query | 1–7 | cross-encoder-filtered; margin ≈ 0.05–0.1 |
 | Chunk size | 256–512 tokens | 10–20% overlap; keep structure intact |
-| First-stage `k` | 50–200 | before RRF and reranking |
-| Final `k` to LLM | 5–10 | tune on answer quality |
+| First-stage $k$ | 50–200 | before RRF and reranking |
+| Final $k$ to LLM | 5–10 | tune on answer quality |
 | HNSW `M` / `efConstruction` / `efSearch` | 16–32 / 200 / 64–256 | `efSearch` is the runtime recall knob |
-| IVF `n_list` / `n_probe` | 4√N – 16√N / 1–5% of lists | retrain codebooks on drift |
+| IVF `n_list` / `n_probe` | $4\sqrt{N}$ – $16\sqrt{N}$ / 1–5% of lists | retrain codebooks on drift |
 | MRL truncation | 1024 → 256–512 | ~1–3 nDCG points; rescore with full dims |
 | Dedup threshold | cosine ≳ 0.95 | model-specific; validate |
 
@@ -506,7 +520,7 @@ MIPS → NN           x' = [x, √(M² − ‖x‖²)],  q' = [q, 0]   (M ≥ ma
 - **Pooling** — collapsing token vectors into one (mean, CLS, last token, latent attention).
 - **Product quantization (PQ)** — compressing vectors into per-sub-vector centroid ids.
 - **Reranker** — second-stage model (usually a cross-encoder) re-scoring first-stage candidates.
-- **Sign-rank bound** — the limit on distinct top-k subsets a `d`-dimensional dot product can express.
+- **Sign-rank bound** — the limit on distinct top-k subsets a $d$-dimensional dot product can express.
 - **Superposition** — more features than dimensions, stored as nearly orthogonal directions.
-- **Temperature (`τ`)** — softmax sharpness in contrastive loss; smaller = focus on hardest negatives.
+- **Temperature ($\tau$)** — softmax sharpness in contrastive loss; smaller = focus on hardest negatives.
 - **Uniformity / alignment** — the two quantities contrastive loss optimizes on the hypersphere.

@@ -238,12 +238,14 @@ for failure in baseline.failures():
 # ### Exercise 4.1 — implement the Wilson interval
 #
 # For `passes` successes in `n` trials return the 95% Wilson score interval `(lo, hi)`, clamped to
-# `[0, 1]`, and `(0.0, 1.0)` when `n == 0`. With `p = passes / n` and `z = 1.96`:
+# `[0, 1]`, and `(0.0, 1.0)` when `n == 0`. With $p = \mathrm{passes}/n$ and $z = 1.96$:
 #
-# $$\text{centre} = \frac{p + z^2/2n}{1 + z^2/n}, \qquad
-#   \text{half} = \frac{z\sqrt{p(1-p)/n + z^2/4n^2}}{1 + z^2/n}$$
+# $$
+# \text{centre} = \frac{p + z^2/2n}{1 + z^2/n}, \qquad
+# \text{half} = \frac{z\sqrt{p(1-p)/n + z^2/4n^2}}{1 + z^2/n}
+# $$
 #
-# Unlike the naive `p ± 1.96·SE`, it never claims "100% ± 0" after ten straight passes.
+# Unlike the naive $p \pm 1.96\,\mathrm{SE}$, it never claims "100% ± 0" after ten straight passes.
 
 # %% exercise
 import math

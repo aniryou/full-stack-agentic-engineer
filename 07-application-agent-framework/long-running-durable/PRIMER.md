@@ -6,7 +6,15 @@
 
 ## 0. The one-paragraph version
 
-A chat agent lives inside a request: seconds long, purely reactive, all state in RAM. A **long-running agent** has to wait — for a queue, a human, a batch job, a clock — for minutes to weeks, on infrastructure where any process can be killed at any line. The whole discipline reduces to five invariants: **durable state** (the store is the only memory), **idempotent actions** (at-least-once delivery + idempotent handlers = effectively-once), **exclusive progress** (a lease, not a lock), **bounded execution** (budgets in code, not prompts), and **hygienic context** (put each fact where its lifetime belongs). Everything else — sagas, fan-out, approvals, schedulers, ADK's `ResumabilityConfig` — is those five invariants applied to a specific kind of waiting.
+A chat agent lives inside a request: seconds long, purely reactive, all state in RAM. A **long-running agent** has to wait — for a queue, a human, a batch job, a clock — for minutes to weeks, on infrastructure where any process can be killed at any line. The whole discipline reduces to five invariants:
+
+- **durable state** (the store is the only memory),
+- **idempotent actions** (at-least-once delivery + idempotent handlers = effectively-once),
+- **exclusive progress** (a lease, not a lock),
+- **bounded execution** (budgets in code, not prompts),
+- and **hygienic context** (put each fact where its lifetime belongs).
+
+Everything else — sagas, fan-out, approvals, schedulers, ADK's `ResumabilityConfig` — is those five invariants applied to a specific kind of waiting.
 
 ---
 
@@ -129,7 +137,7 @@ Planner LLM → N subtasks → Pub/Sub topic (or N Cloud Tasks) → idempotent w
 Tool marked `requires_approval` → run parks `WAITING_HUMAN` with the *exact* proposed call and a single-use token → notify → `POST /runs/{id}/approve` (behind IAP) → journal `HUMAN` + the approved call as a `STARTED` intent → normal loop executes it. **Rules:** approve what you execute / execute what was approved (never re-plan after approval); every gate has a TTL (Scheduler-driven expiry → explicit FAILED + escalation); double-clicks are no-ops. Managed alternative: Cloud Workflows `events.create_callback_endpoint` + `await_callback` (`workflows/research_approval.yaml`) — the execution *is* the durable wait.
 
 ### P4 · Saga / compensating transactions (`patterns/saga.py`, `examples/procurement_saga.py`, notebook 03)
-Flight → hotel → card across systems with no shared transaction. Failure at step k runs compensations k-1…0 in reverse, one per wake-up, each journaled with its own key. A compensation that fails permanently is an **escalation** (`on_stuck`), never silence. The LLM may plan the saga; the runner owns the forward/compensate state machine.
+Flight → hotel → card across systems with no shared transaction. Failure at step $k$ runs compensations $k-1 \ldots 0$ in reverse, one per wake-up, each journaled with its own key. A compensation that fails permanently is an **escalation** (`on_stuck`), never silence. The LLM may plan the saga; the runner owns the forward/compensate state machine.
 
 ### P5 · Scheduled / heartbeat agent (`patterns/scheduled.py`)
 Cloud Scheduler → Pub/Sub → push → `/tick`. Three bugs and their fixes: overlap (a lease, or skip while the previous tick's run is active), duplicate ticks (`next_due`, or one run id per time window with an idempotent start), zombies (lease TTL + heartbeat, and the reaper). Keep the tick small; hand long work to P1.
@@ -248,26 +256,35 @@ Two kinds of drill: **system design** (a broad ask → clarifying questions → 
 
 #### A1. "A bank wants an agent that processes supplier invoices end to end: read the PDF, match to a PO, get approval above a threshold, schedule payment. Design it."
 **Clarify:** volume/day; approval SLA (hours? days?); what "schedule payment" touches (a core-banking API with idempotency keys?); regulatory audit needs; human override paths.
+
 **Shape:** P1 durable loop per invoice (Cloud Run + Cloud Tasks + Firestore); P3 gate on `schedule_payment` above the threshold with a 3-business-day TTL and escalation; Document AI for extraction as a synchronous tool (< 60 s) or P7 if batch; journal = audit trail; Gemini Flash for matching, Pro only for exceptions.
+
 **Trade-offs to voice:** Workflows callback vs your own approval endpoint (declarative durability vs dynamic control flow); Firestore vs Cloud SQL for the journal (ops simplicity vs SQL reporting — you can also export the journal to BigQuery); re-verify PO status *immediately* before payment (staleness guard).
+
 **Estimate:** 50k invoices/day → ~1M wake-ups/day (~12/s) → one Tasks queue; tokens ≈ 50k × 8 steps × 5k ≈ 2B/day → route by model tier and quote the resulting order-of-magnitude monthly cost.
+
 **Failure walk:** payment API times out after charging → intent journaled with key → retry re-sends the same key → bank de-dups → one payment.
 
 #### A2. "Design a research agent that answers a question by reading 200 web pages in parallel."
 **Shape:** P2. Planner splits into ≤ 50 subtasks (cap!), Pub/Sub fan-out, idempotent workers write `runs/{id}/subtasks/{sid}` (not a single counter doc at this N), orchestrator polls a count query via a delayed task every 30 s, or Cloud Workflows `parallel` with `concurrency_limit`. Aggregator with a token budget; store fetched pages in GCS, pass URIs.
+
 **Trade-offs:** Pub/Sub (fan-out, no per-message scheduling) vs Tasks (per-task scheduling/rate limiting, no fan-out semantics); why not one giant prompt (context limits, cost, no partial progress).
+
 **Gotcha to name:** the 200th worker's crash after commit — late duplicates must also see `all_done`; the aggregate task is named so the enqueue is idempotent.
 
 #### A3. "An agent must wait for a customer to upload a document — could take two weeks — then continue."
 **Shape:** park `WAITING_EVENT`; Eventarc on the GCS bucket (object finalized) → Pub/Sub → `/internal/callbacks` resumes the run; no polling. Backstop: a Cloud Task at +14 days to expire/escalate. In Workflows: `await_callback` with a 14-day timeout (execution limit is a year).
+
 **Trade-offs:** callback vs poll (cost, latency, coupling); where the reminder lives (Tasks `schedule_time` max 30 days — chain tasks beyond that).
 
 #### A4. "Nightly, an agent reconciles 3 systems and fixes discrepancies. Sometimes a fix has to be undone."
 **Shape:** Cloud Scheduler → Pub/Sub → tick (P5 lease + due-time) → for each discrepancy, a P4 saga with compensations; Cloud Run job if the scan itself takes hours; every fix idempotent by discrepancy id.
+
 **Voice:** compensation failure = escalation ticket, never silent; the LLM proposes the fix plan, code owns the saga state machine.
 
 #### A5. "Migrate this LangGraph agent to Google's stack with minimal rewrite."
 **Shape:** ADK 2 `Workflow` on Cloud Run with Cloud SQL sessions (architecture C), or Agent Runtime for managed sessions/memory; interrupts → `RequestInput`; checkpointer → session service URI; scheduler → Cloud Scheduler → Pub/Sub → `/wake`.
+
 **Gotchas:** ADK resume is at-least-once (tools must be idempotent); `temp:` state lost on resume; the built-in Pub/Sub trigger route makes a new session — add a resume endpoint; agent nodes cannot be first after START without an input.
 
 #### A6. "What would you measure to know the agent fleet is healthy?"

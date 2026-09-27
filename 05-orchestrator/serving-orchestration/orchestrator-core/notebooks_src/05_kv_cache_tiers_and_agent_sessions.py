@@ -6,13 +6,14 @@
 #
 # ## The one-minute version
 # An agent session re-sends its whole, growing history every turn and pauses between turns while tools run. That
-# makes its KV cache the most reusable state in the fleet — and the most evictable: the **working set** (sessions x
-# context x KV bytes per token) is many times the HBM a replica can spare, so LRU evicts a session during its tool
-# call and the next turn re-prefills everything. Two moves fix it:
+# makes its KV cache the most reusable state in the fleet — and the most evictable: the **working set**
+# ($\text{sessions} \times \text{context} \:\times$ $\text{KV bytes per token}$) is many times the HBM a replica can
+# spare, so LRU evicts a session during its tool call and the next turn re-prefills everything. Two moves fix it:
 #
 # * **Offload** evicted KV to host DRAM, local NVMe or a remote store (vLLM's OffloadingConnector, LMCache, Mooncake,
 #   SGLang HiCache). Fetching beats recomputing whenever the tier's bandwidth exceeds the rate at which prefill
-#   *produces* KV: `KV bytes/token x prefill tokens/s` — about 0.5 GB/s for an 8B model on an L4, 4 GB/s on an H100.
+#   *produces* KV: $\text{KV bytes/token} \times \text{prefill tokens/s}$ — about 0.5 GB/s for an 8B model on an L4,
+#   4 GB/s on an H100.
 # * **Keep sessions near their KV** — sticky routing — or make the KV reachable from anywhere with a **shared** tier,
 #   which frees the router to balance load again (notebook 02's tension, dissolved by memory).
 #
@@ -55,9 +56,10 @@ print(table(rows, title="simulated: EPP 3:2:2 on 4x L4, agent sessions"))
 # rate falls back to "system prompts only", whatever the router does.
 #
 # ## Exercise 5.1 — fetch or recompute?
-# Recomputing `n` tokens of KV takes `n / prefill_tok_s`; fetching them takes `n x kv_bytes_per_token / bandwidth`.
-# Write `fetch_beats_recompute(profile, tiers)`: the names of the tiers whose read bandwidth exceeds the break-even
-# `kv_bytes_per_token x prefill_tok_s` (in GB/s).
+# Recomputing $n$ tokens of KV takes $n / \mathrm{prefill\_tok\_s}$; fetching them takes
+# $n \times \mathrm{kv\_bytes\_per\_token} / \text{bandwidth}$. Write `fetch_beats_recompute(profile, tiers)`: the
+# names of the tiers whose read bandwidth exceeds the break-even
+# $\mathrm{kv\_bytes\_per\_token} \times \mathrm{prefill\_tok\_s}$ (in GB/s).
 
 # %% exercise
 tiers = [Tier("host DRAM (PCIe)", 256, 50.0, 0.0005),        # assumed ~50 GB/s over PCIe Gen5 x16 (verify)
@@ -226,9 +228,11 @@ print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload �
 # size the tiers from a replay of real session traces: hit shares per tier and the recomputed-token floor."
 #
 # **Drills**
-# 1. *Offload to NVMe or just recompute?* Compare the drive's read bandwidth with KV bytes/token x prefill tokens/s:
-#    ~0.5 GB/s for an 8B model on an L4 (NVMe wins easily), ~4 GB/s on an H100 (a single drive is marginal).
+# 1. *Offload to NVMe or just recompute?* Compare the drive's read bandwidth with
+#    $\text{KV bytes/token} \times \text{prefill tokens/s}$: ~0.5 GB/s for an 8B model on an L4 (NVMe wins easily),
+#    ~4 GB/s on an H100 (a single drive is marginal).
 # 2. *Why does sticky routing matter more once you offload?* A local tier only helps the sessions that come back to
 #    it; random routing turns most resumes into misses unless the tier is shared.
-# 3. *What limits a shared tier?* Its network bandwidth and latency against the break-even, its capacity (sessions x
-#    context x bytes), and consistency: blocks must be keyed by the same chain hashes and model version everywhere.
+# 3. *What limits a shared tier?* Its network bandwidth and latency against the break-even, its capacity
+#    ($\text{sessions} \times \text{context} \times \text{bytes}$), and consistency: blocks must be keyed by the same
+#    chain hashes and model version everywhere.

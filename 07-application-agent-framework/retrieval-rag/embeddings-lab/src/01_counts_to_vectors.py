@@ -3,7 +3,7 @@
 # **One idea:** an embedding is a low-rank factorization of a co-occurrence matrix.
 # We build PPMI + SVD vectors, then skip-gram with negative sampling (SGNS) from
 # scratch in NumPy, and verify Levy & Goldberg (2014): SGNS implicitly factorizes
-# `PMI − log k`. *Primer §1–2.*
+# $\mathrm{PMI} - \log k$. *Primer §1–2.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt
@@ -50,8 +50,8 @@ P = ppmi(C)
 
 # %% [markdown]
 # ## Low-rank factorization = embeddings (this is LSA's trick)
-# Truncated SVD of PPMI. Rows of `U_d · sqrt(S_d)` are word vectors. By
-# Eckart–Young this is the best rank-`d` least-squares approximation.
+# Truncated SVD of PPMI. Rows of $U_d \cdot \sqrt{S_d}$ are word vectors. By
+# Eckart–Young this is the best rank-$d$ least-squares approximation.
 
 # %%
 U, S, _ = np.linalg.svd(P)
@@ -73,7 +73,7 @@ for w in ["king", "dog", "coffee", "hammer", "snow"]:
 # %% [markdown]
 # ## SGNS from scratch (~35 lines)
 # For each observed (center, context) pair, push their vectors together; push the
-# center away from `K` sampled negatives (unigram^0.75). The gradients are just
+# center away from $K$ sampled negatives ($\text{unigram}^{0.75}$). The gradients are just
 # sigmoid residuals times the other vector. One engineering wrinkle: our vocab is
 # tiny, so a 1024-pair batch hits the same rows dozens of times — summed scatter
 # updates explode. We accumulate a *dense mean gradient* and let Adam's
@@ -134,7 +134,7 @@ for w in ["king", "dog", "coffee"]:
 
 # %% [markdown]
 # ## The Levy–Goldberg check
-# At the SGNS optimum, `w·c = PMI(w,c) − log K`. Let's see how close 6 epochs got.
+# At the SGNS optimum, $w \cdot c = \mathrm{PMI}(w,c) - \log K$. Let's see how close 6 epochs got.
 
 # %%
 total = C.sum()

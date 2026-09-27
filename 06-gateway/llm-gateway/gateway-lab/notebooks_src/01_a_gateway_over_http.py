@@ -280,6 +280,7 @@ assert bad.status == 400
 print(f"✅ four bodies translated as the gateway does and accepted by bolt; without max_tokens: {bad.status} "
       f"{bad.json['error']['message']!r}")
 
+# %% [markdown]
 # ## Worked example: spans, written as OTLP/JSON lines and read back
 #
 # Every request produces one SERVER span (`POST /v1/chat/completions`) and one CLIENT span per upstream target
@@ -375,16 +376,17 @@ stack.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Every model call goes through one gateway. Callers hold virtual keys — hashed, scoped to
-# aliases, budgeted, revocable in one call — and the tenant comes from the verified key, never a header; the
-# provider keys live only in the gateway. A request names an alias; the gateway decides whether it runs
-# (budget, limits) and which provider, model, region or pool serves it; inside a self-hosted pool the endpoint
-# picker chooses the replica. Everything speaks chat completions over SSE; adapters translate the other
-# dialects, including the usage fields that do not line up. The gateway parses each stream — it asks the
-# provider for usage on every stream and strips it for clients that did not ask — and writes one priced ledger
-# row per request, plus spans with the GenAI names. What it costs is a hop of a few milliseconds, a failure
-# point to run redundantly, and one box holding every key, which is why it is the most defended service we
-# have."
+# **Two minutes:** "Every model call goes through one gateway. Callers hold virtual keys — hashed, scoped to aliases,
+# budgeted, revocable in one call — and the tenant comes from the verified key, never a header; the provider keys live
+# only in the gateway. A request names an alias; the gateway decides whether it runs (budget, limits) and which
+# provider, model, region or pool serves it; inside a self-hosted pool the endpoint picker chooses the replica.
+# Everything speaks chat completions over SSE; adapters translate the other dialects, including the usage fields that
+# do not line up.
+#
+# "The gateway parses each stream — it asks the provider for usage on every stream and strips it for clients that did
+# not ask — and writes one priced ledger row per request, plus spans with the GenAI names. What it costs is a hop of a
+# few milliseconds, a failure point to run redundantly, and one box holding every key, which is why it is the most
+# defended service we have."
 #
 # **Drill 1.** *Why not let each app call the providers with its own keys?* — Every app then holds provider
 # keys, implements retries, limits and fallbacks differently, and bills nothing in one place; a leaked key is a

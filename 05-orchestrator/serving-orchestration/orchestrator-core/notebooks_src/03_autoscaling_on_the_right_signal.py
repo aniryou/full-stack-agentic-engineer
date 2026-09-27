@@ -6,10 +6,11 @@
 #
 # ## The one-minute version
 # The Horizontal Pod Autoscaler is a proportional controller: every 15 s it sets
-# `desired = ceil(current x metric / target)` (more exactly: the sum of the samples the pods reported, divided by the
-# target), ignores changes within a 10 % tolerance band, remembers its recommendations for 5 minutes before scaling
-# down, and rate-limits scale-up (+100 % or +4 pods per 15 s). That rule only works if the metric **grows in
-# proportion to load per replica**, **rises before latency does**, and **is not capped**. For an LLM engine:
+# $\text{desired} = \lceil \text{current} \times \text{metric} / \text{target} \rceil$ (more exactly: the sum of the
+# samples the pods reported, divided by the target), ignores changes within a 10 % tolerance band, remembers its
+# recommendations for 5 minutes before scaling down, and rate-limits scale-up (+100 % or +4 pods per 15 s). That rule
+# only works if the metric **grows in proportion to load per replica**, **rises before latency does**, and **is not
+# capped**. For an LLM engine:
 #
 # * **GPU utilisation** fails all three: continuous batching keeps a kernel running whenever *any* request is in
 #   flight, so "utilisation" reads 100 % at a fraction of capacity. The HPA either pins the fleet at max or never moves.
@@ -17,7 +18,7 @@
 #   HPA scales back down into the next cliff — a sawtooth.
 # * **KV-cache usage** and **running requests** are proportional but capped (100 %, `max_num_seqs`). The controller
 #   multiplies the reporting pods' average by their number, so a capped metric grows the fleet at most
-#   cap/target-fold per round: it climbs out of a big step one cold start at a time.
+#   $\text{cap}/\text{target}$-fold per round: it climbs out of a big step one cold start at a time.
 # * **In-flight requests** (running + waiting, including requests held at the gateway) are proportional and uncapped
 #   — what llm-d's queue-based KEDA path scales on — but they count *requests*. A target taken from a chat load test
 #   is wrong for RAG, whose requests carry five times the prefill. llm-d's token-aware path counts *work*: seconds
@@ -57,8 +58,9 @@ print(table(rows, title="simulated: one L4 replica, chat 1,300 in / 150 out"))
 # that jump *is* the latency cliff.
 #
 # ## Exercise 3.1 — the HPA's core rule
-# Write `hpa_desired(current, metric, target, tolerance=0.1)`: return `current` if `metric / target` is within
-# `[1 - tolerance, 1 + tolerance]`, else `ceil(current * metric / target)`. (`metric` is the average over ready pods.)
+# Write `hpa_desired(current, metric, target, tolerance=0.1)`: return `current` if $\text{metric} / \text{target}$ is
+# within $[1 - \text{tolerance}, 1 + \text{tolerance}]$, else
+# $\lceil \text{current} \times \text{metric} / \text{target} \rceil$. (`metric` is the average over ready pods.)
 
 # %% exercise
 def hpa_desired(current, metric, target, tolerance=0.1):
@@ -82,7 +84,7 @@ print("✅ hpa_desired works")
 # Before scaling **down**, the controller takes the **maximum** of every recommendation it made in the last
 # `window` seconds (default 300) — a rolling max that stops it removing pods it will need again a minute later.
 # Write `stabilized_down(history, now, window, desired)`: `history` is a list of `(time, recommendation)`;
-# include only samples strictly newer than `now - window`, plus the new `desired`.
+# include only samples strictly newer than $\text{now} - \text{window}$, plus the new `desired`.
 
 # %% exercise
 def stabilized_down(history, now, window, desired):
@@ -121,12 +123,13 @@ print("✅", seen, "— doubling per sync, so a 1 -> 40 jump takes about a minut
 # %% [markdown]
 # ## Exercise 3.4 — pods that have not reported yet
 # Two ready replicas report 10 queued requests each against a target of 2 per pod, so the HPA asked for
-# ceil(20 / 2) = 10 replicas; eight of them are still Pending (pulling the image). At the next sync the controller
-# averages the two samples **and eight zeros** — Pending pods count as 0 on a scale-up — and keeps the current count
-# if that new ratio is inside the 10 % band or no longer above 1; otherwise it asks for ceil(new ratio x pods
-# counted). **Predict** the recommendation (current = 10) when the two ready pods report **(a)** 10 each, **(b)**
-# 10.5 each, **(c)** 30 each — and **(d)** what `ceil(sum of the samples / target)`, ignoring the Pending pods
-# altogether, gives for (b). Then write `with_pending(values, target, current, pending)` for this scale-up path.
+# $\lceil 20 / 2 \rceil = 10$ replicas; eight of them are still Pending (pulling the image). At the next sync the
+# controller averages the two samples **and eight zeros** — Pending pods count as 0 on a scale-up — and keeps the
+# current count if that new ratio is inside the 10 % band or no longer above 1; otherwise it asks for
+# $\lceil \text{new ratio} \times \text{pods counted} \rceil$. **Predict** the recommendation (current = 10) when the
+# two ready pods report **(a)** 10 each, **(b)** 10.5 each, **(c)** 30 each — and **(d)** what
+# $\lceil \text{sum of the samples} / \text{target} \rceil$, ignoring the Pending pods altogether, gives for (b). Then
+# write `with_pending(values, target, current, pending)` for this scale-up path.
 
 # %% exercise
 predicted = {"a": None, "b": None, "c": None, "d": None}
@@ -175,7 +178,7 @@ print(f"in-flight target {inflight_target} per replica, KV target {kv_target} "
 
 # %% [markdown]
 # ## Worked example — the same traffic step, five signals
-# One replica serves 1.5 req/s; at t = 60 s traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
+# One replica serves 1.5 req/s; at $t = 60$ s traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
 # (min 1, max 8, default behaviour) on a different signal; new replicas take 30 s to become ready (a warm node and
 # cached weights). The sparkline is the replica count every 15 s.
 
@@ -211,7 +214,7 @@ print("\n".join(lines))
 #   even at 8 replicas); at 0.95 it never scales at all. Neither is a policy; both are accidents.
 # * **Waiting per pod** scales up hard, then sees an empty queue, scales down after the 5-minute window — and walks
 #   into the cliff again: the sawtooth in the middle of the peak.
-# * **KV usage** is proportional but capped at 1.0: each round multiplies the *ready* pods by at most 1 / target,
+# * **KV usage** is proportional but capped at 1.0: each round multiplies the *ready* pods by at most $1/\text{target}$,
 #   and the pods it asked for count only once they are ready and reporting — it climbs one cold start at a time.
 # * **In-flight total** (running + waiting + held at the gateway, averaged per replica) tracks demand directly: the
 #   best SLO attainment of the signals that also scale back down, at half the GPU-hours of the utilisation policy.
@@ -219,7 +222,11 @@ print("\n".join(lines))
 #
 # ## Worked example — the cold start decides the tail
 # Same traffic, the in-flight signal, and a longer cold start; the last row keeps three replicas warm instead. While
-# capacity starts, the excess arrival rate piles up: `backlog = max(0, peak - capacity now) x cold start`.
+# capacity starts, the excess arrival rate piles up:
+#
+# $$
+# \text{backlog} = \max(0, \text{peak} - \text{capacity now}) \times \text{cold start}.
+# $$
 
 # %%
 cold_rows = []
@@ -370,8 +377,9 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 #    suffices, so the HPA sees "no load" and scales down into the next cliff; add running requests (or KV usage) as a
 #    second metric — the HPA takes the max over metrics.
 # 3. *2 ready pods at 10 queued each (target 2) and 8 Pending: what does the HPA do?* Holds at 10:
-#    (20 + 0 x 8) / 10 / 2 = 1.0 is inside the band. It would have asked for ceil(20 / 2) = 10 anyway — the zeros
-#    only stop a small change (at 10.5 each it still holds, where ignoring the Pending pods would say 11).
+#    $(20 + 0 \times 8) / 10 / 2 = 1.0$ is inside the band. It would have asked for $\lceil 20 / 2 \rceil = 10$
+#    anyway — the zeros only stop a small change (at 10.5 each it still holds, where ignoring the Pending pods would
+#    say 11).
 # 4. *Our in-flight target was tuned on chat and RAG traffic doubled. What breaks?* The count underweights RAG: here
 #    SLO attainment fell from 0.94 to about 0.7. Scale on seconds of prefill backlog plus KV, or re-derive the
 #    target for every mix.

@@ -13,12 +13,16 @@
 # pods on each node pool's *template node*, estimates how many nodes each pool would need
 # (bin-packing), lets an **expander** pick a pool, and asks the cloud for nodes. Those nodes take
 # minutes to become useful — VM, driver, device plugin, image pull, model weights — and are removed
-# after sitting idle (10 minutes by default). GPUs add two problems CPUs rarely have: **capacity may
-# not exist** (stockouts; Spot reclaims) and **gangs need every node at once** — a job needing 16
-# nodes that receives 11 pays for 11 idle nodes. Queued, all-or-nothing provisioning (Kueue
-# ProvisioningRequest, GKE DWS flex-start) fixes the second; choosing the capacity type per workload
-# (on-demand, Spot, reservation, flex-start) is how you manage the first. After this notebook you can
-# estimate time-to-capacity and idle cost, and pick a capacity type per workload.
+# after sitting idle (10 minutes by default).
+#
+# GPUs add two problems CPUs rarely have: **capacity may not exist** (stockouts; Spot reclaims) and
+# **gangs need every node at once** — a job needing 16 nodes that receives 11 pays for 11 idle nodes.
+# Queued, all-or-nothing provisioning (Kueue ProvisioningRequest, GKE DWS flex-start) fixes the
+# second; choosing the capacity type per workload (on-demand, Spot, reservation, flex-start) is how
+# you manage the first.
+#
+# After this notebook you can estimate time-to-capacity and idle cost, and pick a capacity type per
+# workload.
 #
 # Primer: §7 *Getting capacity* and §8 *Startup latency* in `../../PRIMER.md`.
 
@@ -77,11 +81,11 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 # %% [markdown]
 # ## Scale from zero, and back
 #
-# One L4 node pool at zero nodes, a 1-hour inference job arrives at t = 0. The node takes 300 s
+# One L4 node pool at zero nodes, a 1-hour inference job arrives at $t = 0$. The node takes 300 s
 # (illustrative) from creation to *allocatable GPUs*; the autoscaler removes a node after it has
 # been unneeded for 600 s (its default `--scale-down-unneeded-time`), and not within 600 s of the last
 # scale-up (`--scale-down-delay-after-add`). `simulate()` models both; here the only scale-up is at
-# t = 0, so the unneeded time is what binds. (Not modelled: the utilisation threshold, several pools.)
+# $t = 0$, so the unneeded time is what binds. (Not modelled: the utilisation threshold, several pools.)
 
 # %%
 l4 = NodePool("l4", gpus_per_node=1, max_nodes=4, boot_s=300, price_per_node_hr=0.70)   # illustrative price
@@ -121,10 +125,15 @@ print(f"✅ {r['node_h']:.3f} node-h billed for {r['busy_node_h']:.1f} h of work
 #
 # Spot capacity is cheap because the provider can reclaim it. For one node that is an occasional
 # restart. For a gang it compounds: if *any* node is reclaimed the collective breaks and, without
-# checkpoints, the whole job starts over. With independent reclaims at rate λ per node-hour, a gang
-# of N nodes survives T hours with probability `exp(-N·λ·T)`, and the expected wall-clock time to
-# finish T hours of work restarting from scratch is `(exp(N·λ·T) − 1)·(1/(N·λ) + R)` for a restart
-# overhead R. The rate below is an illustrative input, not a measured Spot statistic.
+# checkpoints, the whole job starts over. With independent reclaims at rate $\lambda$ per node-hour, a
+# gang of $N$ nodes survives $T$ hours with probability $e^{-N \cdot \lambda \cdot T}$, and the expected
+# wall-clock time to finish $T$ hours of work restarting from scratch is
+#
+# $$
+# \left(e^{N \cdot \lambda \cdot T} - 1\right) \cdot \left(\frac{1}{N \cdot \lambda} + R\right)
+# $$
+#
+# for a restart overhead $R$. The rate below is an illustrative input, not a measured Spot statistic.
 
 # %%
 rate = 0.005   # reclaims per node-hour (illustrative)
@@ -302,7 +311,7 @@ for name, s in (("cold node, plain pull + download", cold), ("warm node, streame
 # **Drill questions.**
 #
 # 1. *Why can't a 16-node training job just use an autoscaling Spot pool?* — Any reclaim restarts
-#    the gang; survival falls as exp(−N·λ·T), and partial scale-ups bill idle nodes. Use queued
+#    the gang; survival falls as $e^{-N \cdot \lambda \cdot T}$, and partial scale-ups bill idle nodes. Use queued
 #    provisioning (flex-start) or reservations, and checkpoint.
 # 2. *A replica takes 9 minutes from Pending to Ready. Where do you look first?* — Split it by stage:
 #    node provisioning and driver, image pull, weight download, warm-up; fix the largest.

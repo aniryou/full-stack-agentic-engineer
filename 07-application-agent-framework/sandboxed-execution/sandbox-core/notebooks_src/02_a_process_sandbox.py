@@ -5,17 +5,20 @@
 # lab (`../sandbox-lab`, notebook 01 hardened containers); the concepts are all here.
 #
 # ## The one-minute version
-# In-process restrictions are not a boundary — code that shares your interpreter can undo them — so the
-# first real boundary is a **separate process** you start clean and bound from outside. A process sandbox
-# does six things: (1) a **clean environment**, so no inherited credentials; (2) an **ephemeral workspace**
-# (mode 0700, deleted after the call); (3) **POSIX resource limits** in the child — CPU seconds, address
-# space, processes, file size, open files; (4) a **wall-clock deadline** and a kill of the whole process
-# group; (5) output **read as it streams**, keeping the first `output_bytes` and stopping the run past
-# `output_kill_bytes`, so a flood never lands in your memory; (6) when it runs as root, **its own UID per
-# execution** — the control that makes the process limit real, keeps your files unreadable, and lets it find
-# and kill a process that left the group. It states what it does *not* stop: the network, the host kernel,
-# and — without that UID — your files and a `setsid()` escape. Primer: `../PRIMER.md` §2 (the isolation
-# ladder), §3 (the execution contract). Numbers here are **measured on this machine** and labelled so.
+# In-process restrictions are not a boundary — code that shares your interpreter can undo them — so the first
+# real boundary is a **separate process** you start clean and bound from outside.
+#
+# A process sandbox does six things: (1) a **clean environment**, so no inherited credentials; (2) an
+# **ephemeral workspace** (mode 0700, deleted after the call); (3) **POSIX resource limits** in the child —
+# CPU seconds, address space, processes, file size, open files; (4) a **wall-clock deadline** and a kill of
+# the whole process group; (5) output **read as it streams**, keeping the first `output_bytes` and stopping
+# the run past `output_kill_bytes`, so a flood never lands in your memory; (6) when it runs as root, **its own
+# UID per execution** — the control that makes the process limit real, keeps your files unreadable, and lets
+# it find and kill a process that left the group.
+#
+# It states what it does *not* stop: the network, the host kernel, and — without that UID — your files and a
+# `setsid()` escape. Primer: `../PRIMER.md` §2 (the isolation ladder), §3 (the execution contract). Numbers
+# here are **measured on this machine** and labelled so.
 
 # %%
 from sandboxcore import Budgets, ExecutionRequest, ProcessSandbox, SandboxConfig, running_as_root
@@ -239,14 +242,17 @@ print("✅ the process group is advisory; only the UID (or a cgroup / PID namesp
 # ## In a design review
 # **The two-minute version.** "The process sandbox is the T0 boundary: a separate child started from a clean
 # environment in a throwaway 0700 workspace, so no credentials come along. Before the code runs the child
-# lowers its own POSIX limits — CPU seconds, address space, open files, file size and the process count —
-# and I hold a wall-clock deadline and read its output as it streams, keeping a budget's worth and killing
-# the run if it floods, so neither a sleeper nor a print loop can hurt the caller. On a host where I can, each
-# execution also gets its own unprivileged UID: that is what makes the process limit bite, keeps my files
-# unreadable — pointing HOME elsewhere does not — and lets me kill a process that left the group with
-# setsid(). I say out loud what this does not do: it does not block the network and it shares the kernel,
-# and without the UID my files and escapees are exposed. For a stronger boundary I move up the ladder — a
-# container, then gVisor, then a microVM — but the contract and the limits are the same shape."
+# lowers its own POSIX limits — CPU seconds, address space, open files, file size and the process count — and
+# I hold a wall-clock deadline and read its output as it streams, keeping a budget's worth and killing the run
+# if it floods, so neither a sleeper nor a print loop can hurt the caller.
+#
+# "On a host where I can, each execution also gets its own unprivileged UID: that is what makes the process
+# limit bite, keeps my files unreadable — pointing HOME elsewhere does not — and lets me kill a process that
+# left the group with setsid().
+#
+# "I say out loud what this does not do: it does not block the network and it shares the kernel, and without
+# the UID my files and escapees are exposed. For a stronger boundary I move up the ladder — a container, then
+# gVisor, then a microVM — but the contract and the limits are the same shape."
 #
 # **Drill questions**
 # 1. *Why a separate process, not a restricted interpreter?* — In-process restrictions share the

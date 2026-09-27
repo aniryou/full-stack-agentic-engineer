@@ -295,16 +295,17 @@ print(harness_markdown({"implicit (hashing)": base}, "computed: scripted model, 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "We evaluate memory with a seeded planted-facts harness in LongMemEval's and LoCoMo's
-# question shapes: 84 questions across seven categories, graded correct, stale, abstained or hallucinated,
-# reported with Wilson intervals and the tokens and model calls per answer. It tells us where each design
-# fails — retrieval before every turn misses preferences, tools miss what the model does not ask for, a
-# pinned profile costs tokens and a call. We set the per-turn memory budget at the knee of recall versus
-# tokens. Forgetting is a checklist with counts: a deletion key on every record, provenance to reach derived
-# facts, the service's idempotency rows, the engine's prefix cache (the tenant's salt rotated; a full reset as the
-# operator's step, since vLLM cannot evict one tenant's blocks), the eval set, a purge of FTS and WAL — then we
-# search the files for the bytes. Audit logs carry hashes, not memory; backups age out, and the policy says
-# how long."
+# **Two minutes.** "We evaluate memory with a seeded planted-facts harness in LongMemEval's and LoCoMo's question
+# shapes: 84 questions across seven categories, graded correct, stale, abstained or hallucinated, reported with
+# Wilson intervals and the tokens and model calls per answer. It tells us where each design fails — retrieval
+# before every turn misses preferences, tools miss what the model does not ask for, a pinned profile costs tokens
+# and a call.
+#
+# "We set the per-turn memory budget at the knee of recall versus tokens. Forgetting is a checklist with counts: a
+# deletion key on every record, provenance to reach derived facts, the service's idempotency rows, the engine's
+# prefix cache (the tenant's salt rotated; a full reset as the operator's step, since vLLM cannot evict one
+# tenant's blocks), the eval set, a purge of FTS and WAL — then we search the files for the bytes. Audit logs
+# carry hashes, not memory; backups age out, and the policy says how long."
 #
 # **Drill 1.** *A user asked us to forget their address; a week later the assistant quoted it. Where was it?* —
 # In a copy the delete did not reach: a consolidated summary derived from it (no provenance link), the FTS

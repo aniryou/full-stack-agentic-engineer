@@ -87,9 +87,11 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
   folder, no notebook at a lab's top level, no answer key beside its blank under a suffix. The guard is `tools/ci/nb_layout.py`
   (run alone, it lists every tracked notebook with its lab, role and twin, then every deviation), which `tools/ci/ci.py check`
   runs; the Colab-link and site generators know this one rule (a notebook is an answer key exactly when its folder is `solutions/`).
-- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the lab-list check and the
-  notebook-layout guard (`tools/ci/ci.py check`), the notebook rebuilds (they must be no-ops), the Colab-link and site generators
-  and the link check on every push and pull request; `tools/ci/run_local.sh <lab-id>|--check|--notebooks|--docs|--colab-index`
+- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the lab-list check, the
+  notebook-layout guard and the percent-source heading guard (`tools/ci/ci.py check`; a heading in a code, exercise or check
+  cell of a percent-format source fails it: it needs a `# %% [markdown]` line of its own, or the builder writes it and the
+  prose under it as comments), the notebook rebuilds (they must be no-ops), the Colab-link and site generators and the link
+  check on every push and pull request; `tools/ci/run_local.sh <lab-id>|--check|--notebooks|--docs|--colab-index`
   runs the same thing locally. A new lab with tests must be added to `tools/ci/labs.json`, and its notebooks must follow the
   layout (`tools/ci/run_local.sh --check` verifies both), or the "lab list complete" job goes red.
 - **Redo an exercise:** `git restore <notebook>` returns it to the committed blank; for percent-source
@@ -215,30 +217,78 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
 
 - **2026-09-27 — distillation: `00-foundations/distillation/` (module 00.6).** Built from `tools/orchestration/SPEC.md` §6c (the §6b contract, one more block) on `claude/admiring-sagan-59fpip` in `build_topic.js`'s shape — a research agent's dated fact sheet (now `tools/orchestration/facts/distillation.md`), then builders A (PRIMER + README + core) and B (lab) in parallel, then `review_workflow.js`: three adversarial reviewers (concepts, runnability, pedagogy) → a fixer that verifies each finding → an independent validator (33 findings — 4 blocking, 9 major, 20 minor — all fixed, none rejected, two GPU- and Docker-only paths deferred; the validator re-ran everything and passed: core 86 tests, lab 201) — and merged through its own PR; both packages are percent-source. `PRIMER.md` (why distil; soft targets, temperature and the choice of divergence; sequence-level distillation; on-policy distillation; distilling reasoning; feature distillation, pruning and vocabulary mismatch; a distilled draft for speculative decoding; measuring a student; the economics of a student; where to run it), `distill-core` (package `distillcore`, standard library + numpy: a toy language whose truth is known, tiny teachers and students with manual gradients, every KD loss and its gradient, forward and reverse KL and TRL's JSD, SeqKD and exposure bias, GKD checked against REINFORCE by enumeration, trace distillation against RL, distilled drafts, agreement and Wilson intervals, roofline serving costs and break-even; 5 notebooks, 86 tests; reproduces `minengine.spec`, the roofline primer's §3.3 and §8.1 tables, the capacity primer's bank example, `quantcore.eval`, rlcore's ThinkTask and `reinforce_grad`, the memory core's and the platform lab's Wilson intervals and the 06 lab's `cost_per_call`) and `distill-lab` (package `distillab`: a tiny transformer distilled four ways in torch — hard labels, logit KD, SeqKD, GKD — a fake vLLM teacher, the teacher-data pipeline, TRL SFT, in-process logit KD and GKD for a 0.5–0.6B student with T4 memory plans, reasoning traces, a distilled draft under vLLM's `--speculative-config` and its spec-decode counters, $/M and break-even from `/metrics`; `deploy/any-gpu` and `deploy/gcp`, the latter the 04 serving lab's Cloud Run Terraform and GKE manifest with a teacher's settings, no new Terraform; 5 notebooks, 201 tests). **Tiers:** the core T0; the lab T0 (torch on a CPU, the fake teacher, bundled traces and counters labelled simulated or illustrative) → T1 (a free T4 for the teacher and the 0.5B student; a 24 GB card for Qwen3-4B with a Qwen3-0.6B draft) → T3 through the 04 lab's deploys. At integration the existing material took one-line cross-links: the RL primer §4 (on-policy distillation as the dense-reward cousin of GRPO) and §5 (the trace-distillation paragraph → distillation §3–§5) and the RL topic README's "How it fits"; serving-engine §7 (training a draft is distillation with acceptance as the metric), its README and the 04 layer README; quantization §7 (QAD → distillation §2); the model-landscape primer's adaptation ladder; the 06 scaling primer §3.4 (a distilled student behind a cascade → distillation §9); the transformer primer §6.1. `CURRICULUM.md` gained module 00.6 (§3.2 step 16, 21 h; the later steps are renumbered, so the two 06 topic READMEs now say steps 24 and 25, the LLM gateway (06.7) is step 26 and 07.6 step 31; about 320 h in all), a §3.4 home for distillation, cross-layer drill 21 (after the gateway's 18–20), and 00.6.4 and 00.6.5 in the two shorter routes; `COMPUTE.md` §1.1, §5.4, §6, §7 and §9, the root and layer READMEs, the site's landing text, `CONTRIBUTING.md` and `tools/orchestration/` were updated. The branch then merged `main` (the entry above: the LLM gateway, 06.7): twelve primer + core + lab topics, seven of them newer; `tools/ci/labs.json` has 40 entries and `ci.py builders` lists 30. **New baseline: 385 notebooks** (365 on the branch before the merge; the gateway added 20).
 
-- **2026-09-27 — distill-core: trained and sampled numbers pinned within a measured tolerance.** `tests (distill-core)`
-  failed on PR #43 (which did not touch the lab) with ten last-digit drifts — `verified == 16` got 14, `0.650` got 0.6485,
-  α `0.890` got 0.889, six primer rows — on sources byte-identical to a green `main` run, same image, Python and wheels.
-  Cause: numpy's bundled OpenBLAS picks its GEMM kernel per microarchitecture, and the last-bit differences grow through
-  hundreds of Adam steps at lr 0.02 into a slightly different, equally valid model; `OPENBLAS_CORETYPE=Haswell` (what an
-  AMD Zen runner uses), `Prescott`, `Nehalem` or `Sandybridge` reproduces the failure on one machine. Measured with the new
-  `distill-core/tools/host_sensitivity.py` (five kernels × four numpy SIMD levels + sixteen last-bit-perturbation runs,
-  36 in all, ~3 min): hard-label training, SFT, the reasoning toy and the 5-token identities land on the same model
-  everywhere; soft-target students move by up to 0.025 in rule accuracy and a factor of 2.8 in KL, the on-policy GKD
-  students by ±0.05 (β = 0) to ±0.08 (β = 1) and ±11–19 of 101 on the §8 rare slices, the 4- and 8-unit drafts by ±0.05
-  and ±0.14 in α. Fix: `tests/pins.py` (`near(x, pinned, tol)` or `factor=` for a KL — asserts the recomputation is within
-  the tolerance and returns the pinned value, so a primer row is formatted from the pin and must still appear verbatim);
-  every trained or sampled number in `test_primer_numbers.py`, `test_seqkd.py`, `test_draft.py` and `test_eval.py` is
-  pinned that way with a tolerance at least twice the measured spread (0.005 floor), closed-form numbers stay exact, and
-  each primer claim behind a pinned number (soft beats hard, on-policy removes the bias with β = 0 ahead on every
-  column and β = 1 far behind, the head start at 20 steps, the speedup peak at 16 units, greedy acceptance capped by the
-  target's mean top-1 probability, the tail gap) is asserted on the host running the test — all hold in every run
-  measured; a strict β = 0.5 > β = 1 ordering at position 12 does not (the two overlap across kernels) and is not asserted. Thresholds that the kernels crossed moved to what they guarantee (own-prefix accuracy after GKD
-  > 0.96 / 0.90, was > 0.98 / 0.97; per-position spread < 0.05, was 0.03). The primer keeps its reference-run digits and
-  says so (header note; one sentence each at the §4, §7 and §8 tables), notebooks 01, 02 and 04 carry a one-line note
-  and were rebuilt, `CONTRIBUTING.md` "Numbers" gained the rule. The suite passes under every kernel, level and
-  perturbation tried; 86 tests, count unchanged. **Baseline unchanged: 385 notebooks.**
+- **2026-09-27 — the site made readable: typeset mathematics, lighter pages, cards and callouts (PR #45).** A Playwright
+  audit of every page of the GitHub Pages site (555 pages at desktop width: words, headings, paragraph and list-item
+  lengths, tables and their overflow, code-block widths, MathJax containers against raw TeX markers, stray italics,
+  console errors; screenshots of the dense ones) found three things. The primers and notebooks wrote every formula as
+  plain text (`α·T²·KL(p_T ‖ q_T)`, `r_t = log π_T − log π_S`), so nothing was typeset and underscores showed raw,
+  while formula code fences were wider than the 688px column and clipped; paragraphs ran to 200–370 words and the
+  "one-minute versions" were single paragraphs of bold terms; and record tables (the curriculum's 7-column module
+  tables with 60–100-word cells, the READMEs' "What you get") rendered as narrow, very tall grids. **Site level**
+  (`site/stylesheets/extra.css`, `site/javascripts/{tables,mathjax}.js`, `tools/site/hooks.py`,
+  `tools/site/build_site_content.py`, `mkdocs.yml`): the page grid may grow to 72rem on desktop (content ~850px on a
+  1366px laptop, ~1000px on 1600px+) with prose kept to a 38rem measure inside it, body 0.85rem/1.65, heavier
+  headings, tables with tighter padding, a tinted header and zebra rows, numeric columns right-aligned, blockquotes
+  styled as the callouts they are, `(verify)` as a tag, notebook cells without the empty `In [ ]:` prompt column,
+  code blocks up to 25 % too wide shrunk to fit, display maths that scrolls, inline maths that neither widens a
+  phone page nor strands its punctuation; record tables laid out as cards (four or more columns with a prose
+  column, three with a 120-word cell, or five with most cells 8+ words: 156 tables on 86 pages); GitHub alerts
+  (`> [!NOTE]`) rendered as admonitions; a list straight after a line of prose given the blank line Python-Markdown
+  needs (GitHub already rendered it as a list); `attr_list` dropped (nothing used it, and it swallowed a cell's
+  closing `{0, 0.5, …, 6}`); and mathematics on Markdown pages: authors write `$...$` / `$$` the way GitHub renders
+  it, the generator (and, for hand-written pages, the hook) turns the inline form into `\( \)` for arithmatex under
+  the price-safe rule (no space inside the dollars, no digit after the closing one, and TeX-looking: a backslash,
+  `^`, `_`, braces, a single letter, or a relation or operator between symbols), and `$$` blocks pass through.
+  **Content**, by 17 Opus agents in parallel (one primer or lab group each, disjoint files, the topic's
+  `test_primer_numbers.py` and lab suites as guards, every page previewed and screenshotted before its commit): every
+  primer and primer-like document (the twelve `PRIMER.md`s, the FlashAttention deep dive and primer, the kv-cache,
+  paged-attention, transformer, capacity-planning, model-landscape, GPU, GPU-deployment, vLLM-internals, scaling,
+  vector-database, embeddings and identity primers) and the Markdown cells of every lab's notebooks (percent-source
+  labs through `notebooks_src/` and a rebuild; hand-written ones edited as JSON) now typeset their formulas, split
+  their walls of text at sentence boundaries with no word changed, and turn single-paragraph summaries into a lead
+  and bullets. Site-wide: 0 → 5,271 typeset formulas on 275 pages, paragraphs over 200 words 86 → 0 and over 120
+  words 729 → 220, tables overflowing the column 107 → 14 (the 9–11-column spec tables, which scroll), no MathJax
+  errors and no raw TeX left. Fixed on the way: `S*`/`k*` italicising a sentence, single-letter italics used as
+  variables, formula fences clipped at the column edge, six Markdown sections and a heading stuck in code cells for
+  want of a `# %% [markdown]` marker, the identity lab's practice notebooks whose first cell was indented into a code
+  block, and paragraphs with two dollar prices, which MathJax's `$` delimiters pair into a formula: the prices are now
+  `\$` (a heading uses `&#36;`), which nbconvert, the site, GitHub and Colab show as a plain dollar; JupyterLab 4
+  renders Markdown first and lets MathJax scan the result, so it still pairs them (a `<span>$</span>` would be the
+  cure there, not applied). **distill-core's tests now hold trained-toy numbers to a tolerance.** CI's `tests (distill-core)` failed on
+  GitHub's AMD runners and passed on its Intel ones: the seeded numpy training amplifies the last-bit differences
+  between OpenBLAS kernels and numpy's SIMD paths, so 202 trained or sampled numbers (the KD students, drafts, GKD,
+  pruning, exposure bias) differ in the third digit between CPU families and a few chaotic ones by 0.1–0.2. Exact
+  quantities (enumerated spaces, closed forms, roofline arithmetic) stay verbatim; the trained ones are checked with
+  `near()` at about 3× the largest deviation measured over 15 kernel × SIMD variants, and the primer's opening note
+  says so. **Writing rules from here on** (in CONTRIBUTING.md): mathematics is TeX, never Unicode prose; paragraphs
+  carry one idea in under about 150 words; callouts are bold-lead blockquotes or GitHub alerts. The audit scripts
+  live outside the repo; the build log counts the MathJax pages, the cards and the lists it fixed. **Baseline
+  unchanged: 385 notebooks.**
+
+- **2026-09-27 — distill-core: the CPU spread measured, and the claims hardened (PR #47, on top of #45's tolerances).**
+  The same `tests (distill-core)` failure (#43's run: `verified == 16` got 14, `0.650` got 0.6485, α `0.890` got 0.889,
+  six primer rows) was root-caused independently: `OPENBLAS_CORETYPE=Haswell` (what an AMD Zen runner uses),
+  `Prescott`, `Nehalem` or `Sandybridge` reproduces it on one machine, and numpy's SIMD level moves the numbers too.
+  #45 landed the `near()` tolerances first; this PR adds what was missing around them. `distill-core/tools/host_sensitivity.py`
+  recomputes every trained or sampled quantity the tests hold, exactly as the tests do, under five OpenBLAS kernels × four
+  numpy SIMD levels plus sixteen runs with the last bit of every `np.exp` / `np.tanh` result flipped at random (a stand-in
+  for kernels the machine cannot force), and prints the spread; its docstring keeps the 2026-09-27 table (hard-label
+  training, SFT, the reasoning toy and the 5-token identities identical everywhere; soft-target students ±0.025 in rule
+  accuracy and ×2.8 in KL; the on-policy GKD students ±0.05–0.08 and ±11–19 of 101 on the §8 rare slices; the 4- and
+  8-unit drafts ±0.05 and ±0.14 in α). Twenty perturbation seeds of the whole suite then showed which qualitative claims
+  hold on every run and which do not: β = 0 ahead of β = 0.5 and β = 1 on every column and at least 0.25 ahead of reverse
+  KL over all contexts, α rising with draft width, the rare-slice gap growing with output length — now asserted outright in
+  `test_primer_numbers.py`; a strict β = 0.5 > β = 1 order at position 12 overlaps across CPUs and is not. Notebooks 01, 02
+  and 04 say in one line that their printed numbers are one CPU's, and `CONTRIBUTING.md` "Numbers" carries the rule.
+  **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
 - Root `.gitignore` keeps caches/venvs/`.DS_Store` out; per-lab `.gitignore` files are retained too.
+- 2026-09-27: seven headings in the `gateway-core`, `gateway-lab` and `memory-core` notebook sources (three exercise
+  statements, a worked example's introduction, two "In a design review" sections and a worked example's heading) followed a
+  code or check cell without a `# %% [markdown]` line of their own, so the built notebooks showed them as comments at the
+  end of that cell. The markers were added and the twelve notebooks rebuilt (the ids of the cells after each inserted cell
+  shifted, as the builders mint them by position); `tools/ci/nb_sources.py`, run by `ci.py check`, now fails on a heading
+  outside a markdown cell in any percent-format source.

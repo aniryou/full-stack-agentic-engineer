@@ -25,21 +25,26 @@ conservative, the same choice as layer 01's
 [roofline primer §1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#1-spec-sheet-literacy).
 
 **1. Weights — does it fit?**
-```
-memory = params × bytes/param        bf16=2, fp8=1, int4=0.5
-```
+
+$$
+\text{memory} = \text{params} \times \text{bytes/param} \qquad \text{bf16} = 2,\ \text{fp8} = 1,\ \text{int4} = 0.5
+$$
+
 24B → 48 GB (bf16), 24 (fp8), 12 (int4). Add ~10% for CUDA context and
 activations. On an 80 GB H100 the **spare after weights**, not the 80, is what
 decides how many users you serve.
 
 **2. KV cache — how many concurrent users fit?** *(the number most people miss)*
-```
-KV/token = 2(K,V) × layers × kv_heads × head_dim × bytes
-```
+
+$$
+\text{KV/token} = 2\,(K,V) \times \text{layers} \times \text{kv_heads} \times \text{head_dim} \times \text{bytes}
+$$
+
 Every token of every live conversation holds this in HBM. Mistral Small:
 `2×40×8×128×2 = 163,840 bytes ≈ 164 kB/token` (bf16), 82 kB (fp8).
+
 - 8K conversation ≈ 1.3 GB; 32K ≈ 5.2 GB; 128K ≈ 21 GB
-- `concurrent sessions = spare_HBM ÷ KV_per_session`
+- $\text{concurrent sessions} = \frac{\text{spare_HBM}}{\text{KV_per_session}}$
 - **GQA is why this works**: it uses `kv_heads` (8), not query heads (32) — a
   built-in 4× cut. Mistral 7B popularised it.
 - **Quantization is a concurrency lever before it is a speed lever**: fp8 both
@@ -47,9 +52,11 @@ Every token of every live conversation holds this in HBM. Mistral Small:
 
 **3. Decode — bandwidth-bound.** Each token streams all weights (plus the
 batch's KV) through HBM.
-```
-time/token ≈ bytes_read ÷ HBM_bandwidth
-```
+
+$$
+\text{time/token} \approx \frac{\text{bytes_read}}{\text{HBM_bandwidth}}
+$$
+
 48 GB ÷ 3.35 TB/s ≈ 14 ms → **~70 tok/s single-stream ceiling** on H100. More
 compute does *not* help — only more bandwidth or fewer bytes (quantize).
 **Batching is nearly free**: weights are read once per step for the whole
@@ -57,12 +64,16 @@ batch, so throughput scales with batch until you hit memory or the compute
 roofline (~batch 300 on H100 = FLOPS ÷ bandwidth).
 
 **4. Prefill — compute-bound.**
-```
-FLOPs ≈ 2 × params × S  +  2 × layers × q_heads × head_dim × S²      (S = prompt tokens)
-        weight GEMMs        causal attention (QKᵀ and AV)
-TTFT = FLOPs ÷ (peak_FLOPS × MFU)
-```
-The attention term grows as S², so it only matters for long prompts. For Mistral Small
+
+$$
+\begin{aligned}
+\text{FLOPs} &\approx \underbrace{2 \times \text{params} \times S}_{\text{weight GEMMs}} + \underbrace{2 \times \text{layers} \times \text{q_heads} \times \text{head_dim} \times S^2}_{\text{causal attention } (QK^\top \text{ and } AV)} \\
+&\qquad (S = \text{prompt tokens}) \\[8pt]
+\text{TTFT} &= \frac{\text{FLOPs}}{\text{peak_FLOPS} \times \text{MFU}}
+\end{aligned}
+$$
+
+The attention term grows as $S^2$, so it only matters for long prompts. For Mistral Small
 (40 layers, 32 query heads × 128) it adds 1.4% at 2K tokens, 5.6% at 8K, 22% at 32K and
 90% at 128K (`capacity.attention_flops`). 24B × 2K prompt ≈ 100 TFLOP → ~0.1 s at 50% MFU
 in fp8. A 32K RAG prompt ≈ 1.5 PFLOP for the weights plus 0.35 for attention ≈ 1.9 PFLOP →
@@ -72,10 +83,14 @@ prompts, repeated documents) is the biggest single win there.
 
 **5. Workload → GPUs.** Pin down the workload first: **peak concurrent users** (not
 headcount), avg input/output tokens, TTFT + TPOT targets, availability, growth.
-```
-concurrency = RPS × request_duration        (Little's Law)
-request_duration ≈ TTFT + output_tokens × TPOT
-```
+
+$$
+\begin{aligned}
+\text{concurrency} &= \text{RPS} \times \text{request_duration} \qquad \text{(Little's Law)} \\
+\text{request_duration} &\approx \text{TTFT} + \text{output_tokens} \times \text{TPOT}
+\end{aligned}
+$$
+
 Then compute GPUs required by *each* constraint separately and take the max:
 memory (sessions ÷ per-GPU), decode throughput, prefill throughput. Finally
 apply utilisation headroom (~60–70%) and add **N+1** spares.
@@ -121,6 +136,7 @@ step streams: [MoE primer §5](../mixture-of-experts/PRIMER.md#5-moe-at-inferenc
 [§7](../mixture-of-experts/PRIMER.md#7-sizing-and-cost) (`moecore` reproduces this section's 17.6 ms floor).
 
 **Parallelism rule of thumb:**
+
 1. Use the **smallest tensor-parallel (TP)** degree that fits weights + KV.
 2. TP only *inside* a node — it needs constant chatter over **NVLink (H100: 450 GB/s
    each way, marketed as 900 GB/s for both directions)**; never TP across **InfiniBand

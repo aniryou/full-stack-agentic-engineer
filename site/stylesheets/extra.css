@@ -6,8 +6,10 @@
  * Light values live on :root; Material's dark scheme ([data-md-color-scheme="slate"], set on <body>)
  * redefines the same tokens. Components read tokens only.
  *
- * Content pages keep Material's defaults except for code in table cells and a few phone-width rules (tables,
- * notebooks, display maths). Everything under "landing page" is scoped under .fse-home.
+ * Content pages (everything under "content pages"): a wider column on desktop, a measure for prose so lines stay
+ * readable inside it while tables, code and notebook cells use the full width, headings that mark sections, tables
+ * with less padding and zebra rows, blockquotes as callouts, notebook cells without the prompt column, display
+ * maths that scrolls. Everything under "landing page" is scoped under .fse-home.
  */
 
 :root {
@@ -38,6 +40,10 @@
   --fse-space-5: 3.2rem;
   --fse-radius: 4px;
   --fse-badge: 1.8rem;          /* the number column on the landing page */
+
+  /* content pages: the longest line of prose (about 90 characters at the body size); tables, code blocks and
+     notebook cells are not bound by it */
+  --fse-measure: 38rem;
 }
 
 [data-md-color-scheme="slate"] {
@@ -65,9 +71,277 @@
   --md-accent-fg-color--transparent: rgba(176, 88, 42, 0.1);
 }
 
-/* Content pages: let code in table cells break at hyphens and slashes, not mid-word */
+/* ------------------------------------------------------------------ content pages */
+
+/* Layout. Material caps the page grid at 61rem and gives both sidebars 12.1rem, which leaves the content column
+   688px on a 1366px screen: a 7-column table or a 90-character code line does not fit. On desktop (Material's
+   76.25em breakpoint, both sidebars shown) the grid may grow to 72rem, so the column reaches ~850px on a 1366px
+   laptop and ~1000px on a 1600px+ screen. Prose keeps a measure (--fse-measure) inside it. */
+@media screen and (min-width: 76.25em) {
+  .md-grid {
+    max-width: 72rem;
+  }
+}
+.md-typeset :where(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6, .admonition, details):not(.fse-home *) {
+  max-width: var(--fse-measure);
+}
+.md-typeset :where(li) > :where(p, ul, ol) {
+  max-width: none;               /* already inside a measured list */
+}
+
+/* Type: a little larger and looser than Material's .8rem/1.6 — the pages are long technical prose. */
+.md-typeset {
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+.md-typeset p {
+  margin-block: 0 1.1em;
+}
+
+/* Headings mark sections: Material's light-weight h1/h2 disappear between 300-word paragraphs. */
+.md-typeset h1 {
+  font-size: 1.85em;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin-bottom: 1em;
+}
+.md-typeset h2 {
+  font-size: 1.45em;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 2.2em 0 0.9em;
+}
+.md-typeset h3 {
+  font-size: 1.15em;
+  font-weight: 600;
+  margin: 1.9em 0 0.7em;
+}
+.md-typeset h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 1.6em 0 0.6em;
+}
+.md-typeset hr + h2 {
+  margin-top: 1.2em;             /* a section that follows a rule needs less air above it */
+}
+.md-typeset hr {
+  margin: 2.4em 0 1.6em;
+}
+.md-typeset .headerlink {
+  font-weight: 400;
+}
+
+/* Tables: less padding than Material's (0.94em 1.25em, which alone doubles a wide table), a readable size, a header
+   row that stands out, zebra rows so the eye can follow a 7-column row, code that breaks at hyphens and slashes. */
+.md-typeset table:not([class]) {
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+.md-typeset table:not([class]) :is(th, td) {
+  padding: 0.6em 0.85em;
+}
+.md-typeset table:not([class]) th {
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 5%, transparent);
+  vertical-align: bottom;
+}
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 2.5%, transparent);
+}
+.md-typeset table:not([class]) tbody tr:hover {
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 6%, transparent);
+  box-shadow: none;
+}
 .md-typeset td code {
   word-break: normal;
+}
+/* columns whose every cell is a number (site/javascripts/tables.js marks them .fse-num) line up on the right */
+.md-typeset table:not([class]) :is(th, td).fse-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.md-typeset table:not([class]) td.fse-num {
+  white-space: nowrap;           /* the numbers; a long header over them may still wrap */
+}
+
+/* Record tables as cards (tools/site/hooks.py marks them .fse-stacked: a table whose rows carry a paragraph, like
+   the curriculum's module tables). Each row is a card: the first column is its title, prose columns run the full
+   width, the short fields sit in a row beneath with their column heading as a small label. The header row is kept
+   for screen readers and hidden visually. */
+.md-typeset table.fse-stacked {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 1.2em 0 1.6em;
+}
+.md-typeset table.fse-stacked thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.md-typeset table.fse-stacked tbody {
+  display: grid;
+  gap: 0.7em;
+}
+.md-typeset table.fse-stacked tr {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.35em 1.4em;
+  align-items: start;
+  padding: 0.75em 1em 0.85em;
+  border: 0.05rem solid var(--md-typeset-table-color);
+  border-left: 0.2rem solid var(--fse-cobalt-soft);
+  border-radius: var(--fse-radius);
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 2%, transparent);
+}
+.md-typeset table.fse-stacked td {
+  display: block;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  text-align: left !important;   /* a right-aligned numeric column reads wrong under its label in a card */
+}
+.md-typeset table.fse-stacked td::before {
+  content: attr(data-label);
+  display: block;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 0.1em;
+}
+.md-typeset table.fse-stacked td.fse-key,
+.md-typeset table.fse-stacked td.fse-prose {
+  grid-column: 1 / -1;
+}
+.md-typeset table.fse-stacked td.fse-key {
+  font-size: 1.05em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.md-typeset table.fse-stacked td.fse-key::before {
+  display: none;
+}
+.md-typeset table.fse-stacked td.fse-key strong {
+  font-weight: 600;
+}
+.md-typeset table.fse-stacked td.fse-prose {
+  max-width: var(--fse-measure);
+}
+.md-typeset table.fse-stacked td :is(p, ul, ol) {
+  margin: 0;
+}
+.md-typeset table.fse-stacked td code {
+  word-break: normal;
+}
+
+/* Blockquotes are callouts here ("Pitfall", "In a design review", "Verify", "Numbers", …), not quotations:
+   full-contrast text on a light tint, the bold lead-in in the accent colour. */
+.md-typeset blockquote {
+  color: var(--md-default-fg-color);
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 3.5%, transparent);
+  border-left: 0.2rem solid var(--fse-cobalt);
+  border-radius: 0 var(--fse-radius) var(--fse-radius) 0;
+  padding: 0.7em 1em 0.7em 1.1em;
+  margin: 1.3em 0;
+}
+.md-typeset blockquote > :first-child {
+  margin-top: 0;
+}
+.md-typeset blockquote > :last-child {
+  margin-bottom: 0;
+}
+.md-typeset blockquote > p:first-child > strong:first-child {
+  color: var(--fse-cobalt);
+}
+
+/* "(verify)" marks a dated product fact; site/javascripts/tables.js wraps it so it reads as a tag, not as prose. */
+.md-typeset .fse-verify {
+  font-size: 0.78em;
+  font-family: var(--fse-font-mono);
+  color: var(--md-default-fg-color--light);
+  white-space: nowrap;
+}
+
+/* Inline code sits a little lighter in a line of prose; code blocks keep Material's size. */
+.md-typeset code {
+  font-size: 0.82em;
+}
+.md-typeset pre > code {
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
+/* A code block a little wider than the column shrinks to fit (site/javascripts/tables.js decides which). */
+.md-typeset pre.fse-shrink-1 > code {
+  font-size: 0.74em;
+}
+.md-typeset pre.fse-shrink-2 > code {
+  font-size: 0.66em;
+}
+
+/* A long inline formula scrolls inside its own box on a phone instead of widening the whole page. */
+.md-typeset mjx-container:not([display="true"]) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* An inline formula and the bracket or punctuation around it stay on one line (site/javascripts/tables.js). */
+.md-typeset .fse-mathglue {
+  white-space: nowrap;
+}
+
+/* Display maths (arithmatex on pages, MathJax on notebooks) gets air and scrolls inside its own box. */
+.md-typeset .arithmatex:not(span),
+.md-typeset mjx-container[display="true"] {
+  margin: 1.1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+.md-typeset mjx-container[display="true"] {
+  padding: 0.2em 0;
+}
+
+/* Notebook pages (mkdocs-jupyter). The "In [ ]:" prompt column carries no information on a rendered, unexecuted
+   page (every prompt is empty) and costs 64px of code width; the cells lose their JupyterLab padding and take the
+   whole column, so a 100-character code line fits on a laptop. Prose cells share the site's font and measure. */
+.jupyter-wrapper {
+  --jp-content-font-family: var(--md-text-font-family);
+  --jp-cell-padding: 0.35rem 0;
+}
+.jupyter-wrapper :is(.jp-InputPrompt, .jp-OutputPrompt, .jp-OutputArea-prompt) {
+  display: none !important;
+}
+.jupyter-wrapper .jp-Cell {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.jupyter-wrapper .jp-RenderedHTMLCommon :where(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) {
+  max-width: var(--fse-measure);
+}
+.jupyter-wrapper .jp-MarkdownCell {
+  margin-top: 0.9rem;
+}
+.jupyter-wrapper .jp-RenderedHTMLCommon :is(h1, h2, h3) {
+  margin-top: 1em;
+}
+.jupyter-wrapper .jp-CodeCell .jp-InputArea .highlight-ipynb,
+.jupyter-wrapper .jp-CodeCell .jp-InputArea pre {
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+.jupyter-wrapper .jp-OutputArea-output pre {
+  font-size: 0.68rem;
+  line-height: 1.45;
 }
 
 /* Content pages on phones (below Material's 45em tablet breakpoint).
@@ -76,8 +350,7 @@
  * Tighter padding and a floor on column width keep each column readable; the table scrolls sideways instead.
  * The floor is for prose: columns whose every cell is short (hours, tiers, step numbers) are marked .fse-narrow by
  * site/javascripts/tables.js and take only the width they need, so the prose columns start on screen.
- * Notebooks: mkdocs-jupyter keeps JupyterLab's "In [ ]:" prompt column (~80px) and cell padding, leaving code about
- * 210px of a 360px screen; the prompts carry no information on a rendered, unexecuted page. */
+ * (Notebook cells lose their prompt column and padding at every width: see the notebook rules above.) */
 @media screen and (max-width: 44.9375em) {
   .md-typeset table:not([class]) {
     font-size: 0.7rem;
@@ -93,19 +366,6 @@
     min-width: 0;
     white-space: nowrap;
   }
-  .jupyter-wrapper :is(.jp-InputPrompt, .jp-OutputPrompt, .jp-OutputArea-prompt) {
-    display: none !important;
-  }
-  .jupyter-wrapper .jp-Cell {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-  }
-}
-/* wide display maths scrolls inside its own box rather than widening the page */
-.md-typeset mjx-container[display="true"] {
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
 }
 
 /* Sidebar on desktop (Material's 76.25em breakpoint). With navigation.tabs + navigation.sections, Material keeps

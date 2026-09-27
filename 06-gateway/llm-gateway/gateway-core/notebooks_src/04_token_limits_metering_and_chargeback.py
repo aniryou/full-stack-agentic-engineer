@@ -6,15 +6,17 @@
 # are `gateway-lab` notebook `04_streaming_limits_metering_and_chargeback`.
 #
 # ## The one-minute version
-# A request's cost is unknown when it is admitted — most of it is output that has not been generated — and output
-# length is heavy-tailed. So a limit that charges **per request** admits whatever the outputs turn out to be, and the
-# day a thinking model ships it lets through twice the provider's tokens per minute. Charge **tokens**: **reserve**
-# prompt + an output bound at admission, **debit** tokens as they stream, **reconcile** with `usage` at the end.
+# A request's cost is unknown when it is admitted — most of it is output that has not been generated — and output length
+# is heavy-tailed. So a limit that charges **per request** admits whatever the outputs turn out to be, and the day a
+# thinking model ships it lets through twice the provider's tokens per minute. Charge **tokens**: **reserve** prompt +
+# an output bound at admission, **debit** tokens as they stream, **reconcile** with `usage` at the end.
+#
 # Then **meter**: the provider's `usage` is the bill (thinking tokens bill as output), a ledger row per request prices
 # it, estimates cover only cut streams, the ledger is reconciled against the provider's counters, and a shared GPU pool
-# is charged back by GPU time rather than by tokens. By the end you can predict over-admission from two means, build
-# the reserving limiter, size a reservation from a simulation, price a thinking call from raw usage, charge back a
-# pool, and find and explain ledger drift.
+# is charged back by GPU time rather than by tokens.
+#
+# By the end you can predict over-admission from two means, build the reserving limiter, size a reservation from a
+# simulation, price a thinking call from raw usage, charge back a pool, and find and explain ledger drift.
 #
 # Primer: §4 *Streaming-aware rate limits* and §5 *Metering, tracing and chargeback* (`../PRIMER.md`). The token bucket
 # itself is 06.3's (scaling primer §5.1); the thinking workload is the 00.5 primer's §7.
@@ -47,14 +49,15 @@ for name, r in res.items():
 print("(arrivals stop at t = 600 s; each run goes on until its admitted streams drain -- simulated)")
 
 # %% [markdown]
-# The per-request bucket admits exactly as many requests after the rollout as before — it cannot see tokens — and
-# pushes the provider to 1.97× its limit at the peak; once the bucket binds (t = 45 s) the provider's window stays
-# over its limit continuously until t = 648 s, while the admitted thinking streams drain. On yesterday's outputs the
-# same bucket was over for 116 scattered seconds between t = 59 and 600: sized on the mean, it still meets the tail.
-# Reserving the cap is exact and wastes three quarters of the budget; reserving an estimate and reconciling serves
-# 70 % with no second over the limit *in this run*. All of it models a provider that counts tokens as they are
-# processed; a hosted API that charges the requested `max_tokens` at admission needs the reservation to match what
-# the gateway sends upstream (PRIMER §4.2, verify).
+# The per-request bucket admits exactly as many requests after the rollout as before — it cannot see tokens — and pushes
+# the provider to 1.97× its limit at the peak; once the bucket binds ($t = 45$ s) the provider's window stays over its
+# limit continuously until $t = 648$ s, while the admitted thinking streams drain. On yesterday's outputs the same
+# bucket was over for 116 scattered seconds between $t = 59$ and 600: sized on the mean, it still meets the tail.
+#
+# Reserving the cap is exact and wastes three quarters of the budget; reserving an estimate and reconciling serves 70 %
+# with no second over the limit *in this run*. All of it models a provider that counts tokens as they are processed; a
+# hosted API that charges the requested `max_tokens` at admission needs the reservation to match what the gateway sends
+# upstream (PRIMER §4.2, verify).
 #
 # ## Worked example 2 — usage is the bill
 # The same call from the adapter samples: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.
@@ -73,8 +76,9 @@ print(f"self-hosted H100 Spot, 6,846.5 tok/s: ${metering.self_hosted_per_million
 # %% [markdown]
 # ## Exercise 4.1 — predict the over-admission
 # A route's prompts are 800 tokens. Its bucket charges a fixed estimate sized on today's outputs: lognormal, median 200,
-# σ = 1.2. A new model's outputs are lognormal with median 2,000 and σ = 1.2. Set `ratio` to how many times the tokens
-# it was sized for the bucket will let through once it binds. Use the lognormal mean `median · exp(σ²/2)`.
+# $\sigma = 1.2$. A new model's outputs are lognormal with median 2,000 and $\sigma = 1.2$. Set `ratio` to how many
+# times the tokens it was sized for the bucket will let through once it binds. Use the lognormal mean
+# $\text{median} \cdot \exp(\sigma^2/2)$.
 
 # %% exercise
 import math
@@ -97,7 +101,8 @@ print(f"✅ x{ratio:.2f}: the output mean grew 10x, but the prompt dilutes it --
 #   request's reservation (never below zero);
 # * `finish(rid)` — release whatever the request still holds.
 #
-# `used(now)` is the tokens debited in the last `window` seconds (an event at time t leaves the window at t + window).
+# `used(now)` is the tokens debited in the last `window` seconds (an event at time $t$ leaves the window at
+# $t + \text{window}$).
 
 # %% exercise
 from collections import deque
@@ -236,7 +241,7 @@ print("✅ token-proportional chargeback makes the prompt-heavy tenant pay for t
 # before anyone opens a ticket: 40 of the day's 400 requests were cut mid-stream (nothing was retried). The gateway
 # billed each cut stream on the 90 tokens it relayed, marked estimated; the provider's logs show it generated 150
 # tokens on each before it noticed the disconnect; every other request generated and billed 300. Set
-# `predicted_drift` to the completion-token difference (provider − ledger) you expect from that alone.
+# `predicted_drift` to the completion-token difference ($\text{provider} - \text{ledger}$) you expect from that alone.
 
 # %%
 rng = random.Random(9)
@@ -262,13 +267,16 @@ assert predicted_drift == d["diff"], (predicted_drift, d["diff"])
 print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion tokens ({d['diff']:+,}) = 40 cut streams x "
       "(150 generated - 90 relayed): the estimated rows explain all of it, so correct those rows, not the price table")
 
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Limits are in tokens, because a request's cost is unknown at admission and heavy-tailed.
 # We reserve prompt plus an output bound, debit tokens as they stream and reconcile with usage at the end; used plus
 # reserved never passes the limit, so the provider never sees more. A per-request bucket let through 1.97× the
 # provider's tokens per minute the day thinking shipped, and it could not even see the change. The reservation is a
 # setting we size by simulation: the cap is exact and strands budget, an estimate serves more with small overruns.
-# Limits nest — key, tenant, org, provider key — checked and committed atomically in one Lua script. Every request
+# Limits nest — key, tenant, org, provider key — checked and committed atomically in one Lua script.
+#
+# "Every request
 # writes a ledger row priced from usage, thinking billed as output — billing Gemini on candidates alone under-bills a
 # thinking call 2.5× — cut streams billed on relayed deltas and marked estimated, and the ledger is reconciled daily
 # against the provider's export. The self-hosted pool is charged back by GPU-seconds, not tokens, or the RAG tenant

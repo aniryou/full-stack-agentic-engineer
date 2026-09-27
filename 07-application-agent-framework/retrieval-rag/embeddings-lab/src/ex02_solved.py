@@ -13,10 +13,10 @@ def softmax(S, axis):
 
 # %% [markdown]
 # ## Task 1 — symmetric InfoNCE from the similarity matrix
-# Given `S = Z_a Z_bᵀ / τ` (B×B, positives on the diagonal), return
+# Given $S = Z_a Z_b^\top / \tau$ ($B \times B$, positives on the diagonal), return
 # `(loss, dL/dS)` where the loss averages row-wise and column-wise
 # cross-entropy toward the diagonal. Hint: for softmax-CE,
-# `dL/dS = (softmax(S) − I) / B`, averaged over the two directions.
+# $dL/dS = (\operatorname{softmax}(S) - I)/B$, averaged over the two directions.
 
 # %%
 def info_nce_from_S(S):
@@ -46,8 +46,8 @@ print("info_nce_from_S ✓")
 # %% [markdown]
 # ## Task 2 — alignment & uniformity (Wang & Isola 2020)
 # `alignment(Za, Zb)` = mean squared distance between positive pairs (unit
-# vectors). `uniformity(Z)` = `log E exp(−2‖z_i − z_j‖²)` over random pairs
-# `i ≠ j`. Lower is better for both.
+# vectors). `uniformity(Z)` = $\log \mathbb{E} \exp(-2\lVert z_i - z_j \rVert^2)$ over random pairs
+# $i \ne j$. Lower is better for both.
 
 # %%
 def alignment(Za, Zb):

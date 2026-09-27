@@ -10,14 +10,18 @@
 # The gateway is where credentials concentrate, so it is where they are disciplined. Apps hold **virtual keys** —
 # hashed, scoped, budgeted, revocable — and the **tenant comes from the verified key**, never from a header; provider
 # keys live only in the gateway and rotate with an overlap; the engine's prefix cache is isolated with a per-tenant
-# `cache_salt` the gateway derives; the gateway's own identity (an SVID) rotates at half its life. **Guardrails** are
-# checks at placements, and each placement has a price in TTFT, dollars and false blocks that compound over a
-# conversation. For **MCP**, the gateway is the OAuth client: it discovers the authorization server from a 401,
-# registers with a Client ID Metadata Document, authorizes with PKCE and `resource`, rotates refresh tokens (a reused
-# one revokes the grant), steps up with the union of scopes, answers DPoP nonce challenges — and keeps one token per
-# (principal, resource), so the agent never holds any. By the end you can derive a valid salt, place a held-back
-# window under a TTFT budget, set a false-positive budget, build the discovery URLs, compute PKCE by hand and detect
-# refresh-token reuse.
+# `cache_salt` the gateway derives; the gateway's own identity (an SVID) rotates at half its life.
+#
+# **Guardrails** are checks at placements, and each placement has a price in TTFT, dollars and false blocks that
+# compound over a conversation.
+#
+# For **MCP**, the gateway is the OAuth client: it discovers the authorization server from a 401, registers with a
+# Client ID Metadata Document, authorizes with PKCE and `resource`, rotates refresh tokens (a reused one revokes the
+# grant), steps up with the union of scopes, answers DPoP nonce challenges — and keeps one token per (principal,
+# resource), so the agent never holds any.
+#
+# By the end you can derive a valid salt, place a held-back window under a TTFT budget, set a false-positive budget,
+# build the discovery URLs, compute PKCE by hand and detect refresh-token reuse.
 #
 # Primer: §6 *Keys, tenants and isolation*, §7 *Guardrails and what they cost*, §8 *The gateway as an MCP client*
 # (`../PRIMER.md`); identity primer §3.3–3.5, §5, §6.1, §7.1. (§9, where to run it and what to adopt, is a reading:
@@ -118,7 +122,7 @@ print(f"✅ {s} -- 256 bits in 43 characters, unguessable without the gateway's 
 
 # %% [markdown]
 # ## Exercise 5.2 — a held-back window under a TTFT budget
-# Output is released in windows of `W` tokens, each checked (150 ms) before release. Write
+# Output is released in windows of $W$ tokens, each checked (150 ms) before release. Write
 # `held_back_ttft_added(W, itl, t_check)`, then set `W_max`: the largest window that adds at most **1.0 s** to TTFT at
 # ITL 20 ms.
 
@@ -267,13 +271,16 @@ print("✅ rotation works, a replayed token revokes alice's whole grant (current
 # call; the tenant, tier and scopes come from the verified key and nothing the caller sends can change them. Provider
 # keys live only in the gateway, injected on the way out — the identity primer's gateway path — and rotate with an
 # overlap. Everything tenant-scoped derives from the key, including the `cache_salt` we send to vLLM, an HMAC of the
-# tenant under our secret. Our own identity is an SVID from the Workload API, rotated at half-life ± 10 % — in
-# practice about 32 minutes before a one-hour SVID expires — and we cycle pooled connections when it rotates. Guardrails are placed by cost: a fast input check in
-# parallel with the model is free, a held-back output window adds a window of generation to TTFT, and false positives
-# compound — 1 % per check blocks 23 % of 26-check conversations — so screens start inspect-only, and deterministic
-# policy bounds what they miss. For MCP we are the OAuth client: discovery from the 401, a metadata-document client id,
-# PKCE with resource in both requests, rotating refresh tokens whose reuse revokes the grant, step-up with the union of
-# scopes, DPoP nonces from RFC 9449 — one token per principal and resource, never in the agent."
+# tenant under our secret. Our own identity is an SVID from the Workload API, rotated at half-life ± 10 % — in practice
+# about 32 minutes before a one-hour SVID expires — and we cycle pooled connections when it rotates.
+#
+# "Guardrails are placed by cost: a fast input check in parallel with the model is free, a held-back output window adds
+# a window of generation to TTFT, and false positives compound — 1 % per check blocks 23 % of 26-check conversations —
+# so screens start inspect-only, and deterministic policy bounds what they miss.
+#
+# "For MCP we are the OAuth client: discovery from the 401, a metadata-document client id, PKCE with resource in both
+# requests, rotating refresh tokens whose reuse revokes the grant, step-up with the union of scopes, DPoP nonces from
+# RFC 9449 — one token per principal and resource, never in the agent."
 #
 # **Drill questions**
 # 1. *Why must the gateway derive `cache_salt` rather than accept it from the app?* — A caller-chosen salt lets a

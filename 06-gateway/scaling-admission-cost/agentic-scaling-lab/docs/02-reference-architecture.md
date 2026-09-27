@@ -311,8 +311,9 @@ Section 10 leaves self-hosted models out of v1. When data residency, latency con
 hosted API out, the same design runs with an open-weight model on a vLLM fleet. Everything above the model gateway
 keeps its shape — the gateway, the durable orchestrator, idempotent tools, degrade levels — with Kubernetes
 equivalents in place of the managed services (RabbitMQ quorum queues for Pub/Sub, Postgres for Firestore, Redis for
-Memorystore, KEDA for Cloud Run's autoscaler). What changes is the model layer and the numbers that size it. The
-worked case is the Mistral provider's anchor, a Singapore telco at 100,000 conversations a day: the reasoning is in
+Memorystore, KEDA for Cloud Run's autoscaler). What changes is the model layer and the numbers that size it.
+
+The worked case is the Mistral provider's anchor, a Singapore telco at 100,000 conversations a day: the reasoning is in
 [mistral/01-scaling-primer.md](mistral/01-scaling-primer.md), the numbers are the Mistral section of
 [03-capacity-plan.md](03-capacity-plan.md) (`python -m scalelab.mistral`, fleet throughput estimated from first
 principles by `scalelab/serving.py`), and the load test is notebook `05_hosted_or_own_gpus` (simulated). Product
@@ -324,12 +325,18 @@ facts were checked on 19 September 2026 (verify).
 location); `api.eu.` and `api.us.` are regional at +10 %, GA since 11 August 2026, with function calling as
 the only regional tool and no Agents, Batch or Files. Priority Tier is +75 %, enabled per request with
 `service_tier="auto"`, falls back to standard when its limits are exceeded and reports `service_tier` in the
-response; the docs state a 99.5 % SLA (the AI Cloud page says 99.9 %, verify). The 2,700-token prefix is sent
+response; the docs state a 99.5 % SLA (the AI Cloud page says 99.9 %, verify).
+
+The 2,700-token prefix is sent
 first with a `prompt_cache_key` per prompt version; 64-token cached blocks are billed at 10 % and reported in
 `usage.prompt_tokens_details.cached_tokens`; TTL and cache-write price are unpublished (the lab assumes
-300 s). The rate-limit request is 60 RPS, 19 M TPM and 209 B tokens a month for Small 4, filed with support
+300 s).
+
+The rate-limit request is 60 RPS, 19 M TPM and 209 B tokens a month for Small 4, filed with support
 once billing passes the $2,000 tier; the free tier (1 RPS, 500 k TPM, 1 B tokens a month) is 10 % of the
-average TPM. The `mistralai` SDK (2.10.1) has no retries by default and a 300 s default timeout: retries stay
+average TPM.
+
+The `mistralai` SDK (2.10.1) has no retries by default and a 300 s default timeout: retries stay
 off so `call_with_retries` is the one place that decides, the timeout is 30 s, a 429 (`errors.SDKError`,
 `status_code`) maps to `RateLimited`, and a `Retry-After` is honoured if one appears (none is documented).
 Model ids are pinned to dated versions; the 22 May 2026 deprecations of Magistral, Devstral, Pixtral and
@@ -341,17 +348,23 @@ FP8 (15.7 GB) on one H100 80 GB per replica with Mistral's documented flags (`--
 caching and chunked prefill are on by default, so the shared prefix is prefilled once per replica. The lab's
 replica model estimates a 54 GB KV budget at 160 KiB per token, 128 resident sequences, a TPOT of 10 ms at
 batch 1 and 20 ms at batch 24, 1,201 tokens per second per replica at batch 24 and a 78 ms TTFT for a call's
-2,300 new tokens, all estimates until `vllm bench serve` replaces them. The alternative primary model is
+2,300 new tokens, all estimates until `vllm bench serve` replaces them.
+
+The alternative primary model is
 Small 4 (MoE 119B / 6.5B active, MLA KV of 22.5 KiB per token, 121 GB FP8, `--tensor-parallel-size 2` on
 H100 with `--attention-backend FLASH_ATTN_MLA`; Mistral's stated minimum of 4× H100, 2× H200 or 1× B200
-needs verifying as GPUs or systems). Replicas are a Deployment, or a KServe 0.17 `LLMInferenceService` on
+needs verifying as GPUs or systems).
+
+Replicas are a Deployment, or a KServe 0.17 `LLMInferenceService` on
 llm-d when prefill/decode disaggregation and node-local weight caching are wanted as a package. In front
 sits an inference gateway implementing the Gateway API Inference Extension (v1.5.0; Envoy Gateway, kgateway
 or GKE Inference Gateway): an `InferencePool` per model, `InferenceObjective` priorities, an endpoint picker
 scoring replicas on queue depth, KV utilisation and prefix affinity, and the alpha flow-control layer whose
 saturation detector (queue depth 5, KV 0.8) holds low-priority requests and drops them on TTL. NIM is an
 option at $1 per GPU-hour ($8 k a month on the peak fleet): `ministral-14b-instruct-2512:1.7.0` exists;
-Small 4 NIM profiles cover H200 and Blackwell only (verify H100). Weights load from a node-local NVMe cache
+Small 4 NIM profiles cover H200 and Blackwell only (verify H100).
+
+Weights load from a node-local NVMe cache
 (or KServe `LocalModelCache`) with pre-pulled images and `--kv-cache-memory-bytes` to skip profiling; the
 Run:ai streamer (about 2 GiB/s from object storage) is itself a `--load-format` value and so excludes
 `--load_format mistral` (verify the trade-off). Cold start is 3–8 minutes end to end, which is why the fleet
@@ -391,11 +404,14 @@ Medium 3.5 and Large 3, not Ministral), or streaming and accepting 10 s.
 Both bills grow with volume, the API linearly and the fleet in replica-sized steps, so the break-even is a
 GPU price, not a volume: the fleet beats the hosted planning mix whenever H100s cost less than about $4.95
 per GPU-hour (0.16 GPU-minutes per conversation at 28 % average utilisation). That is under AWS on-demand,
-about level with 3-year commitments and AWS APAC capacity blocks, and clearly won by neoclouds. Volume matters
-only at the bottom, where the two-replica HA floor is amortised above about 14 k conversations a day at
+about level with 3-year commitments and AWS APAC capacity blocks, and clearly won by neoclouds.
+
+Volume matters only at the bottom, where the two-replica HA floor is amortised above about 14 k conversations a day at
 $3.75, 17 k at $4.72–4.86 and 25 k at $6.88. Residency, latency control and customisation decide the path;
 the arithmetic prices the decision at about $15.5 k a month more on on-demand H100s, about level on committed
-ones and about $9.6 k a month less on neocloud GPUs. The gateway scales on open streams, the orchestrator on
+ones and about $9.6 k a month less on neocloud GPUs.
+
+The gateway scales on open streams, the orchestrator on
 queue depth (bound by the model's token budget, never CPU), the hosted model on tokens per minute, the fleet
 on batch per replica and then replica count, the tools on downstream QPS. What breaks first at the incident:
 the hosted RPS limit at 2.55×, the hosted TPM limit at 2.38×, the peak-sized fleet at 2.31×; the billing

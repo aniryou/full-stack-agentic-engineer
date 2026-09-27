@@ -10,11 +10,11 @@
 # Both techniques attack the same fact: **decode is bound by memory bandwidth** — every step
 # streams all the weights to produce one token per sequence.
 #
-# * **Speculative decoding** proposes `k` tokens cheaply (n-gram lookup in the prompt, a small
-#   draft model, EAGLE/MTP heads) and verifies all of them in *one* target forward pass. With
-#   per-token acceptance α, a step yields `(1 − α^(k+1)) / (1 − α)` tokens on average, and the
-#   rejection-sampling rule keeps the output distribution *exactly* the target model's. It pays
-#   while the step is memory-bound (small batches) and fades as batches make it compute-bound.
+# * **Speculative decoding** proposes $k$ tokens cheaply (n-gram lookup in the prompt, a small draft
+#   model, EAGLE/MTP heads) and verifies all of them in *one* target forward pass. With per-token
+#   acceptance $\alpha$, a step yields $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens on average, and the
+#   rejection-sampling rule keeps the output distribution *exactly* the target model's. It pays while
+#   the step is memory-bound (small batches) and fades as batches make it compute-bound.
 # * **Quantization** shrinks bytes: weight-only INT4 (AWQ/GPTQ) or FP8 weights cut the bytes each
 #   decode step reads (faster decode, more room for KV); FP8 *W8A8* also doubles tensor-core
 #   FLOP/s on GPUs that have FP8 units (faster prefill); FP8 KV halves the KV cache. Accuracy must
@@ -37,9 +37,9 @@ for a in (0.5, 0.7, 0.9):
     print(f"{a:5.1f} " + "".join(f"{(1 - a ** (k + 1)) / (1 - a):8.2f}" for k in (1, 2, 4, 8)))
 
 # %% [markdown]
-# Diminishing returns in `k`: at α = 0.7 the 5th to 8th draft tokens add only 0.4 tokens per step,
-# while the verifier must process all of them. vLLM flags for the three families (method names as
-# in vLLM v0.30.0's `SpeculativeConfig`; they change between releases):
+# Diminishing returns in $k$: at $\alpha = 0.7$ the 5th to 8th draft tokens add only 0.4 tokens per
+# step, while the verifier must process all of them. vLLM flags for the three families (method names
+# as in vLLM v0.30.0's `SpeculativeConfig`; they change between releases):
 
 # %%
 for spec in ({"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max": 4},
@@ -101,9 +101,19 @@ print(spec_trial.snapshot.table())
 #
 # vLLM exports three counters: `vllm:spec_decode_num_drafts` (verify steps with drafts),
 # `..._num_draft_tokens` and `..._num_accepted_tokens`. Its documented PromQL is
-# `acceptance rate = rate(accepted) / rate(draft tokens)` and
-# `mean acceptance length = 1 + rate(accepted) / rate(drafts)` (the 1 counts the target's own
-# token). Write `acceptance(before, after)` returning `(rate, mean_length)` from two scrapes.
+#
+# $$
+# \text{acceptance rate} = \frac{\operatorname{rate}(\text{accepted})}{\operatorname{rate}(\text{draft tokens})}
+# $$
+#
+# and
+#
+# $$
+# \text{mean acceptance length} = 1 + \frac{\operatorname{rate}(\text{accepted})}{\operatorname{rate}(\text{drafts})}
+# $$
+#
+# (the 1 counts the target's own token). Write `acceptance(before, after)` returning
+# `(rate, mean_length)` from two scrapes.
 
 # %%
 from servelab.fakeserver import FakeServer
@@ -131,19 +141,25 @@ print(f"✅ [SIMULATED] acceptance rate {rate:.1%}, mean acceptance length {leng
       f"(formula at a=0.7, k=4: {expected_tokens(0.7, 4):.2f})")
 
 # %% [markdown]
-# Note the difference between the two numbers: the **acceptance rate** is per draft token (0.44
-# here even though α = 0.7, because later positions are reached less often), the **mean acceptance
+# Note the difference between the two numbers: the **acceptance rate** is per draft token (0.44 here
+# even though $\alpha = 0.7$, because later positions are reached less often), the **mean acceptance
 # length** is what sets the speedup.
 #
 # ## Exercise 5.3 — where speculation pays: batch size
 #
-# A verify step processes `batch × (k + 1)` tokens and reads the weights once; drafting adds
-# `k × draft_cost × (weight read time)`. Write `spec_speedup(p, batch, context, alpha, k,
-# draft_cost)`: baseline time per token (one decode step per token) divided by speculative time
-# per token (one verify step + drafting, divided by the expected tokens per step). Use the roofline
-# as in notebook 03: `overhead + max(2·P·tokens / FLOP/s, (weights + batch·context·kv) / bandwidth)`.
-# Predict first: at which batch sizes does speculation stop paying, and why does context length matter?
-# (Every operating point in the check must fit the profile's KV cache — a batch that cannot be
+# A verify step processes $\mathtt{batch} \times (k + 1)$ tokens and reads the weights once; drafting
+# adds $k \times \mathtt{draft\_cost} \times (\text{weight read time})$. Write
+# `spec_speedup(p, batch, context, alpha, k, draft_cost)`: baseline time per token (one decode step
+# per token) divided by speculative time per token (one verify step + drafting, divided by the
+# expected tokens per step). Use the roofline as in notebook 03:
+#
+# $$
+# \text{overhead} + \max\left(\frac{2 \cdot P \cdot \text{tokens}}{\text{FLOP/s}},
+#   \frac{\text{weights} + \text{batch} \cdot \text{context} \cdot \text{kv}}{\text{bandwidth}}\right)
+# $$
+#
+# Predict first: at which batch sizes does speculation stop paying, and why does context length
+# matter? (Every operating point in the check must fit the profile's KV cache — a batch that cannot be
 # held says nothing about a real engine.)
 
 # %% exercise
@@ -178,13 +194,13 @@ print("✅ speculation is a latency tool while decode is memory-bound; once the 
 # ## Exercise 5.4 — what each quantization format buys, prefill versus decode
 #
 # For Llama-3.1-8B on one L4 compare bf16, FP8 (W8A8: FP8 weights *and* FP8 tensor cores) and AWQ
-# (4-bit weights, 16-bit compute). Write `decode_ms(weight_bytes, bw)` — one batch-1 decode step
-# is a weight read (ignore overhead and KV) — and `prefill_ms(active_params, tokens, tflops)` —
-# `2 × params × tokens` FLOPs at `tflops` effective TFLOP/s. The check builds the three cases from
-# `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s, 80% of bandwidth). AWQ computes
-# in 16-bit, so it gets the bf16 FLOP/s; what dequantizing the weights costs on top depends on the
-# kernel (Marlin-style kernels hide most of it at large batch) and is left out — an assumption to
-# check on your GPU (verify), not a result.
+# (4-bit weights, 16-bit compute). Write `decode_ms(weight_bytes, bw)` — one batch-1 decode step is a
+# weight read (ignore overhead and KV) — and `prefill_ms(active_params, tokens, tflops)` —
+# $2 \times \text{params} \times \text{tokens}$ FLOPs at `tflops` effective TFLOP/s. The check builds
+# the three cases from `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s, 80% of
+# bandwidth). AWQ computes in 16-bit, so it gets the bf16 FLOP/s; what dequantizing the weights costs
+# on top depends on the kernel (Marlin-style kernels hide most of it at large batch) and is left out —
+# an assumption to check on your GPU (verify), not a result.
 
 # %% exercise
 def decode_ms(weight_bytes: float, bw_bytes_per_s: float) -> float:
@@ -246,23 +262,23 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Decode is a weight-streaming problem, so we have two levers. Speculative
-# decoding produces several tokens per weight read: with a draft acceptance of 0.7 and four drafts
-# a step yields 2.8 tokens, and the rejection sampler keeps the output distribution identical to
-# the target model's. It is a latency tool for small batches — at batch 256 with short contexts
-# the verify step is compute-bound and speculation slows us down (long contexts keep the step
-# memory-bound longer) — so we enable it for interactive traffic and watch the mean acceptance
-# length on vLLM's counters. Quantization cuts the bytes: for an 8B model on an L4, AWQ INT4 makes
-# batch-1 decode ~2.8x faster but does not speed up prefill; FP8 W8A8 almost halves decode, halves
-# prefill and frees room for KV, and FP8 KV doubles the tokens we can hold. Each gets an accuracy
-# gate on our evals before it ships."
+# **Two minutes:** "Decode is a weight-streaming problem, so we have two levers. Speculative decoding
+# produces several tokens per weight read: with a draft acceptance of 0.7 and four drafts a step
+# yields 2.8 tokens, and the rejection sampler keeps the output distribution identical to the target
+# model's. It is a latency tool for small batches — at batch 256 with short contexts the verify step
+# is compute-bound and speculation slows us down (long contexts keep the step memory-bound longer) —
+# so we enable it for interactive traffic and watch the mean acceptance length on vLLM's counters.
 #
-# **Drill 1.** *Acceptance rate is 40%. Is speculation working?* — Look at the mean acceptance
-# length instead (1 + accepted/drafts): 40% per draft token with k = 4 can still mean ~2.6 tokens
-# per step; judge by measured TPOT at your batch size, not by the rate.
+# "Quantization cuts the bytes: for an 8B model on an L4, AWQ INT4 makes batch-1 decode ~2.8x faster
+# but does not speed up prefill; FP8 W8A8 almost halves decode, halves prefill and frees room for KV,
+# and FP8 KV doubles the tokens we can hold. Each gets an accuracy gate on our evals before it ships."
 #
-# **Drill 2.** *Does speculative decoding change outputs?* — Not with exact rejection sampling:
-# accept with probability min(1, p/q), resample from the normalized residual max(0, p − q) on
+# **Drill 1.** *Acceptance rate is 40%. Is speculation working?* — Look at the mean acceptance length
+# instead ($1 + \text{accepted}/\text{drafts}$): 40% per draft token with $k = 4$ can still mean ~2.6
+# tokens per step; judge by measured TPOT at your batch size, not by the rate.
+#
+# **Drill 2.** *Does speculative decoding change outputs?* — Not with exact rejection sampling: accept
+# with probability $\min(1, p/q)$, resample from the normalized residual $\max(0, p - q)$ on
 # rejection, and the emitted tokens follow the target distribution.
 #
 # **Drill 3.** *AWQ did nothing for our long-prompt TTFT (on one GPU it even got worse). Why?* —

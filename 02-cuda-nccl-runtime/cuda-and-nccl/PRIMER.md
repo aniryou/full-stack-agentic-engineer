@@ -24,12 +24,12 @@ and links to it rather than repeating it.
   lower minor) or PTX the driver can JIT-compile. Otherwise you get *"no kernel image is available"*.
 - **The warp is the unit.** 32 threads share one instruction stream. Their memory requests are served in 32-byte
   sectors: consecutive 4-byte loads take 4 sectors per warp, a column walk takes 32. Shared memory has 32 banks of 4
-  bytes, and a word stride of s costs a gcd(s, 32)-way conflict. A split branch runs both sides.
+  bytes, and a word stride of $s$ costs a $\gcd(s, 32)$-way conflict. A split branch runs both sides.
 - **Memory-bound kernels cost bytes plus launches.** Tiling and fusion cut bytes. CUDA Graphs cut launches, which is
   why engines capture decode steps. Occupancy is a means to keep enough bytes in flight (Little's law), not a goal.
-- **All-reduce = reduce-scatter + all-gather.** On a ring that is 2(p−1) steps of S/p bytes:
-  `T = 2(p−1)·α + 2(p−1)/p · S/B`. Below about `p·α·B` (7.2 MB for 8 H100s with illustrative numbers) it is
-  latency-bound. Tensor-parallel decode all-reduces are well below that, so engines use few-step algorithms.
+- **All-reduce = reduce-scatter + all-gather.** On a ring that is ${2(p-1)}$ steps of ${S/p}$ bytes:
+  $T = 2(p-1) \cdot \alpha + 2(p-1)/p \cdot S/B$. Below about $p \cdot \alpha \cdot B$ (7.2 MB for 8 H100s with
+  illustrative numbers) it is latency-bound. Tensor-parallel decode all-reduces are well below that, so engines use few-step algorithms.
   nccl-tests' **busbw** normalises to the per-link bandwidth so it can be compared with the spec.
 - **A container brings CUDA; the host brings the driver.** The NVIDIA Container Toolkit injects `/dev/nvidia*`,
   `libcuda` and NVML at container start, through an OCI hook or a CDI spec. Never bake `libcuda` into an image.
@@ -180,12 +180,14 @@ progress. The cost model is unchanged.
 the blocks per SM are the minimum over four limits (`gpusim.occupancy.occupancy()`, following NVIDIA's
 `cuda_occupancy.h`):
 
-```
-by warps      max_warps // ceil(threads/32)
-by blocks     max_blocks
-by registers  4 × (16384 // roundup(regs × 32, 256)) // warps_per_block      (4 sub-partitions)
-by smem       smem_per_SM // roundup(smem_per_block + 1 KB reserved, 128)     (CC >= 8.0)
-```
+$$
+\begin{aligned}
+\text{by warps} \quad & \left\lfloor \frac{\texttt{max_warps}}{\lceil \texttt{threads}/32 \rceil} \right\rfloor \\
+\text{by blocks} \quad & \texttt{max_blocks} \\
+\text{by registers} \quad & \left\lfloor \frac{4 \times \lfloor 16384 / \operatorname{roundup}(\texttt{regs} \times 32, 256) \rfloor}{\texttt{warps_per_block}} \right\rfloor && \text{(4 sub-partitions)} \\
+\text{by smem} \quad & \left\lfloor \frac{\texttt{smem_per_SM}}{\operatorname{roundup}(\texttt{smem_per_block} + 1\ \text{KB reserved}, 128)} \right\rfloor && (\text{CC} \ge 8.0)
+\end{aligned}
+$$
 
 | CC (example) | threads/SM | warps/SM | blocks/SM | registers/SM | smem/SM | smem/block |
 |---|---|---|---|---|---|---|
@@ -200,17 +202,18 @@ by smem       smem_per_SM // roundup(smem_per_block + 1 KB reserved, 128)     (C
 Worked on an **L4**. A block of 256 threads using 64 registers per thread gives 2,048 registers per warp. The
 16,384 in each sub-partition hold 8 warps, so 32 warps per SM, which is **4 blocks and 67% occupancy**,
 limited by registers. Add 48 KB of shared memory per block and each block needs 49 KB, so 2 blocks fit in
-100 KB: **33%**. The sub-partition split matters. At 80 registers, 16,384 // 2,560 = 6 warps per partition,
-so 24 per SM, not 65,536 // 2,560 = 25.
+100 KB: **33%**. The sub-partition split matters. At 80 registers, ⌊16,384 / 2,560⌋ = 6 warps per partition,
+so 24 per SM, not ⌊65,536 / 2,560⌋ = 25.
 
 ### 2.4 Latency hiding, Little's law and waves
 
-A warp waiting on memory is swapped out for a ready one. To sustain bandwidth B with latency L, **B × L bytes
+A warp waiting on memory is swapped out for a ready one. To sustain bandwidth $B$ with latency $L$, **$B \times L$ bytes
 must be in flight** (`gpusim.occupancy.bytes_in_flight()`). With an *assumed* loaded latency of 600 ns, an
 H100 at 3.35 TB/s needs 2.0 MB in flight, which is **15 KB per SM**. Even at full occupancy (2,048 threads)
 that is **1.86 outstanding 4-byte loads per thread**, or 0.46 with 16-byte vector loads
-(`loads_in_flight_per_thread()`). An L4 needs 3.1 KB per SM, which about half occupancy covers. So fast kernels on
-big GPUs hide latency with *vector loads, several independent loads per thread, and asynchronous copies*
+(`loads_in_flight_per_thread()`). An L4 needs 3.1 KB per SM, which about half occupancy covers.
+
+So fast kernels on big GPUs hide latency with *vector loads, several independent loads per thread, and asynchronous copies*
 (cp.async, TMA). GEMM and attention kernels run at 1 to 2 blocks per SM with large register tiles and still
 saturate the machine ("better performance at lower occupancy", Volkov 2010). Treat occupancy as a means.
 
@@ -245,7 +248,7 @@ coalesced even though blocks are scattered: each block stores its tokens' keys a
 ### 3.2 Shared memory and bank conflicts
 
 Shared memory is a software-managed on-chip scratchpad (up to 228 KB per SM on an H100) with **32 banks, each
-4 bytes wide**. Word w lives in bank `w mod 32`. In one pass each bank serves one word. Lanes that want
+4 bytes wide**. Word $w$ lives in bank $w \bmod 32$. In one pass each bank serves one word. Lanes that want
 *different* words in the same bank are serialized, and lanes that want the *same* word get a broadcast
 (`gpusim.simt.bank_conflicts()`):
 
@@ -268,13 +271,16 @@ all three numbers; the lab's `01_kernels_in_the_simulator` runs the kernels.
 
 ### 3.4 Tiled GEMM traffic
 
-For C[M,N] = A[M,K] · B[K,N], a block computing a BM × BN tile streams a BM × K panel of A and a K × BN panel
-of B through shared memory. So each A element is loaded once per *column* of tiles and each B element once
-per *row* (`gpusim.tiling.gemm_traffic()`, checked against the simulated kernel `tiled_matmul()`):
+For $C[M,N] = A[M,K] \cdot B[K,N]$, a block computing a $\mathit{BM} \times \mathit{BN}$ tile streams a
+$\mathit{BM} \times K$ panel of $A$ and a $K \times \mathit{BN}$ panel of $B$ through shared memory. So each $A$
+element is loaded once per *column* of tiles and each $B$ element once per *row* (`gpusim.tiling.gemm_traffic()`, checked against the simulated kernel `tiled_matmul()`):
 
-```
-global elements = M·K·⌈N/BN⌉ + K·N·⌈M/BM⌉ + M·N          naive: BM = BN = 1      compulsory: each input once
-```
+$$
+\begin{aligned}
+\text{global elements} &= M \cdot K \cdot \lceil N/\mathit{BN} \rceil + K \cdot N \cdot \lceil M/\mathit{BM} \rceil + M \cdot N \\
+\text{naive: } & \mathit{BM} = \mathit{BN} = 1 \qquad \text{compulsory: each input once}
+\end{aligned}
+$$
 
 | 4096³ GEMM, bf16 | Global traffic | FLOP/byte |
 |---|---|---|
@@ -284,11 +290,11 @@ global elements = M·K·⌈N/BN⌉ + K·N·⌈M/BM⌉ + M·N          naive: BM 
 | 128 × 256 tiles | 1.64 GB | 83.6 |
 | compulsory | 0.10 GB | 1,365 |
 
-Tiles cost shared memory: `stages × (BM·BK + BK·BN) × bytes` (`tile_smem_bytes()`). A 128×128×32 BF16 tile,
+Tiles cost shared memory: $\text{stages} \times (\mathit{BM} \cdot \mathit{BK} + \mathit{BK} \cdot \mathit{BN}) \times \text{bytes}$ (`tile_smem_bytes()`). A 128×128×32 BF16 tile,
 3 stages deep, is 48 KB, which means 2 blocks per SM on an L4 (§2.3). The last factor of about 20× to
 compulsory traffic comes from **L2**, where concurrent blocks share panels. Layer 01 puts these numbers on the
 roofline ([§4.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#4-the-memory-hierarchy-and-why-tilingfusion-win)).
-Note the decode case: with M = 8 tokens, the traffic is the weight matrix read once, and no tile size helps.
+Note the decode case: with $M$ = 8 tokens, the traffic is the weight matrix read once, and no tile size helps.
 
 ### 3.5 Fusion
 
@@ -301,17 +307,19 @@ Every kernel boundary is a round trip through HBM. A row-wise softmax of a 4096 
 | fused, a row fits on chip | 1 | 64 MiB (2RC) | 20 µs |
 | online (two passes, running max and sum) | 1 | 96 MiB (3RC) | 30 µs |
 
-The online variant rescales its running sum by `exp(m_old − m_new)` when the max grows, which makes it exact
+The online variant rescales its running sum by $\exp(m_{\text{old}} - m_{\text{new}})$ when the max grows, which makes it exact
 (`softmax_online()`). FlashAttention fuses it *into* QKᵀ and PV so the score matrix never reaches HBM
 ([FlashAttention primer §4–5](../../04-inference-engine/flash-attention/flash-attention-primer.md)). Elementwise
-chains fuse the same way: k ops unfused move k times the bytes of one fused kernel (`elementwise_traffic()`).
+chains fuse the same way: $k$ ops unfused move $k$ times the bytes of one fused kernel (`elementwise_traffic()`).
 
 ### 3.6 L2: the shared last level
 
 One L2 cache serves all SMs: about 4 MB on a T4, 40 MB on an A100, 48 MB on an L4, 50 MB on an H100 (verify). It is
-where §3.4's tiled GEMM recovers its last ~20×: blocks running at once on neighbouring tiles read the same A and B
+where §3.4's tiled GEMM recovers its last ~20×: blocks running at once on neighbouring tiles read the same $A$ and $B$
 panels, so later readers hit in L2, which is why GEMM libraries launch tiles in a *swizzled* order (nearby tiles
-together). Decode shows the limit: a 17.5 GB weight shard is 350× an H100's L2, so each step streams its weights
+together).
+
+Decode shows the limit: a 17.5 GB weight shard is 350× an H100's L2, so each step streams its weights
 from HBM whatever the policy. Small hot data can be pinned on CC 8.0+ with a stream's access policy window
 (`cudaAccessPolicyWindow`). `gpusim` counts HBM bytes only, so it bounds what L2 can save rather than simulating it.
 
@@ -346,11 +354,14 @@ attention and sampling kernels, many of them a few microseconds long.
 
 A **CUDA Graph** records a sequence of kernels (and memcpys, and NCCL calls) once and replays it with one
 launch. The price is rigidity. Shapes and memory addresses are frozen at capture, so inputs are copied into
-static buffers. There must be no host synchronization inside the graph, and control flow is fixed. Engines
-therefore **capture one graph per batch-size bucket** for decode and pad each batch up to the nearest
+static buffers. There must be no host synchronization inside the graph, and control flow is fixed.
+
+Engines therefore **capture one graph per batch-size bucket** for decode and pad each batch up to the nearest
 captured size. Prefill, with its variable shapes, runs eagerly or as *piecewise* graphs around attention.
 Capturing costs startup time and GPU memory, which is why vLLM's `--enforce-eager` exists: it saves both at
-the cost of slower decode. `torch.compile` attacks the same overhead from the other side: Inductor fuses
+the cost of slower decode.
+
+`torch.compile` attacks the same overhead from the other side: Inductor fuses
 elementwise chains into Triton kernels, and `mode="reduce-overhead"` wraps the result in CUDA Graphs.
 NCCL collectives can be captured too. Custom all-reduce kernels, which read their peers' buffers directly over
 NVLink, register those buffer addresses when the graph is captured.
@@ -361,7 +372,7 @@ NVLink, register those buffer addresses when the graph is captured.
 
 ### 5.1 Semantics
 
-p ranks each hold a buffer. A collective is defined by what each holds afterwards
+$p$ ranks each hold a buffer. A collective is defined by what each holds afterwards
 (`gpusim.collectives.reference()`):
 
 | Collective | After | Used in inference by |
@@ -369,16 +380,16 @@ p ranks each hold a buffer. A collective is defined by what each holds afterward
 | broadcast | every rank has root's buffer | weights or config from rank 0 |
 | reduce | root has the elementwise sum | rarely |
 | **all-reduce** | every rank has the sum | tensor parallelism, 2 per layer |
-| **reduce-scatter** | rank r has chunk r of the sum | sequence parallelism; the first half of all-reduce |
+| **reduce-scatter** | rank $r$ has chunk $r$ of the sum | sequence parallelism; the first half of all-reduce |
 | **all-gather** | every rank has the concatenation | sharded weights (FSDP), logits, sequence parallelism |
-| **all-to-all** | rank r's chunk j goes to rank j | MoE expert parallelism: dispatch and combine |
+| **all-to-all** | rank $r$'s chunk $j$ goes to rank $j$ | MoE expert parallelism: dispatch and combine |
 | send / recv | point-to-point | pipeline parallelism; KV transfer (layer 05) |
 
 ### 5.2 All-reduce = reduce-scatter + all-gather
 
-Split each buffer into p chunks. In the **reduce-scatter**, at step s = 1, …, p−1 every rank r adds its partial of
-chunk `(r−s) mod p` into its right neighbour; after p−1 steps rank r owns the finished chunk r. In the
-**all-gather**, finished chunks travel p−1 more hops. The trace below is `all_reduce(bufs, "ring").trace.table()`
+Split each buffer into $p$ chunks. In the **reduce-scatter**, at step $s = 1, \dots, p-1$ every rank $r$ adds its
+partial of chunk $(r-s) \bmod p$ into its right neighbour; after ${p-1}$ steps rank $r$ owns the finished chunk $r$.
+In the **all-gather**, finished chunks travel ${p-1}$ more hops. The trace below is `all_reduce(bufs, "ring").trace.table()`
 for 4 ranks, where `c2+` means "chunk 2, added in":
 
 ```
@@ -390,59 +401,61 @@ step  5 all-gather       0->1:c3   1->2:c0   2->3:c1   3->0:c2
 step  6 all-gather       0->1:c2   1->2:c3   2->3:c0   3->0:c1      everyone has every sum
 ```
 
-Each rank sends 2(p−1) messages of S/p, so **2(p−1)/p · S** bytes in total. No point-to-point algorithm sends
+Each rank sends ${2(p-1)}$ messages of ${S/p}$, so **$2(p-1)/p \cdot S$** bytes in total. No point-to-point algorithm sends
 less, which is why the ring is bandwidth-optimal. Every chunk is reduced exactly once and then copied, so
 all ranks end with bitwise-identical results. A different algorithm adds in a different order, so ring and
 tree results differ in the last bits (notebook 03 shows it).
 
 ### 5.3 The α-β cost of each algorithm
 
-Model each step as costing **α** (launch, synchronization and hop latency) plus the bytes through the busiest
-port divided by **B**, the per-direction link bandwidth. Layer 01 introduces the model and writes B as β
+Model each step as costing **$\alpha$** (launch, synchronization and hop latency) plus the bytes through the busiest
+port divided by **$B$**, the per-direction link bandwidth. Layer 01 introduces the model and writes $B$ as $\beta$
 ([§5.2](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#5-fabrics-quantitatively)). Every
 algorithm in `gpusim.collectives` really moves numpy data, and its traced time equals the closed form
-`T = a·α + c·S/B` (`cost_terms()`, `model_time()`):
+$T = a \cdot \alpha + c \cdot S/B$ (`cost_terms()`, `model_time()`):
 
-| Algorithm | Steps a | Bandwidth factor c | Needs |
+| Algorithm | Steps $a$ | Bandwidth factor $c$ | Needs |
 |---|---|---|---|
-| ring all-reduce | 2(p−1) | 2(p−1)/p | a ring (any topology) |
-| binomial tree all-reduce (reduce, then broadcast) | 2⌈log₂p⌉ | 2⌈log₂p⌉ | nothing; tiny messages only |
-| NCCL double binary tree (pipelined; a model, not simulated) | ≈ 2⌈log₂p⌉ + pipeline fill | ≈ 2 | NCCL's tree algorithm |
-| one-shot (every rank pulls all buffers) | 1 | p−1 | all-to-all links (NVSwitch) |
-| two-shot (direct reduce-scatter + all-gather) | 2 | 2(p−1)/p | all-to-all links |
-| in-switch reduction (NVLS, SHARP), k chunks | k+1 | (k+1)/k → 1 | a reducing switch |
-| ring reduce-scatter or all-gather | p−1 | (p−1)/p | |
-| pairwise all-to-all / direct all-to-all | p−1 / 1 | (p−1)/p | |
-| pipelined chain broadcast, k chunks | p+k−2 | (p+k−2)/k → 1 | |
+| ring all-reduce | ${2(p-1)}$ | ${2(p-1)/p}$ | a ring (any topology) |
+| binomial tree all-reduce (reduce, then broadcast) | $2\lceil \log_2 p \rceil$ | $2\lceil \log_2 p \rceil$ | nothing; tiny messages only |
+| NCCL double binary tree (pipelined; a model, not simulated) | $\approx 2\lceil \log_2 p \rceil$ + pipeline fill | $\approx 2$ | NCCL's tree algorithm |
+| one-shot (every rank pulls all buffers) | 1 | ${p-1}$ | all-to-all links (NVSwitch) |
+| two-shot (direct reduce-scatter + all-gather) | 2 | ${2(p-1)/p}$ | all-to-all links |
+| in-switch reduction (NVLS, SHARP), $k$ chunks | ${k+1}$ | $(k+1)/k \to 1$ | a reducing switch |
+| ring reduce-scatter or all-gather | ${p-1}$ | ${(p-1)/p}$ | |
+| pairwise all-to-all / direct all-to-all | ${p-1}$ / 1 | ${(p-1)/p}$ | |
+| pipelined chain broadcast, $k$ chunks | ${p+k-2}$ | $(p+k-2)/k \to 1$ | |
 
-Pipelining trades α for β. Chunking a message into k pieces adds k steps but shrinks each one, and the optimum
-is `k* = √(S/(α·B))`: 12 chunks for 128 MiB with the numbers below (`optimal_chunks()`). `best_algorithm()`, `sweep()`
-and `tp_comm()` pipeline at k* unless told otherwise (`pipeline_chunks()`). In-switch reduction nearly halves the
-ring's bytes (S instead of 2(p−1)/p · S per GPU) because each GPU sends its data **once** and receives the result
+Pipelining trades $\alpha$ for $\beta$. Chunking a message into $k$ pieces adds $k$ steps but shrinks each one, and the
+optimum is $k^{\ast} = \sqrt{S/(\alpha \cdot B)}$: 12 chunks for 128 MiB with the numbers below (`optimal_chunks()`).
+`best_algorithm()`, `sweep()` and `tp_comm()` pipeline at $k^{\ast}$ unless told otherwise (`pipeline_chunks()`).
+In-switch reduction nearly halves the ring's bytes ($S$ instead of $2(p-1)/p \cdot S$ per GPU) because each GPU sends its data **once** and receives the result
 once.
 
 ### 5.4 algbw and busbw
 
 nccl-tests reports two bandwidths ([PERFORMANCE.md](https://github.com/NVIDIA/nccl-tests/blob/master/doc/PERFORMANCE.md)).
-**algbw = S / t**, with S the full buffer (the gathered output for all-gather, the input for reduce-scatter).
-**busbw = algbw × factor**, where the factor is the bandwidth term of the optimal point-to-point algorithm, so
-that busbw reads the **per-link** bandwidth whatever p is (`gpusim.collectives.busbw()`):
+**$\text{algbw} = S/t$**, with $S$ the full buffer (the gathered output for all-gather, the input for reduce-scatter).
+**$\text{busbw} = \text{algbw} \times \text{factor}$**, where the factor is the bandwidth term of the optimal
+point-to-point algorithm, so that busbw reads the **per-link** bandwidth whatever $p$ is (`gpusim.collectives.busbw()`):
 
 | all-reduce | reduce-scatter, all-gather, all-to-all | broadcast, reduce, send/recv |
 |---|---|---|
-| 2(p−1)/p | (p−1)/p | 1 |
+| ${2(p-1)/p}$ | ${(p-1)/p}$ | 1 |
 
-Worked with **8 H100s** and layer 01's illustrative NVLink 4 numbers, **α = 2 µs per step and B = 450 GB/s**.
+Worked with **8 H100s** and layer 01's illustrative NVLink 4 numbers, **$\alpha$ = 2 µs per step and $B$ = 450 GB/s**.
 A 1 GiB ring all-reduce takes **4.20 ms**: algbw 255 GB/s, **busbw 447 GB/s**. busbw is the number to hold
-against the link's 450. Two warnings. With **NVLS** (1 GiB in k* = 35 chunks), modelled busbw reaches 744 GB/s
-(ceiling 2(p−1)/p · B = 788), *above* the link rate, because the switch does the reduction and the factor assumes it
+against the link's 450.
+
+Two warnings. With **NVLS** (1 GiB in $k^{\ast}$ = 35 chunks), modelled busbw reaches 744 GB/s
+(ceiling $2(p-1)/p \cdot B$ = 788), *above* the link rate, because the switch does the reduction and the factor assumes it
 did not. That is expected, not an error; what real NVLS reaches is for nccl-tests to say.
 And busbw well below the link rate inside one node usually means NCCL is not using NVLink (§5.8).
 
 ### 5.5 Latency-bound or bandwidth-bound
 
-The latency and bandwidth terms are equal at **S* = a·α·B / c** (`crossover_bytes()`). For the ring,
-**S* = p·α·B = 7.2 MB** on the 8 H100s above, which is about 440 tokens of an 8,192-wide BF16 activation.
+The latency and bandwidth terms are equal at **$S^{\ast} = a \cdot \alpha \cdot B / c$** (`crossover_bytes()`). For the ring,
+**$S^{\ast} = p \cdot \alpha \cdot B$ = 7.2 MB** on the 8 H100s above, which is about 440 tokens of an 8,192-wide BF16 activation.
 The ring sweep, simulated in nccl-tests' shape (`sweep()`, `format_sweep()`):
 
 ```
@@ -454,9 +467,9 @@ The ring sweep, simulated in nccl-tests' shape (`sweep()`, `format_sweep()`):
  1073741824      4203.7         255.43         447.00
 ```
 
-Below S* a ring all-reduce costs about 2(p−1)·α whatever the message size, so the winning algorithm is the one
-with the fewest steps. At 512 KiB on 8 GPUs the model gives two-shot 6.0 µs, in-switch 6.3 µs (k* = 1), one-shot
-10.2 µs, binomial tree 19.0 µs and ring 30.0 µs. At 128 MiB, in-switch reduction wins (349 µs at k* = 12), then
+Below $S^{\ast}$ a ring all-reduce costs about $2(p-1) \cdot \alpha$ whatever the message size, so the winning algorithm is the one
+with the fewest steps. At 512 KiB on 8 GPUs the model gives two-shot 6.0 µs, in-switch 6.3 µs ($k^{\ast}$ = 1), one-shot
+10.2 µs, binomial tree 19.0 µs and ring 30.0 µs. At 128 MiB, in-switch reduction wins (349 µs at $k^{\ast}$ = 12), then
 two-shot and ring (526 and 550 µs), while one-shot is 2.1 ms (`best_algorithm()`). This is, in miniature, what
 NCCL's tuner decides per call.
 
@@ -469,21 +482,23 @@ all-reduces a `tokens × hidden × 2 B` activation **twice per layer**. For a 70
 
 | Step | Message | Ring | Two-shot | Regime |
 |---|---|---|---|---|
-| decode, batch 32 | 512 KiB | 4.81 ms/step (93% α) | 0.97 ms/step | latency-bound |
-| prefill, 8,192 tokens | 128 MiB | 88.0 ms/step (5% α) | 84.2 ms/step | bandwidth-bound |
+| decode, batch 32 | 512 KiB | 4.81 ms/step (93% $\alpha$) | 0.97 ms/step | latency-bound |
+| prefill, 8,192 tokens | 128 MiB | 88.0 ms/step (5% $\alpha$) | 84.2 ms/step | bandwidth-bound |
 
 Each GPU streams its 17.5 GB weight shard in about 5.2 ms per decode step, so a ring would add about 90% to it and a
 two-shot about 19%. That is why engines ship **custom all-reduce kernels**: vLLM's and TensorRT-LLM's one-shot and
 two-shot kernels over NVLink P2P buffers, NVLS where the switch supports it, and all-reduce fused with the following
 RMSNorm. They also capture all of it in the decode CUDA graph. *Sequence parallelism* replaces each all-reduce with
-a reduce-scatter and an all-gather (the same bytes) so that norms run on 1/p of the tokens.
+a reduce-scatter and an all-gather (the same bytes) so that norms run on ${1/p}$ of the tokens.
 
 **Expert parallelism** moves tokens, not partial sums: an all-to-all **dispatch** to each token's top-k
 experts and an all-to-all **combine** back, each `tokens × top_k × hidden × bytes` per GPU. For a Mixtral-like
 layer (hidden 4,096, top-2) with 256 tokens per GPU that is 4 MiB per direction: 22 µs pairwise or 10 µs
 direct in the model (`model_time("all_to_all", ...)`). Specialised kernels (DeepEP) have low-latency modes for decode and high-throughput modes
 for prefill; the MoE side of the exchange — placement, the slowest rank, TP vs EP and wide-EP — is
-[MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus). **Pipeline parallelism** sends one activation per stage boundary (send/recv), which is small
+[MoE primer §6](../../00-foundations/mixture-of-experts/PRIMER.md#6-running-moe-on-gpus).
+
+**Pipeline parallelism** sends one activation per stage boundary (send/recv), which is small
 enough to cross the scale-out network. **Data parallelism** (replicas) needs no collectives at inference. The
 rule from the [deployment primer §4](../../01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu)
 follows: TP and EP inside the NVLink domain, PP and DP across it.
@@ -515,7 +530,7 @@ follows: TP and EP inside the NVLink domain, PP and DP across it.
 
 ### 5.8 Debugging hangs and slowness
 
-NCCL matches collectives **by issue order on a communicator** and checks neither names nor sizes. The k-th
+NCCL matches collectives **by issue order on a communicator** and checks neither names nor sizes. The $k$-th
 call on every rank is the same collective. So one rank that takes a data-dependent branch, crashes, goes OOM,
 or issues calls in a different order leaves the others blocked. A size mismatch can hang or silently corrupt.
 `gpusim.collectives.first_mismatch()` finds the first call where per-rank logs disagree, which is what you do
@@ -643,10 +658,12 @@ on that GPU (verify for your driver). MPS suits cooperative workloads of one tea
 
 ### 7.4 Time-slicing: turns
 
-The device plugin (or GKE's `max_shared_clients_per_gpu`) advertises one GPU as N schedulable replicas. The GPU
+The device plugin (or GKE's `max_shared_clients_per_gpu`) advertises one GPU as $N$ schedulable replicas. The GPU
 runs one context at a time, round-robin. There is **no memory isolation**, so one tenant can OOM the others, and
-no performance isolation. With N busy tenants, a request needing W of GPU time in quanta q with switch cost s
-finishes after `W + (⌈W/q⌉ − 1)·((N−1)(q+s) + s)` at best, when it arrives just as its turn starts
+no performance isolation.
+
+With $N$ busy tenants, a request needing $W$ of GPU time in quanta $q$ with switch cost $s$ finishes after
+$W + (\lceil W/q \rceil - 1) \cdot ((N-1)(q+s) + s)$ at best, when it arrives just as its turn starts
 (`gpusim.sharing.timeslice_latency()`): 10 ms of work with 4 busy tenants, 2 ms quanta and 50 µs switches takes
 **34.8 ms at best**. Arriving just after its turn adds one more round of the others' turns, 6.2 ms, so **41.0 ms
 at worst** and **37.9 ms on average**. Idle tenants cost nothing, which is why time-slicing suits notebooks and
@@ -764,11 +781,15 @@ installs the default driver automatically, and `gpu_driver_version` takes `DEFAU
 `INSTALLATION_DISABLED` (for the GPU Operator path). GPU nodes are tainted `nvidia.com/gpu=present:NoSchedule`
 (verify). Sharing is configured per node pool: MIG with `guest_accelerator.gpu_partition_size` (for example
 `"1g.10gb"`), time-sharing or MPS with `gpu_sharing_config` (`gpu_sharing_strategy = "TIME_SHARING" | "MPS"`,
-`max_shared_clients_per_gpu`). **Deep Learning VM** images come with drivers preinstalled. For multi-node NCCL,
+`max_shared_clients_per_gpu`).
+
+**Deep Learning VM** images come with drivers preinstalled. For multi-node NCCL,
 A3 High (H100, `a3-highgpu-8g`) uses GPUDirect-TCPX (verify) and A3 Mega (H100) GPUDirect-TCPXO; A3 Ultra (H200),
 A4 (B200), A4X (GB200 NVL72) and A4X Max (GB300 NVL72) use GPUDirect RDMA over ConnectX-7 NICs on a rail-aligned
 network with Google's NCCL network plugin (gIB, verify names). DCGM metrics can flow into Cloud Monitoring through
-GKE's managed collection (verify). The deploy assets in [`cuda-nccl-lab`](cuda-nccl-lab/) hold the Terraform (a zonal
+GKE's managed collection (verify).
+
+The deploy assets in [`cuda-nccl-lab`](cuda-nccl-lab/) hold the Terraform (a zonal
 GKE Standard cluster with an L4 Spot pool that scales from zero, an `l4x2` pool of `g2-standard-24` nodes (2 × L4,
 also Spot and from zero) that hosts the 2-GPU nccl-tests Job, and optional time-sharing and MIG pools) and the Jobs.
 
@@ -776,8 +797,9 @@ also Spot and from zero) that hosts the 2-GPU nccl-tests Job, and optional time-
 for free: a real 2-GPU NCCL box without NVLink, where `NCCL_DEBUG=INFO` shows P2P or SHM over PCIe and busbw
 is bounded by PCIe. **RunPod and Vast** hand you a *container* on someone's host: you cannot change the
 driver, so choose an image whose CUDA the host driver supports (§1.2), and MIG and DCGM profiling are usually
-unavailable. **Lambda and GCP** hand you *VMs*: you own the driver, MIG, fabric manager and DCGM. A laptop runs
-everything in `gpusim`, and the lab's Numba kernels run in `NUMBA_ENABLE_CUDASIM=1`. A local kind cluster with
+unavailable. **Lambda and GCP** hand you *VMs*: you own the driver, MIG, fabric manager and DCGM.
+
+A laptop runs everything in `gpusim`, and the lab's Numba kernels run in `NUMBA_ENABLE_CUDASIM=1`. A local kind cluster with
 fake GPU capacity (layer 03) exercises the scheduler, not CUDA: it has no device nodes to inject.
 
 ---
@@ -787,12 +809,15 @@ fake GPU capacity (layer 03) exercises the scheduler, not CUDA: it has no device
 **The two-minute walkthrough.** "Each node pool pins one driver branch. Images carry only CUDA userland,
 built at or below that driver's CUDA version, or within its major, having checked that every kernel ships SASS
 for our GPUs (`torch.cuda.get_arch_list()`). The NVIDIA Container Toolkit injects the host's libcuda and devices,
-so user-mode and kernel-mode driver always match. Our hot kernels are memory-bound: we count bytes and sectors,
+so user-mode and kernel-mode driver always match.
+
+"Our hot kernels are memory-bound: we count bytes and sectors,
 tile and fuse, and at small batch the launch path dominates, so we capture decode as CUDA Graphs per batch
 bucket. We run tensor parallelism inside the NVLink domain. Decode all-reduces are about 0.5 MB, far below the
 ~7 MB latency/bandwidth crossover, so we use a few-step all-reduce (two-shot or NVLS) inside the graph. We
-validate the fabric with nccl-tests busbw against the NVLink rate before any model runs. Whole GPUs go to big
-models; small multi-tenant endpoints get planned MIG layouts; dev notebooks get time-slicing. We alert on SM
+validate the fabric with nccl-tests busbw against the NVLink rate before any model runs.
+
+"Whole GPUs go to big models; small multi-tenant endpoints get planned MIG layouts; dev notebooks get time-slicing. We alert on SM
 active and engine metrics, not GPU util, and hardware XIDs drain nodes automatically."
 
 **Drill questions**
@@ -802,7 +827,7 @@ active and engine metrics, not GPU util, and hardware XIDs drain nodes automatic
    APIs newer than 12.2 fail with 36. Upgrading the driver is the clean fix. A CUDA 13 image would need a
    driver upgrade, or `cuda-compat` on data-center GPUs.
 2. *TP=8 decode spends 40% of the step in all-reduce, yet NVLink is nearly idle. Why?* The messages are
-   hundreds of KB, so a ring's 14 α-steps dominate: it is latency-bound, not bandwidth-bound. Use fewer steps
+   hundreds of KB, so a ring's 14 $\alpha$-steps dominate: it is latency-bound, not bandwidth-bound. Use fewer steps
    (two-shot or one-shot custom all-reduce, NVLS), capture them in CUDA graphs, fuse them with the norm, or
    lower the TP degree for this model.
 3. *nccl-tests on one 8×H100 node shows all-reduce busbw of 100 GB/s. What do you check?* That NCCL uses
@@ -839,8 +864,8 @@ active and engine metrics, not GPU util, and hardware XIDs drain nodes automatic
 | stream | in-order queue of GPU work; different streams may overlap |
 | CUDA Graph | a captured sequence of GPU work replayed with one launch |
 | collective | communication operation defined over all ranks of a communicator |
-| α, B | per-step latency; per-direction link bandwidth (layer 01 writes B as β) |
-| algbw, busbw | nccl-tests' S/t, and S/t × a per-collective factor comparable with link bandwidth |
+| $\alpha$, $B$ | per-step latency; per-direction link bandwidth (layer 01 writes $B$ as $\beta$) |
+| algbw, busbw | nccl-tests' ${S/t}$, and ${S/t}$ × a per-collective factor comparable with link bandwidth |
 | channel | one NCCL ring or tree instance, run by one CTA |
 | LL, LL128, Simple | NCCL protocols: lowest latency, near-full bandwidth, full bandwidth |
 | NVLS, SHARP | in-network reduction in NVSwitch (NVLink SHARP) or InfiniBand switches |
@@ -913,4 +938,4 @@ Dated 2026-09-26. Everything below moves; check it before you rely on it.
 | GKE GPU taint `nvidia.com/gpu=present:NoSchedule`; gIB plugin name; DCGM in Cloud Monitoring; A3 High uses GPUDirect-TCPX | primer §9 | verify |
 | A3 Mega uses GPUDirect-TCPXO; A3 Ultra, A4, A4X and A4X Max use GPUDirect RDMA on ConnectX-7 | primer §9 | from project FACTS |
 | Kaggle 2 × T4 (PCIe), 30 GPU-hours per week | primer §9 | from project FACTS; verify quotas |
-| Illustrative α = 2 µs and B = 450 GB/s (NVLink 4), loaded DRAM latency 600 ns, eager launch 5 µs, graph launch 10 µs; NVLS busbw 744 GB/s (model) | primer §2.4, §4.2, §5 | assumptions and model output, not measurements: measure your own in the lab |
+| Illustrative $\alpha$ = 2 µs and $B$ = 450 GB/s (NVLink 4), loaded DRAM latency 600 ns, eager launch 5 µs, graph launch 10 µs; NVLS busbw 744 GB/s (model) | primer §2.4, §4.2, §5 | assumptions and model output, not measurements: measure your own in the lab |

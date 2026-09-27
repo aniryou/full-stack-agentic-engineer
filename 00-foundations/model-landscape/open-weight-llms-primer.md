@@ -69,6 +69,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 **Position:** the strongest open model on most aggregate indices, and the largest open-weight release to date. Moonshot has held the open scale frontier for nine of the past twelve months.
 
 **Innovations that matter:**
+
 - **Kimi Delta Attention (KDA)** — a fixed-size-state linear attention with a forget gate, from the *Kimi Linear* line of work. K3 interleaves three KDA layers with one Gated MLA layer per block: cheap linear mixing for most of the sequence work, periodic full-capacity attention to preserve global interaction. This is the first and largest public model built primarily on linear attention, and it is the strongest signal yet that softmax attention will not stay universal.
 - **Attention Residuals (AttnRes)** — each module can selectively retrieve representations from the embedding, its own block and all preceding blocks, rather than only reading the immediately previous layer. Shortens the information path in very deep networks.
 - **Stable LatentMoE** — 896 routed experts with 16 active (~56x sparsity, up from K2's 384/8). Shared experts run at full hidden width; routed experts operate in a narrower latent space via down-projection before dispatch and up-projection after aggregation. Stabilised with SiTU-GLU activation, RMSNorm on routed experts and Quantile Balancing.
@@ -86,6 +87,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 **Position:** the price-performance and efficiency benchmark for the whole field. V4-Pro-Max is reported at 80.6% SWE-bench Verified — the top open-weight entry — and a Codeforces rating of 3206, the first open model to match a closed system on competitive programming.
 
 **Innovations that matter:**
+
 - **Manifold-Constrained Hyper-Connections (mHC)** (arXiv:2512.24880, co-authored by CEO Liang Wenfeng). Hyper-connections widen the residual stream into multiple parallel streams, but unconstrained mixing matrices destroy training stability — DeepSeek measured signal amplification above 3000x and catastrophic divergence at 27B. mHC projects those matrices onto the Birkhoff polytope using Sinkhorn–Knopp, holding amplification to ~1.6x for ~6.7% training overhead. This is the single most-cited architectural idea to come out of the open ecosystem this year.
 - **Hybrid attention: Compressed Sparse Attention (CSA) + Heavily Compressed Attention (HCA)**, replacing V3.2's Multi-head Latent Attention. At 1M tokens, V4-Pro uses roughly **27% of the single-token inference FLOPs and 10% of the KV cache** of V3.2. That is the number that drives the pricing.
 - **Muon optimizer**; 32T training tokens; separate domain specialists trained then merged.
@@ -99,6 +101,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 ### 4.3 Alibaba — Qwen (China)
 
 **Current:** the broadest ladder in the ecosystem, and the family that changed posture in August.
+
 - **Qwen3.8-Max** (3 Aug 2026): 2.4T total / ~95B active sparse MoE, 1M context, text + image + video, $2 / $6 per million on the hosted API.
 - **Qwen3.8-2.4T-A95B** (12 Aug 2026): the open-weight Max checkpoint — **the first Max-class Qwen ever made downloadable**. 512 experts (10 routed + 1 shared), Qwen3.5-family hybrid (Gated DeltaNet + MoE + Gated Attention). Custom **Qwen3.8-Max License**, not Apache.
 - **Qwen3.8-27B** (14 Aug 2026): 27.78B dense vision-language model under **Apache 2.0**. 64 layers, hidden dim 5120, hybrid layout of 48 Gated DeltaNet linear-attention layers and 16 full-attention layers, multi-token prediction, `reasoning_effort` dial (xhigh default / medium / low). Native 262,144-token context, extensible to ~1M with YaRN. Text, image and video input.
@@ -138,7 +141,9 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 
 ### 4.6 Mistral AI (France)
 
-**Current lineup:** Mistral Large 3 (2 Dec 2025) — 675B total / 41B active MoE, Apache 2.0, still the largest Apache-licensed MoE from a Western lab. Mistral Small 4 (16 Mar 2026) folds reasoning (Magistral), vision (Pixtral) and coding (Devstral) into one model: a 119B-total, ~6.5B-active MoE under Apache 2.0 (Hugging Face `mistralai/Mistral-Small-4-119B-2603`; verify, 2026-09). "Small" is now the name of the tier, not the footprint: its FP8 weights are about 120 GB, two H100s or one H200, where Small 3.x was a 24B dense model that fits one. Ministral 3 at 3B / 8B / 14B, all Apache 2.0 — the 14B reasoning variant hits 85% on AIME 2025. Plus specialists: Devstral 2 (code), Voxtral (audio/TTS), Leanstral 1.5 (Lean 4 formal proofs), Mistral OCR, and Shieldstral (a 3B open-weights multimodal safety classifier that accepts plain-language policies at inference time and runs on a single 16 GB GPU). Mistral Medium 3.5 is closed.
+**Current lineup:** Mistral Large 3 (2 Dec 2025) — 675B total / 41B active MoE, Apache 2.0, still the largest Apache-licensed MoE from a Western lab. Mistral Small 4 (16 Mar 2026) folds reasoning (Magistral), vision (Pixtral) and coding (Devstral) into one model: a 119B-total, ~6.5B-active MoE under Apache 2.0 (Hugging Face `mistralai/Mistral-Small-4-119B-2603`; verify, 2026-09). "Small" is now the name of the tier, not the footprint: its FP8 weights are about 120 GB, two H100s or one H200, where Small 3.x was a 24B dense model that fits one.
+
+Ministral 3 at 3B / 8B / 14B, all Apache 2.0 — the 14B reasoning variant hits 85% on AIME 2025. Plus specialists: Devstral 2 (code), Voxtral (audio/TTS), Leanstral 1.5 (Lean 4 formal proofs), Mistral OCR, and Shieldstral (a 3B open-weights multimodal safety classifier that accepts plain-language policies at inference time and runs on a single 16 GB GPU). Mistral Medium 3.5 is closed.
 
 **What's coming:** Mensch has confirmed a new open-weight family — described as "fat but sparse" MoE — in **early access since July 2026**, with a broader release expected. Parameter count, benchmarks and license terms remain undisclosed. Separately, the **first Nemotron Coalition model is a base model co-developed by Mistral and NVIDIA on DGX Cloud, to be open-sourced on completion and to underpin Nemotron 4**.
 
@@ -175,12 +180,19 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 **Position:** the most genuinely open of the big-lab releases. NVIDIA publishes **weights, training data and recipes**, with technical reports sufficient to recreate the models — the closest thing to OSI-style openness at this scale. That is a materially different governance proposition for a regulated deployment.
 
 **Innovations that matter:**
+
 - **Hybrid Mamba-2 + Transformer MoE.** Mamba-2 state-space layers give linear-time complexity over sequence length, which is what makes a 1M-token context economical for long-running agents rather than merely possible.
 - **LatentMoE** — compresses tokens into a low-rank latent space before routing, enabling roughly 4x as many expert specialists at the same inference cost.
 - **Multi-Token Prediction** — predicts several future tokens per forward pass, improving chain-of-thought coherence and giving built-in speculative decoding at serve time.
 - **NVFP4 four-bit pretraining** on Blackwell, with claimed ~5x throughput efficiency and ~30% cost reduction versus the best open alternatives.
 
-**Ecosystem proof points** (NVIDIA-reported, but specific and attributable): LangChain tuned its Deep Agents harness for Nemotron 3 Ultra — prompts, tools and middleware only, no retraining — and reached top agent accuracy among open models at ~10x lower cost per run than leading closed alternatives. Arcee AI post-trained on Blackwell to ~$0.90 per million output tokens, ~20x cheaper than comparable closed frontier models, ranking second on PinchBench while staying fully open weight. Harvey post-trained Ultra on its legal benchmark and matched leading closed models at ≥10x lower cost per run. YTL AI Labs post-trained a Nemotron for Malay. Nemotron 3 Nano Omni was measured by Artificial Analysis at 323 tok/s — the fastest model on the BenchLM board clearing its evidence thresholds.
+**Ecosystem proof points** (NVIDIA-reported, but specific and attributable):
+
+- LangChain tuned its Deep Agents harness for Nemotron 3 Ultra — prompts, tools and middleware only, no retraining — and reached top agent accuracy among open models at ~10x lower cost per run than leading closed alternatives.
+- Arcee AI post-trained on Blackwell to ~$0.90 per million output tokens, ~20x cheaper than comparable closed frontier models, ranking second on PinchBench while staying fully open weight.
+- Harvey post-trained Ultra on its legal benchmark and matched leading closed models at ≥10x lower cost per run.
+- YTL AI Labs post-trained a Nemotron for Malay.
+- Nemotron 3 Nano Omni was measured by Artificial Analysis at 323 tok/s — the fastest model on the BenchLM board clearing its evidence thresholds.
 
 **Nemotron Coalition** (announced 16 Mar 2026): Black Forest Labs, Cursor, LangChain, Mistral AI, Perplexity, Reflection AI, Sarvam and Thinking Machines Lab, co-developing open frontier models on DGX Cloud. First deliverable is the Mistral–NVIDIA base model that will underpin Nemotron 4. Contributions span multimodal (Black Forest), real-world coding benchmarks (Cursor) and agentic/long-horizon evaluation (LangChain).
 
@@ -223,6 +235,7 @@ Closed reference points for calibration: Claude Opus 5 (AA Intelligence Index 63
 Five threads run across every family above.
 
 **1. Attention is being rebuilt around the KV cache, not the FLOPs.** At 1M context the cache, not the weights, is the binding memory constraint. Four distinct bets are now in production:
+
 - *Compression* — DeepSeek's MLA → CSA + HCA lineage. Cheapest, with a precision cost MiniMax explicitly criticises.
 - *Block selection on uncompressed KV* — MiniMax's MSA. Preserves precision, more machinery.
 - *Linear attention with periodic full attention* — Kimi's KDA + Gated MLA, Qwen's Gated DeltaNet + full-attention layers. Fixed-size recurrent state; now proven at 2.8T.
@@ -267,6 +280,7 @@ There is no convergence yet, and the choice directly determines your serving cos
 | Qwen3.8-27B | Alibaba | 27.8B dense | Apache 2.0 | AA 52 on a single 24 GB GPU. The best intelligence-per-gigabyte available |
 
 **How wide is the gap, measured three ways:**
+
 - **Epoch AI:** since January 2026, the best open models lag the closed frontier by an average of **four months, or ~8 ECI points** (90% CI 7–11) — wider than the three-month average measured over 2023–2025. Under a stricter comparison rule, ~six months. Epoch's July index put Kimi K3 at 156 against GPT-5.6 Sol at 162, with **overlapping confidence intervals**.
 - **Artificial Analysis:** Opus 5 at 63 vs Kimi K3 at ~57 — six points. Of 170–185 tracked models, roughly 95 are open weight.
 - **Stanford AI Index (March 2026 snapshot):** 1,503 Arena points for the leading closed model vs 1,454 for the leading open model — a 3.3% gap, against 0.5% in August 2024. US–China gap at the top: ~2.7%.
@@ -396,7 +410,7 @@ Measure cost per successful outcome — per merged pull request, per correctly r
 
 **Policy**
 
-- **European Union.** GPAI obligations have applied since 2 August 2025: technical documentation, a copyright policy, a public training-data summary; plus evaluation, adversarial testing, incident reporting and cybersecurity duties for systemic-risk models (presumed above 10^25 training FLOP). Free-and-open-licensed models with public parameters get some documentation relief — **but not if they are systemic-risk models, which most trillion-parameter releases are**. Substantial downstream modification (on the order of a third of original training compute) makes the modifier a provider. The GPAI Code of Practice (Jul 2025) has been signed by Mistral, OpenAI, Google, Microsoft, IBM and Anthropic among others. **Commission enforcement powers — information requests, model access, recall, fines — activated on 2 August 2026.**
+- **European Union.** GPAI obligations have applied since 2 August 2025: technical documentation, a copyright policy, a public training-data summary; plus evaluation, adversarial testing, incident reporting and cybersecurity duties for systemic-risk models (presumed above $10^{25}$ training FLOP). Free-and-open-licensed models with public parameters get some documentation relief — **but not if they are systemic-risk models, which most trillion-parameter releases are**. Substantial downstream modification (on the order of a third of original training compute) makes the modifier a provider. The GPAI Code of Practice (Jul 2025) has been signed by Mistral, OpenAI, Google, Microsoft, IBM and Anthropic among others. **Commission enforcement powers — information requests, model access, recall, fines — activated on 2 August 2026.**
 - **United States.** The 2025 AI Action Plan encouraged open models. A 2 June 2026 executive order directed agencies to build classified benchmarks for advanced cyber capabilities, and a voluntary frontier-testing program followed. **On 4 August 2026 the White House told industry that open-weight models — including Chinese ones — would be excluded from that program.** Five Democratic senators have pushed for mandatory testing; industry coalitions warned that restricting open development would cede ground to China. Critics note the odd shape: reviewers would examine models locked inside corporate infrastructure and skip the ones anyone can download and modify. Chip export controls remain the main lever on Chinese labs; the January 2025 model-weight export rule was rescinded in May 2025.
 - **China.** Open weights function as industrial strategy and standard-setting. Zhipu and MiniMax both listed in Hong Kong in January 2026. Permissive licensing is deliberate — though note the drift toward revenue-conditioned licenses in the 2026 flagships.
 - **Asia-Pacific.** Sovereign programs in Singapore, India, Malaysia, Korea and Japan generally start from open weights and post-train for local languages and regulatory context. This is where near-term regional enterprise demand sits.
@@ -435,7 +449,7 @@ Measure cost per successful outcome — per merged pull request, per correctly r
 - **OSAID** — OSI's Open Source AI Definition (2024).
 - **QAT** — quantization-aware training; learning to compensate for quantization error during training rather than after.
 - **Safetensors** — safe, non-executable weight format; the Hugging Face default.
-- **Systemic-risk model** — EU AI Act term for the highest-capability GPAI models, presumed above 10^25 training FLOP.
+- **Systemic-risk model** — EU AI Act term for the highest-capability GPAI models, presumed above $10^{25}$ training FLOP.
 - **YaRN** — a context-extension method; how Qwen3.8-27B reaches ~1M from a 262K native window.
 
 ---
@@ -443,6 +457,7 @@ Measure cost per successful outcome — per merged pull request, per correctly r
 ## 13. Sources and further reading
 
 **Primary — model and technical reports**
+
 - Kimi K3 technical report (arXiv:2607.24653): https://arxiv.org/abs/2607.24653 · Moonshot blog: https://www.kimi.ai/blog/kimi-k3
 - DeepSeek-V4 technical report (arXiv:2606.19348): https://arxiv.org/pdf/2606.19348 · mHC paper (arXiv:2512.24880): https://arxiv.org/html/2512.24880
 - MiniMax M3 launch: https://www.minimax.io/blog/minimax-m3 (MSA: arXiv:2606.13392)
@@ -453,6 +468,7 @@ Measure cost per successful outcome — per merged pull request, per correctly r
 - Google Open Source Blog, *Gemma 4: Expanding the Gemmaverse with Apache 2.0*: https://opensource.googleblog.com/2026/03/gemma-4-expanding-the-gemmaverse-with-apache-20.html
 
 **Primary — data, policy and market**
+
 - Epoch AI, *Open models lag state-of-the-art closed models by 4 months*: https://epoch.ai/data-insights/open-closed-eci-gap
 - Epoch AI open-models topic page: https://epoch.ai/topics/open-models
 - NVIDIA Nemotron Coalition press release: https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Launches-Nemotron-Coalition-of-Leading-Global-AI-Labs-to-Advance-Open-Frontier-Models/default.aspx
@@ -467,6 +483,7 @@ Measure cost per successful outcome — per merged pull request, per correctly r
 - Artificial Analysis model pages (e.g. Muse Spark 1.2): https://artificialanalysis.ai/models/muse-spark-1-2
 
 **Secondary analysis — useful, verify specifics against primary sources**
+
 - *The State of Open Source AI*, July 2026: https://stateofopensource.ai/
 - Forbes, *Open Weight Models Are Turning Inference Into A Control Point*: https://www.forbes.com/sites/janakirammsv/2026/07/18/open-weight-models-are-turning-inference-into-a-control-point/
 - Towards Data Science, *How a Frontier Model Gets Built, Read from the Kimi K3 Report*: https://towardsdatascience.com/how-a-frontier-model-gets-built-read-from-the-kimi-k3-report/

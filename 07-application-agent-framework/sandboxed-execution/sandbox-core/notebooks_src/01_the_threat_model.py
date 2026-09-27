@@ -6,18 +6,22 @@
 # an attack *work* without any real harm. Docker, gVisor and Kubernetes come in the lab (`../sandbox-lab`).
 #
 # ## The one-minute version
-# An agent is *a workload that turns untrusted text into privileged actions* (the identity primer's one
-# line). A `run_code` tool is the sharpest version of that: the model, which cannot tell instructions
-# from data, emits a program, and something runs it. If it runs with the agent's environment, home
-# directory and network, then a prompt injection is a shell on your infrastructure. This notebook makes
-# that concrete: a small set of **probes** stands in for what a hijacked model might emit — read an
-# environment secret, read a private key, phone home, fork forever, fill the disk, spin the CPU, hang,
-# print forever, outlive the call — and you run them through the **unsandboxed** executor and see what leaks. The invariant a
-# sandbox must restore is **no ambient authority**: no credentials, no network by default, no persistent
-# filesystem. After this you can name the blast radius of a code tool and say which control bounds each
-# risk. Primer: `../PRIMER.md` §1 (why a sandbox, the threat model). The OWASP agentic risks and the
-# "execute code is DESTRUCTIVE-tier" rule are the identity primer's
-# (`../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md` §2, §6.2) — cited, not restated.
+# An agent is *a workload that turns untrusted text into privileged actions* (the identity primer's one line).
+# A `run_code` tool is the sharpest version of that: the model, which cannot tell instructions from data,
+# emits a program, and something runs it. If it runs with the agent's environment, home directory and network,
+# then a prompt injection is a shell on your infrastructure.
+#
+# This notebook makes that concrete: a small set of **probes** stands in for what a hijacked model might emit
+# — read an environment secret, read a private key, phone home, fork forever, fill the disk, spin the CPU,
+# hang, print forever, outlive the call — and you run them through the **unsandboxed** executor and see what
+# leaks. The invariant a sandbox must restore is **no ambient authority**: no credentials, no network by
+# default, no persistent filesystem.
+#
+# After this you can name the blast radius of a code tool and say which control bounds each risk. Primer:
+# `../PRIMER.md` §1 (why a sandbox, the threat model). The OWASP agentic risks and the "execute code is
+# DESTRUCTIVE-tier" rule are the identity primer's
+# (`../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md` §2, §6.2) — cited, not
+# restated.
 
 # %%
 from sandboxcore import PROBES, ProcessSandbox, UnsafeExecutor, run_probe
@@ -55,14 +59,17 @@ print("unsandboxed:", v.detail, "| leaked:", v.leaked)
 # ## Worked example 3 — the same code, through a process sandbox
 # Now run the whole suite through `ProcessSandbox` (notebook 02 builds it). Read its isolation report first:
 # what it can enforce depends on this machine. The environment secret is gone (clean environment) and the
-# resource abuses are stopped by limits. Three probes depend on **running as a different UID**, which the
-# sandbox can only do when it runs as root (Colab, most CI): the key read (a different UID cannot open your
-# 0700 home — pointing `HOME` at the workspace hides nothing from an absolute path), the fork bomb when the
-# sandbox runs as root (`RLIMIT_NPROC` counts tasks per UID and ignores root; as a user the parent counts the
-# run's own process tree instead) and the session escape (only a per-execution UID lets the sandbox
-# find and kill a process that left its process group). And **egress is the one thing a process sandbox never
-# stops**, which it reports honestly. That exception is why the network is a separate control (notebook 04,
-# and NetworkPolicy in the lab).
+# resource abuses are stopped by limits.
+#
+# Three probes depend on **running as a different UID**, which the sandbox can only do when it runs as root
+# (Colab, most CI): the key read (a different UID cannot open your 0700 home — pointing `HOME` at the
+# workspace hides nothing from an absolute path), the fork bomb when the sandbox runs as root (`RLIMIT_NPROC`
+# counts tasks per UID and ignores root; as a user the parent counts the run's own process tree instead) and
+# the session escape (only a per-execution UID lets the sandbox find and kill a process that left its process
+# group).
+#
+# And **egress is the one thing a process sandbox never stops**, which it reports honestly. That exception is
+# why the network is a separate control (notebook 04, and NetworkPolicy in the lab).
 
 # %%
 sb = ProcessSandbox()
@@ -169,17 +176,19 @@ print("✅ the isolation report predicts the verdicts: HOME redirection hides no
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "A code-execution tool takes untrusted, model-written programs and runs them,
-# so I treat it as the highest-risk tool there is — DESTRUCTIVE tier, in the identity primer's language. The
-# question I ask is 'if the model is fully hijacked, what can this code reach?' The answer must be: no
-# ambient credentials, because the process starts from a clean environment; no private files, because the
-# code runs as its own UID (pointing HOME somewhere else is not a boundary); nothing left behind, because
-# the workspace is thrown away and leftovers of that UID are swept; no network, because egress is denied
-# by default and only an allowlisting proxy can reach out; and no runaway resource use, because CPU,
-# memory, processes, file size and output are all bounded. I demonstrate this with a suite of harmless
-# probes: unsandboxed they leak the token, read a key, phone home and outlive the call; sandboxed with a
-# per-execution UID, all but one are contained, and that one — egress — needs the network layer, not the
-# process limits. That last distinction is the one people get wrong."
+# **The two-minute version.** "A code-execution tool takes untrusted, model-written programs and runs them, so
+# I treat it as the highest-risk tool there is — DESTRUCTIVE tier, in the identity primer's language.
+#
+# "The question I ask is 'if the model is fully hijacked, what can this code reach?' The answer must be: no
+# ambient credentials, because the process starts from a clean environment; no private files, because the code
+# runs as its own UID (pointing HOME somewhere else is not a boundary); nothing left behind, because the
+# workspace is thrown away and leftovers of that UID are swept; no network, because egress is denied by
+# default and only an allowlisting proxy can reach out; and no runaway resource use, because CPU, memory,
+# processes, file size and output are all bounded.
+#
+# "I demonstrate this with a suite of harmless probes: unsandboxed they leak the token, read a key, phone home
+# and outlive the call; sandboxed with a per-execution UID, all but one are contained, and that one — egress —
+# needs the network layer, not the process limits. That last distinction is the one people get wrong."
 #
 # **Drill questions**
 # 1. *Why is 'execute code' automatically the most dangerous tool?* — It turns arbitrary model output into

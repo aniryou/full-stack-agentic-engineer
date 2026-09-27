@@ -618,9 +618,12 @@ print("✅ questions:", *qs, sep="\n   ")
 #
 # When the design has a "workflow" box in it, say what is underneath: *"Each session is an append-only event log with a
 # small state dict; the model's context is derived from the log, so approvals, state and notes never leak into prompts.
-# Writes go through compare-and-set on a version, and a turn holds a per-session lock so retries cannot interleave. Anything
-# irreversible pauses the loop with `awaiting_approval` and a pending payload; approval is a state transition that can arrive
-# from another process after a restart. Long-running jobs are a task record with `completed_steps` saved after every step,
-# and every external write carries an idempotency key derived from the task and the step — because one day the worker will
-# die between the payment call and the checkpoint — with a saga of compensations for the steps that cannot be undone."*
+# Writes go through compare-and-set on a version, and a turn holds a per-session lock so retries cannot interleave.*
+#
+# *"Anything irreversible pauses the loop with `awaiting_approval` and a pending payload; approval is a state transition
+# that can arrive from another process after a restart. Long-running jobs are a task record with `completed_steps` saved
+# after every step, and every external write carries an idempotency key derived from the task and the step — because one
+# day the worker will die between the payment call and the checkpoint — with a saga of compensations for the steps that
+# cannot be undone."*
+#
 # Then ask the question that matters — *what happens if the worker dies right here?* — and point at the line.

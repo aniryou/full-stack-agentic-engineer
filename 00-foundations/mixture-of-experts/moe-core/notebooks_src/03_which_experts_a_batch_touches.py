@@ -7,14 +7,18 @@
 # found).
 #
 # ## The one-minute version
-# One token reads k of E experts per layer. A decode step reads the **union** of its tokens' choices: with uniform
-# routing a layer touches `E (1 − (1 − k/E)^T)` distinct experts for T tokens — the closed form layer 01 uses in
-# `roofline.llm.experts_touched` (its PRIMER §3.6). So the weight bytes a step streams climb from about *active*
-# at batch 1 to about *total* by a batch of a few × E/k, while the FLOPs stay proportional to *active × batch*.
+# One token reads $k$ of $E$ experts per layer. A decode step reads the **union** of its tokens' choices: with
+# uniform routing a layer touches $E(1 - (1 - k/E)^T)$ distinct experts for $T$ tokens — the closed form layer 01
+# uses in `roofline.llm.experts_touched` (its PRIMER §3.6). So the weight bytes a step streams climb from about
+# *active* at batch 1 to about *total* by a batch of a few × $E/k$, while the FLOPs stay proportional to
+# *active × batch*.
+#
 # Bytes → total, FLOPs ∝ active: the batch at which decode turns compute-bound grows by about total ÷ active —
 # 754 for Mixtral and 2,055 for Qwen3-30B-A3B on an H200, against 207 for a dense 8B. That is why MoE serving is
-# about big batches. The KV cache follows attention, not experts, so it is unchanged — which shifts the KV share
-# of a step down. Skewed routing touches fewer experts and heats one.
+# about big batches.
+#
+# The KV cache follows attention, not experts, so it is unchanged — which shifts the KV share of a step down.
+# Skewed routing touches fewer experts and heats one.
 #
 # Primer: `../PRIMER.md` §5 *MoE at inference: which experts a step touches*.
 
@@ -43,8 +47,8 @@ for name, e, k in fams:
     print(f"{name + f' ({e}, {k})':24s}" + "".join(f"{T.experts_touched(e, k, b):9.1f}" for b in batches))
 
 # %% [markdown]
-# The closed form is exact for independent tokens that each pick k *distinct* experts uniformly: one token misses a
-# given expert with probability 1 − k/E, T tokens miss it with (1 − k/E)^T. A Monte Carlo draw agrees; a skewed
+# The closed form is exact for independent tokens that each pick $k$ *distinct* experts uniformly: one token misses a
+# given expert with probability $1 - k/E$, $T$ tokens miss it with $(1 - k/E)^T$. A Monte Carlo draw agrees; a skewed
 # (Zipf) popularity — a *model* of hot experts, not a measurement — touches fewer experts and loads the hottest
 # one several times the mean.
 
@@ -88,8 +92,8 @@ for b, c in ((64, 1024), (64, 32_768)):
 
 # %% [markdown]
 # ## Exercise 3.1 — derive the closed form
-# Write `touched(e, k, t)`: the expected number of distinct experts one layer reads for t tokens, uniform routing,
-# k distinct experts per token. Then check it against a simulation.
+# Write `touched(e, k, t)`: the expected number of distinct experts one layer reads for $t$ tokens, uniform routing,
+# $k$ distinct experts per token. Then check it against a simulation.
 
 # %% exercise
 def touched(e, k, t):
@@ -107,7 +111,7 @@ print(f"✅ E(1-(1-k/E)^T): DeepSeek-V3 touches {touched(256, 8, 32):.1f} of 256
 
 # %% [markdown]
 # ## Exercise 3.2 — when is the saving gone?
-# Solve the closed form for T. Set `t_mixtral` to the smallest batch at which Mixtral touches at least 7.5 of 8
+# Solve the closed form for $T$. Set `t_mixtral` to the smallest batch at which Mixtral touches at least 7.5 of 8
 # experts per layer, and `t_qwen` to the smallest at which Qwen3-30B-A3B touches at least 120 of 128.
 
 # %% exercise
@@ -164,9 +168,9 @@ print(f"✅ predicted {predicted:.0f}, bisection says {actual:,} - the ratio car
 
 # %% [markdown]
 # ## Exercise 3.5 — rows per expert
-# Inside the step, each touched expert runs a GEMM on the rows routed to it: on average `batch × k ÷ E` rows. That
-# row count is the expert GEMM's arithmetic intensity (FLOP per weight byte at 2-byte weights). For batch 256, set
-# `rows` to a dict of rows per expert for Mixtral (8, 2), Qwen3 (128, 8) and DeepSeek-V3 (256, 8), and
+# Inside the step, each touched expert runs a GEMM on the rows routed to it: on average $\text{batch} \times k \div E$
+# rows. That row count is the expert GEMM's arithmetic intensity (FLOP per weight byte at 2-byte weights). For batch
+# 256, set `rows` to a dict of rows per expert for Mixtral (8, 2), Qwen3 (128, 8) and DeepSeek-V3 (256, 8), and
 # `batch_for_ridge` to the batch each needs for the average expert to see 206 rows (the H200's ridge).
 
 # %% exercise
@@ -185,7 +189,7 @@ print("✅ each expert sees only B·k/E of the batch: DeepSeek-V3 needs ~6,600 t
 # %% [markdown]
 # ## Exercise 3.6 — skew changes the bytes
 # Hot experts are a workload property: a code-heavy batch favours a few experts. Model it with Zipf popularity
-# s = 1.0 (simulated) for Qwen3-30B-A3B at batch 16, 1K context: set `skew_touched` from `T.touched_mc`, then
+# $s = 1.0$ (simulated) for Qwen3-30B-A3B at batch 16, 1K context: set `skew_touched` from `T.touched_mc`, then
 # `speedup` = uniform step time ÷ skewed step time (`T.decode_step(..., touched=skew_touched)`).
 
 # %% exercise
@@ -203,13 +207,15 @@ print(f"✅ skew: {skew_touched:.1f} experts touched instead of {T.experts_touch
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Per token an MoE computes like its active parameters, but a decode step streams
-# every expert that *any* token in the batch picked. With uniform routing that is E(1 − (1 − k/E)^T) experts per
+# every expert that *any* token in the batch picked. With uniform routing that is $E(1 - (1 - k/E)^T)$ experts per
 # layer, so Mixtral is 13B-like at batch 1 and streams all 93 GB by batch 16, and fine-grained models like
-# Qwen3-30B-A3B hold the saving a bit longer. Throughput per step still improves with batch, but the batch at
-# which decode becomes compute-bound scales with total ÷ active: about 750 for Mixtral and 2,000 for Qwen3 on an
-# H200, versus 200 for a dense 8B, because each expert only sees B·k/E rows. So MoE wants big batches — which on
-# one GPU run into KV memory, and across GPUs means expert parallelism. The KV cache is whatever the attention
-# says; MoE does not change it, prefix caching works the same, and at long context the KV share climbs back."
+# Qwen3-30B-A3B hold the saving a bit longer.
+#
+# "Throughput per step still improves with batch, but the batch at which decode becomes compute-bound scales with
+# total ÷ active: about 750 for Mixtral and 2,000 for Qwen3 on an H200, versus 200 for a dense 8B, because each
+# expert only sees $B \cdot k/E$ rows. So MoE wants big batches — which on one GPU run into KV memory, and across GPUs
+# means expert parallelism. The KV cache is whatever the attention says; MoE does not change it, prefix caching
+# works the same, and at long context the KV share climbs back."
 #
 # **Drill questions**
 # 1. *Mixtral at batch 1 vs batch 64: how do the bytes per step compare?* — 25.6 GB vs 101.7 GB on the roofline:

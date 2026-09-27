@@ -14,23 +14,25 @@ The key thing to internalize: **this is not an approximation.** It is a differen
 
 ## 1. What attention actually computes
 
-You have a sequence of `N` tokens. Each token is projected into three vectors of dimension `d`:
+You have a sequence of $N$ tokens. Each token is projected into three vectors of dimension $d$:
 
 - **Q** (query) — "what am I looking for?"
 - **K** (key) — "what do I contain?"
 - **V** (value) — "what do I pass along if selected?"
 
-Stack them and you get three matrices of shape `N × d`. The computation is three steps:
+Stack them and you get three matrices of shape $N \times d$. The computation is three steps:
 
-```
-S = Q @ Kᵀ           # N×N   raw similarity scores, every token against every token
-P = softmax(S)       # N×N   normalize each row into a probability distribution
-O = P @ V            # N×d   each output is a weighted average of value vectors
-```
+$$
+\begin{aligned}
+S &= QK^{\top} && N \times N && \text{raw similarity scores, every token against every token} \\
+P &= \operatorname{softmax}(S) && N \times N && \text{normalize each row into a probability distribution} \\
+O &= PV && N \times d && \text{each output is a weighted average of value vectors}
+\end{aligned}
+$$
 
-That's it. (Real implementations scale `S` by `1/√d` and often apply a causal mask so a token can't attend to the future, but the shape of the problem is unchanged.)
+That's it. (Real implementations scale $S$ by $1/\sqrt{d}$ and often apply a causal mask so a token can't attend to the future, but the shape of the problem is unchanged.)
 
-Note the shapes. `Q`, `K`, `V`, and `O` are all `N × d`, and `d` is small — typically 64 or 128 per attention head. But `S` and `P` are `N × N`. At `N = 8192`, `S` in fp16 is 128 MB **per head, per sequence in the batch**. With 32 heads and a batch of 8, that's 32 GB of intermediates for one layer. This is the whole problem in one sentence.
+Note the shapes. $Q$, $K$, $V$, and $O$ are all $N \times d$, and $d$ is small — typically 64 or 128 per attention head. But $S$ and $P$ are $N \times N$. At $N$ = 8192, `S` in fp16 is 128 MB **per head, per sequence in the batch**. With 32 heads and a batch of 8, that's 32 GB of intermediates for one layer. This is the whole problem in one sentence.
 
 ---
 
@@ -62,40 +64,40 @@ The ratio has gotten worse every generation, because compute has scaled faster t
 
 The three-line version above, executed literally, does this:
 
-1. Compute `S = Q @ Kᵀ`. Write `N×N` floats to HBM.
-2. Read `S` back from HBM. Compute softmax. Write `P` (`N×N`) to HBM.
-3. Read `P` back from HBM. Compute `P @ V`. Write `O`.
+1. Compute $S = QK^{\top}$. Write $N \times N$ floats to HBM.
+2. Read $S$ back from HBM. Compute softmax. Write $P$ ($N \times N$) to HBM.
+3. Read $P$ back from HBM. Compute ${PV}$. Write $O$.
 
-Let's price it out for one head at `N = 4096`, `d = 64`, fp16:
+Let's price it out for one head at $N$ = 4096, $d$ = 64, fp16:
 
-- **Useful work:** two matmuls, `2 × (2·N²·d)` ≈ **4.3 GFLOP**
-- **Memory traffic:** `Q,K,V` are only 1.6 MB total, but `S` and `P` cost 33.5 MB each and get written and read — roughly **134 MB** of HBM traffic
+- **Useful work:** two matmuls, $2 \times (2 \cdot N^2 \cdot d)$ ≈ **4.3 GFLOP**
+- **Memory traffic:** `Q,K,V` are only 1.6 MB total, but $S$ and $P$ cost 33.5 MB each and get written and read — roughly **134 MB** of HBM traffic
 
 Arithmetic intensity: `4.3e9 / 134e6` ≈ **32 FLOPs per byte**. Against a threshold of ~300, this kernel is running at roughly a tenth of the machine's capability. It is almost entirely memory-bound.
 
-And it gets worse in the details. The two matmuls are efficient tensor-core work. But softmax, masking, dropout, and scaling are *elementwise* operations — one or two FLOPs per element — so they have terrible arithmetic intensity on their own. In a naive implementation each of them is a separate kernel launch that streams the entire `N×N` matrix out of HBM and back. The matmuls aren't the problem. The trips to memory between them are.
+And it gets worse in the details. The two matmuls are efficient tensor-core work. But softmax, masking, dropout, and scaling are *elementwise* operations — one or two FLOPs per element — so they have terrible arithmetic intensity on their own. In a naive implementation each of them is a separate kernel launch that streams the entire $N \times N$ matrix out of HBM and back. The matmuls aren't the problem. The trips to memory between them are.
 
-There's a second, harder failure: **you may simply run out of memory.** Peak memory is `O(N²)`. Double the context and you quadruple the footprint. This is the wall that long-context work runs into first.
+There's a second, harder failure: **you may simply run out of memory.** Peak memory is $O(N^2)$. Double the context and you quadruple the footprint. This is the wall that long-context work runs into first.
 
 ---
 
 ## 4. The idea: tile it, and never write S
 
-The fix is the standard one for memory-bound problems — *fusion* and *tiling*. Don't run softmax as a separate pass over a matrix in HBM. Chop the problem into blocks small enough to fit in SRAM, and do the whole score → softmax → weighted-sum chain on each block while it's still on-chip. `S` and `P` exist only as small tiles in fast memory and are discarded as soon as they're consumed.
+The fix is the standard one for memory-bound problems — *fusion* and *tiling*. Don't run softmax as a separate pass over a matrix in HBM. Chop the problem into blocks small enough to fit in SRAM, and do the whole score → softmax → weighted-sum chain on each block while it's still on-chip. $S$ and $P$ exist only as small tiles in fast memory and are discarded as soon as they're consumed.
 
-Concretely: split `Q` into row blocks of size `Bᵣ × d` and `K`, `V` into blocks of size `Bᶜ × d`, sized so a few of them fit in a single SM's ~200 KB of shared memory. For each `Q` block, loop over all `K`/`V` blocks, accumulating into an output block.
+Concretely: split $Q$ into row blocks of size $B_r \times d$ and $K$, $V$ into blocks of size $B_c \times d$, sized so a few of them fit in a single SM's ~200 KB of shared memory. For each $Q$ block, loop over all $K$/$V$ blocks, accumulating into an output block.
 
 This works fine for the matmuls, which decompose into blocks naturally. **The obstacle is softmax.**
 
 Softmax normalizes across an entire row:
 
-```
-softmax(s)ᵢ = exp(sᵢ) / Σⱼ exp(sⱼ)
-```
+$$
+\operatorname{softmax}(s)_i = \frac{\exp(s_i)}{\sum_j \exp(s_j)}
+$$
 
-That denominator sums over the whole row — all `N` entries. If you're holding a block of 128 columns, you can't compute it. You'd seem to need a full pass over the row before you can emit any output for it, which is exactly the thing you were trying to avoid.
+That denominator sums over the whole row — all $N$ entries. If you're holding a block of 128 columns, you can't compute it. You'd seem to need a full pass over the row before you can emit any output for it, which is exactly the thing you were trying to avoid.
 
-(There's also a numerical wrinkle: `exp` of a large score overflows fp16 immediately, so every real implementation subtracts the row max first — `exp(sᵢ - max)`. Mathematically identical, numerically essential. And now you need the row *max* up front too, which is a second global reduction.)
+(There's also a numerical wrinkle: $\exp$ of a large score overflows fp16 immediately, so every real implementation subtracts the row max first — $\exp(s_i - \max)$. Mathematically identical, numerically essential. And now you need the row *max* up front too, which is a second global reduction.)
 
 ---
 
@@ -105,22 +107,24 @@ The resolution is to compute softmax **incrementally**, maintaining running stat
 
 For each row of the output, carry three running values:
 
-- `m` — the largest score seen so far
-- `ℓ` — the running sum of `exp(score − m)`
-- `O` — the running *unnormalized* output accumulator
+- $m$ — the largest score seen so far
+- $\ell$ — the running sum of $\exp(\text{score} - m)$
+- $O$ — the running *unnormalized* output accumulator
 
-When a new block of scores `S_j` arrives:
+When a new block of scores $S_j$ arrives:
 
-```
-m_new = max(m_old, rowmax(S_j))
-α     = exp(m_old − m_new)                          # correction factor
-ℓ_new = α · ℓ_old + rowsum(exp(S_j − m_new))
-O_new = α · O_old + exp(S_j − m_new) @ V_j
-```
+$$
+\begin{aligned}
+m_{\text{new}} &= \max\big(m_{\text{old}},\ \operatorname{rowmax}(S_j)\big) \\
+\alpha &= \exp(m_{\text{old}} - m_{\text{new}}) && \text{correction factor} \\
+\ell_{\text{new}} &= \alpha \cdot \ell_{\text{old}} + \operatorname{rowsum}\big(\exp(S_j - m_{\text{new}})\big) \\
+O_{\text{new}} &= \alpha \cdot O_{\text{old}} + \exp(S_j - m_{\text{new}}) \, V_j
+\end{aligned}
+$$
 
-After the last block, divide once: `O = O_new / ℓ_new`.
+After the last block, divide once: $O = O_{\text{new}} / \ell_{\text{new}}$.
 
-The correction factor `α` is the entire idea. If a later block contains a bigger score, everything accumulated so far was exponentiated against a stale, too-small max — so it's off by exactly a factor of `exp(m_old − m_new)`. Multiply through and the books balance.
+The correction factor $\alpha$ is the entire idea. If a later block contains a bigger score, everything accumulated so far was exponentiated against a stale, too-small max — so it's off by exactly a factor of $\exp(m_{\text{old}} - m_{\text{new}})$. Multiply through and the books balance.
 
 ### A worked example
 
@@ -143,28 +147,28 @@ O_new = 0.1353 × (0.1353·v₁ + 1.0·v₂) + 1.0·v₃ + 0.0498·v₄
 
 Divide by `ℓ_new = 1.2034` and you recover `[0.0152, 0.1125, 0.8310, 0.0414]` exactly.
 
-No approximation anywhere — just deferred normalization plus bookkeeping. The `N×N` score matrix never existed in full.
+No approximation anywhere — just deferred normalization plus bookkeeping. The $N \times N$ score matrix never existed in full.
 
 ---
 
 ## 6. The backward pass: recompute instead of store
 
-Training needs gradients, and the textbook backward pass for attention needs `P` — the very `N×N` matrix we just refused to build. Storing it would put the quadratic memory cost straight back.
+Training needs gradients, and the textbook backward pass for attention needs $P$ — the very $N \times N$ matrix we just refused to build. Storing it would put the quadratic memory cost straight back.
 
-FlashAttention instead **recomputes** it. During the forward pass it saves only `O` (`N×d`) and the final softmax statistics per row, packed as the log-sum-exp `L = m + log(ℓ)` — that's `N` numbers, not `N²`. In the backward pass it reloads `Q`, `K`, `V` tiles into SRAM and reconstructs each `S` and `P` tile on the fly, using the saved `L` to normalize correctly without a second reduction pass.
+FlashAttention instead **recomputes** it. During the forward pass it saves only $O$ ($N \times d$) and the final softmax statistics per row, packed as the log-sum-exp $L = m + \log(\ell)$ — that's $N$ numbers, not $N^2$. In the backward pass it reloads $Q$, $K$, $V$ tiles into SRAM and reconstructs each $S$ and $P$ tile on the fly, using the saved $L$ to normalize correctly without a second reduction pass.
 
-This costs *more* FLOPs than storing `P` would. It is still faster, because the kernel was never compute-bound to begin with — you're spending surplus arithmetic to buy back scarce bandwidth. It's the same logic as gradient checkpointing, applied surgically at the level of a single fused kernel rather than whole layers.
+This costs *more* FLOPs than storing $P$ would. It is still faster, because the kernel was never compute-bound to begin with — you're spending surplus arithmetic to buy back scarce bandwidth. It's the same logic as gradient checkpointing, applied surgically at the level of a single fused kernel rather than whole layers.
 
 ---
 
 ## 7. What you get
 
-- **Memory:** `O(N)` extra storage per head instead of `O(N²)`. This is the change that unlocks long context.
-- **HBM traffic:** roughly `Θ(N²d²/M)` accesses (`M` = SRAM size) versus `Θ(N² + Nd)` — the original paper measured up to 9× fewer accesses on GPT-2 shapes.
+- **Memory:** ${O(N)}$ extra storage per head instead of $O(N^2)$. This is the change that unlocks long context.
+- **HBM traffic:** roughly $\Theta(N^2 d^2/M)$ accesses ($M$ = SRAM size) versus $\Theta(N^2 + Nd)$ — the original paper measured up to 9× fewer accesses on GPT-2 shapes.
 - **Wall clock:** typically 2–4× on the attention layer, more at long sequence lengths.
 - **Exactness:** bit-for-bit-equivalent mathematics. Floating-point non-associativity means results won't be *bitwise* identical to a naive implementation (or between different tile configurations), but there's no approximation error in the algorithmic sense.
 
-That last point deserves emphasis. Around 2020–2021 there was a wave of "efficient attention" work — Linformer, Performer, sparse and low-rank schemes — that reduced the `O(N²)` cost by *changing the computation*, accepting some quality loss, and often failing to deliver real wall-clock wins because they traded matmuls for memory-bound gather operations. FlashAttention won by leaving the math alone and fixing the memory schedule instead. The lesson generalized well beyond attention.
+That last point deserves emphasis. Around 2020–2021 there was a wave of "efficient attention" work — Linformer, Performer, sparse and low-rank schemes — that reduced the $O(N^2)$ cost by *changing the computation*, accepting some quality loss, and often failing to deliver real wall-clock wins because they traded matmuls for memory-bound gather operations. FlashAttention won by leaving the math alone and fixing the memory schedule instead. The lesson generalized well beyond attention.
 
 ---
 
@@ -172,11 +176,17 @@ That last point deserves emphasis. Around 2020–2021 there was a wave of "effic
 
 **FlashAttention-1** (Dao et al., 2022) — tiling, online softmax, backward recomputation. Established the approach.
 
-**FlashAttention-2** (2023) — mostly a work-partitioning rewrite. Three changes mattered: swapping the loop order so the outer loop runs over `Q` blocks (each output block is then owned by one thread block, no cross-block accumulation); parallelizing over the sequence dimension, not just batch × heads, which matters when batch is small and `N` is large; and minimizing non-matmul FLOPs. That last one is subtler than it sounds — on an A100, tensor-core matmul runs at 312 TFLOP/s while general FP32 arithmetic runs at 19.5, so a non-matmul FLOP costs ~16× a matmul FLOP. Deferring the rescaling division to the end of the loop instead of doing it per block is worth real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
+**FlashAttention-2** (2023) — mostly a work-partitioning rewrite. Three changes mattered: swapping the loop order so the outer loop runs over $Q$ blocks (each output block is then owned by one thread block, no cross-block accumulation); parallelizing over the sequence dimension, not just batch × heads, which matters when batch is small and $N$ is large; and minimizing non-matmul FLOPs.
+
+That last one is subtler than it sounds — on an A100, tensor-core matmul runs at 312 TFLOP/s while general FP32 arithmetic runs at 19.5, so a non-matmul FLOP costs ~16× a matmul FLOP. Deferring the rescaling division to the end of the loop instead of doing it per block is worth real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
 
 **FlashAttention-3** (2024) — Hopper-specific. Exploits asynchrony: TMA for background global↔shared copies, warp specialization into producer (loading) and consumer (computing) roles, and a ping-pong schedule that overlaps the softmax of one block with the matmul of another so the slow exponential units hide behind the tensor cores. Adds FP8 with incoherent processing (a Hadamard rotation to spread outliers before quantization). Reached roughly 740 TFLOP/s at 75% utilization on H100 (paper figure, verify).
 
-**FlashAttention-4** (paper published March 2026) — Blackwell. The framing is what the authors call **asymmetric hardware scaling**: tensor core throughput doubles while other functional units — shared memory bandwidth, exponential units — scale more slowly or not at all. Dense BF16 tensor core throughput went from roughly 1 PFLOPS to 2.25 PFLOPS (datasheet, verify), and the hardware added new tensor core instructions (TCGEN05), a new memory space called Tensor Memory for tensor core intermediates, and a fully asynchronous MMA execution model. So the bottleneck moved, and the kernel had to move with it. The responses are worth knowing because they're so specific: a software emulation of the exponential via polynomial approximation on the FMA units, to relieve pressure on the dedicated exponential hardware, plus conditional online softmax rescaling; and on the backward pass, storing intermediates in tensor memory to relieve shared-memory traffic combined with Blackwell's 2-CTA MMA mode. Two query tiles of 128 tokens each are computed per CTA and alternated in a ping-pong schedule. It's also written entirely in CuTe-DSL embedded in Python, with 20–30× faster compile times than C++ template-based approaches (paper figure, verify) — anyone who has waited on a `flash-attn` build will appreciate that. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, 71% utilization, 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
+**FlashAttention-4** (paper published March 2026) — Blackwell. The framing is what the authors call **asymmetric hardware scaling**: tensor core throughput doubles while other functional units — shared memory bandwidth, exponential units — scale more slowly or not at all. Dense BF16 tensor core throughput went from roughly 1 PFLOPS to 2.25 PFLOPS (datasheet, verify), and the hardware added new tensor core instructions (TCGEN05), a new memory space called Tensor Memory for tensor core intermediates, and a fully asynchronous MMA execution model. So the bottleneck moved, and the kernel had to move with it.
+
+The responses are worth knowing because they're so specific: a software emulation of the exponential via polynomial approximation on the FMA units, to relieve pressure on the dedicated exponential hardware, plus conditional online softmax rescaling; and on the backward pass, storing intermediates in tensor memory to relieve shared-memory traffic combined with Blackwell's 2-CTA MMA mode. Two query tiles of 128 tokens each are computed per CTA and alternated in a ping-pong schedule.
+
+It's also written entirely in CuTe-DSL embedded in Python, with 20–30× faster compile times than C++ template-based approaches (paper figure, verify) — anyone who has waited on a `flash-attn` build will appreciate that. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, 71% utilization, 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
 
 One instructive footnote from the FA4 rollout (verify): for *inference decode*, FlashAttention-4 was initially slower than FlashAttention-2 on B200s until split-KV was ported over. Generating one token at a time is a different regime — a single query row against a long KV cache leaves most SMs idle unless you split along the key dimension and reduce afterwards. Worth remembering that "the fastest attention kernel" is always shape-dependent.
 
@@ -199,7 +209,7 @@ The online-softmax accumulator turned out to be a reusable primitive. Once you k
 
 **Things that trip people up:**
 
-- It reduces *memory traffic*, not FLOPs. The arithmetic is still `O(N²d)`. If someone tells you FlashAttention made attention linear, they're wrong.
+- It reduces *memory traffic*, not FLOPs. The arithmetic is still $O(N^2 d)$. If someone tells you FlashAttention made attention linear, they're wrong.
 - Causal masking is worth roughly 2×, because fully-masked blocks above the diagonal can be skipped entirely. Make sure the flag is actually set.
 - The fast paths want fp16/bf16 and constrained head dimensions. Silent fallback to a slower kernel is a common cause of "why didn't this help?"
 - You cannot inspect the attention matrix afterward — it was never materialized. If you need attention maps for interpretability or visualization, you'll have to recompute them separately, at full quadratic cost.

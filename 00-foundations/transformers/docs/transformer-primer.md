@@ -10,7 +10,7 @@
 
 Language, code, protein sequences, audio: all are sequences of discrete symbols whose meaning depends on what surrounds them. "Bank" on its own is ambiguous; "bank" three words after "river" is not. A sequence model's job is to turn each symbol into a vector that captures what it means *here*, given everything around it.
 
-Until 2017 the standard answer was the recurrent network (RNN, LSTM): read tokens one at a time, carrying a hidden state forward. Two problems. Information from far back has to survive many sequential updates, and it degrades, so long-range dependencies were hard to learn. More decisively, step *t* can't begin until step *t−1* finishes, so training can't parallelize across the sequence. GPUs are throughput machines; a model that forces serial computation wastes them. Convolutions parallelize, but each layer only sees a fixed local window.
+Until 2017 the standard answer was the recurrent network (RNN, LSTM): read tokens one at a time, carrying a hidden state forward. Two problems. Information from far back has to survive many sequential updates, and it degrades, so long-range dependencies were hard to learn. More decisively, step $t$ can't begin until step ${t-1}$ finishes, so training can't parallelize across the sequence. GPUs are throughput machines; a model that forces serial computation wastes them. Convolutions parallelize, but each layer only sees a fixed local window.
 
 The Transformer (Vaswani et al., 2017, "Attention Is All You Need") dropped recurrence entirely. Every token looks directly at every other token in one step, and every position is computed in parallel. That is the whole trick. Everything else in the architecture is scaffolding that makes the trick trainable at scale.
 
@@ -22,40 +22,46 @@ A dictionary lookup takes a **query**, compares it against **keys**, and returns
 
 Every token derives three vectors from its current representation, through three learned linear maps:
 
-- **Query (Q)** — what am I looking for?
-- **Key (K)** — what do I contain, for matching purposes?
-- **Value (V)** — what do I hand over if someone attends to me?
+- **Query ($Q$)** — what am I looking for?
+- **Key ($K$)** — what do I contain, for matching purposes?
+- **Value ($V$)** — what do I hand over if someone attends to me?
 
 Take "it" in *"The animal didn't cross the street because it was too tired."* A useful query for "it" would encode something like "pronoun, needs an antecedent." The key for "animal" matches that query well; the key for "street" does not. "it" receives a blend of values weighted heavily toward "animal", and its representation now carries "refers to the animal." Nobody programs this; it emerges from training.
 
 ### 2.2 The formula, term by term
 
-For n tokens with query, key, and value matrices Q, K, V (each n × d_k, where d_k is the per-head dimension):
+For $n$ tokens with query, key, and value matrices $Q$, $K$, $V$ (each $n \times d_k$, where $d_k$ is the per-head dimension):
 
-    Attention(Q, K, V) = softmax( Q Kᵀ / √d_k ) · V
+$$
+\operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) \cdot V
+$$
 
-- **Q Kᵀ** is an n × n matrix of dot products: the raw compatibility of every query with every key. Row *i* says how much token *i* wants each token *j*.
-- **/ √d_k** keeps those dot products from growing with dimension. Dot products of random d_k-dimensional vectors have variance proportional to d_k; unscaled, the softmax saturates toward one-hot outputs and gradients vanish. A small detail that matters a lot in practice.
+- **$QK^\top$** is an $n \times n$ matrix of dot products: the raw compatibility of every query with every key. Row $i$ says how much token $i$ wants each token $j$.
+- **$/\sqrt{d_k}$** keeps those dot products from growing with dimension. Dot products of random $d_k$-dimensional vectors have variance proportional to $d_k$; unscaled, the softmax saturates toward one-hot outputs and gradients vanish. A small detail that matters a lot in practice.
 - **softmax**, applied row-wise, turns each row into positive weights summing to 1. This is what makes the lookup *soft*: an average, not a selection.
-- **· V** takes the weighted average of value vectors. Token *i*'s output is Σⱼ wᵢⱼ · vⱼ.
+- **$\cdot V$** takes the weighted average of value vectors. Token $i$'s output is $\sum_j w_{ij} \cdot v_j$.
 
 ### 2.3 A toy calculation
 
-Three tokens, two-dimensional vectors, scaling omitted for readability. Token 3's query is q = [2, 0]. The keys are k₁ = [1, 0], k₂ = [0, 1], k₃ = [0, 0]; the values are v₁ = [1, 0], v₂ = [0, 1], v₃ = [1, 1].
+Three tokens, two-dimensional vectors, scaling omitted for readability. Token 3's query is $q$ = [2, 0]. The keys are $k_1$ = [1, 0], $k_2$ = [0, 1], $k_3$ = [0, 0]; the values are $v_1$ = [1, 0], $v_2$ = [0, 1], $v_3$ = [1, 1].
 
-    scores  = [q·k₁, q·k₂, q·k₃] = [2, 0, 0]
-    weights = softmax([2, 0, 0]) ≈ [0.79, 0.11, 0.11]
-    output  = 0.79·v₁ + 0.11·v₂ + 0.11·v₃ ≈ [0.89, 0.21]
+$$
+\begin{aligned}
+\text{scores} &= [q \cdot k_1,\ q \cdot k_2,\ q \cdot k_3] = [2, 0, 0] \\
+\text{weights} &= \operatorname{softmax}([2, 0, 0]) \approx [0.79, 0.11, 0.11] \\
+\text{output} &= 0.79 \cdot v_1 + 0.11 \cdot v_2 + 0.11 \cdot v_3 \approx [0.89, 0.21]
+\end{aligned}
+$$
 
-Token 3 ends up mostly holding token 1's value, with a little of everything else mixed in. Two things to notice. The weights are a convex combination, so attention averages values rather than amplifying any one. And the output lives in value space: what a token *receives* is determined by W_V, not by the attended token's raw embedding.
+Token 3 ends up mostly holding token 1's value, with a little of everything else mixed in. Two things to notice. The weights are a convex combination, so attention averages values rather than amplifying any one. And the output lives in value space: what a token *receives* is determined by $W_V$, not by the attended token's raw embedding.
 
 ### 2.4 Self-attention and cross-attention
 
-When Q, K, V all come from the same sequence it's **self-attention**: tokens contextualize each other. When Q comes from one sequence and K, V from another (a decoder reading an encoder's output; a language model reading image features), it's **cross-attention**. Same math, different inputs. Decoder-only LLMs use self-attention only.
+When $Q$, $K$, $V$ all come from the same sequence it's **self-attention**: tokens contextualize each other. When $Q$ comes from one sequence and $K$, $V$ from another (a decoder reading an encoder's output; a language model reading image features), it's **cross-attention**. Same math, different inputs. Decoder-only LLMs use self-attention only.
 
 ## 3. Anatomy of a Transformer block
 
-A Transformer is a stack of L identical blocks. Each block has two sub-layers, each wrapped in a normalization and a residual connection:
+A Transformer is a stack of $L$ identical blocks. Each block has two sub-layers, each wrapped in a normalization and a residual connection:
 
 ```
 token ids
@@ -78,29 +84,29 @@ x : the residual stream, shape (n tokens × d_model)
 final Norm ──► unembed (linear) ──► softmax ──► P(next token | context)
 ```
 
-The matrix flowing through has shape (n tokens × d_model). The width d_model is 768 for GPT-2 small, 4096 for a 7B-class model, 12,288 for GPT-3 175B. Every block reads this matrix and adds an update back into it.
+The matrix flowing through has shape ($n$ tokens × $d_{\text{model}}$). The width $d_{\text{model}}$ is 768 for GPT-2 small, 4096 for a 7B-class model, 12,288 for GPT-3 175B. Every block reads this matrix and adds an update back into it.
 
 ### 3.1 Multi-head attention
 
-One attention operation computes one n × n pattern of relationships. But a token has several kinds of relationship worth tracking at once — syntactic (what's my subject?), positional (what came right before me?), semantic (which earlier word means the same as me?). So instead of one attention with d_model-dimensional Q/K/V, a block runs h **heads** in parallel, each of dimension d_head = d_model / h, concatenates their outputs, and applies a final linear map W_O.
+One attention operation computes one $n \times n$ pattern of relationships. But a token has several kinds of relationship worth tracking at once — syntactic (what's my subject?), positional (what came right before me?), semantic (which earlier word means the same as me?). So instead of one attention with $d_{\text{model}}$-dimensional $Q$/$K$/$V$, a block runs $h$ **heads** in parallel, each of dimension $d_{\text{head}} = d_{\text{model}} / h$, concatenates their outputs, and applies a final linear map $W_O$.
 
 GPT-2 small: 12 heads of 64 dimensions. Llama-2 7B: 32 heads of 128. Head dimension is almost always 64 or 128; what scales with model size is the number of heads.
 
-**Practitioner note.** Heads cost nothing extra. One weight matrix of shape (d_model, 3·d_model) produces Q, K, V for all heads in a single matmul, and a reshape splits them. Attention has 4·d_model² parameters per block (W_Q, W_K, W_V, W_O) regardless of h.
+**Practitioner note.** Heads cost nothing extra. One weight matrix of shape $(d_{\text{model}}, 3 \cdot d_{\text{model}})$ produces $Q$, $K$, $V$ for all heads in a single matmul, and a reshape splits them. Attention has $4 \cdot d_{\text{model}}^2$ parameters per block ($W_Q$, $W_K$, $W_V$, $W_O$) regardless of $h$.
 
 ### 3.2 The MLP
 
-After attention, each token's vector passes independently through a two-layer feed-forward network: expand to about 4·d_model (or ~2.7× with modern gated variants), apply a nonlinearity (GELU, or SwiGLU today), project back down to d_model. Same weights at every position; no interaction between positions.
+After attention, each token's vector passes independently through a two-layer feed-forward network: expand to about $4 \cdot d_{\text{model}}$ (or ~2.7× with modern gated variants), apply a nonlinearity (GELU, or SwiGLU today), project back down to $d_{\text{model}}$. Same weights at every position; no interaction between positions.
 
 This sub-layer is easy to overlook and holds roughly two-thirds of the parameters. Interpretability work suggests it's where much of the factual knowledge lives: the up-projection asks a large bank of "is pattern X present?" questions, the nonlinearity gates them, and the down-projection writes the consequences back into the token's representation. A useful shorthand: **attention decides where to look; the MLP decides what it means.**
 
 ### 3.3 Residual connections and normalization
 
-Each sub-layer's output is *added* to its input rather than replacing it: x ← x + f(x). Two consequences.
+Each sub-layer's output is *added* to its input rather than replacing it: $x \leftarrow x + f(x)$. Two consequences.
 
 First, deep stacks become trainable. Gradients flow straight back through the additions, so a 100-block model avoids the vanishing gradients that limited deep networks before ResNets.
 
-Second — and this is the mental model experienced practitioners actually use — there is a single **residual stream** running through the whole network, and each block reads from it and writes a small increment. The stream is a shared workspace, d_model wide, in which a token's representation accumulates. Early blocks tend to write syntactic and positional features, later blocks more abstract ones, and the final representation is the sum of every block's contribution.
+Second — and this is the mental model experienced practitioners actually use — there is a single **residual stream** running through the whole network, and each block reads from it and writes a small increment. The stream is a shared workspace, $d_{\text{model}}$ wide, in which a token's representation accumulates. Early blocks tend to write syntactic and positional features, later blocks more abstract ones, and the final representation is the sum of every block's contribution.
 
 **Normalization** (LayerNorm, or more often now RMSNorm) rescales each token's vector to unit scale before each sub-layer. It keeps activations in a numerically comfortable range and makes training far less sensitive to learning rate. The original paper normalized *after* the residual addition ("post-norm"); nearly everything since GPT-2 normalizes *before* the sub-layer ("pre-norm"), which trains stably at large scale without delicate warmup. This is one of the few architectural changes since 2017 that everyone adopted.
 
@@ -111,7 +117,7 @@ A Transformer block does exactly two things:
 1. **Attention moves information between positions.** It is the only place tokens interact: it reads from other tokens' residual streams and writes into this one.
 2. **The MLP processes information within a position.** It transforms what's in this token's stream without looking at any other.
 
-Stack L blocks and every token gets L rounds of "gather context, then think about it." That is the architecture. The rest of this document covers how sequences get in and out, and what happens when you train and run it.
+Stack $L$ blocks and every token gets $L$ rounds of "gather context, then think about it." That is the architecture. The rest of this document covers how sequences get in and out, and what happens when you train and run it.
 
 ## 4. Getting sequences in and out
 
@@ -123,7 +129,7 @@ Models don't see characters or words; they see **tokens** from a fixed vocabular
 
 ### 4.2 Embeddings
 
-A learned table of shape (vocab × d_model) maps each token id to its initial vector — the starting contents of that token's residual stream. At the output, a linear map of shape (d_model × vocab), the "unembedding" or LM head, turns the final stream into a score (logit) for every vocabulary entry; softmax turns those into next-token probabilities. Some models share the two matrices (GPT-2, Gemma); the Llama family keeps them separate.
+A learned table of shape $(\text{vocab} \times d_{\text{model}})$ maps each token id to its initial vector — the starting contents of that token's residual stream. At the output, a linear map of shape $(d_{\text{model}} \times \text{vocab})$, the "unembedding" or LM head, turns the final stream into a score (logit) for every vocabulary entry; softmax turns those into next-token probabilities. Some models share the two matrices (GPT-2, Gemma); the Llama family keeps them separate.
 
 ### 4.3 Position: attention has no sense of order
 
@@ -133,7 +139,7 @@ So position has to be injected. Three generations of solutions:
 
 - **Sinusoidal encodings** (original paper): add a fixed vector of sines and cosines at different frequencies to each token's embedding. Unique per position, similar for nearby positions.
 - **Learned absolute positions** (GPT-2, BERT): an embedding table indexed by position. Simple and effective, but undefined beyond the training length.
-- **Rotary position embeddings, RoPE** (Su et al., 2021; used by Llama and most current open models): instead of adding anything to the embedding, rotate each query and key vector by an angle proportional to its position, arranged so that q·k depends only on the *relative* distance between the two tokens. Attention cares about "how far apart", not "where in absolute terms", and encoding that directly extrapolates better to longer contexts (with some frequency-scaling tricks).
+- **Rotary position embeddings, RoPE** (Su et al., 2021; used by Llama and most current open models): instead of adding anything to the embedding, rotate each query and key vector by an angle proportional to its position, arranged so that $q \cdot k$ depends only on the *relative* distance between the two tokens. Attention cares about "how far apart", not "where in absolute terms", and encoding that directly extrapolates better to longer contexts (with some frequency-scaling tricks).
 
 You don't need RoPE's trigonometry. You need to know that position is a design choice bolted onto an order-blind core, and that the choice governs how well a model handles lengths it wasn't trained on.
 
@@ -144,7 +150,7 @@ The original Transformer had an **encoder** (reads the source sentence; every to
 Two simplifications followed:
 
 - **Encoder-only** (BERT, 2018): just the encoder, trained by masking random tokens and predicting them. Every token sees every other, in both directions. Excellent for classification, embeddings, and extraction — anything where you have the whole input and want a representation of it.
-- **Decoder-only** (GPT, 2018 onward): just the decoder's self-attention, trained to predict the next token. Each token may attend only to tokens *before* it, enforced by the **causal mask**: set the score for every future position to −∞ before the softmax, so its weight is exactly zero.
+- **Decoder-only** (GPT, 2018 onward): just the decoder's self-attention, trained to predict the next token. Each token may attend only to tokens *before* it, enforced by the **causal mask**: set the score for every future position to $-\infty$ before the softmax, so its weight is exactly zero.
 
 Decoder-only won the scaling race, and the reason matters. Next-token prediction gives a training signal at *every* position of *every* sequence, with no labels and no distinction between input and output. Any task — translation, summarization, classification, code — can be phrased as "here is some text; continue it." One objective, one architecture, effectively unlimited data. Encoder–decoder models (T5; the systems behind most machine translation and speech recognition) remain excellent when the task has a clear input→output structure. For general-purpose models, decoder-only is the default.
 
@@ -154,21 +160,21 @@ For the rest of this primer, "Transformer" means decoder-only unless stated othe
 
 ### 6.1 The objective
 
-Take a long sequence of tokens. At each position t, the model outputs a distribution over the token at t+1; the loss is cross-entropy against the token that actually came next, averaged over all positions. Pretraining an LLM is running this over trillions of tokens; distillation trains on the same cross-entropy with a larger model's whole next-token distribution as the target instead of the one-hot next token ([distillation primer §2](../../distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence)).
+Take a long sequence of tokens. At each position $t$, the model outputs a distribution over the token at ${t+1}$; the loss is cross-entropy against the token that actually came next, averaged over all positions. Pretraining an LLM is running this over trillions of tokens; distillation trains on the same cross-entropy with a larger model's whole next-token distribution as the target instead of the one-hot next token ([distillation primer §2](../../distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence)).
 
-The causal mask is what makes it efficient. Because position t sees only positions ≤ t, one forward pass over a sequence of length n produces n next-token predictions, each conditioned on exactly the right prefix. You get n training examples for the price of one pass, computed in parallel. (During training the model always sees the true prefix, never its own predictions — "teacher forcing.") An RNN yields the same n examples but computes them serially. This parallelism, more than any representational advantage, is why Transformers scaled and RNNs didn't.
+The causal mask is what makes it efficient. Because position $t$ sees only positions $\le t$, one forward pass over a sequence of length $n$ produces $n$ next-token predictions, each conditioned on exactly the right prefix. You get $n$ training examples for the price of one pass, computed in parallel. (During training the model always sees the true prefix, never its own predictions — "teacher forcing.") An RNN yields the same $n$ examples but computes them serially. This parallelism, more than any representational advantage, is why Transformers scaled and RNNs didn't.
 
 ### 6.2 What "scale" means
 
 Three quantities determine what a pretrained model can do:
 
-- **N**, parameters, set by d_model, L, and vocabulary size.
-- **D**, training tokens.
-- **C**, compute, well approximated by **C ≈ 6·N·D** FLOPs: 2 per parameter per token for the forward pass, 4 for the backward.
+- **$N$**, parameters, set by $d_{\text{model}}$, $L$, and vocabulary size.
+- **$D$**, training tokens.
+- **$C$**, compute, well approximated by **$C \approx 6 \cdot N \cdot D$** FLOPs: 2 per parameter per token for the forward pass, 4 for the backward.
 
 Scaling laws (Kaplan et al., 2020; Hoffmann et al., "Chinchilla", 2022) showed that loss falls as a smooth power law in each, and that for a fixed compute budget there's an optimal balance — roughly 20 tokens per parameter if training cost is all you care about. In practice models are now trained far past that (Llama-3 8B on ~15 trillion tokens, nearly 2,000 per parameter), because a smaller model trained longer is cheaper to *serve*, and serving cost dominates over a model's lifetime.
 
-**Practitioner note.** This is why architecture debates feel low-stakes to people who train large models. The block has changed in details since 2017 (Section 9) but not in kind; nearly all the capability gain came from N, D, data quality, and training procedure. When someone proposes an architectural change, the first question is whether it moves the scaling curve or just the constant in front of it.
+**Practitioner note.** This is why architecture debates feel low-stakes to people who train large models. The block has changed in details since 2017 (Section 9) but not in kind; nearly all the capability gain came from $N$, $D$, data quality, and training procedure. When someone proposes an architectural change, the first question is whether it moves the scaling curve or just the constant in front of it.
 
 ### 6.3 Post-training is not architecture
 
@@ -182,7 +188,7 @@ At inference the model generates one token at a time: run the forward pass on th
 
 ### 7.2 The KV cache, and why decoding is slow
 
-Naively, generating token 1000 means re-running attention over all 1000 tokens, even though the keys and values for tokens 1–999 were already computed last step. So you cache them. Each new token computes only its own Q, K, V; its query attends over the cached K and V of everything before it; its own K and V join the cache.
+Naively, generating token 1000 means re-running attention over all 1000 tokens, even though the keys and values for tokens 1–999 were already computed last step. So you cache them. Each new token computes only its own $Q$, $K$, $V$; its query attends over the cached $K$ and $V$ of everything before it; its own $K$ and $V$ join the cache.
 
 This splits generation into two very different phases:
 
@@ -195,9 +201,9 @@ This single fact explains most of the economics of LLM serving: why output token
 
 ### 7.3 The cost of context
 
-The KV cache is not free. Per token it stores 2 × L × d_model numbers (one key and one value vector per layer). For Llama-2 7B in 16-bit that's about 0.5 MB per token: a 4k-token conversation costs ~2 GB of GPU memory, and 32k would cost ~16 GB, comparable to the weights themselves. That memory competes directly with batch size. Grouped-query attention (Section 9) exists largely to shrink this number.
+The KV cache is not free. Per token it stores $2 \times L \times d_{\text{model}}$ numbers (one key and one value vector per layer). For Llama-2 7B in 16-bit that's about 0.5 MB per token: a 4k-token conversation costs ~2 GB of GPU memory, and 32k would cost ~16 GB, comparable to the weights themselves. That memory competes directly with batch size. Grouped-query attention (Section 9) exists largely to shrink this number.
 
-Attention compute also grows with n² in sequence length. Whether the quadratic term dominates depends on n relative to d_model: for a 4096-wide model, the linear-in-n matmuls (projections and MLP) outweigh the n² score computation until sequences reach the tens of thousands of tokens. What bites earlier is memory — the n × n score matrix per head per layer. FlashAttention (2022) computes attention in tiles without ever materializing that matrix, which is what made long contexts practical. The math didn't change; the memory-access pattern did.
+Attention compute also grows with $n^2$ in sequence length. Whether the quadratic term dominates depends on $n$ relative to $d_{\text{model}}$: for a 4096-wide model, the linear-in-$n$ matmuls (projections and MLP) outweigh the $n^2$ score computation until sequences reach the tens of thousands of tokens. What bites earlier is memory — the $n \times n$ score matrix per head per layer. FlashAttention (2022) computes attention in tiles without ever materializing that matrix, which is what made long contexts practical. The math didn't change; the memory-access pattern did.
 
 ### 7.4 Decoding settings are not the model
 
@@ -211,17 +217,17 @@ Per block, ignoring biases and norms (both negligible):
 
 | Component | Parameters |
 |---|---|
-| Attention: W_Q, W_K, W_V, W_O | 4·d² |
-| MLP with 4× expansion: W_up, W_down | 8·d² |
-| **Per block** | **≈ 12·d²** |
+| Attention: $W_Q$, $W_K$, $W_V$, $W_O$ | $4 \cdot d^2$ |
+| MLP with 4× expansion: $W_{\text{up}}$, $W_{\text{down}}$ | $8 \cdot d^2$ |
+| **Per block** | **$\approx 12 \cdot d^2$** |
 
-Plus embeddings: vocab × d, doubled if input and output embeddings aren't tied.
+Plus embeddings: $\text{vocab} \times d$, doubled if input and output embeddings aren't tied.
 
-Check against GPT-2 small (d = 768, L = 12, vocab = 50,257, tied embeddings, learned positions): 12 × 12 × 768² ≈ 85M, plus 50,257 × 768 ≈ 39M, plus 1,024 × 768 positions ≈ 0.8M. Total ≈ 124M. ✓
+Check against GPT-2 small ($d$ = 768, $L$ = 12, vocab = 50,257, tied embeddings, learned positions): 12 × 12 × 768² ≈ 85M, plus 50,257 × 768 ≈ 39M, plus 1,024 × 768 positions ≈ 0.8M. Total ≈ 124M. ✓
 
-Llama-2 7B (d = 4096, L = 32, SwiGLU MLP with hidden size 11,008 and therefore three matrices, untied embeddings, vocab = 32,000): attention 4 × 4096² ≈ 67M, MLP 3 × 4096 × 11,008 ≈ 135M, so ≈ 202M per block, × 32 ≈ 6.5B, plus 2 × 32,000 × 4096 ≈ 0.26B. Total ≈ 6.7B. ✓
+Llama-2 7B ($d$ = 4096, $L$ = 32, SwiGLU MLP with hidden size 11,008 and therefore three matrices, untied embeddings, vocab = 32,000): attention 4 × 4096² ≈ 67M, MLP 3 × 4096 × 11,008 ≈ 135M, so ≈ 202M per block, × 32 ≈ 6.5B, plus 2 × 32,000 × 4096 ≈ 0.26B. Total ≈ 6.7B. ✓
 
-Doing this from a config file is a real skill. It gives you memory footprint (parameters × bytes per parameter), inference cost (≈ 2·N FLOPs per token, plus attention), and a sense of where a model's capacity sits.
+Doing this from a config file is a real skill. It gives you memory footprint (parameters × bytes per parameter), inference cost ($\approx 2 \cdot N$ FLOPs per token, plus attention), and a sense of where a model's capacity sits.
 
 ### 8.2 Reading a model config
 
@@ -229,10 +235,10 @@ Hugging Face `config.json` fields map directly onto this primer:
 
 | Field | Meaning |
 |---|---|
-| `hidden_size` | d_model, the residual stream width |
-| `num_hidden_layers` | L, number of blocks |
-| `num_attention_heads` | h; head dimension = hidden_size / h |
-| `num_key_value_heads` | K/V heads for GQA; equals h for standard attention |
+| `hidden_size` | $d_{\text{model}}$, the residual stream width |
+| `num_hidden_layers` | $L$, number of blocks |
+| `num_attention_heads` | $h$; head dimension = `hidden_size` / $h$ |
+| `num_key_value_heads` | K/V heads for GQA; equals $h$ for standard attention |
 | `intermediate_size` | MLP hidden width |
 | `vocab_size` | rows in the embedding table |
 | `max_position_embeddings` | context length trained for |
@@ -241,7 +247,7 @@ Hugging Face `config.json` fields map directly onto this primer:
 
 ### 8.3 Shapes through one forward pass
 
-GPT-2 small, one sequence of n tokens:
+GPT-2 small, one sequence of $n$ tokens:
 
     token ids                     (n,)
     embeddings + positions        (n, 768)
@@ -252,7 +258,7 @@ GPT-2 small, one sequence of n tokens:
     block output                  (n, 768)       same shape in and out, × 12 blocks
     logits                        (n, 50257)
 
-The residual stream shape never changes. Every block is a function from (n, d) to (n, d), which is why stacking any number of them is trivial.
+The residual stream shape never changes. Every block is a function from ${(n, d)}$ to ${(n, d)}$, which is why stacking any number of them is trivial.
 
 ## 9. Modern variants and why each exists
 
@@ -266,10 +272,10 @@ The 2017 design is still recognizable in every frontier model. What changed is a
 | SwiGLU / GeGLU | ReLU or GELU MLP | Gated activation reaches lower loss at equal compute; three matrices with ~2.7× hidden width keep the parameter count matched |
 | No bias terms | Biases everywhere | Slightly more stable at scale, fewer parameters, no measurable loss |
 | Grouped-query attention (GQA) | One K/V pair per head | Several query heads share one K/V head; cuts the KV cache 4–8× at small quality cost. Multi-query (MQA) is the extreme: one K/V for all heads |
-| FlashAttention | Naive attention kernel | Identical math; tiled to avoid materializing the n × n matrix; large speed and memory wins |
-| Mixture of Experts (MoE) | One MLP per block | E MLPs per block and a router that sends each token to the top-k; parameters grow ~E× while compute per token barely moves. More knowledge per FLOP, at the cost of memory and serving complexity; worked in depth in [mixture-of-experts](../../mixture-of-experts/PRIMER.md) |
-| Sliding-window attention | Full attention in every layer | Some layers attend only to the last w tokens, often interleaved with full-attention layers; bounds cost on long inputs |
-| Latent / compressed K/V (e.g. multi-head latent attention) | Standard K/V | Project K and V through a low-rank bottleneck; further KV cache reduction |
+| FlashAttention | Naive attention kernel | Identical math; tiled to avoid materializing the $n \times n$ matrix; large speed and memory wins |
+| Mixture of Experts (MoE) | One MLP per block | $E$ MLPs per block and a router that sends each token to the top-$k$; parameters grow ~$E$× while compute per token barely moves. More knowledge per FLOP, at the cost of memory and serving complexity; worked in depth in [mixture-of-experts](../../mixture-of-experts/PRIMER.md) |
+| Sliding-window attention | Full attention in every layer | Some layers attend only to the last $w$ tokens, often interleaved with full-attention layers; bounds cost on long inputs |
+| Latent / compressed K/V (e.g. multi-head latent attention) | Standard K/V | Project $K$ and $V$ through a low-rank bottleneck; further KV cache reduction |
 
 A "Llama-style" model — pre-norm RMSNorm, RoPE, SwiGLU, GQA, no biases, BPE tokenizer — is the recipe most open-weight models follow. If you can read one of those, you can read nearly all of them.
 
@@ -281,7 +287,7 @@ A "Llama-style" model — pre-norm RMSNorm, RoPE, SwiGLU, GQA, no biases, BPE to
 
 **The model is stateless.** Every call is a fresh forward pass over whatever's in the context. No memory across calls, no learning at inference time. The KV cache is a cache of computation, not a memory system. Anything you want the model to use at inference time has to be in the weights or in the context window.
 
-**Depth is a fixed compute budget per token.** L blocks means each token gets exactly L sequential steps of processing, however hard the question. This is why chain-of-thought helps: writing intermediate tokens lets the model spend more forward passes, and more attention over its own scratch work, on one problem. "Thinking" models institutionalize the same move. When a model fails a task in one step that it can do in ten, the limit is often this fixed depth, not missing knowledge.
+**Depth is a fixed compute budget per token.** $L$ blocks means each token gets exactly $L$ sequential steps of processing, however hard the question. This is why chain-of-thought helps: writing intermediate tokens lets the model spend more forward passes, and more attention over its own scratch work, on one problem. "Thinking" models institutionalize the same move. When a model fails a task in one step that it can do in ten, the limit is often this fixed depth, not missing knowledge.
 
 **In-context learning is a learned circuit, not a magic property.** The best-studied example is the *induction head*: two attention heads that together implement "find the last time this token appeared and copy what followed it." It emerges early in training and accounts for much of a model's ability to pick up patterns from a few examples in the prompt. The architecture doesn't contain this; training discovers it. Much of what looks like reasoning is a stack of learned circuits like this one.
 
@@ -362,15 +368,15 @@ loss = F.cross_entropy(logits[:, :-1].reshape(-1, logits.size(-1)),
                        idx[:, 1:].reshape(-1))
 ```
 
-Every position's prediction is scored against the token that actually came next. One practical detail: with PyTorch's default initialization the starting loss is far above ln(vocab) ≈ 10.8; GPT-2 initializes weights with standard deviation 0.02, which brings the initial loss to roughly that value. A well-initialized language model starts out predicting a near-uniform distribution, and a starting loss far from ln(vocab) is a common early bug signal.
+Every position's prediction is scored against the token that actually came next. One practical detail: with PyTorch's default initialization the starting loss is far above $\ln(\text{vocab}) \approx 10.8$; GPT-2 initializes weights with standard deviation 0.02, which brings the initial loss to roughly that value. A well-initialized language model starts out predicting a near-uniform distribution, and a starting loss far from $\ln(\text{vocab})$ is a common early bug signal.
 
 Swap `nn.LayerNorm` for RMSNorm, the position table for RoPE, the MLP for SwiGLU, and share K/V across groups of heads, and you have a modern open-weight model.
 
 ## 12. Glossary
 
-- **Residual stream** — the (n × d_model) matrix flowing through the network; every block adds to it.
-- **Head** — one independent attention pattern; a block runs h of them in parallel.
-- **Causal mask** — position t attends only to positions ≤ t. Makes next-token training parallel and generation consistent.
+- **Residual stream** — the $(n \times d_{\text{model}})$ matrix flowing through the network; every block adds to it.
+- **Head** — one independent attention pattern; a block runs $h$ of them in parallel.
+- **Causal mask** — position $t$ attends only to positions $\le t$. Makes next-token training parallel and generation consistent.
 - **Logits** — raw, pre-softmax scores over the vocabulary.
 - **KV cache** — stored keys and values from earlier positions, so decoding doesn't recompute them.
 - **Prefill / decode** — the parallel prompt-processing phase and the one-token-at-a-time generation phase.
@@ -378,7 +384,7 @@ Swap `nn.LayerNorm` for RMSNorm, the position table for RoPE, the MLP for SwiGLU
 - **Pretraining / post-training** — next-token prediction on raw text; then fine-tuning to shape behavior.
 - **GQA / MQA** — attention variants that share key/value heads to shrink the KV cache.
 - **MoE** — mixture of experts; several MLPs per block, with a router choosing a few per token.
-- **RoPE** — rotary position embedding; encodes relative position by rotating Q and K.
+- **RoPE** — rotary position embedding; encodes relative position by rotating $Q$ and $K$.
 
 ## 13. Further reading, in order
 

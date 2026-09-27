@@ -306,14 +306,15 @@ shutil.rmtree(WORK, ignore_errors=True)    # this notebook's databases: gone
 #
 # **Two minutes.** "Consolidation runs weekly as a Cloud Run job per shard of users. Each (tenant, user, ISO week)
 # is one durable run with a deterministic id, and the schedule fires once a week to match, so a double-fired
-# schedule is a no-op and no firing is wasted; facts a user states mid-week reach memory at once through extraction
-# after the turn, the job only distils the week's episodes. A lease row keeps two
-# workers apart and expires when one dies; every step checkpoints, so a resume skips the model calls it
-# already paid for; writes carry idempotency keys derived from the run, so the step that died after writing
-# does not write twice. Resolution is deterministic: newer supersedes older with the old validity closed, a
-# weaker source never overwrites a stronger one — it is flagged — and low-confidence extractions are skipped.
-# Consolidated episodes get a 30-day TTL. We measured recall at a fixed budget before and after, and chose to
-# answer from facts once an episode is consolidated, because a raw episode can resurface a superseded value."
+# schedule is a no-op and no firing is wasted; facts a user states mid-week reach memory at once through
+# extraction after the turn, the job only distils the week's episodes. A lease row keeps two workers apart and
+# expires when one dies; every step checkpoints, so a resume skips the model calls it already paid for; writes
+# carry idempotency keys derived from the run, so the step that died after writing does not write twice.
+#
+# "Resolution is deterministic: newer supersedes older with the old validity closed, a weaker source never
+# overwrites a stronger one — it is flagged — and low-confidence extractions are skipped. Consolidated episodes
+# get a 30-day TTL. We measured recall at a fixed budget before and after, and chose to answer from facts once an
+# episode is consolidated, because a raw episode can resurface a superseded value."
 #
 # **Drill 1.** *The scheduler fired twice at 03:17. What happens?* — Both triggers compute the same run id;
 # one takes the lease, the other gets `LeaseHeld` (or, if the first finished, sees the run `done`) and exits.

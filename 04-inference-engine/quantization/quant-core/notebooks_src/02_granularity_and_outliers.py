@@ -6,14 +6,18 @@
 # ## The one-minute version
 # A scale is set by the largest magnitude among the values that share it, so an outlier coarsens the grid for
 # its whole group. That makes **granularity** — how many values share one scale — the main accuracy lever you
-# control. Per tensor, one value hurts everything. Per **output channel** (a row of `W`), an outlier *row* is
+# control.
+#
+# Per tensor, one value hurts everything. Per **output channel** (a row of `W`), an outlier *row* is
 # isolated, but an outlier *input column* is in every row, so per-channel scales cannot isolate it; **groups**
-# of 32–128 along the input dimension confine it to one group per row, for 16/g extra bits. Activations are
-# quantized at run time: **dynamic per-token** scales follow each token, **static per-tensor** scales come
-# from calibration and saturate anything larger than calibration saw. LLM activations have a few channels
-# 20–40× larger than the rest in every token, so a per-token INT8 scale is set by them and the other
-# channels keep only a few levels — the problem SmoothQuant (notebook 03) and FP8's float grid address. After
-# this notebook you can predict which granularity survives which outlier, and say why aggregate error
+# of 32–128 along the input dimension confine it to one group per row, for ${16/g}$ extra bits.
+#
+# Activations are quantized at run time: **dynamic per-token** scales follow each token, **static per-tensor**
+# scales come from calibration and saturate anything larger than calibration saw. LLM activations have a few
+# channels 20–40× larger than the rest in every token, so a per-token INT8 scale is set by them and the other
+# channels keep only a few levels — the problem SmoothQuant (notebook 03) and FP8's float grid address.
+#
+# After this notebook you can predict which granularity survives which outlier, and say why aggregate error
 # metrics hide the damage.
 #
 # Primer: `../PRIMER.md` §2 (outliers) and §3 *Granularity and the bits-per-weight budget*. The layout here is
@@ -77,8 +81,8 @@ for gran, g in (("tensor", 0), ("channel", 0), ("group", 128), ("group", 64), ("
 # AWQ does not apply — its scales come from activation magnitudes, and this column's inputs are ordinary.
 #
 # ## Worked example 3 — activations: the outlier channels are in every token
-# The tiny model's first up-projection reads `RMSNorm(x) × gain`, and four gains are 25–40×. That is how real
-# LLMs get "massive activations": a few fixed channels, large in every token.
+# The tiny model's first up-projection reads $\operatorname{RMSNorm}(x) \times \mathrm{gain}$, and four gains are
+# 25–40×. That is how real LLMs get "massive activations": a few fixed channels, large in every token.
 
 # %%
 m = TinyModel()
@@ -96,13 +100,13 @@ for label, Ah in (("INT8 per token (dynamic)", G.quantize_activations(A, "int8",
 
 # %% [markdown]
 # A per-token scale is set by the outlier channel, so the ordinary channels of that token round with a step of
-# ~amax/127 — an 11% error on them, invisible in the 1.4% aggregate. FP8 per token keeps them at 2.7%: a float
+# ~$\mathrm{amax}/127$ — an 11% error on them, invisible in the 1.4% aggregate. FP8 per token keeps them at 2.7%: a float
 # grid's precision is *relative*, so small values keep their 3 mantissa bits. This is the argument for FP8
 # activations, and for SmoothQuant when the format is INT8.
 #
 # What about the **weights** those channels meet? Look at the up-projection's columns for the four outlier
-# channels, and at where its INT4 output error comes from (`G.output_error_by_input`: channel c contributes
-# `‖X[:, c]‖² · ‖W[:, c] − Ŵ[:, c]‖²`).
+# channels, and at where its INT4 output error comes from (`G.output_error_by_input`: channel $c$ contributes
+# $\lVert X_{:,c} \rVert^2 \cdot \lVert W_{:,c} - \hat{W}_{:,c} \rVert^2$).
 
 # %%
 Wu0 = m.weights["blocks.0.up"]
@@ -160,13 +164,13 @@ print(f"bits per weight with FP32 block scales: {F.bits_per_weight(8, 128 * 128,
 
 # %% [markdown]
 # INT8 needs the local scale (50× less error away from the hot tile); FP8 barely notices, because a 50× range
-# is well inside E4M3's 2^14.8. Block scales matter for FP8 when the range exceeds that — and they are what
+# is well inside E4M3's $2^{14.8}$. Block scales matter for FP8 when the range exceeds that — and they are what
 # make an FP8 GEMM's epilogue need one rescale per 128-wide k block (notebook 04).
 #
 # ## Exercise 2.1 — group-wise INT4, checkpoint layout
-# Write `group_int4(W, g)` for `W[out, in]`: symmetric, **full** convention (codes −8…7, scale = group amax /
-# 7.5), groups of `g` consecutive inputs in each row. Return `(codes, scales)` with codes shaped like `W` and
-# scales shaped `(out, in // g)`.
+# Write `group_int4(W, g)` for `W[out, in]`: symmetric, **full** convention (codes −8…7,
+# $\mathrm{scale} = \text{group amax}/7.5$), groups of `g` consecutive inputs in each row. Return `(codes, scales)`
+# with codes shaped like `W` and scales shaped `(out, in // g)`.
 
 # %% exercise
 def group_int4(W, g):
@@ -211,8 +215,9 @@ print("✅ g32 (4.5 bits): only groups this small keep one outlier weight column
 # %% [markdown]
 # ## Exercise 2.3 — predict the per-token damage
 # A token has 63 ordinary channels of rms 1 and one channel at ±60. Under per-token INT8 (restricted, ±127) the
-# step is `60 / 127` for the whole token. Using the rounding-noise model (noise rms = step / √12), predict the
-# relative error of the ordinary channels, `predicted`, then check it by measurement.
+# step is `60 / 127` for the whole token. Using the rounding-noise model
+# ($\text{noise rms} = \mathrm{step}/\sqrt{12}$), predict the relative error of the ordinary channels, `predicted`,
+# then check it by measurement.
 
 # %% exercise
 rng3 = np.random.default_rng(3)
@@ -252,7 +257,8 @@ print(f"✅ static amax {static_amax:.1f}: held-out error {err(static_amax):.4f}
 
 # %% [markdown]
 # ## Exercise 2.5 — FP8 block scales
-# Write `fp8_block_scales(W, b=128)`: one scale per `b × b` tile, `tile amax / 448`, shaped `(out // b, in // b)`.
+# Write `fp8_block_scales(W, b=128)`: one scale per $b \times b$ tile, $\text{tile amax}/448$, shaped
+# `(out // b, in // b)`.
 
 # %% exercise
 def fp8_block_scales(W, b=128):
@@ -273,7 +279,9 @@ print(f"✅ 16 scales for a 512x512 weight; the hot tile's scale is {s[0, 0] / n
 # weights and groups of 128 for INT4, and we know what each does *not* protect against: per-channel scales
 # isolate an outlier row but not an outlier input column, which is in every row — groups confine it to one
 # group, and at 4 bits one bad column still leaves its neighbours at ~30% error with groups of 128, so we pair
-# INT4 with GPTQ rather than shrink the groups. Activation outliers are a different problem: LLMs have a few
+# INT4 with GPTQ rather than shrink the groups.
+#
+# "Activation outliers are a different problem: LLMs have a few
 # channels 20–40× larger in every token. The weight columns they meet are ordinary, but their rounding error is
 # multiplied by those inputs (98% of our toy up-projection's error), which AWQ fixes; and a per-token INT8
 # activation scale set by them leaves the other channels ~4 bits. Dynamic per-token FP8

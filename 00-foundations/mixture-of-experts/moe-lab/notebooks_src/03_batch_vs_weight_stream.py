@@ -9,13 +9,14 @@
 #
 # * A decode step streams the weights once for the whole batch. A dense model streams all of them at
 #   any batch, so its step time is flat until the batch makes it compute-bound.
-# * An MoE streams only the experts its tokens touch: E(1 − (1 − k/E)^T) per layer for T tokens with
-#   uniform routing. At batch 1 that is k experts — the MoE decodes like its *active* size; by
-#   T ≈ 3E/k nearly every expert streams — it decodes like its *total* size. Skewed routing touches
-#   fewer.
-# * The step turns compute-bound only when each streamed expert sees enough tokens (batch · k/E of
-#   them), so the crossover batch scales with total/active: 207 for Llama-3.1-8B, 754 for
-#   Mixtral-8x7B and 2,055 for Qwen3-30B-A3B on an H200 (layer 01 PRIMER §3.6). MoE wants big batches.
+# * An MoE streams only the experts its tokens touch: $E(1 - (1 - k/E)^T)$ per layer for $T$ tokens
+#   with uniform routing. At batch 1 that is $k$ experts — the MoE decodes like its *active* size; by
+#   $T \approx 3E/k$ nearly every expert streams — it decodes like its *total* size. Skewed routing
+#   touches fewer.
+# * The step turns compute-bound only when each streamed expert sees enough tokens
+#   ($\text{batch} \cdot k/E$ of them), so the crossover batch scales with total/active: 207 for
+#   Llama-3.1-8B, 754 for Mixtral-8x7B and 2,055 for Qwen3-30B-A3B on an H200 (layer 01 PRIMER §3.6).
+#   MoE wants big batches.
 # * The fused MoE kernel sorts the token–expert pairs by expert and pads each expert's rows to a tile
 #   (`BLOCK_SIZE_M`): at batch 1 almost every row it multiplies is padding — harmless, because the step
 #   is memory-bound, and the reason tuned kernel configs are keyed by batch size.
@@ -69,9 +70,10 @@ for b in (1, 4, 16, 64):
 # %% [markdown]
 # ## Exercise 3.1 — experts touched, closed form
 #
-# Each token picks k *distinct* experts of E uniformly, so a given expert escapes one token with
-# probability exactly 1 − k/E, and T independent tokens with (1 − k/E)^T. Write `touched(E, k, T)`,
-# the expected number of distinct experts a layer reads for T tokens (1 for a dense model, E = 0).
+# Each token picks $k$ *distinct* experts of $E$ uniformly, so a given expert escapes one token with
+# probability exactly $1 - k/E$, and $T$ independent tokens with $(1 - k/E)^T$. Write
+# `touched(E, k, T)`, the expected number of distinct experts a layer reads for $T$ tokens (1 for a
+# dense model, $E = 0$).
 
 # %% exercise
 def touched(E, k, T):
@@ -93,8 +95,8 @@ print(f"✅ Mixtral 2.00 -> 7.92 experts by batch 16; OLMoE (64, top-8) at batch
 # %% [markdown]
 # ## Exercise 3.2 — skewed routing, by Monte Carlo
 #
-# Real routers are not uniform (notebook 02). Sample it: for popularity `p` over E experts, draw each
-# token's k distinct experts in proportion to `p` with the **Gumbel top-k** trick — the top-k of
+# Real routers are not uniform (notebook 02). Sample it: for popularity `p` over $E$ experts, draw each
+# token's $k$ distinct experts in proportion to `p` with the **Gumbel top-k** trick — the top-k of
 # `log p + Gumbel noise` is a sample without replacement. Write `touched_skewed(p, k, T, trials, seed)`
 # → mean distinct experts per layer.
 
@@ -208,9 +210,10 @@ for i, b in enumerate(BATCHES):
 #
 # ## Exercise 3.5 — how the fused MoE kernel lays tokens out
 #
-# vLLM's `moe_align_block_size(topk_ids, block_size, num_experts)` flattens the T × k assignments,
-# groups them by expert (ascending id), pads each expert's group to a multiple of `block_size` with a
-# pad id equal to T·k, and returns `(sorted_token_ids, expert_ids per block, num_tokens_post_padded)`.
+# vLLM's `moe_align_block_size(topk_ids, block_size, num_experts)` flattens the $T \times k$
+# assignments, groups them by expert (ascending id), pads each expert's group to a multiple of
+# `block_size` with a pad id equal to $T \cdot k$, and returns
+# `(sorted_token_ids, expert_ids per block, num_tokens_post_padded)`.
 # The Triton kernel then runs one `BLOCK_SIZE_M`-row tile per block against that block's expert.
 # Write `align(topk_ids, block_size, num_experts)` with the same semantics (experts with no tokens
 # get no blocks). The check replays the example in vLLM's docstring.
@@ -245,8 +248,8 @@ print("✅ at batch 1 each of the 8 touched experts gets a 16-row tile for 1 rea
       "so it costs almost nothing — by batch 512 padding is about a tenth of the rows")
 
 # %% [markdown]
-# vLLM keys its tuned kernel configs by batch size M (`E=64,N=1024,device_name=...json` maps M to
-# `BLOCK_SIZE_M/N/K`, `GROUP_SIZE_M`, warps, stages) and uses the nearest M. There are no tuned files
+# vLLM keys its tuned kernel configs by batch size $M$ (`E=64,N=1024,device_name=...json` maps $M$ to
+# `BLOCK_SIZE_M/N/K`, `GROUP_SIZE_M`, warps, stages) and uses the nearest $M$. There are no tuned files
 # for T4, L4 or A10 in the tree (main, Sep 2026), so on those GPUs vLLM logs *"Using default MoE
 # config. Performance might be sub-optimal!"* — notebook 05 finds that line in a start-up log.
 # `benchmarks/kernels/benchmark_moe.py` generates one for your GPU (T1).
@@ -352,12 +355,13 @@ else:
 # ## In a design review
 #
 # **Two minutes:** "A decode step's cost is the bytes it streams. A dense model streams all its
-# weights at any batch; an MoE streams only the experts its tokens touch — k per layer at batch 1,
-# nearly all E once the batch passes a few times E/k. So OLMoE decodes about like a 1.3B model for one
-# user and like a 7B model for thirty-two, and Mixtral on an H200 goes from 25.6 GB to 94.4 GB per step
-# between batch 1 and 16. The step stays memory-bound until each expert sees enough tokens, so the
+# weights at any batch; an MoE streams only the experts its tokens touch — $k$ per layer at batch 1,
+# nearly all $E$ once the batch passes a few times $E/k$. So OLMoE decodes about like a 1.3B model for
+# one user and like a 7B model for thirty-two, and Mixtral on an H200 goes from 25.6 GB to 94.4 GB per
+# step between batch 1 and 16. The step stays memory-bound until each expert sees enough tokens, so the
 # compute-bound crossover moves out by total/active — 754 for Mixtral against 207 for Llama-3.1-8B.
-# We therefore plan MoE capacity at high batch, where the cost per token is lowest, and treat
+#
+# "We therefore plan MoE capacity at high batch, where the cost per token is lowest, and treat
 # batch-1 latency as the easy case. The simulation gives the shape; two measured points calibrate it."
 #
 # **Drill 1.** *Our MoE has 1/5 the active parameters of the dense model but only 1.3x its throughput

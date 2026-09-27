@@ -68,12 +68,12 @@ print("✅ E2M1 rounding matches vLLM's reference thresholds")
 # %% [markdown]
 # ## Exercise 5.2 — the MXFP4 scale: a power of two per 32
 #
-# compressed-tensors rounds each block's `amax` to a power of two `2^e` — down, unless the mantissa
-# of `amax` is at least 1.75, then up — and stores `127 + e - 2` as an unsigned byte (E8M0; the `2`
+# compressed-tensors rounds each block's `amax` to a power of two $2^e$ — down, unless the mantissa
+# of `amax` is at least 1.75, then up — and stores ${127 + e - 2}$ as an unsigned byte (E8M0; the `2`
 # puts the block max in E2M1's top binade). Write `mx_code(amax)` for an array of block maxima.
 #
 # This is what an llm-compressor MXFP4 checkpoint stores. The OCP MX spec's reference rule is plain
-# `floor(log2(amax)) - 2`, which puts the block max in [4, 8): a block whose max is 7.5 then clips to 6,
+# $\lfloor \log_2(\mathrm{amax}) \rfloor - 2$, which puts the block max in [4, 8): a block whose max is 7.5 then clips to 6,
 # where compressed-tensors' rounding gives it the next exponent (PRIMER §2; `quantcore.formats.mxfp4`
 # implements both, `rule="ocp"` and `rule="compressed-tensors"`).
 
@@ -99,8 +99,10 @@ print(f"✅ codes {mx_code(blocks).tolist()}; block max / scale lands in [3.5, 7
 # ## Exercise 5.3 — NVFP4's two-level scale
 #
 # compressed-tensors (and vLLM's reference) quantize a tensor `w` with
-# `global = 448 x 6 / amax(w)` (a multiplier), then per block of 16: `local = E4M3(global x block_amax / 6)`,
-# `value = E2M1(w / (local / global))`, and dequantize `value x local / global`. Write
+# $\mathrm{global} = 448 \times 6/\mathrm{amax}(w)$ (a multiplier), then per block of 16:
+# $\mathrm{local} = \operatorname{E4M3}(\mathrm{global} \times \mathrm{block\_amax}/6)$,
+# $\mathrm{value} = \operatorname{E2M1}(w/(\mathrm{local}/\mathrm{global}))$, and dequantize
+# $\mathrm{value} \times \mathrm{local}/\mathrm{global}$. Write
 # `nvfp4_fake_quant(w, group=16)` returning the dequantized weight (use `e2m1` and
 # `quantlab.numerics.minifloat_round(x, "e4m3")` for the E4M3 rounding).
 
@@ -261,5 +263,5 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 # the dequantization is pure overhead. Use FP8 on Hopper.
 #
 # **Drill 3.** *Does NVFP4's global scale divide or multiply?* — In compressed-tensors it is a multiplier,
-# `448 x 6 / amax`; local scales are E4M3 of `global x block_amax / 6`, and dequantization divides by the
+# $448 \times 6/\mathrm{amax}$; local scales are E4M3 of $\mathrm{global} \times \mathrm{block\_amax}/6$, and dequantization divides by the
 # global again. Inverting it is a classic loader bug.

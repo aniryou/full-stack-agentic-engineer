@@ -10,7 +10,12 @@ The code, the capacity model and the practice notebooks that go with this primer
 
 An agent system is scaled by bounding tokens, not by adding servers. Everything that looks like a classic capacity problem — instances, connections, queue depth, database throughput — turns out to be small and cheap next to one number: tokens per minute at the model, a resource you share with your whole organisation and cannot buy by the instance. The design work is to make demand for that resource predictable (admission control, routing, caching, compaction), to make the system degrade instead of collapse when it runs out (levels, shedding, fallbacks), and to make every turn survive the failures that a long, multi-step, side-effecting unit of work invites (checkpoints, idempotency, at-least-once delivery).
 
-A scaling design has to answer four things. *Resource estimation*: can you get from "100,000 conversations a day" to tokens per minute, in-flight turns and dollars in two minutes on a whiteboard? *Trade-offs*: provisioned throughput or pay-as-you-go, sync or queued, managed runtime or Cloud Run, degrade or shed? *Robustness*: what breaks first, what happens when it does, and how does the user experience it? *Simplicity*: which of the mechanisms below does this workload actually need at its scale, and which are premature?
+A scaling design has to answer four things.
+
+- *Resource estimation*: can you get from "100,000 conversations a day" to tokens per minute, in-flight turns and dollars in two minutes on a whiteboard?
+- *Trade-offs*: provisioned throughput or pay-as-you-go, sync or queued, managed runtime or Cloud Run, degrade or shed?
+- *Robustness*: what breaks first, what happens when it does, and how does the user experience it?
+- *Simplicity*: which of the mechanisms below does this workload actually need at its scale, and which are premature?
 
 > **In a design review** — Open a scaling question with the unit of work and the binding constraint: "The unit of work is a *turn*; each turn is two to three model calls of about five thousand tokens; so 100k conversations a day is about 14 million input tokens a minute at peak, which is above the Flash tier baseline — that's the constraint I'll design around. Cloud Run is not going to be the problem."
 
@@ -38,7 +43,9 @@ Everything in the rest of this primer follows from that last column.
 
 ### 1.2 The binding constraint is model throughput, and it is shared
 
-On the Gemini Enterprise Agent Platform the pay-as-you-go path ("Standard PayGo", the successor of dynamic shared quota) has no fixed per-project quota. Your organisation gets a tokens-per-minute *baseline* per model family based on rolling 30-day spend — for Flash and Flash-Lite 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3; for Pro 0.5 M, 1 M or 2 M — and can burst above it on a best-effort basis. A 429 does not mean "you hit a number"; it means "there is contention on the shared pool right now", and the documented reaction is exponential backoff, the global endpoint and traffic smoothing within the minute. Guaranteed capacity is a separate purchase: Provisioned Throughput in generative-scale units (GSUs), by the week, month, quarter or year, with pay-as-you-go spill-over by default.
+On the Gemini Enterprise Agent Platform the pay-as-you-go path ("Standard PayGo", the successor of dynamic shared quota) has no fixed per-project quota. Your organisation gets a tokens-per-minute *baseline* per model family based on rolling 30-day spend — for Flash and Flash-Lite 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3; for Pro 0.5 M, 1 M or 2 M — and can burst above it on a best-effort basis.
+
+A 429 does not mean "you hit a number"; it means "there is contention on the shared pool right now", and the documented reaction is exponential backoff, the global endpoint and traffic smoothing within the minute. Guaranteed capacity is a separate purchase: Provisioned Throughput in generative-scale units (GSUs), by the week, month, quarter or year, with pay-as-you-go spill-over by default.
 
 Two consequences shape every design. First, capacity planning is a *token* budget, and you compute demand in tokens per minute before you compute anything else. Second, the pool is shared with every other team in the organisation, so your traffic shape (smooth or bursty) affects your own 429 rate and theirs; smoothing is a good-neighbour obligation as much as an optimisation.
 
@@ -46,7 +53,9 @@ Two consequences shape every design. First, capacity planning is a *token* budge
 
 ### 1.3 Latency is a sum of sequential tails
 
-A turn with two tool calls has four segments on the critical path: plan call, tools, answer call, and the streaming of the answer. Model latency is time-to-first-token (which now includes *thinking* time) plus output tokens divided by tokens per second. Because the segments are sequential, the turn's p95 is roughly the sum of the segments' tails, not the tail of their sums; a 4-second p95 target forces parallel tools, streaming, prefetching and a Flash-class model on the planning step. And because turns are long, Little's law couples latency to concurrency: at 20 turns per second, a 6-second turn means 125 turns in flight, a 12-second turn means 250, each holding memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
+A turn with two tool calls has four segments on the critical path: plan call, tools, answer call, and the streaming of the answer. Model latency is time-to-first-token (which now includes *thinking* time) plus output tokens divided by tokens per second. Because the segments are sequential, the turn's p95 is roughly the sum of the segments' tails, not the tail of their sums; a 4-second p95 target forces parallel tools, streaming, prefetching and a Flash-class model on the planning step.
+
+And because turns are long, Little's law couples latency to concurrency: at 20 turns per second, a 6-second turn means 125 turns in flight, a 12-second turn means 250, each holding memory, a session lock and an open client connection. Slowdowns *are* capacity problems.
 
 ### 1.4 Cost scales with context, and context grows
 
@@ -58,11 +67,15 @@ Somewhere in a turn the agent opens a ticket or changes a plan. The process can 
 
 ### 1.6 The feedback loop that kills agent systems
 
-More load → more 429s from the shared pool → retries and longer model calls → longer turns → more turns in flight (Little's law) → more memory, more queued model calls, more retries → more 429s. Without a circuit breaker on the loop, an agent system under overload does not fail fast; it slows down for everyone until turn deadlines fire and users give up, having consumed the tokens anyway. The load generator in the lab reproduces this in a few seconds (notebook 04): 120 virtual users against a simulated 3 M TPM pool with retries only take the p95 turn from 5.8 s to about 40 s with hundreds of 429s and a few dozen hard failures; degrade levels and a breaker without a cap turn that into 120 fail-fast turns; with an in-flight cap of 30 derived from the pool's token budget no turn fails, no call is rate-limited, admitted turns finish at a p95 of 3.6 s, and 17 % of attempts are shed with a `Retry-After`. Shedding fast is kinder than queueing slowly, and it is the only way to keep the turns you do admit inside their budget.
+More load → more 429s from the shared pool → retries and longer model calls → longer turns → more turns in flight (Little's law) → more memory, more queued model calls, more retries → more 429s. Without a circuit breaker on the loop, an agent system under overload does not fail fast; it slows down for everyone until turn deadlines fire and users give up, having consumed the tokens anyway.
+
+The load generator in the lab reproduces this in a few seconds (notebook 04): 120 virtual users against a simulated 3 M TPM pool with retries only take the p95 turn from 5.8 s to about 40 s with hundreds of 429s and a few dozen hard failures; degrade levels and a breaker without a cap turn that into 120 fail-fast turns; with an in-flight cap of 30 derived from the pool's token budget no turn fails, no call is rate-limited, admitted turns finish at a p95 of 3.6 s, and 17 % of attempts are shed with a `Retry-After`.
+
+Shedding fast is kinder than queueing slowly, and it is the only way to keep the turns you do admit inside their budget.
 
 ### 1.7 Multi-agent multiplies everything
 
-A coordinator with three specialists turns 2.2 model calls per turn into eight, cost by 3.6×, latency by 2× even with parallel specialists, and the probability that every hop succeeds from 0.95^2.2 ≈ 0.89 to 0.95^8 ≈ 0.66 at 95 % per hop. The multi-agent question in a scaling design is therefore never "how do I scale the coordinator"; it is "what measured problem justifies paying that multiple", and the answer is usually a tool set too large for one context or permissions that must differ per step.
+A coordinator with three specialists turns 2.2 model calls per turn into eight, cost by 3.6×, latency by 2× even with parallel specialists, and the probability that every hop succeeds from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$ at 95 % per hop. The multi-agent question in a scaling design is therefore never "how do I scale the coordinator"; it is "what measured problem justifies paying that multiple", and the answer is usually a tool set too large for one context or permissions that must differ per step.
 
 > **Pitfall** — Describing scaling as "put it on Cloud Run with max instances 100 and autoscaling handles it". Cloud Run scales the *container*; it cannot scale the token budget, the billing mainframe behind the tools or the cost per conversation. An experienced platform team hears that sentence as "has not run one of these in production".
 
@@ -131,7 +144,11 @@ The working, out loud: 100,000 ÷ 86,400 ≈ 1.16 conversations a second; × 6 t
 
 ### 3.3 Concurrency, from Little's law
 
-In-flight turns = turns/s × turn duration: 6.9 × 6 ≈ 42 at average, 125 at peak, 417 during an incident. Concurrent *sessions* are eleven times larger because users think between turns: a conversation lasts 6 × (6 + 60) ≈ 400 s, so 1.16 × 400 ≈ 460 sessions at average and 4,600 during an incident. The two numbers size different things: in-flight turns size orchestrator memory, session locks and model concurrency; concurrent sessions size open streaming connections at the gateway and the hot session state in Redis.
+$$
+\text{In-flight turns} = \text{turns/s} \times \text{turn duration:}
+$$
+
+6.9 × 6 ≈ 42 at average, 125 at peak, 417 during an incident. Concurrent *sessions* are eleven times larger because users think between turns: a conversation lasts 6 × (6 + 60) ≈ 400 s, so 1.16 × 400 ≈ 460 sessions at average and 4,600 during an incident. The two numbers size different things: in-flight turns size orchestrator memory, session locks and model concurrency; concurrent sessions size open streaming connections at the gateway and the hot session state in Redis.
 
 The token budget also caps concurrency: 10 M TPM ÷ 60 ≈ 167 k tokens/s; a turn consumes 2.2 × 5,350 ≈ 11.8 k tokens over 6 s ≈ 2 k tokens/s; so the baseline sustains about 85 turns in flight, or 14 turns per second. That is the starting value for the admission controller's in-flight cap — and it is *below* peak demand, which is the whole story of this scenario.
 
@@ -143,13 +160,21 @@ The token budget also caps concurrency: 10 M TPM ÷ 60 ≈ 167 k tokens/s; a tur
 | All 3.5 Flash, prefix cached | $0.0070 | $0.092 | $281 k |
 | 35 % of calls on 3.5 Flash-Lite, prefix cached | — | **$0.068** | **$206 k** |
 
-Working: a 3.5 Flash call with 2,300 uncached input tokens at $1.50/M, 2,700 cached (the 3,000-token prefix at a 90 % hit rate) at $0.15/M and 350 output at $9/M costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070; thirteen calls a conversation ≈ $0.092; routing a third of them to Flash-Lite at $0.00165 brings it to $0.068 (with self-hosted models the same lever is a distilled student behind a cascade, priced with its break-even in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student)). Against a human contact at several dollars, all three rows are cheap; against each other they differ by 2×, which at this volume is $220 k a month. Notice that output tokens are the largest single line even though there are fourteen times fewer of them — output is six times the price of input on this model, which is why output caps and thinking levels are cost levers, not just latency levers.
+Working: a 3.5 Flash call with 2,300 uncached input tokens at $1.50/M, 2,700 cached (the 3,000-token prefix at a 90 % hit rate) at $0.15/M and 350 output at $9/M costs $0.00345 + $0.0004 + $0.00315 ≈ $0.0070; thirteen calls a conversation ≈ $0.092; routing a third of them to Flash-Lite at $0.00165 brings it to $0.068 (with self-hosted models the same lever is a distilled student behind a cascade, priced with its break-even in [distillation §9](../../../../00-foundations/distillation/PRIMER.md#9-the-economics-of-a-student)).
+
+Against a human contact at several dollars, all three rows are cheap; against each other they differ by 2×, which at this volume is $220 k a month. Notice that output tokens are the largest single line even though there are fourteen times fewer of them — output is six times the price of input on this model, which is why output caps and thinking levels are cost levers, not just latency levers.
 
 > **Verify** — Prices are for the global endpoint on 5 September 2026: 3.5 Flash $1.50 / $9.00 per M tokens (cached input $0.15); 3.5 Flash-Lite $0.30 / $2.50; 3.1 Flash-Lite $0.25 / $1.50; 3.6–3.8 Flash $0.75 / $3.75 introductory until 31 December 2026, then $1.50 / $7.50; 3.1 Pro Preview $2 / $12 (double above 200 k context). Regional endpoints +10 %; Priority tier 1.8×; Flex and Batch 0.5×.
 
 ### 3.5 Provisioned Throughput
 
-PT is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 *burndown* tokens per second, where a call's burndown is uncached input × 1 + cached input × 0.1 + output × 6. The anchor call burns 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens, so one GSU serves about 0.14 calls per second. Carrying the standard-model share (65 % of calls) entirely on PT needs 69 GSUs at average, 207 at peak and 688 during an incident.
+PT is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 *burndown* tokens per second, where a call's burndown is
+
+$$
+\text{uncached input} \times 1 + \text{cached input} \times 0.1 + \text{output} \times 6.
+$$
+
+The anchor call burns 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens, so one GSU serves about 0.14 calls per second. Carrying the standard-model share (65 % of calls) entirely on PT needs 69 GSUs at average, 207 at peak and 688 during an incident.
 
 | Term | $ per GSU-hour | $ per M burndown tokens at 100 % utilisation | Break-even utilisation vs PayGo ($1.50/M burndown) |
 |---|---:|---:|---:|
@@ -207,7 +232,9 @@ flowchart LR
   GW --> FS
 ```
 
-A turn, end to end: the client posts a message; the gateway authenticates, checks the tenant's bucket and the global in-flight cap, decides a degrade level, writes the turn to Firestore, publishes to Pub/Sub with the session id as ordering key, and starts relaying the turn's event stream to the client over SSE. Pub/Sub pushes the message to the orchestrator with an OIDC token; the orchestrator takes the session lock in Redis, loads the session and any checkpointed steps, and runs the loop under a budget: model call through the gateway (stream deltas to the Redis stream), checkpoint the step in Firestore, execute tool calls in parallel through the executor, checkpoint, repeat, finish. It writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the push. Compaction of the history runs after the terminal event, which is why the orchestrator is on instance-based billing.
+A turn, end to end: the client posts a message; the gateway authenticates, checks the tenant's bucket and the global in-flight cap, decides a degrade level, writes the turn to Firestore, publishes to Pub/Sub with the session id as ordering key, and starts relaying the turn's event stream to the client over SSE.
+
+Pub/Sub pushes the message to the orchestrator with an OIDC token; the orchestrator takes the session lock in Redis, loads the session and any checkpointed steps, and runs the loop under a budget: model call through the gateway (stream deltas to the Redis stream), checkpoint the step in Firestore, execute tool calls in parallel through the executor, checkpoint, repeat, finish. It writes the transcript, publishes the terminal event, decrements the in-flight gauge and acknowledges the push. Compaction of the history runs after the terminal event, which is why the orchestrator is on instance-based billing.
 
 ### 4.1 Why it is shaped this way
 
@@ -237,7 +264,11 @@ The honest answer is that Agent Runtime is the default for a Google-native team 
 
 ### 5.1 Quota strategy and client-side smoothing
 
-Demand for the model must be shaped before it reaches the pool. Three layers: an in-flight cap at the gateway (Part 5.3) bounds how many turns can be generating tokens at once; a token bucket per model in the model gateway, sized to *your share* of the tier baseline and refilled continuously, spreads calls evenly within each minute; and the choice of endpoint and tier — global endpoint unless residency forbids it (it routes to the region with the most capacity and is where the tiers apply), Priority PayGo for customer-facing traffic that must not queue, Flex for latency-tolerant background work at half price, Batch for anything that can wait a day.
+Demand for the model must be shaped before it reaches the pool. Three layers:
+
+1. an in-flight cap at the gateway (Part 5.3) bounds how many turns can be generating tokens at once;
+2. a token bucket per model in the model gateway, sized to *your share* of the tier baseline and refilled continuously, spreads calls evenly within each minute;
+3. and the choice of endpoint and tier — global endpoint unless residency forbids it (it routes to the region with the most capacity and is where the tiers apply), Priority PayGo for customer-facing traffic that must not queue, Flex for latency-tolerant background work at half price, Batch for anything that can wait a day.
 
 The bucket's *capacity* is the burst you tolerate and its *rate* is the sustained tokens per second. A six-second burst allowance is a good default: smaller means smoother traffic and fewer 429s but more client-side queueing. When the bucket cannot admit a call within a bounded wait the gateway treats that as a rate-limit signal too — it counts toward the degrade level — and tries a sibling model with its own pool before failing. A bucket must live in Redis once there is more than one orchestrator instance; a Lua-scripted Redis bucket is atomic and costs one round-trip per call.
 
@@ -249,7 +280,9 @@ Provisioned Throughput plugs into the same place. Per request you choose *dedica
 
 Retry with exponential backoff and *full* jitter — a uniform draw between zero and the backoff — because when a shared pool throttles, every client sees the 429 at the same moment and, without jitter, retries at the same moment; the retry wave is as large as the original. The lab's simulation of 200 clients retrying against a pool with room for 40 per second (notebook 03) finishes far sooner with jitter, with a fraction of the secondary 429s. Honour `Retry-After` when it is sent, jitter a little on top of it, and never retry past the turn's deadline: a retry that cannot finish in time only spends tokens.
 
-A circuit breaker per model and per tool converts repeated failures into fail-fast decisions for a cooling period, with a half-open probe to recover. Breakers matter more for agents than for web services because a sick dependency does not just slow one request: it pins hundreds of coroutines *with their contexts in memory* until the deadline. When a model's breaker opens, or two consecutive 429s arrive, the gateway moves to a *sibling* model — 3.5 Flash to 3.7 Flash to 3.5 Flash-Lite — because each family has its own pool and a sibling's 429 rate is nearly independent of yours. Model ids therefore live in configuration, never in code, which is also how you survive the 45-day retirement clock on the short-lived Flash releases.
+A circuit breaker per model and per tool converts repeated failures into fail-fast decisions for a cooling period, with a half-open probe to recover. Breakers matter more for agents than for web services because a sick dependency does not just slow one request: it pins hundreds of coroutines *with their contexts in memory* until the deadline.
+
+When a model's breaker opens, or two consecutive 429s arrive, the gateway moves to a *sibling* model — 3.5 Flash to 3.7 Flash to 3.5 Flash-Lite — because each family has its own pool and a sibling's 429 rate is nearly independent of yours. Model ids therefore live in configuration, never in code, which is also how you survive the 45-day retirement clock on the short-lived Flash releases.
 
 Hedging — issuing a second identical request when the first has not answered by a chosen delay and keeping the winner — is a p99 tool for small, non-streaming, idempotent calls such as intent classification. It trades extra calls for tail latency: a hedge fired after roughly the p90 typically cuts p99 by a third to a half for a few percent more calls; fired early it halves p99 again but nearly doubles the calls. It is wrong for streaming answers (you cannot un-stream the loser) and wrong when the pool is already contended (it adds load exactly when load is the problem), so it is gated on the degrade level.
 
@@ -272,17 +305,29 @@ Two details separate a working implementation from a diagram. The level needs hy
 
 ### 5.4 Durable execution
 
-The loop checkpoints every step in Firestore *before* acting on its result: the model's response (including the parts the next call must echo back — Gemini 3's thought signatures) after the model call; the tool results, compacted, after the tool step. On redelivery the orchestrator replays the turn from the checkpoint, skipping completed steps; the tool executor keys every write by turn, step, call index and a hash of the arguments and stores the result under that key for a day, so a redelivered turn that already opened a ticket gets the same ticket back. The lab's crash test (notebook 02) kills the process right after the ticket is checkpointed and shows one ticket after redelivery, with four of five steps resumed.
+The loop checkpoints every step in Firestore *before* acting on its result: the model's response (including the parts the next call must echo back — Gemini 3's thought signatures) after the model call; the tool results, compacted, after the tool step.
 
-The queue contract is the other half. Pub/Sub push acknowledges on any 2xx and redelivers on anything else with a push backoff that grows from 100 ms to 60 s; the subscription's own retry policy adds a 10–600 s exponential backoff; after five attempts the message goes to a dead-letter topic that has its own alert. The orchestrator returns 503 only for transient infrastructure trouble (`RetryLater`) and 200 for every *terminal* outcome including graceful failure — a turn that ended with "I couldn't complete that, a colleague will follow up" must not be retried into a second bill. The ack deadline (≤ 600 s) is the ceiling for one delivery; the turn budget (45 s) sits well under it. A session lock in Redis with the turn id as value serialises turns per session even when redelivery and a new turn overlap; the lock's TTL is the budget plus a margin so a dead instance releases it.
+On redelivery the orchestrator replays the turn from the checkpoint, skipping completed steps; the tool executor keys every write by turn, step, call index and a hash of the arguments and stores the result under that key for a day, so a redelivered turn that already opened a ticket gets the same ticket back. The lab's crash test (notebook 02) kills the process right after the ticket is checkpointed and shows one ticket after redelivery, with four of five steps resumed.
+
+The queue contract is the other half. Pub/Sub push acknowledges on any 2xx and redelivers on anything else with a push backoff that grows from 100 ms to 60 s; the subscription's own retry policy adds a 10–600 s exponential backoff; after five attempts the message goes to a dead-letter topic that has its own alert.
+
+The orchestrator returns 503 only for transient infrastructure trouble (`RetryLater`) and 200 for every *terminal* outcome including graceful failure — a turn that ended with "I couldn't complete that, a colleague will follow up" must not be retried into a second bill. The ack deadline (≤ 600 s) is the ceiling for one delivery; the turn budget (45 s) sits well under it.
+
+A session lock in Redis with the turn id as value serialises turns per session even when redelivery and a new turn overlap; the lock's TTL is the budget plus a margin so a dead instance releases it.
 
 Firestore shapes the layout: a session document (bounded by compaction, well under 1 MiB), a turn document per user message with steps appended atomically (`ArrayUnion` is idempotent for identical elements, which is what a replayed step needs), tool results truncated to a few kilobytes *in the checkpoint as well as in the transcript*, a `expires_at` timestamp with a TTL policy, and no counters in documents. A turn writes its document a handful of times over several seconds — comfortably under the sustained one-write-per-second-per-document rule.
 
 ### 5.5 Context engineering for scale
 
-The prompt is laid out for the cache: system instructions, policies and tool schemas first, byte-identical for every user and every turn; then the customer's prefetched profile; then a summary of older turns; then the last N messages verbatim; then the new message. Implicit prefix caching bills the identical prefix at 10 % once it clears the minimum (4,096 tokens on Gemini 3.x; 6,144 on 3.7/3.8 Flash and 3.1 Pro), and an explicit cache with a TTL fronts it deterministically for large prefixes. The prompt *version* is part of the cache key, so a prompt change invalidates cleanly instead of silently halving your hit rate. The explicit-cache break-even is under one request per hour on Flash — storage is not the reason to hesitate; the reason is operational (TTL refresh, versioning).
+The prompt is laid out for the cache: system instructions, policies and tool schemas first, byte-identical for every user and every turn; then the customer's prefetched profile; then a summary of older turns; then the last N messages verbatim; then the new message.
 
-Compaction keeps input bounded: when the pending history exceeds a token threshold, everything but the verbatim tail is summarised on the Lite tier *after* the turn completes, off the critical path. Without compaction the first model call of a twelve-turn conversation grows from under 2 k to over 7 k tokens; with it the call stays near 2.4 k — over twenty turns that is roughly 385 k versus 184 k input tokens, three times the cost. Tool results are truncated before they enter the transcript (a 180-line invoice becomes 600 tokens instead of 3,600); earlier turns' tool traffic is not replayed at all — the assistant's answer carries the facts. Output is capped per task and thinking is set per task: minimal for routing and extraction, low for answers, medium only for the rare hard case, because thinking tokens are billed as output and 3.8 Flash at high effort uses about 30 % more of them than 3.7.
+Implicit prefix caching bills the identical prefix at 10 % once it clears the minimum (4,096 tokens on Gemini 3.x; 6,144 on 3.7/3.8 Flash and 3.1 Pro), and an explicit cache with a TTL fronts it deterministically for large prefixes. The prompt *version* is part of the cache key, so a prompt change invalidates cleanly instead of silently halving your hit rate. The explicit-cache break-even is under one request per hour on Flash — storage is not the reason to hesitate; the reason is operational (TTL refresh, versioning).
+
+Compaction keeps input bounded: when the pending history exceeds a token threshold, everything but the verbatim tail is summarised on the Lite tier *after* the turn completes, off the critical path. Without compaction the first model call of a twelve-turn conversation grows from under 2 k to over 7 k tokens; with it the call stays near 2.4 k — over twenty turns that is roughly 385 k versus 184 k input tokens, three times the cost.
+
+Tool results are truncated before they enter the transcript (a 180-line invoice becomes 600 tokens instead of 3,600); earlier turns' tool traffic is not replayed at all — the assistant's answer carries the facts.
+
+Output is capped per task and thinking is set per task: minimal for routing and extraction, low for answers, medium only for the rare hard case, because thinking tokens are billed as output and 3.8 Flash at high effort uses about 30 % more of them than 3.7.
 
 ### 5.6 Tools at scale
 
@@ -292,7 +337,9 @@ Two habits remove most tool latency from the critical path: prefetch the custome
 
 ### 5.7 Streaming and connections
 
-SSE over HTTP/1.1 chunked transfer is the right transport for a chat agent on Cloud Run: it passes every proxy, supports resume natively with `Last-Event-ID`, and is a plain request, which means it counts against instance concurrency and is subject to the request timeout (default 5 minutes, maximum 60) — so clients must reconnect with the last sequence number and the relay must serve from the stream, not from memory. Responses without chunked encoding are capped at 32 MiB; streams are not. WebSockets work too but need session affinity, which is best-effort, and cross-instance fan-out through Redis pub/sub either way. Time-to-first-token as a user sees it arrives after plan → tools → answer, about four seconds in the load tests; a TTFT SLO of two seconds is only attainable by streaming *progress* events ("checking your invoice…") from the tool steps, which the event stream already carries.
+SSE over HTTP/1.1 chunked transfer is the right transport for a chat agent on Cloud Run: it passes every proxy, supports resume natively with `Last-Event-ID`, and is a plain request, which means it counts against instance concurrency and is subject to the request timeout (default 5 minutes, maximum 60) — so clients must reconnect with the last sequence number and the relay must serve from the stream, not from memory. Responses without chunked encoding are capped at 32 MiB; streams are not. WebSockets work too but need session affinity, which is best-effort, and cross-instance fan-out through Redis pub/sub either way.
+
+Time-to-first-token as a user sees it arrives after plan → tools → answer, about four seconds in the load tests; a TTFT SLO of two seconds is only attainable by streaming *progress* events ("checking your invoice…") from the tool steps, which the event stream already carries.
 
 ### 5.8 Cloud Run settings that matter
 
@@ -312,7 +359,10 @@ Two Cloud Run resource types are worth naming for agents: *worker pools* (GA Apr
 
 ### 5.9 State stores
 
-Firestore for durable documents (sessions, turns, checkpoints; regional 99.99 %, multi-region 99.999 %; PITR; TTL policies; 1 MiB documents; ~1 sustained write/s per document; 500 writes/s to a collection with a sequential indexed field; ramp new collections at 500 ops/s then +50 % every five minutes). Memorystore for Valkey or Redis for hot state (streams for the event relay, locks, token buckets, idempotency markers, the degrade level; ~120 k ops/s per 2-vCPU node; reached from Cloud Run over Direct VPC egress, which needs a /26 or larger subnet and about twice as many IPs as instances). Pub/Sub for the queue (10 MB messages, 31-day retention, ordering keys at 1 MB/s per key, push quota an order of magnitude below pull). Long-term memory and retrieval — AlloyDB with ScaNN, Vertex AI Vector Search, or the platform's Memory Bank — sit beside these and are sized by chunks × dimensions × bytes, which is a small number next to the token bill.
+- Firestore for durable documents (sessions, turns, checkpoints; regional 99.99 %, multi-region 99.999 %; PITR; TTL policies; 1 MiB documents; ~1 sustained write/s per document; 500 writes/s to a collection with a sequential indexed field; ramp new collections at 500 ops/s then +50 % every five minutes).
+- Memorystore for Valkey or Redis for hot state (streams for the event relay, locks, token buckets, idempotency markers, the degrade level; ~120 k ops/s per 2-vCPU node; reached from Cloud Run over Direct VPC egress, which needs a /26 or larger subnet and about twice as many IPs as instances).
+- Pub/Sub for the queue (10 MB messages, 31-day retention, ordering keys at 1 MB/s per key, push quota an order of magnitude below pull).
+- Long-term memory and retrieval — AlloyDB with ScaNN, Vertex AI Vector Search, or the platform's Memory Bank — sit beside these and are sized by chunks × dimensions × bytes, which is a small number next to the token bill.
 
 ### 5.10 Observability and SLOs
 
@@ -322,11 +372,15 @@ SLIs worth defining: availability (turns that ended with an answer over turns ad
 
 ### 5.11 Multi-agent designs and budgets
 
-Every turn carries a budget with four independent dimensions — steps, model calls, tokens, dollars — and a wall-clock deadline, because each fails differently: tool thrash burns steps, a long transcript burns tokens, a Pro fallback burns money, a slow mainframe burns time while the user watches a spinner. A turn that exhausts a budget ends *gracefully* with a message and a terminal event; it is not retried. In multi-agent topologies the budget is hierarchical — the coordinator's budget bounds the sum of the specialists' — and the specialists' calls go through the same gateway and the same buckets, so fan-out cannot escape admission control. The arithmetic of 1.7 is the argument to keep at hand: a specialist is justified by a measured problem (wrong-tool rate, context too large for one prompt, permissions that differ), and the design should say which metric would trigger the split.
+Every turn carries a budget with four independent dimensions — steps, model calls, tokens, dollars — and a wall-clock deadline, because each fails differently: tool thrash burns steps, a long transcript burns tokens, a Pro fallback burns money, a slow mainframe burns time while the user watches a spinner. A turn that exhausts a budget ends *gracefully* with a message and a terminal event; it is not retried.
+
+In multi-agent topologies the budget is hierarchical — the coordinator's budget bounds the sum of the specialists' — and the specialists' calls go through the same gateway and the same buckets, so fan-out cannot escape admission control. The arithmetic of 1.7 is the argument to keep at hand: a specialist is justified by a measured problem (wrong-tool rate, context too large for one prompt, permissions that differ), and the design should say which metric would trigger the split.
 
 ### 5.12 Tenancy, priority, regions
 
-Per-tenant buckets at the gateway, tenant labels on every metric and cost record, and a priority field on the turn that bypasses the in-flight cap for the classes that must never be shed. Regions: the global endpoint for the model unless residency forbids it (regional endpoints cost 10 % more and carry fewer models — 3.1 Pro Preview and the newest Flash releases are global or multi-region only); Cloud Run multi-region services with Service Health failover for the stateless tier; Firestore multi-region for the durable tier; Redis per region with the event relay pinned to the region that runs the turn (Pub/Sub push delivers in-region by default, which is what you want).
+Per-tenant buckets at the gateway, tenant labels on every metric and cost record, and a priority field on the turn that bypasses the in-flight cap for the classes that must never be shed.
+
+Regions: the global endpoint for the model unless residency forbids it (regional endpoints cost 10 % more and carry fewer models — 3.1 Pro Preview and the newest Flash releases are global or multi-region only); Cloud Run multi-region services with Service Health failover for the stateless tier; Firestore multi-region for the durable tier; Redis per region with the event relay pinned to the region that runs the turn (Pub/Sub push delivers in-region by default, which is what you want).
 
 ---
 
@@ -380,14 +434,20 @@ The order of adoption matters: durability (checkpoints, idempotency) before admi
 
 ### 8.2 Questions that change the design
 
-"What happens to traffic during an outage?" (incident factor → degrade design). "Is there a PT commitment already, and on what term?" (spill-over design, break-even). "Does the data have to stay in-country?" (regional endpoint, model availability, +10 %). "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch). "What does a human-handled contact cost today?" (the ROI line that makes $0.07 a conversation obviously fine). "How many brands or tenants share this?" (fairness). "What must never happen twice?" (idempotency scope).
+- "What happens to traffic during an outage?" (incident factor → degrade design).
+- "Is there a PT commitment already, and on what term?" (spill-over design, break-even).
+- "Does the data have to stay in-country?" (regional endpoint, model availability, +10 %).
+- "Which downstream system has the lowest QPS ceiling?" (bulkheads, caches, prefetch).
+- "What does a human-handled contact cost today?" (the ROI line that makes $0.07 a conversation obviously fine).
+- "How many brands or tenants share this?" (fairness).
+- "What must never happen twice?" (idempotency scope).
 
 ### 8.3 Anchors to keep in your head
 
 | Anchor | Value |
 |---|---|
 | Tokens per call (support agent) | 4–6 k in, 300–400 out incl. thinking |
-| Little's law | in-flight = rate × duration; sessions ≈ 11× in-flight turns when users think for a minute |
+| Little's law | $\text{in-flight} = \text{rate} \times \text{duration}$; sessions ≈ 11× in-flight turns when users think for a minute |
 | Flash PayGo tiers | 2 / 4 / 10 M TPM; Pro 0.5 / 1 / 2 M |
 | 10 M TPM sustains | ≈ 14 turns/s of the anchor shape; ≈ 85 in flight |
 | PT, 3.5 Flash | 675 burndown tok/s per GSU; output ×6, cached ×0.1; break-even 75 % at 1-year term, never on a 1-month term |
@@ -399,18 +459,37 @@ The order of adoption matters: durability (checkpoints, idempotency) before admi
 | Firestore | 1 MiB docs; ~1 write/s/doc; 500 → +50 %/5 min ramp |
 | Valkey | ≈ 120 k ops/s per 2-vCPU node |
 | Agent Runtime | 90 queries/min default quota; concurrency 9 default; cold ≈ 4.7 s vs warm 0.4 s |
-| Reliability compounding | 0.95⁵ ≈ 0.77; 0.95⁸ ≈ 0.66 |
+| Reliability compounding | $0.95^{5} \approx 0.77$; $0.95^{8} \approx 0.66$ |
 | Cloud Run fleet vs model bill | ≈ 0.1 % |
 
 ### 8.4 Two prompts, worked in outline
 
-**"Scale the support agent from 5,000 to 500,000 conversations a day."** Do the arithmetic first: 500 k/day is 5× the anchor, so ~70 M input TPM at peak — seven times the tier-3 baseline; no tier fits, so the design is PT for the base on a 1-year term (~350 GSUs of Flash, quote the monthly number), a custom tier negotiated for spill-over, and a hard programme to cut tokens per call (explicit caches, compaction, lite routing to 50 %+). Then concurrency: 625 in-flight turns at peak, 2,000 in an incident → orchestrator 12–40 instances, still small; Redis and Firestore fine; the billing mainframe at 87 QPS in an incident is *over* its 40 QPS limit → invoice cache and level-2 degradation become mandatory, not optional. Then the operational layer: per-tenant quotas if there are brands, multi-region if there is a residency or availability requirement, cost allocation. Close with what you would validate: a load test that reproduces the incident mix.
+**"Scale the support agent from 5,000 to 500,000 conversations a day."** Do the arithmetic first: 500 k/day is 5× the anchor, so ~70 M input TPM at peak — seven times the tier-3 baseline; no tier fits, so the design is PT for the base on a 1-year term (~350 GSUs of Flash, quote the monthly number), a custom tier negotiated for spill-over, and a hard programme to cut tokens per call (explicit caches, compaction, lite routing to 50 %+).
 
-**"The agent costs $0.30 per turn and p95 is 20 s in the morning peak — fix it."** Look at the trace first: where do tokens and seconds go by step. Typical findings and their fixes, in order: no caching (prefix not stable or below the minimum → reorder and enlarge the prefix, explicit cache); Pro on every call (→ route to Flash, Flash-Lite for routing); context growing without compaction (→ compact, truncate tool results, drop old tool traffic); sequential tools (→ parallel calls, prefetch); retries without jitter and a long deadline (→ jitter, breaker, fallback); no admission control so the peak turns into a slow-motion collapse (→ in-flight cap from the token budget, degrade levels). Expected effects: cost 4–5× down, p95 to 6–8 s, and a shed rate you can now *see* and negotiate instead of a latency nobody chose.
+Then concurrency: 625 in-flight turns at peak, 2,000 in an incident → orchestrator 12–40 instances, still small; Redis and Firestore fine; the billing mainframe at 87 QPS in an incident is *over* its 40 QPS limit → invoice cache and level-2 degradation become mandatory, not optional.
+
+Then the operational layer: per-tenant quotas if there are brands, multi-region if there is a residency or availability requirement, cost allocation. Close with what you would validate: a load test that reproduces the incident mix.
+
+**"The agent costs $0.30 per turn and p95 is 20 s in the morning peak — fix it."** Look at the trace first: where do tokens and seconds go by step. Typical findings and their fixes, in order:
+
+1. no caching (prefix not stable or below the minimum → reorder and enlarge the prefix, explicit cache);
+2. Pro on every call (→ route to Flash, Flash-Lite for routing);
+3. context growing without compaction (→ compact, truncate tool results, drop old tool traffic);
+4. sequential tools (→ parallel calls, prefetch);
+5. retries without jitter and a long deadline (→ jitter, breaker, fallback);
+6. no admission control so the peak turns into a slow-motion collapse (→ in-flight cap from the token budget, degrade levels).
+
+Expected effects: cost 4–5× down, p95 to 6–8 s, and a shed rate you can now *see* and negotiate instead of a latency nobody chose.
 
 ### 8.5 Quick-fire
 
-*Why not just raise max instances?* Because instances do not make tokens; the pool is shared and the cap is the token budget. *Why a queue if the user waits?* Backlog with one observable age, redelivery for durability, drain rate set by the bucket. *Exactly-once?* Not on push; design for at-least-once with idempotency keys. *PT or PayGo?* PT for the base on a long term if utilisation clears the break-even, PayGo/Priority for peaks, shaping for incidents. *Sync or async?* Sync for a single-step read with a sub-second budget; queued for anything with tools, side effects or a deadline over a few seconds. *What do you measure in week one?* 429 ratio, queue age, degrade level minutes, p95 by step, cost per conversation, shed rate, cached-token share. *When would you move to Agent Runtime?* Python-first, ADK, the team wants managed sessions/memory/identity and does not want to run the queue and stores — after raising the default quotas.
+- *Why not just raise max instances?* Because instances do not make tokens; the pool is shared and the cap is the token budget.
+- *Why a queue if the user waits?* Backlog with one observable age, redelivery for durability, drain rate set by the bucket.
+- *Exactly-once?* Not on push; design for at-least-once with idempotency keys.
+- *PT or PayGo?* PT for the base on a long term if utilisation clears the break-even, PayGo/Priority for peaks, shaping for incidents.
+- *Sync or async?* Sync for a single-step read with a sub-second budget; queued for anything with tools, side effects or a deadline over a few seconds.
+- *What do you measure in week one?* 429 ratio, queue age, degrade level minutes, p95 by step, cost per conversation, shed rate, cached-token share.
+- *When would you move to Agent Runtime?* Python-first, ADK, the team wants managed sessions/memory/identity and does not want to run the queue and stores — after raising the default quotas.
 
 > **Pitfall** — Quoting a p95 without a step breakdown, a cost without the token shape behind it, or a "we'll shed load" without saying what the user sees and when they can retry.
 
@@ -438,6 +517,30 @@ Off Google Cloud, the mechanisms translate one to one: token buckets and breaker
 
 ## § Sources and verify list
 
-Official documentation read on 5 September 2026 (Google's product docs now live at docs.cloud.google.com): Gemini Enterprise Agent Platform pricing, model pages and lifecycle table, Standard/Priority/Flex PayGo, Provisioned Throughput and its supported-models table, context caching, batch inference, quotas; Cloud Run quotas, autoscaling, request timeout, billing settings, Direct VPC egress, WebSockets, Pub/Sub push integration, "Host AI agents on Cloud Run"; Agent Runtime deploy/optimise/quotas; ADK 2.x; Pub/Sub quotas, push, dead-letter topics, subscription properties; Cloud Tasks and Workflows quotas; Firestore quotas and best practices; Memorystore for Valkey node specifications; Cloud Armor rate limiting; Cloud Monitoring quotas; OpenTelemetry GenAI semantic conventions; Cloud Deploy canary. Third-party latency measurements from Artificial Analysis.
+Official documentation read on 5 September 2026 (Google's product docs now live at docs.cloud.google.com):
 
-Re-check before relying on any of it: model ids and retirement dates (a new Flash release starts a 45-day clock for 3.6/3.7/3.8; the 2.5 line retires 20 October 2026; 3.1 Pro may leave preview); Flash introductory pricing ends 31 December 2026; PayGo tier baselines and whether cached tokens count against them; Flex PayGo status; the `google-genai` 3.0 breaking release; Cloud Run defaults (max instances, gen2) and the Preview status of instances, scaling controls and spend caps; Agent Runtime quotas and concurrency formula; the OTel GenAI attribute names.
+- Gemini Enterprise Agent Platform pricing, model pages and lifecycle table, Standard/Priority/Flex PayGo, Provisioned Throughput and its supported-models table, context caching, batch inference, quotas;
+- Cloud Run quotas, autoscaling, request timeout, billing settings, Direct VPC egress, WebSockets, Pub/Sub push integration, "Host AI agents on Cloud Run";
+- Agent Runtime deploy/optimise/quotas;
+- ADK 2.x;
+- Pub/Sub quotas, push, dead-letter topics, subscription properties;
+- Cloud Tasks and Workflows quotas;
+- Firestore quotas and best practices;
+- Memorystore for Valkey node specifications;
+- Cloud Armor rate limiting;
+- Cloud Monitoring quotas;
+- OpenTelemetry GenAI semantic conventions;
+- Cloud Deploy canary.
+
+Third-party latency measurements from Artificial Analysis.
+
+Re-check before relying on any of it:
+
+- model ids and retirement dates (a new Flash release starts a 45-day clock for 3.6/3.7/3.8; the 2.5 line retires 20 October 2026; 3.1 Pro may leave preview);
+- Flash introductory pricing ends 31 December 2026;
+- PayGo tier baselines and whether cached tokens count against them;
+- Flex PayGo status;
+- the `google-genai` 3.0 breaking release;
+- Cloud Run defaults (max instances, gen2) and the Preview status of instances, scaling controls and spend caps;
+- Agent Runtime quotas and concurrency formula;
+- the OTel GenAI attribute names.

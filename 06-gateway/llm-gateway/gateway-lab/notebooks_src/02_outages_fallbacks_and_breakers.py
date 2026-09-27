@@ -21,10 +21,10 @@
 #    failures, half-open after the recovery timeout, one probe decides. Retries with jitter are the scaling
 #    primer's §5.2; here the retry is the next target.
 #
-# Chain arithmetic: with independent failures `A = 1 − Π(1 − aᵢ)`; a common-mode event (the gateway's own
-# region, a shared upstream) multiplies it by `(1 − c)` — a fallback in the same failure domain buys little.
-# The fallback also costs: latency (the failed attempt, plus a possibly slower target) and money (a pricier
-# model at full traffic until its own quota runs out).
+# Chain arithmetic: with independent failures $A = 1 - \prod_i (1 - a_i)$; a common-mode event (the gateway's own
+# region, a shared upstream) multiplies it by $(1 - c)$ — a fallback in the same failure domain buys little. The
+# fallback also costs: latency (the failed attempt, plus a possibly slower target) and money (a pricier model at full
+# traffic until its own quota runs out).
 
 # %%
 import os, statistics, time
@@ -57,12 +57,14 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 # different: *what do I get back?* For each fault below, switched on at `acme` (the first target of `chat`) for one
 # streamed request, write `client_sees(fault)` returning `(status, served_by, error_in_stream)`: the HTTP status the
 # client receives, the `x-gwlab-target` that served it (`None` if nothing did) and whether the stream carries an
-# `error` event. The faults: `"503"`; `"429"`; `"timeout"` (acme stalls past its 0.4 s first-byte timeout);
-# `"context"` (a prompt the gateway's chars/4 estimate says fits acme's 8,192-token window, which acme's own tokenizer
-# counts as 9,000 tokens); `"midstream"` (an error chunk after 5 content chunks); `"reset"` (the connection drops
-# after 5 chunks); `"bad_key"` (acme rejects the *gateway's* provider key with a 401). Predict before you run
-# anything: the check provokes each fault, one at a time (breakers reset between them, since three in a row would
-# open acme's — the subject of the second half), and prints what the gateway did.
+# `error` event.
+#
+# The faults: `"503"`; `"429"`; `"timeout"` (acme stalls past its 0.4 s first-byte timeout); `"context"` (a prompt the
+# gateway's chars/4 estimate says fits acme's 8,192-token window, which acme's own tokenizer counts as 9,000 tokens);
+# `"midstream"` (an error chunk after 5 content chunks); `"reset"` (the connection drops after 5 chunks); `"bad_key"`
+# (acme rejects the *gateway's* provider key with a 401). Predict before you run anything: the check provokes each
+# fault, one at a time (breakers reset between them, since three in a row would open acme's — the subject of the
+# second half), and prints what the gateway did.
 
 # %% exercise
 def client_sees(fault: str) -> tuple:
@@ -141,11 +143,12 @@ print(f"[SIMULATED] acme failed {fa:.1%} of its attempts, bolt {fb:.1%}: predict
       f"(acme alone: {1 - fa:.2f})")
 print("✅ two lossy targets in independent failure domains; put both behind one common failure and (1 − c) caps it")
 
+# %% [markdown]
 # ## Exercise 2.3 — what a fallback costs in latency
 #
 # On the same run, a request either got `acme` at once (TTFT ≈ acme's), or paid a failed attempt and then got
 # `bolt`. Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`: the mean TTFT of
-# the requests that succeeded — `(1 − p)·t₁ + p·(1 − p₂)·(f + t₂)`, divided by the probability of success.
+# the requests that succeeded — $(1 - p)\,t_1 + p\,(1 - p_2)\,(f + t_2)$, divided by the probability of success.
 # The check fills in the components *measured* on the run (each target's TTFT from the requests it served, the
 # failed attempt's duration from the gateway's decision log) and compares with the measured mean.
 
@@ -201,10 +204,10 @@ print(f"requests that reached acme while it was down: {dead}; skipped by the ope
 #
 # Predict it: requests arrive at `rate` per second; the target is dead for `outage_s`; the breaker opens after
 # `threshold` consecutive failures and lets one probe through every `recovery_s` while open. Write
-# `requests_reaching_dead_target(outage_s, rate, threshold, recovery_s)`: the `threshold` failures that open it
-# (they take `threshold / rate` seconds), plus one failed probe per full `recovery_s` in the rest of the outage.
-# The check compares with the run above (a small tolerance: arrivals are Poisson and the fault window is
-# not aligned with them).
+# `requests_reaching_dead_target(outage_s, rate, threshold, recovery_s)`: the `threshold` failures that open it (they
+# take $\text{threshold} / \text{rate}$ seconds), plus one failed probe per full `recovery_s` in the rest of the
+# outage. The check compares with the run above (a small tolerance: arrivals are Poisson and the fault window is not
+# aligned with them).
 
 # %% exercise
 def requests_reaching_dead_target(outage_s, rate, threshold, recovery_s) -> int:
@@ -276,4 +279,4 @@ stack.stop()
 #
 # **Drill 3.** *Our fallback is the same model in another zone of the same region. What does the chain buy?* —
 # Protection from zonal failures only; a regional outage, a provider-wide incident or a bad deploy is
-# common-mode, so `(1 − c)` bounds availability no matter how many zonal replicas are in the chain.
+# common-mode, so $(1 - c)$ bounds availability no matter how many zonal replicas are in the chain.
