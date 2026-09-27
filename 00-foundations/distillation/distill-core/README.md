@@ -108,7 +108,11 @@ carry the correctness claims:
   constants, and function by function against the originals when they are in the checkout (loaded by path, no
   cache left behind).
 - **The primer says what the code computes.** Every computed number in `../PRIMER.md` is recomputed and must appear
-  verbatim (`test_primer_numbers.py`).
+  verbatim (`test_primer_numbers.py`). A closed-form number must match to the digit; a trained or sampled number is
+  one CPU's run (numpy's matrix kernel differs by microarchitecture, and a few hundred Adam steps grow the last-bit
+  difference into a slightly different model), so it is pinned to the reference run within a tolerance measured across
+  kernels — `tests/pins.py`, with `tools/host_sensitivity.py` to remeasure after a change — and the claim behind it is
+  asserted on whatever machine runs the test.
 
 ## Caveats: what the toys are and are not
 

@@ -3,6 +3,7 @@ import numpy as np
 
 from distillcore import TinyLM, eval as E, losses as L, seqkd, train
 from distillcore.tinylm import fit_language
+from tests.pins import near
 
 
 def test_agreement_metrics_by_hand():
@@ -38,7 +39,8 @@ def test_the_student_gap_hides_in_rare_inputs_and_long_outputs(lang, teacher, be
     rows = {r["slice"]: r for r in E.capability_gap({f"{k} n={n}": (ok(teacher, x, n), ok(small, x, n))
                                                        for k, x in (("common", prompts), ("rare", rare)) for n in (2, 8)})}
     assert rows["common n=2"]["student"] == 1.0 and rows["rare n=8"]["student"] < rows["rare n=2"]["student"] < 1
-    assert round(rows["rare n=8"]["student"], 3) == 0.525 and rows["rare n=8"]["n"] == 101
+    assert rows["rare n=8"]["n"] == 101
+    near(rows["rare n=8"]["student"], 0.525, 0.02)                 # 53 of 101 in the reference run (tests/pins.py)
 
 
 def test_a_student_can_beat_its_teacher_while_agreeing_less(lang):
@@ -54,7 +56,8 @@ def test_a_student_can_beat_its_teacher_while_agreeing_less(lang):
     seqkd.sft(filt, seqkd.keep_verified(lang, data), 600)
     seqkd.sft(raw, data, 600)
     acc = {k: E.vs_truth(m, lang)["rule_acc"] for k, m in (("teacher", weak), ("filtered", filt), ("raw", raw))}
-    assert acc["filtered"] > acc["teacher"] > acc["raw"] and round(acc["teacher"], 3) == 0.950
+    assert acc["filtered"] > acc["teacher"] > acc["raw"]
+    near(acc["teacher"], 0.950, 0.005)                             # 115 of 121 (tests/pins.py)
     zt = weak.logits(C)
     assert E.kl(zt, filt.logits(C)) > 5 * E.kl(zt, raw.logits(C))
     assert E.argmax_agreement(zt, filt.logits(C)) < E.argmax_agreement(zt, raw.logits(C))

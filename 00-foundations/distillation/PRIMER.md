@@ -3,8 +3,14 @@
 *A primer for 00-foundations (module 00.6). Snapshot: September 2026. Product facts are dated and marked (verify);
 every formula has a worked number and names the function in [`distill-core/`](distill-core/) (package
 `distillcore`) that computes it. Toy numbers are exact (the output space is enumerated) or seeded runs of
-tiny numpy models; serving numbers are a roofline bound — the arithmetic of layer 01's `roofline.llm` and
-`roofline.cost`, reproduced in the core's tests — not measurements.*
+tiny numpy models — and a seeded run is one CPU's run: numpy's OpenBLAS picks its matrix kernel per
+microarchitecture, the kernels round differently in the last bit, and a few hundred Adam steps grow that into a
+slightly different, equally valid model. The trained and sampled numbers below are the reference run's, so your
+machine may differ in the last digits; the core's tests pin each one to within the spread measured across kernels —
+a few thousandths on most rates, about ±0.05 on the on-policy students of §4 (±0.1–0.2 on their rare slices in §8),
+±0.14 on the 8-unit draft of §7, a small KL to within a factor of a few (`distill-core/tests/pins.py`,
+`tools/host_sensitivity.py`). Serving numbers are a roofline bound — the arithmetic of layer 01's `roofline.llm`
+and `roofline.cost`, reproduced in the core's tests — not measurements.*
 
 This primer explains how a small model is trained to behave like a large one, and what that buys in serving:
 why a student learns more per example from a teacher's distribution than from labels; which divergence to
@@ -271,8 +277,11 @@ and minimises JSD(β) (`onpolicy.gkd_train()` implements the same loop).
 | GKD λ = 1, β = 0.5 | 0.957 | 0.831 | 0.636 |
 | GKD λ = 1, β = 1 (reverse) | 0.930 | 0.754 | 0.504 |
 
-On-policy data fixes it; the divergence decides how fast. In this toy the reverse end is slow from every start
-tried (rule accuracy over all 121 contexts after 300 steps, `eval.vs_truth()`, notebook 02):
+On-policy data fixes it; the divergence decides how fast. (These are the primer's least reproducible rows after
+§7's small drafts: on-policy training samples its own data, and across the CPU kernels tested the β = 0 row moves by
+up to ±0.01 / ±0.04 / ±0.05, the β = 1 row by ±0.03 / ±0.08 / ±0.07; the order of the rows does not change.) In
+this toy the reverse end is slow from every start tried (rule accuracy over all 121 contexts after 300 steps,
+`eval.vs_truth()`, notebook 02):
 
 | Start from | At the start | Where wrong, mass on the right token | GKD λ = 1, β = 0 | β = 1 |
 |---|---|---|---|---|
@@ -495,7 +504,10 @@ target parameters, the memory-bound view of a decode step, `draft.draft_cost()`)
 | speedup at k = 4 | 1.56× | 1.72× | 2.26× | 1.60× |
 
 α saturates once the draft can hold the target; c keeps growing; the speedup peaks at the smallest draft that holds
-the target's behaviour. Below that size the capacity gap, not the training data, sets α. For a real pair,
+the target's behaviour. Below that size the capacity gap, not the training data, sets α — and which compromise a
+too-small draft ends its 1,500 steps at depends on the CPU's kernel: across those tested, the 4- and 8-unit α move
+by up to about ±0.05 and ±0.14 and the 8-unit speedup by ±0.4, the least reproducible numbers in this primer; the
+ordering and the peak at 16 units hold on every one. For a real pair,
 Qwen3-0.6B drafting for Qwen3-4B (same 151,936 vocabulary) has c ≈ 0.148 by weight bytes, so k = 4 gives 1.45×,
 1.74× and 2.11× at α = 0.6, 0.7 and 0.8 — a model, before per-step overheads (measure c, as the serving primer says).
 
@@ -546,7 +558,9 @@ were trained from, "rare" the other 101 (`eval.capability_gap()`):
 | + on-policy GKD | 20/20 (0.839–1.000) | 0.881 (0.804–0.931) | 0.683 (0.587–0.766) |
 | 8 units, KD on everything | 20/20 (0.839–1.000) | 0.851 (0.769–0.908) | 0.525 (0.428–0.619) |
 
-Every student is perfect on the slice a quick eval would use. The gap is in the tail — rare inputs, long outputs
+Every student is perfect on the slice a quick eval would use (the on-policy student's rare-slice rates are one
+run's: ±0.1 at n = 2 and ±0.2 at n = 8 across the CPU kernels tested, the tail gap on every one). The gap is in
+the tail — rare inputs, long outputs
 (a long output visits many contexts, and an error rate of 6.6% per context compounds) — and 20 items cannot bound
 anything tighter than 84–100%. Where students fail at scale follows the same pattern: long-tail facts and rare
 knowledge, multi-step problems, instruction edge cases and safety behaviour the distillation data under-covers.

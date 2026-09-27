@@ -117,7 +117,9 @@ print("  KD     ", " ".join(f"{x:.2f}" for x in eb_kd["sampled_on_rule"]))
 # slip lands it in contexts no training example covered, where its top token is wrong about a quarter of the
 # time: per position its accuracy falls from 1.000 on the teacher's prefixes to 0.788 by position 4 and then stays
 # there. What compounds with length is the whole output: the chance it has been right at every position falls to
-# 0.650 by position 4 and 0.190 by position 12, while the teacher's stays at 1.000. That is exposure bias.
+# 0.650 by position 4 and 0.190 by position 12, while the teacher's stays at 1.000. That is exposure bias. (Your
+# numbers may differ in the last digits: a seeded run is one CPU's run, and the on-policy rows of the next example
+# move by up to ±0.05 across CPU kernels — the primer's header note and `tests/pins.py` say how much.)
 #
 # ## Worked example 4 — on-policy distillation removes it
 # Continue from the KD student with GKD at λ = 1: the student samples its own continuations; the teacher scores

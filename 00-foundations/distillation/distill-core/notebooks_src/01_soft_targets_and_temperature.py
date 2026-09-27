@@ -132,7 +132,10 @@ for steps in (0, 20, 100):
 # %% [markdown]
 # Pruning alone breaks the model (0.317 on average), but not back to nothing: a fresh student scores 0.097. KD
 # from the parent repairs it fast. After 20 steps the worst pruned student (0.612) beats the best fresh one
-# (0.331). By 100 steps the two are within seed noise, and a single draw could show either one ahead. Pruning
+# (0.331). By 100 steps the two are within seed noise, and a single draw could show either one ahead. (The
+# numbers here are one CPU's: numpy's matrix kernel differs by microarchitecture, and a few hundred Adam steps
+# turn last-bit differences into a slightly different model, so your run may differ in the last digits — the
+# core's tests pin each number to the spread measured across kernels, `tests/pins.py`.) Pruning
 # buys a head start in training steps, not a better student: Minitron's argument (prune by importance, then
 # distil from the parent, with far fewer training tokens per model) in miniature.
 #
