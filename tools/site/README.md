@@ -86,6 +86,10 @@ the link (beside "Open in Colab") in their first cell.
   columns at full width, short fields in a row beneath. The rule: four or more columns with a prose column (a cell
   of 40+ words or an average of 12+), or three columns with a 120-word cell; numeric and short-text tables stay
   tables. The build log counts them;
+- gives a list the blank line Python-Markdown needs: GitHub lets a list interrupt a paragraph, so "**Three
+  fixes:**" followed straight by "- …" lines is a lead-in and a list there, while Python-Markdown rendered the same
+  lines as one paragraph with literal "- " markers; the hook inserts the blank line before a list item that directly
+  follows a line of prose (outside code fences, inside blockquotes too) and the build log counts them;
 - turns GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) in Markdown pages into
   Material admonitions before rendering, so one source reads as a callout on GitHub and on the site; other
   blockquotes are left as they are (the stylesheet styles them as callouts too).
