@@ -23,15 +23,15 @@ the layer it belongs to. This file tells you (Claude) how to keep it consistent.
   │  05-orchestrator                  Orchestrator (Dynamo, llm-d, Ray Serve: routing, autoscaling, disaggregation)
   │  04-inference-engine              Inference engine (vLLM / SGLang / TensorRT-LLM)
   │  03-kubernetes-gpu                Kubernetes and GPU scheduling
-  │  02-cuda-nccl-runtime             CUDA and NCCL runtime
-  └─ 01-hardware-gpu-fabric           Hardware and GPU fabric (GPUs, NVLink, NICs, storage, cooling)
+  │  02-cuda-nccl-runtime             CUDA, NCCL and runtime
+  └─ 01-hardware-gpu-fabric           Hardware and fabric (GPUs, NVLink, NICs, storage, cooling)
   (00-foundations sits below the stack.) These are the canonical layer names; every README, the curriculum and the site use them.
 ```
 
 | # | Folder | What belongs here | Signal keywords |
 |---|--------|-------------------|-----------------|
-| 07 | `07-application-agent-framework` | The agent: loop, tools, sandboxed code execution, memory, durable execution, multi-agent, evals, RAG/retrieval, end-user apps | agent loop, tool calling, ADK, LangGraph, multi-agent, durable, long-running, checkpoint, saga, HITL, RAG, retrieval, vector store, eval, sandbox, gVisor, code execution |
-| 06 | `06-gateway` | Control plane in front of models: authn/z, agent identity, policy/guardrails, rate limits, admission, routing, quotas, cost accounting, observability | auth, OAuth, OIDC, SPIFFE, token exchange, policy, guardrail, rate limit, admission, quota, cost/conversation, circuit breaker, audit, MCP authz |
+| 07 | `07-application-agent-framework` | The agent: loop, tools, sandboxed code execution, memory, durable execution, multi-agent, evals, RAG/retrieval, end-user apps | agent loop, tool calling, ADK, LangGraph, multi-agent, durable, long-running, checkpoint, saga, HITL, RAG, retrieval, vector store, eval, sandbox, gVisor, code execution, memory, episodic, semantic, consolidation, forgetting |
+| 06 | `06-gateway` | Control plane in front of models: authn/z, agent identity, policy/guardrails, rate limits, admission, routing, quotas, cost accounting, observability | auth, OAuth, OIDC, SPIFFE, token exchange, policy, guardrail, rate limit, admission, quota, cost/conversation, circuit breaker, audit, MCP authz, LLM gateway, model routing, fallback chain, semantic cache, token metering, chargeback, virtual key, tenant isolation, MCP client authorization |
 | 05 | `05-orchestrator` | Coordinating engine replicas: routing, replica autoscaling, prefill/decode disaggregation, KV-aware routing | Dynamo, llm-d, Ray Serve, disaggregation, KV-aware routing, prefix cache, replica autoscaling, LoRA routing, SLO |
 | 04 | `04-inference-engine` | Running a model on GPUs: KV cache, batching, prefill/decode, quantization, speculative decoding, attention kernels | vLLM, SGLang, TensorRT-LLM, KV cache, paged attention, flash attention, continuous batching, quantization, GPTQ, AWQ, FP8, FP4, KV quantization, tensor parallel, TTFT |
 | 03 | `03-kubernetes-gpu` | Cluster resource mgmt: GPU Operator, device plugins, GPU scheduling, gang/topology-aware placement | Kubernetes, GPU Operator, device plugin, gang scheduling, Volcano, Kueue, topology-aware, NUMA, cluster autoscaler |
@@ -41,7 +41,8 @@ the layer it belongs to. This file tells you (Claude) how to keep it consistent.
 
 Each layer folder has a `README.md` with full scope + current contents. Plus **`00-foundations/`** (below the stack) for model-level material that underpins every layer. Every layer
 has content; layers 01–05 each hold a primer + core + lab topic (and layer 04 two deep dives), and so do 00 (two:
-`mixture-of-experts`, `rl-and-thinking-models`), 04 (`quantization`, plus `kernel-core`, the numpy core behind the three kernel topics) and 07 (`sandboxed-execution`), all logged below. The root
+`mixture-of-experts`, `rl-and-thinking-models`), 04 (`quantization`, plus `kernel-core`, the numpy core behind the three kernel topics), 06 (`llm-gateway`) and 07 (two:
+`sandboxed-execution`, `agent-memory`), all logged below. The root
 [`CURRICULUM.md`](CURRICULUM.md) (learning path) and [`COMPUTE.md`](COMPUTE.md) (tiers, hardware, cost) are the entry points across layers.
 
 ## Within a layer: topic sub-folders
@@ -68,20 +69,29 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
 - **Every notebook is Colab-ready.** Its first cell (tagged `colab-bootstrap`) is a no-op locally, and
   on Colab clones this repo (public, so a plain shallow clone), `cd`s into the notebook's dir, and pip-installs the nearest lab; see `COLAB.md`.
   Two mechanisms, both baking in the repo URL:
-  - Percent-source labs (`agent-core`, `mistral-agent-core`, `gcp-agent-platform-lab`, every core and lab in layers 01–05, and the cores and labs of `mixture-of-experts`, `rl-and-thinking-models`, `quantization` and `sandboxed-execution`): the
+  - Percent-source labs (`agent-core`, `gcp-agent-platform-lab`, every core and lab in layers 01–05, and the cores and labs of `mixture-of-experts`, `rl-and-thinking-models`, `quantization`, `sandboxed-execution`, `llm-gateway` (`gateway-core`, `gateway-lab`) and `agent-memory` (`memory-core`, `memory-lab`); 24 labs): the
     `BOOTSTRAP` constant in their `tools/build_notebooks.py`. Change it there, then regenerate: `python3 tools/build_notebooks.py`.
-    Three more builders — `00-foundations/transformers/practice/build_notebooks.py`, `long-running-agents-gcp/tools/build_notebooks.py`,
-    `lra-gcp/scripts/build_notebooks.py` — import the injector's `make_cell`, so they emit the same cell and the injector is a no-op on them.
-    Every builder writes stable cell ids: rebuilding an unchanged lab is a no-op (`git status --porcelain` empty), and each of these
-    labs carries `tests/test_notebook_tooling.py` (8 tests) pinning that, the Colab cell and the `run_notebooks.py --expect-fail`
-    verdicts (an exercise stop is `NotImplementedError`; a missing module or a leftover `...` is `FAIL(env)`).
+    Four more builders — `00-foundations/transformers/tools/build_notebooks.py`,
+    `07-application-agent-framework/long-running-durable/lra-gcp/scripts/build_notebooks.py`, and in `07-.../retrieval-rag/`
+    embeddings-lab's `build.py` and rag-from-scratch's `tools_build_notebooks.py` — import the injector's `make_cell`, so they emit
+    the same cell and the injector is a no-op on them. `python3 tools/ci/ci.py builders` lists all 28.
+    Every builder writes stable cell ids: rebuilding an unchanged lab is a no-op (`git status --porcelain` empty), and the 24
+    percent-source labs, the transformers lab and `lra-gcp` each carry `tests/test_notebook_tooling.py` (8 tests) pinning that, the
+    Colab cell and the `run_notebooks.py --expect-fail` verdicts (an exercise stop is `NotImplementedError`; a missing module or a
+    leftover `...` is `FAIL(env)`).
   - All other notebooks: `python3 tools/inject_colab_bootstrap.py <lab-dir> …` (stdlib-only, idempotent —
     re-running replaces the cell, never duplicates it, never touches a lab's own cells).
   - After any change, regenerate: `python3 tools/gen_colab_index.py` (rewrites each layer README's Colab-links section, between `<!-- colab-links -->` markers, plus the `COLAB.md` setup guide).
-- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the notebook rebuilds (they
-  must be no-ops), the Colab-link and site generators and the link check on every push and pull request;
-  `tools/ci/run_local.sh <lab-id>|--notebooks|--docs|--colab-index` runs the same thing locally. A new lab with tests must be
-  added to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies), or the "lab list complete" job goes red.
+- **One notebook layout** in every lab: `<lab>/notebooks/<name>.ipynb` is what a learner opens (exercise blanks, lessons,
+  walkthroughs) and `<lab>/solutions/<name>.ipynb` the worked answer to the blank with the same file name; no other notebook
+  folder, no notebook at a lab's top level, no answer key beside its blank under a suffix. The guard is `tools/ci/nb_layout.py`
+  (run alone, it lists every tracked notebook with its lab, role and twin, then every deviation), which `tools/ci/ci.py check`
+  runs; the Colab-link and site generators know this one rule (a notebook is an answer key exactly when its folder is `solutions/`).
+- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the lab-list check and the
+  notebook-layout guard (`tools/ci/ci.py check`), the notebook rebuilds (they must be no-ops), the Colab-link and site generators
+  and the link check on every push and pull request; `tools/ci/run_local.sh <lab-id>|--check|--notebooks|--docs|--colab-index`
+  runs the same thing locally. A new lab with tests must be added to `tools/ci/labs.json`, and its notebooks must follow the
+  layout (`tools/ci/run_local.sh --check` verifies both), or the "lab list complete" job goes red.
 - **Redo an exercise:** `git restore <notebook>` returns it to the committed blank; for percent-source
   labs, re-run `python3 tools/build_notebooks.py`. (This is why exercises are committed blank.)
 
@@ -91,8 +101,9 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
 3. **Propose the mapping to the user; confirm anything ambiguous.**
 4. `mkdir -p` layer/topic folders; **`mv -n`** items in (whole folders, so nothing is half-moved).
 5. Strip any per-item `.git` and build junk the drop brought in (it's a mono-repo).
-6. Make notebooks Colab-ready (injector or build-script) and regenerate the per-layer Colab links (`tools/gen_colab_index.py`);
-   add any lab with tests to `tools/ci/labs.json` (`tools/ci/run_local.sh --check` verifies).
+6. Put each lab's notebooks in `notebooks/` + `solutions/` (the layout above), make them Colab-ready (injector or build-script)
+   and regenerate the per-layer Colab links (`tools/gen_colab_index.py`); add any lab with tests to `tools/ci/labs.json`
+   (`tools/ci/run_local.sh --check` verifies both).
 7. Update affected layer `README.md`s, this file's decisions log, root `README.md`.
 8. `git add -A && git commit` and `git push`. Verify `raw/` holds only `.DS_Store` + `README.md`.
 
@@ -160,9 +171,49 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   Mistral variants into adapters, standardising the notebook directory conventions (the generators now recognise all of them),
   and the two new topics the review asks for (an LLM gateway in 06, agent memory in 07). **Baseline unchanged: 347 notebooks.**
 
+- **2026-09-27 — the five decisions from the 2026-09-26 review, and a contributor guide.** The owner approved the five items the
+  fix plan had left open, with "use own judgment"; each ran as a package on its own branch
+  (`claude/clever-hypatia-ma6t1l-<id>`), was checked by an independent adversarial verifier and squash-merged, and the ledger
+  `tools/orchestration/reviews/2026-09-26-structure-plan.md` tracked them (the scripts and briefs are in
+  `reviews/structure-plan/`). **c1 (#37):** the durable sub-tree is one lineage,
+  `07-application-agent-framework/long-running-durable/{README.md, PRIMER.md, lra-core/, lra-gcp/}` (module 07.3). The `lra`
+  lineage was kept (`lra-core` is the strongest engine, `lra-gcp` pydantic-only) and the unique parts of
+  `long-running-agents-core/-gcp` and the Mistral durable lab folded in: drills into the primer, the ADK example as an `adk`
+  extra, Mistral Workflows as a `mistral` extra tested on Python 3.12 in CI; the verifier caught a real bug (an unknown tool
+  failed the run; it now returns to the model as a `ToolError`). **c2 (#36):** the Mistral variants are adapters, not copies:
+  `agent-core`'s `mistral` extra (`agentcore/mistral_llm.py`, `docs/MISTRAL.md`, notebook `05_going_live_on_mistral`),
+  `agentic-scaling-lab`'s backend switch (`SCALELAB_BACKEND` / `SCALELAB_PROVIDER`; the Mistral scaling primer, a real rewrite,
+  kept as `docs/mistral/01-scaling-primer.md`) and `agentic-identity-core`'s `agentsec_core_mistral.py`, which imports the five
+  moves. The copies are gone, and with them the `scalelab` name clash. **c3 (#38):** one notebook layout,
+  `notebooks/` + `solutions/<same name>`: 55 deviations in 9 labs moved with `git mv`, the generators reduced to one rule, and
+  `tools/ci/nb_layout.py` guarding it in `ci.py check`. **c5 (#39):** `07-application-agent-framework/agent-memory/` (module
+  07.6), whose primer covers the kinds of memory, the write path with provenance, retrieval by similarity, recency and
+  importance in a token budget, planted-facts evaluation, the context budget and the prefix cache, consolidation, forgetting and
+  deletion, and tenancy and poisoning. `memory-core` (`memcore`, standard library + numpy; 84 tests + 1 skipped) and
+  `memory-lab` (`memlab`: SQLite with FTS5 and vectors and a pgvector twin, a memory service and an agent over HTTP, prefix hits
+  measured on vLLM; 174 + 1) teach every concept at T0, with pgvector at T0 + Docker, a real embedder or model at T1 and a
+  printed T3. **c4 (#41):** `06-gateway/llm-gateway/` (module 06.7), whose primer covers one front door and one API, routing and
+  fallback chains, caching, streaming-aware rate limits, metering and chargeback, virtual keys and tenant isolation, guardrail
+  placement and cost, and the gateway as an MCP client. `gateway-core` (`gwcore`, standard library + numpy on a virtual clock;
+  109 + 1) and `gateway-lab` (`gwlab`: an async OpenAI-compatible gateway over HTTP in front of fake providers or one vLLM, MCP
+  authorization with DPoP; 166 + 1 with the `dpop` extra) run at T0, T0 + Docker and T1, and at T3 through the 04 and 05 labs'
+  GCP deploys. Both topics are percent-source (5 notebooks + 5 solutions per lab), were built with `build_topic.js` against new
+  SPEC §6b blocks and reviewed through three lenses (32 and 39 findings, all fixed, validator pass), and add no Terraform
+  (`deploy/gcp` points at existing labs' deploys). Research corrections that mattered: the generative-agents code's recency is
+  `0.99 ^ rank` over memories sorted oldest-accessed first, so it favours the stalest memory (both forms are pinned); mem0 2.0
+  is ADD-only; Graphiti's valid time is `valid_at`/`invalid_at`; SPIRE's rotation jitter is ±10 % of the half-life; vLLM 0.30.0
+  caps `cache_salt` at 128 characters and names the reasoning field `reasoning`; MCP client credentials (SEP-1046) ship as an
+  extension, and Dynamic Client Registration is deprecated; LiteLLM strips the usage chunk a client did not ask for and reserves
+  TPM before the call (prompt + `max_tokens`, else an estimate from its 4,096-token default). **`CONTRIBUTING.md` (#40)** is the
+  human-facing counterpart of this file. **Licence:** MIT stays for everything not otherwise licensed, prose included (no CC BY
+  split). CURRICULUM: 06.7 is step 25 and 07.6 step 30, about 299 h in all; `tools/ci/labs.json` has 38 entries and
+  `ci.py builders` lists 28; c1 and c2 took the notebooks from 347 to 325, and each topic added 20. Residuals: the
+  `--expect-fail` tooling test of `mini-engine-core` and `thinking-lab` fails intermittently under load (it passes on a re-run);
+  `lra-core/tools/run_notebooks.py --help` takes `--help` for a path; the answer copies in `embeddings-lab/solutions/` and the
+  transformers lab's `solutions/attention_practice.ipynb` keep a "Solutions: …" line that points at themselves.
+  **New baseline: 365 notebooks.**
+
 ## Housekeeping
-- Deduped 2026-09-26: `07-.../long-running-durable/00_primer.md` is the only copy of the durable-execution primer, and
-  `lra/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
-- Both scaling labs' packages are named `scalelab` (install one at a time, or use `PYTHONPATH`); the rename waits for the
-  Mistral-fold decision in `tools/orchestration/reviews/2026-09-26-fix-plan.md`.
+- Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
+  `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
 - Root `.gitignore` keeps caches/venvs/`.DS_Store` out; per-lab `.gitignore` files are retained too.

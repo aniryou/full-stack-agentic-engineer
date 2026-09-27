@@ -55,5 +55,6 @@ primer's §6.2 (code execution) and keeps secrets out of the sandbox with the sa
   when you set `AGENTSEC_PROFILE=gcp` and apply its Terraform. Those products are a September 2026 snapshot, several
   went GA in 2026; the primer's §13 Verify list says what to re-check (verify).
 - The Mistral path's connector scopes, guardrail fields and model names were checked in September 2026 (verify).
-- Not covered yet: the MCP client-side authorization flow (discovery → PKCE → code → token), DPoP nonces, the SPIFFE
-  Workload API and SVID rotation ([`CURRICULUM.md`](../../CURRICULUM.md) §2).
+- The MCP client-side authorization flow (discovery → PKCE → code → token), DPoP nonces, the SPIFFE Workload API and
+  SVID rotation are covered by [`llm-gateway`](../llm-gateway/README.md) (module 06.7): the flow and the nonces in its
+  primer's §8, the Workload API and rotation in brief in §6.5.

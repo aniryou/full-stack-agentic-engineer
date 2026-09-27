@@ -4,7 +4,7 @@
 
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to agents and applications at the top. It is
-organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
+organised as eight layers and, within each layer, by topic: 365 notebooks (exercise and solution versions), all of
 which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Eleven topics come as a primer, a small
 from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
 (03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `llm-gateway` (06),
@@ -149,7 +149,7 @@ python3 -m pytest -q      # most labs ship tests
 ├── LICENSE                MIT, for everything not otherwise licensed (see Licence)
 ├── site/, mkdocs.yml      the guide site: hand-written pages and theme; the site configuration
 ├── requirements-site.txt  what building the site needs
-├── .github/workflows/     builds and publishes the site on every push to main
+├── .github/workflows/     CI on every push and pull request (tests.yml); the site build and publish on pushes to main (pages.yml)
 ├── tools/                 Colab bootstrap and link generators; site/ (the site's page generator)
 ├── tools/orchestration/   notes on how the topics were built and reviewed — maintainer material, not lessons
 ├── raw/                   inbox for new material (gitignored except its README)
