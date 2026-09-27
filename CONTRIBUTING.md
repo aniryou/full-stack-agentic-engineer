@@ -26,7 +26,7 @@ its README's title, the root README, the curriculum and the site. The names are 
 
 | Folder | Name | What belongs there |
 |---|---|---|
-| `00-foundations` | 00 · Foundations | the model itself: transformer internals, capacity planning, the model landscape, mixture-of-experts, RL and thinking models |
+| `00-foundations` | 00 · Foundations | the model itself: transformer internals, capacity planning, the model landscape, mixture-of-experts, RL and thinking models, distillation |
 | `01-hardware-gpu-fabric` | 01 · Hardware and fabric | GPUs and their memory, NVLink and NVSwitch, NICs, storage, power and cooling |
 | `02-cuda-nccl-runtime` | 02 · CUDA, NCCL and runtime | the driver, CUDA, NCCL collectives, the container runtime, MIG |
 | `03-kubernetes-gpu` | 03 · Kubernetes and GPU scheduling | the GPU Operator, device plugins, GPU scheduling, gang and topology-aware placement |
@@ -115,7 +115,7 @@ that makes torch importable.
   `roofline-core`'s `tests/test_primer_numbers.py`: it recomputes every computed number the primer quotes and
   requires it verbatim, so a changed formula fails until the primer follows.
 - When a formula or an explanation already has a home in the repo, cite it and reuse it; duplicating it is a major
-  review finding (SPEC §6b). Labs are standalone packages (no lab's package imports another lab), so new code that
+  review finding (SPEC §6b and §6c). Labs are standalone packages (no lab's package imports another lab), so new code that
   needs such a formula re-implements it, and a test reproduces the home's numbers and says so
   (`tests/test_repo_numbers.py`).
 
@@ -233,7 +233,7 @@ Never edit these by hand; regenerate them, also after a merge that conflicts in 
 - **A new topic** needs its row in the layer README; a module in `CURRICULUM.md` (number, hours and design drills);
   its lab's table in `COMPUTE.md` §6 and its dated items in the §9 Verify list; its entry in the root README; and a
   dated entry in CLAUDE.md's decisions log. [`tools/orchestration/INTEGRATION.md`](tools/orchestration/INTEGRATION.md)
-  is the checklist used when the SPEC §6b topics landed.
+  is the checklist used when the SPEC §6b topics landed, and, adapted, when the §6c topic (distillation) did.
 - **Notebooks added or removed:** re-measure the notebook count the root README quotes.
 - **A moved or renamed path:** search the whole tree for the old one. READMEs, `CURRICULUM.md`, `COMPUTE.md`,
   `tools/ci/labs.json`, Makefiles, primers and the tooling tests all name paths.
@@ -252,7 +252,7 @@ in plain words. The body carries:
 
 A new topic in the primer + core + lab shape has a contract:
 [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md) §0–§5 (goal, tiers, layout, conventions, validation,
-the primer contract) plus a block of its own in the style of §6 and §6b, fixing the primer's numbered sections, the
+the primer contract) plus a block of its own in the style of §6, §6b and §6c, fixing the primer's numbered sections, the
 core's modules and notebooks, the lab's notebooks and deploy targets, and the existing material it must cite and
 reproduce. Write that block, and have it reviewed, before building.
 

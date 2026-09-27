@@ -282,7 +282,8 @@ where they exist, and evals on the true objective.
 
 DeepSeek-R1-Zero used exactly two rule-based rewards, accuracy and format, and no neural reward model (verify). DAPO
 scores +1 / −1 by answer equivalence. Rewards are sparse — one number per completion — and binary, which is what
-makes GRPO's group statistics work.
+makes GRPO's group statistics work; on-policy distillation is the dense-reward cousin, with a teacher scoring every
+token the student samples ([distillation §4](../distillation/PRIMER.md#4-on-policy-distillation)).
 
 **GRPO.** For each prompt, sample a group of G completions from π_old, score them, and give every token of
 completion i the same advantage (DeepSeekMath's GRPO, which R1 adopted; TRL's `GRPOTrainer`). DeepSeekMath writes the
@@ -411,7 +412,11 @@ SFT alone on the ~800k samples, with no RL stage. DeepSeek-R1-Distill-Qwen-1.5B 
 distillation beat RL: RL on Qwen-32B-Base for over 10K steps reached 47.0 on AIME 2024, the distilled 32B 72.6
 (verify). Qwen3's small dense models (0.6B–14B) likewise come from strong-to-weak distillation. In the toy, a fresh
 student trained by SFT on 1,000 traces of the RL-trained ThinkTask teacher reaches accuracy 0.848 against the
-teacher's 0.855, with the same mean thinking length, 11.1 tokens — behaviour copied from outputs alone.
+teacher's 0.855, with the same mean thinking length, 11.1 tokens — behaviour copied from outputs alone. The
+[distillation primer](../distillation/PRIMER.md) works this through: sequence-level distillation and its exposure
+bias ([§3](../distillation/PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs)), on-policy
+distillation ([§4](../distillation/PRIMER.md#4-on-policy-distillation)) and what a distilled thinking model inherits
+([§5](../distillation/PRIMER.md#5-distilling-reasoning)).
 
 **Hybrid thinking modes and chat-template switches.** Qwen3's original release is hybrid: the chat template's
 `enable_thinking` switch (default True) makes it think or not. `enable_thinking=False` appends an empty

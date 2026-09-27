@@ -4,13 +4,13 @@
 
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to agents and applications at the top. It is
-organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
-which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Ten topics come as a primer, a small
+organised as eight layers and, within each layer, by topic: 365 notebooks (exercise and solution versions), all of
+which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Eleven topics come as a primer, a small
 from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
-(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts` and
-`rl-and-thinking-models` (00), and `sandboxed-execution` and `agent-memory` (07). The other topics vary in shape:
-layer 01's `gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code; the rest are usually
-a primer plus practice notebooks or a lab; each topic's or lab's README says what it contains.
+(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts`,
+`rl-and-thinking-models` and `distillation` (00), and `sandboxed-execution` and `agent-memory` (07). The other
+topics vary in shape: layer 01's `gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code;
+the rest are usually a primer plus practice notebooks or a lab; each topic's or lab's README says what it contains.
 
 ## Start here
 
@@ -42,7 +42,7 @@ Read bottom-up: each layer is built on the one below it.
   │  03-kubernetes-gpu                make GPUs schedulable: device plugin, scheduler, gangs, quotas, capacity
   │  02-cuda-nccl-runtime             get from a container to a GPU: driver, CUDA, NCCL, container runtime
   └─ 01-hardware-gpu-fabric           read the machine: spec sheets, the roofline, fabrics, cost of a token
-     00-foundations                   the model itself: transformer internals, capacity math, MoE, RL and thinking
+     00-foundations                   the model itself: transformers, capacity, MoE, RL and thinking, distillation
 ```
 
 ## What is inside
@@ -50,10 +50,12 @@ Read bottom-up: each layer is built on the one below it.
 One entry per layer: what you will be able to do, then its topic folders.
 
 - **00 · Foundations** — [`00-foundations/`](00-foundations/README.md). Build a tiny GPT; size memory and bandwidth
-  for a model; predict what MoE and thinking models do to serving; implement REINFORCE, DPO and GRPO.
+  for a model; predict what MoE and thinking models do to serving; implement REINFORCE, DPO and GRPO; distil a
+  small student from a large teacher and decide whether it pays for itself.
   Topics: `transformers/`, `gpu-capacity-planning/`, `model-landscape/`,
   [`mixture-of-experts/`](00-foundations/mixture-of-experts/README.md),
-  [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md).
+  [`rl-and-thinking-models/`](00-foundations/rl-and-thinking-models/README.md),
+  [`distillation/`](00-foundations/distillation/README.md).
 - **01 · Hardware and fabric** — [`01-hardware-gpu-fabric/`](01-hardware-gpu-fabric/README.md). Read a spec sheet
   and say whether a step is compute- or memory-bound; price a collective; compute $/M tokens; measure your machine.
   Topics: `gpu-primer/`, `gpu-deployment/`,
@@ -91,7 +93,7 @@ the Colab links.
 
 ## How the labs work
 
-The ten primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
+The eleven primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
 one you know how to do the rest. The other topics are shaped differently — a primer with written exercises
 (`gpu-primer/`, `gpu-deployment/`), a primer plus practice notebooks (for example `kv-cache/`, `paged-attention/`,
 `flash-attention/`), or a lab of its own (most of 06 and 07) — and their READMEs say what they have.
@@ -102,7 +104,7 @@ one you know how to do the rest. The other topics are shaped differently — a p
 | **Core** | a minimal implementation, usually standard-library Python, plus fill-in notebooks that *predict* what the real system does |
 | **Lab** | the detailed version: real tools, benchmarks and deploy recipes that *run* or *measure* the same ideas |
 
-**Tiers** say what hardware a notebook or recipe needs, and the ten primer + core + lab topics mark every step
+**Tiers** say what hardware a notebook or recipe needs, and the eleven primer + core + lab topics mark every step
 with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 - **T0** — a laptop, Colab CPU or CI. Free. Every concept is learnable here.

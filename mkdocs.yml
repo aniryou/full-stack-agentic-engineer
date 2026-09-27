@@ -111,6 +111,38 @@ nav:
       - "layers/index.md"
       - "00 · Foundations":
           - "layers/00-foundations/index.md"
+          - "Distillation":
+              - "layers/00-foundations/distillation/index.md"
+              - "Distillation primer": "layers/00-foundations/distillation/PRIMER.md"
+              - "Distill core":
+                  - "layers/00-foundations/distillation/distill-core/index.md"
+                  - "Notebooks":
+                      - "01 · Soft targets and temperature": "layers/00-foundations/distillation/distill-core/notebooks/01_soft_targets_and_temperature.ipynb"
+                      - "02 · Forward vs reverse KL, and on-policy distillation": "layers/00-foundations/distillation/distill-core/notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb"
+                      - "03 · Distilling reasoning traces": "layers/00-foundations/distillation/distill-core/notebooks/03_distilling_reasoning_traces.ipynb"
+                      - "04 · A distilled draft for speculative decoding": "layers/00-foundations/distillation/distill-core/notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb"
+                      - "05 · Measuring a student, and whether it is worth it": "layers/00-foundations/distillation/distill-core/notebooks/05_measuring_a_student_and_the_economics.ipynb"
+                  - "Solutions":
+                      - "01 · Soft targets and temperature (solution)": "layers/00-foundations/distillation/distill-core/solutions/01_soft_targets_and_temperature.ipynb"
+                      - "02 · Forward vs reverse KL, and on-policy distillation (solution)": "layers/00-foundations/distillation/distill-core/solutions/02_forward_reverse_kl_and_on_policy_distillation.ipynb"
+                      - "03 · Distilling reasoning traces (solution)": "layers/00-foundations/distillation/distill-core/solutions/03_distilling_reasoning_traces.ipynb"
+                      - "04 · A distilled draft for speculative decoding (solution)": "layers/00-foundations/distillation/distill-core/solutions/04_a_distilled_draft_for_speculative_decoding.ipynb"
+                      - "05 · Measuring a student, and whether it is worth it (solution)": "layers/00-foundations/distillation/distill-core/solutions/05_measuring_a_student_and_the_economics.ipynb"
+              - "Distill lab":
+                  - "layers/00-foundations/distillation/distill-lab/index.md"
+                  - "Bundled samples": "layers/00-foundations/distillation/distill-lab/distillab/assets/samples/index.md"
+                  - "Notebooks":
+                      - "01 · Distillation on a tiny transformer": "layers/00-foundations/distillation/distill-lab/notebooks/01_kd_on_a_tiny_transformer.ipynb"
+                      - "02 · Teacher data and a real student": "layers/00-foundations/distillation/distill-lab/notebooks/02_teacher_data_and_a_real_student.ipynb"
+                      - "03 · Distilling reasoning traces": "layers/00-foundations/distillation/distill-lab/notebooks/03_distilling_reasoning_traces_for_real.ipynb"
+                      - "04 · A distilled draft for speculative decoding": "layers/00-foundations/distillation/distill-lab/notebooks/04_a_distilled_draft_in_vllm.ipynb"
+                      - "05 · Is the student worth it? Agreement, the capability gap, cost per correct answer and break-even": "layers/00-foundations/distillation/distill-lab/notebooks/05_is_the_student_worth_it.ipynb"
+                  - "Solutions":
+                      - "01 · Distillation on a tiny transformer (solution)": "layers/00-foundations/distillation/distill-lab/solutions/01_kd_on_a_tiny_transformer.ipynb"
+                      - "02 · Teacher data and a real student (solution)": "layers/00-foundations/distillation/distill-lab/solutions/02_teacher_data_and_a_real_student.ipynb"
+                      - "03 · Distilling reasoning traces (solution)": "layers/00-foundations/distillation/distill-lab/solutions/03_distilling_reasoning_traces_for_real.ipynb"
+                      - "04 · A distilled draft for speculative decoding (solution)": "layers/00-foundations/distillation/distill-lab/solutions/04_a_distilled_draft_in_vllm.ipynb"
+                      - "05 · Is the student worth it? Agreement, the capability gap, cost per correct answer and break-even": "layers/00-foundations/distillation/distill-lab/solutions/05_is_the_student_worth_it.ipynb"
           - "LLM GPU Capacity Planning":
               - "layers/00-foundations/gpu-capacity-planning/index.md"
               - "LLM GPU Capacity Planning primer": "layers/00-foundations/gpu-capacity-planning/PRIMER.md"

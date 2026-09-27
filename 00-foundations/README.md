@@ -2,8 +2,9 @@
 
 Understand the model the whole stack serves: after this layer you can build a transformer from nothing, size a
 model's memory, bandwidth and latency before paying for a GPU, place a model family in the open-weight landscape,
-say what a mixture-of-experts router does to memory, batching and serving cost, and explain how RL post-training
-produces thinking models and what their long outputs do to a serving fleet.
+say what a mixture-of-experts router does to memory, batching and serving cost, explain how RL post-training
+produces thinking models and what their long outputs do to a serving fleet, and decide with numbers whether
+distilling a small student from a large teacher pays for itself.
 
 ## Where this layer sits
 
@@ -15,14 +16,14 @@ produces thinking models and what their long outputs do to a serving fleet.
    03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
    02 CUDA, NCCL and runtime          container to GPU: driver, CUDA, kernels, NCCL, GPU sharing, health
    01 Hardware and fabric             GPUs, memory, NVLink, NICs, storage: the roofline, the cost of a token
-   00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
+   00 Foundations                     the model itself, beneath the stack: shapes, capacity, MoE, RL, distillation
 ```
 
 This layer sits beneath the stack: it is the model every layer above stores, moves and serves.
 
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box
 (Kaggle's free 2×T4, or rented for an hour); T3 = the Google Cloud deployment, optional.* Times are rough, include
-the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 00.1–00.5).
+the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 00.1–00.6).
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
@@ -31,6 +32,7 @@ the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.
 | [`model-landscape/`](model-landscape/open-weight-llms-primer.md) | say what "open weight" grants, check a licence, and place a model family by size, architecture and deployment tier — the [open-weight primer](model-landscape/open-weight-llms-primer.md) and the [Mistral exercises](model-landscape/mistral-primer-exercises.md) | ~1 h | read |
 | [`mixture-of-experts/`](mixture-of-experts/README.md) | explain how an MoE layer routes tokens and why routers must be balanced; count total and active parameters from a config; predict which experts a decode batch reads and when it turns compute-bound; price expert parallelism's all-to-alls; size an MoE deployment against a dense one — a [PRIMER](mixture-of-experts/PRIMER.md), [`moe-core`](mixture-of-experts/moe-core/README.md) (numpy, 5 notebooks) and [`moe-lab`](mixture-of-experts/moe-lab/README.md) (a tiny MoE in torch, router hooks, decode step time vs batch in vLLM, expert parallelism on two GPUs, offload and 4-bit experts; 5 notebooks) | ~7 h primer + core; ~8.5 h lab | T0 → T2 (T3 optional) |
 | [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) | explain what an RL post-training step does — REINFORCE, the KL penalty, reward models, DPO, GRPO and its fixes; predict reward hacking, length bias and over-optimisation; choose between thinking longer and sampling more; size and operate a serving fleet for a thinking model — a [PRIMER](rl-and-thinking-models/PRIMER.md), [`rl-core`](rl-and-thinking-models/rl-core/README.md) (numpy, 5 notebooks) and [`thinking-lab`](rl-and-thinking-models/thinking-lab/README.md) (GRPO on a tiny transformer in torch, Qwen3 in vLLM with a reasoning parser, best-of-n and voting, one GRPO step with vLLM rollouts; 5 notebooks) | ~12 h primer + core; ~10 h lab | T0 → T1 (T3 optional) |
+| [`distillation/`](distillation/README.md) | explain why a student learns more from a teacher's distribution than from labels; choose between logit, sequence-level and on-policy distillation and the divergence each minimises; predict exposure bias and what a distilled thinking model inherits; train a draft model for speculative decoding; measure a student honestly and decide whether it pays for itself — a [PRIMER](distillation/PRIMER.md), [`distill-core`](distillation/distill-core/README.md) (numpy, 5 notebooks) and [`distill-lab`](distillation/distill-lab/README.md) (a tiny transformer distilled four ways in torch, teacher data from a served model and a 0.5–0.6B student with TRL, reasoning traces, a distilled draft under vLLM's speculative decoding, whether a student pays for itself; 5 notebooks) | ~11.5 h primer + core; ~10 h lab | T0 → T1 (T3 optional) |
 
 ## Start here
 
@@ -38,11 +40,13 @@ the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.
    [lessons](transformers/lessons/) — skip to step 2 if attention and the KV cache are already familiar.
 2. `cd gpu-capacity-planning && python3 worked_example.py` — under a second, standard library only: it prints every
    number in the capacity primer, from a 24B dense model on one H100 to Mistral Large 3's 675B MoE.
-3. Work the two primer + core + lab topics by their module tables:
+3. Work the three primer + core + lab topics by their module tables:
    [`mixture-of-experts/`](mixture-of-experts/README.md) once you have layer 01's
-   [roofline](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (§3), and
+   [roofline](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (§3),
    [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) once you have read the
-   [serving-engine primer](../04-inference-engine/serving-engine/PRIMER.md).
+   [serving-engine primer](../04-inference-engine/serving-engine/PRIMER.md), and
+   [`distillation/`](distillation/README.md) right after it (it builds on the RL primer and on the serving-engine
+   primer's [§7](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding)).
 
 ## Run it
 
@@ -55,18 +59,22 @@ cd ../moe-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 
 cd ../../rl-and-thinking-models/rl-core
 python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 65 tests, ~50 s
 cd ../thinking-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 99 tests, offline; ~80 s with torch
+cd ../../distillation/distill-core
+python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 84 tests (one skips by design), ~30 s
+cd ../distill-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 189 tests, offline; ~2 min with torch, ~13 s without
 ```
 
-Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab links below. The two labs run
+Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab links below. The three labs run
 every notebook at T0 (torch on a CPU, a fake vLLM, bundled outputs labelled illustrative) and measure on a GPU when
 you point them at one.
 
 ## How it fits
 
 **Builds on** Python and numpy (CPU PyTorch for the tiny GPT) and nothing else: this is the first stop in the
-[curriculum's spiral](../CURRICULUM.md#31-why-this-order) (00 → 04 → 01 → 02 → 04 → 03 → 05 → 06 → 07). Its two
+[curriculum's spiral](../CURRICULUM.md#31-why-this-order) (00 → 04 → 01 → 02 → 04 → 03 → 05 → 06 → 07). Its three
 newer topics come later in that spiral, where their prerequisites are: mixture-of-experts after layer 01's roofline,
-RL and thinking models after the serving-engine primer (step 3 above).
+RL and thinking models after the serving-engine primer, and distillation right after RL and thinking models (step 3
+above).
 
 Everything above builds on this layer's numbers: parameters and KV bytes per token (transformers, capacity
 planning), total vs active parameters (mixture-of-experts) and output length (rl-and-thinking-models). Layer 01's
@@ -76,15 +84,19 @@ planning), total vs active parameters (mixture-of-experts) and output length (rl
 leans on layer 02's [all-to-all](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives) and feeds layer 05's
 [wide-EP](../05-orchestrator/serving-orchestration/PRIMER.md#8-large-moe-topologies-wide-ep-in-brief) fleets; the
 thinking-model workload reshapes the engine's KV budget, the router and the gateway's cost per conversation
-([`06-gateway`](../06-gateway/README.md)).
+([`06-gateway`](../06-gateway/README.md)). Distillation (00.6) feeds two layers above: a draft for layer 04's
+[speculative decoding](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding) is a student measured
+by acceptance, and a student behind a cascade is the gateway's routing by cost.
 
 ## Caveats
 
 - The transformer lessons and the capacity formulas are exact on their own terms; step times, all-to-alls, costs and
   serving numbers in the MoE and RL cores are models (a roofline, an α-β link, the capacity primer's formulas) and
-  labelled simulated. The labs measure only on real GPUs, or on the tiny torch models they train on a CPU.
-- The toy trainers (a tiny MoE, a table-of-softmaxes policy, a tiny transformer under GRPO) show a mechanism's
-  direction across seeds, not a real model's magnitude.
+  labelled simulated, and the distillation core's serving costs are an ideal roofline bound. The labs measure only
+  on real GPUs, or on the tiny torch models they train on a CPU.
+- The toy trainers (a tiny MoE, a table-of-softmaxes policy, a tiny transformer under GRPO, tiny numpy students of a
+  toy language whose truth is known, a tiny transformer distilled four ways) show a mechanism's direction across
+  seeds, not a real model's magnitude.
 - Model configs, vLLM v0.30.0 flags, TRL defaults and prices are a September 2026 snapshot marked `(verify)`; each
   primer ends with a dated Verify list.
 
@@ -93,6 +105,8 @@ thinking-model workload reshapes the engine's KV budget, the router and the gate
 
 One-time Colab setup is in [`../COLAB.md`](../COLAB.md). One line per lab: each link opens that notebook in Colab. Every lab keeps what you open (exercise blanks and lessons) in `notebooks/`, and the worked answer to a blank in `solutions/` under the same file name: those are the *answers*, so try the exercise first.
 
+- **`distillation/distill-core/`** — [01_soft_targets_and_temperature](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/notebooks/01_soft_targets_and_temperature.ipynb) · [02_forward_reverse_kl_and_on_policy_distillation](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) · [03_distilling_reasoning_traces](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/notebooks/03_distilling_reasoning_traces.ipynb) · [04_a_distilled_draft_for_speculative_decoding](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) · [05_measuring_a_student_and_the_economics](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/notebooks/05_measuring_a_student_and_the_economics.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/solutions/01_soft_targets_and_temperature.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/solutions/02_forward_reverse_kl_and_on_policy_distillation.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/solutions/03_distilling_reasoning_traces.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/solutions/04_a_distilled_draft_for_speculative_decoding.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-core/solutions/05_measuring_a_student_and_the_economics.ipynb)
+- **`distillation/distill-lab/`** — [01_kd_on_a_tiny_transformer](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/notebooks/01_kd_on_a_tiny_transformer.ipynb) · [02_teacher_data_and_a_real_student](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/notebooks/02_teacher_data_and_a_real_student.ipynb) · [03_distilling_reasoning_traces_for_real](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/notebooks/03_distilling_reasoning_traces_for_real.ipynb) · [04_a_distilled_draft_in_vllm](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/notebooks/04_a_distilled_draft_in_vllm.ipynb) · [05_is_the_student_worth_it](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/notebooks/05_is_the_student_worth_it.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/solutions/01_kd_on_a_tiny_transformer.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/solutions/02_teacher_data_and_a_real_student.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/solutions/03_distilling_reasoning_traces_for_real.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/solutions/04_a_distilled_draft_in_vllm.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/distillation/distill-lab/solutions/05_is_the_student_worth_it.ipynb)
 - **`gpu-capacity-planning/`** — [01_capacity_practice](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/gpu-capacity-planning/notebooks/01_capacity_practice.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/gpu-capacity-planning/solutions/01_capacity_practice.ipynb)
 - **`mixture-of-experts/moe-core/`** — [01_the_moe_layer](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/notebooks/01_the_moe_layer.ipynb) · [02_routing_and_load_balance](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/notebooks/02_routing_and_load_balance.ipynb) · [03_which_experts_a_batch_touches](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/notebooks/03_which_experts_a_batch_touches.ipynb) · [04_expert_parallelism_and_all_to_all](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/notebooks/04_expert_parallelism_and_all_to_all.ipynb) · [05_sizing_and_cost](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/notebooks/05_sizing_and_cost.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/solutions/01_the_moe_layer.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/solutions/02_routing_and_load_balance.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/solutions/03_which_experts_a_batch_touches.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/solutions/04_expert_parallelism_and_all_to_all.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-core/solutions/05_sizing_and_cost.ipynb)
 - **`mixture-of-experts/moe-lab/`** — [01_a_tiny_moe_in_torch](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb) · [02_watch_the_router](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/notebooks/02_watch_the_router.ipynb) · [03_batch_vs_weight_stream](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/notebooks/03_batch_vs_weight_stream.ipynb) · [04_expert_parallelism_on_two_gpus](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb) · [05_moe_on_a_small_gpu](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb) — *answers:* [01](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/solutions/01_a_tiny_moe_in_torch.ipynb) · [02](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/solutions/02_watch_the_router.ipynb) · [03](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/solutions/03_batch_vs_weight_stream.ipynb) · [04](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/solutions/04_expert_parallelism_on_two_gpus.ipynb) · [05](https://colab.research.google.com/github/aniryou/full-stack-agentic-engineer/blob/main/00-foundations/mixture-of-experts/moe-lab/solutions/05_moe_on_a_small_gpu.ipynb)
