@@ -12,7 +12,9 @@ marked `(verify)`; the dated Verify list is at the end. Every formula names the 
 This primer is about one tool: the one that runs code the model wrote. Everything an agent does that turns
 untrusted text into a privileged action (the identity primer's one-line definition of an agent) is sharpest
 here — a `run_code` tool, a code interpreter, an "execute this shell command" action, a tool that evaluates
-a model-authored query. It builds on material already in the repo and cites rather than repeats it: the
+a model-authored query.
+
+It builds on material already in the repo and cites rather than repeats it: the
 [identity & security primer](../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md)
 (the threat model in its §2, tool tiers in §4.2, secrets in §5, code execution in §6.2, audit in §9), the
 [scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
@@ -28,23 +30,29 @@ primer assumes them.
 A code tool takes an untrusted, model-written program and runs it. If it runs with the agent's environment,
 home directory, credentials and network, then a single prompt injection is a shell on your infrastructure —
 the OWASP-for-agents risk **ASI05 Unexpected Code Execution**, and the identity primer's rule that "an
-'execute code' tool is DESTRUCTIVE-tier by definition". The invariant a sandbox must restore is **no ambient
-authority**: no credentials, no network by default, no persistent filesystem, only what the caller
-deliberately hands it for one execution.
+'execute code' tool is DESTRUCTIVE-tier by definition".
 
-You get there by climbing an **isolation ladder** and by writing the decision as **policy**, enforced twice.
-In-process restrictions are not a boundary; a separate **process** with a clean environment, OS resource
-limits and — where it can — its own UID is the first real one; a **container** adds namespaces, cgroups, dropped capabilities and a
-read-only, non-root, no-new-privileges root filesystem; a **user-space kernel** (gVisor) puts a second
-kernel between the code and the host; a **microVM** (Firecracker, Kata) puts a hardware boundary there. The
-execution is an **API with a contract** — code plus inputs plus a budget for every exhaustible resource, in;
-truncated output plus an exit reason plus usage, out — and every call carries an idempotency key so an
-at-least-once redelivery does not run a side effect twice. The network is a **separate control**: the
-sandbox reaches only an allowlisting egress proxy that injects credentials it never holds. On Kubernetes the
-same policy renders to Pod Security *restricted*, a default-deny NetworkPolicy, a non-retrying Job, and an
-admission policy that rejects any pod missing the controls. And because a sandbox has a cold start, you size
-a **warm pool** with the same queueing arithmetic as any service. After this primer you can walk that whole
-design in a review and put numbers on it.
+- The invariant a sandbox must restore is **no ambient authority**: no credentials, no network by default, no
+  persistent filesystem, only what the caller deliberately hands it for one execution.
+- You get there by climbing an **isolation ladder** and by writing the decision as **policy**, enforced twice.
+    - In-process restrictions are not a boundary;
+    - a separate **process** with a clean environment, OS resource limits and — where it can — its own UID is
+      the first real one;
+    - a **container** adds namespaces, cgroups, dropped capabilities and a read-only, non-root,
+      no-new-privileges root filesystem;
+    - a **user-space kernel** (gVisor) puts a second kernel between the code and the host;
+    - a **microVM** (Firecracker, Kata) puts a hardware boundary there.
+- The execution is an **API with a contract** — code plus inputs plus a budget for every exhaustible resource,
+  in; truncated output plus an exit reason plus usage, out — and every call carries an idempotency key so an
+  at-least-once redelivery does not run a side effect twice.
+- The network is a **separate control**: the sandbox reaches only an allowlisting egress proxy that injects
+  credentials it never holds.
+- On Kubernetes the same policy renders to Pod Security *restricted*, a default-deny NetworkPolicy, a
+  non-retrying Job, and an admission policy that rejects any pod missing the controls.
+- And because a sandbox has a cold start, you size a **warm pool** with the same queueing arithmetic as any
+  service.
+
+After this primer you can walk that whole design in a review and put numbers on it.
 
 ---
 
@@ -72,10 +80,13 @@ sandbox produces. `read_env_secret` reads a planted `CLOUD_API_TOKEN`; `read_ssh
 from a 0700 victim home, by `~` and by its absolute path; `egress_connect` opens a socket to a loopback
 listener the harness owns and sends bytes (the exfiltration leg); `fork_bomb`, `disk_fill`, `cpu_spin`,
 `sleep_forever` and `output_flood` are the resource abuses; `escape_session` leaves its process group with
-`setsid()` and leaves a file behind, so something outlives the call. Run through
-`sandboxcore.UnsafeExecutor`, the secret, key, egress and escape probes **leak** — you watch the token come
-back, the key print, the connection succeed, the escapee write after the call returned. That demonstration
-(notebook 01) is the whole motivation. The lab's suite (`sandboxlab.probes`) adds probes the core lacks —
+`setsid()` and leaves a file behind, so something outlives the call.
+
+Run through `sandboxcore.UnsafeExecutor`, the secret, key, egress and escape probes **leak** — you watch the token
+come back, the key print, the connection succeed, the escapee write after the call returned. That demonstration
+(notebook 01) is the whole motivation.
+
+The lab's suite (`sandboxlab.probes`) adds probes the core lacks —
 reading other processes' `/proc/<pid>/environ` and writing outside the workspace (which separate a container
 from a process), reaching a stand-in cloud metadata endpoint, a memory hog — and names a few differently;
 `sandboxlab.probes.CORE_PROBE_NAMES` maps one set to the other.
@@ -98,7 +109,9 @@ the model stops it?* For a code tool the answers form a table you carry into a r
 
 The identity primer's §2 has the full OWASP Top 10 for Agentic Applications (ASI01–ASI10) and the controls
 for the rest; this topic builds out the ASI05 row it names ("Sandboxed execution … with no ambient
-credentials"). The single most important line of the table is the third: **the network is not bounded by the
+credentials").
+
+The single most important line of the table is the third: **the network is not bounded by the
 process sandbox.** `sandboxcore.ProcessSandbox.isolation_report()` reports `network_blocked: False` for
 exactly this reason, and the egress probe is the one probe a process sandbox never contains — §4 is where
 egress is actually controlled. The second most important is the key row: three of the controls (the key, the
@@ -126,6 +139,8 @@ go to trust it, and how you enforce, broker, size and observe it.
 There is no single "sandbox." There is a ladder of boundaries, each defending against more, each costing
 more. Choose the rung by what you are defending against and what you can afford per execution.
 
+### In-process and process rungs
+
 **Rung 0 — in-process restrictions are not a boundary.** Removing `__builtins__`, patching `import`, or an
 AST allowlist all share the interpreter with the untrusted code, and Python is far too dynamic to fence
 in-process: attribute chains, `gc`, C-level tricks and countless CPython escapes have broken every such
@@ -135,30 +150,41 @@ process.
 **Rung 1 — a subprocess with resource limits (`sandboxcore.ProcessSandbox`).** A child process started with
 a **clean environment**, an **ephemeral 0700 workspace**, POSIX **resource limits** the child applies before
 it runs the code, a **wall-clock deadline**, output **read as it streams** (kept up to a budget, the run killed
-past a cap), and a kill of the whole **process group** at the end. When it runs as root it also gives each
+past a cap), and a kill of the whole **process group** at the end.
+
+When it runs as root it also gives each
 execution **its own unprivileged UID** — and that one control carries three more: `RLIMIT_NPROC` becomes real
 (it counts per real UID and is ignored for root), your files become unreadable (a different UID cannot open a
 0700 home; setting `HOME` elsewhere hides nothing), and after the run the sandbox can kill every process of
 that UID — including one that called `setsid()` to leave the group — and remove what it left in `/tmp`.
+
 With a per-execution UID it contains every probe except egress; as a non-root user it cannot switch UID, and
 the key read and the escape get through. The process budget then only roughly holds: the parent counts the
 run's own process tree every 50 ms, so a burst of forks between two counts runs on until the shared
 `RLIMIT_NPROC` stops it; that limit is set 32 tasks past the budget for the whole UID, so the burst also gets
-every task your other processes free meanwhile. It runs anywhere, including Colab and CI. What it never does:
-it shares the host kernel (a kernel exploit escapes it) and it does not touch the network. The sharp edges are
-in §2's box below and §3.
+every task your other processes free meanwhile.
+
+It runs anywhere, including Colab and CI. What it never does: it shares the host kernel (a kernel exploit escapes it)
+and it does not touch the network. The sharp edges are in §2's box below and §3.
 
 **Rung 1b — the same process, plus namespaces and a syscall filter (no container).** Linux can give a plain
-process most of what a container has, one piece at a time: an **empty network namespace** (`unshare -n`, or
-`unshare -Urn` as an unprivileged user) leaves it only a loopback of its own, so the egress probe fails
-closed; a **user namespace** lets an unprivileged user do that and map itself to root inside; a **PID
-namespace** hides other processes (and their `/proc/<pid>/environ`); a **mount namespace** can hide the home
-directory entirely; **`no_new_privs`** stops setuid binaries escalating; and a **seccomp** filter trims the
-syscall surface. Tools such as bubblewrap (`bwrap`) and nsjail package these. The lab's `ProcessSandbox`
+process most of what a container has, one piece at a time:
+
+- an **empty network namespace** (`unshare -n`, or `unshare -Urn` as an unprivileged user) leaves it only a
+  loopback of its own, so the egress probe fails closed;
+- a **user namespace** lets an unprivileged user do that and map itself to root inside;
+- a **PID namespace** hides other processes (and their `/proc/<pid>/environ`);
+- a **mount namespace** can hide the home directory entirely;
+- **`no_new_privs`** stops setuid binaries escalating;
+- and a **seccomp** filter trims the syscall surface.
+
+Tools such as bubblewrap (`bwrap`) and nsjail package these. The lab's `ProcessSandbox`
 climbs this rung (`--level process+netns`: a dedicated UID and an empty network namespace), and its
 `seccomp.py` derives a profile. Where it is unavailable: macOS (no namespaces), inside Docker's default
 seccomp profile (it blocks `unshare`/user namespaces), and on Ubuntu hosts whose AppArmor policy restricts
 unprivileged user namespaces — the lab's `env.netns_mode()` detects each and says so.
+
+### Container, gVisor and VM rungs
 
 **Rung 2 — a hardened container.** Linux namespaces (PID, mount, network, user, IPC, UTS) give the process
 its own view of the world; cgroups enforce CPU and memory from outside; and you add the deterministic
@@ -173,11 +199,14 @@ memory-safe language (Go)" that intercepts the workload's syscalls and re-implem
 management, filesystems, a userspace network stack) in userspace; "**gVisor never passes through any system
 call to the host**", and its own seccomp filter blocks the Sentry from making dangerous host calls. A
 companion **Gofer** process owns the container filesystem. Escaping requires exploiting *both* the Sentry and
-the host kernel, "which do not share any code". The default platform is `systrap` (seccomp-based
+the host kernel, "which do not share any code".
+
+The default platform is `systrap` (seccomp-based
 interception; works inside VMs); `kvm` is best on bare metal. It runs as the OCI runtime `runsc`
-(`docker run --runtime=runsc`, or a Kubernetes `RuntimeClass` whose handler is `runsc`). It does **not**
-defend against Spectre-style side channels, attacks in higher layers, or exploits *within* what the sandbox
-is configured to reach — so different tenants still go in different sandboxes. It costs on syscall-heavy
+(`docker run --runtime=runsc`, or a Kubernetes `RuntimeClass` whose handler is `runsc`).
+
+It does **not** defend against Spectre-style side channels, attacks in higher layers, or exploits *within* what the
+sandbox is configured to reach — so different tenants still go in different sandboxes. It costs on syscall-heavy
 workloads (the Sentry is on the path); pure compute runs natively.
 
 **Rung 4 — a microVM (Firecracker, Kata).** A hardware virtualization boundary: the code runs in a
@@ -185,7 +214,9 @@ lightweight VM with its **own guest kernel**, so a guest kernel exploit does not
 **Firecracker** starts a VMM in ~**12 ms** typical (8 CPU ms; wall 6–60 ms) and reaches the guest
 `/sbin/init` within **≤ 125 ms**, with a VMM memory overhead **≤ 5 MiB** (its `SPECIFICATION.md`); it needs
 **KVM** (`/dev/kvm`), so it runs on bare metal or nested-virt hosts, not on Colab or a typical laptop's
-Docker. **Kata Containers** run each pod as its own lightweight VM with a `kata-agent` inside; its 4.x
+Docker.
+
+**Kata Containers** run each pod as its own lightweight VM with a `kata-agent` inside; its 4.x
 runtime is `runtime-rs` (Rust) and its Kubernetes RuntimeClasses carry a `-runtime-rs` suffix
 (`kata-qemu-runtime-rs`); it also needs `/dev/kvm`. Kata's `RuntimeClass` sets an `overhead.podFixed`
 (the QEMU shim reserves 320Mi/250m by default) so the scheduler and quota account for the VMM.
@@ -196,7 +227,9 @@ file `MAP_PRIVATE`, so pages load on demand ("very fast snapshot loading"), the 
 every VM restored from it, and network connections from the snapshot may drop (its
 `docs/snapshotting/snapshot-support.md`). gVisor has the same idea at the sandbox level (`runsc checkpoint`
 / `runsc restore`). How much of a cold start a restore saves depends on the image and the warm-up —
-measure it; this primer puts no number on it `(verify)`. The rule: **restoring the same snapshot more than
+measure it; this primer puts no number on it `(verify)`.
+
+The rule: **restoring the same snapshot more than
 once is insecure** by Firecracker's own account — every clone starts with the same RNG state, identifiers
 and any tokens the snapshot held — unless the guest re-seeds (VMGenID, Linux ≥ 5.18) and regenerates
 secrets after restore. Never snapshot a sandbox after it held a tenant's data, and never restore one
@@ -204,6 +237,8 @@ snapshot into two tenants.
 
 **Rung 5 — a full VM or a separate machine.** The strongest and slowest: seconds to boot, a whole OS to
 manage. Used for the highest-risk or noisiest workloads, or where a compliance boundary demands it.
+
+### The ladder at a glance
 
 A compact way to hold the ladder:
 
@@ -220,17 +255,24 @@ A compact way to hold the ladder:
 > **The process sandbox's sharp edges (measured, FACTS §10/§15).** `RLIMIT_CPU` counts **CPU seconds**, not
 > wall time, so a sleeper or a blocked I/O call never trips it — always add a wall-clock kill. Soft `<` hard
 > makes the soft limit raise a catchable `SIGXCPU` first, then the hard limit `SIGKILL`s; soft `==` hard is
-> an immediate `SIGKILL`. `RLIMIT_NPROC` is **per real UID, system-wide, and ignored for uid 0** — so a fork
+> an immediate `SIGKILL`.
+>
+> `RLIMIT_NPROC` is **per real UID, system-wide, and ignored for uid 0** — so a fork
 > bomb is only stopped after switching to an unprivileged UID (which itself needs privilege), and every
 > execution sharing that UID shares one budget: with a single `nobody` UID, one run's fork bomb starves the
 > others (and any daemon running as `nobody`). Hence a **UID per execution**. Colab and many CI containers
 > run as root; a laptop user cannot switch UID at all, and `ProcessSandbox.isolation_report()` says which.
+>
 > `RLIMIT_AS` limits **virtual** address space; set it too low and `import numpy` fails (OpenBLAS arenas),
-> so keep it ≥ 256 MiB and set `OPENBLAS_NUM_THREADS=1`. A naive `subprocess.run(timeout=)` kills only the
-> direct child, leaving a backgrounded **grandchild** re-parented to init — so start a new session and kill
-> the whole **process group** (`sandboxcore.executor._kill_group`). The group is advisory, though: code can
+> so keep it ≥ 256 MiB and set `OPENBLAS_NUM_THREADS=1`.
+>
+> A naive `subprocess.run(timeout=)` kills only the direct child, leaving a backgrounded **grandchild**
+> re-parented to init — so start a new session and kill the whole **process group**
+> (`sandboxcore.executor._kill_group`). The group is advisory, though: code can
 > call `setsid()` and leave it, so only the UID (or a cgroup / PID namespace) finds that process
-> afterwards. `subprocess`'s `preexec_fn` can deadlock a child forked from a threaded parent, so the sandbox
+> afterwards.
+>
+> `subprocess`'s `preexec_fn` can deadlock a child forked from a threaded parent, so the sandbox
 > switches UID and session inside `Popen` (in C) and lets the child's own interpreter lower its limits
 > (`executor._LAUNCHER`). Reading output with `communicate()` buffers all of it in the caller — read it as it
 > streams. None of these touch the **network**.
@@ -261,15 +303,22 @@ Two things a budget is not: `file_mb` is a *single-file* cap, not a disk quota (
 after the run and enforced by `emptyDir.sizeLimit` in the cluster); and `memory_mb` via `RLIMIT_AS` is
 *virtual* memory, which is why it has a floor.
 
-**The result (`ExecutionResult`).** Truncated stdout/stderr (with a `truncated` flag and the full byte
-counts in `usage`), an **exit reason** from a fixed vocabulary (`ok`, `error`, `wall_timeout`, `cpu_time`,
-`memory`, `file_too_large`, `pids`, `open_files`, `output_limit`, `disk_limit`, `killed`, `denied`,
-`sandbox_error` — `sandboxcore.contract.EXIT_REASONS`; the lab's wrapper returns the same names, plus
-`harness_timeout` for its deliberately unbudgeted contrast executor), **where that reason came from**
-(`reason_source`: the parent enforced or measured it, the kernel delivered a signal, or the untrusted
-program's own exit status and stderr said so), the `usage` (CPU and peak memory of the child via `wait4`,
-wall, disk, output bytes), the `artifacts` (workspace files by digest), any `over_budget` fields, what
-`isolation` actually ran it, and what was `swept` afterwards. `ExecutionResult.as_tool_result()` converts this to agent-core's tool-result shape —
+**The result (`ExecutionResult`).**
+
+- Truncated stdout/stderr (with a `truncated` flag and the full byte counts in `usage`),
+- an **exit reason** from a fixed vocabulary (`ok`, `error`, `wall_timeout`, `cpu_time`, `memory`,
+  `file_too_large`, `pids`, `open_files`, `output_limit`, `disk_limit`, `killed`, `denied`, `sandbox_error` —
+  `sandboxcore.contract.EXIT_REASONS`; the lab's wrapper returns the same names, plus `harness_timeout` for its
+  deliberately unbudgeted contrast executor),
+- **where that reason came from** (`reason_source`: the parent enforced or measured it, the kernel delivered a
+  signal, or the untrusted program's own exit status and stderr said so),
+- the `usage` (CPU and peak memory of the child via `wait4`, wall, disk, output bytes),
+- the `artifacts` (workspace files by digest),
+- any `over_budget` fields,
+- what `isolation` actually ran it,
+- and what was `swept` afterwards.
+
+`ExecutionResult.as_tool_result()` converts this to agent-core's tool-result shape —
 `{"ok": True, "data": …}` or `{"ok": False, "error": <exit reason>, "message": …, "hint": …}` — so the model
 gets something it can act on ("`cpu_time`: use a cheaper algorithm") rather than a stack trace, exactly as
 the scaling primer's §5.6 wants tool failures returned as structured data.
@@ -279,12 +328,15 @@ exit reason lives in `sandboxcore.executor._classify` (a signal: `SIGXCPU` → `
 `file_too_large`; stderr: a Python child's `OSError: File too large` → `file_too_large`,
 `MemoryError`/OpenBLAS → `memory`, `EAGAIN` → `pids`). A Python child that hits `RLIMIT_FSIZE` exits non-zero
 with `EFBIG` rather than dying of `SIGXFSZ` (a shell child dies of the signal) — the executor maps both to
-`file_too_large`. **Only some of these can be trusted.** A reason read from stderr is the untrusted program's
+`file_too_large`.
+
+**Only some of these can be trusted.** A reason read from stderr is the untrusted program's
 own say-so — code can print `MemoryError` and exit 1 — so it is labelled `reason_source: code`: fine as a
 hint to the model, not as evidence. `wall_timeout` and `output_limit` (the parent enforced them), a `pids`
 from the parent's count of the process tree and a `cpu_time` the parent's `wait4` measurement confirms are
-`parent`; a bare signal is `signal` (the code could have sent it to itself). When more than one holds, the
-parent's verdicts win in a fixed order — `wall_timeout`, `pids`, `output_limit`
+`parent`; a bare signal is `signal` (the code could have sent it to itself).
+
+When more than one holds, the parent's verdicts win in a fixed order — `wall_timeout`, `pids`, `output_limit`
 (`executor.PARENT_VERDICT_ORDER`) — and any of them beats one read from the exit status.
 
 **Idempotency and safe re-execution.** Side effects mean at-least-once delivery (the scaling primer's §1.5:
@@ -292,7 +344,9 @@ parent's verdicts win in a fixed order — `wall_timeout`, `pids`, `output_limit
 turn_id, step, call_index, args)` follows the scaling primer's §5.4 recipe exactly — turn, step, call index,
 and a hash of the arguments — and `ResultStore.run_once(key, run)` **claims the key before running**, returns
 the stored result on a later delivery, and refuses (`InFlight`) one that arrives while the first is still
-running. Be precise about what that guarantees: within one process, a redelivery does not run the code
+running.
+
+Be precise about what that guarantees: within one process, a redelivery does not run the code
 again. It is not durable (a crash between the run and the store forgets it — a real store writes the claim
 and the result with a conditional put), it does not dedupe across replicas, and it does not make the code's
 *own* side effects idempotent: end to end that needs the key forwarded downstream (the egress proxy adding an
@@ -315,7 +369,9 @@ exfiltration and SSRF are actually contained.
 an outside host, it goes through an **egress proxy** inside the trust boundary. `sandboxcore.EgressProxy`
 checks the URL's host against an allowlist (`ProxyPolicy.allows`); an off-allowlist host gets 403 before any
 request leaves, and the attempt is logged. This is the SSRF/exfiltration guard: "any tool that takes a URL"
-needs an egress allowlist (identity primer §6.1). The check must hold on **every hop**: an allowed host that
+needs an egress allowlist (identity primer §6.1).
+
+The check must hold on **every hop**: an allowed host that
 answers `302 Location: http://elsewhere/` would otherwise have the request replayed to a host nobody checked —
 and Python's default `urlopen` copies the headers, injected credential included, onto the redirected request.
 So the proxy **does not follow redirects**: it hands the 3xx back, and asking for the new URL is a new
@@ -325,7 +381,9 @@ request, checked again (`tests/test_proxy.py` runs this against two loopback ups
 credential header **outbound** (`EgressProxy.fetch` → `ProxyPolicy.inject`), so the secret lives only in the
 proxy and the sandboxed code never sets or reads it. It first drops the caller's own `Authorization`,
 `Proxy-Authorization`, `Cookie` and hop-by-hop headers (the sandbox can neither forward a credential it found
-nor forge one), and it redacts the injected value from any response that echoes it back. This is the identity primer's **gateway path** (§5) —
+nor forge one), and it redacts the injected value from any response that echoes it back.
+
+This is the identity primer's **gateway path** (§5) —
 "end-user credentials are … decrypted only at Agent Gateway, which injects them into the egress request; the
 agent code never sees the raw credential" — realised one layer down, and the same host-side header-injection
 pattern managed services like E2B use. The audit log records the header **name** injected, never its value
@@ -334,18 +392,21 @@ pattern managed services like E2B use. The audit log records the header **name**
 **Enforcement is the network, not the environment variable — or the tool call.** `HTTP_PROXY` only asks a
 well-behaved client to use the proxy; malicious code opens a raw socket and ignores it. Likewise a tool call
 that *declares* the hosts its code needs (`ExecutionRequest.egress`) is the model's own claim: checking it
-refuses a hijacked model polite enough to name `attacker.example`, and nothing else. `sandboxcore.agent`
-shows both: the declared exfiltration is denied before running; the undeclared one — a raw socket — leaks
-through a process sandbox and is audited as an ordinary `allow`. What *forces* traffic through the proxy is
-the network layer: an empty network namespace or `--network none` with the proxy on a Unix socket (the
-lab's rung 1b and Docker path), or a **default-deny egress** NetworkPolicy that opens only the proxy. The
-rendered policy in §5 does exactly this.
+refuses a hijacked model polite enough to name `attacker.example`, and nothing else.
+
+`sandboxcore.agent` shows both: the declared exfiltration is denied before running; the undeclared one — a raw socket
+— leaks through a process sandbox and is audited as an ordinary `allow`. What *forces* traffic through the proxy is
+the network layer: an empty network namespace or `--network none` with the proxy on a Unix socket (the lab's rung 1b
+and Docker path), or a **default-deny egress** NetworkPolicy that opens only the proxy. The rendered policy in §5 does
+exactly this.
 
 **Two honest edges.** First, **DNS**: a default-deny egress policy "also blocks DNS traffic," and the
 tempting fix — re-open port 53 — reintroduces a **DNS-exfiltration** channel (data smuggled in query names,
 resolved by the cluster's DNS on the sandbox's behalf). The safe shape keeps DNS closed: the sandbox reaches
 only the proxy (by `hostAliases` pointing at the proxy Service's pinned ClusterIP, with `dnsPolicy: None`),
-and the **proxy** resolves names and reaches the allowlist. Second, **HTTPS**: a credential cannot be injected into
+and the **proxy** resolves names and reaches the allowlist.
+
+Second, **HTTPS**: a credential cannot be injected into
 an opaque `CONNECT` TLS tunnel without terminating TLS. The teaching proxy therefore brokers **plain HTTP**
 (so it can read and rewrite headers) and refuses `CONNECT`; a production proxy either terminates TLS with a
 CA the sandbox trusts, or is itself the TLS client while the sandbox speaks plain HTTP to it over loopback
@@ -367,18 +428,24 @@ only line of defence. `sandboxcore.SandboxPolicy.render_k8s()` turns one policy 
 Namespace, RuntimeClass, two NetworkPolicies, the proxy's Service, ResourceQuota, LimitRange, a Pod and a Job
 per execution, and the ValidatingAdmissionPolicy with its binding — each a plain dict that validates against
 the Kubernetes 1.34 schemas (`kubernetes-validate --strict -k 1.34.0`, pinned in `tests/test_manifests.py`).
+
 A schema check is not an admission check, so the same test also asserts what the API server would reject
 and the schema cannot see: every resource request is at most its limit. The builders follow the conventions
 of the GPU scheduling lab's `k8sgpu.manifests`. This section is the design; the lab applies it on kind and GKE.
 
-**Pod-per-execution vs a warm pool.** Two shapes. **Pod-per-execution**: a Kubernetes **Job** per call,
-which is auditable and clean but pays a full pod cold start every time (§6) — fine for minutes-tolerant batch
-work, far too slow for interactive use on a busy cluster. **Warm pool**: keep sandbox pods ready and
-`kubectl exec` (or the agent-sandbox CRD's adoption) into one, which is sub-second; delete each pod after one
-use and let the pool replace it (**replace-after-use**), or it carries state between executions and needs
-its own lifecycle. §6 sizes it. The GPU scheduling primer's §8 startup-latency chain is the same
-idea for GPU replicas (a cold GPU replica is 380 s there); a sandbox pod is lighter but the shape is
-identical.
+### The shape: a Job per call or a warm pool
+
+**Pod-per-execution vs a warm pool.** Two shapes.
+
+- **Pod-per-execution**: a Kubernetes **Job** per call, which is auditable and clean but pays a full pod cold
+  start every time (§6) — fine for minutes-tolerant batch work, far too slow for interactive use on a busy
+  cluster.
+- **Warm pool**: keep sandbox pods ready and `kubectl exec` (or the agent-sandbox CRD's adoption) into one,
+  which is sub-second; delete each pod after one use and let the pool replace it (**replace-after-use**), or it
+  carries state between executions and needs its own lifecycle. §6 sizes it.
+
+The GPU scheduling primer's §8 startup-latency chain is the same idea for GPU replicas (a cold GPU replica is
+380 s there); a sandbox pod is lighter but the shape is identical.
 
 **The Job, bounded and non-retrying.** `SandboxPolicy.job()` renders a Job with `restartPolicy: Never`,
 `backoffLimit: 0` (so non-idempotent code does not silently re-run — Kubernetes' default is **6**, and Cloud
@@ -386,21 +453,29 @@ Run jobs default `max_retries` to **3**, the §1.5 idempotency trap at the infra
 `activeDeadlineSeconds` bounding the whole Job (it **takes precedence over `backoffLimit`**), and
 `ttlSecondsAfterFinished: 300` to clean up — remembering that the TTL deletes the Pod **and its logs**, so
 results are collected before it fires. It sets `automountServiceAccountToken: false` so no cloud credential
-rides in on the service-account token. **Deadlines count the cold start.** The Job's `activeDeadlineSeconds`
+rides in on the service-account token.
+
+**Deadlines count the cold start.** The Job's `activeDeadlineSeconds`
 runs from the Job's start — scheduling, node scale-up and the image pull included — and a Pod's own
 `activeDeadlineSeconds` runs from the kubelet admitting it, before the pull. Set either to the code's 5-second
 wall budget and every cold execution on a busy cluster (§6: ~42–50 s p50) ends `DeadlineExceeded` before its
-code starts. So the rendered Job's deadline is a **startup allowance plus the wall budget** (120 + 5 s by
+code starts.
+
+So the rendered Job's deadline is a **startup allowance plus the wall budget** (120 + 5 s by
 default, `SandboxPolicy.startup_allowance_s`), and the wall budget itself is enforced **inside** the pod: the
 command runs under `timeout -s KILL <wall_s>`. (The lab's pods run its wrapper, which enforces every budget
 the same way.)
+
+### The pod: security context and runtime
 
 **`securityContext` and Pod Security *restricted*.** `SandboxPolicy.security_context()` renders the fields
 the *restricted* Pod Security Standard requires (FACTS §3): pod-level `runAsNonRoot: true`, numeric
 `runAsUser: 65534` (numeric so the kubelet can verify non-root without resolving an image's user name),
 `seccompProfile.type: RuntimeDefault`; container-level `allowPrivilegeEscalation: false` (which defaults to
 **true** if unset — pitfall 10), `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, and the same
-seccomp profile. The Namespace carries the `pod-security.kubernetes.io/enforce: restricted` (and
+seccomp profile.
+
+The Namespace carries the `pod-security.kubernetes.io/enforce: restricted` (and
 audit/warn) labels at version `v1.34`. One gotcha the lab honours: PSA `enforce` applies to **Pods, not
 workload objects**, so a non-conforming Job is *accepted* while its Pods are rejected — watch Job conditions,
 not just `kubectl apply`.
@@ -409,24 +484,33 @@ not just `kubectl apply`.
 that `node.k8s.io/v1` RuntimeClass with handler `runsc` for a self-managed gVisor node
 (`SandboxPolicy.runtime_class_obj()`); on GKE, the platform creates a `gvisor` RuntimeClass with the first
 GKE Sandbox node pool (its handler name is `gvisor` rather than `runsc` `(verify)`), so the renderer leaves
-it out (`render_runtime_class=False`). An unknown RuntimeClass or an unrunnable handler sends the pod to phase
+it out (`render_runtime_class=False`).
+
+An unknown RuntimeClass or an unrunnable handler sends the pod to phase
 `Failed`. Kata's RuntimeClasses carry `overhead.podFixed` so the
 scheduler and ResourceQuota account for the VMM. **kind cannot run gVisor** (§10 of the scheduling primer's
 "learning locally" spirit) — kind is a teaching cluster, not a security boundary; the lab says so plainly and
 uses GKE Sandbox for the gVisor path.
 
+### The cluster: network, quota and admission
+
 **NetworkPolicy: default-deny egress, then open only the proxy.** Two policies (§4): a default-deny egress
 policy (`policyTypes: [Egress]`, no rules) and one that opens egress to the proxy pods on the proxy port —
 and nothing else, not DNS. The pod finds the proxy without a resolver: `dnsPolicy: None`, and `hostAliases`
 maps the proxy's name to its Service's pinned ClusterIP (the rendered Service), so there is no DNS channel to
-exfiltrate through. The traps: a NetworkPolicy needs a plugin that enforces it (GKE Dataplane V2, Calico,
-Cilium; kind's kindnetd enforces standard policy through kube-network-policies — its source at the lab's
-pinned kind v0.33.0 builds that controller, v0.23.0's did not — but with **`FailOpen: true`**, and if the
-controller cannot start it logs and carries on without policies, so the lab's `run-examples.sh` has a
-must-fail step that checks enforcement on your cluster), it never blocks traffic to the pod's own **node** (so deny cloud
-metadata with `automountServiceAccountToken: false` and a Workload-Identity KSA that has no IAM, not with
-NetworkPolicy), and a pod created before the policy is handled "may be started unprotected" — apply policies
-first, gate the first runner on a readiness check.
+exfiltrate through.
+
+The traps:
+
+- a NetworkPolicy needs a plugin that enforces it (GKE Dataplane V2, Calico, Cilium; kind's kindnetd enforces
+  standard policy through kube-network-policies — its source at the lab's pinned kind v0.33.0 builds that
+  controller, v0.23.0's did not — but with **`FailOpen: true`**, and if the controller cannot start it logs and
+  carries on without policies, so the lab's `run-examples.sh` has a must-fail step that checks enforcement on
+  your cluster),
+- it never blocks traffic to the pod's own **node** (so deny cloud metadata with
+  `automountServiceAccountToken: false` and a Workload-Identity KSA that has no IAM, not with NetworkPolicy),
+- and a pod created before the policy is handled "may be started unprotected" — apply policies first, gate the
+  first runner on a readiness check.
 
 **ResourceQuota, LimitRange, emptyDir.** A ResourceQuota caps the namespace's pods and cpu/memory; because a
 quota on cpu/memory **rejects pods without requests/limits**, ship a LimitRange with defaults. The workspace
@@ -445,7 +529,9 @@ is the deterministic backstop: even if the runtime code is wrong, the cluster re
 **GKE Sandbox and Autopilot.** A GKE **Sandbox** node pool runs pods with `runtimeClassName: gvisor` on
 gVisor; Autopilot also accepts `runtimeClassName: gvisor`. In Terraform the field is
 `node_config.sandbox_config { type = "GVISOR" }` — **case-sensitive**, `"GVISOR"` not `"gvisor"` (the
-provider's validator rejects the lowercase form; a common trap). The lab's Terraform builds a zonal Standard
+provider's validator rejects the lowercase form; a common trap).
+
+The lab's Terraform builds a zonal Standard
 cluster with a tainted, Spot, autoscale-from-zero sandbox pool and no Cloud NAT: no *internet* egress by
 default — but the subnet's Private Google Access still reaches Google APIs (an attacker's bucket is a Google
 API), so the NetworkPolicy (or VPC Service Controls) is what closes that path. gVisor does not: its default
@@ -478,25 +564,28 @@ per-turn bill is arithmetic.
 The jump from ~35 ms (a process) to ~45 s (a fresh pod on a busy cluster) is why interactive code tools use
 **warm pools** and exec-into-a-running-pod, not a pod per call.
 
-**Three pools.** A **replace-after-use** warm pool (the safe default) hands each execution a ready sandbox,
-destroys it afterwards and warms a replacement in the background: the request never waits on a cold start
-if a warm one is ready, but every execution holds a slot for its run **and** its replacement's warm-up. A
-**reuse** pool (one warm sandbox serves execution after execution) holds a slot for the run only — faster
-and cheaper, but state carries between executions, the thing §3's one-shot default exists to avoid.
-**Cold-on-demand** (no pool: a sandbox per request, started when the request arrives) puts the whole cold
-start on every request's path.
+**Three pools.**
+
+- A **replace-after-use** warm pool (the safe default) hands each execution a ready sandbox, destroys it
+  afterwards and warms a replacement in the background: the request never waits on a cold start if a warm one
+  is ready, but every execution holds a slot for its run **and** its replacement's warm-up.
+- A **reuse** pool (one warm sandbox serves execution after execution) holds a slot for the run only — faster
+  and cheaper, but state carries between executions, the thing §3's one-shot default exists to avoid.
+- **Cold-on-demand** (no pool: a sandbox per request, started when the request arrives) puts the whole cold
+  start on every request's path.
 
 **Little's law gives the mean, not the size.** Busy sandboxes = arrival rate × execution time
 (`pool.busy_sandboxes`); warming replacements = rate × cold start (`pool.warming_sandboxes`). Worked:
-λ = 5 executions/s, t_exec = 2 s, t_cold = 3 s → **10 busy + 15 warming = 25 slots occupied on average**
-(`pool.mean_occupancy`). That is the offered load *a* = λ(t_exec + t_cold) in Erlangs — a floor. A pool of
+$\lambda = 5$ executions/s, $t_{\text{exec}} = 2$ s, $t_{\text{cold}} = 3$ s → **10 busy + 15 warming = 25 slots
+occupied on average** (`pool.mean_occupancy`). That is the offered load $a = \lambda(t_{\text{exec}} + t_{\text{cold}})$
+in Erlangs — a floor. A pool of
 exactly 25 has nothing spare when arrivals bunch up: `pool.erlang_c(25, 25)` is 1.0, the queue never clears.
 
 **Choosing a slot count for a wait target (Erlang C).** `pool.erlang_c(a, c)` gives the fraction of
 requests that find no warm sandbox, `pool.expected_wait_s` the mean wait. For the replace-after-use pool,
-a = 25:
+$a$ = 25:
 
-| slots c | P(wait) | E[Wq] |
+| slots $c$ | $P(\text{wait})$ | $E[W_q]$ |
 |---|---|---|
 | 26 | 0.782 | 3.912 s |
 | 28 | 0.457 | 0.762 s |
@@ -506,24 +595,30 @@ a = 25:
 | 35 | 0.040 | 0.020 s |
 
 `pool.slots_for_wait_target(5, 2, 3, 0.2)` returns **31** (35 for 5%). A reuse pool at the same rate has
-a = λ·t_exec = 10 and needs 14 (P(wait) 0.174; c = 12 gives 0.449) — the FACTS §12 table. Erlang C assumes
-exponential hold times; a fixed cold start varies less, so the real P(wait) comes out a little lower. The
-discrete-event `pool.simulate()` checks this (SIMULATED; seed 1, 30,000 arrivals — notebook 05's worked
-example 4, pinned in `tests/test_pool.py`): replace-after-use at 25 slots — 91% wait, 6.8 s on average; at
-31 — 14% wait, 0.06 s; cold-on-demand at 31 — every request waits at least the 3 s cold start.
+$a = \lambda \cdot t_{\text{exec}} = 10$ and needs 14 ($P(\text{wait})$ 0.174; $c$ = 12 gives 0.449) — the FACTS
+§12 table.
+
+Erlang C assumes exponential hold times; a fixed cold start varies less, so the real $P(\text{wait})$ comes out a
+little lower. The discrete-event `pool.simulate()` checks this (SIMULATED; seed 1, 30,000 arrivals — notebook 05's
+worked example 4, pinned in `tests/test_pool.py`): replace-after-use at 25 slots — 91% wait, 6.8 s on average; at 31 —
+14% wait, 0.06 s; cold-on-demand at 31 — every request waits at least the 3 s cold start.
 
 **Where the arrival rate comes from.** The workload, via the scaling primer's §3.2 arithmetic: **27.1 tool
-calls/s at peak**; if a fifth are `run_code`, λ ≈ **5.4/s** (27.1 × 0.2 = 5.42) — a mean occupancy of 27.1
-and **34** replace-after-use slots for P(wait) ≤ 0.2.
+calls/s at peak**; if a fifth are `run_code`, $\lambda \approx$ **5.4/s** (27.1 × 0.2 = 5.42) — a mean occupancy of
+27.1 and **34** replace-after-use slots for $P(\text{wait}) \le 0.2$.
 
 **Cost per action.** `pool.cost_per_execution(t_exec, t_cold, node_cost_per_s)` = sandbox-seconds held ×
 the node's per-second share (+ any fixed per-execution fee). Every one-shot sandbox — a pod per call, a
-replace-after-use pool, a pay-per-use service — spends a cold start someone pays for: **t_exec + t_cold =
-5 sandbox-seconds** here. A warm pool moves the cold start off the latency path, not off the bill. Only a
-reuse pool amortises it (`reuse=True`: 2 s), at the price of state. The fleet view adds the idle headroom the
-wait target buys: `pool.pool_cost_per_execution(λ, c, $/s)` = c × $/s ÷ λ = 31/5 = **6.2 sandbox-seconds** per
-execution. Then `pool.actions_cost(actions_per_turn, cost_per_action)` closes the scaling primer's §1 loop:
-**actions/turn × cost/action** is the per-turn code-execution bill (1.3 tool calls/turn there). Any dollar figure is `(verify)` against
+replace-after-use pool, a pay-per-use service — spends a cold start someone pays for:
+**$t_{\text{exec}} + t_{\text{cold}} = 5$ sandbox-seconds** here. A warm pool moves the cold start off the latency
+path, not off the bill. Only a reuse pool amortises it (`reuse=True`: 2 s), at the price of state.
+
+The fleet view adds the idle headroom the wait target buys: `pool.pool_cost_per_execution(λ, c, $/s)` = c × $/s ÷ λ =
+31/5 = **6.2 sandbox-seconds** per execution. Then `pool.actions_cost(actions_per_turn, cost_per_action)` closes the
+scaling primer's §1 loop: **actions/turn × cost/action** is the per-turn code-execution bill (1.3 tool calls/turn
+there).
+
+Any dollar figure is `(verify)` against
 [`COMPUTE.md`](../../COMPUTE.md), which has no CPU-only price today — so the primer states the method and
 leaves the price marked.
 
@@ -561,8 +656,9 @@ Every execution must leave a record, the way every tool call does.
 event (§9 "minimum viable audit … trace ID, invocation ID, user, agent identity, authority mode, tool,
 argument hash, policy decision and reasons, approver, result hash, latency, provenance") — the same field
 names as the identity lab's `agentsec.audit.AuditEvent`, a standalone copy so the core stays
-dependency-free, with `args_digest` computed the same way (sha256 of canonical JSON, first 16 hex). It adds
-the fields a sandbox needs: **`budgets_used`** (CPU, wall, peak memory, disk, output), **`exit_reason`**
+dependency-free, with `args_digest` computed the same way (sha256 of canonical JSON, first 16 hex).
+
+It adds the fields a sandbox needs: **`budgets_used`** (CPU, wall, peak memory, disk, output), **`exit_reason`**
 with its **`exit_reason_source`**, and **`policy_decision`**. The event is
 emitted from the executor layer, so it exists even when the code crashes or is killed — the deny path and
 the kill path both leave evidence (`SandboxAgent._audit`).
@@ -571,7 +667,9 @@ the kill path both leave evidence (`SandboxAgent._audit`).
 (`AuditLog.counts()`) — a rising `cpu_time`/`wall_timeout`/`pids`/`output_limit` rate is the abuse signal;
 sustained `memory`/`cpu_time` is a miner or a runaway loop; a spike in `pids` is a fork bomb. Count only
 reasons the sandbox observed (`counts(trusted_only=True)` drops the ones read from the program's own stderr,
-which a hostile program can forge to hide or to frame). Egress attempts need care: a spike of `denied`
+which a hostile program can forge to hide or to frame).
+
+Egress attempts need care: a spike of `denied`
 *declared* egress is an injection that announced itself, but a competent one does not declare anything — its
 attempts show up only where the network is enforced, as proxy 403s and NetworkPolicy drops, so collect those
 logs too.
@@ -611,7 +709,9 @@ on Colab and most laptops' Docker).
 pool (`sandbox_config { type = "GVISOR" }`, tainted, Spot, autoscale-from-zero), no Cloud NAT (no *internet*
 egress by default — Google APIs stay reachable over Private Google Access until the NetworkPolicy closes
 them, §5), Artifact Registry for the sandbox image, and managed Prometheus; `deploy/gke` has the RuntimeClass,
-namespace, NetworkPolicy, runner Job and admission policy. Cloud Run **jobs** are the serverless option:
+namespace, NetworkPolicy, runner Job and admission policy.
+
+Cloud Run **jobs** are the serverless option:
 the first-generation execution environment is gVisor-based and the second a microVM-based full Linux
 `(verify)`; set `max_retries: 0` for non-idempotent code (the default is 3); and mind that **Cloud Run egress
 to the internet is on by default** `(verify)` — closing it needs Direct VPC egress with `ALL_TRAFFIC` plus
@@ -640,19 +740,24 @@ authority*: no credentials, no network by default, no persistent filesystem. I g
 ladder — in-process restrictions are not a boundary, a separate process with a clean environment and OS
 resource limits is the first real one, then a hardened container, then gVisor's user-space kernel, then a
 microVM with its own guest kernel — and I pick the rung by what I'm defending against and the cold-start
-budget. The execution is an API with a contract: code plus inputs plus a budget for every exhaustible
+budget.
+
+"The execution is an API with a contract: code plus inputs plus a budget for every exhaustible
 resource in, truncated output plus an exit reason the model can act on out, and an idempotency key so an
 at-least-once redelivery doesn't run a side effect twice. Even the process rung runs each execution as its
-own UID, because that is what keeps my files unreadable and finds a process that left the group. The network
-is a separate control: deny-by-default egress, and an allowlisting proxy that injects credentials the sandbox
-never holds and never follows a redirect — the hosts a tool call declares are the model's claim, not a
-control. On Kubernetes I render the same policy to Pod Security restricted, a default-deny NetworkPolicy that
-opens only the proxy (no DNS), a non-retrying Job whose deadline allows for the cold start, and a
-ValidatingAdmissionPolicy that refuses any pod missing the controls — deterministic backstops for when the
-runtime code is wrong. Sandboxes have a cold start, so I size a replace-after-use warm pool with Erlang C on
-the workload's arrival rate times run-plus-warm-up — Little's law only gives the floor — and cost per action
-is sandbox-seconds, cold start included, times the node price. Every execution leaves one audit event with the principal, the policy decision, budgets used and
-the exit reason, and I detect abuse from the exit-reason histogram and shed code execution first under load."
+own UID, because that is what keeps my files unreadable and finds a process that left the group.
+
+"The network is a separate control: deny-by-default egress, and an allowlisting proxy that injects credentials the
+sandbox never holds and never follows a redirect — the hosts a tool call declares are the model's claim, not a
+control. On Kubernetes I render the same policy to Pod Security restricted, a default-deny NetworkPolicy that opens
+only the proxy (no DNS), a non-retrying Job whose deadline allows for the cold start, and a ValidatingAdmissionPolicy
+that refuses any pod missing the controls — deterministic backstops for when the runtime code is wrong.
+
+"Sandboxes have a cold start, so I size a replace-after-use warm pool with Erlang C on the workload's arrival rate
+times run-plus-warm-up — Little's law only gives the floor — and cost per action is sandbox-seconds, cold start
+included, times the node price. Every execution leaves one audit event with the principal, the policy decision,
+budgets used and the exit reason, and I detect abuse from the exit-reason histogram and shed code execution first
+under load."
 
 **Drill questions**
 
@@ -675,9 +780,10 @@ the exit reason, and I detect abuse from the exit-reason histogram and shed code
 
 5. *Your interactive code tool has a 2-second p95 budget but pods cold-start in ~45 seconds on a busy
    cluster. What do you change?* — Do not start a pod per call. Keep a replace-after-use warm pool and hand
-   out ready sandboxes (sub-second), sized with Erlang C on λ(t_exec + t_cold) — busy + warming is only the
-   mean. Or use a lighter boundary (gVisor, a microVM restored from a snapshot), remembering that a snapshot
-   restored into two tenants shares its RNG state and secrets: one restore per tenant, re-seed after restore.
+   out ready sandboxes (sub-second), sized with Erlang C on $\lambda(t_{\text{exec}} + t_{\text{cold}})$ —
+   busy + warming is only the mean. Or use a lighter boundary (gVisor, a microVM restored from a snapshot),
+   remembering that a snapshot restored into two tenants shares its RNG state and secrets: one restore per
+   tenant, re-seed after restore.
 
 6. *You run agents as root in CI, with `RLIMIT_NPROC` set. Are fork bombs contained?* — No. `RLIMIT_NPROC` is
    ignored for uid 0 and counts per real UID system-wide, so it does nothing as root. Switch each execution to
