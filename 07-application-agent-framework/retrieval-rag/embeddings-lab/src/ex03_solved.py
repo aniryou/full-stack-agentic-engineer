@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 03 · Geometry diagnostics
 # Implement three diagnostics you can run on any embedding matrix at work.
-# Solutions: `solutions/ex03_solutions.ipynb`.
+# Solutions: `../solutions/ex03.ipynb`.
 
 # %%
 import numpy as np

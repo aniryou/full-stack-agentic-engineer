@@ -113,7 +113,7 @@
    "python": "3.11",
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q",
-   "solutions": "python tools/run_notebooks.py ../kv-cache/01_kv_cache_worked.ipynb && python tools/run_notebooks.py ../kv-cache/02_kv_cache_practice.ipynb --expect-fail"
+   "solutions": "python tools/run_notebooks.py ../kv-cache/notebooks/01_kv_cache_worked.ipynb && python tools/run_notebooks.py ../kv-cache/notebooks/02_kv_cache_practice.ipynb --expect-fail"
   },
   {
    "id": "paged-attention",
@@ -174,14 +174,7 @@
    "id": "agentic-identity-core",
    "dir": "06-gateway/identity-security/agentic-identity-core",
    "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest -q"
-  },
-  {
-   "id": "agentic-identity-core-mistral",
-   "dir": "06-gateway/identity-security/agentic-identity-core-mistral",
-   "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
+   "install": "python -m pip install -r requirements-mistral.txt",
    "test": "python -m pytest -q"
   },
   {
@@ -190,7 +183,7 @@
    "python": "3.11",
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q && ruff check src tests",
-   "solutions": "mkdir -p build/nb && for nb in notebooks/*.ipynb notebooks/solutions/*.ipynb; do jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=180 --output-dir build/nb \"$nb\"; done"
+   "solutions": "mkdir -p build/nb/notebooks build/nb/solutions && for nb in $(ls notebooks/*.ipynb | grep -v '_practice\\.ipynb$') solutions/*.ipynb; do jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=180 --output-dir \"build/nb/$(dirname \"$nb\")\" \"$nb\"; done"
   },
   {
    "id": "agentic-scaling-lab",
@@ -200,17 +193,26 @@
    "test": "python -m pytest -q"
   },
   {
-   "id": "agentic-scaling-lab-mistral",
-   "dir": "06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral",
+   "id": "gateway-core",
+   "dir": "06-gateway/llm-gateway/gateway-core",
    "python": "3.11",
-   "install": "python -m pip install -e \".[dev]\"",
-   "test": "python -m pytest -q"
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "gateway-lab",
+   "dir": "06-gateway/llm-gateway/gateway-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev,dpop]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
    "id": "agent-core",
    "dir": "07-application-agent-framework/agent-fundamentals/agent-core",
    "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
+   "install": "python -m pip install -r requirements.txt && python -m pip install -e \".[mistral]\"",
    "test": "python -m pytest -q",
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
@@ -223,55 +225,36 @@
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
-   "id": "mistral-agent-core",
-   "dir": "07-application-agent-framework/agent-fundamentals/mistral-agent-core",
+   "id": "lra-core",
+   "dir": "07-application-agent-framework/long-running-durable/lra-core",
    "python": "3.11",
    "install": "python -m pip install -r requirements.txt",
    "test": "python -m pytest -q",
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
-   "id": "long-running-agents-gcp",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp",
-   "python": "3.11",
-   "install": "python -m pip install -e \".[dev]\"",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-core",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-core",
-   "python": "3.11",
-   "install": "python -m pip install pytest",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-mistral",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
-   "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-mistral-py312",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
-   "python": "3.12",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "lra-core",
-   "dir": "07-application-agent-framework/long-running-durable/lra-core/lra-core",
-   "python": "3.11",
-   "install": "python -m pip install pytest",
-   "test": "python -m pytest -q"
-  },
-  {
    "id": "lra-gcp",
-   "dir": "07-application-agent-framework/long-running-durable/lra/lra-gcp",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
    "python": "3.11",
    "install": "python -m pip install -e \".[dev,services]\"",
    "test": "python -m pytest -q -p no:warnings",
-   "solutions": "python scripts/local_demo.py && python scripts/run_notebooks.py"
+   "solutions": "python scripts/local_demo.py && python scripts/run_notebooks.py solutions && python scripts/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "lra-gcp-adk",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev,services,adk]\"",
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/run_notebooks.py solutions/04_adk_workflow.ipynb && python scripts/run_notebooks.py notebooks/04_adk_workflow.ipynb --expect-fail"
+  },
+  {
+   "id": "lra-gcp-mistral-py312",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
+   "python": "3.12",
+   "install": "python -m pip install -e \".[dev,services,mistral]\"",
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/run_notebooks.py solutions/05_tool_loop_and_mistral.ipynb && python scripts/run_notebooks.py notebooks/05_tool_loop_and_mistral.ipynb --expect-fail"
   },
   {
    "id": "rag-from-scratch",
@@ -298,6 +281,22 @@
   {
    "id": "sandbox-lab",
    "dir": "07-application-agent-framework/sandboxed-execution/sandbox-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "memory-core",
+   "dir": "07-application-agent-framework/agent-memory/memory-core",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "memory-lab",
+   "dir": "07-application-agent-framework/agent-memory/memory-lab",
    "python": "3.11",
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q",

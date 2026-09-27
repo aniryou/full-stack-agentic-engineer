@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lra"
+version = "0.1.0"
+description = "Long-Running Agents on GCP: durable-execution engine, design patterns, and reference services"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+# Everything needed to run against real Google Cloud services.
+gcp = [
+    "google-cloud-firestore>=2.16",
+    "google-cloud-pubsub>=2.21",
+    "google-cloud-tasks>=2.16",
+    "google-genai>=1.0",
+    "google-auth>=2.29",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-gcp-trace>=1.6",
+]
+# Cloud Run services (control-plane API + step worker).
+services = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
+]
+# Managed-runtime path (Agent Development Kit 2 + Agent Engine): examples/adk_agent_engine,
+# examples/adk_ticket_queue and notebook 04. About 220 MB; never needed by the default install or the offline tests.
+adk = [
+    "google-adk[db]>=2.6",
+    "google-cloud-aiplatform[agent_engines]>=1.90",
+]
+# Mistral as the model provider (lra.adapters.mistral): the mistralai SDK, and on Python 3.12-3.14 Mistral
+# Workflows (Temporal underneath) for lra.adapters.mistral.workflow. mistralai-workflows 3.15 declares
+# Requires-Python >=3.12,<3.15 (checked 2026-09-26, verify); on 3.11 pip skips it and its tests skip.
+mistral = [
+    "mistralai>=2.8",
+    "mistralai-workflows[mistralai]>=3.15; python_version >= '3.12' and python_version < '3.15'",
+]
+dev = [
+    "pytest>=8",
+    "nbformat>=5.10",
+    "nbclient>=0.10",
+    "ipykernel>=6.29",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -5,12 +5,13 @@
 A learning repository for the LLM serving stack, from the GPUs and fabric at the bottom, through the runtime,
 Kubernetes, the inference engine, the orchestrator and the gateway, to agents and applications at the top. It is
 organised as eight layers and, within each layer, by topic: 347 notebooks (exercise and solution versions), all of
-which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Nine topics come as a primer, a small
+which run on a laptop or in Google Colab ([`COLAB.md`](COLAB.md)). Eleven topics come as a primer, a small
 from-scratch implementation and a fuller lab: `roofline-and-fabric` (01), `cuda-and-nccl` (02), `gpu-scheduling`
-(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `mixture-of-experts` and
-`rl-and-thinking-models` (00) and `sandboxed-execution` (07). The other topics vary in shape: layer 01's
-`gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no code; the rest are usually a primer
-plus practice notebooks or a lab; each topic's or lab's README says what it contains.
+(03), `serving-engine` and `quantization` (04), `serving-orchestration` (05), `llm-gateway` (06),
+`mixture-of-experts` and `rl-and-thinking-models` (00), and `sandboxed-execution` and `agent-memory` (07). The other
+topics vary in shape: layer 01's `gpu-primer/` and `gpu-deployment/` are a primer with written exercises and no
+code; the rest are usually a primer plus practice notebooks or a lab; each topic's or lab's README says what it
+contains.
 
 ## Start here
 
@@ -35,8 +36,8 @@ rented GPUs, Google Cloud — what it costs, and which lab needs which tier.
 Read bottom-up: each layer is built on the one below it.
 
 ```
-  ┌─ 07-application-agent-framework   build the agent: loop, tools, sandboxes, state, durability, evals, RAG
-  │  06-gateway                       decide who may run what: identity, policy, rate limits, admission, cost
+  ┌─ 07-application-agent-framework   build the agent: loop, tools, sandboxes, state, memory, durability, evals, RAG
+  │  06-gateway                       decide who may run what: identity, policy, model routing, rate limits, admission, cost
   │  05-orchestrator                  run many engine replicas as one service: routing, autoscaling, P/D split
   │  04-inference-engine              run one model fast: attention kernels, the KV cache, batching, quantization
   │  03-kubernetes-gpu                make GPUs schedulable: device plugin, scheduler, gangs, quotas, capacity
@@ -75,13 +76,17 @@ One entry per layer: what you will be able to do, then its topic folders.
   autoscale on the right signals; size a prefill/decode split — in a simulator, then a real router.
   Topic: [`serving-orchestration/`](05-orchestrator/serving-orchestration/README.md).
 - **06 · Gateway** — [`06-gateway/`](06-gateway/README.md). Give agents identities, exchange tokens, enforce
-  policy with an audit trail; plan capacity, find the provisioned-throughput break-even, add admission control.
+  policy with an audit trail; plan capacity, find the provisioned-throughput break-even, add admission control; put
+  one gateway in front of many models that routes and falls back, caches, meters tokens and keeps tenants apart.
   Topics: [`identity-security/`](06-gateway/identity-security/README.md),
-  [`scaling-admission-cost/`](06-gateway/scaling-admission-cost/README.md).
+  [`scaling-admission-cost/`](06-gateway/scaling-admission-cost/README.md),
+  [`llm-gateway/`](06-gateway/llm-gateway/README.md).
 - **07 · Agents and applications** — [`07-application-agent-framework/`](07-application-agent-framework/README.md). Write
-  an agent loop; make long-running agents durable; build RAG and vector indexes; sandbox model-written code.
+  an agent loop; make long-running agents durable; build RAG and vector indexes; sandbox model-written code; give an
+  agent a long-term memory that stays in budget and can forget.
   Topics: `agent-fundamentals/`, `long-running-durable/`, `retrieval-rag/`,
-  [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md).
+  [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md),
+  [`agent-memory/`](07-application-agent-framework/agent-memory/README.md).
 
 Several topics are worked on more than one provider (Google Cloud, Mistral) so the same concept can be compared
 across stacks. Each layer `README.md` has its topics with time and tier, where to start, how it fits with the layers around it and
@@ -89,7 +94,7 @@ the Colab links.
 
 ## How the labs work
 
-The nine primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
+The eleven primer + core + lab topics (listed at the top of this page) follow the same pattern, so once you have done
 one you know how to do the rest. The other topics are shaped differently — a primer with written exercises
 (`gpu-primer/`, `gpu-deployment/`), a primer plus practice notebooks (for example `kv-cache/`, `paged-attention/`,
 `flash-attention/`), or a lab of its own (most of 06 and 07) — and their READMEs say what they have.
@@ -100,7 +105,7 @@ one you know how to do the rest. The other topics are shaped differently — a p
 | **Core** | a minimal implementation, usually standard-library Python, plus fill-in notebooks that *predict* what the real system does |
 | **Lab** | the detailed version: real tools, benchmarks and deploy recipes that *run* or *measure* the same ideas |
 
-**Tiers** say what hardware a notebook or recipe needs, and the nine primer + core + lab topics mark every step
+**Tiers** say what hardware a notebook or recipe needs, and the eleven primer + core + lab topics mark every step
 with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 - **T0** — a laptop, Colab CPU or CI. Free. Every concept is learnable here.
@@ -110,9 +115,9 @@ with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 Notebooks that need a GPU detect what they have and fall back to a clearly labelled T0 path.
 
-**Exercises** sit in `notebooks/` (or `exercises/`, or `practice/`) with `# YOUR CODE HERE`; in the primer, core and
-lab topics each is followed by a check cell that prints ✅ when your answer is right, and worked answers are in
-`solutions/` (older labs keep them beside the exercise, for example `*_solution.ipynb`). Exercises are committed blank, so
+**Exercises** sit in each lab's `notebooks/` folder (beside its lessons) with `# YOUR CODE HERE`; in the primer, core
+and lab topics each is followed by a check cell that prints ✅ when your answer is right, and the worked answer to
+`notebooks/<name>.ipynb` is `solutions/<name>.ipynb`, the same file name, in every lab. Exercises are committed blank, so
 `git restore <notebook>` returns one to its starting state (for labs built from `notebooks_src/`, re-run that
 lab's `python3 tools/build_notebooks.py`).
 
@@ -148,6 +153,7 @@ python3 -m pytest -q      # most labs ship tests
 ├── tools/                 Colab bootstrap and link generators; site/ (the site's page generator)
 ├── tools/orchestration/   notes on how the topics were built and reviewed — maintainer material, not lessons
 ├── raw/                   inbox for new material (gitignored except its README)
+├── CONTRIBUTING.md        how to make a change: layout, conventions, checks, process
 ├── CLAUDE.md              instructions for the agent that maintains the repo
 └── README.md              this file
 ```
@@ -158,10 +164,13 @@ Everything in this repository that does not carry its own licence — the primer
 guide, the site's text and the code outside the labs — is under the MIT licence in [`LICENSE`](LICENSE). A lab
 with its own `LICENSE` file keeps it: most are MIT as well, and two are Apache 2.0 —
 [`agentic-identity-gcp-lab`](06-gateway/identity-security/agentic-identity-gcp-lab/LICENSE) (06) and
-[`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/LICENSE) (07). Third-party names and
+[`lra-gcp`](07-application-agent-framework/long-running-durable/lra-gcp/LICENSE) (07). Third-party names and
 products are trademarks of their owners and are mentioned only to explain how they work.
 
 ## Maintaining the repo
+
+Before a first change, read [`CONTRIBUTING.md`](CONTRIBUTING.md): the layout, the conventions, the checks CI runs
+and how a pull request lands, for people and coding agents alike.
 
 New material arrives in [`raw/`](raw/README.md) and is moved, never copied, into the layer and topic folder it
 belongs to; [`raw/README.md`](raw/README.md) says what a good drop looks like. [`CLAUDE.md`](CLAUDE.md) holds the

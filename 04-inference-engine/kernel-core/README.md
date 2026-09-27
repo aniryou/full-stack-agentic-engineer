@@ -10,8 +10,8 @@ three kernel primers of this layer.
 1. Read the [KV cache primer](../kv-cache/kv-cache-primer.md) §2–§4 (30 min).
 2. `python3 -m pip install -e '.[dev]' && python3 -m pytest -q` — 51 tests in about a second, numpy only,
    including "cached decode == recomputing the prefix", "paged == contiguous" and "tiled == exact".
-3. Open [`../kv-cache/01_kv_cache_worked.ipynb`](../kv-cache/01_kv_cache_worked.ipynb), then fill in the blanks of
-   [`../kv-cache/02_kv_cache_practice.ipynb`](../kv-cache/02_kv_cache_practice.ipynb).
+3. Open [`../kv-cache/notebooks/01_kv_cache_worked.ipynb`](../kv-cache/notebooks/01_kv_cache_worked.ipynb), then fill in the blanks of
+   [`../kv-cache/notebooks/02_kv_cache_practice.ipynb`](../kv-cache/notebooks/02_kv_cache_practice.ipynb).
 
 ## What you get
 
@@ -25,8 +25,8 @@ the three primers this is the repo curriculum's module 04.0 (about 5 hours).
 | [`kerncore/flash.py`](kerncore/flash.py) | run the FlashAttention-2 forward schedule tile by tile with the online softmax and log-sum-exp, skip tiles above the causal diagonal, and see why a forward key loop needs no `-inf` guard while a backward one does; check tiles and bytes against the deep dive's `fa_calculators.py` | 45 min | T0 |
 | [`../kv-cache/`](../kv-cache/kv-cache-primer.md) notebooks | the worked notebook (the cache in numpy, `IDENTICAL: True`, the cost curves, the sizes) and the practice notebook (four blanks, each with a check that fails the usual wrong answers) | ~1.5 h | T0 |
 
-The paged-attention and flash-attention practice notebooks in [`../paged-attention/`](../paged-attention/paged_attention_practice.ipynb)
-and [`../flash-attention/`](../flash-attention/flash_attention_practice.ipynb) are numpy already; `kerncore.paged` and
+The paged-attention and flash-attention practice notebooks in [`../paged-attention/notebooks/`](../paged-attention/notebooks/paged_attention_practice.ipynb)
+and [`../flash-attention/notebooks/`](../flash-attention/notebooks/flash_attention_practice.ipynb) are numpy already; `kerncore.paged` and
 `kerncore.flash` are tested versions of their answer keys.
 
 ## Run it

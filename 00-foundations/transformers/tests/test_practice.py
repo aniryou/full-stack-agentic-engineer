@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("numpy")
-PRACTICE = Path(__file__).resolve().parents[1] / "practice"
+LAB = Path(__file__).resolve().parents[1]
+BLANK, SOLVED = "notebooks/attention_practice.ipynb", "solutions/attention_practice.ipynb"
 MARK = "# YOUR CODE HERE"
 
 
 def code_cells(name):
-    return ["".join(c["source"]) for c in json.loads((PRACTICE / name).read_text(encoding="utf-8"))["cells"]
+    return ["".join(c["source"]) for c in json.loads((LAB / name).read_text(encoding="utf-8"))["cells"]
             if c["cell_type"] == "code"]
 
 
@@ -30,11 +31,11 @@ def run(cells):
 
 
 def test_solutions_run_clean():
-    assert run(code_cells("attention_solutions.ipynb")) == (None, None)
+    assert run(code_cells(SOLVED)) == (None, None)
 
 
 def test_blank_stops_at_the_first_check_with_a_clear_message():
-    cells = code_cells("attention_practice.ipynb")
+    cells = code_cells(BLANK)
     first = next(i for i, s in enumerate(cells) if MARK in s)
     at, err = run(cells)
     assert at == first + 1 and isinstance(err, NotImplementedError), (at, repr(err))
@@ -42,7 +43,7 @@ def test_blank_stops_at_the_first_check_with_a_clear_message():
 
 
 def test_each_blank_alone_stops_its_own_check():
-    prac, sol = code_cells("attention_practice.ipynb"), code_cells("attention_solutions.ipynb")
+    prac, sol = code_cells(BLANK), code_cells(SOLVED)
     exercises = [i for i, s in enumerate(prac) if MARK in s]
     assert len(exercises) == 7 and len(prac) == len(sol)
     for i in exercises:
@@ -70,13 +71,13 @@ def merge_heads(x):
 
 @pytest.mark.parametrize("start", sorted(ELLIPSIS_ANSWERS))
 def test_ellipsis_indexing_in_a_right_answer_is_not_a_blank(start):
-    sol = code_cells("attention_solutions.ipynb")
+    sol = code_cells(SOLVED)
     i = next(i for i, s in enumerate(sol) if s.lstrip().startswith(start))
     assert run(sol[:i] + [ELLIPSIS_ANSWERS[start]] + sol[i + 1:]) == (None, None)
 
 
 def test_a_blank_next_to_ellipsis_indexing_still_stops():
-    sol = code_cells("attention_solutions.ipynb")
+    sol = code_cells(SOLVED)
     i = next(i for i, s in enumerate(sol) if s.lstrip().startswith("def softmax"))
     half = """def softmax(x, axis=-1):
     e = np.exp(x[..., :])

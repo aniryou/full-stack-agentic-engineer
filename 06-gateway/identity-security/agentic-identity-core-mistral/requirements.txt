@@ -1,3 +1,0 @@
-PyJWT[crypto]>=2.9
-mistralai>=2.10
-pytest>=8

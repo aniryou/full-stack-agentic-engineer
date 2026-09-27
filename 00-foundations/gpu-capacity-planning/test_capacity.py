@@ -47,7 +47,8 @@ def test_prefill_attention_term():
 
 
 # --- the practice notebooks: the solution runs, and each check cell fails a wrong answer -------------------------
-NB = Path(__file__).resolve().parent / "notebooks"
+LAB = Path(__file__).resolve().parent   # the blank is notebooks/<name>, its answer solutions/<name>
+BLANK, SOLVED = "notebooks/01_capacity_practice.ipynb", "solutions/01_capacity_practice.ipynb"
 WRONG = {  # old answers that used to pass a single range assert, plus the old GiB units
     "decode_tok_s": "def decode_tok_s(weight_gb_, gpu):\n    return 70\n",
     "ttft_s": "def ttft_s(active_b, prompt_tokens, gpu, mfu=0.5):\n    return prompt_tokens / 20000\n",
@@ -62,9 +63,9 @@ WRONG = {  # old answers that used to pass a single range assert, plus the old G
 def _run_notebook(name, monkeypatch, replace=None):
     """Execute a notebook's code cells in-process (they are standard library only); return the namespace."""
     import json
-    monkeypatch.chdir(NB)
+    monkeypatch.chdir((LAB / name).parent)
     monkeypatch.setattr(sys, "path", list(sys.path))
-    cells = [("".join(cell["source"])) for cell in json.loads((NB / name).read_text())["cells"] if cell["cell_type"] == "code"]
+    cells = [("".join(cell["source"])) for cell in json.loads((LAB / name).read_text())["cells"] if cell["cell_type"] == "code"]
     ns = {}
     for i, src in enumerate(cells):
         fn = next((f for f in (replace or {}) if src.startswith(f"def {f}(")), None)
@@ -78,12 +79,12 @@ def _run_notebook(name, monkeypatch, replace=None):
 
 def _def_cell(name, fn):
     import json
-    cells = [("".join(c["source"])) for c in json.loads((NB / name).read_text())["cells"] if c["cell_type"] == "code"]
+    cells = [("".join(c["source"])) for c in json.loads((LAB / name).read_text())["cells"] if c["cell_type"] == "code"]
     return next(i for i, src in enumerate(cells) if src.startswith(f"def {fn}("))
 
 
 def test_practice_solution_runs_and_reproduces_the_bank(monkeypatch, capsys):
-    ns = _run_notebook("01_capacity_practice_solved.ipynb", monkeypatch)
+    ns = _run_notebook(SOLVED, monkeypatch)
     assert (round(ns["per_gpu_fp8"], 1), round(ns["per_gpu_bf16"], 1)) == (355.1, 88.8)
     assert "163.84 kB (bf16)" in capsys.readouterr().out
 
@@ -91,7 +92,7 @@ def test_practice_solution_runs_and_reproduces_the_bank(monkeypatch, capsys):
 @pytest.mark.parametrize("fn", sorted(WRONG))
 def test_practice_checks_fail_a_wrong_answer(fn, monkeypatch):
     """The exercise's own check (the cell right after its def) fails it, not some later cell."""
-    name = "01_capacity_practice_solved.ipynb"
+    name = SOLVED
     with pytest.raises(AssertionError) as err:
         _run_notebook(name, monkeypatch, {fn: WRONG[fn]})
     assert err.value.cell == _def_cell(name, fn) + 1
@@ -99,5 +100,5 @@ def test_practice_checks_fail_a_wrong_answer(fn, monkeypatch):
 
 def test_practice_blank_stops_at_the_first_exercise(monkeypatch):
     with pytest.raises(NotImplementedError) as err:
-        _run_notebook("01_capacity_practice.ipynb", monkeypatch)
-    assert err.value.cell == _def_cell("01_capacity_practice.ipynb", "weight_gb") + 1   # its check, not its def
+        _run_notebook(BLANK, monkeypatch)
+    assert err.value.cell == _def_cell(BLANK, "weight_gb") + 1   # its check, not its def

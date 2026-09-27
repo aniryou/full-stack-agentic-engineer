@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memlab"
+version = "0.1.0"
+description = "Agent memory you can run and inspect: a SQLite store with FTS5 and vectors (and a pgvector twin), a memory service and an agent, prefix-cache hits per memory layout, consolidation as a scheduled job, a planted-facts eval and a deletion checked on disk."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# numpy scores the vectors; aiohttp serves the memory service and the fake OpenAI-compatible server.
+# SQLite (with FTS5) is in the standard library.
+dependencies = ["numpy>=1.24", "aiohttp>=3.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "pyyaml>=6.0",
+       # Postgres's own parser (libpg_query) checks the pgvector SQL offline; tests skip without it.
+       "pglast>=7; platform_system != 'Windows'"]
+# T0 + Docker: talk to Postgres + pgvector (deploy/local/compose.yaml). Imported lazily.
+pg = ["psycopg[binary]>=3.1"]
+
+[project.scripts]
+memlab = "memlab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["memlab*"]
+
+[tool.setuptools.package-data]
+memlab = ["data/samples/*.json", "data/samples/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

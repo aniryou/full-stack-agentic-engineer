@@ -1,0 +1,41 @@
+# T0 + Docker (any laptop, no GPU): the gateway in front of two fake providers, one of them unreliable.
+#
+#   ./up.sh        (DRY_RUN=1 prints the steps)      ./smoke.sh      ./down.sh
+#
+#   gateway  http://localhost:8080   /v1/chat/completions, /v1/models, /metrics, /admin/keys, /debug/state
+#   acme     an OpenAI-dialect fake that fails 30 % of requests with 503 before the first byte (--fail-rate 0.3)
+#   bolt     an Anthropic-dialect fake (the fallback)
+# Both fakes are SIMULATED providers (gwlab.fakes); their keys live only in the gateway's environment.
+name: gwlab
+
+x-lab: &lab
+  build: {context: ../.., dockerfile: deploy/local/Dockerfile}
+  image: gwlab:local
+
+services:
+  acme:
+    <<: *lab
+    command: ["python", "-m", "gwlab", "fake", "--name", "acme", "--dialect", "openai", "--host", "0.0.0.0",
+              "--port", "8101", "--keys", "acme-key-1", "--fail-rate", "0.3", "--seed", "7"]
+  bolt:
+    <<: *lab
+    command: ["python", "-m", "gwlab", "fake", "--name", "bolt", "--dialect", "anthropic", "--host", "0.0.0.0",
+              "--port", "8102", "--keys", "bolt-key-1"]
+  gateway:
+    <<: *lab
+    command: ["python", "-m", "gwlab", "gateway", "--config", "lab", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      ACME_URL: http://acme:8101
+      BOLT_URL: http://bolt:8102
+      ACME_API_KEY: acme-key-1                        # provider keys: in the gateway only, never in a client
+      BOLT_API_KEY: bolt-key-1
+      GWLAB_ADMIN_TOKEN: ${GWLAB_ADMIN_TOKEN:-dev-admin-token}
+      GWLAB_SALT_SECRET: ${GWLAB_SALT_SECRET:-dev-salt-secret}
+      GWLAB_DB: /data/gateway.db                      # keys (hashed), cache, ledger: `sqlite3` it after a run
+      GWLAB_SPANS: /data/spans.jsonl                  # OTLP/JSON lines
+    volumes: ["gwdata:/data"]
+    ports: ["8080:8080"]
+    depends_on: [acme, bolt]
+
+volumes:
+  gwdata: {}

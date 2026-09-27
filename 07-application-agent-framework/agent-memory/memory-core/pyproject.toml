@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memcore"
+version = "0.1.0"
+description = "Agent memory from first principles: typed records, a write policy, generative-agents retrieval, the context budget and the prefix cache, consolidation, forgetting and deletion, and a planted-facts harness."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # standard library + numpy; no model, no network
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["memcore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
