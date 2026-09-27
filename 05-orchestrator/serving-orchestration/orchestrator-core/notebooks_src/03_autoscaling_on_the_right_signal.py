@@ -178,7 +178,7 @@ print(f"in-flight target {inflight_target} per replica, KV target {kv_target} "
 
 # %% [markdown]
 # ## Worked example — the same traffic step, five signals
-# One replica serves 1.5 req/s; at $t$ = 60 s traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
+# One replica serves 1.5 req/s; at $t = 60$ s traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
 # (min 1, max 8, default behaviour) on a different signal; new replicas take 30 s to become ready (a warm node and
 # cached weights). The sparkline is the replica count every 15 s.
 

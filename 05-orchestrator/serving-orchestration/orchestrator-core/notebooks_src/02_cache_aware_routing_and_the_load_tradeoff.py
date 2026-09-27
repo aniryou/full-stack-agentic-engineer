@@ -382,7 +382,7 @@ print(f"✅ loads {without['adapter loads']} -> {with_f['adapter loads']}, p95 T
 #    each other, and nothing moves them. It is a good *score*, not a policy.
 # 2. *Hit rate fell from 0.85 to 0.55 after a deploy. Where do you look?* The prompt layout (a timestamp or user id
 #    ahead of the system prompt breaks every block after it), block size, then router weights and per-replica load.
-# 3. *What does $\varepsilon$ = 0.25 buy you?* No replica ever holds more than
+# 3. *What does $\varepsilon = 0.25$ buy you?* No replica ever holds more than
 #    $\lceil (1 + \varepsilon) \times (\text{in-flight} + 1) / n \rceil$ requests — about 1.25 x the average —
 #    whatever the key skew; the price is that overflow keys move to the next replica on the ring and miss there.
 # 4. *Sixteen LoRA adapters, four replicas with `--max-loras 4`: what does the router add?* Adapter affinity (keep
