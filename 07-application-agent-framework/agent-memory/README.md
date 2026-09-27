@@ -64,7 +64,8 @@ print([r.value for r in retrieve(store, alice, "What is the user's home city?", 
 Read the [agent-core loop and tool contracts](../agent-fundamentals/agent-core/) (07.1) first; this topic replaces its
 "memory is the transcript" baseline. It reuses — and cites, section by section — the
 [agent platform lab](../agent-fundamentals/gcp-agent-platform-lab/) (07.2: sessions, context layout, evals, injection
-defences), durable execution (07.3: idempotency, leases, budgets, scheduled runs), [retrieval-rag](../retrieval-rag/)
+defences), [durable execution](../long-running-durable/README.md) (07.3: idempotency, leases, budgets, scheduled
+runs), [retrieval-rag](../retrieval-rag/)
 (07.4: the hashing embedder, hybrid search, the vector-database primer's partitions and tombstones), the
 [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md) §5 (04.3: the prefix cache whose block rules
 price the context budget) and the [identity

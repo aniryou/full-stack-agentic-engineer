@@ -79,8 +79,9 @@ The concepts are in [`../PRIMER.md`](../PRIMER.md); the minimal from-scratch ver
 ([`06-gateway/scaling-admission-cost`](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/))
 and 07.2's Wilson interval. Scope, delegation and audit follow the
 [identity primer](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §2, §3.5, §8, §9;
-the durable job follows the durable-execution primer §3.2–§3.4 and the lra-gcp primer §3.3 and §3.13
-(`07-application-agent-framework/long-running-durable/`). Prices and where to get GPUs:
+the durable job follows the [durable-execution primer](../../long-running-durable/PRIMER.md#3-the-five-invariants)
+§3.2–§3.4 and the [lra-gcp primer](../../long-running-durable/lra-gcp/docs/primer.md) §3.3 and §3.13 (07.3,
+[`long-running-durable`](../../long-running-durable/README.md)). Prices and where to get GPUs:
 [`COMPUTE.md`](../../../COMPUTE.md).
 
 ## The library (`memlab/`, ~4,500 lines, numpy + aiohttp)

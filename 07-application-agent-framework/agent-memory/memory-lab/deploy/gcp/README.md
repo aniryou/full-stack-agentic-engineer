@@ -79,8 +79,10 @@ prints, in order (run them from `memory-lab/`, the image's build context):
    `gcloud run jobs execute --wait` to try it once.
 
 Why **OAuth, not OIDC**: the scheduler calls the Cloud Run Admin API (`run.googleapis.com`), which accepts OAuth
-access tokens; OIDC identity tokens are for invoking your own service's URL (the lra-gcp reaper does that,
-see `07-application-agent-framework/long-running-durable/lra-gcp/docs/primer.md` §3.13). Google's Terraform
+access tokens; OIDC identity tokens are for invoking your own service's URL (the lra-gcp reaper does that: its
+[primer's §3.3](../../../../long-running-durable/lra-gcp/docs/primer.md#33-leases-and-the-reaper-crash-recovery) and
+the `oidc_token` of `google_cloud_scheduler_job.reaper` in its
+[Terraform](../../../../long-running-durable/lra-gcp/infra/terraform/main.tf)). Google's Terraform
 sample for scheduled jobs uses this v2 URI; its gcloud samples use the v1 form
 `https://<region>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<project>/jobs/<job>:run` (verify
 which your gcloud prefers). Also verify: `--task-timeout`, `--set-secrets` and `--command/--args` on

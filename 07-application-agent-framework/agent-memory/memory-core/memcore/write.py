@@ -140,8 +140,8 @@ class IdempotencyConflict(ValueError):
 def idempotency_key(session: str, turn: int, index: int) -> str:
     """session:turn:index - it names the STEP, not its content. A retried turn re-asks the extractor and may get
     different text back; a key with the text in it would then be new, and the retry would write a second, different
-    fact (the durable primer's §3.2 failure: "a naive retry re-asks the model ... and produces a second, different
-    side effect"). With the step as the key, the retry replays the first result, or fails loudly."""
+    fact (the durable primer's §1.3 failure, which its §3.2 fixes: "a naive retry re-asks the model ... and produces
+    a second, different side effect"). With the step as the key, the retry replays the first result, or fails loudly."""
     return f"{session}:{turn}:{index}"
 
 

@@ -13,7 +13,8 @@ source, how it finds it again, what that costs per turn, and how it forgets — 
 builds on material already in the repo and cites rather than repeats it: the agent loop and tool contracts of
 [agent-core](../agent-fundamentals/agent-core/) (07.1), sessions, context layout, evals and injection defences in the
 [agent platform lab](../agent-fundamentals/gcp-agent-platform-lab/) (07.2), the durable-execution primers
-(`long-running-durable/PRIMER.md` and `long-running-durable/lra-gcp/docs/primer.md`, 07.3), retrieval in
+(the [durable primer](../long-running-durable/PRIMER.md) and the
+[lra-gcp primer](../long-running-durable/lra-gcp/docs/primer.md), 07.3), retrieval in
 [retrieval-rag](../retrieval-rag/) (07.4), the prefix cache in the
 [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md) §5 (04.3), and the threat model and
 audit event of the [identity primer](../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) (06).
@@ -53,17 +54,19 @@ baseline this topic replaces. Its cost grows every turn because the prompt re-se
 with a 2,000-token system prompt and 160 tokens per exchange sends **71,200** input tokens in all
 (`memcore.budget.hits_per_turn("none", turns=20)`), cheap only because an append-only transcript is an almost
 perfect prefix-cache customer (95.6% of those tokens hit, §5). Two limits remain: it ends with the session, and
-what is compacted into a summary is paraphrased — the durable primer's rule (`long-running-durable/PRIMER.md` §3.5
-"Context hygiene — every fact has a shelf life": "summaries paraphrase"; "stale context is worse than missing
-context"). The 07.2 lab makes the same point from the other side: notebook
+what is compacted into a summary is paraphrased — the durable primer's rule
+([§3.5 "Context hygiene — every fact has a shelf life"](../long-running-durable/PRIMER.md#35-context-hygiene--every-fact-has-a-shelf-life):
+"summaries paraphrase"; "stale context is worse than missing context").
+The 07.2 lab makes the same point from the other side: notebook
 [`03_state_sessions_checkpoints`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/03_state_sessions_checkpoints.ipynb)
 §1 ("The event log is the source of truth") keeps events as the record and derives what the model sees; its scoped
 state keys (`user:`, `app:`, `temp:`) are "a promise about lifetime".
 
 **Long-term memory has three kinds, one shape.** The vector-databases primer's "Agent memory" pattern
 ([§17 Use-case patterns](../retrieval-rag/vector-databases-primer.md)) names them — episodic (conversation turns),
-semantic (facts), procedural (successful tool sequences) — and the lra-gcp primer (§3.10 "Memory and context
-management") separates run state, working memory, the episodic log and long-term memory. memcore makes them one
+semantic (facts), procedural (successful tool sequences) — and the lra-gcp primer
+([§3.10 "Memory and context management"](../long-running-durable/lra-gcp/docs/primer.md#310-memory-and-context-management))
+separates run state, working memory, the episodic log and long-term memory. memcore makes them one
 record, `memcore.records.MemoryRecord`, because every later mechanism needs the same fields:
 
 | Field | Job | Used in |
@@ -143,10 +146,12 @@ user. Neither is wrong. memory-core notebook 01 exercise 1.4 makes you predict t
 before running it, because precedence rules that look obvious disagree in exactly these cases.
 
 **Idempotent writes.** Turns run on at-least-once machinery, so a retried turn must not write twice — the durable
-primer's §3.2 "Idempotency — effectively-once, not exactly-once" (key = `run_id:step_index`, "stable across
-retries"). The key names the **step**, never its content: a retry re-asks the extraction model, which may phrase the
+primer's [§3.2 "Idempotency — effectively-once, not exactly-once"](../long-running-durable/PRIMER.md#32-idempotency--effectively-once-not-exactly-once)
+(key = `run_id:step_index`, "stable across retries"). The key names the **step**, never its content: a retry
+re-asks the extraction model, which may phrase the
 fact differently, and a key with a content hash in it would then be new — exactly the "second, different side
-effect" §3.2 warns about. memcore's `memcore.write.idempotency_key(session, turn, index)` is `session:turn:index`
+effect" the durable primer's [§1.3](../long-running-durable/PRIMER.md#13-the-model-is-a-non-deterministic-side-effect) warns about and §3.2 fixes.
+memcore's `memcore.write.idempotency_key(session, turn, index)` is `session:turn:index`
 (e.g. `s1:7:0`), unique per `(tenant, user)` partition; `Writer.write(rec, key)` journals the first result and
 returns it for a replay, and a *different* write under a known key raises `IdempotencyConflict` instead of writing
 (an HTTP API answers 422 — the lab's service does). The journal must be as durable as the records: the lab keeps the
@@ -376,7 +381,8 @@ of a cached turn-8 answer ($0.00199, pinned, 4,000-token system prompt) and 22% 
 ($0.00642, 2,000-token system prompt). One consolidation per 8-turn session (1,600 in, 100 out) amortises to
 **$0.00041** a turn. Extract on the hot path only what the next turn needs; batch the rest (§7).
 
-**Budgets are code.** The durable primer's §3.4 "Boundedness — budgets are code" applies per turn.
+**Budgets are code.** The durable primer's
+[§3.4 "Boundedness — budgets are code"](../long-running-durable/PRIMER.md#34-boundedness--budgets-are-code) applies per turn.
 `memcore.budget.Budget` holds limits for memory tokens, writes and model calls. The memory-token limit **shapes** the
 work: retrieval packs at most what the turn has left, so a tight budget packs fewer memories instead of crashing the
 turn. Writes and model calls cannot be half-done, so `charge()` raises `BudgetExceeded` **before** each one and the
@@ -453,17 +459,21 @@ reflection sums past a trigger — 150 in both the paper and the reference code 
 generates focal questions from its recent records (the paper says the 100 most recent; the code uses the events since
 the last reflection, `importance_ele_n`), retrieves evidence for each, and stores up to five insights citing evidence
 ids (`reflect.py`, verify). `memcore.consolidate.reflect()` keeps the shape — an importance-sum trigger, insights citing
-evidence — with the explicit exits of the lra-gcp primer's §3.8 reflection loop: `below_trigger`, `done`,
+evidence — with the explicit exits of the lra-gcp primer's
+[§3.8 reflection loop](../long-running-durable/lra-gcp/docs/primer.md#38-reflection-evaluatoroptimizer-as-durable-steps): `below_trigger`, `done`,
 `max_insights`, `budget_exhausted`.
 
 **The job is a durable scheduled run.** A deterministic run id per window —
-`consolidate:acme:alice:day0-7`, the way the lra-gcp primer (§3.13 "Scheduled and event-triggered runs") names
+`consolidate:acme:alice:day0-7`, the way the lra-gcp primer
+([§3.13 "Scheduled and event-triggered runs"](../long-running-durable/lra-gcp/docs/primer.md#313-scheduled-and-event-triggered-runs)) names
 `weekly-review-2026-W37` — so a double fire of the schedule is one run (the second reports `already done`); a
-**lease** with a TTL (§3.3 "Leases and the reaper"), so a worker that dies holding it blocks others only until it
+**lease** with a TTL
+([§3.3 "Leases and the reaper"](../long-running-durable/lra-gcp/docs/primer.md#33-leases-and-the-reaper-crash-recovery)), so a worker that dies holding it blocks others only until it
 expires (a crash at t, a second worker refused at t + 30 s, admitted at t + 61 s with a 60 s lease); a **heartbeat**
 that renews the lease before every slot and a **fence** that checks it is still ours before writing — a worker that is
 slow rather than dead (90 s per slot against a 60 s lease) finds its run taken over and stops with `LeaseLost`
-instead of writing alongside its successor — the durable primer's §3.3 "Exclusivity — leases, not locks": "Long
+instead of writing alongside its successor — the durable primer's
+[§3.3 "Exclusivity — leases, not locks"](../long-running-durable/PRIMER.md#33-exclusivity--leases-not-locks): "Long
 steps extend the lease (heartbeat)", and a check on every save is "the second half"; a **checkpoint** after
 every slot, so the resumed run skips finished slots; and fact ids derived from (run id, slot, position), so a slot
 re-applied after a crash overwrites instead of duplicating. The crash hook fires at the worst place — after a slot's
@@ -726,8 +736,9 @@ comes from the verified token, and every read, write and forget is audited."
   (MINJA), arXiv 2503.03704, 2025; Zou et al., PoisonedRAG, 2024; OWASP Top 10 for Agentic Applications (ASI06).
 - **Repo material cited, not restated** — agent-core (`agentcore/agent.py`, `tools.py`, notebook 03); the agent
   platform lab (notebooks 03, 04, 08, 11; `agentlab.agents.context.ContextBuilder`, `agentlab.estimation.calc`,
-  `agentlab.evals.gate.wilson_interval`, `agentlab.security.injection`); `long-running-durable/PRIMER.md` §3.2–§3.5
-  and `long-running-durable/lra-gcp/docs/primer.md` §3.3, §3.8, §3.10, §3.13; the vector-databases primer §8, §9,
+  `agentlab.evals.gate.wilson_interval`, `agentlab.security.injection`); the
+  [durable primer](../long-running-durable/PRIMER.md) §3.2–§3.5 and the
+  [lra-gcp primer](../long-running-durable/lra-gcp/docs/primer.md) §3.3, §3.8, §3.10, §3.13; the vector-databases primer §8, §9,
   §11, §17; the embeddings primer §15; `ragkit.embed.HashingEmbedder`, `ragkit.reference`; `minifaiss` HNSW; the
   identity primer §2, §3.5, §8, §9 and `agentsec/audit/log.py`; the scaling primer §3.4, §5.5 and
   `scalelab/capacity.py`; the serving-engine primer §5, `minengine.kv`, `minengine.perf`; vllm-serving-lab notebook
