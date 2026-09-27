@@ -26,10 +26,11 @@ def test_labs_json_is_complete_and_consistent():
         assert lab["install"] and lab["test"], lab["id"]
         assert lab["python"] in ("3.11", "3.12"), lab["id"]
         assert "torch" not in lab["install"].replace("grep -viE '^[[:space:]]*torch'", ""), lab["id"]
-    # the two scaling labs both ship a package named `scalelab`: separate entries, separate environments
+    # the two scaling labs both ship a package named `scalelab`: separate entries, separate environments;
+    # lra-gcp runs three times: the default install, with the ADK extra, and on Python 3.12 with the Mistral extra
     ids = {lab["id"] for lab in labs}
-    assert {"agentic-scaling-lab", "agentic-scaling-lab-mistral", "lra-gcp",
-            "long-running-agents-mistral", "long-running-agents-mistral-py312"} <= ids
+    assert {"agentic-scaling-lab", "agentic-scaling-lab-mistral", "lra-core", "lra-gcp",
+            "lra-gcp-adk", "lra-gcp-mistral-py312"} <= ids
 
 
 def test_check_passes_on_the_committed_tree():
@@ -59,7 +60,7 @@ def test_builders_are_all_found():
     found = ci.builders()
     assert "07-application-agent-framework/retrieval-rag/embeddings-lab/build.py" in found
     assert "07-application-agent-framework/retrieval-rag/rag-from-scratch/tools_build_notebooks.py" in found
-    assert len(found) >= 26
+    assert len(found) >= 25
 
 
 def test_matrix_output_is_compact_json():

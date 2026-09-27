@@ -231,47 +231,36 @@
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
-   "id": "long-running-agents-gcp",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp",
-   "python": "3.11",
-   "install": "python -m pip install -e \".[dev]\"",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-core",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-core",
-   "python": "3.11",
-   "install": "python -m pip install pytest",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-mistral",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
-   "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest tests -q"
-  },
-  {
-   "id": "long-running-agents-mistral-py312",
-   "dir": "07-application-agent-framework/long-running-durable/long-running-agents-mistral",
-   "python": "3.12",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest tests -q"
-  },
-  {
    "id": "lra-core",
-   "dir": "07-application-agent-framework/long-running-durable/lra-core/lra-core",
+   "dir": "07-application-agent-framework/long-running-durable/lra-core",
    "python": "3.11",
-   "install": "python -m pip install pytest",
-   "test": "python -m pytest -q"
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
    "id": "lra-gcp",
-   "dir": "07-application-agent-framework/long-running-durable/lra/lra-gcp",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
    "python": "3.11",
    "install": "python -m pip install -e \".[dev,services]\"",
    "test": "python -m pytest -q -p no:warnings",
-   "solutions": "python scripts/local_demo.py && python scripts/run_notebooks.py"
+   "solutions": "python scripts/local_demo.py && python scripts/run_notebooks.py solutions && python scripts/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "lra-gcp-adk",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev,services,adk]\"",
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/run_notebooks.py solutions/04_adk_workflow.ipynb && python scripts/run_notebooks.py notebooks/04_adk_workflow.ipynb --expect-fail"
+  },
+  {
+   "id": "lra-gcp-mistral-py312",
+   "dir": "07-application-agent-framework/long-running-durable/lra-gcp",
+   "python": "3.12",
+   "install": "python -m pip install -e \".[dev,services,mistral]\"",
+   "test": "python -m pytest -q -p no:warnings",
+   "solutions": "python scripts/run_notebooks.py solutions/05_tool_loop_and_mistral.ipynb && python scripts/run_notebooks.py notebooks/05_tool_loop_and_mistral.ipynb --expect-fail"
   },
   {
    "id": "rag-from-scratch",

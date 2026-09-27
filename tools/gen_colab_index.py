@@ -17,8 +17,8 @@ START, END = "<!-- colab-links:start -->", "<!-- colab-links:end -->"
 # is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
 # same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
 # own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
-# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
-# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
+# 02_kv_cache_practice (no twin), and a folder that reads its *_worked notebooks first and keeps the *_practice
+# answers in a solutions/ folder lists the worked ones as lessons (the answers live elsewhere).
 # Kept identical to tools/site/build_site_content.py.
 ROOT = Path(__file__).resolve().parents[1]
 SOLUTION_DIRS = {"solutions", "worked"}
