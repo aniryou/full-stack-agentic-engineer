@@ -140,16 +140,20 @@ most $\lceil (P + O - 1) / B \rceil$ blocks — the last sampled token is never 
 (`KVCacheManager.blocks_needed(P + O − 1)`, notebook 01). Llama-3.1-8B on a 24 GB L4 at 90% utilisation leaves 2,164
 blocks of 16 tokens (`perf.kv_cache_blocks()`); chat requests of 1,000 + 200 tokens need 75 blocks each → **28
 concurrent requests** (31 at vLLM v0.30.0's defaults, which §4 compares). The same arithmetic, plus Little's law
-($\text{concurrency} = \text{arrival rate} \times \text{time in system}$), sizes a fleet — [capacity planning,
-formulas 2 and 5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
+(concurrency = arrival rate × time in system), sizes a fleet — [capacity planning, formulas 2 and
+5](../../00-foundations/gpu-capacity-planning/PRIMER.md).
 
 ## 3. Chunked prefill and prefill/decode interference
 
-**The step-time curve.** A step pays
-$\max(\text{bytes} / \text{bandwidth}, \text{FLOPs} / \text{peak}) + \text{overhead}$ (`perf.step_cost()`; the full
-per-kernel model is [roofline-and-fabric §2–3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)). Bytes are
-nearly constant (the weights); FLOPs grow as $2 \times \text{params}$ per token. The **knee** where they cross, in
-tokens, is the ridge point scaled by bytes per parameter (`perf.knee_tokens()`):
+**The step-time curve.** A step pays (`perf.step_cost()`; the full per-kernel model is [roofline-and-fabric
+§2–3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)):
+
+$$
+\max\left(\frac{\text{bytes}}{\text{bandwidth}}, \frac{\text{FLOPs}}{\text{peak}}\right) + \text{overhead}
+$$
+
+Bytes are nearly constant (the weights); FLOPs grow as $2 \times \text{params}$ per token. The **knee** where they
+cross, in tokens, is the ridge point scaled by bytes per parameter (`perf.knee_tokens()`):
 
 $$
 \text{knee} \approx \frac{\text{peak} \times \mathtt{bytes\_per\_param}}{2 \times \text{bandwidth}}
@@ -474,10 +478,10 @@ draft $k$ tokens and have the target check them all in one pass.
 - on the first rejection: emit $y \sim \operatorname{norm}(\max(0, p - q))$ and stop ("recovered" token);
 - if all $k$ are accepted: emit one more token from the target's next $p$ ("bonus" token).
 
-Why it is exact: the chance of emitting token $y$ is $q(y) \min(1, p(y)/q(y)) = \min(p(y), q(y))$ via acceptance, plus
-$P(\text{reject}) \times \text{residual}(y)$. $P(\text{reject}) = 1 - \sum \min(p, q)$, and the residual's normaliser
-$\sum \max(0, p - q)$ equals that same $1 - \sum \min(p, q)$, so the second term is $\max(0, p(y) - q(y))$. The sum is
-$\min(p, q) + \max(0, p - q) = p(y)$.
+Why it is exact: the chance of emitting token $y$ is $q(y) \min(1, p(y)/q(y)) =$ $\min(p(y), q(y))$ via acceptance,
+plus $P(\text{reject}) \times \text{residual}(y)$. $P(\text{reject}) = 1 - \sum \min(p, q)$, and the residual's
+normaliser $\sum \max(0, p - q)$ equals that same $1 - \sum \min(p, q)$, so the second term is $\max(0, p(y) - q(y))$.
+The sum is $\min(p, q) + \max(0, p - q) = p(y)$.
 
 **Speculation changes speed, never the distribution** — the core's chi-square test over all 64 three-token outcomes
 confirms it, and rejects a plausible bug (resampling from $p$ instead of the residual). With temperature 0 both
@@ -823,8 +827,8 @@ and report goodput against the SLO."
 **Drill.**
 
 1. *Why does adding requests to a decode batch barely slow it down, and when does that stop?* — Below the knee (~300
-   tokens on an H100 in bf16; $\text{peak} \times \mathtt{bytes\_per\_param} / (2 \times \text{bandwidth})$) a step is
-   the weight read, shared by every token in it. It stops when the batch's tokens pass the knee, or earlier at long
+   tokens on an H100 in bf16; $\text{peak} \times \mathtt{bytes\_per\_param} /$ $(2 \times \text{bandwidth})$) a step
+   is the weight read, shared by every token in it. It stops when the batch's tokens pass the knee, or earlier at long
    contexts, where each request's KV read adds bytes (64 decodes at 2,048 tokens of context add 17.2 GB to the 15 GB
    of weights).
 2. *p99 ITL spikes whenever a long document arrives. Diagnose and fix.* — Prefill/decode interference: the prompt's
