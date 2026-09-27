@@ -324,7 +324,7 @@ Governance loop: **register** (Agent Registry as the inventory and allowlist) â†
 
 ### 11.2 Code-evaluation drills (spot the bug)
 
-The `notebooks/practice/` set includes deliberately flawed snippets to find: a tool that forwards the inbound bearer token upstream (token passthrough); a verifier that checks signature but not `aud`; a policy engine that allows unknown tools; a confirmation UI that displays the model's summary instead of the actual arguments; a secret stored in `tool_context.state`; an egress check that matches on substring instead of parsed host; a DPoP verifier that skips `jti` replay tracking; a `principalSet` matcher that does prefix matching on the wrong segment.
+The practice notebooks (`notebooks/*_practice.ipynb`) include deliberately flawed snippets to find: a tool that forwards the inbound bearer token upstream (token passthrough); a verifier that checks signature but not `aud`; a policy engine that allows unknown tools; a confirmation UI that displays the model's summary instead of the actual arguments; a secret stored in `tool_context.state`; an egress check that matches on substring instead of parsed host; a DPoP verifier that skips `jti` replay tracking; a `principalSet` matcher that does prefix matching on the wrong segment.
 
 ### 11.3 Trade-offs you should be ready to argue
 
