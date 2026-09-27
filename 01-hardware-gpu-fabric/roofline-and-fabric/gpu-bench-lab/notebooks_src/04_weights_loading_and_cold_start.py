@@ -173,9 +173,9 @@ print("✅ a cold read is only a disk number if the bytes really came from the d
 # cache was doing the work. On a local NVMe, parallel reads usually beat a single stream; on a
 # network disk (a cloud boot disk, a FUSE mount of an object store) they are essential — Little's
 # law again: an object store serving each range request after a first-byte latency needs
-# `target × latency ÷ request size` requests outstanding (`loading.streams_needed`; roofline-core
-# Ex 4.2 sizes it). For 5 GB/s at 50 ms per 16 MB range that is 5e9 × 0.05 ÷ 16e6 ≈ 16 requests in
-# flight, not one.
+# $\text{target} \times \text{latency} \div \text{request size}$ requests outstanding (`loading.streams_needed`;
+# roofline-core Ex 4.2 sizes it). For 5 GB/s at 50 ms per 16 MB range that is 5e9 × 0.05 ÷ 16e6 ≈ 16
+# requests in flight, not one.
 #
 # ## Exercise 4.3 — which measured rate belongs in the model?
 #
@@ -209,7 +209,7 @@ print(f"✅ the loader's disk tier on this machine: {si(disk_bw, 'B/s') if disk_
 # ## 3 · To the GPU (T1)
 #
 # On a GPU host the last hops are host RAM → PCIe → HBM, from a **pinned** buffer so the copy engine
-# can DMA it. The lab's loader double-buffers: while chunk *i* is copied to the GPU, chunk *i+1* is
+# can DMA it. The lab's loader double-buffers: while chunk $i$ is copied to the GPU, chunk $i+1$ is
 # read into the other pinned buffer — a two-stage pipeline, so the time should approach the slower
 # stage, not the sum.
 
