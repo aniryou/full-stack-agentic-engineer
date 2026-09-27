@@ -153,6 +153,7 @@ python3 -m pytest -q      # most labs ship tests
 ├── tools/                 Colab bootstrap and link generators; site/ (the site's page generator)
 ├── tools/orchestration/   notes on how the topics were built and reviewed — maintainer material, not lessons
 ├── raw/                   inbox for new material (gitignored except its README)
+├── CONTRIBUTING.md        how to make a change: layout, conventions, checks, process
 ├── CLAUDE.md              instructions for the agent that maintains the repo
 └── README.md              this file
 ```
@@ -167,6 +168,9 @@ with its own `LICENSE` file keeps it: most are MIT as well, and two are Apache 2
 products are trademarks of their owners and are mentioned only to explain how they work.
 
 ## Maintaining the repo
+
+Before a first change, read [`CONTRIBUTING.md`](CONTRIBUTING.md): the layout, the conventions, the checks CI runs
+and how a pull request lands, for people and coding agents alike.
 
 New material arrives in [`raw/`](raw/README.md) and is moved, never copied, into the layer and topic folder it
 belongs to; [`raw/README.md`](raw/README.md) says what a good drop looks like. [`CLAUDE.md`](CLAUDE.md) holds the
