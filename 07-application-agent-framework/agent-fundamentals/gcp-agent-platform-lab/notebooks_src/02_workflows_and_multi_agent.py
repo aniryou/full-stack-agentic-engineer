@@ -175,8 +175,8 @@ for label, ctx in (("single agent", await run_single_agent()), ("coordinator + 1
 # %% [markdown]
 # ## 5. Compounded reliability
 #
-# A chain of agents is a chain of probabilities. If each hop does the right thing with probability *p*, the chain succeeds
-# with *p^N* — 95% per hop looks fine until five hops make it 77%. Simulate it before you believe it.
+# A chain of agents is a chain of probabilities. If each hop does the right thing with probability $p$, the chain succeeds
+# with $p^N$ — 95% per hop looks fine until five hops make it 77%. Simulate it before you believe it.
 
 # %%
 def simulate_chain(p: float, hops: int, trials: int = 20_000, seed: int = 7) -> float:
@@ -468,8 +468,11 @@ print("✅ conditions cover:", ", ".join(hits))
 #
 # Start from the single agent and justify every addition. *"I begin with one agent and a small tool set. The moment the
 # control flow is known — classify then draft, run three checks at once, revise until a checker passes — I move it into a
-# workflow agent so the sequence is code, not prompt. I add a second LLM agent only when a sub-task needs its own context,
-# its own permissions, or genuinely parallel work — and I budget for it: each hop is another model call, the child cannot see
-# the parent's context, and reliability compounds as p^N (95% per hop is 77% after five). The budget is shared across the
-# tree so delegation can't escape it, and the coordinator's session records delegation events so I can trace who decided
-# what."* That framing — simplicity as a decision, backed by numbers — is what separates an architect from a framework user.
+# workflow agent so the sequence is code, not prompt.*
+#
+# *"I add a second LLM agent only when a sub-task needs its own context, its own permissions, or genuinely parallel work —
+# and I budget for it: each hop is another model call, the child cannot see the parent's context, and reliability
+# compounds as $p^N$ (95% per hop is 77% after five). The budget is shared across the tree so delegation can't escape it,
+# and the coordinator's session records delegation events so I can trace who decided what."*
+#
+# That framing — simplicity as a decision, backed by numbers — is what separates an architect from a framework user.

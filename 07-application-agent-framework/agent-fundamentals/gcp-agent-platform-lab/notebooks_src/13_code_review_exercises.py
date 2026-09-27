@@ -73,7 +73,7 @@ from typing import Any
 # * `FakeDB.execute` records every query and refuses a `WHERE` predicate that was string-interpolated.
 # * `FakePayments.refund` applies the refund and *then* times out on the first call for an order — the real-world
 #   shape that makes naive retries double-charge. With an idempotency key it replays the stored outcome.
-# * `FakeModel` is a scripted function-calling model: `script[i]` is its reply once *i* tool results have arrived since
+# * `FakeModel` is a scripted function-calling model: `script[i]` is its reply once $i$ tool results have arrived since
 #   the last user message, so it behaves deterministically however the runtime drives it. `fail_on_calls` injects 503s.
 # * `Heartbeat` ticks every 10 ms on the event loop and remembers the longest gap — a blocked loop shows up as a stall.
 
@@ -1324,7 +1324,7 @@ print("✅ Exercise B: retrieval is entitlement-aware, batched, bounded and rank
 # 6. **Quality — no candidate pool.** Searching `top_k=k` (l. 17) then reranking can only reorder what the ANN step
 #    already chose. Fix: over-fetch (4k) and let the reranker select.
 # 7. **Performance — N+1 fetches.** `db_docs.fetch(h.doc_id)` per hit (l. 20). Fix: one `fetch_many`.
-# 8. **Cost — one reranker call per document.** `rerank(query, d.text)` in a loop (l. 24–25) is *k* model calls per
+# 8. **Cost — one reranker call per document.** `rerank(query, d.text)` in a loop (l. 24–25) is $k$ model calls per
 #    query. Fix: `score_batch` (one call), or bounded concurrency if the API has no batch endpoint.
 # 9. **Correctness — dedupe by equality.** `if d not in docs` (l. 21) compares fresh row objects, so two chunks of one
 #    document both survive (and it is O(n²)). Fix: dedupe ids before fetching.

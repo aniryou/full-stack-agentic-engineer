@@ -180,7 +180,7 @@ print(f"longest span in it (wall time): {span_name} {span_ms:.1f} ms")
 # ### Exercise 3.1 — nearest-rank percentile
 #
 # `my_percentile(values, p)` returns the smallest observed value below which `p` percent of the sample
-# lies, with **no interpolation**: sort, take rank `ceil(p/100 × n)` (at least 1), return the value at
+# lies, with **no interpolation**: sort, take rank $\lceil p/100 \times n \rceil$ (at least 1), return the value at
 # that rank. An interpolated p95 can be a latency nobody experienced; nearest-rank never invents a number.
 
 # %% exercise

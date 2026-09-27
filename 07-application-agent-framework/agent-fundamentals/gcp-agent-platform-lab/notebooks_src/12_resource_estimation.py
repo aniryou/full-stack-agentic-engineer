@@ -90,7 +90,7 @@ print(scenarios[0].report())
 # ### Exercise 2.1 — peak input TPM and concurrency from first principles
 #
 # * `peak_input_tpm(sc)`: calls/day ÷ 86,400 × `peak_factor` × `in_tokens` × 60 — the number you compare with the model's quota.
-# * `concurrency(sc)`: Little's law, L = λW — peak calls per second × `seconds_per_call` — the number of requests in flight,
+# * `concurrency(sc)`: Little's law, $L = \lambda W$ — peak calls per second × `seconds_per_call` — the number of requests in flight,
 #   which sizes worker pools and connection limits.
 #
 # Use only the scenario's fields; do not call the library methods.
@@ -300,7 +300,7 @@ print(waterfall_text(turn_final, first_token_segment="answer", first_token_offse
 #
 # 1. **Volume** → calls/day → calls/s (÷ 86,400) → peak (× 3). *"400k calls a day is 4.6/s, call it 14/s at peak."*
 # 2. **Tokens per call** → peak input TPM against the quota; concurrency by Little's law. *"14 × 6k × 60 ≈ 5M TPM; 14 × 4 s ≈ 56 in flight."*
-# 3. **Cost** = calls × (in × p_in + cached × p_cached + out × p_out). Say the driver: *"input tokens on Pro are 70% of this bill."*
+# 3. **Cost** = $\text{calls} \times (\text{in} \times p_{\text{in}} +{}$ $\text{cached} \times p_{\text{cached}} + \text{out} \times p_{\text{out}})$. Say the driver: *"input tokens on Pro are 70% of this bill."*
 # 4. **Levers, ordered by risk**: cache the prefix, parallelise, trim context, route by difficulty, constrain output, batch the offline work.
 # 5. **Latency** as a waterfall with a first-token marker; parallel tools and streaming change what the user *feels*.
 # 6. **Uncertainty**: quote the eval set's confidence interval, and remind everyone that reliability compounds per hop.
