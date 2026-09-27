@@ -4,7 +4,7 @@
 #   tools/ci/run_local.sh roofline-core lra-gcp   # the tests job for these labs (ids from tools/ci/labs.json)
 #   tools/ci/run_local.sh --all-labs              # the tests job for every lab (about 38 venvs; slow)
 #   tools/ci/run_local.sh --solutions agent-core  # the manual solutions job for these labs (lra-gcp's rewrites the
-#                                                 # outputs of its worked notebooks: git restore them afterwards)
+#                                                 # outputs of its solution notebooks in lra-gcp/solutions/: git restore them afterwards)
 #   tools/ci/run_local.sh --check                 # every test is in the lab list; tools/ci's own tests
 #   tools/ci/run_local.sh --notebooks             # every builder + the Colab injector are no-ops (needs a clean tree)
 #   tools/ci/run_local.sh --docs                  # site tests, mkdocs.yml up to date, strict build, relative links

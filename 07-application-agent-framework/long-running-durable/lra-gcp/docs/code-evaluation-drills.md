@@ -93,7 +93,7 @@ def execute_task(task):
 
 ---
 
-### Design-round prompts (5-minute answers)
+### Design-review prompts (5-minute answers)
 
 1. A worker replica is OOM-killed after calling the payments API but before checkpointing. Walk through exactly what happens on the next delivery. (I3: effect record found → skipped → checkpoint proceeds.)
 2. Two Cloud Tasks deliveries for the same step arrive 50 ms apart on two replicas. What prevents double execution, and what does the loser return? (Lease → 503 → queue retries → stale.)

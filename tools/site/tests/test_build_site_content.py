@@ -44,9 +44,9 @@ def test_is_solution_leaves_exercises_alone(path):
 
 # A *_worked notebook is an answer key only beside its exercise twin, and only when the folder keeps no solutions/
 # of its own; otherwise it is a worked lesson.
-GCP = "07-x/long-running-agents-gcp/notebooks/"
+GCP = "07-x/lab-with-lessons/notebooks/"
 KV = "04-x/kv-cache/"
-CORE = "07-x/long-running-agents-core/notebooks/"
+CORE = "07-x/core-with-lessons/notebooks/"
 FOLDERS = {
     GCP: ["01_durable_loop_practice", "01_durable_loop_worked", "03_hitl_saga_practice", "03_hitl_saga_scheduled_worked"],
     KV: ["01_kv_cache_worked", "02_kv_cache_practice"],
@@ -55,7 +55,7 @@ FOLDERS = {
     "c/": ["02_z_practice", "02_z_worked", "03_w_exercise", "03_w_scheduled_worked"],
 }
 SIBLINGS = [f"{d}{n}.ipynb" for d, names in FOLDERS.items() for n in names]
-# long-running-agents-gcp keeps the practice answers as Python files in notebooks/solutions/ (README step 3).
+# A lab that reads its worked lessons first and keeps the practice answers as Python files in notebooks/solutions/.
 SIBLINGS_WITH_FILES = SIBLINGS + [GCP + "solutions/ex1_durable_loop.py"]
 
 
@@ -81,32 +81,30 @@ def test_a_solutions_folder_makes_worked_notebooks_lessons():
     assert b.is_solution(path, SIBLINGS + [GCP + "worked/01_durable_loop.ipynb"]) is False
 
 
-def test_worked_rule_reads_the_folder_on_disk_by_default():
-    """With no sibling list the folder is listed; the repo's own notebooks are the fixture. Both are lessons:
-    kv-cache's has no twin, and long-running-agents-gcp's README reads the worked notebooks first and keeps the
-    practice answers in notebooks/solutions/."""
-    root = Path(b.ROOT)
-    kv = "04-inference-engine/kv-cache/01_kv_cache_worked.ipynb"
-    gcp_dir = ("07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/"
-               "notebooks")
-    gcp = f"{gcp_dir}/01_durable_loop_worked.ipynb"
-    if not ((root / kv).exists() and (root / gcp).exists() and (root / gcp_dir / "solutions").is_dir()):
-        pytest.skip("repo notebooks moved")
-    assert not b.is_solution(kv)
-    assert not b.is_solution(gcp)
-    assert b.is_solution("07-application-agent-framework/long-running-durable/lra/lra-gcp/notebooks/worked/"
-                         "00_core_idea.ipynb")
+def test_worked_rule_reads_the_folder_on_disk_by_default(tmp_path, monkeypatch):
+    """With no sibling list the folder is listed on disk. kv-cache's worked notebook is a lesson (no twin); a
+    worked twin whose folder keeps a solutions/ folder is a lesson; the same twin without it is an answer key."""
+    assert not b.is_solution("04-inference-engine/kv-cache/01_kv_cache_worked.ipynb")
+    assert b.is_solution("07-application-agent-framework/long-running-durable/lra-gcp/solutions/00_core_idea.ipynb")
+    monkeypatch.setattr(b, "ROOT", tmp_path)
+    for folder in ("lessons", "keys"):
+        (tmp_path / folder).mkdir()
+        for n in ("01_loop_practice", "01_loop_worked"):
+            (tmp_path / folder / f"{n}.ipynb").write_text("{}")
+    (tmp_path / "lessons" / "solutions").mkdir()
+    assert not b.is_solution("lessons/01_loop_worked.ipynb")
+    assert b.is_solution("keys/01_loop_worked.ipynb")
 
 
-def test_worked_lessons_come_before_the_exercises_in_the_nav(monkeypatch):
-    """long-running-agents-gcp's reading order: 01..04 worked, then 01..04 practice (README "Read in this order")."""
-    folder = "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/notebooks"
+def test_worked_lessons_come_before_the_exercises_in_the_nav(tmp_path, monkeypatch):
+    """A folder that reads its worked lessons first: 01..02 worked, then 01..02 practice."""
+    folder = "07-x/lab-with-lessons/notebooks"
     names = ["01_a_practice", "01_a_worked", "02_b_practice", "02_b_worked"]
+    (tmp_path / folder / "solutions").mkdir(parents=True)          # the answers live elsewhere
+    monkeypatch.setattr(b, "ROOT", tmp_path)
     monkeypatch.setattr(b, "pages", {})
     monkeypatch.setattr(b, "notebooks", {f"{folder}/{n}.ipynb": f"layers/{folder}/{n}.ipynb" for n in names})
     monkeypatch.setattr(b, "nb_title", lambda rp: posixpath.basename(rp))
-    if not (Path(b.ROOT) / folder / "solutions").is_dir():
-        pytest.skip("repo notebooks moved")
     order = [next(iter(e.values())).rsplit("/", 1)[-1] for e in b.nav_for_dir(folder)]
     assert order == ["01_a_worked.ipynb", "02_b_worked.ipynb", "01_a_practice.ipynb", "02_b_practice.ipynb"]
 
@@ -123,8 +121,7 @@ def test_colab_index_uses_the_same_rule():
         for path in SIBLINGS + ["b/01_y_worked.ipynb"]:
             assert g.is_solution(path, sibs) == b.is_solution(path, sibs), path
     for path in ("04-inference-engine/kv-cache/01_kv_cache_worked.ipynb",
-                 "07-application-agent-framework/long-running-durable/long-running-agentic/long-running-agents-gcp/"
-                 "notebooks/01_durable_loop_worked.ipynb"):
+                 "07-application-agent-framework/long-running-durable/lra-gcp/solutions/00_core_idea.ipynb"):
         assert g.is_solution(path) == b.is_solution(path), path
     assert (g.SOLUTION_DIRS, g.SOLUTION_STEM.pattern, g.WORKED_STEM.pattern, g.EXERCISE_STEM.pattern) == \
         (b.SOLUTION_DIRS, b.SOLUTION_STEM.pattern, b.WORKED_STEM.pattern, b.EXERCISE_STEM.pattern)
