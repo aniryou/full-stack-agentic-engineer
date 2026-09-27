@@ -1,4 +1,8 @@
-"""A distilled draft for speculative decoding: acceptance is the metric (primer §7)."""
+"""A distilled draft for speculative decoding: acceptance is the metric (primer §7).
+
+The drafts' α and speedups come from trained toy models: the primer's numbers are one seeded run on one CPU, and
+another CPU family's BLAS and SIMD kernels move them (0.988 ran 0.971–0.990 across 15 CPU variants), so they are
+compared with a tolerance of about three times the largest deviation seen. The orderings and the cap stay exact."""
 import math
 
 import numpy as np
@@ -41,16 +45,19 @@ def drafts():
 def test_a_draft_distilled_from_the_target_accepts_more(drafts):
     target, text, d = drafts
     a = {k: Dr.acceptance_on_text(target, m, text) for k, m in d.items()}
-    assert round(a["off-the-shelf"]["alpha"], 3) == 0.890 and round(a["kd"]["alpha"], 3) == 0.988
+    assert a["off-the-shelf"]["alpha"] == pytest.approx(0.890, abs=0.008)
+    assert a["kd"]["alpha"] == pytest.approx(0.988, abs=0.06)
     assert a["off-the-shelf"]["alpha"] < a["seqkd"]["alpha"] < a["kd"]["alpha"]
+    top1 = Dr.acceptance_on_text(target, target, text)["greedy"]  # a perfect draft: the target's own top-1, ≈ 0.8
+    assert top1 == pytest.approx(0.8, abs=0.0025)
     for v in a.values():
         assert abs(v["alpha"] + v["tv"] - 1) < 1e-12 and v["kl"] >= 0
-        assert v["greedy"] <= 0.8 + 1e-3                           # greedy drafting is capped by the target's top-1
+        assert v["greedy"] <= top1 + 1e-12                         # greedy drafting is capped by the target's top-1
 
 
 def test_speedup_prefers_the_distilled_draft(drafts):
     target, text, d = drafts
     c = Dr.draft_cost(d["kd"].n_params, target.n_params)
-    assert round(c, 3) == 0.289
+    assert round(c, 3) == 0.289                                   # parameter counts: exact
     s = {k: Dr.speedup(Dr.acceptance_on_text(target, m, text)["alpha"], 4, c) for k, m in d.items()}
-    assert round(s["off-the-shelf"], 2) == 1.86 and round(s["kd"], 2) == 2.26
+    assert s["off-the-shelf"] == pytest.approx(1.86, abs=0.025) and s["kd"] == pytest.approx(2.26, abs=0.25)

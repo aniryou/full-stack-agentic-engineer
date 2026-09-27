@@ -1,9 +1,23 @@
-"""Every computed number the topic's PRIMER.md quotes is recomputed here and must appear verbatim.
+"""Every computed number the topic's PRIMER.md quotes is recomputed here.
+
+Exact numbers must appear verbatim (`present`): closed forms on fixed logits, enumerations, parameter counts, the
+roofline's bytes, FLOPs, costs and break-even, Wilson intervals of fixed counts. Numbers that come from training or
+sampling a toy model — downstream of `fit_language`, `train`, `gkd_train`, `seqkd.pipeline`, `exposure_bias`,
+pruning, the drafts' acceptance, the REINFORCE teacher — are one seeded run on one CPU. Another CPU family's
+OpenBLAS kernels and numpy SIMD loops round the tiny models' matmuls and exponentials differently in the last bit,
+training amplifies that, and the third digit moves (an AVX2-only runner gives 0.889 where the primer says 0.890).
+Those are checked with `near`: the text around them verbatim, each number within a tolerance of the one stated.
+The tolerances were measured: OpenBLAS's SkylakeX, Haswell (= Zen), Sandybridge, Nehalem and Prescott kernels under
+numpy's AVX-512, AVX2 and SSE4.2 loops (15 variants; one or four threads changes nothing). A number that came out
+bit-identical on all 15 gets one unit of its last printed digit; any other, about three times its largest
+deviation from the primer, rounded up. Where the loosest of those windows could hide a claim the primer draws from
+the numbers (soft beats hard, the speedup peaks at 16 units), the claim is asserted outright.
 
 If a formula, a seed or an experiment changes, the primer fails this test until it is updated. Cited facts (TRL
 and vLLM defaults, the R1, Qwen3, Minitron and EAGLE results, prices, the T4 memory predictions) are quoted and
 marked (verify) in the primer; they are not checked here.
 """
+import re
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +38,28 @@ PRIMER = _norm((Path(__file__).resolve().parents[2] / "PRIMER.md").read_text(enc
 def present(*fragments):
     missing = [f for f in fragments if _norm(f) not in PRIMER]
     assert not missing, f"PRIMER.md no longer says: {missing}"
+
+
+NUMBER = r"([−-]?\d[\d,]*(?:\.\d+)?)"
+
+
+def stated(template: str) -> list[list[float]]:
+    """Each place PRIMER.md says `template` — its text verbatim (whitespace-normalised, as in present()), every '#'
+    one number — and the numbers it states there, one list per place."""
+    pattern = NUMBER.join(re.escape(part) for part in _norm(template).split("#"))
+    found = [[float(g.replace(",", "").replace("−", "-")) for g in m.groups()] for m in re.finditer(pattern, PRIMER)]
+    assert found, f"PRIMER.md no longer says: {template}"
+    return found
+
+
+def near(template: str, *computed, tol):
+    """Trained or sampled numbers: the primer's text around them verbatim, and each computed value within `tol` (one
+    for every '#', or one per '#', in order) of the number stated, wherever the primer says it."""
+    tols = tol if isinstance(tol, tuple) else (tol,) * len(computed)
+    assert template.count("#") == len(computed) == len(tols), template
+    for want in stated(template):
+        off = [(w, round(float(c), 4), t) for w, c, t in zip(want, computed, tols) if not abs(float(c) - w) <= t]
+        assert not off, f"PRIMER.md says {template!r} with {want}; outside the tolerance (stated, computed, tol): {off}"
 
 
 def neg(s: str) -> str:
@@ -62,12 +98,17 @@ def test_s1_soft_targets_beat_hard_labels_and_capacity(lang, teacher):
         train(hard, ctx, lambda z, i: L.hard_ce(z, y[i]), 400)
         train(soft, ctx, lambda z, i: L.kd(z, zt[i], 1.0), 400)
         h, s = E.vs_truth(hard, lang), E.vs_truth(soft, lang)
-        present(f"| {N} ({round(N / 121)}) | {h['rule_acc']:.3f} / {h['kl']:.3f} nats | {s['rule_acc']:.3f} / {s['kl']:.3f} nats |")
+        # the KD student's KL is dominated by the contexts its 242 draws never covered: 0.57–1.02 across CPUs
+        near(f"| {N} ({round(N / 121)}) | # / # nats | # / # nats |", h["rule_acc"], h["kl"], s["rule_acc"], s["kl"],
+             tol=(0.001, 0.001, 0.08, 1.5 if N == 242 else 0.4))
+        assert s["rule_acc"] > h["rule_acc"] and s["kl"] < h["kl"]  # soft targets beat hard labels
         if N == 242:
-            present(f"two examples per context gave {s['rule_acc']:.3f} rule accuracy with soft targets and {h['rule_acc']:.3f} with labels")
+            near("two examples per context gave # rule accuracy with soft targets and # with labels", s["rule_acc"],
+                 h["rule_acc"], tol=(0.08, 0.001))
     r8, r16 = E.vs_truth(fit_language(lang, 8), lang), E.vs_truth(fit_language(lang, 16), lang)
-    present(f"tops out at {r8['rule_acc']:.3f} rule accuracy", f"where 16 units reach {r16['rule_acc']:.3f}",
-            f"an error rate of {(1 - r8['rule_acc']) * 100:.1f}% per context")
+    near("tops out at # rule accuracy", r8["rule_acc"], tol=0.001)
+    near("where 16 units reach #", r16["rule_acc"], tol=0.001)
+    near("an error rate of #% per context", (1 - r8["rule_acc"]) * 100, tol=0.1)
 
 
 def test_s2_soft_targets_temperature_and_the_limit():
@@ -100,32 +141,39 @@ def test_s2_forward_against_reverse_kl():
 
 
 def test_s3_pipeline_bookkeeping_and_exposure_bias(lang, teacher, bench):
-    for label, T in (("T = 0 (greedy)", 0.0), ("T = 1", 1.0)):
-        _, st = seqkd.pipeline(teacher, lang, bench["prompts"], 8, 12, np.random.default_rng(1), T=T)
-        present(f"| {label} | {st['generated']} | {st['verified']} | {st['unique']} | {st['tokens_paid']:,} | {st['tokens_used']} |")
+    # greedy decoding of a teacher right at every context (test_tinylm) is exact: 8 identical samples per prompt
+    _, st = seqkd.pipeline(teacher, lang, bench["prompts"], 8, 12, np.random.default_rng(1), T=0.0)
+    present(f"| T = 0 (greedy) | {st['generated']} | {st['verified']} | {st['unique']} | {st['tokens_paid']:,} | "
+            f"{st['tokens_used']} |")
+    _, st = seqkd.pipeline(teacher, lang, bench["prompts"], 8, 12, np.random.default_rng(1), T=1.0)
+    near(f"| T = 1 | {st['generated']} | # | # | {st['tokens_paid']:,} | # |", st["verified"], st["unique"],
+         st["tokens_used"], tol=(6, 6, 72))
+    assert st["tokens_used"] == 12 * st["unique"]
     present(f"(0.8)^12 = {0.8 ** 12:.3f}", f"about {12 / 0.8 ** 12:.0f} teacher tokens")
     greedy, kd = bench["greedy"], bench["kd"]
     sft = TinyLM(11, 16, 8, seed=1)
     seqkd.sft(sft, greedy, 400)
     ctx, _ = teacher.positions(greedy)
     ent = lambda m: float(-(m.probs(ctx) * np.log(m.probs(ctx))).sum(1).mean())
-    present(f"Entropy (teacher {ent(teacher):.2f})", f"the teacher's {ent(teacher):.2f})")
+    near("Entropy (teacher #)", ent(teacher), tol=0.015)
     ebs = {}
     for label, m in (("SFT on the greedy text", sft), ("supervised KD on the greedy text (GKD λ = 0)", kd)):
         eb = ebs[label] = seqkd.exposure_bias(m, lang, greedy, bench["prompts"], np.random.default_rng(5))
         o, a = eb["own_prefixes"], eb["all_right_so_far"]
-        present(f"| {label} | {eb['teacher_prefixes'].mean():.3f} | {o[0]:.3f} | {o[3]:.3f} | {o[11]:.3f} | {a[3]:.3f} | "
-                f"{a[11]:.3f} | {ent(m):.3f} |")
-    present(f"entropy (0.009 against the teacher's {ent(teacher):.2f})".replace("0.009", f"{ent(sft):.3f}"))
+        near(f"| {label} | # | # | # | # | # | # | # |", eb["teacher_prefixes"].mean(), o[0], o[3], o[11], a[3], a[11],
+             ent(m), tol=0.001 if m is sft else (0.001, 0.001, 0.02, 0.04, 0.015, 0.03, 0.02))
+    near("entropy (# against the teacher's #)", ent(sft), ent(teacher), tol=(0.001, 0.015))
     k, t = ebs["supervised KD on the greedy text (GKD λ = 0)"], seqkd.exposure_bias(teacher, lang, greedy, bench["prompts"], np.random.default_rng(5))
     o, a, r, tr = k["own_prefixes"], k["all_right_so_far"], k["sampled_on_rule"], t["sampled_on_rule"]
-    present(f"its samples follow the rule {r[0]:.3f} of the time at position 1, like the teacher's, then {r[3]:.3f} by "
-            f"position 4, where the teacher's stay between {tr.min():.2f} and {tr.max():.2f}",
-            f"per-position accuracy drops to {o[3]:.3f} by position 4 and then stays there ({o[11]:.3f} at position 12)",
-            f"falls to {a[3]:.3f} by position 4 and {a[11]:.3f} by position 12, where the teacher's stays at "
-            f"{t['all_right_so_far'][-1]:.3f}", f"only {a[11]:.3f} of its outputs were right all the way to position 12")
+    near("its samples follow the rule # of the time at position 1, like the teacher's, then # by position 4, where the "
+         "teacher's stay between # and #", r[0], r[3], tr.min(), tr.max(), tol=(0.015, 0.04, 0.02, 0.02))
+    near("per-position accuracy drops to # by position 4 and then stays there (# at position 12)", o[3], o[11],
+         tol=(0.02, 0.04))
+    near("falls to # by position 4 and # by position 12, where the teacher's stays at #", a[3], a[11],
+         t["all_right_so_far"][-1], tol=(0.015, 0.03, 0.001))
+    near("only # of its outputs were right all the way to position 12", a[11], tol=0.03)
     assert abs(r[0] - tr[0]) < 0.02 and r[3] < tr.min() - 0.1       # it slips more often than the teacher after position 1
-    assert np.ptp(o[3:]) < 0.03 and np.all(np.diff(a) < 0)          # flat per position; compounding per output
+    assert np.ptp(o[3:]) < 0.05 and np.all(np.diff(a) < 0)          # flat per position; compounding per output
 
 
 def test_s3_and_s9_the_fixed_cost():
@@ -150,16 +198,19 @@ def test_s4_on_policy_removes_exposure_bias(lang, teacher, bench):
         s = bench["kd"].copy()
         op.gkd_train(s, teacher, bench["prompts"], 12, 300, lam=lam, beta=beta, data=bench["greedy"], seed=1)
         rows.append((label, s))
+    tols = {"(nothing: supervised KD only)": (0.02, 0.04, 0.05), "GKD λ = 1, β = 0 (forward)": (0.025, 0.15, 0.15),
+            "GKD λ = 1, β = 0.5": (0.08, 0.15, 0.15), "GKD λ = 1, β = 1 (reverse)": (0.08, 0.2, 0.15)}
     for label, m in rows:
         o = seqkd.own_accuracy(m, lang, bench["prompts"], 12, np.random.default_rng(5))
-        present(f"| {label} | {o[3]:.3f} | {o[11]:.3f} | {E.vs_truth(m, lang)['rule_acc']:.3f} |")
+        near(f"| {label} | # | # | # |", o[3], o[11], E.vs_truth(m, lang)["rule_acc"], tol=tols[label])
     o_fwd = seqkd.own_accuracy(rows[1][1], lang, bench["prompts"], 12, np.random.default_rng(5))
-    present(f"on-policy training held {o_fwd[3]:.3f}")
+    near("on-policy training held #", o_fwd[3], tol=0.025)
     sft = TinyLM(11, 16, 8, seed=1)
     seqkd.sft(sft, bench["greedy"], 400)
     after, at_start = {}, {}
-    for label, start in (("the KD student (§3)", bench["kd"]), ("the SFT student (§3)", sft),
-                         ("a fresh 16-unit student", TinyLM(11, 16, 8, seed=1))):
+    for label, start, tol in (("the KD student (§3)", bench["kd"], (0.05, 0.025, 0.15, 0.15)),
+                              ("the SFT student (§3)", sft, (0.001, 0.001, 0.08, 0.3)),
+                              ("a fresh 16-unit student", TinyLM(11, 16, 8, seed=1), (0.001, 0.001, 0.025, 0.25))):
         v = at_start[label] = E.vs_truth(start, lang)
         accs = []
         for beta in (0.0, 1.0):
@@ -167,12 +218,12 @@ def test_s4_on_policy_removes_exposure_bias(lang, teacher, bench):
             op.gkd_train(s, teacher, bench["prompts"], 12, 300, lam=1.0, beta=beta, data=bench["greedy"], seed=1)
             after[(label, beta)] = E.vs_truth(s, lang)
             accs.append(after[(label, beta)]["rule_acc"])
-        present(f"| {label} | {v['rule_acc']:.3f} | {v['wrong_right_q']:.3f} | {accs[0]:.3f} | {accs[1]:.3f} |")
+        near(f"| {label} | # | # | # | # |", v["rule_acc"], v["wrong_right_q"], accs[0], accs[1], tol=tol)
         assert accs[1] < accs[0] - 0.3                              # reverse KL is slow from every start here
     kd_q, sft_q = at_start["the KD student (§3)"]["wrong_right_q"], at_start["the SFT student (§3)"]["wrong_right_q"]
-    present(f"they give the right token {kd_q:.3f} and {sft_q:.3f}, so starting from them does not help here")
+    near("they give the right token # and #, so starting from them does not help here", kd_q, sft_q, tol=(0.025, 0.001))
     f1 = after[("a fresh 16-unit student", 1.0)]
-    present(f"it puts {f1['wrong_top_q']:.3f} on a wrong token and {f1['wrong_right_q']:.3f} on the right one")
+    near("it puts # on a wrong token and # on the right one", f1["wrong_top_q"], f1["wrong_right_q"], tol=(0.15, 0.08))
     p_t, v_wrong = np.array([0.8, 0.1, 0.0999, 0.0001]), np.array([0.0, 0.0, 0.0, 9.0])
     ratio = np.linalg.norm(L.gkd(v_wrong[None], p_t[None], 1.0)[1]) / np.linalg.norm(L.softmax(v_wrong) - p_t)
     present(f"the reverse-KL gradient is {ratio:.4f} of the forward one")
@@ -198,8 +249,8 @@ def test_s4_the_policy_gradient_identities():
         s = s5.sample(np.tile(prompt, (64, 1)), 3, rng)
         A.append(flat(op.pg_grad(s5, t5, s)))
         B.append(flat(op.pg_grad(s5, t5, s, per_token=True)))
-    present(f"differs by {np.linalg.norm(ex_tok - ex_seq) / np.linalg.norm(ex_seq):.0%} of the gradient's norm",
-            f"total variance {np.array(B).var(0).sum():.2f} against {np.array(A).var(0).sum():.2f} per batch of 64")
+    near("differs by #% of the gradient's norm", 100 * np.linalg.norm(ex_tok - ex_seq) / np.linalg.norm(ex_seq), tol=1)
+    near("total variance # against # per batch of 64", np.array(B).var(0).sum(), np.array(A).var(0).sum(), tol=0.01)
     g = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)
     gr = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False, reference_params=8e9)
     d = op.flops_per_prompt(8e9, 32e9, 4096, samples=16)
@@ -213,32 +264,37 @@ def test_s4_the_policy_gradient_identities():
 
 def test_s5_distilling_reasoning(think):
     task, teacher = think
-    rows = [("untrained student", R.LengthPolicy(32)), ("teacher (RL, 16,000 rollouts)", teacher)]
+    # the RL teacher and its traces are sampled, but no matmul is in the loop: identical on every CPU tried
+    e = R.LengthPolicy(32).expected(task)                          # untrained: a closed form
+    present(f"| untrained student | {e['accuracy']:.3f} | {e['length']:.2f} | {e['p90']} | "
+            f"{e['tokens_per_correct']:.2f} |")
     L_, ok = R.traces(teacher, task, np.random.default_rng(1), 1000)
     student = R.distil(L_, ok)
-    rows.append(("student, SFT on 1,000 traces", student))
-    for label, pol in rows:
+    for label, pol in (("teacher (RL, 16,000 rollouts)", teacher), ("student, SFT on 1,000 traces", student)):
         e = pol.expected(task)
-        present(f"| {label} | {e['accuracy']:.3f} | {e['length']:.2f} | {e['p90']} | {e['tokens_per_correct']:.2f} |")
+        near(f"| {label} | # | # | # | # |", e["accuracy"], e["length"], e["p90"], e["tokens_per_correct"],
+             tol=(0.001, 0.01, 1, 0.01))
     accs = []
     for n in (10, 30, 100, 300, 1000):
         Ln, okn = R.traces(teacher, task, np.random.default_rng(2), n)
         accs.append(R.distil(Ln, okn).expected(task)["accuracy"])
-    present("reach " + ", ".join(f"{a:.3f}" for a in accs[:-1]) + f" and {accs[-1]:.3f}")
+    near("1,000 traces reach #, #, #, # and #", *accs, tol=0.001)
     for label, keep, ml in (("all (plain SeqKD)", "all", None), ("correct only (rejection sampling)", "correct", None),
                             ("correct and L ≤ 16", "correct", 16), ("correct and L ≤ 12", "correct", 12)):
         kept = int(((ok if keep == "correct" else np.ones_like(ok)) & (L_ <= (ml or 99)) & (L_ < 32)).sum())
         e = R.distil(L_, ok, keep=keep, max_len=ml).expected(task)
-        present(f"| {label} | {kept} | {e['accuracy']:.3f} | {e['length']:.2f} | {e['tokens_per_correct']:.2f} |")
+        near(f"| {label} | # | # | # | # |", kept, e["accuracy"], e["length"], e["tokens_per_correct"],
+             tol=(1, 0.001, 0.01, 0.01))
     rl = [R.reinforce(task, np.random.default_rng(3), n).expected(task)["accuracy"] for n in (1000, 4000, 16000)]
-    present(f"SFT on 1,000 teacher traces reaches {student.expected(task)['accuracy']:.3f}; REINFORCE on the student "
-            f"with 1,000 rollouts reaches {rl[0]:.3f}, with 4,000 {rl[1]:.3f}, with 16,000 {rl[2]:.3f}")
+    near("SFT on 1,000 teacher traces reaches #; REINFORCE on the student with 1,000 rollouts reaches #, with 4,000 #, "
+         "with 16,000 #", student.expected(task)["accuracy"], *rl, tol=0.001)
     weak = student.expected(task, q=0.05)
-    present(f"copies the teacher's {weak['length']:.2f}-token thinking exactly and scores {weak['accuracy']:.3f}, "
-            f"not {teacher.expected(task)['accuracy']:.3f}",
-            f"is {task.optimal_length(0.01, q=0.05):.1f} tokens, not the {student.expected(task)['length']:.1f} it copied",
-            f"its {teacher.expected(task)['length']:.1f} is where 16,000 rollouts left it",
-            f"({student.expected(task)['length']:.1f} tokens against {teacher.expected(task)['length']:.1f} in the toy)")
+    near("copies the teacher's #-token thinking exactly and scores #, not #", weak["length"], weak["accuracy"],
+         teacher.expected(task)["accuracy"], tol=(0.01, 0.001, 0.001))
+    near(f"is {task.optimal_length(0.01, q=0.05):.1f} tokens, not the # it copied", student.expected(task)["length"],
+         tol=0.1)
+    near("its # is where 16,000 rollouts left it", teacher.expected(task)["length"], tol=0.1)
+    near("(# tokens against # in the toy)", student.expected(task)["length"], teacher.expected(task)["length"], tol=0.1)
 
 
 def prune_vs_fresh(lang, teacher, steps, draws=range(1, 6), inits=range(1, 5)):
@@ -258,10 +314,12 @@ def prune_vs_fresh(lang, teacher, steps, draws=range(1, 6), inits=range(1, 5)):
 
 
 def test_s6_prune_then_distil(lang, teacher):
-    cell = lambda a: f"{a.mean():.3f} ({a.min():.3f}–{a.max():.3f})"
     runs = {n: prune_vs_fresh(lang, teacher, n) for n in (0, 20, 100)}
-    present("| pruned from the teacher | " + " | ".join(cell(runs[n][0]) for n in runs) + " |",
-            "| fresh | " + " | ".join(cell(runs[n][1]) for n in runs) + " |")
+    tols = {"pruned from the teacher": (0.06, 0.06, 0.06, 0.04, 0.08, 0.06, 0.04, 0.025, 0.06),
+            "fresh": (0.001, 0.001, 0.001, 0.015, 0.06, 0.05, 0.015, 0.08, 0.1)}
+    for i, label in enumerate(tols):                                  # mean (min–max) at 0, 20 and 100 steps
+        near(f"| {label} | # (#–#) | # (#–#) | # (#–#) |",
+             *(x for n in runs for x in (runs[n][i].mean(), runs[n][i].min(), runs[n][i].max())), tol=tols[label])
     (p20, f20), (p100, f100) = runs[20], runs[100]
     assert p20.min() > f20.max()                                  # a head start at every seed
     assert abs(p100.mean() - f100.mean()) < f100.std() + p100.std()   # no better destination: within seed noise
@@ -299,18 +357,22 @@ def test_s7_the_formulas_on_the_serving_primers_numbers():
 def test_s7_distilled_against_off_the_shelf_and_size(draft_world):
     target, text, d, kd = draft_world
     c16 = Dr.draft_cost(kd[16].n_params, target.n_params)
-    for label, m in (("off-the-shelf (trained on the base language)", d["off"]),
-                     ("SeqKD from the target (24,000 of its tokens)", d["seqkd"]), ("logit KD from the target", kd[16])):
+    for label, m, tol in (("off-the-shelf (trained on the base language)", d["off"], (0.008, 0.0025, 0.008, 0.025)),
+                          ("SeqKD from the target (24,000 of its tokens)", d["seqkd"], (0.15, 0.02, 0.2, 0.5)),
+                          ("logit KD from the target", kd[16], (0.06, 0.02, 0.03, 0.25))):
         r = Dr.acceptance_on_text(target, m, text)
-        present(f"| {label} | {r['alpha']:.3f} | {r['greedy']:.3f} | {r['kl']:.3f} | {Dr.speedup(r['alpha'], 4, c16):.2f}× |")
-    present(f"k = 4, c = {c16:.3f}")
+        near(f"| {label} | # | # | # | #× |", r["alpha"], r["greedy"], r["kl"], Dr.speedup(r["alpha"], 4, c16),
+             tol=tol)
+    present(f"k = 4, c = {c16:.3f}")                                # parameter counts: exact
     cs = {H: Dr.draft_cost(m.n_params, target.n_params) for H, m in kd.items()}
     al = {H: Dr.acceptance_on_text(target, m, text)["alpha"] for H, m in kd.items()}
-    present("| c | " + " | ".join(f"{cs[H]:.3f}" for H in kd) + " |",
-            "| α (logit KD) | " + " | ".join(f"{al[H]:.3f}" for H in kd) + " |",
-            "| speedup at k = 4 | " + " | ".join(f"{Dr.speedup(al[H], 4, cs[H]):.2f}×" for H in kd) + " |")
+    present("| c | " + " | ".join(f"{cs[H]:.3f}" for H in kd) + " |")
+    sp = {H: Dr.speedup(al[H], 4, cs[H]) for H in kd}                # the 4- and 8-unit drafts are the chaotic ones
+    near("| α (logit KD) | # | # | # | # |", *al.values(), tol=(0.2, 0.5, 0.06, 0.02))
+    near("| speedup at k = 4 | #× | #× | #× | #× |", *sp.values(), tol=(0.5, 1.5, 0.25, 0.08))
+    assert max(sp, key=sp.get) == 16                                  # the smallest draft that holds the target
     off, kd16 = Dr.acceptance_on_text(target, d["off"], text)["alpha"], al[16]
-    present(f"({off:.3f} → {kd16:.3f} in the toy)")
+    near("(# → # in the toy)", off, kd16, tol=(0.008, 0.06))
     c = K.SHAPES["qwen3-0.6b"].params() / K.SHAPES["qwen3-4b"].params()
     present(f"c ≈ {c:.3f} by weight bytes, so k = 4 gives {Dr.speedup(0.6, 4, c):.2f}×, {Dr.speedup(0.7, 4, c):.2f}× and "
             f"{Dr.speedup(0.8, 4, c):.2f}× at α = 0.6, 0.7 and 0.8")
@@ -327,16 +389,22 @@ def test_s8_measuring_a_student(lang, teacher, bench):
     common = set(map(tuple, prompts))
     rare = np.array([c for c in C if tuple(c) not in common])
     ok = lambda m, x, n: lang.verify(m.sample(x, n, None, 0.0))
-    for label1, label2, s in students:
+    # the on-policy student samples its own training data, so it is the most CPU-sensitive: its rare-input accuracy
+    # at n = 8 ran 0.50–0.87 across the 15 variants, where the other two students' are identical on all of them
+    agree_tol = ((0.25, 0.05, 0.08), (0.4, 0.15, 0.25), (0.008, 0.001, 0.01))
+    rare_tol = (0.001, (0.4, 0.4, 0.3, 0.6, 0.8, 0.5), 0.001)
+    for (label1, label2, s), atol, rtol in zip(students, agree_tol, rare_tol):
         zs = s.logits(C)
-        present(f"| {label1} | {E.kl(zt, zs):.3f} | {E.argmax_agreement(zt, zs):.3f} | {E.topk_overlap(zt, zs, 3):.3f} |")
+        near(f"| {label1} | # | # | # |", E.kl(zt, zs), E.argmax_agreement(zt, zs), E.topk_overlap(zt, zs, 3), tol=atol)
+        assert ok(s, prompts, 8).all()                              # so n = 2 too: every student is perfect here
+        m = len(prompts)
+        lo, hi = E.wilson_interval(m, m)
         cells = []
-        for x, n in ((prompts, 2), (rare, 2), (rare, 8)):
-            k, m = int(ok(s, x, n).sum()), len(x)
-            lo, hi = E.wilson_interval(k, m)
-            cells.append(f"{k}/{m} ({lo:.3f}–{hi:.3f})" if k == m else f"{k / m:.3f} ({lo:.3f}–{hi:.3f})")
-        assert ok(s, prompts, 8).all()
-        present(f"| {label2} | " + " | ".join(cells) + " |")
+        for n in (2, 8):                                            # the rare slice: a count and its Wilson interval
+            k = int(ok(s, rare, n).sum())
+            cells += [k / len(rare), *E.wilson_interval(k, len(rare))]
+        assert cells[0] < 1                                         # the gap is in the tail
+        near(f"| {label2} | {m}/{m} ({lo:.3f}–{hi:.3f}) | # (#–#) | # (#–#) |", *cells, tol=rtol)
     lo, _ = E.wilson_interval(20, 20)
     present(f"anything tighter than {lo * 100:.0f}–100%")
 
@@ -353,9 +421,11 @@ def test_s8_a_student_that_beats_its_teacher(lang):
     seqkd.sft(raw, data, 600)
     zw = weak.logits(C)
     acc = lambda m: E.vs_truth(m, lang)["rule_acc"]
-    present(f"is right on {acc(weak):.3f} of contexts", f"is right on {acc(filt):.3f} — better than its teacher",
-            f"(KL {E.kl(zw, filt.logits(C)):.2f}, top-1 {E.argmax_agreement(zw, filt.logits(C)):.3f})",
-            f"({acc(raw):.3f} right, KL {E.kl(zw, raw.logits(C)):.3f}, top-1 {E.argmax_agreement(zw, raw.logits(C)):.3f})")
+    near("is right on # of contexts", acc(weak), tol=0.001)     # the same to the printed digit on every CPU tried
+    near("is right on # — better than its teacher", acc(filt), tol=0.001)
+    near("(KL #, top-1 #)", E.kl(zw, filt.logits(C)), E.argmax_agreement(zw, filt.logits(C)), tol=(0.01, 0.001))
+    near("(# right, KL #, top-1 #)", acc(raw), E.kl(zw, raw.logits(C)), E.argmax_agreement(zw, raw.logits(C)),
+         tol=0.001)
 
 
 def test_s9_serving_break_even_and_the_cascade():
