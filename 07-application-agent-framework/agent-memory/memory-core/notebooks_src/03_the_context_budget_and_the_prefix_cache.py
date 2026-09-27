@@ -113,7 +113,7 @@ for layout in LAYOUTS:
 # Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 vs 15.3 ms, SIMULATED). The engine did
 # the same work the whole time — the layout decided how much of it was repeated.
 #
-# Money is a different system. A hosted API has its own cache, and bills the cached rate ($0.15 instead of $1.50 per
+# Money is a different system. A hosted API has its own cache, and bills the cached rate (\$0.15 instead of \$1.50 per
 # M on Gemini 3.5 Flash, 5 Sep 2026, verify) only once a request clears its **caching minimum** — 4,096 tokens on
 # Gemini 3.x (scaling primer §5.5; whether it applies to the request or the shared prefix is verify). `turn_cost`
 # applies it through `billed_cached`, assuming the provider caches the prefix vLLM would.

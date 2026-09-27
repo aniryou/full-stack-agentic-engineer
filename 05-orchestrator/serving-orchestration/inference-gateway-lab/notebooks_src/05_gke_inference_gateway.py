@@ -260,13 +260,13 @@ print(f"✅ installed, busy or idle: ≈ ${lab_cost(1, 1):.2f}/h with its one L4
       f"uninstalled but not destroyed, a forgotten day still costs up to ≈ ${lab_cost(24, 0):.2f}")
 
 # %% [markdown]
-# Read the three states apart. **Installed and idle**: `lab_cost(1, 1)` ≈ $0.44/h, because the
+# Read the three states apart. **Installed and idle**: `lab_cost(1, 1)` ≈ \$0.44/h, because the
 # HPA's `minReplicas: 1` keeps one vLLM pod and so one L4 Spot node up — the GPU pool never reaches
 # 0 while the workloads exist (that needs scale-to-zero: KEDA or the alpha `HPAScaleToZero`).
-# **After `uninstall.sh`**: the pool drains to 0 and at most `lab_cost(1, 0)` ≈ $0.16/h remains — the
-# system node and disks (~$0.13/h plus disks), and the load balancer's forwarding rule only while a
+# **After `uninstall.sh`**: the pool drains to 0 and at most `lab_cost(1, 0)` ≈ \$0.16/h remains — the
+# system node and disks (~\$0.13/h plus disks), and the load balancer's forwarding rule only while a
 # Gateway still exists (`uninstall.sh` deletes it; `lab_cost` counts it anyway, as an upper bound).
-# **After `terraform destroy`**: $0.
+# **After `terraform destroy`**: \$0.
 # That last step is the one people forget.
 #
 # ## The plan

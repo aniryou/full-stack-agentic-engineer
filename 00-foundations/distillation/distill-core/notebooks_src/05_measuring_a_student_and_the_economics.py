@@ -104,7 +104,7 @@ for name, m in (("weak teacher", weak), ("student, verified samples", filt), ("s
 #
 # ## Worked example 4 — what the student saves in serving
 # Decode on H100s at 2K context under a 30 ms ITL budget: the largest batch that meets it and fits in HBM, its
-# step time and throughput, and $/M output tokens at $11/GPU-hour on demand (verify). The 32B is costed twice: on
+# step time and throughput, and \$/M output tokens at \$11/GPU-hour on demand (verify). The 32B is costed twice: on
 # one H100, where its 65.5 GB of weights leave 6.5 GB for KV, and split over two (`K.tp_group`: ideal tensor
 # parallelism, all-reduces not counted). A roofline bound — the costs are lower bounds; carry the like-for-like
 # ratio.
@@ -217,7 +217,7 @@ print("✅ top-1 can disagree while the top-3 sets agree — and vice versa; rep
 # ## Exercise 5.3 — a student's cost per token from the roofline
 # For `m = K.SHAPES["qwen2.5-0.5b"]` on the H100 at 2K context and a 30 ms ITL: find the largest batch whose
 # decode step (`K.decode_step`) is ≤ 30 ms and that fits in memory (`K.max_batch`), then its tokens/s and
-# $/M at $11/GPU-hour. Set `batch`, `tok_s`, `usd_per_m`.
+# \$/M at \$11/GPU-hour. Set `batch`, `tok_s`, `usd_per_m`.
 
 # %% exercise
 m = K.SHAPES["qwen2.5-0.5b"]
@@ -287,7 +287,7 @@ print(f"✅ gate {best_gate}: accuracy {res[best_gate]['accuracy']:.3f} at ${res
 # **Drill questions**
 # 1. *The student agrees with the teacher on 99% of tokens. Ship it?* — Not on that alone: agreement is averaged
 #    over common positions. Check task accuracy with intervals on the rare and long slices; that is where it fails.
-# 2. *Where does a distillation budget go?* — The teacher's tokens (here $178 of $192 self-hosted, $1,800 of $1,814
+# 2. *Where does a distillation budget go?* — The teacher's tokens (here \$178 of \$192 self-hosted, \$1,800 of \$1,814
 #    via an API); training the student was 1.3 GPU-hours. Cut samples the verifier will reject before generating more.
 # 3. *Distil, or route easy traffic to a cheaper off-the-shelf model?* — If an off-the-shelf model meets the easy
 #    slice, routing costs no training; distil when no such model exists for your task or the volume makes the

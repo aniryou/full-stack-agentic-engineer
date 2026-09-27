@@ -149,9 +149,9 @@ print(f"32B -> 1.5B: {TEACHER['$/M'] / STUDENT['$/M']:.0f}x cheaper per output t
 #
 # ## Exercise 5.3 — the fixed cost and break-even
 #
-# The fact sheet's worked case: 100k prompts × 2,000 teacher tokens at $9.00 per million output tokens, then SFT
+# The fact sheet's worked case: 100k prompts × 2,000 teacher tokens at \$9.00 per million output tokens, then SFT
 # of the 1.5B student (its exact parameter count from the bundled config) on those 2e8 tokens (6·N·D FLOPs) on an
-# H100 at 40% MFU and $11/GPU-h. Write `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`: the
+# H100 at 40% MFU and \$11/GPU-h. Write `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`: the
 # days of serving after which the student has paid for itself. Every million tokens served by the student instead
 # of the teacher saves `teacher_per_m − student_per_m` dollars. The table also shows the same data generated on
 # the self-hosted teacher.
@@ -286,7 +286,7 @@ print(table([
 # "Against the 32B on two H100s, the smallest deployment that leaves it room to batch, the 1.5B student costs about a
 # sixteenth as much per output token by the roofline bound. On one H100 it would look like a ninety-sixth, but only
 # because the teacher's KV fills that card at a dozen sequences. The fixed cost is dominated by the teacher's
-# generated tokens ($1,800 for 2e8 at $9 per million) rather than training ($14), so with bought data the break-even
+# generated tokens (\$1,800 for 2e8 at \$9 per million) rather than training (\$14), so with bought data the break-even
 # is about two days at a billion tokens a day, three weeks at a hundred million and years at a million; generating the
 # data on our own teacher cuts that about ninefold.
 #

@@ -98,7 +98,7 @@ print(table([r for r in TE.by_kind(SAMPLES) if r["difficulty"] >= 3], title="Tea
 # %% [markdown]
 # ## Exercise 2.2 — the bill, per kept sample
 #
-# At the 06 scaling lab's price for `gemini-3.5-flash` ($1.50 per million input tokens and $9.00 per million output,
+# At the 06 scaling lab's price for `gemini-3.5-flash` (\$1.50 per million input tokens and \$9.00 per million output,
 # checked 5 Sep 2026, verify), what did this dataset cost, and what did each *kept* sample cost? Write
 # `data_cost(samples, kept, model)` returning `(total_dollars, dollars_per_kept)`. Every generated sample is paid
 # for, kept or not.

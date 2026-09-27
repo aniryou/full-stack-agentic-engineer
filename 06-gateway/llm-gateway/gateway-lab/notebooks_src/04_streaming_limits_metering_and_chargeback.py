@@ -218,8 +218,8 @@ print(f"✅ {n} ledger rows re-priced exactly; the §3.4 call is $0.007005 on ge
 # ## Worked example: $ per 1M tokens, hosted and self-hosted
 #
 # The same call shape blended over its 5,350 tokens, per hosted row (verify, 2026-09-26), and self-hosted rows
-# from a GPU's hourly price and a throughput — 01 PRIMER §8.1's Llama-3.1-8B numbers (H100 Spot at $3.7/h and
-# 6,846.5 tokens/s; an L4 at $0.70/h and 294.39 tokens/s), at 100 % and 60 % utilisation.
+# from a GPU's hourly price and a throughput — 01 PRIMER §8.1's Llama-3.1-8B numbers (H100 Spot at \$3.7/h and
+# 6,846.5 tokens/s; an L4 at \$0.70/h and 294.39 tokens/s), at 100 % and 60 % utilisation.
 
 # %%
 for name, p in metering.PRICES.items():

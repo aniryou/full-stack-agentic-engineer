@@ -10,7 +10,7 @@
 # In this notebook you will:
 # 1. reproduce cost scenarios A–D and the capacity numbers (peak TPM, concurrency) from first principles;
 # 2. build a latency budget with parallel tool calls and read it as an ASCII waterfall;
-# 3. apply the optimisation playbook lever by lever: **$0.80 → $0.15 per conversation and 14 s → 4 s per turn**.
+# 3. apply the optimisation playbook lever by lever: **\$0.80 → \$0.15 per conversation and 14 s → 4 s per turn**.
 
 # %%
 from dataclasses import dataclass, replace
@@ -206,7 +206,7 @@ assert my_vector_store_bytes(1_000_000, 1536, bytes_per_dim=2, index_overhead=1.
 print(f"✅ raw {human_bytes(my_vector_store_bytes(5_000_000, 768, index_overhead=1.0))}, with index ≈ {human_bytes(my_vector_store_bytes(5_000_000, 768))}")
 
 # %% [markdown]
-# ## 7. The playbook: $0.80 → $0.15 per conversation, 14 s → 4 s per turn
+# ## 7. The playbook: &#36;0.80 → &#36;0.15 per conversation, 14 s → 4 s per turn
 #
 # The starting point is a real-looking first version: 20 model calls per conversation with a 17k-token prompt
 # (system prompt, policies, tool schemas, the whole transcript) and 500-token answers on Pro; a turn is a

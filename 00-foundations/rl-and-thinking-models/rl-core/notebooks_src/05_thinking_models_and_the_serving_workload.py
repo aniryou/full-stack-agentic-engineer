@@ -175,7 +175,7 @@ for keep in (False, True):
 # pays off only on the stable prefix.
 #
 # ## Worked example 7 — cost per *correct* answer, and routing by effort
-# Per-call API cost at the 06 scaling lab's example prices ($1.50 / $9.00 / $0.15 per 1M input / output / cached
+# Per-call API cost at the 06 scaling lab's example prices (\$1.50 / \$9.00 / \$0.15 per 1M input / output / cached
 # input, verify): 5,000 input tokens (2,700 cached) and 350 output tokens, or 3,500 with thinking.
 
 # %%
