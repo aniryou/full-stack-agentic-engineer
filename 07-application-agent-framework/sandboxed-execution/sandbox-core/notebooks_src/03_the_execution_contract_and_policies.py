@@ -8,15 +8,21 @@
 # A sandbox is an **API with a contract**, not a place. The request carries the code, its inputs and a
 # **budget for every resource the code could exhaust**; the result carries truncated output, an **exit
 # reason** the caller can act on, what was used, and hashes that make the call auditable and safely
-# repeatable. The decision "may this run, and under what limits?" is **policy as data** — tool tier, egress
-# allowlist, filesystem rule, budget ceiling — enforced **twice**: once by the executor at run time, and
-# once by the cluster (Pod Security *restricted*, a default-deny NetworkPolicy, a non-retrying Job, a
+# repeatable.
+#
+# The decision "may this run, and under what limits?" is **policy as data** — tool tier, egress allowlist,
+# filesystem rule, budget ceiling — enforced **twice**: once by the executor at run time, and once by the
+# cluster (Pod Security *restricted*, a default-deny NetworkPolicy, a non-retrying Job, a
 # ValidatingAdmissionPolicy). The same policy object renders both. One honest limit: the egress hosts a
 # request lists are the *model's own claim*, so checking them is a review aid, not enforcement — the
-# NetworkPolicy is. And because side effects mean at-least-once delivery, an **idempotency key** (turn,
-# step, call index, args hash — the scaling primer's recipe) lets a redelivered step return the stored
-# result instead of running twice. Primer: `../PRIMER.md`
-# §3 (the execution contract), §5 (sandboxes on Kubernetes). Reuses the scaling primer's idempotency recipe
+# NetworkPolicy is.
+#
+# And because side effects mean at-least-once delivery, an **idempotency key** (turn, step, call index, args
+# hash — the scaling primer's recipe) lets a redelivered step return the stored result instead of running
+# twice.
+#
+# Primer: `../PRIMER.md` §3 (the execution contract), §5 (sandboxes on Kubernetes). Reuses the scaling
+# primer's idempotency recipe
 # (`../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md` §5.4) and the
 # identity primer's tool tiers (§4.2).
 
@@ -193,18 +199,21 @@ print("✅ the linter catches retries, a deadline shorter than a cold start, clu
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "I treat the sandbox as an API with a contract. The request is code plus
-# inputs plus a budget for every exhaustible resource — CPU, wall time, memory, processes, disk, output —
-# plus the policy that applies. The result is truncated output, an exit reason the model can act on — with
-# where it came from, because a program can forge its own — what was used, and a result hash. The policy is
-# data, not prose: tool tier, egress allowlist, filesystem rule, budget ceiling. I enforce it twice — the
-# executor clamps and checks at run time, and the cluster enforces the same intent with Pod Security
-# restricted, a default-deny NetworkPolicy with no DNS, a non-retrying Job whose deadline allows for a cold
-# start, and a ValidatingAdmissionPolicy that rejects any pod missing the controls — and I render both from
-# one object so they cannot drift. The hosts a request declares are only the model's claim; the network
-# policy is what enforces egress. Because delivery is at-least-once, every execution carries an idempotency
-# key of turn, step, call index and an argument hash, claimed before it runs, so a redelivered step returns
-# the stored result instead of running a second time."
+# **The two-minute version.** "I treat the sandbox as an API with a contract. The request is code plus inputs
+# plus a budget for every exhaustible resource — CPU, wall time, memory, processes, disk, output — plus the
+# policy that applies. The result is truncated output, an exit reason the model can act on — with where it
+# came from, because a program can forge its own — what was used, and a result hash.
+#
+# "The policy is data, not prose: tool tier, egress allowlist, filesystem rule, budget ceiling. I enforce it
+# twice — the executor clamps and checks at run time, and the cluster enforces the same intent with Pod
+# Security restricted, a default-deny NetworkPolicy with no DNS, a non-retrying Job whose deadline allows for
+# a cold start, and a ValidatingAdmissionPolicy that rejects any pod missing the controls — and I render both
+# from one object so they cannot drift. The hosts a request declares are only the model's claim; the network
+# policy is what enforces egress.
+#
+# "Because delivery is at-least-once, every execution carries an idempotency key of turn, step, call index and
+# an argument hash, claimed before it runs, so a redelivered step returns the stored result instead of running
+# a second time."
 #
 # **Drill questions**
 # 1. *Why enforce policy in the cluster when the executor already checks it?* — Defence in depth: if the

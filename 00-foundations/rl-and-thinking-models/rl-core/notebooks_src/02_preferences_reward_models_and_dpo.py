@@ -6,15 +6,22 @@
 # exactly. Real DPO and reward-model training use TRL's `DPOTrainer` and `RewardTrainer` (primer §3).
 #
 # ## The one-minute version
-# When no program can check an answer, people compare two: "A is better than B". **Bradley–Terry** reads that as
-# a noisy comparison of rewards, P(A ≻ B) = σ(r(A) − r(B)), so a **reward model** is logistic regression on pairs.
-# **RLHF** then maximises E[r] − β·KL(π‖π_ref) with PPO — a clipped policy-gradient step plus a **value model**
-# for the baseline (GAE). **DPO** notices that the KL-regularised optimum has a closed form, π* ∝ π_ref·exp(r/β),
-# inverts it, r = β·log(π*/π_ref) + const, and substitutes into Bradley–Terry: the constant cancels and the policy
-# trains directly on pairs with a classification loss. Its **implicit reward** β·log(π/π_ref) is what TRL logs as
-# `rewards/chosen`. What DPO gives up: it only sees the pairs (no exploration), and it optimises the *margin*, so
-# the chosen answer's likelihood can fall. And any bias in the annotators — say, a taste for long answers —
-# becomes the reward, and optimising harder turns it into padding. Primer: `../PRIMER.md` §3.
+# When no program can check an answer, people compare two: "A is better than B".
+#
+# - **Bradley–Terry** reads that as a noisy comparison of rewards, $P(A \succ B) = \sigma(r(A) - r(B))$, so a
+#   **reward model** is logistic regression on pairs.
+# - **RLHF** then maximises $\mathbb{E}[r] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$ with PPO — a clipped
+#   policy-gradient step plus a **value model** for the baseline (GAE).
+# - **DPO** notices that the KL-regularised optimum has a closed form, $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$,
+#   inverts it, $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \text{const}$, and substitutes into Bradley–Terry: the
+#   constant cancels and the policy trains directly on pairs with a classification loss.
+# - Its **implicit reward** $\beta \log(\pi/\pi_{\text{ref}})$ is what TRL logs as `rewards/chosen`. What DPO gives
+#   up: it only sees the pairs (no exploration), and it optimises the *margin*, so the chosen answer's likelihood
+#   can fall.
+# - And any bias in the annotators — say, a taste for long answers — becomes the reward, and optimising harder
+#   turns it into padding.
+#
+# Primer: `../PRIMER.md` §3.
 
 # %%
 import math
@@ -34,8 +41,9 @@ ok = np.array([task.verify(s) for s in seqs])
 
 # %% [markdown]
 # ## Worked example 1 — Bradley–Terry, and why a reward model has no zero point
-# Hidden linear reward r = 1.5·x₁ − 0.5·x₂ over two features. Annotators compare random pairs with
-# P(A ≻ B) = σ(r_A − r_B). Fitting the same logistic model to "chosen minus rejected" recovers the weights.
+# Hidden linear reward $r = 1.5\,x_1 - 0.5\,x_2$ over two features. Annotators compare random pairs with
+# $P(A \succ B) = \sigma(r_A - r_B)$. Fitting the same logistic model to "chosen minus rejected" recovers the
+# weights.
 
 # %%
 rng = np.random.default_rng(0)
@@ -54,9 +62,9 @@ print("σ(2 − 1) =", round(float(pref.bt_prob(2, 1)), 4), "= σ(12 − 11) =",
 # scores from different runs are not comparable.
 #
 # ## Worked example 2 — RLHF in two stages: fit a reward model, then RL against it with a KL penalty
-# Preferences over bracket strings from a true reward r = 3·balanced, pairs drawn from the reference (as a real
-# dataset is collected). Stage 1 fits a one-feature reward model; stage 2 runs REINFORCE with β = 1 against it.
-# The target is the closed form π* ∝ π_ref·exp(r/β).
+# Preferences over bracket strings from a true reward $r = 3 \cdot \text{balanced}$, pairs drawn from the reference
+# (as a real dataset is collected). Stage 1 fits a one-feature reward model; stage 2 runs REINFORCE with $\beta$ = 1
+# against it. The target is the closed form $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$.
 
 # %%
 R = 3.0 * ok
@@ -102,9 +110,14 @@ print(f"implicit reward β·log(π/π_ref): balanced minus unbalanced = {ir[ok >
 # of over-training.
 #
 # ## Worked example 4 — PPO's value side, in brief: GAE
-# PPO gives every token its own advantage from a learned value model V(s): δ_t = r_t + γV(s_{t+1}) − V(s_t),
-# A_t = δ_t + γλ·A_{t+1}. In RLHF the reward-model score sits on the last token and −β·log(π/π_ref) on every
-# token. The value model is typically as large as the policy — the memory GRPO saves (notebook 03).
+# PPO gives every token its own advantage from a learned value model ${V(s)}$:
+#
+# $$
+# \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t), \qquad A_t = \delta_t + \gamma\lambda\, A_{t+1}.
+# $$
+#
+# In RLHF the reward-model score sits on the last token and $-\beta \log(\pi/\pi_{\text{ref}})$ on every token. The
+# value model is typically as large as the policy — the memory GRPO saves (notebook 03).
 
 # %%
 r_tok, v_tok = [0.0, 0.0, 1.0], [0.5, 0.6, 0.8]
@@ -112,14 +125,15 @@ for lam in (0.0, 0.5, 1.0):
     print(f"λ = {lam}: advantages {pref.gae(r_tok, v_tok, gamma=1.0, lam=lam).round(3).tolist()}")
 
 # %% [markdown]
-# λ = 0 trusts the value model (one-step TD error: low variance, biased if V is wrong); λ = 1 trusts the sampled
-# return (Monte Carlo minus V: unbiased, noisy). PPO then applies the same clipped ratio GRPO uses (notebook 03).
+# $\lambda$ = 0 trusts the value model (one-step TD error: low variance, biased if $V$ is wrong); $\lambda$ = 1
+# trusts the sampled return (Monte Carlo minus $V$: unbiased, noisy). PPO then applies the same clipped ratio GRPO
+# uses (notebook 03).
 #
 # ## Worked example 5 — an annotator who likes long answers
 # 40 answers to one prompt, each in five versions padded with 0–800 filler tokens; filler lowers true quality by
 # 0.3 per 100 tokens. The reference rarely pads. Annotators prefer higher quality **and** longer answers:
-# P(A ≻ B) = σ(Δquality + 0.6·Δlength/100). Fit a reward model on 3,000 such pairs, then optimise it harder and
-# harder (smaller β, via the closed form) and watch the true quality.
+# $P(A \succ B) = \sigma(\Delta\text{quality} + 0.6\,\Delta\text{length}/100)$. Fit a reward model on 3,000 such
+# pairs, then optimise it harder and harder (smaller $\beta$, via the closed form) and watch the true quality.
 
 # %%
 cat = pref.response_catalogue()
@@ -146,7 +160,7 @@ print(f"optimising true quality instead (β = 0.1): quality {pig @ cat['quality'
 #
 # ## Exercise 2.1 — the Bradley–Terry gradient
 # For weights `w` and feature differences `d = x_chosen − x_rejected` (one row per pair), return the gradient of
-# the mean log-likelihood Σ log σ(w·d) / n. (Hint: ∂ log σ(z)/∂z = 1 − σ(z).)
+# the mean log-likelihood $\sum \log \sigma(w \cdot d)/n$. (Hint: $\partial \log \sigma(z)/\partial z = 1 - \sigma(z)$.)
 
 # %% exercise
 def bt_grad(w, d):
@@ -165,8 +179,9 @@ print("✅ the BT gradient: each pair pulls w along its feature difference, weig
 
 # %% [markdown]
 # ## Exercise 2.2 — DPO's loss by hand
-# The policy raised the chosen answer's log-ratio log(π/π_ref) by +1 and lowered the rejected one's by −1.
-# With β = 0.1 compute the DPO loss `loss_a`. Then compute `loss_b` for a pair where both log-ratios are 0.3.
+# The policy raised the chosen answer's log-ratio $\log(\pi/\pi_{\text{ref}})$ by +1 and lowered the rejected one's
+# by −1. With $\beta$ = 0.1 compute the DPO loss `loss_a`. Then compute `loss_b` for a pair where both log-ratios
+# are 0.3.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -181,8 +196,14 @@ print(f"✅ margin 2, β 0.1: loss {loss_a:.6f}; zero margin: ln 2 = {loss_b:.6f
 
 # %% [markdown]
 # ## Exercise 2.3 — which pairs teach DPO the most?
-# DPO's gradient on a pair is β·σ(−m)·(∇log π(y⁺) − ∇log π(y⁻)) with m = β·(Δ⁺ − Δ⁻). Write `pair_weight(m, beta)`
-# = β·σ(−m). Then set `most_informative` to the index of the pair in `margins` that gets the largest update.
+# DPO's gradient on a pair is
+#
+# $$
+# \beta\,\sigma(-m)\,\bigl(\nabla \log \pi(y^+) - \nabla \log \pi(y^-)\bigr)
+# $$
+#
+# with $m = \beta\,(\Delta^+ - \Delta^-)$. Write `pair_weight(m, beta)` $= \beta\,\sigma(-m)$. Then set
+# `most_informative` to the index of the pair in `margins` that gets the largest update.
 
 # %% exercise
 margins = [2.0, 0.0, -1.5, 0.5]                      # m for four pairs
@@ -204,7 +225,7 @@ print("✅ mis-ranked pairs (m < 0) get up to β; pairs already ranked confident
 
 # %% [markdown]
 # ## Exercise 2.4 — generalised advantage estimation
-# Implement `my_gae(rewards, values, gamma, lam)` with V after the last token = 0.
+# Implement `my_gae(rewards, values, gamma, lam)` with $V$ after the last token = 0.
 
 # %% exercise
 def my_gae(rewards, values, gamma, lam):
@@ -242,9 +263,10 @@ print(f"✅ β = {best_beta}: true quality peaks at a KL of {kl_budget:.2f} nats
 
 # %% [markdown]
 # ## Exercise 2.6 — IPO's fixed margin
-# IPO replaces −log σ(β·margin) with (margin − 1/(2β))², where margin = Δ⁺ − Δ⁻. For β = 0.1, what margin does
-# IPO drive a pair toward (`ipo_target`)? And what is the DPO loss's gradient with respect to the margin as the
-# margin → ∞ (`dpo_grad_at_inf`)?
+# IPO replaces $-\log \sigma(\beta \cdot \text{margin})$ with $(\text{margin} - 1/(2\beta))^2$, where
+# $\text{margin} = \Delta^+ - \Delta^-$. For $\beta$ = 0.1, what margin does IPO drive a pair toward
+# (`ipo_target`)? And what is the DPO loss's gradient with respect to the margin as the margin $\to \infty$
+# (`dpo_grad_at_inf`)?
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -261,23 +283,26 @@ print("✅ IPO stops at a margin of 1/(2β) = 5; DPO's loss keeps (slowly) payin
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Where no program can grade the output we collect pairwise preferences and model
-# them with Bradley–Terry, P(A ≻ B) = σ(r_A − r_B). The classic path fits a reward model and runs PPO against it
-# with a KL penalty to the SFT model — four networks in memory: policy, reference, reward model and value model.
-# DPO gets the same KL-regularised optimum in closed form: π* ∝ π_ref·exp(r/β), so r is β·log(π/π_ref) up to a
-# constant that cancels in the pairwise likelihood, and we train the policy directly on pairs with a
-# classification loss — two networks, no sampling. We watch rewards/margins and rewards/chosen; a falling chosen
-# log-ratio is expected but a collapsing one means over-training. The main risk on either path is the preference
-# data itself: annotators' biases, length above all, become the reward, and optimising harder turns them into
-# the behaviour — so we control for length, cap the KL budget, and evaluate on held-out human or verifiable
-# judgements. Where answers can be checked, we use verifiable rewards instead."
+# them with Bradley–Terry, $P(A \succ B) = \sigma(r_A - r_B)$. The classic path fits a reward model and runs PPO
+# against it with a KL penalty to the SFT model — four networks in memory: policy, reference, reward model and
+# value model. DPO gets the same KL-regularised optimum in closed form: $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$,
+# so $r$ is $\beta \log(\pi/\pi_{\text{ref}})$ up to a constant that cancels in the pairwise likelihood, and we
+# train the policy directly on pairs with a classification loss — two networks, no sampling. We watch
+# rewards/margins and rewards/chosen; a falling chosen log-ratio is expected but a collapsing one means
+# over-training.
+#
+# "The main risk on either path is the preference data itself: annotators' biases, length above all, become the
+# reward, and optimising harder turns them into the behaviour — so we control for length, cap the KL budget, and
+# evaluate on held-out human or verifiable judgements. Where answers can be checked, we use verifiable rewards
+# instead."
 #
 # **Drill questions**
-# 1. *Why does DPO need no reward model?* — The KL-regularised objective's optimum gives r = β·log(π*/π_ref) +
-#    β·log Z(x); in the Bradley–Terry difference r(y⁺) − r(y⁻) the Z term cancels, so the likelihood can be written
-#    in terms of the policy alone.
+# 1. *Why does DPO need no reward model?* — The KL-regularised objective's optimum gives
+#    $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \beta \log Z(x)$; in the Bradley–Terry difference $r(y^+) - r(y^-)$
+#    the $Z$ term cancels, so the likelihood can be written in terms of the policy alone.
 # 2. *rewards/chosen is falling during DPO. Bug?* — Not necessarily: DPO optimises the margin, and lowering both
 #    log-ratios (the rejected one faster) wins it. Worry when the chosen log-probability collapses or generations
-#    degrade; lower the learning rate or epochs, raise β.
+#    degrade; lower the learning rate or epochs, raise $\beta$.
 # 3. *After RLHF, answers are 3× longer and win-rate against the old model is up. Ship?* — Not on that evidence:
 #    length is the classic reward-model exploit and judges share the bias. Compare at matched length or with a
 #    length-controlled judge, and check task accuracy.

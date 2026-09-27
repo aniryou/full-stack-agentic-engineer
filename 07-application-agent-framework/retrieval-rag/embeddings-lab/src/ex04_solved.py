@@ -115,6 +115,6 @@ print("filtered-search trap ✓ demonstrated")
 
 # %% [markdown]
 # ## Task 4 (open) — the knee of the curve
-# For your `ivf_search`, sweep `n_probe ∈ {1..32}` and find the smallest value
+# For your `ivf_search`, sweep $n_{\text{probe}} \in \lbrace 1, \ldots, 32 \rbrace$ and find the smallest value
 # reaching ≥ 0.95 recall@10. How does it change if you double `NLIST`? (Rule of
-# thumb: n_list ≈ √N, then tune n_probe on *your* recall target.)
+# thumb: $n_{\text{list}} \approx \sqrt{N}$, then tune $n_{\text{probe}}$ on *your* recall target.)

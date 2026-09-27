@@ -9,10 +9,15 @@
 # slowest bandwidth on the path, plus provisioning, image pull and engine init — parallel and
 # streamed loading attack the first term, warm pools and caches the rest. **Reliability**: failure
 # rates add, so a 16K-GPU job is interrupted every few hours even though each GPU runs for years;
-# training answers with checkpoints every `√(2 · checkpoint time · MTBF)`, inference with spare
-# replicas, and bigger replicas are bigger failure domains. **Cost**: `$/M tokens = $/GPU-hr ÷
-# (tokens/s × 3600 × utilisation) × 1e6` — every lever in this layer (batching, quantization, the
-# right GPU, keeping it busy) shows up in that one line. Primer: `../PRIMER.md` §6–8.
+# training answers with checkpoints every $\sqrt{2 \cdot \text{checkpoint time} \cdot \mathrm{MTBF}}$, inference with
+# spare replicas, and bigger replicas are bigger failure domains. **Cost**:
+#
+# $$
+# \text{\$/M tokens} = \frac{\text{\$/GPU-hr}}{\text{tokens/s} \times 3600 \times \text{utilisation}} \times 10^6
+# $$
+#
+# — every lever in this layer (batching, quantization, the right GPU, keeping it busy) shows up in
+# that one line. Primer: `../PRIMER.md` §6–8.
 
 # %%
 import math
@@ -70,9 +75,10 @@ for n in (8, 64, 1024, 16384):
 # %% [markdown]
 # ## Checkpoint interval: Young/Daly
 # Checkpoint too often and you pay the write each time; too rarely and each failure throws away
-# more work. With checkpoint time δ and system MTBF M the waste is ≈ δ/τ + τ/(2M), minimised at
-# τ = √(2δM), where it equals √(2δ/M). Faster (asynchronous) checkpoints help as a square root. Each
-# failure also costs a restart R (reschedule, reload, re-initialise): R/M on top, which τ cannot fix.
+# more work. With checkpoint time $\delta$ and system MTBF $M$ the waste is $\approx \delta/\tau + \tau/(2M)$,
+# minimised at $\tau = \sqrt{2\delta M}$, where it equals $\sqrt{2\delta/M}$. Faster (asynchronous) checkpoints help
+# as a square root. Each failure also costs a restart $R$ (reschedule, reload, re-initialise): $R/M$ on top, which
+# $\tau$ cannot fix.
 
 # %%
 Ms = reliability.cluster_mtbf(M, 16384) * 3600
@@ -84,7 +90,7 @@ for delta in (60, 10):
 
 # %% [markdown]
 # ## Inference: replicas are failure domains
-# A TP=8 replica is down whenever any of its 8 GPUs is, so its MTBF is M/8. Needing 8 replicas up,
+# A TP=8 replica is down whenever any of its 8 GPUs is, so its MTBF is $M/8$. Needing 8 replicas up,
 # how many do you deploy? (MTTR of 48 h assumed: detect, drain, swap or repair the node.)
 
 # %%
@@ -244,8 +250,8 @@ print("✅ at 60% busy: L4 $1.10 (and it misses the 10 ms SLO), H100 on-demand $
 
 # %% [markdown]
 # ## Exercise 4.6 — rent or own?
-# An 8×H100 server: $300k (assumed), 4-year life, 10.2 kW at full load (verify), PUE 1.3, $0.10/kWh,
-# $30k/year of fixed opex. Write `breakeven(rent_per_gpu_hr, fixed_per_gpu_hr, energy_per_gpu_hr)` — the
+# An 8×H100 server: \$300k (assumed), 4-year life, 10.2 kW at full load (verify), PUE 1.3, \$0.10/kWh,
+# \$30k/year of fixed opex. Write `breakeven(rent_per_gpu_hr, fixed_per_gpu_hr, energy_per_gpu_hr)` — the
 # utilisation above which owning is cheaper — and compare against on-demand and Spot rental.
 
 # %%
@@ -274,14 +280,15 @@ print("✅ owning beats on-demand above ~14% utilisation but Spot only above ~42
 # 141 GB from one object-store stream is 23 minutes, from 128 parallel streams at a 100 Gb/s NIC
 # about 11 s, so I stream weights in parallel, keep a warm pool and cache the checkpoint locally,
 # and then engine init dominates. Reliability: failure rates add, so a 16K-GPU run is interrupted
-# every ~3 hours; checkpoint every √(2δM) — about 19 minutes at a 60 s checkpoint — and make
+# every ~3 hours; checkpoint every $\sqrt{2\delta M}$ — about 19 minutes at a 60 s checkpoint — and make
 # checkpoints asynchronous. For serving, each TP=8 replica is an 8-GPU failure domain: 8 needed means
-# 10 deployed for 99.9%. Cost is $/GPU-hr over tokens/s × utilisation, so I quote $/M tokens at a
+# 10 deployed for 99.9%. Cost is \$/GPU-hr over tokens/s × utilisation, so I quote \$/M tokens at a
 # realistic utilisation, not at the roofline."
 #
 # **Drill.**
 # 1. *Autoscaling takes 10 minutes; where do you look first?* — the stage table: usually the weight
 #    fetch (one slow stream) — parallel/streamed loads, a local or regional cache, smaller precision.
-# 2. *Checkpoint writes got 4× faster. How much less waste?* — waste ∝ √δ at the optimum: half.
+# 2. *Checkpoint writes got 4× faster. How much less waste?* — $\text{waste} \propto \sqrt{\delta}$ at the optimum:
+#    half.
 # 3. *Should we buy GPUs because we are 60% utilised?* — only if 60% is above the break-even against
 #    the rental you would actually use: ~14% vs on-demand, ~42% vs Spot, higher against cheaper rentals.

@@ -2,19 +2,23 @@
 # # 05 · Choosing a scheme
 #
 # **Tier:** T0 — arithmetic on a model config and a GPU spec, a few seconds. Every latency printed here is
-# **SIMULATED** (a roofline model: max(bytes / bandwidth, FLOPs / peak) with assumed efficiencies); GPU figures
-# are dense datasheet values as of September 2026 `(verify)`. Measuring the same schemes on a real GPU is the
-# lab's notebook 02 (T1).
+# **SIMULATED** (a roofline model: $\max(\text{bytes}/\text{bandwidth}, \text{FLOPs}/\text{peak})$ with assumed
+# efficiencies); GPU figures are dense datasheet values as of September 2026 `(verify)`. Measuring the same schemes
+# on a real GPU is the lab's notebook 02 (T1).
 #
 # ## The one-minute version
-# Choose in three steps. **What bounds the workload?** Decode streams every weight each step, so it is bound by
-# weight bytes (and, at long context and high batch, KV bytes); prefill is bound by FLOPs; concurrency is bound by
-# KV memory. **What can the GPU execute natively?** Weight-only formats (W4A16, W8A16) run anywhere from Turing up
-# and cut bytes, not FLOPs; FP8 W8A8 needs Ada or newer; FP4 W4A4 needs Blackwell; INT8 W8A8 is gone on
-# Blackwell; an FP8 checkpoint on an A100 runs as weight-only FP8 — `cost.supported` encodes vLLM's rules. **What
-# accuracy can you afford?** Rank schemes from least to most aggressive and take the first that meets the
-# latency and concurrency targets *and* passes the eval (notebook 03, primer §8). After this notebook you can
-# produce and defend that table for any GPU and model in the repo, and put a cost per million tokens on it.
+# Choose in three steps.
+#
+# - **What bounds the workload?** Decode streams every weight each step, so it is bound by weight bytes (and, at
+#   long context and high batch, KV bytes); prefill is bound by FLOPs; concurrency is bound by KV memory.
+# - **What can the GPU execute natively?** Weight-only formats (W4A16, W8A16) run anywhere from Turing up and cut
+#   bytes, not FLOPs; FP8 W8A8 needs Ada or newer; FP4 W4A4 needs Blackwell; INT8 W8A8 is gone on Blackwell; an
+#   FP8 checkpoint on an A100 runs as weight-only FP8 — `cost.supported` encodes vLLM's rules.
+# - **What accuracy can you afford?** Rank schemes from least to most aggressive and take the first that meets the
+#   latency and concurrency targets *and* passes the eval (notebook 03, primer §8).
+#
+# After this notebook you can produce and defend that table for any GPU and model in the repo, and put a cost per
+# million tokens on it.
 #
 # Primer: `../PRIMER.md` §1 *Why quantize* and §10 *Choosing a scheme*; the roofline is layer 01's
 # (`01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md` §2–3), the cost formula its §8.
@@ -56,8 +60,8 @@ show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 # halves it. And sessions follow the bytes left for KV: FP8 KV doubles them at any weight format.
 #
 # ## Worked example 2 — one GEMM on the roofline: where W4A16 stops paying
-# vllm-internals §8.1 prices Llama-3.1-8B's `down_proj` (K = 14,336, N = 4,096) on an L4 for M tokens in the
-# step. `cost.gemm_time` reproduces it (W4A16 at 4.16 bits per weight, as that table counts).
+# vllm-internals §8.1 prices Llama-3.1-8B's `down_proj` ($K = 14{,}336$, $N = 4{,}096$) on an L4 for $M$ tokens
+# in the step. `cost.gemm_time` reproduces it (W4A16 at 4.16 bits per weight, as that table counts).
 
 # %%
 for M in (1, 16, 64, 128, 256, 400, 462, 2048):
@@ -114,7 +118,7 @@ show(C.table(C.GPUS["B200"], m8, kv=(8,), schemes=["bf16", "w8a8-fp8", "w8a8-int
 #
 # ## Worked example 5 — what it costs per million tokens
 # `$/M tokens = $/GPU-hour ÷ (tokens/s × 3600 × utilisation) × 10⁶` (layer 01 §8.1). Prices are the research
-# snapshot's GCP list prices, us-central1, September 2026 — L4 ~$0.70/hr, H100 ~$11/GPU-hr on demand — `(verify)`;
+# snapshot's GCP list prices, us-central1, September 2026 — L4 ~\$0.70/hr, H100 ~\$11/GPU-hr on demand — `(verify)`;
 # `COMPUTE.md` keeps them current.
 
 # %%
@@ -132,7 +136,7 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 # sessions and FP8 reaches the 256 cap used here; FP8 roughly halves the cost.
 #
 # ## Worked example 6 — the accuracy gate
-# The eval decides which rows are allowed at all. On the tiny model (notebook 03) with a budget of KL ≤ 0.05 nats
+# The eval decides which rows are allowed at all. On the tiny model (notebook 03) with a budget of $\mathrm{KL} \le 0.05$ nats
 # and an accuracy drop within two standard errors of the difference (`E.diff_stderr`, unpaired; the paired
 # McNemar z on the flips, `E.paired_z`, is the sharper test — primer §8):
 
@@ -149,14 +153,15 @@ for label, q in (("INT8 RTN", quantize_model(tm, "rtn", 8, None)), ("INT4 RTN g3
 
 # %% [markdown]
 # INT4 is allowed only with GPTQ here — the recipe is part of the scheme. GPTQ's 0.6-point drop is inside the
-# unpaired noise bar, while the paired flips (85 lost, 61 gained, z = −2.0) say it is a small but probably real loss:
+# unpaired noise bar, while the paired flips (85 lost, 61 gained, ${z = -2.0}$) say it is a small but probably real loss:
 # a budget should say which test it means. `choose(rows, allowed=...)` takes that set.
 #
 # ## Exercise 5.1 — the W4A16 crossover by hand
-# For a linear with K inputs and N outputs, M tokens: FLOPs `2MKN`, bytes `K·N·w + M·(K·a + 2N)` with `w` bytes
-# per weight (4.16 bits → 0.52 B) and `a = 2` bytes per activation; the time is the larger of FLOPs / peak and
-# bytes / bandwidth. Solve for the M where the two are equal, for the L4 (121 TFLOP/s bf16, 0.30 TB/s) and the H100
-# (989.4, 3.35). Set `m_l4` and `m_h100`.
+# For a linear with $K$ inputs and $N$ outputs, $M$ tokens: FLOPs ${2MKN}$, bytes
+# $K \cdot N \cdot w + M \cdot (K \cdot a + 2N)$ with `w` bytes per weight (4.16 bits → 0.52 B) and `a = 2` bytes
+# per activation; the time is the larger of $\text{FLOPs}/\text{peak}$ and $\text{bytes}/\text{bandwidth}$. Solve for
+# the $M$ where the two are equal, for the L4 (121 TFLOP/s bf16, 0.30 TB/s) and the H100 (989.4, 3.35). Set `m_l4`
+# and `m_h100`.
 
 # %% exercise
 K_, N_ = 14336, 4096
@@ -244,7 +249,9 @@ print("✅ 141 GB in bf16, 72.7 GB in FP8 (no room left at these round inputs; 2
 # Our traffic is decode-heavy chat on L4s, so weight bytes and KV memory decide: FP8 W8A8 halves the weights and
 # halves prefill on Ada's FP8 tensor cores, and an FP8 KV cache doubles the sessions — 87 instead of 17 for an 8B
 # model on a 24 GB L4, simulated — which is also what cuts cost per token ~6×: a bigger batch shares every weight
-# read. INT4 weight-only would decode faster still but does not speed prefill (above ~120 tokens per step on an L4
+# read.
+#
+# "INT4 weight-only would decode faster still but does not speed prefill (above ~120 tokens per step on an L4
 # its GEMM is BF16-math-bound, and by ~460 plain BF16 has caught up), so we keep it for memory-bound cases: a T4, or a 70B on one 80 GB GPU. We checked
 # what each checkpoint runs as on each generation — FP8 on an A100 is weight-only, NVFP4 is W4A4 only on Blackwell,
 # INT8 W8A8 disappears on Blackwell — and every scheme passed the eval budget before it reached this table."

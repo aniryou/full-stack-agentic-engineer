@@ -50,7 +50,9 @@ Everything in the rest of this document follows from that last column.
 
 ### 1.2 The binding constraint is model throughput, and it is shared
 
-On the Gemini Enterprise Agent Platform, the pay-as-you-go path ("Standard PayGo", successor to dynamic shared quota) has no fixed per-project quota. Your organisation receives a tokens-per-minute *baseline* per model family, based on rolling 30-day spend — for Flash and Flash-Lite, 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3; for Pro, 0.5 M, 1 M or 2 M — and can burst above it on a best-effort basis. A `429` response does not mean "you hit a number"; it means "there is contention on the shared pool right now". The documented response is exponential backoff, use of the global endpoint, and smoothing traffic within the minute. Guaranteed capacity is a separate purchase: Provisioned Throughput, sold in generative-scale units (GSUs) by the week, month, quarter or year, with pay-as-you-go spill-over enabled by default.
+On the Gemini Enterprise Agent Platform, the pay-as-you-go path ("Standard PayGo", successor to dynamic shared quota) has no fixed per-project quota. Your organisation receives a tokens-per-minute *baseline* per model family, based on rolling 30-day spend — for Flash and Flash-Lite, 2 M, 4 M or 10 M TPM at tiers 1, 2 and 3; for Pro, 0.5 M, 1 M or 2 M — and can burst above it on a best-effort basis.
+
+A `429` response does not mean "you hit a number"; it means "there is contention on the shared pool right now". The documented response is exponential backoff, use of the global endpoint, and smoothing traffic within the minute. Guaranteed capacity is a separate purchase: Provisioned Throughput, sold in generative-scale units (GSUs) by the week, month, quarter or year, with pay-as-you-go spill-over enabled by default.
 
 Two consequences shape every design. First, capacity planning is a *token* budget — you compute demand in tokens per minute before you compute anything else. Second, the pool is shared with every other team in the organisation, so the shape of your traffic affects your own error rate and everyone else's. Smoothing is a good-neighbour obligation as much as an optimisation.
 
@@ -98,7 +100,7 @@ A simulated load test reproduces it in seconds (`scalelab.sim`, the lab's notebo
 
 ### 1.7 Multi-agent designs multiply everything
 
-A coordinator with three specialists turns 2.2 model calls per turn into about eight. Cost rises by roughly 3.6×; latency by about 2× even with specialists running in parallel; and the probability that every hop succeeds falls from 0.95^2.2 ≈ 0.89 to 0.95^8 ≈ 0.66 at 95 % reliability per hop.
+A coordinator with three specialists turns 2.2 model calls per turn into about eight. Cost rises by roughly 3.6×; latency by about 2× even with specialists running in parallel; and the probability that every hop succeeds falls from $0.95^{2.2} \approx 0.89$ to $0.95^{8} \approx 0.66$ at 95 % reliability per hop.
 
 The right question about a multi-agent topology is therefore never "how do we scale the coordinator". It is "what measured problem justifies paying that multiple?" The answer is usually one of two things: a tool set too large to fit sensibly in one context, or permissions that must genuinely differ per step — a claims-adjustment agent that can write to the claims system, say, alongside a general enquiry agent that cannot.
 
@@ -199,7 +201,13 @@ Note that output tokens are the largest single line even though there are fourte
 
 ### 3.5 Provisioned Throughput
 
-Provisioned Throughput is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 *burndown* tokens per second, where a call's burndown is uncached input ×1 + cached input ×0.1 + output ×6. A call in this example burns 4,400–4,700 tokens, so one GSU serves about 0.14 calls per second. Carrying the standard-model share — 65 % of calls — entirely on Provisioned Throughput needs 69 GSUs at average, 207 at peak and 688 during a major event.
+Provisioned Throughput is bought in GSUs per model. One GSU of 3.5 Flash delivers 675 *burndown* tokens per second, where a call's burndown is
+
+$$
+\text{uncached input} \times 1 + \text{cached input} \times 0.1 + \text{output} \times 6.
+$$
+
+A call in this example burns 4,400–4,700 tokens, so one GSU serves about 0.14 calls per second. Carrying the standard-model share — 65 % of calls — entirely on Provisioned Throughput needs 69 GSUs at average, 207 at peak and 688 during a major event.
 
 | Term | $ per GSU-hour | $ per M burndown tokens at 100 % utilisation | Break-even utilisation vs PayGo at $1.50/M |
 |---|---:|---:|---:|
@@ -545,7 +553,7 @@ If part of the estate is not on Google Cloud, the mechanisms translate almost on
 | Figure | Value |
 |---|---|
 | Tokens per call (service agent) | 4–6 k in, 300–400 out including thinking |
-| Little's law | in-flight = rate × duration; sessions ≈ 11× in-flight turns when users pause for a minute |
+| Little's law | $\text{in-flight} = \text{rate} \times \text{duration}$; sessions ≈ 11× in-flight turns when users pause for a minute |
 | Flash PayGo tiers | 2 / 4 / 10 M TPM; Pro 0.5 / 1 / 2 M |
 | What 10 M TPM sustains | ≈ 14 turns/s of this turn shape; ≈ 85 turns in flight |
 | Provisioned Throughput, 3.5 Flash | 675 burndown tokens/s per GSU; output ×6, cached ×0.1; break-even 75 % on a 1-year term, never on a 1-month term |
@@ -557,7 +565,7 @@ If part of the estate is not on Google Cloud, the mechanisms translate almost on
 | Firestore | 1 MiB documents; ~1 write/s/document; 500 then +50 %/5 min ramp |
 | Valkey | ≈ 120 k ops/s per 2-vCPU node |
 | Agent Runtime | 90 queries/min default quota; concurrency 9 by default; cold ≈ 4.7 s versus warm 0.4 s |
-| Reliability compounding | 0.95⁵ ≈ 0.77; 0.95⁸ ≈ 0.66 |
+| Reliability compounding | $0.95^{5} \approx 0.77$; $0.95^{8} \approx 0.66$ |
 | Cloud Run fleet vs model bill | ≈ 0.1 % |
 
 ---

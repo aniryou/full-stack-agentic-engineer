@@ -77,7 +77,7 @@ print("\nrouting view:", extract_vllm(Families.from_text(text)))
 # The router does not run the model's tokenizer. Like the EPP's default `estimate` token producer
 # it packs the request bytes (tool schemas, then role + content of each message) into **4-byte
 # pseudo-tokens**, cuts them into blocks of 64 and hashes each block *together with the previous
-# block's hash*. Two prompts that agree for the first N blocks therefore share exactly N hashes.
+# block's hash*. Two prompts that agree for the first $N$ blocks therefore share exactly $N$ hashes.
 
 # %%
 from igwlab.router import PrefixIndex, block_hashes, estimate_tokens
@@ -106,9 +106,14 @@ print("turn-2 match per endpoint:", idx.match(h2), f"-> prefix score on a = {idx
 #
 # Implement the `prefix-cache-scorer` formula (llm-d router, v0.10):
 #
-# `score = w * min(1, matched_tokens / scale)^2 + (1 - w) * match_blocks / total_blocks`,
-# with `matched_tokens = match_blocks * block_size`; a request with `total_blocks == 0` scores 0.
-# With the default `w = 0` it is just the fraction of the prompt's blocks already cached there.
+# $$
+# \text{score} = w \cdot \min\left(1, \frac{\mathrm{matched\_tokens}}{\text{scale}}\right)^2
+#   + (1 - w) \cdot \frac{\mathrm{match\_blocks}}{\mathrm{total\_blocks}},
+# $$
+#
+# with $\mathrm{matched\_tokens} =$ $\mathrm{match\_blocks} \times \mathrm{block\_size}$; a request with
+# `total_blocks == 0` scores 0. With the default $w = 0$ it is just the fraction of the prompt's blocks
+# already cached there.
 
 # %% exercise
 def prefix_score(match_blocks, total_blocks, block_size=64, w=0.0, scale=8192):
@@ -133,12 +138,12 @@ print("✅ prefix_score matches the prefix-cache-scorer formula")
 # ## Exercise 1.2 — the queue score, and the replica nobody has scraped yet
 #
 # `queue-scorer` turns the scraped `vllm:num_requests_waiting` of each endpoint into a score with a
-# min-max normalization: `(maxQ - q) / (maxQ - minQ)`; if every endpoint has the same queue, they all
-# get the neutral score **1.0**. The detail that bites in production: the scorer reads each
-# endpoint's *current* metrics with no freshness check (llm-d-router v0.10.0 does the same), and an
-# endpoint that has never been scraped — a pod that became ready a moment ago, `None` here — has
-# all-zero metrics. Implement `queue_scores(waiting)` with exactly that behaviour, then answer: what
-# does a freshly started replica score, and what does that do to the next burst?
+# min-max normalization: $(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$; if every endpoint has
+# the same queue, they all get the neutral score **1.0**. The detail that bites in production: the
+# scorer reads each endpoint's *current* metrics with no freshness check (llm-d-router v0.10.0 does the
+# same), and an endpoint that has never been scraped — a pod that became ready a moment ago, `None`
+# here — has all-zero metrics. Implement `queue_scores(waiting)` with exactly that behaviour, then
+# answer: what does a freshly started replica score, and what does that do to the next burst?
 
 # %% exercise
 def queue_scores(waiting: dict) -> dict:
@@ -166,11 +171,11 @@ print("✅ a never-scraped replica scores 1.0: it looks idle, so until its first
 # %% [markdown]
 # ## Exercise 1.3 — the weighted pick
 #
-# The scheduler adds, for each endpoint, `weight × clamp(score, 0, 1)` over all scorers (an
-# unscored endpoint contributes 0 for that scorer) and the `max-score-picker` takes the highest
-# total. Implement `pick(scores, weights)` → the winning endpoint name; break exact ties by the
-# alphabetically smallest name (the lab's picker rotates ties round-robin; llm-d-router v0.10.0
-# shuffles the candidates at random before a stable sort by score, so its ties land at random).
+# The scheduler adds, for each endpoint, $\text{weight} \times \operatorname{clamp}(\text{score}, 0, 1)$
+# over all scorers (an unscored endpoint contributes 0 for that scorer) and the `max-score-picker`
+# takes the highest total. Implement `pick(scores, weights)` → the winning endpoint name; break exact
+# ties by the alphabetically smallest name (the lab's picker rotates ties round-robin; llm-d-router
+# v0.10.0 shuffles the candidates at random before a stable sort by score, so its ties land at random).
 
 # %% exercise
 def pick(scores: dict, weights: dict) -> str:
@@ -205,7 +210,9 @@ print("✅ pick reproduces the weighted-sum scheduler")
 # * `default-weighted` — the llm-d Helm chart's default: `prefix-cache-scorer` ×3,
 #   `queue-scorer` ×2, `kv-cache-utilization-scorer` ×2.
 #
-# `hit rate` = prompt tokens the engines reported as cached / all prompt tokens.
+# $$
+# \text{hit rate} = \frac{\text{prompt tokens the engines reported as cached}}{\text{all prompt tokens}}.
+# $$
 
 # %%
 from igwlab.bench import agentic_sessions, ascii_bars, compare

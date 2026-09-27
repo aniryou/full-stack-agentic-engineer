@@ -17,16 +17,17 @@
 # | provider prompt cache | hosted API | ~90 % of the cached input's price (scaling primer §3.4) | none to correctness |
 # | engine prefix cache | vLLM | prefill compute, so TTFT (serving-engine PRIMER §5) | a timing side channel between tenants: `cache_salt` |
 #
-# The response caches are only safe for answers that do not depend on who asks or when, and a gateway cannot tell
-# that from the text — so the **route declares** each request's class in `metadata.cache_class` (PRIMER §3.2), and
-# only allowlisted classes are cached: shared ones (`faq`) in a namespace per tenant, alias and system prompt,
-# per-user ones (`account`) per user as well. Deterministic requests only (`temperature: 0`), no tools. A regex
-# may still *veto* a declared shared class that looks personal; it never makes anything cacheable. A semantic
-# cache embeds the question, finds its nearest cached neighbour and serves it above a similarity threshold; an
-# exact **guard** on numbers, dates and codes stops the classic false hit ("order 1234" answered with order
-# 1243's status). Where to set the threshold is not a guess: sweep it on labelled traffic — and check that the
-# live gateway does what the sweep predicted. The embedder is the lexical hashing embedder of 07.4's `ragkit`
-# (embeddings primer §15, "Embeddings elsewhere in agent systems"); a real embedder (T1) moves both curves.
+# The response caches are only safe for answers that do not depend on who asks or when, and a gateway cannot tell that
+# from the text — so the **route declares** each request's class in `metadata.cache_class` (PRIMER §3.2), and only
+# allowlisted classes are cached: shared ones (`faq`) in a namespace per tenant, alias and system prompt, per-user
+# ones (`account`) per user as well. Deterministic requests only (`temperature: 0`), no tools. A regex may still
+# *veto* a declared shared class that looks personal; it never makes anything cacheable.
+#
+# A semantic cache embeds the question, finds its nearest cached neighbour and serves it above a similarity threshold;
+# an exact **guard** on numbers, dates and codes stops the classic false hit ("order 1234" answered with order 1243's
+# status). Where to set the threshold is not a guess: sweep it on labelled traffic — and check that the live gateway
+# does what the sweep predicted. The embedder is the lexical hashing embedder of 07.4's `ragkit` (embeddings primer
+# §15, "Embeddings elsewhere in agent systems"); a real embedder (T1) moves both curves.
 
 # %%
 import collections, json
@@ -93,12 +94,13 @@ for a, b in zip(rows[False], rows[True]):
 # Write `cache_key(tenant, alias, body)`: `None` when the gateway must not cache this request, else a key that is
 # equal for two requests exactly when the gateway would treat them as the same cache entry. Not cacheable:
 # `temperature` absent or not 0, any `tools`, `n > 1`; no `metadata.cache_class`; a class not in `SHARED` or
-# `PER_USER`; a per-user class without `metadata.user`; and a shared class whose last user message
-# `C.classify_query` does not call `"general"` (the deny-only guard). The key is a SHA-256 over the namespace —
-# tenant, alias, the system prompt, and **the user for a per-user class** — and the canonical request: `model`,
-# `messages`, `temperature`, `top_p`, the token caps, `tools`, `tool_choice`, `response_format`, `stop`, `seed`,
-# `reasoning_effort` (not `stream`, `stream_options`, `user` or `metadata`). The check compares with the live
-# gateway's cache on 600 pairs of generated requests.
+# `PER_USER`; a per-user class without `metadata.user`; and a shared class whose last user message `C.classify_query`
+# does not call `"general"` (the deny-only guard).
+#
+# The key is a SHA-256 over the namespace — tenant, alias, the system prompt, and **the user for a per-user class** —
+# and the canonical request: `model`, `messages`, `temperature`, `top_p`, the token caps, `tools`, `tool_choice`,
+# `response_format`, `stop`, `seed`, `reasoning_effort` (not `stream`, `stream_options`, `user` or `metadata`). The
+# check compares with the live gateway's cache on 600 pairs of generated requests.
 
 # %% exercise
 import hashlib
@@ -256,14 +258,14 @@ print("salts:", {t: C.cache_salt(t, stack.cfg.salt_secret)[:12] + "..." for t in
 # %% [markdown]
 # ## Exercise 3.3 — the side channel the salt closes
 #
-# Why salt at all, when the prefix cache never serves a wrong answer? Because its *speed* is observable. A tenant
-# who can send a candidate prompt and time the first token learns whether someone else already sent it — a
-# leak of another tenant's system prompt or document, one guess at a time. Write
+# Why salt at all, when the prefix cache never serves a wrong answer? Because its *speed* is observable. A tenant who
+# can send a candidate prompt and time the first token learns whether someone else already sent it — a leak of another
+# tenant's system prompt or document, one guess at a time. Write
 # `looks_cached(ttft_s, prompt_tokens, base_s, prefill_s_per_token)`: the attacker's test, `True` when the measured
-# TTFT is below the midpoint between a fully warm prefill (`base_s`) and a fully cold one
-# (`base_s + prompt_tokens × prefill_s_per_token`). The check plays the attack straight against the engine (the
-# vLLM-shaped fake): a victim sends a prompt, the attacker times the same prompt — once with no salt at all (a
-# gateway that forgot it), once under each tenant's own salt (what this gateway sends).
+# TTFT is below the midpoint between a fully warm prefill (`base_s`) and a fully cold one ($\mathrm{base\_s} \:+$
+# $\mathrm{prompt\_tokens} \times \mathrm{prefill\_s\_per\_token}$). The check plays the attack straight against the
+# engine (the vLLM-shaped fake): a victim sends a prompt, the attacker times the same prompt — once with no salt at
+# all (a gateway that forgot it), once under each tenant's own salt (what this gateway sends).
 
 # %% exercise
 def looks_cached(ttft_s: float, prompt_tokens: int, base_s: float, prefill_s_per_token: float) -> bool:
@@ -295,12 +297,12 @@ print(f"✅ unsalted: the attacker's TTFT {r1.ttft_s * 1e3:.0f} ms gives the vic
 # %% [markdown]
 # ## Exercise 3.4 — predict `cached_tokens`
 #
-# vLLM caches **full** blocks only (16 tokens), walks the prompt's block-hash chain until the first miss, and
-# always computes the last prompt token (it needs its logits), so a hit is capped at `(n − 1) // 16` blocks.
+# vLLM caches **full** blocks only (16 tokens), walks the prompt's block-hash chain until the first miss, and always
+# computes the last prompt token (it needs its logits), so a hit is capped at $\lfloor (n - 1)/16 \rfloor$ blocks.
 # Write `expected_cached_tokens(prompt_tokens, shared_prefix_tokens, block=16)` for a prompt whose first
-# `shared_prefix_tokens` tokens were already processed (under the same salt). The check builds prompts that share
-# a varying prefix with a warmed prompt — lengths counted by the fake's tokenizer — and compares with what the
-# fake reports. (The same rule is `expected_cached_tokens` in 04's `servelab`; at T1 vLLM reports the real one.)
+# `shared_prefix_tokens` tokens were already processed (under the same salt). The check builds prompts that share a
+# varying prefix with a warmed prompt — lengths counted by the fake's tokenizer — and compares with what the fake
+# reports. (The same rule is `expected_cached_tokens` in 04's `servelab`; at T1 vLLM reports the real one.)
 
 # %% exercise
 def expected_cached_tokens(prompt_tokens: int, shared_prefix_tokens: int, block: int = 16) -> int:
@@ -347,8 +349,8 @@ print(f"no cache ${full:.5f} | prompt cache (2,700 cached) ${prompt_cached:.5f} 
 # first target is vLLM; the engine reports `cached_tokens` itself (with `--enable-prompt-tokens-details`). Each run
 # puts a fresh nonce in the system prompt, so blocks cached by an earlier run cannot hit. Its tokenizer is the
 # model's, so the check is the rule, asserted only on rows vLLM served (`MEASURED`): a multiple of 16, at most
-# `(n − 1) // 16 × 16`, 0 for team-a's first request, more than 0 for its second, and **0 under team-b's salt** —
-# if the gateway stopped sending `cache_salt`, that last assertion fails.
+# $\lfloor (n - 1)/16 \rfloor \times 16$, 0 for team-a's first request, more than 0 for its second, and **0 under
+# team-b's salt** — if the gateway stopped sending `cache_salt`, that last assertion fails.
 
 # %%
 if tiers["vllm_url"]:
@@ -365,16 +367,17 @@ stack.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We cache at two places for two reasons. The engine's prefix cache — and a hosted provider's
-# prompt cache — is exact and safe: we lay prompts out with the stable part first, and we salt the engine's
-# cache per tenant with an HMAC of the verified tenant, because its speed is observable and an unsalted prefix
-# cache lets one tenant time another's prompts. The gateway's response cache is for answers that do not depend on
-# who asks or when, and the route declares which those are — `faq` shared within a tenant, `account` per user —
-# because no classifier can read that from the text; a regex only vetoes. Everything is namespaced by tenant,
-# alias and system prompt. Its semantic half serves paraphrases above a threshold we chose from a sweep on
-# labelled traffic — and we checked that the live gateway serves exactly what the sweep predicted — with an exact
-# guard on numbers, dates and codes. A false hit is a wrong answer delivered confidently, so we would rather serve
-# fewer hits."
+# **Two minutes:** "We cache at two places for two reasons. The engine's prefix cache — and a hosted provider's prompt
+# cache — is exact and safe: we lay prompts out with the stable part first, and we salt the engine's cache per tenant
+# with an HMAC of the verified tenant, because its speed is observable and an unsalted prefix cache lets one tenant
+# time another's prompts.
+#
+# "The gateway's response cache is for answers that do not depend on who asks or when, and the route declares which
+# those are — `faq` shared within a tenant, `account` per user — because no classifier can read that from the text; a
+# regex only vetoes. Everything is namespaced by tenant, alias and system prompt. Its semantic half serves paraphrases
+# above a threshold we chose from a sweep on labelled traffic — and we checked that the live gateway serves exactly
+# what the sweep predicted — with an exact guard on numbers, dates and codes. A false hit is a wrong answer delivered
+# confidently, so we would rather serve fewer hits."
 #
 # **Drill 1.** *The semantic cache answered one user with another user's order status. What went wrong?* — The
 # question was personal, a class that must never share an answer, and the key had no user namespace; a lexical

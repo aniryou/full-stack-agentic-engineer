@@ -9,8 +9,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Task 1 — participation ratio (effective dimensionality)
-# `PR = (Σᵢ λᵢ)² / Σᵢ λᵢ²` over eigenvalues of the covariance of `X`.
-# Isotropic d-dim data → ≈ d; rank-1 data → ≈ 1.
+# $\mathrm{PR} = \left(\sum_i \lambda_i\right)^2 / \sum_i \lambda_i^2$ over eigenvalues of the covariance of `X`.
+# Isotropic $d$-dim data → $\approx d$; rank-1 data → $\approx 1$.
 
 # %%
 def participation_ratio(X):
@@ -28,7 +28,7 @@ print(f"participation_ratio ✓  (isotropic≈{participation_ratio(iso):.1f}, ra
 
 # %% [markdown]
 # ## Task 2 — CSLS rescoring (the hubness fix)
-# `csls(S, k) = 2·S − r(row) − r(col)`, where `r(x)` is the mean of x's top-k
+# $\operatorname{csls}(S, k) = 2 \cdot S - r(\text{row}) - r(\text{col})$, where ${r(x)}$ is the mean of $x$'s top-$k$
 # similarities (diagonal excluded). Penalizes points that are close to
 # *everything*.
 

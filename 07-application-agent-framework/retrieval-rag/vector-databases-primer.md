@@ -24,9 +24,9 @@ If you already know what an embedding is, skip to Part 2. Parts 3 and 4 are the 
 
 Traditional databases answer questions about exact values and ranges: `WHERE customer_id = 42`, `WHERE price < 100`, `WHERE name LIKE 'Jo%'`. They are built on B-trees, hash indexes, and inverted indexes — structures that exploit ordering or exact token matches.
 
-A whole class of modern questions has no exact-match formulation: "find documents that mean roughly the same thing as this query," "find images that look like this one," "find products this user would like," "have we seen a support ticket like this before?" Neural networks answer these by mapping objects into a high-dimensional vector space where geometric proximity approximates semantic similarity. The database question becomes: given a query vector, find the *k* stored vectors closest to it — nearest-neighbor search.
+A whole class of modern questions has no exact-match formulation: "find documents that mean roughly the same thing as this query," "find images that look like this one," "find products this user would like," "have we seen a support ticket like this before?" Neural networks answer these by mapping objects into a high-dimensional vector space where geometric proximity approximates semantic similarity. The database question becomes: given a query vector, find the $k$ stored vectors closest to it — nearest-neighbor search.
 
-Nearest-neighbor search in hundreds or thousands of dimensions defeats every classic index. There is no total ordering to exploit (B-trees fail), no exact key to hash (hash indexes fail), and no discrete tokens to invert (inverted indexes fail). You are left with brute force — comparing the query against every vector — which is O(N·d) per query: fine for 100k vectors, not for 100 million at 1,000 queries per second.
+Nearest-neighbor search in hundreds or thousands of dimensions defeats every classic index. There is no total ordering to exploit (B-trees fail), no exact key to hash (hash indexes fail), and no discrete tokens to invert (inverted indexes fail). You are left with brute force — comparing the query against every vector — which is $O(N \cdot d)$ per query: fine for 100k vectors, not for 100 million at 1,000 queries per second.
 
 Vector databases exist to solve two problems at once:
 
@@ -37,7 +37,7 @@ The first problem has thirty years of literature behind it. The second is where 
 
 ### 2. Embeddings and vector spaces
 
-An **embedding** is a fixed-length array of floating-point numbers produced by a model that maps an input (text, image, audio, code, a user's behaviour history, a molecule) to a point in R^d. Good embedding models are trained — usually with contrastive objectives — so that inputs with similar meaning land near each other.
+An **embedding** is a fixed-length array of floating-point numbers produced by a model that maps an input (text, image, audio, code, a user's behaviour history, a molecule) to a point in $\mathbb{R}^d$. Good embedding models are trained — usually with contrastive objectives — so that inputs with similar meaning land near each other.
 
 Key properties:
 
@@ -48,18 +48,18 @@ Key properties:
 
 ### 3. Similarity and distance metrics
 
-| Metric | Definition (for vectors a, b) | Use when |
+| Metric | Definition (for vectors $a$, $b$) | Use when |
 |---|---|---|
-| Cosine similarity | a·b / (‖a‖ ‖b‖) | Direction matters, magnitude doesn't. Default for most text embeddings. |
-| Dot (inner) product | a·b | Model trained with dot product; magnitude carries signal (e.g. item popularity in recsys). "Maximum inner-product search" (MIPS). |
-| Euclidean (L2) | ‖a − b‖ | Model trained with L2; some image and scientific embeddings. |
-| Manhattan (L1) | ‖a − b‖₁ | Rare; some sparse or robustness settings. |
+| Cosine similarity | $a \cdot b \,/\, (\lVert a \rVert \, \lVert b \rVert)$ | Direction matters, magnitude doesn't. Default for most text embeddings. |
+| Dot (inner) product | $a \cdot b$ | Model trained with dot product; magnitude carries signal (e.g. item popularity in recsys). "Maximum inner-product search" (MIPS). |
+| Euclidean (L2) | $\lVert a - b \rVert$ | Model trained with L2; some image and scientific embeddings. |
+| Manhattan (L1) | $\lVert a - b \rVert_1$ | Rare; some sparse or robustness settings. |
 | Hamming | number of differing bits | Binary-quantized vectors. |
-| Jaccard | size(A∩B) ÷ size(A∪B) | Set-valued data (tags, shingles). |
+| Jaccard | $\operatorname{size}(A \cap B) \div \operatorname{size}(A \cup B)$ | Set-valued data (tags, shingles). |
 
 Two things to internalize:
 
-- **If vectors are L2-normalized (unit length), cosine, dot product and Euclidean produce identical rankings**, because ‖a − b‖² = 2 − 2(a·b) on the unit sphere. Most vector databases normalize on ingest when you choose cosine, which turns cosine into a cheap dot product.
+- **If vectors are L2-normalized (unit length), cosine, dot product and Euclidean produce identical rankings**, because $\lVert a - b \rVert^2 = 2 - 2(a \cdot b)$ on the unit sphere. Most vector databases normalize on ingest when you choose cosine, which turns cosine into a cheap dot product.
 - **Use the metric the embedding model was trained with.** Mixing them silently degrades quality without producing an error.
 
 ### 4. The nearest-neighbor problem
@@ -85,9 +85,11 @@ The fundamental trade-off is a triangle: **recall ↔ query latency and throughp
 
 **Locality-sensitive hashing (LSH).** Hash vectors so that similar ones collide with high probability (random hyperplanes for cosine, p-stable distributions for L2). Elegant sublinear guarantees, but reaching high recall in practice needs many tables and a lot of memory. Rarely the production choice today outside streaming and near-duplicate detection (SimHash, MinHash).
 
-**Inverted file (IVF) / clustering.** Run k-means to get `nlist` centroids and assign each vector to its nearest centroid's list. At query time, find the `nprobe` closest centroids and scan only their lists. This is Faiss's workhorse. Build is cheap (one k-means pass), memory is just vectors plus centroids, and it composes with compression (IVF-PQ). Weaknesses: recall depends on cluster quality, boundary effects (a true neighbor may sit in an un-probed cluster), and lists need re-training as the data distribution drifts. Rules of thumb: `nlist ≈ 4√N to 16√N`; train on at least ~30–50 × `nlist` samples.
+**Inverted file (IVF) / clustering.** Run k-means to get `nlist` centroids and assign each vector to its nearest centroid's list. At query time, find the `nprobe` closest centroids and scan only their lists. This is Faiss's workhorse. Build is cheap (one k-means pass), memory is just vectors plus centroids, and it composes with compression (IVF-PQ). Weaknesses: recall depends on cluster quality, boundary effects (a true neighbor may sit in an un-probed cluster), and lists need re-training as the data distribution drifts. Rules of thumb: `nlist` $\approx 4\sqrt{N}$ to $16\sqrt{N}$; train on at least ~30–50 × `nlist` samples.
 
-**Graph-based (NSW, HNSW, NSG, Vamana/DiskANN, CAGRA).** Build a proximity graph where each vector links to a small number of near — and a few far — neighbors, then search by greedy traversal: start somewhere, move to whichever neighbor is closest to the query, repeat, keeping a candidate beam. **HNSW** (Hierarchical Navigable Small World; Malkov & Yashunin, 2016) adds a hierarchy of sparser layers for fast coarse navigation, like a skip list. HNSW is the default in most vector databases because it offers the best recall-per-millisecond at moderate scale, supports incremental inserts, and is well understood. Costs: memory (graph links on top of raw vectors), slow single-threaded build (roughly O(N log N) with a large constant), and awkward deletes.
+**Graph-based (NSW, HNSW, NSG, Vamana/DiskANN, CAGRA).** Build a proximity graph where each vector links to a small number of near — and a few far — neighbors, then search by greedy traversal: start somewhere, move to whichever neighbor is closest to the query, repeat, keeping a candidate beam.
+
+**HNSW** (Hierarchical Navigable Small World; Malkov & Yashunin, 2016) adds a hierarchy of sparser layers for fast coarse navigation, like a skip list. HNSW is the default in most vector databases because it offers the best recall-per-millisecond at moderate scale, supports incremental inserts, and is well understood. Costs: memory (graph links on top of raw vectors), slow single-threaded build (roughly $O(N \log N)$ with a large constant), and awkward deletes.
 
 **Disk-resident graphs (DiskANN/Vamana, SPANN).** DiskANN (Microsoft, 2019) builds a single-layer graph with deliberately added long-range edges, keeps a product-quantized copy of every vector in RAM for navigation, and stores the graph plus full-precision vectors on NVMe SSD. Result: billion-scale search on a single machine with tens of gigabytes of RAM, ~95% recall, and single-digit-millisecond latency. Streaming/fresh variants handle inserts and deletes in place. The design is used or adapted by Azure (Cosmos DB, Bing), pgvectorscale (StreamingDiskANN), Milvus, JVector (Cassandra/Astra) and others. SPANN takes an IVF-like approach with centroids in memory and posting lists on disk.
 
@@ -119,7 +121,7 @@ The fundamental trade-off is a triangle: **recall ↔ query latency and throughp
 
 - `M` — maximum links per node per layer (typical 8–64; 16 is a common default). Higher M → better recall, more memory, slower build. High-dimensional or hard datasets want 32–48.
 - `efConstruction` — beam width during build (typical 100–500). Higher → better graph quality, slower build. A one-time cost, so err high.
-- `efSearch` (a.k.a. `ef`, `hnsw_ef`) — beam width at query time; must be ≥ k, typically 50–500. **This is the runtime recall dial.** Tune it per query class; many systems accept it per request.
+- `efSearch` (a.k.a. `ef`, `hnsw_ef`) — beam width at query time; must be $\ge k$, typically 50–500. **This is the runtime recall dial.** Tune it per query class; many systems accept it per request.
 
 **IVF**
 
@@ -137,9 +139,9 @@ The correct tuning procedure is empirical: take a representative sample of real 
 
 ### 7. Memory sizing (worked example)
 
-For HNSW, memory per vector ≈ `4·d` bytes (float32) + `~8·M` bytes for layer-0 graph links (2M links × 4-byte ids) + a small overhead for the upper layers.
+For HNSW, memory per vector ≈ $4 \cdot d$ bytes (float32) + ${\sim}8 \cdot M$ bytes for layer-0 graph links ($2\,M$ links × 4-byte ids) + a small overhead for the upper layers.
 
-Ten million vectors, d = 1536, M = 16:
+Ten million vectors, $d = 1536$, $M = 16$:
 
 - Raw float32: 10M × 6,144 B ≈ **61 GB**
 - Graph links: 10M × 128 B ≈ 1.3 GB
@@ -177,7 +179,7 @@ An ANN library (Faiss, hnswlib, USearch) gives you an in-memory index and a sear
 
 Almost every real query is "nearest neighbors *where* tenant = X *and* date > Y *and* category in (…)". There are three strategies:
 
-- **Post-filtering.** Run ANN for the top k′ (k′ > k), then drop results that fail the filter. Simple, but with a selective filter (say, 1% of rows match) you either return nothing or need k′ in the hundreds of thousands. Naïve implementations fail silently with short result lists.
+- **Post-filtering.** Run ANN for the top $k'$ ($k' > k$), then drop results that fail the filter. Simple, but with a selective filter (say, 1% of rows match) you either return nothing or need $k'$ in the hundreds of thousands. Naïve implementations fail silently with short result lists.
 - **Pre-filtering.** Evaluate the filter first to get the allowed id set, then search only within it. Exact and simple when the filter is selective — brute-force over the matching subset. But restricting an HNSW traversal to a sparse allowed set breaks graph connectivity (the greedy walk hits dead ends), and recall collapses.
 - **In-traversal (single-stage) filtering.** Apply the predicate during graph traversal while still expanding through non-matching nodes to preserve connectivity. This is what serious engines do now: Qdrant's "filterable HNSW" adds extra links per payload value; Weaviate implements ACORN (predicate-agnostic expansion); Milvus, Vespa and Pinecone evaluate filters inline; Lucene-based engines intersect a bitset with the HNSW walk and fall back to exact search when the filter is very selective.
 
@@ -190,7 +192,7 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 **Hybrid search** = dense ANN + sparse/lexical retrieval + fusion.
 
 - Sparse side: classic BM25 over an inverted index, or *learned sparse* models (SPLADE, Elastic's ELSER, BGE-M3's sparse head) that expand terms with learned weights — capturing synonyms while staying exact-match friendly.
-- Fusion: **Reciprocal Rank Fusion** — `score(d) = Σᵢ 1 / (k + rankᵢ(d))` with k ≈ 60 — is the robust default because it ignores incomparable score scales. Weighted score fusion (normalize each list, then α·dense + (1−α)·sparse) gives more control but needs calibration.
+- Fusion: **Reciprocal Rank Fusion** — $\operatorname{score}(d) = \sum_{i} 1 / (k + \operatorname{rank}_{i}(d))$ with $k \approx 60$ — is the robust default because it ignores incomparable score scales. Weighted score fusion (normalize each list, then $\alpha \cdot \text{dense} + (1 - \alpha) \cdot \text{sparse}$) gives more control but needs calibration.
 - Native support: Elasticsearch/OpenSearch, Vespa, Weaviate, Qdrant, Milvus, Pinecone (sparse-dense), Azure AI Search, MongoDB Atlas; pgvector via a join with `tsvector`.
 
 **Reranking.** ANN returns the top 50–200 by approximate similarity; a **cross-encoder** (Cohere Rerank, bge-reranker, Jina, Voyage, or an LLM) then scores each (query, document) pair jointly and reorders. Rerankers cost more per pair but are far more accurate — most of the quality in a RAG pipeline comes from this stage. Several databases now bundle reranking as a query step.
@@ -233,9 +235,9 @@ Dense vectors are strong on semantics and weak on exact tokens: product codes, n
 
 1. Optional query rewriting: LLM expansion or decomposition, HyDE, multi-query.
 2. Embed the query with the same model — including the query-side instruction or prefix if the model uses one.
-3. Retrieve candidates: dense ANN (plus sparse) with filters; k′ ≈ 50–200.
+3. Retrieve candidates: dense ANN (plus sparse) with filters; $k'$ ≈ 50–200.
 4. Fuse (RRF), deduplicate by source, apply business rules (recency boosts, ACL checks).
-5. Rerank to the final k ≈ 5–20.
+5. Rerank to the final $k$ ≈ 5–20.
 6. Assemble context or return results; log the query, candidates and outcomes for evaluation.
 
 A typical p95 latency budget: embedding 20–50 ms → ANN 5–30 ms → reranking 50–200 ms. The reranker, not the vector database, usually dominates latency; the vector database usually dominates cost.

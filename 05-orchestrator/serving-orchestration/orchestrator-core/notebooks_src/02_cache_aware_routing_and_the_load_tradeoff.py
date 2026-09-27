@@ -13,10 +13,10 @@
 #   and each replica's small cache has to hold everybody's prefixes.
 #
 # Production routers are knobs between the two. **Consistent hashing with bounded loads** keeps affinity but caps
-# any replica at (1 + ε) x the average load. The **llm-d EPP** filters, then adds weighted scores for prefix match,
-# queue depth and KV use. **Sticky until saturated** keeps affinity until the estimated TTFT penalty is too high.
-# You will find the knob's optimum in numbers, see what each load gate can and cannot see, and route LoRA adapters
-# the same way. Primer: §2 and §7 (and §6 for why long pauses defeat any router).
+# any replica at $(1 + \varepsilon) \times \text{the average load}$. The **llm-d EPP** filters, then adds weighted
+# scores for prefix match, queue depth and KV use. **Sticky until saturated** keeps affinity until the estimated TTFT
+# penalty is too high. You will find the knob's optimum in numbers, see what each load gate can and cannot see, and
+# route LoRA adapters the same way. Primer: §2 and §7 (and §6 for why long pauses defeat any router).
 
 # %%
 from fleetsim import (L4_8B, ConsistentHashBoundedLoad, Fleet, HashChain, PowerOfTwo, PrefixAffinityFilter,
@@ -39,8 +39,8 @@ print(f"{len(reqs)} requests; mean prompt {sum(r.prompt for r in reqs) / len(req
 # %% [markdown]
 # ## The identity a prefix cache matches on
 # vLLM hashes each **full** block of 16 tokens together with the hash of the block before it:
-# `h_i = H(h_{i-1}, tokens of block i)`. So block *i* matches only if the *entire* prefix up to it matches — the same
-# paragraph at a different position is a different block, and a partial last block is never shared.
+# $h_i = H(h_{i-1}, \text{tokens of block } i)$. So block $i$ matches only if the *entire* prefix up to it matches —
+# the same paragraph at a different position is a different block, and a partial last block is never shared.
 #
 # ## Exercise 2.1 — chain hashes
 # Write `block_hashes(tokens, block=16)` returning one hash per **full** block, chaining each block's hash to its
@@ -68,8 +68,9 @@ print("✅ block_hashes works — a hit means the whole prefix matched")
 # %% [markdown]
 # ## Exercise 2.2 — two EPP scorers
 # The llm-d Router's `prefix-cache-scorer` scores an endpoint by **matched prefix blocks / total prompt blocks**; its
-# `queue-scorer` min-max normalises the scraped waiting-queue length: **(maxQ - q) / (maxQ - minQ)**, and gives every
-# endpoint a neutral **1.0** if all queues are equal. Write both.
+# `queue-scorer` min-max normalises the scraped waiting-queue length:
+# **$(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$**, and gives every endpoint a neutral **1.0** if all queues
+# are equal. Write both.
 
 # %% exercise
 def prefix_score(request_hashes, cached):
@@ -163,8 +164,9 @@ print(table(sweep, ["prefix weight"] + cols, title="simulated: EPP weight sweep 
 #
 # ## Exercise 2.3 — bounded loads
 # Write `bounded_pick(order, loads, eps)`: `order` is the list of replicas in clockwise ring order starting at the
-# request's hash; `loads` maps replica -> requests in flight. Capacity is `ceil((1 + eps) * (total + 1) / n)` (the
-# `+ 1` counts the request being placed); return the first replica in `order` whose load is **below** capacity.
+# request's hash; `loads` maps replica -> requests in flight. Capacity is
+# $\lceil (1 + \mathrm{eps}) \times (\text{total} + 1) / n \rceil$ (the $+1$ counts the request being placed); return
+# the first replica in `order` whose load is **below** capacity.
 
 # %% exercise
 def bounded_pick(order, loads, eps):
@@ -373,16 +375,16 @@ print(f"✅ loads {without['adapter loads']} -> {with_f['adapter loads']}, p95 T
 # a replay of our traffic, watching hit rate *and* per-replica load together, because the failure is a hot spot, not
 # a low hit rate. If we take llm-d's affinity filter with a TTFT gate instead, I check that the gate's estimate —
 # prefill backlog — is what actually slows our hot replicas, and count how often it breaks. For hard guarantees,
-# bounded-load consistent hashing caps any replica at (1 + ε) x average."
+# bounded-load consistent hashing caps any replica at $(1 + \varepsilon) \times \text{average}$."
 #
 # **Drills**
 # 1. *Why not hash on the session id and be done?* It ignores load; a few long sessions on one replica queue behind
 #    each other, and nothing moves them. It is a good *score*, not a policy.
 # 2. *Hit rate fell from 0.85 to 0.55 after a deploy. Where do you look?* The prompt layout (a timestamp or user id
 #    ahead of the system prompt breaks every block after it), block size, then router weights and per-replica load.
-# 3. *What does ε = 0.25 buy you?* No replica ever holds more than ceil((1 + ε) x (in-flight + 1) / n) requests —
-#    about 1.25 x the average — whatever the key skew; the price is that overflow keys move to the next replica on
-#    the ring and miss there.
+# 3. *What does $\varepsilon = 0.25$ buy you?* No replica ever holds more than
+#    $\lceil (1 + \varepsilon) \times (\text{in-flight} + 1) / n \rceil$ requests — about 1.25 x the average —
+#    whatever the key skew; the price is that overflow keys move to the next replica on the ring and miss there.
 # 4. *Sixteen LoRA adapters, four replicas with `--max-loras 4`: what does the router add?* Adapter affinity (keep
 #    replicas that have the adapter, else ones with a free slot) — without it every replica churns through adapters
 #    and requests wait for a slot; the price is imbalance, because a hot adapter pins its replica.

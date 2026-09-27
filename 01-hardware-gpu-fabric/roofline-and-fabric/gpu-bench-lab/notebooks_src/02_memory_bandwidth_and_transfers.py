@@ -18,8 +18,8 @@
 # the caches, and report the best of several runs. One core cannot fill a memory bus — Little's law
 # says bandwidth = bytes in flight ÷ latency — so CPU bandwidth scales with threads, and a GPU keeps
 # tens of thousands of threads in flight. Fusion wins by deleting whole passes over memory. And
-# every copy costs `α + n/β`: small copies are latency-bound, which is why engines batch them and
-# keep their host buffers pinned — and *which* α you measured depends on whether the copies waited
+# every copy costs $\alpha + n/\beta$: small copies are latency-bound, which is why engines batch them and
+# keep their host buffers pinned — and *which* $\alpha$ you measured depends on whether the copies waited
 # for each other.
 
 # %%
@@ -201,9 +201,9 @@ if not be.is_gpu:
 # %% [markdown]
 # ## 5 · Fusion: delete whole passes over memory
 #
-# Apply `k` cheap elementwise ops to a large array. **Unfused**, each op is its own pass: read the
-# array, write it back, `k` times. **Fused**, the array is processed in cache-sized blocks and all
-# `k` ops run on a block while it sits in cache: one read and one write of DRAM. Same FLOPs, `k`×
+# Apply $k$ cheap elementwise ops to a large array. **Unfused**, each op is its own pass: read the
+# array, write it back, $k$ times. **Fused**, the array is processed in cache-sized blocks and all
+# $k$ ops run on a block while it sits in cache: one read and one write of DRAM. Same FLOPs, $k$×
 # fewer DRAM bytes. It is exactly what a fused GPU kernel does with registers and shared memory,
 # and what [FlashAttention](../../../../04-inference-engine/flash-attention/flash-attention-primer.md)
 # does to attention (primer §4). The experiment runs on the CPU even when a GPU is present — GPU
@@ -243,8 +243,8 @@ print(f"measured speedup {unfused.seconds() / fused.seconds():.2f}× (bound {spe
       f"unfused ran at {si(unfused.bytes_per_s(), 'B/s')} of DRAM traffic")
 
 # %% [markdown]
-# The measured speedup falls short of `k` because the fused version is not free: each block pays
-# numpy's per-call overhead `k` times, and its `k` passes still stream the block through L1/L2 —
+# The measured speedup falls short of $k$ because the fused version is not free: each block pays
+# numpy's per-call overhead $k$ times, and its $k$ passes still stream the block through L1/L2 —
 # a faster memory, but a memory. A compiled fused kernel keeps the intermediate in *registers*
 # and pays neither cost, which is why it gets much closer to the bound. The next section measures
 # both costs, and then puts a number on the gap.
@@ -264,9 +264,12 @@ print(f"smallest working set: {si(lad[0].seconds(), 's')} per call — that is m
 # %% [markdown]
 # Read the knees against the cache sizes: the rate drops where the working set outgrows a level
 # (an in-place update touches the set once per call, so a level holds a working set about its own
-# size). **Back to the fusion gap**, with the ladder's numbers: the fused chain made `k` numpy calls
+# size). **Back to the fusion gap**, with the ladder's numbers: the fused chain made $k$ numpy calls
 # per block, each on a block that sits in cache, so its time should be about
-# `blocks × k × (time of one ladder call at the block size)`.
+#
+# $$
+# \text{blocks} \times k \times (\text{time of one ladder call at the block size}).
+# $$
 
 # %%
 if not be.is_gpu:
@@ -283,25 +286,27 @@ if not be.is_gpu:
 # %% [markdown]
 # ## 7 · Every copy costs α + n/β
 #
-# Time a copy over a range of sizes and fit `t(n) = α + n/β`: α is the fixed cost of *any* copy
-# (a call, a descriptor, a launch), β the bandwidth of the slowest link on the path, and `n½ = α·β`
-# the size at which you get half of β (primer §5). On T0 we time host `memcpy` of cache-cold data;
-# the method is the same one you would use on PCIe, NVLink or a network.
+# Time a copy over a range of sizes and fit $t(n) = \alpha + n/\beta$: $\alpha$ is the fixed cost of *any* copy
+# (a call, a descriptor, a launch), $\beta$ the bandwidth of the slowest link on the path, and
+# $n_{1/2} = \alpha \cdot \beta$ the size at which you get half of $\beta$ (primer §5). On T0 we time host `memcpy` of
+# cache-cold data; the method is the same one you would use on PCIe, NVLink or a network.
 #
-# **Which α?** It depends on how the copies were timed. The sweep issues copies back to back and
+# **Which $\alpha$?** It depends on how the copies were timed. The sweep issues copies back to back and
 # synchronises only at the ends. A synchronous copy (numpy's `memcpy`, a pageable host→device copy)
-# finishes before the next starts, so its α is the latency of one copy. An asynchronous one (a
+# finishes before the next starts, so its $\alpha$ is the latency of one copy. An asynchronous one (a
 # *pinned* host→device copy, `non_blocking=True`) is queued while the previous one runs, so its
-# fixed cost overlaps the transfer and the fit's α is an **issue cost**, often several times smaller
-# than the time until one copy's bytes have arrived. On a GPU the lab therefore also runs a *latency*
-# sweep — one synchronised copy per sample — and reports both. Use the pipelined α for a stream of
-# independent copies, the latency α when each copy waits for the last (every step of a ring
-# all-reduce, notebook 03).
+# fixed cost overlaps the transfer and the fit's $\alpha$ is an **issue cost**, often several times smaller
+# than the time until one copy's bytes have arrived.
+#
+# On a GPU the lab therefore also runs a *latency* sweep — one synchronised copy per sample — and reports
+# both. Use the pipelined $\alpha$ for a stream of independent copies, the latency $\alpha$ when each copy waits
+# for the last (every step of a ring all-reduce, notebook 03).
 #
 # ## Exercise 2.5 — fit α and β
 #
 # Write `my_fit(sizes, times)` returning `(alpha, beta)` by ordinary least squares on
-# `t = α + s·n` (slope `s = 1/β`). No libraries needed: slope = cov(n, t) / var(n).
+# $t = \alpha + s \cdot n$ (slope $s = 1/\beta$). No libraries needed:
+# $\text{slope} = \operatorname{cov}(n, t) / \operatorname{var}(n)$.
 
 # %% exercise
 def my_fit(sizes, times):
@@ -346,23 +351,25 @@ for key, series in transfer.series(copies).items():
 # %% [markdown]
 # Three things to read here. **Your fit vs the library's.** Plain least squares minimises absolute
 # error, so the largest copies — thousands of times longer than the smallest — decide everything
-# and α comes out as noise (sometimes negative). The library weights each point by `1/t`, so the
-# small sizes that pin α count as much as the large ones that pin β. **β vs STREAM copy.** A transfer
-# counts each delivered byte once; STREAM's copy counts the read and the write. So a memcpy β of
-# 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s — compare the "STREAM-convention
-# equivalent" with the one-thread copy row of section 2, not β itself. **Model vs measured.** Each
-# copy reads bytes that are not in cache (the op cycles through a pool 4× the last-level cache), like
-# a real transfer. α-β assumes **one** bottleneck, and a CPU copy has several regimes: glibc's
-# `memcpy` switches to non-temporal stores once a copy is a sizeable fraction of the last-level
-# cache, which skips the write-allocate read of section 4 — so big copies can run *faster* than the
-# fit. Over PCIe the link is the bottleneck at every size above a few KB, and the fit is much tighter.
+# and $\alpha$ comes out as noise (sometimes negative). The library weights each point by $1/t$, so the
+# small sizes that pin $\alpha$ count as much as the large ones that pin $\beta$.
+#
+# **$\beta$ vs STREAM copy.** A transfer counts each delivered byte once; STREAM's copy counts the read and
+# the write. So a memcpy $\beta$ of 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s — compare
+# the "STREAM-convention equivalent" with the one-thread copy row of section 2, not $\beta$ itself.
+#
+# **Model vs measured.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the
+# last-level cache), like a real transfer. α-β assumes **one** bottleneck, and a CPU copy has several
+# regimes: glibc's `memcpy` switches to non-temporal stores once a copy is a sizeable fraction of the
+# last-level cache, which skips the write-allocate read of section 4 — so big copies can run *faster* than
+# the fit. Over PCIe the link is the bottleneck at every size above a few KB, and the fit is much tighter.
 #
 # ## Exercise 2.6 — predict a copy, then measure it
 #
-# How big must a copy be to get a fraction `f` of the link? Solve `n / t(n) = f·β` for `n` with
-# `t(n) = α + n/β` and write `size_for_fraction(alpha, beta, f)`. (At `f = ½` it is `n½`.) The check
-# then predicts, from *your* fit, the size that reaches 80% of β, measures a copy of that size, and
-# compares.
+# How big must a copy be to get a fraction $f$ of the link? Solve $n/t(n) = f \cdot \beta$ for $n$ with
+# $t(n) = \alpha + n/\beta$ and write `size_for_fraction(alpha, beta, f)`. (At $f = \tfrac{1}{2}$ it is $n_{1/2}$.)
+# The check then predicts, from *your* fit, the size that reaches 80% of $\beta$, measures a copy of that
+# size, and compares.
 
 # %% exercise
 def size_for_fraction(alpha, beta, f):
@@ -391,9 +398,9 @@ print("✅ the fit predicts a copy it never saw — within the noise of a shared
 # A GPU's copy engine DMAs from host memory it can address directly: **pinned** (page-locked)
 # memory. From ordinary **pageable** memory the driver first copies each chunk into a pinned
 # bounce buffer, so the copy is slower and blocks the host — it cannot overlap with compute. The
-# link's theoretical rate per direction is `GT/s × lanes × encoding ÷ 8` (`specs.pcie_gbs`): Gen3
-# runs 8 GT/s per lane, Gen4 16, Gen5 32, all with 128b/130b encoding; packet headers and flow
-# control take another 10–20%, so a good pinned copy lands at 80–90% of it.
+# link's theoretical rate per direction is $\text{GT/s} \times \text{lanes} \times \text{encoding} \div 8$
+# (`specs.pcie_gbs`): Gen3 runs 8 GT/s per lane, Gen4 16, Gen5 32, all with 128b/130b encoding; packet
+# headers and flow control take another 10–20%, so a good pinned copy lands at 80–90% of it.
 
 # %%
 print("PCIe per direction (theoretical, not a measurement) and 16 GB of weights at 85% of it:")
@@ -421,20 +428,21 @@ else:
 # of N — and we say when an implementation moves more than STREAM counts. On a CPU one thread
 # cannot fill the bus (Little's law: bandwidth = bytes in flight ÷ latency), so bandwidth scales
 # with cores; a GPU keeps megabytes in flight across its SMs. Fusion is the biggest software lever
-# on a memory-bound block: it keeps the FLOPs and deletes passes. For copies we fit `α + n/β` and
-# design so transfers are large, batched, pinned and asynchronous; below `n½` you are paying
-# latency, not bandwidth — and we say which α we measured: back-to-back async copies give an issue
-# cost, a synchronised copy gives the latency a dependent step pays."
+# on a memory-bound block: it keeps the FLOPs and deletes passes.
+#
+# "For copies we fit $\alpha + n/\beta$ and design so transfers are large, batched, pinned and asynchronous;
+# below $n_{1/2}$ you are paying latency, not bandwidth — and we say which $\alpha$ we measured: back-to-back
+# async copies give an issue cost, a synchronised copy gives the latency a dependent step pays."
 #
 # **Drills**
 #
 # 1. *Our 4 KB host→device copies of token IDs run at a few hundred MB/s on a 32 GB/s link. Bug?* —
-#    No: they are α-bound. If each copy is waited for, a latency of ~10 µs (illustrative) caps a 4 KB
-#    copy at ≤ 0.4 GB/s, and `n½` is hundreds of KB. Batch them, keep the buffer pinned, issue them
+#    No: they are $\alpha$-bound. If each copy is waited for, a latency of ~10 µs (illustrative) caps a 4 KB
+#    copy at ≤ 0.4 GB/s, and $n_{1/2}$ is hundreds of KB. Batch them, keep the buffer pinned, issue them
 #    asynchronously — then consecutive copies overlap their fixed costs and only the issue cost remains.
 # 2. *Why does fusing bias + GELU + residual speed up a memory-bound layer?* — Each unfused op
 #    reads and writes the activation from HBM; fused, it is read once and written once. Time
-#    follows bytes, so `k` passes become one.
+#    follows bytes, so $k$ passes become one.
 # 3. *A vendor's STREAM number is 20% above ours on the same CPU. Who is wrong?* — Possibly
 #    nobody: check thread count and pinning (and NUMA placement on a two-socket box), array size vs
 #    the *total* last-level cache, and whether their build uses non-temporal stores (no

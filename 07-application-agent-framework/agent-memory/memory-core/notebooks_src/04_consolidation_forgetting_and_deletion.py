@@ -12,11 +12,15 @@
 # highest-precedence source wins (human > user > tool > inferred), newer supersedes older **and the older fact is
 # kept, closed** (`valid_to`, bi-temporal, as Graphiti closes an edge with `invalid_at`), and a weaker contradiction
 # is flagged for review. "Newer" means valid time, not arrival order, so a backfilled window never lets an old value
-# win. It runs as a durable job: a deterministic run id, a lease renewed before every slot and checked before every
-# write, a checkpoint per slot, ids that make a re-applied slot overwrite rather than duplicate. **Forgetting** is four mechanisms — decay, TTL, the per-turn
-# budget, a cap per scope — and none of them is **deletion**. Deleting a fact means finding every copy: the record,
-# its vector and full-text postings, facts derived from it, anything that quotes it, cached prompt prefixes, logs,
-# eval sets and backups. You prove a deletion by searching for the data afterwards.
+# win.
+#
+# It runs as a durable job: a deterministic run id, a lease renewed before every slot and checked before every write,
+# a checkpoint per slot, ids that make a re-applied slot overwrite rather than duplicate.
+#
+# **Forgetting** is four mechanisms — decay, TTL, the per-turn budget, a cap per scope — and none of them is
+# **deletion**. Deleting a fact means finding every copy: the record, its vector and full-text postings, facts derived
+# from it, anything that quotes it, cached prompt prefixes, logs, eval sets and backups. You prove a deletion by
+# searching for the data afterwards.
 #
 # Primer: §7 *Consolidation, forgetting and deletion* (`../PRIMER.md`).
 
@@ -325,8 +329,13 @@ print("✅ a lease expires - that lets a dead worker's job be picked up; the fen
 
 # %% [markdown]
 # ## Exercise 4.3 — predict the retention
-# `retention = importance / 10 × 0.5 ** (days since last use / 30)`. Predict, to three decimals, the retention of an
-# importance-8 memory last used 45 days ago, and how many days an importance-4 memory takes to fall below 0.1.
+#
+# $$
+# \text{retention} = \frac{\text{importance}}{10} \times 0.5^{\text{days since last use} / 30}.
+# $$
+#
+# Predict, to three decimals, the retention of an importance-8 memory last used 45 days ago, and how many days an
+# importance-4 memory takes to fall below 0.1.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -389,15 +398,18 @@ print(f"✅ the naive delete left {sum(left.values())} copies on {sum(v > 0 for 
 # **The two-minute version.** "We write raw episodes cheaply on the hot path and consolidate them per user and window
 # on a schedule. The job is rules, not a summary: the highest-precedence source wins, newer supersedes older — in
 # valid time, so a backfill never undoes a later change — and the older fact is kept with a `valid_to`, and weaker
-# contradictions are flagged for review — tool output is never read because it is quarantined on write. It runs as a
-# durable job: a deterministic run id per window so a double fire is one run, a lease so a dead worker's run is picked
-# up after the TTL, a heartbeat and a fence so a slow worker that lost its lease stops, a checkpoint per slot, ids
-# that make a re-applied slot overwrite. At a 60-token budget consolidated facts give 91% recall against 18% for raw episodes. Forgetting is
-# decay, TTL, the per-turn budget and a cap per scope — and deletion is separate: a deletion key and provenance let us
-# delete the record, its vector and full-text postings, everything derived from it and everything quoting it on word
-# boundaries, list for review what derives from a deleted record without quoting it, rotate the tenant's cache salt,
-# redact logs and drop eval cases; backups and unreachable cache blocks age out on a stated schedule, and we test
-# deletion by searching every surface for the data."
+# contradictions are flagged for review — tool output is never read because it is quarantined on write.
+#
+# "It runs as a durable job: a deterministic run id per window so a double fire is one run, a lease so a dead worker's
+# run is picked up after the TTL, a heartbeat and a fence so a slow worker that lost its lease stops, a checkpoint per
+# slot, ids that make a re-applied slot overwrite. At a 60-token budget consolidated facts give 91% recall against 18%
+# for raw episodes.
+#
+# "Forgetting is decay, TTL, the per-turn budget and a cap per scope — and deletion is separate: a deletion key and
+# provenance let us delete the record, its vector and full-text postings, everything derived from it and everything
+# quoting it on word boundaries, list for review what derives from a deleted record without quoting it, rotate the
+# tenant's cache salt, redact logs and drop eval cases; backups and unreachable cache blocks age out on a stated
+# schedule, and we test deletion by searching every surface for the data."
 #
 # **Drill questions**
 # 1. *A user asked to forget their address; a week later the agent quoted it. Where was it?* — In a copy the deletion

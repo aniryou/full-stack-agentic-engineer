@@ -1,5 +1,6 @@
 """Distilling reasoning traces on the ThinkTask-style toy (primer §5)."""
 import numpy as np
+import pytest
 
 from distillcore import ThinkToy, reasoning as R
 
@@ -24,7 +25,7 @@ def test_the_untrained_student_answers_at_once_half_the_time():
 def test_the_rl_teacher_and_a_student_distilled_from_its_traces(think):
     task, teacher = think
     t = teacher.expected(task)
-    assert round(t["accuracy"], 3) == 0.893 and round(t["length"], 1) == 19.9
+    assert t["accuracy"] == pytest.approx(0.893, abs=0.001) and t["length"] == pytest.approx(19.9, abs=0.1)   # trained
     L, ok = R.traces(teacher, task, np.random.default_rng(1), 1000)
     s = R.distil(L, ok).expected(task)
     assert abs(s["accuracy"] - t["accuracy"]) < 0.01 and abs(s["length"] - t["length"]) < 0.5
@@ -53,7 +54,8 @@ def test_knowledge_does_not_transfer(think):
     L, ok = R.traces(teacher, task, np.random.default_rng(1), 1000)
     s = R.distil(L, ok)
     weak = s.expected(task, q=0.05)
-    assert abs(weak["length"] - s.expected(task)["length"]) < 1e-9 and round(weak["accuracy"], 3) == 0.706
+    assert abs(weak["length"] - s.expected(task)["length"]) < 1e-9
+    assert weak["accuracy"] == pytest.approx(0.706, abs=0.001)
     assert task.optimal_length(0.01, q=0.05) > task.optimal_length(0.01)   # a weaker solver should think longer
 
 

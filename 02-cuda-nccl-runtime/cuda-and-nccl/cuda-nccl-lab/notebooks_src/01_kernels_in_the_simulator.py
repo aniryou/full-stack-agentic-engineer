@@ -134,7 +134,7 @@ print("✅ 64 threads covered 1,000 elements")
 #
 # `gpurt.kernels.reduction` sums a vector. Each block loads its slice into **shared memory**, then halves
 # the number of active threads at every step: `buf[tid] += buf[tid + stride]`. Between steps,
-# `cuda.syncthreads()` guarantees every write of step *k* is visible before any read of step *k+1*.
+# `cuda.syncthreads()` guarantees every write of step $k$ is visible before any read of step $k+1$.
 # Blocks cannot synchronise with each other, so the per-block partial sums are combined by a second
 # launch (deterministic) or by `cuda.atomic.add` (one launch, order-dependent rounding).
 
@@ -198,7 +198,7 @@ print(f"✅ {partials.size} blocks, each reduced its slice in log2({T}) = {int(n
 # ## Watching the memory system: coalescing, measured from the kernel itself
 #
 # `gpurt.kernels.trace` hands a kernel arrays that record every access with the simulated thread that
-# made it, then groups accesses into **warp requests** (same block, same warp of 32 lanes, same k-th
+# made it, then groups accesses into **warp requests** (same block, same warp of 32 lanes, same $k$-th
 # access) and counts the distinct 32-byte **sectors** each request touches. The transpose is the classic
 # case: the naive kernel reads rows (coalesced) and writes columns (strided).
 
@@ -249,7 +249,7 @@ print("✅ stride 4 B -> 4 sectors, stride 8 B -> 8, stride of a row -> 32 (what
 #
 # Shared memory has 32 banks of 4-byte words; word `w` lives in bank `w % 32`. The tiled transpose
 # reads a tile *column*: lane `l` reads word `l * width + c` of a tile `width` words wide. If two lanes hit
-# different words of one bank, the accesses serialise (an n-way conflict). `bank_conflict_ways` computes
+# different words of one bank, the accesses serialise (an $n$-way conflict). `bank_conflict_ways` computes
 # that degree. Return the list of widths in `range(32, 41)` that are conflict-free for a column read —
 # and notice the pattern.
 
@@ -267,8 +267,8 @@ print("✅ any odd width works: it is coprime with 32 banks. TILE + 1 is the che
 # %% [markdown]
 # ## Reuse: tiling a matrix multiply
 #
-# The naive GEMM thread for `C[row, col]` loads a full row of A and column of B from global memory. The
-# tiled kernel loads one element of A and one of B per `tile`-wide step into shared memory, then every
+# The naive GEMM thread for `C[row, col]` loads a full row of $A$ and column of $B$ from global memory. The
+# tiled kernel loads one element of $A$ and one of $B$ per `tile`-wide step into shared memory, then every
 # thread of the block reads them `tile` times on-chip. Count it from the kernels:
 
 # %%
@@ -291,8 +291,8 @@ for name, kernel, tile in (("naive", mm.matmul_naive, 1), ("tiled 8", mm.make_ma
 #
 # Write `loads_and_intensity(M, N, K, tile)` returning `(global_loads, flops_per_byte)`: the element
 # loads the tiled kernel issues (the formula the tracer just confirmed) and the arithmetic intensity
-# `2·M·N·K / (loads × 4 bytes)`, as if no cache helped. Compare with a T4's balance point
-# (`traffic.machine_balance`): ~25 FLOP/byte.
+# $2 \cdot M \cdot N \cdot K / (\text{loads} \times 4\ \text{bytes})$, as if no cache helped. Compare with a
+# T4's balance point (`traffic.machine_balance`): ~25 FLOP/byte.
 
 # %% exercise
 def loads_and_intensity(M: int, N: int, K: int, tile: int) -> tuple[int, float]:

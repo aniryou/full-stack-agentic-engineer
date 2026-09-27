@@ -59,7 +59,9 @@ You have a single 80 GB H100 and you intend to keep 20% of memory as headroom. F
 A model has 60 layers, 8 KV heads, head dimension 128, KV cache in FP16.
 
 (a) Bytes of KV cache per token?
+
 (b) For a single request with an 8,000-token context, how much KV cache?
+
 (c) If you switch the KV cache to FP8, what changes?
 
 ### B3 — Concurrency budget
@@ -67,8 +69,11 @@ A model has 60 layers, 8 KV heads, head dimension 128, KV cache in FP16.
 You are serving a 70B model at FP8 on a single H200 (141 GB). KV cache costs 320 KiB per token. Reserve 15% of total memory for activations, buffers and fragmentation.
 
 (a) How much memory remains for KV cache?
+
 (b) How many total tokens of KV cache does that buy?
+
 (c) If the average request holds 2,000 tokens of context, roughly how many concurrent requests can you serve?
+
 (d) What happens to (c) if you enable FP8 KV cache?
 
 ### B4 — The decode wall
@@ -76,14 +81,19 @@ You are serving a 70B model at FP8 on a single H200 (141 GB). KV cache costs 320
 A 70B model at FP8 needs 70 GB of weights read from HBM for every single decode step.
 
 (a) On an H100 (3.35 TB/s HBM), what is the theoretical floor on time per decode step? Convert to tokens/sec at batch size 1.
+
 (b) Same calculation for Rubin (22 TB/s).
+
 (c) Back on the H100, at batch size 64, what is the aggregate token throughput? What is the per-user token rate?
+
 (d) State in one sentence what (c) proves about batching.
 
 ### B5 — The interconnect cliff
 
 (a) A Blackwell GPU has 1.8 TB/s of NVLink bandwidth, the marketed bidirectional total. A node's scale-out NIC runs at 800 Gb/s, quoted per direction. Express both links per direction in GB/s, then compute the ratio.
+
 (b) Rubin raises NVLink to 3.6 TB/s (again a bidirectional total). If the NIC stayed at 800 Gb/s, what would happen to the ratio?
+
 (c) What does the trend in (b) imply for how you should partition models over time?
 
 ### B6 — Is disaggregation feasible?
@@ -91,8 +101,11 @@ A 70B model at FP8 needs 70 GB of weights read from HBM for every single decode 
 A request produces 1.34 GB of KV cache during prefill. Your TTFT budget is 500 ms and prefill itself consumes 200 ms.
 
 (a) How long may the KV transfer take?
+
 (b) Over a 400 Gb/s RDMA link, how long does the transfer actually take?
+
 (c) Over 800 Gb/s?
+
 (d) Is multi-node disaggregation viable for this workload? What would change your answer?
 
 ### B7 — Prefix caching ROI
@@ -100,8 +113,11 @@ A request produces 1.34 GB of KV cache during prefill. Your TTFT budget is 500 m
 An agentic application serves 10,000 requests per day. Every request carries the same 2,000-token system prompt, followed by an average of 500 tokens of user-specific content.
 
 (a) Total prefill tokens per day with no prefix caching.
+
 (b) Total prefill tokens per day with perfect prefix caching.
+
 (c) Percentage reduction in prefill work.
+
 (d) Why is this optimisation especially valuable for agent workloads specifically?
 
 ### B8 — Rack-scale capacity
@@ -109,7 +125,9 @@ An agentic application serves 10,000 requests per day. Every request carries the
 An NVL72 rack holds 72 GPUs at 288 GB each, giving roughly 20.7 TB of HBM in one NVLink domain.
 
 (a) Ignoring all overhead, how many parameters could you hold at FP4?
+
 (b) Reserving 30% for KV cache and overhead, what is the realistic figure?
+
 (c) A 671B MoE model at FP4 needs roughly 335 GB of weights. What fraction of one rack is that, and what does the remainder buy you?
 
 ---
@@ -183,42 +201,67 @@ Two to four sentences each. State your reasoning, not just your conclusion.
 80 GB with 20% headroom leaves 64 GB usable. BF16 consumes all of it, leaving nothing for KV cache, so the model "fits" but cannot serve a single request. This is exactly the trap the primer warns about in §3.4.
 
 **B2.**
+
 (a) 60 × 8 × 128 × 2 × 2 = **245,760 bytes = 240 KiB per token**
+
 (b) 8,000 × 245,760 ≈ **1.97 GB (1.83 GiB)** for one request
+
 (c) Halves to 120 KiB/token, so about 0.98 GB — doubling either your context length or your concurrency for the same memory.
 
 **B3.**
+
 (a) 15% of 141 GB = 21.2 GB reserve. 141 − 70 − 21.2 = **≈ 50 GB for KV cache**
+
 (b) 50 GB ÷ 320 KiB ≈ **152,000 tokens**
+
 (c) 152,000 ÷ 2,000 ≈ **76 concurrent requests**
+
 (d) FP8 KV halves per-token cost, so roughly **152 concurrent requests**. Note this is a bigger concurrency win than most hardware upgrades, for the price of a config flag.
 
 **B4.**
+
 (a) 70 GB ÷ 3.35 TB/s = **20.9 ms per token → ≈ 48 tokens/sec** at batch 1.
+
 (b) 70 GB ÷ 22 TB/s = **3.2 ms per token → ≈ 314 tokens/sec**. The 6.6× bandwidth improvement translates almost directly into decode speed, which is the whole point of the HBM4 jump.
+
 (c) The 20.9 ms step is unchanged, but produces 64 tokens: **≈ 3,060 tokens/sec aggregate**, still **≈ 48 tokens/sec per user**.
+
 (d) Batching buys throughput essentially for free in decode, because the dominant cost — reading the weights — is paid once regardless of batch size.
 
 **B5.**
+
 (a) NIC: 800 Gb/s ÷ 8 = 100 GB/s per direction. NVLink: 1.8 TB/s is both directions added, so 900 GB/s per direction. Ratio = 900 ÷ 100 = **9×**. Dividing the 1,800 total by the NIC's one-way 100 gives 18×, which double-counts NVLink: compare like with like. The Hopper pair gives the same answer, 450 GB/s per direction of NVLink 4 over a 400 Gb/s (50 GB/s) NIC: **9×** ([roofline primer §1 and §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), `roofline.fabric.LINKS`).
+
 (b) 1,800 GB/s per direction ÷ 100 = **18×**: the cliff would double. Whether it does depends on the NIC keeping pace; the Rubin generation's NICs are announced at 1.6 Tb/s, 200 GB/s per direction, which would hold the per-GPU ratio near 9× (verify, 2026-09).
+
 (c) The per-GPU ratio has sat near 9× for two generations because NICs doubled with NVLink, while the scale-up domain grew from 8 GPUs to 72 and beyond. So the penalty for letting a tightly coupled collective cross the domain boundary is not shrinking, and more of a model's parallelism can now stay inside the domain. Partition to keep tensor parallelism inside the scale-up domain, and when choosing a platform weight the size of the NVLink domain at least as heavily as per-GPU FLOPs.
 
 **B6.**
+
 (a) 500 − 200 = **300 ms**
+
 (b) 1.34 GB ÷ 50 GB/s = **≈ 27 ms**
+
 (c) 1.34 GB ÷ 100 GB/s = **≈ 13 ms**
+
 (d) Yes, comfortably — the transfer uses under 10% of the budget. What would change the answer: much longer contexts (KV scales linearly, so a 64K-token prompt is 16× this), a tighter TTFT SLO, contended fabric, or a transfer path that falls back off RDMA and goes through the CPU.
 
 **B7.**
+
 (a) 10,000 × 2,500 = **25 million prefill tokens**
+
 (b) 2,000 once, plus 10,000 × 500 = **≈ 5 million tokens**
+
 (c) **80% reduction**
+
 (d) Agent workloads have long, stable system prompts — tool definitions, instructions, retrieved context — that repeat across enormous numbers of requests, and often across many turns of the same session. The shared prefix is a large fraction of total input, so the cache hit rate is high and the saving is close to the theoretical maximum. Ordinary chat workloads share far less.
 
 **B8.**
+
 (a) 20.7 TB ÷ 0.5 bytes/param = **≈ 41 trillion parameters**
+
 (b) 70% of that ≈ **29 trillion parameters**
+
 (c) 335 GB is about **1.6% of the rack's memory**. The remainder is not spare capacity to be embarrassed about — it is what buys you very large KV cache pools, meaning high concurrency and long context, which is where the economics of frontier-model serving actually come from.
 
 ---

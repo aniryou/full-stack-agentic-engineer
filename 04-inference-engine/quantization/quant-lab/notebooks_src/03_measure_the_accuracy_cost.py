@@ -73,7 +73,7 @@ for task in tm.TASKS:
 #
 # ## Exercise 3.1 — the mean KL between two models
 #
-# Write `mean_kl(ref_logits, test_logits)`: the mean over positions of `KL(p_ref || p_test)` in nats,
+# Write `mean_kl(ref_logits, test_logits)`: the mean over positions of $\mathrm{KL}(p_{\mathrm{ref}} \,\|\, p_{\mathrm{test}})$ in nats,
 # with a numerically safe log-softmax (subtract the max first).
 
 # %% exercise
@@ -120,7 +120,7 @@ for task in tm.TASKS:
 # ## Exercise 3.2 — how many questions does it take to see a drop?
 #
 # An unpaired comparison of two accuracies near `p` has a standard error of about
-# `sqrt(2 p (1 - p) / n)`. Write `n_needed(p, delta, z=2)`: the number of questions per model at
+# $\sqrt{2p(1-p)/n}$. Write `n_needed(p, delta, z=2)`: the number of questions per model at
 # which a drop of `delta` is `z` standard errors. Then use it on the lm-eval sample below.
 
 # %% exercise
@@ -146,7 +146,7 @@ print(f"✅ a 2.8-point drop at 30% needs ~{need:,} questions per model to see u
 #
 # Run both models on the same questions and count only the questions they disagree on: `b` = the
 # reference got it right and the quantized model wrong, `c` = the reverse. Under "no difference" each
-# disagreement is a fair coin, so the two-sided p-value is `2 x P(Binomial(b + c, 1/2) <= min(b, c))`,
+# disagreement is a fair coin, so the two-sided p-value is $2 \times P(\operatorname{Binomial}(b + c, 1/2) \le \min(b, c))$,
 # capped at 1. Write `mcnemar(b, c)`.
 
 # %% exercise
@@ -226,7 +226,7 @@ C.clean(tmp)
 # ## Worked example: long generations compound small damage
 #
 # If each generated token independently diverges with probability `e`, a generation of `L` tokens
-# stays identical with probability `(1 - e)^L`. The tiny model's answers are 4-6 tokens; a reasoning
+# stays identical with probability $(1 - e)^L$. The tiny model's answers are 4-6 tokens; a reasoning
 # trace is thousands. Per-token argmax disagreement measured above is the `e` to plug in.
 
 # %%
@@ -269,7 +269,9 @@ else:
 # 250 gsm8k questions is inside the noise, and seeing it unpaired would take more questions than
 # gsm8k has — so we compare paired flips. KL is sensitive long before accuracy moves; it tells us how
 # much headroom we have for inputs our eval does not cover, and it matters most for long generations,
-# where small per-token divergences compound. On the lab's model, round-to-nearest INT4 fails that
+# where small per-token divergences compound.
+#
+# "On the lab's model, round-to-nearest INT4 fails that
 # budget, GPTQ at the same 4.125 bits passes it, and FP4 activations fail badly — though that toy is
 # saturated and easy to compensate, so on our model we expect INT4 GPTQ to cost more than FP8, and we
 # measure it."
@@ -279,9 +281,9 @@ else:
 # task evals that matter (and the long-generation ones for a reasoning model), compare paired, check
 # the capabilities quantization tends to break first (math, code, rare languages, tool-call formats).
 #
-# **Drill 2.** *Accuracy is identical; why do you still care about KL?* — Identical accuracy on N questions
+# **Drill 2.** *Accuracy is identical; why do you still care about KL?* — Identical accuracy on $N$ questions
 # bounds the damage only on that distribution; KL measures the shift everywhere, and large KL predicts
 # failures on inputs the eval did not contain.
 #
 # **Drill 3.** *lm-eval says 27.2 vs 30.0 on gsm8k with ±2.9 stderr each. Regression?* — Unpaired, it is
-# within noise (z ≈ -0.7). Re-run with `--log_samples` and count paired flips; or run the full split.
+# within noise ($z \approx -0.7$). Re-run with `--log_samples` and count paired flips; or run the full split.

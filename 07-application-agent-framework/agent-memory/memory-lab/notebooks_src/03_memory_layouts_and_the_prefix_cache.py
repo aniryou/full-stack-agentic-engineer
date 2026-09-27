@@ -163,10 +163,11 @@ print(f"✅ the prompts part at token {i} (inside the memory block, which starts
 # %% [markdown]
 # ## Exercise 3.3 — what a miss costs in time
 #
-# Write `ttft_ms(prompt_tokens, cached_tokens, gpu, llm)`: the prefill step of one request on an idle
-# engine, `step_cost(GPUS[gpu], LLMS[llm], [(cached, prompt - cached)])["t"]` in milliseconds (at least one
-# new token). This is `minengine.perf.step_cost`'s roofline — max(bytes / (BW·0.8), FLOPs / (peak·0.6)) +
-# 2 ms — re-implemented in `cachebench`; the check pins it to the numbers the serving engine's model gives.
+# Write `ttft_ms(prompt_tokens, cached_tokens, gpu, llm)`: the prefill step of one request on an idle engine,
+# `step_cost(GPUS[gpu], LLMS[llm], [(cached, prompt - cached)])["t"]` in milliseconds (at least one new token).
+# This is `minengine.perf.step_cost`'s roofline —
+# $\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$
+# — re-implemented in `cachebench`; the check pins it to the numbers the serving engine's model gives.
 
 # %% exercise
 def ttft_ms(prompt_tokens, cached_tokens, gpu="L4", llm="qwen2.5-1.5b"):
@@ -279,15 +280,16 @@ if fake:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "Memory is re-retrieved every turn, so it is the most volatile part of the prompt, and
-# the prefix cache only reuses from token zero. If we inject it after the system prompt, every history block
-# after it misses and each turn prefills the whole conversation again: in this notebook's simulated session a
-# 38% hit rate against 67% for the same memory at the tail of the prompt (77% when the block follows the
-# user's text), and about twice the prefill time on our own engine (a roofline estimate; the T1 run measures the hit
-# rates). On a hosted API these prompts are below the provider's caching minimum, so the bill barely moves until
-# the prompt clears it — the latency and the GPU time are the cost. So: stable
-# things first — system prompt, tools, a pinned per-session profile sorted so it is byte-identical — and
-# per-turn memory at the tail, request-scoped. We watch `cached_tokens` per request and
+# **Two minutes.** "Memory is re-retrieved every turn, so it is the most volatile part of the prompt, and the
+# prefix cache only reuses from token zero. If we inject it after the system prompt, every history block after it
+# misses and each turn prefills the whole conversation again: in this notebook's simulated session a 38% hit rate
+# against 67% for the same memory at the tail of the prompt (77% when the block follows the user's text), and
+# about twice the prefill time on our own engine (a roofline estimate; the T1 run measures the hit rates). On a
+# hosted API these prompts are below the provider's caching minimum, so the bill barely moves until the prompt
+# clears it — the latency and the GPU time are the cost.
+#
+# "So: stable things first — system prompt, tools, a pinned per-session profile sorted so it is byte-identical —
+# and per-turn memory at the tail, request-scoped. We watch `cached_tokens` per request and
 # `prefix_cache_hits / queries` per replica, and we salt the cache per tenant so one tenant's prefix is never
 # another's hit."
 #

@@ -13,8 +13,8 @@
 #   loads need 4 sectors, and every byte fetched gets used. A column walk down a row-major
 #   matrix needs 32 sectors, and only 12.5% of the bytes get used.
 # * **Bank conflicts.** Shared memory has 32 banks, each 4 bytes wide. Lanes that hit
-#   *different* words in the *same* bank are serialized. A word stride of s gives a
-#   gcd(s, 32)-way conflict, so padding a 32x32 tile to 33 columns fixes the transpose.
+#   *different* words in the *same* bank are serialized. A word stride of $s$ gives a
+#   $\gcd(s, 32)$-way conflict, so padding a 32x32 tile to 33 columns fixes the transpose.
 # * **Divergence.** When lanes of one warp take different branches, the warp runs every path,
 #   one after another.
 #
@@ -79,7 +79,7 @@ print("tile[32][33] column read:", bank_conflicts(col(33)))
 # %% [markdown]
 # With a pitch of 32 floats every element of a column sits in the same bank, so there are 32
 # distinct words in bank 0 and 32 serialized passes. Padding each row to 33 floats shifts row
-# `r` by `r` banks, so a column touches all 32 banks exactly once. That one extra column per row
+# $r$ by $r$ banks, so a column touches all 32 banks exactly once. That one extra column per row
 # is the whole trick.
 
 # %% [markdown]
@@ -163,8 +163,8 @@ print("✅ stride s in words gives a gcd(s, 32)-way conflict; stride 0 is a broa
 # ## Exercise 1.4: pick the padding
 #
 # A block reads a `float` tile column-wise, `tile[lane][c]`, with a row pitch of `pitch`
-# floats. Find the **smallest pitch >= 32** that makes a column read conflict-free, and the
-# smallest pitch >= 64 for a 64-column tile. Use `bank_conflicts(np.arange(32) * pitch * 4)`
+# floats. Find the **smallest $\text{pitch} \ge 32$** that makes a column read conflict-free, and
+# the smallest $\text{pitch} \ge 64$ for a 64-column tile. Use `bank_conflicts(np.arange(32) * pitch * 4)`
 # to search.
 
 # %% exercise
@@ -189,9 +189,10 @@ print(f"✅ pitch {pitch_32} and {pitch_64}: any odd pitch works, because gcd(od
 #
 # A kernel gives each thread one sequence and loops over its tokens. A warp keeps issuing until
 # its *longest* sequence is done, while shorter lanes idle. Write `simt_efficiency(lengths)`:
-# the useful lane-iterations (the sum of lengths) divided by `32 x sum over warps of the warp's
-# max length`. Pad a partial last warp with zero-length lanes. Then compare unsorted lengths with
-# lengths **sorted** before they are assigned to threads.
+# the useful lane-iterations (the sum of lengths) divided by
+# $32 \times \sum_{\text{warps}} (\text{the warp's max length})$. Pad a partial last warp with
+# zero-length lanes. Then compare unsorted lengths with lengths **sorted** before they are
+# assigned to threads.
 
 # %% exercise
 def simt_efficiency(lengths):
@@ -239,7 +240,7 @@ print("branch on (tid//32) % 2:", f"{divergence((tid // 32) % 2, {0: 10, 1: 10})
 #    transpose the data once) or stage through a shared-memory tile so that lanes read contiguous
 #    bytes.
 # 2. *Why a 33-float pitch and not 32?* With 32, every row starts in bank 0, so a column is a
-#    32-way conflict. With 33, row `r` starts in bank `r % 32`, so a column spans all banks.
+#    32-way conflict. With 33, row $r$ starts in bank $r \bmod 32$, so a column spans all banks.
 #    Any odd pitch works.
 # 3. *Is `if (threadIdx.x < 16)` expensive?* Only inside warps that straddle the boundary: warp
 #    0 runs both paths and every other warp runs one. Divergence is a per-warp cost.

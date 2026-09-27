@@ -6,16 +6,22 @@
 # Kaggle 2×T4 box over PCIe) and layer 02's `cuda-nccl-lab` (nccl-tests, busbw).
 #
 # ## The one-minute version
-# Moving `n` bytes costs `t = α + n/β`: a fixed latency plus a bandwidth term. A ring all-reduce
-# over `p` ranks costs `2(p−1)α + 2(p−1)/p · n/β`. Two regimes follow. A decode step's
-# tensor-parallel all-reduces are tiny (one token × d_model × 2 bytes = 16 KiB for a 70B model),
-# so they are **latency-bound**: what matters is how many collectives a step makes and the
-# algorithm's α-count. A prefill step's all-reduces are tens of MB, so they are
-# **bandwidth-bound**: what matters is β, and the ring's bandwidth term (~2n/β) does not shrink as
-# the TP degree grows while each GPU's compute does. Past the node, β per GPU falls ~9× from NVLink
-# to a 400 Gb/s NIC. That is the quantitative reason tensor parallelism stays inside the NVLink
-# domain, why clusters give every GPU its own NIC (rails) and run collectives hierarchically, and
-# what `nvidia-smi topo -m` is telling you. Primer: `../PRIMER.md` §5.
+# Moving $n$ bytes costs $t = \alpha + n/\beta$: a fixed latency plus a bandwidth term. A ring all-reduce
+# over $p$ ranks costs
+#
+# $$
+# 2(p-1)\,\alpha + \frac{2(p-1)}{p} \cdot \frac{n}{\beta}.
+# $$
+#
+# Two regimes follow. A decode step's tensor-parallel all-reduces are tiny (one token × $d_{\text{model}}$ ×
+# 2 bytes = 16 KiB for a 70B model), so they are **latency-bound**: what matters is how many collectives a
+# step makes and the algorithm's $\alpha$-count. A prefill step's all-reduces are tens of MB, so they are
+# **bandwidth-bound**: what matters is $\beta$, and the ring's bandwidth term (~$2n/\beta$) does not shrink as
+# the TP degree grows while each GPU's compute does.
+#
+# Past the node, $\beta$ per GPU falls ~9× from NVLink to a 400 Gb/s NIC. That is the quantitative reason
+# tensor parallelism stays inside the NVLink domain, why clusters give every GPU its own NIC (rails) and run
+# collectives hierarchically, and what `nvidia-smi topo -m` is telling you. Primer: `../PRIMER.md` §5.
 
 # %%
 from roofline import fabric, llm, specs
@@ -28,8 +34,8 @@ print("\nBandwidths are theoretical, per direction. Alphas are illustrative per-
 
 # %% [markdown]
 # ## α-β: small messages pay latency, large ones pay bandwidth
-# The ring's two terms are equal at `n = p·α·β` — about 7 MB for 8 GPUs on NVLink 4 with α = 2 µs.
-# Below that, a collective is latency-bound on this model; above it, bandwidth-bound.
+# The ring's two terms are equal at $n = p \cdot \alpha \cdot \beta$ — about 7 MB for 8 GPUs on NVLink 4
+# with $\alpha = 2$ µs. Below that, a collective is latency-bound on this model; above it, bandwidth-bound.
 
 # %%
 for key in ("nvlink4", "ib-ndr"):
@@ -40,9 +46,9 @@ for key in ("nvlink4", "ib-ndr"):
 
 # %% [markdown]
 # ## algbw and busbw, as nccl-tests reports them
-# `algbw = size / time`. `busbw = algbw × 2(p−1)/p` for all-reduce, so that a perfect ring reads
-# as the per-direction link bandwidth, independent of p. A large all-reduce on NVLink 4 should show
-# busbw ≈ 450 GB/s on this model (real systems land below it; layer 02 measures it).
+# $\mathrm{algbw} = \text{size}/\text{time}$. $\mathrm{busbw} = \mathrm{algbw} \times 2(p-1)/p$ for all-reduce,
+# so that a perfect ring reads as the per-direction link bandwidth, independent of $p$. A large all-reduce on
+# NVLink 4 should show busbw ≈ 450 GB/s on this model (real systems land below it; layer 02 measures it).
 
 # %%
 GIB = 1 << 30
@@ -51,8 +57,8 @@ print(f"1 GiB, 8 ranks: {t * 1e3:.2f} ms, algbw {fabric.algbw(GIB, t) / 1e9:.0f}
 
 # %% [markdown]
 # ## Tensor parallelism: two all-reduces per layer, every step
-# Megatron-style TP all-reduces a `[tokens × d_model]` activation after attention's output
-# projection and after the MLP's down projection: `2 × layers` collectives per forward step.
+# Megatron-style TP all-reduces a $[\text{tokens} \times d_{\text{model}}]$ activation after attention's output
+# projection and after the MLP's down projection: $2 \times \text{layers}$ collectives per forward step.
 
 # %%
 m70 = llm.PRESETS["llama-3.1-70b"]
@@ -73,7 +79,7 @@ print(f"   if every ring hop crossed a 400 Gb/s NIC (8 GPUs in 8 nodes): {fabric
 # ## TP=16 across two nodes
 # NCCL does not squeeze a cross-node all-reduce through one NIC: on a rail-optimized cluster it spreads
 # the traffic over every rail (a ring channel per NIC, or its tree algorithm). The core models that as a
-# hierarchical all-reduce — reduce-scatter inside each node over NVLink, all-reduce each GPU's `n/8` share
+# hierarchical all-reduce — reduce-scatter inside each node over NVLink, all-reduce each GPU's $n/8$ share
 # across nodes over its own NIC, all-gather inside the node (`fabric.tp_comm_time_across_nodes`). Even so,
 # communication outgrows compute — and without a NIC per GPU it is far worse.
 
@@ -86,7 +92,7 @@ for label, t in [("rails, 8 NICs per node", fabric.tp_comm_time_across_nodes(m70
 
 # %% [markdown]
 # ## Rails: every GPU gets its own NIC
-# A hierarchical all-reduce reduce-scatters inside the node over NVLink, all-reduces `n/g` per GPU
+# A hierarchical all-reduce reduce-scatters inside the node over NVLink, all-reduces $n/g$ per GPU
 # across nodes, and all-gathers inside the node. With one NIC per GPU (a rail-optimized design)
 # each GPU's share rides its own NIC; with one NIC per node, eight GPUs queue behind it.
 
@@ -100,8 +106,8 @@ print("switch hops (32 nodes per rail leaf):",
 
 # %% [markdown]
 # ## Leaf-spine: oversubscription and bisection
-# A two-tier folded Clos of radix-R switches is non-blocking (1:1) when every leaf splits its
-# ports half down, half up; it tops out at `R²/2` endpoints. Giving more ports to hosts saves
+# A two-tier folded Clos of radix-$R$ switches is non-blocking (1:1) when every leaf splits its
+# ports half down, half up; it tops out at $R^2/2$ endpoints. Giving more ports to hosts saves
 # switches and cuts bisection bandwidth by the oversubscription ratio.
 
 # %%
@@ -122,14 +128,14 @@ print(f"1 GiB, GPUDirect RDMA pipelined in 1 MiB chunks:        {fabric.staged_t
 
 # %% [markdown]
 # ## Exercise 3.1 — the ring all-reduce, by running one
-# Each of `p` ranks holds a vector cut into `p` chunks (`vectors[r][j]` is chunk `j` on rank `r`). In one
+# Each of $p$ ranks holds a vector cut into $p$ chunks (`vectors[r][j]` is chunk $j$ on rank $r$). In one
 # synchronous **step** every rank sends one chunk to its right neighbour `(r + 1) % p`. Phase 1
 # (reduce-scatter): the receiver *adds* the chunk into its own copy; when it ends, each rank holds one
 # chunk that is the sum over all ranks. Phase 2 (all-gather): the finished chunks travel the same ring and
 # the receiver *overwrites* its copy. Write `simulate_ring_allreduce(vectors)` returning
 # `(result, steps)`, working out yourself which chunk each rank sends at each step. Then write
-# `ring_allreduce(n, p, alpha, beta)` in seconds (α in s, β in bytes/s) from what the simulation tells you:
-# how many steps, and how many bytes each message carries.
+# `ring_allreduce(n, p, alpha, beta)` in seconds ($\alpha$ in s, $\beta$ in bytes/s) from what the simulation
+# tells you: how many steps, and how many bytes each message carries.
 
 # %% exercise
 def simulate_ring_allreduce(vectors):
@@ -205,7 +211,7 @@ print(f"✅ latency-bound up to {lb[-1] / 2**20:.0f} MiB — just below p·α·�
 
 # %% [markdown]
 # ## Exercise 3.3 — choose a TP degree against an ITL SLO
-# Batch-1 decode latency with TP = p is roughly: each GPU streams `1/p` of the bytes, plus the step's
+# Batch-1 decode latency with $\text{TP} = p$ is roughly: each GPU streams $1/p$ of the bytes, plus the step's
 # all-reduces. Nodes hold 8 GPUs on NVLink 4, with one 400 Gb/s NIC per GPU. Write
 # `decode_latency(model, device, tp, algo)`: use `llm.decode(...).t_memory` (batch 1, context 1024); for
 # `tp ≤ 8` the all-reduces run inside a node (`fabric.tp_comm_time` over NVLink 4 with `algo`); for
@@ -308,15 +314,16 @@ print("✅ put a 2-GPU TP job on GPU0+GPU1 (NV12), never GPU1+GPU2 (SYS: across 
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Every transfer is α + n/β. Tensor parallelism makes two
+# **The two-minute version.** "Every transfer is $\alpha + n/\beta$. Tensor parallelism makes two
 # all-reduces per layer per step — 160 for a 70B model. At decode they are 16 KiB each, so they are
 # latency-bound: the count × the algorithm's latency is the cost, which is why engines use
-# latency-optimal all-reduce kernels. At prefill they are tens of MB and bandwidth-bound, and that
-# cost does not shrink as TP grows: 46 ms per 4K-token step at TP=8 on NVLink against 74 ms of
-# compute per GPU; at TP=16 across two nodes, even with a NIC per GPU and the traffic spread over all of
-# them, 75 ms against 37 ms. So TP stays inside the NVLink domain; across nodes I use pipeline or data
-# parallelism, one NIC per GPU on a rail-optimized, non-blocking fabric, and I check
-# `nvidia-smi topo -m` before placing ranks."
+# latency-optimal all-reduce kernels.
+#
+# "At prefill they are tens of MB and bandwidth-bound, and that cost does not shrink as TP grows: 46 ms
+# per 4K-token step at TP=8 on NVLink against 74 ms of compute per GPU; at TP=16 across two nodes, even
+# with a NIC per GPU and the traffic spread over all of them, 75 ms against 37 ms. So TP stays inside the
+# NVLink domain; across nodes I use pipeline or data parallelism, one NIC per GPU on a rail-optimized,
+# non-blocking fabric, and I check `nvidia-smi topo -m` before placing ranks."
 #
 # **Drill.**
 # 1. *Why not TP=16 across two 8-GPU H100 nodes?* — communication outgrows compute. With rails (traffic
@@ -325,6 +332,6 @@ print("✅ put a 2-GPU TP job on GPU0+GPU1 (NV12), never GPU1+GPU2 (SYS: across 
 #    with one NIC per node it is ~263 ms, and as a flat ring through the NICs ~427 ms. Use PP=2 × TP=8,
 #    FP8 to fit in one node, or a bigger NVLink domain.
 # 2. *nccl-tests shows busbw of 20 GB/s at 64 KB. Is the fabric broken?* — no: at 64 KB the collective is
-#    latency-bound (below p·α·β); judge the fabric on the large-message plateau.
+#    latency-bound (below $p \cdot \alpha \cdot \beta$); judge the fabric on the large-message plateau.
 # 3. *Is a 3:1 oversubscribed fabric fine for inference?* — often, for independent replicas (mostly
 #    north-south traffic); not for training all-reduces or disaggregated KV transfer, which need bisection.

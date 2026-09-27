@@ -1,22 +1,23 @@
 # %% [markdown]
 # # 03 · Distilling reasoning traces
 #
-# **Tier:** T0 — CPU only, numpy, no network, a few seconds. The reasoning toy is `rlcore`'s ThinkTask formula:
-# think L tokens, then answer, right with probability 1 − e0·(1 − q)^L. A policy is a stopping rule — the chance
-# of ending the think block at each length — so every accuracy and length below is exact. Real traces from
-# Qwen3-1.7B or DeepSeek-R1-Distill-Qwen-1.5B into a 0.5–0.6B student are `distill-lab` notebook
+# **Tier:** T0 — CPU only, numpy, no network, a few seconds. The reasoning toy is `rlcore`'s ThinkTask formula: think
+# $L$ tokens, then answer, right with probability $1 - e_0\,(1 - q)^L$. A policy is a stopping rule — the chance of
+# ending the think block at each length — so every accuracy and length below is exact. Real traces from Qwen3-1.7B or
+# DeepSeek-R1-Distill-Qwen-1.5B into a 0.5–0.6B student are `distill-lab` notebook
 # `03_distilling_reasoning_traces_for_real` (T1).
 #
 # ## The one-minute version
 # A thinking model's traces teach a student a procedure — including **when to stop thinking**. SFT on traces is
-# maximum likelihood, so the student inherits the teacher's thinking-length distribution, tail and all, and
-# with it the serving workload (rl-and-thinking-models §7). **Filtering** the traces reshapes it: keeping only
-# correct ones (rejection sampling) lengthens thinking, capping length (budget-aware distillation) shortens it
-# and costs accuracy. A trace carries the whole behaviour where an RL reward carries one bit, so a thousand
-# traces from a strong teacher beat a thousand RL rollouts on the student — the toy version of R1's finding.
-# What does not transfer is **knowledge**: accuracy depends on the student's own q, so a weaker student that
-# copies the teacher's length is less accurate, and should think longer, not the same. Primer: `../../PRIMER.md`
-# §5, and §3 for filtering and the data budget.
+# maximum likelihood, so the student inherits the teacher's thinking-length distribution, tail and all, and with it
+# the serving workload (rl-and-thinking-models §7). **Filtering** the traces reshapes it: keeping only correct ones
+# (rejection sampling) lengthens thinking, capping length (budget-aware distillation) shortens it and costs accuracy.
+#
+# A trace carries the whole behaviour where an RL reward carries one bit, so a thousand traces from a strong teacher
+# beat a thousand RL rollouts on the student — the toy version of R1's finding. What does not transfer is
+# **knowledge**: accuracy depends on the student's own $q$, so a weaker student that copies the teacher's length is
+# less accurate, and should think longer, not the same. Primer: `../../PRIMER.md` §5, and §3 for filtering and the
+# data budget.
 
 # %%
 import numpy as np
@@ -82,7 +83,7 @@ for name, keep, ml in (("all traces (plain SeqKD)", "all", None), ("correct only
 
 # %% [markdown]
 # Correct traces are longer on average (thinking helps), so rejection sampling nudges thinking up. A length cap
-# cuts tokens per correct answer from 22.3 to 16.6 at L ≤ 16 — and accuracy from 0.892 to 0.769: the budget is
+# cuts tokens per correct answer from 22.3 to 16.6 at $L \le 16$ — and accuracy from 0.892 to 0.769: the budget is
 # a product decision, and the traces you keep make it for you. (The cap also discards 91% of the traces the
 # teacher was paid to write.)
 #
@@ -102,7 +103,7 @@ print(f"distilled from 1,000 traces:        accuracy {student.expected(task)['ac
 # scale (the distilled 32B beat RL on the 32B base, primer §5) — plus a capability ceiling the toy does not have.
 #
 # ## Worked example 6 — what does not transfer
-# Knowledge. Give the student a smaller q (it cracks the problem half as often per thinking token). It copies
+# Knowledge. Give the student a smaller $q$ (it cracks the problem half as often per thinking token). It copies
 # the teacher's length exactly — and that length is wrong for it.
 
 # %%
@@ -113,8 +114,13 @@ print(f"best length at a cost of 0.01 per token: teacher (q = 0.1) {task.optimal
 
 # %% [markdown]
 # ## Exercise 3.1 — SFT on traces, in closed form
-# Write `fit_hazard(lengths, max_think, prior)`: for each t < max_think, the stopping rate
-# h_t = (#traces with L = t + prior/2) / (#traces with L ≥ t + prior). Return the array of h_t.
+# Write `fit_hazard(lengths, max_think, prior)`: for each $t$ < `max_think`, the stopping rate
+#
+# $$
+# h_t = \frac{\#\text{traces with } L = t + \text{prior}/2}{\#\text{traces with } L \ge t + \text{prior}}.
+# $$
+#
+# Return the array of $h_t$.
 
 # %% exercise
 def fit_hazard(lengths, max_think, prior=1.0):
@@ -135,9 +141,14 @@ print("✅ maximum likelihood on traces = the empirical stopping rate; the prior
 
 # %% [markdown]
 # ## Exercise 3.2 — exact accuracy and length of a stopping rule
-# From stopping rates `h` (length max_think), compute P(L = t) = h_t·Π_{s<t}(1 − h_s) and P(truncated) =
-# Π(1 − h_s); then `acc` = Σ_t P(L = t)·(1 − e0·(1 − q)^t) (truncated traces score 0) and `mean_len`
-# (truncated ones count max_think tokens).
+# From stopping rates `h` (length `max_think`), compute
+#
+# $$
+# P(L = t) = h_t \prod_{s<t} (1 - h_s) \quad \text{and} \quad P(\text{truncated}) = \prod (1 - h_s);
+# $$
+#
+# then `acc` $= \sum_t P(L = t)\,\bigl(1 - e_0\,(1 - q)^t\bigr)$ (truncated traces score 0) and `mean_len` (truncated
+# ones count `max_think` tokens).
 
 # %% exercise
 def exact(h, e0=0.8, q=0.1):
@@ -160,8 +171,13 @@ print("✅ accuracy = Σ P(L)·(1 − e0(1 − q)^L): exact, because the policy 
 
 # %% [markdown]
 # ## Exercise 3.3 — the REINFORCE gradient of a stopping rule
-# For one trace of length L (L < max_think: it stopped), return ∇θ log π(L) where
-# log π(L) = Σ_{t<L} log(1 − σ(θ_t)) + log σ(θ_L). (The derivative of log σ is 1 − σ; of log(1 − σ) is −σ.)
+# For one trace of length $L$ ($L$ < `max_think`: it stopped), return $\nabla_\theta \log \pi(L)$ where
+#
+# $$
+# \log \pi(L) = \sum_{t<L} \log\bigl(1 - \sigma(\theta_t)\bigr) + \log \sigma(\theta_L).
+# $$
+#
+# (The derivative of $\log \sigma$ is $1 - \sigma$; of $\log(1 - \sigma)$ is $-\sigma$.)
 
 # %% exercise
 def grad_log_pi(theta, L_):
@@ -202,9 +218,15 @@ print(f"✅ cap {cap}: accuracy {accs[cap]:.3f} at {tokens_per_correct:.1f} toke
 
 # %% [markdown]
 # ## Exercise 3.5 — how long should the weaker student think?
-# The student with q = 0.05 pays 0.01 per thinking token (reward = correct − 0.01·L). Predict `L_star`, the
-# real-valued optimum, from e0·(−ln(1 − q))·(1 − q)^L = c, and `gain`: its expected reward at round(L_star)
-# minus its expected reward at the teacher's copied mean length (use accuracy(L) − 0.01·L at both lengths).
+# The student with $q$ = 0.05 pays 0.01 per thinking token ($\text{reward} = \text{correct} - 0.01\,L$). Predict
+# `L_star`, the real-valued optimum, from
+#
+# $$
+# e_0\,\bigl(-\ln(1 - q)\bigr)\,(1 - q)^L = c,
+# $$
+#
+# and `gain`: its expected reward at `round(L_star)` minus its expected reward at the teacher's copied mean length
+# (use $\text{accuracy}(L) - 0.01\,L$ at both lengths).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -239,5 +261,5 @@ print(f"✅ L* = {L_star:.1f} tokens for the weaker student against the {student
 # 2. *Keep only correct traces — any side effect?* — Correct traces are longer when thinking helps, so the student
 #    thinks longer; and hard problems with no correct trace vanish from the data (a coverage bias).
 # 3. *When would RL on the student beat distillation?* — When no stronger teacher exists for the task, or once the
-#    student has the teacher's behaviour and needs its own: RL on the student fits its own q (here L* = 27.5, not
+#    student has the teacher's behaviour and needs its own: RL on the student fits its own $q$ (here $L^*$ = 27.5, not
 #    the copied 19.9). R1's authors note that an RL stage after distillation could add substantially more.

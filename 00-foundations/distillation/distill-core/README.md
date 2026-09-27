@@ -107,8 +107,16 @@ carry the correctness claims:
   memory primer's and the platform lab's Wilson intervals, and the 06 lab's `cost_per_call` ($0.007005) — as
   constants, and function by function against the originals when they are in the checkout (loaded by path, no
   cache left behind).
-- **The primer says what the code computes.** Every computed number in `../PRIMER.md` is recomputed and must appear
-  verbatim (`test_primer_numbers.py`).
+- **The primer says what the code computes.** Every computed number in `../PRIMER.md` is recomputed
+  (`test_primer_numbers.py`). Exact ones — closed forms on fixed logits, enumerations, parameter counts, roofline
+  costs, Wilson intervals of fixed counts — must appear verbatim. Numbers from a trained or sampled toy model are one
+  seeded run on one CPU: OpenBLAS's matmul kernels and numpy's SIMD loops round differently in the last bit on each
+  CPU family, training amplifies that, and most such numbers move in the third digit (an AVX2-only AMD runner gets
+  α = 0.889 where the primer says 0.890), a few chaotic ones by 0.1–0.2 (the on-policy student on rare inputs, the
+  4- and 8-unit drafts). Those — here and in the other test files — are compared with a tolerance of about three
+  times the largest deviation measured across 15 x86 kernel and SIMD variants; the qualitative claims stay exact.
+  `OPENBLAS_CORETYPE=Haswell NPY_DISABLE_CPU_FEATURES="X86_V4 AVX512_ICL AVX512_SPR" python3 -m pytest -q`
+  reproduces that AMD runner's numbers on an AVX-512 Intel machine.
 
 ## Caveats: what the toys are and are not
 

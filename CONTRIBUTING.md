@@ -90,6 +90,15 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
 - No emojis, except ✅ in the output of a check, and no marketing adjectives
   ([`README-STYLE.md`](tools/orchestration/README-STYLE.md), SPEC §3).
 - One name per layer: the one in the table above, in prose, headings and tables alike.
+- Mathematics is TeX, written the way GitHub renders it: `$...$` inline, `$$` on its own lines for display (an
+  `aligned` environment inside it for a derivation). No space just inside the dollars, no digit right after the
+  closing one, `\|` rather than `|` inside a table cell; a dollar price is never inside math. The site turns the
+  inline form into `\( \)` and leaves prices alone (`tools/site/README.md`, "Math"). Plain-text formulas
+  (`α·T²·KL(p_T ‖ q_T)`, `r_t = log π_T − log π_S`) render as raw underscores: do not write them.
+- Paragraphs carry one idea and stay under about 150 words; a summary of several bold terms is a list, one item
+  per term. Callouts are blockquotes with a bold lead-in (`> **Pitfall.**`, `> **Verify.**`, `> **In a design
+  review**`) or GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), which the site
+  renders as admonitions.
 
 ### Run tiers
 

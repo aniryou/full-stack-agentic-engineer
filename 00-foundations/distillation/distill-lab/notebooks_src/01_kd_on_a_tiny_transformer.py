@@ -65,10 +65,12 @@ print(table([{"scratchpad length": j, "teacher's demos": round(teacher_mix(6)[j]
 #
 # ## Exercise 1.1 — Hinton's soft-target loss and its gradient, in numpy
 #
-# Write `kd_soft(z_teacher, z_student, T)` for one position: return `(loss, grad)` where `loss = T² · KL(p_T ‖ q_T)`,
-# with `p_T = softmax(z_teacher / T)` and `q_T = softmax(z_student / T)`, and `grad` is its gradient with respect to
-# `z_student`. Derive the gradient rather than differentiating numerically. The KL is `Σ p (log p − log q)`, and
-# `∂(−Σ p log q) / ∂z_student = (q − p) / T`. The check uses the fact sheet's five-token example.
+# Write `kd_soft(z_teacher, z_student, T)` for one position: return `(loss, grad)` where `loss`
+# $= T^2\,\mathrm{KL}(p_T \,\|\, q_T)$, with $p_T = \operatorname{softmax}(z_{\text{teacher}} / T)$ and
+# $q_T = \operatorname{softmax}(z_{\text{student}} / T)$, and `grad` is its gradient with respect to `z_student`.
+# Derive the gradient rather than differentiating numerically. The KL is $\sum p\,(\log p - \log q)$, and
+# $\partial(-\sum p \log q) / \partial z_{\text{student}} = (q - p) / T$. The check uses the fact sheet's five-token
+# example.
 
 # %% exercise
 def softmax(z, T=1.0):
@@ -110,10 +112,11 @@ print(f"✅ loss and gradient right; as T grows, T² x KL tends to {limit:.3f}: 
 # %% [markdown]
 # ## Worked example: the teacher and four students, trained now
 #
-# `train.run()` trains the teacher, samples its completions for the student's 1,000 prompts (SeqKD's data, kept
-# only when the verifier accepts them), then trains four students from the same initial weights. Logit KD uses
-# `T = 2` and `α = 0.9` on the soft term. GKD uses `λ = 0.5` (half the batches are the student's own samples) and
-# `β = 0.5`, which are TRL's `GKDConfig` defaults. Every 100 steps each student is measured on 256 held-out problems.
+# `train.run()` trains the teacher, samples its completions for the student's 1,000 prompts (SeqKD's data, kept only
+# when the verifier accepts them), then trains four students from the same initial weights. Logit KD uses $T$ = 2 and
+# $\alpha = 0.9$ on the soft term. GKD uses $\lambda = 0.5$ (half the batches are the student's own samples) and
+# $\beta = 0.5$, which are TRL's `GKDConfig` defaults. Every 100 steps each student is measured on 256 held-out
+# problems.
 
 # %%
 if HAVE_TORCH:
@@ -206,11 +209,17 @@ print(table([{"student": "seqkd (verified only)", **{c: S["seqkd"][c] for c in (
 # %% [markdown]
 # ## Exercise 1.3 — GKD's divergence, in TRL's convention
 #
-# TRL's `generalized_jsd_loss` takes `beta`. `β = 0` is the forward KL(teacher ‖ student), `β = 1` is the reverse
-# KL(student ‖ teacher), and in between it is `β·KL(p ‖ m) + (1 − β)·KL(q ‖ m)` with `m = β·p + (1 − β)·q`, where
-# `p` is the teacher and `q` the student. Write it for two probability vectors. The check pins the fact sheet's
-# values on the five-token example (`p = softmax(z)`, `q = softmax(v)`), and the `distillab.losses` torch version
-# when torch is here.
+# TRL's `generalized_jsd_loss` takes `beta`. $\beta = 0$ is the forward
+# $\mathrm{KL}(\text{teacher} \,\|\, \text{student})$, $\beta = 1$ is the reverse
+# $\mathrm{KL}(\text{student} \,\|\, \text{teacher})$, and in between it is
+#
+# $$
+# \beta\,\mathrm{KL}(p \,\|\, m) + (1 - \beta)\,\mathrm{KL}(q \,\|\, m)
+# $$
+#
+# with $m = \beta\,p + (1 - \beta)\,q$, where $p$ is the teacher and $q$ the student. Write it for two probability
+# vectors. The check pins the fact sheet's values on the five-token example ($p = \operatorname{softmax}(z)$,
+# $q = \operatorname{softmax}(v)$), and the `distillab.losses` torch version when torch is here.
 
 # %% exercise
 def kl(a, b):
@@ -252,8 +261,8 @@ print("✅ TRL's endpoints are the exact KLs (0.2565 forward, 0.2714 reverse); i
 # * **A (think, unsure which digit):** 0.18 on each of the five digits, 0.1 on `</think>`;
 # * **B (answer directly):** 0.96 on `</think>`, 0.008 on each digit.
 #
-# Compute the forward KL(p ‖ q) and the reverse KL(q ‖ p) of each, and set `forward_prefers` and
-# `reverse_prefers` to `"A"` or `"B"`, the student each divergence scores lower.
+# Compute the forward $\mathrm{KL}(p \,\|\, q)$ and the reverse $\mathrm{KL}(q \,\|\, p)$ of each, and set
+# `forward_prefers` and `reverse_prefers` to `"A"` or `"B"`, the student each divergence scores lower.
 
 # %%
 V_BRANCH = ["0", "1", "2", "3", "4", "</think>"]
@@ -280,7 +289,7 @@ print("✅ forward KL pays wherever the teacher has mass the student lacks, so i
       "retreats to the one mode it can fit: answering directly")
 
 # %% [markdown]
-# Does that happen in training? The next cell trains GKD with `β = 1` (reverse KL) from the same teacher: about 30
+# Does that happen in training? The next cell trains GKD with $\beta = 1$ (reverse KL) from the same teacher: about 30
 # seconds, since the teacher is reused. Without torch it shows the recorded experiments.
 
 # %%
@@ -306,7 +315,7 @@ print("reverse KL collapsed to answering directly in this run" if collapsed else
 # already puts mass near the teacher's modes. That is why the published recipes start on-policy distillation from
 # an SFT'd student (PRIMER §4, verify); this notebook's GKD starts from scratch. A warm start helps only if it does
 # put mass there: in distill-core's toy, students that were confidently wrong off their training data gained
-# nothing from it. `β = 0.5` hedges.
+# nothing from it. $\beta = 0.5$ hedges.
 #
 # ## Worked example: exposure bias, measured
 #
@@ -377,19 +386,20 @@ print(table([{"knob": "kd_temperature / kd_alpha", "try": "1 / 0.5", "what chang
 #
 # ## In a design review
 #
-# **Two minutes:** "We distilled with three kinds of teacher signal and compared them on the same budget. Hard
-# labels from our answer key taught the student to skip the working, and it scored far below the distilled
-# students, close to guessing. The teacher's logits on the *same* sequences taught it to think as often as the
-# teacher does. That is the extra information soft targets carry: the teacher's behaviour at every position, not only the next token. Sequence-level distillation
-# on the teacher's verified outputs gave the most accurate student, more accurate than the teacher, because the
-# verifier kept mostly the long traces. That student also inherits their length, so it costs more to serve.
-# On-policy GKD gave the closest copy of the teacher. Reverse KL alone can pull a weak student onto the easy mode,
-# because it lifts a token only as far as the student already proposes it, so we start on-policy distillation from
-# an SFT'd student, as the published recipes do, and check β on our own data."
+# **Two minutes:** "We distilled with three kinds of teacher signal and compared them on the same budget. Hard labels
+# from our answer key taught the student to skip the working, and it scored far below the distilled students, close to
+# guessing. The teacher's logits on the *same* sequences taught it to think as often as the teacher does. That is the
+# extra information soft targets carry: the teacher's behaviour at every position, not only the next token.
+#
+# "Sequence-level distillation on the teacher's verified outputs gave the most accurate student, more accurate than
+# the teacher, because the verifier kept mostly the long traces. That student also inherits their length, so it costs
+# more to serve. On-policy GKD gave the closest copy of the teacher. Reverse KL alone can pull a weak student onto the
+# easy mode, because it lifts a token only as far as the student already proposes it, so we start on-policy
+# distillation from an SFT'd student, as the published recipes do, and check $\beta$ on our own data."
 #
 # **Drill 1.** *Why does logit KD beat SFT on exactly the same sequences?* Every position gets the teacher's full
 # distribution instead of one token. Where the label and the teacher disagree, as at the think-or-answer branch
-# here, the soft target teaches the teacher's behaviour. The T² factor keeps that term's gradient from vanishing
+# here, the soft target teaches the teacher's behaviour. The $T^2$ factor keeps that term's gradient from vanishing
 # at high temperature.
 #
 # **Drill 2.** *The SeqKD student beats its teacher. Should we expect that at scale?* It can happen on a narrow,
@@ -400,6 +410,6 @@ print(table([{"knob": "kd_temperature / kd_alpha", "try": "1 / 0.5", "what chang
 # with it less, so do not grade it by agreement alone (PRIMER §8 "Measuring a student").
 #
 # **Drill 3.** *On-policy distillation from scratch produced a student that never thinks. What happened?* Reverse
-# KL (β near 1) is mode-seeking. A student that cannot yet fit the teacher's main mode moves to one it can fit.
+# KL ($\beta$ near 1) is mode-seeking. A student that cannot yet fit the teacher's main mode moves to one it can fit.
 # Warm-start with SFT or SeqKD so that the student already proposes the thinking mode (the recipes' practice; it
-# helps only if the warm start does put mass there), or use β ≤ 0.5 at first.
+# helps only if the warm start does put mass there), or use $\beta \le 0.5$ at first.

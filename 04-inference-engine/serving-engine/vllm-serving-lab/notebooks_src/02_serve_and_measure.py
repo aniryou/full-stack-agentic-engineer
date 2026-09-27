@@ -12,18 +12,18 @@
 #
 # | Metric | Definition | What it is about |
 # |---|---|---|
-# | **TTFT** | first chunk carrying a token − send time | queueing + prefill (+ network) |
+# | **TTFT** | $\text{first chunk carrying a token} - \text{send time}$ | queueing + prefill (+ network) |
 # | **ITL** | gaps between consecutive token-carrying chunks | one decode step, stalls when a prefill shares the step |
-# | **TPOT** | (E2E − TTFT) / (output tokens − 1), per request | the per-token pace a user feels |
-# | **E2E** | last chunk − send time | the whole request |
+# | **TPOT** | $(\text{E2E} - \text{TTFT}) / (\text{output tokens} - 1)$, per request | the per-token pace a user feels |
+# | **E2E** | $\text{last chunk} - \text{send time}$ | the whole request |
 # | **throughput** | tokens (or requests) / wall time of the run | capacity |
 # | **goodput** | requests meeting *every* SLO / wall time | capacity you can sell |
 #
 # One deliberate difference from `vllm bench serve`: a chat stream opens with a role-only chunk
 # (`"delta": {"role": "assistant", "content": ""}`), sent just before the first token. vLLM's
-# benchmark counts it as a chunk, so its TTFT comes from it and each chat request's ITL list gets
-# one extra ~0 ms gap; this lab skips it, so TTFT is the same and chat ITL has one fewer,
-# near-zero entry (the mean reads higher by ~1/n for n tokens). For completions they are identical.
+# benchmark counts it as a chunk, so its TTFT comes from it and each chat request's ITL list gets one
+# extra ~0 ms gap; this lab skips it, so TTFT is the same and chat ITL has one fewer, near-zero entry
+# (the mean reads higher by ~$1/n$ for $n$ tokens). For completions they are identical.
 #
 # The engine's own `/metrics` gives the server-side view: queue depth, batch size, KV usage and
 # latency *histograms*, whose percentiles are interpolations inside buckets. How requests are sent
@@ -106,7 +106,8 @@ print(M.snapshot(after, before).table())
 #
 # Given the send time, the arrival time of each token chunk and the output token count reported in
 # `usage`, return a dict with `ttft`, `itl` (list), `e2e` and `tpot` (seconds). `tpot` is
-# `(e2e - ttft) / (output_tokens - 1)`, and `nan` for single-token outputs.
+# $(\mathtt{e2e} - \mathtt{ttft}) / (\mathtt{output\_tokens} - 1)$, and `nan` for single-token
+# outputs.
 
 # %% exercise
 def request_metrics(send_time: float, chunk_times: list, output_tokens: int) -> dict:
@@ -133,9 +134,9 @@ print("✅ request_metrics matches the benchmark's definitions (vLLM's, minus th
 #
 # Goodput counts only requests that met **every** SLO, per second of the run. Write
 # `goodput(results, duration_s, ttft_ms, tpot_ms)` using vLLM's rule: a request is good when
-# `ttft <= target` and `tpot <= target`, where a single-token output counts as TPOT 0; failed
-# requests are never good. Then compare with plain throughput: the gap is the capacity you
-# cannot sell at this SLO.
+# $\mathtt{ttft} \le \text{target}$ and $\mathtt{tpot} \le \text{target}$, where a single-token output
+# counts as TPOT 0; failed requests are never good. Then compare with plain throughput: the gap is the
+# capacity you cannot sell at this SLO.
 
 # %% exercise
 def goodput(results: list, duration_s: float, ttft_ms: float, tpot_ms: float) -> float:
@@ -181,9 +182,10 @@ print(f"client TTFT mean {run.summary().ttft.mean:.1f} ms (includes HTTP, tokeni
 # ## Exercise 2.3 — `histogram_quantile`, as PromQL computes it
 #
 # Implement it for `buckets = [(upper_bound, cumulative_count), ...]` ending with `+Inf`:
-# `rank = q × total`; take the first bucket whose cumulative count is `>= rank`; interpolate
-# linearly from the previous upper bound (0 for the first bucket) to this one. If the rank lands
-# in the `+Inf` bucket, return the largest finite bound. No observations: `nan`.
+# $\mathtt{rank} = q \times \mathtt{total}$; take the first bucket whose cumulative count is
+# $\ge \mathtt{rank}$; interpolate linearly from the previous upper bound (0 for the first bucket) to
+# this one. If the rank lands in the `+Inf` bucket, return the largest finite bound. No observations:
+# `nan`.
 
 # %% exercise
 def histogram_quantile(q: float, buckets: list) -> float:
@@ -236,18 +238,23 @@ print(f"[SIMULATED] closed loop, 4 users: {cs.request_throughput:.2f} req/s, TTF
 #
 # Little's law says requests in the system = arrival rate × time each spends there. With at most
 # `max_num_seqs` requests running, each taking `mean_e2e_s`, the engine completes at most
-# `capacity_rps = max_num_seqs / mean_e2e_s` requests per second. Implement it; the check feeds it
-# the closed loop's mean E2E.
 #
-# Then predict what an **open loop** faster than that capacity does. `n` requests arrive over
-# `n / rate` seconds, but the engine admits a waiting request only when a running one finishes, and
-# finishes them at `capacity` per second. So the last request is admitted when request
-# `n − max_num_seqs` completes — about `(n − max_num_seqs) / capacity` seconds after the start —
-# although it arrived at `n / rate`. Write `last_request_wait_s(n, rate, capacity, max_num_seqs)`
-# (0 when the engine keeps up). The check sends 40 more requests of the same shape (fresh prompts,
-# so the prefix cache cannot help) open-loop at twice the capacity: the served throughput should
-# match your capacity (derived from a *different* run), and the worst TTFT your wait — seconds,
-# where the closed loop on the same server showed tens of milliseconds.
+# $$
+# \mathtt{capacity\_rps} = \frac{\mathtt{max\_num\_seqs}}{\mathtt{mean\_e2e\_s}}
+# $$
+#
+# requests per second. Implement it; the check feeds it the closed loop's mean E2E.
+#
+# Then predict what an **open loop** faster than that capacity does. $n$ requests arrive over
+# $n / \mathtt{rate}$ seconds, but the engine admits a waiting request only when a running one
+# finishes, and finishes them at `capacity` per second. So the last request is admitted when request
+# $n - \mathtt{max\_num\_seqs}$ completes — about $(n - \mathtt{max\_num\_seqs}) / \mathtt{capacity}$
+# seconds after the start — although it arrived at $n / \mathtt{rate}$. Write
+# `last_request_wait_s(n, rate, capacity, max_num_seqs)` (0 when the engine keeps up). The check sends
+# 40 more requests of the same shape (fresh prompts, so the prefix cache cannot help) open-loop at
+# twice the capacity: the served throughput should match your capacity (derived from a *different*
+# run), and the worst TTFT your wait — seconds, where the closed loop on the same server showed tens
+# of milliseconds.
 
 # %% exercise
 def capacity_rps(max_num_seqs: int, mean_e2e_s: float) -> float:
@@ -317,13 +324,13 @@ print(f"✅ Little's law: predicted {predicted:.2f} in flight, engine gauges ave
 # %% [markdown]
 # ## Exercise 2.6 — the workload's shape: burstiness and long tails
 #
-# Two runs at the same mean rate can load an engine very differently. `vllm bench serve
-# --burstiness b` (and `arrival_times` here) draws the gaps between requests from a Gamma
-# distribution with shape `b` and mean `1 / rate`, whose coefficient of variation (std / mean) is
-# `1 / sqrt(b)`: 1 for Poisson, 2 at `b = 0.25`. Write `gap_cv(burstiness)`. The check samples the
-# gaps, then runs the same mean rate four ways — Poisson versus bursty arrivals, fixed 512-token
-# prompts versus a lognormal with the same median (most prompts short, a few 5x longer) — and
-# compares the medians with the tails.
+# Two runs at the same mean rate can load an engine very differently.
+# `vllm bench serve --burstiness b` (and `arrival_times` here) draws the gaps between requests from a
+# Gamma distribution with shape $b$ and mean $1 / \mathtt{rate}$, whose coefficient of variation (std
+# / mean) is $1 / \sqrt{b}$: 1 for Poisson, 2 at $b = 0.25$. Write `gap_cv(burstiness)`. The check
+# samples the gaps, then runs the same mean rate four ways — Poisson versus bursty arrivals, fixed
+# 512-token prompts versus a lognormal with the same median (most prompts short, a few 5x longer) —
+# and compares the medians with the tails.
 
 # %% exercise
 def gap_cv(burstiness: float) -> float:
@@ -361,15 +368,16 @@ target.stop()
 # ## In a design review
 #
 # **Two minutes:** "We measure at the client, from the stream: TTFT to the first token chunk, ITL
-# between chunks, TPOT per request as (E2E − TTFT)/(n − 1), throughput over the run's wall time —
-# the definitions of `vllm bench serve`, so our numbers compare with anyone's. We report goodput:
-# requests that met both the TTFT and the TPOT target per second. We drive the engine open-loop at
-# a rate, because a closed loop slows down with the server and hides the queue, after a warm-up
-# with different prompts, and we state the arrival process and length distribution, because bursts
-# and long prompts move the tail at the same mean rate. We cross-check
+# between chunks, TPOT per request as $(\text{E2E} - \text{TTFT})/(n - 1)$, throughput over the run's
+# wall time — the definitions of `vllm bench serve`, so our numbers compare with anyone's. We report
+# goodput: requests that met both the TTFT and the TPOT target per second.
+#
+# "We drive the engine open-loop at a rate, because a closed loop slows down with the server and hides
+# the queue, after a warm-up with different prompts, and we state the arrival process and length
+# distribution, because bursts and long prompts move the tail at the same mean rate. We cross-check
 # with the engine's `/metrics`: the running and waiting gauges must agree with Little's law from the
-# client side, and we treat histogram percentiles as bucket interpolations — the exact numbers
-# there are the means."
+# client side, and we treat histogram percentiles as bucket interpolations — the exact numbers there
+# are the means."
 #
 # **Drill 1.** *Throughput went up 20% and p99 TTFT doubled. Is that better?* — Only if goodput
 # went up; at a fixed SLO, more requests missing the TTFT target can mean less sellable capacity.

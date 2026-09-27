@@ -46,11 +46,12 @@ print(table(rows, title="simulated step times, 8B bf16 on one L4"))
 #
 # ## Exercise 1.1 — how different are two requests?
 # A request occupies a replica in three currencies: **prefill compute** (its uncached prompt tokens divided by
-# `p.compute_tok_s`), **KV memory** (`ceil((prompt + output) / p.block)` blocks at the end), and **residency** (it
-# stays in the batch for roughly `output` decode steps; take `step_s = 0.07`, a typical busy step here).
-# Write `footprint(p, prompt, output, cached=0, step_s=0.07)` returning a dict with keys `prefill_s`, `kv_blocks`,
-# `residency_s` (prefill time + output x step_s) and `block_seconds` (kv_blocks x residency_s — the memory-time
-# product a replica has to give this request).
+# `p.compute_tok_s`), **KV memory** ($\lceil (\text{prompt} + \text{output}) / \mathrm{p.block} \rceil$ blocks at the
+# end), and **residency** (it stays in the batch for roughly `output` decode steps; take `step_s = 0.07`, a typical
+# busy step here). Write `footprint(p, prompt, output, cached=0, step_s=0.07)` returning a dict with keys
+# `prefill_s`, `kv_blocks`, `residency_s` ($\text{prefill time} + \text{output} \times \mathrm{step\_s}$) and
+# `block_seconds` ($\mathrm{kv\_blocks} \times \mathrm{residency\_s}$ — the memory-time product a replica has to give
+# this request).
 
 # %% exercise
 import math
@@ -255,10 +256,10 @@ print(table(flow_rows, title="simulated: interactive chat + a batch RAG burst on
 # %% [markdown]
 # Dispatching immediately lets the burst push the interactive flow past its 2 s SLO: it queues in the engines behind
 # batch prompts, and KV runs out (preemptions). A cap of 4 per endpoint **starves the GPUs**: the fleet can complete
-# at most cap x replicas / (time in system) requests per second, fewer than arrive, so the router queue grows to
-# over a hundred and the batch flow waits minutes; priority keeps the interactive flow moving, and the cap removes
-# preemption (at most 4 requests hold KV per replica), but capacity sits idle. A cap of 32 never binds: the router
-# queue stays empty and priority has nothing to reorder. The cap is a sizing question.
+# at most $\text{cap} \times \text{replicas} / (\text{time in system})$ requests per second, fewer than arrive, so
+# the router queue grows to over a hundred and the batch flow waits minutes; priority keeps the interactive flow
+# moving, and the cap removes preemption (at most 4 requests hold KV per replica), but capacity sits idle. A cap of
+# 32 never binds: the router queue stays empty and priority has nothing to reorder. The cap is a sizing question.
 #
 # ## Exercise 1.5 — size the cap with Little's law
 # In steady state the number of requests in a system equals the arrival rate times the mean time each spends in it

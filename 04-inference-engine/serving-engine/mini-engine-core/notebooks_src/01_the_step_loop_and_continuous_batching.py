@@ -149,7 +149,7 @@ print("✅ slot mapping matches the engine's:", slot_mapping(eng.kv.tables[req.r
 
 # %% [markdown]
 # ## Exercise 1.3 — predict a request's peak KV blocks
-# A request with a `P`-token prompt that generates `O` tokens: how many blocks does it hold at its peak?
+# A request with a $P$-token prompt that generates $O$ tokens: how many blocks does it hold at its peak?
 # Careful — the **last** sampled token is returned to the user but never fed back through the model, so it
 # never gets a K/V slot. Write `peak_blocks(P, O, block_size)`.
 
@@ -221,12 +221,13 @@ print("   the same arithmetic as 00-foundations/gpu-capacity-planning; Notebook 
 # %% [markdown]
 # ## Exercise 1.6 — one step on two GPUs (tensor parallelism)
 # When one GPU is too small or too slow, the engine splits every layer across GPUs (the Megatron pattern). The
-# MLP `(silu(h W_gate) * (h W_up)) W_down` splits cleanly: each rank holds **half the columns** of `W_gate` and
-# `W_up` — *column-parallel*: it computes half of the hidden features with no communication, because the gating
-# is elementwise — and the **matching half of the rows** of `W_down` — *row-parallel*: it produces a full-size
-# **partial sum**. Adding the ranks' partial sums is the **all-reduce**. Write `tp_mlp_partials(L, h, world)`:
-# the `world` partial outputs, rank `r` using only its shard of the three weights (`h` is the normalised input,
-# `L` one layer's weights, e.g. `L["w_gate"]` of shape `(d_model, d_ff)`).
+# MLP $(\operatorname{silu}(h W_{\text{gate}}) \odot (h W_{\text{up}}))\,W_{\text{down}}$ splits cleanly: each rank
+# holds **half the columns** of $W_{\text{gate}}$ and $W_{\text{up}}$ — *column-parallel*: it computes half of the
+# hidden features with no communication, because the gating is elementwise — and the **matching half of the rows**
+# of $W_{\text{down}}$ — *row-parallel*: it produces a full-size **partial sum**. Adding the ranks' partial sums is
+# the **all-reduce**. Write `tp_mlp_partials(L, h, world)`: the `world` partial outputs, rank $r$ using only its
+# shard of the three weights ($h$ is the normalised input, `L` one layer's weights, e.g. `L["w_gate"]` of shape
+# `(d_model, d_ff)`).
 
 # %% exercise
 def tp_mlp_partials(L, h, world):
@@ -268,12 +269,13 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # token budget: running requests first — one token each if they are decoding, a chunk if they are still
 # prefilling — then new requests while budget, sequence slots and KV blocks last. All scheduled tokens are
 # flattened into one batch, so the weights are read once for everyone; attention reads each request's history
-# through its block table. After the pass we sample for requests whose prompt is done, and finished requests
-# free their blocks immediately, so a waiting request joins at the next step — that is continuous batching,
-# about 1.6× the throughput of static batching from scheduling alone on a mix of 10–400-token outputs (more
-# with longer tails or more slots). Concurrency is capped by KV blocks, not by compute: for an 8B model on an
-# L4 it is about 28 chat requests. When a model needs more than one GPU, tensor parallelism splits each layer
-# and pays two all-reduces per layer per step."
+# through its block table.
+#
+# "After the pass we sample for requests whose prompt is done, and finished requests free their blocks immediately,
+# so a waiting request joins at the next step — that is continuous batching, about 1.6× the throughput of static
+# batching from scheduling alone on a mix of 10–400-token outputs (more with longer tails or more slots). Concurrency
+# is capped by KV blocks, not by compute: for an 8B model on an L4 it is about 28 chat requests. When a model needs
+# more than one GPU, tensor parallelism splits each layer and pays two all-reduces per layer per step."
 #
 # **Drill questions**
 # 1. *Why does the engine not have prefill steps and decode steps?* — Because the scheduler only tracks

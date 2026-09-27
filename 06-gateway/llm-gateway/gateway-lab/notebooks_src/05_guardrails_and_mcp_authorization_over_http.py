@@ -9,11 +9,11 @@
 # ## The one-minute version
 #
 # **Guardrails** (PRIMER §7). Where a check sits decides what it costs and what it can stop. An input check adds
-# latency before the first token (inline), or only when it is slower than the model's TTFT (parallel, with the
-# first byte held until it passes). An output check on a stream trades latency against leakage: hold the whole
-# answer (`full`), hold windows of W tokens (`window`: adds about `(W − 1)·ITL + check` to TTFT), stream at once
-# and cut when a check flags (`parallel`: no added latency, but tokens leak before the cut), or only log
-# (`shadow`). Guardrails reduce risk; authorization bounds it (identity primer §0, §4.1, §6).
+# latency before the first token (inline), or only when it is slower than the model's TTFT (parallel, with the first
+# byte held until it passes). An output check on a stream trades latency against leakage: hold the whole answer
+# (`full`), hold windows of $W$ tokens (`window`: adds about $(W - 1) \times \text{ITL} + \text{check}$ to TTFT),
+# stream at once and cut when a check flags (`parallel`: no added latency, but tokens leak before the cut), or only
+# log (`shadow`). Guardrails reduce risk; authorization bounds it (identity primer §0, §4.1, §6).
 #
 # **Keys** (PRIMER §6). Provider keys live only in the gateway and rotate with an overlap; virtual keys are
 # revoked in one call. (The gateway's own workload identity — a SPIFFE SVID from the Workload API, rotated at
@@ -75,12 +75,12 @@ for (inp, out), r in results.items():
 # %% [markdown]
 # ## Exercise 5.1 — when does each window reach the client?
 #
-# Tokens are generated at `ttft + (i − 1)·itl` for i = 1…n. With windowed output checks, window k (its last token
-# is token `min(k·W, n)`) is checked when it is complete **and** the previous check has finished, and each check
-# takes `check_s`; the window is released when its check ends. Write `window_release(ttft, itl, n, window,
-# check_s)` returning the list of release times. The client's TTFT is the first, its E2E the last. The check
-# compares with `gwlab.gateway.guardrails` on a grid (including checks slower than generation, which queue) and
-# with the measured `window` and `full` rows above.
+# Tokens are generated at $\text{ttft} + (i - 1) \cdot \text{itl}$ for $i = 1 \ldots n$. With windowed output checks,
+# window $k$ (its last token is token $\min(k \cdot W, n)$) is checked when it is complete **and** the previous check
+# has finished, and each check takes `check_s`; the window is released when its check ends. Write
+# `window_release(ttft, itl, n, window, check_s)` returning the list of release times. The client's TTFT is the first,
+# its E2E the last. The check compares with `gwlab.gateway.guardrails` on a grid (including checks slower than
+# generation, which queue) and with the measured `window` and `full` rows above.
 
 # %% exercise
 def window_release(ttft: float, itl: float, n: int, window: int, check_s: float) -> list:
@@ -106,8 +106,8 @@ for out, w in (("window", W), ("full", N)):
 print("✅ a held-back window costs about (W − 1)·ITL + one check before the first token; holding everything costs the whole answer")
 
 # %% [markdown]
-# (The largest window a TTFT budget allows, `(budget − check)/ITL + 1`, is the core's exercise 5.2; the drill at the
-# end uses it.)
+# (The largest window a TTFT budget allows, $(\text{budget} - \text{check})/\text{ITL} + 1$, is the core's exercise
+# 5.2; the drill at the end uses it.)
 #
 # ## Worked example: revoke a virtual key
 #
@@ -358,18 +358,20 @@ mcp.stop()
 #
 # **Two minutes:** "Guardrails sit at four hooks — input, tool call, tool result, output — and their placement is a
 # latency-versus-leakage decision we make per policy: an input screen inline costs its check time before the first
-# token; for secrets in output we hold back windows sized from our TTFT budget, `(W − 1)·ITL + check`; for
-# lower-stakes categories we stream and cut in parallel, accepting a window of leakage; new rules start in shadow.
-# They lower how often something bad gets through; authorization is what bounds it. Provider keys never leave the
-# gateway and rotate with an overlap; virtual keys revoke in one call. For MCP, the gateway is the OAuth client:
-# discovery from the 401, a Client ID Metadata Document instead of dynamic registration, PKCE S256 with
-# `resource` in both requests, a token per principal and resource, step-up on insufficient scope, rotating refresh
-# tokens — a replay revokes the grant — and DPoP nonces when the servers bind tokens to our key."
+# token; for secrets in output we hold back windows sized from our TTFT budget,
+# $(W - 1) \times \text{ITL} + \text{check}$; for lower-stakes categories we stream and cut in parallel, accepting a
+# window of leakage; new rules start in shadow. They lower how often something bad gets through; authorization is what
+# bounds it.
 #
-# **Drill 1.** *Where would you put a 12B guard model on a streamed answer with a 300 ms TTFT budget?* — Not
-# inline on every window if its check takes most of the budget: largest window `(budget − check)/ITL + 1` may be a
-# few tokens. Run it in parallel with a cut, or on the input only, and keep a fast screen (a small classifier or
-# rules) holding back the short windows where leakage is unacceptable.
+# "Provider keys never leave the gateway and rotate with an overlap; virtual keys revoke in one call. For MCP, the
+# gateway is the OAuth client: discovery from the 401, a Client ID Metadata Document instead of dynamic registration,
+# PKCE S256 with `resource` in both requests, a token per principal and resource, step-up on insufficient scope,
+# rotating refresh tokens — a replay revokes the grant — and DPoP nonces when the servers bind tokens to our key."
+#
+# **Drill 1.** *Where would you put a 12B guard model on a streamed answer with a 300 ms TTFT budget?* — Not inline on
+# every window if its check takes most of the budget: largest window $(\text{budget} - \text{check})/\text{ITL} + 1$
+# may be a few tokens. Run it in parallel with a cut, or on the input only, and keep a fast screen (a small classifier
+# or rules) holding back the short windows where leakage is unacceptable.
 #
 # **Drill 2.** *Why should the gateway keep MCP tokens per user rather than one per server, as the Python SDK
 # does?* — A multi-tenant gateway acts for many principals; one token per server would let every user act with

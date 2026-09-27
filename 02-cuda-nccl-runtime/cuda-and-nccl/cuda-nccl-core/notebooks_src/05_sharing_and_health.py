@@ -118,8 +118,8 @@ for mode, t in S.TRAITS.items():
 #
 # ## Exercise 5.2: time-slicing latency from first principles
 #
-# The GPU runs one context at a time, round-robin, for a quantum `q` each, and pays `s` for every
-# context switch. Our request needs `W` of GPU time, so `k = ceil(W/q)` quanta. The other `N - 1`
+# The GPU runs one context at a time, round-robin, for a quantum $q$ each, and pays $s$ for every
+# context switch. Our request needs $W$ of GPU time, so $k = \lceil W/q \rceil$ quanta. The other ${N-1}$
 # tenants always have work. Between two of our quanta, each of them runs a quantum, with a switch
 # before each, plus one more switch back to us. If our first quantum starts right away, when do
 # we finish? Write `timeslice_best(W, N, q, s)`.
@@ -190,7 +190,8 @@ for finding in H.diagnose(sample):
 #
 # Write `counters(kernels, n_sms, window)` for kernels given as `(start, end, sms_busy)` with
 # **integer** microsecond times. `gpu_util` is the share of the window in which at least one
-# kernel runs. `sm_active` is the average over the window of `min(total SMs busy, n_sms) / n_sms`.
+# kernel runs. `sm_active` is the average over the window of
+# $\min(\text{total SMs busy}, n_{\text{sms}}) / n_{\text{sms}}$.
 # Kernels may overlap. (Stepping through the window 1 us at a time is fine.)
 
 # %% exercise

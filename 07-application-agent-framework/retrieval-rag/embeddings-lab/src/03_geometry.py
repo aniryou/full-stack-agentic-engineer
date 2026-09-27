@@ -75,7 +75,7 @@ for name, W in candidates.items():
 
 # %% [markdown]
 # ## Hubness: a few points are everyone's neighbour
-# Count how often each word appears in others' top-10 (`N₁₀`). A long right tail
+# Count how often each word appears in others' top-10 ($N_{10}$). A long right tail
 # = hubs. **CSLS** (Conneau et al. 2018) rescales similarity by each point's
 # local neighbourhood density and flattens the tail.
 
@@ -107,8 +107,8 @@ print("biggest hubs under cosine:", hubs)
 
 # %% [markdown]
 # ## Johnson–Lindenstrauss: why dimension cuts are cheap
-# A *random* projection to `k = O(log n / ε²)` dims preserves all pairwise
-# distances within (1±ε). No training, no data-dependence — the floor that PCA
+# A *random* projection to $k = O(\log n / \varepsilon^2)$ dims preserves all pairwise
+# distances within $(1 \pm \varepsilon)$. No training, no data-dependence — the floor that PCA
 # and Matryoshka improve on.
 
 # %%
@@ -134,7 +134,7 @@ plt.tight_layout(); plt.show()
 # ## SVD is the original Matryoshka
 # SVD orders dimensions by singular value, so a *prefix* of the vector is the
 # best low-rank view. Compare neighbour-list overlap when truncating to the
-# first `k` dims vs a random `k`-dim subset. (MRL trains modern models to have
+# first $k$ dims vs a random $k$-dim subset. (MRL trains modern models to have
 # exactly this property — §5.)
 
 # %%

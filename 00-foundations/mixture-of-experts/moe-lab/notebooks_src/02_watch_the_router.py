@@ -96,7 +96,7 @@ print(f"✅ {ids0.shape} = (tokens - 1, layers, top-k); dtype {ids0.dtype}")
 # ## Exercise 2.2 — utilisation per layer
 #
 # Write `utilisation(ids, n_experts)` → counts `[layers, n_experts]`: how many of the token-slot
-# assignments of each layer went to each expert. Every row sums to tokens × k.
+# assignments of each layer went to each expert. Every row sums to $\text{tokens} \times k$.
 
 # %% exercise
 def utilisation(ids, n_experts):
@@ -130,7 +130,7 @@ print(f"... {ts.n_experts - 10} more experts share the remaining {1 - np.sort(U[
 # vLLM's EPLB logs **balancedness** = mean tokens per expert / max tokens per expert (1.0 perfect).
 # Even a perfectly uniform router shows balancedness below 1 in a finite sample. Write
 # `balancedness(counts)` (per row) and `uniform_baseline(tokens, n_experts, k, trials, seed)`: the
-# mean balancedness of `trials` samples of `tokens` tokens routed uniformly (k *distinct* experts per
+# mean balancedness of `trials` samples of `tokens` tokens routed uniformly ($k$ *distinct* experts per
 # token). A layer whose balancedness sits well below the baseline is skewed for real.
 
 # %% exercise
@@ -167,8 +167,9 @@ print("✅ judge skew against the uniform baseline at the same sample size, not 
 # ## Exercise 2.4 — does the hot set depend on the domain?
 #
 # Write `js(p, q)`: the Jensen–Shannon divergence in bits between two count vectors
-# (normalise each, `m = (p + q)/2`, `JS = ½ KL(p‖m) + ½ KL(q‖m)`; 0 = same distribution, 1 =
-# disjoint). Then compare the domains layer by layer.
+# (normalise each, $m = (p + q)/2$,
+# $\mathrm{JS} = \frac{1}{2}\,\mathrm{KL}(p \,\|\, m) + \frac{1}{2}\,\mathrm{KL}(q \,\|\, m)$; 0 = same
+# distribution, 1 = disjoint). Then compare the domains layer by layer.
 
 # %% exercise
 def js(p, q):
@@ -202,10 +203,10 @@ print(f"✅ first quarter of layers {div[:L // 4].mean():.3f}, last quarter {div
 #
 # ## Exercise 2.5 — from hot experts to a slow GPU
 #
-# With `--enable-expert-parallel` and vLLM's default `--expert-placement-strategy linear`, EP rank r
-# holds experts `[r·E/ep, (r+1)·E/ep)` (`round_robin`, expert e on rank e mod ep, is only honoured
-# for models with expert groups, like DeepSeek-V3 — vLLM falls back to linear otherwise; checked on
-# vLLM main, Sep 2026, verify for your version). Write
+# With `--enable-expert-parallel` and vLLM's default `--expert-placement-strategy linear`, EP rank $r$
+# holds experts `[r·E/ep, (r+1)·E/ep)` (`round_robin`, expert $e$ on rank $e \bmod \mathit{ep}$, is
+# only honoured for models with expert groups, like DeepSeek-V3 — vLLM falls back to linear
+# otherwise; checked on vLLM main, Sep 2026, verify for your version). Write
 # `rank_loads(counts, ep)` → `[layers, ep]` assignments per rank under linear placement, then the
 # **imbalance** max/mean per layer.
 
@@ -304,7 +305,7 @@ else:
 # ```
 #
 # The notebook looks the served model up in `moelab.configs` (`hooks.expert_layout`) for its expert
-# count and reads k from the returned arrays; for a model outside the catalogue set `MOELAB_EXPERTS`
+# count and reads $k$ from the returned arrays; for a model outside the catalogue set `MOELAB_EXPERTS`
 # (and `MOELAB_TOPK`) from its `config.json`, or the capture stops with an error rather than guess.
 #
 # Then write your own prompts per domain (`hooks.capture_vllm(..., prompts={...})`) — a few hundred
@@ -319,7 +320,7 @@ else:
 # Per layer, load is uneven — the hottest expert takes a multiple of its fair share — and we judge
 # that against what uniform routing would show at our sample size before calling it real. The hot
 # set shifts with the traffic mix, so the placement that balances code traffic may not balance chat.
-# For serving that matters through expert parallelism: GPU r holds a block of experts, the busiest
+# For serving that matters through expert parallelism: GPU $r$ holds a block of experts, the busiest
 # GPU sets the step, and the imbalance grows as experts per GPU shrink. The remedies are measured
 # placement and replication of hot experts (EPLB) — each replica costs HBM — not topic-based
 # assignment."

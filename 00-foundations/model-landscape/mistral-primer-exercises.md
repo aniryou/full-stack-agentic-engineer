@@ -78,7 +78,7 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 
 - **Extraction:** OCR 4.1 — 170 languages covers the six, and it returns bounding boxes, typed block classification and per-page/per-word confidence.
 - **Indexing:** Mistral Search Toolkit over the policy corpus; OCR 4 output feeds the ingestion pipeline directly as citation-ready structured blocks.
-- **Validation:** Agentic Search against that index — this is exactly the case one-shot RAG fails, since the answer sits in a specific clause or table rather than a top-*k* chunk.
+- **Validation:** Agentic Search against that index — this is exactly the case one-shot RAG fails, since the answer sits in a specific clause or table rather than a top-$k$ chunk.
 - **Adjudication draft:** Small 4 with `reasoning_effort` scaled to claim complexity; Medium 3.5 only if the workflow calls multiple tools over a long horizon.
 - **Safety:** Shieldstral if outputs reach end users and the deployment is isolated; Moderation 2 if API is acceptable (it's free).
 
@@ -91,6 +91,7 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 **(b)** One deployment instead of three, one set of weights to version and evaluate, fewer GPUs held warm, no routing logic to maintain or get wrong, and reasoning becomes a per-request parameter rather than a model choice.
 
 **(c) Two non-obvious breaks:**
+
 - **Verbosity changes.** `reasoning_effort="high"` approximates old Magistral verbosity and `"none"` approximates Small 3.2 chat style — but anything tuned to a specific output length, latency budget or token cost needs re-benchmarking, not just re-pointing.
 - **Infrastructure shape changes.** Devstral Small was a 24B dense model that fits one GPU; Small 4 is a 119B-total, ~6.5B-active MoE (verify, 2026-09). All 119B parameters must sit in memory: about 240 GB in BF16 and 120 GB in FP8 (params × bytes, [capacity primer](../gpu-capacity-planning/PRIMER.md)), so two H100s or one H200 in FP8 before any KV cache. A team self-hosting Devstral Small on one modest GPU may need to re-provision entirely — or drop to Ministral 3 14B and accept the capability trade.
 
@@ -110,7 +111,9 @@ The point of the exercise: **the expensive model is rarely the answer, and the c
 
 **(b) The trap:** Regional Endpoints let you choose **Europe or the US**. Neither is Singapore. For a no-data-leaves-Singapore constraint, regional endpoints are irrelevant — you need self-hosting or a cloud region inside Singapore. "Just use regional endpoints" misreads the feature.
 
-**(c)** In-country: the GPUs serving the models, the weights, the OCR container, the search index, the fine-tuning data and Forge's artefacts, and the logs and traces, because prompts and outputs contain the personal data too. Options for the GPUs are the bank's own data centre, a hyperscaler region in Singapore, or a sovereign-cloud offering. Before signing off, check: every data centre the offering may place the workload in (some regional sovereign clouds span Singapore and neighbouring countries), GPU availability and lead time in that region, where support staff and telemetry pipelines can reach the data, and whether the model licence allows self-hosting (Apache 2.0 for Small 4, Large 3 and Ministral 3; verify).
+**(c)** In-country: the GPUs serving the models, the weights, the OCR container, the search index, the fine-tuning data and Forge's artefacts, and the logs and traces, because prompts and outputs contain the personal data too. Options for the GPUs are the bank's own data centre, a hyperscaler region in Singapore, or a sovereign-cloud offering.
+
+Before signing off, check: every data centre the offering may place the workload in (some regional sovereign clouds span Singapore and neighbouring countries), GPU availability and lead time in that region, where support staff and telemetry pipelines can reach the data, and whether the model licence allows self-hosting (Apache 2.0 for Small 4, Large 3 and Ministral 3; verify).
 
 ### 6. Explain-it drill
 

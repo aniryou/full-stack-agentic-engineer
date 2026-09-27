@@ -213,7 +213,7 @@ print("✅ selector, taints and integer resources decide feasibility; nothing el
 # an XID 79, "GPU has fallen off the bus". Predict, *before* running anything:
 #
 # * `capacity` and `allocatable` in the node status;
-# * how many GPUs the scheduler now considers free on this node (allocatable − requested);
+# * how many GPUs the scheduler now considers free on this node ($\mathit{allocatable} - \mathit{requested}$);
 # * whether the kubelet can admit a new 2-GPU pod.
 
 # %% exercise
@@ -282,8 +282,8 @@ print("✅ topology-aware allocation inside one node - notebook 03 does the same
 # ## Sharing: time-slicing advertises more integers, not more GPUs
 #
 # Because the scheduler only counts, sharing a GPU means advertising *more units*. With time-slicing
-# the NVIDIA device plugin is configured with `replicas: N`: every physical GPU is listed N times in
-# `ListAndWatch` (IDs `<uuid>::0 ... ::N-1`), and allocatable grows N-fold. The plugin's preferred
+# the NVIDIA device plugin is configured with `replicas: N`: every physical GPU is listed $N$ times in
+# `ListAndWatch` (IDs `<uuid>::0 ... ::N-1`), and allocatable grows $N$-fold. The plugin's preferred
 # allocation takes replicas one at a time from the physical GPU with the fewest replicas already
 # allocated (its default *distributed* policy), and a replica carries no memory limit and no
 # guaranteed share of compute — every process on the GPU is time-sliced equally.
@@ -370,7 +370,9 @@ for policy in ("distributed", "packed", "spread"):
 # installed by the GPU Operator, or by GKE itself — registers `nvidia.com/gpu` with the kubelet and
 # streams device health; the kubelet turns that into capacity and allocatable on the Node; the
 # scheduler sees an integer and never overcommits it. Requests are whole GPUs with requests equal
-# to limits. We taint GPU nodes so only GPU pods land there — the ExtendedResourceToleration
+# to limits.
+#
+# "We taint GPU nodes so only GPU pods land there — the ExtendedResourceToleration
 # admission plugin (on in GKE; we enable it on self-built clusters) adds the toleration to GPU pods —
 # and select GPU types with node labels. If we need fractions we choose MIG for isolation or
 # time-slicing for density, knowing time-slicing gives no memory or fault isolation and that two

@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 03 · Test-time compute for real: pass@k, majority vote, best-of-n, and the price of a correct answer
 #
-# **Tier:** T1 — sample every problem n times from a real thinking model (`THINKLAB_URL` pointing at
+# **Tier:** T1 — sample every problem $n$ times from a real thinking model (`THINKLAB_URL` pointing at
 # `vllm serve Qwen/Qwen3-0.6B --reasoning-parser qwen3`; 40 problems × (8 + 8 + 16) samples is a few
 # thousand requests, tens of minutes on a T4 (verify on yours); set `COLLECT = True`). T0 (default) —
 # the bundled table of the lab's **simulated** model on the same problems (illustrative outcomes,
@@ -12,10 +12,10 @@
 # * There are two ways to spend more compute on a question at inference time: think **longer**
 #   (sequential: more reasoning tokens, or a larger budget) or sample **more** answers and pick one
 #   (parallel: majority vote, best-of-n with a verifier or reward model). PRIMER §6 "Test-time compute".
-# * Measure them properly. **pass@k**, the chance that at least one of k samples is right, needs the
-#   unbiased estimator `1 − C(n−c, k)/C(n, k)` from n ≥ k samples. `1 − (1 − c/n)^k` is biased.
-#   **pass^k**, the chance that *all* k are right, is the reliability an agent needs, and it *falls*
-#   with k. **maj@k** needs no verifier, only answers that can be compared.
+# * Measure them properly. **pass@k**, the chance that at least one of $k$ samples is right, needs the
+#   unbiased estimator `1 − C(n−c, k)/C(n, k)` from $n \ge k$ samples. `1 − (1 − c/n)^k` is biased.
+#   **pass^k**, the chance that *all* $k$ are right, is the reliability an agent needs, and it *falls*
+#   with $k$. **maj@k** needs no verifier, only answers that can be compared.
 # * pass@k is an upper bound that only a perfect verifier achieves. Majority vote and a noisy reward
 #   model land below it, and majority vote can *lose* accuracy when a wrong answer is the most
 #   common one.
@@ -63,7 +63,7 @@ print(table(rows, title=f"[{LABEL}] one sample, by mode"))
 # The unbiased estimator `1 − C(n−c, k)/C(n, k)` is derived and implemented in rl-core notebook 04
 # (exercise 4.1); here it is `ref_pass_at_k`. Apply it to the records. `pass_at_k_both(sel, k)`
 # returns `(unbiased, plugin)`: the mean over the problems in `sel` of `ref_pass_at_k(n, c, k)` and
-# of the plug-in `1 − (1 − c/n)^k`, where each problem has n samples of which c are correct. Then
+# of the plug-in `1 − (1 − c/n)^k`, where each problem has $n$ samples of which $c$ are correct. Then
 # set `gap_comes_from` to the kind of problem that produces all of the difference between the two:
 # `"all right"`, `"all wrong"` or `"some right"`.
 
@@ -133,7 +133,7 @@ print("✅ majority vote with None ignored and first-seen tie-breaking")
 # For each problem with 8 thinking-mode samples:
 #
 # * **pass@k** (perfect verifier, oracle best-of-n), the ceiling;
-# * **maj@k**, majority vote over k of the 8 samples, averaged over random subsets;
+# * **maj@k**, majority vote over $k$ of the 8 samples, averaged over random subsets;
 # * **best-of-k by a reward model**: the sample with the top score from a *noisy* scorer. In the
 #   simulated records the scorer gives correct answers +0.8 on average with unit noise; at T1 plug in
 #   a real reward model.
@@ -158,16 +158,16 @@ for mode in ("off", "on"):
 # Best-of-k with the noisy reward model rises at first, then can *fall*: the more samples, the more
 # chances that a wrong one draws the top score. That is reward over-optimisation at inference time,
 # and the reason to trust a verifier over a reward model where one exists. pass^k falls: the chance
-# that every one of k attempts succeeds is what an agent running the same step many times sees.
+# that every one of $k$ attempts succeeds is what an agent running the same step many times sees.
 # Thinking lifts every column, and each thinking sample costs roughly ten times the tokens.
 #
 # ## Exercise 3.3 — pass^k on the records, and the independence shortcut
 #
-# pass^k, the chance that k samples of the *same* problem are all right, is `C(c, k)/C(n, k)`
+# pass^k, the chance that $k$ samples of the *same* problem are all right, is `C(c, k)/C(n, k)`
 # (τ-bench; rl-core notebook 04, exercise 4.2; here `ref_pass_hat_k`). A common shortcut is to raise
-# pass@1 to the k-th power, as if every attempt were an independent coin with the eval set's average
+# pass@1 to the $k$-th power, as if every attempt were an independent coin with the eval set's average
 # accuracy. `reliability(sel, k)` returns `(pass_hat, shortcut)`: the mean over problems of
-# `ref_pass_hat_k(n, c, k)`, and (mean accuracy over all samples)^k. Then set `shortcut_is` to
+# `ref_pass_hat_k(n, c, k)`, and $(\text{mean accuracy over all samples})^k$. Then set `shortcut_is` to
 # `"optimistic"` or `"pessimistic"` for these records, and say why in a comment.
 
 # %% exercise
@@ -236,8 +236,8 @@ print("✅ cost per correct answer = all tokens of all samples x price / accurac
 # %% [markdown]
 # ## Exercise 3.5 — compute-optimal: the best accuracy for a token budget per question
 #
-# Build the option list — every (mode, k) with its expected tokens per question (`k` × mean output
-# tokens of the mode) and its accuracy (maj@k for k > 1, pass@1 for k = 1) — and, for each budget
+# Build the option list — every (mode, $k$) with its expected tokens per question (`k` × mean output
+# tokens of the mode) and its accuracy (maj@k for ${k > 1}$, pass@1 for $k$ = 1) — and, for each budget
 # of tokens per question, pick the most accurate option that fits (cheaper wins ties). This is the
 # small-scale version of "compute-optimal test-time scaling": the best way to spend a fixed number of
 # tokens depends on how many there are. With other models and tasks the order can differ; many
@@ -292,8 +292,8 @@ print("✅ the best option changes with the budget: direct answers, then budgete
 # depends on the token budget per question, so the router, not the model, picks it (notebook 04,
 # exercise 4.5)."
 #
-# **Drill 1.** *Why not estimate pass@8 as 1 − (1 − pass@1)^8?* That assumes independent samples
-# with the same success probability on every problem. The estimator from n ≥ k real samples per
+# **Drill 1.** *Why not estimate pass@8 as $1 - (1 - \text{pass@1})^8$?* That assumes independent samples
+# with the same success probability on every problem. The estimator from $n \ge k$ real samples per
 # problem is unbiased, and averaging it over problems keeps easy and hard problems separate.
 #
 # **Drill 2.** *maj@16 is worse than maj@4 on our hardest slice. Bug?* No. When a wrong answer is
@@ -301,5 +301,5 @@ print("✅ the best option changes with the budget: direct answers, then budgete
 # of problems where the right answer is modal.
 #
 # **Drill 3.** *pass@1 is 90%, so the five-step agent succeeds 90% of the time?* Only if you run each
-# step once and the steps are independent, which gives 0.9^5 ≈ 59%. If a step must succeed every
+# step once and the steps are independent, which gives $0.9^5$ ≈ 59%. If a step must succeed every
 # time it is retried or repeated, measure pass^k.

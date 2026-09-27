@@ -9,7 +9,12 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Task 1 — implement PPMI
-# `ppmi(C)[i,j] = max(0, log( p(i,j) / (p(i)·p(j)) ))`, with unseen pairs → 0.
+#
+# $$
+# \operatorname{ppmi}(C)[i,j] = \max\left(0, \log \frac{p(i,j)}{p(i)\,p(j)}\right),
+# $$
+#
+# with unseen pairs → 0.
 
 # %%
 def ppmi(C):
@@ -30,9 +35,13 @@ print("ppmi ✓")
 
 # %% [markdown]
 # ## Task 2 — the SGNS gradient
-# For one (center `v`, positive `u⁺`, negatives `U⁻` of shape (K,d)) example:
-# `L = −log σ(v·u⁺) − Σ_k log σ(−v·u⁻_k)`.
-# Return `(dL/dv, dL/du⁺, dL/dU⁻)`. Hint: both gradients are sigmoid residuals
+# For one (center $v$, positive $u^+$, negatives $U^-$ of shape (K,d)) example:
+#
+# $$
+# L = -\log \sigma(v \cdot u^+) - \sum_k \log \sigma(-v \cdot u^-_k).
+# $$
+#
+# Return $(dL/dv,\ dL/du^+,\ dL/dU^-)$. Hint: both gradients are sigmoid residuals
 # times the *other* vector.
 
 # %%
@@ -72,7 +81,7 @@ print("sgns_grads ✓ (matches finite differences)")
 
 # %% [markdown]
 # ## Task 3 — the analogy function
-# `analogy(a, b, c)`: nearest word to `a − b + c` by cosine, **excluding** a, b,
+# `analogy(a, b, c)`: nearest word to $a - b + c$ by cosine, **excluding** a, b,
 # c. Uses the vectors saved by notebook 01 (run it first).
 
 # %%

@@ -62,7 +62,7 @@ print(f"linear-layer weights: {linear:,} of {model.num_params():,} ({linear / mo
 #
 # `Recipe("FP8_DYNAMIC")` is `QuantizationModifier(targets="Linear", scheme="FP8_DYNAMIC",
 # ignore=["lm_head"])`. Each projection becomes an `F8_E4M3` `weight` plus a bf16 `weight_scale` of
-# shape `[out, 1]` (one per output channel, `amax / 448`); activation scales are computed per token
+# shape `[out, 1]` (one per output channel, $\mathrm{amax}/448$); activation scales are computed per token
 # at run time, so there is nothing to calibrate.
 
 # %%
@@ -135,7 +135,7 @@ print(f"✅ predicted {predict_w4a16_bytes(model):,} B = written {actual:,} B; {
 # the largest inputs. GPTQ quantizes one column at a time and pushes each column's rounding error
 # onto the columns not yet quantized, weighted by the inverse Hessian of the calibration inputs, so
 # the error that lands on the big-input channels is compensated elsewhere. Layer error below is
-# `||X W_hat^T - X W^T|| / ||X W^T||` on calibration inputs.
+# $\lVert X\hat{W}^\top - XW^\top \rVert / \lVert XW^\top \rVert$ on calibration inputs.
 
 # %%
 print("outlier channels:", tm.outlier_channels(model))
@@ -203,7 +203,8 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # ## Exercise 1.3 — the symmetric INT4 group quantizer
 #
 # Implement compressed-tensors' symmetric INT4 grid for `w` shaped `[out, in]`: for each output row
-# and each run of `g` inputs, `scale = amax / 7.5`, `code = clip(round(w / scale), -8, 7)`. Return
+# and each run of `g` inputs, $\mathrm{scale} = \mathrm{amax}/7.5$,
+# $\mathrm{code} = \operatorname{clip}(\operatorname{round}(w/\mathrm{scale}), -8, 7)$. Return
 # `(codes [out, in], scales [out, in / g], w_hat)`.
 
 # %% exercise
@@ -257,7 +258,7 @@ print(f"✅ all {len(model.linear_names())} projections decode; add accuracy {be
 #
 # llm-compressor errors at initialize, and vLLM's Marlin refuses the layer, when a projection's
 # `in_features` is not a multiple of the group size. q/k/v and gate/up read `hidden_size` inputs,
-# o_proj reads `num_heads x head_dim`, down_proj reads `intermediate_size`. Write
+# o_proj reads $\mathrm{num\_heads} \times \mathrm{head\_dim}$, down_proj reads `intermediate_size`. Write
 # `bad_projections(config, g)` returning the sorted names (`"q_proj"`, ... `"down_proj"`) that fail.
 
 # %% exercise
@@ -326,7 +327,7 @@ else:
 #
 # **Drill 1.** *Why does `FP8_DYNAMIC` need no calibration data but `W4A16` with GPTQ does?* — FP8
 # dynamic computes weight scales from the weights and activation scales per token at run time;
-# GPTQ's error compensation needs the Hessian `X^T X` of real inputs to each layer.
+# GPTQ's error compensation needs the Hessian $X^\top X$ of real inputs to each layer.
 #
 # **Drill 2.** *The INT4 checkpoint of a 0.5B model is only 2.2x smaller. Is the tool broken?* — No:
 # Qwen2.5-0.5B ties a 136 M-parameter embedding that stays bf16 (27.6% of the model), plus 16/128 bits

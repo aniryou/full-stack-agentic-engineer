@@ -1,5 +1,10 @@
-"""Sequence-level distillation: the data pipeline's bookkeeping and exposure bias (primer §3)."""
+"""Sequence-level distillation: the data pipeline's bookkeeping and exposure bias (primer §3).
+
+Counts and rates from sampling or training are one seeded run on one CPU (the primer's numbers); another CPU
+family's BLAS and SIMD kernels move them, so they are compared with a tolerance of about three times the largest
+deviation seen across 15 CPU variants. The bookkeeping is exact."""
 import numpy as np
+import pytest
 
 from distillcore import TinyLM, onpolicy as op, seqkd
 
@@ -12,7 +17,8 @@ def test_pipeline_bookkeeping_greedy_samples_are_duplicates(lang, teacher, bench
 
 def test_pipeline_bookkeeping_sampled_data_mostly_fails_the_verifier(lang, teacher, bench):
     data, s1 = seqkd.pipeline(teacher, lang, bench["prompts"], 8, 12, np.random.default_rng(1), T=1.0)
-    assert s1["generated"] == 160 and s1["verified"] == 16 and s1["unique"] == 11 and s1["tokens_used"] == 132
+    assert s1["generated"] == 160 and s1["tokens_used"] == 12 * s1["unique"]
+    assert s1["verified"] == pytest.approx(16, abs=6) and s1["unique"] == pytest.approx(11, abs=6)
     assert lang.verify(data).all() and len(np.unique(data, axis=0)) == len(data)
     assert abs(0.8 ** 12 - 0.0687) < 1e-4                          # a perfect teacher passes 6.9% of 12-token samples
 
@@ -35,11 +41,13 @@ def test_exposure_bias_teacher_prefixes_vs_own_prefixes(lang, bench):
 
 def test_exposure_bias_compounds_per_output_not_per_position(lang, teacher, bench):
     """Per position the KD student settles near 0.77 after a few tokens; the chance its whole output is right so far
-    falls every position (0.650 at 4, 0.190 at 12). The teacher stays right, and samples the rule's ~0.8 throughout."""
+    falls every position (0.650 at 4, 0.190 at 12 in the primer's run). The teacher stays right, and samples the
+    rule's ~0.8 throughout."""
     eb = seqkd.exposure_bias(bench["kd"], lang, bench["greedy"], bench["prompts"], np.random.default_rng(5))
     own, allr, onrule = eb["own_prefixes"], eb["all_right_so_far"], eb["sampled_on_rule"]
-    assert np.ptp(own[3:]) < 0.03                                  # flat per position after the first slips
-    assert np.all(np.diff(allr) < 0) and round(allr[3], 3) == 0.650 and round(allr[11], 3) == 0.190
+    assert np.ptp(own[3:]) < 0.05              # flat per position after the first slips (2,000 samples a position)
+    assert np.all(np.diff(allr) < 0)
+    assert allr[3] == pytest.approx(0.650, abs=0.015) and allr[11] == pytest.approx(0.190, abs=0.03)
     assert np.allclose(allr[0], own[0]) and np.all(allr <= own + 1e-12)
     t = seqkd.exposure_bias(teacher, lang, bench["greedy"], bench["prompts"], np.random.default_rng(5))
     assert np.all(t["all_right_so_far"] == 1.0) and np.all(np.abs(t["sampled_on_rule"] - 0.8) < 0.03)
@@ -50,4 +58,4 @@ def test_on_policy_distillation_removes_it(lang, teacher, bench):
     s = bench["kd"].copy()
     op.gkd_train(s, teacher, bench["prompts"], 12, 300, lam=1.0, beta=0.0, data=bench["greedy"], seed=1)
     own = seqkd.own_accuracy(s, lang, bench["prompts"], 12, np.random.default_rng(5))
-    assert own[3] > 0.98 and own[11] > 0.97
+    assert own[3] > 0.97 and own[11] > 0.87   # 0.994 and 0.984 in the primer's run; the KD student: 0.788 and 0.774

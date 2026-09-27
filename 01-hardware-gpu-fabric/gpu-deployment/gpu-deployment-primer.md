@@ -70,9 +70,9 @@ Three things consume GPU memory.
 
 ### 3.1 Weights
 
-```
-weight memory = parameters × bytes per parameter
-```
+$$
+\text{weight memory} = \text{parameters} \times \text{bytes per parameter}
+$$
 
 | Precision | Bytes/param | 70B model | 405B model |
 |---|---|---|---|
@@ -89,15 +89,15 @@ Quantisation (running at lower precision) is the single biggest lever you have. 
 
 During decode, the model caches the key and value vectors for every token it has already seen, so it doesn't recompute them each step. This cache grows linearly with sequence length **and** with the number of concurrent requests.
 
-```
-KV bytes per token = layers × kv_heads × head_dim × 2 (K and V) × bytes_per_element
-```
+$$
+\text{KV bytes per token} = \text{layers} \times \text{kv_heads} \times \text{head_dim} \times 2\ (K \text{ and } V) \times \text{bytes_per_element}
+$$
 
 Worked example, roughly a 70B-class model at FP16:
 
-```
-80 layers × 8 KV heads × 128 dims × 2 × 2 bytes ≈ 320 KB per token
-```
+$$
+80\ \text{layers} \times 8\ \text{KV heads} \times 128\ \text{dims} \times 2 \times 2\ \text{bytes} \approx 320\ \text{KB per token}
+$$
 
 A 4,000-token prompt therefore costs about **1.3 GB of KV cache for a single request**. Multiply by your concurrency target.
 
@@ -251,6 +251,7 @@ The current architectural frontier, and a direct consequence of section 2.
 Instead of running both phases on the same GPUs, you run **separate pools**: prefill workers and decode workers. When prefill finishes, the KV cache is transferred over the fabric to a decode worker, which starts generating immediately.
 
 **Why it helps:**
+
 - Each pool can be sized, tuned, and parallelised independently.
 - Prefill workers are never interrupted by decode, so TTFT drops sharply.
 - Decode workers are never stalled by long prefills, so token streams stay smooth.
@@ -285,15 +286,18 @@ Training needs checkpointing and fault tolerance as first-class concerns, becaus
 ## 10. The numbers to hold yourself to
 
 **Latency**
+
 - **TTFT** — time to first token. Dominated by prefill and queueing. Target under ~500 ms for interactive use.
 - **ITL / TPOT** — inter-token latency. Dominated by decode. Under ~50 ms feels faster than reading speed.
 - Always report **p50, p95 and p99**. Averages hide everything that matters.
 
 **Throughput**
+
 - Output tokens/sec/GPU is the honest efficiency number.
 - **Goodput** — requests/sec that actually met their SLO. Better than raw throughput, because throughput measured with a 10-second TTFT is a lie.
 
 **Efficiency**
+
 - **MFU** — what fraction of theoretical FLOPs you're achieving. 40–50% is good for training. Inference decode is memory-bound so MFU is naturally low; measure bandwidth utilisation instead.
 - **$/million tokens** — the number your finance team cares about, and the honest basis for build-vs-buy.
 
@@ -358,12 +362,14 @@ Most organisations should start at A, and are wrong about needing C.
 ## 14. Where to go next
 
 **Do these in order:**
+
 1. Run vLLM on a single GPU with a 7B model. Watch `nvidia-smi`. Vary batch size and observe the throughput/latency curve yourself.
 2. Do the memory arithmetic by hand for a model you care about, then check it against what the engine actually allocates.
 3. Benchmark with a realistic request distribution, not a uniform one. Your prompt-length distribution determines everything.
 4. Only then reach for multi-node, and only then for disaggregation.
 
 **Reading:**
+
 - vLLM docs and the PagedAttention paper (Kwon et al., 2023)
 - Sarathi-Serve on chunked prefill (Agrawal et al., 2024)
 - DistServe and Splitwise on disaggregation (2024)
@@ -371,6 +377,7 @@ Most organisations should start at A, and are wrong about needing C.
 - NVIDIA's own scale-up networking material for the interconnect view
 
 **Sources consulted for the 2026 hardware and stack picture:**
+
 - https://ai-infrastructure.net/nvidia-gpu-roadmap/
 - https://vrlatech.com/nvidia-gpu-roadmap-2026-2030/
 - https://developer.nvidia.com/blog/nvidia-nvlink-the-scale-up-network-for-ai-factories/

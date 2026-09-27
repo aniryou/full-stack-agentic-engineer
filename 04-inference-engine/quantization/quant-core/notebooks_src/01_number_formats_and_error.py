@@ -6,15 +6,19 @@
 #
 # ## The one-minute version
 # Every low-precision format is a **grid** of representable values plus a **scale** that stretches it over
-# the data: `x ≈ code × scale`. Integer grids (INT8, INT4) are evenly spaced, so the absolute error is at
-# most half a step everywhere and each extra bit halves it — about **6 dB of signal-to-noise per bit**.
-# Floating grids (FP8 E4M3 and E5M2, FP4 E2M1) are spaced by powers of two, so the *relative* error is
-# the same at every magnitude and the exponent bits buy **range** instead of precision: E4M3 has 3
-# mantissa bits (≤ 6.25% rounding error) over 2^14.8 of normal range, E5M2 2 bits (≤ 12.5%) over 2^29.8.
-# Block formats — **MXFP4** (a power-of-two scale per 32) and **NVFP4** (an FP8 scale per 16 plus one per
-# tensor) — give a 4-bit float grid a local scale. Every scale costs bits: INT4 with a 16-bit scale per
-# 128 weights is **4.125 bits per weight**, 4.156 with a 4-bit zero point, MXFP4 4.25, NVFP4 4.5. After
-# this notebook you can say which grid a format is, predict its error from its bits and the data's
+# the data: $x \approx \text{code} \times \text{scale}$.
+#
+# - Integer grids (INT8, INT4) are evenly spaced, so the absolute error is at most half a step everywhere and
+#   each extra bit halves it — about **6 dB of signal-to-noise per bit**.
+# - Floating grids (FP8 E4M3 and E5M2, FP4 E2M1) are spaced by powers of two, so the *relative* error is the
+#   same at every magnitude and the exponent bits buy **range** instead of precision: E4M3 has 3 mantissa bits
+#   (≤ 6.25% rounding error) over $2^{14.8}$ of normal range, E5M2 2 bits (≤ 12.5%) over $2^{29.8}$.
+# - Block formats — **MXFP4** (a power-of-two scale per 32) and **NVFP4** (an FP8 scale per 16 plus one per
+#   tensor) — give a 4-bit float grid a local scale.
+# - Every scale costs bits: INT4 with a 16-bit scale per 128 weights is **4.125 bits per weight**, 4.156 with a
+#   4-bit zero point, MXFP4 4.25, NVFP4 4.5.
+#
+# After this notebook you can say which grid a format is, predict its error from its bits and the data's
 # crest factor, and count what a checkpoint really stores.
 #
 # Primer: `../PRIMER.md` §2 *Number formats* and §3 *Granularity and the bits-per-weight budget*. The
@@ -34,10 +38,11 @@ rng = np.random.default_rng(0)
 # %% [markdown]
 # ## Worked example 1 — integer grids: symmetric, the extra code, and the zero point
 # Symmetric INT4 has 16 codes, −8…7. Two conventions share it out:
-# **restricted** (±7, scale = amax/7: `minengine.quant`, SmoothQuant's fake-quant) wastes the −8 code;
-# **full** (−8…7, scale = amax/7.5: GPTQ's `quant.py`, compressed-tensors' `_calculate_range`) uses all 16,
-# so its step is 7/7.5 of the restricted one. **Asymmetric** (AWQ, KIVI) shifts an unsigned 0…15 grid by a
-# zero point so it covers [min, max] instead of [−amax, amax] — worth it for one-sided data.
+# **restricted** (±7, $\mathrm{scale} = \mathrm{amax}/7$: `minengine.quant`, SmoothQuant's fake-quant) wastes the
+# −8 code; **full** (−8…7, $\mathrm{scale} = \mathrm{amax}/7.5$: GPTQ's `quant.py`, compressed-tensors'
+# `_calculate_range`) uses all 16, so its step is 7/7.5 of the restricted one. **Asymmetric** (AWQ, KIVI) shifts an
+# unsigned 0…15 grid by a zero point so it covers $[\mathrm{min}, \mathrm{max}]$ instead of $[-\mathrm{amax}, \mathrm{amax}]$ —
+# worth it for one-sided data.
 
 # %%
 for bits in (8, 4):
@@ -119,12 +124,17 @@ for name, fn in schemes.items():
 # clipped, near 4 the top codes go unused — which is what NVFP4's E4M3 scale per 16 fixes, for 0.25 more bits.
 #
 # ## Worked example 4 — about 6 dB per bit, and what outliers cost
-# The uniform-quantizer model: rounding noise has power step²/12, and with `step = 2·amax / 2^b`,
+# The uniform-quantizer model: rounding noise has power $\mathrm{step}^2/12$, and with
+# $\mathrm{step} = 2\,\mathrm{amax}/2^b$,
 #
-# `SQNR ≈ 6.02·b + 4.77 − 20·log10(amax / rms)`  (`formats.sqnr_rule_db`)
+# $$
+# \mathrm{SQNR} \approx 6.02\,b + 4.77 - 20\log_{10}(\mathrm{amax}/\mathrm{rms})
+# $$
 #
-# The last term is the **crest factor**. A sine wave (crest √2) gives the textbook 6.02·b + 1.76; every 10×
-# of amax over rms — one outlier — costs 20 dB, more than three bits.
+# (`formats.sqnr_rule_db`)
+#
+# The last term is the **crest factor**. A sine wave (crest $\sqrt{2}$) gives the textbook $6.02\,b + 1.76$;
+# every 10× of amax over rms — one outlier — costs 20 dB, more than three bits.
 
 # %%
 w = rng.standard_normal((128, 256))
@@ -177,9 +187,9 @@ print("FP4 [0.5, -6, 1.5, 0] ->", [hex(int(b)) for b in F.pack_fp4(np.array([0.5
 # %% [markdown]
 # ## Exercise 1.1 — round to any float format
 # Write `round_float(x, exp_bits, man_bits, bias, max_value)`: saturate to ±max_value, find each value's
-# binade `e = floor(log2 |x|)` but never below the smallest normal exponent `1 − bias` (below it the spacing
-# stays fixed: subnormals), round `x / 2^(e − man_bits)` to the nearest integer (numpy's `np.round` ties to
-# even), and scale back.
+# binade $e = \lfloor \log_2 |x| \rfloor$ but never below the smallest normal exponent $1 - \mathrm{bias}$ (below
+# it the spacing stays fixed: subnormals), round $x / 2^{e - \mathrm{man\_bits}}$ to the nearest integer (numpy's
+# `np.round` ties to even), and scale back.
 
 # %% exercise
 def round_float(x, exp_bits, man_bits, bias, max_value):
@@ -200,9 +210,10 @@ print("✅ one rounding rule gives E4M3, E5M2 and E2M1; FP4 ties go to the even 
 
 # %% [markdown]
 # ## Exercise 1.2 — asymmetric INT4 with a zero point
-# For a vector `v`, compute `scale = (max − min) / 15` and `zero = round(−min / scale)` after widening the
-# range to include 0, then codes `clip(round(v / scale) + zero, 0, 15)` and the dequantized `(codes − zero) × scale`.
-# Return `(codes, scale, zero, v_hat)`.
+# For a vector `v`, compute $\mathrm{scale} = (\mathrm{max} - \mathrm{min})/15$ and
+# $\mathrm{zero} = \operatorname{round}(-\mathrm{min}/\mathrm{scale})$ after widening the range to include 0, then codes
+# $\operatorname{clip}(\operatorname{round}(v/\mathrm{scale}) + \mathrm{zero}, 0, 15)$ and the dequantized
+# $(\mathrm{codes} - \mathrm{zero}) \times \mathrm{scale}$. Return `(codes, scale, zero, v_hat)`.
 
 # %% exercise
 def asym_int4(v):
@@ -268,9 +279,9 @@ print(f"✅ Llama-3.1-8B: INT4 asym {gb['int4-g128-asym']:.2f} GB, MXFP4 {gb['mx
 
 # %% [markdown]
 # ## Exercise 1.5 — the MXFP4 shared exponent
-# For each block of 32, the OCP MX rule is `exp = floor(log2(block amax)) − 2` (2 = E2M1's largest exponent,
-# since 6 = 1.5 × 2²), stored as the byte `exp + 127`. Write `mx_scale_codes(x)` returning those bytes for a
-# 1-D array whose length is a multiple of 32.
+# For each block of 32, the OCP MX rule is $\mathrm{exp} = \lfloor \log_2(\text{block amax}) \rfloor - 2$ (2 = E2M1's
+# largest exponent, since 6 = 1.5 × 2²), stored as the byte $\mathrm{exp} + 127$. Write `mx_scale_codes(x)`
+# returning those bytes for a 1-D array whose length is a multiple of 32.
 
 # %% exercise
 def mx_scale_codes(x):
@@ -302,8 +313,8 @@ for rule in ("ocp", "compressed-tensors"):
 
 # %% [markdown]
 # ## Exercise 1.6 — pack INT4 codes the way a checkpoint does
-# Write `pack8(codes)` for a 1-D array of eight signed codes in −8…7: add 8, then OR code *i* into bits
-# `4i … 4i+3` of a uint32. Return a Python int.
+# Write `pack8(codes)` for a 1-D array of eight signed codes in −8…7: add 8, then OR code $i$ into bits
+# $4i \ldots 4i+3$ of a uint32. Return a Python int.
 
 # %% exercise
 def pack8(codes):
@@ -324,8 +335,10 @@ print("✅ 0xfcba9810 - the value compressed-tensors' pack_to_int32 produces for
 # ## In a design review
 # **The two-minute version.** "A format is a grid and a scale. INT grids are evenly spaced, so their error is
 # absolute and each bit is ~6 dB; FP grids are spaced by powers of two, so their error is relative — E4M3
-# rounds within 6.25% anywhere in a 2^15 range, which is why FP8 is the activation and KV format and why a
-# per-tensor FP8 scale is often enough. At 4 bits the grid alone is too coarse, so every 4-bit format carries
+# rounds within 6.25% anywhere in a $2^{15}$ range, which is why FP8 is the activation and KV format and why a
+# per-tensor FP8 scale is often enough.
+#
+# "At 4 bits the grid alone is too coarse, so every 4-bit format carries
 # small scales: INT4 with a 16-bit scale per 128 costs 4.125 bits, MXFP4 a power-of-two scale per 32 (4.25),
 # NVFP4 an FP8 scale per 16 (4.5) — and the finer NVFP4 scale measurably beats MXFP4's. Outliers are the
 # enemy of every integer grid: the SQNR loses 20 dB for every 10× of amax over rms. And the checkpoint is
@@ -336,4 +349,4 @@ print("✅ 0xfcba9810 - the value compressed-tensors' pack_to_int32 produces for
 #    range): E4M3 has 3 mantissa bits (≤ 6.25% error) vs 2 (≤ 12.5%); E5M2's extra range suits gradients.
 # 2. *What is 4.156 bits?* — INT4 plus a 16-bit scale and a 4-bit zero point per 128 weights: 4 + 20/128.
 # 3. *A 4,096-value row gains one value 40× its rms. What does INT8 per-channel lose?* — about 3 bits: the
-#    crest factor rises from ~3.9 to ~34, and 20·log10(34 / 3.9) ≈ 19 dB ≈ 3.1 bits (exercise 1.3).
+#    crest factor rises from ~3.9 to ~34, and $20\log_{10}(34/3.9)$ ≈ 19 dB ≈ 3.1 bits (exercise 1.3).

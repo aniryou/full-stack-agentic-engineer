@@ -9,7 +9,7 @@ from collections import Counter
 
 # %% [markdown]
 # ## Task 1 — graded nDCG@k
-# `ndcg_at_k(gains, ideal_gains, k)` with `DCG = Σ gain_i / log2(i + 2)`.
+# `ndcg_at_k(gains, ideal_gains, k)` with $\mathrm{DCG} = \sum_i \mathrm{gain}_i / \log_2(i + 2)$.
 # Check: ranking with gains [3,2,0,1] vs ideal [3,2,1,0] → 0.98544.
 
 # %%
@@ -30,14 +30,21 @@ print("ndcg_at_k ✓")
 
 # %% [markdown]
 # ## Task 2 — Reciprocal Rank Fusion
-# `rrf(rankings, k)`: score(d) = Σ over rankings 1/(k + rank(d) + 1), rank
-# 0-based; return doc ids sorted by score. Checks with k=1:
+# `rrf(rankings, k)`:
+#
+# $$
+# \mathrm{score}(d) = \sum_{\text{rankings}} \frac{1}{k + \mathrm{rank}(d) + 1},
+# $$
+#
+# rank 0-based; return doc ids sorted by score.
+#
+# Checks with $k = 1$:
 # [a,b,c] + [c,a,b] → a: 1/2+1/3, c: 1/4+1/2, b: 1/3+1/4 → order a, c, b.
 # [a,b,c,d] + [b,c,d] → b: 1/3+1/2 = 5/6, c: 1/4+1/3 = 7/12, a: 1/2,
 #   d: 1/5+1/4 = 9/20 → order b, c, a, d. No two scores tie, so the order
 #   does not depend on how you break ties, and the constant shows:
-#   1/(k+rank) scores b 3/2, a 1, c 5/6, d 7/12 → b, a, c, d;
-#   1/(k+rank+2) scores b 7/12, c 9/20, d 11/30, a 1/3 → b, c, d, a.
+#   $1/(k + \mathrm{rank})$ scores b 3/2, a 1, c 5/6, d 7/12 → b, a, c, d;
+#   $1/(k + \mathrm{rank} + 2)$ scores b 7/12, c 9/20, d 11/30, a 1/3 → b, c, d, a.
 
 # %%
 def rrf(rankings, k=60):
@@ -56,8 +63,14 @@ print("rrf ✓")
 
 # %% [markdown]
 # ## Task 3 — the two halves of a BM25 term score
-# `bm25_idf(N, df) = log(1 + (N − df + 0.5)/(df + 0.5))` and
-# `bm25_tf_norm(f, dl, avgdl, k1, b) = f·(k1+1) / (f + k1·(1 − b + b·dl/avgdl))`.
+#
+# $$
+# \begin{aligned}
+# \mathrm{bm25\_idf}(N, \mathrm{df}) &= \log\left(1 + \frac{N - \mathrm{df} + 0.5}{\mathrm{df} + 0.5}\right) \quad \text{and} \\
+# \mathrm{bm25\_tf\_norm}(f, \mathrm{dl}, \mathrm{avgdl}, k_1, b) &= \frac{f \cdot (k_1 + 1)}{f + k_1 \cdot (1 - b + b \cdot \mathrm{dl}/\mathrm{avgdl})}.
+# \end{aligned}
+# $$
+#
 # The second is the part worth internalizing: term-frequency **saturates** and
 # long documents are **penalized**.
 
@@ -81,5 +94,5 @@ print("bm25 components ✓")
 # %% [markdown]
 # ## Task 4 (open) — break the hybrid
 # In notebook 05, replace RRF with a weighted score sum
-# `α·z(bm25) + (1−α)·z(dense)` (z = standardize scores per query). Sweep α.
+# $\alpha \cdot z(\text{bm25}) + (1 - \alpha) \cdot z(\text{dense})$ ($z$ = standardize scores per query). Sweep $\alpha$.
 # Why does RRF usually win without tuning? (Hint: score scales vs rank scales.)

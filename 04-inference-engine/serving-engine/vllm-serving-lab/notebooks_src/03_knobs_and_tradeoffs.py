@@ -48,7 +48,12 @@ print(P.describe())
 # %% [markdown]
 # ## Worked example: why batching is nearly free (the step-time model)
 #
-# The fake engine's step time is the roofline: `overhead + max(FLOPs / FLOP/s, bytes / bandwidth)`.
+# The fake engine's step time is the roofline:
+#
+# $$
+# \text{overhead} + \max\left(\frac{\text{FLOPs}}{\text{FLOP/s}}, \frac{\text{bytes}}{\text{bandwidth}}\right)
+# $$
+#
 # For a decode step, bytes = all weights (once, shared by the batch) + every sequence's KV.
 
 # %%
@@ -120,13 +125,17 @@ engine.stop()
 #
 # ## Exercise 3.2 — the token budget: long prompts versus everyone else's next token
 #
-# With chunked prefill, a step processes at most `max_num_batched_tokens` tokens: decodes first,
-# then a chunk of a waiting prompt. Write `stall_s(p, budget, decode_batch, context, long_prompt)`:
-# the duration of a step holding `decode_batch` decode tokens plus a prefill chunk of
-# `min(budget - decode_batch, long_prompt)` tokens — that is the inter-token gap every decoding
-# request sees during that step (roofline as in 3.1; the chunk's KV reads are its own tokens).
-# Predict how ITL p99 for short requests and TTFT for long prompts move as the budget grows, then
-# run the sweep.
+# With chunked prefill, a step processes at most `max_num_batched_tokens` tokens: decodes first, then
+# a chunk of a waiting prompt. Write `stall_s(p, budget, decode_batch, context, long_prompt)`: the
+# duration of a step holding `decode_batch` decode tokens plus a prefill chunk of
+#
+# $$
+# \min(\mathtt{budget} - \mathtt{decode\_batch}, \mathtt{long\_prompt})
+# $$
+#
+# tokens — that is the inter-token gap every decoding request sees during that step (roofline as in
+# 3.1; the chunk's KV reads are its own tokens). Predict how ITL p99 for short requests and TTFT for
+# long prompts move as the budget grows, then run the sweep.
 
 # %% exercise
 def stall_s(p, budget: int, decode_batch: int, context: int, long_prompt: int) -> float:
@@ -191,8 +200,9 @@ print("✅ chosen:", choice and choice.config, "— the highest throughput among
 # ## Exercise 3.4 — the highest rate that still meets the SLO
 #
 # Capacity is a *rate at an SLO*. Write `max_rate(measure, lo, hi, target, iters)`: bisection in log
-# space (`mid = sqrt(lo * hi)`), keeping `lo` meeting the target and `hi` missing it; return the last
-# good rate. Return `nan` if `lo` already misses, `hi` if even `hi` meets it.
+# space ($\mathtt{mid} = \sqrt{\mathtt{lo} \cdot \mathtt{hi}}$), keeping `lo` meeting the target and
+# `hi` missing it; return the last good rate. Return `nan` if `lo` already misses, `hi` if even `hi`
+# meets it.
 
 # %% exercise
 def max_rate(measure, lo: float, hi: float, target: float = 0.9, iters: int = 4) -> float:
@@ -234,7 +244,7 @@ print(f"✅ with --max-num-seqs 8 this engine sustains about {cap:.1f} req/s at 
 # When the running requests need more KV blocks than exist, the scheduler **preempts** the most
 # recently admitted request: frees its blocks, puts it back in the queue, and recomputes its prompt
 # (and the tokens it had generated) later — visible as `vllm:num_preemptions` and a long ITL gap.
-# Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`: the blocks that `n`
+# Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`: the blocks that $n$
 # requests need to *finish* together. The check runs 12 simultaneous requests with exactly that
 # many blocks (`--num-gpu-blocks-override`, vLLM's flag for this experiment) and with a third of it
 # (`--max-model-len 1024`, because vLLM refuses to start unless one full-length request fits).
@@ -282,18 +292,19 @@ print("✅ enough blocks for everyone's full length: no preemption; a third of i
 # of the KV heads (PRIMER §9 "Parallelism inside the engine"), and every layer adds two
 # all-reduces. Two predictions:
 #
-# 1. **Memory.** Write `tp_kv_tokens(model, gpu, tp)`: the KV token slots of one TP replica. Per
-#    GPU the budget is `ceil(0.92 × memory) − weights / tp − overhead`, one token costs
-#    `kv_bytes_per_token / tp` (never below one KV head per GPU), and the pool is
-#    `floor(budget / (16 × that)) × 16` (the same blocks exist on every GPU). Use
-#    `sizing.weight_bytes(m, "half", tensor_parallel_size=tp)`,
+# 1. **Memory.** Write `tp_kv_tokens(model, gpu, tp)`: the KV token slots of one TP replica. Per GPU
+#    the budget is $\lceil 0.92 \times \text{memory} \rceil - {}$
+#    $\text{weights} / \mathtt{tp} - \text{overhead}$, one token costs
+#    $\mathtt{kv\_bytes\_per\_token} / \mathtt{tp}$ (never below one KV head per GPU), and the pool is
+#    $\lfloor \text{budget} / (16 \times \text{that}) \rfloor \times 16$ (the same blocks exist on
+#    every GPU). Use `sizing.weight_bytes(m, "half", tensor_parallel_size=tp)`,
 #    `sizing.kv_bytes_per_token(m, dtype="half", tensor_parallel_size=tp)` and
-#    `sum(sizing.overhead_estimate(m, dtype="half", tensor_parallel_size=tp).values())`; return 0
-#    when the weights leave no room.
+#    `sum(sizing.overhead_estimate(m, dtype="half", tensor_parallel_size=tp).values())`; return 0 when
+#    the weights leave no room.
 # 2. **Latency.** Write `tp_decode_step_s(p, batch, context, tp, layers, allreduce_s)`: notebook 3.1's
 #    roofline with the FLOPs, the weight bytes and the KV bytes all divided by `tp`, plus
-#    `2 × layers × allreduce_s` for the all-reduces (their size, `batch × hidden × 2` bytes, is tiny
-#    in decode, so latency dominates).
+#    $2 \times \mathtt{layers} \times \mathtt{allreduce\_s}$ for the all-reduces (their size,
+#    $\text{batch} \times \text{hidden} \times 2$ bytes, is tiny in decode, so latency dominates).
 
 # %% exercise
 def tp_kv_tokens(model: str, gpu_name: str, tp: int) -> int:

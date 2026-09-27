@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 06 · Superposition: more features than dimensions (advanced)
 # A minimal replication of Anthropic's *Toy Models of Superposition* (Elhage et
-# al., 2022). A tiny autoencoder must squeeze `n` sparse features through `d < n`
+# al., 2022). A tiny autoencoder must squeeze $n$ sparse features through $d < n$
 # dimensions. When features are **dense** it keeps only the most important ones;
 # when they are **sparse** it stores all of them as nearly-orthogonal directions
 # and accepts interference — superposition. This is the mechanism behind
@@ -59,8 +59,8 @@ gradcheck()
 
 # %% [markdown]
 # ## Train across sparsity levels
-# `n = 5` features, `d = 2` dimensions, equal importance. Each feature is active
-# with probability `p` (uniform magnitude when active).
+# $n = 5$ features, $d = 2$ dimensions, equal importance. Each feature is active
+# with probability $p$ (uniform magnitude when active).
 
 # %%
 def sample(Bn, n, p):
@@ -99,7 +99,7 @@ plt.suptitle("columns of W: what each feature's direction looks like in the 2-d 
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# Dense regime (p=1): only ~2 features get directions — the rest are dropped
+# Dense regime ($p = 1$): only ~2 features get directions — the rest are dropped
 # (PCA-like behaviour). Sparse regime: all 5 survive at equal norm, packed as
 # the famous pentagon. The model represents **5 things in 2 dimensions**
 # because they rarely co-occur.
@@ -128,8 +128,8 @@ plt.xlabel("feature"); plt.ylabel("‖W_i‖"); plt.legend()
 plt.title("capacity follows importance"); plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Takeaways.** (1) With sparse features, a `d`-dim space holds far more than
-# `d` concepts as *directions* — exactly the linear-representation picture from
+# **Takeaways.** (1) With sparse features, a $d$-dim space holds far more than
+# $d$ concepts as *directions* — exactly the linear-representation picture from
 # §9, and why analogies and steering work. (2) Interference is the tax; sparse
 # autoencoders are the attempt to un-mix it. (3) Nearly-orthogonal packings are
 # a JL-lemma story (notebook 03): exponentially many almost-orthogonal

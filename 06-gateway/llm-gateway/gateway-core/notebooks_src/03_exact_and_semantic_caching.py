@@ -12,9 +12,11 @@
 # **exact** and **semantic** caches reuse an *answer*, so they are only safe for classes the route declares cacheable,
 # in a namespace keyed by the **verified tenant**, and — for the semantic one — at a threshold chosen on labelled
 # traffic, with numbers, dates and codes guarded exactly, because an embedding cannot see that "Q3 2024" is not
-# "Q3 2025". By the end you can build a safe exact key, extract the entities a guard compares, choose a threshold
-# under a false-hit budget, put a price on a false hit, decide what a namespace must hold for shared and per-user
-# classes, and say what the provider's prompt cache saves instead.
+# "Q3 2025".
+#
+# By the end you can build a safe exact key, extract the entities a guard compares, choose a threshold under a false-hit
+# budget, put a price on a false hit, decide what a namespace must hold for shared and per-user classes, and say what
+# the provider's prompt cache saves instead.
 #
 # Primer: §3 *Caching at the gateway* (`../PRIMER.md`); §6.4 for `cache_salt`; the engine's prefix cache is
 # serving-engine PRIMER §5 (module 04.3); semantic caching's false positives, the embeddings primer §15.
@@ -151,7 +153,7 @@ print(f"✅ tau={tau} guard={guard}: {table[(guard, tau)]['hit_rate']:.1%} of pa
 
 # %% [markdown]
 # ## Exercise 3.4 — price a false hit
-# At τ = 0.90 with the guard, per 44 cacheable lookups the cache serves `right` correct and `wrong` wrong answers
+# At $\tau = 0.90$ with the guard, per 44 cacheable lookups the cache serves `right` correct and `wrong` wrong answers
 # (from `cache.sweep_thresholds`). A correct hit saves the §5.3 call on gemini-3.5-flash (`metering.price_call`,
 # 5,000 in of which 2,700 cached, 350 out). Set `break_even` to the cost of one wrong answer, in dollars, at which the
 # cache saves exactly nothing.
@@ -229,14 +231,15 @@ print(f"   for a vLLM pool the engine's prefix cache is isolated per tenant with
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "There are four caches on the path. The provider's prompt cache and the engine's prefix
-# cache reuse computation: they cut cost and TTFT and never change an answer, so we lay prompts out for them and
-# isolate the engine's with a per-tenant `cache_salt`. The gateway's exact and semantic caches reuse answers, so they
-# only serve classes a route declares cacheable — never personal, time-sensitive or tool-using requests — in a
-# namespace keyed by the verified tenant. The exact key hashes every field that changes the answer and nothing else.
-# The semantic cache needs a threshold chosen on labelled traffic: on our sample a lexical embedder ranks near misses
-# above paraphrases, the entity guard halves false hits but cannot see a changed word, and at a 5 % false-hit budget
-# the cache hits a fifth of paraphrases. A wrong answer that costs more than about a cent and a half makes that a
-# loss, so for anything that matters we cache narrowly, guard entities and add a verifier."
+# cache reuse computation: they cut cost and TTFT and never change an answer, so we lay prompts out for them and isolate
+# the engine's with a per-tenant `cache_salt`. The gateway's exact and semantic caches reuse answers, so they only serve
+# classes a route declares cacheable — never personal, time-sensitive or tool-using requests — in a namespace keyed by
+# the verified tenant. The exact key hashes every field that changes the answer and nothing else.
+#
+# "The semantic cache needs a threshold chosen on labelled traffic: on our sample a lexical embedder ranks near misses
+# above paraphrases, the entity guard halves false hits but cannot see a changed word, and at a 5 % false-hit budget the
+# cache hits a fifth of paraphrases. A wrong answer that costs more than about a cent and a half makes that a loss, so
+# for anything that matters we cache narrowly, guard entities and add a verifier."
 #
 # **Drill questions**
 # 1. *The semantic cache answered one user with another user's order status. What went wrong?* — A personal class was

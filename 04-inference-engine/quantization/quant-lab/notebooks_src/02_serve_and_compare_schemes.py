@@ -40,9 +40,9 @@ print(serve.matrix(gpus=("T4", "L4", "H100-80GB", "B200"), schemes=("bf16", "fp8
 #
 # ## Worked example: one GEMM on the roofline
 #
-# Llama-3.1-8B's `down_proj` is `[M, 14,336] x [14,336, 4,096]` for `M` tokens in the step. Its time
-# is `max(2MKN / peak, (KN w + MK a + MN 2) / bandwidth)`, with `w`, `a` the weight and activation
-# bytes (W4A16 counts its group scales and zero points: 4.16 bits).
+# Llama-3.1-8B's `down_proj` is $[M, 14{,}336] \times [14{,}336, 4{,}096]$ for `M` tokens in the step. Its time
+# is $\max(2MKN/\text{peak}, (KN \cdot w + MK \cdot a + MN \cdot 2)/\text{bandwidth})$, with `w`, `a` the weight
+# and activation bytes (W4A16 counts its group scales and zero points: 4.16 bits).
 
 # %%
 for M in (1, 16, 64, 256, 2048):
@@ -77,7 +77,7 @@ print("✅ BF16 / W4A16 / FP8, microseconds:", table, "— vllm-internals §8.1,
 # W4A16 is memory-bound (fast) while its FLOP time is below its byte time. Write
 # `compute_bound_m(K, N, w_bytes, a_bytes, peak_tflops, bw_gbs)`: the smallest `M` at which the FLOP
 # time reaches the byte time. Predict first: an L4's BF16 ridge is 121e12 / 300e9 = 403 FLOP/byte,
-# and a W4A16 GEMM does about `2M / 0.52` FLOP per weight byte.
+# and a W4A16 GEMM does about ${2M/0.52}$ FLOP per weight byte.
 
 # %% exercise
 def compute_bound_m(K, N, w_bytes, a_bytes, peak_tflops, bw_gbs):
@@ -146,7 +146,14 @@ else:
 # ## Exercise 2.3 — predict a decode step before simulating it
 #
 # One decode step for `b` sequences at context `c` costs
-# `overhead + max((2 x params_per_token x b + attn_flops_per_pair x b x c) / (peak x compute_eff), (streamed_bytes + b x c x kv_bytes) / (bw x memory_eff))`
+#
+# $$
+# \begin{aligned}
+# \mathrm{overhead} + \max\Biggl(&\frac{2 \times \mathrm{params\_per\_token} \times b + \mathrm{attn\_flops\_per\_pair} \times b \times c}{\mathrm{peak} \times \mathrm{compute\_eff}},\\
+# &\frac{\mathrm{streamed\_bytes} + b \times c \times \mathrm{kv\_bytes}}{\mathrm{bw} \times \mathrm{memory\_eff}}\Biggr)
+# \end{aligned}
+# $$
+#
 # — every decoded token goes through every linear layer and the LM head, and attends to `c` positions.
 # Write `step_ms(p, b, c)` from a `bench.Profile`'s fields (`params_per_token`, `attn_flops_per_pair`,
 # `streamed_bytes`, `kv_bytes_per_token`, `peak_flops`, `mem_bw`, `compute_eff`, `memory_eff`, `overhead_s`).
@@ -174,7 +181,7 @@ print(f"✅ batch 16 at 1,100 tokens: bf16 {step_ms(bf, 16, 1100):.1f} ms, w4a16
 #
 # Write `pick(gpu, prompt_len, output_len)`: among `bf16`, `fp8`, `w4a16`, `w8a8-int8` and `nvfp4`,
 # keep the schemes `serve.plan` says the GPU runs, simulate 8 users (`B.compare`), and return the one
-# with the lowest mean end-to-end latency `ttft + (output_len - 1) x tpot`. Speed only — accuracy is
+# with the lowest mean end-to-end latency $\mathrm{ttft} + (\mathrm{output\_len} - 1) \times \mathrm{tpot}$. Speed only — accuracy is
 # notebook 03's job.
 
 # %% exercise

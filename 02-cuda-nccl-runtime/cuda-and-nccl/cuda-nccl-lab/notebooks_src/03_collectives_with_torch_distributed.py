@@ -11,8 +11,8 @@
 #
 # * A collective is defined by **who ends up with what**: broadcast, reduce, all-reduce, all-gather,
 #   reduce-scatter, all-to-all, send/recv.
-# * **All-reduce = reduce-scatter + all-gather.** On a ring each phase takes n−1 steps with every link busy;
-#   each rank sends 2(n−1)/n of the buffer — that ratio is the busbw factor.
+# * **All-reduce = reduce-scatter + all-gather.** On a ring each phase takes ${n-1}$ steps with every link busy;
+#   each rank sends $2(n-1)/n$ of the buffer — that ratio is the busbw factor.
 # * Parallelism → collective: tensor parallelism all-reduces activations (twice per layer), data/FSDP
 #   parallelism reduce-scatters gradients and all-gathers weights, expert parallelism all-to-alls tokens,
 #   pipeline parallelism sends activations to the next stage.
@@ -62,7 +62,7 @@ print("sendrecv       :", [c.tolist() for c in semantics.sendrecv(xs)], "(ring s
 # ## Exercise 3.1 — all-reduce is reduce-scatter followed by all-gather
 #
 # Implement the two halves on a list of per-rank arrays (buffer length divisible by the number of
-# ranks): `my_reduce_scatter(xs)` returns rank r's chunk r of the element-wise sum; `my_all_gather(chunks)`
+# ranks): `my_reduce_scatter(xs)` returns rank $r$'s chunk $r$ of the element-wise sum; `my_all_gather(chunks)`
 # returns, for every rank, the concatenation of all chunks in rank order.
 
 # %% exercise
@@ -91,12 +91,12 @@ print("✅ all_gather(reduce_scatter(x)) == all_reduce(x): the decomposition eve
 # %% [markdown]
 # ## The ring schedule
 #
-# Cut the buffer into n chunks and number the steps from 1, as primer §5.2 does. In reduce-scatter step
-# s = 1 … n−1, rank r sends chunk (r − s) mod n to its right neighbour and adds the chunk arriving from its
-# left; after n−1 steps rank r owns the fully reduced chunk r. The all-gather then circulates the finished
-# chunks for n−1 more steps: rank r first sends its own finished chunk r, then forwards whatever arrived
-# last. This is the schedule `gpurt.dist.pipes` executes (`semantics.ring_chunks`); for 4 ranks it is the
-# primer's trace, step for step.
+# Cut the buffer into $n$ chunks and number the steps from 1, as primer §5.2 does. In reduce-scatter step
+# $s = 1, \dots, n-1$, rank $r$ sends chunk $(r-s) \bmod n$ to its right neighbour and adds the chunk arriving
+# from its left; after ${n-1}$ steps rank $r$ owns the fully reduced chunk $r$. The all-gather then circulates
+# the finished chunks for ${n-1}$ more steps: rank $r$ first sends its own finished chunk $r$, then forwards
+# whatever arrived last. This is the schedule `gpurt.dist.pipes` executes (`semantics.ring_chunks`); for 4
+# ranks it is the primer's trace, step for step.
 
 # %%
 n = 4
@@ -110,7 +110,7 @@ for phase in ("rs", "ag"):
 # ## Exercise 3.2 — write the ring schedule yourself
 #
 # Implement `my_ring_chunks(rank, step, n, phase)` returning `(send_chunk, recv_chunk)` for steps
-# 1 … n−1 of phase `"rs"` (the receiver adds what arrives) or `"ag"` (the receiver copies it), without
+# $1, \dots, n-1$ of phase `"rs"` (the receiver adds what arrives) or `"ag"` (the receiver copies it), without
 # looking at `semantics.ring_chunks`. Two hints: what a rank receives in a step is exactly what its left
 # neighbour sends in that step; and a rank's first all-gather send must be a chunk it has *finished*.
 #
@@ -162,8 +162,9 @@ print(format_table(sr, f"(backend {BACKEND}, measured on this machine)"))
 # %% [markdown]
 # ## Exercise 3.3 — recompute busbw from size and time
 #
-# Write `busbw_gbps(size_bytes, time_us, op, n)` from first principles (`algbw = size / time`, GB = 1e9;
-# then the factor for `op` over `n` ranks). The check recomputes every row of both sweeps.
+# Write `busbw_gbps(size_bytes, time_us, op, n)` from first principles
+# ($\text{algbw} = \text{size}/\text{time}$, GB = 1e9; then the factor for `op` over `n` ranks). The check
+# recomputes every row of both sweeps.
 
 # %% exercise
 def busbw_gbps(size_bytes: int, time_us: float, op: str, n: int) -> float:
@@ -245,8 +246,8 @@ else:
 #
 # **Two minutes.** I describe a collective by its result — all-reduce leaves the sum everywhere,
 # all-gather leaves every shard everywhere, reduce-scatter leaves each rank one shard of the sum — and I
-# build all-reduce from the other two. On a ring, n−1 reduce-scatter steps and n−1 all-gather steps keep
-# every link busy, and each rank sends 2(n−1)/n of the buffer, which is why nccl-tests multiplies algbw by
+# build all-reduce from the other two. On a ring, ${n-1}$ reduce-scatter steps and ${n-1}$ all-gather steps keep
+# every link busy, and each rank sends $2(n-1)/n$ of the buffer, which is why nccl-tests multiplies algbw by
 # that factor to get busbw: a number you can hold against the link. Then I map parallelism to traffic:
 # tensor parallelism is two all-reduces per layer of batch × hidden values — kilobytes in decode, so
 # latency dominates; FSDP is reduce-scatter and all-gather of parameters; MoE is all-to-all. Before
@@ -254,8 +255,8 @@ else:
 #
 # **Drill questions**
 #
-# 1. *Why is the all-reduce busbw factor 2(n−1)/n and not 2?* — Each rank sends n−1 chunks of S/n in
-#    reduce-scatter and n−1 more in all-gather: 2(n−1)/n·S. The factor approaches 2 for large n.
+# 1. *Why is the all-reduce busbw factor $2(n-1)/n$ and not 2?* — Each rank sends ${n-1}$ chunks of $S/n$ in
+#    reduce-scatter and ${n-1}$ more in all-gather: $2(n-1)/n \cdot S$. The factor approaches 2 for large $n$.
 # 2. *Tensor parallelism across two nodes over 400 Gb/s NICs instead of within one NVLink node — what
 #    happens to decode?* — Two latency-bound all-reduces per layer now cross the network: microseconds
 #    to tens of microseconds each, times 2 × layers per token. Keep TP inside the NVLink domain; use

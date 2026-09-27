@@ -8,12 +8,14 @@
 #
 # ## The one-minute version
 #
-# * Every column of nccl-tests can be recomputed: **algbw = size / time**, **busbw = algbw × factor(op, n)**.
+# * Every column of nccl-tests can be recomputed: **$\text{algbw} = \text{size}/\text{time}$**,
+#   **$\text{busbw} = \text{algbw} \times \operatorname{factor}(\text{op}, n)$**.
 # * A size sweep has two regimes: a **latency floor** (time flat in size) and a **bandwidth plateau**
-#   (busbw flat). The α-β fit `t = α + S/B` gives both, and the **half-bandwidth size S½ = α·B** separates them.
+#   (busbw flat). The α-β fit $t = \alpha + S/B$ gives both, and the **half-bandwidth size
+#   $S_{1/2} = \alpha \cdot B$** separates them.
 # * The plateau busbw is held against the **link**: NVLink hundreds of GB/s per GPU, PCIe Gen4 x16 about
 #   25 GB/s in practice. Far below the link means NCCL is not using the path you think.
-# * Inference: decode's tensor-parallel all-reduces sit on the latency floor — α, not bandwidth, sets their
+# * Inference: decode's tensor-parallel all-reduces sit on the latency floor — $\alpha$, not bandwidth, sets their
 #   cost; prefill's sit on the plateau.
 #
 # Concepts: [the primer](../../PRIMER.md) §5 *Collectives* (α-β costs, algbw and busbw, latency- vs
@@ -56,7 +58,7 @@ print(f"✅ every row: busbw = algbw x 2(n-1)/n = algbw x {bw.bus_factor('all_re
 # %% [markdown]
 # ## Seeing the two regimes
 #
-# busbw against size, as a text chart. Small messages barely register; the curve bends around S½ and
+# busbw against size, as a text chart. Small messages barely register; the curve bends around $S_{1/2}$ and
 # flattens at the link-limited plateau.
 
 # %%
@@ -67,9 +69,10 @@ for r in res.rows[::2]:
 # %% [markdown]
 # ## Exercise 4.2 — fit α and B yourself
 #
-# Fit `t = α + S/B` to (size, time) by least squares on **relative** error — minimise
-# Σ((α + β·S − t)/t)² with β = 1/B — so that a 20 µs point and a 5 ms point weigh the same. Divide each
-# row of the linear system `[1, S]·[α, β] = t` by `t` and use `np.linalg.lstsq`. Return `(alpha_s, bw_Bps)`.
+# Fit $t = \alpha + S/B$ to (size, time) by least squares on **relative** error — minimise
+# $\sum ((\alpha + \beta \cdot S - t)/t)^2$ with $\beta = 1/B$ — so that a 20 µs point and a 5 ms point weigh the
+# same. Divide each row of the linear system $[1, S] \cdot [\alpha, \beta] = t$ by $t$ and use `np.linalg.lstsq`.
+# Return `(alpha_s, bw_Bps)`.
 
 # %% exercise
 import numpy as np  # noqa: E402
@@ -97,10 +100,11 @@ print(f"✅ α = {alpha * 1e6:.1f} µs, algbw -> {B / 1e9:.1f} GB/s, busbw -> {B
 # %% [markdown]
 # ## Exercise 4.3 — the half-bandwidth size, two ways
 #
-# The fit's α is the **whole collective's** latency, and B its asymptotic **algbw**. The primer writes
-# the same ring with a per-hop latency α_hop and per-link bandwidth B_link:
-# `t = 2(n−1)·α_hop + 2(n−1)/n · S / B_link`, crossing over at `S* = n·α_hop·B_link`.
-# Write `half_size(alpha_s, bw_Bps)` (S½ = α·B) and `per_hop(alpha_s, algbw_Bps, n)` returning
+# The fit's $\alpha$ is the **whole collective's** latency, and $B$ its asymptotic **algbw**. The primer writes
+# the same ring with a per-hop latency $\alpha_{\text{hop}}$ and per-link bandwidth $B_{\text{link}}$:
+# $t = 2(n-1) \cdot \alpha_{\text{hop}} + 2(n-1)/n \cdot S/B_{\text{link}}$, crossing over at
+# $S^{\ast} = n \cdot \alpha_{\text{hop}} \cdot B_{\text{link}}$.
+# Write `half_size(alpha_s, bw_Bps)` ($S_{1/2} = \alpha \cdot B$) and `per_hop(alpha_s, algbw_Bps, n)` returning
 # `(alpha_hop, link_Bps)`, and confirm the two views give the same size.
 
 # %% exercise
@@ -129,7 +133,7 @@ print(f"✅ S½ = {s_half / 2**20:.1f} MiB: α_hop = {a_hop * 1e6:.2f} µs per s
 #
 # `AlphaBeta.regime()` labels each size. The second sample (also illustrative) is an `all_gather` log in
 # the older nccl-tests layout (no `redop`/`root` columns, a float `error` column); the parser handles
-# both, and the busbw factor is now (n−1)/n.
+# both, and the busbw factor is now $(n-1)/n$.
 
 # %%
 model = ab.AlphaBeta(alpha, B)
@@ -143,7 +147,7 @@ print(f"\nlegacy all_gather over {s['nranks']} ranks: factor {bw.bus_factor('all
 # %% [markdown]
 # ## Exercise 4.4 — what tensor parallelism costs a decode step
 #
-# With the fitted model, one all-reduce of `S` bytes takes `model.time(S)`. Write
+# With the fitted model, one all-reduce of $S$ bytes takes `model.time(S)`. Write
 # `tp_comm_us(model, tokens, hidden, layers, dtype_bytes=2)`: the all-reduce time of one decode step
 # (two all-reduces of tokens × hidden per layer), in microseconds. Evaluate a 70B-class model (hidden 8192,
 # 80 layers, bf16) at batch 32 on the 8-GPU sample fabric, and compare with a 30 ms inter-token budget.
@@ -164,7 +168,7 @@ print(f"✅ {msg // 1024} KiB per all-reduce is latency-bound: {t_us / 1e3:.2f} 
       f"({share:.0%} of a 30 ms budget); α alone is {160 * model.alpha_s * 1e3:.2f} ms of it")
 
 # %% [markdown]
-# That is why engines attack **α** for decode: fewer, fused all-reduces; algorithms with fewer steps
+# That is why engines attack **$\alpha$** for decode: fewer, fused all-reduces; algorithms with fewer steps
 # (one-shot/two-shot kernels, trees, NVLink SHARP in the switch); overlapping communication with compute;
 # or a smaller tensor-parallel degree.
 #
@@ -190,8 +194,8 @@ print("✅ below the link? NCCL_DEBUG=INFO shows the transport (P2P, SHM, NET); 
 # ## Your own numbers
 #
 # The same parser reads the tables `gpurt.dist` prints. Here is a quick sweep of this machine's CPU
-# transport (the notebook 03 backend) — measured, and a very different fabric: the fit tells you its α
-# and B, and the fit error tells you how well a straight line describes it. Then every nccl-tests or
+# transport (the notebook 03 backend) — measured, and a very different fabric: the fit tells you its $\alpha$
+# and $B$, and the fit error tells you how well a straight line describes it. Then every nccl-tests or
 # `gpurt.dist` log you brought back from a GPU box — into the lab's `out/` (`deploy/any-gpu`) or
 # `deploy/gke/out/` (`run.sh nccl`) — is parsed and summarised the same way.
 
@@ -215,13 +219,15 @@ for log in sorted(Path("..").glob("out/*.log")) + sorted(Path("..").glob("deploy
 # ## In a design review
 #
 # **Two minutes.** I read an nccl-tests table by recomputing it: algbw is size over time, busbw is
-# algbw times 2(n−1)/n for all-reduce — the per-link rate an optimal ring needs — so it compares with the
-# link whatever the number of GPUs. I fit `t = α + S/B` to the sweep: α is the latency floor, B the
-# plateau, and S½ = α·B the size where half the bandwidth is reached; below it a faster link does not
-# help, fewer steps do. I check the plateau against the path — NVLink or PCIe — and if it is well below,
-# I look at the transport NCCL chose. Then I place the workload on the curve: decode's tensor-parallel
-# all-reduces are hundreds of kilobytes at most, deep in the latency regime, so their cost is roughly
-# 2 × layers × α per token.
+# algbw times $2(n-1)/n$ for all-reduce — the per-link rate an optimal ring needs — so it compares with the
+# link whatever the number of GPUs. I fit $t = \alpha + S/B$ to the sweep: $\alpha$ is the latency floor, $B$ the
+# plateau, and $S_{1/2} = \alpha \cdot B$ the size where half the bandwidth is reached; below it a faster link
+# does not help, fewer steps do.
+#
+# I check the plateau against the path — NVLink or PCIe — and if it is well below, I look at the transport
+# NCCL chose. Then I place the workload on the curve: decode's tensor-parallel all-reduces are hundreds of
+# kilobytes at most, deep in the latency regime, so their cost is roughly $2 \times \text{layers} \times \alpha$
+# per token.
 #
 # **Drill questions**
 #
@@ -232,4 +238,4 @@ for log in sorted(Path("..").glob("out/*.log")) + sorted(Path("..").glob("deploy
 #    slowest link (network, per-GPU NIC share) bounds it. Hierarchical and tree algorithms help, but the
 #    plateau is the inter-node bandwidth per GPU.
 # 3. *What single number would you quote for decode all-reduce performance?* — The time at the actual
-#    message size (e.g. 512 KiB), i.e. the latency floor α — not the plateau busbw at 1 GiB.
+#    message size (e.g. 512 KiB), i.e. the latency floor $\alpha$ — not the plateau busbw at 1 GiB.

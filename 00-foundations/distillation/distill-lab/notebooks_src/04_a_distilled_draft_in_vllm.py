@@ -6,20 +6,22 @@
 # spec-decode counters (model ids, fits and flags verify). T0 (default): the tiny teacher of notebook 01 is the
 # target and its students are drafts. Their acceptance is computed from the models' own distributions with torch
 # on a CPU (about 50 seconds; the recorded run without torch). A bundled pair of `/metrics` scrapes, **synthetic**
-# at α = 0.7, teaches vLLM's counters.
+# at $\alpha = 0.7$, teaches vLLM's counters.
 #
 # ## The one-minute version
 #
-# * **A draft model is a student graded on one number:** how often the target accepts what it proposes. Per
-#   position α = Σ_v min(p(v), q(v)) = 1 − TV(p, q). One target pass then yields (1 − α^(k+1)) / (1 − α) tokens,
-#   and the speedup is that over (k·c + 1), with c the cost of a draft step (serving-engine PRIMER §7, whose
-#   formulas `minengine.spec` implements; PRIMER §7 "A distilled draft for speculative decoding").
-# * **Distilling the draft on the target's outputs raises α.** An off-the-shelf small model of the same family was
-#   trained on other data, and that distribution mismatch lowers α. For a draft, do *not* filter by a verifier:
-#   the goal is to match the target, mistakes included.
+# * **A draft model is a student graded on one number:** how often the target accepts what it proposes. Per position
+#   $\alpha = \sum_v \min(p(v), q(v)) = 1 - \mathrm{TV}(p, q)$. One target pass then yields
+#   $(1 - \alpha^{k+1}) / (1 - \alpha)$ tokens, and the speedup is that over $(k\,c + 1)$, with $c$ the cost of a
+#   draft step (serving-engine PRIMER §7, whose formulas `minengine.spec` implements; PRIMER §7 "A distilled draft for
+#   speculative decoding").
+# * **Distilling the draft on the target's outputs raises $\alpha$.** An off-the-shelf small model of the same family
+#   was trained on other data, and that distribution mismatch lowers $\alpha$. For a draft, do *not* filter by a
+#   verifier: the goal is to match the target, mistakes included.
 # * **Read vLLM's numbers carefully.** vLLM 0.30.0 drafts *greedily* by default, so the acceptance is
-#   p(argmax q), not Σ min(p, q). Its "acceptance rate" is accepted / drafted = (E − 1)/k, not α. α is the
-#   per-position rate at position 0, and the mean acceptance length 1 + accepted/drafts is E.
+#   $p(\operatorname{argmax} q)$, not $\sum \min(p, q)$. Its "acceptance rate" is
+#   $\text{accepted} / \text{drafted} = (E - 1)/k$, not $\alpha$. $\alpha$ is the per-position rate at position 0, and
+#   the mean acceptance length $1 + \text{accepted}/\text{drafts}$ is $E$.
 # * **Same vocabulary or nothing:** vLLM's `draft_model` method compares `vocab_size`. Qwen3-0.6B → Qwen3-4B passes
 #   (151,936 both), and Qwen2.5-0.5B → Qwen2.5-7B fails (151,936 against 152,064).
 
@@ -42,8 +44,8 @@ print(table([{"k": k, **{f"E at alpha {al}": round(DR.expected_tokens(al, k), 3)
 # ## Worked example: vLLM's spec-decode counters
 #
 # vLLM exports four counters: drafts (verify steps that had drafts), draft tokens, accepted tokens, and accepted
-# tokens per position (label `position` = 0 … k − 1). Position i counts only when positions 0 … i were all
-# accepted. The bundled scrapes are **synthetic**: 20,000 drafts of k = 4 at α = 0.7, made by
+# tokens per position (label `position` = $0 \ldots k - 1$). Position $i$ counts only when positions $0 \ldots i$ were
+# all accepted. The bundled scrapes are **synthetic**: 20,000 drafts of $k$ = 4 at $\alpha = 0.7$, made by
 # `DR.simulate_counters`, to show how the counters read and not what any draft achieves.
 
 # %%
@@ -56,10 +58,10 @@ print(text("spec_decode_metrics_after.txt"))
 # ## Exercise 4.1 — from counters to α
 #
 # Write `read_counters(before, after)` returning `(alpha, mean_length, rate)`. `alpha` is the per-position rate at
-# position 0 (accepted at position 0 over drafts). `mean_length` is 1 + accepted / drafts (vLLM counts the target's
-# bonus token). `rate` is accepted / draft tokens, the number vLLM logs as "Avg Draft acceptance rate". Use
-# `after.value(name)` and `before.value(name)` with the names in `distillab.metrics`, and `after.by_label(M.SPEC_ACCEPTED_PER_POS,
-# "position")` for the per-position counts.
+# position 0 (accepted at position 0 over drafts). `mean_length` is $1 + \text{accepted} / \text{drafts}$ (vLLM counts
+# the target's bonus token). `rate` is accepted / draft tokens, the number vLLM logs as "Avg Draft acceptance rate".
+# Use `after.value(name)` and `before.value(name)` with the names in `distillab.metrics`, and
+# `after.by_label(M.SPEC_ACCEPTED_PER_POS, "position")` for the per-position counts.
 
 # %% exercise
 def read_counters(before, after) -> tuple:
@@ -85,8 +87,9 @@ print(f"✅ [synthetic counters] alpha {alpha:.3f}, mean acceptance length {mean
 #
 # The target is notebook 01's tiny teacher. Three students are drafts: **off-the-shelf** (`hard`, trained on the
 # labelled set rather than the target's outputs), **distilled** (`seqkd_all`, SFT on the target's own samples,
-# unfiltered), and **distilled and verified** (`seqkd`, the same with the verifier filter). For each position of
-# the target's own samples, α = Σ min(p, q) and the greedy acceptance p(argmax q). About 50 seconds with torch.
+# unfiltered), and **distilled and verified** (`seqkd`, the same with the verifier filter). For each position of the
+# target's own samples, $\alpha = \sum \min(p, q)$ and the greedy acceptance $p(\operatorname{argmax} q)$. About 50
+# seconds with torch.
 
 # %%
 if env.has_torch():
@@ -115,9 +118,9 @@ print(table([{"draft": m, "alpha (sampled draft)": ALPHA[m], "greedy draft": GRE
 # %% [markdown]
 # ## Exercise 4.2 — the best draft and k
 #
-# Given each draft's α and cost ratio c, write `best_draft(alphas, c, k_max=8)`: the `(name, k, speedup)` with the
-# highest `DR.speedup(alpha, k, c)` over every draft and every k from 1 to `k_max`. Leave out `"target itself"`,
-# which is not a draft you can afford.
+# Given each draft's $\alpha$ and cost ratio $c$, write `best_draft(alphas, c, k_max=8)`: the `(name, k, speedup)`
+# with the highest `DR.speedup(alpha, k, c)` over every draft and every $k$ from 1 to `k_max`. Leave out
+# `"target itself"`, which is not a draft you can afford.
 
 # %% exercise
 def best_draft(alphas: dict, c: float, k_max: int = 8) -> tuple:
@@ -140,17 +143,18 @@ print(f"✅ best: {name} at k = {k}, {sp:.2f}x. " + ("The drafts distilled on th
       if min(ALPHA["seqkd_all"], ALPHA["seqkd"]) > ALPHA["hard"] else "In this run the off-the-shelf draft was not worst: read the alpha table."))
 
 # %% [markdown]
-# Two things to notice. In the recorded run the **unfiltered** distilled draft has the higher α (one run: check
+# Two things to notice. In the recorded run the **unfiltered** distilled draft has the higher $\alpha$ (one run: check
 # the table above for yours). That is the expected direction: the verifier filter trained the other one toward
-# *better* answers than the target gives, which is the wrong goal for a draft. And the tiny
-# c (a quarter of the target) makes long k expensive. A real 0.6B draft for a 4B target is c ≈ 0.15 by weight
-# bytes, so its best k is larger (Exercise 4.4).
+# *better* answers than the target gives, which is the wrong goal for a draft. And the tiny $c$ (a quarter of the
+# target) makes long $k$ expensive. A real 0.6B draft for a 4B target is $c \approx 0.15$ by weight bytes, so its best
+# $k$ is larger (Exercise 4.4).
 #
 # ## Exercise 4.3 — greedy drafting
 #
-# vLLM 0.30.0's default `draft_sample_method` is `"greedy"`: the draft proposes argmax q, and the target keeps it
-# with probability p(argmax q). Write `greedy_accept(p, q)`. Then compute `perfect`: the greedy acceptance of a
-# *perfect* draft (q = p) for the primer's target p. The check prints the tiny models' two columns side by side.
+# vLLM 0.30.0's default `draft_sample_method` is `"greedy"`: the draft proposes $\operatorname{argmax} q$, and the
+# target keeps it with probability $p(\operatorname{argmax} q)$. Write `greedy_accept(p, q)`. Then compute `perfect`:
+# the greedy acceptance of a *perfect* draft ($q$ = $p$) for the primer's target $p$. The check prints the tiny
+# models' two columns side by side.
 
 # %% exercise
 def greedy_accept(p, q) -> float:
@@ -175,8 +179,8 @@ print("✅ with a sampling target even a perfect draft is accepted only p(argmax
 # ## Exercise 4.4 — can vLLM run this pair, and at what k?
 #
 # Write `plan_draft(target_cfg, draft_cfg, alpha)`: return `None` when `DR.check_vocab` rejects the pair; otherwise
-# `(k, speedup)` at the best k, with c the ratio of the two models' parameter counts (`shape(name).params()`, a
-# memory-bound decode step streams the weights). The check runs it for two pairs at α = 0.7.
+# `(k, speedup)` at the best $k$, with $c$ the ratio of the two models' parameter counts (`shape(name).params()`, a
+# memory-bound decode step streams the weights). The check runs it for two pairs at $\alpha = 0.7$.
 
 # %% exercise
 def plan_draft(target: str, draft: str, alpha: float):
@@ -202,7 +206,7 @@ print("✅ Qwen2.5-0.5B cannot draft for Qwen2.5-7B (vocab_size 151,936 vs 152,0
 
 # %% [markdown]
 # The speedups are an upper bound for batch 1. The formula assumes a memory-bound target step, and verification
-# of k + 1 tokens stays about as cheap as one only while that holds. Larger batches make the target
+# of $k$ + 1 tokens stays about as cheap as one only while that holds. Larger batches make the target
 # compute-bound, and the gain fades (the 04 serving lab's notebook 05 measures where).
 #
 # ## On a real GPU (T1)
@@ -237,22 +241,23 @@ if env.server_url():
 #
 # ## In a design review
 #
-# **Two minutes:** "A draft model is a student whose only metric is acceptance: α = Σ min(p, q), and the speedup
-# follows from α, k and the draft's relative cost. We distil the draft on the target's own outputs, not filtered
-# by correctness, because its job is to predict the target, mistakes included. On our toy that raised α over an
-# off-the-shelf model trained on other data. We check vLLM's counters the right way. The mean acceptance length
-# is the speedup's numerator, the logged 'acceptance rate' is (E − 1)/k, and α is position 0's rate. Greedy
-# drafting, vLLM's default, caps acceptance at p(argmax q) for a sampling target. The pair must share
-# `vocab_size`: Qwen3-0.6B drafting for Qwen3-4B works, and Qwen2.5-0.5B for Qwen2.5-7B does not."
+# **Two minutes:** "A draft model is a student whose only metric is acceptance: $\alpha = \sum \min(p, q)$, and the
+# speedup follows from $\alpha$, $k$ and the draft's relative cost. We distil the draft on the target's own outputs,
+# not filtered by correctness, because its job is to predict the target, mistakes included. On our toy that raised
+# $\alpha$ over an off-the-shelf model trained on other data. We check vLLM's counters the right way. The mean
+# acceptance length is the speedup's numerator, the logged 'acceptance rate' is $\left(E - 1\right)/k$, and $\alpha$
+# is position 0's rate. Greedy drafting, vLLM's default, caps acceptance at $p(\operatorname{argmax} q)$ for a
+# sampling target. The pair must share `vocab_size`: Qwen3-0.6B drafting for Qwen3-4B works, and Qwen2.5-0.5B for
+# Qwen2.5-7B does not."
 #
-# **Drill 1.** *vLLM says the acceptance rate is 40%. Is speculation working?* Maybe well: with k = 4 that is a mean
+# **Drill 1.** *vLLM says the acceptance rate is 40%. Is speculation working?* Maybe well: with $k$ = 4 that is a mean
 # acceptance length of 2.6, so 2.6 tokens per target pass. Judge by measured inter-token latency at your batch
 # size, not by that rate.
 #
 # **Drill 2.** *Should the draft be trained on verified outputs?* No. Verification makes it a better model and a
 # worse predictor of the target. Train it on the target's own samples, at the temperature you serve.
 #
-# **Drill 3.** *The distilled draft doubled α at batch 1, but throughput at batch 64 fell. Why?* At batch 64 the
-# target step is compute-bound: verifying k + 1 tokens per sequence costs up to k + 1 times as much, and the extra
+# **Drill 3.** *The distilled draft doubled $\alpha$ at batch 1, but throughput at batch 64 fell. Why?* At batch 64 the
+# target step is compute-bound: verifying $k$ + 1 tokens per sequence costs up to $k$ + 1 times as much, and the extra
 # tokens do not pay for it. Speculation is a latency tool. Enable it by load, as `num_speculative_tokens_per_batch_size`
 # allows in vLLM (verify).

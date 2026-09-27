@@ -110,7 +110,12 @@ show_schedule(RetryPolicy(max_attempts=6, cap_s=4.0, jitter_s=0.0))
 # ### Exercise 2.1 — implement the schedule
 #
 # Write `my_backoff_schedule(policy, rng)` returning the delay before each retry (so `max_attempts - 1` values):
-# `min(cap_s, base_s · 2ⁱ) + rng.uniform(0, jitter_s)` for attempt index `i = 0, 1, …`.
+#
+# $$
+# \min(\mathrm{cap\_s}, \mathrm{base\_s} \cdot 2^i) + \text{rng.uniform}(0, \mathrm{jitter\_s})
+# $$
+#
+# for attempt index $i = 0, 1, \ldots$.
 # Draw the jitter with `rng.uniform` once per delay, in order, so the result matches the library for the same seed.
 
 # %% exercise

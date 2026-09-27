@@ -60,8 +60,8 @@ print(table(TR.accuracy_by_length(TRACES, [0, 50, 100, 200, 400, 1000]), title="
 #
 # ## Exercise 3.1 — how much of the bill the tail holds
 #
-# Write `tail_share(traces, q)`: the share of all reasoning tokens that sits in the longest `(1 − q)` fraction of
-# traces (at least one trace). For `q = 0.9` that is the top 10%. The bill, the student's KV cache and the
+# Write `tail_share(traces, q)`: the share of all reasoning tokens that sits in the longest $\left(1 - q\right)$
+# fraction of traces (at least one trace). For $q$ = 0.9 that is the top 10%. The bill, the student's KV cache and the
 # request timeout are all set by this tail, not by the mean.
 
 # %% exercise
@@ -138,10 +138,10 @@ print(table([{"set": "all traces (paid)", **TR.reasoning_bill(TRACES, 9.0)}, {"s
 # %% [markdown]
 # ## Exercise 3.3 — the student's output budget
 #
-# If the student reproduces the kept traces' length distribution, a serving `max_tokens` of M cuts off every
-# answer that would be longer: `finish_reason: "length"`, and often no answer at all. Write `cut_share(traces, M)`
-# (the share of traces with more than M completion tokens) and `budget_for(traces, max_cut)`: the smallest M
-# among the traces' own completion lengths for which at most `max_cut` of them are cut.
+# If the student reproduces the kept traces' length distribution, a serving `max_tokens` of $M$ cuts off every answer
+# that would be longer: `finish_reason: "length"`, and often no answer at all. Write `cut_share(traces, M)` (the share
+# of traces with more than $M$ completion tokens) and `budget_for(traces, max_cut)`: the smallest $M$ among the
+# traces' own completion lengths for which at most `max_cut` of them are cut.
 
 # %% exercise
 def cut_share(traces: list, M: int) -> float:
@@ -170,7 +170,7 @@ print(f"✅ [{LABEL}] to cut at most 1% of answers: max_tokens {b_all} for a stu
 # ## Worked example: budget-aware distillation, measured on the tiny task
 #
 # The tiny teacher of notebook 01 answers 1,000 fresh problems. Two students train by SFT on its *verified*
-# answers, one with no cap and one capped at 9 tokens, one short of the full scratchpad (K + 4 = 10). The capped
+# answers, one with no cap and one capped at 9 tokens, one short of the full scratchpad ($K$ + 4 = 10). The capped
 # set keeps every correct answer that is short, which leaves only the lucky guesses and the partial working. About
 # 40 seconds with torch.
 

@@ -90,10 +90,14 @@ print("kind simulator:", {k: f[k] for k in ("prefill-overhead", "prefill-time-pe
 
 # %% [markdown]
 # The simulator's `per-token` latency calculator is the fake backend's per-request model:
-# `TTFT = prefill-overhead + (prompt − cached) × prefill-time-per-token` and `inter-token-latency` per
-# output token, both stretched by up to `time-factor-under-load` as the batch fills. Both engines
-# cache prompts in **full 16-token blocks**: a block is reusable only if every one of its 16 tokens
-# matches, and a partial last block is never cached.
+#
+# $$
+# \text{TTFT} = \texttt{prefill-overhead} + (\text{prompt} - \text{cached}) \times \texttt{prefill-time-per-token}
+# $$
+#
+# and `inter-token-latency` per output token, both stretched by up to `time-factor-under-load` as the batch
+# fills. Both engines cache prompts in **full 16-token blocks**: a block is reusable only if every one of its
+# 16 tokens matches, and a partial last block is never cached.
 #
 # ## Exercise 4.1 — predict the second turn
 #
@@ -436,10 +440,11 @@ else:
 # tuned in-process, and the simulator reproduces each request's TTFT formula and prefix cache — but
 # not prefill contention, so we compare hit rates and per-replica splits there, not TTFT. We also
 # know where the lab router and the EPP part ways: tie-breaking, flow control, data-parallel metrics.
-# On one rented GPU we then put the same router in front of real vLLM replicas and re-derive the
-# autoscaling targets from measured numbers. What changes in production is the model servers (real
-# vLLM on GPUs) and the proxy (a cloud load balancer in Gateway mode); what no local stack tells us:
-# cold-start times, network effects and the real fleet's traffic."
+#
+# "On one rented GPU we then put the same router in front of real vLLM replicas and re-derive the autoscaling
+# targets from measured numbers. What changes in production is the model servers (real vLLM on GPUs) and the
+# proxy (a cloud load balancer in Gateway mode); what no local stack tells us: cold-start times, network
+# effects and the real fleet's traffic."
 #
 # **Drill questions**
 #

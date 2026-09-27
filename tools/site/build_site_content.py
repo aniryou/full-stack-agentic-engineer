@@ -17,8 +17,11 @@ re-slugified the way MkDocs' toc does for Markdown pages and the way mkdocs-jupy
 whose heading cannot be found is dropped: the link keeps its page, and a same-page link becomes plain text);
 anything else in the repo (code, Terraform, YAML, folders without a README, LICENSE, ...) points at GitHub;
 absolute URLs are untouched.
-Math: in notebook Markdown, inline TeX written as $...$ becomes \\(...\\), the only inline delimiter the site's
-MathJax accepts, so dollar amounts ("$20 / $100") stay text; see site/javascripts/mathjax.js.
+Math: inline TeX written as $...$ becomes \\(...\\), the only inline delimiter the site accepts, so dollar amounts
+("$20 / $100") stay text; see site/javascripts/mathjax.js. In notebook cells it is written with character references
+(nbconvert's Markdown would otherwise read the underscores as emphasis); in Markdown pages as plain \\( \\), which
+pymdownx.arithmatex protects from Markdown. Display math ($$...$$ on its own lines) is left as written: arithmatex
+(pages) and MathJax (notebooks) both take it.
 """
 from __future__ import annotations
 
@@ -340,21 +343,26 @@ def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str
 
 
 # Inline TeX between single dollars, by pandoc's rule (no space inside either dollar, no digit right after the
-# closing one), and only when it looks like TeX: a backslash, ^, _ or braces, or a single letter ($x$). "$20 / $100"
-# fails the rule; "$5 and $10" too. Display math ($$...$$) is left as it is: MathJax takes $$ as display math.
+# closing one), and only when it looks like TeX: a backslash, ^, _ or braces, a single letter ($x$), or a relation or
+# operator between symbols ($T > 1$, $E/p$, $k = 2$, $B \\cdot k/E$). "$20 / $100" fails the rule; "$5 and $10" too;
+# "$5/$10" and "$100-$200" end on a digit. Display math ($$...$$) is left as it is: MathJax takes $$ as display math.
 INLINE_TEX = re.compile(r"(?<![\\$\w])\$(?![\s$])((?:\\.|[^$\\\n])+?)(?<![\s\\])\$(?![\d$])")
-TEXISH = re.compile(r"[\\^_{}]|^[A-Za-z]'*$")
+TEXISH = re.compile(r"[\\^_{}=+\-/<>×·≈≤≥≠−±∝√∑∞]|^[A-Za-z]'*$")
 MATH_ENTITIES = {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\\": "&#92;", "_": "&#95;", "*": "&#42;", "`": "&#96;",
                  "[": "&#91;", "]": "&#93;", "|": "&#124;", "~": "&#126;"}
 
 
-def inline_tex_to_parens(text: str) -> str:
-    """$x_1$ -> \\(x_1\\), written with character references so Markdown passes it through untouched."""
+def inline_tex_to_parens(text: str, entities: bool = True) -> str:
+    """$x_1$ -> \\(x_1\\). With entities=True (notebook cells) it is written with character references so the
+    Markdown renderer passes it through untouched; with entities=False (Markdown pages) as plain \\(x_1\\), which
+    pymdownx.arithmatex takes before any other inline rule and protects from Markdown."""
     def conv(m):
         body = m.group(1)
         if not TEXISH.search(body):
             return m.group(0)
         stats["math"] += 1
+        if not entities:
+            return f"\\({body}\\)"
         enc = "".join(MATH_ENTITIES.get(ch, ch) for ch in body)
         return f"&#92;({enc}&#92;)"
     return INLINE_TEX.sub(conv, text)
@@ -380,9 +388,10 @@ def rewrite_segment(s: str, fn) -> str:
     return HTMLATTR.sub(lambda m: f'{m.group(1)}="{fn(m.group(2)) or m.group(2)}"', s)
 
 
-def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False, math: bool = False) -> str:
+def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False, math=False) -> str:
     """Rewrite link targets in Markdown, outside fenced code and inline code; links may span lines.
-    With math=True (notebook cells), also turn inline $...$ TeX into \\(...\\) (inline_tex_to_parens)."""
+    With math=True (notebook cells) also turn inline $...$ TeX into \\(...\\) written with character references;
+    with math="page" (Markdown pages) into plain \\(...\\) for arithmatex (inline_tex_to_parens)."""
     fn = lambda t: rewrite_target(t, src_repo, src_site, html)  # noqa: E731
     out: list[str] = []
     prose: list[str] = []
@@ -400,7 +409,7 @@ def rewrite_markdown(text: str, src_repo: str, src_site: str, html: bool = False
             return f"\x00{len(spans) - 1}\x00"
         masked = CODESPAN.sub(mask, block)
         if math:
-            masked = inline_tex_to_parens(masked)
+            masked = inline_tex_to_parens(masked, entities=(math != "page"))
         masked = rewrite_segment(masked, fn)
         out.append(re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], masked))
 
@@ -486,7 +495,7 @@ def build_pages() -> None:
         shutil.copyfile(REPO / rp, dst)
         stats["images"] += 1
     for rp, t in texts.items():
-        write(pages[rp], front_matter(source_path=rp) + rewrite_markdown(t, rp, pages[rp]))
+        write(pages[rp], front_matter(source_path=rp) + rewrite_markdown(t, rp, pages[rp], math="page"))
         stats["pages"] += 1
     for rp, nb in nbs.items():
         site_path = notebooks[rp]
