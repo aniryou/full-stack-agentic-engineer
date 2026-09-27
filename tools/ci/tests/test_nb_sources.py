@@ -109,6 +109,8 @@ def test_the_committed_sources_are_clean():
     assert len(paths) >= 150
     assert all(p.endswith(".py") and ("/notebooks_src/" in p or "/embeddings-lab/src/" in p) for p in paths), paths
     assert "06-gateway/llm-gateway/gateway-core/notebooks_src/02_routing_and_fallback_chains.py" in paths
+    assert "07-application-agent-framework/retrieval-rag/embeddings-lab/src/01_counts_to_vectors.py" in paths
+    assert not any(p.startswith("tools/") for p in paths)   # this file's fixtures carry markers; it is not a source
     assert nbs.findings(paths) == []
 
 

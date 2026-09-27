@@ -27,9 +27,14 @@ MARKDOWN = "markdown"
 BEFORE_FIRST = "before the first cell marker"
 
 
+SOURCE_GLOBS = ("*/notebooks_src/*.py", "*/embeddings-lab/src/*.py")   # what the builders read
+
+
 def tracked_sources() -> list[str]:
-    """Every tracked .py file with a cell marker: the percent-source labs' notebooks_src/ and embeddings-lab's src/."""
-    out = subprocess.run(["git", "grep", "-l", "-e", "^# %%", "--", "*.py"], cwd=REPO, capture_output=True, text=True)
+    """Every tracked source a builder reads: notebooks_src/*.py in the percent-source labs and src/*.py in
+    embeddings-lab (SOURCE_GLOBS). Not "any .py with a `# %%` line": a test fixture or a script with cell markers
+    is not a notebook source."""
+    out = subprocess.run(["git", "ls-files", "--", *SOURCE_GLOBS], cwd=REPO, check=True, capture_output=True, text=True)
     return sorted(p for p in out.stdout.splitlines() if p)
 
 
