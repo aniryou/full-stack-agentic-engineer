@@ -187,7 +187,7 @@ def test_overload_regimes():
         for name, kw, users in [("naive", dict(pool_tpm=3_000_000, naive=True), 100),
                                 ("capped", dict(pool_tpm=3_000_000, max_inflight=30), 100)]:
             CLOCK.reset(0.02)
-            results[name] = await simulate(make_setup(**kw), users=users, duration_s=40, think_s=5)
+            results[name] = await simulate(make_setup("hosted", **kw), users=users, duration_s=40, think_s=5)
         return results
 
     random.seed(0)

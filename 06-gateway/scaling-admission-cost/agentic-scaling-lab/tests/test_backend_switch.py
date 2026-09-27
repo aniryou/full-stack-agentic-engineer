@@ -11,10 +11,7 @@ from scalelab.model import FakeModel, HostedBackend, HybridBackend, ServerPool, 
 from scalelab.sim import BACKEND_ENV, PROVIDER_ENV, make_setup, resolve_backend
 
 
-@pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
-    monkeypatch.delenv(BACKEND_ENV, raising=False)
-    monkeypatch.delenv(PROVIDER_ENV, raising=False)
+# tests/conftest.py clears SCALELAB_BACKEND / SCALELAB_PROVIDER before every test; tests here set them explicitly.
 
 
 def test_the_default_is_the_gemini_pool_with_the_primers_cap():
