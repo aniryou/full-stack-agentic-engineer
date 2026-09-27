@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gwlab"
+version = "0.1.0"
+description = "An async OpenAI-compatible LLM gateway in front of fake providers or a real vLLM: keys, routing and fallbacks, caching, streaming token limits, metering, guardrails, GenAI spans and the MCP client flow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Runtime: an async HTTP server and client (the gateway, the fake providers, the MCP servers), YAML for the
+# gateway's config, numpy for the semantic cache's vectors. sqlite3 and everything else is the standard library.
+dependencies = ["aiohttp>=3.9", "pyyaml>=6.0", "numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+# Real DPoP proofs (ES256). Without it the MCP client signs with a labelled HMAC stand-in.
+dpop = ["cryptography>=42"]
+# Export spans over OTLP/HTTP as well as to the JSON-lines file.
+otlp = ["opentelemetry-sdk>=1.30", "opentelemetry-exporter-otlp-proto-http>=1.30"]
+
+[project.scripts]
+gwlab = "gwlab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gwlab*"]
+
+[tool.setuptools.package-data]
+gwlab = ["configs/*.yaml", "data/*.jsonl", "data/samples/*.txt", "data/samples/*.jsonl", "data/payloads/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

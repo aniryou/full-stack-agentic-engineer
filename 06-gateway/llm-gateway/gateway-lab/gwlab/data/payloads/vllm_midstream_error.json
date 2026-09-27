@@ -1,0 +1,4 @@
+{"_label": "sample output in the documented format (illustrative): how vLLM 0.30.0 ends a stream that failed after it started (chat_completion/serving.py): an error object in a data: event, then [DONE], all inside the HTTP 200. ErrorInfo.code is the HTTP status as an int.",
+ "events": ["data: {\"id\":\"chatcmpl-9a\",\"object\":\"chat.completion.chunk\",\"model\":\"lab/llm\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The first\"},\"finish_reason\":null}]}",
+            "data: {\"error\":{\"message\":\"EngineCore encountered an issue\",\"type\":\"InternalServerError\",\"param\":null,\"code\":500}}",
+            "data: [DONE]"]}

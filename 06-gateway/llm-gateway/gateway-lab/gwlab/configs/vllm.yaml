@@ -1,0 +1,45 @@
+# T1: the gateway in front of one real `vllm serve` (deploy/any-gpu), with a fake provider as the fallback.
+# vLLM serves Qwen/Qwen2.5-0.5B-Instruct under the name `lab/llm`, started with --enable-prompt-tokens-details
+# (else usage has no cached_tokens). The self-hosted price row is the GPU hour over a throughput: set
+# GWLAB_GPU_HOUR_USD and GWLAB_TOKENS_PER_S to what you rent and what you measured (01 PRIMER §8.1).
+gateway:
+  admin_token: ${GWLAB_ADMIN_TOKEN:-dev-admin-token}
+  salt_secret: ${GWLAB_SALT_SECRET:-dev-salt-secret}
+  db: ${GWLAB_DB:-:memory:}
+  spans: ${GWLAB_SPANS:-}
+
+providers:
+  local:                                 # vLLM speaks the OpenAI dialect
+    dialect: openai
+    base_url: ${GWLAB_VLLM_URL:-http://127.0.0.1:8000}
+    key: ${VLLM_API_KEY:-}                # if you started vLLM with --api-key; never exposed to callers
+    region: us
+    first_byte_timeout_s: 30              # the first request after a cold start compiles graphs
+    cache_salt: true                      # vLLM >= 0.30 (verify): per-tenant cache isolation
+    otel_name: vllm                       # gen_ai.provider.name has no self-hosted value; a lab choice
+  acme:
+    dialect: openai
+    base_url: ${ACME_URL:-http://127.0.0.1:8101}
+    key: ${ACME_API_KEY:-acme-key-1}
+    region: us
+    first_byte_timeout_s: 2.0
+    cache_salt: true
+
+models:
+  local/llm:  {provider: local, upstream: lab/llm, context_window: 4096, tools: false,
+               price: {gpu_hour_usd: "${GWLAB_GPU_HOUR_USD:-0.35}", tokens_per_s: "${GWLAB_TOKENS_PER_S:-300}", utilisation: 0.6}}
+  acme/fast:  {provider: acme, upstream: fast-1, context_window: 8192, tools: true, price: gpt-5.4-mini}
+
+aliases:
+  chat:        {policy: ordered, targets: [local/llm, acme/fast]}
+  chat-strong: {policy: ordered, targets: [acme/fast]}
+  chat-cheap:  {policy: cheapest, targets: [local/llm, acme/fast]}
+
+tenants:
+  team-a: {aliases: [chat, chat-strong, chat-cheap], rpm: 600, tpm: 200000, tier: premium}
+  team-b: {aliases: [chat, chat-cheap], rpm: 600, tpm: 200000}
+
+limits: {mode: reserve, minute_s: 60, default_output_estimate: 512, hard_output_cap: 1024}
+cache: {exact: true, semantic: true, threshold: 0.92, entity_guard: true, ttl_s: 3600, classes: [faq], per_user_classes: [account]}
+guardrails: {input: "off", output: "off", window_tokens: 16, check_ms: 20}
+breaker: {failure_threshold: 3, recovery_timeout_s: 10}

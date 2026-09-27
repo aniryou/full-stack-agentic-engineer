@@ -8,7 +8,7 @@ each choice with numbers in a design review.
 
 ```
    07 Agents and applications         the agent: loop, tools, sandboxes, state, memory, durable execution, retrieval
-   06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
+   06 Gateway                         who may run what: identity, policy, model routing, rate limits, admission, cost
    05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
    04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
    03 Kubernetes and GPU scheduling   GPUs made schedulable: device plugin, scheduler, gangs, quotas
