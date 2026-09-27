@@ -39,7 +39,8 @@ The 04 lab's service is private. From a laptop, `gcloud run services proxy` adds
 (the gateway then talks to `127.0.0.1`). A gateway running on Google Cloud would instead send a Google-signed ID
 token whose audience is the service URL (verify) — this lab's provider credential is a static key, so that path
 is a follow-up, not something it implements. Keep `first_byte_timeout_s` above the cold start (image pull plus
-weights plus engine start, which the 04 lab's notebook 06 computes), or set `min_instances = 1` there.
+weights plus engine start, which the 04 lab's
+[notebook 06](../../../../../04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb) computes), or set `min_instances = 1` there.
 
 ## Running the gateway itself on Cloud Run (CPU)
 

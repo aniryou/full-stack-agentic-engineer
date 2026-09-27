@@ -247,7 +247,7 @@ labels a result served by a fallback as degraded; the gateway does the same with
 
 A breaker learns only as fast as failures complete. With a 10 s timeout and 50 requests a second, the first
 10 × 50 = 500 requests are all in flight before the breaker has seen three failures (502 with the three that trip
-it; core notebook 02, exercise 2.4, counts it against `routing.Breaker`). Fast failure signals — connect
+it; [core notebook 02](gateway-core/notebooks/02_routing_and_fallback_chains.ipynb), exercise 2.4, counts it against `routing.Breaker`). Fast failure signals — connect
 errors, a 503, a deadline on the *first byte* shorter than the whole-response timeout — shorten that window; that is
 why the gateway times out on TTFT separately from end-to-end.
 
@@ -292,7 +292,8 @@ the server runs `--scheduling-policy priority`), llm-d's `InferenceObjective.pri
 there), Envoy's `backendRefs.priority` 0 is the primary — so map tiers explicitly. And cost: a pool has no per-token
 price; its bill is split by GPU time (§5.4). Hosted provider or own pool is a break-even on $ per million tokens against utilisation — the 01 primer's
 [§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens) turns a GPU-hour into
-$/M and §5.3 below compares the two at one call shape; module 06.5 (the scaling lab) works the capacity side. A
+$/M and §5.3 below compares the two at one call shape; module 06.5 (the scaling lab's [Mistral scaling primer §3.5–3.6](../scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md#35-self-hosted-the-replica-then-the-fleet)
+and its [notebook 05](../scaling-admission-cost/agentic-scaling-lab/notebooks/05_hosted_or_own_gpus.ipynb)) works the capacity side. A
 Provisioned Throughput commitment is a target too, with its own quota and spill-over (scaling primer §3.5).
 
 ---
@@ -322,7 +323,7 @@ An answer may be reused only if it would be the same answer for this caller now.
 tools (tool calls act on the world), and sampled outputs where variety is the point. A gateway cannot infer the class
 from the text — "How do I reset *my* password?" is an FAQ and contains "my" — so the **route declares it**
 (`metadata.cache_class`, `cache.cacheable()`), and only allowlisted classes are looked up or stored. The lab's
-notebook 03 shows why: its regex reads "How do I cancel my subscription?" as personal and "What is my plan limit?"
+[notebook 03](gateway-lab/notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb) shows why: its regex reads "How do I cancel my subscription?" as personal and "What is my plan limit?"
 as general, so there a regex may only *veto* a declared shared class, never make a request cacheable. The key is
 namespaced by the **verified tenant** (and by user for per-user classes); OSS Portkey's exact-cache key has no tenant
 in it (§9), and LiteLLM's semantic cache scopes by key by default — check what your product does.
@@ -445,7 +446,7 @@ admitted thinking streams have drained (t = 648 s). Sized right on the mean it s
 seconds, because the tail is not the mean. Reserving the cap is exact and wasteful: a 16K reservation held for a
 minute-long stream strands most of the budget (26.5 % served). Reserving an estimate and reconciling serves 70.4 % with no second over the limit here —
 910,498 tokens overran their reservations and were debited as they streamed, so admission saw them — but that is
-measured, not guaranteed: sweeping the reservation (notebook 04, exercise 4.3), 1,024 serves 98.9 % of the limit
+measured, not guaranteed: sweeping the reservation ([core notebook 04](gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb), exercise 4.3), 1,024 serves 98.9 % of the limit
 but spends 56 seconds over it, 2,048 serves 89.3 % with 2 seconds over, and 4,096 is the smallest with none. Size the
 reservation by simulation on your own output distribution — the cap where a provider 429 is unacceptable — and never
 charge a per-request constant.
@@ -465,7 +466,8 @@ working example with fixed-window counters).
 A shared provider key has one TPM. Without per-tenant limits, one tenant's thinking rollout consumes it and every
 other tenant gets 429s it did nothing to earn; admission's degrade levels (scaling primer §5.3) then shed the wrong
 traffic. Per-tenant token limits under the provider limit, with priority tiers above them (§6.4), keep one tenant's
-tail inside its own budget; the lab's `bench.py` scripts tenants against shared fake providers (its notebook 04).
+tail inside its own budget; the lab's `bench.py` scripts tenants against shared fake providers (its
+[notebook 04](gateway-lab/notebooks/04_streaming_limits_metering_and_chargeback.ipynb)).
 
 ---
 
@@ -549,7 +551,7 @@ v1.41.0 (April 2026) is the last semantic-conventions release that defines them,
 replaced the `gen_ai.client.token.usage` histogram with counters, both unreleased. `otel.py` pins the names the two
 agree on — the same constants as the 07.2 lab's
 [`tracing.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/observability/tracing.py)
-(its notebook 09; a test compares them) plus `gen_ai.provider.name` (required; there is no well-known value for a
+(its [notebook 09](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/09_tracing_and_metrics.ipynb); a test compares them) plus `gen_ai.provider.name` (required; there is no well-known value for a
 self-hosted server, so `vllm` is our choice), `gen_ai.response.model` (the model that actually answered — the alias goes in
 `gen_ai.request.model` on the server span), `gen_ai.response.time_to_first_chunk` and `gen_ai.request.stream` — and
 defaults to the released names where they disagree, keeping the map (`otel.RENAMED_ON_MAIN`). Spans are written as
@@ -686,8 +688,9 @@ Agents reach MCP servers through the gateway — the 07.2 lab's
 [MCP egress gateway](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/mcp/gateway.py)
 ([notebook 05](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/05_mcp_server_client_gateway.ipynb))
 enforces policy, screens arguments and results, forbids token passthrough and audits every call. The MCP server is an
-OAuth 2.1 resource server (identity primer §7.1), so whoever calls it runs the **client** side of the MCP
-authorization spec (revision 2026-07-28, verify; the 07.2 lab's `docs/MCP_REVISIONS.md` lists what changed per revision).
+OAuth 2.1 resource server ([identity primer §7.1](../identity-security/agentic-identity-gcp-lab/docs/primer.md#71-mcp-the-server-is-an-oauth-21-resource-server)), so whoever calls it runs the **client** side of the MCP
+authorization spec (revision 2026-07-28, verify; the 07.2 lab's
+[`docs/MCP_REVISIONS.md`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/docs/MCP_REVISIONS.md) lists what changed per revision).
 If the gateway is the client, tokens live in the gateway, per principal, and the agent never holds one. The 07.2
 lab's [`agentlab/auth/oauth.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/auth/oauth.py)
 ([notebook 06](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/06_oauth_identity_propagation.ipynb))
@@ -750,7 +753,7 @@ which would drop what it already had — and retries a bounded number of times (
 
 ### 8.5 DPoP nonces
 
-A sender-constrained token (identity primer §3.5) is bound to a key: the client sends `Authorization: DPoP <token>`
+A sender-constrained token ([identity primer §3.5](../identity-security/agentic-identity-gcp-lab/docs/primer.md#35-delegation-mechanics-standards-you-should-be-able-to-draw)) is bound to a key: the client sends `Authorization: DPoP <token>`
 plus a `DPoP` proof — a JWT with `jti`, `htm`, `htu`, `iat`, and `ath` = base64url(SHA-256(token)) — signed by that
 key. RFC 9449 lets servers demand a fresh **nonce** in the proof: an authorization server answers `400
 {"error":"use_dpop_nonce"}` with a `DPoP-Nonce` header (§8 of the RFC), a resource server answers `401` with
@@ -771,7 +774,7 @@ library has none. The lab signs with `cryptography` when it is installed.
 |---|---|---|
 | T0 in-process | all of `gateway-core`: providers, the chain, caches, limits, ledger, spans and the MCP flow on a virtual clock | free |
 | T0 on localhost | [`gateway-lab`](gateway-lab/): an async OpenAI-compatible gateway over HTTP in front of fake providers, built like the 05 lab's [`igwlab` router](../../05-orchestrator/serving-orchestration/inference-gateway-lab/igwlab/router/server.py) | free |
-| T0 + Docker | the lab's compose stack: the gateway and two fake providers, one set to fail | free |
+| T0 + Docker | the lab's [compose stack](gateway-lab/deploy/local/): the gateway and two fake providers, one set to fail | free |
 | T1 | the gateway in front of one real vLLM (`vllm/vllm-openai:v0.30.0`, Qwen2.5-0.5B-Instruct, `--enable-prompt-tokens-details`) on a free Colab or Kaggle T4, with a fake provider as the fallback | free, or ~$0.3–0.7 an hour rented (verify) |
 | T3 | the gateway on Cloud Run or GKE with the 04 lab's [Cloud Run or GKE vLLM](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/) or the 05 lab's [GKE Inference Gateway](../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gke/) as upstreams; no new Terraform | pay per use; see [`COMPUTE.md`](../../COMPUTE.md) |
 
@@ -786,7 +789,7 @@ map one to one:
 | shared buckets and caches (§4.4) | Memorystore | Redis or Valkey |
 | provider keys (§6.2) | Secret Manager | Vault, or the cloud's own secret manager |
 | spans (§5.6) | Cloud Trace over OTLP | any OTLP backend: Jaeger, Tempo, an OpenTelemetry Collector |
-| a T1 upstream | the 04 lab's Cloud Run or GKE vLLM | a rented GPU (RunPod, Vast, Lambda; prices in `COMPUTE.md`, verify) running the lab's `deploy/any-gpu` |
+| a T1 upstream | the 04 lab's Cloud Run or GKE vLLM | a rented GPU (RunPod, Vast, Lambda; prices in [`COMPUTE.md`](../../COMPUTE.md), verify) running the lab's [`deploy/any-gpu`](gateway-lab/deploy/any-gpu/) |
 
 ### 9.2 Build or adopt
 

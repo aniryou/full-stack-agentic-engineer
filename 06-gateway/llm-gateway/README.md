@@ -46,8 +46,9 @@ python3 tools/run_notebooks.py solutions             # the five finished noteboo
 python3 -m jupyterlab notebooks                      # do the exercises
 ```
 
-The lab's install, tests and deploy targets (`deploy/local` compose, `deploy/any-gpu` with vLLM, `deploy/gcp` — a
-README pointing at existing deploys, no new Terraform) are in [`gateway-lab/`](gateway-lab/).
+The lab's install, tests and deploy targets ([`deploy/local`](gateway-lab/deploy/local/) compose,
+[`deploy/any-gpu`](gateway-lab/deploy/any-gpu/) with vLLM, [`deploy/gcp`](gateway-lab/deploy/gcp/) — a README pointing at
+existing deploys, no new Terraform) are in [`gateway-lab/`](gateway-lab/).
 
 ## How it fits
 
