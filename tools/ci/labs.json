@@ -113,7 +113,7 @@
    "python": "3.11",
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q",
-   "solutions": "python tools/run_notebooks.py ../kv-cache/01_kv_cache_worked.ipynb && python tools/run_notebooks.py ../kv-cache/02_kv_cache_practice.ipynb --expect-fail"
+   "solutions": "python tools/run_notebooks.py ../kv-cache/notebooks/01_kv_cache_worked.ipynb && python tools/run_notebooks.py ../kv-cache/notebooks/02_kv_cache_practice.ipynb --expect-fail"
   },
   {
    "id": "paged-attention",
