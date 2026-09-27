@@ -53,6 +53,22 @@ def test_reserve_invariant_bounds_what_the_provider_sees():
             assert lim.overrun == 0
 
 
+def test_a_refund_never_lets_the_window_read_below_what_was_processed():
+    """Streamed estimates over-counted: usage says 700 of the 1,000 debited at t=0..9 were real. The refund shrinks this
+    request's own earliest debits, so the window never goes negative and never under-counts the true 700 while
+    those debits are in it (a negative event at reconcile time would outlive them)."""
+    lim = RL.ReserveLimiter(10_000)
+    lim.admit("a", 2_000, 0)
+    for t in range(10):
+        lim.debit("a", 100, t)
+    assert lim.refund("a", 300, 20) == 300 and lim.meter.used(20) == 700
+    lim.finish("a")
+    for t in (20, 59.5, 60, 65, 69.5, 70, 80):
+        true = sum(100 for s in range(10) if s > t - 60) - 300 * (t < 63)       # the refund took t=0,1,2's debits
+        assert lim.meter.used(t) >= 0 and lim.meter.used(t) >= min(700, true)
+    assert lim.meter.used(70) == 0
+
+
 def test_admit_all_is_all_or_nothing():
     tenant, provider = RL.ReserveLimiter(10_000), RL.ReserveLimiter(5_000)
     assert not RL.admit_all([tenant, provider], "r", [6_000, 6_000], 0)
@@ -73,6 +89,8 @@ def test_compare_buckets_pinned():
     assert old["admitted"] == new["admitted"] == 5055                 # the per-request bucket cannot see the change
     assert round(old["peak_ratio"], 2) == 1.03 and old["seconds_over_limit"] == 116
     assert round(new["peak_ratio"], 2) == 1.97 and new["seconds_over_limit"] == 604 and round(new["utilisation"], 2) == 1.87
+    assert (old["first_over"], old["last_over"]) == (59, 600)                 # the old mix: 116 scattered seconds
+    assert (new["first_over"], new["last_over"]) == (45, 648) and 648 - 45 + 1 == 604   # continuous once it binds
     assert est["seconds_over_limit"] == 0 and round(est["peak_ratio"], 2) == 0.77 and round(est["utilisation"], 3) == 0.704
     assert est["admitted"] == 1920 and est["overrun_tokens"] == 910_498
     assert cap["seconds_over_limit"] == 0 and round(cap["utilisation"], 3) == 0.265 and cap["truncated"] == 5

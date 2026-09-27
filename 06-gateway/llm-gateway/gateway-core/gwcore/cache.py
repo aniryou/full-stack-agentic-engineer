@@ -21,6 +21,7 @@ import numpy as np
 EMBEDDER_LABEL = "hashing embedder (T0; lexical, not semantic)"
 KEY_FIELDS = ("model", "messages", "tools", "tool_choice", "response_format", "temperature", "top_p",
               "max_completion_tokens", "seed", "reasoning_effort")
+COMPLETE = frozenset({"stop"})       # the finish reasons whose answer may be stored: an allowlist, never "not an error"
 _TOKEN = re.compile(r"[a-z0-9]+")
 _ENTITY = re.compile(r"\b(?:[A-Z][A-Z0-9]+|\d[\d.,/:-]*)\b")      # IDs, codes, numbers, dates: SSO, Q3, 2025, 1234
 

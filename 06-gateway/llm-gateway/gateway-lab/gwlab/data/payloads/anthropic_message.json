@@ -1,7 +1,38 @@
-{"_label": "sample output in the documented format (illustrative): a non-streamed Anthropic Messages response; input_tokens EXCLUDES the cache reads and writes (anthropic-sdk-python types/usage.py)",
- "id": "msg_01XyZ", "type": "message", "role": "assistant", "model": "claude-haiku-4-5",
- "content": [{"type": "text", "text": "Your invoice is due on the 12th."},
-             {"type": "tool_use", "id": "toolu_01A", "name": "get_invoice", "input": {"account": "A-17"}}],
- "stop_reason": "tool_use", "stop_sequence": null,
- "usage": {"input_tokens": 2300, "cache_read_input_tokens": 2700, "cache_creation_input_tokens": 0, "output_tokens": 350,
-           "output_tokens_details": {"thinking_tokens": 0}, "service_tier": "standard"}}
+{
+  "_label": "sample output in the documented format (illustrative): a non-streamed Anthropic Messages response; input_tokens EXCLUDES the cache reads and writes (anthropic-sdk-python types/usage.py) It is the primer's \u00a71.5 call: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.",
+  "id": "msg_01XyZ",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-4-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "The user asks about their invoice; look it up.",
+      "signature": "sig-illustrative"
+    },
+    {
+      "type": "text",
+      "text": "Your invoice is due on the 12th."
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01A",
+      "name": "get_invoice",
+      "input": {
+        "account": "A-17"
+      }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 2300,
+    "cache_read_input_tokens": 2700,
+    "cache_creation_input_tokens": 0,
+    "output_tokens": 1550,
+    "output_tokens_details": {
+      "thinking_tokens": 1200
+    },
+    "service_tier": "standard"
+  }
+}

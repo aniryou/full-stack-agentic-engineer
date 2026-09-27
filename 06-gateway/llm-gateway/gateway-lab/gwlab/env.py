@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import http.client
+import urllib.parse
 from importlib import resources
 
 VLLM_ENV = "GWLAB_VLLM_URL"              # e.g. http://127.0.0.1:8000 -- a `vllm serve` from deploy/any-gpu
@@ -24,8 +26,30 @@ def docker_available() -> bool:
         return False
 
 
-def vllm_url() -> str | None:
-    return os.environ.get(VLLM_ENV) or None
+def vllm_answers(url: str, timeout: float = 2.0) -> bool:
+    """True if `GET <url>/health` answers 200 within `timeout` seconds (vLLM's health endpoint, never behind --api-key)."""
+    try:                                              # http.client, like gwlab.client: no proxy between us and it
+        u = urllib.parse.urlsplit(url)
+        cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+        conn = cls(u.hostname, u.port, timeout=timeout)
+        conn.request("GET", u.path.rstrip("/") + "/health")
+        ok = conn.getresponse().status == 200
+        conn.close()
+        return ok
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+
+
+def vllm_url(quiet: bool = False) -> str | None:
+    """The T1 vLLM's URL -- only if `GWLAB_VLLM_URL` is set *and* the server answers. A set variable pointing at a
+    stopped server (notebook 02's T1 cell stops it on purpose) is not T1: the notebooks fall back to T0."""
+    url = os.environ.get(VLLM_ENV) or None
+    if url and not vllm_answers(url):
+        if not quiet:
+            print(f"{VLLM_ENV}={url} is set but vLLM is not answering on /health: T1 skipped "
+                  "(restart it with deploy/any-gpu/serve.sh)")
+        return None
+    return url
 
 
 def has_cryptography() -> bool:

@@ -165,16 +165,18 @@ def test_limits_budget_and_reconciliation():
 
 def test_exact_and_semantic_cache_and_tenant_isolation(stack):
     a, b = stack.issue_key("team-a"), stack.issue_key("team-b")
-    q = "How do I export a report as CSV?"
-    first = stack.chat(a, q, temperature=0)
-    hit = stack.chat(a, q, temperature=0, stream=True)
+    q, faq = "How do I export a report as CSV?", {"cache_class": "faq"}
+    first = stack.chat(a, q, temperature=0, metadata=faq)
+    hit = stack.chat(a, q, temperature=0, stream=True, metadata=faq)
     assert first.header("x-gwlab-cache") == "miss" and hit.header("x-gwlab-cache") == "exact" and hit.text == first.text
-    para = stack.chat(a, "how do I export a report as csv", temperature=0)
+    para = stack.chat(a, "how do I export a report as csv", temperature=0, metadata=faq)
     assert para.header("x-gwlab-cache") == "semantic"
-    assert stack.chat(b, q, temperature=0).header("x-gwlab-cache") == "miss"          # another tenant's namespace
-    assert stack.chat(a, "What is the status of my order 1234?", temperature=0).header("x-gwlab-cache") == "miss"
+    assert stack.chat(b, q, temperature=0, metadata=faq).header("x-gwlab-cache") == "miss"   # another tenant's namespace
+    assert stack.chat(a, "What is the status of my order 1234?", temperature=0, metadata=faq).header("x-gwlab-cache") == "miss"
+    assert "vetoed" in stack.last_decision()["cache"]["reason"]
+    assert stack.chat(a, q, temperature=0).header("x-gwlab-cache") == "miss"                # undeclared: never cached
     rows = stack.ledger(tenant="team-a")
-    assert [r["cache"] for r in rows[-3:]][:2] == ["exact", "semantic"] and rows[-2]["cost_usd"] == 0
+    assert [r["cache"] for r in rows[-4:]][:2] == ["exact", "semantic"] and rows[-3]["cost_usd"] == 0
 
 
 def test_cache_salt_keeps_prefix_hits_inside_a_tenant(fresh):
@@ -254,7 +256,7 @@ def test_parallel_input_check_still_applies_to_cache_hits_and_bills_what_ran():
         assert r.status == 400 and r.json["error"]["code"] == "content_filter"
         row = s.ledger(request_id=s.last_decision()["request_id"])[0]
         assert row["usage_source"] == "provider" and row["completion_tokens"] == 12 and row["cost_usd"] > 0
-        s.gateway.cache.put("team-a", "chat", {"model": "chat", "temperature": 0,
-                                               "messages": [{"role": "user", "content": q}]},
-                            {"choices": [{"message": {"content": "cached"}}]})
-        assert s.chat(key, q, temperature=0).status == 400               # a cached answer is not a way around it
+        assert s.gateway.cache.put("team-a", "chat", {"model": "chat", "temperature": 0, "metadata": {"cache_class": "faq"},
+                                                      "messages": [{"role": "user", "content": q}]},
+                                   {"choices": [{"message": {"content": "cached"}}]})
+        assert s.chat(key, q, temperature=0, metadata={"cache_class": "faq"}).status == 400   # a cached answer is no way around it

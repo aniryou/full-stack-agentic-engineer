@@ -19,8 +19,9 @@
 # window under a TTFT budget, set a false-positive budget, build the discovery URLs, compute PKCE by hand and detect
 # refresh-token reuse.
 #
-# Primer: §6 *Keys, tenants and isolation*, §7 *Guardrails and what they cost*, §8 *The gateway as an MCP client*,
-# §9 *Where to run it, and what to adopt* (`../PRIMER.md`); identity primer §3.3–3.5, §5, §6.1, §7.1.
+# Primer: §6 *Keys, tenants and isolation*, §7 *Guardrails and what they cost*, §8 *The gateway as an MCP client*
+# (`../PRIMER.md`); identity primer §3.3–3.5, §5, §6.1, §7.1. (§9, where to run it and what to adopt, is a reading:
+# its product table is the checklist of §1–§8, which these five notebooks have exercised.)
 
 # %%
 from gwcore import guardrails, keys
@@ -45,8 +46,11 @@ pk.add("openai", "sk-old", now=0)
 pk.rotate("openai", "sk-new", now=1000, overlap=600)
 print("rotation: current at 1001 =", pk.current("openai", 1001), "| old still valid at 1599:", pk.valid("openai", "sk-old", 1599),
       "| at 1600:", pk.valid("openai", "sk-old", 1600))
-stream = keys.FakeWorkloadAPI("spiffe://corp.example/gateway", seed=2).fetch_x509_svid({"workload.spiffe.io": "true"}, until=3 * 3600)
-print("SVID rotations (s):", [round(m["at"]) for m in stream], "| window:", keys.svid_rotation_window(3600))
+msgs = list(keys.FakeWorkloadAPI("spiffe://corp.example/gateway", seed=2).fetch_x509_svid({"workload.spiffe.io": "true"},
+                                                                                         until=3 * 3600))
+print("SVID rotations (s):", [round(m["at"]) for m in msgs], "| window:", keys.svid_rotation_window(3600))
+print("minutes left at each rotation:", [round((a["svids"][0]["not_after"] - b["at"]) / 60, 1) for a, b in zip(msgs, msgs[1:])],
+      "(a fresh jitter draw on every 5 s check lands rotation near the top of the window)")
 
 # %% [markdown]
 # ## Worked example 1 — what a guardrail costs by placement
@@ -263,8 +267,8 @@ print("✅ rotation works, a replayed token revokes alice's whole grant (current
 # call; the tenant, tier and scopes come from the verified key and nothing the caller sends can change them. Provider
 # keys live only in the gateway, injected on the way out — the identity primer's gateway path — and rotate with an
 # overlap. Everything tenant-scoped derives from the key, including the `cache_salt` we send to vLLM, an HMAC of the
-# tenant under our secret. Our own identity is an SVID from the Workload API, rotated at half-life, 27 to 33 minutes
-# before expiry, and we cycle pooled connections when it rotates. Guardrails are placed by cost: a fast input check in
+# tenant under our secret. Our own identity is an SVID from the Workload API, rotated at half-life ± 10 % — in
+# practice about 32 minutes before a one-hour SVID expires — and we cycle pooled connections when it rotates. Guardrails are placed by cost: a fast input check in
 # parallel with the model is free, a held-back output window adds a window of generation to TTFT, and false positives
 # compound — 1 % per check blocks 23 % of 26-check conversations — so screens start inspect-only, and deterministic
 # policy bounds what they miss. For MCP we are the OAuth client: discovery from the 401, a metadata-document client id,

@@ -10,13 +10,20 @@ depend on who asks or when. Four caches sit on the path and save different thing
 | provider prompt cache | hosted API | ~90 % of cached input $ (scaling primer §3.4) | none to correctness |
 | engine prefix cache | vLLM | prefill time (TTFT) (serving-engine PRIMER §5) | a timing side channel: `cache_salt` per tenant |
 
-The semantic path here: classify (personal and time-sensitive queries are never cached) -> namespace by tenant,
-alias and system prompt -> embed the last user message -> nearest neighbour -> threshold -> an **exact guard**
-on numbers, dates and codes (a lexical near miss such as "order 1234" vs "order 1243" is rejected) -> serve.
+What may be cached is **declared, never inferred**: the route (the calling app) names the request's class in
+`metadata.cache_class`, and only the classes the config allowlists are looked up or stored — shared classes
+(`faq`) in a namespace per tenant, per-user classes (`account`) per tenant *and* `metadata.user`. A gateway cannot
+tell the class from the text ("How do I cancel my subscription?" is an FAQ that says "my"; "What is my plan
+limit?" is personal and says nothing a regex can see), so the regex below is only a second, **deny-only** guard
+on shared classes: it can veto a declared `faq` that looks personal or time-bound, never make a request cacheable.
+
+The semantic path here: declared and allowlisted class -> namespace by tenant, alias, system prompt (and user for a
+per-user class) -> embed the last user message -> nearest neighbour -> threshold -> an **exact guard** on numbers,
+dates and codes (a lexical near miss such as "order 1234" vs "order 1243" is rejected) -> serve.
 The embedder is the lexical hashing embedder of `ragkit.embed.HashingEmbedder` (07.4), re-implemented: two texts
 are close exactly when they share words, so it finds rephrasings that reuse words and misses the ones that do
 not (a real embedder, T1, finds more of both — true paraphrases and false hits; embeddings primer §15,
-"Embeddings elsewhere in agent systems"). The classifier is a regex stand-in, labelled as one.
+"Embeddings elsewhere in agent systems"). The deny-only guard is a regex stand-in, labelled as one.
 """
 from __future__ import annotations
 
@@ -35,7 +42,8 @@ import numpy as np
 from ..tokens import last_user_text, system_text
 
 EMBEDDER_LABEL = "hashing embedder (T0 stand-in; lexical, not semantic)"
-CLASSIFIER_LABEL = "regex stand-in, not a classifier"
+CLASSIFIER_LABEL = "regex stand-in, not a classifier: a deny-only second guard on declared shared classes"
+SHARED_CLASSES, PER_USER_CLASSES = ("faq",), ("account",)         # defaults; the config's `cache` section overrides
 _TOKEN = re.compile(r"[a-z0-9]+")
 _ENTITY = re.compile(r"\b\d{4}-\d{2}-\d{2}\b|\b[A-Za-z]{0,4}-?\d+(?:[.,:/]\d+)*\b")
 _PERSONAL = re.compile(r"\b(my|our)\s+(order|account|invoice|balance|booking|ticket|payment|address|card|bill|"
@@ -65,7 +73,9 @@ def entities(text: str) -> tuple:
 
 
 def classify_query(text: str) -> str:
-    """general | personal | time_sensitive (a regex stand-in, not a classifier)."""
+    """general | personal | time_sensitive (a regex stand-in, not a classifier). It misreads both ways -- "How do
+    I cancel my subscription?" reads personal, "What is my plan limit?" reads general -- which is why the class is
+    declared by the route and this only ever vetoes."""
     if _PERSONAL.search(text):
         return "personal"
     if _TIME.search(text):
@@ -82,18 +92,32 @@ def canonical(body: dict) -> str:
     return json.dumps({k: body[k] for k in _CANON_KEYS if k in body}, sort_keys=True, separators=(",", ":"))
 
 
-def cacheable(body: dict) -> tuple[bool, str]:
-    """Is this request's answer safe to reuse? (deterministic, no tools, one choice, not personal or time-bound)"""
+def declared(body: dict) -> tuple[str | None, str | None]:
+    """(cache_class, user) from the request's route metadata -- set by the calling app's route, stripped upstream."""
+    meta = body.get("metadata") or {}
+    return meta.get("cache_class"), meta.get("user")
+
+
+def cacheable(body: dict, shared=SHARED_CLASSES, per_user=PER_USER_CLASSES) -> tuple[bool, str]:
+    """Is this request's answer safe to reuse? Deterministic, no tools, one choice, and a *declared* class the config
+    allowlists (a per-user class also needs a user); the regex may still veto a shared class. Returns (ok, why/class)."""
     if body.get("temperature") != 0:
         return False, "sampling (temperature is not 0)"
     if body.get("tools"):
         return False, "tools (the answer depends on tool state)"
     if (body.get("n") or 1) != 1:
         return False, "n > 1"
-    cls = classify_query(last_user_text(body))
-    if cls != "general":
-        return False, cls
-    return True, "general"
+    cls, user = declared(body)
+    if cls is None:
+        return False, "no cache_class declared (the route decides what may be cached)"
+    if cls in per_user:
+        return (True, cls) if user else (False, f"per-user class {cls!r} without metadata.user")
+    if cls not in shared:
+        return False, f"class {cls!r} is not cacheable here"
+    looks = classify_query(last_user_text(body))
+    if looks != "general":
+        return False, f"declared {cls!r}, vetoed by the regex guard ({looks})"
+    return True, cls
 
 
 def cache_salt(tenant: str, secret: str) -> str:
@@ -121,13 +145,23 @@ class Lookup:
 class GatewayCache:
     def __init__(self, store, cfg, clock=time.time, embedder: HashingEmbedder | None = None):
         self.store, self.cfg, self.clock = store, cfg, clock
+        self.shared, self.per_user = tuple(getattr(cfg, "classes", SHARED_CLASSES)), tuple(getattr(cfg, "per_user_classes",
+                                                                                                    PER_USER_CLASSES))
         self.embedder = embedder or HashingEmbedder(cfg.dim)
         self.stats = {"exact": 0, "semantic": 0, "miss": 0, "bypass": 0, "guard_rejected": 0, "stored": 0}
 
-    @staticmethod
-    def namespace(tenant: str, alias: str, body: dict) -> str:
-        """tenant | alias | hash of the system prompt: a hit never crosses tenants, models or instructions."""
-        return f"{tenant}|{alias}|{hashlib.sha256(system_text(body).encode()).hexdigest()[:12]}"
+    def cacheable(self, body: dict) -> tuple[bool, str]:
+        return cacheable(body, self.shared, self.per_user)
+
+    def namespace(self, tenant: str, alias: str, body: dict) -> str:
+        """tenant | alias | hash of the system prompt [| hash of the user, for a per-user class]: a hit never crosses
+        tenants, models or instructions, and a per-user answer never crosses users (ids hashed, so no id can forge
+        another's namespace with a '|')."""
+        ns = f"{tenant}|{alias}|{hashlib.sha256(system_text(body).encode()).hexdigest()[:12]}"
+        cls, user = declared(body)
+        if cls in self.per_user:
+            ns += "|u:" + hashlib.sha256(str(user).encode()).hexdigest()[:16]
+        return ns
 
     @staticmethod
     def exact_key(body: dict) -> str:
@@ -138,7 +172,7 @@ class GatewayCache:
         return sum(1 for m in body.get("messages") or [] if m.get("role") not in ("system", "developer")) == 1
 
     def lookup(self, tenant: str, alias: str, body: dict) -> Lookup:
-        ok, why = cacheable(body)
+        ok, why = self.cacheable(body)
         if not ok:
             self.stats["bypass"] += 1
             return Lookup(None, reason=why)
@@ -173,7 +207,7 @@ class GatewayCache:
         return Lookup(None, reason="miss")
 
     def put(self, tenant: str, alias: str, body: dict, response: dict) -> bool:
-        if not cacheable(body)[0]:
+        if not self.cacheable(body)[0]:
             return False
         ns, now = self.namespace(tenant, alias, body), self.clock()
         exp, resp = now + self.cfg.ttl_s, json.dumps(response)
@@ -212,14 +246,17 @@ def load_sample() -> list[dict]:
 def sweep(sample: list, thresholds, guard: bool = True, embedder: HashingEmbedder | None = None) -> list[dict]:
     """Replay the sample through a fresh semantic cache per threshold.
 
-    A query that is not `general` bypasses the cache. Otherwise its nearest cached query answers it when the
-    cosine clears the threshold (and, with `guard`, the entities match exactly); the answer is *correct* when
-    both are in the same group. A miss stores the query. Rates are over cacheable queries:
-    `hit_rate` (served from cache), `false_hit_rate` (served another question's answer), and `reachable`
-    (share whose group was already cached: the most any threshold could serve).
+    Only queries the sample labels `general` are cacheable (the route declares them `faq`); the rest bypass. A
+    cacheable query is answered by its nearest cached query when the cosine clears the threshold (and, with `guard`,
+    the entities match exactly); the answer is *correct* when both are in the same group. A miss stores the query.
+    Rates are over the cacheable queries: `served_rate` (answered from the cache, right or wrong), `correct_rate`
+    (answered with its own group's answer), `false_hit_rate` (answered with another question's answer) and
+    `reachable` (share whose group was already cached: the most any threshold could serve correctly). The core's
+    `hit_rate` is a different ratio -- correct answers over *paraphrases* only -- on a different sample, so compare
+    the method, not the thresholds.
     """
     emb = embedder or HashingEmbedder()
-    eligible = [q for q in sample if classify_query(q["query"]) == "general"]
+    eligible = [q for q in sample if q["class"] == "general"]
     vecs = {id(q): emb.encode(q["query"]) for q in eligible}
     out = []
     for thr in thresholds:
@@ -239,7 +276,7 @@ def sweep(sample: list, thresholds, guard: bool = True, embedder: HashingEmbedde
             else:
                 entries.append(q)
         n = len(eligible)
-        out.append({"threshold": thr, "n": n, "hits": hits, "false_hits": false_hits,
-                    "hit_rate": hits / n, "false_hit_rate": false_hits / n, "reachable": reachable / n,
+        out.append({"threshold": thr, "n": n, "hits": hits, "false_hits": false_hits, "served_rate": hits / n,
+                    "correct_rate": (hits - false_hits) / n, "false_hit_rate": false_hits / n, "reachable": reachable / n,
                     "bypassed": len(sample) - n})
     return out

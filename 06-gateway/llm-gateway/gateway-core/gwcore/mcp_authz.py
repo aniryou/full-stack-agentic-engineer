@@ -104,6 +104,22 @@ class HMACSigner:
         return tuple(json.loads(base64.urlsafe_b64decode(x + "=" * (-len(x) % 4))) for x in (h, c))
 
 
+def check_proof(signer: HMACSigner, proof: str | None, *, method: str, url: str, now: float, seen: set,
+                max_age: float = 60.0) -> tuple:
+    """A DPoP proof's checks (RFC 9449 §4.3) other than the nonce: signature, ``htm`` and ``htu`` equal to *this*
+    request (so a proof minted for ``POST /token`` is refused at the MCP server), ``iat`` within ``max_age`` of the
+    server's clock, and a ``jti`` never seen before (a replayed proof is refused). Raises ``PermissionError``."""
+    hdr, claims = signer.verify(proof)
+    if claims.get("htm") != method or claims.get("htu") != url.split("?")[0].split("#")[0]:
+        raise PermissionError("DPoP proof is for another method or URL")
+    if abs(now - claims.get("iat", -1e18)) > max_age:
+        raise PermissionError("DPoP proof iat outside the acceptable window")
+    if claims.get("jti") in seen:
+        raise PermissionError("DPoP proof replayed (jti seen before)")
+    seen.add(claims.get("jti"))
+    return hdr, claims
+
+
 class FakeAS:
     """An OAuth 2.1 authorization server in miniature: CIMD clients, PKCE, rotation with reuse detection, DPoP nonces."""
 
@@ -111,7 +127,7 @@ class FakeAS:
                  dpop_signer: HMACSigner | None = None, access_ttl: float = 300.0):
         self.issuer, self.clock, self.documents, self.pkce, self.cimd = issuer, clock, documents, pkce, cimd
         self.signer, self.ttl, self.nonce = dpop_signer, access_ttl, "as-nonce-1"
-        self.codes, self.access, self.refresh, self.revoked, self.clients = {}, {}, {}, set(), {}
+        self.codes, self.access, self.refresh, self.revoked, self.clients, self.seen_jti = {}, {}, {}, set(), {}, set()
 
     def metadata(self) -> dict:
         m = {"issuer": self.issuer, "authorization_endpoint": self.issuer + "/authorize", "token_endpoint": self.issuer + "/token",
@@ -139,7 +155,11 @@ class FakeAS:
     def token(self, form: dict, headers: dict | None = None) -> tuple:
         jkt = None
         if self.signer:                                    # RFC 9449 §8: the AS demands its nonce with a 400
-            hdr, claims = self.signer.verify((headers or {}).get("DPoP"))
+            try:
+                hdr, claims = check_proof(self.signer, (headers or {}).get("DPoP"), method="POST",
+                                          url=self.issuer + "/token", now=self.clock.now(), seen=self.seen_jti)
+            except PermissionError as e:
+                return 400, {}, {"error": "invalid_dpop_proof", "error_description": str(e)}
             if claims.get("nonce") != self.nonce:
                 return 400, {"DPoP-Nonce": self.nonce}, {"error": "use_dpop_nonce"}
             jkt = hdr["jkt"]
@@ -176,6 +196,7 @@ class FakeMCPServer:
 
     def __init__(self, resource: str, auth: FakeAS, tool_scopes: dict, *, dpop_nonce: bool = False):
         self.resource, self.auth, self.tool_scopes, self.dpop_nonce, self.nonce = resource, auth, tool_scopes, dpop_nonce, "rs-nonce-1"
+        self.seen_jti: set = set()
         base, path = _base(resource)
         self.prm_url = f"{base}/.well-known/oauth-protected-resource{path}"
 
@@ -189,7 +210,11 @@ class FakeMCPServer:
         if rec is None or rec["aud"] != self.resource:     # a token minted for another resource is refused
             return 401, {"WWW-Authenticate": f'Bearer resource_metadata="{self.prm_url}", scope="{need}"'}, {"error": "invalid_token"}
         if rec["jkt"]:
-            hdr, claims = self.auth.signer.verify(headers.get("DPoP"))
+            try:
+                hdr, claims = check_proof(self.auth.signer, headers.get("DPoP"), method="POST", url=self.resource,
+                                          now=self.auth.clock.now(), seen=self.seen_jti)
+            except PermissionError:
+                return 401, {"WWW-Authenticate": 'DPoP error="invalid_dpop_proof"'}, {"error": "invalid_dpop_proof"}
             if scheme != "DPoP" or hdr["jkt"] != rec["jkt"] or claims.get("ath") != s256(token):
                 return 401, {"WWW-Authenticate": 'DPoP error="invalid_token"'}, {"error": "invalid_token"}
             if self.dpop_nonce and claims.get("nonce") != self.nonce:

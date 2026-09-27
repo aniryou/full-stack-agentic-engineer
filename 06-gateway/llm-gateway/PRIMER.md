@@ -140,6 +140,7 @@ reasoning tokens — spelled four ways, and `providers.normalize_usage()` maps e
 |---|---|---|---|
 | `prompt_tokens` (cached included) | `prompt_tokens` | `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens` (2,300 + 2,700 + 0) | `promptTokenCount` (+ `toolUsePromptTokenCount`) |
 | `cached_tokens` | `prompt_tokens_details.cached_tokens` | `cache_read_input_tokens` | `cachedContentTokenCount` |
+| `cache_write_tokens` | `prompt_tokens_details.cache_write_tokens` | `cache_creation_input_tokens` | — |
 | `completion_tokens` (reasoning included) | `completion_tokens` | `output_tokens` | `candidatesTokenCount` + `thoughtsTokenCount` (350 + 1,200) |
 | `reasoning_tokens` | `completion_tokens_details.reasoning_tokens` | `output_tokens_details.thinking_tokens` | `thoughtsTokenCount` |
 | auth header | `Authorization: Bearer` | `x-api-key` + `anthropic-version` | `x-goog-api-key` |
@@ -147,16 +148,23 @@ reasoning tokens — spelled four ways, and `providers.normalize_usage()` maps e
 Two traps sit in that table. Anthropic's `input_tokens` *excludes* cache reads and writes, so feeding it straight
 into a price function that expects cached tokens inside the prompt count (`scalelab.capacity.cost_per_call`,
 `metering.price_call()`) discounts the cache twice. Gemini reports thinking *outside* `candidatesTokenCount`, so a
-gateway that bills candidates alone under-bills a thinking call (§5.2). vLLM fills `cached_tokens` only with
-`--enable-prompt-tokens-details` and `reasoning_tokens` only with a `--reasoning-parser`.
+gateway that bills candidates alone under-bills a thinking call (§5.2). Cache *writes* are prompt tokens too, but
+Anthropic prices them above the input rate (1.25× on claude-haiku-4-5), so they get their own canonical field and
+their own price (§5.3). vLLM fills `cached_tokens` only with `--enable-prompt-tokens-details` and
+`reasoning_tokens` only with a `--reasoning-parser`.
 
 What does not normalise cleanly is the stream. Anthropic sends named events (`message_start` with the input usage,
 `content_block_delta` carrying `text_delta`, `input_json_delta` or `thinking_delta`, `message_delta` with cumulative
 output usage, `message_stop` and no `[DONE]`); the Gemini API sends whole function calls, not argument fragments
 (`partial_args` is Vertex-only), and flags thought parts `thought: true`; vLLM names the reasoning text `reasoning` (it
-renames an incoming `reasoning_content`), and OpenAI's schema has neither. `providers.normalize_stream()` turns the first two into canonical chunks, and the exercise shows
-what is lost: the Anthropic stream carries no thinking-token count (only the non-streamed `Usage` does), so a
-streamed Anthropic call normalises to `reasoning_tokens` 0 — a field to reconcile later, not to invent.
+renames an incoming `reasoning_content`), and OpenAI's schema has neither. `providers.normalize_stream()` turns the
+first two into canonical chunks. The counts do normalise, but only at the end: Anthropic's usage is cumulative, and
+the final `message_delta` carries the whole of it — `output_tokens_details.thinking_tokens` included when the API
+sends it (optional in the SDK's `MessageDeltaUsage`) — so the §1.5 stream normalises to the same 1,550 completion
+and 1,200 reasoning tokens as the non-streamed response. What does not survive is a stream cut before that event:
+all it holds is `message_start`'s usage, whose `output_tokens` is 1. That is not a bill, so the normaliser emits no
+usage chunk for a cut stream, and the gateway estimates from the deltas it relayed and marks the row estimated
+(§5.2) — it reconciles the gap later rather than inventing a count.
 
 ### 1.6 What it costs
 
@@ -211,8 +219,9 @@ Fall through only when another target could plausibly succeed where this one fai
 |---|---|---|---|
 | 429 | that provider's quota; a sibling has its own pool | 400 bad request | every target gets the same bad request |
 | 500, 502, 503, 504 | that provider is sick | 401, 403 | your credentials or scopes, not their health |
-| timeout / no answer | that provider is slow or down | 404 | a wrong model id is a configuration bug |
-| 400 `context_length_exceeded` | a longer-context target can take it | content-policy refusal | falling through launders a refusal into another model's answer |
+| 529 `overloaded_error` (Anthropic) | that provider is overloaded; try elsewhere | 404 | a wrong model id is a configuration bug |
+| 408, timeout / no answer | that provider is slow or down | content-policy refusal | falling through launders a refusal into another model's answer |
+| 400 `context_length_exceeded` | a longer-context target can take it | | |
 
 Falling through on a content-policy refusal is sometimes chosen deliberately (LiteLLM has `content_policy_fallbacks`);
 if you choose it, make it a named policy per route with an owner, not a default.
@@ -231,11 +240,14 @@ Retries with full jitter, `Retry-After` and a deadline are the scaling primer's 
 ([`agentlab/reliability/breaker.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/reliability/breaker.py)).
 The gateway applies one breaker **per target** (`routing.Breaker`), following 07.2's rule: open after `threshold`
 consecutive failures, fail fast for `cooldown` seconds, then let exactly one probe decide. (`scalelab`'s breaker trips
-on a failure *ratio* in a window instead; either works per target — name the one you run.) 07.2's `FallbackChain`
+on a failure *ratio* in a window instead; either works per target — name the one you run.) A probe that ends in a
+status saying nothing about the provider's health — a 400 for this request, our own 401 — decides nothing: the
+breaker hands the probe back (`Breaker.release()`) so the next request probes, instead of staying half-open forever. 07.2's `FallbackChain`
 labels a result served by a fallback as degraded; the gateway does the same with `Result.attempts` and a header.
 
 A breaker learns only as fast as failures complete. With a 10 s timeout and 50 requests a second, the first
-10 × 50 = 500 requests are all in flight before the breaker has seen three failures. Fast failure signals — connect
+10 × 50 = 500 requests are all in flight before the breaker has seen three failures (502 with the three that trip
+it; core notebook 02, exercise 2.4, counts it against `routing.Breaker`). Fast failure signals — connect
 errors, a 503, a deadline on the *first byte* shorter than the whole-response timeout — shorten that window; that is
 why the gateway times out on TTFT separately from end-to-end.
 
@@ -278,9 +290,10 @@ affinity and KV load are the router's signals. Two things cross the boundary. Pr
 pool's priority, and the directions differ — vLLM's `priority` is *lower = earlier* (and non-zero values error unless
 the server runs `--scheduling-policy priority`), llm-d's `InferenceObjective.priority` is *higher = first* (§3.2
 there), Envoy's `backendRefs.priority` 0 is the primary — so map tiers explicitly. And cost: a pool has no per-token
-price; its bill is split by GPU time (§5.4). Hosted provider or own pool is module 06.5's break-even
-([Mistral scaling primer](../scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md) §3.5–3.6);
-a Provisioned Throughput commitment is a target too, with its own quota and spill-over (scaling primer §3.5).
+price; its bill is split by GPU time (§5.4). Hosted provider or own pool is a break-even on $ per million tokens against utilisation — the 01 primer's
+[§8.1](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#81-from-gpu-hour-to-m-tokens) turns a GPU-hour into
+$/M and §5.3 below compares the two at one call shape; module 06.5 (the scaling lab) works the capacity side. A
+Provisioned Throughput commitment is a target too, with its own quota and spill-over (scaling primer §3.5).
 
 ---
 
@@ -395,25 +408,39 @@ then `used + reserved` never exceeds the limit (processing moves tokens from one
 release only lower it), so a provider counting the same tokens in the same window never sees more than the limit
 (`tests/test_ratelimit.py` checks the invariant on random traffic). A stream cut before its usage chunk reconciles on
 the tokens counted from its deltas, marked estimated (§5.2). Envoy AI Gateway's token costs (`llmRequestCosts`) and a
-naive bucket debit only *after* the response, so concurrent long streams are never reserved; LiteLLM's v3 limiter
-reserves an estimate — 4,096 output tokens when `max_tokens` is absent — and reconciles (verify both).
+naive bucket debit only *after* the response, so concurrent long streams are never reserved. LiteLLM's v3 limiter
+(`parallel_request_limiter_v3.py` at `849f303`) reserves the prompt estimate plus `max_tokens`; when the request has
+none, a per-key configured estimate or else max(the input estimate, 1,024) — a quarter of its 4,096 default, lowered
+to a quarter of the smallest configured TPM limit when that is smaller, in which case it also writes the lowered
+bound into the request as `max_tokens` — and reconciles after the call (verify both).
+
+The experiment below also assumes something about the provider: that it counts tokens as they are processed. Hosted
+APIs may instead do their own reserve → reconcile, charging the requested output bound at admission — OpenAI's
+rate-limit guide counts the larger of `max_tokens` and an estimate against TPM, and Anthropic estimates output tokens
+per minute from `max_tokens` when a request starts and corrects it at the end (verify both: from memory, the docs
+sites could not be read here). Against such a provider the gateway's reservation must follow the provider's rule:
+reserve the `max_tokens` it actually sends upstream, or send upstream the bound it reserved. A gateway that reserves
+prompt + 4,096 while forwarding a 16,384 cap is refused at the provider's door. The §4.3 numbers hold for providers
+and self-hosted pools that meter processed tokens.
 
 ### 4.3 The experiment
 
 `ratelimit.compare_buckets()` offers 12 requests a second for ten minutes to a provider key with a 1,000,000
 tokens-per-minute limit (1,500-token prompts, 50 output tokens a second per stream; the provider is modelled as a
-sliding 60-second window over processed tokens — simulated):
+sliding 60-second window over processed tokens — simulated; each run continues past t = 600 s until its admitted
+streams drain):
 
-| Limiter | Admitted | Peak window ÷ limit | Seconds over the limit | Tokens served ÷ limit |
+| Limiter | Admitted | Peak window ÷ limit | Seconds over the limit (whole run) | Tokens served ÷ limit |
 |---|---|---|---|---|
-| per-request bucket, yesterday's outputs (median 300) | 5,055 | 1.03 | 116 of 600 | 1.00 |
-| per-request bucket, thinking outputs (median 1,500) | 5,055 | 1.97 | 604 (every second) | 1.87 |
+| per-request bucket, yesterday's outputs (median 300) | 5,055 | 1.03 | 116 (between t = 59 and 600 s) | 1.00 |
+| per-request bucket, thinking outputs (median 1,500) | 5,055 | 1.97 | 604 (t = 45–648 s, continuously) | 1.87 |
 | reserve prompt + 4,096, debit, reconcile | 1,920 | 0.77 | 0 | 0.704 |
 | reserve prompt + the 16,384 cap, debit, reconcile | 725 | 0.31 | 0 | 0.265 |
 
-The per-request bucket cannot see the rollout: it admits exactly as many requests and pushes 1.97× the limit, every
-second. Sized right on the mean it still sits over the limit for 116 of 600 seconds, because the tail is not the
-mean. Reserving the cap is exact and wasteful: a 16K reservation held for a minute-long stream strands most of the
+The per-request bucket cannot see the rollout: it admits exactly as many requests and pushes 1.97× the limit at the
+peak; from the moment it binds (t = 45 s) the provider's window stays over the limit without a break until the
+admitted thinking streams have drained (t = 648 s). Sized right on the mean it still sits over the limit for 116 of 600
+seconds, because the tail is not the mean. Reserving the cap is exact and wasteful: a 16K reservation held for a minute-long stream strands most of the
 budget (26.5 % served). Reserving an estimate and reconciling serves 70.4 % with no second over the limit here —
 910,498 tokens overran their reservations and were debited as they streamed, so admission saw them — but that is
 measured, not guaranteed: sweeping the reservation (notebook 04, exercise 4.3), 1,024 serves 98.9 % of the limit
@@ -465,7 +492,9 @@ tokens counted from the deltas it relayed, never zero (`StreamAccumulator.output
 
 The price table in `providers.CATALOGUE` is dated 2026-09-26 (verify): the Gemini rows equal `scalelab.capacity.PRICES`
 (checked 5 September, unchanged), and a test proves `metering.price_call()` equals `scalelab.capacity.cost_per_call` on
-every one of those rows. For the scaling primer's anchor call — 5,000 input tokens of which 2,700 cached, 350
+every one of those rows. Cache reads, cache writes and the rest of the prompt are three prices: on claude-haiku-4-5,
+10,000 tokens written to the prompt cache cost $0.0125 at the 1.25 write rate, not the $0.0100 an input-rate ledger
+would bill (`price_call(..., cache_write_tokens=)`). For the scaling primer's anchor call — 5,000 input tokens of which 2,700 cached, 350
 output — blended over its 5,350 tokens (`metering.cost_per_million()`):
 
 | Model | $ per call | Blended $ per 1M tokens |
@@ -545,7 +574,8 @@ that injects credentials the sandboxed code never holds
 ([sandboxed-execution PRIMER §4](../../07-application-agent-framework/sandboxed-execution/PRIMER.md#4-network-and-secrets)).
 Rotation is add, overlap, retire (`keys.ProviderKeys.rotate()`): the new key becomes current at once, the old stays
 valid for an overlap window so in-flight requests and every gateway replica finish on it, then it expires. Never
-expose an engine's port: vLLM's `--api-key` guards only `/v1`, `/v2` and `/inference`.
+expose an engine's port: vLLM's `--api-key` guards only paths under `/v1`, `/v2`, `/inference` and `/cohere`;
+`/health`, `/metrics` and the rest stay open.
 
 ### 6.3 The tenant comes from the verified key
 
@@ -577,8 +607,10 @@ identity (identity primer §3.3–3.5): on SPIFFE, an X.509-SVID from the **Work
 named by `SPIFFE_ENDPOINT_SOCKET`, every call carrying the `workload.spiffe.io: true` metadata, `FetchX509SVID` a
 server stream whose every message holds the full state (an SVID missing from a message was revoked). SPIRE issues
 one-hour X.509-SVIDs by default and rotates when the remaining lifetime falls to half-life ± 10 % of the half-life:
-between 1,620 and 1,980 seconds before expiry, 27–33 minutes (`keys.svid_rotation_window(3600)`;
-`keys.FakeWorkloadAPI` streams the rotations). A gateway pools long-lived TLS connections, and an established session
+between 1,620 and 1,980 seconds before expiry, 27–33 minutes (`keys.svid_rotation_window(3600)`). The agent re-draws
+that jittered half-life on every check (`rotationutil.shouldRotateByHalf`), so with a check every few seconds rotation
+lands near the top of the window, not uniformly across it: `keys.FakeWorkloadAPI`, which models a check every 5 s
+(verify), rotates with a mean of 32.1 minutes left. A gateway pools long-lived TLS connections, and an established session
 keeps the certificate of its handshake, so it must rebuild its TLS configuration from the stream and cycle
 connections before the old SVID expires (verify: this is operational practice, not in the standards).
 
@@ -626,7 +658,9 @@ cancel", not a held-back window (verify when you configure it).
 ### 7.3 Dollars and false positives
 
 A classifier on a dedicated GPU costs its GPU time: at $3.7 an hour for an A100 (verify), 92.4 ms a check one at a time
-is $0.095 per 1,000 checks, and batched 16 at a time $0.0059 (`guardrails.cost_per_1k_checks()`). False positives
+is $0.095 per 1,000 checks, and batched 16 at a time $0.0059 — *assuming* a batch of 16 finishes in about the same
+92.4 ms, which the model card does not say (its figure is one 512-token classification); measure the batch latency
+before you rely on it (`guardrails.cost_per_1k_checks()` divides by the concurrency you give it). False positives
 compound: checking the input and the output of the scaling primer's 13 model calls per conversation is 26 checks,
 and at a 1 % false-positive rate 23.0 % of conversations hit at least one false block; at 0.1 %, 2.57 %
 (`guardrails.false_block_rate()` = 1 − (1 − fpr)^checks). That — not the dollars — is usually the binding cost, and it
@@ -741,7 +775,16 @@ library has none. The lab signs with `cryptography` when it is installed.
 
 On Google Cloud the gateway is a stateless service (Cloud Run: requests up to 60 minutes, streams not capped, scaling
 primer §5.7) with keys in Secret Manager, limits and caches in Memorystore and spans to Cloud Trace over OTLP; Apigee
-and Agent Gateway are the managed pieces (scaling primer §9, identity primer §10; verify). Elsewhere: any VM or cluster.
+and Agent Gateway are the managed pieces (scaling primer §9, identity primer §10; verify). Elsewhere the same pieces
+map one to one:
+
+| The gateway needs | On Google Cloud | Anywhere else |
+|---|---|---|
+| a stateless, multi-replica service | Cloud Run, GKE | any container host or Kubernetes cluster; locally the lab's compose stack or kind |
+| shared buckets and caches (§4.4) | Memorystore | Redis or Valkey |
+| provider keys (§6.2) | Secret Manager | Vault, or the cloud's own secret manager |
+| spans (§5.6) | Cloud Trace over OTLP | any OTLP backend: Jaeger, Tempo, an OpenTelemetry Collector |
+| a T1 upstream | the 04 lab's Cloud Run or GKE vLLM | a rented GPU (RunPod, Vast, Lambda; prices in `COMPUTE.md`, verify) running the lab's `deploy/any-gpu` |
 
 ### 9.2 Build or adopt
 
@@ -803,7 +846,8 @@ union of scopes, DPoP nonces — tokens per principal and resource, never in the
 
 3. *After a thinking-model rollout the provider started returning 429s, but our request rate limit never tripped.* —
    The bucket charged per request while outputs grew by an order of magnitude with a heavy tail, so the same request
-   rate carried twice the tokens per minute (1.99× by the closed form, 1.97× measured in §4.3). Meter tokens: reserve
+   rate carried twice the tokens per minute (1.99× by the closed form; in §4.3 the tokens served rose from 1.00× to
+1.87× the limit, with the window peaking at 1.97×). Meter tokens: reserve
    at admission, debit as chunks stream, reconcile at the end, cap output; enforce TPM beside RPM per tenant; budget
    thinking rather than truncating it with `max_tokens` (§4).
 
@@ -884,7 +928,7 @@ Dated 26 September 2026. Re-check before relying on any of these.
 | Context windows: gpt-5.4-mini 272,000; claude-haiku-4-5 200,000; Gemini rows 1,048,576 | first two from LiteLLM's file; the Gemini value is not from a source here |
 | GPU prices: H100 Spot $3.7/GPU-hour, on demand $11; L4 $0.70; A100 ~$3.7/hour | the repo's FACTS and 01 PRIMER §8.1, us-central1; see `COMPUTE.md` |
 | `data: [DONE]` for chat completions; `x-ratelimit-*` headers | `[DONE]` only inside the `include_usage` description; `x-ratelimit-*` not in the OpenAPI description (prose docs only) |
-| vLLM v0.30.0: `cache_salt` ≤ 128 characters without `@ / \` NUL, first block only; `priority` lower = earlier, needs `--scheduling-policy priority`; `--api-key` guards `/v1`, `/v2`, `/inference` only | read at the tag |
+| vLLM v0.30.0: `cache_salt` ≤ 128 characters without `@ / \` NUL, first block only; `priority` lower = earlier, needs `--scheduling-policy priority`; `--api-key` guards `/v1`, `/v2`, `/inference` and `/cohere` only (`GUARDED_PREFIX`) | read at the tag |
 | OTel GenAI: v1.41.0 last release defining GenAI; `cache_write` and `gen_ai.client.inference.*` unreleased on genai main | read 2026-09-26; names will move |
 | MCP authorization 2026-07-28: CIMD SHOULD, DCR MAY and deprecated; S256 refusal rule; `resource` in both requests; RFC 9207 `iss`; no DPoP | spec pages read at `ab3a39c` |
 | OAuth 2.1 refresh-rotation reuse detection (§4.3.1) and which draft number is current | editor's copy; draft number (verify) |
@@ -894,3 +938,6 @@ Dated 26 September 2026. Re-check before relying on any of these.
 | Product features in §9.2 (LiteLLM, Envoy AI Gateway, Kong OSS vs Enterprise, Portkey OSS cache) | read in each repo at the pinned commit; managed gateways (Apigee, Agent Gateway) from the repo's primers |
 | Cloud Run request timeout up to 60 minutes; Cloud Trace via OTLP (`telemetry.googleapis.com`) | from the scaling primer §5.7 and §9 |
 | Redis + Lua atomic check-and-commit; one hash slot per script on a cluster | not read from a Redis source here |
+| How hosted providers count tokens against TPM/OTPM: OpenAI the larger of `max_tokens` and an estimate at admission; Anthropic output tokens estimated from `max_tokens` and corrected at the end | from memory; the providers' rate-limit pages could not be read here |
+| LiteLLM v3 limiter: prompt + `max_tokens`, else max(input estimate, 1,024 = 4,096 ÷ 4, capped at a quarter of the smallest TPM limit), an implicit `max_tokens` when capped, reconcile after | `parallel_request_limiter_v3.py` @`849f303` |
+| SPIRE agent checks rotation on its sync loop (default 5 s, backing off on errors) | `pkg/agent/manager/manager.go`; the fake's 5 s check is a model of it |

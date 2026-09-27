@@ -1,5 +1,21 @@
-{"_label": "sample output in the documented format (illustrative): the final chunk of a chat-completions stream sent with stream_options.include_usage (openai/openai-openapi CompletionUsage; vLLM fills prompt_tokens_details only with --enable-prompt-tokens-details)",
- "id": "chatcmpl-5f1c2a", "object": "chat.completion.chunk", "created": 1790000000, "model": "gpt-5.4-mini", "choices": [],
- "usage": {"prompt_tokens": 5000, "completion_tokens": 350, "total_tokens": 5350,
-           "prompt_tokens_details": {"cached_tokens": 2700, "audio_tokens": 0},
-           "completion_tokens_details": {"reasoning_tokens": 120, "audio_tokens": 0}}}
+{
+  "_label": "sample output in the documented format (illustrative): the final chunk of a chat-completions stream sent with stream_options.include_usage (openai/openai-openapi CompletionUsage; vLLM fills prompt_tokens_details only with --enable-prompt-tokens-details) It is the primer's \u00a71.5 call: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.",
+  "id": "chatcmpl-5f1c2a",
+  "object": "chat.completion.chunk",
+  "created": 1790000000,
+  "model": "gpt-5.4-mini",
+  "choices": [],
+  "usage": {
+    "prompt_tokens": 5000,
+    "completion_tokens": 1550,
+    "total_tokens": 6550,
+    "prompt_tokens_details": {
+      "cached_tokens": 2700,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 1200,
+      "audio_tokens": 0
+    }
+  }
+}

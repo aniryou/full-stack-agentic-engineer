@@ -46,19 +46,31 @@ class TokenBucket:
 
 
 class WindowMeter:
-    """Tokens counted in a sliding window -- how a provider's tokens-per-minute sees you (modelled)."""
+    """Tokens counted in a sliding window -- how a provider's tokens-per-minute sees you (modelled). Each event is a
+    mutable ``[t, n]`` so a refund can shrink the events it corrects instead of adding a negative one."""
 
     def __init__(self, window: float = 60.0):
         self.window, self.events, self.total = window, deque(), 0.0
 
-    def add(self, t: float, n: float) -> None:
-        self.events.append((t, n))
+    def add(self, t: float, n: float) -> list:
+        ev = [t, n]
+        self.events.append(ev)
         self.total += n
+        return ev
 
     def used(self, now: float) -> float:
         while self.events and self.events[0][0] <= now - self.window:
             self.total -= self.events.popleft()[1]
         return self.total
+
+    def shrink(self, ev: list, n: float, now: float) -> float:
+        """Take up to ``n`` off one event still in the window (never below zero); returns what was taken."""
+        if ev[0] <= now - self.window:
+            return 0.0                                    # already expired: it no longer counts, nothing to correct
+        take = min(n, ev[1])
+        ev[1] -= take
+        self.total -= take
+        return take
 
 
 class ReserveLimiter:
@@ -66,6 +78,7 @@ class ReserveLimiter:
 
     def __init__(self, limit: float, window: float = 60.0):
         self.limit, self.meter, self.held, self.outstanding, self.overrun = limit, WindowMeter(window), {}, 0.0, 0.0
+        self.debits: dict = {}                            # rid -> its meter events, oldest first (for refunds)
 
     def headroom(self, now: float) -> float:
         return self.limit - self.meter.used(now) - self.outstanding
@@ -79,14 +92,26 @@ class ReserveLimiter:
 
     def debit(self, rid, n: float, now: float) -> None:
         """Tokens actually processed: move them from reserved to used. Beyond the reservation is overrun."""
-        self.meter.add(now, n)
+        self.debits.setdefault(rid, []).append(self.meter.add(now, n))
         take = min(n, self.held.get(rid, 0.0))
         self.held[rid] = self.held.get(rid, 0.0) - take
         self.outstanding -= take
         self.overrun += n - take
 
+    def refund(self, rid, n: float, now: float) -> float:
+        """This request's streamed estimate over-counted by ``n`` (usage says so): shrink its own debits, earliest
+        first, never below zero. A negative event at ``now`` would outlive the debits it corrects and let the window
+        read less than was processed; this way ``used`` never drops below the provider-true count."""
+        left = n
+        for ev in self.debits.get(rid, []):
+            if left <= 0:
+                break
+            left -= self.meter.shrink(ev, left, now)
+        return n - left
+
     def finish(self, rid) -> float:
         """Reconcile: release what was reserved and not used. Returns the refund."""
+        self.debits.pop(rid, None)
         left = self.held.pop(rid, 0.0)
         self.outstanding -= left
         return left
@@ -128,10 +153,13 @@ def simulate(arrivals: list, kind: str, *, limit: float, est: float = 0.0, burst
     """Admit on a 1 s grid; admitted streams process the prompt at once and ``tok_per_s`` output tokens per
     second. ``kind="per_request"``: a ``TokenBucket`` (rate limit/60, a ``burst_s`` burst) charging ``est``
     per request, never reconciled. ``kind="reserve"``: reserve prompt + ``reserve_out``, debit, release.
-    The provider is modelled as a ``WindowMeter`` over the tokens processed (simulated)."""
+    The provider is modelled as a ``WindowMeter`` over the tokens processed (simulated). The run continues past the
+    last arrival until every admitted stream drains (``end``); ``seconds_over_limit`` counts the whole run, and
+    ``first_over``/``last_over`` say when it started and stopped."""
     rate = limit / 60
     bucket, lim, provider = TokenBucket(rate, rate * burst_s), ReserveLimiter(limit), WindowMeter()
     live, done, admitted, refused, truncated, served, peak, over_s = {}, [], 0, 0, 0, 0.0, 0.0, 0
+    first_over = last_over = None
     horizon = int(arrivals[-1][0]) + 1 if arrivals else 0
     i, t = 0, 0
     while i < len(arrivals) or live:
@@ -160,9 +188,11 @@ def simulate(arrivals: list, kind: str, *, limit: float, est: float = 0.0, burst
                 del live[rid]
         used = provider.used(t)
         peak, over_s = max(peak, used), over_s + (used > limit)
+        if used > limit:
+            first_over, last_over = first_over or t, t
     return {"admitted": admitted, "refused": refused, "truncated": truncated, "peak_ratio": peak / limit,
-            "seconds_over_limit": over_s, "utilisation": served / (limit / 60 * horizon) if horizon else 0.0,
-            "overrun_tokens": lim.overrun}
+            "seconds_over_limit": over_s, "first_over": first_over, "last_over": last_over, "end": t,
+            "utilisation": served / (limit / 60 * horizon) if horizon else 0.0, "overrun_tokens": lim.overrun}
 
 
 def compare_buckets(*, limit: float = 1_000_000, prompt: int = 1_500, old_median: float = 300,

@@ -112,16 +112,29 @@ def svid_rotation_window(ttl: float, jitter: float = 0.1) -> tuple:
 
 class FakeWorkloadAPI:
     """Stands in for the SPIFFE Workload API's ``FetchX509SVID`` server stream: every message carries the
-    *full* state (a missing SVID means it was revoked), and callers must send ``workload.spiffe.io: true``."""
+    *full* state (a missing SVID means it was revoked), and callers must send ``workload.spiffe.io: true``.
 
-    def __init__(self, spiffe_id: str, ttl: float = 3600.0, seed: int = 0):
-        self.spiffe_id, self.ttl, self.rng = spiffe_id, ttl, random.Random(seed)
+    Rotation is modelled the way SPIRE's agent decides it: on every check (every ``check_every`` s -- the agent's
+    default sync interval is 5 s, verify) ``shouldRotateByHalf`` draws a *fresh* jittered half-life and rotates when
+    the remaining lifetime is at or below it. Because each check re-draws, rotation lands near the top of the
+    27-33 minute window (about 32 minutes left on a one-hour SVID), not uniformly across it."""
+
+    def __init__(self, spiffe_id: str, ttl: float = 3600.0, seed: int = 0, check_every: float = 5.0):
+        self.spiffe_id, self.ttl, self.rng, self.check_every = spiffe_id, ttl, random.Random(seed), check_every
+
+    def should_rotate(self, remaining: float) -> bool:
+        """``rotationutil.shouldRotateByHalf``: a new jittered half-life on every call."""
+        lo, hi = svid_rotation_window(self.ttl)
+        return remaining <= self.rng.uniform(lo, hi)
 
     def fetch_x509_svid(self, metadata: dict, until: float, start: float = 0.0):
         if metadata.get("workload.spiffe.io") != "true":
             raise PermissionError("missing workload.spiffe.io: true metadata")
         t, serial = start, 1
         while t < until:
-            yield {"at": t, "svids": [{"spiffe_id": self.spiffe_id, "serial": serial, "not_after": t + self.ttl}]}
-            lo, hi = svid_rotation_window(self.ttl)
-            t, serial = t + self.ttl - self.rng.uniform(lo, hi), serial + 1   # rotate at the jittered half-life
+            not_after = t + self.ttl
+            yield {"at": t, "svids": [{"spiffe_id": self.spiffe_id, "serial": serial, "not_after": not_after}]}
+            check = t + self.check_every
+            while not self.should_rotate(not_after - check):
+                check += self.check_every
+            t, serial = check, serial + 1

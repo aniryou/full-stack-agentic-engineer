@@ -13,8 +13,8 @@
 # in a namespace keyed by the **verified tenant**, and — for the semantic one — at a threshold chosen on labelled
 # traffic, with numbers, dates and codes guarded exactly, because an embedding cannot see that "Q3 2024" is not
 # "Q3 2025". By the end you can build a safe exact key, extract the entities a guard compares, choose a threshold
-# under a false-hit budget, put a price on a false hit, show a cross-tenant leak and close it, and say what the
-# provider's prompt cache saves instead.
+# under a false-hit budget, put a price on a false hit, decide what a namespace must hold for shared and per-user
+# classes, and say what the provider's prompt cache saves instead.
 #
 # Primer: §3 *Caching at the gateway* (`../PRIMER.md`); §6.4 for `cache_salt`; the engine's prefix cache is
 # serving-engine PRIMER §5 (module 04.3); semantic caching's false positives, the embeddings primer §15.
@@ -169,36 +169,43 @@ print(f"✅ break-even ${break_even:.5f} per wrong answer: any wrong answer that
       "(a support ticket, a refund, a wrong order status) makes this cache a loss")
 
 # %% [markdown]
-# ## Exercise 3.5 — the cross-tenant leak, and the fix
-# `leaky` below is one semantic cache shared by every tenant, keyed on nothing but the text. Write
-# `safe_lookup(cache_, tenant, query)` and `safe_store(cache_, tenant, query, answer)` so that each tenant has its own
-# namespace, and show that the leak is gone.
+# ## Exercise 3.5 — which fields a namespace needs
+# `leaky` below is one semantic cache shared by every tenant and user, keyed on nothing but the text: one tenant's
+# answer reaches another. The fix is a namespace, and what goes in it depends on the class the route declared. A
+# shared class (`faq`: "How do I reset my password?") has one right answer per **tenant** — every user of that tenant
+# may share it, no other tenant may. A per-user class (`account`: "What is my plan limit?") has one right answer per
+# **user** — sharing it inside the tenant is the drill-1 incident. Write `namespace(tenant, user, cache_class)`
+# returning a string: the classes in `PER_USER` are namespaced by tenant *and* user, every other class by tenant only.
+# Tenant and user ids are arbitrary strings (they may contain `:` or `|`), so two different (tenant, user) pairs must
+# never produce the same namespace.
 
 # %%
 leaky = cache.SemanticCache(0.8)
 leaky.store("shared", "How do I reset my password?", "acme: use the ACME SSO portal")
 print("globex asks, leaky cache answers:", leaky.lookup("shared", "how do I reset my password")[0])
+PER_USER = {"account"}
 
 # %% exercise
-def safe_store(cache_, tenant, query, answer):
+def namespace(tenant, user, cache_class):
     ### BEGIN SOLUTION
-    cache_.store(f"tenant:{tenant}", query, answer)
-    ### END SOLUTION
-
-
-def safe_lookup(cache_, tenant, query):
-    ### BEGIN SOLUTION
-    return cache_.lookup(f"tenant:{tenant}", query)
+    return json.dumps([cache_class, tenant, user if cache_class in PER_USER else None])
     ### END SOLUTION
 
 # %% check
 c = cache.SemanticCache(0.8)
-safe_store(c, "acme", "How do I reset my password?", "acme: use the ACME SSO portal")
-assert safe_lookup(c, "globex", "how do I reset my password") is None
-assert safe_lookup(c, "acme", "how do I reset my password")[0].startswith("acme")
-print("✅ one namespace per verified tenant: globex misses, acme still hits")
+put = lambda t, u, cls, q, a: c.store(namespace(t, u, cls), q, a)          # noqa: E731
+get = lambda t, u, cls, q: c.lookup(namespace(t, u, cls), q)               # noqa: E731
+put("acme", "alice", "faq", "How do I reset my password?", "acme: use the ACME SSO portal")
+put("acme", "alice", "account", "What is my plan limit?", "alice: 10 seats")
+assert get("acme", "bob", "faq", "how do I reset my password")[0].startswith("acme")   # shared inside the tenant
+assert get("globex", "bob", "faq", "how do I reset my password") is None               # never across tenants
+assert get("acme", "bob", "account", "what is my plan limit") is None                  # a per-user answer stays put
+assert get("acme", "alice", "account", "what is my plan limit")[0] == "alice: 10 seats"
+tricky = [("acme", "bob:x"), ("acme:bob", "x"), ("acme|bob", "x"), ("acme", "bob|x"), ("", "acmebob"), ("acmebob", "")]
+assert len({namespace(t, u, "account") for t, u in tricky}) == len(tricky), "two identities share a namespace"
+assert namespace("acme", "alice", "faq") != namespace("acme", "alice", "account")
+print("✅ faq: one namespace per tenant; account: one per (tenant, user); no two identities collide")
 
-# %% [markdown]
 # ## Exercise 3.6 — what the provider's prompt cache saves instead
 # The provider's prompt cache is never wrong: it bills cached input at ~10 % of the input price. For the §5.3 call on
 # **gpt-5.4-mini** (5,000 input tokens, 350 output), set `uncached`, `cached` (2,700 of the input cached) and

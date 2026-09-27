@@ -15,7 +15,8 @@ from dataclasses import dataclass
 
 from .providers import CATALOGUE
 
-FALLS_THROUGH = {429, 500, 502, 503, 504, None}          # None: no answer before the timeout
+# 408: the provider timed out the request; 529: Anthropic's overloaded_error. None: no answer before our timeout.
+FALLS_THROUGH = {408, 429, 500, 502, 503, 504, 529, None}
 
 
 def falls_through(status: int | None, code: str | None = None) -> bool:
@@ -36,7 +37,10 @@ class Target:
 class Breaker:
     """The 07.2 lab's rule (``agentlab/reliability/breaker.py``): open after ``threshold`` *consecutive*
     failures, fail fast for ``cooldown`` s, then let one probe decide. (``scalelab``'s breaker trips on a
-    failure *ratio* in a window instead; both are fine per target, pick one and say which.)"""
+    failure *ratio* in a window instead; both are fine per target, pick one and say which.)
+
+    A probe whose outcome says nothing about the provider's health -- a 400 for this request, our own 401 --
+    must not leave the breaker half-open forever: ``release()`` hands the probe back so the next request probes."""
 
     def __init__(self, threshold: int = 3, cooldown: float = 30.0):
         self.threshold, self.cooldown = threshold, cooldown
@@ -53,6 +57,10 @@ class Breaker:
             return False
         self.probing = s == "half_open"
         return True
+
+    def release(self) -> None:
+        """The probe ended without a health verdict: let the next request probe instead."""
+        self.probing = False
 
     def record(self, ok: bool, now: float) -> None:
         if ok:
@@ -109,6 +117,9 @@ class Router:
 
     def allow(self, target: Target, now: float) -> bool:
         return self.breakers[target].allow(now)
+
+    def release(self, target: Target) -> None:
+        self.breakers[target].release()
 
     def observe(self, target: Target, ok: bool, now: float, ttft: float | None = None) -> None:
         self.breakers[target].record(ok, now)

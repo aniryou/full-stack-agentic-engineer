@@ -7,17 +7,31 @@ from gwlab.gateway.config import CacheCfg
 from gwlab.gateway.store import Store
 
 
-def body(q, system="You are helpful.", **kw):
-    return {"model": "chat", "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": q}], **kw}
+def body(q, system="You are helpful.", cls="faq", user=None, **kw):
+    meta = {k: v for k, v in (("cache_class", cls), ("user", user)) if v is not None}
+    return {"model": "chat", "temperature": 0, "messages": [{"role": "system", "content": system}, {"role": "user", "content": q}],
+            **({"metadata": meta} if meta else {}), **kw}
 
 
-def test_what_is_cacheable():
-    assert cacheable(body("How do I export a report as CSV?")) == (True, "general")
+def test_what_is_cacheable_is_declared_not_inferred():
+    assert cacheable(body("How do I export a report as CSV?")) == (True, "faq")
+    assert cacheable(body("How do I export a report as CSV?", cls=None))[1].startswith("no cache_class declared")
+    assert cacheable(body("How do I export a report as CSV?", cls="marketing"))[0] is False      # not allowlisted
     assert cacheable({**body("x"), "temperature": 0.7})[0] is False
     assert cacheable({k: v for k, v in body("x").items() if k != "temperature"})[0] is False     # default is 1
     assert cacheable(body("x", tools=[{"type": "function"}]))[1].startswith("tools")
-    assert cacheable(body("What is the status of my order 1234?"))[1] == "personal"
-    assert cacheable(body("Is the service down right now?"))[1] == "time_sensitive"
+    # the regex only vetoes a declared shared class; it never makes anything cacheable
+    assert cacheable(body("What is the status of my order 1234?"))[1] == "declared 'faq', vetoed by the regex guard (personal)"
+    assert cacheable(body("Is the service down right now?"))[1].endswith("(time_sensitive)")
+    assert cacheable(body("What is the status of my order 1234?", cls=None))[0] is False
+    # per-user classes need a user, and are not second-guessed by the regex
+    assert cacheable(body("What is my plan limit?", cls="account"))[0] is False
+    assert cacheable(body("What is my plan limit?", cls="account", user="alice")) == (True, "account")
+
+
+def test_why_the_class_is_declared_the_regex_misreads_both_ways():
+    assert classify_query("How do I cancel my subscription?") == "personal"      # an FAQ, read as personal
+    assert classify_query("What is my plan limit?") == "general"                 # personal, read as general
 
 
 def test_classifier_stand_in_agrees_with_the_sample_labels():
@@ -78,10 +92,22 @@ def test_namespaces_ttl_and_invalidation():
     assert c.invalidate("team-a") == 2 and c.lookup("team-a", "chat", body("How do I export a report as CSV?")).kind is None
 
 
+def test_a_per_user_class_is_namespaced_by_user():
+    c, _ = make_cache()
+    c.put("team-a", "chat", body("What is my plan limit?", cls="account", user="alice"), {"answer": "alice: 10 seats"})
+    assert c.lookup("team-a", "chat", body("What is my plan limit?", cls="account", user="alice")).kind == "exact"
+    assert c.lookup("team-a", "chat", body("What is my plan limit?", cls="account", user="bob")).kind is None
+    assert c.lookup("team-a", "chat", body("what is my plan limit", cls="account", user="bob")).kind is None
+    assert c.namespace("t", "a", body("q", cls="account", user="x|y")) != c.namespace("t", "a", body("q", cls="account", user="x"))
+    c.put("team-a", "chat", body("How do I export a report as CSV?", user="alice"), {"answer": "Reports > Export"})
+    assert c.lookup("team-a", "chat", body("How do I export a report as CSV?", user="bob")).kind == "exact"   # faq: shared
+
+
 def test_multi_turn_is_exact_only():
     c, _ = make_cache()
-    b = {"model": "chat", "temperature": 0, "messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"},
-                                                         {"role": "user", "content": "How do I export a report as CSV?"}]}
+    b = {"model": "chat", "temperature": 0, "metadata": {"cache_class": "faq"},
+         "messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"},
+                      {"role": "user", "content": "How do I export a report as CSV?"}]}
     c.put("team-a", "chat", b, {"x": 1})
     assert c.store.query("SELECT COUNT(*) AS n FROM cache WHERE kind='semantic'")[0]["n"] == 0
 
@@ -95,8 +121,10 @@ def test_sweep_on_the_bundled_sample():
     assert (rows[(0.85, False)]["false_hits"], rows[(0.85, True)]["false_hits"]) == (9, 6)      # the guard's catch
     for thr in (0.8, 0.85, 0.9, 0.95):
         assert rows[(thr, True)]["false_hits"] <= rows[(thr, False)]["false_hits"]
-    hr = [rows[(t, True)]["hit_rate"] for t in (0.8, 0.85, 0.9, 0.95)]
+    hr = [rows[(t, True)]["served_rate"] for t in (0.8, 0.85, 0.9, 0.95)]
     assert hr == sorted(hr, reverse=True)                                                        # stricter = fewer hits
+    r = rows[(0.9, True)]
+    assert r["correct_rate"] == pytest.approx(r["served_rate"] - r["false_hit_rate"]) and r["correct_rate"] <= r["reachable"]
 
 
 def test_embedder_is_deterministic_and_normalised():

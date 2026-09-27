@@ -1,5 +1,25 @@
-{"_label": "sample output in the documented format (illustrative): the last streamed GenerateContentResponse of a Gemini call; thoughtsTokenCount is OUTSIDE candidatesTokenCount (python-genai types.py GenerateContentResponseUsageMetadata; wire names camelCase)",
- "candidates": [{"content": {"role": "model", "parts": [{"text": "It is 17."}]}, "finishReason": "STOP", "index": 0}],
- "usageMetadata": {"promptTokenCount": 5000, "cachedContentTokenCount": 2700, "candidatesTokenCount": 230,
-                   "thoughtsTokenCount": 120, "totalTokenCount": 5350},
- "modelVersion": "gemini-3.5-flash"}
+{
+  "_label": "sample output in the documented format (illustrative): the last streamed GenerateContentResponse of a Gemini call; thoughtsTokenCount is OUTSIDE candidatesTokenCount (python-genai types.py GenerateContentResponseUsageMetadata; wire names camelCase) It is the primer's \u00a71.5 call: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.",
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "It is 17."
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 5000,
+    "cachedContentTokenCount": 2700,
+    "candidatesTokenCount": 350,
+    "thoughtsTokenCount": 1200,
+    "totalTokenCount": 6550
+  },
+  "modelVersion": "gemini-3.5-flash"
+}

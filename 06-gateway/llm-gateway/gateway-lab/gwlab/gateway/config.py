@@ -101,6 +101,8 @@ class CacheCfg:
     entity_guard: bool = True
     ttl_s: float = 3600.0
     dim: int = 1024
+    classes: list = field(default_factory=lambda: ["faq"])              # declared shared classes that may be cached
+    per_user_classes: list = field(default_factory=lambda: ["account"])  # ... namespaced by metadata.user as well
 
 
 @dataclass

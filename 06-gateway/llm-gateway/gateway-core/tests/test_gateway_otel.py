@@ -139,3 +139,45 @@ def test_the_screener_is_linear_on_long_input():
     t = time.perf_counter()
     assert not RegexScreener().check("x" * 200_000, "input").block
     assert time.perf_counter() - t < 2.0                                  # an unbounded pattern took minutes here
+
+
+def test_a_probe_answered_with_a_400_does_not_leave_the_breaker_half_open_forever():
+    """Open google's breaker, let its probe hit a 400 (this request's context is too long for it), heal it: the
+    next request must probe again and be served by google -- not be skipped as 'breaker open' forever."""
+    gw, k, provs, clock = make(google={"outages": [(0, 20, 503)]})
+    for _ in range(3):
+        gw.handle(k, ask(stream=False))
+    google = Target("google", "gemini-3.5-flash")
+    assert gw.router.breakers[google].state(clock.now()) == "open"
+    clock.t, provs["google"].context = 100, 5
+    r = gw.handle(k, ask(stream=False, max_completion_tokens=100))
+    assert r.attempts[0] == (google, 400) and r.status == 200            # the probe got a 400; openai served it
+    provs["google"].context = 1_000_000
+    for t in (200, 500):
+        clock.t = t
+        r = gw.handle(k, ask(stream=False))
+        assert r.served_by == google and r.attempts == [(google, "ok")]
+    assert gw.router.breakers[google].state(clock.now()) == "closed"
+
+
+def test_client_spans_name_the_upstream_host():
+    gw, k, provs, _ = make()
+    gw.handle(k, ask())
+    client = [s for s in gw.tracer.spans if s["kind"] == otel.SPAN_KIND["CLIENT"]]
+    assert client[0]["attrs"][otel.SERVER_ADDRESS] == "generativelanguage.googleapis.com"
+
+
+def test_an_unknown_finish_reason_is_not_cached():
+    gw, k, provs, _ = make()
+    body = api.chat_request("chat", [{"role": "user", "content": "What are your opening hours?"}], metadata={"cache_class": "faq"})
+    real = provs["google"].chat
+
+    def paused(req):                                    # the provider paused the turn: not a complete answer
+        resp = real(req)
+        resp.body["choices"][0]["finish_reason"] = "pause_turn"
+        return resp
+    provs["google"].chat = paused
+    assert gw.handle(k, body).cache == "miss" and gw.handle(k, body).cache == "miss"      # nothing was stored
+    provs["google"].chat = real
+    gw.handle(k, body)
+    assert gw.handle(k, body).cache == "hit"                                          # a "stop" answer is

@@ -76,7 +76,8 @@ DIALECTS = {
         "usage": {"prompt": ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"],
                   "completion": ["output_tokens"], "cached": "cache_read_input_tokens",
                   "cache_write": "cache_creation_input_tokens", "reasoning": "output_tokens_details.thinking_tokens"},
-        "finish": {"end_turn": "stop", "stop_sequence": "stop", "pause_turn": "stop", "max_tokens": "length",
+        # pause_turn (a server-tool turn the client must continue) is deliberately unmapped: not a complete answer
+        "finish": {"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length",
                    "model_context_window_exceeded": "length", "tool_use": "tool_calls", "refusal": "content_filter"},
         "stream_end": "event: message_stop",
         "otel_provider": "anthropic",
@@ -88,9 +89,9 @@ DIALECTS = {
         "usage": {"prompt": ["promptTokenCount", "toolUsePromptTokenCount"],
                   "completion": ["candidatesTokenCount", "thoughtsTokenCount"],
                   "cached": "cachedContentTokenCount", "cache_write": None, "reasoning": "thoughtsTokenCount"},
+        # MALFORMED_FUNCTION_CALL, OTHER and the rest are abnormal endings: unmapped, they pass through as themselves
         "finish": {"STOP": "stop", "MAX_TOKENS": "length", "SAFETY": "content_filter", "RECITATION": "content_filter",
-                   "BLOCKLIST": "content_filter", "PROHIBITED_CONTENT": "content_filter", "SPII": "content_filter",
-                   "MALFORMED_FUNCTION_CALL": "stop", "OTHER": "stop"},
+                   "BLOCKLIST": "content_filter", "PROHIBITED_CONTENT": "content_filter", "SPII": "content_filter"},
         "stream_end": "end of the HTTP body",
         "otel_provider": "gcp.gemini",
     },
@@ -118,9 +119,11 @@ def normalise_usage(dialect: str, raw: dict | None) -> Usage | None:
 
 
 def normalise_finish(dialect: str, reason: str | None) -> str | None:
+    """A provider's stop reason -> OpenAI's. Unknown or abnormal reasons are never guessed to be "stop": they pass
+    through as the provider spelled them, so the cache (which stores only "stop") never keeps an incomplete answer."""
     if reason is None:
         return None
-    return DIALECTS[dialect]["finish"].get(reason, "stop")
+    return DIALECTS[dialect]["finish"].get(reason, reason)
 
 
 def auth_headers(dialect: str, key: str) -> dict:
@@ -187,8 +190,8 @@ def to_upstream(dialect: str, body: dict, upstream_model: str, *, stream: bool, 
     cap = requested_output(body)
     if output_cap is not None:
         cap = min(cap, output_cap) if cap else output_cap
-    if dialect == "openai":
-        up = {k: v for k, v in body.items() if k not in ("stream_options", "max_tokens", "max_completion_tokens")}
+    if dialect == "openai":                          # `metadata` is the gateway's route metadata: never forwarded
+        up = {k: v for k, v in body.items() if k not in ("stream_options", "max_tokens", "max_completion_tokens", "metadata")}
         up["model"] = upstream_model
         up["stream"] = bool(stream)
         if stream and want_usage:

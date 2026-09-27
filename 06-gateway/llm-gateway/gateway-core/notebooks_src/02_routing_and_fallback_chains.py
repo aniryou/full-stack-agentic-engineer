@@ -12,7 +12,8 @@
 # byte** reached the client. A **breaker per target** turns a dead provider into an instant skip instead of a timeout
 # per request. A chain's availability is capped by what its targets share, and a slow failure (a timeout) costs every
 # request behind it. By the end you can classify failures, compute a chain's availability and expected latency and
-# cost, build the breaker, apply the first-byte rule, and pick a first-byte deadline from a latency budget.
+# cost, predict how many requests a breaker lets reach a dead target when requests overlap, apply the first-byte
+# rule, and pick a first-byte deadline from a latency budget.
 #
 # Primer: §2 *Model routing and fallback chains* (`../PRIMER.md`); retries and full jitter are the scaling primer's
 # §5.2; the breaker's full state machine is the 07.2 lab's notebook 10.
@@ -47,34 +48,42 @@ print("policy cheapest (800 in/500) :", show(router.candidates("chat", {"max_com
 # zero while it has headroom — its real cost is the GPU bill, charged back in notebook 04.
 #
 # ## Worked example 1 — an outage, with and without a breaker
-# The primary hangs for five minutes (no answer at all), the gateway's timeout is 10 s. One request every 5 s.
+# The primary hangs for five minutes (no answer at all), the gateway's timeout is 10 s. One request every 12 s for
+# eight minutes. The in-process gateway handles one request at a time on the virtual clock, so the gap is longer than
+# a timeout on purpose: no request waits behind another, and each time to first token is measured from its arrival
+# (the loop checks it). Overlapping requests — the production case — are Exercise 2.4.
 
 # %%
-def outage_run(threshold, n=60, gap=5.0):
+def outage_run(threshold, n=40, gap=12.0):
     clock = Clock()
     provs = {"google": FakeProvider("google", clock, outages=[(0, 300, None)]), "openai": FakeProvider("openai", clock)}
     ks = keys.KeyStore(seed=1)
     k = ks.issue("acme")
     gw = Gateway(keys=ks, router=Router({"chat": chain[:2]}, threshold=threshold, cooldown=30), providers=provs,
                  clock=clock, timeout=10.0)
-    waits = []
+    ttft, timed_out = [], 0
     for i in range(n):
-        clock.t = max(clock.t, i * gap)                      # arrivals every `gap` seconds (or later, if we are behind)
+        assert clock.t <= i * gap, "a request would have queued behind the previous one"
+        clock.t = i * gap                                    # the request arrives
         r = gw.handle(k, api.chat_request("chat", [{"role": "user", "content": "hi"}], stream=True))
-        waits.append(r.row.ttft)
-    return provs["google"].calls, max(waits), sum(waits) / len(waits)
+        ttft.append(r.row.ttft)                              # measured from the start of handle() = the arrival
+        timed_out += r.attempts[0][1] == "timeout"
+    in_outage = sum(1 for i in range(n) if i * gap < 300)
+    return in_outage, timed_out, max(ttft), sum(ttft) / n
 
 
 for label, th in (("no breaker", 10 ** 9), ("breaker: 3 consecutive, 30 s cooldown", 3)):
-    calls, worst, mean = outage_run(th)
-    print(f"{label:40s} calls to the primary {calls:3d} | worst TTFT {worst:5.2f} s | mean TTFT {mean:5.2f} s (simulated)")
+    arrived, paid, worst, mean = outage_run(th)
+    print(f"{label:40s} {paid:2d} of the {arrived} requests that arrived during the outage paid the 10 s timeout | "
+          f"worst TTFT {worst:5.2f} s | mean TTFT {mean:4.2f} s (simulated)")
 
 # %% [markdown]
-# Without a breaker every request that arrives during the outage pays the 10 s timeout before falling through (and the
-# queue falls behind its arrivals). With one, three requests pay it, then the primary is skipped and probed once per
-# cooldown until it answers again — 9 calls instead of 60. In production requests overlap: at 50 requests a second the
-# first 10 × 50 = 500 requests are in flight before the breaker has seen three timeouts complete — which is why a
-# **first-byte deadline** shorter than the full timeout matters (Exercise 2.6).
+# Without a breaker every one of the 25 requests that arrive during the outage pays the 10 s timeout before falling
+# through. With one, three pay it, the breaker opens, and after that only the one probe per cooldown does — 8 of 25;
+# the rest skip the primary at once. The worst case is the same 10.3 s: the breaker cuts how *often* requests pay a
+# timeout, not what one costs — that is the first-byte deadline's job (Exercise 2.6). And here the breaker had it
+# easy: each failure completed before the next request arrived. In production requests overlap, and the breaker
+# learns only as fast as failures complete (Exercise 2.4).
 #
 # ## Worked example 2 — availability, latency and cost of a chain
 
@@ -94,19 +103,20 @@ for t_fail in (0.15, 10.0):
 # %% [markdown]
 # ## Exercise 2.1 — what falls through
 # Write `should_fall_through(status, code)`: `status` is an HTTP status or `None` (no answer before the timeout),
-# `code` the error body's `code`. Return True only when another target could plausibly succeed.
+# `code` the error body's `code`. Return True only when another target could plausibly succeed. Two statuses are
+# easy to miss: 408 (the provider timed the request out) and Anthropic's 529 `overloaded_error`.
 
 # %% exercise
 def should_fall_through(status, code=None):
     ### BEGIN SOLUTION
     if status == 400:
         return code == "context_length_exceeded"
-    return status is None or status == 429 or 500 <= status <= 504
+    return status is None or status in (408, 429, 500, 502, 503, 504, 529)
     ### END SOLUTION
 
 # %% check
 cases = [(429, None), (500, None), (502, None), (503, None), (504, None), (None, None), (400, "context_length_exceeded"),
-         (400, None), (400, "content_policy"), (401, None), (403, None), (404, None)]
+         (408, None), (529, None), (400, None), (400, "content_policy"), (401, None), (403, None), (404, None)]
 assert [should_fall_through(*c) for c in cases] == [routing.falls_through(*c) for c in cases]
 print("✅ falls through:", [c for c in cases if should_fall_through(*c)])
 print("   stops:        ", [c for c in cases if not should_fall_through(*c)])
@@ -157,55 +167,54 @@ for _ in range(200):
 print("✅ expected latency matches routing.chain_cost on 200 random chains")
 
 # %% [markdown]
-# ## Exercise 2.4 — a breaker per target
-# Build the 07.2 lab's rule as `MyBreaker(threshold, cooldown)`: `allow(now)` and `record(ok, now)`. Closed: allow;
-# count *consecutive* failures, a success resets the count; at `threshold` open. Open: refuse until `cooldown` has
-# passed since opening. Then half-open: allow exactly **one** probe; its success closes the breaker, its failure
-# re-opens it (the cooldown restarts).
+# ## Exercise 2.4 — a breaker learns only as fast as failures complete
+# The breaker itself — closed, open, one probe after the cooldown — is the 07.2 lab's (gcp-agent-platform-lab
+# notebook 10 builds it, half-open included); here it is `routing.Breaker`, as given. What the gateway adds is
+# *concurrency*. Requests arrive every `1 / rate` seconds, each attempt at the dead primary takes `t_fail` seconds to
+# fail (the full timeout, a first-byte deadline, or a fast 503), and the breaker opens when `threshold` failures have
+# **completed** — while every request that arrived in the meantime is already waiting on the dead target.
+#
+# Write `reach_before_open(rate, t_fail, threshold)`: how many requests reach the dead target before its breaker
+# opens (a whole number: round up). Then set `at_50_rps`: that number at 50 requests a second with threshold 3, for a
+# 10 s timeout, a 1 s first-byte deadline and a 0.15 s 503, as a tuple in that order.
 
 # %% exercise
-class MyBreaker:
-    def __init__(self, threshold=3, cooldown=30.0):
-        ### BEGIN SOLUTION
-        self.threshold, self.cooldown = threshold, cooldown
-        self.failures, self.opened_at, self.probing = 0, None, False
-        ### END SOLUTION
+import math
 
-    def allow(self, now):
-        ### BEGIN SOLUTION
-        if self.opened_at is not None and now - self.opened_at < self.cooldown:
-            return False
-        if self.opened_at is not None:                      # half-open
-            if self.probing:
-                return False
-            self.probing = True
-        return True
-        ### END SOLUTION
 
-    def record(self, ok, now):
-        ### BEGIN SOLUTION
-        if ok:
-            self.failures, self.opened_at, self.probing = 0, None, False
-            return
-        self.failures += 1
-        if self.probing or self.failures >= self.threshold:
-            self.opened_at, self.probing = now, False
-        ### END SOLUTION
+def reach_before_open(rate, t_fail, threshold):
+    ### BEGIN SOLUTION
+    # request k arrives at k / rate; the threshold-th failure completes at (threshold - 1) / rate + t_fail
+    return math.ceil(threshold - 1 + rate * t_fail)
+    ### END SOLUTION
+
+### BEGIN SOLUTION
+at_50_rps = tuple(reach_before_open(50, tf, 3) for tf in (10.0, 1.0, 0.15))
+### END SOLUTION
 
 # %% check
-for trial in range(50):
-    mine, ref, t = MyBreaker(3, 30.0), routing.Breaker(3, 30.0), 0.0
-    for _ in range(300):
-        t += rng.expovariate(0.5)
-        a, b = mine.allow(t), ref.allow(t)
-        assert a == b, (trial, t)
-        if a:
-            ok = rng.random() < (0.2 if 40 < t % 200 < 120 else 0.95)      # a sick period every 200 s
-            mine.record(ok, t)
-            ref.record(ok, t)
-print("✅ your breaker makes the same allow/refuse decision as routing.Breaker on 15,000 random calls")
+def overlapping(rate, t_fail, threshold):
+    """Arrivals every 1/rate s against a dead target; failures are recorded when they complete (routing.Breaker)."""
+    b, in_flight, reached, k = routing.Breaker(threshold, cooldown=1e9), [], 0, 0
+    while True:
+        t = k / rate
+        for done in sorted(x for x in in_flight if x <= t):
+            b.record(False, done)
+        in_flight = [x for x in in_flight if x > t]
+        if b.state(t) == "open":
+            return reached
+        if b.allow(t):
+            reached += 1
+            in_flight.append(t + t_fail)
+        k += 1
 
-# %% [markdown]
+
+for rate, tf, th in [(50, 10.0, 3), (50, 1.0, 3), (50, 0.15, 3), (10, 2.5, 5), (200, 0.4, 3), (1, 10.0, 3), (7, 0.3, 2)]:
+    assert abs(reach_before_open(rate, tf, th) - overlapping(rate, tf, th)) <= 1, (rate, tf, th, overlapping(rate, tf, th))
+assert at_50_rps == (502, 52, 10), at_50_rps
+print(f"✅ at 50 requests a second, {at_50_rps[0]} requests wait on a 10 s timeout before the breaker opens; a 1 s "
+      f"first-byte deadline cuts that to {at_50_rps[1]}, a fast 503 to {at_50_rps[2]}. The breaker needs fast failures.")
+
 # ## Exercise 2.5 — fall back only before the first byte
 # Write `relay(events)`: walk a provider's stream events. If an event with an `"error"` key arrives before any content
 # chunk has been relayed, return `"fall through"`. Otherwise return `(relayed, outcome)`: how many chunks with choices
@@ -243,8 +252,10 @@ print("✅ before the first byte: fall through; after it: surface the error and 
 # ## Exercise 2.6 — pick a first-byte deadline from a latency budget
 # The primary fails 5 % of requests by hanging; the gateway gives up after `t_fail` seconds and falls through (steps
 # as in worked example 2). The route's budget is a **mean** time to first token of 0.70 s. Set `deadline` to the
-# largest `t_fail`, to 0.01 s, that meets the budget — compute it, do not search blindly — and say in one line why a
-# full-response timeout cannot be that number.
+# largest `t_fail`, to 0.01 s, that meets the budget — compute it, do not search blindly. Then show why a
+# whole-response timeout cannot do the job: a healthy answer on this route is 350 tokens at 20 ms each after a
+# 0.6 s first token, so set `full_response_s` to the shortest whole-response timeout that never kills a healthy
+# stream, and `mean_with_it` to the route's mean time to first token if failures were detected only that late.
 
 # %% exercise
 def steps_for(t_fail):
@@ -254,17 +265,18 @@ def steps_for(t_fail):
 ### BEGIN SOLUTION
 base = routing.chain_cost(steps_for(0.0))["latency"]      # latency is linear in t_fail with slope 0.05
 deadline = int((0.70 - base) / 0.05 * 100) / 100
-why = "a full response takes seconds to stream, so the deadline must be on the first byte, not on the response"
+full_response_s = 0.6 + 349 * 0.02
+mean_with_it = routing.chain_cost(steps_for(full_response_s))["latency"]
 ### END SOLUTION
 
 # %% check
 assert routing.chain_cost(steps_for(deadline))["latency"] <= 0.70 < routing.chain_cost(steps_for(deadline + 0.01))["latency"]
-assert isinstance(why, str) and len(why) > 20
-print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at "
-      f"{routing.chain_cost(steps_for(deadline))['latency']:.3f} s; the 10 s timeout gives "
-      f"{routing.chain_cost(steps_for(10.0))['latency']:.3f} s")
+assert abs(full_response_s - 7.58) < 1e-9 and abs(mean_with_it - routing.chain_cost(steps_for(7.58))["latency"]) < 1e-12
+assert mean_with_it > 0.70
+print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.chain_cost(steps_for(deadline))['latency']:.3f} s; "
+      f"a whole-response timeout can be no shorter than {full_response_s:.2f} s, which puts the mean at {mean_with_it:.3f} s "
+      "-- over budget, so time out on the first byte and on the whole response separately")
 
-# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Clients ask for aliases; each alias is an ordered chain of provider, model and region,
 # filtered by what the request needs — tools, reasoning effort, context, residency — and ordered by a policy: as
@@ -285,5 +297,6 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at "
 #    failure (the gateway, a region, one provider behind two aliases); independent targets only shrink the part that
 #    was already tiny.
 # 3. *The breaker is configured, yet the first ten seconds of an outage were terrible. Why?* — Requests overlap: the
-#    breaker opens only after failures *complete*, so every request in flight during the first timeout pays it. A
-#    first-byte deadline and fast failure signals (connect errors, 503s) shorten that window.
+#    breaker opens only after failures *complete*, so every request in flight during the first timeout pays it — about
+#    500 at 50 requests a second (Exercise 2.4). A first-byte deadline and fast failure signals (connect errors, 503s)
+#    shorten that window.

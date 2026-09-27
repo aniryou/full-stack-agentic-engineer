@@ -63,8 +63,11 @@ print("text:", repr(acc.text()), "| finish:", acc.finish_reason, "| usage:", acc
 # %% [markdown]
 # ## Worked example 2 — other dialects stream differently
 # Anthropic sends named events; Gemini sends whole function calls and flags thought parts. `normalize_stream` turns
-# both into canonical chunks. One thing does not survive: Anthropic's *stream* carries no thinking-token count (only
-# its non-streamed `Usage` does), so the normalised `reasoning_tokens` is 0 — a field to reconcile, not to invent.
+# both into canonical chunks. The *usage* survives — Anthropic's final `message_delta` carries the cumulative count,
+# thinking tokens included in `output_tokens_details` (anthropic-sdk-python 1.8.0 `MessageDeltaUsage`) — but only
+# if the stream ends. Cut it before `message_delta` and all you hold is `message_start`'s usage, whose
+# `output_tokens` is 1: not a bill. The normaliser then emits no usage chunk at all, and the gateway estimates from
+# the deltas it relayed, marked as an estimate — it never invents the missing count.
 
 # %%
 for dialect in ("anthropic", "gemini"):
@@ -73,6 +76,12 @@ for dialect in ("anthropic", "gemini"):
         acc.add(ev)
     print(f"{dialect:9s} text={acc.text()!r} reasoning={''.join(acc.reasoning)!r}")
     print(f"{'':9s} tool calls={acc.tool_calls()} usage={acc.usage}")
+events = PAYLOADS["anthropic"]["stream"]
+cut = normalize_stream("anthropic", events[:[e["event"] for e in events].index("message_delta")])
+acc = api.StreamAccumulator()
+for ev in cut:
+    acc.add(ev)
+print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from the deltas:", acc.output_estimate(), "tokens")
 
 # %% [markdown]
 # ## Worked example 3 — the whole front door
@@ -102,8 +111,9 @@ print("ledger row:", r.row)
 #
 # ## Exercise 1.1 — write two adapters by hand
 # Write `anthropic_usage(raw)` and `gemini_usage(raw)`: each returns the canonical dict with keys `prompt_tokens`
-# (cached included), `completion_tokens` (reasoning included), `cached_tokens`, `reasoning_tokens` and `total_tokens`.
-# Field names are in the primer's §1.5 table. Missing fields count as 0.
+# (cached and cache-written included), `completion_tokens` (reasoning included), `cached_tokens`, `cache_write_tokens`
+# (prompt tokens written to the provider's cache, which bill at their own price), `reasoning_tokens` and
+# `total_tokens`. Field names are in the primer's §1.5 table. Missing fields count as 0; Gemini reports no cache writes.
 
 # %% exercise
 def anthropic_usage(raw):
@@ -112,6 +122,7 @@ def anthropic_usage(raw):
     prompt = g("input_tokens") + g("cache_read_input_tokens") + g("cache_creation_input_tokens")
     out = g("output_tokens")
     return {"prompt_tokens": prompt, "completion_tokens": out, "cached_tokens": g("cache_read_input_tokens"),
+            "cache_write_tokens": g("cache_creation_input_tokens"),
             "reasoning_tokens": (raw.get("output_tokens_details") or {}).get("thinking_tokens", 0), "total_tokens": prompt + out}
     ### END SOLUTION
 
@@ -122,7 +133,7 @@ def gemini_usage(raw):
     prompt = g("promptTokenCount") + g("toolUsePromptTokenCount")
     out = g("candidatesTokenCount") + g("thoughtsTokenCount")
     return {"prompt_tokens": prompt, "completion_tokens": out, "cached_tokens": g("cachedContentTokenCount"),
-            "reasoning_tokens": g("thoughtsTokenCount"), "total_tokens": prompt + out}
+            "cache_write_tokens": 0, "reasoning_tokens": g("thoughtsTokenCount"), "total_tokens": prompt + out}
     ### END SOLUTION
 
 # %% check
@@ -133,6 +144,7 @@ assert gemini_usage(PAYLOADS["gemini"]["response"]["usageMetadata"])["completion
 rng = random.Random(0)
 for _ in range(200):
     a = {k: rng.randint(0, 5000) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens")}
+    a["output_tokens_details"] = {"thinking_tokens": rng.randint(0, a["output_tokens"])}
     g = {k: rng.randint(0, 5000) for k in ("promptTokenCount", "cachedContentTokenCount", "candidatesTokenCount", "thoughtsTokenCount")}
     assert anthropic_usage(a) == normalize_usage("anthropic", a) and gemini_usage(g) == normalize_usage("gemini", g)
 print("✅ two adapters written by hand match the table-driven ones on 200 random usages")
@@ -286,6 +298,7 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 # 2. *A stream dies after 200 tokens and no usage arrives. What does the ledger say?* — An estimated row for the tokens
 #    counted from the relayed deltas, status `cut`, reconciled later against the provider's export — never zero,
 #    never the output cap.
-# 3. *What does not normalise across providers?* — Stream shapes (named events, whole function calls vs argument
-#    fragments), where reasoning text lives, and reasoning-token counts in some streams; the adapter records what is
-#    missing rather than inventing it.
+# 3. *What does not normalise across providers?* — Stream shapes (named events vs chunks, whole function calls vs
+#    argument fragments, no `[DONE]` from Anthropic), where reasoning text lives, and when the counts arrive: Anthropic's
+#    thinking tokens come only in the final `message_delta`, so a stream cut before it has no usage to trust. The
+#    adapter reports what is missing, and the ledger estimates it and says so, rather than inventing it.

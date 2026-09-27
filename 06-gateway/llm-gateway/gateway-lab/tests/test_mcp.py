@@ -183,3 +183,48 @@ def test_proof_checks():
     with pytest.raises(dpop.ProofError, match="iat"):
         dpop.verify_proof(old, method="POST", url=url)
     assert "NOT DPoP-conformant" in s.label
+
+
+async def _code(c, srv, resource):
+    """An authorization code for `resource` (the fake AS auto-approves the login_hint principal)."""
+    import urllib.parse
+    from gwlab.mcp.client import make_verifier
+    _, asm = c.meta[srv.resource]
+    verifier = make_verifier()
+    params = {"response_type": "code", "client_id": c.client_id, "redirect_uri": c.redirect_uri, "scope": "mcp:read",
+              "state": "s", "code_challenge": pkce_challenge(verifier), "code_challenge_method": "S256",
+              "resource": resource, "login_hint": "p"}
+    async with c.session.get(asm["authorization_endpoint"], params=params, allow_redirects=False) as r:
+        assert r.status == 302
+        code = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(r.headers["Location"]).query))["code"]
+    return asm, code, verifier
+
+
+def test_a_token_minted_for_another_resource_is_refused():
+    """RFC 8707: the token's audience is the resource it was requested for; this MCP server refuses any other."""
+    async def go(srv, c):
+        await c.call("p", srv.resource, CALL("search_notes"))                       # discovery, and a token of its own
+        other = srv.rs_url + "/other-mcp"
+        asm, code, verifier = await _code(c, srv, other)
+        form = {"grant_type": "authorization_code", "code": code, "redirect_uri": c.redirect_uri, "client_id": c.client_id,
+                "code_verifier": verifier, "resource": other}
+        async with c.session.post(asm["token_endpoint"], data=form) as r:
+            assert r.status == 200
+            tok = (await r.json())["access_token"]
+        async with c.session.post(srv.resource, json=CALL("search_notes"), headers={"Authorization": f"Bearer {tok}"}) as r:
+            assert r.status == 401 and 'error="invalid_token"' in r.headers["WWW-Authenticate"]
+        own = c.cached("p", srv.resource).access_token
+        async with c.session.post(srv.resource, json=CALL("search_notes"), headers={"Authorization": f"Bearer {own}"}) as r:
+            assert r.status == 200
+    run(AsOptions(), go)
+
+
+def test_the_code_exchange_must_name_the_authorized_resource():
+    async def go(srv, c):
+        await c.call("p", srv.resource, CALL("search_notes"))
+        asm, code, verifier = await _code(c, srv, srv.resource)
+        form = {"grant_type": "authorization_code", "code": code, "redirect_uri": c.redirect_uri, "client_id": c.client_id,
+                "code_verifier": verifier, "resource": srv.rs_url + "/other-mcp"}
+        async with c.session.post(asm["token_endpoint"], data=form) as r:
+            assert r.status == 400 and (await r.json())["error"] in ("invalid_target", "invalid_grant")
+    run(AsOptions(), go)

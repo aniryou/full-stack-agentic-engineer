@@ -4,7 +4,8 @@ import pytest
 from gwcore import api
 from gwcore.providers import ADAPTERS, PAYLOADS, Clock, FakeProvider, normalize_finish, normalize_stream, normalize_usage
 
-SAME_CALL = {"prompt_tokens": 5000, "completion_tokens": 1550, "total_tokens": 6550, "cached_tokens": 2700, "reasoning_tokens": 1200}
+SAME_CALL = {"prompt_tokens": 5000, "completion_tokens": 1550, "total_tokens": 6550, "cached_tokens": 2700, "reasoning_tokens": 1200,
+             "cache_write_tokens": 0}
 
 
 @pytest.mark.parametrize("dialect,field", [("openai", "usage"), ("anthropic", "usage"), ("gemini", "usageMetadata"), ("vllm", "usage")])
@@ -24,6 +25,22 @@ def test_finish_reasons_map_to_the_canonical_four():
         ["stop", "length", "tool_calls", "content_filter"]
     assert normalize_finish("gemini", "SAFETY") == "content_filter" and normalize_finish("gemini", "MAX_TOKENS") == "length"
     assert ADAPTERS["anthropic"]["auth"][0] == "x-api-key" and ADAPTERS["gemini"]["auth"][0] == "x-goog-api-key"
+
+
+def test_abnormal_finish_reasons_are_never_guessed_to_be_stop():
+    """A paused turn or a malformed call is not a complete answer: it passes through, and the cache refuses it."""
+    for dialect, reason in (("anthropic", "pause_turn"), ("gemini", "MALFORMED_FUNCTION_CALL"), ("gemini", "OTHER"),
+                            ("openai", "something_new")):
+        assert normalize_finish(dialect, reason) == reason != "stop"
+
+
+def test_cache_writes_are_their_own_field():
+    u = normalize_usage("anthropic", {"input_tokens": 100, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 4000,
+                                      "output_tokens": 50})
+    assert u["prompt_tokens"] == 4100 and u["cache_write_tokens"] == 4000 and u["cached_tokens"] == 0
+    o = normalize_usage("openai", {"prompt_tokens": 4100, "completion_tokens": 50,
+                                   "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 4000}})
+    assert o["cache_write_tokens"] == 4000 and normalize_usage("gemini", {"promptTokenCount": 10})["cache_write_tokens"] == 0
 
 
 def test_sse_round_trip_and_done():
@@ -58,8 +75,21 @@ def test_other_dialects_stream_to_canonical_chunks(dialect):
     assert call["name"] == "get_weather" and call["arguments"] == {"city": "Paris"} and call["valid_json"]
     assert acc.text() == "Checking the weather." and "".join(acc.reasoning) == "The user wants the weather."
     assert acc.finish_reason == "tool_calls" and acc.usage["prompt_tokens"] == 5000
-    # Anthropic's stream carries no thinking-token count (only the non-streamed Usage does): it does not normalise
-    assert acc.usage["reasoning_tokens"] == (0 if dialect == "anthropic" else 1200)
+    # Anthropic's final message_delta carries the cumulative usage, thinking tokens included (MessageDeltaUsage)
+    assert acc.usage["reasoning_tokens"] == 1200 and acc.usage["completion_tokens"] == 1550
+
+
+@pytest.mark.parametrize("dialect,cut", [("anthropic", "message_delta"), ("gemini", None)])
+def test_a_cut_dialect_stream_has_no_usage_to_trust(dialect, cut):
+    """message_start's usage (output_tokens 1) is not the bill: a stream cut before its end yields no usage chunk and no
+    DONE, so the gateway estimates from the deltas and marks the row estimated."""
+    events = PAYLOADS[dialect]["stream"]
+    events = events[:[e.get("event") for e in events].index(cut)] if cut else events[:-1]
+    out = normalize_stream(dialect, events)
+    acc = api.StreamAccumulator()
+    for ev in out:
+        acc.add(ev)
+    assert api.DONE not in out and acc.usage is None and acc.output_estimate() > 0
 
 
 def test_vllm_mid_stream_error_arrives_inside_a_200():
@@ -94,3 +124,16 @@ def test_fake_provider_429_retry_after_and_outages():
 def test_stream_options_without_stream_is_a_400_as_in_vllm():
     r = FakeProvider("p", Clock()).chat({"model": "m", "messages": [], "stream_options": {"include_usage": True}})
     assert r.status == 400 and "stream=True" in r.body["error"]["message"]
+
+
+def test_max_completion_tokens_bounds_reasoning_and_visible_tokens_together():
+    clock = Clock()
+    p = FakeProvider("p", clock, output_tokens=40, reasoning_tokens=100)
+    r = p.chat(api.chat_request("m", [{"role": "user", "content": "hi"}], max_completion_tokens=120))
+    assert r.body["usage"]["completion_tokens"] == 120 and r.body["usage"]["completion_tokens_details"]["reasoning_tokens"] == 100
+    assert r.body["choices"][0]["finish_reason"] == "length"
+    events = list(p.chat(api.chat_request("m", [{"role": "user", "content": "hi"}], stream=True, include_usage=True,
+                                          max_completion_tokens=60)).events)
+    assert events[-2]["usage"]["completion_tokens"] == 60 and events[-3]["choices"][0]["finish_reason"] == "length"
+    whole = p.chat(api.chat_request("m", [{"role": "user", "content": "hi"}], max_completion_tokens=500))
+    assert whole.body["usage"]["completion_tokens"] == 140 and whole.body["choices"][0]["finish_reason"] == "stop"

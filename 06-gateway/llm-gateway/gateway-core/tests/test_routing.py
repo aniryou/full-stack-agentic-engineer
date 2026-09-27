@@ -6,7 +6,7 @@ from gwcore.metering import price_call
 
 
 def test_what_falls_through_and_what_must_not():
-    assert all(R.falls_through(s) for s in (429, 500, 502, 503, 504, None))
+    assert all(R.falls_through(s) for s in (408, 429, 500, 502, 503, 504, 529, None))   # 529: Anthropic's overloaded_error
     assert not any(R.falls_through(s) for s in (400, 401, 403, 404))
     assert R.falls_through(400, "context_length_exceeded") and not R.falls_through(400, "content_policy")
 
@@ -26,6 +26,15 @@ def test_breaker_opens_on_consecutive_failures_and_one_probe_decides():
     assert b.allow(65)
     b.record(True, 65)
     assert b.state(66) == "closed"
+
+
+def test_a_probe_without_a_health_verdict_is_handed_back():
+    b = R.Breaker(threshold=1, cooldown=30)
+    assert b.allow(0)
+    b.record(False, 0)
+    assert b.allow(30) and not b.allow(30)             # the probe is out
+    b.release()                                         # ... and came back with a 400: it decided nothing
+    assert b.state(31) == "half_open" and b.allow(31)   # so the next request probes, instead of refusing forever
 
 
 def test_capability_context_and_region_filters():

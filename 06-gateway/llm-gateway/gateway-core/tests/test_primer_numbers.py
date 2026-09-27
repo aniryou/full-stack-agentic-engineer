@@ -23,6 +23,11 @@ def test_s1_adapters_and_the_hop():
          for d in ("openai", "anthropic", "gemini", "vllm")}
     assert all(x["prompt_tokens"] == 5000 and x["completion_tokens"] == 1550 for x in u.values())
     present("maps every one of them to 5,000 prompt and 1,550 completion tokens", "(2,300 + 2,700 + 0)", "(350 + 1,200)")
+    acc = __import__("gwcore.api", fromlist=["api"]).StreamAccumulator()
+    for ev in P.normalize_stream("anthropic", P.PAYLOADS["anthropic"]["stream"]):
+        acc.add(ev)
+    assert acc.usage["completion_tokens"] == 1550 and acc.usage["reasoning_tokens"] == 1200
+    present("the §1.5 stream normalises to the same 1,550 completion and 1,200 reasoning tokens")
     a = R.chain_availability([0.995, 0.99], common_mode=0.0005)
     present(f"gives {a:.3%}".replace("%", " %"), f"= {a:.9f})")
 
@@ -41,6 +46,17 @@ def test_s2_chain_numbers():
             f"{R.chain_cost(steps(0.15)[:1])['latency']:.3f} s, but 5 % of requests fail",
             f"= {slow['latency'] - fast['latency']:.2f} s to the *mean*")
     assert fast["p_fail"] == pytest.approx(5.0e-6)
+    # §2.4: 50 requests a second against a 10 s timeout; the breaker (threshold 3) opens when the third failure completes
+    b, in_flight, reached, k = R.Breaker(3, cooldown=1e9), [], 0, 0
+    while b.state(k / 50) != "open":
+        t = k / 50
+        for done in sorted(x for x in in_flight if x <= t):
+            b.record(False, done)
+        in_flight = [x for x in in_flight if x > t]
+        if b.allow(t):
+            reached, in_flight = reached + 1, in_flight + [t + 10.0]
+        k += 1
+    present(f"({reached} with the three that trip it")
 
 
 def test_s3_cache_numbers():
@@ -70,13 +86,22 @@ def test_s4_rate_limit_numbers():
     present(f"(mean {old:.1f}, `ratelimit.lognormal_mean()`)", f"mean {new:,.0f}",
             f"= {1500 + new:,.0f} / {1500 + old:,.0f} = **{RL.overadmission_ratio(1500, old, new):.2f}×**")
     res = RL.compare_buckets()
-    rows = [("per-request bucket, yesterday's outputs (median 300)", res["per-request, old outputs"], "{} of 600"),
-            ("per-request bucket, thinking outputs (median 1,500)", res["per-request, thinking outputs"], "{} (every second)"),
-            ("reserve prompt + 4,096, debit, reconcile", res["reserve prompt + 4,096"], "{}"),
-            ("reserve prompt + the 16,384 cap, debit, reconcile", res["reserve prompt + cap 16,384"], "{}")]
+    rows = [("per-request bucket, yesterday's outputs (median 300)", res["per-request, old outputs"],
+             "{n} (between t = {a} and {b} s)"),
+            ("per-request bucket, thinking outputs (median 1,500)", res["per-request, thinking outputs"],
+             "{n} (t = {a}–{b} s, continuously)"),
+            ("reserve prompt + 4,096, debit, reconcile", res["reserve prompt + 4,096"], "{n}"),
+            ("reserve prompt + the 16,384 cap, debit, reconcile", res["reserve prompt + cap 16,384"], "{n}")]
     for name, r, over in rows:
         util = f"{r['utilisation']:.2f}" if r["utilisation"] > 0.9 else f"{r['utilisation']:.3f}"
-        present(f"| {name} | {r['admitted']:,} | {r['peak_ratio']:.2f} | {over.format(r['seconds_over_limit'])} | {util} |")
+        cell = over.format(n=r["seconds_over_limit"], a=r["first_over"], b=r["last_over"])
+        present(f"| {name} | {r['admitted']:,} | {r['peak_ratio']:.2f} | {cell} | {util} |")
+    new_run = res["per-request, thinking outputs"]
+    assert new_run["last_over"] - new_run["first_over"] + 1 == new_run["seconds_over_limit"]      # "continuously"
+    present(f"from the moment it binds (t = {new_run['first_over']} s)", f"have drained (t = {new_run['last_over']} s)")
+    old_run = res["per-request, old outputs"]
+    present(f"the tokens served rose from {old_run['utilisation']:.2f}× to {new_run['utilisation']:.2f}× the limit, with the "
+            f"window peaking at {new_run['peak_ratio']:.2f}×")
     est, cap = res["reserve prompt + 4,096"], res["reserve prompt + cap 16,384"]
     present(f"pushes {res['per-request, thinking outputs']['peak_ratio']:.2f}× the limit",
             f"for {res['per-request, old outputs']['seconds_over_limit']} of 600 seconds",
@@ -91,6 +116,9 @@ def test_s4_rate_limit_numbers():
 
 
 def test_s5_metering_numbers():
+    write = M.price_call("claude-haiku-4-5", 10_000, 0, 0, 10_000)
+    present(f"10,000 tokens written to the prompt cache cost ${write:.4f} at the 1.25 write rate, not the "
+            f"${M.price_call('claude-haiku-4-5', 10_000, 0):.4f}")
     think, plain = M.price_call("gemini-3.5-flash", 5000, 1550, 2700), M.price_call("gemini-3.5-flash", 5000, 350, 2700)
     present(f"costs ${think:.6f} on gemini-3.5-flash, {think / plain:.2f}× the ${plain:.6f}")
     for model in ("gemini-3.5-flash", "claude-haiku-4-5", "gpt-5.4-mini", "gemini-3.5-flash-lite"):
@@ -114,6 +142,11 @@ def test_s6_keys_numbers():
     lo, hi = K.svid_rotation_window(3600)
     present(f"{len(salt)} characters (`keys.cache_salt()`)", f"between {lo:,.0f} and {hi:,.0f} seconds before expiry, "
             f"{lo / 60:.0f}–{hi / 60:.0f} minutes")
+    left = []
+    for seed in range(100):
+        msgs = list(K.FakeWorkloadAPI("spiffe://x/gw", seed=seed).fetch_x509_svid({"workload.spiffe.io": "true"}, until=4 * 3600))
+        left += [a["svids"][0]["not_after"] - b["at"] for a, b in zip(msgs, msgs[1:])]
+    present(f"rotates with a mean of {sum(left) / len(left) / 60:.1f} minutes left")
 
 
 def test_s7_guardrail_numbers():
@@ -127,7 +160,7 @@ def test_s7_guardrail_numbers():
         present(f"{label} = + {G.added_latency('held_back', t_check=0.15, window=w, **kw)[0]:.2f} s")
     present(f"+ 0.02 × 299 + 0.15 = + {G.added_latency('final', t_check=0.15, **kw)[0]:.2f} s")
     present(f"is ${G.cost_per_1k_checks(3.7, 0.0924):.3f} per 1,000 checks, and batched 16 at a time "
-            f"${G.cost_per_1k_checks(3.7, 0.0924, 16):.4f}",
+            f"${G.cost_per_1k_checks(3.7, 0.0924, 16):.4f} — *assuming* a batch of 16 finishes in about the same 92.4 ms",
             f"{G.false_block_rate(0.01, 26):.1%} of conversations".replace("%", " %"),
             f"at 0.1 %, {G.false_block_rate(0.001, 26):.2%}".replace("%", " %"))
 

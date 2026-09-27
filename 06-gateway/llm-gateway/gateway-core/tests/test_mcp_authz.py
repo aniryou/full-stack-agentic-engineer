@@ -102,3 +102,46 @@ def test_a_refused_refresh_starts_a_fresh_authorization():
     clock.sleep(301)
     assert client.call("alice", RES, "list_tickets")["result"].startswith("list_tickets")
     assert sum("discovered" in line for line in client.log) == 2
+
+
+def test_a_token_for_one_mcp_server_is_refused_at_another():
+    """RFC 8707: the token's audience is the one resource it was requested for."""
+    clock, auth, server, client = world()
+    other = FakeMCPServer("https://other.example.com/mcp", auth, TOOLS)
+    client.call("alice", RES, "list_tickets")
+    tok = client.tokens[("alice", RES)]["access"]
+    assert server.call("list_tickets", {"Authorization": f"Bearer {tok}"})[0] == 200
+    status, headers, _ = other.call("list_tickets", {"Authorization": f"Bearer {tok}"})
+    assert status == 401 and "resource_metadata" in headers["WWW-Authenticate"]
+
+
+def test_the_code_exchange_is_bound_to_the_authorized_resource():
+    _, auth, _, _ = world()
+    from gwcore.mcp_authz import make_verifier
+    v = make_verifier()
+    code = auth.authorize(client_id=CID, redirect_uri="https://gateway.example.com/cb", code_challenge=s256(v),
+                          code_challenge_method="S256", resource=RES, scope="tickets:read", subject="alice")["code"]
+    status, _, body = auth.token({"grant_type": "authorization_code", "code": code, "code_verifier": v, "client_id": CID,
+                                  "resource": "https://other.example.com/mcp"})
+    assert status == 400 and body["error"] == "invalid_grant"
+
+
+def test_a_dpop_proof_is_bound_to_its_request_and_used_once():
+    clock, auth, server, client = world(dpop=True)
+    client.call("alice", RES, "list_tickets")
+    tok = client.tokens[("alice", RES)]["access"]
+    signer = client.signer
+    good = lambda: signer.proof("POST", RES, now=clock.now(), access_token=tok, nonce=server.nonce)   # noqa: E731
+    h = lambda proof: {"Authorization": f"DPoP {tok}", "DPoP": proof}                                  # noqa: E731
+    assert server.call("list_tickets", h(good()))[0] == 200
+    for_the_as = signer.proof("POST", auth.issuer + "/token", now=clock.now(), access_token=tok, nonce=server.nonce)
+    assert server.call("list_tickets", h(for_the_as))[0] == 401                  # htu names the token endpoint
+    assert server.call("list_tickets", h(signer.proof("GET", RES, now=clock.now(), access_token=tok, nonce=server.nonce)))[0] == 401
+    once = good()
+    assert server.call("list_tickets", h(once))[0] == 200 and server.call("list_tickets", h(once))[0] == 401   # jti replay
+    stale = signer.proof("POST", RES, now=clock.now() - 3600, access_token=tok, nonce=server.nonce)
+    assert server.call("list_tickets", h(stale))[0] == 401                      # iat an hour old
+    replayed_at_as = signer.proof("POST", auth.issuer + "/token", now=clock.now(), nonce=auth.nonce)
+    form = {"grant_type": "refresh_token", "refresh_token": client.tokens[("alice", RES)]["refresh"], "client_id": CID, "resource": RES}
+    assert auth.token(form, {"DPoP": replayed_at_as})[0] == 200
+    assert auth.token(form, {"DPoP": replayed_at_as})[2]["error"] == "invalid_dpop_proof"

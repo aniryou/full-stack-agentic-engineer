@@ -46,7 +46,7 @@
       {"event": "content_block_delta", "data": {"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "{\"city\": \"Par"}}},
       {"event": "content_block_delta", "data": {"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "is\"}"}}},
       {"event": "content_block_stop", "data": {"type": "content_block_stop", "index": 2}},
-      {"event": "message_delta", "data": {"type": "message_delta", "delta": {"stop_reason": "tool_use", "stop_sequence": null}, "usage": {"output_tokens": 1550}}},
+      {"event": "message_delta", "data": {"type": "message_delta", "delta": {"stop_reason": "tool_use", "stop_sequence": null}, "usage": {"input_tokens": 2300, "cache_read_input_tokens": 2700, "cache_creation_input_tokens": 0, "output_tokens": 1550, "output_tokens_details": {"thinking_tokens": 1200}}}},
       {"event": "message_stop", "data": {"type": "message_stop"}}
     ],
     "error_429": {"type": "error", "error": {"type": "rate_limit_error", "message": "Number of request tokens has exceeded your per-minute rate limit"}}

@@ -14,7 +14,7 @@
 # it, estimates cover only cut streams, the ledger is reconciled against the provider's counters, and a shared GPU pool
 # is charged back by GPU time rather than by tokens. By the end you can predict over-admission from two means, build
 # the reserving limiter, size a reservation from a simulation, price a thinking call from raw usage, charge back a
-# pool, and find ledger drift.
+# pool, and find and explain ledger drift.
 #
 # Primer: §4 *Streaming-aware rate limits* and §5 *Metering, tracing and chargeback* (`../PRIMER.md`). The token bucket
 # itself is 06.3's (scaling primer §5.1); the thinking workload is the 00.5 primer's §7.
@@ -39,15 +39,20 @@ print(f"a per-request charge sized for the old mix over-admits x{ratelimit.overa
 
 # %%
 res = ratelimit.compare_buckets()
-print(f"{'limiter':34s} {'admitted':>8s} {'peak/limit':>10s} {'s over':>7s} {'served/limit':>12s} {'overrun':>9s}")
+print(f"{'limiter':34s} {'admitted':>8s} {'peak/limit':>10s} {'s over':>7s} {'when (s)':>10s} {'served/limit':>12s} {'overrun':>9s}")
 for name, r in res.items():
-    print(f"{name:34s} {r['admitted']:8,d} {r['peak_ratio']:10.2f} {r['seconds_over_limit']:7d} "
+    when = f"{r['first_over']}-{r['last_over']}" if r["first_over"] else "-"
+    print(f"{name:34s} {r['admitted']:8,d} {r['peak_ratio']:10.2f} {r['seconds_over_limit']:7d} {when:>10s} "
           f"{r['utilisation']:12.3f} {r['overrun_tokens']:9,.0f}")
+print("(arrivals stop at t = 600 s; each run goes on until its admitted streams drain -- simulated)")
 
 # %% [markdown]
 # The per-request bucket admits exactly as many requests after the rollout as before — it cannot see tokens — and
-# pushes the provider to 1.97× its limit, every second. Reserving the cap is exact and wastes three quarters of the
-# budget; reserving an estimate and reconciling serves 70 % with no second over the limit *in this run*.
+# pushes the provider to 1.97× its limit at the peak; once the bucket binds (t = 45 s) the provider's window stays
+# over its limit continuously until t = 648 s, while the admitted thinking streams drain. On yesterday's outputs the
+# same bucket was over for 116 scattered seconds between t = 59 and 600: sized on the mean, it still meets the tail.
+# Reserving the cap is exact and wastes three quarters of the budget; reserving an estimate and reconciling serves
+# 70 % with no second over the limit *in this run*.
 #
 # ## Worked example 2 — usage is the bill
 # The same call from the adapter samples: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.
@@ -223,11 +228,13 @@ for t in usage:
 print("✅ token-proportional chargeback makes the prompt-heavy tenant pay for the output-heavy one's decode time")
 
 # %% [markdown]
-# ## Exercise 4.6 — find the drift
+# ## Exercise 4.6 — find the drift, and predict it
 # The ledger below recorded a day of traffic; the provider's usage export disagrees. Use `Ledger.reconcile` (1 %
-# tolerance) and set `drifted` to the set of `(model, field)` pairs that are out of tolerance, and `likely_cause` to one
-# of `"retries billed once"`, `"cut streams estimated"` or `"cached tokens"` for the completion-token drift, given that
-# 40 of the day's requests were cut mid-stream and none were retried.
+# tolerance) and set `drifted` to the set of `(model, field)` pairs that are out of tolerance. Then explain the number
+# before anyone opens a ticket: 40 of the day's 400 requests were cut mid-stream (nothing was retried). The gateway
+# billed each cut stream on the 90 tokens it relayed, marked estimated; the provider's logs show it generated 150
+# tokens on each before it noticed the disconnect; every other request generated and billed 300. Set
+# `predicted_drift` to the completion-token difference (provider − ledger) you expect from that alone.
 
 # %%
 rng = random.Random(9)
@@ -236,23 +243,23 @@ for i in range(400):
     cut = i < 40
     ledger.add(metering.row_from_usage(f"r{i}", "acme", "k", "gpt-5.4-mini",
                                        {"prompt_tokens": 1200, "completion_tokens": 90 if cut else 300}, estimated=cut))
-provider = {"gpt-5.4-mini": {"prompt_tokens": 480_000, "completion_tokens": 400 * 300 - 40 * 150}}
+provider = {"gpt-5.4-mini": {"prompt_tokens": 480_000, "completion_tokens": 360 * 300 + 40 * 150}}
 print(ledger.totals()["acme"])
 
 # %% exercise
 ### BEGIN SOLUTION
 report = ledger.reconcile(provider)
 drifted = {k for k, v in report.items() if not v["ok"]}
-likely_cause = "cut streams estimated"
+predicted_drift = 40 * (150 - 90)
 ### END SOLUTION
 
 # %% check
-assert drifted == {("gpt-5.4-mini", "completion_tokens")} and likely_cause == "cut streams estimated"
+assert drifted == {("gpt-5.4-mini", "completion_tokens")}
 d = ledger.reconcile(provider)[("gpt-5.4-mini", "completion_tokens")]
-print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion tokens ({d['diff']:+,}): the 40 cut streams were "
-      "billed on relayed deltas; the provider generated more than it relayed before the cut")
+assert predicted_drift == d["diff"], (predicted_drift, d["diff"])
+print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion tokens ({d['diff']:+,}) = 40 cut streams x "
+      "(150 generated - 90 relayed): the estimated rows explain all of it, so correct those rows, not the price table")
 
-# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Limits are in tokens, because a request's cost is unknown at admission and heavy-tailed.
 # We reserve prompt plus an output bound, debit tokens as they stream and reconcile with usage at the end; used plus

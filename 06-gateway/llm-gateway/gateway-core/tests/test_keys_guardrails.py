@@ -36,8 +36,19 @@ def test_cache_salt_is_valid_for_vllm_and_per_tenant():
 def test_svid_rotates_at_half_life_plus_minus_ten_percent():
     assert K.svid_rotation_window(3600) == (1620, 1980)               # 27-33 minutes before a 1 h SVID expires
     msgs = list(K.FakeWorkloadAPI("spiffe://corp/gw", seed=1).fetch_x509_svid({"workload.spiffe.io": "true"}, until=4 * 3600))
-    gaps = [b["at"] - a["at"] for a, b in zip(msgs, msgs[1:])]
-    assert all(1620 <= g <= 1980 for g in gaps) and [m["svids"][0]["serial"] for m in msgs] == list(range(1, len(msgs) + 1))
+    left = [a["svids"][0]["not_after"] - b["at"] for a, b in zip(msgs, msgs[1:])]      # lifetime left at each rotation
+    assert all(1620 <= x <= 1980 for x in left) and [m["svids"][0]["serial"] for m in msgs] == list(range(1, len(msgs) + 1))
+
+
+def test_svid_rotation_redraws_the_jitter_on_every_check():
+    """SPIRE's shouldRotateByHalf draws a new jittered half-life on every check, so rotation clusters near the top of
+    the window (about 32 minutes left), not uniformly across 27-33 minutes."""
+    left = []
+    for seed in range(100):
+        msgs = list(K.FakeWorkloadAPI("spiffe://corp/gw", seed=seed).fetch_x509_svid({"workload.spiffe.io": "true"}, until=4 * 3600))
+        left += [a["svids"][0]["not_after"] - b["at"] for a, b in zip(msgs, msgs[1:])]
+    mean = sum(left) / len(left)
+    assert 1900 < mean < 1960 and min(left) > 1700 and sum(x < 1800 for x in left) / len(left) < 0.02
     with pytest.raises(PermissionError):
         next(K.FakeWorkloadAPI("spiffe://corp/gw").fetch_x509_svid({}, until=1))
 

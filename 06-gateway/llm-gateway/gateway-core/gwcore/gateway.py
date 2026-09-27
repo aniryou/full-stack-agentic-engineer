@@ -91,14 +91,16 @@ class Gateway:
                 body["cache_salt"] = keymod.cache_salt(vk.tenant, self.salt_secret)
             span = self.tracer.start(f"chat {target.model}", "CLIENT", server, **{
                 otel.OPERATION_NAME: "chat", otel.REQUEST_MODEL: target.model, otel.PROVIDER_NAME: otel.PROVIDER_VALUE[dialect],
-                otel.SERVER_ADDRESS: target.provider, **({otel.REQUEST_STREAM: True} if stream else {})})
+                otel.SERVER_ADDRESS: getattr(provider, "host", target.provider), **({otel.REQUEST_STREAM: True} if stream else {})})
             t0, resp = self.clock.now(), provider.chat(body)
             if resp.status != 200:
                 if resp.status is None:
                     self.clock.sleep(self.timeout)                  # no answer: our timeout decides
                 code = ((resp.body or {}).get("error") or {}).get("code")
-                if resp.status is None or resp.status == 429 or resp.status >= 500:
+                if resp.status is None or resp.status in (408, 429) or resp.status >= 500:
                     self.router.observe(target, False, self.clock.now())   # only the provider's health trips its breaker
+                else:
+                    self.router.release(target)     # a 400/401/403/404 says nothing about health: a probe decides nothing
                 self.tracer.end(span, error=str(code or resp.status or "timeout"))
                 attempts.append((target, resp.status or "timeout"))
                 if falls_through(resp.status, code):
@@ -144,8 +146,8 @@ class Gateway:
                 correction = usage["prompt_tokens"] + usage["completion_tokens"] - debited
                 if correction > 0:
                     lim.debit(rid, correction, self.clock.now())
-                else:                                               # we over-estimated while streaming: give it back
-                    lim.meter.add(self.clock.now(), correction)
+                elif correction < 0:                                # we over-estimated while streaming: give it back
+                    lim.refund(rid, -correction, self.clock.now())  # from this request's own earliest debits
                 lim.finish(rid)
             self.router.observe(target, not acc.error, self.clock.now(), first - t0)
             now = self.clock.now()
@@ -156,11 +158,12 @@ class Gateway:
             self.keys.charge(vk, row.cost)
             gen = {otel.RESPONSE_MODEL: target.model, otel.INPUT_TOKENS: usage["prompt_tokens"],
                    otel.OUTPUT_TOKENS: usage["completion_tokens"], otel.CACHE_READ: usage.get("cached_tokens", 0),
-                   otel.REASONING: usage.get("reasoning_tokens", 0), otel.FINISH_REASONS: [finish]}
+                   otel.REASONING: usage.get("reasoning_tokens", 0), otel.CACHE_CREATION: usage.get("cache_write_tokens") or None,
+                   otel.FINISH_REASONS: [finish]}
             self.tracer.end(span, error="stream_error" if acc.error else None, **gen, **{otel.TIME_TO_FIRST_CHUNK: first - t0})
             self.tracer.end(server, error="stream_error" if acc.error else None, **gen, **{"gw.attempts": len(attempts) + 1})
             answer = acc.text() if stream else resp.body["choices"][0]["message"]["content"]
-            if ckey and finish == "stop":                               # 8. cache only complete answers
+            if ckey and finish in cachemod.COMPLETE:                    # 8. cache only complete answers (an allowlist)
                 self.cache.put(ckey, answer, now)
             attempts.append((target, "ok" if not acc.error else "cut after first byte"))
             headers = {"x-gateway-target": f"{target.provider}/{target.model}"}

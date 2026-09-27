@@ -10,6 +10,18 @@ def test_the_scaling_primers_call():
     assert M.price_call("gemini-3.5-flash", 5000, 350) == pytest.approx(0.01065)
 
 
+def test_cache_writes_bill_at_their_own_price():
+    """Anthropic's cache_creation_input_tokens bill at 1.25/M on claude-haiku-4-5, not the 1.00/M input rate."""
+    from gwcore.providers import normalize_usage
+    u = normalize_usage("anthropic", {"input_tokens": 1000, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 10_000,
+                                      "output_tokens": 0})
+    assert M.price_call("claude-haiku-4-5", u["prompt_tokens"], 0, u["cached_tokens"], u["cache_write_tokens"]) == \
+        pytest.approx((1000 * 1.00 + 10_000 * 1.25) / 1e6)
+    row = M.row_from_usage("r", "t", "k", "claude-haiku-4-5", u)
+    assert row.cache_write_tokens == 10_000 and row.cost == pytest.approx(0.01350)             # not $0.01100
+    assert M.price_call("gemini-3.5-flash", 5000, 350, 0, 1000) == M.price_call("gemini-3.5-flash", 5000, 350)  # no write price: input
+
+
 def test_thinking_bills_as_output():
     assert M.price_call("gemini-3.5-flash", 5000, 1550, 2700) == pytest.approx(0.017805)
     assert round(0.017805 / 0.007005, 2) == 2.54

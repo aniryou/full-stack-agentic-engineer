@@ -1,7 +1,7 @@
 """Metering, the ledger and chargeback (PRIMER §5).
 
-The one idea: the provider's ``usage`` is the bill -- prompt tokens (the cached ones at their own price)
-and completion tokens (reasoning included) -- so the ledger prices *usage*, not text. The gateway
+The one idea: the provider's ``usage`` is the bill -- prompt tokens (cache reads and cache writes each at their
+own price) and completion tokens (reasoning included) -- so the ledger prices *usage*, not text. The gateway
 estimates only where no usage exists (at admission, and for a stream cut before its usage chunk),
 marks those rows estimated, and reconciles its totals against the provider's counters. A shared
 self-hosted pool has no per-token price: split its bill by what each tenant made the GPUs do.
@@ -14,11 +14,17 @@ from dataclasses import dataclass
 from .providers import CATALOGUE
 
 
-def price_call(model: str, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> float:
+def price_call(model: str, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0,
+               cache_write_tokens: int = 0) -> float:
     """Dollars for one call from canonical usage: ``prompt_tokens`` includes the cached ones (as in
-    ``scalelab.capacity.cost_per_call``); ``completion_tokens`` includes reasoning."""
-    inp, out, cached = CATALOGUE[model].price
-    return ((prompt_tokens - cached_tokens) * inp + cached_tokens * cached + completion_tokens * out) / 1e6
+    ``scalelab.capacity.cost_per_call``) and the ones written to the prompt cache; ``completion_tokens`` includes
+    reasoning. Cache reads bill at the cached rate, cache writes at the write rate (Anthropic: 1.25x input), the
+    rest of the prompt at the input rate."""
+    price = CATALOGUE[model].price
+    inp, out, cached = price[:3]
+    write = price[3] if len(price) > 3 else inp
+    uncached = prompt_tokens - cached_tokens - cache_write_tokens
+    return (uncached * inp + cached_tokens * cached + cache_write_tokens * write + completion_tokens * out) / 1e6
 
 
 def cost_per_million(model: str, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> float:
@@ -43,6 +49,7 @@ class LedgerRow:
     cached_tokens: int = 0
     reasoning_tokens: int = 0
     cost: float = 0.0
+    cache_write_tokens: int = 0
     estimated: bool = False            # True when no provider usage covered this row (a cut stream)
     status: str = "ok"
     ttft: float | None = None
@@ -53,10 +60,11 @@ class LedgerRow:
 def row_from_usage(request_id: str, tenant: str, key_id: str, model: str, usage: dict, *, estimated: bool = False,
                    **extra) -> LedgerRow:
     m = CATALOGUE[model]
-    cost = 0.0 if m.price is None else price_call(model, usage["prompt_tokens"], usage["completion_tokens"],
-                                                  usage.get("cached_tokens", 0))
+    cached, write = usage.get("cached_tokens", 0), usage.get("cache_write_tokens", 0)
+    cost = 0.0 if m.price is None else price_call(model, usage["prompt_tokens"], usage["completion_tokens"], cached, write)
     return LedgerRow(request_id, tenant, key_id, model, m.provider, usage["prompt_tokens"], usage["completion_tokens"],
-                     usage.get("cached_tokens", 0), usage.get("reasoning_tokens", 0), cost, estimated, **extra)
+                     cached_tokens=cached, reasoning_tokens=usage.get("reasoning_tokens", 0), cost=cost,
+                     estimated=estimated, cache_write_tokens=write, **extra)
 
 
 class Ledger:
