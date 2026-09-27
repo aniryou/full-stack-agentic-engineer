@@ -218,6 +218,7 @@ assert at_50_rps == (502, 52, 10), at_50_rps
 print(f"✅ at 50 requests a second, {at_50_rps[0]} requests wait on a 10 s timeout before the breaker opens; a 1 s "
       f"first-byte deadline cuts that to {at_50_rps[1]}, a fast 503 to {at_50_rps[2]}. The breaker needs fast failures.")
 
+# %% [markdown]
 # ## Exercise 2.5 — fall back only before the first byte
 # Write `relay(events)`: walk a provider's stream events. If an event with an `"error"` key arrives before any content
 # chunk has been relayed, return `"fall through"`. Otherwise return `(relayed, outcome)`: how many chunks with choices
@@ -280,12 +281,15 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.ch
       f"a whole-response timeout can be no shorter than {full_response_s:.2f} s, which puts the mean at {mean_with_it:.3f} s "
       "-- over budget, so time out on the first byte and on the whole response separately")
 
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Clients ask for aliases; each alias is an ordered chain of provider, model and region,
 # filtered by what the request needs — tools, reasoning effort, context, residency — and ordered by a policy: as
 # written, cheapest capable, lowest moving-average TTFT, a canary share, or a separate chain per tier. We fall through
 # on 429, 5xx, timeouts and context-too-long, never on a bad request, credentials or a policy refusal, and never after
-# the first byte — after it we surface an error chunk. Each target has a breaker: three consecutive failures open it
+# the first byte — after it we surface an error chunk.
+#
+# "Each target has a breaker: three consecutive failures open it
 # for 30 s and one probe decides, so an outage costs a few timeouts instead of one per request; and we time out on the
 # first byte, not the whole response, because the breaker only learns as fast as failures complete. The chain's
 # availability is capped by what the targets share — 99.5 % and 99 % give 99.995 % independently but 99.895 % with a

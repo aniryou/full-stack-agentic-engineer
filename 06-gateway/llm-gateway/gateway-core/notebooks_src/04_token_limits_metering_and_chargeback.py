@@ -267,13 +267,16 @@ assert predicted_drift == d["diff"], (predicted_drift, d["diff"])
 print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion tokens ({d['diff']:+,}) = 40 cut streams x "
       "(150 generated - 90 relayed): the estimated rows explain all of it, so correct those rows, not the price table")
 
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Limits are in tokens, because a request's cost is unknown at admission and heavy-tailed.
 # We reserve prompt plus an output bound, debit tokens as they stream and reconcile with usage at the end; used plus
 # reserved never passes the limit, so the provider never sees more. A per-request bucket let through 1.97× the
 # provider's tokens per minute the day thinking shipped, and it could not even see the change. The reservation is a
 # setting we size by simulation: the cap is exact and strands budget, an estimate serves more with small overruns.
-# Limits nest — key, tenant, org, provider key — checked and committed atomically in one Lua script. Every request
+# Limits nest — key, tenant, org, provider key — checked and committed atomically in one Lua script.
+#
+# "Every request
 # writes a ledger row priced from usage, thinking billed as output — billing Gemini on candidates alone under-bills a
 # thinking call 2.5× — cut streams billed on relayed deltas and marked estimated, and the ledger is reconciled daily
 # against the provider's export. The self-hosted pool is charged back by GPU-seconds, not tokens, or the RAG tenant
