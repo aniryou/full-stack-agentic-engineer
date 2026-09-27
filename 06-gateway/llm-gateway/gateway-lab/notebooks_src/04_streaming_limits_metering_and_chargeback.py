@@ -319,7 +319,7 @@ else:
 # **Drill 1.** *After a thinking-model rollout the provider started returning 429s but our request limit never
 # tripped. Why?* — The bucket charged per request while outputs grew ten-fold with a heavy tail, so the same
 # request rate carried many times the tokens. Reserve, stream, reconcile; TPM beside RPM per tenant; budget
-# thinking rather than truncating it with `max_tokens` (CURRICULUM cross-layer drill 18).
+# thinking rather than truncating it with `max_tokens` (CURRICULUM cross-layer drill 20).
 #
 # **Drill 2.** *Two gateway replicas each allow the tenant 3,000 tokens per minute. What does the tenant get?* —
 # Up to 6,000. Buckets shared between replicas live in Redis behind a Lua script (one round trip per check) or
