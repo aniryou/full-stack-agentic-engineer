@@ -6,15 +6,19 @@
 # (AWQ/GPTQ INT4, FP8) served by vLLM are `vllm-serving-lab` notebook `05_speculation_and_quantization_in_vllm` (T1).
 #
 # ## The one-minute version
-# Quantization stores a number in fewer bits plus a **scale** that says what the bits mean: `w ≈ code × scale`.
-# The design choice is **granularity** — how many weights share one scale. Per tensor is cheapest, but one outlier
-# stretches the scale and wrecks everyone else's resolution; per output channel isolates outlier rows; groups of
-# 32–128 inputs (the usual INT4 recipe, GPTQ/AWQ) isolate them further for a few extra bits per group. What it buys
-# depends on the bottleneck: **decode is memory-bound**, so fewer weight bytes are faster tokens (weight-only INT4
-# ≈ 3× on one request for an 8B model — not 3.9×, because the embedding and LM head stay in 16-bit and the KV read
-# does not shrink); **prefill is compute-bound**, so only formats the tensor cores compute in natively (FP8
-# W8A8 on Ada/Hopper/Blackwell, INT8 W8A8) make it faster. Quantizing the **KV cache** (FP8) halves its bytes, which
-# doubles how many sessions fit. And it always costs some accuracy — measure it on your own evals.
+# Quantization stores a number in fewer bits plus a **scale** that says what the bits mean:
+# $w \approx \text{code} \times \text{scale}$. The design choice is **granularity** — how many weights share one
+# scale. Per tensor is cheapest, but one outlier stretches the scale and wrecks everyone else's resolution; per
+# output channel isolates outlier rows; groups of 32–128 inputs (the usual INT4 recipe, GPTQ/AWQ) isolate them
+# further for a few extra bits per group.
+#
+# What it buys depends on the bottleneck: **decode is memory-bound**, so fewer weight bytes are faster tokens
+# (weight-only INT4 ≈ 3× on one request for an 8B model — not 3.9×, because the embedding and LM head stay in 16-bit
+# and the KV read does not shrink); **prefill is compute-bound**, so only formats the tensor cores compute in
+# natively (FP8 W8A8 on Ada/Hopper/Blackwell, INT8 W8A8) make it faster.
+#
+# Quantizing the **KV cache** (FP8) halves its bytes, which doubles how many sessions fit. And it always costs some
+# accuracy — measure it on your own evals.
 #
 # Primer: §8 *Quantization* (`../../PRIMER.md`); memory sizing: `00-foundations/gpu-capacity-planning/PRIMER.md`.
 
@@ -81,8 +85,8 @@ for gran in ["tensor", "channel"]:
 #
 # ## Worked example 4 — activations have outliers too: SmoothQuant for W8A8
 # W8A8 quantizes activations as well, per token, at run time. LLM activations have a few channels that are
-# consistently huge. SmoothQuant divides those channels of X by a factor `s` and multiplies the matching rows of W
-# by it: `X W = (X / s)(s W)`, moving the difficulty into the weights, which tolerate it.
+# consistently huge. SmoothQuant divides those channels of $X$ by a factor $s$ and multiplies the matching rows of
+# $W$ by it: $XW = (X/s)(sW)$, moving the difficulty into the weights, which tolerate it.
 
 # %%
 X, W = rng.standard_normal((32, 64)), rng.standard_normal((64, 16)) * 0.05
@@ -164,8 +168,9 @@ print("(SIMULATED: roofline model, 80% bandwidth / 60% FLOPs, 2 ms per step over
 # lever.
 #
 # ## Exercise 6.1 — symmetric per-channel INT8
-# For `w` of shape `(d_in, d_out)`, one scale per output column: `scale = max|w[:, j]| / 127`,
-# `codes = round(w / scale)` clipped to ±127. Return `(codes, scale)` with `scale` of shape `(d_out,)`.
+# For `w` of shape `(d_in, d_out)`, one scale per output column: $\mathrm{scale} = \max \lvert w_{:,j} \rvert / 127$,
+# $\mathrm{codes} = \operatorname{round}(w/\mathrm{scale})$ clipped to ±127. Return `(codes, scale)` with `scale` of
+# shape `(d_out,)`.
 
 # %% exercise
 def int8_per_channel(w):
@@ -184,8 +189,9 @@ print(f"✅ int8 per-channel: max error {np.abs(codes * scale - w).max():.2e} <=
 
 # %% [markdown]
 # ## Exercise 6.2 — group-wise INT4
-# Now one scale per group of `g` consecutive **input** rows of each output column: reshape to `(d_in // g, g, d_out)`,
-# `scale = max|group| / 7`, `codes = round(w / scale)` clipped to ±7. Return the dequantized weight `w_hat`.
+# Now one scale per group of $g$ consecutive **input** rows of each output column: reshape to
+# `(d_in // g, g, d_out)`, $\mathrm{scale} = \max \lvert \mathrm{group} \rvert / 7$,
+# $\mathrm{codes} = \operatorname{round}(w/\mathrm{scale})$ clipped to ±7. Return the dequantized weight `w_hat`.
 
 # %% exercise
 def int4_groupwise(w, g):

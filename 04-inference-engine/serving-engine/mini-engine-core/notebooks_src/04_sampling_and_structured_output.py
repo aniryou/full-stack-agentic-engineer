@@ -10,7 +10,7 @@
 # **penalties** → if `temperature == 0` take the argmax → divide by **temperature** → cut the tail with
 # **min-p**, **top-k**, **top-p** → draw, with the request's **own seeded generator**. None of this changes the
 # model; it reshapes one distribution per step. **Structured output** is the same mechanism with a grammar behind
-# it: a finite-state machine says which tokens are legal next, the rest get `-inf`. The model never learns the
+# it: a finite-state machine says which tokens are legal next, the rest get $-\infty$. The model never learns the
 # schema; it is fenced in — which guarantees *syntax*, not *sense*. With real, multi-character tokens, computing
 # that mask per grammar state is the expensive part; you will build one.
 #
@@ -155,7 +155,7 @@ print("in state 6, a quote ->", char_step(6, '"'), "(illegal: a number must come
 # precomputes the whole table.
 #
 # ## Exercise 4.1 — top-p (nucleus) filtering
-# Keep the smallest set of highest-probability tokens whose total probability reaches `p`; set the rest to `-inf`.
+# Keep the smallest set of highest-probability tokens whose total probability reaches $p$; set the rest to $-\infty$.
 # The top token is always kept.
 
 # %% exercise
@@ -356,12 +356,13 @@ print(f"   {top!r} came out as {len(spellings[top])} different token sequences, 
 # or temperature, min-p, top-k, top-p, and a draw from the request's own seeded generator. It reshapes the model's
 # distribution per step; it never changes the model. For production we default to temperature with top-p or min-p
 # because they adapt to the model's confidence, we fix seeds when we need replayable outputs, and we log raw
-# logprobs because they show what the model believed. For machine-readable output we use structured output: the
-# engine compiles the JSON schema into a character automaton, precomputes which of the vocabulary's multi-character
-# tokens are legal in each state, and masks the rest, so an output that finishes always parses (one cut by
-# max_tokens does not — we check finish_reason). That guarantees syntax, not correctness — a model that does not
-# know the answer will still produce a well-formed one, so we validate semantics downstream and watch the
-# logprobs of constrained fields."
+# logprobs because they show what the model believed.
+#
+# "For machine-readable output we use structured output: the engine compiles the JSON schema into a character
+# automaton, precomputes which of the vocabulary's multi-character tokens are legal in each state, and masks the
+# rest, so an output that finishes always parses (one cut by max_tokens does not — we check finish_reason). That
+# guarantees syntax, not correctness — a model that does not know the answer will still produce a well-formed one, so
+# we validate semantics downstream and watch the logprobs of constrained fields."
 #
 # **Drill questions**
 # 1. *Why prefer top-p or min-p over top-k?* — They adapt to the distribution: few tokens when the model is sure,
