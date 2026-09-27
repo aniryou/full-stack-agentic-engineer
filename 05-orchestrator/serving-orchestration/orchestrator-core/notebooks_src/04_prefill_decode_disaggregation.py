@@ -8,8 +8,8 @@
 # chunk makes every decoding request in the batch wait half a second (on an L4). **Disaggregation** runs prefill on
 # its own pool and ships each prompt's KV cache to a decode replica: decodes stop stuttering. The bill:
 #
-# * the **transfer** — `prompt tokens x KV bytes/token / link bandwidth` — added to TTFT, which needs RDMA-class
-#   links on fast GPUs;
+# * the **transfer** — $\text{prompt tokens} \:\times$ $\text{KV bytes/token} \:\div$ $\text{link bandwidth}$ — added
+#   to TTFT, which needs RDMA-class links on fast GPUs;
 # * **two pools to size**: the P:D ratio must match the traffic's input/output mix, or one pool idles while the other
 #   queues — small fleets fragment badly;
 # * an extra hop, for nothing, on short prompts.
@@ -108,7 +108,8 @@ print({k: round(v, 2) for k, v in plan.items()})
 # The prefill side is division: 1.2 req/s x 6,060 tokens over 3,781 tok/s at a 0.7 utilisation cap is 2.75
 # replicas. The decode side hinges on one number — how many requests a decode replica can batch — and that is capped
 # three ways: `profile.max_seqs`; the KV pool, which must hold every request's context (`profile.kv_blocks` blocks
-# of `profile.block` tokens; `ctx` tokens of context plus the next token need ceil((ctx + 1) / block) blocks); and
+# of `profile.block` tokens; `ctx` tokens of context plus the next token need
+# $\lceil (\text{ctx} + 1) / \text{block} \rceil$ blocks); and
 # the ITL SLO, which one decode step for the whole batch, `decode_step_s(profile, batch, ctx)`, must meet. Write
 # `largest_decode_batch(profile, ctx, itl_slo_s)` (0 if even one request misses the SLO), and **predict** which cap
 # binds for the plan above — `ctx` = 6,060 + 250 / 2 = 6,185 on the L4 with an 80 ms SLO: `"kv"` or `"itl"`.
@@ -196,9 +197,10 @@ print("✅ conditional disaggregation: pay the hop only where the stall it remov
 # **Two-minute version.** "Disaggregation separates two phases with opposite bottlenecks so each pool can be batched
 # and parallelised for its own phase, and decode never waits for a prefill chunk. Before proposing it I would check
 # three numbers: the stall it removes — p99 inter-token latency against our SLO, after tuning the chunk budget; the
-# KV transfer it adds — prompt tokens x KV bytes per token over our link, compared with the prefill time; and whether
-# the fleet is big enough to split at the traffic's P:D ratio without fragmenting. If yes, xPyD sized from that ratio,
-# conditional on prompt length, over RDMA — llm-d or Dynamo with NIXL. If not, aggregated with a tuned chunk budget."
+# KV transfer it adds — $\text{prompt tokens} \times \text{KV bytes per token}$ over our link, compared with the
+# prefill time; and whether the fleet is big enough to split at the traffic's P:D ratio without fragmenting. If yes,
+# xPyD sized from that ratio, conditional on prompt length, over RDMA — llm-d or Dynamo with NIXL. If not, aggregated
+# with a tuned chunk budget."
 #
 # **Drills**
 # 1. *When does disaggregation make things worse?* Short prompts (no stall to remove, an extra hop), slow links (the
