@@ -40,6 +40,6 @@ tenants:
   team-b: {aliases: [chat, chat-cheap], rpm: 600, tpm: 200000}
 
 limits: {mode: reserve, minute_s: 60, default_output_estimate: 512, hard_output_cap: 1024}
-cache: {exact: true, semantic: true, threshold: 0.92, entity_guard: true, ttl_s: 3600}
+cache: {exact: true, semantic: true, threshold: 0.92, entity_guard: true, ttl_s: 3600, classes: [faq], per_user_classes: [account]}
 guardrails: {input: "off", output: "off", window_tokens: 16, check_ms: 20}
 breaker: {failure_threshold: 3, recovery_timeout_s: 10}

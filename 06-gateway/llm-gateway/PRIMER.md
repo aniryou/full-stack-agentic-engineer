@@ -442,8 +442,8 @@ streams drain):
 The per-request bucket cannot see the rollout: it admits exactly as many requests and pushes 1.97× the limit at the
 peak; from the moment it binds (t = 45 s) the provider's window stays over the limit without a break until the
 admitted thinking streams have drained (t = 648 s). Sized right on the mean it still sits over the limit for 116 of 600
-seconds, because the tail is not the mean. Reserving the cap is exact and wasteful: a 16K reservation held for a minute-long stream strands most of the
-budget (26.5 % served). Reserving an estimate and reconciling serves 70.4 % with no second over the limit here —
+seconds, because the tail is not the mean. Reserving the cap is exact and wasteful: a 16K reservation held for a
+minute-long stream strands most of the budget (26.5 % served). Reserving an estimate and reconciling serves 70.4 % with no second over the limit here —
 910,498 tokens overran their reservations and were debited as they streamed, so admission saw them — but that is
 measured, not guaranteed: sweeping the reservation (notebook 04, exercise 4.3), 1,024 serves 98.9 % of the limit
 but spends 56 seconds over it, 2,048 serves 89.3 % with 2 seconds over, and 4,096 is the smallest with none. Size the

@@ -46,12 +46,14 @@ limits:
   per_request_output_guess: 64
   global_tpm: 0
 
-cache:
+cache:                                   # only what a route declares in metadata.cache_class is cached (PRIMER §3.2)
   exact: true
   semantic: true
   threshold: 0.92
   entity_guard: true
   ttl_s: 3600
+  classes: [faq]                         # shared inside a tenant (a regex may still veto one that looks personal)
+  per_user_classes: [account]            # namespaced by metadata.user as well
 
 guardrails:
   input: "off"

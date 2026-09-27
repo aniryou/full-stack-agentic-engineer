@@ -189,7 +189,7 @@ def simulate(arrivals: list, kind: str, *, limit: float, est: float = 0.0, burst
         used = provider.used(t)
         peak, over_s = max(peak, used), over_s + (used > limit)
         if used > limit:
-            first_over, last_over = first_over or t, t
+            first_over, last_over = (t if first_over is None else first_over), t
     return {"admitted": admitted, "refused": refused, "truncated": truncated, "peak_ratio": peak / limit,
             "seconds_over_limit": over_s, "first_over": first_over, "last_over": last_over, "end": t,
             "utilisation": served / (limit / 60 * horizon) if horizon else 0.0, "overrun_tokens": lim.overrun}

@@ -237,7 +237,7 @@ print("✅ without the breaker all ~40 would have paid a failed attempt; with it
 if tiers["vllm_url"] and os.environ.get("GWLAB_T1_STOP") == "1":
     res = t1.stop_midrun(tiers["vllm_url"], t1.stop_vllm, fallback=FakeSpec(name="acme", **FAST), rate=2, n=40,
                          stop_after_s=8.0)
-    print("MEASURED served by, in send order (v = vLLM, a = the fake fallback):", res["line"])
+    print("served by, in send order (v = vLLM: MEASURED; a = the fake fallback: SIMULATED):", res["line"])
     print(f"requests that reached the stopped vLLM: {res['reached_dead']}; breaker opens: {res['breaker_opens']}")
     print(res["run"].table())
     assert res["line"].startswith("v"), "vLLM served nothing before the stop"
