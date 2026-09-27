@@ -343,10 +343,11 @@ def rewrite_target(target: str, src_repo: str, src_site: str, html: bool) -> str
 
 
 # Inline TeX between single dollars, by pandoc's rule (no space inside either dollar, no digit right after the
-# closing one), and only when it looks like TeX: a backslash, ^, _ or braces, or a single letter ($x$). "$20 / $100"
-# fails the rule; "$5 and $10" too. Display math ($$...$$) is left as it is: MathJax takes $$ as display math.
+# closing one), and only when it looks like TeX: a backslash, ^, _ or braces, a single letter ($x$), or a relation or
+# operator between symbols ($T > 1$, $E/p$, $k = 2$, $B \\cdot k/E$). "$20 / $100" fails the rule; "$5 and $10" too;
+# "$5/$10" and "$100-$200" end on a digit. Display math ($$...$$) is left as it is: MathJax takes $$ as display math.
 INLINE_TEX = re.compile(r"(?<![\\$\w])\$(?![\s$])((?:\\.|[^$\\\n])+?)(?<![\s\\])\$(?![\d$])")
-TEXISH = re.compile(r"[\\^_{}]|^[A-Za-z]'*$")
+TEXISH = re.compile(r"[\\^_{}=+/<>×·≈≤≥≠−±∝√∑∞]|^[A-Za-z]'*$")
 MATH_ENTITIES = {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\\": "&#92;", "_": "&#95;", "*": "&#42;", "`": "&#96;",
                  "[": "&#91;", "]": "&#93;", "|": "&#124;", "~": "&#126;"}
 

@@ -91,6 +91,12 @@ def test_dollar_amounts_stay_text(text):
     assert b.inline_tex_to_parens(text) == text
 
 
+def test_operator_spans_are_tex_but_prices_are_not():
+    out = b.inline_tex_to_parens("With $T > 1$, $E/p$ ranks and $k = 2$; a T4 is $0.35/h, $5/$10 a day, $100-$200 a month.")
+    assert "&#92;(T &gt; 1&#92;)" in out and "&#92;(E/p&#92;)" in out and "&#92;(k = 2&#92;)" in out
+    assert "$0.35/h, $5/$10 a day, $100-$200 a month." in out
+
+
 def test_inline_tex_becomes_parens_markdown_cannot_mangle():
     out = b.inline_tex_to_parens(r"The $\sqrt{d_k}$ keeps it; set to $-\infty$; costs $5 and $x$.")
     assert out == ("The &#92;(&#92;sqrt{d&#95;k}&#92;) keeps it; set to &#92;(-&#92;infty&#92;); "
