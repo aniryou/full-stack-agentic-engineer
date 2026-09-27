@@ -9,15 +9,20 @@
 #
 # ## The one-minute version
 # A thinking model is trained to spend output tokens before it answers: RL with verifiable rewards lengthens
-# thinking, rejection-sampling SFT keeps it, and distillation copies it into small models without RL. For serving,
-# that makes the workload **output-heavy and decode-bound**, with a **heavy-tailed** length distribution (the p99
-# trace is ten times the median). A request's KV grows while it thinks, so its KV-token-steps are P·L + L²/2 —
-# ten times the output is about eighteen times the memory-time. Little's law multiplies concurrency by the output
-# length; **KV memory** sets the GPU count, and a tight **ITL** SLO caps the batch before HBM does. `max_tokens`
-# counts thinking, so a cap truncates answers; a **thinking budget** closes the think block and answers instead.
-# Templates drop earlier turns' thinking, so it is never a cached prefix. And every thinking token is billed as
-# output: the metric is **cost per correct answer**, and effort is something to route. Primer: `../PRIMER.md`
-# §5 and §7.
+# thinking, rejection-sampling SFT keeps it, and distillation copies it into small models without RL.
+#
+# - For serving, that makes the workload **output-heavy and decode-bound**, with a **heavy-tailed** length
+#   distribution (the p99 trace is ten times the median). A request's KV grows while it thinks, so its
+#   KV-token-steps are $P \cdot L + L^2/2$ — ten times the output is about eighteen times the memory-time.
+# - Little's law multiplies concurrency by the output length; **KV memory** sets the GPU count, and a tight
+#   **ITL** SLO caps the batch before HBM does.
+# - `max_tokens` counts thinking, so a cap truncates answers; a **thinking budget** closes the think block and
+#   answers instead.
+# - Templates drop earlier turns' thinking, so it is never a cached prefix.
+# - And every thinking token is billed as output: the metric is **cost per correct answer**, and effort is
+#   something to route.
+#
+# Primer: `../PRIMER.md` §5 and §7.
 
 # %%
 import math
@@ -70,7 +75,7 @@ for name, p in (("teacher (RL)", teacher), ("student (SFT on traces)", student))
 # RL directly on the small base in R1's comparison (AIME 2024: 72.6 vs 47.0 for 32B; primer §5, verify).
 #
 # ## Worked example 2 — a heavy-tailed length distribution
-# Thinking lengths vary by question difficulty — a mixture that looks lognormal. Median 1,500 tokens, σ = 1:
+# Thinking lengths vary by question difficulty — a mixture that looks lognormal. Median 1,500 tokens, $\sigma$ = 1:
 
 # %%
 med, sig = 1500, 1.0
@@ -89,7 +94,8 @@ print(f"Qwen3-0.6B: {kv:.0f} kB of KV per token ({kv * 1000:,.0f} B); an 8K-toke
 # 40 ms TPOT, Mistral Small 3 (24B) in FP8 on H100s. `w.plan` reproduces its numbers, then adds what its
 # `decode_aggregate` leaves out: the batch per GPU is capped by HBM and by the ITL SLO. Like the primer, `w.plan`
 # prices every output token at the SLO's TPOT. `w.plan_steady` instead lets a request live as long as the step the
-# fleet actually runs at: N = rps·(TTFT + out·step(b))/b GPUs hold a steady batch b per GPU (`w.gpus_for_batch`).
+# fleet actually runs at: $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cdot \operatorname{step}(b))/b$ GPUs hold
+# a steady batch $b$ per GPU (`w.gpus_for_batch`).
 
 # %%
 rps = 10_000 * 0.10 * 0.5 / 60
@@ -119,7 +125,11 @@ print(f"decode_aggregate alone would batch all 1,000 on one GPU: "
 # a 20 ms ITL SLO the step time caps each GPU at 174 sessions, below the 195 that fit in HBM: ITL binds first.
 #
 # ## Worked example 4 — KV working set: memory × time
-# A request holds P + t tokens of KV at decode step t, for L steps: Σ = P·L + L(L+1)/2.
+# A request holds ${P + t}$ tokens of KV at decode step $t$, for $L$ steps:
+#
+# $$
+# \Sigma = P \cdot L + \frac{L(L+1)}{2}.
+# $$
 
 # %%
 base_kv = w.kv_token_steps(1500, 300)
@@ -128,10 +138,11 @@ for out in (300, 1000, 1500, 3000, 8000):
 
 # %% [markdown]
 # ## Worked example 5 — `max_tokens` is a cap, a thinking budget is a budget
-# Each question needs L_req ~ lognormal(1,500, σ = 1) thinking tokens; the answer is 300 tokens. With
-# `max_tokens`, a request that is still thinking when the cap hits returns no answer (`finish_reason="length"`,
-# empty content). With budget forcing — vLLM's `thinking_token_budget`, or Qwen's two-call recipe — the think
-# block is closed at the budget and the model answers with what it has (right 30% of the time here, e0 = 0.7).
+# Each question needs $L_{\text{req}} \sim \operatorname{lognormal}(1{,}500, \sigma = 1)$ thinking tokens; the answer
+# is 300 tokens. With `max_tokens`, a request that is still thinking when the cap hits returns no answer
+# (`finish_reason="length"`, empty content). With budget forcing — vLLM's `thinking_token_budget`, or Qwen's
+# two-call recipe — the think block is closed at the budget and the model answers with what it has (right 30% of
+# the time here, $e_0$ = 0.7).
 
 # %%
 print(f"{'limit':>7} {'max_tokens: accuracy':>21} {'truncated':>10} {'budget: accuracy':>17} {'mean output':>12}")
@@ -146,10 +157,10 @@ for cap in (2048, 4096, 8192, 16384):
 # for this on Qwen3: `reasoning_effort` other than "none" only switches thinking on (primer §5, verify).
 #
 # ## Worked example 6 — prefix caching when the template drops old thinking
-# Qwen3's and gpt-oss's templates render earlier assistant turns *without* their thinking. Turn N's KV holds
-# prompt + thinking + answer; turn N+1's prompt contains only the answer, so the cache hit ends where turn N's
-# prompt ended (rounded down to a 16-token block) and the answer is prefilled again. Inside one tool-calling loop
-# the thinking is kept and the whole previous sequence is a hit.
+# Qwen3's and gpt-oss's templates render earlier assistant turns *without* their thinking. Turn $N$'s KV holds
+# prompt + thinking + answer; turn ${N+1}$'s prompt contains only the answer, so the cache hit ends where turn
+# $N$'s prompt ended (rounded down to a 16-token block) and the answer is prefilled again. Inside one
+# tool-calling loop the thinking is kept and the whole previous sequence is a hit.
 
 # %%
 turns = [(100, 800, 200)] * 4                          # (user, thinking, answer) tokens per turn; 1,000-token system prompt
@@ -185,8 +196,8 @@ for policy in ({"easy": "off", "hard": "off"}, {"easy": "on", "hard": "on"}, {"e
 # cheap first pass, that knows which requests are hard.
 #
 # ## Exercise 5.1 — memory × time
-# Write `kv_steps(P, L)`, the KV-token-steps of a request with a P-token prompt and L output tokens, and compute
-# `ratio`: a 3,000-token output against a 300-token one on a 1,500-token prompt.
+# Write `kv_steps(P, L)`, the KV-token-steps of a request with a $P$-token prompt and $L$ output tokens, and
+# compute `ratio`: a 3,000-token output against a 300-token one on a 1,500-token prompt.
 
 # %% exercise
 def kv_steps(P, L):
@@ -233,8 +244,9 @@ print(f"✅ {live:,.0f} live sessions / {per_gpu:.1f} per GPU = {gpus:.2f} GPUs 
 
 # %% [markdown]
 # ## Exercise 5.3 — choose `max_model_len`
-# Prompts are 1,500 tokens, answers 300, thinking lognormal(1,500, σ = 1). Pick the smallest `max_model_len` that
-# is a multiple of 1,024 and truncates at most 1% of requests. (vLLM's `max_model_len` bounds prompt + output.)
+# Prompts are 1,500 tokens, answers 300, thinking $\operatorname{lognormal}(1{,}500, \sigma = 1)$. Pick the
+# smallest `max_model_len` that is a multiple of 1,024 and truncates at most 1% of requests. (vLLM's
+# `max_model_len` bounds prompt + output.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -312,13 +324,15 @@ print(f"✅ keeping only correct samples: thinking {before['length']:.2f} → {a
 # **The two-minute version.** "Thinking models spend output tokens before answering — RL with verifiable rewards
 # taught them to, and distillation copies the behaviour into small models. For serving, that turns a
 # prefill-heavy chat workload into a decode-heavy one with a heavy tail: our p99 thinking length is ten times the
-# median. Because KV grows while a request thinks, memory-time per request goes as P·L + L²/2, so 10× the
-# output is ~18× the GPUs for memory at the same arrival rate — the capacity primer's formulas with the batch
-# capped by HBM and by the ITL SLO, which binds first when it is tight. We size at the step the fleet actually
-# runs at, not at the SLO's TPOT, or the looser SLO looks dearer. We size max_model_len for the tail and
-# enforce cost with a thinking budget rather than max_tokens, which counts thinking and truncates answers. The
-# templates drop old thinking, so multi-turn prefix-cache hits stop at each turn's prompt. Every thinking token
-# is billed as output, so we track cost per correct answer and route effort per request class at the gateway."
+# median. Because KV grows while a request thinks, memory-time per request goes as $P \cdot L + L^2/2$, so 10×
+# the output is ~18× the GPUs for memory at the same arrival rate — the capacity primer's formulas with the
+# batch capped by HBM and by the ITL SLO, which binds first when it is tight. We size at the step the fleet
+# actually runs at, not at the SLO's TPOT, or the looser SLO looks dearer.
+#
+# "We size max_model_len for the tail and enforce cost with a thinking budget rather than max_tokens, which
+# counts thinking and truncates answers. The templates drop old thinking, so multi-turn prefix-cache hits stop at
+# each turn's prompt. Every thinking token is billed as output, so we track cost per correct answer and route
+# effort per request class at the gateway."
 #
 # **Drill questions**
 # 1. *We enabled thinking and p99 ITL doubled at the same QPS. Why?* — Concurrency rose with output length

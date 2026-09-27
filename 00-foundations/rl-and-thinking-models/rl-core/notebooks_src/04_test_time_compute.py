@@ -7,14 +7,18 @@
 # `03_test_time_compute_for_real` (T1; at T0 it replays bundled outputs).
 #
 # ## The one-minute version
-# There are two ways to spend more inference on one question. **Sequential**: think longer — worth it when the
-# model is on the right track and needs more steps. **Parallel**: sample n answers and pick one — worth it when an
-# attempt can go down a dead end, *if* something can pick: a **verifier** (tests, a checker) finds any correct
-# sample; **majority vote** (self-consistency) needs no checker but only wins when the right answer is the most
-# common one; a **reward model** picks through noise. Which split of a token budget is best depends on why
-# questions are hard, the budget, and whether you have a verifier — and past a point every extra token buys
-# less. Measure with the **unbiased pass@k** estimator 1 − C(n−c, k)/C(n, k) (never 1 − (1 − c/n)^k), and with
-# **pass^k** (all k tries succeed) when what you need is reliability, not a lucky hit. Primer: `../PRIMER.md` §6.
+# There are two ways to spend more inference on one question.
+#
+# - **Sequential**: think longer — worth it when the model is on the right track and needs more steps.
+# - **Parallel**: sample $n$ answers and pick one — worth it when an attempt can go down a dead end, *if*
+#   something can pick: a **verifier** (tests, a checker) finds any correct sample; **majority vote**
+#   (self-consistency) needs no checker but only wins when the right answer is the most common one; a
+#   **reward model** picks through noise.
+#
+# Which split of a token budget is best depends on why questions are hard, the budget, and whether you have a
+# verifier — and past a point every extra token buys less. Measure with the **unbiased pass@k** estimator
+# $1 - \binom{n-c}{k}/\binom{n}{k}$ (never $1 - (1 - c/n)^k$), and with **pass^k** (all $k$ tries succeed) when
+# what you need is reliability, not a lucky hit. Primer: `../PRIMER.md` §6.
 
 # %%
 import math
@@ -29,8 +33,9 @@ print(f"questions: mean chance an attempt is on a workable approach {qs['a'].mea
 
 # %% [markdown]
 # ## Worked example 1 — estimating pass@k without fooling yourself
-# Draw n = 10 samples per question and count c correct. The tempting estimate of pass@5 is 1 − (1 − c/n)^5. Its
-# expectation over the binomial draw is *below* the truth; the unbiased estimator's expectation *is* the truth.
+# Draw $n$ = 10 samples per question and count $c$ correct. The tempting estimate of pass@5 is $1 - (1 - c/n)^5$.
+# Its expectation over the binomial draw is *below* the truth; the unbiased estimator's expectation *is* the
+# truth.
 
 # %%
 print(f"{'p':>4} {'truth 1-(1-p)^5':>16} {'E[unbiased]':>12} {'E[plug-in]':>11}")
@@ -41,13 +46,14 @@ print("n=10, c=3:", {k: round(ttc.pass_at_k(10, 3, k), 6) for k in (1, 5, 8)}, "
 print("n=16, c=4, k=4: pass@4", round(ttc.pass_at_k(16, 4, 4), 6), " pass^4", round(ttc.pass_hat_k(16, 4, 4), 6))
 
 # %% [markdown]
-# The plug-in estimate is concave in c/n, so by Jensen it is biased low — worst for small p, where pass@k is most
-# interesting. Estimate pass@k from n ≥ k samples with the product form HumanEval's code uses. And note the pair
-# in the last line: a model that solves a task 1 time in 4 has pass@4 = 0.73 but pass^4 = 0.0005. An agent that
-# must succeed every time a user asks is judged by pass^k (τ-bench), and test-time sampling does nothing for it.
+# The plug-in estimate is concave in ${c/n}$, so by Jensen it is biased low — worst for small $p$, where pass@k is
+# most interesting. Estimate pass@k from $n \ge k$ samples with the product form HumanEval's code uses. And note
+# the pair in the last line: a model that solves a task 1 time in 4 has pass@4 = 0.73 but pass^4 = 0.0005. An
+# agent that must succeed every time a user asks is judged by pass^k (τ-bench), and test-time sampling does
+# nothing for it.
 #
 # ## Worked example 2 — majority vote needs the right answer to be the most common
-# One question; a sample is right with p = 0.4. Where the wrong 60% goes decides everything.
+# One question; a sample is right with $p$ = 0.4. Where the wrong 60% goes decides everything.
 
 # %%
 cases = {"one dominant misconception [0.5, 0.1]": [0.5, 0.1], "a narrow misconception [0.42, 0.18]": [0.42, 0.18],
@@ -59,14 +65,15 @@ print("(columns: n = 1, 5, 15, 31, 101 votes)")
 # %% [markdown]
 # With scattered mistakes, voting turns a 40% sampler into a ~90% answerer. When one wrong answer out-polls the
 # right one, voting converges on the *wrong* answer: at 50% against 40% accuracy falls from 0.400 to 0.278 by 31
-# votes and 0.144 by 101 — worse than one sample at every n above 1. A *narrow* misconception (42% against 40%)
-# shows why this is easy to miss: at small n the right answer often beats the split-up remainder, so the vote
-# still helps (0.449 at 15 votes); it falls below one sample only past about 130 votes, and to 0 in the limit
-# (exercise 4.4). Self-consistency works on math because wrong derivations rarely agree on the same wrong number.
+# votes and 0.144 by 101 — worse than one sample at every $n$ above 1. A *narrow* misconception (42% against
+# 40%) shows why this is easy to miss: at small $n$ the right answer often beats the split-up remainder, so the
+# vote still helps (0.449 at 15 votes); it falls below one sample only past about 130 votes, and to 0 in the
+# limit (exercise 4.4). Self-consistency works on math because wrong derivations rarely agree on the same wrong
+# number.
 #
 # ## Worked example 3 — best-of-n: a verifier vs a reward model
-# Pick the highest-scoring of n samples. A perfect verifier gives 1 − (1 − p)^n. A reward model sees correctness
-# through noise.
+# Pick the highest-scoring of $n$ samples. A perfect verifier gives $1 - (1 - p)^n$. A reward model sees
+# correctness through noise.
 
 # %%
 rng = np.random.default_rng(0)
@@ -99,7 +106,7 @@ for L in (0, 500, 1000, 2000, 4000, 8000, 16000):
 # when it keeps going after cracking the question (exercise 4.6).
 #
 # ## Worked example 5 — splitting a budget: n samples × L tokens
-# Per question, n·(L + 50 answer tokens) ≤ budget.
+# Per question, $n \cdot (L + 50\ \text{answer tokens}) \le \text{budget}$.
 
 # %%
 only_slow = ttc.question_set(viable=None)            # every attempt is workable; questions differ only in length
@@ -111,7 +118,7 @@ for label, pop in (("questions only slow (a = 1)", only_slow), ("slow or dead-en
 
 # %% [markdown]
 # Three lessons. When the only difficulty is length, sampling buys nothing that thinking does not — with a
-# memoryless crack rate, n short attempts equal one long one minus the answer overheads — so one long sample
+# memoryless crack rate, $n$ short attempts equal one long one minus the answer overheads — so one long sample
 # wins. When attempts can dead-end, a verifier makes parallel sampling the better buy as the budget grows. And
 # with only a vote, parallel sampling pays only once each sample is right often enough to out-poll the wrong
 # answers — at 16K tokens here, not before.
@@ -137,8 +144,13 @@ for method in ("verifier", "vote"):
 # own evals (07.2 evals notebook for the intervals such comparisons need).
 #
 # ## Exercise 4.1 — the unbiased pass@k
-# Implement 1 − C(n−c, k)/C(n, k) in the stable product form 1 − Π_{i=n−c+1}^{n} (1 − k/i), returning 1.0 when
-# n − c < k.
+# Implement $1 - \binom{n-c}{k}/\binom{n}{k}$ in the stable product form
+#
+# $$
+# 1 - \prod_{i=n-c+1}^{n} \left(1 - \frac{k}{i}\right),
+# $$
+#
+# returning 1.0 when ${n - c < k}$.
 
 # %% exercise
 def my_pass_at_k(n, c, k):
@@ -157,7 +169,7 @@ print("✅ pass@5 from 3/10 correct is", round(my_pass_at_k(10, 3, 5), 6), "— 
 # ## Exercise 4.2 — pass^k for reliability
 # An agent flow succeeds on 12 of 16 runs of a task in your eval. A user makes five separate requests of this
 # kind. Compute `reliability`, the chance all five succeed (pass^5), and `any_success`, the chance that at least
-# one of five samples succeeds (pass@5), both from c = 12, n = 16.
+# one of five samples succeeds (pass@5), both from $c$ = 12, $n$ = 16.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -171,8 +183,8 @@ print(f"✅ 75% per try: pass@5 = {any_success:.0%} but pass^5 = {reliability:.1
 
 # %% [markdown]
 # ## Exercise 4.3 — majority of n between two answers
-# A sample is right with p, otherwise it gives the *same* wrong answer. For odd n, P(majority right) is the
-# binomial tail P(X > n/2). Implement it and check against the exact multi-answer function.
+# A sample is right with $p$, otherwise it gives the *same* wrong answer. For odd $n$, $P(\text{majority right})$ is
+# the binomial tail ${P(X > n/2)}$. Implement it and check against the exact multi-answer function.
 
 # %% exercise
 def majority_two(p, n):
@@ -189,9 +201,9 @@ print(f"✅ p = 0.6 → {majority_two(0.6, 21):.3f} with 21 votes; p = 0.4 → {
 
 # %% [markdown]
 # ## Exercise 4.4 — predict the limit
-# As n → ∞, majority vote is right with probability → 1 if the right answer's share p beats every wrong
-# answer's share, and → 0 if some wrong answer beats it. Write `wins_in_the_limit(p, wrong)` and check it
-# against 41 votes on three cases.
+# As $n \to \infty$, majority vote is right with probability $\to 1$ if the right answer's share $p$ beats every
+# wrong answer's share, and $\to 0$ if some wrong answer beats it. Write `wins_in_the_limit(p, wrong)` and check
+# it against 41 votes on three cases.
 
 # %% exercise
 def wins_in_the_limit(p, wrong):
@@ -209,9 +221,9 @@ print("✅ in the limit a 30% answer wins against scattered 20% mistakes and a 4
 
 # %% [markdown]
 # ## Exercise 4.5 — spend a budget
-# For the 400 questions `qs`, with a perfect verifier and 50 answer tokens per sample, find `best` = (n, L,
-# accuracy) for a 4,000-token budget over n ∈ {1, 2, 4, 8, 16}. Then find `crossover`: the smallest budget in
-# `budgets` at which the best n under majority vote is greater than 1.
+# For the 400 questions `qs`, with a perfect verifier and 50 answer tokens per sample, find `best` =
+# $(n, L, \text{accuracy})$ for a 4,000-token budget over $n \in \{1, 2, 4, 8, 16\}$. Then find `crossover`: the
+# smallest budget in `budgets` at which the best $n$ under majority vote is greater than 1.
 
 # %% exercise
 budgets = [2000, 4000, 8000, 12000, 16000, 32000]
@@ -229,11 +241,12 @@ print(f"✅ with a verifier: {best[0]} samples of {best[1]} tokens ({best[2]:.3f
 
 # %% [markdown]
 # ## Exercise 4.6 — thinking past the answer
-# Suppose a sample on a workable approach cracks the question after Geometric(q) tokens. A model that always
-# thinks for exactly L tokens spends L; one that stops the moment it cracks the question spends E[min(L_crack, L)]
-# = (1 − (1 − q)^L)/q (and the full L when it never cracks it). For the questions in `qs`, compute `waste`: the
-# fraction of an L = 4,000 thinking budget spent *after* the question was already cracked, averaged over questions
-# and weighted by a (the chance the attempt was on a workable approach).
+# Suppose a sample on a workable approach cracks the question after $\operatorname{Geometric}(q)$ tokens. A model
+# that always thinks for exactly $L$ tokens spends $L$; one that stops the moment it cracks the question spends
+# $\mathbb{E}[\min(L_{\text{crack}}, L)] = (1 - (1 - q)^L)/q$ (and the full $L$ when it never cracks it). For the
+# questions in `qs`, compute `waste`: the fraction of an $L$ = 4,000 thinking budget spent *after* the question
+# was already cracked, averaged over questions and weighted by $a$ (the chance the attempt was on a workable
+# approach).
 
 # %% exercise
 L_fixed = 4000
@@ -257,7 +270,7 @@ print(f"✅ {waste:.0%} of a fixed 4K-token think happens after the answer is fo
 # misconception. Returns diminish with every doubling, and a fixed budget wastes tokens on questions solved
 # early, so we set effort per request class rather than globally. We report pass@1 and, for agent flows, pass^k
 # — reliability across repeated requests, which sampling does not improve — and estimate pass@k with the unbiased
-# estimator from n ≥ k samples, with confidence intervals."
+# estimator from $n \ge k$ samples, with confidence intervals."
 #
 # **Drill questions**
 # 1. *pass@1 is 40%, pass@16 is 95%. Is the model good?* — Only if you have a verifier that picks the right
