@@ -153,7 +153,11 @@ Out loud: 100,000 ÷ 86,400 ≈ 1.16 conversations a second; × 6 turns ≈ 7 a 
 
 ### 3.3 Concurrency, from Little's law
 
-$\text{In-flight turns} = \text{turns/s} \times \text{turn duration}$: 6.9 × 6 ≈ 42 at average, 125 at peak, 417 during an incident on the hosted path. Concurrent *sessions* are eleven times larger because users think between turns: a conversation lasts 6 × (6 + 60) ≈ 400 s, so 460 / 1,400 / 4,600 sessions.
+$$
+\text{In-flight turns} = \text{turns/s} \times \text{turn duration:}
+$$
+
+6.9 × 6 ≈ 42 at average, 125 at peak, 417 during an incident on the hosted path. Concurrent *sessions* are eleven times larger because users think between turns: a conversation lasts 6 × (6 + 60) ≈ 400 s, so 460 / 1,400 / 4,600 sessions.
 
 The token limit also caps concurrency: 20 M TPM ÷ 60 ≈ 333 k tokens/s; a turn consumes 2.2 × 5,200 ≈ 11.4 k tokens over 6 s ≈ 1.9 k tokens/s; so the limit sustains about 175 turns in flight, or 29 turns per second — the starting value for the admission controller's in-flight cap (`AdmissionConfig.max_inflight` in `scalelab/admission.py`), above peak demand and below the incident. On the self-hosted path the turn is longer (10 s at the batch chosen in 3.5), so in-flight turns are 69 / 208 / 692, and the cap comes from the fleet: 293 at peak.
 
