@@ -1,7 +1,7 @@
 ---
 template: home.html
 title: Full-stack agentic engineer
-description: A learning repository for the LLM serving stack, from GPUs to agents, in eight layers organised by topic. Nine topics come as a primer, a from-scratch core and a fuller lab; the others are a primer with exercises, a primer with practice notebooks or a lab of their own.
+description: A learning repository for the LLM serving stack, from GPUs to agents, in eight layers organised by topic. Ten topics come as a primer, a from-scratch core and a fuller lab; the others are a primer with exercises, a primer with practice notebooks or a lab of their own.
 hide:
   - navigation
   - toc

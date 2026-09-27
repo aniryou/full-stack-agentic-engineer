@@ -28,7 +28,7 @@ this site's text and the code outside the labs — is under the MIT licence in t
 
 | Licence | Labs |
 |---|---|
-| MIT | every other lab that ships a `LICENSE`, including all the cores and labs of layers 01–05 and of the four newer topics (mixture-of-experts, RL and thinking models, quantization, sandboxed execution) |
+| MIT | every other lab that ships a `LICENSE`, including all the cores and labs of layers 01–05 and of the five newer topics (mixture-of-experts, RL and thinking models, quantization, sandboxed execution, agent memory) |
 | Apache 2.0 | `agentic-identity-gcp-lab` (06); `lra-gcp` (07) |
 | No licence file of its own | covered by the repository's MIT licence |
 

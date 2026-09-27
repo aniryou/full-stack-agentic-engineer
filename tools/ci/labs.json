@@ -269,6 +269,22 @@
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q",
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "memory-core",
+   "dir": "07-application-agent-framework/agent-memory/memory-core",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "memory-lab",
+   "dir": "07-application-agent-framework/agent-memory/memory-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   }
  ]
 }
