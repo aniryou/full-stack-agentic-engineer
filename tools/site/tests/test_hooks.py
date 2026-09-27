@@ -112,3 +112,40 @@ def test_cache_busting_covers_css_and_js(tmp_path):
     assert cfg["extra_css"][0].startswith("stylesheets/extra.css?v=")
     assert cfg["extra_javascript"][0].startswith("javascripts/tables.js?v=")
     assert cfg["extra_javascript"][1] == "https://cdn.example/x.js"
+
+
+# ---------------------------------------------------------------- GitHub alerts -> admonitions
+
+def test_github_alerts_become_admonitions():
+    md = """Intro.
+
+> [!NOTE]
+> The first line, with `code` and \\(x_1\\).
+>
+> A second paragraph.
+Next paragraph, no blank line.
+
+> **Pitfall.** An ordinary blockquote stays a blockquote.
+
+```md
+> [!TIP]
+> inside a fence: untouched
+```
+
+> [!WARNING]
+> last block"""
+    out = hooks.github_alerts_to_admonitions(md)
+    assert ('!!! note "Note"\n    The first line, with `code` and \\(x_1\\).\n\n    A second paragraph.\n\n'
+            "Next paragraph, no blank line.") in out
+    assert "> **Pitfall.** An ordinary blockquote stays a blockquote." in out
+    assert "```md\n> [!TIP]\n> inside a fence: untouched\n```" in out
+    assert out.endswith('!!! warning "Warning"\n    last block')
+    assert "[!NOTE]" not in out and "[!WARNING]" not in out
+
+
+def test_on_page_markdown_only_touches_markdown_pages():
+    md = "> [!TIP]\n> t"
+    page_md = SimpleNamespace(file=SimpleNamespace(src_uri="layers/00-x/PRIMER.md"))
+    page_nb = SimpleNamespace(file=SimpleNamespace(src_uri="layers/00-x/notebooks/01.ipynb"))
+    assert hooks.on_page_markdown(md, page_md, {}, None).startswith('!!! tip "Tip"')
+    assert hooks.on_page_markdown(md, page_nb, {}, None) == md

@@ -71,6 +71,9 @@ markdown_extensions:
   - attr_list
   - md_in_html
   - tables
+  # Callouts: written in the repo as GitHub alerts (`> [!NOTE]`), which tools/site/hooks.py turns into these.
+  - admonition
+  - pymdownx.details
   - toc:
       permalink: true
   - pymdownx.highlight:
@@ -80,12 +83,14 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  # Math only as \( … \) and \[ … \] / \begin{…}: the repo is full of dollar prices, which must stay text.
-  # No Markdown page uses math yet; this keeps the rule the same as in notebooks (see site/javascripts/mathjax.js).
+  # Inline math only as \( … \): the repo is full of dollar prices, which must stay text. Authors write TeX as
+  # $…$ (GitHub renders it); tools/site/build_site_content.py turns the TeX-looking ones into \( … \) for the site,
+  # the same rule as in notebooks (see site/javascripts/mathjax.js). Display math: $$ on its own lines, \[ … \]
+  # or \begin{…}.
   - pymdownx.arithmatex:
       generic: true
       inline_syntax: [round]
-      block_syntax: [square, begin]
+      block_syntax: [dollar, square, begin]
 
 plugins:
   - search

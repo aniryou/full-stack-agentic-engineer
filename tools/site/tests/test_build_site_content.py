@@ -104,6 +104,18 @@ def test_math_conversion_skips_code(tmp_path, monkeypatch):
     assert "but &#92;(a&#95;b&#92;) is math." in out
 
 
+def test_markdown_pages_get_plain_parens_for_arithmatex():
+    """Pages go through pymdownx.arithmatex, which takes \\( \\) before any other inline rule: no entities needed,
+    and $$ display blocks stay as written (arithmatex's dollar block syntax). Prices stay text."""
+    md = ("The loss is $\\alpha T^2\\,\\mathrm{KL}(p_T \\| q_T)$ and $x_1$; a T4 is $0.35/h and an L4 $0.7/h, "
+          "so $20 / $100 buys little.\n\n$$\nr_t = \\log \\pi_T - \\log \\pi_S\n$$\n\nSee `$HOME` and $5.")
+    out = b.rewrite_markdown(md, "00-x/PRIMER.md", "layers/00-x/PRIMER.md", math="page")
+    assert "\\(\\alpha T^2\\,\\mathrm{KL}(p_T \\| q_T)\\)" in out and "\\(x_1\\)" in out
+    assert "&#92;" not in out
+    assert "$0.35/h and an L4 $0.7/h" in out and "$20 / $100" in out and "`$HOME` and $5." in out
+    assert "$$\nr_t = \\log \\pi_T - \\log \\pi_S\n$$" in out
+
+
 # ---------------------------------------------------------------- notebook anchors
 
 @pytest.fixture

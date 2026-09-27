@@ -20,6 +20,10 @@
 5. Search leaves out the answers: solution notebooks (build_site_content.is_solution) are excluded from the index,
    and on every notebook page the duplicate copy of each code cell (the text behind the copy button), cell outputs,
    the `In [ ]:` prompts and the "Copied!" notice are marked `data-search-exclude`.
+6. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
+   WARNING, CAUTION) is what GitHub renders as a callout; Python-Markdown would show the marker as text. The hook
+   rewrites the block into Material's `!!! note "Note"` admonition before the page is rendered, so one source reads
+   as a callout on GitHub and on the site. Other blockquotes are left alone (site/stylesheets/extra.css styles them).
 """
 from __future__ import annotations
 
@@ -49,6 +53,12 @@ ID = re.compile(r"\bid=\"([^\"]+)\"")
 HREF_FRAG = re.compile(r"\bhref=\"#([^\"]+)\"")
 SEARCH_NOISE = re.compile(
     r"<(div|span) class=\"(clipboard-copy-txt|jp-InputPrompt[^\"]*|jp-OutputPrompt[^\"]*|jp-OutputArea [^\"]*|notice)\"")
+
+# GitHub alert markers -> Material admonition type and title (docs.github.com "Alerts"; Material's admonition types).
+ALERTS = {"NOTE": ("note", "Note"), "TIP": ("tip", "Tip"), "IMPORTANT": ("info", "Important"),
+          "WARNING": ("warning", "Warning"), "CAUTION": ("danger", "Caution")}
+ALERT_START = re.compile(r"^[ ]{0,3}>[ ]?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*$", re.I)
+QUOTE_LINE = re.compile(r"^[ ]{0,3}>[ ]?(.*)$")
 
 _css: dict[str, str] = {}          # hash -> stylesheet text
 _page_css: dict[str, str] = {}     # page src_uri -> hash of its notebook stylesheet
@@ -104,6 +114,45 @@ def _fix_notebook_toc(html: str, page) -> None:
             walk(item.children)
 
     walk(page.toc)
+
+
+def github_alerts_to_admonitions(markdown: str) -> str:
+    """Rewrite `> [!NOTE]` blockquotes (GitHub alerts) as `!!! note "Note"` admonitions; everything else unchanged.
+    The alert is the whole run of `>` lines that follows the marker (lazy continuation lines are not GitHub's
+    behaviour for alerts either). Fenced code is never touched."""
+    out: list[str] = []
+    lines = markdown.split("\n")
+    i, fence = 0, None
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            tok = stripped[:3]
+            fence = None if fence == tok else (tok if fence is None else fence)
+        m = ALERT_START.match(line) if fence is None else None
+        if not m:
+            out.append(line)
+            i += 1
+            continue
+        kind, title = ALERTS[m.group(1).upper()]
+        body: list[str] = []
+        i += 1
+        while i < len(lines) and QUOTE_LINE.match(lines[i]):
+            body.append(QUOTE_LINE.match(lines[i]).group(1))
+            i += 1
+        while body and not body[-1].strip():
+            body.pop()
+        out.append(f'!!! {kind} "{title}"')
+        out.extend(("    " + b) if b.strip() else "" for b in body)
+        if i < len(lines) and lines[i].strip():
+            out.append("")                     # an admonition ends at a blank line
+    return "\n".join(out)
+
+
+def on_page_markdown(markdown, page, config, files, **kwargs):
+    if page.file.src_uri.endswith(".md") and "[!" in markdown:
+        return github_alerts_to_admonitions(markdown)
+    return markdown
 
 
 def on_page_content(html, page, config, files, **kwargs):
