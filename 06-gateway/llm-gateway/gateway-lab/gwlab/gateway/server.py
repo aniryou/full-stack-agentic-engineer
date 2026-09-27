@@ -51,8 +51,10 @@ class Outcome:
 
     def __init__(self, kind: str, *, error: UpstreamError | None = None, response=None, usage: Usage | None = None,
                  acc=None, ttft_s: float | None = None, sent: bool = False, finish: str | None = None,
-                 blocked: bool = False, disconnected: bool = False, reason: str = ""):
+                 blocked: bool = False, disconnected: bool = False, reason: str = "", tail: list | None = None):
         self.kind, self.error, self.response, self.usage, self.acc = kind, error, response, usage, acc
+        self.tail = tail or []           # stream bytes written after the ledger row, so a client that has seen
+                                         # [DONE] can already read its own row
         self.ttft_s, self.sent, self.finish, self.blocked, self.disconnected = ttft_s, sent, finish, blocked, disconnected
         self.reason = reason or (error.code if error else "")
 
@@ -125,8 +127,8 @@ class Gateway:
         app = web.Application(client_max_size=32 * 1024 * 1024)
         app.router.add_post("/v1/chat/completions", self.handle_chat)
         app.router.add_get("/v1/models", self.handle_models)
-        app.router.add_get("/metrics", lambda r: web.Response(text=self.metrics_text(), content_type="text/plain"))
-        app.router.add_get("/health", lambda r: web.json_response({"status": "ok"}))
+        app.router.add_get("/metrics", self.handle_metrics)
+        app.router.add_get("/health", self.handle_health)
         app.router.add_post("/admin/keys", self.admin_issue)
         app.router.add_get("/admin/keys", self.admin_list)
         app.router.add_delete("/admin/keys/{key_id}", self.admin_revoke)
@@ -138,6 +140,12 @@ class Gateway:
         app.router.add_post("/mcp/{server}", self.handle_mcp)
         return app
 
+    async def handle_metrics(self, request):
+        return web.Response(text=self.metrics_text(), content_type="text/plain")
+
+    async def handle_health(self, request):
+        return web.json_response({"status": "ok"})
+
     # ------------------------------------------------------------------------------------------ helpers
     @staticmethod
     def error(status: int, code: str, message: str, etype: str | None = None, headers: dict | None = None) -> web.Response:
@@ -148,6 +156,9 @@ class Gateway:
 
     def _admin(self, request) -> bool:
         return bearer(request.headers) == self.cfg.admin_token
+
+    def _rl_headers(self, key) -> dict:
+        return self.limiter.headers(key.tenant, key.key_id if (key.rpm or key.tpm) else None)
 
     def tenant_salt(self, tenant: str) -> str:
         return cache_salt(tenant, self.cfg.salt_secret)
@@ -283,7 +294,7 @@ class Gateway:
 
         # 4. admit
         prompt_est, requested = estimate_prompt(body), requested_output(body)
-        adm = self.limiter.admit(key.tenant, prompt_est, requested, rpm=key.rpm, tpm=key.tpm)
+        adm = self.limiter.admit(key.tenant, prompt_est, requested, key_id=key.key_id, rpm=key.rpm, tpm=key.tpm)
         if not adm.ok:
             self.m_rl.labels(tenant=key.tenant, limit=adm.limit).inc()
             return self._finish_error(span, dec, self.error(429, "rate_limit_exceeded", f"tenant {key.tenant}: {adm.limit} limit",
@@ -339,17 +350,30 @@ class Gateway:
         # 8. account
         if served is None:
             self.limiter.reconcile(res, 0, 0)            # nothing ran: refund the whole reservation
-            if last_err is None:
-                err = UpstreamError(503, "api_error", "no_target_available", "every target is unavailable (breakers open or filtered)")
-            else:
-                err = last_err
-            status = err.status if outcome is not None and outcome.kind == FAIL else (429 if err.status == 429 else 503 if err.status >= 500 or err.status in (0, 408, 529) else err.status)
-            headers = {"Retry-After": str(max(1, int(err.retry_after or 1)))} if status in (429, 503) else None
-            code = err.code if outcome is not None and outcome.kind == FAIL else ("all_targets_failed" if dec["attempts"] else err.code)
-            resp = self.error(status, code, f"{err.message} (attempts: {len(dec['attempts'])})", err.type, headers)
-            self._ledger(dec, key, alias, None, Usage(0, 0, source="none"), status, stream, t0, None, err.code, None)
+            resp = self._no_answer(dec, outcome, last_err)
+            err_code = json.loads(resp.body)["error"]["code"]
+            self._ledger(dec, key, alias, None, Usage(0, 0, source="none"), resp.status, stream, t0, None, err_code, None)
             return self._finish_error(span, dec, resp)
-        return self._account(request, span, dec, key, alias, served, outcome, res, body, stream, t0)
+        return await self._account(request, span, dec, key, alias, served, outcome, res, body, stream, t0)
+
+    def _no_answer(self, dec, outcome, last_err) -> web.Response:
+        """The response when no target answered: a non-fallthrough error keeps its status (a provider 401/403 is
+        the gateway's credential problem, so the client sees 502); a chain of 429s is a 429; otherwise 503."""
+        if outcome is not None and outcome.kind == FAIL and last_err is not None:
+            if last_err.status in (401, 403):
+                return self.error(502, "upstream_auth_error", f"the provider rejected the gateway's credential: {last_err.message}")
+            return self.error(last_err.status, last_err.code, last_err.message, last_err.type)
+        tried = [a for a in dec["attempts"] if a["outcome"] != "breaker_open"]
+        if not tried:
+            wait = min((self.router.breakers[a["target"]].recovery_s for a in dec["attempts"]), default=1.0)
+            return self.error(503, "no_target_available", "every target is unavailable (breakers open or filtered out)",
+                              headers={"Retry-After": str(max(1, int(wait)))})
+        if all(a.get("status") == 429 for a in tried):
+            return self.error(429, "rate_limit_exceeded", f"every target is rate-limited ({len(tried)} tried)",
+                              headers={"Retry-After": str(max(1, int((last_err.retry_after if last_err else 1) or 1)))})
+        msg = last_err.message if last_err else "no answer"
+        return self.error(503, "all_targets_failed", f"{len(tried)} target(s) failed; last: {msg}", "api_error",
+                          headers={"Retry-After": "1"})
 
     async def _screen(self, hook: str, text: str, action: str):
         await asyncio.sleep(self.screener.check_s)            # the classifier call a regex stands in for (simulated)
@@ -419,72 +443,74 @@ class Gateway:
 
     async def _relay(self, request, resp, model, prov, want_usage, res, key, input_check, dec, n, t0, t_send):
         """Relay a stream: nothing reaches the client until the first real chunk, so any failure before it can
-        still fall through to the next target; after it, failures are surfaced in the stream."""
+        still fall through to the next target; after it, failures are surfaced in the stream, never spliced."""
         g = self.cfg.guardrails
         parser, acc = sse.SSEParser(), sse.StreamAccumulator()
         tr = AnthropicStreamTranslator(model.upstream) if prov.dialect == "anthropic" else None
         upstream_usage: dict | None = None
         out: web.StreamResponse | None = None
-        held: list = []                      # chunks not yet released (role chunk; guardrail window)
-        state = {"ttft": None, "window_start": 0, "sent": False, "blocked": False, "cut": False}
+        held: list = []                      # chunks not yet released (the role chunk; a guardrail window)
+        st = {"ttft": None, "window_start": 0, "sent": False, "blocked": False, "cut": False, "check": None}
         done = False
         first_deadline = time.perf_counter() + prov.first_byte_timeout_s
 
-        async def open_client():
-            nonlocal out
-            out = web.StreamResponse(status=200, headers={
-                "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-request-id": dec["request_id"],
-                "x-gwlab-target": model.id, "x-gwlab-provider": prov.name, "x-gwlab-attempts": str(n),
-                "x-gwlab-cache": "miss", **self.limiter.headers(key.tenant)})
-            await out.prepare(request)
-
         async def write(chunks: list):
+            nonlocal out
             if not chunks:
                 return
-            if input_check is not None and not state["sent"] and await input_check:
+            if input_check is not None and not st["sent"] and await input_check:
                 raise _Blocked("input")
             if out is None:
-                await open_client()
-            for c in chunks:
-                await out.write(sse.encode(c))
-            if not state["sent"]:
-                state["sent"] = True
-                state["ttft"] = time.perf_counter() - t0
-                self.m_ttft.labels(alias=dec.get("alias", "")).observe(state["ttft"])
+                out = web.StreamResponse(status=200, headers={
+                    "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "x-request-id": dec["request_id"],
+                    "x-gwlab-target": model.id, "x-gwlab-provider": prov.name, "x-gwlab-attempts": str(n),
+                    "x-gwlab-cache": "miss", **self._rl_headers(key)})
+                await out.prepare(request)
+            try:
+                for c in chunks:
+                    await out.write(sse.encode(c))
+            except ConnectionResetError as e:          # aiohttp's ClientConnectionResetError is one of these
+                raise _ClientGone() from e
+            if not st["sent"]:
+                st["sent"], st["ttft"] = True, time.perf_counter() - t0
+                self.m_ttft.labels(alias=dec.get("alias", "")).observe(st["ttft"])
 
         async def release(final: bool = False):
-            """Apply the output placement to the held chunks."""
-            if not held:
-                return
-            content_new = acc.content_chunks - state["window_start"]
-            if g.output in ("off", "shadow", "parallel") or (g.output == "window" and (content_new >= g.window_tokens or final)) \
-                    or (g.output == "full" and final):
-                if g.output in ("window", "full"):
-                    if await self._screen("output", acc.content, "block"):
-                        state["blocked"] = True
-                        return
-                    state["window_start"] = acc.content_chunks
-                batch = held[:]
-                held.clear()
-                await write(batch)
-                if g.output == "parallel" and (content_new >= g.window_tokens or final):
-                    state["window_start"] = acc.content_chunks
-                    if await self._screen("output", acc.content, "cut"):
-                        state["blocked"] = True
-                if g.output == "shadow" and final:
-                    await self._screen("output", acc.content, "log")
+            """Apply the output guardrail placement to the held chunks (PRIMER §7)."""
+            new = acc.content_chunks - st["window_start"]
+            if g.output in ("window", "full"):
+                if not (final or (g.output == "window" and new >= g.window_tokens)):
+                    return
+                if held and await self._screen("output", acc.content, "block"):
+                    st["blocked"] = True
+                    return
+                st["window_start"] = acc.content_chunks
+            elif g.output == "parallel":
+                t = st["check"]
+                if t is not None and t.done() and t.result():
+                    st["blocked"] = True
+                    return
+                if (new >= g.window_tokens or final) and (t is None or t.done()):
+                    st["window_start"] = acc.content_chunks
+                    st["check"] = asyncio.ensure_future(self._screen("output", acc.content, "cut"))
+            batch = held[:]
+            held.clear()
+            await write(batch)
+            if final and g.output == "shadow":
+                asyncio.ensure_future(self._screen("output", acc.content, "log"))
 
         try:
             while not done:
-                timeout = max(0.001, first_deadline - time.perf_counter()) if not state["sent"] else prov.total_timeout_s
+                timeout = max(0.001, first_deadline - time.perf_counter()) if not st["sent"] else prov.total_timeout_s
                 try:
                     raw = await asyncio.wait_for(resp.content.readany(), timeout)
                 except asyncio.TimeoutError:
-                    if not state["sent"]:
+                    if not st["sent"]:
+                        resp.close()
                         return Outcome(FALLTHROUGH, error=UpstreamError(504, "timeout", "timeout", "no first chunk in time"))
                     raise _UpstreamGone("idle timeout mid-stream")
                 if not raw:
-                    break                                                  # upstream closed
+                    break                                                  # the upstream closed the connection
                 for ev in parser.feed(raw):
                     if ev.data.strip() == sse.DONE:
                         done = True
@@ -495,12 +521,11 @@ class Gateway:
                         done = True
                     for ch in chunks:
                         if ch.get("error"):
-                            err = normalise_error(prov.dialect if not tr else "openai", 200, ch)
-                            if isinstance(ch["error"], dict) and isinstance(ch["error"].get("code"), int):
-                                err.status = ch["error"]["code"]
-                            elif isinstance(ch["error"], dict) and ch["error"].get("status"):
-                                err.status = ch["error"]["status"]
-                            if not state["sent"]:
+                            e = ch["error"] if isinstance(ch["error"], dict) else {"message": str(ch["error"])}
+                            status = e.get("status") or (e["code"] if isinstance(e.get("code"), int) else 500)
+                            err = normalise_error("openai", int(status), {"error": e})
+                            if not st["sent"]:
+                                resp.close()
                                 return Outcome(classify(err.status, err.code), error=err)
                             raise _MidStream(err)
                         acc.add(ch)
@@ -511,58 +536,54 @@ class Gateway:
                             ch.pop("usage", None)                         # the client did not ask for usage
                         held.append(ch)
                         if not self.limiter.on_output(res, acc.output_estimate()):
-                            state["cut"] = True
-                            done = True
+                            st["cut"] = done = True
                             break
-                    real = acc.content_chunks or acc.tool_calls or acc.reasoning or acc.finish_reason
-                    if real:
+                    if acc.token_chunks or acc.tool_calls or acc.finish_reason:
                         await release()
-                    if state["blocked"]:
+                    if st["blocked"]:
                         done = True
                         break
             if not done and not (tr is None and acc.finish_reason):
-                if not state["sent"]:
+                if not st["sent"]:
                     return Outcome(FALLTHROUGH, error=UpstreamError(502, "upstream_error", "connection_reset",
                                                                     "upstream closed before the first chunk"))
                 raise _UpstreamGone("upstream closed mid-stream")
-            if not state["blocked"]:
+            if st["blocked"] or st["cut"]:
+                resp.close()                                              # stop the provider generating
+            if not st["blocked"]:
                 await release(final=True)
             usage = normalise_usage("openai", upstream_usage) if not tr else tr.usage
-            if state["blocked"]:
-                block = {"id": acc.id, "object": "chat.completion.chunk", "model": model.upstream,
-                         "choices": [{"index": 0, "delta": {}, "finish_reason": "content_filter"}]}
+            if st["blocked"]:
                 held.clear()
-                await write([block])
+                await write([{"id": acc.id, "object": "chat.completion.chunk", "model": model.upstream,
+                              "choices": [{"index": 0, "delta": {}, "finish_reason": "content_filter"}]}])
                 acc.finish_reason = "content_filter"
+                usage = None                                              # cut short: the bill is estimated
             if want_usage and usage:
                 await write([{"id": acc.id or "chatcmpl-" + dec["request_id"], "object": "chat.completion.chunk",
                               "model": model.upstream, "choices": [], "usage": usage.to_openai()}])
-            if out is None:
-                await open_client()
-            await out.write(sse.encode_done())
-            await out.write_eof()
-            return Outcome("done", response=out, usage=usage, acc=acc, ttft_s=state["ttft"], sent=True,
-                           finish=acc.finish_reason, blocked=state["blocked"], reason="output_cap" if state["cut"] else "")
+            if out is None:                                               # an empty answer: still a valid stream
+                await write([{"id": acc.id, "object": "chat.completion.chunk", "model": model.upstream,
+                              "choices": [{"index": 0, "delta": {}, "finish_reason": acc.finish_reason or "stop"}]}])
+            return Outcome("done", response=out, usage=usage, acc=acc, ttft_s=st["ttft"], sent=True,
+                           finish=acc.finish_reason, blocked=st["blocked"], reason="output_cap" if st["cut"] else "",
+                           tail=[sse.encode_done()])
+        except _ClientGone:                                    # the client went away: stop the upstream, meter what ran
+            self.m_disc.inc()
+            resp.close()
+            return Outcome("done", response=out, acc=acc, ttft_s=st["ttft"], sent=True, disconnected=True,
+                           finish=acc.finish_reason)
         except _Blocked:
+            resp.close()
             return Outcome(FAIL, error=UpstreamError(400, "invalid_request_error", "content_filter",
                                                      "blocked by the input guardrail"), acc=acc)
         except (_MidStream, _UpstreamGone, aiohttp.ClientPayloadError, aiohttp.ClientConnectionError) as e:
             err = e.err if isinstance(e, _MidStream) else UpstreamError(502, "upstream_error", "stream_interrupted", str(e))
-            if not state["sent"]:
+            if not st["sent"]:
                 return Outcome(FALLTHROUGH, error=err, acc=acc)
-            try:                                               # after the first byte: surface, never splice
-                await out.write(sse.encode({"error": err.body()["error"]}))
-                await out.write(sse.encode_done())
-                await out.write_eof()
-            except ConnectionResetError:
-                pass
-            return Outcome("done", response=out, acc=acc, ttft_s=state["ttft"], sent=True, error=err,
-                           finish=acc.finish_reason, usage=normalise_usage("openai", upstream_usage) if not tr else tr.usage)
-        except ConnectionResetError:                           # the client went away: stop the upstream, meter what ran
-            self.m_disc.inc()
-            resp.close()
-            return Outcome("done", response=out, acc=acc, ttft_s=state["ttft"], sent=True, disconnected=True,
-                           finish=acc.finish_reason, usage=tr.usage if tr and tr.usage and tr.finish else None)
+            # after the first byte: surface the error in the stream, never splice another model's output
+            return Outcome("done", response=out, acc=acc, ttft_s=st["ttft"], sent=True, error=err, finish=acc.finish_reason,
+                           tail=[sse.encode({"error": err.body()["error"]}), sse.encode_done()])
 
     # ------------------------------------------------------------------------------------------ accounting
     def _close_client_span(self, cspan, outcome, model):
@@ -574,11 +595,10 @@ class Gateway:
                      otel.TIME_TO_FIRST_CHUNK: outcome.ttft_s})
         self.tracer.end(cspan, error=outcome.error.code if outcome.error else ("client_disconnect" if outcome.disconnected else None))
 
-    def _account(self, request, span, dec, key, alias, model, o, res, body, stream, t0):
+    async def _account(self, request, span, dec, key, alias, model, o, res, body, stream, t0):
         usage = o.usage
-        if usage is None or o.disconnected and (o.acc is not None):
-            est_out = o.acc.output_estimate() if o.acc is not None else 0
-            usage = Usage(res.prompt_estimate, est_out, source="estimate")   # never bill a cut stream as 0
+        if usage is None:                                 # a cut stream: no usage chunk arrived -- never bill it as 0
+            usage = Usage(res.prompt_estimate, o.acc.output_estimate() if o.acc is not None else 0, source="estimate")
         self.limiter.reconcile(res, usage.prompt_tokens, usage.completion_tokens)
         cost = cost_usd(usage, model.price)
         self.keys.add_spend(key.key_id, cost)
@@ -604,11 +624,18 @@ class Gateway:
                    error=err, finish_reason=o.finish)
         self.decisions.append(dec)
         if stream:
+            if not o.disconnected:
+                try:
+                    for b in o.tail:
+                        await o.response.write(b)
+                    await o.response.write_eof()
+                except ConnectionResetError:
+                    pass
             return o.response
         resp = web.json_response(o.response, headers={"x-request-id": dec["request_id"], "x-gwlab-target": model.id,
                                                       "x-gwlab-provider": model.provider, "x-gwlab-cache": "miss",
                                                       "x-gwlab-attempts": str(len(dec["attempts"])),
-                                                      **self.limiter.headers(key.tenant)})
+                                                      **self._rl_headers(key)})
         return resp
 
     def _ledger(self, dec, key, alias, model, usage, status, stream, t0, ttft_s, error, finish, cost=0.0, cache="miss"):
@@ -686,6 +713,10 @@ class Gateway:
 
 
 class _Blocked(Exception):
+    pass
+
+
+class _ClientGone(Exception):
     pass
 
 

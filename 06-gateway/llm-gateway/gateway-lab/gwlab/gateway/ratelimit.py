@@ -87,14 +87,21 @@ class Limiter:
         self.global_tpm = Bucket(limits.global_tpm, limits.global_tpm / limits.minute_s, clock) if limits.global_tpm else None
         self.rejections: dict = {}
 
-    def _buckets(self, tenant: str, rpm: int | None = None, tpm: int | None = None):
+    def _buckets(self, tenant: str):
         if tenant not in self._b:
             t = self.tenants.get(tenant)
-            rpm = rpm or (t.rpm if t else 600)
-            tpm = tpm or (t.tpm if t else 200_000)
-            m = self.cfg.minute_s
-            self._b[tenant] = (Bucket(rpm, rpm / m, self.clock), Bucket(tpm, tpm / m, self.clock))
+            self._b[tenant] = self._pair(t.rpm if t else 600, t.tpm if t else 200_000)
         return self._b[tenant]
+
+    def _key_buckets(self, key_id: str, rpm: int | None, tpm: int | None):
+        """A key with its own limits gets its own buckets, nested inside its tenant's."""
+        if ("key", key_id) not in self._b:
+            self._b[("key", key_id)] = self._pair(rpm or 10**9, tpm or 10**12)
+        return self._b[("key", key_id)]
+
+    def _pair(self, rpm: float, tpm: float):
+        m = self.cfg.minute_s
+        return Bucket(rpm, rpm / m, self.clock), Bucket(tpm, tpm / m, self.clock)
 
     def output_reservation(self, requested_output: int | None) -> int:
         c = self.cfg
@@ -103,15 +110,21 @@ class Limiter:
         return min(requested_output or c.default_output_estimate, c.hard_output_cap)
 
     def admit(self, tenant: str, prompt_estimate: int, requested_output: int | None = None, *,
-              rpm: int | None = None, tpm: int | None = None) -> Decision:
-        """Check RPM, tenant TPM and the global TPM together; take from all three only if all admit."""
-        rpm_b, tpm_b = self._buckets(tenant, rpm, tpm)
+              key_id: str | None = None, rpm: int | None = None, tpm: int | None = None) -> Decision:
+        """Check every level — the key's own limits (if it has any), the tenant's RPM and TPM, the global TPM —
+        and take from all of them only if all admit (hierarchical limits)."""
+        rpm_b, tpm_b = self._buckets(tenant)
         out = self.output_reservation(requested_output)
         tokens = prompt_estimate + out
-        checks = [("rpm", rpm_b, 1), ("tpm", tpm_b, tokens)]
+        checks = []
+        own = key_id is not None and (rpm or tpm)
+        if own:
+            k_rpm, k_tpm = self._key_buckets(key_id, rpm, tpm)
+            checks += [("key_rpm", k_rpm, 1), ("key_tpm", k_tpm, tokens)]
+        checks += [("rpm", rpm_b, 1), ("tpm", tpm_b, tokens)]
         if self.global_tpm:
             checks.append(("global_tpm", self.global_tpm, tokens))
-        headers = self.headers(tenant)
+        headers = self.headers(tenant, key_id if own else None)
         for name, b, n in checks:
             if not b.can_take(n):
                 ra = b.retry_after(n)
@@ -120,8 +133,8 @@ class Limiter:
         for _, b, n in checks:
             b.take(n)
         res = Reservation(tenant, self.cfg.mode, prompt_estimate, out, out,
-                          [b for name, b, _ in checks if name != "rpm"])
-        return Decision(True, reservation=res, headers=self.headers(tenant))
+                          [b for name, b, _ in checks if not name.endswith("rpm")])
+        return Decision(True, reservation=res, headers=self.headers(tenant, key_id if own else None))
 
     def on_output(self, res: Reservation, streamed_tokens: int) -> bool:
         """Called as output streams. Reserve mode debits tokens beyond what was charged; returns False once the
@@ -147,9 +160,10 @@ class Limiter:
         res.charged_output -= delta
         return delta
 
-    def headers(self, tenant: str) -> dict:
-        """`x-ratelimit-*` headers as OpenAI's docs describe them (prose docs, not the OpenAPI spec: verify)."""
-        rpm_b, tpm_b = self._buckets(tenant)
+    def headers(self, tenant: str, key_id: str | None = None) -> dict:
+        """`x-ratelimit-*` headers as OpenAI's docs describe them (prose docs, not the OpenAPI spec: verify), for the
+        innermost level that applies to this caller (the key's own limits, else its tenant's)."""
+        rpm_b, tpm_b = self._b[("key", key_id)] if key_id and ("key", key_id) in self._b else self._buckets(tenant)
         m = self.cfg.minute_s
         return {"x-ratelimit-limit-requests": str(int(rpm_b.capacity)),
                 "x-ratelimit-remaining-requests": str(max(0, int(rpm_b.available()))),
@@ -159,8 +173,10 @@ class Limiter:
                 "x-gwlab-minute-s": f"{m:g}"}
 
     def state(self) -> dict:
-        return {t: {"rpm_available": round(r.available(), 2), "tpm_available": round(k.available(), 1),
-                    "rpm": r.capacity, "tpm": k.capacity} for t, (r, k) in self._b.items()}
+        return {(t if isinstance(t, str) else "key:" + t[1]): {"rpm_available": round(r.available(), 2),
+                                                             "tpm_available": round(k.available(), 1),
+                                                             "rpm": r.capacity, "tpm": k.capacity}
+                for t, (r, k) in self._b.items()}
 
 
 def over_admission(prompt_tokens: float, mean_output: float, charged_output: float) -> float:

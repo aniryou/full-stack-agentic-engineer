@@ -161,6 +161,7 @@ class FakeProvider:
     own limits over a 60 s window. ``fail_after``: a streamed 200 that breaks after that many chunks.
     Token counts use ``api.estimate_tokens`` -- this fake has no tokenizer, and says so.
     """
+    dialect = "openai"                           # the wire format it speaks, whatever model family it fronts
 
     def __init__(self, name: str, clock: Clock, *, ttft: float = 0.30, itl: float = 0.020, output_tokens: int = 40,
                  reasoning_tokens: int = 0, outages=(), rpm: int | None = None, tpm: int | None = None,

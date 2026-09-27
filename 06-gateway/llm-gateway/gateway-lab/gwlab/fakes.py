@@ -191,11 +191,17 @@ class FakeProvider:
         app.router.add_post(path, self.handle)
         app.router.add_get("/v1/models", self.models)
         app.router.add_get("/metrics", self.metrics)
-        app.router.add_get("/health", lambda r: web.json_response({"status": "ok", "simulated": True}))
+        app.router.add_get("/health", self.health)
         app.router.add_post("/admin/fault", self.set_fault)
         app.router.add_post("/admin/keys", self.set_keys)
-        app.router.add_get("/admin/stats", lambda r: web.json_response(dict(self.stats)))
+        app.router.add_get("/admin/stats", self.admin_stats)
         return app
+
+    async def health(self, request):
+        return web.json_response({"status": "ok", "simulated": True})
+
+    async def admin_stats(self, request):
+        return web.json_response(dict(self.stats))
 
     async def start(self) -> str:
         self._runner = web.AppRunner(self.app(), access_log=None)
@@ -426,11 +432,13 @@ class FakeProvider:
             self._finish(finish, n_out, entry)
             await resp.write_eof()
             return resp
-        except (ConnectionResetError, asyncio.CancelledError):
+        except (ConnectionResetError, asyncio.CancelledError) as e:
             self.stats["client_disconnects"] += 1
             if not state.get("aborted"):
                 self._finish("abort", state["generated"], entry)  # the engine frees the request; tokens so far count
-            raise
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            return web.Response(status=499)                         # nobody is listening; nothing to log
         finally:
             self.running -= 1
 

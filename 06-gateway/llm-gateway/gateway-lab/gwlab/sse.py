@@ -101,6 +101,7 @@ class StreamAccumulator:
     error: dict | None = None
     chunks: int = 0
     content_chunks: int = 0
+    token_chunks: int = 0                                 # chunks that carried content or reasoning text
     tool_calls: dict = field(default_factory=dict)       # index -> {"id", "type", "function": {"name", "arguments"}}
 
     def add(self, chunk: dict) -> None:
@@ -117,9 +118,11 @@ class StreamAccumulator:
             if delta.get("content"):
                 self.content += delta["content"]
                 self.content_chunks += 1
+                self.token_chunks += 1
             for key in ("reasoning", "reasoning_content"):      # vLLM 0.30.0 says `reasoning`
                 if delta.get(key):
                     self.reasoning += delta[key]
+                    self.token_chunks += 1
             for tc in delta.get("tool_calls") or []:
                 slot = self.tool_calls.setdefault(tc["index"], {"id": None, "type": "function",
                                                                 "function": {"name": "", "arguments": ""}})
@@ -138,9 +141,11 @@ class StreamAccumulator:
         return [self.tool_calls[i] for i in sorted(self.tool_calls)]
 
     def output_estimate(self) -> int:
-        """Output tokens estimated from what was streamed (content, reasoning, tool-call arguments)."""
+        """Output tokens estimated from what was streamed: one per text-carrying chunk (vLLM streams one token per
+        chunk at the default stream interval, and so do the fakes; speculative decoding or `--stream-interval`
+        pack several), plus ceil(chars / 4) for tool-call arguments. An estimate, labelled as one wherever used."""
         args = "".join(c["function"]["name"] + c["function"]["arguments"] for c in self.calls)
-        return estimate_text(self.content) + estimate_text(self.reasoning) + estimate_text(args)
+        return self.token_chunks + estimate_text(args)
 
     def completion(self) -> dict:
         """The non-streamed `chat.completion` this stream is equivalent to."""

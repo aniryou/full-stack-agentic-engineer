@@ -9,7 +9,7 @@ self-hosted pool has no per-token price: split its bill by what each tenant made
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from .providers import CATALOGUE
 
@@ -89,9 +89,6 @@ class Ledger:
                 report[(model, field)] = {"ledger": mine[field], "provider": theirs[field], "diff": diff,
                                           "ok": abs(diff) <= tolerance * max(1, theirs[field])}
         return report
-
-    def dump(self) -> list:
-        return [asdict(r) for r in self.rows]
 
 
 def chargeback(usage_by_tenant: dict, pool_cost: float, *, by: str = "tokens", prefill_tps: float = 68_000.0,

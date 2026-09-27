@@ -84,14 +84,15 @@ class Gateway:
             if not self.router.allow(target, self.clock.now()):
                 attempts.append((target, "breaker open"))
                 continue
-            dialect = CATALOGUE[target.model].dialect
+            provider, dialect = self.providers[target.provider], CATALOGUE[target.model].dialect
+            wire = getattr(provider, "dialect", "openai")         # the format on the wire: what usage is normalised from
             body = {**upstream, "model": target.model}
             if dialect == "vllm":                                   # engine prefix-cache isolation per tenant
                 body["cache_salt"] = keymod.cache_salt(vk.tenant, self.salt_secret)
             span = self.tracer.start(f"chat {target.model}", "CLIENT", server, **{
                 otel.OPERATION_NAME: "chat", otel.REQUEST_MODEL: target.model, otel.PROVIDER_NAME: otel.PROVIDER_VALUE[dialect],
                 otel.SERVER_ADDRESS: target.provider, **({otel.REQUEST_STREAM: True} if stream else {})})
-            t0, resp = self.clock.now(), self.providers[target.provider].chat(body)
+            t0, resp = self.clock.now(), provider.chat(body)
             if resp.status != 200:
                 if resp.status is None:
                     self.clock.sleep(self.timeout)                  # no answer: our timeout decides
@@ -133,7 +134,7 @@ class Gateway:
             else:
                 first, raw_usage = self.clock.now(), resp.body.get("usage")
                 finish = resp.body["choices"][0]["finish_reason"]
-            usage = normalize_usage(dialect, raw_usage) if raw_usage else {   # 7. reconcile: usage is the bill
+            usage = normalize_usage(wire, raw_usage) if raw_usage else {      # 7. reconcile: usage is the bill
                 "prompt_tokens": prompt_est, "completion_tokens": acc.output_estimate(), "cached_tokens": 0, "reasoning_tokens": 0}
             if lim:
                 correction = usage["prompt_tokens"] + usage["completion_tokens"] - debited
