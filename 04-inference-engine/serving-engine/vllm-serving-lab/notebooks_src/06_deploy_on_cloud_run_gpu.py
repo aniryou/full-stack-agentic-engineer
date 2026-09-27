@@ -72,12 +72,12 @@ print(plan.summary())
 # (image size from the registry, bandwidths from a test, init time from the log line
 # `init engine (profile, create kv cache, warmup model) took ...`).
 #
-# Then the part that breaks deployments: the **startup probe** must outlast the part of the cold
-# start that happens *inside* the container. The image pull comes before the container starts, so
-# only weights + engine init count against the probe (as in Kubernetes; verify for Cloud Run). Write
+# Then the part that breaks deployments: the **startup probe** must outlast the part of the cold start
+# that happens *inside* the container. The image pull comes before the container starts, so only
+# weights + engine init count against the probe (as in Kubernetes; verify for Cloud Run). Write
 # `min_failure_threshold(weights_gb, weights_gb_s, init_s, period_s, margin)`: the smallest
-# `failure_threshold` whose `failure_threshold × period_s` covers `margin ×` that time. The check
-# reads the probe settings from this lab's Terraform.
+# `failure_threshold` whose $\mathtt{failure\_threshold} \times \mathtt{period\_s}$ covers
+# $\mathtt{margin} \times{}$ that time. The check reads the probe settings from this lab's Terraform.
 
 # %%
 ASSUME = {"image_gb": 8.0,         # vllm/vllm-openai compressed size (assumption; verify in the registry)
@@ -207,14 +207,20 @@ print(f"✅ 3 busy hours/day in 6 bursts: ${s0:,.0f}/month scaling to zero (6 co
 # %% [markdown]
 # ## Exercise 6.5 — Cloud Run concurrency above the engine's batch cap
 #
-# Cloud Run's `concurrency` and vLLM's `--max-num-seqs` are two different limits. If Cloud Run
-# lets 64 requests into an instance whose engine runs at most 16 at a time, 48 wait *inside vLLM*:
-# Cloud Run sees a busy instance, not a queue. Predict the wait. In a closed loop of `concurrency`
-# users against a batch cap `max_num_seqs`, each admitted request takes `service_s` (its E2E at a
-# full batch), so the engine completes `max_num_seqs / service_s` requests per second, and by
-# Little's law each request spends `concurrency × service_s / max_num_seqs` in the instance: the
-# part beyond its own `service_s` is queueing. Write `queued_wait_s(concurrency, max_num_seqs,
-# service_s)`. The check measures `service_s` with 16 users, then runs 64 users and compares TTFT.
+# Cloud Run's `concurrency` and vLLM's `--max-num-seqs` are two different limits. If Cloud Run lets 64
+# requests into an instance whose engine runs at most 16 at a time, 48 wait *inside vLLM*: Cloud Run
+# sees a busy instance, not a queue. Predict the wait. In a closed loop of `concurrency` users against
+# a batch cap `max_num_seqs`, each admitted request takes `service_s` (its E2E at a full batch), so
+# the engine completes $\mathtt{max\_num\_seqs} / \mathtt{service\_s}$ requests per second, and by
+# Little's law each request spends
+#
+# $$
+# \frac{\mathtt{concurrency} \times \mathtt{service\_s}}{\mathtt{max\_num\_seqs}}
+# $$
+#
+# in the instance: the part beyond its own `service_s` is queueing. Write
+# `queued_wait_s(concurrency, max_num_seqs, service_s)`. The check measures `service_s` with 16 users,
+# then runs 64 users and compares TTFT.
 
 # %% exercise
 def queued_wait_s(concurrency: int, max_num_seqs: int, service_s: float) -> float:
@@ -255,15 +261,17 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Each Cloud Run instance is one vLLM on one L4. We sized the model first (a
-# 1.5B model in bf16 leaves ~17 GiB of KV on the L4), then measured one instance (in this notebook,
-# the simulated L4 profile; on GCP, the real service): 32 requests in flight still met our SLO and
-# 64 did not, so `concurrency` is 32 — Cloud Run adds an instance
-# rather than letting one engine slow everyone down. We scale to zero because traffic is bursty and
-# the bill is per instance-second; the price is a cold start of a minute or two, dominated by the
-# image and engine init once the weights come from Cloud Storage. If the first request of a burst
-# cannot wait, we keep `min_instances = 1` and pay for 24 hours. Cost per million tokens is the
-# instance price over measured throughput, so batching well is also what makes it cheap."
+# **Two minutes:** "Each Cloud Run instance is one vLLM on one L4. We sized the model first (a 1.5B
+# model in bf16 leaves ~17 GiB of KV on the L4), then measured one instance (in this notebook, the
+# simulated L4 profile; on GCP, the real service): 32 requests in flight still met our SLO and 64 did
+# not, so `concurrency` is 32 — Cloud Run adds an instance rather than letting one engine slow
+# everyone down.
+#
+# "We scale to zero because traffic is bursty and the bill is per instance-second; the price is a cold
+# start of a minute or two, dominated by the image and engine init once the weights come from Cloud
+# Storage. If the first request of a burst cannot wait, we keep `min_instances = 1` and pay for 24
+# hours. Cost per million tokens is the instance price over measured throughput, so batching well is
+# also what makes it cheap."
 #
 # **Drill 1.** *Why not set Cloud Run concurrency to 1,000 and let vLLM batch?* — vLLM will batch,
 # but past the engine's SLO-limited batch every request slows down or queues inside the instance,
