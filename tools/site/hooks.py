@@ -24,7 +24,8 @@
    curriculum's module tables: 7 columns, 60–100 words in "You can …"; a README's "What you get": 4 columns, a
    90-word cell) renders as a narrow, very tall grid. The hook marks such a table `fse-stacked` and gives each cell
    its column heading as `data-label`; extra.css lays each row out as a card — the first column as its title, the
-   prose column at full width, the short fields in a row beneath. Numeric and short-text tables stay tables.
+   prose column at full width, the short fields in a row beneath. A record table whose every field is a short
+   sentence (most cells 8+ words, five or more columns) counts too. Numeric and short-text tables stay tables.
 7. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
    WARNING, CAUTION) is what GitHub renders as a callout; Python-Markdown would show the marker as text. The hook
    rewrites the block into Material's `!!! note "Note"` admonition before the page is rendered, so one source reads
@@ -71,6 +72,7 @@ TR = re.compile(r"<tr>(.*?)</tr>", re.S)
 TD = re.compile(r"<td([^>]*)>(.*?)</td>", re.S)
 TAGS = re.compile(r"<[^>]+>")
 STACK_MIN_COLS, STACK_PROSE_MAX, STACK_PROSE_AVG, STACK_3COL_MAX = 4, 40, 12, 120
+STACK_SHARE_WORDS, STACK_SHARE_5COL, STACK_SHARE_4COL, STACK_SHARE_MIN_MAX = 8, 0.35, 0.5, 15
 
 _css: dict[str, str] = {}          # hash -> stylesheet text
 _page_css: dict[str, str] = {}     # page src_uri -> hash of its notebook stylesheet
@@ -153,8 +155,16 @@ def stack_prose_tables(html: str) -> tuple[str, int]:
         prose = [i for i in range(cols) if col_max[i] >= STACK_PROSE_MAX or col_avg[i] >= STACK_PROSE_AVG]
         wide = cols >= STACK_MIN_COLS and bool(prose)
         three = cols == 3 and max(col_max) >= STACK_3COL_MAX
-        if not (wide or three):
+        # records whose every field is a short sentence (a compute guide's "T0 path | Real run | Cheapest real
+        # option" rows): no column is long, but most cells are 8+ words, so the table is tall and narrow
+        cells = [x for row in words for x in row]
+        share = sum(1 for x in cells if x >= STACK_SHARE_WORDS) / len(cells)
+        dense = (max(col_max) >= STACK_SHARE_MIN_MAX
+                 and ((cols >= 5 and share >= STACK_SHARE_5COL) or (cols == 4 and share >= STACK_SHARE_4COL)))
+        if not (wide or three or dense):
             return m.group(0)
+        if dense and not prose:
+            prose = [i for i in range(cols) if col_avg[i] >= STACK_SHARE_WORDS]
         changed += 1
         if three:
             prose = [i for i in range(cols) if col_max[i] >= STACK_PROSE_MAX]

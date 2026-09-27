@@ -194,3 +194,15 @@ def test_hand_written_pages_get_inline_tex_converted_too():
     out = hooks.on_page_markdown(md, page_md, {}, None)
     assert out == "Loss \\(\\alpha T^2\\) costs $5 and $10; `$x_1$` stays.\n\n```\n$a_b$\n```\n\nand \\(x_1\\)."
     assert hooks.on_page_markdown(out, page_md, {}, None) == out       # idempotent on a generated page
+
+
+def test_dense_record_tables_become_cards_but_spec_tables_do_not():
+    def table(cells):
+        head = "".join(f"<th>h{i}</th>" for i in range(len(cells[0])))
+        body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in cells)
+        return f"<table>\n<thead>\n<tr>{head}</tr>\n</thead>\n<tbody>{body}</tbody>\n</table>"
+    sentence = " ".join(["w"] * 12)
+    records = table([["nb01", sentence, sentence, "—", sentence]] * 4)        # 60% of cells are 12 words
+    assert hooks.stack_prose_tables(records)[1] == 1
+    spec = table([["T4", "16 GB", "~320 GB/s", "7.5", " ".join(["w"] * 20)]] * 6)   # one notes column only
+    assert hooks.stack_prose_tables(spec)[1] == 0
