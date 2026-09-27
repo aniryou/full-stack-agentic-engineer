@@ -15,7 +15,7 @@
 # * **a vector per record**, scored exactly with numpy (a flat index: per-user partitions are small, and a
 #   flat index can *delete*, which 07.4's `minifaiss` HNSW cannot);
 # * **a full-text index** (FTS5, ranked by `bm25()`), fused with the vector ranking by reciprocal rank
-#   fusion — 07.4's hybrid search, reused (`ragkit.reference.reciprocal_rank_fusion`, k = 60);
+#   fusion — 07.4's hybrid search, reused (`ragkit.reference.reciprocal_rank_fusion`, $k = 60$);
 # * **the partition** `(tenant, user_id)` in *every* query's WHERE clause, so scope is enforced by the store
 #   rather than remembered by the caller (vector-databases primer §9, §11).
 #
@@ -83,8 +83,8 @@ print("acme/u2 asks the same:", [h.record.text for h in store.search("acme", "u2
 # %% [markdown]
 # ## Exercise 1.1 — reciprocal rank fusion
 #
-# Write `rrf(rankings, k=60)`: each ranking is a list of ids, best first; an id at 0-based position `r`
-# earns `1 / (k + r + 1)` from that list; return `(id, score)` pairs sorted by score, highest first. This is
+# Write `rrf(rankings, k=60)`: each ranking is a list of ids, best first; an id at 0-based position $r$
+# earns $1/(k + r + 1)$ from that list; return `(id, score)` pairs sorted by score, highest first. This is
 # `ragkit.reference.reciprocal_rank_fusion` (07.4 notebook 03) — the store's hybrid mode uses the same rule.
 
 # %% exercise
@@ -111,10 +111,21 @@ print("✅ rrf reproduces the store's hybrid scores; the best id scores", round(
 # ## Exercise 1.2 — `bm25()` by hand, sign and all
 #
 # Reproduce FTS5's `bm25()` for a query of one or more terms on a small table: for each query term,
-# `idf = ln((N − n + 0.5) / (n + 0.5))` (N rows, n rows containing the term), **floored at 1e-6 when it is
-# not positive**; each row scores `Σ idf · tf·(k1 + 1) / (tf + k1·(1 − b + b·|d| / avgdl))` with k1 = 1.2,
-# b = 0.75, `|d|` the row's token count and `avgdl` the mean; `bm25()` returns **minus** that. (ragkit's BM25
-# uses k1 = 1.5 — same idea, different constant.) Return one value per document.
+#
+# $$
+# \mathrm{idf} = \ln\frac{N - n + 0.5}{n + 0.5}
+# $$
+#
+# ($N$ rows, $n$ rows containing the term), **floored at 1e-6 when it is not positive**; each row scores
+#
+# $$
+# \sum \mathrm{idf} \cdot
+# \frac{\mathrm{tf} \cdot (k_1 + 1)}{\mathrm{tf} + k_1 \cdot (1 - b + b \cdot \lvert d \rvert / \mathrm{avgdl})}
+# $$
+#
+# with $k_1 = 1.2$, $b = 0.75$, $\lvert d \rvert$ the row's token count and $\mathrm{avgdl}$ the mean; `bm25()`
+# returns **minus** that. (ragkit's BM25 uses $k_1 = 1.5$ — same idea, different constant.) Return one value per
+# document.
 
 # %%
 DOCS = ["the user lives in lisbon", "the user works at globex in lisbon", "a dog named rex",
@@ -158,8 +169,9 @@ print("✅ bm25 matches SQLite:", {i: round(v, 4) for i, v in sqlite_bm25(["dog"
 # ## Exercise 1.3 — how big is a memory?
 #
 # Write `vector_bytes(dim, backend)`: the bytes of one stored vector for `"sqlite"` (float32 BLOB, 4 bytes per
-# dimension), `"pgvector"` (`vector`: 4·dim + 8) and `"halfvec"` (2·dim + 8) — pgvector's README sizes. Then
-# `memory_bytes(n, dim, avg_text_chars, backend)`: n records × (vector + text bytes), ignoring indexes.
+# dimension), `"pgvector"` (`vector`: $4 \cdot \text{dim} + 8$) and `"halfvec"` ($2 \cdot \text{dim} + 8$) —
+# pgvector's README sizes. Then `memory_bytes(n, dim, avg_text_chars, backend)`: $n$ records × (vector + text
+# bytes), ignoring indexes.
 
 # %% exercise
 def vector_bytes(dim, backend="sqlite"):
@@ -233,7 +245,7 @@ print("   the store's own forget(mode='purge') runs the same steps:", naive.forg
 #
 # ## T0 + Docker: the same store on Postgres + pgvector
 #
-# `memlab.store.pgvector` has the same schema and the same three queries in SQL (RRF with k = 60 written as
+# `memlab.store.pgvector` has the same schema and the same three queries in SQL (RRF with $k = 60$ written as
 # two ranked CTEs), plus the consolidation job's lease and checkpoint tables. With `MEMLAB_PG_DSN` set and
 # psycopg installed this cell runs them; otherwise it prints how to start Postgres and checks every
 # statement with Postgres's own parser (`pglast`) offline.
