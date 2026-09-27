@@ -262,6 +262,7 @@ assert predicted_drift == d["diff"], (predicted_drift, d["diff"])
 print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion tokens ({d['diff']:+,}) = 40 cut streams x "
       "(150 generated - 90 relayed): the estimated rows explain all of it, so correct those rows, not the price table")
 
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Limits are in tokens, because a request's cost is unknown at admission and heavy-tailed.
 # We reserve prompt plus an output bound, debit tokens as they stream and reconcile with usage at the end; used plus

@@ -206,6 +206,7 @@ assert len({namespace(t, u, "account") for t, u in tricky}) == len(tricky), "two
 assert namespace("acme", "alice", "faq") != namespace("acme", "alice", "account")
 print("✅ faq: one namespace per tenant; account: one per (tenant, user); no two identities collide")
 
+# %% [markdown]
 # ## Exercise 3.6 — what the provider's prompt cache saves instead
 # The provider's prompt cache is never wrong: it bills cached input at ~10 % of the input price. For the §5.3 call on
 # **gpt-5.4-mini** (5,000 input tokens, 350 output), set `uncached`, `cached` (2,700 of the input cached) and
