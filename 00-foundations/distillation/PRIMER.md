@@ -3,7 +3,11 @@
 *A primer for 00-foundations (module 00.6). Snapshot: September 2026. Product facts are dated and marked (verify);
 every formula has a worked number and names the function in [`distill-core/`](distill-core/) (package
 `distillcore`) that computes it. Toy numbers are exact (the output space is enumerated) or seeded runs of
-tiny numpy models; serving numbers are a roofline bound — the arithmetic of layer 01's `roofline.llm` and
+tiny numpy models — one run on one CPU: another CPU family's BLAS and SIMD kernels round the same arithmetic
+differently in the last bit, training amplifies it, and a trained number can come out different in its last
+digit (α = 0.889 for the 0.890 in §7) or, for the few chaotic ones (the on-policy student on rare inputs, the
+4- and 8-unit drafts, the §1 soft-target KL), by 0.1–0.2; the core's tests hold these to a stated tolerance and
+the exact ones verbatim. Serving numbers are a roofline bound — the arithmetic of layer 01's `roofline.llm` and
 `roofline.cost`, reproduced in the core's tests — not measurements.*
 
 This primer explains how a small model is trained to behave like a large one, and what that buys in serving:
