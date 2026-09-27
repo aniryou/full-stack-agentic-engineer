@@ -7,12 +7,12 @@
 #
 # ## The one-minute version
 #
-# The scaling primer's token bucket (§5.1) and admission control (§5.3) decide whether a request may start. For
-# LLM calls the cost of a request is unknown when it starts — the output length is decided while it streams, and
-# it is heavy-tailed (00.5 PRIMER §7: a thinking model's outputs are an order of magnitude longer). A bucket that
-# charges each request a fixed guess up front **over-admits** by `(prompt + actual output) / (prompt + guess)`,
-# and the provider's own TPM limit then does the refusing, with 429s the tenant cannot explain (PRIMER §4). The
-# fix is to meter tokens where they flow:
+# The scaling primer's token bucket (§5.1) and admission control (§5.3) decide whether a request may start. For LLM
+# calls the cost of a request is unknown when it starts — the output length is decided while it streams, and it is
+# heavy-tailed (00.5 PRIMER §7: a thinking model's outputs are an order of magnitude longer). A bucket that charges
+# each request a fixed guess up front **over-admits** by $(\text{prompt} + \text{actual output}) \:/$
+# $(\text{prompt} + \text{guess})$, and the provider's own TPM limit then does the refusing, with 429s the tenant
+# cannot explain (PRIMER §4). The fix is to meter tokens where they flow:
 #
 #     admit      reserve prompt estimate + min(requested cap or a default, a hard cap) from the tenant's TPM
 #     stream     debit anything beyond the reservation as chunks arrive
@@ -63,16 +63,18 @@ print(f"a rate-limit minute here lasts {MINUTE} s; acme allows 3,000 tokens per 
 # %% [markdown]
 # ## Worked example: a per-request bucket vs reserve -> stream -> reconcile, against the same provider
 #
-# One tenant sends 30 requests a second for 6 seconds through the alias `solo` (acme only, so the provider's
-# refusals are visible). The provider counts tokens over a sliding window of one "minute" (2 s); the gateway's
-# bucket holds a burst (its capacity) and refills continuously, so over any window it admits up to
-# `capacity + rate × window`. Sizing the tenant's bucket at 1,500 tokens per minute keeps that inside the
-# provider's limit: `1,500 + 750/s × 2 s = 3,000`. (A bucket sized at the provider's full 3,000 would admit up to
-# 6,000 in the first window: the burst is part of the budget.) The core's `ReserveLimiter` counts a sliding window
-# instead — admit only if `used + reserved + reserve ≤ limit` (PRIMER §4.2) — which lines up with a provider's
-# window by construction; this lab keeps the scaling lab's token bucket (06.3) and needs the sizing rule above.
-# The per-request bucket charges `prompt + 20` per request; the reserving bucket charges `prompt + 200` up front
-# and settles to the real count at the end.
+# One tenant sends 30 requests a second for 6 seconds through the alias `solo` (acme only, so the provider's refusals
+# are visible). The provider counts tokens over a sliding window of one "minute" (2 s); the gateway's bucket holds a
+# burst (its capacity) and refills continuously, so over any window it admits up to
+# $\text{capacity} + \text{rate} \times \text{window}$. Sizing the tenant's bucket at 1,500 tokens per minute keeps
+# that inside the provider's limit: $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. (A bucket sized at the
+# provider's full 3,000 would admit up to 6,000 in the first window: the burst is part of the budget.)
+#
+# The core's `ReserveLimiter` counts a sliding window instead — admit only if
+# $\text{used} + \text{reserved} + \text{reserve} \le \text{limit}$ (PRIMER §4.2) — which lines up with a provider's
+# window by construction; this lab keeps the scaling lab's token bucket (06.3) and needs the sizing rule above. The
+# per-request bucket charges $\text{prompt} + 20$ per request; the reserving bucket charges $\text{prompt} + 200$ up
+# front and settles to the real count at the end.
 
 # %%
 runs = {}
@@ -120,9 +122,10 @@ print("✅ a caller that sets max_completion_tokens gets exactly that reserved; 
 # ## Exercise 4.2 — how far a per-request bucket over-admits
 #
 # Write `over_admission(prompt, mean_output, charged_output)`: the ratio of tokens really consumed to tokens the
-# bucket charged, when each request is charged `prompt + charged_output` but costs `prompt + mean_output`. The
-# check takes the per-request run above: the mean prompt the gateway estimated, the mean output from the ledger,
-# the 20-token guess — and compares with the measured ratio of all tokens served to all tokens charged.
+# bucket charged, when each request is charged $\text{prompt} + \mathrm{charged\_output}$ but costs
+# $\text{prompt} + \mathrm{mean\_output}$. The check takes the per-request run above: the mean prompt the gateway
+# estimated, the mean output from the ledger, the 20-token guess — and compares with the measured ratio of all tokens
+# served to all tokens charged.
 
 # %% exercise
 def over_admission(prompt: float, mean_output: float, charged_output: float) -> float:
@@ -228,12 +231,13 @@ for name, gpu_h, tps in (("H100 Spot, self-hosted", 3.7, 6846.5), ("L4, self-hos
 # %% [markdown]
 # ## Exercise 4.4 — chargeback for a shared GPU
 #
-# A self-hosted pool costs the same per hour whoever uses it; the question is how to split the bill. By tokens,
-# every token weighs the same. By GPU-seconds, a prompt token (prefill: batched, compute-bound) weighs far less
-# than an output token (decode: one step per token). Write `chargeback(rows, total_usd, by, prefill_s, decode_s)`
-# returning `{tenant: dollars}`; `by` is `"tokens"` or `"gpu_seconds"` (weight = prompt × prefill_s +
-# completion × decode_s). The check runs a RAG tenant (long prompts, short answers) and a chat tenant (short
-# prompts, long answers) through the gateway and compares with the lab's `metering.chargeback`.
+# A self-hosted pool costs the same per hour whoever uses it; the question is how to split the bill. By tokens, every
+# token weighs the same. By GPU-seconds, a prompt token (prefill: batched, compute-bound) weighs far less than an
+# output token (decode: one step per token). Write `chargeback(rows, total_usd, by, prefill_s, decode_s)` returning
+# `{tenant: dollars}`; `by` is `"tokens"` or `"gpu_seconds"`
+# ($\text{weight} = \text{prompt} \times \mathrm{prefill\_s} \:+$ $\text{completion} \times \mathrm{decode\_s}$). The
+# check runs a RAG tenant (long prompts, short answers) and a chat tenant (short prompts, long answers) through the
+# gateway and compares with the lab's `metering.chargeback`.
 
 # %% exercise
 def chargeback(rows: list, total_usd: float, by: str, prefill_s: float = 0.0, decode_s: float = 1.0) -> dict:
