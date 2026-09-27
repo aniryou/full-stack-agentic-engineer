@@ -7,13 +7,16 @@
 # ## The one-minute version
 # Clients ask for an **alias**; the gateway resolves it to an ordered **chain** of (provider, model, region) targets,
 # filters the chain by what the request needs (tools, reasoning effort, context length, residency), orders it by a
-# policy, and walks it. A request **falls through** only on a failure another target could fix — 429, 5xx, a timeout,
-# a context too long — never on a bad request, bad credentials or a policy refusal, and **never after the first
-# byte** reached the client. A **breaker per target** turns a dead provider into an instant skip instead of a timeout
-# per request. A chain's availability is capped by what its targets share, and a slow failure (a timeout) costs every
-# request behind it. By the end you can classify failures, compute a chain's availability and expected latency and
-# cost, predict how many requests a breaker lets reach a dead target when requests overlap, apply the first-byte
-# rule, and pick a first-byte deadline from a latency budget.
+# policy, and walks it.
+#
+# A request **falls through** only on a failure another target could fix — 429, 5xx, a timeout, a context too long —
+# never on a bad request, bad credentials or a policy refusal, and **never after the first byte** reached the client. A
+# **breaker per target** turns a dead provider into an instant skip instead of a timeout per request. A chain's
+# availability is capped by what its targets share, and a slow failure (a timeout) costs every request behind it.
+#
+# By the end you can classify failures, compute a chain's availability and expected latency and cost, predict how many
+# requests a breaker lets reach a dead target when requests overlap, apply the first-byte rule, and pick a first-byte
+# deadline from a latency budget.
 #
 # Primer: §2 *Model routing and fallback chains* (`../PRIMER.md`); retries and full jitter are the scaling primer's
 # §5.2; the breaker's full state machine is the 07.2 lab's notebook 10.
@@ -123,8 +126,8 @@ print("   stops:        ", [c for c in cases if not should_fall_through(*c)])
 
 # %% [markdown]
 # ## Exercise 2.2 — chain availability
-# Write `chain_avail(avails, common_mode)`: the probability that some target answers, when each fails independently
-# with probability 1 − aᵢ and, separately, a common-mode failure with probability `common_mode` takes them all down.
+# Write `chain_avail(avails, common_mode)`: the probability that some target answers, when each fails independently with
+# probability $1 - a_i$ and, separately, a common-mode failure with probability `common_mode` takes them all down.
 
 # %% exercise
 def chain_avail(avails, common_mode=0.0):
@@ -168,10 +171,10 @@ print("✅ expected latency matches routing.chain_cost on 200 random chains")
 
 # %% [markdown]
 # ## Exercise 2.4 — a breaker learns only as fast as failures complete
-# The breaker itself — closed, open, one probe after the cooldown — is the 07.2 lab's (gcp-agent-platform-lab
-# notebook 10 builds it, half-open included); here it is `routing.Breaker`, as given. What the gateway adds is
-# *concurrency*. Requests arrive every `1 / rate` seconds, each attempt at the dead primary takes `t_fail` seconds to
-# fail (the full timeout, a first-byte deadline, or a fast 503), and the breaker opens when `threshold` failures have
+# The breaker itself — closed, open, one probe after the cooldown — is the 07.2 lab's (gcp-agent-platform-lab notebook
+# 10 builds it, half-open included); here it is `routing.Breaker`, as given. What the gateway adds is *concurrency*.
+# Requests arrive every $1/\text{rate}$ seconds, each attempt at the dead primary takes `t_fail` seconds to fail (the
+# full timeout, a first-byte deadline, or a fast 503), and the breaker opens when `threshold` failures have
 # **completed** — while every request that arrived in the meantime is already waiting on the dead target.
 #
 # Write `reach_before_open(rate, t_fail, threshold)`: how many requests reach the dead target before its breaker
