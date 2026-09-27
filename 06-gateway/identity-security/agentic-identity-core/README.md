@@ -9,7 +9,9 @@ a token, and what the audit records — and say where each one lives on Google C
 1. `python3 -m pip install -r requirements.txt && python3 agentsec_core.py` — a second: the story end to end, with
    the audit timeline.
 2. Read [`agentsec_core.py`](agentsec_core.py) top to bottom (about 30 min; ~400 lines, one dependency).
-3. Open [`core_walkthrough.ipynb`](core_walkthrough.ipynb), then do [`core_practice.ipynb`](core_practice.ipynb).
+3. Open [`notebooks/core_walkthrough.ipynb`](notebooks/core_walkthrough.ipynb), then do
+   [`notebooks/core_practice.ipynb`](notebooks/core_practice.ipynb); its answers are in
+   [`solutions/core_practice.ipynb`](solutions/core_practice.ipynb).
 
 ## What you get
 
@@ -17,8 +19,8 @@ a token, and what the audit records — and say where each one lives on Google C
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`agentsec_core.py`](agentsec_core.py) + `core_walkthrough` / `core_practice` / `core_solution` | build the five moves (below) and break each one on purpose; 19 practice blanks with self-checking asserts | 1–2 h | T0 |
-| [`agentsec_core_mistral.py`](agentsec_core_mistral.py) + `core_mistral_walkthrough` / `core_mistral_practice` / `core_mistral_solution` | put the same five moves (imported from `agentsec_core.py`, not copied) behind a real model doing function calling (with an offline scripted twin), Mistral's moderation classifier as the screener, and a per-agent key; say where each control lives when the platform gives you the model and connectors but not the identity plane; 20 practice blanks | +1 h | T0 (a key adds the live model) |
+| [`agentsec_core.py`](agentsec_core.py) + `notebooks/core_walkthrough`, `notebooks/core_practice` (answers: `solutions/core_practice`) | build the five moves (below) and break each one on purpose; 19 practice blanks with self-checking asserts | 1–2 h | T0 |
+| [`agentsec_core_mistral.py`](agentsec_core_mistral.py) + `notebooks/core_mistral_walkthrough`, `notebooks/core_mistral_practice` (answers: `solutions/core_mistral_practice`) | put the same five moves (imported from `agentsec_core.py`, not copied) behind a real model doing function calling (with an offline scripted twin), Mistral's moderation classifier as the screener, and a per-agent key; say where each control lives when the platform gives you the model and connectors but not the identity plane; 20 practice blanks | +1 h | T0 (a key adds the live model) |
 
 **The provider path.** The optional [`requirements-mistral.txt`](requirements-mistral.txt) adds only the `mistralai`
 client, whose request and response types the Mistral notebooks and two tests use offline; the core, the Mistral
@@ -32,9 +34,9 @@ python3 -m pip install -r requirements.txt           # PyJWT[crypto], pytest
 python3 agentsec_core.py                             # the story end to end, with the audit timeline
 python3 agentsec_core_mistral.py                     # the same story with a scripted model and a local screener
 python3 -m pytest -q                                 # 32 tests, ~2 s (two skip without the Mistral client, one without a key)
-python3 -m pip install jupyterlab && python3 -m jupyterlab core_walkthrough.ipynb
+python3 -m pip install jupyterlab && python3 -m jupyterlab notebooks/core_walkthrough.ipynb
 
-python3 -m pip install -r requirements-mistral.txt   # optional: the Mistral client, for the core_mistral_* notebooks
+python3 -m pip install -r requirements-mistral.txt   # optional: the Mistral client, for the notebooks/core_mistral_* notebooks
 MISTRAL_API_KEY=... python3 agentsec_core_mistral.py # live: mistral-medium-latest + mistral-moderation-2603 (billed)
 ```
 

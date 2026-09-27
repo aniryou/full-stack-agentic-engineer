@@ -18,13 +18,13 @@ Mistral Small 3 (24B dense) and Mistral Large 3 (675B MoE).
 | `worked_example.py` | Runs it all: Mistral Small on H100, the bank, Mistral Large 3. |
 | `test_capacity.py` | Pins the numbers `PRIMER.md` quotes (units, the bank example, prefill's attention term) and checks the practice notebooks: the solution runs and each check cell fails a wrong answer. |
 | `notebooks/01_capacity_practice.ipynb` | Fill-in-the-blank. Implement the 6 core functions; the checks compare them with `capacity.py` on several inputs. |
-| `notebooks/01_capacity_practice_solved.ipynb` | Solutions. |
+| `solutions/01_capacity_practice.ipynb` | The worked answers: the same notebook with every blank filled in. |
 
 ## Run
 ```bash
 python worked_example.py          # prints the numbers in PRIMER.md
 python -m pytest -q test_capacity.py   # checks them (needs pytest)
-jupyter notebook notebooks/       # do the practice (pure stdlib, no install)
+jupyter notebook notebooks/       # do the practice (pure stdlib, no install); answers in solutions/
 ```
 
 Start with `PRIMER.md`, run `worked_example.py`, then do the practice notebook

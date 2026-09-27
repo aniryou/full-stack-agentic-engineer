@@ -11,8 +11,8 @@ and show each of those in code that runs on a laptop.
 2. `cd agentic-identity-core && python3 -m pip install -r requirements.txt && python3 agentsec_core.py` — a second:
    the five moves end to end (identity, authority, policy, resource, audit) with the audit timeline; then
    `python3 -m pytest -q` (32 tests, 3 of them skip without the optional Mistral client or a key).
-3. Open the core's [`core_walkthrough.ipynb`](agentic-identity-core/core_walkthrough.ipynb), then do
-   `core_practice.ipynb`; then step up to the Google Cloud lab's notebooks 01–09.
+3. Open the core's [`notebooks/core_walkthrough.ipynb`](agentic-identity-core/notebooks/core_walkthrough.ipynb), then do
+   `notebooks/core_practice.ipynb`; then step up to the Google Cloud lab's notebooks 01–09.
 
 ## What you get
 

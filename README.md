@@ -110,9 +110,9 @@ with one ([`COMPUTE.md`](COMPUTE.md) has the details and prices):
 
 Notebooks that need a GPU detect what they have and fall back to a clearly labelled T0 path.
 
-**Exercises** sit in `notebooks/` (or `exercises/`, or `practice/`) with `# YOUR CODE HERE`; in the primer, core and
-lab topics each is followed by a check cell that prints ✅ when your answer is right, and worked answers are in
-`solutions/` (older labs keep them beside the exercise, for example `*_solution.ipynb`). Exercises are committed blank, so
+**Exercises** sit in each lab's `notebooks/` folder (beside its lessons) with `# YOUR CODE HERE`; in the primer, core
+and lab topics each is followed by a check cell that prints ✅ when your answer is right, and the worked answer to
+`notebooks/<name>.ipynb` is `solutions/<name>.ipynb`, the same file name, in every lab. Exercises are committed blank, so
 `git restore <notebook>` returns one to its starting state (for labs built from `notebooks_src/`, re-run that
 lab's `python3 tools/build_notebooks.py`).
 

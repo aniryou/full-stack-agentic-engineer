@@ -1,6 +1,7 @@
 # Notebooks — hands-on companions to `docs/primer.md`
 
-Nine worked notebooks, each with a fill-in-the-blank **practice** twin and a completed **solution**.
+Nine worked notebooks, each with a fill-in-the-blank **practice** twin beside it and a completed **solution**
+under the practice notebook's name in [`../solutions/`](../solutions/).
 Everything runs offline against the local twins in `src/agentsec/` (`LocalRuntimeCA`, `TokenIssuer`,
 `LocalAuthManager`, `LocalScreener`, the tickets MCP server in a background thread, and the ADK loop
 driven by `ScriptedLlm`) — no Google Cloud project or API key is needed. Every notebook ends with a
@@ -24,11 +25,11 @@ driven by `ScriptedLlm`) — no Google Cloud project or API key is needed. Every
 
 1. **Read the worked notebook** (`NN_*.ipynb`) top to bottom and run it. Each cell states the security
    idea, runs it, and asserts the property it claims.
-2. **Do the practice notebook** (`practice/NN_*_practice.ipynb`). It keeps the narrative but replaces the
+2. **Do the practice notebook** (`NN_*_practice.ipynb`, in this folder). It keeps the narrative but replaces the
    key lines with `____` blanks (an argument, a method name, an expected value) or a
    `raise NotImplementedError("fill me")` in a function body. Every exercise ends with `assert` checks —
    if the cell runs silently, you got it right. Practice notebooks will not run until the blanks are filled.
-3. **Compare with the solution** (`solutions/NN_*_solution.ipynb`) — the completed practice notebook.
+3. **Compare with the solution** (`../solutions/NN_*_practice.ipynb`, the same file name) — the completed practice notebook.
    Every solution executes cleanly end to end.
 4. **Say it out loud.** The last cell of every notebook is the one-minute version; the notebooks exist so
    that you can *show* each claim (replay fails, audience mismatch is rejected, the hijacked model is
@@ -53,15 +54,15 @@ Conventions inside the notebooks:
 * Notebook 05 contains a guarded `ModelArmorScreener(template)` cell (`RUN_ON_GCP = False`) showing the
   one-line swap from the local screener to Model Armor on a real project.
 
-To verify that the worked and solution notebooks still execute (what the manual `solutions` job of the root [`tests` workflow](../../../../.github/workflows/tests.yml) runs):
+To verify, from the lab folder, that the worked and solution notebooks still execute (what the manual `solutions` job of the root [`tests` workflow](../../../../.github/workflows/tests.yml) runs):
 
 ```bash
-mkdir -p /tmp/nb-out
-for nb in notebooks/*.ipynb notebooks/solutions/*.ipynb; do
+mkdir -p /tmp/nb-out/notebooks /tmp/nb-out/solutions
+for nb in $(ls notebooks/*.ipynb | grep -v '_practice\.ipynb$') solutions/*.ipynb; do
   jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=180 \
-    --output "/tmp/nb-out/$(basename "$nb")" "$nb" || echo "FAILED: $nb"
+    --output "/tmp/nb-out/$nb" "$nb" || echo "FAILED: $nb"
 done
 ```
 
 The repository copies are stored without outputs; keep it that way
-(`jupyter nbconvert --clear-output --inplace notebooks/**/*.ipynb`) so diffs stay reviewable.
+(`jupyter nbconvert --clear-output --inplace notebooks/*.ipynb solutions/*.ipynb`) so diffs stay reviewable.

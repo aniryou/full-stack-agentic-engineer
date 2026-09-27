@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 02 · Contrastive training
 # Implement the InfoNCE machinery you used in notebook 02, then look at what
-# in-batch "hard negatives" actually are. Solutions: `solutions/ex02_solutions.ipynb`.
+# in-batch "hard negatives" actually are. Solutions: `../solutions/ex02.ipynb`.
 
 # %%
 import numpy as np

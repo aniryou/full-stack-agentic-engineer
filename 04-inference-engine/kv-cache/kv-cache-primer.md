@@ -2,7 +2,7 @@
 
 *Assumes no prior knowledge of attention internals. Builds up to why the KV cache is the single biggest constraint in LLM serving.*
 
-**Tier and notebooks.** Everything here is T0. The two notebooks, [`01_kv_cache_worked.ipynb`](01_kv_cache_worked.ipynb) and [`02_kv_cache_practice.ipynb`](02_kv_cache_practice.ipynb), run on numpy and matplotlib through [`kernel-core`](../kernel-core/README.md) (`kerncore.kv`), on a laptop or a Colab CPU runtime, with no GPU and no PyTorch; torch is optional, for one clearly labelled comparison cell at the end of 01 that skips itself when torch is not installed. Sizes are in binary units (1 KiB = 1,024 bytes, 1 GiB = 2³⁰ bytes) with decimal GB (1 GB = 10⁹ bytes) in brackets, here and in the notebooks; `kernel-core/tests/test_primer_numbers.py` pins every size on this page.
+**Tier and notebooks.** Everything here is T0. The two notebooks, [`notebooks/01_kv_cache_worked.ipynb`](notebooks/01_kv_cache_worked.ipynb) and [`notebooks/02_kv_cache_practice.ipynb`](notebooks/02_kv_cache_practice.ipynb), run on numpy and matplotlib through [`kernel-core`](../kernel-core/README.md) (`kerncore.kv`), on a laptop or a Colab CPU runtime, with no GPU and no PyTorch; torch is optional, for one clearly labelled comparison cell at the end of 01 that skips itself when torch is not installed. Sizes are in binary units (1 KiB = 1,024 bytes, 1 GiB = 2³⁰ bytes) with decimal GB (1 GB = 10⁹ bytes) in brackets, here and in the notebooks; `kernel-core/tests/test_primer_numbers.py` pins every size on this page.
 
 ---
 

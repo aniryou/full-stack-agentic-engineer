@@ -12,7 +12,7 @@ import pytest
 
 from kerncore import kv
 
-KV = Path(__file__).resolve().parents[2] / "kv-cache"
+KV = Path(__file__).resolve().parents[2] / "kv-cache" / "notebooks"
 WORKED, PRACTICE = KV / "01_kv_cache_worked.ipynb", KV / "02_kv_cache_practice.ipynb"
 
 

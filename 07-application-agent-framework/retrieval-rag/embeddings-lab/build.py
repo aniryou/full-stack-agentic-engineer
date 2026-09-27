@@ -1,9 +1,11 @@
 """Build pipeline: src/*.py (jupytext percent) -> executed notebooks.
-Worked notebooks -> notebooks/ ; solved exercises -> solutions/ (executed)
-and exercises/ (solutions stripped, unexecuted).
+Worked notebooks -> notebooks/ (executed); each exercise -> notebooks/exNN.ipynb
+(solutions stripped, unexecuted) and its answer -> solutions/exNN.ipynb (executed),
+the repo's one notebook layout: a blank and its answer share a file name.
 
-The build is reproducible: cell ids are derived from the notebook name and the
-cell's position, no execution timestamps are recorded, consecutive stream
+The build is reproducible: cell ids are derived from the notebook's name and the
+cell's position (ID_KEYS keeps the names the notebooks had before the layout
+move, so moving them changed no id), no execution timestamps are recorded, consecutive stream
 outputs are merged, and the kernel runs single-threaded BLAS with a fixed hash
 seed. Every notebook starts with the repo's Colab setup cell, exactly as
 tools/inject_colab_bootstrap.py writes it and in the injector's JSON layout, so
@@ -57,10 +59,18 @@ def execute(nb, cwd):
                    resources={"metadata": {"path": str(cwd)}}).execute()
     return nb
 
+# Cell ids are seeded with each notebook's folder/stem as it was when stable ids were introduced (exercises/exNN
+# and solutions/exNN_solutions); the September 2026 move to notebooks/ + solutions/ kept them unchanged.
+ID_KEYS = {**{f"notebooks/ex0{i}": f"exercises/ex0{i}" for i in range(1, 7)},
+           **{f"solutions/ex0{i}": f"solutions/ex0{i}_solutions" for i in range(1, 7)}}
+
+
 def write(nb, path):
     """Stable ids, no interpreter version, bootstrap cell first, injector's JSON layout."""
+    key = f"{path.parent.name}/{path.stem}"
+    key = ID_KEYS.get(key, key)
     for i, cell in enumerate(nb.cells):
-        cell.id = hashlib.sha1(f"{path.parent.name}/{path.stem}/{i}".encode()).hexdigest()[:12]
+        cell.id = hashlib.sha1(f"{key}/{i}".encode()).hexdigest()[:12]
     nb.metadata.get("language_info", {}).pop("version", None)
     d = json.loads(nbformat.writes(nb))
     d["cells"].insert(0, _inject.make_cell(path.parent.relative_to(REPO).as_posix()))
@@ -77,10 +87,10 @@ def build_exercise(name):
     text = (ROOT / "src" / f"{name}_solved.py").read_text()
     sol = jupytext.reads(clean(text), fmt="py:percent")
     execute(sol, ROOT / "solutions")
-    write(sol, ROOT / "solutions" / f"{name}_solutions.ipynb")
+    write(sol, ROOT / "solutions" / f"{name}.ipynb")
     ex = jupytext.reads(strip_solutions(text), fmt="py:percent")
-    write(ex, ROOT / "exercises" / f"{name}.ipynb")
-    print(f"  solutions/{name}_solutions.ipynb ok + exercises/{name}.ipynb")
+    write(ex, ROOT / "notebooks" / f"{name}.ipynb")
+    print(f"  solutions/{name}.ipynb ok + notebooks/{name}.ipynb")
 
 if __name__ == "__main__":
     targets = sys.argv[1:] or ["01_counts_to_vectors", "02_contrastive_bi_encoder",

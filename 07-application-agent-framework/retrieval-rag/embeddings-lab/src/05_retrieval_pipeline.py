@@ -169,4 +169,4 @@ show("q03")   # negation: 'not steep' retrieves the steep doc — both fail
 # Fusion buys robustness across query types, not dominance on each. (2) Metrics
 # on *your* judged queries beat any leaderboard — this whole harness is ~40 lines.
 # (3) Keep per-query-type slices; averages hide exactly the failures that hurt.
-# → `exercises/ex05.ipynb`.
+# → `ex05.ipynb`.
