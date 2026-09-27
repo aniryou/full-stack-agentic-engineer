@@ -9,7 +9,8 @@ you set `AGENTSEC_PROFILE=gcp` and apply the Terraform.
 
 ```
 docs/primer.md        ← start here: the primer (13 numbered sections, drillable)
-notebooks/            ← worked examples + fill-in-the-blank practice + solutions, one per primer topic
+notebooks/            ← worked examples + fill-in-the-blank practice, one pair per primer topic
+solutions/            ← the practice notebooks completed, under the same file names
 src/agentsec/         ← the reference implementation (Python, ADK 2.8, MCP SDK, A2A SDK)
 policies/             ← deny-by-default tool policy (YAML)
 infra/terraform/      ← Google Cloud infrastructure (validated with provider 8.1); infra/scripts/ for gcloud-only steps
@@ -43,7 +44,7 @@ agentsec token-demo           # mint / exchange / inspect a delegated, certifica
 agentsec policy-check --agent "spiffe://agents.global.org-123456789012.system.id.goog/resources/aiplatform/projects/987654321098/locations/us-central1/reasoningEngines/support-agent" \
     --tool issue_refund --args '{"order_id":"O-5001","amount":120,"currency":"USD","reason":"x"}' \
     --user ana@customer.example --scopes payments:refund
-jupyter lab notebooks/        # worked examples; then notebooks/practice with notebooks/solutions
+jupyter lab notebooks/        # worked examples, then the *_practice blanks; answers in solutions/
 ```
 
 Run the tickets MCP server on its own (`agentsec mcp-serve --port 8765`) and probe it with

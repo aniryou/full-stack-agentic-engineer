@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 01 · Counts to vectors
 # Fill in each `YOUR CODE HERE` block. Every task has a self-check cell — run it
-# to verify. Solutions: `solutions/ex01_solutions.ipynb`.
+# to verify. Solutions: `../solutions/ex01.ipynb`.
 
 # %%
 import numpy as np

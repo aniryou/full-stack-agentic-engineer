@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 04 · ANN internals
 # Implement the two core moves of IVF-PQ, then demonstrate the filtered-search
-# trap yourself. Solutions: `solutions/ex04_solutions.ipynb`.
+# trap yourself. Solutions: `../solutions/ex04.ipynb`.
 
 # %%
 import numpy as np

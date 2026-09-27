@@ -167,4 +167,4 @@ print("pre-filter  (exact over the ~1% matching set): recall@10 = 1.000, "
 # (PQ/int8/binary) pairs with cheap **re-ranking** by full vectors. (3) Selective
 # filters break post-filtering — use pre-filtering, filter-aware traversal, or
 # partitioning. HNSW/DiskANN change the "scan less" step to graph walks; the
-# trade-offs are the same shape. → `exercises/ex04.ipynb`.
+# trade-offs are the same shape. → `ex04.ipynb`.

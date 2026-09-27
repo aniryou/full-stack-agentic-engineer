@@ -1,5 +1,5 @@
 PY ?= python3
-KV := ../kv-cache
+KV := ../kv-cache/notebooks
 
 .PHONY: setup test notebooks check lab clean
 

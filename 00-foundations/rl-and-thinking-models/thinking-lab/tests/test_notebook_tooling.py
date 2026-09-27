@@ -3,7 +3,7 @@
 - The builder is deterministic (stable cell ids), so rebuilding unchanged sources leaves the tree clean.
 - Every notebook it writes starts with a Colab setup cell. A cell tagged ``colab-bootstrap`` is exactly
   the one ``tools/inject_colab_bootstrap.py`` writes, so running the injector afterwards changes nothing.
-- The committed solution-side notebooks are what the builder writes (exercise notebooks are left out:
+- The committed solutions/ notebooks are what the builder writes (the notebooks/ blanks are left out:
   learners edit them in place).
 - ``run_notebooks.py --expect-fail`` passes a blank that stops at its exercise and reports a missing module,
   a leftover ``...`` or an error before the first exercise as a failure, exiting non-zero.
@@ -25,7 +25,7 @@ import pytest
 
 LAB = Path(__file__).resolve().parents[1]
 REPO = next((p for p in LAB.parents if (p / "tools" / "inject_colab_bootstrap.py").is_file()), None)
-BUILDER = next(p for d in ("tools", "scripts", "practice") if (p := LAB / d / "build_notebooks.py").is_file())
+BUILDER = next(p for d in ("tools", "scripts") if (p := LAB / d / "build_notebooks.py").is_file())
 RUNNER = next((p for d in ("tools", "scripts") if (p := LAB / d / "run_notebooks.py").is_file()), None)
 SKIP = {".git", ".venv", "venv", "_run_outputs", ".ipynb_checkpoints", "__pycache__", "node_modules"}
 
@@ -126,10 +126,9 @@ def content(raw: bytes):
 
 def test_committed_solutions_match_a_rebuild(fresh):
     _, _, built = fresh
-    has_solutions = any(rel.startswith("solutions/") for rel in built)
-    solution_side = [rel for rel in built if "practice" not in Path(rel).stem
-                     and not rel.startswith("notebooks/practice/")
-                     and not (has_solutions and rel.startswith("notebooks/"))]
+    # One layout: blanks (and lessons) in notebooks/, their answers under the same name in solutions/.
+    solution_side = [rel for rel in built if rel.startswith("solutions/")] or \
+                    [rel for rel in built if "practice" not in Path(rel).stem]
     assert solution_side
     committed = notebooks(LAB)
     stale = [rel for rel in solution_side if content(committed[rel]) != content(built[rel])]

@@ -90,7 +90,7 @@ def test_notebook_toc_points_at_the_rendered_headings_and_dead_anchors_are_count
 
 
 def test_search_skips_solutions_and_code_duplicates(fresh):
-    sol = nb_page("layers/06-x/lab/notebooks/solutions/06_mcp_solution.ipynb")
+    sol = nb_page("layers/06-x/lab/solutions/06_mcp.ipynb")
     html = hooks.on_page_content(NB_HTML, sol, fresh, None)
     assert sol.meta["search"] == {"exclude": True}
     assert '<div class="clipboard-copy-txt" data-search-exclude' in html

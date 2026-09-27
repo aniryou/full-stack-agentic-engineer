@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Execute notebooks and report pass/fail. Paths are relative to kernel-core/.
 
-    python tools/run_notebooks.py ../kv-cache/01_kv_cache_worked.ipynb           # must run clean
-    python tools/run_notebooks.py ../kv-cache/01_kv_cache_worked.ipynb --write   # ... and save its outputs
-    python tools/run_notebooks.py ../kv-cache/02_kv_cache_practice.ipynb --expect-fail   # the blank must stop
+    python tools/run_notebooks.py ../kv-cache/notebooks/01_kv_cache_worked.ipynb           # must run clean
+    python tools/run_notebooks.py ../kv-cache/notebooks/01_kv_cache_worked.ipynb --write   # ... and save its outputs
+    python tools/run_notebooks.py ../kv-cache/notebooks/02_kv_cache_practice.ipynb --expect-fail   # the blank must stop
 
 With --expect-fail a blank notebook passes only if it stops at an exercise: the first
 error is raised in or after the first `# YOUR CODE HERE` cell. It fails as FAIL(env)

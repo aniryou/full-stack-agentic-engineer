@@ -70,9 +70,9 @@ SCALELAB_BACKEND=local jupyter lab notebooks/   # notebook 04's load test and ex
 | `sim.py` | a load generator: many users against any backend; latency, shedding, spill-over share and cost per regime; the backend switch |
 | `clock.py` | the virtual clock, and a virtual-time event loop for deterministic tests |
 
-The notebooks use their own check helper (`notebooks/nbutil.py`): an exercise is a `todo()` placeholder rather than
+The notebooks use their own check helper (`nbutil.py`, beside `scalelab/`): an exercise is a `todo()` placeholder rather than
 `# YOUR CODE HERE`, and a check prints `PASS`, `FAIL` or `---- not attempted yet` rather than a ✅. Practice notebooks
-run end to end untouched; solutions (`notebooks/solutions/`) run with every check passing.
+(`notebooks/`) run end to end untouched; their solutions (`solutions/`, the same file names) run with every check passing.
 
 ## The anchor numbers (verify before quoting — prices, limits and GPU rates move)
 

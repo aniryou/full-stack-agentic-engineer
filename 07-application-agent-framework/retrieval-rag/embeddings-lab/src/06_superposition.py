@@ -133,4 +133,4 @@ plt.title("capacity follows importance"); plt.tight_layout(); plt.show()
 # §9, and why analogies and steering work. (2) Interference is the tax; sparse
 # autoencoders are the attempt to un-mix it. (3) Nearly-orthogonal packings are
 # a JL-lemma story (notebook 03): exponentially many almost-orthogonal
-# directions exist. → `exercises/ex06.ipynb`.
+# directions exist. → `ex06.ipynb`.

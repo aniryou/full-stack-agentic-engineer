@@ -160,4 +160,4 @@ plt.legend(); plt.title("truncation quality"); plt.tight_layout(); plt.show()
 # **Takeaways.** (1) Measure anisotropy before trusting cosines. (2) If the same
 # chunks surface for every query, suspect hubness — CSLS/centering help. (3) JL
 # explains why 256 dims is usually plenty. (4) Dimension order matters: trained
-# (MRL) or spectral (SVD) prefixes ≫ arbitrary subsets. → `exercises/ex03.ipynb`.
+# (MRL) or spectral (SVD) prefixes ≫ arbitrary subsets. → `ex03.ipynb`.
