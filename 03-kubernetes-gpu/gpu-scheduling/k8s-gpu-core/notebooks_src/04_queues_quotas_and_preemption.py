@@ -43,11 +43,12 @@ print(kueue.table())
 # nominal quota and only 16 of B's own plus 8 more are in use. The quota arithmetic behind
 # `available` (Kueue's `resource_node.go`, for a flat cohort) is:
 #
-# * `guaranteed = nominal - lendingLimit` (0 when there is no lending limit) — never lent;
-# * the cohort pool = sum over members of `nominal - guaranteed`; pool usage = sum of
-#   `max(0, usage - guaranteed)`;
-# * `available = max(0, guaranteed - usage) + (pool - pool usage)`, and if a `borrowingLimit` is set
-#   the cohort part is capped at `(nominal - guaranteed) - max(0, usage - guaranteed) + borrowingLimit`.
+# * $\text{guaranteed} =$ $\text{nominal} - \texttt{lendingLimit}$ (0 when there is no lending limit) — never lent;
+# * the cohort pool = sum over members of $\text{nominal} - \text{guaranteed}$; pool usage = sum of
+#   $\max(0, \text{usage} - \text{guaranteed})$;
+# * $\text{available} =$ $\max(0, \text{guaranteed} - \text{usage}) +{}$ $(\text{pool} - \text{pool usage})$, and if a
+#   `borrowingLimit` is set the cohort part is capped at $(\text{nominal} - \text{guaranteed}) -{}$
+#   $\max(0, \text{usage} - \text{guaranteed}) +{}$ $\texttt{borrowingLimit}$.
 #
 # ## Exercise 4.1 — how many GPUs can this ClusterQueue use right now?
 #

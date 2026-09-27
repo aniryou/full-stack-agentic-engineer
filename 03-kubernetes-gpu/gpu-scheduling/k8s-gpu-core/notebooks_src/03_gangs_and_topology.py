@@ -12,11 +12,14 @@
 # scheduler places pods one at a time, so two such jobs arriving together can each get *part* of
 # what they need — every GPU allocated, no job making progress: a **deadlock**. A **gang** is placed
 # all-or-nothing: Kueue admits a whole workload or none of it (the coscheduling plugin, Volcano and
-# the new Kubernetes Workload API do the same at the pod level). And "all" is not enough: a job's
-# pods must also be **close** — inside one NVLink domain, sub-block or block — because the
-# collectives run at the speed of the slowest link they cross. Kueue's Topology-Aware Scheduling
-# picks the tightest domain that holds the whole gang. After this notebook you can show the
-# deadlock, explain the fix, and choose a topology constraint for a workload.
+# the new Kubernetes Workload API do the same at the pod level).
+#
+# And "all" is not enough: a job's pods must also be **close** — inside one NVLink domain, sub-block
+# or block — because the collectives run at the speed of the slowest link they cross. Kueue's
+# Topology-Aware Scheduling picks the tightest domain that holds the whole gang.
+#
+# After this notebook you can show the deadlock, explain the fix, and choose a topology constraint
+# for a workload.
 #
 # Primer: §4 *Gangs* and §5 *Topology-aware placement* in `../../PRIMER.md`.
 

@@ -51,10 +51,12 @@ print("free GPUs:", spread.free(), "| stranded for 8-GPU pods:", stranded_gpus(s
 # ## Exercise 2.1 — the MostAllocated score
 #
 # kube-scheduler's `MostAllocated` strategy scores a node as a weighted average over the configured
-# resources of `requested * 100 // allocatable`, where *requested* already includes the incoming
-# pod, in integer arithmetic:
+# resources of $\lfloor \mathit{requested} \cdot 100 / \mathit{allocatable} \rfloor$, where *requested* already includes the
+# incoming pod, in integer arithmetic:
 #
-# `score = sum(weight_r * (min(requested_r, alloc_r) * 100 // alloc_r)) // sum(weight_r)`
+# $$
+# \mathit{score} = \left\lfloor \frac{\sum_r \mathit{weight}_r \cdot \lfloor \min(\mathit{requested}_r, \mathit{alloc}_r) \cdot 100 / \mathit{alloc}_r \rfloor}{\sum_r \mathit{weight}_r} \right\rfloor
+# $$
 #
 # Write `most_allocated_score(rows)` where `rows` is a list of `(requested_after, allocatable,
 # weight)` tuples.
@@ -105,8 +107,8 @@ print("\ntrain ->", p.schedule_one(gpu_pod("train", 8)).node)
 # %% [markdown]
 # ## Exercise 2.2 — measure fragmentation
 #
-# Define **stranded GPUs** for a pod shape of `k` GPUs as the free GPUs that cannot host one more
-# such pod: on each node, `free mod k`. Write `stranded(free_per_node, k)` and `frag(free_per_node,
+# Define **stranded GPUs** for a pod shape of $k$ GPUs as the free GPUs that cannot host one more
+# such pod: on each node, $\mathit{free} \bmod k$. Write `stranded(free_per_node, k)` and `frag(free_per_node,
 # k)` = stranded / total free (0.0 when nothing is free).
 
 # %% exercise
