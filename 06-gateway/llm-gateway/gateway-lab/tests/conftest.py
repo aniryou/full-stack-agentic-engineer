@@ -1,9 +1,12 @@
 """Shared fixtures: a fast in-process stack (fakes with short, fixed timings) and a path loader for other labs."""
 from __future__ import annotations
 
+import sys
+
+sys.dont_write_bytecode = True      # the path-import tests load other labs' code: leave no caches in their directories
+
 import ast
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
