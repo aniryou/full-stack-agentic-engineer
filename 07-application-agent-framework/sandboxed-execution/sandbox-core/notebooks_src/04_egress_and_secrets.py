@@ -6,19 +6,24 @@
 # 03); the logic is all here.
 #
 # ## The one-minute version
-# The sandbox has no network of its own and no secrets. When code legitimately needs an outside host, it
-# talks to an **egress proxy** inside the trust boundary; the proxy checks the host against an **allowlist**
-# and, for allowed hosts, **injects the credential** on the way out. The secret lives only in the proxy —
-# the same "gateway path" the identity primer describes (the agent never sees the raw credential), one layer
-# down, and the header-injection pattern managed services like E2B use host-side. To keep it there the proxy
-# must also **not follow redirects** (a 302 would replay the injected header to a host nobody allowed),
-# **drop the caller's own credential headers**, and **redact** an upstream that echoes the credential back.
+# The sandbox has no network of its own and no secrets. When code legitimately needs an outside host, it talks
+# to an **egress proxy** inside the trust boundary; the proxy checks the host against an **allowlist** and,
+# for allowed hosts, **injects the credential** on the way out. The secret lives only in the proxy — the same
+# "gateway path" the identity primer describes (the agent never sees the raw credential), one layer down, and
+# the header-injection pattern managed services like E2B use host-side.
+#
+# To keep it there the proxy must also **not follow redirects** (a 302 would replay the injected header to a
+# host nobody allowed), **drop the caller's own credential headers**, and **redact** an upstream that echoes
+# the credential back.
+#
 # Two honest edges: a default-deny egress policy also blocks **DNS**, and the safe shape keeps it blocked —
 # the sandbox reaches only the proxy (by `hostAliases`), and the proxy resolves names; and HTTPS through a
 # `CONNECT` tunnel can't have headers injected without terminating TLS, so the teaching proxy brokers plain
-# HTTP and refuses `CONNECT`. Enforcement is the **network**, not an env var: `HTTP_PROXY` is advisory, and
-# code that opens its own socket ignores it — which worked example 5 shows. Primer: `../PRIMER.md` §4
-# (network and secrets). Reuses the identity primer's token-exchange/gateway pattern (§3.5, §5).
+# HTTP and refuses `CONNECT`.
+#
+# Enforcement is the **network**, not an env var: `HTTP_PROXY` is advisory, and code that opens its own socket
+# ignores it — which worked example 5 shows. Primer: `../PRIMER.md` §4 (network and secrets). Reuses the
+# identity primer's token-exchange/gateway pattern (§3.5, §5).
 
 # %%
 import threading
@@ -234,14 +239,17 @@ print("✅ the process sandbox leaks a raw socket; every rung that owns the netw
 # ## In a design review
 # **The two-minute version.** "The sandbox holds no secrets and has no network. When code needs an allowed
 # host, it goes through an egress proxy inside the boundary: the proxy checks the host against an allowlist
-# and injects the credential outbound, so the secret lives in one hardened place and the sandboxed code
-# never sees it — the identity primer's gateway path, one layer down. The proxy doesn't follow redirects,
-# strips any credential the caller sends, and redacts an upstream that echoes the key. Enforcement is the
-# network, not an environment variable or the tool call: a default-deny egress NetworkPolicy opens only the
-# proxy, because `HTTP_PROXY` is advisory and the hosts a model declares are its own claim — a process
-# sandbox lets a raw socket straight out. I keep DNS closed too: the pod finds the proxy through hostAliases,
-# and the proxy resolves names. And I broker plain HTTP so I can inject headers — HTTPS needs TLS termination
-# at the proxy with a trusted CA. The audit log records which header was injected, never its value."
+# and injects the credential outbound, so the secret lives in one hardened place and the sandboxed code never
+# sees it — the identity primer's gateway path, one layer down. The proxy doesn't follow redirects, strips any
+# credential the caller sends, and redacts an upstream that echoes the key.
+#
+# "Enforcement is the network, not an environment variable or the tool call: a default-deny egress
+# NetworkPolicy opens only the proxy, because `HTTP_PROXY` is advisory and the hosts a model declares are its
+# own claim — a process sandbox lets a raw socket straight out. I keep DNS closed too: the pod finds the proxy
+# through hostAliases, and the proxy resolves names.
+#
+# "And I broker plain HTTP so I can inject headers — HTTPS needs TLS termination at the proxy with a trusted
+# CA. The audit log records which header was injected, never its value."
 #
 # **Drill questions**
 # 1. *Where does the API key live, and who can read it?* — Only in the proxy. The sandboxed code cannot read
