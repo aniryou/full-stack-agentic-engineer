@@ -7,8 +7,10 @@ standing instruction planted by a web page looks like), a confidence floor, and 
 (secrets are rejected, injection phrasing and every tool-sourced fact are quarantined - stored, never
 retrieved until a human promotes them; 07.2 notebook 11 §4). Survivors are merged against what the partition
 already holds: the same value is a NOOP, a new value from an equal or stronger source is an UPDATE that closes
-the old fact (valid_to) instead of deleting it, and a weaker contradiction is quarantined. Every write carries
-an idempotency key, so a retried turn writes once (durable primer §3.2).
+the old fact (valid_to) instead of deleting it, an OLDER value that arrives late (a backfill, an out-of-order
+background extraction) is kept as closed history and never supersedes a newer one, and a weaker contradiction is
+quarantined. Every write carries an idempotency key that names the step - (session, turn, call index), never the
+content - so a retried turn replays its first result instead of writing again (durable primer §3.2).
 
 This is extract -> compare -> ADD / UPDATE / NOOP, the shape mem0 used before its 2.0.0 release (its events were
 ADD / UPDATE / DELETE / NONE; mem0 2.x is ADD-only). Deletion is not a write-path event here: `forget` is.
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import zlib
 from dataclasses import dataclass, field
 
 from .records import KINDS, MemoryRecord, Scope
@@ -34,17 +37,37 @@ SLOTS = {
 }
 NOUN_TO_KEY = {noun: key for key, (noun, _, _) in SLOTS.items()}
 FACT_RE = re.compile(r"(?i:the user's) (?P<noun>[a-z ]+) is (?P<v>[A-Za-z][A-Za-z ]*)\.")
+# A family of open-ended slots ("My favourite colour is teal." -> favourite_colour), so the harness can give a user
+# far more facts than a profile holds. Importance is a fixed pseudo-rating per thing (2..8), like a model's rating.
+FAVOURITE_RE = re.compile(r"(?i:my favourite) (?P<thing>[a-z]+) (?i:is) (?P<v>[a-z]+)")
+
+
+def slot_info(key: str) -> tuple[str, int]:
+    """(noun used in the fact's text, importance 1..10) for a fixed slot or a favourite_<thing> slot."""
+    if key in SLOTS:
+        return SLOTS[key][0], SLOTS[key][1]
+    if key.startswith("favourite_"):
+        return "favourite " + key[len("favourite_"):], 2 + zlib.crc32(key.encode()) % 7
+    raise KeyError(key)
+
+
+def _noun_key(noun: str) -> str | None:
+    if noun in NOUN_TO_KEY:
+        return NOUN_TO_KEY[noun]
+    parts = noun.split()
+    return "favourite_" + parts[1] if len(parts) == 2 and parts[0] == "favourite" else None
 
 
 def fact_text(key: str, value: str) -> str:
-    return f"For this user, always {value}." if key == "procedure" else f"The user's {SLOTS[key][0]} is {value}."
+    return f"For this user, always {value}." if key == "procedure" else f"The user's {slot_info(key)[0]} is {value}."
 
 
 def read_facts(text: str) -> list[tuple[str, str]]:
     """(key, value) pairs a reader finds in a memory's text - a distilled fact or a raw statement."""
-    out = [(NOUN_TO_KEY[m["noun"]], m["v"]) for m in FACT_RE.finditer(text) if m["noun"] in NOUN_TO_KEY]
+    out = [(_noun_key(m["noun"]), m["v"]) for m in FACT_RE.finditer(text) if _noun_key(m["noun"])]
     for key, (_, _, pats) in SLOTS.items():
         out += [(key, m["v"]) for p in pats for m in re.finditer(p, text)]
+    out += [("favourite_" + m["thing"].lower(), m["v"]) for m in FAVOURITE_RE.finditer(text)]
     return out
 
 
@@ -53,7 +76,7 @@ def extract(text: str, scope: Scope, *, source: str = "user", at: float = 0.0, t
     """One episodic record for the turn, plus one semantic (or procedural) candidate per recognised statement."""
     facts = []
     for key, value in read_facts(text):
-        noun, importance, _ = SLOTS[key]
+        noun, importance = slot_info(key)
         facts.append(MemoryRecord(fact_text(key, value), "procedural" if key == "procedure" else "semantic", scope,
                                   source, key=key, value=value, confidence=confidence, importance=importance,
                                   created_at=at, provenance=(turn_id,) if turn_id else ()))
@@ -103,15 +126,27 @@ class WritePolicy:
 
 @dataclass
 class WriteResult:
-    action: str                          # ADD | UPDATE | NOOP | QUARANTINE | REJECT
+    action: str                          # ADD | UPDATE | ADD_HISTORY | NOOP | QUARANTINE | REJECT
     record: MemoryRecord | None
     reasons: list[str] = field(default_factory=list)
     superseded: str | None = None        # id of the fact an UPDATE closed
 
 
-def idempotency_key(session: str, turn: int, index: int, text: str) -> str:
-    """session:turn:index plus a content hash - stable across retries of the same turn, unique across turns."""
-    return f"{session}:{turn}:{index}:" + hashlib.sha256(text.encode()).hexdigest()[:8]
+class IdempotencyConflict(ValueError):
+    """A known key arrived with a different write: the caller re-derived the step instead of replaying it.
+    Never a second write (an HTTP API answers 422; the lab's service does)."""
+
+
+def idempotency_key(session: str, turn: int, index: int) -> str:
+    """session:turn:index - it names the STEP, not its content. A retried turn re-asks the extractor and may get
+    different text back; a key with the text in it would then be new, and the retry would write a second, different
+    fact (the durable primer's §3.2 failure: "a naive retry re-asks the model ... and produces a second, different
+    side effect"). With the step as the key, the retry replays the first result, or fails loudly."""
+    return f"{session}:{turn}:{index}"
+
+
+def fingerprint(rec: MemoryRecord) -> str:
+    return hashlib.sha256(repr((rec.kind, rec.key, _norm(rec.value), _norm(rec.text))).encode()).hexdigest()[:16]
 
 
 def _norm(s: str | None) -> str:
@@ -119,16 +154,27 @@ def _norm(s: str | None) -> str:
 
 
 class Writer:
+    """The write path. `journal` maps ((tenant, user), key) -> (fingerprint, result): keys are unique per partition
+    (two users may both have a session "s1"). It is in-process here; in production it is a table written in the
+    same transaction as the record (memory-lab's `idempotency_key` column), so it survives the crash that caused
+    the retry."""
+
     def __init__(self, store, policy: WritePolicy | None = None):
         self.store, self.policy = store, policy or WritePolicy()
-        self.seen: dict[str, WriteResult] = {}
+        self.journal: dict[tuple, tuple[str, WriteResult]] = {}
 
     def write(self, rec: MemoryRecord, idempotency_key: str | None = None) -> WriteResult:
-        if idempotency_key is not None and idempotency_key in self.seen:
-            return self.seen[idempotency_key]            # a replayed turn: same answer, no second write
+        slot = (rec.scope.partition, idempotency_key)
+        if idempotency_key is not None and slot in self.journal:
+            fp, result = self.journal[slot]
+            if fp != fingerprint(rec):
+                raise IdempotencyConflict(f"key {idempotency_key!r} already wrote {result.action} "
+                                          f"{result.record.text if result.record else ''!r}: replay the journaled "
+                                          f"step instead of re-extracting it")
+            return result                                 # a replayed turn: same answer, no second write
         result = self._write(rec)
         if idempotency_key is not None:
-            self.seen[idempotency_key] = result
+            self.journal[slot] = (fingerprint(rec), result)
         return result
 
     def _write(self, rec: MemoryRecord) -> WriteResult:
@@ -147,11 +193,24 @@ class Writer:
         if _norm(old.value or old.text) == _norm(rec.value or rec.text):     # merge: provenance, confidence
             old.provenance = tuple(dict.fromkeys(old.provenance + rec.provenance))
             old.confidence = max(old.confidence, rec.confidence)
+            old.valid_from = min(old.valid_from, rec.valid_from)             # older evidence: true since then
             return WriteResult("NOOP", self.store.update(old), ["already known"])
         if rec.trust < old.trust:
             return WriteResult("QUARANTINE", self.store.put(rec.copy(status="quarantined")),
                                [f"contradicts {old.id} from a stronger source ({old.source})"])
+        if rec.valid_from < old.valid_from:           # a late, OLDER value: history, never the current fact
+            end = history_end(self.store.find(rec.scope, rec.key, status=None), rec.valid_from) if rec.key else None
+            return WriteResult("ADD_HISTORY", self.store.put(rec.copy(status="superseded", valid_to=end,
+                                                                      superseded_at=rec.created_at)),
+                               [f"older than {old.id} (valid from day {old.valid_from / 86400:g}): kept as history"])
         old.valid_to, old.superseded_at, old.status = rec.valid_from, rec.created_at, "superseded"
         self.store.update(old)
         return WriteResult("UPDATE", self.store.put(rec.copy(meta={**rec.meta, "supersedes": old.id})),
                            [f"supersedes {old.id}"], superseded=old.id)
+
+
+def history_end(records, valid_from: float) -> float | None:
+    """Where a late, older value stops being true: the valid_from of the next known value of the slot (active or
+    already superseded), or None if nothing later is known (memory-lab's memory.history_end)."""
+    later = [r.valid_from for r in records if r.valid_from > valid_from and r.status in ("active", "superseded")]
+    return min(later) if later else None

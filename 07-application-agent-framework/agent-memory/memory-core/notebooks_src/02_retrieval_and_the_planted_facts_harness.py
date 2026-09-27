@@ -108,6 +108,12 @@ for q in sc.questions:
 # Here the adversarial question asks about a fact that only a **tool result** asserted — quarantined on write, so the
 # right answer is "I don't know".
 #
+# **A fixture artefact, disclosed.** Look at the planted statements: "I live in Prague. (about my home city)". No
+# real user adds that hint. It exists so that the template extractor and the lexical embedder have something to work
+# with on raw episodes — it hands the embedder the question's own words ("home", "city"). So the raw-episode numbers
+# below flatter raw episodes; `generate(hint=False)` drops the hints, and the cell after worked example 6 shows the
+# difference. Consolidated facts are unaffected: their text is the template "The user's home city is …" either way.
+#
 # ## Worked example 5 — evaluate, with an interval
 
 # %%
@@ -118,12 +124,20 @@ print(f"{res['n']} questions at a 60-token budget: accuracy {res['accuracy']:.1%
       f"recall {res['recall']:.1%}, stale {res['stale']:.1%}, abstention {res['abstention']:.0%}")
 for k, v in res["by_type"].items():
     print(f"   {k:26} {v:.0%}")
+c_lo, c_hi = res["cluster"]
+print(f"resampling users instead of questions (a cluster bootstrap): {c_lo:.1%}-{c_hi:.1%}")
 
 # %% [markdown]
 # Everything is right except the preference paraphrase: "Where does the user like to sit on a plane?" shares no
 # token with "The user's seat preference is aisle.", every fact ties on relevance, and the lowest-importance fact
 # loses the budget. The reader is a strict template reader, so each miss is a retrieval or write-path miss — which
 # is the point of a memory benchmark.
+#
+# The Wilson interval treats the 390 questions as 390 independent trials. They are not: thirteen per user share one
+# store and one write path, and here every one of the 30 users misses the *same* question. Resampling users (the
+# `cluster` interval) collapses to a point — this harness's uncertainty is in which question types it asks, not in
+# which users. Compare designs per question type (`by_type`), and read an interval as a statement about this
+# generator, not about your users.
 #
 # ## Worked example 6 — recall against the budget, raw episodes against facts
 
@@ -137,7 +151,16 @@ for mode in ("consolidated", "episodes"):
 
 # %% [markdown]
 # Facts reach full recall at 90 tokens — the whole profile fits — while raw episodes (long, in the user's words,
-# filler included) are at 40% with 120. Note the episodes' accuracy at 15 tokens: 15.4% with **zero** recall — the
+# filler included) are at 40% with 120, and that with the slot hints' help:
+
+# %%
+for hint in (True, False):
+    pairs = [(s, build_store(s, "episodes")) for s in (generate(i, hint=hint) for i in range(30))]
+    r = summarize([o for s, st in pairs for o in evaluate(s, st, 60, ("episodic",))])
+    print(f"raw episodes at 60 tokens, slot hints {'on ' if hint else 'off'}: recall {r['recall']:.1%}")
+
+# %% [markdown]
+# The episodes' curve is the fixture's best case. Note the episodes' accuracy at 15 tokens: 15.4% with **zero** recall — the
 # two unanswerable questions per user are "right" for a reader that knows nothing. Report recall and abstention
 # separately, or a memory that stores nothing looks like it works.
 #
@@ -207,18 +230,20 @@ print(f"✅ paper {np.round(s_p, 3)}, code {np.round(s_c, 3)}: on a knowledge up
 
 # %% [markdown]
 # The harness shows the damage at scale: on raw episodes at a 60-token budget, the code form answers 70% of the
-# knowledge-update questions with the old value; the paper form 0%.
+# knowledge-update questions with the old value; the paper form 0%. With the slot hints removed the gap shrinks but
+# keeps its direction.
 
 # %%
-eruns = [(sc, build_store(sc, "episodes")) for sc in map(generate, range(30))]
-for form in ("paper", "code"):
-    r = summarize([o for sc, st in eruns for o in evaluate(sc, st, 60, ("episodic",), form)])
-    print(f"{form:5}: recall {r['recall']:.1%}  stale answers {r['stale']:.1%}")
+for hint in (True, False):
+    eruns = [(sc, build_store(sc, "episodes")) for sc in (generate(i, hint=hint) for i in range(30))]
+    for form in ("paper", "code"):
+        r = summarize([o for sc, st in eruns for o in evaluate(sc, st, 60, ("episodic",), form)])
+        print(f"hints {'on ' if hint else 'off'} {form:5}: recall {r['recall']:.1%}  stale answers {r['stale']:.1%}")
 
 # %% [markdown]
 # Read both columns. The code form's *recall* is higher — its relevance weight of 3 suits long episodes — and 70%
-# of its knowledge-update answers are stale. A single aggregate would have picked the wrong form; per-type metrics
-# (stale answers, abstention) are what catch it.
+# of its knowledge-update answers are stale (27% without the hints). A single aggregate would have picked the wrong
+# form; per-type metrics (stale answers, abstention) are what catch it.
 #
 # ## Exercise 2.4 — pack into the budget
 # Implement `pack_budget(records, budget)`: walk the records in the order given (best first), take each one whose
@@ -292,8 +317,8 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # **The two-minute version.** "Retrieval is where memory quality is decided, so we score and we measure. Each
 # candidate in the user's partition gets the generative-agents score — recency, importance and relevance, each
 # min-max normalised — and we use the paper's form: recency decays with hours since last use. The reference code's
-# form ranks by access order oldest-first and served stale facts on 70% of knowledge updates in our harness, so we
-# do not copy it. The ranked list is packed into a per-turn token budget, greedily with skip, and as-of queries
+# form ranks by access order oldest-first and served stale facts on 70% of knowledge updates over raw episodes in our
+# harness (27% once we removed the harness's slot hints), so we do not copy it. The ranked list is packed into a per-turn token budget, greedily with skip, and as-of queries
 # can reach closed facts. We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes — shapes,
 # not their data — and report accuracy with a Wilson interval, recall within the budget, stale answers and
 # abstention separately, because a memory that stores nothing still gets the abstention questions right. The knee
@@ -304,6 +329,7 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # 1. *Why add recency and importance to similarity?* — Similarity finds the most on-topic memory; the most useful
 #    one is often more recent (a knowledge update) or more important (an allergy) than the closest match.
 # 2. *Accuracy is 92% on 13 questions. Ship?* — 12/13 is a 67–99% Wilson interval: too wide. Run hundreds of
-#    questions (390 here: 89–95%) and read recall, stale answers and abstention separately.
+#    questions (390 here: 89–95%), remember they are not independent (resample users, compare per question type),
+#    and read recall, stale answers and abstention separately.
 # 3. *When do you need an ANN index for memory?* — When one partition is large; a user's memory is small, so a
 #    flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) pays at tenant or corpus scale.

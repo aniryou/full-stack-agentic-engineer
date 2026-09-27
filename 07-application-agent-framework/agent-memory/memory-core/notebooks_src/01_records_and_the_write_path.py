@@ -13,15 +13,16 @@
 # deletion key. What gets written is decided **in code**: extract candidates after the turn, check a **write
 # policy** (which kinds each source may write, a confidence floor, screening before persistence), then **merge**
 # against what is known — the same value is a no-op, a new value closes the old fact instead of deleting it, a
-# weaker source that contradicts is quarantined — and give every write an **idempotency key** so a retried turn
-# writes once.
+# weaker source that contradicts is quarantined, an older value arriving late becomes history — and give every write
+# an **idempotency key** that names the step (never its content) so a retried turn writes once.
 #
 # Primer: §1 *What an agent remembers*, §2 *The write path* (`../PRIMER.md`).
 
 # %%
 import hashlib
 
-from memcore import DAY, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, extract, idempotency_key
+from memcore import (DAY, IdempotencyConflict, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, extract,
+                     idempotency_key)
 
 ALICE = Scope("acme", "alice", session="s1")
 
@@ -106,18 +107,44 @@ for r in store.records(ALICE, status=None):
 # the secret and the tool's rule never reached the store. This is extract → compare → ADD / UPDATE / NOOP, the
 # shape mem0 used before 2.0.0 (its events were ADD / UPDATE / DELETE / NONE; mem0 2.x is ADD-only, verify).
 #
+# One more branch, because background extraction delivers statements **out of order**: the user said "I live in
+# Lisbon" on day 0 and "I moved to Porto" on day 3, but the day-0 extraction arrives second.
+
+# %%
+store = MemoryStore()
+writer = Writer(store)
+for rec in (fact_rec("Porto", day=3), fact_rec("Lisbon", day=0)):
+    res = writer.write(rec)
+    print(f"{rec.value:7} (valid from day {rec.valid_from / DAY:g}) -> {res.action:12} {'; '.join(res.reasons)[:60]}")
+for r in store.records(ALICE, status=None):
+    print(f"   {r.status:11} {r.value:7} valid day {r.valid_from / DAY:g} to "
+          f"{'now' if r.valid_to is None else f'day {r.valid_to / DAY:g}'}")
+
+# %% [markdown]
+# An older value never supersedes a newer one: Lisbon is stored as closed history (`ADD_HISTORY`, valid until Porto
+# begins) and Porto stays the current fact. Updating by arrival order would have undone the move.
+#
 # ## Worked example 5 — a retried turn writes once
-# Agent turns run on at-least-once machinery (queues, retries). The write carries a key that is stable across a
-# retry and unique across turns — `session:turn:index` plus a content hash (durable primer §3.2).
+# Agent turns run on at-least-once machinery (queues, retries). The write carries a key that names the **step** —
+# `session:turn:index`, stable across a retry and unique across turns (durable primer §3.2). Not the content: a
+# retry re-asks the extraction model, which may phrase the fact differently, and a key with a content hash would then
+# be new — a second, different write.
 
 # %%
 store = MemoryStore()
 writer = Writer(store)
 rec = extract("I prefer window seats.", ALICE, at=DAY, turn_id="s1:7")[1]
-key = idempotency_key("s1", 7, 0, rec.text)
+key = idempotency_key("s1", 7, 0)
 first, retry = writer.write(rec, key), writer.write(rec, key)
 print(key, "|", first.action, "then", retry.action if retry is not first else "the same result (no second write)",
       "| records:", len(store.records(ALICE)))
+reworded = MemoryRecord("The user prefers window seats.", "semantic", ALICE, "user", key="seat_preference",
+                        value="window", created_at=DAY)            # the retry's extraction came out differently
+try:
+    writer.write(reworded, key)
+except IdempotencyConflict as e:
+    print("a re-extracted retry under the same key:", type(e).__name__, "-", str(e)[:80], "...")
+print("records:", len(store.records(ALICE)))
 
 # %% [markdown]
 # ## Exercise 1.1 — which kind is it?
@@ -172,8 +199,10 @@ print("✅ your policy agrees with memcore.WritePolicy on all", len(cases), "cas
 # %% [markdown]
 # ## Exercise 1.3 — the merge decision
 # `existing` is the active fact for a slot (or `None`), `new` a candidate for the same slot that passed the policy.
-# Return `"ADD"` (nothing known), `"NOOP"` (same value, ignoring case), `"UPDATE"` (a different value from a source
-# at least as trusted: `new.trust >= existing.trust`) or `"QUARANTINE"` (a different value from a weaker source).
+# Return `"ADD"` (nothing known), `"NOOP"` (same value, ignoring case), `"QUARANTINE"` (a different value from a
+# weaker source: `new.trust < existing.trust`), `"ADD_HISTORY"` (a different value from a source at least as trusted,
+# but *older*: `new.valid_from < existing.valid_from`) or `"UPDATE"` (a different, newer value from a source at least
+# as trusted).
 
 # %% exercise
 def merge_action(existing, new):
@@ -182,21 +211,23 @@ def merge_action(existing, new):
         return "ADD"
     if existing.value.lower() == new.value.lower():
         return "NOOP"
-    return "UPDATE" if new.trust >= existing.trust else "QUARANTINE"
+    if new.trust < existing.trust:
+        return "QUARANTINE"
+    return "ADD_HISTORY" if new.valid_from < existing.valid_from else "UPDATE"
     ### END SOLUTION
 
 # %% check
 import itertools
-for src_old, src_new, v in itertools.product(["human", "user", "inferred"], ["human", "user", "inferred"],
-                                             ["Lisbon", "lisbon", "Porto"]):
+for src_old, src_new, v, day in itertools.product(["human", "user", "inferred"], ["human", "user", "inferred"],
+                                                  ["Lisbon", "lisbon", "Porto"], [1, 3]):
     store = MemoryStore()
     w = Writer(store)
-    old = fact_rec("Lisbon", src_old, day=0)
+    old = fact_rec("Lisbon", src_old, day=2)
     w.write(old)
-    new = fact_rec(v, src_new, day=1)
-    assert merge_action(store.find(ALICE, "home_city")[0], new) == w.write(new).action, (src_old, src_new, v)
+    new = fact_rec(v, src_new, day=day)
+    assert merge_action(store.find(ALICE, "home_city")[0], new) == w.write(new).action, (src_old, src_new, v, day)
 assert merge_action(None, fact_rec("Oslo")) == "ADD"
-print("✅ same value: merge; stronger or equal source: supersede (and keep the old fact closed); weaker: quarantine")
+print("✅ same value: merge; weaker source: quarantine; older: history; newer from an equal or stronger source: supersede")
 
 # %% [markdown]
 # ## Exercise 1.4 — predict the actions
@@ -223,26 +254,35 @@ print("✅", actual, "| sources on file:", [(r.value, r.source, r.status) for r 
 # and test it, because precedence rules that look obvious disagree in exactly these edge cases.
 #
 # ## Exercise 1.5 — an idempotency key
-# Write `write_key(session, turn, index, text)`: equal for a retry of the same write, different for a different
-# turn, a different call in the same turn, or different content in the same slot. (Any stable construction passes;
-# memcore uses `session:turn:index:` plus 8 hex of sha256 of the text.)
+# Write `write_key(session, turn, index, text)`: the key of the write at position `index` of turn `turn`. It must
+# be equal for every retry of that step — **including a retry whose extraction came back worded differently**
+# (`text` is what the extractor returned this time) — and different for a different turn, a different call in the
+# same turn, or another session. (memcore's `idempotency_key` is one answer; any stable construction passes.)
 
 # %% exercise
 def write_key(session, turn, index, text):
     ### BEGIN SOLUTION
-    return f"{session}:{turn}:{index}:" + hashlib.sha256(text.encode()).hexdigest()[:8]
+    return f"{session}:{turn}:{index}"          # the step names the write; the text must not
     ### END SOLUTION
 
 # %% check
 k = write_key("s1", 7, 0, "I prefer window seats.")
 assert k == write_key("s1", 7, 0, "I prefer window seats.")
+assert k == write_key("s1", 7, 0, "The user prefers window seats."), "a re-extracted retry must replay, not write again"
 others = [write_key("s1", 8, 0, "I prefer window seats."), write_key("s1", 7, 1, "I prefer window seats."),
-          write_key("s2", 7, 0, "I prefer window seats."), write_key("s1", 7, 0, "I prefer aisle seats.")]
-assert k not in others and len(set(others)) == 4
+          write_key("s2", 7, 0, "I prefer window seats.")]
+assert k not in others and len(set(others)) == 3
 w = Writer(MemoryStore())
 rec = extract("I prefer window seats.", ALICE, at=DAY)[1]
 assert w.write(rec, k) is w.write(rec, k) and len(w.store.records(ALICE)) == 1
-print("✅ a retried turn writes once; two different writes never share a key")
+try:
+    w.write(MemoryRecord("The user prefers window seats.", "semantic", ALICE, "user", key="seat_preference",
+                         value="window", created_at=DAY), k)
+    raise AssertionError("a different write under a known key must not be written")
+except IdempotencyConflict:
+    pass
+assert len(w.store.records(ALICE)) == 1
+print("✅ a retried turn writes once, however the retry's extraction was worded; distinct steps never share a key")
 
 # %% [markdown]
 # ## In a design review
@@ -254,7 +294,9 @@ print("✅ a retried turn writes once; two different writes never share a key")
 # for secrets and injection before anything persists; tool output is quarantined until reviewed and can never
 # write procedural memory. Survivors merge against what we know: same value is a no-op, a new value from an equal or
 # stronger source supersedes and closes the old fact — we keep it for as-of questions and audit — and a weaker
-# contradiction is quarantined. Every write carries an idempotency key, so a retried turn writes once."
+# contradiction is quarantined; an older value that arrives late is history, never the current fact. Every write
+# carries an idempotency key that names the step — not its content, which a retried extraction may reword — so a
+# retried turn writes once."
 #
 # **Drill questions**
 # 1. *Why not just keep the whole transcript?* — Cost grows with every turn (the prompt re-sends it), it ends with

@@ -12,15 +12,17 @@
 # history**, the prefix changes right after the system prompt and every history block behind it misses: the whole
 # conversation re-prefills on every turn. Two layouts keep the history a stable prefix: a **profile pinned once per
 # session**, or per-turn memory at the **tail**, just before the new user message (ADK's `PreloadMemoryTool` inserts
-# there). You can predict the hit rate of each layout from the block rules, turn the lost hits into TTFT with a
-# roofline model and into dollars with a price table — and extraction has a price too.
+# there). You can predict the hit rate of each layout from the block rules and turn the lost hits into TTFT with a
+# roofline model — the self-hosted cost. A hosted API is different: it bills the cached rate only once a request
+# clears its caching minimum (4,096 tokens on Gemini 3.x), so below it the layout does not change the bill at all.
+# And extraction has a price too.
 #
 # Primer: §5 *The context budget: tokens, the prefix cache and cost per turn*; the block rules are
 # serving-engine PRIMER §5 and mini-engine-core notebook 03 exercise 3.4.
 
 # %%
-from memcore import (GPUS, LAYOUTS, LLMS, PrefixCache, call_cost, expected_cached_tokens, hit_rate, hits_per_turn,
-                     prefill_seconds, token_ids, turn_cost)
+from memcore import (CACHE_MIN_TOKENS, GPUS, LAYOUTS, LLMS, PrefixCache, Salts, billed_cached, cache_salt, call_cost,
+                     expected_cached_tokens, hit_rate, hits_per_turn, prefill_seconds, token_ids, turn_cost)
 
 # %% [markdown]
 # ## Worked example 1 — three rules decide every hit
@@ -91,25 +93,42 @@ print("\nover 20 turns:", {l: f"{hit_rate(hits_per_turn(l, turns=20)):.1%}" for 
 # to 48% in 20 — it gets **worse** as the conversation grows, because the uncached part is the whole history.
 # Pinned costs almost nothing in hits; the tail loses one exchange and the memory itself per turn.
 #
-# ## Worked example 4 — what the lost hits cost (SIMULATED time, dated prices)
-# Turn 8 of the default session. Time: memcore's restatement of `minengine.perf.step_cost` for one prefill chunk
-# (`prefill_seconds`, roofline: max(bytes / 0.8 BW, FLOPs / 0.6 peak) + 2 ms). Money: `turn_cost` at the scaling
-# primer's §3.4 prices (Gemini 3.5 Flash, $1.50 / $0.15 cached / $9.00 per M tokens, 5 Sep 2026, verify).
+# ## Worked example 4 — what the lost hits cost: time on your GPUs (SIMULATED), dollars on a hosted API
+# Turn 8 of the default session. Time, for a self-hosted engine: memcore's restatement of `minengine.perf.step_cost`
+# for one prefill chunk (`prefill_seconds`, roofline: max(bytes / 0.8 BW, FLOPs / 0.6 peak) + 2 ms).
 
 # %%
 l4, q15, h100, l8 = GPUS["L4"], LLMS["qwen2.5-1.5b"], GPUS["H100-SXM"], LLMS["llama-3.1-8b"]
-print(f"{'layout':15} {'uncached':>8} {'L4 1.5B':>9} {'H100 8B':>9} {'$ turn 8':>10} {'$ session':>10}")
+print(f"{'layout':15} {'uncached':>8} {'L4 1.5B':>9} {'H100 8B':>9}")
 for layout in LAYOUTS:
-    turns = hits_per_turn(layout)
-    t = turns[-1]
+    t = hits_per_turn(layout)[-1]
     print(f"{layout:15} {t.prompt - t.cached:8} {prefill_seconds(l4, q15, t.prompt, t.cached) * 1e3:7.1f}ms "
-          f"{prefill_seconds(h100, l8, t.prompt, t.cached) * 1e3:7.1f}ms "
-          f"{turn_cost(t.prompt, t.cached, 120)['total']:10.5f} {sum(turn_cost(x.prompt, x.cached, 120)['total'] for x in turns):10.5f}")
+          f"{prefill_seconds(h100, l8, t.prompt, t.cached) * 1e3:7.1f}ms")
 
 # %% [markdown]
-# Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 vs 15.3 ms) and the 8-turn session
-# 71% dearer than no memory at all ($0.0257 vs $0.0150); pinned costs 7% more than none. The engine did the same
-# work the whole time — the layout decided how much of it was repeated.
+# Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 vs 15.3 ms, SIMULATED). The engine did
+# the same work the whole time — the layout decided how much of it was repeated.
+#
+# Money is a different system. A hosted API has its own cache, and bills the cached rate ($0.15 instead of $1.50 per
+# M on Gemini 3.5 Flash, 5 Sep 2026, verify) only once a request clears its **caching minimum** — 4,096 tokens on
+# Gemini 3.x (scaling primer §5.5; whether it applies to the request or the shared prefix is verify). `turn_cost`
+# applies it through `billed_cached`, assuming the provider caches the prefix vLLM would.
+
+# %%
+print("caching minimum:", CACHE_MIN_TOKENS["gemini-3.5-flash"], "tokens | turn-8 prompts:",
+      {l: hits_per_turn(l)[-1].prompt for l in LAYOUTS})
+for system in (2000, 4000):
+    cost = {l: sum(turn_cost(t.prompt, t.cached, 120)["total"] for t in hits_per_turn(l, system_tokens=system))
+            for l in LAYOUTS}
+    print(f"{system:,}-token system prompt, $ per 8-turn session:", {l: round(c, 5) for l, c in cost.items()},
+          f"| before_history vs pinned: {cost['before_history'] / cost['pinned'] - 1:+.0%}")
+
+# %% [markdown]
+# With the 2,000-token system prompt every prompt stays under 4,096 tokens, nothing is billed cached, and all three
+# memory layouts cost the same — 12% more than no memory, for the 400 tokens injected. With a 4,000-token system
+# prompt (tools and policies; the scaling primer's support turn sends 4–6 k) every turn from the second clears the
+# minimum, and memory before the history costs 46% more than a pinned profile. The bigger prompt is also the
+# *cheaper* session: it is the one that gets cached. A threshold, not a slope — know your provider's.
 #
 # ## Worked example 5 — extraction has a price too
 # Extracting after every turn is a model call per turn. Consolidating once per session reads the whole session.
@@ -117,26 +136,33 @@ for layout in LAYOUTS:
 # %%
 per_turn = turn_cost(0, 0, 0, extraction_in=600, extraction_out=60)["extraction"]
 per_session = turn_cost(0, 0, 0, extraction_in=1600, extraction_out=100, extractions_per_turn=1 / 8)["extraction"]
-answer = turn_cost(3560, 3504, 120)["answer"]
-print(f"answering turn 8 (pinned): ${answer:.5f} | extraction every turn: ${per_turn:.5f} | "
-      f"one consolidation per 8-turn session, per turn: ${per_session:.5f}")
+cached = hits_per_turn("pinned", system_tokens=4000)[-1]
+answer = turn_cost(cached.prompt, cached.cached, 120)["answer"]
+print(f"answering turn 8 (pinned, 4,000-token system prompt, billed cached): ${answer:.5f} | extraction every turn: "
+      f"${per_turn:.5f} | one consolidation per 8-turn session, per turn: ${per_session:.5f}")
 
 # %% [markdown]
-# Hot-path extraction on every turn nearly doubles the cost of a cached turn. Batch it: extract in the background
+# Hot-path extraction on every turn adds 72% to the cost of a cached turn. Batch it: extract in the background
 # after the session (or on a schedule, notebook 04) unless the next turn needs the fact immediately.
 #
 # ## Worked example 6 — one prefix cache, many tenants
 # vLLM lets a request carry a `cache_salt`, which enters the first block's hash only; the chain carries it to
 # every later block (vllm-internals §4.3). Different salts never share blocks, so one tenant cannot learn from
-# timing that another sent the same prefix. The salt must be secret, random and per tenant (vLLM v0.30.0 accepts
-# at most 128 characters, verify).
+# timing that another sent the same prefix. The salt must be secret and per tenant: `cache_salt(secret, tenant)` is
+# an HMAC of the tenant under a server-side secret. vLLM v0.30.0 accepts at most 128 characters and refuses `@`, `/`,
+# `\` and NUL (verify) — so a salt like `acme/alice` is not even valid, and a salt like `acme` is guessable.
 
 # %%
 prompt = token_ids(SYSTEM + "User: hello\n")
+salts = Salts(b"a server-side secret")
 cache = PrefixCache(16)
-cache.serve(prompt, salt="tenant-a-9f3c")
-print("same tenant:", cache.lookup(prompt, salt="tenant-a-9f3c"), "| other tenant:", cache.lookup(prompt, salt="tenant-b-77aa"),
-      "| no salt:", cache.lookup(prompt))
+cache.serve(prompt, salt=salts.salt("acme"))
+print("acme's salt:", salts.salt("acme"), "| globex's:", salts.salt("globex"))
+print("same tenant:", cache.lookup(prompt, salt=salts.salt("acme")), "| other tenant:",
+      cache.lookup(prompt, salt=salts.salt("globex")), "| no salt:", cache.lookup(prompt))
+salts.rotate("acme")                       # e.g. a deletion request (notebook 04): vLLM cannot evict by salt
+print("after rotating acme's salt:", cache.lookup(prompt, salt=salts.salt("acme")), "hits; blocks still resident:",
+      cache.count(salts.retired["acme"][0]))
 
 # %% [markdown]
 # ## Exercise 3.1 — the three rules
@@ -207,26 +233,35 @@ assert round(lost[1], 1) == 53.2 and lost[0] < lost[1] < lost[2]
 print(f"✅ SIMULATED TTFT lost to memory before the history: turn 2 {lost[0]:.1f} ms, turn 8 {lost[1]:.1f} ms, turn 20 {lost[2]:.1f} ms")
 
 # %% [markdown]
-# ## Exercise 3.4 — dollars per session
-# Write `session_cost(layout, model)`: the sum over the default session's turns of `call_cost(prompt, 120, cached,
-# model)`. Then compute `premium`, how much dearer `before_history` is than `pinned` at Gemini 3.5 Flash prices, as
-# a fraction (0.5 = 50%).
+# ## Exercise 3.4 — dollars per session, on a hosted API
+# Write `session_cost(layout, system_tokens, model)`: the sum over the session's turns
+# (`hits_per_turn(layout, system_tokens=system_tokens)`) of `call_cost(prompt, 120, billed, model)`, where `billed` is
+# the turn's cached tokens if its prompt is at least `CACHE_MIN_TOKENS[model]` tokens, else 0 — the provider's
+# caching minimum. Then set `premium_2k` and `premium_4k`: how much dearer `before_history` is than `pinned`, as a
+# fraction (0.5 = 50%), with a 2,000- and a 4,000-token system prompt.
 
 # %% exercise
-def session_cost(layout, model="gemini-3.5-flash"):
+def session_cost(layout, system_tokens=2000, model="gemini-3.5-flash"):
     ### BEGIN SOLUTION
-    return sum(call_cost(t.prompt, 120, t.cached, model) for t in hits_per_turn(layout))
+    total = 0.0
+    for t in hits_per_turn(layout, system_tokens=system_tokens):
+        billed = t.cached if t.prompt >= CACHE_MIN_TOKENS[model] else 0
+        total += call_cost(t.prompt, 120, billed, model)
+    return total
     ### END SOLUTION
 
 ### BEGIN SOLUTION
-premium = session_cost("before_history") / session_cost("pinned") - 1
+premium_2k = session_cost("before_history", 2000) / session_cost("pinned", 2000) - 1
+premium_4k = session_cost("before_history", 4000) / session_cost("pinned", 4000) - 1
 ### END SOLUTION
 
 # %% check
 for layout in LAYOUTS:
-    assert abs(session_cost(layout) - sum(turn_cost(t.prompt, t.cached, 120)["total"] for t in hits_per_turn(layout))) < 1e-12
-assert round(premium, 3) == 0.602
-print(f"✅ memory before the history: {premium:.0%} dearer per session than a pinned profile, same answers")
+    for system in (2000, 3000, 4000):
+        want = sum(turn_cost(t.prompt, t.cached, 120)["total"] for t in hits_per_turn(layout, system_tokens=system))
+        assert abs(session_cost(layout, system) - want) < 1e-12, (layout, system)
+assert premium_2k == 0 and round(premium_4k, 3) == 0.457
+print(f"✅ before_history vs pinned: {premium_2k:+.0%} under the caching minimum, {premium_4k:+.0%} above it")
 
 # %% [markdown]
 # ## Exercise 3.5 — fix the layout
@@ -257,9 +292,10 @@ print(f"✅ uncached tokens per turn {bad} -> {good}: stable first, history appe
 # **The two-minute version.** "Memory costs tokens twice — what we inject and the prefix-cache hits we break. The
 # engine reuses KV only for an exact prefix in full 16-token blocks, so where memory goes decides the hit rate. If
 # we re-retrieve memory every turn and put it before the history, the prefix changes right after the system prompt
-# and the whole history re-prefills every turn: in our 8-turn model the hit rate falls from 88% to 58%, turn-8 TTFT
-# on an L4 goes from 15 to 68 ms (simulated), and the session costs 60% more than with a pinned profile. So the
-# layout is: system prompt and tools, then a profile retrieved once per session, then the append-only history, then
+# and the whole history re-prefills every turn: in our 8-turn model the hit rate falls from 88% to 58% and turn-8 TTFT
+# on an L4 goes from 15 to 68 ms (simulated) on our own engine; on a hosted API the bill moves only once prompts clear
+# the provider's caching minimum (4,096 tokens on Gemini 3.x), and then the session costs 46% more than with a pinned
+# profile (a 4,000-token system prompt). So the layout is: system prompt and tools, then a profile retrieved once per session, then the append-only history, then
 # per-turn memory and anything volatile at the tail — which is where ADK's preload puts it too. We cap injected
 # memory at the recall knee, extract in the background rather than on every turn, salt the prefix cache per
 # tenant, and watch `cached_tokens` per turn to catch a layout regression."
@@ -271,5 +307,8 @@ print(f"✅ uncached tokens per turn {bad} -> {good}: stable first, history appe
 # 2. *Why does the damage grow with the conversation?* — The uncached part is everything after the memory block,
 #    i.e. the whole history; the pinned and tail layouts lose a constant amount per turn instead.
 # 3. *Two tenants share a system prompt on one vLLM. Any risk?* — Without a per-tenant `cache_salt`, one tenant's
-#    TTFT reveals whether the other sent the same prefix. Salt per tenant (secret, random), and budget for the
-#    shared-prefix hits you give up.
+#    TTFT reveals whether the other sent the same prefix. Salt per tenant (an HMAC under a server secret, never the
+#    tenant's name), and budget for the shared-prefix hits you give up.
+# 4. *We moved memory to the tail and the hosted-API bill did not move. Why?* — Every prompt is below the provider's
+#    caching minimum, so nothing was billed cached before or after; the saving shows up as TTFT on a self-hosted
+#    engine, and on the bill only once the prompt clears the minimum.

@@ -1,8 +1,10 @@
 """The write path (extract, policy, merge, idempotency) and retrieval (both generative-agents forms, packing)."""
 import numpy as np
 
-from memcore import (DAY, HOUR, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, extract, idempotency_key,
-                     minmax, pack, read_facts, recency, retrieve, score, screen)
+import pytest
+
+from memcore import (DAY, HOUR, IdempotencyConflict, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, extract,
+                     idempotency_key, minmax, pack, read_facts, recency, retrieve, score, screen)
 
 U = Scope("acme", "alice", session="s1")
 
@@ -50,9 +52,41 @@ def test_a_retried_turn_writes_once():
     store = MemoryStore()
     w = Writer(store)
     rec = MemoryRecord("User said: hi", "episodic", U, "user")
-    key = idempotency_key("s1", 3, 0, rec.text)
-    assert key.startswith("s1:3:0:") and w.write(rec, key) is w.write(rec, key)
+    key = idempotency_key("s1", 3, 0)
+    assert key == "s1:3:0" and w.write(rec, key) is w.write(rec, key)
     assert store.counts(U)["records"] == 1
+
+
+def test_the_key_names_the_step_not_the_content():
+    """A retry whose extraction came out different must not write a second, different fact (durable primer §3.2)."""
+    store = MemoryStore()
+    w = Writer(store)
+    first = extract("I prefer window seats.", U, at=DAY)[1]
+    reworded = MemoryRecord("The user prefers window seats.", "semantic", U, "user", key="seat_preference",
+                            value="window", created_at=DAY)                     # the LLM re-extracted it differently
+    key = idempotency_key("s1", 7, 0)
+    assert w.write(first, key).action == "ADD"
+    with pytest.raises(IdempotencyConflict):
+        w.write(reworded, key)                                                  # replay the journal, never re-derive
+    assert len(store.records(U)) == 1
+    bob = Scope("acme", "bob", session="s1")                                    # another user's "s1:7:0" is a new step
+    assert w.write(extract("I prefer aisle seats.", bob, at=DAY)[1], key).action == "ADD"
+
+
+def test_an_older_value_arriving_late_is_history_not_the_current_fact():
+    store = MemoryStore()
+    w = Writer(store)
+    porto = extract("I moved to Porto.", U, at=3 * DAY)[1]
+    lisbon = extract("I live in Lisbon.", U, at=0)[1]
+    assert w.write(porto).action == "ADD"
+    late = w.write(lisbon)                                                      # background extraction, out of order
+    assert late.action == "ADD_HISTORY" and late.record.status == "superseded"
+    assert (late.record.valid_from, late.record.valid_to) == (0, 3 * DAY)       # closed where Porto begins
+    assert [r.value for r in store.find(U, "home_city")] == ["Porto"]
+    assert store.get(U, porto.id).valid_to is None                              # the newer fact is untouched
+    assert retrieve(store, U, "home city", now=4 * DAY, as_of=DAY).records[0].value == "Lisbon"
+    again = w.write(extract("I moved to Porto.", U, at=2 * DAY)[1])            # older evidence of the same value
+    assert again.action == "NOOP" and store.get(U, porto.id).valid_from == 2 * DAY
 
 
 # --- retrieval ------------------------------------------------------------------------------------------

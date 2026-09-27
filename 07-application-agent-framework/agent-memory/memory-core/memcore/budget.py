@@ -5,7 +5,9 @@ by a hash chained to its parent, the last token of a prompt always recomputed). 
 and placed BEFORE the history changes the prefix every turn, so every history block after it misses and the
 conversation re-prefills on every turn. Pinning a profile once per session, or putting per-turn memory at the
 tail (as ADK's PreloadMemoryTool does), keeps the history a stable prefix. The lost hits turn into prefill
-time (a roofline step model, SIMULATED) and into dollars (a dated price table, verify).
+time (a roofline step model, SIMULATED) - the self-hosted cost - and into dollars on a hosted API (a dated price
+table, verify), which bills the cached rate only once a request clears the provider's caching minimum (4,096
+tokens on Gemini 3.x): below it, where the layout puts memory changes the engine's work but not the bill.
 
 Restated here, not imported (the core stays standalone; tests/test_repo_numbers.py checks the numbers match):
 vllm-serving-lab notebook 04's `expected_cached_tokens`, minengine.kv's chained block names,
@@ -16,6 +18,7 @@ a shared token prefix (a real tokenizer may shift one token at the boundary).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import itertools
 import zlib
 from dataclasses import dataclass, field
@@ -52,7 +55,12 @@ def block_names(tokens, block_size: int = 16, salt: str | None = None) -> list[s
 
 
 class PrefixCache:
-    """A block-hash prefix cache with vLLM's rules and no eviction (the pool is assumed big enough)."""
+    """A block-hash prefix cache with vLLM's rules and no LRU pressure (the pool is assumed big enough).
+
+    What vLLM v0.30.0 lets an operator do to it: `reset()` - the dev-mode POST /reset_prefix_cache, which clears
+    EVERY tenant's blocks and answers only {"success": bool} (verify). There is no eviction by salt or by user.
+    `count(salt)` is a view only the simulator has: a real engine does not report which salt a block was written
+    under."""
 
     def __init__(self, block_size: int = 16):
         self.block_size, self.names = block_size, {}      # name -> salt it was written under
@@ -77,11 +85,39 @@ class PrefixCache:
     def count(self, salt: str) -> int:
         return sum(s == salt for s in self.names.values())
 
-    def evict(self, salt: str) -> int:
-        gone = [n for n, s in self.names.items() if s == salt]
-        for n in gone:
-            del self.names[n]
-        return len(gone)
+    def reset(self) -> bool:
+        """vLLM's dev-mode /reset_prefix_cache: every block of every tenant, gone; returns success."""
+        self.names.clear()
+        return True
+
+
+# --- cache_salt: secret, random per tenant, rotated to make a tenant's cached blocks unreachable ---------------
+def cache_salt(secret: bytes, tenant: str, epoch: int = 0) -> str:
+    """HMAC-SHA256(secret, "tenant:epoch"), 32 hex: unguessable without the server's secret, stable per tenant, and
+    valid for vLLM v0.30.0 (at most 128 characters, no '@', '/', '\\' or NUL - `validate_cache_salt`, verify).
+    A salt made of the tenant's name ("acme") is guessable, so anyone who can send requests can probe that
+    tenant's cache; and "acme/alice" would be refused outright for its '/'."""
+    return hmac.new(secret, f"{tenant}:{epoch}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+class Salts:
+    """The salt book: one current salt per tenant. `rotate(tenant)` starts a new epoch: from then on the tenant's
+    requests are keyed by a new salt, so every block cached under the old one can never be hit again - it stays
+    in GPU memory, unreachable, until LRU eviction reuses it (or an operator resets the cache). That is the only
+    per-tenant "eviction" an engine without eviction by salt allows, and its cost is one cold prefix per user of
+    the tenant."""
+
+    def __init__(self, secret: bytes):
+        self.secret, self.epoch, self.retired = secret, {}, {}
+
+    def salt(self, tenant: str) -> str:
+        return cache_salt(self.secret, tenant, self.epoch.get(tenant, 0))
+
+    def rotate(self, tenant: str) -> str:
+        old = self.salt(tenant)
+        self.retired.setdefault(tenant, []).append(old)
+        self.epoch[tenant] = self.epoch.get(tenant, 0) + 1
+        return old
 
 
 @dataclass
@@ -170,17 +206,33 @@ def compute_ttft(active_b: float, prompt_tokens: int, tflops: float, mfu: float 
 # --- money: dated price tables (USD per 1M tokens: input, cached input, output) ----------------------------
 PRICES = {"gemini-3.5-flash": (1.50, 0.15, 9.00),   # scaling primer §3.4, prices of 5 Sep 2026 (verify)
           "gemini-3-flash": (0.50, 0.05, 3.00)}     # 07.2 agentlab.estimation, illustrative, Sep 2026 (verify)
+# The provider bills the cached rate only for a request of at least this many tokens: 4,096 on Gemini 3.x (scaling
+# primer §5.5; 6,144 on 3.7/3.8 Flash and 3.1 Pro). Whether the minimum applies to the request or to the shared
+# prefix is not settled here (verify); the scaling primer's own §3.4 call - 5,000 tokens, 2,700 cached - is
+# consistent with "the request". A self-hosted engine has no such minimum: it reuses KV from the first full block.
+CACHE_MIN_TOKENS = {"gemini-3.5-flash": 4096, "gemini-3-flash": 4096}
 
 
 def call_cost(input_tokens: int, output_tokens: int, cached_tokens: int = 0, model: str = "gemini-3.5-flash") -> float:
+    """One call, with `cached_tokens` as the provider reports them billed at the cached rate
+    (scalelab.capacity.cost_per_call)."""
     inp, cached, out = PRICES[model]
     return ((input_tokens - cached_tokens) * inp + cached_tokens * cached + output_tokens * out) / 1e6
 
 
+def billed_cached(prompt_tokens: int, engine_cached: int, model: str = "gemini-3.5-flash") -> int:
+    """What a provider bills at the cached rate when its cache hits the same prefix a vLLM-style block cache would
+    (an assumption, verify): the engine's hits if the request clears the minimum, else nothing."""
+    return engine_cached if prompt_tokens >= CACHE_MIN_TOKENS.get(model, 0) else 0
+
+
 def turn_cost(prompt_tokens: int, cached_tokens: int, output_tokens: int, model: str = "gemini-3.5-flash", *,
-              extraction_in: int = 0, extraction_out: int = 0, extractions_per_turn: float = 1.0) -> dict:
-    """The answering call plus the memory-extraction call(s) amortised over the turn."""
-    answer = call_cost(prompt_tokens, output_tokens, cached_tokens, model)
+              provider_minimum: bool = True, extraction_in: int = 0, extraction_out: int = 0,
+              extractions_per_turn: float = 1.0) -> dict:
+    """The answering call plus the memory-extraction call(s) amortised over the turn. `cached_tokens` are the
+    engine's hits; with `provider_minimum` (the default) they are billed cached only above the provider's minimum."""
+    billed = billed_cached(prompt_tokens, cached_tokens, model) if provider_minimum else cached_tokens
+    answer = call_cost(prompt_tokens, output_tokens, billed, model)
     extract = extractions_per_turn * call_cost(extraction_in, extraction_out, 0, model)
     return {"answer": answer, "extraction": extract, "total": answer + extract}
 
@@ -192,7 +244,11 @@ class BudgetExceeded(RuntimeError):
 
 @dataclass
 class Budget:
-    limits: dict = field(default_factory=lambda: {"memory_tokens": 400, "writes": 5, "llm_calls": 4, "usd": 0.02})
+    """Per-turn limits. A limit on work that can be skipped or shrunk (memory tokens) shapes the work: retrieval packs
+    at most `left("memory_tokens")`. A limit on work that cannot be half-done (a write, a model call) is charged
+    before the work and raises: the circuit breaker, not a log line. Any other key (e.g. "usd") is available to a
+    caller that charges it; memcore's scripted agent has no token counts to price, so it charges none."""
+    limits: dict = field(default_factory=lambda: {"memory_tokens": 400, "writes": 5, "llm_calls": 4})
     used: dict = field(default_factory=dict)
 
     def charge(self, what: str, amount: float = 1) -> None:

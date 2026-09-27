@@ -3,8 +3,9 @@ import random
 
 import pytest
 
-from memcore import (GPUS, LLMS, Budget, BudgetExceeded, PrefixCache, call_cost, compute_ttft,
-                     expected_cached_tokens, hit_rate, hits_per_turn, prefill_seconds, token_ids, turn_cost)
+from memcore import (CACHE_MIN_TOKENS, GPUS, LLMS, Budget, BudgetExceeded, PrefixCache, Salts, billed_cached,
+                     cache_salt, call_cost, compute_ttft, expected_cached_tokens, hit_rate, hits_per_turn,
+                     prefill_seconds, token_ids, turn_cost)
 
 
 def test_token_ids_match_count_tokens_and_keep_prefixes():
@@ -30,8 +31,23 @@ def test_cache_salt_keeps_tenants_apart():
     cache = PrefixCache(16)
     cache.serve(prompt, salt="tenant-a")
     assert cache.lookup(prompt, salt="tenant-a") == 48 and cache.lookup(prompt, salt="tenant-b") == 0
-    assert cache.lookup(prompt) == 0 and cache.count("tenant-a") == 3 and cache.evict("tenant-a") == 3
-    assert cache.lookup(prompt, salt="tenant-a") == 0
+    assert cache.lookup(prompt) == 0 and cache.count("tenant-a") == 3
+    assert not hasattr(cache, "evict")                   # vLLM v0.30.0 has no eviction by salt; only a full reset
+    assert cache.reset() and cache.lookup(prompt, salt="tenant-a") == 0 and cache.names == {}
+
+
+def test_salts_are_secret_valid_for_vllm_and_rotate():
+    salts = Salts(b"server-secret")
+    a, b = salts.salt("acme"), salts.salt("globex")
+    assert a != b and a == cache_salt(b"server-secret", "acme") != cache_salt(b"other-secret", "acme")
+    assert len(a) <= 128 and not set("@/\\\0") & set(a)             # vLLM's validate_cache_salt rules
+    prompt = list(range(64))
+    cache = PrefixCache(16)
+    cache.serve(prompt, salt=a)
+    old = salts.rotate("acme")
+    assert old == a and salts.salt("acme") != a and salts.retired["acme"] == [a]
+    assert cache.lookup(prompt, salt=salts.salt("acme")) == 0          # unreachable at once...
+    assert cache.count(a) == 3                                          # ...but resident until LRU or a reset
 
 
 @pytest.mark.parametrize("layout,cached_after_turn_1", [
@@ -66,13 +82,25 @@ def test_prefill_seconds_reproduces_step_cost():
 def test_call_and_turn_cost_hand_computed():
     assert round(call_cost(5000, 350, 2700), 6) == 0.007005        # (2300 x 1.50 + 2700 x 0.15 + 350 x 9.00) / 1e6
     assert round(call_cost(5000, 350, 2700, "gemini-3-flash"), 6) == 0.002335
-    c = turn_cost(3000, 2000, 150, extraction_in=600, extraction_out=60, extractions_per_turn=0.5)
+    c = turn_cost(3000, 2000, 150, provider_minimum=False, extraction_in=600, extraction_out=60, extractions_per_turn=0.5)
     assert round(c["answer"], 6) == round((1000 * 1.5 + 2000 * 0.15 + 150 * 9) / 1e6, 6)
     assert round(c["extraction"], 6) == round(0.5 * (600 * 1.5 + 60 * 9) / 1e6, 6)
 
 
+def test_the_provider_bills_cached_tokens_only_above_its_minimum():
+    assert CACHE_MIN_TOKENS["gemini-3.5-flash"] == 4096
+    assert billed_cached(4095, 4000) == 0 and billed_cached(4096, 4000) == 4000
+    assert round(turn_cost(3000, 2000, 150)["answer"], 6) == round((3000 * 1.5 + 150 * 9) / 1e6, 6)   # below: full price
+    assert round(turn_cost(5000, 2700, 350)["answer"], 6) == 0.007005                                # the scaling primer's call
+    # below the minimum the layouts cost the same; above it the layout shows on the bill
+    small = {l: sum(turn_cost(t.prompt, t.cached, 120)["total"] for t in hits_per_turn(l)) for l in ("before_history", "pinned")}
+    big = {l: sum(turn_cost(t.prompt, t.cached, 120)["total"] for t in hits_per_turn(l, system_tokens=4000))
+           for l in ("before_history", "pinned")}
+    assert small["before_history"] == small["pinned"] and big["before_history"] > 1.4 * big["pinned"]
+
+
 def test_budget_is_checked_before_the_work():
-    b = Budget({"memory_tokens": 100, "writes": 2, "llm_calls": 3, "usd": 0.01})
+    b = Budget({"memory_tokens": 100, "writes": 2, "llm_calls": 3})
     b.charge("memory_tokens", 60)
     with pytest.raises(BudgetExceeded):
         b.charge("memory_tokens", 41)

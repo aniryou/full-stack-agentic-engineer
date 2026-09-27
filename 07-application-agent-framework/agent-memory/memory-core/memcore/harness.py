@@ -6,9 +6,16 @@ false claim in through a tool result. It then asks questions in the task shapes 
 preference, multi-session, temporal, knowledge update, abstention) and LoCoMo (adversarial: a question with no
 true answer) - shapes only, no data copied or downloaded. A strict template reader answers from whatever
 retrieval packed into the budget, so every miss is a retrieval or write-path miss. Metrics: accuracy with a
-Wilson interval (07.2 notebook 08 §4), recall of the evidence within the budget, stale answers, abstention,
-tokens and model calls per turn. A paraphrase subset asks the same questions in other words: the lexical
-hashing embedder misses those by design - that gap is what a real embedder buys (the lab's T1 path).
+Wilson interval (07.2 notebook 08 §4) - which treats questions as independent, so a per-user cluster
+bootstrap is reported beside it - recall of the evidence within the budget, stale answers, abstention, tokens
+and model calls per turn. A paraphrase subset asks the same questions in other words: the lexical hashing
+embedder misses those by design - that gap is what a real embedder buys (the lab's T1 path).
+
+Two artefacts of the fixture, stated so nobody mistakes them for findings: every planted statement carries a
+slot hint - "I live in Prague. (about my home city)" - that no real user writes and that hands the lexical
+embedder the question's own words on raw episodes (`generate(hint=False)` removes it); and each user's whole
+memory is five facts (~66 tokens), smaller than a 60-90 token profile (`generate(extra_facts=30)` gives each user
+thirty more facts, "My favourite colour is teal.", of mixed importance).
 """
 from __future__ import annotations
 
@@ -20,7 +27,7 @@ from .consolidate import Consolidator
 from .records import DAY, HOUR, Scope
 from .retrieve import retrieve
 from .store import MemoryStore
-from .write import SLOTS, Writer, extract, read_facts
+from .write import Writer, extract, read_facts, slot_info
 
 VALUES = {"name": ["Ana", "Bruno", "Chen", "Dara", "Emil", "Farah"],
           "home_city": ["Lisbon", "Porto", "Madrid", "Oslo", "Prague", "Dublin", "Vienna", "Lyon"],
@@ -35,6 +42,17 @@ PARAPHRASE = {"name": "How should we address the user?", "employer": "Who signs 
               "pet": "What animal shares the user's flat?", "language": "Which tongue is the user studying?"}
 FILLER = ["The weather has been strange all week.", "I spent the morning answering email.",
           "The train was late again today.", "I finally finished that long report.", "We had a team lunch at noon."]
+FAVOURITES = {"colour": ["teal", "amber", "violet"], "food": ["ramen", "paella", "falafel"],
+              "book": ["dune", "emma", "ulysses"], "film": ["alien", "heat", "amelie"], "sport": ["tennis", "rugby", "judo"],
+              "season": ["autumn", "spring", "winter"], "drink": ["espresso", "kombucha", "lemonade"],
+              "fruit": ["mango", "plum", "kiwi"], "flower": ["tulip", "orchid", "peony"], "game": ["chess", "go", "bridge"],
+              "band": ["abba", "blur", "queen"], "painter": ["vermeer", "monet", "kahlo"], "city": ["kyoto", "quito", "hanoi"],
+              "bird": ["heron", "robin", "falcon"], "tree": ["birch", "cedar", "maple"], "dessert": ["flan", "baklava", "tiramisu"],
+              "cheese": ["brie", "gouda", "manchego"], "tea": ["sencha", "assam", "rooibos"], "genre": ["jazz", "folk", "techno"],
+              "car": ["mini", "beetle", "saab"], "holiday": ["diwali", "easter", "hogmanay"], "podcast": ["radiolab", "serial", "planetmoney"],
+              "gem": ["opal", "jade", "ruby"], "fabric": ["linen", "wool", "silk"], "spice": ["cumin", "saffron", "sumac"],
+              "island": ["crete", "bali", "skye"], "author": ["borges", "austen", "tolstoy"], "dance": ["tango", "salsa", "waltz"],
+              "planet": ["saturn", "mars", "jupiter"], "font": ["futura", "garamond", "helvetica"]}
 
 
 def read_answer(slots, records, as_of: float | None = None) -> str | None:
@@ -69,8 +87,12 @@ class Scenario:
     end: float
 
 
-def generate(seed: int = 0, sessions: int = 6, tenant: str = "t0") -> Scenario:
+def generate(seed: int = 0, sessions: int = 6, tenant: str = "t0", *, hint: bool = True,
+             extra_facts: int = 0) -> Scenario:
+    """`hint=False` drops the "(about my home city)" slot hints; `extra_facts=n` plants n more facts per user
+    ("My favourite X is Y."), drawn from a separate seeded stream so the base scenario is unchanged."""
     rng, scope = random.Random(seed), Scope(tenant, f"u{seed}")
+    about = (lambda k: f" (about my {slot_info(k)[0]})") if hint else (lambda k: "")
     others = [k for k in VALUES if k not in ("home_city", "seat_preference")]
     planted = ["home_city", "seat_preference"] + rng.sample(others, 3)
     unplanted = [k for k in VALUES if k not in planted]
@@ -80,17 +102,24 @@ def generate(seed: int = 0, sessions: int = 6, tenant: str = "t0") -> Scenario:
             planted[4]: rng.randrange(sessions - 3)}      # the multi-session pair lives in two sessions
     turns = []
     for s in range(sessions):
-        says = [STATEMENT[k].format(v=values[k]) + f" (about my {SLOTS[k][0]})" for k in planted if when[k] == s]
+        says = [STATEMENT[k].format(v=values[k]) + about(k) for k in planted if when[k] == s]
         if s == sessions - 2:
-            says.append(f"I moved to {moved}. (about my home city)")
+            says.append(f"I moved to {moved}." + about("home_city"))
         says += [""] * (3 - len(says))
         for i, say in enumerate(says):
             text = " ".join(x for x in (rng.choice(FILLER), say, rng.choice(FILLER)) if x)
             turns.append((s * DAY + (9 + i) * HOUR, s, text, "user"))
     poison = unplanted[0]                # a tool result asserts a fact the user never stated
     turns.append(((sessions - 3) * DAY + 15 * HOUR, sessions - 3,
-                  f"The user's {SLOTS[poison][0]} is {rng.choice(VALUES[poison])}.", "tool"))
-    noun = lambda k: SLOTS[k][0]
+                  f"The user's {slot_info(poison)[0]} is {rng.choice(VALUES[poison])}.", "tool"))
+    if extra_facts:                      # a separate stream: the base scenario's draws are untouched
+        xr = random.Random(10_000 + seed)
+        for j, thing in enumerate(xr.sample(sorted(FAVOURITES), min(extra_facts, len(FAVOURITES)))):
+            s = j % (sessions - 2)
+            turns.append((s * DAY + (13 + j // (sessions - 2) / 4) * HOUR, s,
+                          f"{xr.choice(FILLER)} My favourite {thing} is {xr.choice(FAVOURITES[thing])}.", "user"))
+        turns.sort(key=lambda x: x[0])
+    noun = lambda k: slot_info(k)[0]
     qs = [Question("extraction", f"What is the user's {noun(k)}?", (k,), values[k]) for k in planted[2:]]
     qs += [Question("preference", "What is the user's seat preference?", ("seat_preference",), values["seat_preference"]),
            Question("knowledge-update", "What is the user's home city?", ("home_city",), moved, stale=values["home_city"]),
@@ -126,6 +155,7 @@ class Outcome:
     recalled: bool | None               # was every evidence value in the packed context? (None: unanswerable)
     stale: bool
     tokens: int
+    user: str = ""                      # the cluster: questions of one user share one store
 
 
 def evaluate(sc: Scenario, store, budget_tokens: int = 60, kinds=None, form: str = "paper") -> list[Outcome]:
@@ -139,7 +169,8 @@ def evaluate(sc: Scenario, store, budget_tokens: int = 60, kinds=None, form: str
         if q.answer is not None:
             seen = {(k, v.lower()) for r in rec.records for k, v in read_facts(r.text)}
             recalled = all((s, v.lower()) in seen for s, v in zip(q.slots, q.answer.split("; ")))
-        out.append(Outcome(q, ans, correct, recalled, q.stale is not None and ans == q.stale, rec.tokens))
+        out.append(Outcome(q, ans, correct, recalled, q.stale is not None and ans == q.stale, rec.tokens,
+                           sc.scope.user))
     return out
 
 
@@ -152,6 +183,23 @@ def wilson_interval(passes: int, n: int, z: float = 1.96) -> tuple[float, float]
     return (max(0.0, centre - half), min(1.0, centre + half))
 
 
+def cluster_interval(outcomes, resamples: int = 2000, seed: int = 0) -> tuple[float, float]:
+    """A 95% percentile bootstrap that resamples USERS, not questions: a user's questions share one store, one set of
+    planted values and one write path, so they fail together and are not independent trials."""
+    by_user = {}
+    for o in outcomes:
+        by_user.setdefault(o.user, []).append(o.correct)
+    groups = [(sum(v), len(v)) for v in by_user.values()]
+    if len(groups) < 2:
+        return wilson_interval(sum(o.correct for o in outcomes), len(outcomes))
+    rng, stats = random.Random(seed), []
+    for _ in range(resamples):
+        pick = [groups[rng.randrange(len(groups))] for _ in groups]
+        stats.append(sum(a for a, _ in pick) / sum(b for _, b in pick))
+    stats.sort()
+    return stats[int(0.025 * resamples)], stats[int(0.975 * resamples) - 1]
+
+
 def summarize(outcomes) -> dict:
     n, ok = len(outcomes), sum(o.correct for o in outcomes)
     answerable = [o for o in outcomes if o.recalled is not None]
@@ -161,7 +209,7 @@ def summarize(outcomes) -> dict:
     for o in outcomes:
         key = o.q.qtype + (" (paraphrase)" if o.q.paraphrase else "")
         by.setdefault(key, []).append(o.correct)
-    return {"n": n, "accuracy": ok / n, "wilson": wilson_interval(ok, n),
+    return {"n": n, "accuracy": ok / n, "wilson": wilson_interval(ok, n), "cluster": cluster_interval(outcomes),
             "recall": sum(o.recalled for o in answerable) / len(answerable),
             "stale": sum(o.stale for o in ku) / max(1, len(ku)),
             "abstention": sum(o.correct for o in unans) / max(1, len(unans)),
@@ -185,13 +233,15 @@ def knee(rows, tol: float = 0.02) -> int:
     return min(r["budget"] for r in rows if r["recall"] >= best - tol)
 
 
-def compare_modes(seeds=range(30), budget_tokens: int = 60, profile_tokens: int = 60) -> dict:
-    """The same user through the agent in three memory modes; score the last session's turns."""
+def compare_modes(seeds=range(30), budget_tokens: int = 60, profile_tokens: int = 60, extra_facts: int = 0) -> dict:
+    """The same user through the agent in three memory modes; score the last session's turns.
+    Read with the fixture in mind: the scripted model recalls only when a turn names a slot (so tools mode misses
+    the task by construction), and with extra_facts=0 a user's whole memory barely exceeds the profile."""
     from .agent import MemoryAgent, UserTurn          # the agent reads with read_answer above
     out = {}
     for mode in ("tools", "implicit", "pinned"):
         ok = need = mem = calls = turns = stable = 0
-        for sc in map(generate, seeds):
+        for sc in (generate(seed, extra_facts=extra_facts) for seed in seeds):
             agent = MemoryAgent(MemoryStore(), sc.scope, mode=mode, budget_tokens=budget_tokens,
                                 profile_tokens=profile_tokens)
             for s in range(max(t[1] for t in sc.turns) + 1):

@@ -2,8 +2,8 @@
 import pytest
 
 from memcore import (DAY, Budget, BudgetExceeded, MemoryAgent, MemoryStore, Scope, UserTurn, WritePolicy,
-                     build_store, compare_modes, evaluate, fence, generate, knee, recall_vs_budget, summarize,
-                     wilson_interval)
+                     build_store, cluster_interval, compare_modes, evaluate, fence, generate, knee, recall_vs_budget,
+                     summarize, wilson_interval)
 from memcore.records import MemoryRecord
 
 U = Scope("acme", "alice")
@@ -59,13 +59,37 @@ def test_modes_pay_differently():
     assert agent.audit[0].args_hash and len(agent.audit[0].args_hash) == 16
 
 
-def test_budget_fails_closed():
+def test_the_memory_budget_shapes_packing_and_calls_fail_closed():
     store = MemoryStore()
-    agent = MemoryAgent(store, U, mode="implicit", budget=Budget({"memory_tokens": 5, "writes": 9, "llm_calls": 9, "usd": 1}))
+    agent = MemoryAgent(store, U, mode="implicit", budget=Budget({"memory_tokens": 5, "writes": 9, "llm_calls": 9}))
     agent.start_session("s1", 0)
-    agent.run(UserTurn("I prefer window seats."), now=DAY)              # nothing to retrieve yet: fine
-    with pytest.raises(BudgetExceeded):
-        agent.run(UserTurn("What is the user's seat preference?", ask=("seat_preference",)), now=DAY)
+    agent.run(UserTurn("I prefer window seats."), now=DAY)
+    before = store.find(U, "seat_preference")[0].last_accessed
+    res = agent.run(UserTurn("What is the user's seat preference?", ask=("seat_preference",)), now=2 * DAY)
+    assert res.text == "I don't know." and res.memory_tokens == 0          # packed into what was left: nothing
+    assert store.find(U, "seat_preference")[0].last_accessed == before     # and no read side effect either
+    one_write = MemoryAgent(MemoryStore(), U, mode="implicit", budget=Budget({"memory_tokens": 60, "writes": 1, "llm_calls": 9}))
+    one_write.start_session("s1", 0)
+    with pytest.raises(BudgetExceeded):                                    # the episode fits, the fact does not
+        one_write.run(UserTurn("I prefer window seats."), now=DAY)
+    assert [r.kind for r in one_write.store.records(U)] == ["episodic"]    # refused before the write, not after
+    tools = MemoryAgent(MemoryStore(), U, mode="tools", budget=Budget({"memory_tokens": 60, "writes": 9, "llm_calls": 1}))
+    tools.start_session("s1", 0)
+    with pytest.raises(BudgetExceeded):                                    # remember's result needs a second call
+        tools.run(UserTurn("I prefer window seats."), now=DAY)
+    assert tools.budget.used["llm_calls"] == 1
+
+
+def test_a_write_to_a_pinned_slot_re_pins_the_profile():
+    for repin, want in ((False, "Lisbon"), (True, "Porto")):
+        store = MemoryStore()
+        agent = MemoryAgent(store, U, mode="pinned", repin=repin)
+        agent.start_session("s1", 0)
+        agent.run(UserTurn("I live in Lisbon."), now=0)
+        agent.start_session("s2", 2 * DAY)
+        agent.run(UserTurn("I moved to Porto."), now=2 * DAY)
+        res = agent.run(UserTurn("What is the user's home city?", ask=("home_city",)), now=2 * DAY)
+        assert res.text == want and res.calls == 1 and agent.repins == int(repin)
 
 
 # --- the harness -----------------------------------------------------------------------------------------
@@ -115,6 +139,32 @@ def test_compare_modes_shape():
     assert m["tools"]["memory_tokens_per_turn"] < m["implicit"]["memory_tokens_per_turn"]
     assert m["pinned"]["accuracy"] > max(m["tools"]["accuracy"], m["implicit"]["accuracy"])
     assert m["pinned"]["stable_tokens_per_turn"] > 0 == m["implicit"]["stable_tokens_per_turn"]
+
+
+def test_the_pinned_lead_is_a_memory_smaller_than_the_profile():
+    base, big = compare_modes(seeds=range(8)), compare_modes(seeds=range(8), extra_facts=30)
+    assert all(big[m]["accuracy"] < base[m]["accuracy"] for m in base)
+    assert big["pinned"]["accuracy"] - big["tools"]["accuracy"] < 0.1 < base["pinned"]["accuracy"] - base["tools"]["accuracy"]
+    sc = generate(0, extra_facts=30)
+    assert len(sc.turns) == len(generate(0).turns) + 30 and generate(0, extra_facts=30).questions == sc.questions
+    assert sorted(generate(0).turns) == sorted(t for t in sc.turns if "favourite" not in t[2])   # base draws untouched
+
+
+def test_the_slot_hint_is_a_fixture_artefact():
+    hinted, plain = generate(0), generate(0, hint=False)
+    assert all("(about my" not in t[2] for t in plain.turns) and any("(about my" in t[2] for t in hinted.turns)
+    rec = lambda sc: summarize(evaluate(sc, build_store(sc, "episodes"), 60, ("episodic",)))["recall"]
+    assert sum(rec(generate(i, hint=False)) for i in range(10)) < sum(rec(generate(i)) for i in range(10))
+
+
+def test_questions_of_one_user_are_not_independent():
+    runs = [(sc, build_store(sc, "consolidated")) for sc in map(generate, range(10))]
+    outs = [o for sc, st in runs for o in evaluate(sc, st, 60, ("semantic", "procedural"))]
+    assert {o.user for o in outs} == {f"u{i}" for i in range(10)}
+    lo, hi = cluster_interval(outs)
+    assert lo == hi == 12 / 13                                             # every user misses the same question
+    assert wilson_interval(120, 130)[1] - wilson_interval(120, 130)[0] > 0.05
+    assert {o.q.qtype for o in outs if not o.correct} == {"preference"}
 
 
 def test_wilson_interval_pins():

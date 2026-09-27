@@ -4,8 +4,13 @@ The one idea: there are two ways to give an agent memory, and a hybrid. As TOOLS
 `forget`, with agent-core's contracts: `remember` idempotent, `forget` confirm-gated), the model decides when
 to look - and misses what it did not think to ask for. IMPLICITLY (retrieve before every turn, as ADK's
 PreloadMemoryTool does), every turn pays the tokens and nothing can be fetched mid-plan. PINNED: a short profile
-fixed per session (a stable, cacheable prefix) plus `recall` for the rest. The loop is agent-core's (07.1),
+fixed per session (a stable, cacheable prefix) plus `recall` for the rest; a write that changes a pinned slot
+re-pins it (one prefix-cache miss) so the profile is never staler than the store. The loop is agent-core's (07.1),
 re-implemented: the model returns text or a tool call; tools run; results go back; stop on text or the step budget.
+
+The scripted model's recall policy is a RULE we wrote, not a behaviour we observed: it calls `recall` only when a
+turn asks about a slot (`UserTurn.ask`). A task that silently needs a preference (`UserTurn.needs`) never triggers
+it, so "tools miss the task" is built into this fixture; a real model may or may not look (the lab's T1 path).
 
 Memory reaches the prompt FENCED as data (07.2 notebook 11 §3): inside delimiter blocks it cannot forge. Writes
 inherit the trust of what the model had read: a `remember` issued after a tool result is attributed to the
@@ -117,23 +122,28 @@ class TurnResult:
 class MemoryAgent:
     def __init__(self, store, scope: Scope, *, mode: str = "implicit", budget_tokens: int = 60,
                  profile_tokens: int = 40, model=scripted_model, on_confirm=None, max_steps: int = 6,
-                 principal: str = "agent:assistant", surfaces: Surfaces | None = None, budget: Budget | None = None):
+                 principal: str = "agent:assistant", surfaces: Surfaces | None = None, budget: Budget | None = None,
+                 repin: bool = True):
         assert mode in ("tools", "implicit", "pinned")
         self.store, self.scope, self.mode, self.model = store, scope, mode, model
         self.budget_tokens, self.profile_tokens, self.max_steps = budget_tokens, profile_tokens, max_steps
         self.on_confirm, self.principal = on_confirm, principal
         self.writer, self.audit = Writer(store), []
-        self.surfaces, self.budget = surfaces or Surfaces(store), budget
-        self.session, self.turn_no, self.profile = "s0", 0, []
+        self.surfaces, self.budget, self.repin = surfaces or Surfaces(store), budget, repin
+        self.session, self.turn_no, self.profile, self.repins = "s0", 0, [], 0
 
     def start_session(self, session: str, now: float) -> None:
         self.session, self.turn_no, self.profile = session, 0, []
-        if self.mode == "pinned":                            # one profile per session: the most important facts
-            facts = sorted((r for r in self.store.records(self.scope) if r.kind in FACT_KINDS),
-                           key=lambda r: (-r.importance, r.id))
-            self.profile = pack(facts, self.profile_tokens)
-            self._audit("memory.read", "allow", {"profile_tokens": self.profile_tokens},
-                        provenance=[r.id for r in self.profile])
+        if self.mode == "pinned":
+            self._pin()
+
+    def _pin(self) -> None:
+        """One profile per session: the most important active facts that fit the profile budget."""
+        facts = sorted((r for r in self.store.records(self.scope) if r.kind in FACT_KINDS),
+                       key=lambda r: (-r.importance, r.id))
+        self.profile = pack(facts, self.profile_tokens)
+        self._audit("memory.read", "allow", {"profile_tokens": self.profile_tokens},
+                    provenance=[r.id for r in self.profile])
 
     def _audit(self, event_type, decision, args, *, reasons=(), result=None, provenance=()):
         self.audit.append(AuditEvent(event_type, self.principal, user=self.scope.user, tool=event_type.split(".")[1],
@@ -146,12 +156,23 @@ class MemoryAgent:
         results = []
         for i, rec in enumerate(extract(text, self.scope, source=source, at=now, turn_id=f"{self.session}:{self.turn_no}")):
             self._charge("writes")
-            r = self.writer.write(rec, idempotency_key(self.session, self.turn_no, call_index * 100 + i, rec.text))
+            r = self.writer.write(rec, idempotency_key(self.session, self.turn_no, call_index * 100 + i))
             results.append(r)
-            self._audit("memory.write", {"ADD": "allow", "UPDATE": "allow", "NOOP": "allow"}.get(r.action, r.action.lower()),
+            self._audit("memory.write", {"ADD": "allow", "UPDATE": "allow", "ADD_HISTORY": "allow",
+                                         "NOOP": "allow"}.get(r.action, r.action.lower()),
                         {"text": rec.text, "source": source}, reasons=[r.action] + r.reasons,
                         provenance=[rec.id] if r.record else [])
+        pinned = {r.key for r in self.profile}
+        if self.repin and self.mode == "pinned" and any(r.action == "UPDATE" and r.record.key in pinned for r in results):
+            self._pin()                                      # a pinned fact changed: re-pin, one prefix miss
+            self.repins += 1
         return results
+
+    def _memory_budget(self) -> int:
+        """The memory tokens this retrieval may pack: the per-call budget, shrunk to what the turn has left."""
+        if self.budget is None or "memory_tokens" not in self.budget.limits:
+            return self.budget_tokens
+        return max(0, min(self.budget_tokens, int(self.budget.left("memory_tokens"))))
 
     def _tool(self, call: ToolCall, turn: UserTurn, now: float, tainted: bool, context: list, index: int) -> str:
         if call.name == "fetch_page":
@@ -160,9 +181,9 @@ class MemoryAgent:
             res = self._write(call.args["text"], "tool" if tainted else "user", now, index)
             return json.dumps({"ok": True, "data": [r.action for r in res]})
         if call.name == "recall":
-            rec = retrieve(self.store, self.scope, call.args["query"], now=now, budget_tokens=self.budget_tokens,
+            rec = retrieve(self.store, self.scope, call.args["query"], now=now, budget_tokens=self._memory_budget(),
                            as_of=call.args.get("as_of"), kinds=FACT_KINDS)
-            self._charge("memory_tokens", rec.tokens)
+            self._charge("memory_tokens", rec.tokens)         # never raises: the budget shaped the packing
             context += rec.records
             self._audit("memory.read", "allow", call.args, provenance=[r.id for r in rec.records])
             return fence(rec.records)
@@ -176,8 +197,8 @@ class MemoryAgent:
         return json.dumps({"ok": False, "error": "unknown_tool", "message": f"no tool named {call.name!r}"})
 
     def _charge(self, what: str, amount: float = 1) -> None:
-        if self.budget is not None:
-            self.budget.charge(what, amount)               # raises BudgetExceeded: the turn fails closed
+        if self.budget is not None and what in self.budget.limits:
+            self.budget.charge(what, amount)               # raises BudgetExceeded before a write or a model call
 
     def run(self, turn: UserTurn, now: float) -> TurnResult:
         self.turn_no += 1
@@ -187,7 +208,7 @@ class MemoryAgent:
         if self.profile:
             messages.append({"role": "system", "content": fence(self.profile)})
         if self.mode == "implicit":                          # retrieval before every turn, on the user's words
-            rec = retrieve(self.store, self.scope, turn.text, now=now, budget_tokens=self.budget_tokens,
+            rec = retrieve(self.store, self.scope, turn.text, now=now, budget_tokens=self._memory_budget(),
                            as_of=turn.as_of, kinds=FACT_KINDS)
             self._charge("memory_tokens", rec.tokens)
             context += rec.records
