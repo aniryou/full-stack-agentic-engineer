@@ -8,6 +8,10 @@
  *    gets .fse-num on all its cells, header included: right-aligned, tabular figures, no wrapping.
  * 3. "(verify)" — the repo's mark on a dated product fact — is wrapped in <span class="fse-verify"> so it reads as
  *    a tag beside the fact rather than as part of the sentence. Code, headings and links are left alone.
+ * 4. A code block on a Markdown page that is a little wider than the column (the layer READMEs' stack diagram is
+ *    117 characters; formula fences and ASCII diagrams are alike) gets .fse-shrink-1 / .fse-shrink-2, a 10% or 20%
+ *    smaller font, when that makes it fit; anything wider keeps its horizontal scroll. Notebook cells are real code
+ *    and are left alone.
  */
 (function () {
   var SHORT = 14;
@@ -59,7 +63,23 @@
       n.parentNode.replaceChild(frag, n);
     });
   }
-  function run() { mark(); tagVerify(); }
+  function shrinkWidePre() {
+    document.querySelectorAll(".md-content pre").forEach(function (pre) {
+      if (pre.closest(".jupyter-wrapper")) return;
+      var code = pre.querySelector("code") || pre;
+      pre.classList.remove("fse-shrink-1", "fse-shrink-2");
+      var ratio = code.scrollWidth / Math.max(1, code.clientWidth);
+      if (ratio <= 1.005) return;
+      if (ratio <= 1.11) pre.classList.add("fse-shrink-1");
+      else if (ratio <= 1.25) pre.classList.add("fse-shrink-2");
+    });
+  }
+  function run() { mark(); tagVerify(); shrinkWidePre(); }
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(shrinkWidePre, 150);
+  });
   if (window.document$ && typeof window.document$.subscribe === "function") {
     window.document$.subscribe(run);
   } else if (document.readyState === "loading") {

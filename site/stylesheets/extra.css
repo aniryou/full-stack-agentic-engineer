@@ -199,6 +199,14 @@
   line-height: 1.5;
 }
 
+/* A code block a little wider than the column shrinks to fit (site/javascripts/tables.js decides which). */
+.md-typeset pre.fse-shrink-1 > code {
+  font-size: 0.74em;
+}
+.md-typeset pre.fse-shrink-2 > code {
+  font-size: 0.66em;
+}
+
 /* Display maths (arithmatex on pages, MathJax on notebooks) gets air and scrolls inside its own box. */
 .md-typeset .arithmatex:not(span),
 .md-typeset mjx-container[display="true"] {

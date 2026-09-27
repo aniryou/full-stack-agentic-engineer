@@ -43,8 +43,15 @@ opens (exercise blanks, lessons, walkthroughs) and `solutions/` for the worked a
 file name. A notebook in a `solutions/` folder (`is_solution`, kept identical to `tools/gen_colab_index.py`) gets a
 "worked answers" line instead, a "(solution)" suffix in the navigation unless its title already says so, and is left
 out of search; a folder's notebooks are listed in file-name order. Notebooks are shown as committed, minus the Colab setup cell at the top (it
-only runs on Colab); the site never runs them. Inline TeX in notebook Markdown written as `$...$` is rewritten to
-`\(...\)`, the only inline delimiter the site's MathJax accepts, so dollar amounts stay text.
+only runs on Colab); the site never runs them.
+
+Math: authors write TeX the way GitHub renders it, `$...$` inline and `$$` on its own lines for display. The
+generator rewrites the inline form to `\(...\)`, the only inline delimiter the site accepts, so dollar amounts
+("$20 / $100", "$0.35/h") stay text: a span counts as TeX only when it has no space just inside the dollars, no
+digit after the closing one, and looks like TeX (a backslash, `^`, `_`, braces or a single letter). In notebook
+cells the result is written with character references (nbconvert's Markdown would otherwise read the underscores
+as emphasis); on Markdown pages as plain `\( \)`, which `pymdownx.arithmatex` takes before any other inline rule.
+Display blocks pass through: arithmatex on pages, MathJax on notebook pages.
 
 Navigation: one section per folder, titled from the folder's README H1 (the name part before the dash, humanised when
 it is just the folder name; "(Mistral)" / "(GCP)" added when a provider variant's title does not say so); primers
@@ -73,14 +80,24 @@ the link (beside "Open in Colab") in their first cell.
   notebook pages still point nowhere;
 - leaves solution notebooks out of the search index, and on every notebook page the duplicate copy of each code cell
   (the text behind the copy button), cell outputs, the `In [ ]:` prompts and the "Copied!" notice.
+- turns GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) in Markdown pages into
+  Material admonitions before rendering, so one source reads as a callout on GitHub and on the site; other
+  blockquotes are left as they are (the stylesheet styles them as callouts too).
 
 ## Markdown extensions and features
 
 `mkdocs.yml` keeps only what the pages use: `attr_list` and `md_in_html` (the landing page's HTML), `tables`, `toc`
-with permalinks, `pymdownx.highlight` / `superfences` (code and Mermaid), and `pymdownx.arithmatex` with only
-`\( \)` inline and `\[ \]` / `\begin{}` display. No Markdown page has math yet; arithmatex is there so a primer can
-add a formula with the same rule as the notebooks (a dollar sign is always a dollar). Admonitions, details and tabs
-are not enabled: nothing uses them. `navigation.prune` keeps each page's HTML to the part of the navigation it is in;
+with permalinks, `pymdownx.highlight` / `superfences` (code and Mermaid), `admonition` and `pymdownx.details`
+(the callouts the hook makes from GitHub alerts), and `pymdownx.arithmatex` with `\( \)` inline (what the
+generator makes of `$...$`) and `$$`, `\[ \]` and `\begin{}` display. A bare `$` is always a dollar. Tabs are not
+enabled: nothing uses them.
+
+`site/stylesheets/extra.css` is where the reading experience is set: on desktop the page grid may grow to 72rem
+(Material's default 61rem leaves 688px for content beside two sidebars, too little for a 7-column table or a
+90-character line of code), prose keeps a 38rem measure inside that column, headings are heavier than
+Material's so sections stand out between long paragraphs, tables have tighter padding and zebra rows,
+blockquotes read as callouts, notebook cells drop the empty `In [ ]:` prompt column, and display maths scrolls in
+its own box. `site/javascripts/tables.js` right-aligns numeric columns and wraps "(verify)" so it reads as a tag. `navigation.prune` keeps each page's HTML to the part of the navigation it is in;
 `include_source: false` stops publishing a rewritten copy of every notebook that nothing links (pages link GitHub).
 
 When content lands in a layer, nothing here needs editing: re-run the generator and commit the updated `nav:` in
