@@ -271,7 +271,7 @@ stack.stop()
 # Retries without a budget outlived the outage; streams that failed midway were re-run from the start and paid
 # twice; the chain fell through to a pricier model at full traffic until its quota ran out. Retry budgets with
 # jitter, a breaker per target, fallback only before the first byte, fallback capacity sized and priced ahead,
-# and a cost alert per tenant (CURRICULUM cross-layer drill 16).
+# and a cost alert per tenant (CURRICULUM cross-layer drill 18).
 #
 # **Drill 2.** *Why not retry a stream on another model after it failed at token 300?* — The client has already
 # shown 300 tokens from model A; B's continuation of A's text is not A's answer, and B re-generates (and bills)

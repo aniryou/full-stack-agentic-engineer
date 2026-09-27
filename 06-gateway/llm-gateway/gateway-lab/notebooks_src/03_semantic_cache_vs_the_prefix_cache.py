@@ -383,7 +383,7 @@ stack.stop()
 # question was personal, a class that must never share an answer, and the key had no user namespace; a lexical
 # near-match ("order 1234" vs "order 1243") cleared the threshold. Declare classes per route (per-user ones keyed
 # by user), namespace by tenant, guard entities, measure false hits before lowering the threshold (CURRICULUM
-# cross-layer drill 17).
+# cross-layer drill 19).
 #
 # **Drill 2.** *Should the semantic cache key include the system prompt?* — Yes: the same question under
 # different instructions has a different correct answer. Here the namespace hashes the system prompt, and a

@@ -147,6 +147,7 @@ except LeaseLost as e:
 print("semantic records:", len(job.store.records(ALICE, kind="semantic", status=None)))
 
 # %% [markdown]
+#
 # ## Worked example 4 — facts beat raw episodes at a fixed budget
 
 # %%
