@@ -162,6 +162,84 @@
   white-space: nowrap;
 }
 
+/* Record tables as cards (tools/site/hooks.py marks them .fse-stacked: a table whose rows carry a paragraph, like
+   the curriculum's module tables). Each row is a card: the first column is its title, prose columns run the full
+   width, the short fields sit in a row beneath with their column heading as a small label. The header row is kept
+   for screen readers and hidden visually. */
+.md-typeset table.fse-stacked {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 1.2em 0 1.6em;
+}
+.md-typeset table.fse-stacked thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.md-typeset table.fse-stacked tbody {
+  display: grid;
+  gap: 0.7em;
+}
+.md-typeset table.fse-stacked tr {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.35em 1.4em;
+  align-items: start;
+  padding: 0.75em 1em 0.85em;
+  border: 0.05rem solid var(--md-typeset-table-color);
+  border-left: 0.2rem solid var(--fse-cobalt-soft);
+  border-radius: var(--fse-radius);
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 2%, transparent);
+}
+.md-typeset table.fse-stacked td {
+  display: block;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  text-align: left !important;   /* a right-aligned numeric column reads wrong under its label in a card */
+}
+.md-typeset table.fse-stacked td::before {
+  content: attr(data-label);
+  display: block;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 0.1em;
+}
+.md-typeset table.fse-stacked td.fse-key,
+.md-typeset table.fse-stacked td.fse-prose {
+  grid-column: 1 / -1;
+}
+.md-typeset table.fse-stacked td.fse-key {
+  font-size: 1.05em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.md-typeset table.fse-stacked td.fse-key::before {
+  display: none;
+}
+.md-typeset table.fse-stacked td.fse-key strong {
+  font-weight: 600;
+}
+.md-typeset table.fse-stacked td.fse-prose {
+  max-width: var(--fse-measure);
+}
+.md-typeset table.fse-stacked td :is(p, ul, ol) {
+  margin: 0;
+}
+.md-typeset table.fse-stacked td code {
+  word-break: normal;
+}
+
 /* Blockquotes are callouts here ("Pitfall", "In a design review", "Verify", "Numbers", …), not quotations:
    full-contrast text on a light tint, the bold lead-in in the accent colour. */
 .md-typeset blockquote {

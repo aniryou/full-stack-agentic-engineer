@@ -80,6 +80,12 @@ the link (beside "Open in Colab") in their first cell.
   notebook pages still point nowhere;
 - leaves solution notebooks out of the search index, and on every notebook page the duplicate copy of each code cell
   (the text behind the copy button), cell outputs, the `In [ ]:` prompts and the "Copied!" notice.
+- lays record tables out as cards: a table whose rows carry a paragraph (the curriculum's module tables, a
+  README's "What you get" with its 90-word cells, "Tier | Where | What runs" tables) gets `class="fse-stacked"`
+  and a `data-label` per cell, and the stylesheet renders each row as a card — first column as its title, prose
+  columns at full width, short fields in a row beneath. The rule: four or more columns with a prose column (a cell
+  of 40+ words or an average of 12+), or three columns with a 120-word cell; numeric and short-text tables stay
+  tables. The build log counts them;
 - turns GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) in Markdown pages into
   Material admonitions before rendering, so one source reads as a callout on GitHub and on the site; other
   blockquotes are left as they are (the stylesheet styles them as callouts too).

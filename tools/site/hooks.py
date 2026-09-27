@@ -20,7 +20,12 @@
 5. Search leaves out the answers: solution notebooks (build_site_content.is_solution) are excluded from the index,
    and on every notebook page the duplicate copy of each code cell (the text behind the copy button), cell outputs,
    the `In [ ]:` prompts and the "Copied!" notice are marked `data-search-exclude`.
-6. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
+6. Wide prose tables become cards. A Markdown table whose rows are records with a paragraph in them (the
+   curriculum's module tables: 7 columns, 60–100 words in "You can …"; a README's "What you get": 4 columns, a
+   90-word cell) renders as a narrow, very tall grid. The hook marks such a table `fse-stacked` and gives each cell
+   its column heading as `data-label`; extra.css lays each row out as a card — the first column as its title, the
+   prose column at full width, the short fields in a row beneath. Numeric and short-text tables stay tables.
+7. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
    WARNING, CAUTION) is what GitHub renders as a callout; Python-Markdown would show the marker as text. The hook
    rewrites the block into Material's `!!! note "Note"` admonition before the page is rendered, so one source reads
    as a callout on GitHub and on the site. Other blockquotes are left alone (site/stylesheets/extra.css styles them).
@@ -60,11 +65,19 @@ ALERTS = {"NOTE": ("note", "Note"), "TIP": ("tip", "Tip"), "IMPORTANT": ("info",
 ALERT_START = re.compile(r"^[ ]{0,3}>[ ]?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*$", re.I)
 QUOTE_LINE = re.compile(r"^[ ]{0,3}>[ ]?(.*)$")
 
+TABLE = re.compile(r"<table>\s*<thead>\s*<tr>(.*?)</tr>\s*</thead>\s*<tbody>(.*?)</tbody>\s*</table>", re.S)
+TH = re.compile(r"<th[^>]*>(.*?)</th>", re.S)
+TR = re.compile(r"<tr>(.*?)</tr>", re.S)
+TD = re.compile(r"<td([^>]*)>(.*?)</td>", re.S)
+TAGS = re.compile(r"<[^>]+>")
+STACK_MIN_COLS, STACK_PROSE_MAX, STACK_PROSE_AVG, STACK_3COL_MAX = 4, 40, 12, 120
+
 _css: dict[str, str] = {}          # hash -> stylesheet text
 _page_css: dict[str, str] = {}     # page src_uri -> hash of its notebook stylesheet
 _math_pages: set[str] = set()
 _dead: list[str] = []
 _toc_fixed = 0
+_stacked = 0
 _config_hash = ""
 
 
@@ -73,7 +86,7 @@ def _digest(data: bytes) -> str:
 
 
 def on_config(config, **kwargs):
-    global _config_hash, _toc_fixed
+    global _config_hash, _toc_fixed, _stacked
     docs = Path(config["docs_dir"])
     for key in ("extra_css", "extra_javascript"):
         busted = []
@@ -87,6 +100,7 @@ def on_config(config, **kwargs):
     cfg = docs / MATHJAX_CONFIG
     _config_hash = _digest(cfg.read_bytes()) if cfg.is_file() else ""
     _toc_fixed = 0
+    _stacked = 0
     for store in (_css, _page_css):
         store.clear()
     _math_pages.clear()
@@ -114,6 +128,48 @@ def _fix_notebook_toc(html: str, page) -> None:
             walk(item.children)
 
     walk(page.toc)
+
+
+def _words(html: str) -> int:
+    return len(TAGS.sub(" ", html).split())
+
+
+def stack_prose_tables(html: str) -> tuple[str, int]:
+    """Mark record-like tables (see the module docstring, item 6) with class fse-stacked and per-cell data-labels.
+    Returns the HTML and the number of tables changed."""
+    changed = 0
+
+    def table(m):
+        nonlocal changed
+        heads = [TAGS.sub("", h).strip() for h in TH.findall(m.group(1))]
+        rows = [TD.findall(r) for r in TR.findall(m.group(2))]
+        rows = [r for r in rows if r]
+        if not heads or not rows or any(len(r) != len(heads) for r in rows):
+            return m.group(0)
+        cols = len(heads)
+        words = [[_words(c[1]) for c in r] for r in rows]
+        col_max = [max(w[i] for w in words) for i in range(cols)]
+        col_avg = [sum(w[i] for w in words) / len(words) for i in range(cols)]
+        prose = [i for i in range(cols) if col_max[i] >= STACK_PROSE_MAX or col_avg[i] >= STACK_PROSE_AVG]
+        wide = cols >= STACK_MIN_COLS and bool(prose)
+        three = cols == 3 and max(col_max) >= STACK_3COL_MAX
+        if not (wide or three):
+            return m.group(0)
+        changed += 1
+        if three:
+            prose = [i for i in range(cols) if col_max[i] >= STACK_PROSE_MAX]
+        body = []
+        for r in rows:
+            cells = []
+            for i, (attrs, inner) in enumerate(r):
+                cls = " fse-key" if i == 0 else (" fse-prose" if i in prose else "")
+                label = heads[i].replace('"', "&quot;")
+                cells.append(f'<td{attrs} data-label="{label}" class="fse-cell{cls}">{inner}</td>')
+            body.append("<tr>" + "".join(cells) + "</tr>")
+        return (f'<table class="fse-stacked"><thead><tr>{m.group(1)}</tr></thead>'
+                f'<tbody>{"".join(body)}</tbody></table>')
+
+    return TABLE.sub(table, html), changed
 
 
 def github_alerts_to_admonitions(markdown: str) -> str:
@@ -186,6 +242,10 @@ def on_page_content(html, page, config, files, **kwargs):
         for frag in list(HREF_FRAG.findall(html)) + list(toc_ids(page.toc)):
             if frag not in ids:
                 _dead.append(f"{src}#{frag}")
+    elif src.endswith(".md") and "<table>" in html:
+        html, n = stack_prose_tables(html)
+        global _stacked
+        _stacked += n
     if HAS_MATH.search(CODE.sub("", html)):
         _math_pages.add(src)
     return html
@@ -211,6 +271,6 @@ def on_post_build(config, **kwargs):
         out.write_text(css, encoding="utf-8")
     log.info(f"site hooks: {len(_page_css)} notebook pages share {len(_css)} stylesheet(s); "
              f"{len(_math_pages)} pages load MathJax; {_toc_fixed} notebook TOC entries re-pointed; "
-             f"{len(_dead)} dead in-page anchors on notebook pages")
+             f"{len(_dead)} dead in-page anchors on notebook pages; {_stacked} prose tables laid out as cards")
     for d in _dead[:20]:
         log.info(f"  dead anchor: {d}")
