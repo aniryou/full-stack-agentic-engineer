@@ -187,7 +187,7 @@ for m in hpa["spec"]["metrics"]:
 # %% [markdown]
 # ## Exercise 5.3 — how late is the first extra replica?
 #
-# A burst starts at t = 0 and pushes `vllm:num_requests_waiting` far above target. Predict the
+# A burst starts at $t$ = 0 and pushes `vllm:num_requests_waiting` far above target. Predict the
 # **worst-case** time until a new vLLM pod receives traffic. The chain, in order, and where each
 # number comes from:
 #
@@ -308,13 +308,14 @@ else:
 # chart installs the endpoint picker with the same scoring config we tuned locally, plus the
 # InferencePool that selects the vLLM pods and our three InferenceObjectives. A Gateway of class
 # `gke-l7-regional-external-managed` with an HTTPRoute to the InferencePool makes the load balancer
-# ask the EPP for a pod on every request. Managed Prometheus scrapes vLLM, the custom-metrics adapter
-# exposes `vllm:num_requests_waiting` and `vllm:num_requests_running` to the HPA — the queue for
-# bursts, the occupied batch slots so it does not scale away capacity once the queue drains — and the
-# HPA adds at most one replica a minute; the first extra replica still arrives minutes after a burst,
-# because a Spot node, the image and the weights come first. With one replica always up, an idle
-# hour costs about $0.44 (one L4 Spot node plus the fixed parts); only uninstalling the workloads
-# brings the GPU pool to zero, and only `terraform destroy` stops the rest."
+# ask the EPP for a pod on every request.
+#
+# "Managed Prometheus scrapes vLLM, the custom-metrics adapter exposes `vllm:num_requests_waiting` and
+# `vllm:num_requests_running` to the HPA — the queue for bursts, the occupied batch slots so it does not scale
+# away capacity once the queue drains — and the HPA adds at most one replica a minute; the first extra replica
+# still arrives minutes after a burst, because a Spot node, the image and the weights come first. With one
+# replica always up, an idle hour costs about $0.44 (one L4 Spot node plus the fixed parts); only uninstalling
+# the workloads brings the GPU pool to zero, and only `terraform destroy` stops the rest."
 #
 # **Drill questions**
 #

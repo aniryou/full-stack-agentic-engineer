@@ -8,20 +8,28 @@
 # ## The one-minute version
 #
 # The HorizontalPodAutoscaler is a proportional controller with guard rails:
-# `desired = ceil(ready_pods × current_average / target)`, skipped when the ratio is within ±10%;
-# then **stabilization** (scale down no lower than the highest recommendation of the last 300 s),
-# then **rate limits** (by default at most +4 pods or +100% per 15 s up, −100% per 15 s down), then
-# min/max. For LLM servers the question is *which metric*: GPU utilization reads 100% as soon as a
+#
+# $$
+# \text{desired} = \left\lceil \frac{\mathrm{ready\_pods} \times \mathrm{current\_average}}{\text{target}} \right\rceil,
+# $$
+#
+# skipped when the ratio is within ±10%; then **stabilization** (scale down no lower than the highest
+# recommendation of the last 300 s), then **rate limits** (by default at most +4 pods or +100% per 15 s up,
+# −100% per 15 s down), then min/max.
+#
+# For LLM servers the question is *which metric*: GPU utilization reads 100% as soon as a
 # continuous-batching engine has any work, so it cannot tell 3 replicas from 30. Use demand signals
 # the engine exposes — `vllm:num_requests_waiting` (queue) **and** `vllm:num_requests_running`
 # (occupied batch slots). Queue alone is a trap: once capacity catches up the queue drains to 0, the
-# HPA proposes the minimum, and the pool oscillates. Cold starts of minutes (node + image + weights)
-# make every scale-up late, so overshoot is the norm; scale-up rate limits trade GPU-hours and
-# overshoot for a longer backlog. The targets come from the engine you deploy — its batch slots and
-# its time per request — not from a rule of thumb. The basic rule, stabilization and the default
-# policies are exercises in the core's notebook 03; here you work the parts the core leaves out:
-# missing and starting pods, legacy vs `behavior`, live scrapes, and a queue target from a latency
-# budget. Background: [PRIMER §4 Autoscaling](../../PRIMER.md).
+# HPA proposes the minimum, and the pool oscillates.
+#
+# Cold starts of minutes (node + image + weights) make every scale-up late, so overshoot is the norm; scale-up
+# rate limits trade GPU-hours and overshoot for a longer backlog. The targets come from the engine you deploy
+# — its batch slots and its time per request — not from a rule of thumb.
+#
+# The basic rule, stabilization and the default policies are exercises in the core's notebook 03; here you
+# work the parts the core leaves out: missing and starting pods, legacy vs `behavior`, live scrapes, and a
+# queue target from a latency budget. Background: [PRIMER §4 Autoscaling](../../PRIMER.md).
 
 # %%
 import pathlib
@@ -37,8 +45,8 @@ from igwlab.stack import LocalStack
 # %% [markdown]
 # ## The core formula, and what "ready pods" means
 #
-# For a `type: Pods` metric with an `AverageValue` target, the controller averages the metric over the
-# pods that reported it (in integer milli-units), and proposes `ceil(ratio × pods)`:
+# For a `type: Pods` metric with an `AverageValue` target, the controller averages the metric over the pods
+# that reported it (in integer milli-units), and proposes $\lceil \text{ratio} \times \text{pods} \rceil$:
 
 # %%
 def pods(*values):
@@ -54,7 +62,8 @@ print("2 ready + 1 starting, 12 waiting    ->",
 # The last line is how the HPA avoids stampeding while new pods start. The rules
 # (`calcPlainMetricReplicas`, ported in `plain_metric_replicas`):
 #
-# 1. The average and the proposal `ceil(ratio × n)` use only the **ready pods that reported** the metric.
+# 1. The average and the proposal $\lceil \text{ratio} \times n \rceil$ use only the **ready pods that
+#    reported** the metric.
 # 2. If some pods are **not ready** and the ratio says *scale up*, recompute with each of them at **0**.
 # 3. If some pods have **no metric**: on a scale-*down* assume each is exactly **at target**, on a
 #    scale-*up* assume **0**; recompute.
@@ -68,8 +77,8 @@ print("2 ready + 1 starting, 12 waiting    ->",
 #
 # Predict the proposal for each case (target 5 waiting per pod). `None` = the pod has not reported
 # the metric (a new pod GMP has not scraped yet); `"Pending"` = not ready (still loading weights).
-# Write the four integers into `predicted`; a naive `ceil(current × average / target)` gets three
-# of them wrong.
+# Write the four integers into `predicted`; a naive
+# $\lceil \text{current} \times \text{average} / \text{target} \rceil$ gets three of them wrong.
 #
 # | case | pods (waiting per pod) | current replicas |
 # |---|---|---|
@@ -106,8 +115,8 @@ print("✅ missing pods damp scale-downs, starting pods damp scale-ups, and a fl
 # ## Stabilization and rate limits
 #
 # Two HPAs see the same proposals: `behavior` unset (the legacy path: scale-up capped at
-# `max(2 × current, 4)` per sync, scale-down stabilized over 300 s) and `behavior` set to the API
-# defaults (scale-up `max(+4 pods, +100%)` per 15 s, same 300 s scale-down window).
+# $\max(2 \times \text{current}, 4)$ per sync, scale-down stabilized over 300 s) and `behavior` set to the API
+# defaults (scale-up $\max(+4 \text{ pods}, +100\%)$ per 15 s, same 300 s scale-down window).
 
 # %%
 proposals = [(0, 3, 20), (15, None, 20), (30, None, 20), (45, None, 2), (120, None, 2), (340, None, 2), (360, None, 2)]
@@ -124,11 +133,11 @@ for label, hpa in (("behavior unset", HPARecommender(1, 12)), ("default behavior
 # ## Exercise 3.2 — legacy path or `behavior`?
 #
 # An HPA without a `behavior` block takes the *legacy* path: one sync may scale up to
-# `max(2 × current, 4)`. Setting `behavior` — even to the API defaults — switches to the policies:
-# `max(+4 pods, +100 %)` per 15 s, counted from the replica count at the start of the period. The
-# two agree once the pool has 4 or more replicas, and differ below. Both HPAs start at **2**
-# replicas (min 1, max 50) and see a proposal of **30** at t = 0, 15, 30 and 45 s. Predict the
-# replica count each one sets at each sync.
+# $\max(2 \times \text{current}, 4)$. Setting `behavior` — even to the API defaults — switches to the
+# policies: $\max(+4 \text{ pods}, +100\,\%)$ per 15 s, counted from the replica count at the start of the
+# period. The two agree once the pool has 4 or more replicas, and differ below. Both HPAs start at **2**
+# replicas (min 1, max 50) and see a proposal of **30** at $t$ = 0, 15, 30 and 45 s. Predict the replica count
+# each one sets at each sync.
 
 # %% exercise
 legacy_seq, behavior_seq = [], []          # four integers each
@@ -225,11 +234,13 @@ print(f"✅ hpa_proposal matches the controller on all {len(samples)} live scrap
 #
 # `vllm:num_requests_waiting` counts requests that have **no batch slot yet**. Once all `slots`
 # (vLLM's `--max-num-seqs`) are busy, a slot frees whenever a running request finishes; if each
-# request holds its slot for `service_s` seconds, slots free at `slots / service_s` per second (Little's
-# law). A request that finds `N` waiting ahead of it therefore waits about `N × service_s / slots`
-# for its slot. If the TTFT SLO leaves `budget_s` for that wait, keep the average waiting count per
-# pod at most `floor(budget_s × slots / service_s)` — never below 1. (Waiting is not a queue of
-# prefills: it is a queue for slots, which free at the pace of whole requests, decode included.)
+# request holds its slot for `service_s` seconds, slots free at $\text{slots} / \mathrm{service\_s}$
+# per second (Little's law). A request that finds $N$ waiting ahead of it therefore waits about
+# $N \times \mathrm{service\_s} / \text{slots}$ for its slot. If the TTFT SLO leaves `budget_s` for that
+# wait, keep the average waiting count per pod at most
+# $\lfloor \mathrm{budget\_s} \times \text{slots} / \mathrm{service\_s} \rfloor$ — never below 1. (Waiting
+# is not a queue of prefills: it is a queue for slots, which free at the pace of whole requests, decode
+# included.)
 
 # %% exercise
 def waiting_target(budget_s: float, service_s: float, slots: int) -> int:
@@ -267,7 +278,7 @@ print(f"✅ GKE: {gke_slots} slots, 0.5 s budget, S ~ 3 s (assumed) -> target {w
 #
 # The fluid model (`FluidPool`, *simulated*): each replica completes 2 requests/s, each request holds
 # a batch slot for 4 s (8 slots per replica), and a new replica is ready **120 s** after it is
-# requested. Load steps from 3 to 11 requests/s at t = 120 s and back to 3 at t = 900 s — 11 rps
+# requested. Load steps from 3 to 11 requests/s at $t$ = 120 s and back to 3 at $t$ = 900 s — 11 rps
 # needs at least 5.5 replicas. First, the HPA on **queue length only**:
 
 # %%
@@ -288,17 +299,17 @@ queue_only = simulate(StepLoad(), {"waiting": 5}, pool=FluidPool(ready=2))
 timeline(queue_only)
 
 # %% [markdown]
-# Look at t ≈ 700 s: the backlog is gone, so `waiting/pod = 0`, the proposal is `ceil(0 × n) = 0`, and
-# after the 300 s window the HPA scales to `minReplicas` — at full load. The queue explodes, the HPA
-# scales back up (2+ minutes of cold start), and the cycle repeats. A queue measures *excess* demand,
-# not demand.
+# Look at $t$ ≈ 700 s: the backlog is gone, so `waiting/pod = 0`, the proposal is
+# $\lceil 0 \times n \rceil = 0$, and after the 300 s window the HPA scales to `minReplicas` — at full load.
+# The queue explodes, the HPA scales back up (2+ minutes of cold start), and the cycle repeats. A queue
+# measures *excess* demand, not demand.
 #
 # ## Exercise 3.5 — add the signal that measures demand
 #
 # Return the `targets` dict for `simulate()` — `{"waiting": ..., "running": ...}` — so that the pool
 # no longer collapses. `running` is the average number of occupied batch slots per pod (8 slots per
 # replica here); give it a target below 8 so there is headroom. The check requires: at least 6 ready
-# replicas for the whole of t = 600…900 s, no more than 3 replicas at the end, and a `running` target
+# replicas for the whole of $t$ = 600…900 s, no more than 3 replicas at the end, and a `running` target
 # that fits in the 8 slots.
 
 # %% exercise
@@ -380,7 +391,7 @@ except ImportError:
 # with the gate and `minReplicas: 0` it computes from Object/External metrics). Scale-from-zero needs a signal that
 # exists without pods — a router-side queue (e.g. the EPP's flow-control queue) exported as an
 # `External` metric — and a controller that owns the 0↔1 step, such as KEDA. See `usage_ratio_replicas`
-# for the controller's from-zero arithmetic (`ceil(usage / target)`).
+# for the controller's from-zero arithmetic ($\lceil \text{usage} / \text{target} \rceil$).
 #
 # ## In a design review
 #
@@ -390,16 +401,17 @@ except ImportError:
 # queue alone proposes the minimum at full load and collapses the pool. Waiting requests, target 5
 # — Little's law: a waiting request needs a slot, slots free at 32 per ~3 s (an assumption we
 # re-measure), so 5 waiting cost ~0.5 s of our TTFT budget. The HPA takes the larger proposal. Not
-# GPU utilization: it is 100% whenever any request runs. Scale-up adds one pod a minute: each pod
-# needs a new L4 Spot node, which quota and Spot obtainability limit anyway, and a slower ramp buys
-# fewer GPU-hours for a longer backlog — it cannot shorten the queue built during the first cold
-# start. Scale-down waits 300 s and removes one pod per two minutes. Minimum is one replica;
-# scale-to-zero would need a router-side queue metric and KEDA."
+# GPU utilization: it is 100% whenever any request runs.
+#
+# "Scale-up adds one pod a minute: each pod needs a new L4 Spot node, which quota and Spot obtainability limit
+# anyway, and a slower ramp buys fewer GPU-hours for a longer backlog — it cannot shorten the queue built
+# during the first cold start. Scale-down waits 300 s and removes one pod per two minutes. Minimum is one
+# replica; scale-to-zero would need a router-side queue metric and KEDA."
 #
 # **Drill questions**
 #
 # 1. *Current 4 pods, average waiting 9, target 5 — what does the HPA propose, and what does the
-#    default behavior allow in one step?* `ceil(4 × 1.8) = 8`; default limit `max(4+4, 8) = 8`, so 8.
+#    default behavior allow in one step?* $\lceil 4 \times 1.8 \rceil = 8$; default limit $\max(4+4, 8) = 8$, so 8.
 # 2. *Why did the pool drop to one replica while load was still high?* The only metric was the queue;
 #    with enough capacity the queue is 0, which proposes the minimum. Add a demand signal (running
 #    slots, KV usage, or router in-flight requests).
