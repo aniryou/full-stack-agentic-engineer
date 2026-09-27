@@ -92,8 +92,8 @@ def test_dollar_amounts_stay_text(text):
 
 
 def test_operator_spans_are_tex_but_prices_are_not():
-    out = b.inline_tex_to_parens("With $T > 1$, $E/p$ ranks and $k = 2$; a T4 is $0.35/h, $5/$10 a day, $100-$200 a month.")
-    assert "&#92;(T &gt; 1&#92;)" in out and "&#92;(E/p&#92;)" in out and "&#92;(k = 2&#92;)" in out
+    out = b.inline_tex_to_parens("With $T > 1$, $E/p$, $n-1$ ranks and $k = 2$; a T4 is $0.35/h, $5/$10 a day, $100-$200 a month.")
+    assert "&#92;(T &gt; 1&#92;)" in out and "&#92;(E/p&#92;)" in out and "&#92;(n-1&#92;)" in out and "&#92;(k = 2&#92;)" in out
     assert "$0.35/h, $5/$10 a day, $100-$200 a month." in out
 
 

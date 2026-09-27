@@ -206,3 +206,19 @@ def test_dense_record_tables_become_cards_but_spec_tables_do_not():
     assert hooks.stack_prose_tables(records)[1] == 1
     notes = [["T4", "16 GB", "~320 GB/s", "7.5", " ".join(["w"] * 6)]] * 5 + [["L4", "24 GB", "~300 GB/s", "8.9", " ".join(["w"] * 20)]]
     assert hooks.stack_prose_tables(table(notes))[1] == 0       # a short notes column with one long note: a table
+
+
+def test_a_list_after_prose_gets_its_blank_line():
+    md = ("**Three fixes:**\n- one\n- two\n\nAlready fine:\n\n- a\n- b\n\n"
+          "1. first\n2. second\n\n> Quoted lead\n> - q1\n> - q2\n\n"
+          "- item\n  continued line\n- next\n\n```\ntext\n- not a list\n```\n\n## Heading\n- under a heading\n"
+          "| a | b |\n|---|---|\n- after a table")
+    out = hooks.blank_line_before_lists(md)
+    assert "**Three fixes:**\n\n- one\n- two" in out
+    assert "Already fine:\n\n- a\n- b" in out                     # unchanged
+    assert "> Quoted lead\n>\n> - q1\n> - q2" in out
+    assert "- item\n  continued line\n- next" in out              # a continuation line is not prose
+    assert "```\ntext\n- not a list\n```" in out
+    assert "## Heading\n- under a heading" in out                  # headings and tables already end a block
+    assert "|---|---|\n- after a table" in out
+    assert hooks.blank_line_before_lists(out) == out                 # idempotent

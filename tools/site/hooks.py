@@ -26,7 +26,11 @@
    its column heading as `data-label`; extra.css lays each row out as a card — the first column as its title, the
    prose column at full width, the short fields in a row beneath. A record table whose every field is a short
    sentence (most cells 8+ words, five or more columns) counts too. Numeric and short-text tables stay tables.
-7. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
+7. A list gets the blank line Python-Markdown needs. GitHub (CommonMark) lets a list interrupt a paragraph, so
+   "**Three fixes:**" followed straight by "- …" lines is a lead-in and a list there; Python-Markdown renders the
+   same lines as one paragraph with literal "- " markers. The hook inserts the blank line before a list item that
+   directly follows a line of prose (outside code fences; inside blockquotes too).
+8. GitHub alerts become admonitions. A Markdown page's blockquote that opens with `> [!NOTE]` (or TIP, IMPORTANT,
    WARNING, CAUTION) is what GitHub renders as a callout; Python-Markdown would show the marker as text. The hook
    rewrites the block into Material's `!!! note "Note"` admonition before the page is rendered, so one source reads
    as a callout on GitHub and on the site. Other blockquotes are left alone (site/stylesheets/extra.css styles them).
@@ -80,6 +84,7 @@ _math_pages: set[str] = set()
 _dead: list[str] = []
 _toc_fixed = 0
 _stacked = 0
+_lists = 0
 _config_hash = ""
 
 
@@ -88,7 +93,7 @@ def _digest(data: bytes) -> str:
 
 
 def on_config(config, **kwargs):
-    global _config_hash, _toc_fixed, _stacked
+    global _config_hash, _toc_fixed, _stacked, _lists
     docs = Path(config["docs_dir"])
     for key in ("extra_css", "extra_javascript"):
         busted = []
@@ -103,6 +108,7 @@ def on_config(config, **kwargs):
     _config_hash = _digest(cfg.read_bytes()) if cfg.is_file() else ""
     _toc_fixed = 0
     _stacked = 0
+    _lists = 0
     for store in (_css, _page_css):
         store.clear()
     _math_pages.clear()
@@ -182,6 +188,37 @@ def stack_prose_tables(html: str) -> tuple[str, int]:
     return TABLE.sub(table, html), changed
 
 
+QUOTE_PREFIX = re.compile(r"^(?:>[ ]?)*")
+LIST_ITEM = re.compile(r"^[ ]{0,3}(?:[-*+]|\d{1,3}[.)])[ \t]+\S")
+PROSE_LINE = re.compile(r"^(?![ ]{2,}|#{1,6}\s|\||[-*+][ ]|\d{1,3}[.)][ ]|[-*_]{3,}\s*$|```|~~~|<)\S")
+
+
+def _split_quote(line: str) -> tuple[str, str]:
+    prefix = QUOTE_PREFIX.match(line).group(0)
+    return prefix, line[len(prefix):]
+
+
+def blank_line_before_lists(markdown: str) -> str:
+    """Insert the blank line Python-Markdown needs between a line of prose and the list that follows it (see the
+    module docstring, item 7). Code fences are left alone; inside a blockquote the inserted line is a bare '>'."""
+    out: list[str] = []
+    fence = None
+    for line in markdown.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            tok = stripped[:3]
+            fence = None if fence == tok else (tok if fence is None else fence)
+        elif fence is None and out:
+            prefix, body = _split_quote(line)
+            prev_prefix, prev_body = _split_quote(out[-1])
+            if LIST_ITEM.match(body) and PROSE_LINE.match(prev_body) and prefix.count(">") == prev_prefix.count(">"):
+                out.append(prefix.rstrip())
+                global _lists
+                _lists += 1
+        out.append(line)
+    return "\n".join(out)
+
+
 def github_alerts_to_admonitions(markdown: str) -> str:
     """Rewrite `> [!NOTE]` blockquotes (GitHub alerts) as `!!! note "Note"` admonitions; everything else unchanged.
     The alert is the whole run of `>` lines that follows the marker (lazy continuation lines are not GitHub's
@@ -220,6 +257,7 @@ def on_page_markdown(markdown, page, config, files, **kwargs):
     write (the hand-written ones under site/guide/); on generated pages the second step finds nothing to do."""
     if not page.file.src_uri.endswith(".md"):
         return markdown
+    markdown = blank_line_before_lists(markdown)
     if "[!" in markdown:
         markdown = github_alerts_to_admonitions(markdown)
     if "$" in markdown:
@@ -317,6 +355,7 @@ def on_post_build(config, **kwargs):
         out.write_text(css, encoding="utf-8")
     log.info(f"site hooks: {len(_page_css)} notebook pages share {len(_css)} stylesheet(s); "
              f"{len(_math_pages)} pages load MathJax; {_toc_fixed} notebook TOC entries re-pointed; "
-             f"{len(_dead)} dead in-page anchors on notebook pages; {_stacked} prose tables laid out as cards")
+             f"{len(_dead)} dead in-page anchors on notebook pages; {_stacked} prose tables laid out as cards; "
+             f"{_lists} lists given their blank line")
     for d in _dead[:20]:
         log.info(f"  dead anchor: {d}")
