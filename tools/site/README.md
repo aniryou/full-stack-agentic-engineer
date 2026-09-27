@@ -38,23 +38,18 @@ ids mkdocs-jupyter gives headings (GitHub's and Jupyter's spellings both work); 
 exist is dropped, and the summary line counts it (`SITE_VERBOSE=1` lists every one).
 
 Notebooks: exercise notebooks get an "Open in Colab" button, using the same URL as `tools/gen_colab_index.py`.
-Notebooks with the answers filled in, in any of the repo's conventions (a `solutions/` or `worked/` folder, or a
-name with `_solution`, `_solutions` or `_solved`; `is_solution`, kept identical to `tools/gen_colab_index.py`), get
-a "worked answers" line instead, a "(solution)" or "(worked)" suffix in the navigation, and are left out of search.
-A name with `_worked` counts only beside its exercise twin in the same folder (`01_x_worked` next to
-`01_x_practice` or `01_x`, or the same number next to a `*_practice` notebook), and only when that folder keeps no
-`solutions/` or `worked/` folder of its own. Otherwise it is a worked lesson, treated like any other notebook and
-listed before the exercises: kv-cache's `01_kv_cache_worked` comes before `02_kv_cache_practice` (no twin), and in
-a folder that keeps its practice answers in `solutions/`, the `*_worked` notebooks are lessons read first.
-A single answer key sits beside its exercise instead of in a one-entry "Solutions" section. Notebooks are shown as committed, minus the Colab setup cell at the top (it
+Every lab keeps its notebooks in one layout (guarded by `tools/ci/nb_layout.py`): `notebooks/` for what a learner
+opens (exercise blanks, lessons, walkthroughs) and `solutions/` for the worked answer to a blank, under the blank's
+file name. A notebook in a `solutions/` folder (`is_solution`, kept identical to `tools/gen_colab_index.py`) gets a
+"worked answers" line instead, a "(solution)" suffix in the navigation unless its title already says so, and is left
+out of search; a folder's notebooks are listed in file-name order. Notebooks are shown as committed, minus the Colab setup cell at the top (it
 only runs on Colab); the site never runs them. Inline TeX in notebook Markdown written as `$...$` is rewritten to
 `\(...\)`, the only inline delimiter the site's MathJax accepts, so dollar amounts stay text.
 
 Navigation: one section per folder, titled from the folder's README H1 (the name part before the dash, humanised when
 it is just the folder name; "(Mistral)" / "(GCP)" added when a provider variant's title does not say so); primers
 are named "<topic> primer"; notebooks are titled from their first H1, numbered like the file. A folder around a
-single entry collapses into it, and a `notebooks/` folder holding only `practice/` and `worked/` is lifted into its
-parent. Deploy targets, fixtures, infra, `notebooks_src/` and `client/` folders (`PLUMBING_DIRS`) keep their pages,
+single entry collapses into it. Deploy targets, fixtures, infra, `notebooks_src/` and `client/` folders (`PLUMBING_DIRS`) keep their pages,
 reachable from the READMEs that link them, but stay out of the navigation (`not_in_nav:` in `mkdocs.yml`).
 
 Every generated Markdown page gets front matter naming the file it came from (`source_path`, a repo path; the

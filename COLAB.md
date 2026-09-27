@@ -6,7 +6,9 @@ its layer's `README.md`. The repo is public, so there is nothing to set up. Each
 folder and pip-installs that lab's dependencies.
 
 ## Where the links are
-Each layer README ends with a *Run in Colab* section: one line per lab, exercises first, then the worked answers.
+Each layer README ends with a *Run in Colab* section: one line per lab, exercises and lessons first, then the worked
+answers. Every lab has the same two folders: `notebooks/` for what you open (exercise blanks, lessons and
+walkthroughs) and `solutions/` for the worked answer to a blank, under the same file name as the blank.
 
 - [00 · Foundations](00-foundations/README.md#run-in-colab) — 46 notebooks
 - [01 · Hardware and fabric](01-hardware-gpu-fabric/README.md#run-in-colab) — 16 notebooks

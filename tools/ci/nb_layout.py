@@ -4,7 +4,7 @@
     <lab>/notebooks/<name>.ipynb    what a learner opens: exercise blanks, lessons and walkthroughs
     <lab>/solutions/<name>.ipynb    the worked answer to the blank notebooks/<name>.ipynb (the same file name)
 
-Nothing else: no other notebook folder (no nesting such as notebooks/solutions/), no notebook at a lab's top level,
+Nothing else: no other notebook folder (and neither nested in the other), no notebook at a lab's top level,
 and no answer key kept beside its blank under a suffix (_solved, _solution(s), or a _worked twin of a blank). A
 notebook in notebooks/ without a twin in solutions/ is fine: a lesson, or a blank whose answer is in the lab's tests.
 
