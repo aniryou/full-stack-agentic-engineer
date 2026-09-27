@@ -149,7 +149,7 @@ python3 -m pytest -q      # most labs ship tests
 ├── LICENSE                MIT, for everything not otherwise licensed (see Licence)
 ├── site/, mkdocs.yml      the guide site: hand-written pages and theme; the site configuration
 ├── requirements-site.txt  what building the site needs
-├── .github/workflows/     builds and publishes the site on every push to main
+├── .github/workflows/     CI on every push and pull request (tests.yml); the site build and publish on pushes to main (pages.yml)
 ├── tools/                 Colab bootstrap and link generators; site/ (the site's page generator)
 ├── tools/orchestration/   notes on how the topics were built and reviewed — maintainer material, not lessons
 ├── raw/                   inbox for new material (gitignored except its README)
