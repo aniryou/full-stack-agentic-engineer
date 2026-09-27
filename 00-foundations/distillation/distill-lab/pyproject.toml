@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distillab"
+version = "0.1.0"
+description = "Distillation hands on: a tiny teacher and student trained four ways on a CPU, teacher data and reasoning traces from a served model, a distilled speculative draft, and whether a student pays for itself — with a fake vLLM teacher for offline work."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Runtime: numpy (agreement metrics) and the async HTTP server of the fake teacher. Everything else is standard library.
+dependencies = ["numpy>=1.24", "aiohttp>=3.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0", "matplotlib>=3.7"]
+# The tiny teacher and students (notebooks 01, 03, 04): the CPU build of torch is enough.
+torch = ["torch>=2.2"]
+# T1 only (a GPU box): the real engine and the Hugging Face trainers of distillab.hf.
+gpu = ["vllm==0.30.0", "transformers>=4.56.2", "trl==1.14.0", "peft>=0.13", "datasets>=4.7.0", "lm-eval==0.4.13"]
+
+[project.scripts]
+distillab = "distillab.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["distillab*"]
+
+[tool.setuptools.package-data]
+distillab = ["assets/*.json", "assets/configs/*.json", "assets/samples/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: the full tiny-distillation run (~1.5 min on a CPU); runs by default, deselect with -m 'not slow'"]
