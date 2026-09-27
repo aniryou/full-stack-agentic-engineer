@@ -27,7 +27,7 @@ pick a setting) each followed by a check that prints ✅, and closes with *in a 
 
 | # | Notebook | Tier | You will be able to explain | Primer | Time |
 |---|---|---|---|---|---|
-| 01 | [`kd_on_a_tiny_transformer`](notebooks/01_kd_on_a_tiny_transformer.ipynb) | T0 with torch (~3 min on a CPU) | why logit KD beats SFT on the *same* sequences (the soft target carries the teacher's behaviour); the T² factor and the high-temperature limit; how a verifier filter makes a SeqKD student beat its teacher while agreeing less; GKD's β in TRL's convention; mode covering against mode seeking, and a reverse-KL student that stops thinking; exposure bias, measured | [§1 Why distil](../PRIMER.md#1-why-distil); [§2 Soft targets, temperature and the choice of divergence](../PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence); [§3 Sequence-level distillation](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs); [§4 On-policy distillation](../PRIMER.md#4-on-policy-distillation) | ~2.5 h |
+| 01 | [`kd_on_a_tiny_transformer`](notebooks/01_kd_on_a_tiny_transformer.ipynb) | T0 with torch (~2 min on a CPU) | why logit KD beats SFT on the *same* sequences (the soft target carries the teacher's behaviour); the T² factor and the high-temperature limit; how a verifier filter makes a SeqKD student beat its teacher while agreeing less; GKD's β in TRL's convention; mode covering against mode seeking, and a reverse-KL student that stops thinking; exposure bias, measured | [§1 Why distil](../PRIMER.md#1-why-distil); [§2 Soft targets, temperature and the choice of divergence](../PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence); [§3 Sequence-level distillation](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs); [§4 On-policy distillation](../PRIMER.md#4-on-policy-distillation) | ~2.5 h |
 | 02 | [`teacher_data_and_a_real_student`](notebooks/02_teacher_data_and_a_real_student.ipynb) | T1 (T0: fake teacher, simulated; a tiny student with torch) | the teacher-data pipeline and its yield and bill; what an API teacher gives (samples, top-k log-probs, `prompt_logprobs` scores) and why logit KD runs in-process; the per-token on-policy reward; a student trained on unverified data learning the teacher's mistakes; what fits on a T4 and why the logits decide it | [§3](../PRIMER.md#3-sequence-level-distillation-learning-from-the-teachers-outputs); [§4](../PRIMER.md#4-on-policy-distillation); [§10 Where to run it](../PRIMER.md#10-where-to-run-it) | ~2 h |
 | 03 | [`distilling_reasoning_traces_for_real`](notebooks/03_distilling_reasoning_traces_for_real.ipynb) | T1 (T0: bundled traces, illustrative; a tiny run with torch) | what a student inherits from traces (procedure and length); how the verifier and a length cap trade accuracy, coverage of hard problems and serving cost; choosing a cap and a `max_tokens`; why a capped student can score at chance on correct-only data | [§5 Distilling reasoning](../PRIMER.md#5-distilling-reasoning) | ~1.5 h |
 | 04 | [`a_distilled_draft_in_vllm`](notebooks/04_a_distilled_draft_in_vllm.ipynb) | T1, 24 GB (T0: tiny models with torch; synthetic counters) | acceptance as a draft's metric; why a draft distilled on the target's unfiltered outputs beats an off-the-shelf one; reading vLLM's spec-decode counters (α, mean acceptance length, the "acceptance rate" that is not α); greedy drafting's ceiling; which pairs vLLM accepts and the best k | [§7 A distilled draft for speculative decoding](../PRIMER.md#7-a-distilled-draft-for-speculative-decoding) | ~2 h |
@@ -46,12 +46,12 @@ pick a setting) each followed by a check that prints ✅, and closes with *in a 
 cd distill-lab
 python3 -m pip install -e ".[dev]"           # numpy, aiohttp; dev: pytest, jupyter, matplotlib
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu   # optional: the tiny models train for real
-python3 -m pytest -q                         # 189 tests, offline, no GPU: ~2 min with torch (one full tiny run; -m 'not slow' skips it: ~20 s), ~13 s without torch
+python3 -m pytest -q                         # 201 tests, offline, no GPU: ~2 min with torch (one full tiny run; -m 'not slow' skips it: ~20 s), ~15 s without torch (the torch and TRL ones skip)
 python3 -m distillab tinylm                  # teacher + four students on the tiny task (~90 s on a CPU)
 python3 -m distillab fake --port 8000 &      # a fake vLLM teacher (every answer simulated)
-DISTILLAB_URL=http://127.0.0.1:8000 python3 -m distillab teacher-data --problems 100 -n 4
+DISTILLAB_URL=http://127.0.0.1:8000 python3 -m distillab teacher-data --problems 100 -n 4   # --keep all: a draft's data
 python3 -m distillab memory --teacher qwen2.5-1.5b-instruct   # does logit KD of a 0.5B fit a T4? (predicted)
-python3 -m distillab cost                    # a 32B teacher against a 1.5B student: $/M and break-even (predicted)
+python3 -m distillab cost                    # a 32B teacher (two H100s) against a 1.5B student: $/M and break-even (predicted)
 python3 -m distillab spec-config             # the vllm serve command for Qwen3-4B with a Qwen3-0.6B draft
 python3 -m jupyterlab notebooks              # the exercises; answers in solutions/
 ```
@@ -114,7 +114,8 @@ make check                                              # all of the above + tes
   often. It does not predict the size of any effect on a real model. Measure yours.
 - **Checked by construction.** The T1 paths (vLLM teacher and draft, TRL SFT and GKD, the in-process KD trainer)
   are written against vLLM v0.30.0 and TRL 1.14.0 and checked with `bash -n`, `DRY_RUN=1`, `--dry-run`, config
-  builders and tests. They were not run on a GPU here.
+  builders and tests; the trainer configs were also built against TRL 1.14.0 with transformers 5.17.0 on a CPU
+  (`tests/test_memory_hf.py` does it whenever TRL is installed). They were not run on a GPU here.
 
 ## Verify list (facts dated 2026-09-27 that move)
 

@@ -27,8 +27,8 @@ tiny transformer four ways in torch and a real 0.5–0.6B student with TRL and v
 A teacher's output is a distribution, and its **soft targets** p = softmax(z/T) say how wrong each wrong answer
 is — information a hard label does not carry, so a student learns more per example from them than a same-size
 model trained from scratch on the same tokens. The classic loss is α·T²·KL(p_T ‖ q_T) + (1 − α)·CE, whose
-soft term's gradient on the student's logits is T·(q_T − p_T). When the student cannot copy the teacher, the **divergence**
-decides what it gets wrong: forward KL makes it cover every mode (and fill the gaps between them), reverse KL
+soft term's gradient on the student's logits is T·(q_T − p_T). When the student cannot copy the teacher, the
+**divergence** decides what it gets wrong: forward KL makes it cover every mode (and fill the gaps between them), reverse KL
 makes it commit to the modes it can fit. **Sequence-level distillation** is SFT on text the teacher wrote — it
 needs only samples, and it pays for every token the verifier throws away; its flaw is **exposure bias**, since
 the student trains on the teacher's prefixes and decodes on its own. **On-policy distillation** samples from the
@@ -38,7 +38,8 @@ distribution, not its knowledge. A **draft model** is a student whose metric is 
 students by agreement *and* by task accuracy with intervals, per slice. The payoff is serving: a 1.5B student is
 ~16× cheaper per token on the roofline than a 32B teacher served on two H100s (the 96× you get against one H100
 is a teacher with no room left to batch), against a one-off bill dominated by the teacher's tokens — so
-break-even is days or months depending on volume, and a cascade sits in between.
+break-even is days to years depending on volume and on where those tokens come from, and a cascade sits in
+between.
 
 ---
 

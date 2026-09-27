@@ -11,12 +11,14 @@ the 04 lab's deploy with different engine flags, and the students train wherever
 ## Cloud Run (one L4, scale to zero)
 
 ```bash
+# from this directory (distill-lab/deploy/gcp)
 LAB04=../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/terraform
 cp cloud-run-teacher.tfvars.example "$LAB04/teacher.tfvars"      # edit project_id, invoker_members
-cd "$LAB04" && terraform init && terraform apply -var-file=teacher.tfvars
+(cd "$LAB04" && terraform init && terraform apply -var-file=teacher.tfvars)   # a subshell: you stay here
 gcloud run services proxy vllm-teacher-l4 --region us-central1 --port 8080 &      # (verify the command in your gcloud)
 export DISTILLAB_URL=http://127.0.0.1:8080
-python -m distillab teacher-data --problems 5000 -n 4 --out _run_outputs/teacher   # from the lab directory
+cd ../..                                                          # the lab directory
+python -m distillab teacher-data --problems 5000 -n 4 --out _run_outputs/teacher
 ```
 
 Read the 04 lab's [Cloud Run README](../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/README.md)
@@ -43,5 +45,5 @@ name and port in that manifest).
 Cloud Run bills per second while an instance exists. With `min_instances = 0` an idle service costs nothing,
 but the next request pays a cold start (image pull plus 15 GB of weights for the 7B). Generating 20,000 samples
 is minutes to an hour of L4 time (verify with notebook 05's throughput cell). `terraform destroy
--var-file=teacher.tfvars` removes it. On GKE, delete the Deployment and then the cluster; the cluster keeps
+-var-file=teacher.tfvars`, run in `$LAB04`, removes it. On GKE, delete the Deployment and then the cluster; the cluster keeps
 billing until you delete it. Prices are in [`COMPUTE.md`](../../../../../COMPUTE.md).

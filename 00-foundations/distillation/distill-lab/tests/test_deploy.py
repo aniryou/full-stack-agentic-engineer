@@ -23,11 +23,11 @@ SCRIPTS = sorted(p.relative_to(DEPLOY).as_posix() for p in DEPLOY.rglob("*.sh"))
 DOCS = [LAB / "README.md", *sorted(DEPLOY.rglob("*.md")), *sorted((LAB / "notebooks_src").glob("*.py"))]
 
 
-def dry(script: str, **env) -> str:
+def dry(script: str, cwd=None, **env) -> str:
     if not shutil.which("bash"):
         pytest.skip("no bash")
     e = {"DRY_RUN": "1", "PATH": os.environ["PATH"], "HOME": "/tmp", "MODE": "pip", **env}
-    r = subprocess.run(["bash", str(DEPLOY / script)], capture_output=True, text=True, env=e, timeout=120)
+    r = subprocess.run(["bash", str(DEPLOY / script)], capture_output=True, text=True, env=e, timeout=120, cwd=cwd)
     assert r.returncode == 0, r.stdout + r.stderr
     return r.stdout
 
@@ -52,6 +52,53 @@ def test_serve_with_draft_emits_a_valid_speculative_config():
     spec = json.loads(re.search(r"speculative config: (\{.*\})", out).group(1))
     assert DR.speculative_config(spec.pop("model"), spec.pop("num_speculative_tokens"), spec.pop("method"), **spec)
     assert "--speculative-config" not in dry("any-gpu/serve_with_draft.sh", DRAFT="none")
+
+
+def _spec_and_cmd(out: str):
+    spec = json.loads(re.search(r"speculative config: (\{.*\})", out).group(1))
+    cmd = next(shlex.split(line[2:]) for line in out.splitlines() if line.startswith("+ "))
+    return spec, cmd
+
+
+def test_a_local_draft_is_passed_where_vllm_will_find_it(tmp_path):
+    """Docker: the draft directory is mounted and the spec names the container path (the image's workdir is
+    /vllm-workspace, so a relative path would not resolve). pip: an absolute host path, found from the caller's
+    directory or from the lab directory."""
+    d = tmp_path / "draft-distilled"
+    d.mkdir()
+    spec, cmd = _spec_and_cmd(dry("any-gpu/serve_with_draft.sh", DRAFT=str(d), MODE="docker"))
+    mounts = {m.split(":")[0]: m.split(":")[1] for i, a in enumerate(cmd) if a == "-v" for m in [cmd[i + 1]]}
+    assert mounts.get(str(d)) == spec["model"] and spec["model"].startswith("/drafts/")
+    spec, cmd = _spec_and_cmd(dry("any-gpu/serve_with_draft.sh", DRAFT="draft-distilled", cwd=tmp_path))
+    assert cmd[:3] == ["vllm", "serve", "Qwen/Qwen3-4B"] and spec["model"] == str(d)           # relative to the caller
+    missing = dry("any-gpu/serve_with_draft.sh", DRAFT="_run_outputs/not-trained-yet")
+    assert "no local draft" in missing                                                          # would be a hub id
+    assert _spec_and_cmd(dry("any-gpu/serve_with_draft.sh"))[0]["model"] == "Qwen/Qwen3-0.6B"  # a hub id stays one
+
+
+def _commands_of(out: str):
+    return [shlex.split(line[2:]) for line in out.splitlines() if line.startswith("+ ") and "distillab" in line]
+
+
+@pytest.mark.parametrize("method,batch,seq", [("sft", "4", "1024"), ("kd", "2", "512"), ("gkd", "2", "512")])
+def test_train_student_plans_the_run_it_launches(method, batch, seq):
+    cmds = _commands_of(dry("any-gpu/train_student.sh", METHOD=method))
+    plan = next(c for c in cmds if "memory" in c)
+    train = next(c for c in cmds if f"distillab.hf.{method}" in c)
+    val = lambda c, flag: c[c.index(flag) + 1]
+    assert (val(plan, "--batch"), val(plan, "--seq")) == (batch, seq) == (val(train, "--batch-size"), val(train, "--max-length"))
+    big = _commands_of(dry("any-gpu/train_student.sh", METHOD=method, BATCH="1", MAX_LEN="256"))
+    assert all(("1" in c and "256" in c) for c in big if "memory" in c or f"distillab.hf.{method}" in c)
+
+
+def test_train_student_stages_keep_the_teacher_off_the_card_while_training():
+    data = dry("any-gpu/train_student.sh", STAGE="data")
+    assert "teacher-data" in data and "distillab.hf" not in data and "STAGE=train" in data
+    train = dry("any-gpu/train_student.sh", STAGE="train")
+    assert "teacher-data" not in train.replace("teacher_", "") and "distillab.hf.sft" in train
+    both = dry("any-gpu/train_student.sh", STAGE="all")
+    assert both.index("teacher-data") < both.index("distillab.hf.sft")
+    assert [l[:6] for l in both.splitlines() if l.startswith(">> ")] == [">> 1/4", ">> 2/4", ">> 3/4", ">> 4/4"]
 
 
 @pytest.mark.parametrize("method", ["sft", "kd", "gkd"])

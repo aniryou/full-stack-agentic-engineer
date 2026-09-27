@@ -12,9 +12,13 @@ that decide whether it fits and trains on the card you have (PRIMER §3 and §10
   0.5B model is then 16 B/param = 7.9 GB before activations (``distillab.hf.memory``; predicted, verify).
 * **LoRA** when memory is short (``peft_config``): r = 16 on all linear layers trains 1.8 % of Qwen2.5-0.5B.
 
+* **Versions.** ``trl==1.14.0`` asks for ``transformers>=4.56.2``, and pip resolves that to transformers 5.x, which
+  removed ``warmup_ratio`` (its ``warmup_steps`` reads a value below 1 as a ratio). :func:`for_config` adapts the
+  kwargs to whatever config class is installed and names any field it does not know, before training starts.
+
 ``sft_kwargs`` and ``lora_kwargs`` are plain dictionaries (tested without TRL installed); :func:`train` imports
-torch, transformers, datasets, trl and peft only when called. Pins: ``trl==1.14.0``, ``transformers>=4.56.2``,
-``peft`` 0.21.0 (verify).
+torch, transformers, datasets, trl and peft only when called. Pins: ``trl==1.14.0``, ``transformers>=4.56.2``
+(5.17.0 when checked, 2026-09-27), ``peft`` 0.21.0 (verify).
 
     python -m distillab.hf.sft --model Qwen/Qwen2.5-0.5B-Instruct --data _run_outputs/teacher_pc.jsonl \\
         --out _run_outputs/student-sft [--lora-r 16] [--gpu T4]
@@ -22,9 +26,26 @@ torch, transformers, datasets, trl and peft only when called. Pins: ``trl==1.14.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 
 from .memory import BF16_OK
+
+
+def for_config(config_cls, kwargs: dict) -> dict:
+    """The builders' kwargs, adapted to the installed TRL/transformers ``config_cls`` (a dataclass).
+
+    ``warmup_ratio`` becomes ``warmup_steps`` only where the field is gone (transformers 5.x, which reads
+    ``warmup_steps`` < 1 as a ratio); on 4.x a float ``warmup_steps`` of 0.03 would mean no warmup at all. Any other
+    field the installed class lacks raises here, naming it, instead of deep inside ``__init__``."""
+    fields = {f.name for f in dataclasses.fields(config_cls)}
+    kw = dict(kwargs)
+    if "warmup_ratio" in kw and "warmup_ratio" not in fields:
+        kw["warmup_steps"] = kw.pop("warmup_ratio")
+    unknown = sorted(set(kw) - fields)
+    if unknown:
+        raise TypeError(f"the installed {config_cls.__name__} has no field(s) {unknown}: check the trl/transformers pins")
+    return kw
 
 
 def sft_kwargs(*, out: str, gpu: str = "T4", lora: bool = False, epochs: float = 1.0, batch_size: int = 4,
@@ -63,7 +84,7 @@ def train(model_id: str, data: str, out: str, *, gpu: str = "T4", lora_r: int = 
         from peft import LoraConfig
         peft_config = LoraConfig(**lora_kwargs(lora_r))
     ds = load_dataset("json", data_files=data, split="train")
-    args = SFTConfig(**sft_kwargs(out=out, gpu=gpu, lora=bool(lora_r), **kw))
+    args = SFTConfig(**for_config(SFTConfig, sft_kwargs(out=out, gpu=gpu, lora=bool(lora_r), **kw)))
     trainer = SFTTrainer(model=model, args=args, train_dataset=ds, processing_class=tok, peft_config=peft_config)
     trainer.train()
     trainer.save_model(out)

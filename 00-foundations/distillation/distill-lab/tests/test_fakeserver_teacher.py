@@ -38,6 +38,29 @@ def test_chat_samples_logprobs_and_the_max_logprobs_limit(servers):
     assert cut.finish_reason == "length" and cut.completion_tokens == 3
 
 
+def _sample(i, correct, finish, content="<answer>3</answer>"):
+    return TE.Sample(f"p{i}", "sum", 1, "q", "prompt", content, None, correct, finish, 10, 20, None, i)
+
+
+def test_a_cut_off_answer_is_not_data_even_when_it_is_right():
+    """Rejection sampling drops a truncated sample whatever the verifier said; so does a draft's `keep="all"`."""
+    ok, cut, wrong = _sample(0, True, "stop"), _sample(1, True, "length", "<answer>3</answer> and then"), _sample(2, False, "stop", "x")
+    assert TE.filter_verified([ok, cut, wrong]) == [ok]
+    kept, rows = TE.funnel([ok, cut, wrong])
+    assert kept == [ok] and [r["samples"] for r in rows][:3] == [3, 1, 1]
+    every, rows_all = TE.funnel([ok, cut, wrong], keep="all")
+    assert every == [ok, wrong] and rows_all[1]["samples"] == 2
+    with pytest.raises(ValueError):
+        TE.funnel([ok], keep="some")
+
+
+def test_the_fake_teachers_truncated_samples_never_reach_the_data(servers):
+    probs = D.make_set(12, seed=2, split="train")
+    samples = TE.generate(servers["teacher"], probs, n=2, temperature=1.0, max_tokens=12)
+    cut = [s for s in samples if s.finish_reason == "length"]
+    assert cut and not any(s in TE.funnel(samples)[0] or s in TE.funnel(samples, keep="all")[0] for s in cut)
+
+
 def test_temperature_zero_repeats_itself_and_dedup_sees_it(servers):
     probs = D.make_set(10, seed=1, split="train")
     greedy = TE.generate(servers["teacher"], probs, n=4, temperature=0.0)

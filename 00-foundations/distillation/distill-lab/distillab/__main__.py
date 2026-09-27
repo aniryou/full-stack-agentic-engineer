@@ -3,9 +3,11 @@
     env                                   what this machine can run (tier detection)
     fake [--port 8000] [--profile P]      serve the simulated teacher (a fake vLLM; every answer simulated)
     tinylm [--steps 1500]                 teacher + four students on the tiny task (needs torch; a CPU is fine)
-    teacher-data [--url U] [-n 4]         teacher samples -> verifier -> dedup -> JSONL for TRL (fake teacher by default)
+    teacher-data [--url U] [-n 4] [--keep all]   teacher samples -> verifier -> dedup -> JSONL for TRL (fake teacher
+                                          by default; --keep all: every finished sample, for a distilled draft)
     memory [--student S] [--teacher T]    will this training run fit on a T4 / L4 / ... (predicted)
-    cost [--teacher T] [--student S]      serving $/M for both, the fixed cost, break-even (roofline; predicted)
+    cost [--teacher T] [--student S]      serving $/M for both (teacher on --teacher-gpus, default 2), the fixed
+                                          cost, break-even (roofline; predicted)
     spec-config [--target T] [--draft D]  the vllm serve command for a target with a draft model
 """
 from __future__ import annotations
@@ -37,6 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--temperature", type=float, default=0.7)
     d.add_argument("--max-tokens", type=int, default=512)
     d.add_argument("--out", default="_run_outputs/teacher")
+    d.add_argument("--keep", default="verified", choices=["verified", "all"],
+                   help="verified: right, finished, deduplicated (SeqKD); all: every finished sample (a draft's data)")
     m = sub.add_parser("memory")
     m.add_argument("--student", default="qwen2.5-0.5b-instruct")
     m.add_argument("--teacher", help="a frozen teacher beside the student (logit KD / GKD)")
@@ -49,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--teacher", default="qwen2.5-32b-instruct")
     c.add_argument("--student", default="qwen2.5-1.5b-instruct")
     c.add_argument("--gpu", default="H100")
+    c.add_argument("--teacher-gpus", type=int, default=2,
+                   help="GPUs the teacher is served on (ideal TP); 1 leaves a 32B no room to batch on an 80 GB card")
     c.add_argument("--context", type=int, default=2048)
     c.add_argument("--itl-ms", type=float, default=30.0)
     c.add_argument("--teacher-tokens", type=float, default=2e8, help="tokens the teacher generates for the data")
@@ -90,7 +96,7 @@ def main(argv=None) -> int:
         train, _ = D.decontaminate(D.make_set(a.problems, seed=0, split="train"), D.make_set(200, seed=0))
         samples = TE.generate(Client(tgt.url, tgt.model, tgt.headers), train, n=a.n, temperature=a.temperature,
                               max_tokens=a.max_tokens)
-        kept, rows = TE.funnel(samples)
+        kept, rows = TE.funnel(samples, keep=a.keep)
         print(table(rows, title=f"[{tgt.label}] teacher data from {tgt.model}"))
         print(table([TE.token_bill(samples)], title="the bill (every generated token, kept or not)"))
         p1 = TE.write_jsonl(TE.to_messages(kept), a.out + "_msgs.jsonl")
@@ -108,9 +114,10 @@ def main(argv=None) -> int:
         from . import cost as C
         gpu = C.GPUS[a.gpu]
         tm, sm = C.shape(a.teacher), C.shape(a.student)
-        rows = [C.serving(x, gpu, context=a.context, itl_s=a.itl_ms / 1e3) for x in (tm, sm)]
+        rows = [C.serving(x, gpu, context=a.context, itl_s=a.itl_ms / 1e3, n_gpus=n)
+                for x, n in ((tm, a.teacher_gpus), (sm, 1))]
         print(table(rows, title=f"PREDICTED (roofline bound): {a.gpu} at ${gpu.price_hr}/GPU-h, {a.context} context, "
-                                f"ITL {a.itl_ms} ms"))
+                                f"ITL {a.itl_ms} ms; teacher on {a.teacher_gpus} GPU(s)"))
         fixed = C.fixed_cost(teacher_tokens=a.teacher_tokens, teacher_price_per_m=a.teacher_price,
                              student_params=sm.params(), train_tokens=a.teacher_tokens, gpu=gpu)
         print(json.dumps({k: round(v, 3) for k, v in fixed.items()}, indent=1))

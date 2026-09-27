@@ -136,13 +136,13 @@ nav:
                       - "02 · Teacher data and a real student": "layers/00-foundations/distillation/distill-lab/notebooks/02_teacher_data_and_a_real_student.ipynb"
                       - "03 · Distilling reasoning traces": "layers/00-foundations/distillation/distill-lab/notebooks/03_distilling_reasoning_traces_for_real.ipynb"
                       - "04 · A distilled draft for speculative decoding": "layers/00-foundations/distillation/distill-lab/notebooks/04_a_distilled_draft_in_vllm.ipynb"
-                      - "05 · Is the student worth it? Agreement, the capability gap, cost per correct answer and break-even": "layers/00-foundations/distillation/distill-lab/notebooks/05_is_the_student_worth_it.ipynb"
+                      - "05 · Is the student worth it?": "layers/00-foundations/distillation/distill-lab/notebooks/05_is_the_student_worth_it.ipynb"
                   - "Solutions":
                       - "01 · Distillation on a tiny transformer (solution)": "layers/00-foundations/distillation/distill-lab/solutions/01_kd_on_a_tiny_transformer.ipynb"
                       - "02 · Teacher data and a real student (solution)": "layers/00-foundations/distillation/distill-lab/solutions/02_teacher_data_and_a_real_student.ipynb"
                       - "03 · Distilling reasoning traces (solution)": "layers/00-foundations/distillation/distill-lab/solutions/03_distilling_reasoning_traces_for_real.ipynb"
                       - "04 · A distilled draft for speculative decoding (solution)": "layers/00-foundations/distillation/distill-lab/solutions/04_a_distilled_draft_in_vllm.ipynb"
-                      - "05 · Is the student worth it? Agreement, the capability gap, cost per correct answer and break-even": "layers/00-foundations/distillation/distill-lab/solutions/05_is_the_student_worth_it.ipynb"
+                      - "05 · Is the student worth it? (solution)": "layers/00-foundations/distillation/distill-lab/solutions/05_is_the_student_worth_it.ipynb"
           - "LLM GPU Capacity Planning":
               - "layers/00-foundations/gpu-capacity-planning/index.md"
               - "LLM GPU Capacity Planning primer": "layers/00-foundations/gpu-capacity-planning/PRIMER.md"

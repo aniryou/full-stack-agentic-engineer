@@ -10,8 +10,12 @@ change what you train (PRIMER §4 "On-policy distillation"; read against ``trl/e
   generates the batch's completions (on-policy); otherwise the dataset's completions are used, or the teacher's
   when ``seq_kd=True``. ``beta`` (0.5) picks the divergence: 0 = forward KL(teacher ‖ student), 1 = reverse KL
   (student ‖ teacher), in between the generalised JSD. ``DistillationConfig.beta`` defaults to 1.0 (reverse KL).
-* **Temperature and T².** ``GKDConfig.temperature`` (0.9) only sets *sampling*; the loss runs at T = 1, and
-  nothing in TRL multiplies by T².
+* **Temperature and T².** ``GKDConfig.temperature`` (0.9) only sets *sampling*; its loss runs at T = 1.
+  ``DistillationConfig.temperature`` (1.0) divides both logits inside the loss. Nothing in TRL multiplies by T².
+
+* **Data.** ``GKDTrainer`` reads conversational rows (``teacher_msgs.jsonl``); ``DistillationTrainer`` needs a
+  ``prompt`` column and generates the completions itself, so pass ``teacher_pc.jsonl`` (its ``completion`` column
+  is ignored) or a messages file, which :func:`train` converts with :func:`prompt_only`.
 
 Both trainers check ``vocab_size`` equality and raise ``ValueError`` otherwise ("GKD compares the teacher's full
 next-token distribution, which requires a shared vocabulary"); ``check_vocab`` does the same before anything
@@ -21,6 +25,7 @@ The kwargs builders are plain dictionaries; :func:`train` imports TRL only when 
 
     python -m distillab.hf.gkd --teacher Qwen/Qwen2.5-1.5B-Instruct --student Qwen/Qwen2.5-0.5B-Instruct \\
         --data _run_outputs/teacher_msgs.jsonl --out _run_outputs/student-gkd --lmbda 0.5 --beta 0.5
+    python -m distillab.hf.gkd --trainer distillation --data _run_outputs/teacher_pc.jsonl --out _run_outputs/student-od
 """
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ import argparse
 import sys
 
 from .memory import BF16_OK
+from .sft import for_config
 
 GKD_DEFAULTS = {"temperature": 0.9, "lmbda": 0.5, "beta": 0.5, "max_new_tokens": 128, "disable_dropout": True,
                 "seq_kd": False}                        # TRL 1.14.0 GKDConfig (verify)
@@ -64,6 +70,15 @@ def distillation_kwargs(*, out: str, teacher: str, gpu: str = "T4", beta: float 
             "use_vllm": use_vllm, "bf16": bf16, "fp16": not bf16, "report_to": "none"}
 
 
+def prompt_only(row: dict) -> dict:
+    """A conversational row as ``DistillationTrainer`` wants it: the messages before the last assistant turn."""
+    msgs = row["messages"]
+    last = max((i for i, m in enumerate(msgs) if m.get("role") == "assistant"), default=len(msgs))
+    if last == 0:
+        raise ValueError("a row with no message before its assistant turn has no prompt")
+    return {"prompt": msgs[:last]}
+
+
 def check_vocab(teacher_config: dict, student_config: dict) -> None:
     t, s = teacher_config.get("vocab_size"), student_config.get("vocab_size")
     if t != s:
@@ -86,13 +101,17 @@ def train(student: str, data: str, out: str, *, trainer: str = "gkd", **kw):
     model = AutoModelForCausalLM.from_pretrained(student, dtype=torch.bfloat16 if bf16 else torch.float32)
     if trainer == "gkd":
         from trl.experimental.gkd import GKDConfig, GKDTrainer
-        args = GKDConfig(**gkd_kwargs(out=out, **kw))
+        args = GKDConfig(**for_config(GKDConfig, gkd_kwargs(out=out, **kw)))
         t = GKDTrainer(model=model, teacher_model=teacher, args=args, train_dataset=ds, processing_class=tok)
     else:
         from trl import DistillationConfig, DistillationTrainer
+        if "prompt" not in ds.column_names:
+            if "messages" not in ds.column_names:
+                raise ValueError(f"{data}: DistillationTrainer needs a 'prompt' or a 'messages' column")
+            ds = ds.map(prompt_only, remove_columns=ds.column_names)
         keep = {k: v for k, v in kw.items() if k in ("teacher", "gpu", "beta", "max_completion_length", "lr",
                                                     "batch_size", "grad_accum", "use_vllm")}
-        args = DistillationConfig(**distillation_kwargs(out=out, **keep))
+        args = DistillationConfig(**for_config(DistillationConfig, distillation_kwargs(out=out, **keep)))
         t = DistillationTrainer(model=model, teacher_model=teacher, args=args, train_dataset=ds, processing_class=tok)
     t.train()
     t.save_model(out)
@@ -109,15 +128,19 @@ def main(argv=None) -> int:
     ap.add_argument("--trainer", choices=["gkd", "distillation"], default="gkd")
     ap.add_argument("--gpu", default="T4", choices=sorted(BF16_OK))
     ap.add_argument("--lmbda", type=float, default=0.5)
-    ap.add_argument("--beta", type=float, default=0.5)
+    ap.add_argument("--beta", type=float, help="0 forward KL, 1 reverse (default: 0.5 for gkd, 1.0 for distillation)")
     ap.add_argument("--temperature", type=float, default=0.9)
     ap.add_argument("--max-new-tokens", type=int, default=128)
     ap.add_argument("--seq-kd", action="store_true")
+    ap.add_argument("--batch-size", type=int, default=2)
+    ap.add_argument("--max-length", type=int, default=512, help="GKD: prompt + completion tokens per row")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
-    kw = dict(teacher=a.teacher, gpu=a.gpu, beta=a.beta)
+    beta = a.beta if a.beta is not None else (GKD_DEFAULTS if a.trainer == "gkd" else DISTILLATION_DEFAULTS)["beta"]
+    kw = dict(teacher=a.teacher, gpu=a.gpu, beta=beta, batch_size=a.batch_size)
     if a.trainer == "gkd":
-        kw.update(lmbda=a.lmbda, temperature=a.temperature, max_new_tokens=a.max_new_tokens, seq_kd=a.seq_kd)
+        kw.update(lmbda=a.lmbda, temperature=a.temperature, max_new_tokens=a.max_new_tokens, seq_kd=a.seq_kd,
+                  max_length=a.max_length)
         print("GKDConfig:", gkd_kwargs(out=a.out, **kw))
     else:
         print("DistillationConfig:", distillation_kwargs(out=a.out, **kw))

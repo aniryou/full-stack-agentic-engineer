@@ -100,8 +100,8 @@ carry the correctness claims:
   `test_primer_numbers.py`, `test_cost.py`, `test_onpolicy.py`, `test_draft.py`, `test_reasoning.py`,
   `test_eval.py`).
 - **Existing repo numbers reproduced** (`test_repo_numbers.py`, each test named for whose numbers): the serving
-  primer's §7 (`minengine.spec`: α = 0.6 from its p and q; at α = 0.8, 3.36 tokens per pass and best k = 6 at
-  2.47×), the roofline primer's §3.3 and §8.1 tables and `max_batch_by_memory` over 2 and 4 devices (Llama-3.1-8B: batch 68, 9.93 ms, 6,847 tokens/s, $0.446; FP8 193; 4.52 and 50.5 ms), the capacity
+  primer's §7 (`minengine.spec`: α = 0.6 from its p and q; at α = 0.8, k = 4 gives 3.36 tokens per pass, and at
+  draft cost c = 0.1 the best k is 6, at 2.47×), the roofline primer's §3.3 and §8.1 tables and `max_batch_by_memory` over 2 and 4 devices (Llama-3.1-8B: batch 68, 9.93 ms, 6,847 tokens/s, $0.446; FP8 193; 4.52 and 50.5 ms), the capacity
   primer's bank example (88.8 and 355.1 sessions per GPU), quantization §8 (±0.0268, z = −2.9), rlcore's ThinkTask
   (L* = 20.23; 0.304 at a mean of 1.0 tokens) and `reinforce_grad`'s convention with the teacher as reference, the
   memory primer's and the platform lab's Wilson intervals, and the 06 lab's `cost_per_call` ($0.007005) — as

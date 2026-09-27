@@ -55,8 +55,8 @@ def test_the_fixed_cost_is_mostly_teacher_tokens():
 
 
 def test_break_even_and_the_cascade():
-    b = K.break_even(1084.72, 5.352, 0.056, 50e6)
-    assert round(b["days"], 2) == 4.10 and round(b["saving_per_day"], 1) == 264.8
+    b = K.break_even(192.21, 0.890, 0.056, 50e6)                   # PRIMER §9: self-hosted data, teacher at TP = 2
+    assert round(b["tokens"] / 1e6, 1) == 230.5 and round(b["days"], 2) == 4.61 and round(b["saving_per_day"], 1) == 41.7
     assert K.break_even(100, 1.0, 1.0, 1e6)["tokens"] == math.inf
     c = K.cascade(1.0, 10.0, (0.95, 0.30), (0.97, 0.85), hard=0.3, catch=0.8, false_alarm=0.1)
     assert math.isclose(c["to_teacher"], 0.31) and math.isclose(c["cost"], 4.1)

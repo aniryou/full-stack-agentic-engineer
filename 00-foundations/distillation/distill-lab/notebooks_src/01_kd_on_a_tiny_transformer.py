@@ -16,11 +16,13 @@
 #   what makes it right. A student of 26K parameters has a labelled set in which 80% of the answers skip the
 #   working, like an answer key. Every student gets the same architecture, initial weights, 1,500 steps of 64
 #   sequences and 1,000 prompts. Only what it is asked to match changes.
-# * **What you will see.** Hard labels teach the student to answer directly, and it scores at chance. The
-#   teacher's logits on the *same* labelled sequences teach it to think first, because the soft target at the
-#   branch says "think" 70% of the time (PRIMER §2 "Soft targets, temperature and the choice of divergence").
-#   SeqKD on verifier-filtered teacher samples beats the teacher itself. GKD copies the teacher most closely
-#   (PRIMER §3 "Sequence-level distillation: learning from the teacher's outputs", §4 "On-policy distillation").
+# * **What you should see** (the recorded run did; a cell below checks your run). Hard labels teach the student to
+#   answer directly, and it scores far below every distilled student (0.24 in the recorded run, where a guess
+#   scores 0.2). The teacher's logits on the *same* labelled sequences teach it to think first, because the soft
+#   target at the branch says "think" 70% of the time (PRIMER §2 "Soft targets, temperature and the choice of
+#   divergence"). SeqKD on verifier-filtered teacher samples beats the teacher itself. GKD copies the teacher most
+#   closely (PRIMER §3 "Sequence-level distillation: learning from the teacher's outputs", §4 "On-policy
+#   distillation").
 # * **What you will build:** Hinton's loss and its gradient, GKD's divergence in TRL's convention, the effect of a
 #   verifier filter on what a student inherits, and why reverse KL can make a student give up thinking altogether.
 
@@ -133,6 +135,7 @@ S = {m: s["final"] for m, s in RUN["students"].items()}
 TE = RUN["teacher"]["eval"]
 claims = {
     "hard labels answer directly (full scratchpad < 40%)": S["hard"]["full"] < 0.4,
+    "hard labels score below every distilled student": S["hard"]["accuracy"] < min(S[m]["accuracy"] for m in ("kd", "seqkd", "gkd")),
     "every distilled student copies the teacher better than hard labels (agree, kl)":
         all(S[m]["agree"] > S["hard"]["agree"] and S[m]["kl"] < S["hard"]["kl"] for m in ("kd", "seqkd", "gkd")),
     "logit KD on the same sequences learns to think (full > hard + 0.2)": S["kd"]["full"] > S["hard"]["full"] + 0.2,
@@ -235,8 +238,9 @@ if HAVE_TORCH:
     for beta in want:
         t = generalized_jsd(torch.tensor([v], dtype=torch.float64), torch.tensor([z], dtype=torch.float64), beta).item()
         assert abs(t - my_gjsd(pz, qv, beta)) < 1e-9
-print("✅ TRL's endpoints are the exact KLs (0.2565 forward, 0.2714 reverse); in between the JSD is at most ln 2 "
-      "and shrinks like beta x KL near 0, so the loss scale jumps ~1/beta at the endpoints: re-tune the learning rate")
+print("✅ TRL's endpoints are the exact KLs (0.2565 forward, 0.2714 reverse); in between the JSD is at most ln 2, "
+      "~beta x KL(p||q) near beta = 0 and ~(1 - beta) x KL(q||p) near beta = 1, so the loss scale jumps ~1/beta at one "
+      "end and ~1/(1 - beta) at the other: re-tune the learning rate")
 
 # %% [markdown]
 # ## Exercise 1.4 — mode covering and mode seeking at the branch token
@@ -298,8 +302,11 @@ print("reverse KL collapsed to answering directly in this run" if collapsed else
 # %% [markdown]
 # Reverse KL is not wrong. MiniLLM and TRL's `DistillationTrainer` (default `beta = 1.0`) use it on purpose,
 # because mode seeking keeps a small generator from spreading mass over outputs its teacher would never produce.
-# It needs a student that already puts its mass near the teacher's modes, which is why on-policy distillation
-# usually starts from an SFT'd student rather than from scratch as here (PRIMER §4). `β = 0.5` hedges.
+# But it lifts a token only in proportion to the student's own probability of it, so it needs a student that
+# already puts mass near the teacher's modes. That is why the published recipes start on-policy distillation from
+# an SFT'd student (PRIMER §4, verify); this notebook's GKD starts from scratch. A warm start helps only if it does
+# put mass there: in distill-core's toy, students that were confidently wrong off their training data gained
+# nothing from it. `β = 0.5` hedges.
 #
 # ## Worked example: exposure bias, measured
 #
@@ -371,24 +378,28 @@ print(table([{"knob": "kd_temperature / kd_alpha", "try": "1 / 0.5", "what chang
 # ## In a design review
 #
 # **Two minutes:** "We distilled with three kinds of teacher signal and compared them on the same budget. Hard
-# labels from our answer key taught the student to skip the working, and it scored at chance. The teacher's logits
-# on the *same* sequences taught it to think as often as the teacher does. That is the extra information soft
-# targets carry: the teacher's behaviour at every position, not only the next token. Sequence-level distillation
+# labels from our answer key taught the student to skip the working, and it scored far below the distilled
+# students, close to guessing. The teacher's logits on the *same* sequences taught it to think as often as the
+# teacher does. That is the extra information soft targets carry: the teacher's behaviour at every position, not only the next token. Sequence-level distillation
 # on the teacher's verified outputs gave the most accurate student, more accurate than the teacher, because the
 # verifier kept mostly the long traces. That student also inherits their length, so it costs more to serve.
-# On-policy GKD gave the closest copy of the teacher. Reverse KL alone can collapse a weak student onto the easy
-# mode, so we start on-policy distillation from an SFT'd student."
+# On-policy GKD gave the closest copy of the teacher. Reverse KL alone can pull a weak student onto the easy mode,
+# because it lifts a token only as far as the student already proposes it, so we start on-policy distillation from
+# an SFT'd student, as the published recipes do, and check β on our own data."
 #
 # **Drill 1.** *Why does logit KD beat SFT on exactly the same sequences?* Every position gets the teacher's full
 # distribution instead of one token. Where the label and the teacher disagree, as at the think-or-answer branch
 # here, the soft target teaches the teacher's behaviour. The T² factor keeps that term's gradient from vanishing
 # at high temperature.
 #
-# **Drill 2.** *The SeqKD student beats its teacher. Should we expect that at scale?* On a verifiable task, when
-# the filter selects better-than-average behaviour, yes; the R1 distills trained on filtered traces show the same
-# effect (rl-and-thinking-models PRIMER §5). It will also agree with the teacher less, so do not grade it by
-# agreement alone (PRIMER §8 "Measuring a student").
+# **Drill 2.** *The SeqKD student beats its teacher. Should we expect that at scale?* It can happen on a narrow,
+# verifiable task when the filter keeps better-than-average behaviour: here, and in distill-core's toy (PRIMER §8,
+# 0.975 against the teacher's 0.950). Do not expect it in general. The R1 distills show something else: SFT on the
+# big model's traces beat RL on the same small base (72.6 against 47.0 on AIME 2024 for Qwen-32B), while staying
+# below DeepSeek-R1's own 79.8 (rl-and-thinking-models PRIMER §5). A student that beats its teacher will also agree
+# with it less, so do not grade it by agreement alone (PRIMER §8 "Measuring a student").
 #
 # **Drill 3.** *On-policy distillation from scratch produced a student that never thinks. What happened?* Reverse
 # KL (β near 1) is mode-seeking. A student that cannot yet fit the teacher's main mode moves to one it can fit.
-# Warm-start with SFT or SeqKD, or use β ≤ 0.5 at first.
+# Warm-start with SFT or SeqKD so that the student already proposes the thinking mode (the recipes' practice; it
+# helps only if the warm start does put mass there), or use β ≤ 0.5 at first.

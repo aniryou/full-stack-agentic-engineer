@@ -1,5 +1,5 @@
 # %% [markdown]
-# # 05 · Is the student worth it? Agreement, the capability gap, cost per correct answer and break-even
+# # 05 · Is the student worth it? — agreement, the capability gap, cost per correct answer and break-even
 #
 # **Tier:** T0 (default): serving costs from a roofline model (**predicted**: bounds at ideal bandwidth, 01 PRIMER
 # §3 and §8), accuracy from this lab's fake teacher and fake student (**simulated**), agreement from notebook 01's

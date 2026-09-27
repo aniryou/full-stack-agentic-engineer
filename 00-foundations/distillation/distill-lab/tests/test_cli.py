@@ -17,8 +17,9 @@ def run(*args, env=None):
 def test_env_memory_cost_and_spec_config():
     assert "torch" in run("env")
     assert "does NOT fit" in run("memory", "--teacher", "qwen2.5-1.5b-instruct")
-    out = run("cost")
-    assert "5.352" in out and "break-even" in out
+    out = run("cost")                                              # the teacher on two H100s by default
+    assert "0.8896" in out and "2xH100" in out and "break-even" in out
+    assert "5.352" in run("cost", "--teacher-gpus", "1")
     assert "--speculative-config" in run("spec-config")
 
 
@@ -30,3 +31,7 @@ def test_tinylm_without_torch_prints_the_recorded_run():
 def test_teacher_data_against_the_fake(tmp_path):
     out = run("teacher-data", "--problems", "20", "-n", "2", "--out", str(tmp_path / "t"))
     assert "SIMULATED" in out and (tmp_path / "t_pc.jsonl").exists() and (tmp_path / "t_msgs.jsonl").exists()
+    verified = len((tmp_path / "t_pc.jsonl").read_text().splitlines())
+    out = run("teacher-data", "--problems", "20", "-n", "2", "--keep", "all", "--out", str(tmp_path / "a"))
+    everything = len((tmp_path / "a_pc.jsonl").read_text().splitlines())
+    assert "right or wrong" in out and everything > verified       # a draft's data keeps the target's mistakes

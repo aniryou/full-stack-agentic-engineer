@@ -140,8 +140,9 @@ print(f"✅ best: {name} at k = {k}, {sp:.2f}x. " + ("The drafts distilled on th
       if min(ALPHA["seqkd_all"], ALPHA["seqkd"]) > ALPHA["hard"] else "In this run the off-the-shelf draft was not worst: read the alpha table."))
 
 # %% [markdown]
-# Two things to notice. The **unfiltered** distilled draft usually has the higher α. The verifier filter trained
-# the other one toward *better* answers than the target gives, which is the wrong goal for a draft. And the tiny
+# Two things to notice. In the recorded run the **unfiltered** distilled draft has the higher α (one run: check
+# the table above for yours). That is the expected direction: the verifier filter trained the other one toward
+# *better* answers than the target gives, which is the wrong goal for a draft. And the tiny
 # c (a quarter of the target) makes long k expensive. A real 0.6B draft for a 4B target is c ≈ 0.15 by weight
 # bytes, so its best k is larger (Exercise 4.4).
 #
@@ -219,10 +220,17 @@ if env.server_url():
           {k: round(v, 4) if isinstance(v, float) else v for k, v in live.items() if k != "per_position"})
 
 # %% [markdown]
-# To make the distilled draft: serve the *target* first, collect its answers to your prompts without a verifier
-# filter (`python -m distillab teacher-data --url ...`, then use every sample rather than only the kept ones),
-# SFT Qwen3-0.6B on them (`python -m distillab.hf.sft --model Qwen/Qwen3-0.6B ...`), and serve the result as
-# the draft. EAGLE-3 heads are the same idea at the feature level: a small head trained with a soft-target
+# To make the distilled draft, serve the *target* first and collect its answers without a verifier filter or
+# deduplication, every finished answer, right or wrong:
+#
+#     python -m distillab teacher-data --url http://127.0.0.1:8000 --keep all --out _run_outputs/target
+#
+# The lab's generated problems stand in for your traffic here; a real draft should see prompts like the ones it
+# will serve. Then SFT Qwen3-0.6B on them and serve the result as the draft:
+#
+#     python -m distillab.hf.sft --model Qwen/Qwen3-0.6B --data _run_outputs/target_pc.jsonl --out _run_outputs/draft-distilled
+#     DRAFT=_run_outputs/draft-distilled deploy/any-gpu/serve_with_draft.sh
+# EAGLE-3 heads are the same idea at the feature level: a small head trained with a soft-target
 # cross-entropy to the frozen target's distribution, from the target's hidden states (the `eagle` repository's
 # training code; SpecForge trains them for vLLM and SGLang). Their speedups are quoted for 13B targets on 2×
 # RTX 3090 (verify before quoting them for your setup).

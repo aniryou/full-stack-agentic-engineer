@@ -116,13 +116,26 @@ def token_bill(samples: list) -> dict:
             "reasoning_tokens": sum(s.reasoning_tokens or 0 for s in samples)}
 
 
-def funnel(samples: list, max_completion_tokens: int | None = None) -> tuple:
-    """The whole pipeline with the count at each stage. Returns ``(kept, rows)``."""
+def finished(samples: list) -> list:
+    """Every sample that finished, right or wrong: a draft model's data (its job is to predict the target,
+    mistakes included), so neither the verifier nor deduplication should reshape the target's distribution."""
+    return [s for s in samples if s.finish_reason != "length"]
+
+
+def funnel(samples: list, max_completion_tokens: int | None = None, keep: str = "verified") -> tuple:
+    """The whole pipeline with the count at each stage. Returns ``(kept, rows)``. ``keep="verified"`` is SeqKD's
+    rejection sampling plus deduplication; ``keep="all"`` keeps every finished sample (a distilled draft's data)."""
+    if keep not in ("verified", "all"):
+        raise ValueError("keep must be 'verified' or 'all'")
     rows = [{"stage": "generated", "samples": len(samples)}]
-    s1 = filter_verified(samples)
-    rows.append({"stage": "verified (right and finished)", "samples": len(s1)})
-    s2 = dedup(s1)
-    rows.append({"stage": "deduplicated", "samples": len(s2)})
+    if keep == "all":
+        s2 = finished(samples)
+        rows.append({"stage": "finished (right or wrong, duplicates kept)", "samples": len(s2)})
+    else:
+        s1 = filter_verified(samples)
+        rows.append({"stage": "verified (right and finished)", "samples": len(s1)})
+        s2 = dedup(s1)
+        rows.append({"stage": "deduplicated", "samples": len(s2)})
     if max_completion_tokens is not None:
         s2 = length_cap(s2, max_completion_tokens)
         rows.append({"stage": f"length <= {max_completion_tokens} tokens", "samples": len(s2)})

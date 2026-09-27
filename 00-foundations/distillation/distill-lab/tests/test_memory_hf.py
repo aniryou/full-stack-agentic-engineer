@@ -82,3 +82,59 @@ def test_kd_encode_masks_the_prompt(v5):
     assert enc["labels"][:n_prompt] == [-100] * n_prompt and enc["labels"][n_prompt:] == enc["input_ids"][n_prompt:]
     assert len(enc["input_ids"]) == n_prompt + 2
     assert kd.encode(_StubTokenizer(v5), row, max_length=3)["labels"] == [-100] * 3
+
+
+def test_for_config_adapts_warmup_to_the_installed_transformers():
+    """transformers 5.x dropped `warmup_ratio` (its `warmup_steps` < 1 is a ratio); 4.x keeps it. Unknown fields fail
+    early, by name."""
+    import dataclasses
+
+    @dataclasses.dataclass
+    class V4:                                     # transformers 4.56-4.57: both fields
+        output_dir: str = ""
+        warmup_ratio: float = 0.0
+        warmup_steps: int = 0
+
+    @dataclasses.dataclass
+    class V5:                                     # transformers 5.x: warmup_steps only
+        output_dir: str = ""
+        warmup_steps: float = 0
+
+    kw = {"output_dir": "o", "warmup_ratio": 0.03}
+    assert sft.for_config(V4, kw) == kw
+    assert sft.for_config(V5, kw) == {"output_dir": "o", "warmup_steps": 0.03} and "warmup_ratio" in kw
+    with pytest.raises(TypeError, match="no_such_field"):
+        sft.for_config(V5, {"no_such_field": 1})
+    assert "warmup_ratio" in sft.sft_kwargs(out="o")      # the builder states the intent; for_config translates it
+
+
+def test_the_configs_build_with_the_installed_trl(tmp_path):
+    """When TRL is importable (T1), every builder's kwargs construct the real config classes."""
+    trl = pytest.importorskip("trl")
+    pytest.importorskip("transformers")
+    from trl.experimental.gkd import GKDConfig
+    cpu = {"bf16": False, "fp16": False, "use_cpu": True}          # this check runs anywhere; the card sets these
+    out = str(tmp_path / "o")
+    for gpu in ("T4", "L4"):
+        c = trl.SFTConfig(**sft.for_config(trl.SFTConfig, {**sft.sft_kwargs(out=out, gpu=gpu, lora=gpu == "T4"), **cpu}))
+        assert c.get_warmup_steps(1000) == 30                      # 3% warmup on either transformers major
+        g = GKDConfig(**sft.for_config(GKDConfig, {**gkd.gkd_kwargs(out=out, teacher="t", gpu=gpu), **cpu}))
+        d = trl.DistillationConfig(**sft.for_config(trl.DistillationConfig,
+                                                    {**gkd.distillation_kwargs(out=out, teacher="t", gpu=gpu), **cpu}))
+        assert (g.lmbda, g.beta, d.beta) == (0.5, 0.5, 1.0)
+
+
+def test_distillation_trainer_gets_prompt_only_rows():
+    row = {"messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "2+2?"},
+                        {"role": "assistant", "content": "4"}]}
+    assert gkd.prompt_only(row) == {"prompt": row["messages"][:2]}
+    assert gkd.prompt_only({"messages": [{"role": "user", "content": "q"}]}) == {"prompt": [{"role": "user", "content": "q"}]}
+    with pytest.raises(ValueError):
+        gkd.prompt_only({"messages": [{"role": "assistant", "content": "a"}]})
+
+
+def test_gkd_cli_beta_default_follows_the_trainer():
+    run = lambda *a: subprocess.run([sys.executable, "-m", "distillab.hf.gkd", "--data", "d", "--out", "o", "--dry-run", *a],
+                                    cwd=LAB, capture_output=True, text=True, timeout=60).stdout
+    assert "'beta': 0.5" in run() and "'beta': 1.0" in run("--trainer", "distillation")
+    assert "'beta': 0.0" in run("--trainer", "distillation", "--beta", "0")

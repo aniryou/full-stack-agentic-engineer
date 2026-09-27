@@ -3,9 +3,9 @@
 The one idea: a student too small to represent the teacher must choose what to get wrong. Forward
 KL(p ‖ q) — the teacher's view, what SFT and classic KD minimise — charges the student wherever the teacher
 has mass and it has none, so it spreads to cover every mode and, when it is unimodal, puts mass *between*
-them: samples the teacher would never produce. Reverse KL(q ‖ p) — the student's view, what on-policy
-distillation minimises — charges it for mass where the teacher has none, so it commits to the modes it can
-fit and drops the rest. The generalised JSD(β) interpolates. The acceptance rate of a draft, Σ min(p, q),
+them: samples the teacher would never produce. Reverse KL(q ‖ p) — the student's view, GKD's β = 1 and what
+the sampled-token reward of on-policy distillation estimates — charges it for mass where the teacher has none,
+so it commits to the modes it can fit and drops the rest. Whose samples you train on is a separate choice. The generalised JSD(β) interpolates. The acceptance rate of a draft, Σ min(p, q),
 is 1 − TV(p, q) (§7). Worked here with a bimodal teacher and a one-bump student family on 11 tokens.
 """
 from __future__ import annotations
