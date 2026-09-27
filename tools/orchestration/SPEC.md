@@ -1,4 +1,4 @@
-# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, six more topics: §6b)
+# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, six more topics: §6b; from 2026-09-27, distillation: §6c)
 
 Repo: `/home/user/full-stack-agentic-engineer` (read its `CLAUDE.md`; you already have it). Scratch: `$SP` (see FACTS.md).
 Read `$SP/FACTS.md` before writing anything product-specific. This file is the contract every builder and reviewer follows.
@@ -41,6 +41,7 @@ output is labelled "simulated"; sample tool output used as fixtures is labelled 
 | 07 | `07-application-agent-framework/sandboxed-execution` | `sandbox-core` (`sandboxcore`) | `sandbox-lab` (`sandboxlab`) |
 | 06 | `06-gateway/llm-gateway` | `gateway-core` (`gwcore`) | `gateway-lab` (`gwlab`) |
 | 07 | `07-application-agent-framework/agent-memory` | `memory-core` (`memcore`) | `memory-lab` (`memlab`) |
+| 00 | `00-foundations/distillation` | `distill-core` (`distillcore`) | `distill-lab` (`distillab`) |
 Root `CURRICULUM.md` and `COMPUTE.md` exist (the integrator updates them); you may link to them (from a topic dir:
 `../../CURRICULUM.md`, `../../COMPUTE.md`; from a core/lab dir: `../../../COMPUTE.md`) — the link checker may flag only those two.
 
@@ -588,3 +589,131 @@ Lab notebooks: `01_a_memory_store_on_sqlite` (T0; T0 + Docker for pgvector), `02
 `05_evaluate_forget_and_audit` (T0: the harness end to end, a deletion checked on disk; T1: a real embedder on the paraphrase subset).
 Must cite/reuse: the sections named above and their code — `agentcore`, `agentlab` (`ContextBuilder`, `token_cost`, `wilson_interval`), `ragkit`, `minifaiss`,
 `agentsec/audit/log.py`, `scalelab/capacity.py`, `minengine.kv`/`perf`, `capacity.py`, vllm-serving-lab notebook 04 and `deploy/`.
+
+## 6c. Distillation (2026-09-27): the §6b contract, one more block
+
+Everything in §0–§5 and §6b's opening list of differences applies unchanged (existing material is a hard prerequisite; torch lazy and
+optional; no network in tests or solutions; no Terraform in `00-foundations`; facts from `$SP/FACTS.md` and `$SP/facts-distillation.md`,
+upstream sources under `$SP/ref/`). Module id **00.6**. Packages `distillcore` and `distillab` are unique in the repo.
+
+### 00 · distillation — "Distillation: teaching a small model what a large one knows, and what the student saves in serving"
+Primer sections: 1 Why distil (the cost argument from the roofline — a student with a tenth of the parameters streams a tenth of the weight
+bytes per decode step and needs a tenth of the FLOPs per prefill token, cite 01 PRIMER §3 and §8 and reuse `roofline.llm.decode` /
+`roofline.cost.cost_per_million_tokens`; the capacity view, cite the capacity primer and `capacity.py`; three routes to a small model — train
+small from scratch, prune, distil — and why a distilled student beats a same-size model trained from scratch on the same tokens (soft targets
+carry more bits per example); the three families for language models in one table — logit (soft-label) distillation, sequence-level
+distillation on teacher outputs, on-policy distillation — with what each needs from the teacher (logits, samples, per-token scores on the
+student's own samples); what distillation cannot do — the capacity ceiling and the teacher–student gap, knowledge the teacher never verbalises,
+behaviours the data never elicits; licences and terms of use on training on a model's outputs, one dated paragraph marked (verify), not legal
+advice; where this primer starts and rl-and-thinking-models §1 and §5 stop — link, do not repeat) ·
+2 Soft targets, temperature and the choice of divergence (Hinton's soft targets p_T = softmax(z/T) and dark knowledge; the loss
+α·T²·KL(p_T^teacher ‖ p_T^student) + (1−α)·CE(hard); the gradient on the student's logits (q_i − p_i)/T and why T² restores its scale; the
+high-T limit as logit matching (MSE on centred logits), all worked on a five-token vocabulary with numbers; forward KL(p‖q) is mode-covering —
+the student spreads mass over every teacher mode and, when too small, puts mass between them — versus reverse KL(q‖p) mode-seeking — the
+student commits to the modes it can fit — MiniLLM's argument; the generalised Jensen–Shannon divergence with β interpolating between them;
+total variation; a bimodal teacher and a unimodal student worked with numbers from `distillcore.divergences`; why the choice matters more for
+generation than for classification; the same KL as RL's penalty, cite rl-and-thinking-models §2) ·
+3 Sequence-level distillation: learning from the teacher's outputs (SeqKD as SFT on teacher-generated completions — the recipe behind the R1
+distills and Qwen3's strong-to-weak stage, cite rl-and-thinking-models §1 and §5 for the recipe and its numbers and do not repeat them;
+exposure bias — the student trains on teacher prefixes and decodes on its own, so per-token errors compound with length, measured on the
+core's toy; the data budget — prompts × samples per prompt × tokens at the teacher's price per token, cite `06-gateway/scaling-admission-cost`
+for the price model; filtering by a verifier (rejection sampling, cite rl §5–§6) and by length, deduplication, decontamination against the eval
+set; rationales as extra supervision (distilling step-by-step) in brief; worked: teacher tokens × $/M against the student's training compute
+6·N·D → GPU-hours — `distillcore.cost`) ·
+4 On-policy distillation (sample from the student, score every token with the teacher's log-probabilities, minimise the reverse KL or a JSD
+per token — GKD; the mixing ratio λ between student-generated and teacher-generated sequences and the β of the divergence; the per-token
+reward view r_t = log π_teacher(y_t | y_<t) − log π_student(y_t | y_<t): a dense reward where GRPO's verifier gives one sparse reward per
+sequence, so the same policy-gradient machinery applies with far lower variance — cite rl-and-thinking-models §2 and §4 and match
+`rlcore.pg.reinforce_grad`'s convention in a test; why on-policy sampling removes exposure bias; compute per student token — one teacher
+forward pass in prefill shape against G rollouts per prompt for GRPO; the shared-tokenizer requirement; TRL's `GKDTrainer` / `GKDConfig`
+(`lmbda`, `beta`, `temperature`, `seq_kd`, `max_new_tokens` — verify names and defaults from the clone) as the concrete reference; recent
+results that on-policy distillation recovers RL-trained reasoning at a small fraction of the compute — only as far as the fact sheet verifies) ·
+5 Distilling reasoning (chain-of-thought traces as the training data; what a small student inherits — the format, the procedure and the
+teacher's thinking-length distribution, so the serving workload of rl-and-thinking-models §7 comes with it; filtering traces by verifier and by
+length and the accuracy-versus-length trade this sets; distillation versus RL on a small model — R1's finding, cite rl §5 — and the core's toy
+version of it; budget-aware distillation — training on shorter correct traces and what it costs in accuracy; what does not transfer —
+knowledge the student lacks, long-tail facts; the core's `ThinkTask`-style toy: a student that learns a thinking length from a teacher,
+`distillcore.reasoning`) ·
+6 Feature distillation, pruning and vocabulary mismatch (hidden-state and attention-map matching — TinyBERT, MiniLM — as the encoder-era
+recipe and why decoder LMs mostly distil logits and sequences; layer mapping; pruning then distillation — Minitron's depth and width pruning
+by activation importance followed by KD from the parent, and the Llama 3.2 1B/3B lineage (verify from the clones); distillation at pretraining
+scale (Gemma) in one paragraph, verify-marked; a dense student from an MoE teacher — cite mixture-of-experts §5 and §7 for what the teacher
+costs; teacher and student with different tokenizers — universal logit distillation and token-alignment approaches in brief, marked (verify);
+the checkpoint is an ordinary model — nothing changes in serving) ·
+7 A distilled draft for speculative decoding (the draft model is a student whose metric is acceptance — α = Σ_v min(p(v), q(v)) per position
+and E[tokens per pass] = (1 − α^(k+1)) / (1 − α) — cite serving-engine PRIMER §7 and reproduce `minengine.spec.acceptance_rate`,
+`expected_tokens` and `speedup` on that primer's own p and q (α = 0.6) in a test that says so; training a draft on the target's own outputs —
+sequence-level distillation from the target — against an off-the-shelf small model of the same family (distribution mismatch lowers α);
+EAGLE's feature-level draft head trained on the target's hidden states and Medusa's heads as draft-as-student designs, in brief, with (verify)
+numbers from the clones; acceptance versus draft size and the speedup model; measured in the lab with vLLM's `--speculative-config` and its
+spec-decode metrics (verify names); `distillcore.draft`) ·
+8 Measuring a student (teacher–student agreement — logit KL, argmax agreement, top-k overlap — with the same definitions as quantization §8
+and `quantcore.eval.kl` / `compare`, reproduced in a test; task accuracy against the teacher with Wilson intervals — cite the 07 platform lab's
+evals notebook and `memory-core`'s intervals; the capability gap and where students fail — the long tail, rare knowledge, multi-step problems,
+safety behaviour, instruction edge cases; model collapse from recursive synthetic data, in brief; benchmark contamination through teacher
+outputs; when agreement is the wrong metric — a student may beat its teacher on the target task while agreeing less) ·
+9 The economics of a student (cost per million tokens of teacher and student on the same GPU from a roofline decode step — cite 01 PRIMER §8
+and reproduce `roofline.cost.cost_per_million_tokens` in a test; the fixed cost of distillation — teacher generation tokens at their price plus
+the student's training GPU-hours at an assumed MFU; break-even volume and days; the cascade alternative — route easy queries to the student
+and hard ones to the teacher — cite `06-gateway/scaling-admission-cost` and rl §7's cost per correct answer; a decision table — prompt,
+fine-tune, distil, quantize, or a smaller off-the-shelf model — linking quantization §10; worked: a 1.5B student of a 32B teacher at a stated
+daily volume — `distillcore.cost`) ·
+10 Where to run it (T0: numpy teachers and students in the core, the lab's tiny torch transformers on a CPU; Colab/Kaggle T4: teacher
+completions from a 1.5–1.7B model in vLLM, SFT and logit KD of a 0.5–0.6B student with TRL — fp16, gradient checkpointing, LoRA when memory
+demands it, sizes from the fact sheet, verify — and on-policy GKD; a rented 24 GB GPU: a 3–4B teacher and a distilled draft measured under
+vLLM speculative decoding; GCP through the 04 serving lab's Cloud Run/GKE deploys for teacher inference — no new Terraform; link `COMPUTE.md`).
+Core `distillcore` (numpy): `tasks.py` (synthetic sequence tasks with exact verifiers and output spaces small enough to enumerate — a
+next-token language with structure a wider model learns better, such as a bracket or modular-arithmetic language — plus a `ThinkTask`-style
+reasoning toy where a scratchpad of length L raises accuracy to 1 − e0·(1−q)^L, mirroring `rlcore.tasks.ThinkTask`), `tinylm.py` (a small
+next-token model family with manual gradients — context embedding → hidden layer → logits — a wider teacher and a narrower student; seeded
+SGD/Adam; sampling with temperature; per-token log-probs; training runs of a few seconds), `losses.py` (soft-target cross-entropy, forward and
+reverse KL, generalised JSD(β), temperature scaling with the T² factor, logit MSE, α-mixing with the hard-label loss, closed-form gradients on
+logits; tests pin the gradient (q − p)/T and the high-T limit), `divergences.py` (forward against reverse KL fits of a unimodal student to a
+bimodal teacher; mode covering against seeking; total variation; worked numbers), `seqkd.py` (teacher data generation with temperature, n
+samples per prompt, verifier filtering and deduplication; SFT of the student; exposure-bias measurement — per-token accuracy on teacher
+prefixes against the student's own prefixes by position), `onpolicy.py` (GKD: student sampling, per-token teacher log-probs, the reverse-KL/JSD
+gradient with the policy-gradient estimator and λ mixing; the per-token reward form; a test that the reward form equals the reverse-KL gradient
+in expectation on an enumerable task and matches `rlcore.pg.reinforce_grad`'s convention), `reasoning.py` (trace distillation on the reasoning
+toy: teacher traces, rejection sampling by the verifier, length filtering, the student's accuracy and length distribution against the number of
+traces, a REINFORCE baseline on the same student for the distil-against-RL comparison), `draft.py` (acceptance α = Σ min(p, q), expected tokens
+per pass, the speedup model, acceptance of a distilled draft against an independent small model on the toy; reproduces `minengine.spec` in a
+test), `eval.py` (KL, argmax agreement, top-k overlap, task accuracy with Wilson intervals, the capability-gap table; reproduces `quantcore.eval`
+in a test), `cost.py` (teacher generation cost, student training FLOPs 6·N·D → GPU-hours → dollars, serving cost per million tokens for teacher
+and student from a roofline decode model, break-even volume, a cascade model; reproduces `roofline.cost` and the capacity primer's sizing in tests).
+Core notebooks: `01_soft_targets_and_temperature`, `02_forward_reverse_kl_and_on_policy_distillation`, `03_distilling_reasoning_traces`,
+`04_a_distilled_draft_for_speculative_decoding`, `05_measuring_a_student_and_the_economics`.
+Lab `distillab`: `tinylm/` (torch, lazy: a tiny decoder-only transformer teacher trained from scratch on a generated verifiable task —
+multi-digit arithmetic with an optional scratchpad — and a narrower student trained four ways: hard-label SFT on the same data, logit KD with T
+and α, SeqKD on teacher samples, on-policy GKD with λ and β; the accuracy, agreement and length curves the run actually produced; the whole
+notebook under 10 minutes on a laptop CPU; bundled curves labelled illustrative are the no-torch fallback), `data.py` (a generated eval and
+training set of verifiable arithmetic and logic problems with a scratchpad format — no download; the same shape as thinking-lab's built-in eval
+set, re-implemented since labs are standalone), `teacher.py` (teacher-data generation through any OpenAI-compatible server — vLLM at T1, the
+lab's fake at T0: n samples per prompt, temperature, verifier filtering, deduplication, the token bill; writes JSONL in the conversational
+format TRL's `SFTTrainer` reads (verify)), `fakeserver.py` (a T0 OpenAI-compatible teacher stand-in that answers the generated problems with
+deterministic scratchpads and returns logprobs and vLLM-named usage fields — say so), `hf/` (lazy, T1: `sft.py` — SFT on teacher data with TRL,
+a LoRA option for a 16 GB card; `kd.py` — a logit-KD trainer: teacher forward under no_grad, KL at temperature T, α-mixing; `gkd.py` — TRL
+`GKDTrainer` configuration; `memory.py` — a training-memory calculator (weights, gradients, optimizer states, activations with checkpointing,
+LoRA) from a model's `config.json`, with verify-marked T4 fits), `traces.py` (reasoning-trace distillation: collect traces from a thinking
+model served by vLLM with `--reasoning-parser`, filter by verifier and length, SFT the student, measure accuracy and trace-length distribution
+before and after; T0: bundled traces labelled illustrative), `draft.py` (speculative decoding in vLLM with a draft model — `--speculative-config`
+fields at the pinned version, verify — acceptance rate from vLLM's spec-decode metrics or from logprobs; a distilled draft against an
+off-the-shelf small model; T0: acceptance computed from the tiny torch models' distributions), `agreement.py` (teacher–student KL, argmax
+agreement, top-k overlap and task accuracy with intervals on a held-out set — HF models at T1, the tiny models at T0; an optional lm-eval
+wrapper), `cost.py` (break-even from measured throughput — vLLM `/metrics` at T1 — or the roofline model at T0), `report.py`.
+Lab notebooks: `01_kd_on_a_tiny_transformer` (T0 with torch: hard labels against logit KD, SeqKD and GKD), `02_teacher_data_and_a_real_student`
+(T1: vLLM generates teacher completions, then SFT and logit KD of a 0.5–0.6B student on a T4; T0: the fake teacher and a tiny run),
+`03_distilling_reasoning_traces_for_real` (T1: traces from Qwen3-1.7B or DeepSeek-R1-Distill-Qwen-1.5B into a 0.5–0.6B student; T0: bundled
+traces), `04_a_distilled_draft_in_vllm` (T1: acceptance and speedup of a distilled draft against its target; T0: from the tiny models),
+`05_is_the_student_worth_it` (agreement, the capability gap, cost per correct answer, break-even and the cascade; T0 calculators, T1 measured
+throughput).
+Deploy: `deploy/any-gpu/` (docker run vLLM as the teacher with logprobs enabled, the training scripts' commands, a Colab/Kaggle T4 recipe with
+`--dtype half` and memory-fitting flags, RunPod/Vast notes for a 24 GB card) and a pointer to
+`04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/` for teacher inference on GCP — no new Terraform.
+Must cite/reuse: transformer primer §6 (6·N·D); capacity primer and `capacity.py`; roofline PRIMER §3 and §8 with `roofline.llm` and
+`roofline.cost`; serving-engine PRIMER §7 and `minengine.spec`; rl-and-thinking-models PRIMER §1, §2, §4, §5, §6, §7 with `rlcore.pg`,
+`rlcore.tasks.ThinkTask` and its fact sheet `tools/orchestration/facts/rl-and-thinking-models.md`; quantization PRIMER §7 (QAD) and §8 with
+`quantcore.eval`; mixture-of-experts §5 and §7; `06-gateway/scaling-admission-cost` (cost per token and per conversation, routing by cost);
+the 07 platform lab's evals notebook 08 and `memory-core`'s Wilson intervals; the model-landscape primer's distillation lines.
+Model ids (verify, consistent with thinking-lab): teacher `Qwen/Qwen2.5-1.5B-Instruct` or `Qwen/Qwen3-1.7B`; student `Qwen/Qwen2.5-0.5B-Instruct`
+or `Qwen/Qwen3-0.6B`; thinking teacher `Qwen/Qwen3-1.7B` (thinking on) or `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`; draft → target
+`Qwen/Qwen3-0.6B` → `Qwen/Qwen3-4B` on a 24 GB card. Pins: vLLM 0.30.0, TRL 1.14.0 (verify).

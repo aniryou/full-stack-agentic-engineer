@@ -154,7 +154,7 @@ For the rest of this primer, "Transformer" means decoder-only unless stated othe
 
 ### 6.1 The objective
 
-Take a long sequence of tokens. At each position t, the model outputs a distribution over the token at t+1; the loss is cross-entropy against the token that actually came next, averaged over all positions. Pretraining an LLM is running this over trillions of tokens.
+Take a long sequence of tokens. At each position t, the model outputs a distribution over the token at t+1; the loss is cross-entropy against the token that actually came next, averaged over all positions. Pretraining an LLM is running this over trillions of tokens; distillation trains on the same cross-entropy with a larger model's whole next-token distribution as the target instead of the one-hot next token ([distillation primer §2](../../distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence)).
 
 The causal mask is what makes it efficient. Because position t sees only positions ≤ t, one forward pass over a sequence of length n produces n next-token predictions, each conditioned on exactly the right prefix. You get n training examples for the price of one pass, computed in parallel. (During training the model always sees the true prefix, never its own predictions — "teacher forcing.") An RNN yields the same n examples but computes them serially. This parallelism, more than any representational advantage, is why Transformers scaled and RNNs didn't.
 

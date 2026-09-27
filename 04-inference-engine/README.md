@@ -83,8 +83,11 @@ parallelism runs on) and layer 03's [`gpu-scheduling`](../03-kubernetes-gpu/gpu-
 gets its GPUs) sit between them. Two layer-00 topics bring workloads that change how an engine is run:
 [mixture-of-experts](../00-foundations/mixture-of-experts/PRIMER.md) (§6: fused MoE kernels and expert parallelism)
 and [rl-and-thinking-models](../00-foundations/rl-and-thinking-models/PRIMER.md) (§7: long, heavy-tailed outputs
-against the KV budget). Leads to [`05-orchestrator`](../05-orchestrator/README.md), which
-routes across many engine replicas by prefix-cache affinity and load, autoscales them and splits prefill from decode.
+against the KV budget); layer 00's
+[distillation](../00-foundations/distillation/PRIMER.md#7-a-distilled-draft-for-speculative-decoding) (§7) trains the
+draft model that speculative decoding (serving-engine §7) runs, as a student of its target. Leads to
+[`05-orchestrator`](../05-orchestrator/README.md), which routes across many engine replicas by prefix-cache affinity
+and load, autoscales them and splits prefill from decode.
 
 ## Caveats
 

@@ -1,0 +1,19 @@
+{
+  "_name_or_path": "Qwen/Qwen3-1.7B",
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "model_type": "qwen3",
+  "hidden_size": 2048,
+  "intermediate_size": 6144,
+  "num_hidden_layers": 28,
+  "num_attention_heads": 16,
+  "num_key_value_heads": 8,
+  "head_dim": 128,
+  "vocab_size": 151936,
+  "max_position_embeddings": 40960,
+  "tie_word_embeddings": true,
+  "rope_theta": 1000000,
+  "torch_dtype": "bfloat16",
+  "_note": "Key fields of this model's config.json (verify on the Hugging Face Hub: it was not reachable when this was written); shape from the Qwen3 technical report's Table 1 (layers, heads, tied) with hidden and intermediate sizes marked (verify) in the fact sheet. Bundled for offline sizing."
+}

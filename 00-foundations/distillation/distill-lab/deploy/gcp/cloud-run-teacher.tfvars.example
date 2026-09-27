@@ -1,0 +1,31 @@
+# Variables for the 04 serving lab's Cloud Run Terraform, set up to serve a *teacher* for distillation data.
+# Use it from that directory (this lab adds no Terraform of its own):
+#   cd ../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/cloud-run/terraform
+#   cp <this file> teacher.tfvars   # edit project_id and invoker_members
+#   terraform init && terraform apply -var-file=teacher.tfvars
+# Every key below is a variable of that module (tests/test_deploy.py checks it).
+
+project_id   = "my-serving-lab"
+region       = "us-central1" # a region with Cloud Run L4 GPUs (verify)
+service_name = "vllm-teacher-l4"
+labels       = { app = "distill-lab", layer = "00-foundations" }
+
+# A 7B teacher in bf16 is 15.2 GB on a 24 GB L4 (bundled config, verify), leaving a few GB of KV at
+# max_model_len 4096. Its vocab_size is 152,064, not the small Qwen2.5 models' 151,936: fine for sequence-level
+# distillation (text), not for logit KD, GKD or a draft model. For those, serve Qwen/Qwen2.5-1.5B-Instruct, or
+# Qwen/Qwen3-4B (thinking; add "--reasoning-parser", "qwen3") for Qwen3 students.
+model                  = "Qwen/Qwen2.5-7B-Instruct"
+max_model_len          = 4096
+gpu_memory_utilization = 0.92
+extra_args = [
+  "--max-logprobs", "20",
+  "--max-num-seqs", "64",
+]
+
+# Data generation is a batch job: many concurrent requests, no interactive SLO. Scale to zero when idle.
+request_timeout = "900s"
+concurrency     = 64
+min_instances   = 0
+max_instances   = 1
+
+invoker_members = ["user:you@example.com"]

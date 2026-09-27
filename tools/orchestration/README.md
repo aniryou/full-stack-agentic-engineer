@@ -1,18 +1,18 @@
-# tools/orchestration — how layers 01–05 and the six §6b topics were built and validated
+# tools/orchestration — how layers 01–05, the six §6b topics and the §6c topic were built and validated
 
-Working notes for the multi-agent build of the layer-01–05 labs and of six more topics — mixture-of-experts, RL and
+Working notes for the multi-agent build of the layer-01–05 labs and of seven more topics — mixture-of-experts, RL and
 thinking models, quantization, sandboxed execution, and, in the 2026-09-26 structure plan, the LLM gateway and agent memory
-(September 2026). Kept in the repo so the build can be resumed from any checkout, and so the validation steps stay
-reproducible.
+(§6b), and distillation (§6c) (September 2026). Kept in the repo so the build can be resumed from any checkout, and so the
+validation steps stay reproducible.
 
 | File | What it is |
 |---|---|
-| `SPEC.md` | The shared contract every builder and reviewer followed: goal, run tiers T0–T3, fixed paths, conventions, per-layer plan; §6b adds the six later topics (four, then two in the structure plan). |
+| `SPEC.md` | The shared contract every builder and reviewer followed: goal, run tiers T0–T3, fixed paths, conventions, per-layer plan; §6b adds the six later topics (four, then two in the structure plan), §6c distillation. |
 | `FACTS.md` | Product facts verified on 2026-09-26 (API versions, metric names, prices, obtainability) — the source of truth for `(verify)` items. |
-| `facts/<topic>.md` | The dated fact sheets the research agents wrote for the six §6b topics (`mixture-of-experts`, `rl-and-thinking-models`, `quantization`, `sandboxed-execution`, `llm-gateway`, `agent-memory`), with the upstream file each fact was read from — the verification record behind those primers. |
+| `facts/<topic>.md` | The dated fact sheets the research agents wrote for the six §6b topics (`mixture-of-experts`, `rl-and-thinking-models`, `quantization`, `sandboxed-execution`, `llm-gateway`, `agent-memory`) and the §6c topic (`distillation`), with the upstream file each fact was read from — the verification record behind those primers. |
 | `build_topic.js` | Workflow script for one topic: a research agent writes `facts-<topic>.md`, then builder A (PRIMER + README + core) and builder B (lab) run in parallel, then the nested review. Takes `topic`, `sp`, `repo` and the paths in `args`. |
 | `review_workflow.js` | The nested review: three adversarial reviewers (concepts, runnability, pedagogy) → a fixer that verifies each finding before acting → an independent validator that re-runs everything and audits the fixer's rejections. Takes `topic`, `sp`, `repo`, the topic's `dirs` and its SPEC block in `args`. |
-| `INTEGRATION.md` | The checklist the integrator followed to land the four §6b topics: layer READMEs, cross-links, `CURRICULUM.md`, `COMPUTE.md`, root README, `CLAUDE.md`, this folder, the site build. |
+| `INTEGRATION.md` | The checklist the integrator followed to land the four §6b topics: layer READMEs, cross-links, `CURRICULUM.md`, `COMPUTE.md`, root README, `CLAUDE.md`, this folder, the site build; the §6c topic landed with an adapted copy. |
 | `README-STYLE.md` | The README style guide every integrator applies (human-first structure: promise → start here → what you get → run it → how it fits). |
 | `STATUS.md` | Per-layer progress: built / reviewed / merged, with the next step. Update it whenever a layer changes state. |
 | `reviews/` | The 2026-09-26 adversarial review of the whole repo (`2026-09-26-adversarial-review.md`); its fix plan and ledger (`2026-09-26-fix-plan.md`) with `fixpkg.js`, the fix → verify → re-fix workflow each fix package ran; the structure plan that carried out the five decisions the fix plan left to the owner (`2026-09-26-structure-plan.md`); and `structure-plan/`, the scripts and briefs its packages ran with. |

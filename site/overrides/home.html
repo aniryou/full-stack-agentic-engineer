@@ -32,7 +32,7 @@
     <h1 id="fse-title" class="fse-title">Full-stack agentic engineer</h1>
     <p>
       A learning repository for the LLM serving stack, from the GPU and its fabric to agents and applications,
-      organised as eight layers and, within each layer, by topic. Eleven topics come as a primer, a small from-scratch
+      organised as eight layers and, within each layer, by topic. Twelve topics come as a primer, a small from-scratch
       implementation and a fuller lab, with notebooks for both; the others are a primer with written exercises, a
       primer with practice notebooks, or a lab of their own. This site is a readable copy of the
       <a href="{{ repo }}">repository</a>; code files open on GitHub.
@@ -50,7 +50,7 @@
         ("03-kubernetes-gpu", "03", "Kubernetes and GPU scheduling", "device plugins, gangs, topology, Kueue quotas"),
         ("02-cuda-nccl-runtime", "02", "CUDA, NCCL and runtime", "the execution model, collectives, containers, GPU sharing"),
         ("01-hardware-gpu-fabric", "01", "Hardware and fabric", "spec sheets, the roofline, fabrics, the cost of a token"),
-        ("00-foundations", "00", "Foundations", "transformer internals, capacity planning, the model landscape, MoE, RL and thinking models"),
+        ("00-foundations", "00", "Foundations", "transformer internals, capacity planning, the model landscape, MoE, RL and thinking models, distillation"),
       ] %}
       <ol class="fse-stack" aria-label="Layers 07 to 01: a request enters at the agent and goes down to the GPUs">
         {% for folder, num, name, what in layers if num != '00' %}

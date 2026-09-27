@@ -23,6 +23,22 @@
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
+   "id": "distill-core",
+   "dir": "00-foundations/distillation/distill-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "distill-lab",
+   "dir": "00-foundations/distillation/distill-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
    "id": "rl-core",
    "dir": "00-foundations/rl-and-thinking-models/rl-core",
    "python": "3.11",

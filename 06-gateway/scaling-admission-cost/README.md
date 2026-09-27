@@ -48,7 +48,7 @@ sits one layer above the orchestrator ([`05-orchestrator`](../../05-orchestrator
 whether a request runs, the router then decides where, and layer 03's Kueue quotas are the same "shape demand to
 capacity" idea for GPU jobs. It leads to layer 07's agents, whose turns this topic bounds, and pairs with
 [`identity-security/`](../identity-security/README.md). In the [curriculum's spiral](../../CURRICULUM.md#31-why-this-order)
-it is step 23, after the orchestrator.
+it is step 24, after the orchestrator.
 
 ## Caveats
 

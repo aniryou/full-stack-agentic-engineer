@@ -350,7 +350,7 @@ There is no convergence yet, and the choice directly determines your serving cos
 2. **Retrieval and tool grounding** — same as closed, but you can co-locate the model with the data.
 3. **PEFT** — LoRA/QLoRA via TRL, Unsloth, Axolotl, LLaMA-Factory. Hours on one GPU for a 27B model.
 4. **Full post-training and RL** — NeMo, TRL, verl-style stacks; or managed routes (Mistral Forge, Thinking Machines' Tinker). Harvey reached frontier-class legal accuracy on Nemotron at ≥10x lower cost per run; Arcee hit ~$0.90 per million output tokens.
-5. **Distillation** — compress a large open teacher into a task-specific student. Inkling-Small is the public worked example, including its factuality cost.
+5. **Distillation** — compress a large open teacher into a task-specific student. Inkling-Small is the public worked example, including its factuality cost. How it works, and when a student pays for itself: [`distillation`](../distillation/README.md).
 
 ### Operating discipline
 

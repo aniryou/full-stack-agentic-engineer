@@ -46,7 +46,7 @@ may do). It leads to layer 07: the agent loop whose tool calls the policy gates
 ([`agent-fundamentals`](../../07-application-agent-framework/README.md)), and
 [sandboxed execution](../../07-application-agent-framework/sandboxed-execution/README.md), which starts from the
 primer's §6.2 (code execution) and keeps secrets out of the sandbox with the same token discipline. In the
-[curriculum's spiral](../../CURRICULUM.md#31-why-this-order) it is step 24, after the scaling lab.
+[curriculum's spiral](../../CURRICULUM.md#31-why-this-order) it is step 25, after the scaling lab.
 
 ## Caveats
 

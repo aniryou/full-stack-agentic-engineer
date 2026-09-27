@@ -77,6 +77,7 @@ Prices, free tiers and how to obtain GPUs on GCP and elsewhere: [`COMPUTE.md`](.
 | beside | layer 02's [cuda-and-nccl primer](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §4–5 and layer 03's [gpu-scheduling](../../03-kubernetes-gpu/gpu-scheduling/README.md) topic | CUDA Graphs and the all-reduces tensor parallelism runs on; how the engine's pod gets its GPUs |
 | after | [`vllm-internals`](../vllm-internals/README.md) | the same mechanisms read in vLLM's source, with line numbers |
 | after | [`quantization`](../quantization/README.md) | the deep dive behind primer §8: formats to the bit, GPTQ/AWQ/SmoothQuant, what each scheme runs as per GPU, FP8 KV, a real quantized checkpoint served and evaluated |
+| after | [`00 distillation`](../../00-foundations/distillation/README.md) (primer §7) | the draft model of primer §7 trained as a student of its target, and its acceptance measured under `--speculative-config` |
 | after | [`05-orchestrator`](../../05-orchestrator/README.md) | many replicas, routed by prefix-cache affinity and load, autoscaled on queue depth and KV usage, split into prefill and decode pools |
 | after | [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/); [`07-application-agent-framework`](../../07-application-agent-framework/) | admission, rate limits and cost in front of the fleet; the agent workloads — long stable prefixes, append-only histories — that shape all of it |
 

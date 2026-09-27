@@ -461,6 +461,11 @@ probability to benchmark speed and does not preserve the distribution (verify).
 | EAGLE / EAGLE-3 | a light head on the target's own hidden states drafts features, then tokens | a few % | general chat; the common production choice |
 | MTP | extra prediction heads trained with the model (e.g. DeepSeek-V3) | a few % | models that ship them |
 
+Training a draft model is distillation with acceptance as the metric: α is 1 − TV between the pair on the target's own
+text, so a draft trained on the target's outputs or logits beats an off-the-shelf small model of the same family
+wherever the target was fine-tuned
+([distillation primer §7](../../00-foundations/distillation/PRIMER.md#7-a-distilled-draft-for-speculative-decoding)).
+
 **When it stops paying** (SIMULATED, `perf.spec_speedup()`, notebook 05: Llama-3.1-8B target, Llama-3.2-1B draft,
 H100, α = 0.7, k = 4). A round is one engine step: it pays the step's fixed overhead (2 ms, as everywhere in this
 primer) once, k draft forwards at their roofline time plus an assumed 0.5 ms each (a CUDA-graph replay and a draft

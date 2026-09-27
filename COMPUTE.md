@@ -48,6 +48,7 @@ T0 path and print the commands to run on real hardware, so no notebook requires 
 | try FP8 | a GPU with compute capability 8.9 or higher: RTX 4090 (RunPod, Vast.ai) or L4 (GCP Spot) |
 | try FP4 (NVFP4 W4A4) | one rented Blackwell GPU: B200 or RTX PRO 6000 (GCP G4, Cloud Run) `(verify)` |
 | serve a thinking model | Colab or Kaggle T4 with `Qwen/Qwen3-0.6B`, `--reasoning-parser qwen3` and `--dtype half`; a 24 GB GPU for a 4B model |
+| distil a small student from a served teacher | Colab or Kaggle T4: `Qwen/Qwen2.5-1.5B-Instruct` in vLLM with `--dtype half` writes the data, then TRL trains `Qwen/Qwen2.5-0.5B-Instruct` on the same card; a 24 GB GPU for a Qwen3-4B target with a Qwen3-0.6B draft |
 | measure NCCL collectives over PCIe | Kaggle 2×T4 |
 | compare tensor and expert parallelism for an MoE | Kaggle 2×T4 with a small MoE in vLLM |
 | measure NVLink P2P and busbw | 2× A100 or H100 SXM on RunPod, Vast.ai or Lambda for an hour |
@@ -219,9 +220,9 @@ scale to zero.
 | 07 [`sandbox-lab/deploy/gcp/terraform`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/terraform/) | zonal GKE Standard with private nodes and Dataplane V2, a one-node `e2-standard-2` system pool, a GKE Sandbox (gVisor) Spot pool 0→3, an Artifact Registry repository, Managed Prometheus; Cloud NAT only with `enable_nat = true`; no GPU | the cluster fee, the system pool (roughly $0.07/h on demand in us-central1 `(verify)`), image storage, Cloud NAT if enabled |
 | 07 [`memory-lab/deploy/gcp`](07-application-agent-framework/agent-memory/memory-lab/deploy/gcp/) (printed `gcloud` commands, no Terraform) | an Artifact Registry repository and the lab's image, two service accounts, a Secret Manager secret, a Cloud Run job on a weekly Cloud Scheduler trigger; the store is a Cloud SQL for PostgreSQL instance with pgvector that you create `(verify)`; the model is the serving lab's Cloud Run service | the Cloud SQL instance, per hour even when idle (the largest line) and its backups; image storage |
 
-The 00 MoE and thinking labs and the 04 quantization lab add no Terraform: MoE's expert-parallel Deployment runs on
-layer 02's cluster (its 2 × L4 `l4x2` pool), and the thinking and quantized models run on the serving lab's Cloud Run
-and GKE targets above with different model ids and engine flags.
+The 00 MoE, thinking and distillation labs and the 04 quantization lab add no Terraform: MoE's expert-parallel
+Deployment runs on layer 02's cluster (its 2 × L4 `l4x2` pool), and the thinking, teacher and quantized models run on
+the serving lab's Cloud Run and GKE targets above with different model ids and engine flags.
 
 Notes that apply across labs:
 
@@ -273,6 +274,18 @@ which a lab notebook's numbers become measurements.
 | `05_rl_rollouts_with_an_engine` | the same bookkeeping on the tiny transformer's rollouts | T1: vLLM generates the rollouts for `Qwen/Qwen2.5-0.5B-Instruct`, transformers takes one GRPO step | Colab or Kaggle T4 (the fit in 15 GB is `(verify)`); a 24 GB GPU with room | — |
 | [`deploy/any-gpu`](00-foundations/rl-and-thinking-models/thinking-lab/deploy/any-gpu/) | `DRY_RUN=1` | T1 | `serve.sh` (Docker or pip), `rl_step.sh`; Colab/Kaggle T4 and 24 GB recipes, RunPod/Vast notes | — |
 | [`deploy/gcp`](00-foundations/rl-and-thinking-models/thinking-lab/deploy/gcp/) | the tfvars example and the manifests checked offline by the lab's tests | T3 | — | the 04 serving lab's Cloud Run Terraform or GKE manifests set up for a thinking model (longer request timeout, lower concurrency); no Terraform here |
+
+### 00 · [`distill-lab`](00-foundations/distillation/distill-lab/)
+
+| Notebook or target | T0 path | Real run | Cheapest real option | GCP (T3) |
+|---|---|---|---|---|
+| `01_kd_on_a_tiny_transformer` | torch on a CPU trains a tiny teacher and four students (a real run, a few minutes); without torch, a recorded run (illustrative) | T1 only makes it faster | — | — |
+| `02_teacher_data_and_a_real_student` | the teacher-data pipeline against the lab's fake teacher (simulated) and a tiny student trained with torch on a CPU; the T4 memory plans are a calculator's (predicted) | T1: `vllm serve Qwen/Qwen2.5-1.5B-Instruct` writes the data, then SFT and logit KD of `Qwen/Qwen2.5-0.5B-Instruct` with TRL on the same card | Colab or Kaggle T4 (`--dtype half`; the training fits are `(verify)`) | the 04 serving lab's Cloud Run (one L4, scale to zero) or GKE deploy serving a larger teacher, via `deploy/gcp` |
+| `03_distilling_reasoning_traces_for_real` | 160 bundled traces from the fake thinking teacher (simulated, illustrative) and a tiny budget-aware run with torch | T1: traces from `Qwen/Qwen3-1.7B` or `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` with `--reasoning-parser`, then SFT of `Qwen/Qwen3-0.6B` | Colab or Kaggle T4 | — |
+| `04_a_distilled_draft_in_vllm` | the tiny models as target and drafts, acceptance computed from their distributions with torch; a bundled pair of `/metrics` scrapes, synthetic at α = 0.7 | T1: `Qwen/Qwen3-4B` with a `Qwen/Qwen3-0.6B` draft, off the shelf and distilled, under `--speculative-config` | a 24 GB L4 or RTX 4090 | — |
+| `05_is_the_student_worth_it` | roofline serving costs (predicted), accuracy from the fake teacher and student (simulated), agreement from notebook 01's recorded run (illustrative) | T1: output tokens per second from a real vLLM's `/metrics`; lm-eval accuracies | Colab or Kaggle T4 | the teacher deploy of 02, judged by tokens per second and $/M tokens |
+| [`deploy/any-gpu`](00-foundations/distillation/distill-lab/deploy/any-gpu/) | `DRY_RUN=1` | T1 | `serve_teacher.sh` (Docker or pip), `train_student.sh`, `serve_with_draft.sh`; Colab/Kaggle T4 and 24 GB recipes, RunPod/Vast notes | — |
+| [`deploy/gcp`](00-foundations/distillation/distill-lab/deploy/gcp/) | the tfvars example checked offline by the lab's tests | T3 | — | the 04 serving lab's Cloud Run Terraform with a teacher's settings (`Qwen/Qwen2.5-7B-Instruct`, `--max-logprobs 20`, concurrency 64 for a batch job), or its GKE manifest with `--max-logprobs=20`; no Terraform here |
 
 ### 01 · [`gpu-bench-lab`](01-hardware-gpu-fabric/roofline-and-fabric/gpu-bench-lab/)
 
@@ -418,10 +431,10 @@ GPU time is cheapest when the T0 work is already done and several labs share one
 
 | Session | Hardware | Cost | Run |
 |---|---|---|---|
-| A · one GPU | Colab or Kaggle T4; a rented 4090 or a GCP L4 Spot VM when you need FP8 | $0, or ~$0.3–0.7/hr | 01 lab 01, 02, 04 · 02 lab 02, 05 · 04 lab 02–05 and the vllm-internals observations · 05 lab 04 with one real vLLM backend · 00 MoE lab 02, 03, 05 · 00 thinking lab 02–05 · 04 quantization lab 01–04 (04 needs FP8) · 06 gateway lab 01–04 (one vLLM behind the gateway, a fake fallback) · 07 memory lab 02, 03, 05 (a chat model with tool calls and an embedder side by side) |
+| A · one GPU | Colab or Kaggle T4; a rented 4090 or a GCP L4 Spot VM when you need FP8 | $0, or ~$0.3–0.7/hr | 01 lab 01, 02, 04 · 02 lab 02, 05 · 04 lab 02–05 and the vllm-internals observations · 05 lab 04 with one real vLLM backend · 00 MoE lab 02, 03, 05 · 00 thinking lab 02–05 · 00 distillation lab 02–05 (04 on a 24 GB card) · 04 quantization lab 01–04 (04 needs FP8) · 06 gateway lab 01–04 (one vLLM behind the gateway, a fake fallback) · 07 memory lab 02, 03, 05 (a chat model with tool calls and an embedder side by side) |
 | B · two GPUs over PCIe | Kaggle 2×T4 | $0 | 01 lab 03 · 02 lab 03, 04 (and the nccl-tests recipe) · 04 lab exercise 3.6 (tensor parallelism) · 05 lab 04 with two vLLM replicas · 00 MoE lab 04 (tensor vs expert parallelism) |
 | C · NVLink | 2× A100 or H100 SXM on RunPod, Vast.ai or Lambda, about an hour | ~$1–6 | session B again, to compare P2P and busbw with PCIe; optionally a vLLM run with `--tensor-parallel-size 2` to see the all-reduce cost in ITL |
-| D · GCP, one lab at a time | each lab's Terraform | GPU at the Spot price plus the cluster or load-balancer overhead | 01 VM suite · 04 Cloud Run (also with a quantized or thinking model) · 02, 03, 05 on GKE (the MoE lab's EP Deployment rides on 02's) · 06 gateway on Cloud Run in front of 04's or 05's vLLM (the upstream's GPU is the bill) · 07 GKE Sandbox (no GPU) · 07 memory lab's consolidation job (printed commands; Cloud SQL bills while it exists); destroy before starting the next |
+| D · GCP, one lab at a time | each lab's Terraform | GPU at the Spot price plus the cluster or load-balancer overhead | 01 VM suite · 04 Cloud Run (also with a quantized, thinking or teacher model) · 02, 03, 05 on GKE (the MoE lab's EP Deployment rides on 02's) · 06 gateway on Cloud Run in front of 04's or 05's vLLM (the upstream's GPU is the bill) · 07 GKE Sandbox (no GPU) · 07 memory lab's consolidation job (printed commands; Cloud SQL bills while it exists); destroy before starting the next |
 | E · Blackwell | one rented B200 or RTX PRO 6000 `(verify)` | per hour at the provider's price | 04 quantization lab 05 (NVFP4 W4A4) |
 
 ---
@@ -481,6 +494,8 @@ gcloud storage buckets list
 
 ## 9. Verify list — 2026-09-26
 
+*The Distill lab row was added on 2026-09-27, with the distillation topic.*
+
 | Item | Value used here | Where it matters |
 |---|---|---|
 | Colab free tier | T4 16 GB; ~15–30 GPU-h/week, not guaranteed; ~12 h sessions; paid tiers' GPUs | §3.2, T1 |
@@ -502,6 +517,7 @@ gcloud storage buckets list
 | Tooling | Terraform google provider 8.4.0 (labs pin `>= 8.0`); Kueue v0.19.6; `gcloud billing budgets create` flags; project-deletion recovery window | §6, §8 |
 | MoE lab | model ids (`allenai/OLMoE-1B-7B-0924(-Instruct)`, `Qwen/Qwen1.5-MoE-A2.7B` and its GPTQ-Int4, `Qwen/Qwen3-30B-A3B-GPTQ-Int4`, the granite-3.0 MoE models); vLLM v0.30.0 `--enable-expert-parallel`, `--cpu-offload-gb`, `--enable-return-routed-experts`; MXFP4 (gpt-oss) needs compute capability 8.0, so not a T4; PCIe peer bandwidths on Kaggle's 2×T4 | §6 (moe-lab) |
 | Thinking lab | model ids (`Qwen/Qwen3-0.6B`, `-1.7B`, `-4B`, `-4B-Thinking-2507`, `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`, `Qwen/Qwen2.5-0.5B-Instruct`); vLLM v0.30.0 `--reasoning-parser` and the `reasoning` response field; TRL 1.14.0 `GRPOConfig` defaults; Qwen3 in fp16 on a T4; the GRPO step's fit in 15 GB; Cloud Run's maximum request timeout | §6 (thinking-lab) |
+| Distill lab | model ids and shapes (`Qwen/Qwen2.5-0.5B-Instruct`, `-1.5B-Instruct`, `-7B-Instruct`, `Qwen/Qwen3-0.6B`, `-1.7B`, `-4B`, `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`) and `vocab_size` (151,936 for the small Qwen2.5 and all Qwen3, 152,064 for Qwen2.5-7B and larger); TRL 1.14.0: `GKDTrainer` and `GKDConfig` under `trl.experimental.gkd` (not `from trl import`) and their defaults, the stable `DistillationTrainer`, `bf16` on unless `fp16` is set; vLLM v0.30.0 `--speculative-config` fields (`method`, `model`, `num_speculative_tokens`, `draft_sample_method` defaulting to `"greedy"`), the `draft_model` vocabulary check, the `vllm:spec_decode_*` counter names, `--max-logprobs` default 20; the T4 training fits (full SFT of the 0.5B, logit KD with LoRA and a chunked loss, Qwen in fp16 without NaNs); the prices it prices a student with (H100 ~$11/GPU-hour on demand, T4 and L4 from §5.2, the 06 lab's API prices of 5 September 2026) | §6 (distill-lab) |
 | Quantization lab | llm-compressor 0.14.0, compressed-tensors 0.19.0, lm-eval 0.4.13, GPTQModel 7.5.0; `--quantization fp8` works at vLLM 0.30.0 and raises at `main` (use `fp8_per_tensor`); bitsandbytes and GGUF as out-of-tree plugins; kernel floors (FP8 W8A8 from compute capability 8.9, NVFP4 W4A4 on 10.x–12.x with CUDA 12.8+, INT8 W8A8 not on 10.0+, no FP8 KV backend on 7.5); pre-quantized model ids; Blackwell rental prices | §2, §6 (quant-lab) |
 | Gateway lab | the hosted price rows in `gwcore.providers.CATALOGUE` and `gwlab/gateway/metering.py` (dated 2026-09-26) and their context windows; vLLM v0.30.0 behaviour the gateway depends on: `--enable-prompt-tokens-details` for `cached_tokens`, `--enable-force-include-usage` (which also turns on usage in every chunk), `stream_options` rejected without `stream`, `cache_salt` at most 128 characters and salting the first block only, a mid-stream error sent as a `data:` chunk inside an HTTP 200, reasoning text in `reasoning`, `--api-key` guarding only `/v1`, `/v2`, `/inference` and `/cohere`; the OpenTelemetry GenAI names (development stability; v1.41.0 is the last release that defines them, and `cache_write` and `gen_ai.client.inference.*` are unreleased renames); MCP authorization revision 2026-07-28 (CIMD as SHOULD, dynamic client registration deprecated, the S256 refusal rule, `resource` in both requests, RFC 9207 `iss`); the `x-ratelimit-*` headers (prose docs only; `Retry-After` is in the OpenAPI description); the LiteLLM 1.104.0, Envoy AI Gateway v1.1.0, Kong 3.10.0 and Portkey 1.15.2 feature table (primer §9.2); Cloud Run for a CPU gateway (`--set-secrets`, an ID token for a private upstream, the 60-minute request limit); the T1 model id and image | §5.4, §6 (gateway-lab) |
 | Sandboxes | gVisor's install layout and `runsc` release channel; GKE Sandbox `sandbox_config.type = "GVISOR"` (case-sensitive in the provider), the `gvisor` RuntimeClass GKE creates and its node taint; kind v0.33.0 with node image K8s 1.34.11 and kindnetd's NetworkPolicy enforcement (it fails open); `e2-standard-2` ~$0.07/h on demand; GKE Sandbox carries no surcharge | §5.4, §6 (sandbox-lab) |

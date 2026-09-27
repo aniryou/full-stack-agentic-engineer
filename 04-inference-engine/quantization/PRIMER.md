@@ -490,9 +490,11 @@ sharing.
 The backward pass treats rounding as the identity inside the clipping range, the **straight-through estimator**, so
 the weights learn to sit where rounding hurts least. It can recover much of what PTQ loses at 4 bits and below, at
 the cost of a training run (measure it per model). Quantization-aware distillation (QAD) trains the quantized model
-to match the full-precision model's outputs rather than labels. NVIDIA's NVFP4 W4A4 note reports 500 QAD iterations
-recovering an instruction-following benchmark that lost 2.6 points after PTQ, with a 67 → 22 GiB checkpoint
-(ModelOpt, 2026-09-16, verify). This is the same "cheap post-training step on top of a big model" economics as the
+to match the full-precision model's outputs rather than labels, the full-precision model acting as the teacher in
+the loss of [distillation §2](../../00-foundations/distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence).
+NVIDIA's NVFP4 W4A4 note reports 500 QAD iterations recovering an instruction-following benchmark that lost 2.6
+points after PTQ, with a 67 → 22 GiB checkpoint (ModelOpt, 2026-09-16, verify). This is the same "cheap
+post-training step on top of a big model" economics as the
 post-training stages in [rl-and-thinking-models §1](../../00-foundations/rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training).
 
 **QLoRA is a training recipe, not a serving format.** It freezes the base model in **NF4**, a 4-bit format whose

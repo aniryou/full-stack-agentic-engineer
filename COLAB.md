@@ -10,7 +10,7 @@ Each layer README ends with a *Run in Colab* section: one line per lab, exercise
 answers. Every lab has the same two folders: `notebooks/` for what you open (exercise blanks, lessons and
 walkthroughs) and `solutions/` for the worked answer to a blank, under the same file name as the blank.
 
-- [00 · Foundations](00-foundations/README.md#run-in-colab) — 46 notebooks
+- [00 · Foundations](00-foundations/README.md#run-in-colab) — 66 notebooks
 - [01 · Hardware and fabric](01-hardware-gpu-fabric/README.md#run-in-colab) — 16 notebooks
 - [02 · CUDA, NCCL and runtime](02-cuda-nccl-runtime/README.md#run-in-colab) — 22 notebooks
 - [03 · Kubernetes and GPU scheduling](03-kubernetes-gpu/README.md#run-in-colab) — 18 notebooks
