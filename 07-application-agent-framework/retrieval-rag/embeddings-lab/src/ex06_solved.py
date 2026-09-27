@@ -10,8 +10,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Task 1 — forward pass
-# `x̂ = ReLU(X W Wᵀ + b)` with `X` (B,n), `W` (n,d), `b` (n,).
-# Check: with `W = I` (n = d) and non-negative `X`, `b = 0`, the model is the
+# $\hat{x} = \operatorname{ReLU}(X W W^\top + b)$ with `X` (B,n), `W` (n,d), `b` (n,).
+# Check: with $W = I$ ($n = d$) and non-negative `X`, $b = 0$, the model is the
 # identity.
 
 # %%
@@ -29,8 +29,8 @@ print("forward ✓")
 
 # %% [markdown]
 # ## Task 2 — gradients (W appears twice!)
-# Loss: `mean_B Σᵢ Iᵢ (x̂ᵢ − xᵢ)²`. Derive `dW` and `db`. Hints:
-# `dZ = (2/B)·I·(x̂ − x)·1[Z>0]`; then `dW = dZᵀH + Xᵀ(dZ·W)` — one term per
+# Loss: $\operatorname{mean}_B \sum_i I_i \, (\hat{x}_i - x_i)^2$. Derive `dW` and `db`. Hints:
+# $dZ = (2/B) \cdot I \cdot (\hat{x} - x) \cdot \mathbf{1}[Z > 0]$; then $dW = dZ^\top H + X^\top (dZ \cdot W)$ — one term per
 # appearance of `W`. The finite-difference harness below is the judge.
 
 # %%
@@ -69,7 +69,7 @@ print("loss_and_grads ✓ (matches finite differences)")
 
 # %% [markdown]
 # ## Task 3 — run the phase change with your gradients
-# Provided training loop. Train at p = 1.0 and p = 0.05 and plot the feature
+# Provided training loop. Train at $p = 1.0$ and $p = 0.05$ and plot the feature
 # directions. You should see ~2 surviving features (dense) vs all 5 packed in
 # (sparse).
 
@@ -105,6 +105,6 @@ print("phase change ✓ — sparse inputs buy superposition")
 
 # %% [markdown]
 # ## Task 4 (open) — capacity allocation
-# Rerun with importances `0.75**i` for 8 features at p=0.15. Which features get
+# Rerun with importances `0.75**i` for 8 features at $p = 0.15$. Which features get
 # a (near-)dedicated direction and which share? Relate to why frequent concepts
 # in real embedding models interfere less than rare ones.

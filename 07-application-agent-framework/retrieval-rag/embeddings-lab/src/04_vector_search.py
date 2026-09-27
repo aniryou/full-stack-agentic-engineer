@@ -74,8 +74,8 @@ plt.title("IVF: recall vs work"); plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ## PQ: store less
-# Split each vector into `m` sub-vectors; k-means each subspace to 256 centroids;
-# store one **byte** per sub-vector. Query-time distances come from an `m × 256`
+# Split each vector into $m$ sub-vectors; k-means each subspace to 256 centroids;
+# store one **byte** per sub-vector. Query-time distances come from an $m \times 256$
 # lookup table (*asymmetric distance computation*) — no decompression.
 
 # %%

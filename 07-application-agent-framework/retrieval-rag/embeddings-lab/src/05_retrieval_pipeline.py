@@ -54,7 +54,7 @@ def bm25_scores(q, k1=1.5, b=0.75):
 # ## A dense retriever: TF-IDF → SVD (LSA)
 # A stand-in for a trained embedding model with identical pipeline mechanics:
 # docs become vectors offline, queries are *folded in* at query time
-# (`u_q = q · V · S⁻¹`), similarity is cosine. Because SVD links words that
+# ($u_q = q \cdot V \cdot S^{-1}$), similarity is cosine. Because SVD links words that
 # co-occur, "limescale" and "descale" end up near each other even when a doc
 # uses only one of them.
 
@@ -109,7 +109,7 @@ def evaluate(score_fn):
 # %% [markdown]
 # ## Fusion: Reciprocal Rank Fusion (RRF)
 # Rank-based, so no score-calibration across systems is needed — the reason it
-# is everyone's default (`k = 60`).
+# is everyone's default ($k = 60$).
 
 # %%
 def rrf(rankings, k=60):
