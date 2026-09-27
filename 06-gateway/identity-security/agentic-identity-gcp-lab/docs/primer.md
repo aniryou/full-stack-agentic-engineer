@@ -338,7 +338,22 @@ The practice notebooks (`notebooks/*_practice.ipynb`) include deliberately flawe
 
 ## 12. Glossary (fast recall)
 
-**Agent Identity** — Google Cloud's SPIFFE-based, certificate-bound identity for agents. **Auth Manager** — Google's vault/broker for agents' outbound credentials (API key, 2LO, 3LO). **Agent Gateway** — networking chokepoint for agent ingress/egress with mTLS, DPoP, IAP/IAM, Model Armor. **Agent Registry** — inventory of agents, MCP servers, endpoints; the allowlist the gateway enforces against. **Model Armor** — prompt/response screening (injection, sensitive data, malicious URI, RAI). **PEP** — policy enforcement point. **PRM** — OAuth Protected Resource Metadata (RFC 9728). **Resource indicator** — RFC 8707 `resource` parameter binding a token to an audience. **DPoP** — RFC 9449 proof-of-possession header. **cnf** — the confirmation claim binding a token to a key/cert. **RFC 8693** — OAuth token exchange, `act` claim for delegation. **CIMD** — Client ID Metadata Documents (URL as `client_id`). **PAB** — Principal Access Boundary policy. **VPC-SC** — VPC Service Controls perimeter. **CAB** — Credential Access Boundary (downscoped token). **WIF** — Workload Identity Federation.
+- **Agent Identity** — Google Cloud's SPIFFE-based, certificate-bound identity for agents.
+- **Auth Manager** — Google's vault/broker for agents' outbound credentials (API key, 2LO, 3LO).
+- **Agent Gateway** — networking chokepoint for agent ingress/egress with mTLS, DPoP, IAP/IAM, Model Armor.
+- **Agent Registry** — inventory of agents, MCP servers, endpoints; the allowlist the gateway enforces against.
+- **Model Armor** — prompt/response screening (injection, sensitive data, malicious URI, RAI).
+- **PEP** — policy enforcement point.
+- **PRM** — OAuth Protected Resource Metadata (RFC 9728).
+- **Resource indicator** — RFC 8707 `resource` parameter binding a token to an audience.
+- **DPoP** — RFC 9449 proof-of-possession header.
+- **cnf** — the confirmation claim binding a token to a key/cert.
+- **RFC 8693** — OAuth token exchange, `act` claim for delegation.
+- **CIMD** — Client ID Metadata Documents (URL as `client_id`).
+- **PAB** — Principal Access Boundary policy.
+- **VPC-SC** — VPC Service Controls perimeter.
+- **CAB** — Credential Access Boundary (downscoped token).
+- **WIF** — Workload Identity Federation.
 
 ---
 
