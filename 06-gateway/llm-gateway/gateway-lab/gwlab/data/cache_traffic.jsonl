@@ -1,0 +1,60 @@
+{"id": 0, "query": "How do I reset a forgotten password?", "group": "reset-password", "class": "general", "kind": "seed"}
+{"id": 1, "query": "How do I export a report as CSV?", "group": "export-csv", "class": "general", "kind": "seed"}
+{"id": 2, "query": "What is the refund policy for annual plans?", "group": "refund-annual", "class": "general", "kind": "seed"}
+{"id": 3, "query": "how do I reset a forgotten password", "group": "reset-password", "class": "general", "kind": "repeat"}
+{"id": 4, "query": "What is the rate limit on the free tier?", "group": "ratelimit-free", "class": "general", "kind": "seed"}
+{"id": 5, "query": "Steps to reset a forgotten password", "group": "reset-password", "class": "general", "kind": "paraphrase"}
+{"id": 6, "query": "How many vCPUs does plan 4 include?", "group": "vcpu-plan4", "class": "general", "kind": "seed"}
+{"id": 7, "query": "what is the refund policy on annual plans", "group": "refund-annual", "class": "general", "kind": "paraphrase"}
+{"id": 8, "query": "What does error code E1042 mean?", "group": "err-e1042", "class": "general", "kind": "seed"}
+{"id": 9, "query": "Which port does the admin console listen on?", "group": "admin-port", "class": "general", "kind": "seed"}
+{"id": 10, "query": "What changed in the 2026-09-01 release?", "group": "release-0901", "class": "general", "kind": "seed"}
+{"id": 11, "query": "How do I enable two-factor authentication?", "group": "enable-2fa", "class": "general", "kind": "seed"}
+{"id": 12, "query": "rate limit on the free tier?", "group": "ratelimit-free", "class": "general", "kind": "paraphrase"}
+{"id": 13, "query": "How do I export a report as PDF?", "group": "export-pdf", "class": "general", "kind": "near_miss"}
+{"id": 14, "query": "How many vCPUs does plan 8 include?", "group": "vcpu-plan8", "class": "general", "kind": "near_miss"}
+{"id": 15, "query": "What is the status of my order 1234?", "group": "order-1234", "class": "personal", "kind": "personal"}
+{"id": 16, "query": "What does error code E1043 mean?", "group": "err-e1043", "class": "general", "kind": "near_miss"}
+{"id": 17, "query": "Explain what a token bucket is", "group": "explain-bucket", "class": "general", "kind": "seed"}
+{"id": 18, "query": "What is the refund policy for monthly plans?", "group": "refund-monthly", "class": "general", "kind": "near_miss"}
+{"id": 19, "query": "export a report as CSV how?", "group": "export-csv", "class": "general", "kind": "paraphrase"}
+{"id": 20, "query": "What is the weather today in Paris?", "group": "weather", "class": "time_sensitive", "kind": "time_sensitive"}
+{"id": 21, "query": "What changed in the 2026-08-01 release?", "group": "release-0801", "class": "general", "kind": "near_miss"}
+{"id": 22, "query": "Explain what a circuit breaker is", "group": "explain-breaker", "class": "general", "kind": "near_miss"}
+{"id": 23, "query": "What is the rate limit on the enterprise tier?", "group": "ratelimit-enterprise", "class": "general", "kind": "near_miss"}
+{"id": 24, "query": "turn on two factor auth", "group": "enable-2fa", "class": "general", "kind": "paraphrase_other_words"}
+{"id": 25, "query": "What is the status of my order 1243?", "group": "order-1243", "class": "personal", "kind": "personal"}
+{"id": 26, "query": "admin console listens on which port?", "group": "admin-port", "class": "general", "kind": "paraphrase"}
+{"id": 27, "query": "meaning of error code E1042", "group": "err-e1042", "class": "general", "kind": "paraphrase"}
+{"id": 28, "query": "Which vCPU count comes with plan 4?", "group": "vcpu-plan4", "class": "general", "kind": "paraphrase"}
+{"id": 29, "query": "Is the service down right now?", "group": "status-now", "class": "time_sensitive", "kind": "time_sensitive"}
+{"id": 30, "query": "release notes: what changed in the 2026-09-01 release", "group": "release-0901", "class": "general", "kind": "paraphrase"}
+{"id": 31, "query": "Can I get my money back on a yearly subscription?", "group": "refund-annual", "class": "general", "kind": "paraphrase_other_words"}
+{"id": 32, "query": "set up 2FA on my login", "group": "enable-2fa", "class": "general", "kind": "paraphrase_other_words"}
+{"id": 33, "query": "What is the refund policy for annual plans?", "group": "refund-annual", "class": "general", "kind": "repeat"}
+{"id": 34, "query": "How do I reset a forgotten password?", "group": "reset-password", "class": "general", "kind": "repeat"}
+{"id": 35, "query": "What is my account balance?", "group": "balance", "class": "personal", "kind": "personal"}
+{"id": 36, "query": "Summarise the benefits of unit tests", "group": "unit-tests", "class": "general", "kind": "seed"}
+{"id": 37, "query": "Explain what a token bucket is", "group": "explain-bucket", "class": "general", "kind": "repeat"}
+{"id": 38, "query": "summarise the benefits of integration tests", "group": "integration-tests", "class": "general", "kind": "near_miss"}
+{"id": 39, "query": "What port does the admin console use?", "group": "admin-port", "class": "general", "kind": "paraphrase"}
+{"id": 40, "query": "How do I export a report as CSV file?", "group": "export-csv", "class": "general", "kind": "paraphrase"}
+{"id": 41, "query": "Explain what a leaky bucket is", "group": "explain-leaky", "class": "general", "kind": "near_miss"}
+{"id": 42, "query": "How many vCPUs does plan 16 include?", "group": "vcpu-plan16", "class": "general", "kind": "near_miss"}
+{"id": 43, "query": "Show my invoice for March", "group": "invoice-march", "class": "personal", "kind": "personal"}
+{"id": 44, "query": "What is the latest version of the CLI?", "group": "latest-cli", "class": "time_sensitive", "kind": "time_sensitive"}
+{"id": 45, "query": "free tier rate limit", "group": "ratelimit-free", "class": "general", "kind": "paraphrase"}
+{"id": 46, "query": "How can I reset a password I forgot?", "group": "reset-password", "class": "general", "kind": "paraphrase"}
+{"id": 47, "query": "Which port is used by the admin console?", "group": "admin-port", "class": "general", "kind": "paraphrase"}
+{"id": 48, "query": "what does E1042 mean", "group": "err-e1042", "class": "general", "kind": "paraphrase"}
+{"id": 49, "query": "Explain what a circuit breaker is", "group": "explain-breaker", "class": "general", "kind": "repeat"}
+{"id": 50, "query": "What changed in the 2026-09-01 release?", "group": "release-0901", "class": "general", "kind": "repeat"}
+{"id": 51, "query": "How do I delete a report?", "group": "delete-report", "class": "general", "kind": "near_miss"}
+{"id": 52, "query": "How do I export a dashboard as CSV?", "group": "export-dashboard-csv", "class": "general", "kind": "near_miss"}
+{"id": 53, "query": "What is the refund policy for annual plans in the EU?", "group": "refund-annual-eu", "class": "general", "kind": "near_miss"}
+{"id": 54, "query": "Give me the exchange rate for USD to EUR", "group": "fx", "class": "time_sensitive", "kind": "time_sensitive"}
+{"id": 55, "query": "How do I enable two-factor authentication for my team?", "group": "enable-2fa-team", "class": "general", "kind": "near_miss"}
+{"id": 56, "query": "password reset steps for a forgotten password", "group": "reset-password", "class": "general", "kind": "paraphrase"}
+{"id": 57, "query": "How do I rotate an API key?", "group": "rotate-key", "class": "general", "kind": "seed"}
+{"id": 58, "query": "how to rotate an API key", "group": "rotate-key", "class": "general", "kind": "paraphrase"}
+{"id": 59, "query": "How do I revoke an API key?", "group": "revoke-key", "class": "general", "kind": "near_miss"}

@@ -209,6 +209,22 @@
    "test": "python -m pytest -q"
   },
   {
+   "id": "gateway-core",
+   "dir": "06-gateway/llm-gateway/gateway-core",
+   "python": "3.11",
+   "install": "python -m pip install -r requirements.txt",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
+   "id": "gateway-lab",
+   "dir": "06-gateway/llm-gateway/gateway-lab",
+   "python": "3.11",
+   "install": "python -m pip install -e \".[dev,dpop]\"",
+   "test": "python -m pytest -q",
+   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
+  },
+  {
    "id": "agent-core",
    "dir": "07-application-agent-framework/agent-fundamentals/agent-core",
    "python": "3.11",

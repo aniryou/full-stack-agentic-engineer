@@ -16,7 +16,7 @@ walkthroughs) and `solutions/` for the worked answer to a blank, under the same 
 - [03 · Kubernetes and GPU scheduling](03-kubernetes-gpu/README.md#run-in-colab) — 18 notebooks
 - [04 · Inference engine](04-inference-engine/README.md#run-in-colab) — 50 notebooks
 - [05 · Orchestrator](05-orchestrator/README.md#run-in-colab) — 20 notebooks
-- [06 · Gateway](06-gateway/README.md#run-in-colab) — 43 notebooks
+- [06 · Gateway](06-gateway/README.md#run-in-colab) — 63 notebooks
 - [07 · Agents and applications](07-application-agent-framework/README.md#run-in-colab) — 130 notebooks
 
 ## Keeping your work

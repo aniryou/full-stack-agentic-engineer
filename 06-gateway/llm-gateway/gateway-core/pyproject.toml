@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gwcore"
+version = "0.1.0"
+description = "The LLM gateway in one sitting: one API, routing and fallback chains, exact and semantic caches, streaming-aware token limits, metering, virtual keys, guardrail placement and the MCP client authorization flow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24"]         # the library is standard library + numpy
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "nbformat>=5.9", "nbclient>=0.9", "ipykernel>=6.25", "jupyterlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["gwcore*"]
+
+[tool.setuptools.package-data]
+gwcore = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

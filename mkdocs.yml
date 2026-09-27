@@ -494,6 +494,37 @@ nav:
                       - "07 · A2A agent cards practice (solution)": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/solutions/07_a2a_agent_cards_practice.ipynb"
                       - "08 · Audit and governance practice (solution)": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/solutions/08_audit_and_governance_practice.ipynb"
                       - "09 · Code evaluation drills practice (solution)": "layers/06-gateway/identity-security/agentic-identity-gcp-lab/solutions/09_code_evaluation_drills_practice.ipynb"
+          - "LLM gateway":
+              - "layers/06-gateway/llm-gateway/index.md"
+              - "LLM gateway primer": "layers/06-gateway/llm-gateway/PRIMER.md"
+              - "Gateway core":
+                  - "layers/06-gateway/llm-gateway/gateway-core/index.md"
+                  - "Notebooks":
+                      - "01 · One front door": "layers/06-gateway/llm-gateway/gateway-core/notebooks/01_one_front_door.ipynb"
+                      - "02 · Routing and fallback chains": "layers/06-gateway/llm-gateway/gateway-core/notebooks/02_routing_and_fallback_chains.ipynb"
+                      - "03 · Exact and semantic caching": "layers/06-gateway/llm-gateway/gateway-core/notebooks/03_exact_and_semantic_caching.ipynb"
+                      - "04 · Token limits, metering and chargeback": "layers/06-gateway/llm-gateway/gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb"
+                      - "05 · Guardrails, keys and MCP authorization": "layers/06-gateway/llm-gateway/gateway-core/notebooks/05_guardrails_keys_and_mcp_authorization.ipynb"
+                  - "Solutions":
+                      - "01 · One front door (solution)": "layers/06-gateway/llm-gateway/gateway-core/solutions/01_one_front_door.ipynb"
+                      - "02 · Routing and fallback chains (solution)": "layers/06-gateway/llm-gateway/gateway-core/solutions/02_routing_and_fallback_chains.ipynb"
+                      - "03 · Exact and semantic caching (solution)": "layers/06-gateway/llm-gateway/gateway-core/solutions/03_exact_and_semantic_caching.ipynb"
+                      - "04 · Token limits, metering and chargeback (solution)": "layers/06-gateway/llm-gateway/gateway-core/solutions/04_token_limits_metering_and_chargeback.ipynb"
+                      - "05 · Guardrails, keys and MCP authorization (solution)": "layers/06-gateway/llm-gateway/gateway-core/solutions/05_guardrails_keys_and_mcp_authorization.ipynb"
+              - "Gateway lab":
+                  - "layers/06-gateway/llm-gateway/gateway-lab/index.md"
+                  - "Notebooks":
+                      - "01 · A gateway over HTTP": "layers/06-gateway/llm-gateway/gateway-lab/notebooks/01_a_gateway_over_http.ipynb"
+                      - "02 · Outages, fallbacks and breakers": "layers/06-gateway/llm-gateway/gateway-lab/notebooks/02_outages_fallbacks_and_breakers.ipynb"
+                      - "03 · The semantic cache vs the prefix cache": "layers/06-gateway/llm-gateway/gateway-lab/notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb"
+                      - "04 · Streaming limits, metering and chargeback": "layers/06-gateway/llm-gateway/gateway-lab/notebooks/04_streaming_limits_metering_and_chargeback.ipynb"
+                      - "05 · Guardrails, keys and MCP authorization over HTTP": "layers/06-gateway/llm-gateway/gateway-lab/notebooks/05_guardrails_and_mcp_authorization_over_http.ipynb"
+                  - "Solutions":
+                      - "01 · A gateway over HTTP (solution)": "layers/06-gateway/llm-gateway/gateway-lab/solutions/01_a_gateway_over_http.ipynb"
+                      - "02 · Outages, fallbacks and breakers (solution)": "layers/06-gateway/llm-gateway/gateway-lab/solutions/02_outages_fallbacks_and_breakers.ipynb"
+                      - "03 · The semantic cache vs the prefix cache (solution)": "layers/06-gateway/llm-gateway/gateway-lab/solutions/03_semantic_cache_vs_the_prefix_cache.ipynb"
+                      - "04 · Streaming limits, metering and chargeback (solution)": "layers/06-gateway/llm-gateway/gateway-lab/solutions/04_streaming_limits_metering_and_chargeback.ipynb"
+                      - "05 · Guardrails, keys and MCP authorization over HTTP (solution)": "layers/06-gateway/llm-gateway/gateway-lab/solutions/05_guardrails_and_mcp_authorization_over_http.ipynb"
           - "Scaling admission cost":
               - "layers/06-gateway/scaling-admission-cost/index.md"
               - "Agentic scaling lab":

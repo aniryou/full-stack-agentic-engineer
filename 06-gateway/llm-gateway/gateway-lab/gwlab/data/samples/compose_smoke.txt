@@ -1,0 +1,63 @@
+# sample output in the documented format (illustrative): deploy/local/smoke.sh against the compose stack.
+# acme fails 30 % of requests (seeded), so some requests are served by bolt; attempts: 2 marks a fallback.
+
+==> issue a virtual key for tenant team-a (the secret is shown once; the gateway keeps its SHA-256)
+key: gwk_Q3v1...
+
+==> request 1
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 2
+HTTP/1.1 200 OK
+x-gwlab-target: bolt/haiku
+x-gwlab-attempts: 2
+
+==> request 3
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 4
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 5
+HTTP/1.1 200 OK
+x-gwlab-target: bolt/haiku
+x-gwlab-attempts: 2
+
+==> request 6
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 7
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 8
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> request 9
+HTTP/1.1 200 OK
+x-gwlab-target: bolt/haiku
+x-gwlab-attempts: 2
+
+==> request 10
+HTTP/1.1 200 OK
+x-gwlab-target: acme/fast
+x-gwlab-attempts: 1
+
+==> the gateway's counters
+gwlab_attempts_total{target="acme/fast",outcome="done"} 7.0
+gwlab_attempts_total{target="acme/fast",outcome="fallthrough"} 3.0
+gwlab_attempts_total{target="bolt/haiku",outcome="done"} 3.0
+gwlab_requests_total{tenant="team-a",alias="chat",target="acme/fast",status="200"} 7.0
+gwlab_requests_total{tenant="team-a",alias="chat",target="bolt/haiku",status="200"} 3.0
+gwlab_cost_usd_total{tenant="team-a"} 0.0021315

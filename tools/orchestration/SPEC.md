@@ -1,4 +1,4 @@
-# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, four more topics: §6b; from 2026-09-27, distillation: §6c)
+# SPEC — filling layers 01–05 of full-stack-agentic-engineer (and, from 2026-09-26, six more topics: §6b; from 2026-09-27, distillation: §6c)
 
 Repo: `/home/user/full-stack-agentic-engineer` (read its `CLAUDE.md`; you already have it). Scratch: `$SP` (see FACTS.md).
 Read `$SP/FACTS.md` before writing anything product-specific. This file is the contract every builder and reviewer follows.
@@ -39,6 +39,8 @@ output is labelled "simulated"; sample tool output used as fixtures is labelled 
 | 00 | `00-foundations/mixture-of-experts` | `moe-core` (`moecore`) | `moe-lab` (`moelab`) |
 | 04 | `04-inference-engine/quantization` | `quant-core` (`quantcore`) | `quant-lab` (`quantlab`) |
 | 07 | `07-application-agent-framework/sandboxed-execution` | `sandbox-core` (`sandboxcore`) | `sandbox-lab` (`sandboxlab`) |
+| 06 | `06-gateway/llm-gateway` | `gateway-core` (`gwcore`) | `gateway-lab` (`gwlab`) |
+| 07 | `07-application-agent-framework/agent-memory` | `memory-core` (`memcore`) | `memory-lab` (`memlab`) |
 | 00 | `00-foundations/distillation` | `distill-core` (`distillcore`) | `distill-lab` (`distillab`) |
 Root `CURRICULUM.md` and `COMPUTE.md` exist (the integrator updates them); you may link to them (from a topic dir:
 `../../CURRICULUM.md`, `../../COMPUTE.md`; from a core/lab dir: `../../../COMPUTE.md`) — the link checker may flag only those two.
@@ -470,6 +472,123 @@ Lab notebooks: `01_hardened_containers` (T0 + Docker), `02_pod_per_execution_on_
 `04_an_agent_with_a_sandbox_tool` (T0), `05_gke_sandbox_with_gvisor` (T3; T0 inspects and validates manifests).
 Must cite/reuse: identity primer §6.2 and its audit section, `06-gateway/scaling-admission-cost` §1 and §5 (admission, cost), 03 PRIMER §1, §3, §9,
 `03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab` (`k8sgpu.manifests` style, kind deploy script style), agent-core (07.1) tool contracts.
+
+### Added 2026-09-26 (structure plan): two more blocks
+The environment for these two builds differs from the four above — see FACTS.md "Environment for the 2026-09-26 structure-plan builds": torch is not installed (the torch line of §6b's opening list does not apply), there is no Terraform (`deploy/gcp/` is a README pointing at existing labs' deploys), and one shared venv is used. Paths under `07-application-agent-framework/long-running-durable/` are cited at their post-consolidation locations (`PRIMER.md`, `lra-core/`, `lra-gcp/`), and the Mistral variants no longer exist as separate labs.
+
+### 06 · llm-gateway — "The LLM gateway: one front door for many models — routing, fallbacks, caching, metering and tenant isolation"
+Primer sections: 1 One front door, one API (what a gateway owns for many apps, tenants and providers — keys, policy, limits, metering, routing, caching,
+traces; the split: the gateway decides whether a request runs and which model, provider, region or pool serves it, the 05 router picks the replica, the
+engine batches (05 PRIMER §1.3, §3.3, §7); the request path; chat completions + SSE as the lingua franca (`[DONE]`, `stream_options.include_usage`);
+provider adapters as data; what does not normalise (tool-call deltas, `reasoning_content`); its cost — a hop, a failure point, every key in one box)
+· 2 Model routing and fallback chains (aliases → ordered (provider, model, region) chains; capability filters; policies — cheapest capable, EWMA TTFT,
+canary, tenant tier, effort (00.5 PRIMER §7); what falls through (429, 5xx, timeout, context length) and what must not (400, auth, content policy); fall
+back only before the first byte; retries and breakers: scaling primer §5.2, 07.2 notebook 10; chain availability, independent and common-mode
+(`routing.chain_availability()`), expected latency and cost (`routing.chain_cost()`); a self-hosted target is a pool — the EPP picks the pod) · 3 Caching at
+the gateway (exact, semantic, provider prompt caching (scaling primer §3.4) and the engine's prefix cache (serving-engine PRIMER §5) — what each saves and
+risks; what is safe to cache; tenant namespaces; embed → nearest neighbour → threshold → an exact guard on numbers, dates and entities (embeddings primer
+§15); hit and false-hit rate vs threshold on the bundled sample (`cache.sweep_thresholds()`); invalidation; a lexical T0 embedder) · 4 Streaming-aware rate
+limits (on top of scaling primer §5.1 and §5.3 (06.3); why per-request charges fail — cost is unknown at admission and heavy-tailed (00.5 PRIMER §7);
+reserve → stream → reconcile, a hard cap; RPM and TPM together; hierarchical limits, shared state (Redis + Lua); how far a per-request bucket over-admits a
+provider's TPM (`ratelimit.compare_buckets()`); the noisy neighbour) · 5 Metering, tracing and chargeback (the ledger row; `usage` is authoritative —
+thinking bills as output (00.5 PRIMER §5) — estimates cover admission and cut streams; $ per 1M tokens for a model table, hosted (verify, 2026-09-26) and
+self-hosted (01 PRIMER §8.1), blended (`metering.cost_per_million()`); chargeback by tokens or GPU-seconds (`metering.chargeback()`); reconciliation; a
+billing-grade ledger vs sampled OpenTelemetry GenAI spans, names still moving (verify)) · 6 Keys, tenants and isolation (virtual keys — hashed, scoped,
+budgeted, revocable; provider keys only in the gateway, rotated with overlap (identity primer §5's gateway path); the tenant from the verified key, never a
+header; isolation by layer — buckets, cache namespaces, `cache_salt`, ledger, traces, residency; tier → priority below (05 PRIMER §3.2); in brief, the
+gateway's own identity — SPIFFE Workload API, SVID rotation (identity primer §3.3–3.5)) · 7 Guardrails and what they cost (vendor-neutral hooks — input,
+tool call and result, streamed and final output; placements — inline, parallel with cancel, held-back windows, shadow (identity primer §6.1); latency added
+before and after generation (`guardrails.added_latency()`), dollars per 1k checks, false positives; guardrails reduce risk, policy bounds it (identity
+primer §0, §4.1, §6)) · 8 The gateway as an MCP client (agents reach MCP servers through it (07.2 notebook 05), so it runs the client side of the MCP
+authorization spec (2026-07-28, verify): 401 → RFC 9728 → RFC 8414 or OIDC discovery → a Client ID Metadata Document → PKCE S256 with `resource` → code →
+token → refresh rotation with reuse detection → step-up; tokens per principal and resource; DPoP nonces (RFC 9449, not the MCP spec); link identity primer
+§3.5, §7.1 and 07.2's `agentlab.auth.oauth`) · 9 Where to run it, and what to adopt (T0 in-process and on localhost; T0 + Docker; T1 one vLLM; T3 the 04 and
+05 labs' GCP deploys as upstreams; LiteLLM, Envoy AI Gateway, Kong, Portkey and managed gateways against §1–§8, verify-marked; `COMPUTE.md`).
+Core `gwcore` (standard library + numpy, all in-process): `api.py` (chat-completions shapes, SSE, stream accumulation with tool-call deltas and the usage
+chunk, a labelled token estimate), `providers.py` (the adapter table with bundled payloads per dialect (illustrative), a model catalogue with prices,
+`FakeProvider` on a virtual clock — TTFT/ITL, errors, 429 + `Retry-After`, outages), `routing.py` (chains, filters, fallback classes, a breaker per target),
+`cache.py` (exact + semantic; a hashing embedder built like `ragkit.embed.HashingEmbedder`; a labelled traffic sample with paraphrases, near misses and
+uncacheable queries), `ratelimit.py` (per-request vs reserve → stream → reconcile), `metering.py` (ledger, prices, chargeback), `keys.py` (virtual and
+provider keys, a fake Workload API rotating an SVID), `guardrails.py` (hooks, a regex screener labelled as a stand-in), `mcp_authz.py` (§8 against a fake AS
+and MCP server; PKCE pinned to RFC 7636 Appendix B; DPoP from a pluggable signer, a labelled HMAC stand-in — no asymmetric crypto in the stdlib), `otel.py`
+(07.2's GenAI names plus `gen_ai.provider.name`, `gen_ai.response.model`; JSON-lines export and read-back), `gateway.py` (the §1 pipeline). Tests pin every
+§2–§7 number and reproduce `scalelab.capacity.cost_per_call`, `roofline.cost.cost_per_million_tokens` and `agentlab.auth.oauth.challenge_for`.
+Core notebooks: `01_one_front_door`, `02_routing_and_fallback_chains`, `03_exact_and_semantic_caching`, `04_token_limits_metering_and_chargeback`,
+`05_guardrails_keys_and_mcp_authorization`.
+Lab `gwlab`: `gateway/` (aiohttp, pyyaml, sqlite3 — an async OpenAI-compatible gateway in the style of `igwlab/router/server.py`: `/v1/chat/completions`
+streamed or not, `/v1/models`, `/metrics`, `/admin/keys`; a YAML config with the provider table, chains, tenants, limits, cache and guardrails; an SSE relay
+that injects `stream_options.include_usage`, strips the usage chunk nobody asked for and meters partial output on disconnect; sqlite3 keys, cache and
+ledger; spans to JSON lines, OTLP when installed), `fakes.py` (providers over HTTP modelled on `servelab/fakeserver.py`, with their own RPM/TPM limits,
+outages and a second dialect), `mcp/` (§8 over HTTP; DPoP with `cryptography` when installed), `bench.py` (scripted tenants), `report.py`.
+Deploy: `deploy/local/` (compose: the gateway + two fake providers, one set to fail; `DRY_RUN=1`; no Docker → printed commands, illustrative output),
+`deploy/any-gpu/` (T1: `vllm/vllm-openai:v0.30.0`, Qwen2.5-0.5B-Instruct as `lab/llm`, `--enable-prompt-tokens-details`, a fake fallback; Colab/Kaggle T4
+recipe), `deploy/gcp/` (a README, no Terraform: the 04 lab's Cloud Run or GKE vLLM, the 05 lab's GKE Inference Gateway; what to change, cost).
+Lab notebooks: `01_a_gateway_over_http` (T0; T0 + Docker the compose stack; T1 vLLM as one provider), `02_outages_fallbacks_and_breakers` (T0; T1 stop vLLM
+mid-run), `03_semantic_cache_vs_the_prefix_cache` (T0 emulated; T1 vLLM's `cached_tokens` measured), `04_streaming_limits_metering_and_chargeback` (T0; T1
+the ledger reconciled with vLLM's `usage` and `/metrics`), `05_guardrails_and_mcp_authorization_over_http` (T0).
+Must cite/reuse: `06-gateway/scaling-admission-cost/agentic-scaling-lab/` (primer §3.4–3.5, §5.1–5.3, §5.7, §5.10–5.12; `scalelab.resilience`, `.admission`,
+`.capacity`); `06-gateway/identity-security/agentic-identity-gcp-lab/` (`docs/primer.md` §0, §3.3–3.5, §4.1, §5, §6.1, §7.1, §8, §9;
+`agentsec.identity.tokens.DPoP`); `07-.../gcp-agent-platform-lab/` (notebooks 05, 06, 07, 09, 10; `agentlab.auth.oauth`, `.mcp.gateway`, `.observability`,
+`.reliability`); `05-orchestrator/serving-orchestration/` (PRIMER §1.3, §3.2–3.3, §7, §9; `igwlab`); `04-inference-engine/serving-engine/` (PRIMER §1, §5,
+§11; `servelab/fakeserver.py`); `00-foundations/rl-and-thinking-models/PRIMER.md` §5, §7; `01-hardware-gpu-fabric/roofline-and-fabric/` (PRIMER §8.1;
+`roofline.cost`); `07-.../embeddings-lab/docs/primer.md` §15; `07-.../sandboxed-execution/PRIMER.md` §4; CURRICULUM §3.4's canonical homes.
+
+### 07 · agent-memory — "Agent memory: what an agent remembers, how it is written, retrieved, consolidated and forgotten"
+Primer sections: 1 What an agent remembers (working memory is the context window and its budget; episodic (what happened, timestamped), semantic (distilled
+facts) and procedural (how-to notes, tool preferences) memory as one typed record — kind, scope (tenant / user / session / agent), source (turn, tool output,
+human, consolidation), provenance, confidence, importance, validity, TTL, deletion key; link 07.1 notebook 03 (`history`), 07.2 notebook 03 §1, durable primer
+§3.5, lra-gcp primer §3.10, vector-databases primer §17) · 2 The write path: extraction, provenance and write policy (extraction after the turn vs an explicit
+`remember`; extract → compare → ADD/UPDATE/DELETE/NOOP as mem0 does (verify); a write policy in code — kinds per source, a confidence floor, screening before
+persistence (07.2 notebook 11 §4, §6); merge; idempotent writes, durable primer §3.2) · 3 Retrieval: similarity, recency and importance (scope as a partition
+— vector-databases primer §9, §11; the generative-agents score with tunable weights (Park et al. 2023), whose paper and reference code differ — both (verify)
+— worked on three memories; top-k in a token budget; as-of filters; hybrid search stays 07.4's (`ragkit.reference`); `minifaiss`'s HNSW (M0 = 2M) pays only at
+tenant scale) · 4 Measuring memory: planted facts across sessions (facts planted by a seeded generator and asked later, in LongMemEval's and LoCoMo's task
+shapes — extraction, preference, multi-session, temporal, knowledge update, abstention, adversarial (verify both, and licences; nothing downloaded); recall
+within the budget, accuracy, stale answers, abstention, tokens and calls per turn, Wilson intervals (07.2 notebook 08 §4); a paraphrase subset the hashing
+embedder misses by design) · 5 The context budget: tokens, the prefix cache and cost per turn (recall vs tokens injected per turn, and the knee; memory
+re-retrieved each turn and placed before the history changes the prefix, so every later block misses — vLLM's rules as `minengine.kv` and the serving lab's
+`expected_cached_tokens` apply them (serving-engine PRIMER §5, mini-engine-core notebook 03 exercise 3.4, 07.2 notebook 04 §1–§2); memory before the history
+vs a profile pinned per session vs memory at the tail; TTFT lost, by `minengine.perf.step_cost`'s model; $ per turn with and without memory at (verify)
+prices, extraction amortised (scaling primer §3.4); budgets in code (durable primer §3.4)) · 6 Memory as tools, or memory before every turn (`remember` /
+`recall` / `forget` with 07.1 contracts — an idempotent `remember`, a confirm-gated `forget`: the model chooses when and misses what it did not ask for;
+implicit retrieval pays tokens every turn and cannot fetch mid-plan; the hybrid (a pinned profile plus `recall`); ADK's `load_memory` vs `PreloadMemoryTool`,
+LangMem, Letta (verify); compared on the harness) · 7 Consolidation, forgetting and deletion (episodic → semantic per (user, window) on a schedule: newer
+supersedes older, kept with `valid_to` (bi-temporal, as in Graphiti, verify), precedence human > user > tool > inferred, a weaker contradiction flagged;
+reflection in brief — an importance-sum trigger, insights citing evidence (generative agents, verify), lra-gcp primer §3.8's exits; the job as a durable
+scheduled run (lra-gcp primer §3.3, §3.13); recall after consolidation vs raw episodes at a fixed budget; forgetting = decay + TTL + the per-turn budget + a
+cap per scope; deletion must reach the record, vector and index entry (vector-databases primer §8), derived facts (provenance), full-text indexes, prompt
+caches, logs, eval sets, backups — a checklist with counts; embeddings are the data (embeddings primer §15)) · 8 Tenancy, trust and memory poisoning (tool
+output or a web page (sandboxed-execution PRIMER §1) written to memory replays in later sessions — ASI06, identity primer §2; the 06/07 split: 06 owns scope
+keyed by the verified principal (§8), reads under delegated identity (§3.5) and an audit event per memory read, write and forget (§9); 07 owns provenance and
+trust by source (tool output quarantined, never promoted unreviewed), screening before persistence, memory fenced as data (07.2 notebook 11 §3), an injection
+golden case (07.2 notebook 11 §7); leaks via shared prefix caches (`cache_salt`, vllm-internals §4.3); prompt injection's home stays 06.6) · 9 Where to run it
+(T0: all of it — SQLite, a scripted model, a hashing embedder; T0 + Docker: Postgres + pgvector; T1: a real embedder or a 0.5–1.5B model via the 04 serving
+lab's `deploy/any-gpu/`; T3: a Cloud Run job on Cloud Scheduler; stores and memory services, verify-marked; `COMPUTE.md`).
+Core `memcore` (standard library + numpy, no torch; a scripted "LLM" — template extractor and answerer — and a hashing embedder keep every number offline;
+tokens = `len(text) // 4`, as 07.2 counts): `records.py` (the record, scopes, source trust), `store.py` (per-(tenant, user) partitions; `ragkit`'s crc32
+hashing embedder, re-implemented; a flat index with the delete `minifaiss` lacks), `write.py` (extraction, `WritePolicy`, ADD/UPDATE/NOOP, merge, idempotency
+keys), `retrieve.py` (`score()` in both forms, filters, budget packing), `budget.py` (layouts; `expected_cached_tokens` and a block-hash cache with vLLM's
+rules; `hits_per_turn()`, `prefill_seconds()`, `turn_cost()` with a dated price table; `Budget`), `consolidate.py` (the §7 rules, reflection, run id + lease +
+checkpoints), `forget.py` (decay, TTL, caps; `propagate()` → a `DeletionReport`), `harness.py` (the §4 generator and answerer, metrics, `recall_vs_budget()`,
+`compare_modes()`), `agent.py` (agent-core's loop with the three tools, implicit and pinned modes, `AuditEvent`-named audit, a poisoned tool result). Tests
+pin each worked number; `tests/test_repo_numbers.py` reproduces `ragkit`'s vectors, `expected_cached_tokens`, `minengine.kv` and `minengine.perf`,
+`capacity.ttft_s`, `scalelab.capacity.cost_per_call` (≈ $0.0070, scaling primer §3.4) and `wilson_interval` (cross-checked by path import where present).
+Core notebooks: `01_records_and_the_write_path`, `02_retrieval_and_the_planted_facts_harness`, `03_the_context_budget_and_the_prefix_cache`,
+`04_consolidation_forgetting_and_deletion`, `05_memory_tools_and_memory_poisoning`.
+Lab `memlab`: `store/` (`sqlite.py` — the schema, float32 BLOB vectors scored in numpy, FTS5 `bm25()`, RRF (k = 60), and a deletion that removes the bytes —
+`secure_delete`, FTS5 `secure-delete` or `optimize`, WAL checkpoint, `VACUUM` — checked by searching the file; `pgvector.py` — the same on Postgres +
+pgvector, psycopg lazy, SQL checked offline), `embedders.py` (hashing; an OpenAI-compatible `/v1/embeddings` client), `llm.py` (an OpenAI-compatible chat
+client with tool calls; the scripted model), `service.py` (aiohttp: write with `Idempotency-Key`, search, forget by deletion key; scope from a verified
+stand-in token, never the body; audit JSON lines), `agent.py` (07.1-style; three modes), `consolidate.py` (a lease row, checkpoints, a crash hook),
+`fakeserver.py` (chat + embeddings; cached tokens and vLLM-named metrics simulated by block hashing), `cachebench.py`, `harness.py`, `report.py`, a CLI.
+Deploy: `deploy/local/` (SQLite; optional Postgres + pgvector in compose; `up.sh` prints commands without Docker), `deploy/any-gpu/` (README: the 04 serving
+lab's `serve.sh`: `EXTRA_ARGS` for tool calls and `--enable-prompt-tokens-details`; an embedder on vLLM's pooling runner (verify)), `deploy/gcp/` (README, no
+Terraform: consolidation as a Cloud Run job on Cloud Scheduler; the model on the 04 serving lab's Cloud Run GPU; a verify-marked table of managed stores).
+Lab notebooks: `01_a_memory_store_on_sqlite` (T0; T0 + Docker for pgvector), `02_a_memory_service_and_an_agent` (T0; T1 a real small model with tool calls),
+`03_memory_layouts_and_the_prefix_cache` (T0 simulated; T1 vLLM, measured), `04_consolidation_as_a_scheduled_job` (T0 with a crash and a resume; T3 printed),
+`05_evaluate_forget_and_audit` (T0: the harness end to end, a deletion checked on disk; T1: a real embedder on the paraphrase subset).
+Must cite/reuse: the sections named above and their code — `agentcore`, `agentlab` (`ContextBuilder`, `token_cost`, `wilson_interval`), `ragkit`, `minifaiss`,
+`agentsec/audit/log.py`, `scalelab/capacity.py`, `minengine.kv`/`perf`, `capacity.py`, vllm-serving-lab notebook 04 and `deploy/`.
 
 ## 6c. Distillation (2026-09-27): the §6b contract, one more block
 

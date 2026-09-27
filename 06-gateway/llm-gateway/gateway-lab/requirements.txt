@@ -1,0 +1,13 @@
+# The library (T0): an async HTTP server/client, YAML config, numpy for the semantic cache.
+aiohttp>=3.9
+pyyaml>=6.0
+numpy>=1.24
+# Notebooks and tests.
+pytest>=7.4
+nbformat>=5.9
+nbclient>=0.9
+ipykernel>=6.25
+jupyterlab>=4.0
+# Optional: real ES256 DPoP proofs (otherwise a labelled HMAC stand-in signs them).
+#   pip install "cryptography>=42"
+# T1 only (a GPU box, not needed for T0): the vLLM image or `pip install "vllm==0.30.0"` -- see deploy/any-gpu.

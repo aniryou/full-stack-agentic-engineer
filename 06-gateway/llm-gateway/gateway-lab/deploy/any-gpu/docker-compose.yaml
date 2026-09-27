@@ -1,0 +1,50 @@
+# T1 with Docker on a GPU machine (a rented 24 GB card, a GCP/Lambda VM with the NVIDIA Container Toolkit):
+# one real vLLM, a fake provider as the fallback, and the gateway in front of both.
+#
+#   docker compose -f docker-compose.yaml up -d --build          # the first start downloads the model (~1 GB)
+#   export GWLAB_VLLM_URL=http://127.0.0.1:8000                    # notebooks 01-04 run their T1 cells
+#   python3 -m gwlab key --url http://127.0.0.1:8080 --tenant team-a
+#
+# vLLM serves Qwen2.5-0.5B-Instruct as `lab/llm` with --enable-prompt-tokens-details (usage then carries
+# cached_tokens, which notebook 03 measures). On a T4 add "--dtype", "half" (no bfloat16 below compute 8.0).
+name: gwlab-gpu
+
+services:
+  vllm:
+    image: vllm/vllm-openai:v0.30.0                         # (verify) the repo's pin, as in layers 04 and 05
+    ipc: host
+    command: ["Qwen/Qwen2.5-0.5B-Instruct", "--served-model-name", "lab/llm", "--port", "8000",
+              "--max-model-len", "4096", "--enable-prompt-tokens-details"]
+    environment: {HF_TOKEN: "${HF_TOKEN:-}"}
+    volumes: ["${HOME}/.cache/huggingface:/root/.cache/huggingface"]
+    ports: ["127.0.0.1:8000:8000"]                          # loopback only: callers go through the gateway
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      retries: 90                                           # download + load: up to 15 minutes
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+
+  acme:                                                     # the fallback (a SIMULATED provider)
+    build: {context: ../.., dockerfile: deploy/local/Dockerfile}
+    image: gwlab:local
+    command: ["python", "-m", "gwlab", "fake", "--name", "acme", "--dialect", "openai", "--host", "0.0.0.0",
+              "--port", "8101", "--keys", "acme-key-1"]
+
+  gateway:
+    build: {context: ../.., dockerfile: deploy/local/Dockerfile}
+    image: gwlab:local
+    command: ["python", "-m", "gwlab", "gateway", "--config", "vllm", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      GWLAB_VLLM_URL: http://vllm:8000
+      ACME_URL: http://acme:8101
+      ACME_API_KEY: acme-key-1
+      GWLAB_ADMIN_TOKEN: ${GWLAB_ADMIN_TOKEN:-dev-admin-token}
+      GWLAB_GPU_HOUR_USD: ${GWLAB_GPU_HOUR_USD:-0.35}       # what you pay for this GPU (verify)
+      GWLAB_TOKENS_PER_S: ${GWLAB_TOKENS_PER_S:-300}        # what you measured (notebook 04)
+    ports: ["8080:8080"]
+    depends_on:
+      vllm: {condition: service_healthy}
+      acme: {condition: service_started}
