@@ -136,7 +136,7 @@ for label, hpa in (("behavior unset", HPARecommender(1, 12)), ("default behavior
 # $\max(2 \times \text{current}, 4)$. Setting `behavior` — even to the API defaults — switches to the
 # policies: $\max(+4 \text{ pods}, +100\,\%)$ per 15 s, counted from the replica count at the start of the
 # period. The two agree once the pool has 4 or more replicas, and differ below. Both HPAs start at **2**
-# replicas (min 1, max 50) and see a proposal of **30** at $t$ = 0, 15, 30 and 45 s. Predict the replica count
+# replicas (min 1, max 50) and see a proposal of **30** at $t = 0$, 15, 30 and 45 s. Predict the replica count
 # each one sets at each sync.
 
 # %% exercise
@@ -278,7 +278,7 @@ print(f"✅ GKE: {gke_slots} slots, 0.5 s budget, S ~ 3 s (assumed) -> target {w
 #
 # The fluid model (`FluidPool`, *simulated*): each replica completes 2 requests/s, each request holds
 # a batch slot for 4 s (8 slots per replica), and a new replica is ready **120 s** after it is
-# requested. Load steps from 3 to 11 requests/s at $t$ = 120 s and back to 3 at $t$ = 900 s — 11 rps
+# requested. Load steps from 3 to 11 requests/s at $t = 120$ s and back to 3 at $t = 900$ s — 11 rps
 # needs at least 5.5 replicas. First, the HPA on **queue length only**:
 
 # %%
@@ -299,7 +299,7 @@ queue_only = simulate(StepLoad(), {"waiting": 5}, pool=FluidPool(ready=2))
 timeline(queue_only)
 
 # %% [markdown]
-# Look at $t$ ≈ 700 s: the backlog is gone, so `waiting/pod = 0`, the proposal is
+# Look at $t \approx 700$ s: the backlog is gone, so `waiting/pod = 0`, the proposal is
 # $\lceil 0 \times n \rceil = 0$, and after the 300 s window the HPA scales to `minReplicas` — at full load.
 # The queue explodes, the HPA scales back up (2+ minutes of cold start), and the cycle repeats. A queue
 # measures *excess* demand, not demand.
@@ -309,7 +309,7 @@ timeline(queue_only)
 # Return the `targets` dict for `simulate()` — `{"waiting": ..., "running": ...}` — so that the pool
 # no longer collapses. `running` is the average number of occupied batch slots per pod (8 slots per
 # replica here); give it a target below 8 so there is headroom. The check requires: at least 6 ready
-# replicas for the whole of $t$ = 600…900 s, no more than 3 replicas at the end, and a `running` target
+# replicas for the whole of $t = 600\ldots 900$ s, no more than 3 replicas at the end, and a `running` target
 # that fits in the 8 slots.
 
 # %% exercise
