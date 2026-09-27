@@ -20,8 +20,8 @@ A token's output is computed by comparing its **Q** against the **K** of every t
 
 Two properties matter enormously:
 
-1. **Causality.** Token *i* can only attend to tokens ≤ *i*. It never sees the future.
-2. Because of causality, token *i*'s **K** and **V** depend only on tokens up to *i*. Once computed, **they never change** — not when token 502 arrives, not ever.
+1. **Causality.** Token $i$ can only attend to tokens $\le i$. It never sees the future.
+2. Because of causality, token $i$'s **K** and **V** depend only on tokens up to $i$. Once computed, **they never change** — not when token 502 arrives, not ever.
 
 ---
 
@@ -62,23 +62,26 @@ This distinction is the heart of GPU inference.
 
 **Decode** — generating output, one token per forward pass. There's only one token of new work, but you must read every model weight and the entire KV cache out of memory to do it. It is **memory-bandwidth-bound**: the tensor cores sit mostly idle waiting on data. Latency here is your *tokens per second*.
 
-Why bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16 but moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy you'd need ~300 floating-point operations per byte loaded. Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention: each cached K or V element (2 bytes) is loaded once and used in one multiply-add (2 FLOPs) for its one query head. In general it is `2g/b` FLOP per byte, with `g` query heads sharing each KV head and `b` bytes per cached value, so GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B. Either way you are off by about two orders of magnitude (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck stuck in traffic, not an engine short on horsepower.
+Why bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16 but moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy you'd need ~300 floating-point operations per byte loaded.
+
+Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention: each cached K or V element (2 bytes) is loaded once and used in one multiply-add (2 FLOPs) for its one query head. In general it is ${2g/b}$ FLOP per byte, with $g$ query heads sharing each KV head and $b$ bytes per cached value, so GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B. Either way you are off by about two orders of magnitude (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck stuck in traffic, not an engine short on horsepower.
 
 Useful approximation for decode speed:
 
-```
-tokens/sec  ≈  HBM bandwidth ÷ (bytes of weights + bytes of KV cache read per token)
-```
+$$
+\text{tokens/sec} \approx \frac{\text{HBM bandwidth}}{\text{bytes of weights} + \text{bytes of KV cache read per token}}
+$$
 
 ---
 
 ## 4. How big is the cache, concretely
 
-```
-KV bytes = 2 × layers × kv_heads × head_dim × seq_len × batch × bytes_per_value
-           ↑
-        one for K, one for V
-```
+$$
+\begin{aligned}
+\text{KV bytes} = \underbrace{2}_{\text{one for K, one for V}} &\times \text{layers} \times \text{kv_heads} \times \text{head_dim} \\
+&\times \text{seq_len} \times \text{batch} \times \text{bytes_per_value}
+\end{aligned}
+$$
 
 **Worked example — Llama 3 8B** (32 layers, 8 KV heads, head_dim 128, fp16 = 2 bytes):
 
@@ -128,7 +131,7 @@ Roughly in order of how universally they're adopted:
 
 **Multi-head latent attention (MLA).** DeepSeek's approach: compress K and V into a small shared low-rank latent vector and reconstruct on the fly. Far more aggressive than GQA, trading a little compute for a lot of memory.
 
-**Sliding-window / local attention.** Each token attends only to the last *W* tokens, so the cache stops growing at *W*. Usually combined with a few "attention sink" tokens at the start of the sequence, which turn out to be necessary for stability.
+**Sliding-window / local attention.** Each token attends only to the last $W$ tokens, so the cache stops growing at $W$. Usually combined with a few "attention sink" tokens at the start of the sequence, which turn out to be necessary for stability.
 
 **Eviction policies** (H2O, SnapKV and relatives). Observe that attention is concentrated on a minority of tokens; drop the rest from the cache. Lossy, workload-dependent, but effective.
 
@@ -176,4 +179,4 @@ Product and paper facts this primer states; the sizes are computed from them.
 | Llama 3 8B shape (§4, §6) | 32 layers, 32 query heads, 8 KV heads, head_dim 128; ~16 GB of fp16 weights | the model's `config.json` |
 | Llama 2 13B shape (§4) | 40 layers, 40 KV heads (full MHA), head_dim 128 | the model's `config.json` |
 | Fragmentation (§5) | 60–80% waste in early serving stacks; under 4% with paging; 16-token blocks | PagedAttention paper and vLLM's default block size |
-| Decode intensity (§3) | `2g/b` FLOP/B: 1 for fp16 MHA, 4 for Llama 3 8B's GQA | derived in the FlashAttention deep dive; kernels that pack a GQA group reach it, others do not |
+| Decode intensity (§3) | ${2g/b}$ FLOP/B: 1 for fp16 MHA, 4 for Llama 3 8B's GQA | derived in the FlashAttention deep dive; kernels that pack a GQA group reach it, others do not |
