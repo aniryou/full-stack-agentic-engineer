@@ -204,5 +204,5 @@ def test_dense_record_tables_become_cards_but_spec_tables_do_not():
     sentence = " ".join(["w"] * 12)
     records = table([["nb01", sentence, sentence, "—", sentence]] * 4)        # 60% of cells are 12 words
     assert hooks.stack_prose_tables(records)[1] == 1
-    spec = table([["T4", "16 GB", "~320 GB/s", "7.5", " ".join(["w"] * 20)]] * 6)   # one notes column only
-    assert hooks.stack_prose_tables(spec)[1] == 0
+    notes = [["T4", "16 GB", "~320 GB/s", "7.5", " ".join(["w"] * 6)]] * 5 + [["L4", "24 GB", "~300 GB/s", "8.9", " ".join(["w"] * 20)]]
+    assert hooks.stack_prose_tables(table(notes))[1] == 0       # a short notes column with one long note: a table
