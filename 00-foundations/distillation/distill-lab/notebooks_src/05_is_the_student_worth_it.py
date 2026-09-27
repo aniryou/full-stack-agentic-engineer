@@ -13,9 +13,11 @@
 #   They can disagree, and a student can beat its teacher while agreeing less.
 # * **The capability gap hides in the tail.** An average over easy and hard problems can look close while the
 #   hardest slice is far apart. Report accuracy per difficulty with Wilson intervals, and use paired comparisons.
-# * **The economics** (PRIMER §9 "The economics of a student"). The student is cheaper per token by about the ratio
-#   of the weights it streams, and more because its smaller KV allows bigger batches. Distilling costs a fixed
-#   amount, the teacher's tokens plus 6·N·D of training. Break-even is that fixed cost over the saving per token.
+# * **The economics** (PRIMER §9 "The economics of a student"). The student is cheaper per token because each GPU
+#   holds far more of its sequences: its weights and its KV per sequence are both smaller. Price the teacher on
+#   the GPUs you would really give it (two H100s for a 32B), not on one card it barely fits. Distilling costs a
+#   fixed amount, the teacher's tokens plus 6·N·D of training. Break-even is that fixed cost over the saving per
+#   token.
 # * **The cascade:** send easy queries to the student and hard ones to the teacher. Judge it by cost per *correct*
 #   answer, not cost per token.
 
@@ -117,35 +119,41 @@ print(f"✅ overall gap {overall:.3f}; at difficulty 4 it is {g[4]:.3f}: " +
 #
 # ## Worked example: what each model costs to serve
 #
-# The roofline bound for the fact sheet's pair, a 32B teacher and a 1.5B student on one H100 at 2K context under a
-# 30 ms inter-token latency, and for the T4-sized pair. `C.serving` picks the largest batch whose decode step fits
-# the latency budget and the memory, then prices it with `roofline.cost`'s formula (the tests check both against
-# layer 01's core).
+# The roofline bound for the fact sheet's pair, a 32B teacher and a 1.5B student at 2K context under a 30 ms
+# inter-token latency, and for the T4-sized pair. `C.serving` picks the largest batch whose decode step fits the
+# latency budget and the memory, then prices it with `roofline.cost`'s formula (the tests check both against layer
+# 01's core). The 32B is costed on one H100 and on two (`n_gpus=2`: ideal tensor parallelism, all-reduces not
+# counted).
 
 # %%
 H100, T4 = C.GPUS["H100"], C.GPUS["T4"]
-SERVE = [C.serving(C.shape("qwen2.5-32b-instruct"), H100, context=2048, itl_s=0.030),
-         C.serving(C.shape("qwen2.5-1.5b-instruct"), H100, context=2048, itl_s=0.030),
-         C.serving(C.shape("qwen2.5-1.5b-instruct"), T4, context=2048, itl_s=0.030, precision="fp16"),
-         C.serving(C.shape("qwen2.5-0.5b-instruct"), T4, context=2048, itl_s=0.030, precision="fp16")]
-print(table(SERVE, ["model", "gpu", "batch", "step ms", "tok/s", "$/M"], "PREDICTED (roofline bound, 100% utilisation; "
-            "H100 $11/GPU-h, T4 $0.35/GPU-h, COMPUTE.md 2026-09-26, verify)"))
-print(f"32B -> 1.5B on an H100: {SERVE[0]['$/M'] / SERVE[1]['$/M']:.0f}x cheaper per output token "
-      f"(weights {C.shape('qwen2.5-32b-instruct').params() / C.shape('qwen2.5-1.5b-instruct').params():.0f}x smaller, "
-      f"KV per token {C.shape('qwen2.5-32b-instruct').kv_bytes_per_token() / C.shape('qwen2.5-1.5b-instruct').kv_bytes_per_token():.0f}x smaller)")
+T32, S15 = C.shape("qwen2.5-32b-instruct"), C.shape("qwen2.5-1.5b-instruct")
+TEACHER_1GPU = C.serving(T32, H100, context=2048, itl_s=0.030)
+TEACHER = C.serving(T32, H100, context=2048, itl_s=0.030, n_gpus=2)          # the teacher as you would run it
+STUDENT = C.serving(S15, H100, context=2048, itl_s=0.030)
+T4_TEACHER = C.serving(S15, T4, context=2048, itl_s=0.030, precision="fp16")
+T4_STUDENT = C.serving(C.shape("qwen2.5-0.5b-instruct"), T4, context=2048, itl_s=0.030, precision="fp16")
+print(table([TEACHER_1GPU, TEACHER, STUDENT, T4_TEACHER, T4_STUDENT], ["model", "gpu", "batch", "step ms", "tok/s", "$/M"],
+            "PREDICTED (roofline bound, 100% utilisation; H100 $11/GPU-h, T4 $0.35/GPU-h, COMPUTE.md 2026-09-26, verify)"))
+print(f"32B -> 1.5B: {TEACHER['$/M'] / STUDENT['$/M']:.0f}x cheaper per output token against the teacher on two H100s, "
+      f"{TEACHER_1GPU['$/M'] / STUDENT['$/M']:.0f}x against one (weights {T32.params() / S15.params():.0f}x smaller, "
+      f"KV per token {T32.kv_bytes_per_token() / S15.kv_bytes_per_token():.0f}x smaller)")
 
 # %% [markdown]
-# The 32B teacher is memory-bound twice over: its weights leave room for only 12 sequences of 2K context, so it
-# cannot batch its way to efficiency. The student's small KV per token lets it run a thousand sequences under
-# the same latency. That is why the saving per token (96×) is much larger than the parameter ratio (21×).
+# On one H100 the 32B's weights leave room for only 12 sequences of 2K context, so it cannot batch, and the student
+# looks 96× cheaper. Nobody would serve a 32B that way. On two H100s it runs 146 sequences and the student is 16×
+# cheaper, the number to carry. Both runs fill HBM, so cost per token follows how many sequences each GPU holds:
+# the student's KV per sequence is 9× smaller, and its weights leave more of each card free. Everything below
+# prices the teacher on two H100s.
 #
 # ## Exercise 5.3 — the fixed cost and break-even
 #
 # The fact sheet's worked case: 100k prompts × 2,000 teacher tokens at $9.00 per million output tokens, then SFT
-# of the 1.5B student on those 2e8 tokens (6·N·D FLOPs) on an H100 at 40% MFU and $11/GPU-h. Write
-# `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`: the days of serving after which the
-# student has paid for itself. Every million tokens served by the student instead of the teacher saves
-# `teacher_per_m − student_per_m` dollars.
+# of the 1.5B student (its exact parameter count from the bundled config) on those 2e8 tokens (6·N·D FLOPs) on an
+# H100 at 40% MFU and $11/GPU-h. Write `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`: the
+# days of serving after which the student has paid for itself. Every million tokens served by the student instead
+# of the teacher saves `teacher_per_m − student_per_m` dollars. The table also shows the same data generated on
+# the self-hosted teacher.
 
 # %% exercise
 def break_even_days(fixed: float, teacher_per_m: float, student_per_m: float, tokens_per_day: float) -> float:
@@ -155,17 +163,24 @@ def break_even_days(fixed: float, teacher_per_m: float, student_per_m: float, to
     ### END SOLUTION
 
 # %% check
-FIXED = C.fixed_cost(teacher_tokens=2e8, teacher_price_per_m=9.0, student_params=1.5e9, train_tokens=2e8, gpu=H100, mfu=0.4)
-assert abs(FIXED["teacher generation $"] - 1800) < 1e-9 and abs(FIXED["training $"] - 13.897) < 1e-3
-for tpd in (1e7, 1e8, 1e9):
-    want = C.break_even(FIXED["total $"], SERVE[0]["$/M"], SERVE[1]["$/M"], tpd)["days"]
-    assert abs(break_even_days(FIXED["total $"], SERVE[0]["$/M"], SERVE[1]["$/M"], tpd) - want) < 1e-9
+FIXED = C.fixed_cost(teacher_tokens=2e8, teacher_price_per_m=9.0, student_params=S15.params(), train_tokens=2e8, gpu=H100, mfu=0.4)
+OWN = C.fixed_cost(teacher_tokens=2e8, teacher_price_per_m=TEACHER["$/M"], student_params=S15.params(), train_tokens=2e8, gpu=H100, mfu=0.4)
+assert abs(FIXED["teacher generation $"] - 1800) < 1e-9 and abs(FIXED["training $"] - 14.30) < 5e-3   # PRIMER §3: $14.30
+VOLUMES = (1e6, 1e7, 1e8, 1e9)
+for tpd in VOLUMES:
+    want = C.break_even(FIXED["total $"], TEACHER["$/M"], STUDENT["$/M"], tpd)["days"]
+    assert abs(break_even_days(FIXED["total $"], TEACHER["$/M"], STUDENT["$/M"], tpd) - want) < 1e-9
 assert break_even_days(10, 1, 2, 1e6) == math.inf
-print(table([{"tokens per day": f"{tpd:,.0f}", "break-even days": round(break_even_days(FIXED["total $"], SERVE[0]["$/M"], SERVE[1]["$/M"], tpd), 2)}
-             for tpd in (1e7, 1e8, 1e9)], title=f"PREDICTED: fixed cost ${FIXED['total $']:,.0f} "
-             f"(teacher tokens ${FIXED['teacher generation $']:,.0f}, training ${FIXED['training $']:.2f})"))
-print("✅ the teacher's tokens, not the student's training, dominate the fixed cost. Against a self-hosted 32B the break-even "
-      "is days at a billion tokens a day. At low volume the fixed cost never pays back")
+DAYS = {tpd: break_even_days(FIXED["total $"], TEACHER["$/M"], STUDENT["$/M"], tpd) for tpd in VOLUMES}
+print(table([{"tokens per day": f"{tpd:,.0f}", "break-even days, API data": round(DAYS[tpd], 2),
+              "break-even days, self-hosted data": round(break_even_days(OWN["total $"], TEACHER["$/M"], STUDENT["$/M"], tpd), 2)}
+             for tpd in VOLUMES],
+            title=f"PREDICTED: fixed cost ${FIXED['total $']:,.2f} with API data (teacher tokens ${FIXED['teacher generation $']:,.0f}, "
+                  f"training ${FIXED['training $']:.2f}); ${OWN['total $']:,.2f} with data from the self-hosted teacher"))
+print(f"✅ the teacher's tokens, not the student's training, dominate the fixed cost. With API-bought data, break-even "
+      f"against the 32B on two H100s is {DAYS[1e9]:.1f} days at a billion tokens a day, {DAYS[1e8]:.0f} at 100 million, "
+      f"{DAYS[1e7]:.0f} at 10 million and {DAYS[1e6]:,.0f} at a million, longer than most models stay in service; "
+      f"generating the data on the self-hosted teacher cuts every row {FIXED['total $'] / OWN['total $']:.1f}x")
 
 # %% [markdown]
 # ## Exercise 5.4 — a cascade by difficulty
@@ -177,7 +192,7 @@ print("✅ the teacher's tokens, not the student's training, dominate the fixed 
 # only) whose accuracy is at least `FLOOR`, the one with the lowest cost per correct answer.
 
 # %%
-PRICE = {"teacher": SERVE[2]["$/M"] / 1e6, "student": SERVE[3]["$/M"] / 1e6}      # $ per output token (T4 rows)
+PRICE = {"teacher": T4_TEACHER["$/M"] / 1e6, "student": T4_STUDENT["$/M"] / 1e6}  # $ per output token (T4 rows)
 FLOOR = 0.90                                                                        # the accuracy the product needs
 print({k: f"${v * 1e6:.4f}/M" for k, v in PRICE.items()}, "accuracy floor", FLOOR)
 
@@ -265,21 +280,26 @@ print(table([
 #
 # **Two minutes:** "We measured the student two ways. Agreement tells us how closely it copies the teacher. Task
 # accuracy with Wilson intervals, per difficulty, tells us whether it solves our problems. The averages were
-# close, and the gap was on the hardest slice, so we gate on that slice. On one H100 the 1.5B student costs about
-# a ninety-sixth of the 32B teacher per output token by the roofline bound. That is far more than the 21× weight
-# ratio, because the teacher's KV fills the card at a dozen sequences. The fixed cost is dominated by the
-# teacher's generated tokens ($1,800 for 2e8 at $9 per million) rather than training ($14), so the break-even is
-# days at a billion tokens a day and never at low volume. We serve a cascade: the student by default, the teacher
-# for requests the router flags as hard, judged by cost per correct answer."
+# close, and the gap was on the hardest slice, so we gate on that slice. Against the 32B on two H100s, the
+# smallest deployment that leaves it room to batch, the 1.5B student costs about a sixteenth as much per output
+# token by the roofline bound. On one H100 it would look like a ninety-sixth, but only because the teacher's KV
+# fills that card at a dozen sequences. The fixed cost is dominated by the teacher's generated tokens ($1,800 for
+# 2e8 at $9 per million) rather than training ($14), so with bought data the break-even is about two days at a
+# billion tokens a day, three weeks at a hundred million and years at a million; generating the data on our own
+# teacher cuts that about ninefold. We serve a cascade: the student by default, the teacher for requests the
+# router flags as hard, judged by cost per correct answer."
 #
 # **Drill 1.** *Offline agreement with the teacher is 97%, but users say the student got worse on hard tickets.
 # What do you check?* Task accuracy on a hard slice with its own interval, paired against the teacher on the same
 # items. Agreement averages over easy positions. Then decide whether to route that slice to the teacher.
 #
-# **Drill 2.** *The student is 20× smaller. Why is it 96× cheaper per token?* Decode streams weights *and* KV. The
-# small model's KV per token is 9× smaller, so a batch of hundreds fits under the same latency budget and the
-# weights are amortised over far more tokens.
+# **Drill 2.** *The student is 21× smaller. On one H100 it is 96× cheaper per token, against the teacher on two
+# H100s 16×. Which do you quote, and where does the gap come from?* Quote 16×. Decode streams weights *and* KV, and
+# both runs fill HBM, so cost per token follows the sequences each GPU holds. One H100 leaves the 32B 6.5 GB for
+# KV, 12 sequences; two give it 146. The student's KV per sequence is 9× smaller and its weights leave more of the
+# card free, so it holds 1,173 per GPU against the teacher's 73.
 #
-# **Drill 3.** *When does distillation not pay?* At low volume, since break-even is fixed cost over saving per token.
+# **Drill 3.** *When does distillation not pay?* At low volume, since break-even is fixed cost over saving per token:
+# with bought data, years at a million tokens a day.
 # Also when the task needs knowledge the student lacks, which shows as a tail the cascade must cover, and when a
 # quantized teacher or a smaller off-the-shelf model already meets the accuracy bar.

@@ -5,8 +5,10 @@ parameters and a ninth of the KV per token fits a far bigger batch under the sam
 far less per token ($/M = $/GPU-h ÷ (tokens/s × 3600) × 10⁶, `roofline.cost.cost_per_million_tokens`).
 Against that saving stands a one-off bill: the teacher's tokens at their price, plus the student's training,
 ≈ 6·N·D FLOPs (transformer primer §6.2) at some MFU. Break-even is that bill over the saving per token; a
-cascade (student first, teacher when needed) sits between the two. The decode step below restates
-`roofline.llm.decode` for dense models, and the memory helpers restate `capacity.py`, so the numbers match.
+cascade (student first, teacher when needed) sits between the two. Compare like with like: a 32B teacher on one
+80 GB GPU has almost no room left for KV and cannot batch, so price it on the tensor-parallel group you would
+really run (`tp_group`). The decode step below restates `roofline.llm.decode` for dense models, and the memory
+helpers restate `capacity.py`, so the numbers match.
 """
 from __future__ import annotations
 
@@ -95,13 +97,23 @@ def cost_per_million_tokens(price_per_gpu_hour: float, tokens_per_s: float, util
     return price_per_gpu_hour * n_gpus / (tokens_per_s * 3600 * utilisation) * 1e6
 
 
-def serving(m: Shape, g: GPU, price_per_gpu_hour: float, context: int, itl_s: float, **kw) -> dict:
-    """The batch the ITL budget allows, its step, throughput and $/M output tokens on one GPU."""
-    b = best_batch(m, g, context, itl_s, **kw)
+def tp_group(g: GPU, n: int) -> GPU:
+    """n GPUs as one ideal tensor-parallel device: n× the memory, bandwidth and FLOPs, the all-reduces not counted
+    (the roofline primer §5.3 prices them with α-β) — an upper bound, like everything here. Its memory matches
+    `roofline.llm.max_batch_by_memory(..., n_devices=n)`."""
+    return g if n == 1 else GPU(f"{n}×{g.name}", g.memory_gb * n, g.tb_s * n, {k: v * n for k, v in g.tflops.items()})
+
+
+def serving(m: Shape, g: GPU, price_per_gpu_hour: float, context: int, itl_s: float, n_gpus: int = 1, **kw) -> dict:
+    """The batch the ITL budget allows, its step, throughput and $/M output tokens on `n_gpus` GPUs (ideal TP)."""
+    grp = tp_group(g, n_gpus)
+    b = best_batch(m, grp, context, itl_s, **kw)
     if b == 0:
-        return {"batch": 0, "step_s": decode_step(m, g, 1, context, **kw), "tok_s": 0.0, "usd_per_m": math.inf}
-    t = decode_step(m, g, b, context, **kw)
-    return {"batch": b, "step_s": t, "tok_s": b / t, "usd_per_m": cost_per_million_tokens(price_per_gpu_hour, b / t)}
+        return {"batch": 0, "step_s": decode_step(m, grp, 1, context, **kw), "tok_s": 0.0, "usd_per_m": math.inf,
+                "n_gpus": n_gpus}
+    t = decode_step(m, grp, b, context, **kw)
+    return {"batch": b, "step_s": t, "tok_s": b / t, "n_gpus": n_gpus,
+            "usd_per_m": cost_per_million_tokens(price_per_gpu_hour, b / t, n_gpus=n_gpus)}
 
 
 # -- the capacity primer's memory view (capacity.py, GB = 1e9 bytes) ----------------------------------------

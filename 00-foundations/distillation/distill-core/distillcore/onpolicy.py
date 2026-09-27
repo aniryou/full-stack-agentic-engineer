@@ -93,10 +93,16 @@ def token_pg_identity(p, v) -> tuple[np.ndarray, np.ndarray]:
 
 
 def flops_per_prompt(student_params: float, teacher_params: float, tokens: int, samples: int = 1,
-                     teacher_scores: bool = True) -> dict:
+                     teacher_scores: bool = True, reference_params: float = 0.0) -> dict:
     """One prompt's compute: the student generates `samples` completions of `tokens` (2·N_S per token, and
     decode-bound in practice), trains on them (6·N_S), and the teacher scores every token in one
-    prefill-shaped forward pass (2·N_T) — no teacher generation. GRPO: samples = G and a verifier instead."""
+    prefill-shaped forward pass (2·N_T) — no teacher generation. GRPO: samples = G, a verifier instead of the
+    teacher, and, with a KL penalty, a reference model's forward pass (`reference_params`, 2·N_ref per token).
+    Per token that is 8·N_S + 2·N_T against GRPO's 8·N_S (+ 2·N_ref): a big teacher makes each on-policy step
+    dearer, so its saving has to come from needing fewer steps."""
     gen, trn = 2 * student_params * tokens * samples, 6 * student_params * tokens * samples
     score = 2 * teacher_params * tokens * samples if teacher_scores else 0.0
-    return {"generate": gen, "train": trn, "score": score, "total": gen + trn + score}
+    ref = 2 * reference_params * tokens * samples
+    total = gen + trn + score + ref
+    return {"generate": gen, "train": trn, "score": score, "reference": ref, "total": total,
+            "per_token": total / (tokens * samples)}

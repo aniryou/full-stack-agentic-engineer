@@ -41,7 +41,13 @@ def vs_truth(model, lang) -> dict:
     P, lq = lang.true_probs(C), log_softmax(model.logits(C))
     with np.errstate(divide="ignore", invalid="ignore"):
         k = np.where(P > 0, P * (np.log(P) - lq), 0.0).sum(1)
-    return {"kl": float(k.mean()), "rule_acc": float((lq.argmax(1) == lang.main(C)).mean())}
+    wrong = lq.argmax(1) != lang.main(C)
+    q = np.exp(lq)
+    right_q = q[np.arange(len(C)), lang.main(C)]
+    return {"kl": float(k.mean()), "rule_acc": float((~wrong).mean()),
+            # where it is wrong: how sure it is of its wrong token, and how much it gives the right one
+            "wrong_top_q": float(q.max(1)[wrong].mean()) if wrong.any() else 0.0,
+            "wrong_right_q": float(right_q[wrong].mean()) if wrong.any() else 0.0}
 
 
 def accuracy_stderr(p: float, n: int) -> float:

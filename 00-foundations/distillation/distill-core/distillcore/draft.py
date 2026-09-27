@@ -40,7 +40,9 @@ def greedy_acceptance(p, q) -> float:
 
 def vllm_view(alpha: float, k: int) -> dict:
     """What vLLM's spec-decode counters show for an i.i.d. per-token α: mean acceptance length (bonus token
-    included) = expected_tokens; per-position acceptance α^(i+1); 'draft acceptance rate' = (E − 1)/k ≠ α."""
+    included) = expected_tokens; per-position acceptance α^(i+1); 'draft acceptance rate' = (E − 1)/k ≠ α.
+    The position-0 rate is Σ min(p, q) only with draft_sample_method="probabilistic"; under vLLM's default
+    "greedy" it is p(argmax q) (`greedy_acceptance`) — pass that as `alpha` to read a default deployment."""
     E = expected_tokens(alpha, k)
     return {"mean_acceptance_length": E, "per_position": [alpha ** (i + 1) for i in range(k)],
             "draft_acceptance_rate": (E - 1) / k}

@@ -79,6 +79,9 @@ def test_reproduces_roofline_cost_and_decode_roofline_primer_sections_3_and_8():
         assert math.isclose(K.decode_step(m, h, batch, ctx), llm.decode(llm.PRESETS["llama-3.1-8b"], specs.get("h100-sxm"), batch, ctx).time)
     assert K.best_batch(m, h, 2048, 0.010) == llm.best_batch_under_itl(llm.PRESETS["llama-3.1-8b"], specs.get("h100-sxm"), 2048, 0.010)
     assert K.max_batch(m, h, 2048) == llm.max_batch_by_memory(llm.PRESETS["llama-3.1-8b"], specs.get("h100-sxm"), 2048)
+    for n in (2, 4):                                               # tp_group's memory is roofline's n_devices
+        assert K.max_batch(m, K.tp_group(h, n), 2048) == llm.max_batch_by_memory(
+            llm.PRESETS["llama-3.1-8b"], specs.get("h100-sxm"), 2048, n_devices=n)
 
 
 # -- the capacity primer and capacity.py ----------------------------------------------------------------------

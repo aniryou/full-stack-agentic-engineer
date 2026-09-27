@@ -46,6 +46,10 @@ def test_s1_the_roofline_and_capacity_view():
     t, s = rows["qwen2.5-32b"][0], rows["qwen2.5-1.5b"][0]
     present(f"The weights are {t.params() / s.params():.1f}× smaller and the KV per token "
             f"{t.kv_bytes_per_token() / s.kv_bytes_per_token():.1f}× smaller")
+    w, kv = rows["qwen2.5-32b"][1], rows["qwen2.5-32b"][2] / 1e3
+    tp2, one = K.sessions_per_gpu(160, w, kv, 2048), K.sessions_per_gpu(80, rows["qwen2.5-1.5b"][1], rows["qwen2.5-1.5b"][2] / 1e3, 2048)
+    present(f"leave for KV ({80 * 0.9 - w:.2f} GB of the usable {80 * 0.9:.0f})",
+            f"the 32B holds {tp2:.1f} such sessions, {tp2 / 2:.1f} per GPU, and the per-GPU ratio is {one / (tp2 / 2):.0f}×")
 
 
 def test_s1_soft_targets_beat_hard_labels_and_capacity(lang, teacher):
@@ -106,23 +110,36 @@ def test_s3_pipeline_bookkeeping_and_exposure_bias(lang, teacher, bench):
     ctx, _ = teacher.positions(greedy)
     ent = lambda m: float(-(m.probs(ctx) * np.log(m.probs(ctx))).sum(1).mean())
     present(f"Entropy (teacher {ent(teacher):.2f})", f"the teacher's {ent(teacher):.2f})")
+    ebs = {}
     for label, m in (("SFT on the greedy text", sft), ("supervised KD on the greedy text (GKD λ = 0)", kd)):
-        eb = seqkd.exposure_bias(m, lang, greedy, bench["prompts"], np.random.default_rng(5))
-        o = eb["own_prefixes"]
-        present(f"| {label} | {eb['teacher_prefixes'].mean():.3f} | {o[0]:.3f} | {o[3]:.3f} | {o[11]:.3f} | {ent(m):.3f} |")
+        eb = ebs[label] = seqkd.exposure_bias(m, lang, greedy, bench["prompts"], np.random.default_rng(5))
+        o, a = eb["own_prefixes"], eb["all_right_so_far"]
+        present(f"| {label} | {eb['teacher_prefixes'].mean():.3f} | {o[0]:.3f} | {o[3]:.3f} | {o[11]:.3f} | {a[3]:.3f} | "
+                f"{a[11]:.3f} | {ent(m):.3f} |")
     present(f"entropy (0.009 against the teacher's {ent(teacher):.2f})".replace("0.009", f"{ent(sft):.3f}"))
+    k, t = ebs["supervised KD on the greedy text (GKD λ = 0)"], seqkd.exposure_bias(teacher, lang, greedy, bench["prompts"], np.random.default_rng(5))
+    o, a, r, tr = k["own_prefixes"], k["all_right_so_far"], k["sampled_on_rule"], t["sampled_on_rule"]
+    present(f"its samples follow the rule {r[0]:.3f} of the time at position 1, like the teacher's, then {r[3]:.3f} by "
+            f"position 4, where the teacher's stay between {tr.min():.2f} and {tr.max():.2f}",
+            f"per-position accuracy drops to {o[3]:.3f} by position 4 and then stays there ({o[11]:.3f} at position 12)",
+            f"falls to {a[3]:.3f} by position 4 and {a[11]:.3f} by position 12, where the teacher's stays at "
+            f"{t['all_right_so_far'][-1]:.3f}", f"only {a[11]:.3f} of its outputs were right all the way to position 12")
+    assert abs(r[0] - tr[0]) < 0.02 and r[3] < tr.min() - 0.1       # it slips more often than the teacher after position 1
+    assert np.ptp(o[3:]) < 0.03 and np.all(np.diff(a) < 0)          # flat per position; compounding per output
 
 
 def test_s3_and_s9_the_fixed_cost():
     s = K.SHAPES["qwen2.5-1.5b"]
     api = K.fixed_cost(100_000, 1, 2000, 9.00, s.params(), H100, 11, mfu=0.4)
-    t_cost = K.serving(K.SHAPES["qwen2.5-32b"], H100, 11, 2048, 0.030)["usd_per_m"]
+    t_cost = K.serving(K.SHAPES["qwen2.5-32b"], H100, 11, 2048, 0.030, n_gpus=2)["usd_per_m"]
     own = K.fixed_cost(100_000, 1, 2000, t_cost, s.params(), H100, 11, mfu=0.4)
-    present(f"that is ${api['generation_usd']:,.0f}", f"makes it ${own['generation_usd']:,.2f}",
+    present(f"that is ${api['generation_usd']:,.0f}", f"at §9's roofline cost, makes it ${own['generation_usd']:,.2f}",
             f"6·N·D = {api['train_flops'] / 1e18:.2f} × 10¹⁸ FLOPs", f"{api['gpu_hours']:.3f} GPU-hours on an H100 at 40% MFU, "
             f"${api['train_usd']:.2f} at $11/GPU-hour", f"{own['gpu_hours']:.3f} GPU-hours (${own['train_usd']:.2f})",
-            f"The teacher's tokens are {own['generation_usd'] / own['total_usd']:.0%} of it")
-    present(f"(${own['generation_usd']:,.0f} self-hosted, ${api['generation_usd']:,.0f} through an API")
+            f"The teacher's tokens are {own['generation_usd'] / own['total_usd']:.0%} of it self-hosted and "
+            f"{api['generation_usd'] / api['total_usd']:.0%} through the API",
+            f"${own['generation_usd']:,.2f} on the 32B self-hosted at TP = 2")
+    present(f"(${own['generation_usd']:,.0f} on a self-hosted teacher, ${api['generation_usd']:,.0f} through an API")
 
 
 def test_s4_on_policy_removes_exposure_bias(lang, teacher, bench):
@@ -138,6 +155,24 @@ def test_s4_on_policy_removes_exposure_bias(lang, teacher, bench):
         present(f"| {label} | {o[3]:.3f} | {o[11]:.3f} | {E.vs_truth(m, lang)['rule_acc']:.3f} |")
     o_fwd = seqkd.own_accuracy(rows[1][1], lang, bench["prompts"], 12, np.random.default_rng(5))
     present(f"on-policy training held {o_fwd[3]:.3f}")
+    sft = TinyLM(11, 16, 8, seed=1)
+    seqkd.sft(sft, bench["greedy"], 400)
+    after, at_start = {}, {}
+    for label, start in (("the KD student (§3)", bench["kd"]), ("the SFT student (§3)", sft),
+                         ("a fresh 16-unit student", TinyLM(11, 16, 8, seed=1))):
+        v = at_start[label] = E.vs_truth(start, lang)
+        accs = []
+        for beta in (0.0, 1.0):
+            s = start.copy()
+            op.gkd_train(s, teacher, bench["prompts"], 12, 300, lam=1.0, beta=beta, data=bench["greedy"], seed=1)
+            after[(label, beta)] = E.vs_truth(s, lang)
+            accs.append(after[(label, beta)]["rule_acc"])
+        present(f"| {label} | {v['rule_acc']:.3f} | {v['wrong_right_q']:.3f} | {accs[0]:.3f} | {accs[1]:.3f} |")
+        assert accs[1] < accs[0] - 0.3                              # reverse KL is slow from every start here
+    kd_q, sft_q = at_start["the KD student (§3)"]["wrong_right_q"], at_start["the SFT student (§3)"]["wrong_right_q"]
+    present(f"they give the right token {kd_q:.3f} and {sft_q:.3f}, so starting from them does not help here")
+    f1 = after[("a fresh 16-unit student", 1.0)]
+    present(f"it puts {f1['wrong_top_q']:.3f} on a wrong token and {f1['wrong_right_q']:.3f} on the right one")
     p_t, v_wrong = np.array([0.8, 0.1, 0.0999, 0.0001]), np.array([0.0, 0.0, 0.0, 9.0])
     ratio = np.linalg.norm(L.gkd(v_wrong[None], p_t[None], 1.0)[1]) / np.linalg.norm(L.softmax(v_wrong) - p_t)
     present(f"the reverse-KL gradient is {ratio:.4f} of the forward one")
@@ -165,9 +200,15 @@ def test_s4_the_policy_gradient_identities():
         B.append(flat(op.pg_grad(s5, t5, s, per_token=True)))
     present(f"differs by {np.linalg.norm(ex_tok - ex_seq) / np.linalg.norm(ex_seq):.0%} of the gradient's norm",
             f"total variance {np.array(B).var(0).sum():.2f} against {np.array(A).var(0).sum():.2f} per batch of 64")
-    g16 = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)["total"]
-    d4 = op.flops_per_prompt(8e9, 32e9, 4096, samples=4)["total"]
-    present(f"cost {d4 / 1e15:.2f} × 10¹⁵ FLOPs against {g16 / 1e15:.2f} × 10¹⁵")
+    g = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)
+    gr = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False, reference_params=8e9)
+    d = op.flops_per_prompt(8e9, 32e9, 4096, samples=16)
+    present(f"that is {d['per_token'] / 1e9:.0f} GFLOP per student token, against {g['per_token'] / 1e9:.0f} for GRPO "
+            f"({gr['per_token'] / 1e9:.0f} with a reference model's forward pass",
+            "makes each on-policy token twice as dear",
+            f"that is {d['total'] / 1e15:.2f} × 10¹⁵ FLOPs against {g['total'] / 1e15:.2f} × 10¹⁵ "
+            f"({gr['total'] / 1e15:.2f} × 10¹⁵ with the reference)")
+    assert d["per_token"] == 2 * g["per_token"] and d["per_token"] == 2 * 8e9 + 6 * 8e9 + 2 * 32e9
 
 
 def test_s5_distilling_reasoning(think):
@@ -195,24 +236,35 @@ def test_s5_distilling_reasoning(think):
     weak = student.expected(task, q=0.05)
     present(f"copies the teacher's {weak['length']:.2f}-token thinking exactly and scores {weak['accuracy']:.3f}, "
             f"not {teacher.expected(task)['accuracy']:.3f}",
-            f"is {task.optimal_length(0.01, q=0.05):.1f} tokens, against the teacher's {task.optimal_length(0.01):.1f}",
+            f"is {task.optimal_length(0.01, q=0.05):.1f} tokens, not the {student.expected(task)['length']:.1f} it copied",
+            f"its {teacher.expected(task)['length']:.1f} is where 16,000 rollouts left it",
             f"({student.expected(task)['length']:.1f} tokens against {teacher.expected(task)['length']:.1f} in the toy)")
 
 
+def prune_vs_fresh(lang, teacher, steps, draws=range(1, 6), inits=range(1, 5)):
+    """Rule accuracy of the pruned teacher and of fresh 16-unit students after `steps` KD steps on 242 contexts,
+    over several data draws (draw 1 is notebook 01's worked example)."""
+    C, pruned, fresh = lang.contexts(), [], []
+    for d in draws:
+        rng = np.random.default_rng(d)
+        ctx = C[rng.integers(0, 121, 242)]
+        lang.sample_next(ctx, rng)                                # the same draws as notebook 01
+        zt = teacher.logits(ctx)
+        for m, out in [(teacher.prune_width(ctx, 16), pruned)] + [(TinyLM(11, 16, 8, seed=s), fresh) for s in inits]:
+            if steps:
+                train(m, ctx, lambda z, i: L.kd(z, zt[i], 1.0), steps)
+            out.append(E.vs_truth(m, lang)["rule_acc"])
+    return np.array(pruned), np.array(fresh)
+
+
 def test_s6_prune_then_distil(lang, teacher):
-    C = lang.contexts()
-    rng = np.random.default_rng(1)
-    ctx = C[rng.integers(0, 121, 242)]
-    lang.sample_next(ctx, rng)                                    # the same draws as notebook 01
-    zt = teacher.logits(ctx)
-    pruned = teacher.prune_width(ctx, 16)
-    before = E.vs_truth(pruned, lang)["rule_acc"]
-    train(pruned, ctx, lambda z, i: L.kd(z, zt[i], 1.0), 100)
-    fresh = TinyLM(11, 16, 8, seed=1)
-    train(fresh, ctx, lambda z, i: L.kd(z, zt[i], 1.0), 100)
-    present(f"scores {before:.3f} rule accuracy; 100 KD steps from the parent take it to "
-            f"{E.vs_truth(pruned, lang)['rule_acc']:.3f}, where a fresh 16-unit student after the same 100 steps "
-            f"reaches {E.vs_truth(fresh, lang)['rule_acc']:.3f}")
+    cell = lambda a: f"{a.mean():.3f} ({a.min():.3f}–{a.max():.3f})"
+    runs = {n: prune_vs_fresh(lang, teacher, n) for n in (0, 20, 100)}
+    present("| pruned from the teacher | " + " | ".join(cell(runs[n][0]) for n in runs) + " |",
+            "| fresh | " + " | ".join(cell(runs[n][1]) for n in runs) + " |")
+    (p20, f20), (p100, f100) = runs[20], runs[100]
+    assert p20.min() > f20.max()                                  # a head start at every seed
+    assert abs(p100.mean() - f100.mean()) < f100.std() + p100.std()   # no better destination: within seed noise
 
 
 @pytest.fixture(scope="module")
@@ -308,29 +360,45 @@ def test_s8_a_student_that_beats_its_teacher(lang):
 
 def test_s9_serving_break_even_and_the_cascade():
     serve = {}
-    for key, label in (("qwen2.5-32b", "Qwen2.5-32B (teacher)"), ("qwen2.5-1.5b", "Qwen2.5-1.5B (student)"),
-                       ("qwen2.5-0.5b", "Qwen2.5-0.5B (student)")):
-        s = serve[key] = K.serving(K.SHAPES[key], H100, 11, 2048, 0.030)
-        usd = f"${s['usd_per_m']:.3f}" if s["usd_per_m"] > 1 else f"${s['usd_per_m']:.4f}"
-        present(f"| {label} | {s['batch']} | {s['step_s'] * 1e3:.2f} ms | {s['tok_s']:,.0f} | {usd} |")
-    t, s = serve["qwen2.5-32b"], serve["qwen2.5-1.5b"]
+    for key, n, label in (("qwen2.5-32b", 1, "Qwen2.5-32B (teacher), one GPU"), ("qwen2.5-32b", 2, "Qwen2.5-32B (teacher), TP = 2"),
+                          ("qwen2.5-1.5b", 1, "Qwen2.5-1.5B (student)"), ("qwen2.5-0.5b", 1, "Qwen2.5-0.5B (student)")):
+        s = serve[(key, n)] = K.serving(K.SHAPES[key], H100, 11, 2048, 0.030, n_gpus=n)
+        usd = f"${s['usd_per_m']:.3f}" if s["usd_per_m"] > 0.1 else f"${s['usd_per_m']:.4f}"
+        present(f"| {label} | {n} | {s['batch']} | {s['step_s'] * 1e3:.2f} ms | {s['tok_s']:,.0f} | {usd} |")
+    t1, t, s = serve[("qwen2.5-32b", 1)], serve[("qwen2.5-32b", 2)], serve[("qwen2.5-1.5b", 1)]
+    t4 = K.serving(K.SHAPES["qwen2.5-32b"], H100, 11, 2048, 0.030, n_gpus=4)
     mt, ms = K.SHAPES["qwen2.5-32b"], K.SHAPES["qwen2.5-1.5b"]
-    present(f"the student is {t['usd_per_m'] / s['usd_per_m']:.0f}× cheaper per token: "
-            f"{mt.params() / ms.params():.0f}× fewer weight bytes and {mt.kv_bytes_per_token() / ms.kv_bytes_per_token():.0f}× "
-            f"less KV per token let it run {s['batch'] / t['batch']:.0f}× the batch",
+    present(f"the 32B's weights leave {80 * 0.9 - K.weight_gb(mt.params()):.2f} GB of the usable 72 for KV, room for {t1['batch']}",
+            f"and the {t1['usd_per_m'] / s['usd_per_m']:.0f}× it gives is an artefact of that",
+            f"it runs batch {t['batch']} at ${t['usd_per_m']:.3f} per million, and the student is "
+            f"{t['usd_per_m'] / s['usd_per_m']:.0f}× cheaper per token: {mt.params() / ms.params():.0f}× fewer weight bytes and "
+            f"{mt.kv_bytes_per_token() / ms.kv_bytes_per_token():.0f}× less KV per token let it run "
+            f"{s['batch'] / (t['batch'] / 2):.0f}× the batch per GPU",
+            f"At TP = 4 the teacher reaches ${t4['usd_per_m']:.3f} and the ratio {t4['usd_per_m'] / s['usd_per_m']:.0f}×",
             f"batch 1 already takes {K.decode_step(mt, H100, 1, 2048) * 1e3:.1f} ms — while the 1.5B still runs batch "
             f"{K.serving(ms, H100, 11, 2048, 0.010)['batch']}",
-            f"~{t['usd_per_m'] / s['usd_per_m']:.0f}× cheaper per token on the roofline")
+            f"~{t['usd_per_m'] / s['usd_per_m']:.0f}× cheaper per token on the roofline than a 32B teacher served on two H100s "
+            f"(the {t1['usd_per_m'] / s['usd_per_m']:.0f}× you get against one H100",
+            f"a 1.5B student serves {s['batch'] / (t['batch'] / 2):.0f}× the batch per GPU under the same ITL and is "
+            f"~{t['usd_per_m'] / s['usd_per_m']:.0f}× cheaper per token on the roofline ({t1['usd_per_m'] / s['usd_per_m']:.0f}× against one H100")
+    assert K.serving(mt, H100, 11, 2048, 0.010)["batch"] == 0      # one H100 misses a 10 ms ITL at batch 1
     ll, H = K.SHAPES["llama-3.1-8b"], H100
     b = K.best_batch(ll, H, 2048, 0.010)
     step = K.decode_step(ll, H, b, 2048)
     present(f"batch {b}, {step * 1e3:.2f} ms, {b / step:,.0f} tokens/s, ${K.cost_per_million_tokens(11, b / step):.3f} per million")
-    fixed = K.fixed_cost(100_000, 1, 2000, t["usd_per_m"], ms.params(), H, 11)["total_usd"]
-    b50, b5 = (K.break_even(fixed, t["usd_per_m"], s["usd_per_m"], v) for v in (50e6, 5e6))
-    present(f"${fixed:,.2f} ÷ (${t['usd_per_m']:.3f} − ${s['usd_per_m']:.3f} per million) — {b50['days']:.1f} days at 50 "
-            f"million output tokens a day (${b50['saving_per_day']:.2f} a day saved), {b5['days']:.1f} days at 5 million",
-            f"a saving of ~${t['usd_per_m'] - s['usd_per_m']:.2f} per million — {b5['days']:.0f} days")
-    present(f"{K.break_even(fixed, t['usd_per_m'], s['usd_per_m'], 1e6)['days']:.1f} days at 1 million")
+    own = K.fixed_cost(100_000, 1, 2000, t["usd_per_m"], ms.params(), H, 11)
+    api = K.fixed_cost(100_000, 1, 2000, 9.00, ms.params(), H, 11)
+    saving = t["usd_per_m"] - s["usd_per_m"]
+    b50, b5, b1 = (K.break_even(own["total_usd"], t["usd_per_m"], s["usd_per_m"], v) for v in (50e6, 5e6, 1e6))
+    a50, a5 = (K.break_even(api["total_usd"], t["usd_per_m"], s["usd_per_m"], v) for v in (50e6, 5e6))
+    present(f"${own['total_usd']:,.2f} ÷ (${t['usd_per_m']:.3f} − ${s['usd_per_m']:.3f} per million) is "
+            f"{b50['tokens'] / 1e6:.1f} million tokens: {b50['days']:.1f} days at 50 million output tokens a day "
+            f"(${b50['saving_per_day']:.2f} a day saved), {b5['days']:.1f} days at 5 million, {b1['days']:.1f} days at 1 million",
+            f"makes it ${api['total_usd']:,.2f} ÷ ${saving:.3f}, {a50['tokens'] / 1e6:,.1f} million tokens: "
+            f"{a50['days']:.1f} days at 50 million a day, {a5['days']:.1f} at 5 million",
+            f"a saving of ~${saving:.2f} per million over the teacher on two H100s — {b5['days']:.0f} days with self-hosted "
+            f"data, {a5['days']:.0f} with API-bought data")
+    assert abs(b50["tokens"] - 2e8) / 2e8 < 0.2                    # ≈ the volume the teacher wrote for the student
     c_t, c_s = 500 * t["usd_per_m"] / 1e6, 500 * s["usd_per_m"] / 1e6
     gate = K.cascade(c_s, c_t, (0.95, 0.30), (0.97, 0.85), 0.3, catch=0.8, false_alarm=0.1)
     present(f"every false alarm is a full teacher call ({0.7 * 0.1 * c_t / gate['cost']:.0%} of this gate's bill)")

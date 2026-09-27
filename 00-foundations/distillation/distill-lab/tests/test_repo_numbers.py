@@ -99,6 +99,8 @@ def test_decode_step_matches_roofline_llm():
                 assert C.decode_step(m, C.GPUS[gpu], batch, ctx, precision=prec) == pytest.approx(
                     llm.decode(mc, dev, batch, ctx, precision=prec).time)
             assert C.max_batch_by_memory(m, C.GPUS[gpu], 2048) == llm.max_batch_by_memory(mc, dev, 2048)
+            for n in (2, 4):                                  # an ideal TP group's memory is roofline's n_devices
+                assert C.max_batch_by_memory(m, C.tp_group(C.GPUS[gpu], n), 2048) == llm.max_batch_by_memory(mc, dev, 2048, n_devices=n)
     mc, dev = llm.PRESETS["llama-3.1-8b"], specs.get("h100-sxm")
     m = C.Shape("llama", mc.n_layers, mc.d_model, mc.n_heads, mc.n_kv_heads, mc.head_dim, mc.d_ff, mc.vocab)
     assert C.best_batch(m, C.GPUS["H100"], 2048, 0.010) == llm.best_batch_under_itl(mc, dev, 2048, 0.010) == 68

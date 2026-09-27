@@ -9,12 +9,12 @@
 # ## The one-minute version
 # A teacher's output is a whole distribution, not just its top token. Hinton's **soft targets** p_T =
 # softmax(z / T) expose how the teacher ranks the wrong answers — the **dark knowledge** — and a temperature T > 1
-# turns the small logits up. The classic loss is α·T²·KL(p_T ‖ q_T) + (1 − α)·CE(y, q): its gradient on the
-# student's logits is T·(q_T − p_T), and the T² keeps it from fading as T grows; as T → ∞ it becomes matching
+# turns the small logits up. The classic loss is α·T²·KL(p_T ‖ q_T) + (1 − α)·CE(y, q): its soft term's gradient
+# on the student's logits is T·(q_T − p_T), and the T² keeps it from fading as T grows; as T → ∞ it becomes matching
 # centred logits. A hard label is the same loss with a one-hot target, and sampling it adds 1 − Σp² of noise per
 # example that the teacher's distribution does not — which is why a student learns more per example from soft
 # targets than a same-size model trained from scratch on the same tokens. And there are three routes to a small
-# model: train it small, prune a big one, or distil — pruning then distilling is the cheapest start. After this
+# model: train it small, prune a big one, or distil — pruning then distilling gets there in fewer steps. After this
 # notebook you can compute every one of those numbers by hand. Primer: `../../PRIMER.md` §1–§2 (and §6 for pruning).
 
 # %%
@@ -104,22 +104,37 @@ for N in (242, 605):
 #
 # ## Worked example 5 — three routes to a small model
 # Train small from scratch (hard labels), distil into a fresh small model, or **prune** the teacher to 16 hidden
-# units by activation magnitude (Minitron's width pruning) and distil into what is left.
+# units by activation magnitude (Minitron's width pruning) and distil into what is left. One run proves little
+# here, so compare over five draws of the 242 training contexts (draw 1 is worked example 4's), with four
+# initialisations of the fresh student per draw.
 
 # %%
-ctx, y, zt = results[242]
-pruned = teacher.prune_width(ctx, 16)
-print("pruned, before any training:", {k: round(v, 3) for k, v in E.vs_truth(pruned, lang).items()})
-train(pruned, ctx, lambda z, i: L.kd(z, zt[i], 1.0), 100)
-print("pruned + 100 KD steps:      ", {k: round(v, 3) for k, v in E.vs_truth(pruned, lang).items()})
-fresh = TinyLM(11, 16, 8, seed=1)
-train(fresh, ctx, lambda z, i: L.kd(z, zt[i], 1.0), 100)
-print("fresh + 100 KD steps:       ", {k: round(v, 3) for k, v in E.vs_truth(fresh, lang).items()})
+def prune_vs_fresh(steps, draws=range(1, 6), inits=range(1, 5)):
+    """Rule accuracy of the pruned teacher and of fresh 16-unit students after `steps` KD steps from the parent."""
+    pruned, fresh = [], []
+    for d in draws:
+        rng = np.random.default_rng(d)
+        c = C[rng.integers(0, 121, 242)]
+        lang.sample_next(c, rng)
+        zc = teacher.logits(c)
+        for m, out in [(teacher.prune_width(c, 16), pruned)] + [(TinyLM(11, 16, 8, seed=s), fresh) for s in inits]:
+            if steps:
+                train(m, c, lambda z, i: L.kd(z, zc[i], 1.0), steps)
+            out.append(E.vs_truth(m, lang)["rule_acc"])
+    return np.array(pruned), np.array(fresh)
+
+
+for steps in (0, 20, 100):
+    pr, fr = prune_vs_fresh(steps)
+    print(f"{steps:3d} KD steps: pruned {pr.mean():.3f} ({pr.min():.3f}–{pr.max():.3f})   "
+          f"fresh {fr.mean():.3f} ({fr.min():.3f}–{fr.max():.3f})")
 
 # %% [markdown]
-# Pruning alone breaks the model (35.5% rule accuracy); a short distillation from the parent repairs it, and it
-# gets further in 100 steps than a fresh student does — the parent's surviving units already encode most of
-# the table. That is Minitron's argument (prune by importance, then distil from the parent) in miniature.
+# Pruning alone breaks the model (0.317 on average), but not back to nothing: a fresh student scores 0.097. KD
+# from the parent repairs it fast. After 20 steps the worst pruned student (0.612) beats the best fresh one
+# (0.331). By 100 steps the two are within seed noise, and a single draw could show either one ahead. Pruning
+# buys a head start in training steps, not a better student: Minitron's argument (prune by importance, then
+# distil from the parent, with far fewer training tokens per model) in miniature.
 #
 # ## Exercise 1.1 — temperature
 # Write `softmax_T(z, T)`: the softmax of z / T along the last axis, numerically stable (subtract the max).
@@ -212,18 +227,18 @@ def keep_units(model, ctx, keep):
 idx = keep_units(teacher, C, 16)
 assert len(idx) == 16 and np.all(np.diff(idx) > 0)
 assert np.allclose(teacher.p["W2"][idx], teacher.prune_width(C, 16).p["W2"])
-print("✅ keep the most active units, slice W1, b1 and W2 — a narrower model that still knows most of what its parent did")
+print("✅ keep the most active units, slice W1, b1 and W2 — a narrower model that starts from its parent's busiest units")
 
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "We distil rather than train the small model from scratch because the teacher's
 # full distribution is worth far more per example than a sampled token: it ranks the wrong answers, and a
 # sampled label adds 1 − Σp² of noise per example that the distribution does not. The loss is
-# α·T²·KL(p_T ‖ q_T) + (1 − α)·CE; the gradient on the student's logits is T·(q_T − p_T), the T² keeps the soft
-# term's scale as T grows, and at very high T it is logit matching. T and α are knobs to sweep, not constants;
-# TRL's distillation trainers run the divergence at T = 1. Width is capacity: below the size that can hold what
-# the teacher does, no loss closes the gap. If we have the teacher's weights, we prune it to the student's shape
-# by activation importance and distil into that — it starts closer than a fresh network."
+# α·T²·KL(p_T ‖ q_T) + (1 − α)·CE; the soft term's gradient on the student's logits is T·(q_T − p_T), the T² keeps
+# its scale as T grows, and at very high T it is logit matching. T and α are knobs to sweep, not constants; TRL
+# applies no T² (its GKD trainer runs the divergence at T = 1). Width is capacity: below the size that can hold
+# what the teacher does, no loss closes the gap. If we have the teacher's weights, we prune it to the student's shape
+# by activation importance and distil into that — it gets there in fewer steps than a fresh network, not further."
 #
 # **Drill questions**
 # 1. *Why multiply the soft term by T²?* — Its gradient is (q_T − p_T)/T and the difference itself shrinks

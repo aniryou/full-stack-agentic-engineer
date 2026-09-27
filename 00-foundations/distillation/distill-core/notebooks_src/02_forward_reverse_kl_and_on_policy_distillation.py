@@ -73,10 +73,10 @@ print(f"a perfect teacher at T = 1 passes (0.8)^12 = {0.8 ** 12:.3f} of 12-token
 
 # %% [markdown]
 # ## Worked example 3 — exposure bias
-# Train three 16-unit students on the teacher's greedy continuations of those prompts: plain SFT on the tokens,
+# Train two 16-unit students on the teacher's greedy continuations of those prompts: plain SFT on the tokens,
 # and supervised KD (the teacher's full distribution at every position of *its* text: GKD with λ = 0). Then
-# compare the student's accuracy (is its top token the rule's?) on the teacher's prefixes and on its own,
-# sampled at T = 1.
+# compare each one's accuracy (is its top token the rule's?) on the teacher's prefixes and on its own, sampled at
+# T = 1: per position, and over its whole output so far (right at every position up to this one).
 
 # %%
 greedy = seqkd.teacher_data(teacher, prompts, 1, 12, np.random.default_rng(1), T=0.0)
@@ -94,21 +94,30 @@ def entropy(m):
 
 def report(name, m):
     eb = seqkd.exposure_bias(m, lang, greedy, prompts, np.random.default_rng(5))
-    own = eb["own_prefixes"]
+    own, allr = eb["own_prefixes"], eb["all_right_so_far"]
     print(f"{name:26s} teacher prefixes {eb['teacher_prefixes'].mean():.3f} | own prefixes: position 1 {own[0]:.3f}, "
-          f"4 {own[3]:.3f}, 12 {own[11]:.3f} | all contexts {E.vs_truth(m, lang)['rule_acc']:.3f} | entropy {entropy(m):.3f}")
+          f"4 {own[3]:.3f}, 12 {own[11]:.3f} | whole output right through 4 {allr[3]:.3f}, through 12 {allr[11]:.3f} | "
+          f"all contexts {E.vs_truth(m, lang)['rule_acc']:.3f} | entropy {entropy(m):.3f}")
+    return eb
 
 
 print(f"teacher entropy {entropy(teacher):.3f}")
+eb_t = report("teacher", teacher)
 report("SFT on greedy text", sft)
-report("supervised KD (λ = 0)", kd)
+eb_kd = report("supervised KD (λ = 0)", kd)
+print("share of sampled tokens that follow the rule, by position:")
+print("  teacher", " ".join(f"{x:.2f}" for x in eb_t["sampled_on_rule"]))
+print("  KD     ", " ".join(f"{x:.2f}" for x in eb_kd["sampled_on_rule"]))
 
 # %% [markdown]
 # The SFT student never slips — because it never varies: its entropy is near zero where the teacher's is 0.64.
 # It has copied the teacher's greedy output, not the teacher. The KD student matches the teacher's
-# distribution on the teacher's text, so at T = 1 it wanders off the rule's cycle about as often as the teacher
-# would — into contexts no training example covered — and its accuracy falls from 1.000 on the teacher's
-# prefixes to 0.788 by position 4. Per-token errors now compound with length. That is exposure bias.
+# distribution on the teacher's text, so at T = 1 it samples off the rule's cycle: at position 1 as often as the
+# teacher, then more often (0.64 of its samples follow the rule from position 4, against the teacher's 0.8). Each
+# slip lands it in contexts no training example covered, where its top token is wrong about a quarter of the
+# time: per position its accuracy falls from 1.000 on the teacher's prefixes to 0.788 by position 4 and then stays
+# there. What compounds with length is the whole output: the chance it has been right at every position falls to
+# 0.650 by position 4 and 0.190 by position 12, while the teacher's stays at 1.000. That is exposure bias.
 #
 # ## Worked example 4 — on-policy distillation removes it
 # Continue from the KD student with GKD at λ = 1: the student samples its own continuations; the teacher scores
@@ -124,10 +133,29 @@ for lam, beta in ((1.0, 0.0), (1.0, 0.5), (1.0, 1.0), (0.5, 0.5)):
 
 # %% [markdown]
 # Training on its own samples, the student learns the contexts it actually visits: at β = 0 (forward KL) its
-# accuracy stays at 0.994 at position 4 and 0.984 at position 12. The reverse end (β = 1) improves more slowly
-# here: where the student is confidently wrong, reverse KL's gradient q·(log q − log p − KL) nearly vanishes
-# (exercise 2.3 shows why), so in this toy — a student far from the teacher off the cycle — the forward end wins.
-# TRL's docs say the same thing in general form: on-policy data helps, and the best β depends on the task.
+# accuracy stays at 0.994 at position 4 and 0.984 at position 12. The reverse end (β = 1) improves more slowly.
+# Is that the starting point? Run both ends from three starts: the KD student, the SFT student, and a fresh one.
+
+# %%
+for name, start in (("KD student", kd), ("SFT student", sft), ("fresh student", TinyLM(11, 16, 8, seed=1))):
+    v, out = E.vs_truth(start, lang), []
+    for beta in (0.0, 1.0):
+        s = start.copy()
+        op.gkd_train(s, teacher, prompts, 12, 300, lam=1.0, beta=beta, data=greedy, seed=1)
+        w = E.vs_truth(s, lang)
+        out.append(f"β = {beta:.0f}: {w['rule_acc']:.3f} (where wrong: {w['wrong_top_q']:.2f} on its pick, "
+                   f"{w['wrong_right_q']:.3f} on the right token)")
+    print(f"{name:14s} start {v['rule_acc']:.3f} (where wrong, {v['wrong_right_q']:.3f} on the right token) → " + "; ".join(out))
+
+# %% [markdown]
+# Reverse KL is slow from every start. Its gradient on a logit is q_i·(log q_i − log p_i − KL): it lifts a token in
+# proportion to the student's *own* probability of it, so it sharpens what the student already proposes and
+# barely finds what it does not. Where the KD and SFT students are wrong, they give the right token 0.029 and
+# 0.007, so warming up from them does not help; a fresh student commits early under β = 1 and ends up in the same
+# state. Exercise 2.3 shows the extreme case. The published recipes do start on-policy distillation from an SFT
+# checkpoint (primer §4; verify): on a real model that checkpoint writes in the teacher's format and puts mass near
+# its modes, which this lookup-table toy cannot show. TRL's docs say it in general form: on-policy data helps, and
+# the best β depends on the task.
 #
 # ## Worked example 5 — on-policy distillation is policy gradient with a dense reward
 # Reverse KL over whole sequences, KL(π_S ‖ π_T) = E_{y~π_S}[log π_S(y) − log π_T(y)], has the REINFORCE gradient
@@ -151,14 +179,16 @@ print("the per-token rewards of one sample:", np.round(op.token_rewards(s5, t5, 
 
 # %% [markdown]
 # GRPO's verifier gives one number per sequence; here every token gets its own. That is the variance argument
-# for on-policy distillation, and the reason its compute per prompt is small: one teacher forward pass over the
-# student's tokens (prefill-shaped, 2·N_T per token), against G generated rollouts for GRPO.
+# for on-policy distillation: the dense signal needs far fewer steps. Each step is not cheaper, though. The teacher
+# scores every student token in one prefill-shaped forward pass, 2·N_T FLOPs per token, on top of the student's
+# 2·N_S to generate and 6·N_S to train; GRPO pays 8·N_S, plus 2·N_ref if it keeps a KL reference model.
 
 # %%
-g16 = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)
-d4 = op.flops_per_prompt(8e9, 32e9, 4096, samples=4)
-print(f"8B student, 4K-token completions: GRPO with G = 16 {g16['total']:.2e} FLOPs per prompt; "
-      f"on-policy distillation with 4 samples scored by a 32B teacher {d4['total']:.2e} ({g16['total'] / d4['total']:.1f}× less)")
+for label, kw in (("on-policy distillation, 32B teacher", {}), ("GRPO", dict(teacher_scores=False)),
+                  ("GRPO with an 8B KL reference", dict(teacher_scores=False, reference_params=8e9))):
+    f = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, **kw)
+    print(f"8B student, 16 samples × 4K tokens, {label:36s}: {f['per_token'] / 1e9:4.0f} GFLOP per token, "
+          f"{f['total']:.2e} per prompt")
 
 # %% [markdown]
 # ## Exercise 2.1 — the reverse-KL fit
@@ -242,8 +272,9 @@ for _ in range(5):
     assert np.allclose(reverse_kl_grad(pr, vr), L.gkd(vr[None], pr[None], 1.0)[1][0])
 assert abs(ratio - np.linalg.norm(L.gkd(v_wrong[None], p_t[None], 1.0)[1]) / np.linalg.norm(L.softmax(v_wrong) - p_t)) < 1e-9
 assert ratio < 0.02
-print(f"✅ confidently wrong, the reverse-KL gradient is {ratio:.4f} of the forward one: the softmax is saturated, "
-      "so start reverse-KL distillation from a student that is already close (SFT or KD first), or mix in forward KL")
+print(f"✅ confidently wrong, the reverse-KL gradient is {ratio:.4f} of the forward one: it lifts a token only in "
+      "proportion to the student's own probability of it. A warm start helps only if it already puts mass on the "
+      "teacher's modes (the KD and SFT students above do not, off the cycle); otherwise sweep β or mix in forward KL")
 
 # %% [markdown]
 # ## Exercise 2.4 — advantages for on-policy distillation
@@ -296,9 +327,11 @@ print(f"✅ predicted {yield_12:.3f}, measured {measured:.3f} over 4,000 samples
 # not the teacher. Its weakness is exposure bias: trained on the teacher's prefixes, the student decodes on its
 # own. On-policy distillation fixes that — the student samples, the teacher scores every token, and we minimise
 # a divergence there; as RL it is REINFORCE with a dense per-token reward, log π_T − log π_S, and it costs one
-# teacher forward pass per student token. We choose the divergence knowingly: forward KL makes a small student
-# cover everything, including the gaps between the teacher's modes; reverse KL makes it commit, and its gradient
-# stalls where the student is confidently wrong, so we start it from an SFT or KD student and sweep β."
+# teacher forward pass per student token, which with a big teacher makes each step dearer than GRPO's; it wins on
+# the number of steps. We choose the divergence knowingly: forward KL makes a small student cover everything,
+# including the gaps between the teacher's modes; reverse KL makes it commit, and it barely lifts a token the
+# student gives little probability, so it is slow where the student is confidently wrong. The recipes start it
+# from an SFT student; we sweep β, and in this toy forward KL won from every start."
 #
 # **Drill questions**
 # 1. *Why can on-policy distillation not be done through a text-only API?* — It needs the teacher's

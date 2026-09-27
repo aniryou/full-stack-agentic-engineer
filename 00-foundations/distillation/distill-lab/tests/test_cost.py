@@ -21,6 +21,16 @@ def test_teacher_and_student_on_an_h100():
     assert 1e3 * C.decode_step(C.shape("qwen2.5-32b-instruct"), C.GPUS["H100"], 1, 1024) == pytest.approx(19.175, abs=1e-3)
 
 
+def test_price_the_teacher_on_the_gpus_you_would_give_it():
+    """On two H100s (ideal TP) the 32B batches 146 at $0.890/M: 16× the 1.5B student, not the one-GPU 96×."""
+    h, t, s = C.GPUS["H100"], C.shape("qwen2.5-32b-instruct"), C.shape("qwen2.5-1.5b-instruct")
+    tp2 = C.serving(t, h, context=2048, itl_s=0.030, n_gpus=2)
+    st = C.serving(s, h, context=2048, itl_s=0.030)
+    assert (tp2["batch"], tp2["tok/s"], tp2["gpu"]) == (146, 6870, "2xH100") and tp2["$/M"] == pytest.approx(0.8896, abs=5e-5)
+    assert tp2["$/M"] == pytest.approx(C.cost_per_million_tokens(11.0, 6869.80, n_gpus=2), rel=1e-4)
+    assert round(tp2["$/M"] / st["$/M"]) == 16 and C.tp_group(h, 1) is h and C.tp_group(h, 2).memory_gb == 160
+
+
 def test_t4_has_no_bf16_and_small_models_decode_fast():
     m = C.shape("qwen2.5-0.5b-instruct")
     with pytest.raises(KeyError):

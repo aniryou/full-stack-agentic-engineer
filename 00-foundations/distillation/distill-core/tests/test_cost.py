@@ -33,6 +33,19 @@ def test_serving_teacher_and_student_under_one_itl_budget():
     assert miss["batch"] == 0 and miss["usd_per_m"] == math.inf    # batch 1 already takes 19.3 ms
 
 
+def test_a_capacity_starved_teacher_is_not_a_fair_baseline():
+    """One H100 leaves the 32B 6.47 GB for KV (batch 12, 96×); on two (ideal TP) it batches 146 and the ratio is 16×."""
+    h, t, s = G["h100"], S["qwen2.5-32b"], S["qwen2.5-1.5b"]
+    assert round(80 * 0.9 - K.weight_gb(t.params()), 2) == 6.47
+    two = K.tp_group(h, 2)
+    assert (two.memory_gb, two.tb_s, two.tflops["bf16"]) == (160, 6.7, 2 * 989.4) and K.tp_group(h, 1) is h
+    tp2, st = K.serving(t, h, 11, 2048, 0.030, n_gpus=2), K.serving(s, h, 11, 2048, 0.030)
+    assert tp2["batch"] == 146 and round(tp2["step_s"] * 1e3, 2) == 21.25 and round(tp2["usd_per_m"], 3) == 0.890
+    assert math.isclose(tp2["usd_per_m"], 11 * 2 / (tp2["tok_s"] * 3600) * 1e6)     # two GPUs' price
+    assert round(tp2["usd_per_m"] / st["usd_per_m"]) == 16
+    assert round(K.serving(t, h, 11, 2048, 0.030, n_gpus=4)["usd_per_m"] / st["usd_per_m"]) == 11
+
+
 def test_the_fixed_cost_is_mostly_teacher_tokens():
     h = G["h100"]
     f = K.fixed_cost(100_000, 1, 2000, 9.00, S["qwen2.5-1.5b"].params(), h, 11, mfu=0.4)

@@ -63,7 +63,13 @@ def test_advantages_follow_the_batch_mean_baseline_and_the_1_over_n_average():
     assert np.allclose(op.advantages(s_lp, t_lp, per_token=True), (t_lp - s_lp) / 3)
 
 
-def test_on_policy_compute_per_prompt():
-    g = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)     # GRPO, G = 16
-    d = op.flops_per_prompt(8e9, 32e9, 4096, samples=4)                            # 4 samples, teacher scores
-    assert g["total"] == 16 * 8 * 8e9 * 4096 and d["score"] == 4 * 2 * 32e9 * 4096 and g["total"] / d["total"] == 2.0
+def test_on_policy_compute_per_token_and_per_prompt():
+    """Per student token: 2·N_S generate + 6·N_S train + 2·N_T score = 128 GFLOP for 8B ← 32B; GRPO 64 (80 with a
+    reference model). At equal samples on-policy distillation costs more per prompt: its saving is in steps."""
+    d = op.flops_per_prompt(8e9, 32e9, 4096, samples=16)
+    g = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False)                   # GRPO, G = 16
+    gr = op.flops_per_prompt(8e9, 32e9, 4096, samples=16, teacher_scores=False, reference_params=8e9)
+    assert d["per_token"] == 128e9 and g["per_token"] == 64e9 and gr["per_token"] == 80e9
+    assert d["score"] == 16 * 2 * 32e9 * 4096 and d["total"] == 2 * g["total"] and gr["reference"] == 16 * 2 * 8e9 * 4096
+    same = op.flops_per_prompt(8e9, 8e9, 4096, samples=16)                                    # a same-size teacher
+    assert same["total"] == gr["total"]                  # costs exactly a GRPO step with a same-size KL reference

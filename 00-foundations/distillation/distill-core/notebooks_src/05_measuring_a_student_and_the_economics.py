@@ -12,8 +12,9 @@
 # accuracy** is what users feel, and it needs an interval (Wilson). Report both **per slice**: a student's gap
 # hides in rare inputs and long outputs; and a student can beat its teacher on the task while agreeing with it
 # less. Then the economics: a 1.5B student of a 32B teacher streams a twentieth of the weights and a ninth of
-# the KV per token, so under the same ITL budget it runs ~100× the batch at a ~96× lower cost per token on the
-# roofline. Against that saving stands a one-off bill dominated by the teacher's tokens; break-even is days at
+# the KV per token, so under the same ITL budget it runs 16× the batch per GPU of the teacher on two H100s, at
+# ~16× lower cost per token on the roofline (96× against a teacher squeezed onto one H100, which is not a fair
+# baseline). Against that saving stands a one-off bill dominated by the teacher's tokens; break-even is days at
 # a large daily volume and months at a small one; a **cascade** sits in between. Primer: `../../PRIMER.md` §8, §9
 # (and §1 for the roofline argument).
 
@@ -98,20 +99,30 @@ for name, m in (("weak teacher", weak), ("student, verified samples", filt), ("s
 # had been "agree with the teacher", it would have shipped the worse student.
 #
 # ## Worked example 4 — what the student saves in serving
-# Decode on an H100 at 2K context under a 30 ms ITL budget: the largest batch that meets it and fits in HBM, its
-# step time and throughput, and $/M output tokens at $11/GPU-hour on demand (verify). A roofline bound — the
-# costs are lower bounds and the ratios are what to carry.
+# Decode on H100s at 2K context under a 30 ms ITL budget: the largest batch that meets it and fits in HBM, its
+# step time and throughput, and $/M output tokens at $11/GPU-hour on demand (verify). The 32B is costed twice: on
+# one H100, where its 65.5 GB of weights leave 6.5 GB for KV, and split over two (`K.tp_group`: ideal tensor
+# parallelism, all-reduces not counted). A roofline bound — the costs are lower bounds; carry the like-for-like
+# ratio.
 
 # %%
 H100 = K.GPUS["h100"]
 serve = {}
-for name in ("qwen2.5-32b", "qwen2.5-1.5b", "qwen2.5-0.5b"):
+for name, key, n in (("qwen2.5-32b", "qwen2.5-32b", 1), ("qwen2.5-32b", "qwen2.5-32b-tp2", 2),
+                     ("qwen2.5-1.5b", "qwen2.5-1.5b", 1), ("qwen2.5-0.5b", "qwen2.5-0.5b", 1)):
     m = K.SHAPES[name]
-    s = serve[name] = K.serving(m, H100, 11, 2048, 0.030)
-    print(f"{name:13s} {m.params() / 1e9:5.2f} B params, {m.kv_bytes_per_token():7,.0f} B KV/token: batch {s['batch']:5d}, "
-          f"step {s['step_s'] * 1e3:5.2f} ms, {s['tok_s']:9,.0f} tok/s, ${s['usd_per_m']:.4f}/M")
-print(f"teacher/student cost per token: {serve['qwen2.5-32b']['usd_per_m'] / serve['qwen2.5-1.5b']['usd_per_m']:.0f}×")
-print(f"at a 10 ms ITL the 32B cannot serve at all: batch 1 takes {K.decode_step(K.SHAPES['qwen2.5-32b'], H100, 1, 2048) * 1e3:.1f} ms")
+    s = serve[key] = K.serving(m, H100, 11, 2048, 0.030, n_gpus=n)
+    print(f"{key:16s} on {n} GPU{'s' if n > 1 else ' '}: {m.params() / 1e9:5.2f} B params, {m.kv_bytes_per_token():7,.0f} B KV/token: "
+          f"batch {s['batch']:5d}, step {s['step_s'] * 1e3:5.2f} ms, {s['tok_s']:9,.0f} tok/s, ${s['usd_per_m']:.4f}/M")
+T_PER_M = serve["qwen2.5-32b-tp2"]["usd_per_m"]                                     # the teacher as you would run it
+for key in ("qwen2.5-32b", "qwen2.5-32b-tp2"):
+    print(f"{key} / 1.5B student, cost per token: {serve[key]['usd_per_m'] / serve['qwen2.5-1.5b']['usd_per_m']:.0f}×")
+print(f"at a 10 ms ITL the 32B cannot serve on one H100: batch 1 takes {K.decode_step(K.SHAPES['qwen2.5-32b'], H100, 1, 2048) * 1e3:.1f} ms")
+
+# %% [markdown]
+# On one GPU the teacher runs 12 sequences and the student looks 96× cheaper; that compares the student with a
+# deployment nobody would choose. On two GPUs the teacher runs 146 and the ratio is 16×: the number to carry.
+# Everything below prices the teacher on two H100s.
 
 # %% [markdown]
 # ## Worked example 5 — the fixed cost, and break-even
@@ -120,19 +131,21 @@ print(f"at a 10 ms ITL the 32B cannot serve at all: batch 1 takes {K.decode_step
 # its roofline cost; then SFT the 1.5B student for one epoch at 6·N·D FLOPs on an H100 at 40% MFU.
 
 # %%
-for label, price in (("API teacher", 9.00), ("self-hosted 32B", serve["qwen2.5-32b"]["usd_per_m"])):
+for label, price in (("API teacher", 9.00), ("self-hosted 32B", T_PER_M)):
     f = K.fixed_cost(100_000, 1, 2000, price, K.SHAPES["qwen2.5-1.5b"].params(), H100, 11, mfu=0.4)
     print(f"{label:16s} teacher tokens ${f['generation_usd']:8,.2f} + training {f['gpu_hours']:.3f} GPU-h = ${f['train_usd']:.2f} "
           f"→ ${f['total_usd']:,.2f}")
-fixed = K.fixed_cost(100_000, 1, 2000, serve["qwen2.5-32b"]["usd_per_m"], K.SHAPES["qwen2.5-1.5b"].params(), H100, 11)["total_usd"]
-for per_day in (50e6, 5e6):
-    b = K.break_even(fixed, serve["qwen2.5-32b"]["usd_per_m"], serve["qwen2.5-1.5b"]["usd_per_m"], per_day)
-    print(f"{per_day / 1e6:4.0f}M output tokens/day: saves ${b['saving_per_day']:,.2f}/day, pays back in {b['days']:.1f} days")
+    for per_day in (50e6, 5e6):
+        b = K.break_even(f["total_usd"], T_PER_M, serve["qwen2.5-1.5b"]["usd_per_m"], per_day)
+        print(f"    {per_day / 1e6:4.0f}M output tokens/day: saves ${b['saving_per_day']:,.2f}/day, pays back in {b['days']:.1f} days")
+fixed = K.fixed_cost(100_000, 1, 2000, T_PER_M, K.SHAPES["qwen2.5-1.5b"].params(), H100, 11)["total_usd"]
 
 # %% [markdown]
-# The teacher's tokens are 99% of the bill; the student's training is an hour of one GPU. That is why the data
-# budget (§3) — prompts × samples × tokens, and how many the verifier discards — is the number to argue about.
-# And the break-even omits the engineering, the evals and the ongoing cost of a second model to maintain.
+# The teacher's tokens are 93% of the bill self-hosted and 99% through the API; the student's training is an hour
+# of one GPU. That is why the data budget (§3) — prompts × samples × tokens, and how many the verifier discards —
+# is the number to argue about. With self-hosted data, break-even comes at roughly the volume the teacher wrote
+# for the student (2 × 10⁸ tokens here), whatever the teacher costs; API-bought data takes ten times longer. And
+# the break-even omits the engineering, the evals and the ongoing cost of a second model to maintain.
 #
 # ## Worked example 6 — the cascade
 # Route by difficulty instead of replacing the teacher. Per request (500 output tokens at the costs above) and
@@ -140,7 +153,7 @@ for per_day in (50e6, 5e6):
 # teacher 0.85, the split rl-and-thinking-models §7 uses — compare cost per correct answer.
 
 # %%
-c_t, c_s = 500 * serve["qwen2.5-32b"]["usd_per_m"] / 1e6, 500 * serve["qwen2.5-1.5b"]["usd_per_m"] / 1e6
+c_t, c_s = 500 * T_PER_M / 1e6, 500 * serve["qwen2.5-1.5b"]["usd_per_m"] / 1e6
 acc_s, acc_t = (0.95, 0.30), (0.97, 0.85)
 options = {"teacher only": K.cascade(c_s, c_t, acc_s, acc_t, 0.3, catch=1.0, false_alarm=1.0, student_first=False),
            "student only": K.cascade(c_s, c_t, acc_s, acc_t, 0.3, catch=0.0, false_alarm=0.0),
@@ -207,20 +220,21 @@ usd_per_m = 11 / (tok_s * 3600) * 1e6
 ref = K.serving(m, H100, 11, 2048, 0.030)
 assert batch == ref["batch"] and abs(tok_s - ref["tok_s"]) < 1e-6 and abs(usd_per_m - ref["usd_per_m"]) < 1e-12
 print(f"✅ batch {batch} (memory-bound, not ITL-bound), {tok_s:,.0f} tok/s, ${usd_per_m:.4f}/M — "
-      f"{serve['qwen2.5-32b']['usd_per_m'] / usd_per_m:.0f}× cheaper than the 32B teacher on this bound")
+      f"{T_PER_M / usd_per_m:.0f}× cheaper than the 32B teacher on two H100s on this bound")
 
 # %% [markdown]
 # ## Exercise 5.4 — break-even
 # Distilling a 0.5B student from the 32B teacher costs the same one-off `fixed` as above. At 20M output tokens
-# a day, after how many `days` does it pay for itself against serving the 32B? (Use the two $/M figures.)
+# a day, after how many `days` does it pay for itself against serving the 32B on two H100s? (Use `T_PER_M` and
+# your `usd_per_m`.)
 
 # %% exercise
 ### BEGIN SOLUTION
-days = fixed / ((serve["qwen2.5-32b"]["usd_per_m"] - usd_per_m) * 20e6 / 1e6)
+days = fixed / ((T_PER_M - usd_per_m) * 20e6 / 1e6)
 ### END SOLUTION
 
 # %% check
-assert abs(days - K.break_even(fixed, serve["qwen2.5-32b"]["usd_per_m"], usd_per_m, 20e6)["days"]) < 1e-9
+assert abs(days - K.break_even(fixed, T_PER_M, usd_per_m, 20e6)["days"]) < 1e-9
 print(f"✅ {days:.1f} days at 20M tokens/day — before the cost of evals, of a second model to keep current, and of any quality gap")
 
 # %% [markdown]
@@ -250,16 +264,17 @@ print(f"✅ gate {best_gate}: accuracy {res[best_gate]['accuracy']:.3f} at ${res
 # with Wilson intervals, per slice, is the release gate, because the gap hides in rare inputs and long outputs
 # and a quick eval of common cases will say 100%. We do not gate on agreement alone: a verifier-filtered student
 # can beat its teacher while agreeing less. The case for the student is the roofline: at a 2K context and a
-# 30 ms ITL a 1.5B serves ~100× the batch of a 32B on one H100, ~96× cheaper per token on the bound. The one-off
-# cost is mostly teacher tokens; break-even is days at 50M tokens a day and weeks at 5M. If the student is only
+# 30 ms ITL a 1.5B serves 16× the batch per GPU of a 32B on two H100s, ~16× cheaper per token on the bound (the
+# 96× against a 32B squeezed onto one H100 is not a fair baseline). The one-off cost is mostly teacher tokens;
+# with self-hosted data, break-even is days at 50M tokens a day and weeks at 5M. If the student is only
 # good enough on easy requests, we cascade: student first, a gate escalates the hard ones, and we tune the
 # gate's recall on cost per correct answer."
 #
 # **Drill questions**
 # 1. *The student agrees with the teacher on 99% of tokens. Ship it?* — Not on that alone: agreement is averaged
 #    over common positions. Check task accuracy with intervals on the rare and long slices; that is where it fails.
-# 2. *Where does a distillation budget go?* — The teacher's tokens (here $1,070 of $1,085 self-hosted, $1,800 via an
-#    API); training the student was 1.3 GPU-hours. Cut samples the verifier will reject before generating more.
+# 2. *Where does a distillation budget go?* — The teacher's tokens (here $178 of $192 self-hosted, $1,800 of $1,814
+#    via an API); training the student was 1.3 GPU-hours. Cut samples the verifier will reject before generating more.
 # 3. *Distil, or route easy traffic to a cheaper off-the-shelf model?* — If an off-the-shelf model meets the easy
 #    slice, routing costs no training; distil when no such model exists for your task or the volume makes the
 #    per-token saving dominate (primer §9's decision table).

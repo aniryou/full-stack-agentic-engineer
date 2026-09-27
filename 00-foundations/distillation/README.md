@@ -9,7 +9,7 @@ a student honestly, and decide with numbers whether distilling pays for itself.
 
 1. Read [PRIMER.md](PRIMER.md): "The one-minute version", then §1 Why distil and §2 Soft targets, temperature and
    the choice of divergence (40 min).
-2. `cd distill-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 84 tests in about
+2. `cd distill-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 86 tests in about
    30 s; then open [`01_soft_targets_and_temperature`](distill-core/notebooks/01_soft_targets_and_temperature.ipynb)
    and watch soft targets beat hard labels on the same examples.
 3. With torch on a laptop (or a free Colab CPU), distil a tiny transformer four ways:
@@ -23,7 +23,7 @@ rented for an hour; T3 = the Google Cloud deployment, optional.*
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | explain distillation in ten sections — §1 why distil · §2 soft targets, temperature and the choice of divergence · §3 sequence-level distillation · §4 on-policy distillation · §5 distilling reasoning · §6 feature distillation, pruning and vocabulary mismatch · §7 a distilled draft for speculative decoding · §8 measuring a student · §9 the economics of a student · §10 where to run it — each formula with a worked number and the core function that computes it; then "In a design review", a glossary, sources and a dated Verify list | ~2.5 h, read alongside the core | — |
-| [`distill-core/`](distill-core/) | build it yourself in `distillcore` (standard library + numpy, ~1,000 lines): a toy language whose truth is known, tiny teachers and students with manual gradients, every KD loss and its gradient, forward/reverse KL and TRL's JSD, the SeqKD pipeline and exposure bias, GKD and its policy-gradient form checked by enumeration, trace distillation against RL, distilled drafts, agreement and Wilson intervals, and roofline serving costs and break-even; five fill-in notebooks | ~9 h | T0 |
+| [`distill-core/`](distill-core/) | build it yourself in `distillcore` (standard library + numpy, ~1,050 lines): a toy language whose truth is known, tiny teachers and students with manual gradients, every KD loss and its gradient, forward/reverse KL and TRL's JSD, the SeqKD pipeline and exposure bias, GKD and its policy-gradient form checked by enumeration, trace distillation against RL, distilled drafts, agreement and Wilson intervals, and roofline serving costs and break-even; five fill-in notebooks | ~9 h | T0 |
 | [`distill-lab/`](distill-lab/) | distil a tiny transformer four ways in torch; generate teacher data from a served model and train a 0.5–0.6B student with TRL; distil reasoning traces; measure a distilled draft under vLLM's speculative decoding; compute whether a student pays for itself from measured throughput (`distillab`; a fake teacher server and bundled outputs make every notebook run at T0) | ~10 h | T0 → T1 (T3 via the 04 lab's deploys) |
 
 ### Work it in this order
@@ -47,11 +47,12 @@ design-review section covers the whole topic.
 ```bash
 cd distill-core
 python3 -m pip install -r requirements.txt     # numpy + what the notebooks and tests need
-python3 -m pytest -q                           # 84 tests (one skips by design), ~30 s
+python3 -m pytest -q                           # 86 tests (one skips by design), ~30 s
 python3 -m jupyterlab notebooks                # the exercises; finished versions are in solutions/
 
 cd ../distill-lab
-python3 -m pip install -e ".[dev,torch]"       # the CPU build of torch is enough at T0; ".[dev]" without it
+python3 -m pip install -e ".[dev]"            # numpy, aiohttp; dev: pytest, jupyter, matplotlib
+python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu   # optional: the CPU build is enough at T0
 python3 -m pytest -q                           # offline; torch paths skip when torch is absent
 python3 -m jupyterlab notebooks
 ```

@@ -126,17 +126,29 @@ def cost_per_million_tokens(price_per_gpu_hour: float, tokens_per_s: float, util
     return price_per_gpu_hour * n_gpus / (tokens_per_s * 3600 * utilisation) * 1e6
 
 
+def tp_group(gpu: GPU, n: int) -> GPU:
+    """``n`` GPUs as one ideal tensor-parallel device: n× memory, bandwidth and FLOPs, all-reduces not counted (01
+    PRIMER §5.3 prices them). The per-GPU price stays per GPU; :func:`serving` multiplies by ``n``."""
+    if n == 1:
+        return gpu
+    return GPU(f"{n}x{gpu.name}", gpu.memory_gb * n, gpu.bw_tbs * n, {k: v * n for k, v in gpu.tflops.items()},
+               gpu.price_hr, gpu.spot_hr)
+
+
 def serving(m: Shape, gpu: GPU, *, context: int = 2048, itl_s: float = 0.030, utilisation: float = 1.0,
-            price: float | None = None, precision: str = "bf16") -> dict:
-    """The serving row of one model: the batch under an ITL (capped by memory), tokens/s and $/M (PREDICTED)."""
-    b = best_batch(m, gpu, context, itl_s, precision=precision)
+            price: float | None = None, precision: str = "bf16", n_gpus: int = 1) -> dict:
+    """The serving row of one model on ``n_gpus`` (ideal TP): the batch under an ITL (capped by memory), tokens/s
+    and $/M (PREDICTED). Price a big teacher on the GPUs you would really give it: a 32B on one 80 GB card has
+    almost no room for KV and cannot batch, which flatters any student compared with it."""
+    grp = tp_group(gpu, n_gpus)
+    b = best_batch(m, grp, context, itl_s, precision=precision)
     if b == 0:
-        return {"model": m.name, "gpu": gpu.name, "batch": 0, "step ms": round(1e3 * decode_step(m, gpu, 1, context, precision=precision), 2),
+        return {"model": m.name, "gpu": grp.name, "batch": 0, "step ms": round(1e3 * decode_step(m, grp, 1, context, precision=precision), 2),
                 "tok/s": 0.0, "$/M": math.inf, "note": "misses the ITL at batch 1"}
-    step = decode_step(m, gpu, b, context, precision=precision)
+    step = decode_step(m, grp, b, context, precision=precision)
     tps = b / step
-    return {"model": m.name, "gpu": gpu.name, "batch": b, "step ms": round(step * 1e3, 2), "tok/s": round(tps),
-            "$/M": cost_per_million_tokens(price if price is not None else gpu.price_hr, tps, utilisation)}
+    return {"model": m.name, "gpu": grp.name, "batch": b, "step ms": round(step * 1e3, 2), "tok/s": round(tps),
+            "$/M": cost_per_million_tokens(price if price is not None else gpu.price_hr, tps, utilisation, n_gpus)}
 
 
 # --- the fixed cost of distilling ------------------------------------------------------------------------
