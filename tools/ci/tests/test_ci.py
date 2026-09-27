@@ -26,11 +26,22 @@ def test_labs_json_is_complete_and_consistent():
         assert lab["install"] and lab["test"], lab["id"]
         assert lab["python"] in ("3.11", "3.12"), lab["id"]
         assert "torch" not in lab["install"].replace("grep -viE '^[[:space:]]*torch'", ""), lab["id"]
-    # the two scaling labs both ship a package named `scalelab`: separate entries, separate environments;
+    # every lab runs in its own environment; one package named `scalelab` (the Mistral provider is inside it);
     # lra-gcp runs three times: the default install, with the ADK extra, and on Python 3.12 with the Mistral extra
     ids = {lab["id"] for lab in labs}
-    assert {"agentic-scaling-lab", "agentic-scaling-lab-mistral", "lra-core", "lra-gcp",
-            "lra-gcp-adk", "lra-gcp-mistral-py312"} <= ids
+    assert {"agentic-scaling-lab", "lra-core", "lra-gcp", "lra-gcp-adk", "lra-gcp-mistral-py312"} <= ids
+
+
+def test_one_pyproject_declares_each_package_name():
+    """Two labs installing the same package name cannot share an environment (the old scalelab clash)."""
+    files = subprocess.run(["git", "ls-files", "*pyproject.toml"], cwd=REPO, capture_output=True, text=True, check=True).stdout.split()
+    names: dict[str, list[str]] = {}
+    for f in files:
+        m = re.search(r'(?m)^name\s*=\s*"([^"]+)"', (REPO / f).read_text())
+        if m:
+            names.setdefault(m.group(1), []).append(f)
+    assert {n: fs for n, fs in names.items() if len(fs) > 1} == {}
+    assert names.get("scalelab") == ["06-gateway/scaling-admission-cost/agentic-scaling-lab/pyproject.toml"]
 
 
 def test_check_passes_on_the_committed_tree():
@@ -60,7 +71,9 @@ def test_builders_are_all_found():
     found = ci.builders()
     assert "07-application-agent-framework/retrieval-rag/embeddings-lab/build.py" in found
     assert "07-application-agent-framework/retrieval-rag/rag-from-scratch/tools_build_notebooks.py" in found
-    assert len(found) >= 25
+    # 26 before the durable-agent labs were consolidated and the Mistral copy of agent-core folded into agent-core
+    # (each took one builder with it)
+    assert len(found) >= 24
 
 
 def test_matrix_output_is_compact_json():

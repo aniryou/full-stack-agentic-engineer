@@ -278,9 +278,10 @@ Paths are relative to `$SP/ref/` unless they start with a repo dir (`00-…`, `0
   weights; "Configurable reasoning effort: … (low, medium, high)"; must use the Harmony format (`gpt-oss/README.md` l.18–45). The chat template
   writes `"Reasoning: " + reasoning_effort` into the system message, default **`"medium"`** (convert_gpt_oss_weights_to_hf.py l.638–642);
   the reference chat CLI default is `low` (`-r/--reasoning-effort`, README l.357). Channels `analysis` (CoT), `commentary`, `final`.
-- Repo already routes by effort: `06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/02-reference-architecture.md` l.128
-  ("route (task × level × mode → model, `reasoning_effort`, output cap, backend)"); `…/docs/01-scaling-primer.md` l.319 ("reasoning tokens
-  are billed as output at four to five times the input price … decode steps the whole batch pays for").
+- Repo already routes by effort: `06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md` §5.3 l.305
+  (a model and output cap per degrade level, on the API and on the fleet) and §5.5 l.321 ("reasoning is set per task with `reasoning_effort`
+  … reasoning tokens are billed as output at four to five times the input price, and on a fleet they are decode steps the whole batch pays
+  for"); the base lab's `…/docs/02-reference-architecture.md` l.128 routes "task × degrade level → model, thinking level, output cap".
 
 ## 10. SGLang comparison (`sglang/docs/docs/advanced_features/separate_reasoning.mdx`, `server_arguments.mdx`)
 - `--reasoning-parser` (default None) values: `auto`, `apertus2509`, `deepseek-r1`, `deepseek-v3`, `deepseek-v4`, `dots`, `glm45`, `ling3`,

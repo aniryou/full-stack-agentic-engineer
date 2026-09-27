@@ -46,19 +46,24 @@ def cdf(ax, values, label):
 
 
 def latency_cdfs(results, title="Turn latency"):
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(7.5, 4))
     for name, r in results.items():
         done = r.samples[r.samples.outcome == "completed"]
         cdf(ax, done.latency_s, name)
-    ax.set_xlabel("seconds"), ax.set_ylabel("share of completed turns"), ax.set_title(title), ax.grid(alpha=.3), ax.legend()
+    ax.set_xlabel("seconds"), ax.set_ylabel("share of completed turns"), ax.set_title(title), ax.grid(alpha=.3), ax.legend(fontsize=8)
     plt.tight_layout()
 
 
 def timeline(result, title):
+    """In-flight turns, the backend's load signal (pool utilisation on the API; batch per replica on a fleet), degrade level."""
     tl = result.timeline
     fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
     axes[0].plot(tl.t, tl.inflight), axes[0].set_ylabel("in flight")
-    axes[1].plot(tl.t, tl.pool_utilisation), axes[1].set_ylabel("pool util."), axes[1].axhline(1, ls="--", c="grey")
+    if result.setup.server is not None:
+        axes[1].plot(tl.t, tl.batch), axes[1].set_ylabel("batch / replica")
+        axes[1].axhline(result.setup.server.target_batch, ls="--", c="grey")
+    else:
+        axes[1].plot(tl.t, tl.pool_utilisation), axes[1].set_ylabel("pool util."), axes[1].axhline(1, ls="--", c="grey")
     axes[2].step(tl.t, tl.level, where="post"), axes[2].set_ylabel("degrade level"), axes[2].set_xlabel("virtual seconds")
     axes[0].set_title(title)
     for ax in axes:

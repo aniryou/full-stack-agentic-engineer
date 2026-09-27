@@ -98,7 +98,7 @@ def step_cost(gpu: GPU, llm: LLM, chunks, flop_eff=0.6, bw_eff=0.8, overhead_s=0
     (A one-line version of layer 01's roofline.llm model, cheap enough to run every simulated step.)
 
     The same H100 is modelled differently one layer up: layer 06's
-    06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/scalelab/serving.py
+    06-gateway/scaling-admission-cost/agentic-scaling-lab/scalelab/serving.py
     (`Replica.step_seconds`) prices a decode step as bytes / (BW x 0.6) + 2 ms, with no compute
     term, where this uses max(bytes / (BW x 0.8), flops / (peak x 0.6)) + 2 ms. For a decode step
     that reads 15 GB (Llama-3.1-8B's streamed weights) that is ~9.5 ms there against 7.6 ms here,

@@ -417,14 +417,13 @@ nav:
               - "layers/06-gateway/identity-security/index.md"
               - "Agentic identity core":
                   - "layers/06-gateway/identity-security/agentic-identity-core/index.md"
+                  - "Core Mistral practice": "layers/06-gateway/identity-security/agentic-identity-core/core_mistral_practice.ipynb"
+                  - "Core Mistral walkthrough": "layers/06-gateway/identity-security/agentic-identity-core/core_mistral_walkthrough.ipynb"
                   - "Identity & security for an agent loop — PRACTICE": "layers/06-gateway/identity-security/agentic-identity-core/core_practice.ipynb"
                   - "Identity & security for an agent loop — the core concept": "layers/06-gateway/identity-security/agentic-identity-core/core_walkthrough.ipynb"
-                  - "Identity & security for an agent loop — the core concept (solution)": "layers/06-gateway/identity-security/agentic-identity-core/core_solution.ipynb"
-              - "Agentic identity core Mistral":
-                  - "layers/06-gateway/identity-security/agentic-identity-core-mistral/index.md"
-                  - "Core Mistral practice": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_practice.ipynb"
-                  - "Core Mistral walkthrough": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_walkthrough.ipynb"
-                  - "Identity & security for an agent loop — on Mistral (solution)": "layers/06-gateway/identity-security/agentic-identity-core-mistral/core_mistral_solution.ipynb"
+                  - "Solutions":
+                      - "Identity & security for an agent loop — on Mistral (solution)": "layers/06-gateway/identity-security/agentic-identity-core/core_mistral_solution.ipynb"
+                      - "Identity & security for an agent loop — the core concept (solution)": "layers/06-gateway/identity-security/agentic-identity-core/core_solution.ipynb"
               - "Agentic identity GCP lab":
                   - "layers/06-gateway/identity-security/agentic-identity-gcp-lab/index.md"
                   - "Docs":
@@ -473,63 +472,37 @@ nav:
                       - "Capacity plan — 100,000 conversations/day": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/03-capacity-plan.md"
                       - "From the core concepts to Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/04-gcp-mapping.md"
                       - "Scaling Agentic Solutions on Google Cloud": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/scaling-agentic-solutions-on-google-cloud.md"
+                      - "Scaling Agentic Solutions on Mistral — a primer": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md"
                   - "Notebooks":
                       - "01 · The arithmetic of agent scale": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/01_scaling_math.ipynb"
                       - "02 · The turn: budgets, checkpoints and idempotency": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/02_turn_loop_and_durability.ipynb"
                       - "03 · Rate limits, retries, breakers and admission control": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/03_rate_limits_and_admission.ipynb"
                       - "04 · From a load test to Cloud Run settings": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/04_load_to_settings.ipynb"
+                      - "05 · Hosted API or your own GPUs": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/05_hosted_or_own_gpus.ipynb"
                       - "Solutions":
                           - "01 · The arithmetic of agent scale (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/01_scaling_math_solutions.ipynb"
                           - "02 · The turn: budgets, checkpoints and idempotency (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/02_turn_loop_and_durability_solutions.ipynb"
                           - "03 · Rate limits, retries, breakers and admission control (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/03_rate_limits_and_admission_solutions.ipynb"
                           - "04 · From a load test to Cloud Run settings (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/04_load_to_settings_solutions.ipynb"
-              - "Agentic scaling lab Mistral":
-                  - "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/index.md"
-                  - "Docs":
-                      - "Scaling Agentic Solutions on Mistral — a primer": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md"
-                      - "Reference architecture (Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/02-reference-architecture.md"
-                      - "Capacity plan — 100,000 conversations/day (Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/03-capacity-plan.md"
-                      - "From the core concepts to the platform": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/docs/04-platform-mapping.md"
-                  - "Notebooks":
-                      - "01 · The arithmetic of agent scale (Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/01_scaling_math.ipynb"
-                      - "02 · The turn: budgets, checkpoints and idempotency (Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/02_turn_loop_and_durability.ipynb"
-                      - "03 · Rate limits, retries, breakers and admission": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/03_rate_limits_and_admission.ipynb"
-                      - "04 · From a load test to Kubernetes and vLLM settings": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/04_load_to_settings.ipynb"
-                      - "Solutions":
-                          - "01 · The arithmetic of agent scale (solution, Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/01_scaling_math_solutions.ipynb"
-                          - "02 · The turn: budgets, checkpoints and idempotency (solution, Mistral)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/02_turn_loop_and_durability_solutions.ipynb"
-                          - "03 · Rate limits, retries, breakers and admission (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/03_rate_limits_and_admission_solutions.ipynb"
-                          - "04 · From a load test to Kubernetes and vLLM settings (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral/notebooks/solutions/04_load_to_settings_solutions.ipynb"
+                          - "05 · Hosted API or your own GPUs (solution)": "layers/06-gateway/scaling-admission-cost/agentic-scaling-lab/notebooks/solutions/05_hosted_or_own_gpus_solutions.ipynb"
       - "07 · Agents and applications":
           - "layers/07-application-agent-framework/index.md"
           - "Agent fundamentals":
               - "Agent core":
                   - "layers/07-application-agent-framework/agent-fundamentals/agent-core/index.md"
+                  - "Running agent-core on Mistral": "layers/07-application-agent-framework/agent-fundamentals/agent-core/docs/MISTRAL.md"
                   - "Notebooks":
                       - "01 · The agent loop, from scratch": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/01_the_agent_loop.ipynb"
                       - "02 · Tools are contracts": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/02_tools.ipynb"
                       - "03 · State and control": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/03_state_and_control.ipynb"
                       - "04 · A mini support agent (capstone)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/04_mini_support_agent.ipynb"
+                      - "05 · Going live on Mistral": "layers/07-application-agent-framework/agent-fundamentals/agent-core/notebooks/05_going_live_on_mistral.ipynb"
                   - "Solutions":
                       - "01 · The agent loop, from scratch (solution)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/01_the_agent_loop.ipynb"
                       - "02 · Tools are contracts (solution)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/02_tools.ipynb"
                       - "03 · State and control (solution)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/03_state_and_control.ipynb"
                       - "04 · A mini support agent (capstone) (solution)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/04_mini_support_agent.ipynb"
-              - "Mistral agent core":
-                  - "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/index.md"
-                  - "Running on Mistral": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/docs/MISTRAL.md"
-                  - "Notebooks":
-                      - "01 · The agent loop, from scratch (Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/01_the_agent_loop.ipynb"
-                      - "02 · Tools are contracts (Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/02_tools.ipynb"
-                      - "03 · State and control (Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/03_state_and_control.ipynb"
-                      - "04 · A mini support agent (capstone) (Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/04_mini_support_agent.ipynb"
-                      - "05 · Going live on Mistral": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/notebooks/05_going_live_on_mistral.ipynb"
-                  - "Solutions":
-                      - "01 · The agent loop, from scratch (solution, Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/01_the_agent_loop.ipynb"
-                      - "02 · Tools are contracts (solution, Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/02_tools.ipynb"
-                      - "03 · State and control (solution, Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/03_state_and_control.ipynb"
-                      - "04 · A mini support agent (capstone) (solution, Mistral)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/04_mini_support_agent.ipynb"
-                      - "05 · Going live on Mistral (solution)": "layers/07-application-agent-framework/agent-fundamentals/mistral-agent-core/solutions/05_going_live_on_mistral.ipynb"
+                      - "05 · Going live on Mistral (solution)": "layers/07-application-agent-framework/agent-fundamentals/agent-core/solutions/05_going_live_on_mistral.ipynb"
               - "Agent Platform Lab (Google Cloud)":
                   - "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/index.md"
                   - "Docs":

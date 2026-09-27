@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scalelab"
-version = "0.2.0"
-description = "The core concepts of scaling agentic solutions, in a few hundred lines of Python, with practice notebooks."
+version = "0.3.0"
+description = "The core concepts of scaling agentic solutions — a hosted API or your own vLLM fleet — in about a thousand lines of Python, with practice notebooks."
 requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "pandas>=2.2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "matplotlib>=3.8", "nbformat>=5.10", "nbconvert>=7.16", "ipykernel>=6.29"]
-gcp = ["google-genai>=2.20,<3"]
+gcp = ["google-genai>=2.20,<3"]                       # the real Gemini call in scalelab/model.py
+mistral = ["mistralai>=2.10,<3", "httpx>=0.27"]        # the real Mistral call (scalelab/mistral.py) and a vLLM endpoint
 
 [tool.setuptools]
 packages = ["scalelab"]

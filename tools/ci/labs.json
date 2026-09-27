@@ -174,14 +174,7 @@
    "id": "agentic-identity-core",
    "dir": "06-gateway/identity-security/agentic-identity-core",
    "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest -q"
-  },
-  {
-   "id": "agentic-identity-core-mistral",
-   "dir": "06-gateway/identity-security/agentic-identity-core-mistral",
-   "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
+   "install": "python -m pip install -r requirements-mistral.txt",
    "test": "python -m pytest -q"
   },
   {
@@ -200,17 +193,10 @@
    "test": "python -m pytest -q"
   },
   {
-   "id": "agentic-scaling-lab-mistral",
-   "dir": "06-gateway/scaling-admission-cost/agentic-scaling-lab-mistral",
-   "python": "3.11",
-   "install": "python -m pip install -e \".[dev]\"",
-   "test": "python -m pytest -q"
-  },
-  {
    "id": "agent-core",
    "dir": "07-application-agent-framework/agent-fundamentals/agent-core",
    "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
+   "install": "python -m pip install -r requirements.txt && python -m pip install -e \".[mistral]\"",
    "test": "python -m pytest -q",
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
@@ -220,14 +206,6 @@
    "python": "3.11",
    "install": "python -m pip install -e \".[dev]\"",
    "test": "python -m pytest -q -m \"not slow\"",
-   "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
-  },
-  {
-   "id": "mistral-agent-core",
-   "dir": "07-application-agent-framework/agent-fundamentals/mistral-agent-core",
-   "python": "3.11",
-   "install": "python -m pip install -r requirements.txt",
-   "test": "python -m pytest -q",
    "solutions": "python tools/run_notebooks.py solutions && python tools/run_notebooks.py notebooks --expect-fail"
   },
   {
