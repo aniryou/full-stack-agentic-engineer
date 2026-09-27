@@ -7,7 +7,7 @@ it is, this map and the notebooks' own introductions are the reading.)
 
 Primers referenced below, relative to this file:
 
-- **Durable** — [long-running agentic workflows](../../../long-running-durable/00_primer.md)
+- **Durable** — [long-running agentic workflows](../../../long-running-durable/PRIMER.md)
 - **Identity** — [identity and security for agentic systems](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md)
 - **Scaling** — [scaling agentic solutions](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
 - **Sandbox** — [sandboxed execution](../../../sandboxed-execution/PRIMER.md)

@@ -44,9 +44,8 @@ a "worked answers" line instead, a "(solution)" or "(worked)" suffix in the navi
 A name with `_worked` counts only beside its exercise twin in the same folder (`01_x_worked` next to
 `01_x_practice` or `01_x`, or the same number next to a `*_practice` notebook), and only when that folder keeps no
 `solutions/` or `worked/` folder of its own. Otherwise it is a worked lesson, treated like any other notebook and
-listed before the exercises: kv-cache's `01_kv_cache_worked` comes before `02_kv_cache_practice` (no twin), and
-long-running-agents-gcp's `01`–`04_*_worked` are the lessons its README reads first, with the practice answers in
-`notebooks/solutions/`.
+listed before the exercises: kv-cache's `01_kv_cache_worked` comes before `02_kv_cache_practice` (no twin), and in
+a folder that keeps its practice answers in `solutions/`, the `*_worked` notebooks are lessons read first.
 A single answer key sits beside its exercise instead of in a one-entry "Solutions" section. Notebooks are shown as committed, minus the Colab setup cell at the top (it
 only runs on Colab); the site never runs them. Inline TeX in notebook Markdown written as `$...$` is rewritten to
 `\(...\)`, the only inline delimiter the site's MathJax accepts, so dollar amounts stay text.

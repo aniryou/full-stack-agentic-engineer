@@ -26,10 +26,10 @@ def test_labs_json_is_complete_and_consistent():
         assert lab["install"] and lab["test"], lab["id"]
         assert lab["python"] in ("3.11", "3.12"), lab["id"]
         assert "torch" not in lab["install"].replace("grep -viE '^[[:space:]]*torch'", ""), lab["id"]
-    # every lab runs in its own environment; one package named `scalelab` (the Mistral provider is inside it)
+    # every lab runs in its own environment; one package named `scalelab` (the Mistral provider is inside it);
+    # lra-gcp runs three times: the default install, with the ADK extra, and on Python 3.12 with the Mistral extra
     ids = {lab["id"] for lab in labs}
-    assert {"agentic-scaling-lab", "lra-gcp",
-            "long-running-agents-mistral", "long-running-agents-mistral-py312"} <= ids
+    assert {"agentic-scaling-lab", "lra-core", "lra-gcp", "lra-gcp-adk", "lra-gcp-mistral-py312"} <= ids
 
 
 def test_one_pyproject_declares_each_package_name():
@@ -71,7 +71,9 @@ def test_builders_are_all_found():
     found = ci.builders()
     assert "07-application-agent-framework/retrieval-rag/embeddings-lab/build.py" in found
     assert "07-application-agent-framework/retrieval-rag/rag-from-scratch/tools_build_notebooks.py" in found
-    assert len(found) >= 25    # 26 before the Mistral copy of agent-core (and its builder) folded into agent-core
+    # 26 before the durable-agent labs were consolidated and the Mistral copy of agent-core folded into agent-core
+    # (each took one builder with it)
+    assert len(found) >= 24
 
 
 def test_matrix_output_is_compact_json():

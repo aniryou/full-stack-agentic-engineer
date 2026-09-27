@@ -2,7 +2,7 @@
 
 The invariants behind them — the store is the only memory, effectively-once
 side effects, leases — are the long-running-durable primer's §3
-(07-application-agent-framework/long-running-durable/00_primer.md).
+(07-application-agent-framework/long-running-durable/PRIMER.md).
 
 The event log is the source of truth; the model's view of the conversation is
 *derived* from it. Working state is a small typed dict kept alongside the log,
