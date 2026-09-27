@@ -43,11 +43,22 @@ weights plus engine start, which the 04 lab's notebook 06 computes), or set `min
 
 ## Running the gateway itself on Cloud Run (CPU)
 
-The gateway is a CPU service. The shape, not a tested script (all verify):
+The gateway is a CPU service. The shape, not a tested script (all verify). It needs three things the local stack
+does not: a config that lives in the image, a listener on `0.0.0.0` (the CLI binds `127.0.0.1` by default, which
+Cloud Run cannot reach), and an image — the lab root has no Dockerfile, so `--source .` would fall back to
+buildpacks with no entrypoint; build [`deploy/local/Dockerfile`](../local/Dockerfile) instead.
 
 ```bash
-gcloud run deploy gwlab-gateway --source . --region us-central1 --no-allow-unauthenticated \
-  --set-env-vars GWLAB_CONFIG=/lab/gwlab/configs/vllm.yaml \
+# 1. a config baked into the image: copy gwlab/configs/vllm.yaml to gwlab/configs/cloudrun.yaml, replace its
+#    `local` provider and `local/llm` model with the `cloudrun` entries above, point `chat` at cloudrun/qwen, and
+#    point (or drop) the `acme` fallback -- there is no fake provider on Cloud Run
+# 2. build and push the lab image (build context = the lab root; the Dockerfile's WORKDIR is /lab)
+IMAGE=us-central1-docker.pkg.dev/${PROJECT}/gwlab/gateway:0.1
+docker build -f deploy/local/Dockerfile -t "${IMAGE}" . && docker push "${IMAGE}"
+# 3. run the gateway process (not the image's default `--help`), on all interfaces, on the port Cloud Run routes to
+gcloud run deploy gwlab-gateway --image "${IMAGE}" --region us-central1 --no-allow-unauthenticated --port 8080 \
+  --command python --args=-m,gwlab,gateway,--host,0.0.0.0,--port,8080 \
+  --set-env-vars GWLAB_CONFIG=/lab/gwlab/configs/cloudrun.yaml,CLOUD_RUN_URL=https://<the 04 lab's service URL> \
   --set-secrets GWLAB_ADMIN_TOKEN=gwlab-admin:latest,GWLAB_SALT_SECRET=gwlab-salt:latest \
   --timeout 3600 --concurrency 250 --min-instances 0
 ```

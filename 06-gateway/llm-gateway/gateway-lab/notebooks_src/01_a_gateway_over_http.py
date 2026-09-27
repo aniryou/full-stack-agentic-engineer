@@ -22,12 +22,13 @@
 # forwards bytes untouched: it owns the bill, so it must read it.
 #
 # After this notebook you can issue a key, trace one request through the pipeline, read what went over the wire
-# in both dialects, and find its ledger row and spans. Concepts: PRIMER §1 One front door, one API; §5 Metering,
+# in both dialects — usage that arrives in pieces, an error after the first byte, a body the other dialect accepts —
+# and find its ledger row and spans. Concepts: PRIMER §1 One front door, one API; §5 Metering,
 # tracing and chargeback; §6 Keys, tenants and isolation ([`PRIMER.md`](../../PRIMER.md)).
 
 # %%
 import hashlib, json, os, random, statistics
-from gwlab import client, env, sse
+from gwlab import client, env, sse, t1
 from gwlab.gateway import adapters, otel
 from gwlab.stack import LocalStack
 
@@ -99,77 +100,98 @@ print("the client gets:", [list((c.get("choices") or [{}])[0].get("delta", {}).k
 print("served by", via.header("x-gwlab-target"))
 
 # %% [markdown]
-# ## Exercise 1.1 — normalise usage across dialects
+# ## Exercise 1.1 — Anthropic's usage, from the events on the wire
 #
-# Write `normalise_usage(dialect, raw)` returning a dict with `prompt_tokens`, `completion_tokens`,
-# `cached_tokens` and `reasoning_tokens`, where prompt tokens **include** cached ones and completion tokens
-# **include** reasoning ones (the canonical meaning; a thinking token bills as output, 00.5 PRIMER §5):
+# The core wrote the non-streamed usage table (gateway-core notebook 01, exercise 1.1). On a stream the counts
+# arrive in pieces, and the pieces are the trap. Anthropic's `message_start` carries `message.usage` with the input
+# side — `input_tokens` (which **excludes** the cache), `cache_read_input_tokens`, `cache_creation_input_tokens` —
+# and an `output_tokens` of 1; the final `message_delta` carries `usage` again, **cumulative**, with the whole
+# `output_tokens` and, when the API sends it, `output_tokens_details.thinking_tokens`. A later value replaces an
+# earlier one; nothing is summed across events.
 #
-# | dialect | prompt | cached | completion | reasoning |
-# |---|---|---|---|---|
-# | `openai` | `prompt_tokens` | `prompt_tokens_details.cached_tokens` | `completion_tokens` | `completion_tokens_details.reasoning_tokens` |
-# | `anthropic` | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` | `cache_read_input_tokens` | `output_tokens` | `output_tokens_details.thinking_tokens` |
-# | `gemini` | `promptTokenCount + toolUsePromptTokenCount` | `cachedContentTokenCount` | `candidatesTokenCount + thoughtsTokenCount` | `thoughtsTokenCount` |
-#
-# Missing fields count as 0. The check runs the bundled payloads (sample output in the documented format,
-# illustrative) and 300 random usage objects against the lab's adapter table.
+# Write `usage_from_events(events)` for a list of `(event_name, data_dict)` read off the wire. Return the canonical
+# `{"prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens"}` (prompt includes the cache reads and
+# writes; completion includes thinking), or `None` if the stream ended before its `message_delta` — then
+# `message_start`'s numbers are not a bill, and the gateway must estimate instead. The check reads real streams
+# from `bolt` over HTTP — a warm one with cache reads, and one the provider cuts mid-stream — and compares with the
+# gateway's own translator and ledger.
+
+# %%
+def bolt_events(content, max_tokens=24):
+    """Stream straight from bolt (as the operator, with its key) and parse the SSE events."""
+    raw = client.request("POST", stack.fake_url("bolt") + "/v1/messages",
+                         {"model": "claude-haiku-4-5", "max_tokens": max_tokens, "stream": True,
+                          "system": "You answer billing questions. " * 12, "messages": [{"role": "user", "content": content}]},
+                         {"x-api-key": "bolt-key-1", "anthropic-version": "2023-06-01"}).raw
+    return [(e.event, e.json()) for e in sse.SSEParser().feed(raw)]
+
+warm = bolt_events("When is my invoice due?")            # the first request fills bolt's prefix cache ...
+warm = bolt_events("When is my invoice due?")            # ... the second reads it back
+print([name for name, _ in warm])
+print("message_start usage:", warm[0][1]["message"]["usage"])
+print("message_delta usage:", next(d for n, d in warm if n == "message_delta")["usage"])
 
 # %% exercise
-def normalise_usage(dialect: str, raw: dict) -> dict:
+def usage_from_events(events):
     ### BEGIN SOLUTION
-    def g(path):
-        cur = raw
-        for p in path.split("."):
-            cur = cur.get(p) if isinstance(cur, dict) else None
-        return cur or 0
-    if dialect == "openai":
-        return {"prompt_tokens": g("prompt_tokens"), "completion_tokens": g("completion_tokens"),
-                "cached_tokens": g("prompt_tokens_details.cached_tokens"),
-                "reasoning_tokens": g("completion_tokens_details.reasoning_tokens")}
-    if dialect == "anthropic":
-        return {"prompt_tokens": g("input_tokens") + g("cache_read_input_tokens") + g("cache_creation_input_tokens"),
-                "completion_tokens": g("output_tokens"), "cached_tokens": g("cache_read_input_tokens"),
-                "reasoning_tokens": g("output_tokens_details.thinking_tokens")}
-    return {"prompt_tokens": g("promptTokenCount") + g("toolUsePromptTokenCount"),
-            "completion_tokens": g("candidatesTokenCount") + g("thoughtsTokenCount"),
-            "cached_tokens": g("cachedContentTokenCount"), "reasoning_tokens": g("thoughtsTokenCount")}
+    raw, finished = {}, False
+    for name, data in events:
+        if name == "message_start":
+            raw.update((data.get("message") or {}).get("usage") or {})
+        elif name == "message_delta":
+            raw.update({k: v for k, v in (data.get("usage") or {}).items() if v is not None})
+            finished = True
+    if not finished:
+        return None
+    g = lambda k: raw.get(k) or 0                                                    # noqa: E731
+    return {"prompt_tokens": g("input_tokens") + g("cache_read_input_tokens") + g("cache_creation_input_tokens"),
+            "completion_tokens": g("output_tokens"), "cached_tokens": g("cache_read_input_tokens"),
+            "reasoning_tokens": (raw.get("output_tokens_details") or {}).get("thinking_tokens", 0)}
     ### END SOLUTION
 
 # %% check
 fields = ("prompt_tokens", "completion_tokens", "cached_tokens", "reasoning_tokens")
-for d, raw in (("openai", adapters.payload("openai_usage")["usage"]), ("anthropic", adapters.payload("anthropic_message")["usage"]),
-               ("gemini", adapters.payload("gemini_response")["usageMetadata"])):
-    mine, ref = normalise_usage(d, raw), adapters.normalise_usage(d, raw)
-    assert [mine[f] for f in fields] == [getattr(ref, f) for f in fields], (d, mine)
-rng = random.Random(1)
-for _ in range(300):
-    n = lambda: rng.choice([0, rng.randint(1, 5000)])   # noqa: E731
-    samples = {"openai": {"prompt_tokens": n(), "completion_tokens": n(), "prompt_tokens_details": {"cached_tokens": n()},
-                          "completion_tokens_details": {"reasoning_tokens": n()}},
-               "anthropic": {"input_tokens": n(), "cache_read_input_tokens": n(), "cache_creation_input_tokens": n(),
-                             "output_tokens": n(), "output_tokens_details": {"thinking_tokens": n()}},
-               "gemini": {"promptTokenCount": n(), "toolUsePromptTokenCount": n(), "cachedContentTokenCount": n(),
-                          "candidatesTokenCount": n(), "thoughtsTokenCount": n()}}
-    for d, raw in samples.items():
-        ref = adapters.normalise_usage(d, raw)
-        assert [normalise_usage(d, raw)[f] for f in fields] == [getattr(ref, f) for f in fields], (d, raw)
-print("✅ one usage shape for three dialects: Anthropic's prompt is 2,300 + 2,700 cached = 5,000; Gemini's output is 230 + 120 thoughts")
+def translated(events):
+    tr = adapters.AnthropicStreamTranslator("claude-haiku-4-5")
+    for name, data in events:
+        tr.feed(name, data)
+    return tr.usage
+
+bundled = [tuple(e) for e in adapters.payload("anthropic_stream")["events"]]
+for evs in (warm, bundled):
+    mine, ref = usage_from_events(evs), translated(evs)
+    assert [mine[f] for f in fields] == [getattr(ref, f) for f in fields], (mine, ref)
+assert usage_from_events(warm)["cached_tokens"] > 0                                  # the warm stream read the cache
+stack.fault("bolt", "midstream", count=1, after_chunks=3)
+cut = bolt_events("When is my invoice due?", max_tokens=40)
+assert "error" in [n for n, _ in cut] and usage_from_events(cut) is None             # cut: no bill in the stream
+stack.fault("bolt", "midstream", count=1, after_chunks=3)
+via = stack.chat(key_eu, "When is my invoice due?", stream=True, max_completion_tokens=40)
+row = stack.ledger(request_id=via.header("x-request-id"))[0]
+assert via.error and row["usage_source"] == "estimate" and row["completion_tokens"] > 0
+print(f"✅ warm: {usage_from_events(warm)} | cut after 3 chunks: None, so the gateway billed "
+      f"{row['completion_tokens']} completion tokens from the relayed chunks, marked '{row['usage_source']}'")
 
 # %% [markdown]
-# ## Exercise 1.2 — rebuild a streamed answer, tool calls included
+# ## Exercise 1.2 — rebuild a streamed answer, and notice an error after the first byte
 #
-# Write `accumulate(chunks)` for a list of `chat.completion.chunk` dicts. Return a dict with `content` (the
-# concatenated text), `tool_calls` (a list ordered by `index`, each `{"id", "name", "arguments"}`),
-# `finish_reason` (the last non-null one) and `usage` (the last non-null one — never a sum: with continuous
-# usage every chunk carries a running total). A tool call's first delta carries its `id` and `function.name`;
-# later deltas carry only `index` and a fragment of `function.arguments`. The check replays a real tool-call
-# stream the gateway produced from bolt's Anthropic events, and a hand-made stream with two interleaved calls.
+# Write `accumulate(chunks)` for the `chat.completion.chunk` dicts a client read from the gateway. Return a dict with
+# `content` (the concatenated text), `tool_calls` (ordered by `index`, each `{"id", "name", "arguments"}`),
+# `finish_reason` (the last non-null one), `usage` (the last non-null one — never a sum: with continuous usage every
+# chunk carries a running total) and `error` (the `error` object if the stream carried one, else `None`). A tool
+# call's first delta carries its `id` and `function.name`; later deltas carry only `index` and a fragment of
+# `function.arguments`. An error inside a 200 stream is the gateway telling you the answer is incomplete — after the
+# first byte it can no longer fall back, so it says so in the stream. The check replays a tool-call stream the
+# gateway translated from bolt's Anthropic events, a hand-made stream with two interleaved calls, and a live stream
+# that `acme` cuts mid-answer.
 
 # %% exercise
 def accumulate(chunks: list) -> dict:
     ### BEGIN SOLUTION
-    content, calls, finish, usage = "", {}, None, None
+    content, calls, finish, usage, error = "", {}, None, None, None
     for ch in chunks:
+        if ch.get("error"):
+            error = ch["error"]
         if ch.get("usage"):
             usage = ch["usage"]
         for c in ch.get("choices") or []:
@@ -182,7 +204,8 @@ def accumulate(chunks: list) -> dict:
                 slot["name"] += fn.get("name") or ""
                 slot["arguments"] += fn.get("arguments") or ""
             finish = c.get("finish_reason") or finish
-    return {"content": content, "tool_calls": [calls[i] for i in sorted(calls)], "finish_reason": finish, "usage": usage}
+    return {"content": content, "tool_calls": [calls[i] for i in sorted(calls)], "finish_reason": finish, "usage": usage,
+            "error": error}
     ### END SOLUTION
 
 # %% check
@@ -192,7 +215,7 @@ mine, ref = accumulate(tc_stream.chunks), sse.StreamAccumulator()
 for c in tc_stream.chunks:
     ref.add(c)
 assert mine["tool_calls"][0]["name"] == "get_weather" and json.loads(mine["tool_calls"][0]["arguments"]) == json.loads(ref.calls[0]["function"]["arguments"])
-assert mine["finish_reason"] == "tool_calls" and mine["usage"] == ref.usage
+assert mine["finish_reason"] == "tool_calls" and mine["usage"] == ref.usage and mine["error"] is None
 hand = [{"choices": [{"delta": {"tool_calls": [{"index": 1, "id": "b", "function": {"name": "t2", "arguments": "{\"y\""}}]}}]},
         {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "a", "function": {"name": "t1", "arguments": ""}}]}}]},
         {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{\"x\": 1}"}}]}}], "usage": {"completion_tokens": 3}},
@@ -201,46 +224,62 @@ hand = [{"choices": [{"delta": {"tool_calls": [{"index": 1, "id": "b", "function
 out = accumulate(hand)
 assert [(c["id"], c["name"], json.loads(c["arguments"])) for c in out["tool_calls"]] == [("a", "t1", {"x": 1}), ("b", "t2", {"y": 2})]
 assert out["usage"] == {"completion_tokens": 5}
-print("✅ tool calls rebuilt by index from", len(tc_stream.chunks), "chunks the gateway translated from Anthropic events")
+stack.fault("acme", "midstream", count=1, after_chunks=4)
+cut = stack.chat(key_a, "Tell me a long story.", stream=True)
+got = accumulate(cut.chunks)
+assert cut.status == 200 and got["error"] is not None and got["content"] == cut.text and got["finish_reason"] is None
+print(f"✅ tool calls rebuilt by index; a stream acme cut after 4 chunks is still an HTTP 200 with "
+      f"{len(got['content'].split())} words and error {got['error'].get('code')!r} — no finish_reason, so not an answer")
 
 # %% [markdown]
-# ## Exercise 1.3 — the body the gateway sends upstream
+# ## Exercise 1.3 — the body the gateway sends to an Anthropic-dialect provider
 #
-# Write `upstream_body(body, upstream_model)` for an OpenAI-dialect provider. Return `(new_body, strip_usage)`:
-# the body with `model` replaced; on a **streamed** request `stream_options` set to `{"include_usage": True}`; on a
-# non-streamed request no `stream_options` key at all (vLLM rejects it with a 400); and `strip_usage` True when
-# the client streamed without asking for usage (the relay then drops the usage chunk). Do not modify `body`.
-# The check compares with the rules on a grid of bodies and then sends every body you produce straight to the
-# vLLM-shaped fake (as the operator, with the provider key): each must be accepted.
+# The OpenAI half of the relay rule (ask for `include_usage` on streams only) is the core's exercise 1.3. The other
+# dialect needs a real translation, and `bolt` refuses what is wrong with it. Write `to_anthropic(body, model, cap)`
+# for a chat-completions `body` without tools: the `system`/`developer` messages lifted out into one `system` string
+# (joined with a newline; omit the key if there are none), the other messages kept as `{"role", "content"}`,
+# `model`, `max_tokens` (required by Anthropic: `cap` if given, else `adapters.ANTHROPIC_DEFAULT_MAX_TOKENS`),
+# `stream` as a bool, `temperature` and `top_p` copied when present, `stop` as a list in `stop_sequences`, and no
+# `stream_options` — Anthropic streams always carry usage. The check compares with the gateway's adapter on a grid
+# of bodies and sends each of yours straight to `bolt`; then it shows what bolt says to a body without `max_tokens`.
 
 # %% exercise
-def upstream_body(body: dict, upstream_model: str) -> tuple:
+def to_anthropic(body: dict, model: str, cap=None) -> dict:
     ### BEGIN SOLUTION
-    up = {k: v for k, v in body.items() if k != "stream_options"}
-    up["model"] = upstream_model
-    stream = bool(body.get("stream"))
-    if stream:
-        up["stream_options"] = {"include_usage": True}
-    asked = bool((body.get("stream_options") or {}).get("include_usage"))
-    return up, stream and not asked
+    system = [m["content"] for m in body["messages"] if m["role"] in ("system", "developer")]
+    up = {"model": model, "messages": [{"role": m["role"], "content": m["content"]} for m in body["messages"]
+                                       if m["role"] not in ("system", "developer")],
+          "max_tokens": cap or adapters.ANTHROPIC_DEFAULT_MAX_TOKENS, "stream": bool(body.get("stream"))}
+    if system:
+        up["system"] = "\n".join(system)
+    for k in ("temperature", "top_p"):
+        if k in body:
+            up[k] = body[k]
+    if body.get("stop"):
+        up["stop_sequences"] = body["stop"] if isinstance(body["stop"], list) else [body["stop"]]
+    return up
     ### END SOLUTION
 
 # %% check
-msgs = [{"role": "user", "content": "hi"}]
-grid = [{"model": "chat", "messages": msgs, **extra} for extra in (
-    {}, {"stream": False}, {"stream": True}, {"stream": True, "stream_options": {"include_usage": True}},
-    {"stream": True, "stream_options": {"include_usage": False}}, {"stream": False, "stream_options": {"include_usage": True}})]
-for b in grid:
-    before = json.dumps(b, sort_keys=True)
-    up, strip = upstream_body(b, "fast-1")
-    assert json.dumps(b, sort_keys=True) == before, "the client's body was modified"
-    assert up["model"] == "fast-1" and ("stream_options" in up) == bool(b.get("stream"))
-    assert strip == (bool(b.get("stream")) and not (b.get("stream_options") or {}).get("include_usage"))
-    sent = client.request("POST", stack.fake_url("acme") + "/v1/chat/completions", up, {"Authorization": "Bearer acme-key-1"})
-    assert sent.status == 200, (up, sent.json)
-print("✅ usage asked for on every stream, never on a non-stream (vLLM's 400); the client decides only what it sees")
+msgs = [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"},
+        {"role": "user", "content": "and now?"}]
+grid = [({"model": "chat", "messages": msgs[1:2]}, None), ({"model": "chat", "messages": msgs, "stream": True}, 64),
+        ({"model": "chat", "messages": msgs, "temperature": 0, "stop": "END"}, None),
+        ({"model": "chat", "messages": [{"role": "developer", "content": "Rules."}] + msgs, "top_p": 0.9,
+          "stop": ["A", "B"], "stream": True, "stream_options": {"include_usage": True}}, 8)]
+for b, cap in grid:
+    mine, ref = to_anthropic(b, "claude-haiku-4-5", cap), adapters.to_upstream("anthropic", b, "claude-haiku-4-5",
+                                                                              stream=bool(b.get("stream")), output_cap=cap)
+    assert mine == ref, (mine, ref)
+    sent = client.request("POST", stack.fake_url("bolt") + "/v1/messages", mine,
+                          {"x-api-key": "bolt-key-1", "anthropic-version": "2023-06-01"})
+    assert sent.status == 200, sent.json
+bad = client.request("POST", stack.fake_url("bolt") + "/v1/messages", {k: v for k, v in mine.items() if k != "max_tokens"},
+                     {"x-api-key": "bolt-key-1", "anthropic-version": "2023-06-01"})
+assert bad.status == 400
+print(f"✅ four bodies translated as the gateway does and accepted by bolt; without max_tokens: {bad.status} "
+      f"{bad.json['error']['message']!r}")
 
-# %% [markdown]
 # ## Worked example: spans, written as OTLP/JSON lines and read back
 #
 # Every request produces one SERVER span (`POST /v1/chat/completions`) and one CLIENT span per upstream target
@@ -318,16 +357,15 @@ else:
 #
 # With `GWLAB_VLLM_URL` set (deploy/any-gpu: `Qwen/Qwen2.5-0.5B-Instruct` served as `lab/llm` with
 # `--enable-prompt-tokens-details`), a second gateway starts with the `vllm` config: vLLM first in `chat`, a fake
-# as the fallback. The same request now returns measured usage from a real engine.
+# as the fallback. The same request now returns measured usage from a real engine — labelled `MEASURED` only when
+# vLLM actually served it (`gwlab.t1.label`); a fallback to the fake is labelled `SIMULATED`, whatever the cell hoped.
 
 # %%
 if tiers["vllm_url"]:
-    t1 = LocalStack(config="vllm", upstreams={"local": tiers["vllm_url"]}, fakes={"acme": stack.fakes["acme"].spec}).start()
-    k1 = t1.issue_key("team-a")
-    for q in ("What does a gateway own?", "What does a gateway own? Answer in one word."):
-        rr = t1.chat(k1, q, stream=True, stream_options={"include_usage": True})
-        print("MEASURED", rr.header("x-gwlab-target"), f"TTFT {rr.ttft_s * 1e3:.0f} ms", rr.usage)
-    t1.stop()
+    for tag, target, ttft, usage in t1.first_requests(tiers["vllm_url"], ["What does a gateway own?",
+                                                                          "What does a gateway own? Answer in one word."],
+                                                      fallback=stack.fakes["acme"].spec):
+        print(tag, target, f"TTFT {ttft * 1e3:.0f} ms", usage)      # MEASURED only when vLLM served it
 else:
     print("T1 skipped: start vLLM with deploy/any-gpu/serve.sh, then export GWLAB_VLLM_URL=http://127.0.0.1:8000")
 

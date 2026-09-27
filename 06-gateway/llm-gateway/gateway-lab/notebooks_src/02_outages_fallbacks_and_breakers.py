@@ -27,8 +27,8 @@
 # model at full traffic until its own quota runs out).
 
 # %%
-import statistics, time
-from gwlab import bench, client, env
+import os, statistics, time
+from gwlab import bench, client, env, t1
 from gwlab.fakes import FakeSpec
 from gwlab.gateway import routing
 from gwlab.stack import LocalStack
@@ -51,96 +51,96 @@ def reset_breakers(s=None):
 print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slower on purpose: TTFT 120 ms vs 20 ms (simulated)")
 
 # %% [markdown]
-# ## Worked example: one fault of each kind
+# ## Exercise 2.1 — what the client sees
 #
-# Each row switches on one fault at `acme` for the next request and shows what the gateway did. Before the first
-# byte (503, 429, a stall past the 0.4 s first-byte timeout) the request falls through to `bolt`. After it
-# (an error chunk mid-stream, a dropped connection) the client gets the partial answer and an `error` event.
-# The breakers are reset between rows so that each row shows one fault on its own (three in a row would open
-# acme's breaker — the subject of the second half).
+# The core classified statuses (gateway-core notebook 02, exercise 2.1). Over HTTP the question a client owner asks is
+# different: *what do I get back?* For each fault below, switched on at `acme` (the first target of `chat`) for one
+# streamed request, write `client_sees(fault)` returning `(status, served_by, error_in_stream)`: the HTTP status the
+# client receives, the `x-gwlab-target` that served it (`None` if nothing did) and whether the stream carries an
+# `error` event. The faults: `"503"`; `"429"`; `"timeout"` (acme stalls past its 0.4 s first-byte timeout);
+# `"context"` (a prompt the gateway's chars/4 estimate says fits acme's 8,192-token window, which acme's own tokenizer
+# counts as 9,000 tokens); `"midstream"` (an error chunk after 5 content chunks); `"reset"` (the connection drops
+# after 5 chunks); `"bad_key"` (acme rejects the *gateway's* provider key with a 401). Predict before you run
+# anything: the check provokes each fault, one at a time (breakers reset between them, since three in a row would
+# open acme's — the subject of the second half), and prints what the gateway did.
+
+# %% exercise
+def client_sees(fault: str) -> tuple:
+    ### BEGIN SOLUTION
+    if fault in ("503", "429", "timeout", "context"):
+        return 200, "bolt/haiku", False        # before the first byte: fall through
+    if fault in ("midstream", "reset"):
+        return 200, "acme/fast", True          # after it: the error goes into the stream, never another model's text
+    if fault == "bad_key":
+        return 502, None, False                # our credential, not the caller's request: no fall through, a 502
+    raise ValueError(fault)
+    ### END SOLUTION
+
+# %% check
+def provoke(fault):
+    reset_breakers()
+    prompt = "a " * 9000 if fault == "context" else f"fault {fault}"
+    if fault == "bad_key":
+        client.post_json(stack.url + "/admin/providers/acme/key", {"key": "revoked-key"}, token=stack.admin_token)
+    elif fault != "context":
+        stack.fault("acme", fault, count=1, **({"stall_s": 2} if fault == "timeout" else
+                                               {"after_chunks": 5} if fault in ("midstream", "reset") else {}))
+    try:
+        r = stack.chat(key, prompt, stream=True)
+    finally:
+        client.post_json(stack.url + "/admin/providers/acme/key", {"key": "acme-key-1"}, token=stack.admin_token)
+    return (r.status, r.header("x-gwlab-target"), r.error is not None and r.status == 200), stack.last_decision()
+
+def path(dec):
+    return " -> ".join(f"{a['target']}:{a['outcome']}" + (f"({a['code']})" if a.get("code") else "") for a in dec["attempts"])
+
+for fault in ("503", "429", "timeout", "context", "midstream", "reset", "bad_key"):
+    seen, dec = provoke(fault)
+    assert client_sees(fault) == seen, (fault, seen, dec["attempts"])
+    print(f"{fault:9s} -> {seen} | {path(dec)}")
+print("✅ before the first byte a fault is invisible (another target answers); after it, an error event in a 200; "
+      "the gateway's own bad key is a 502, never a fall-through")
+
+# %% [markdown]
+# ## Exercise 2.2 — availability, read from the decision log
+#
+# The chain formula is the core's (`routing.chain_availability`, given). What the lab adds is where its inputs come
+# from in production: the gateway's own decisions. `acme` fails 25 % of requests and `bolt` 20 % (seeded, before the
+# first byte); breakers are set so high they never open, so every request walks the whole chain; 240 requests go
+# through. Write `failure_rate(decisions, target)`: of the attempts at `target` (an attempt skipped by an open breaker
+# is not one), the share that failed (`outcome` `"fallthrough"` or `"fail"`). Then set `predicted` from the two
+# measured rates with `routing.chain_availability`, and `measured` to the share of requests that got a 200.
 
 # %%
-def once(mode, **kw):
-    reset_breakers()
-    stack.fault("acme", mode, count=1, **kw)
-    r = stack.chat(key, f"fault {mode}", stream=True)
-    d = stack.last_decision()
-    atts = " -> ".join(f"{a['target']}:{a['outcome']}" + (f"({a.get('code')})" if a.get("code") else "") for a in d["attempts"])
-    return r, f"{mode:10s} status {r.status}  served by {r.header('x-gwlab-target')}  text chunks {sum(1 for c in r.chunks if c.get('choices') and c['choices'][0].get('delta', {}).get('content'))}  error {(r.error or {}).get('code')}  | {atts}"
-
-for mode, kw in (("503", {}), ("429", {}), ("timeout", {"stall_s": 2}), ("midstream", {"after_chunks": 5}), ("reset", {"after_chunks": 5})):
-    print(once(mode, **kw)[1])
-
-# %% [markdown]
-# ## Exercise 2.1 — what falls through
-#
-# Write `classify(status, code=None, timeout=False)` returning `"fallthrough"` or `"fail"` by the rules above
-# (`timeout=True` covers timeouts and connection errors; `code` is the normalised error code, a string such as
-# `"context_length_exceeded"` or `"content_filter"`). The check compares with the gateway's `routing.classify`
-# on a table, then provokes two live cases: a 503 (must fall through) and a provider rejecting the gateway's
-# own key with a 401 (must not — the client gets a 502, because the credential problem is the operator's).
-
-# %% exercise
-def classify(status, code=None, timeout=False) -> str:
-    ### BEGIN SOLUTION
-    if timeout or code == "context_length_exceeded":
-        return "fallthrough"
-    if code == "content_filter":
-        return "fail"
-    return "fallthrough" if status in (408, 429, 500, 502, 503, 504, 529) else "fail"
-    ### END SOLUTION
-
-# %% check
-cases = [(429, None, False), (500, None, False), (502, None, False), (503, None, False), (529, None, False), (None, None, True),
-         (400, "context_length_exceeded", False), (400, None, False), (401, None, False), (403, None, False),
-         (404, "model_not_found", False), (400, "content_filter", False), (500, "content_filter", False), (422, None, False)]
-for s, c, t in cases:
-    assert classify(s, c, t) == routing.classify(s, c, timeout=t), (s, c, t)
-reset_breakers()
-stack.fault("acme", "503", count=1)
-stack.chat(key, "live 503", stream=True)
-assert stack.last_decision()["attempts"][0]["outcome"] == classify(503)
-client.post_json(stack.url + "/admin/providers/acme/key", {"key": "revoked-key"}, token=stack.admin_token)
-r = stack.chat(key, "live 401")
-assert r.status == 502 and stack.last_decision()["attempts"][0]["status"] == 401 and classify(401) == "fail"
-client.post_json(stack.url + "/admin/providers/acme/key", {"key": "acme-key-1"}, token=stack.admin_token)
-print("✅ 429/5xx/timeouts/context-length fall through; 400/401/403/content-policy fail the request (a 401 upstream is a 502 here)")
-
-# %% [markdown]
-# ## Exercise 2.2 — chain availability, predicted and measured
-#
-# Write `chain_availability(availabilities, common_mode=0.0)`: the probability that some target in the chain
-# answers when target *i* is up with probability `aᵢ` independently, and a common-mode event that takes every
-# target down happens with probability `common_mode`. Then the check measures it: `acme` fails 25 % of requests
-# and `bolt` 20 % (seeded, before the first byte), breakers are set so high they never open (so every request
-# walks the whole chain), and 240 requests go through. Predicted `1 − 0.25 × 0.20 = 0.95`; one-target
-# availability would be 0.75.
-
-# %% exercise
-def chain_availability(availabilities, common_mode: float = 0.0) -> float:
-    ### BEGIN SOLUTION
-    p = 1.0
-    for a in availabilities:
-        p *= 1.0 - a
-    return (1.0 - common_mode) * (1.0 - p)
-    ### END SOLUTION
-
-# %% check
-assert abs(chain_availability([0.99, 0.99]) - 0.9999) < 1e-12 and abs(chain_availability([0.99, 0.99], 0.001) - 0.999 * 0.9999) < 1e-12
-for avs, c in (([0.9], 0), ([0.9, 0.8, 0.7], 0.01), ([0.999, 0.99], 0.0005)):
-    assert abs(chain_availability(avs, c) - routing.chain_availability(avs, c)) < 1e-12
 lossy = {"acme": FakeSpec(name="acme", fail_rate=0.25, seed=3, **FAST),
          "bolt": FakeSpec.anthropic("bolt", fail_rate=0.20, seed=4, **{**FAST, "ttft_s": 0.12})}
 chain = LocalStack(fakes=lossy, overrides={**overrides, "breaker": {"failure_threshold": 10**6, "recovery_timeout_s": 1}}).start()
 k2 = chain.issue_key("team-a")
 run = bench.run(chain.url, [bench.TenantScript("team-a", k2, rate=120, n=240)], seed=5)
-measured = sum(s.status == 200 for s in run.samples) / len(run.samples)
-predicted = chain_availability([0.75, 0.80])
-print(f"[SIMULATED] measured {measured:.3f} vs predicted {predicted:.3f} (acme alone: 0.75)")
-assert abs(measured - predicted) < 0.05
-print("✅ two lossy targets in independent failure domains: 0.95; put both behind one common failure and (1 − c) caps it")
+decisions = chain.decisions()
+print(len(decisions), "decisions; one:", decisions[0]["attempts"])
 
-# %% [markdown]
+# %% exercise
+def failure_rate(decisions, target):
+    ### BEGIN SOLUTION
+    tried = [a for d in decisions for a in d.get("attempts", []) if a["target"] == target and a["outcome"] != "breaker_open"]
+    return sum(a["outcome"] in ("fallthrough", "fail") for a in tried) / len(tried)
+    ### END SOLUTION
+
+### BEGIN SOLUTION
+predicted = routing.chain_availability([1 - failure_rate(decisions, "acme/fast"), 1 - failure_rate(decisions, "bolt/haiku")])
+measured = sum(d.get("status") == 200 for d in decisions) / len(decisions)
+### END SOLUTION
+
+# %% check
+fa, fb = failure_rate(decisions, "acme/fast"), failure_rate(decisions, "bolt/haiku")
+assert abs(fa - 0.25) < 0.08 and abs(fb - 0.20) < 0.10, (fa, fb)
+assert abs(measured - sum(x.status == 200 for x in run.samples) / len(run.samples)) < 1e-9
+assert abs(predicted - (1 - fa * fb)) < 1e-9 and abs(measured - predicted) < 0.05
+print(f"[SIMULATED] acme failed {fa:.1%} of its attempts, bolt {fb:.1%}: predicted {predicted:.3f}, measured {measured:.3f} "
+      f"(acme alone: {1 - fa:.2f})")
+print("✅ two lossy targets in independent failure domains; put both behind one common failure and (1 − c) caps it")
+
 # ## Exercise 2.3 — what a fallback costs in latency
 #
 # On the same run, a request either got `acme` at once (TTFT ≈ acme's), or paid a failed attempt and then got
@@ -226,20 +226,26 @@ print("✅ without the breaker all ~40 would have paid a failed attempt; with it
 # ## T1: stop vLLM mid-run
 #
 # With `GWLAB_VLLM_URL` set, a second gateway puts the real vLLM first in `chat` (config `vllm`) and a fake
-# second. The next cell sends a steady stream for 40 s: stop vLLM in a terminal while it runs
-# (`pkill -f "vllm serve"`, or `docker compose -f deploy/any-gpu/docker-compose.yaml stop vllm`) and watch the
-# served-by line switch from `v` to `a` after a few connection errors, with the breaker then skipping vLLM.
+# second. The next cell sends two requests a second for 20 s and — because Colab and Kaggle give you no second
+# terminal — stops vLLM itself 8 s in (`gwlab.t1.stop_vllm`: `pkill -f "vllm serve"`, else
+# `docker compose ... stop vllm`), behind an explicit opt-in (`GWLAB_T1_STOP=1`) so re-running the notebook never
+# kills your engine by surprise. The served-by line switches from `v` to `a` after a few connection errors, and the
+# breaker then skips vLLM. It prints how to restart vLLM: notebooks 03 and 04 need it again (if you forget, their
+# T1 cells find no vLLM on `/health` and skip).
 
 # %%
-if tiers["vllm_url"]:
-    t1 = LocalStack(config="vllm", upstreams={"local": tiers["vllm_url"]}, fakes={"acme": FakeSpec(name="acme", **FAST)},
-                    overrides={"breaker": {"failure_threshold": 3, "recovery_timeout_s": 5}}).start()
-    k1 = t1.issue_key("team-a")
-    print("sending 2 requests/s for 40 s -- stop vLLM now in another terminal")
-    r1 = bench.run(t1.url, [bench.TenantScript("team-a", k1, rate=2, n=80)], seed=1)
-    print("".join({"local/llm": "v", "acme/fast": "a"}.get(s.target, "x") for s in sorted(r1.samples, key=lambda s: s.t_send)))
-    print(r1.table())
-    t1.stop()
+if tiers["vllm_url"] and os.environ.get("GWLAB_T1_STOP") == "1":
+    res = t1.stop_midrun(tiers["vllm_url"], t1.stop_vllm, fallback=FakeSpec(name="acme", **FAST), rate=2, n=40,
+                         stop_after_s=8.0)
+    print("MEASURED served by, in send order (v = vLLM, a = the fake fallback):", res["line"])
+    print(f"requests that reached the stopped vLLM: {res['reached_dead']}; breaker opens: {res['breaker_opens']}")
+    print(res["run"].table())
+    assert res["line"].startswith("v"), "vLLM served nothing before the stop"
+    assert res["line"].endswith("a") and res["breaker_opens"] >= 1, "vLLM was not stopped, or nothing fell back"
+    print(t1.RESTART_HINT)
+elif tiers["vllm_url"]:
+    print("T1 ready. This cell stops vLLM itself (pkill -f 'vllm serve', or docker compose stop vllm) 8 s into a "
+          "20 s run: set GWLAB_T1_STOP=1 and re-run it. Afterwards: " + t1.RESTART_HINT)
 else:
     print("T1 skipped: deploy/any-gpu/serve.sh, then export GWLAB_VLLM_URL=http://127.0.0.1:8000 and re-run")
 

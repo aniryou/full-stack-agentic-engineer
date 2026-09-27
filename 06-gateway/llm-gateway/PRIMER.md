@@ -321,7 +321,9 @@ An answer may be reused only if it would be the same answer for this caller now.
 ("what is the status of my order 1234"), time-sensitive classes ("is the service down right now"), anything with
 tools (tool calls act on the world), and sampled outputs where variety is the point. A gateway cannot infer the class
 from the text — "How do I reset *my* password?" is an FAQ and contains "my" — so the **route declares it**
-(`metadata.cache_class`, `cache.cacheable()`), and only allowlisted classes are looked up or stored. The key is
+(`metadata.cache_class`, `cache.cacheable()`), and only allowlisted classes are looked up or stored. The lab's
+notebook 03 shows why: its regex reads "How do I cancel my subscription?" as personal and "What is my plan limit?"
+as general, so there a regex may only *veto* a declared shared class, never make a request cacheable. The key is
 namespaced by the **verified tenant** (and by user for per-user classes); OSS Portkey's exact-cache key has no tenant
 in it (§9), and LiteLLM's semantic cache scopes by key by default — check what your product does.
 

@@ -17,7 +17,8 @@
 #
 # **Keys** (PRIMER §6). Provider keys live only in the gateway and rotate with an overlap; virtual keys are
 # revoked in one call. (The gateway's own workload identity — a SPIFFE SVID from the Workload API, rotated at
-# half its lifetime, ±10 % of the half-life: 27–33 minutes left on a 1-hour SVID — is PRIMER §6 and the identity
+# half its lifetime, ±10 % of the half-life: 27–33 minutes left on a 1-hour SVID, about 32 in practice because the
+# jitter is re-drawn on every check — is PRIMER §6.5 and the identity
 # primer §3.3–3.5; its fake Workload API lives in the core.)
 #
 # **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client: it
@@ -105,54 +106,71 @@ for out, w in (("window", W), ("full", N)):
 print("✅ a held-back window costs about (W − 1)·ITL + one check before the first token; holding everything costs the whole answer")
 
 # %% [markdown]
-# ## Exercise 5.2 — the largest window a TTFT budget allows
+# (The largest window a TTFT budget allows, `(budget − check)/ITL + 1`, is the core's exercise 5.2; the drill at the
+# end uses it.)
 #
-# Policy: secrets must never reach the client, so the output check must hold tokens back; product: the check may
-# add at most `budget_s` to TTFT. Write `largest_window(budget_s, itl, check_s)`: the largest W whose added TTFT
-# `(W − 1)·itl + check_s` fits the budget, or 0 when not even a 1-token window fits (then this check is too slow to
-# hold anything back, and the design needs a faster check or a looser policy). The check brute-forces
-# `added_latency` for several budgets.
-
-# %% exercise
-def largest_window(budget_s: float, itl: float, check_s: float) -> int:
-    ### BEGIN SOLUTION
-    if budget_s < check_s:
-        return 0
-    return int((budget_s - check_s) / itl + 1e-9) + 1
-    ### END SOLUTION
-
-# %% check
-for budget in (0.03, 0.05, 0.12, 0.3, 1.0):
-    best = 0
-    for w in range(1, 500):
-        if G.added_latency("off", "window", check_s=0.05, ttft_s=0.1, itl_s=0.01, n_tokens=1000, window=w)["added_ttft_s"] <= budget + 1e-9:
-            best = w
-    assert largest_window(budget, 0.01, 0.05) == best, (budget, best)
-print(f"✅ with a 50 ms check and 10 ms ITL, a 300 ms TTFT budget allows windows of {largest_window(0.3, 0.01, 0.05)} tokens; "
-      "a regex (≈0 ms) allows almost anything, a 12B guard model far less")
-
-# %% [markdown]
-# ## Worked example: keys — rotate a provider key with overlap, revoke a virtual key
+# ## Worked example: revoke a virtual key
 #
-# Rotation has three steps, and the order matters: the provider starts accepting the new key, the gateway switches
-# to it, the provider retires the old one. No request fails at any step, and no caller ever sees either key.
+# A leaked virtual key is one tenant's budget until it is revoked — one admin call, effective on the next request.
 
 # %%
 with LocalStack(fakes=fakes) as s:
     k = s.issue_key("team-a")
-    fp = lambda: client.get_json(s.url + "/debug/state", token=s.admin_token).json["provider_key_fingerprints"]["acme"]   # noqa: E731
-    steps = [("before", None),
-             ("1. provider accepts both", lambda: client.post_json(s.fake_url("acme") + "/admin/keys", {"add": "acme-key-2"})),
-             ("2. gateway switches", lambda: client.post_json(s.url + "/admin/providers/acme/key", {"key": "acme-key-2"}, token=s.admin_token)),
-             ("3. provider retires the old", lambda: client.post_json(s.fake_url("acme") + "/admin/keys", {"remove": "acme-key-1"}))]
-    for label, act in steps:
-        if act:
-            act()
-        r = s.chat(k, "ping")
-        print(f"{label:30s} request -> {r.status}, served by {r.header('x-gwlab-target')}, gateway key fingerprint {fp()}")
+    print("before:", s.chat(k, "ping").status)
     kid = client.get_json(s.url + "/admin/keys", token=s.admin_token).json["keys"][0]["key_id"]
     client.request("DELETE", s.url + f"/admin/keys/{kid}", headers={"Authorization": f"Bearer {s.admin_token}"})
-    print("after revoking the virtual key:", s.chat(k, "ping").status, s.chat(k, "ping").json["error"]["message"])
+    r = s.chat(k, "ping")
+    print("after revoking it:", r.status, r.json["error"]["message"])
+
+# %% [markdown]
+# ## Exercise 5.2 — rotate a provider key under load, and fail nothing
+#
+# A provider key is every tenant's at once, so its rotation must not fail a request. Three operator actions exist:
+# `"provider: add new"` (acme starts accepting `acme-key-2` beside `acme-key-1`), `"gateway: switch"` (the gateway
+# starts sending `acme-key-2`) and `"provider: remove old"` (acme stops accepting `acme-key-1`). Write
+# `rotation_plan()` returning the three in the order that fails no request — the add → overlap → retire of PRIMER
+# §6.2, `keys.ProviderKeys.rotate()` in the core. The check runs 20 requests a second through the gateway while it
+# executes your plan, one action every 0.4 s, and counts what failed; then it runs every other order to show what
+# each would have cost. (A request that reaches acme with a key it no longer accepts is the gateway's credential
+# problem: a 502, never a fall-through.)
+
+# %% exercise
+def rotation_plan() -> list:
+    ### BEGIN SOLUTION
+    return ["provider: add new", "gateway: switch", "provider: remove old"]
+    ### END SOLUTION
+
+# %% check
+import itertools, threading
+from gwlab import bench
+
+def rotate_under_load(plan):
+    with LocalStack(fakes=fakes) as s:
+        k = s.issue_key("team-a")
+        act = {"provider: add new": lambda: client.post_json(s.fake_url("acme") + "/admin/keys", {"add": "acme-key-2"}),
+               "gateway: switch": lambda: client.post_json(s.url + "/admin/providers/acme/key", {"key": "acme-key-2"},
+                                                           token=s.admin_token),
+               "provider: remove old": lambda: client.post_json(s.fake_url("acme") + "/admin/keys", {"remove": "acme-key-1"})}
+        box = {}
+        load = threading.Thread(target=lambda: box.update(run=bench.run(
+            s.url, [bench.TenantScript("team-a", k, rate=20, n=50, model="chat", max_tokens=4)], seed=3)))
+        load.start()
+        for a in plan:
+            time.sleep(0.4)
+            act[a]()
+        load.join()
+        return sum(x.status != 200 for x in box["run"].samples)
+
+plan = rotation_plan()
+assert sorted(plan) == ["gateway: switch", "provider: add new", "provider: remove old"], plan
+assert rotate_under_load(plan) == 0, "a request failed during your rotation"
+for other in itertools.permutations(plan):
+    if list(other) != plan:
+        failed = rotate_under_load(list(other))
+        print(f"{' -> '.join(other):62s} failed {failed:2d} of 50 requests [SIMULATED load]")
+        assert failed > 0, other
+print("✅ add, switch, then retire: zero of 50 requests failed while the key changed under them; every other order "
+      "breaks some, and no caller ever held either key")
 
 # %% [markdown]
 # ## Worked example: an agent calls an MCP server through the gateway
@@ -179,59 +197,80 @@ print("the gateway's CIMD (its client_id is this URL):", client.get_json(mcp.url
 print("DPoP signer:", mcp.call(lambda: mcp.gateway.mcp.signer.label))
 
 # %% [markdown]
-# ## Exercise 5.3 — where to look for the authorization server's metadata
+# The discovery order is the spec's (MCP 2026-07-28, verify) and the core's exercise 5.4; here it is, as the gateway
+# actually walked it — two misses, then the OIDC path-appended document:
+
+# %%
+tried = [x[1] for x in log if x[0] == "as_metadata_try"]
+print(*tried, sep="\n")
+assert tried == ref_as_urls(mcp.mcp.issuer)
+
+# %% [markdown]
+# ## Exercise 5.3 — one token, one resource
 #
-# Write `as_metadata_urls(issuer)`: the URLs a client must try, in order, per MCP 2026-07-28 (verify). For an
-# issuer with a path (`https://auth.example.com/tenant1`): RFC 8414 with the well-known segment inserted before the
-# path, then OpenID Connect discovery inserted the same way, then OIDC with the well-known segment *appended* to
-# the path. Without a path: RFC 8414, then OIDC. The check compares with the lab's client and with the order the
-# gateway actually tried above.
+# `resource` goes in both the authorization and the token request (RFC 8707) so that a token names the one MCP
+# server it is for — its `aud` claim — and a token stolen from one server is refused at another. The fake
+# authorization server issues JWT access tokens (`header.claims.signature`, base64url without padding). Write
+# `accepts(token, resource, now)`: the audience and expiry half of what the resource server checks — decode the
+# claims (no signature check: the server does that) and return `True` only if `aud` equals `resource` exactly and
+# `exp` is later than `now`. The check fetches, over HTTP from a bearer-token deployment, alice's token for `notes`
+# and a token the same authorization server minted for another resource, and compares your verdict with what the
+# `notes` server answers to each.
 
 # %% exercise
-from urllib.parse import urlsplit
+import base64, json
 
-def as_metadata_urls(issuer: str) -> list:
+def accepts(token: str, resource: str, now: float) -> bool:
     ### BEGIN SOLUTION
-    u = urlsplit(issuer)
-    base, path = f"{u.scheme}://{u.netloc}", u.path.rstrip("/")
-    if path:
-        return [f"{base}/.well-known/oauth-authorization-server{path}", f"{base}/.well-known/openid-configuration{path}",
-                f"{base}{path}/.well-known/openid-configuration"]
-    return [f"{base}/.well-known/oauth-authorization-server", f"{base}/.well-known/openid-configuration"]
+    part = token.split(".")[1]
+    claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+    return claims.get("aud") == resource and claims.get("exp", 0) > now
     ### END SOLUTION
 
 # %% check
-for iss in ("https://auth.example.com/tenant1", "https://auth.example.com", "https://auth.example.com/a/b/", "http://127.0.0.1:9000/t"):
-    assert as_metadata_urls(iss) == ref_as_urls(iss), iss
-tried = [s[1] for s in log if s[0] == "as_metadata_try"]
-assert tried == as_metadata_urls(mcp.mcp.issuer)
-print("✅ the gateway tried", len(tried), "locations in the spec's order; the third answered")
+import http.client, urllib.parse
+from gwlab.mcp.client import make_verifier
+
+bearer = LocalStack(fakes=fakes, mcp=AsOptions()).start()
+kb = bearer.issue_key("team-a")
+assert client.request("POST", bearer.url + "/mcp/notes", {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                                           "params": {"name": "search_notes"}},
+                      {"Authorization": f"Bearer {kb}", "x-gwlab-user": "alice"}).status == 200
+notes = bearer.mcp.resource
+alice_tok = bearer.call(lambda: bearer.gateway.mcp.cached("team-a/alice", notes).access_token)
+
+def token_for(resource):
+    """What an attacker who compromised another MCP server holds: a token this AS minted for *that* server."""
+    c = bearer.gateway.mcp
+    v = make_verifier()
+    q = {"response_type": "code", "client_id": c.client_id, "redirect_uri": c.redirect_uri, "scope": "mcp:read",
+         "state": "s", "code_challenge": pkce_challenge(v), "code_challenge_method": "S256", "resource": resource,
+         "login_hint": "team-a/alice"}
+    r = client.request("GET", bearer.mcp.issuer + "/authorize?" + urllib.parse.urlencode(q))
+    code = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(r.headers["Location"]).query))["code"]
+    form = {"grant_type": "authorization_code", "code": code, "redirect_uri": c.redirect_uri, "client_id": c.client_id,
+            "code_verifier": v, "resource": resource}
+    iss = urllib.parse.urlsplit(bearer.mcp.issuer)
+    conn = http.client.HTTPConnection(iss.hostname, iss.port)            # the token endpoint takes a form, not JSON
+    conn.request("POST", iss.path + "/token", urllib.parse.urlencode(form), {"Content-Type": "application/x-www-form-urlencoded"})
+    body = json.loads(conn.getresponse().read())
+    conn.close()
+    return body["access_token"]
+
+other_tok = token_for(bearer.mcp.rs_url + "/billing-mcp")
+for name, tok in (("alice's token for notes", alice_tok), ("a token minted for billing-mcp", other_tok)):
+    rs = client.request("POST", notes, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_notes"}},
+                        {"Authorization": f"Bearer {tok}"}).status
+    mine = accepts(tok, notes, time.time())
+    print(f"{name:32s} notes answers {rs}; accepts() says {mine}")
+    assert mine == (rs == 200), (name, rs)
+assert not accepts(alice_tok, notes, time.time() + 3600)          # and an hour later it has expired
+bearer.stop()
+print("✅ same issuer, same signature key, same user: a token for billing-mcp is still refused at notes — the audience, "
+      "set by `resource`, is what confines a stolen token to the server it was minted for")
 
 # %% [markdown]
-# ## Exercise 5.4 — PKCE S256
-#
-# Write `pkce_s256(verifier)`: `BASE64URL-ENCODE(SHA256(ASCII(verifier)))` without padding (RFC 7636 §4.2). The
-# check uses RFC 7636 Appendix B's pair (the same value 07.2's `agentlab.auth.oauth.challenge_for` produces) and
-# random verifiers against the lab's client. The MCP spec requires S256 and requires a client to refuse an
-# authorization server that does not advertise it.
-
-# %% exercise
-import base64, hashlib
-
-def pkce_s256(verifier: str) -> str:
-    ### BEGIN SOLUTION
-    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode()
-    ### END SOLUTION
-
-# %% check
-assert pkce_s256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-for _ in range(50):
-    v = secrets.token_urlsafe(32)
-    assert pkce_s256(v) == pkce_challenge(v)
-print("✅ RFC 7636 Appendix B reproduced; the verifier travels only in the token request, the challenge only in the authorization request")
-
-# %% [markdown]
-# ## Exercise 5.5 — a stolen refresh token comes back
+# ## Exercise 5.4 — a stolen refresh token comes back
 #
 # The authorization server rotates refresh tokens: every refresh returns a new one and invalidates the old. An
 # attacker who copied an old refresh token replays it *after* the legitimate client has rotated. OAuth 2.1 §4.3.1:
@@ -275,7 +314,7 @@ assert r.status == 200
 print("✅ one replay revokes the grant, for the attacker and the client alike; the gateway re-authorizes alice and her call succeeds")
 
 # %% [markdown]
-# ## Exercise 5.6 — answer a DPoP nonce challenge
+# ## Exercise 5.5 — answer a DPoP nonce challenge
 #
 # Write `nonce_to_retry(status, headers, body)`: the nonce to retry with, or `None` if this response is not a nonce
 # challenge. The authorization server (RFC 9449 §8) answers **400** with `{"error": "use_dpop_nonce"}` and a

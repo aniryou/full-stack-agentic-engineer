@@ -52,7 +52,9 @@ print("(arrivals stop at t = 600 s; each run goes on until its admitted streams 
 # over its limit continuously until t = 648 s, while the admitted thinking streams drain. On yesterday's outputs the
 # same bucket was over for 116 scattered seconds between t = 59 and 600: sized on the mean, it still meets the tail.
 # Reserving the cap is exact and wastes three quarters of the budget; reserving an estimate and reconciling serves
-# 70 % with no second over the limit *in this run*.
+# 70 % with no second over the limit *in this run*. All of it models a provider that counts tokens as they are
+# processed; a hosted API that charges the requested `max_tokens` at admission needs the reservation to match what
+# the gateway sends upstream (PRIMER §4.2, verify).
 #
 # ## Worked example 2 — usage is the bill
 # The same call from the adapter samples: 5,000 prompt tokens (2,700 cached), 350 visible and 1,200 reasoning tokens.

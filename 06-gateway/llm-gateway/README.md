@@ -8,7 +8,7 @@ comes from, what a guardrail costs in latency, and how the gateway authorizes it
 ## Start here
 
 1. Read [PRIMER.md](PRIMER.md) §1–§2 (45 min): one front door, one API; routing and fallback chains.
-2. `cd gateway-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 94 tests in about 15 s,
+2. `cd gateway-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 109 tests in about 16 s,
    free, on any laptop; then open [`gateway-core/notebooks/01_one_front_door.ipynb`](gateway-core/notebooks/01_one_front_door.ipynb)
    and watch a request fall through a provider outage before its first byte.
 3. When you want real HTTP (still free), or one real vLLM on a free Colab or Kaggle T4, continue in
@@ -24,24 +24,24 @@ module 06.7, about 16.5 hours with every exercise; the T1 paths add about 2 GPU-
 |---|---|---|---|
 | [PRIMER.md](PRIMER.md) | explain the gateway's decisions and their costs, §1–§9, with a design-review walkthrough and six drills | ~2.5 h | reading |
 | [`gateway-core/`](gateway-core/) (package `gwcore`, standard library + numpy) | build each decision in process on a virtual clock: adapters, chains and breakers, exact and semantic caches, reserve → stream → reconcile, the ledger and chargeback, virtual keys and `cache_salt`, guardrail placement, the MCP client flow, GenAI spans | ~8 h, 5 notebooks | T0 |
-| [`gateway-lab/`](gateway-lab/) (package `gwlab`) | run the same gateway over HTTP in front of fake providers or a real vLLM: outages, the semantic cache beside vLLM's prefix cache, a ledger reconciled with vLLM's `usage` and `/metrics`, MCP authorization over HTTP | ~6 h, 5 notebooks | T0, T0 + Docker, T1 |
+| [`gateway-lab/`](gateway-lab/) (package `gwlab`) | run the same gateway over HTTP in front of fake providers or a real vLLM: what a client sees for each fault, a semantic cache on declared classes checked live against its sweep, the prefix-cache timing attack `cache_salt` closes, a ledger reconciled with vLLM's `usage` and `/metrics`, key rotation under load, MCP authorization over HTTP | ~6 h, 5 notebooks | T0, T0 + Docker, T1 |
 
 The modules, one per pair of notebooks:
 
 | Module | Primer | Core notebook | Lab notebook | Hours | Tier |
 |---|---|---|---|---:|---|
-| 06.7.1 One front door | §1 | [`01_one_front_door`](gateway-core/notebooks/01_one_front_door.ipynb) | `01_a_gateway_over_http` | 3 | T0 (T1 with one vLLM) |
-| 06.7.2 Routing and fallback chains | §2 | [`02_routing_and_fallback_chains`](gateway-core/notebooks/02_routing_and_fallback_chains.ipynb) | `02_outages_fallbacks_and_breakers` | 3 | T0 → T1 |
-| 06.7.3 Caching at the gateway | §3 | [`03_exact_and_semantic_caching`](gateway-core/notebooks/03_exact_and_semantic_caching.ipynb) | `03_semantic_cache_vs_the_prefix_cache` | 3 | T0 → T1 |
-| 06.7.4 Tokens: limits, metering and chargeback | §4, §5 | [`04_token_limits_metering_and_chargeback`](gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb) | `04_streaming_limits_metering_and_chargeback` | 4 | T0 → T1 |
-| 06.7.5 Keys, guardrails and MCP authorization | §6–§9 | [`05_guardrails_keys_and_mcp_authorization`](gateway-core/notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | `05_guardrails_and_mcp_authorization_over_http` | 3.5 | T0 |
+| 06.7.1 One front door | §1 | [`01_one_front_door`](gateway-core/notebooks/01_one_front_door.ipynb) | [`01_a_gateway_over_http`](gateway-lab/notebooks/01_a_gateway_over_http.ipynb) | 3 | T0 (T1 with one vLLM) |
+| 06.7.2 Routing and fallback chains | §2 | [`02_routing_and_fallback_chains`](gateway-core/notebooks/02_routing_and_fallback_chains.ipynb) | [`02_outages_fallbacks_and_breakers`](gateway-lab/notebooks/02_outages_fallbacks_and_breakers.ipynb) | 3 | T0 → T1 |
+| 06.7.3 Caching at the gateway | §3 | [`03_exact_and_semantic_caching`](gateway-core/notebooks/03_exact_and_semantic_caching.ipynb) | [`03_semantic_cache_vs_the_prefix_cache`](gateway-lab/notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb) | 3 | T0 → T1 |
+| 06.7.4 Tokens: limits, metering and chargeback | §4, §5 | [`04_token_limits_metering_and_chargeback`](gateway-core/notebooks/04_token_limits_metering_and_chargeback.ipynb) | [`04_streaming_limits_metering_and_chargeback`](gateway-lab/notebooks/04_streaming_limits_metering_and_chargeback.ipynb) | 4 | T0 → T1 |
+| 06.7.5 Keys, guardrails and MCP authorization | §6–§9 | [`05_guardrails_keys_and_mcp_authorization`](gateway-core/notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | [`05_guardrails_and_mcp_authorization_over_http`](gateway-lab/notebooks/05_guardrails_and_mcp_authorization_over_http.ipynb) | 3.5 | T0 |
 
 ## Run it
 
 ```bash
 cd 06-gateway/llm-gateway/gateway-core
 python3 -m pip install -r requirements.txt          # numpy + pytest + Jupyter
-python3 -m pytest -q                                 # 94 tests (+1 skipped), ~15 s
+python3 -m pytest -q                                 # 109 tests (+1 skipped), ~16 s
 python3 tools/run_notebooks.py solutions             # the five finished notebooks, ~10 s
 python3 -m jupyterlab notebooks                      # do the exercises
 ```

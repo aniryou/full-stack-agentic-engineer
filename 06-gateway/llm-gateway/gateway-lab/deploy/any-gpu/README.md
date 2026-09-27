@@ -24,7 +24,7 @@ OpenAI-dialect provider second, so notebook 02 can stop vLLM mid-run and watch t
 | `--enable-prompt-tokens-details` | without it vLLM's `usage` has no `prompt_tokens_details.cached_tokens`, and notebook 03 cannot measure prefix-cache hits per request (prefix caching itself is on by default) |
 | `--max-model-len 4096` | the lab's prompts are short; it keeps the KV cache of a 0.5B model small on a T4 |
 | `--dtype half` on a T4 | Turing has no bfloat16 (`serve.sh` detects it; in compose add it yourself) |
-| `--api-key` (optional) | set `VLLM_API_KEY`: the gateway holds it, callers never do; vLLM's check covers `/v1` only, so keep the port private anyway |
+| `--api-key` (optional) | set `VLLM_API_KEY`: the gateway holds it, callers never do; vLLM's check covers only `/v1`, `/v2`, `/inference` and `/cohere` (`/health`, `/metrics` and the rest stay open), so keep the port private anyway |
 
 The gateway asks vLLM for `stream_options.include_usage` on every streamed request and strips the usage chunk
 from clients that did not ask; it sends each tenant's `cache_salt` (vLLM validates it: at most 128 characters,

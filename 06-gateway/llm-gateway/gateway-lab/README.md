@@ -19,17 +19,17 @@ and ledger, places a guardrail, and obtains MCP tokens for the agents behind it.
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU
 box, rented for an hour (not used here); T3 = the Google Cloud deployment, optional.* Every notebook runs at T0:
 the gateway is real, its upstreams are fake providers whose timings and token counts are **simulated** and
-labelled so. Each opens with *the one-minute version*, works examples over HTTP, then 4–6 exercises (implement
+labelled so. Each opens with *the one-minute version*, works examples over HTTP, then 4–5 exercises (implement
 the key function, predict a number, pick a setting) each followed by a check that prints ✅, and closes with
 *in a design review*. Answers are in [`solutions/`](solutions/). Times are for the lab notebook alone.
 
 | # | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|---|
-| 01 | [`a_gateway_over_http`](notebooks/01_a_gateway_over_http.ipynb) | issue a hashed, scoped virtual key; trace one request through the pipeline; read the stream on the wire in two dialects; normalise usage across OpenAI, Anthropic and Gemini; rebuild tool calls from deltas; see why the gateway injects `include_usage` and strips it; read a request's spans back from OTLP/JSON lines | §1, §5, §6 | ~1.5 h | T0; T0 + Docker; T1 |
-| 02 | [`outages_fallbacks_and_breakers`](notebooks/02_outages_fallbacks_and_breakers.ipynb) | say which failures fall through and why a stream never falls back after its first byte; predict and measure a chain's availability and its latency cost; predict how many requests a breaker lets reach a dead target | §2 | ~1.5 h | T0; T1 (stop vLLM mid-run) |
-| 03 | [`semantic_cache_vs_the_prefix_cache`](notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb) | build a cache key that never crosses tenants; sweep a semantic threshold for hits against false hits, with an entity guard; derive a per-tenant `cache_salt`; predict `cached_tokens` from vLLM's block rule; say what each cache saves | §3 | ~1.5 h | T0 emulated; T1 measured |
+| 01 | [`a_gateway_over_http`](notebooks/01_a_gateway_over_http.ipynb) | issue a hashed, scoped virtual key; trace one request through the pipeline; read Anthropic's usage off live stream events, and know when a cut stream has none; rebuild tool calls from deltas and notice an error after the first byte; translate a body `bolt` accepts; see why the gateway injects `include_usage` and strips it; time the gateway's own hop from its spans | §1, §5, §6 | ~1.5 h | T0; T0 + Docker; T1 |
+| 02 | [`outages_fallbacks_and_breakers`](notebooks/02_outages_fallbacks_and_breakers.ipynb) | predict what a client sees for seven live faults (fall through, an error in the stream, or a 502); read per-target failure rates and the chain's availability off the decision log; predict the latency a fallback costs; predict how many requests a breaker lets reach a dead target | §2 | ~1.5 h | T0; T1 (stops vLLM mid-run, opt-in) |
+| 03 | [`semantic_cache_vs_the_prefix_cache`](notebooks/03_semantic_cache_vs_the_prefix_cache.ipynb) | key the cache on classes the route declares (per-user ones per user), with a regex only as a veto; sweep a semantic threshold, then check the live gateway serves exactly what the sweep predicted; play the prefix-cache timing attack that `cache_salt` closes; predict `cached_tokens` from vLLM's block rule | §3 | ~1.5 h | T0 emulated; T1 measured |
 | 04 | [`streaming_limits_metering_and_chargeback`](notebooks/04_streaming_limits_metering_and_chargeback.ipynb) | show how far a per-request bucket over-admits a provider's TPM and fix it with reserve → stream → reconcile; protect a tenant from a noisy neighbour; price requests from `usage`; split a shared GPU by tokens or GPU-seconds; reconcile the ledger with the provider's counters | §4, §5 | ~2 h | T0; T1 (vLLM's `/metrics`) |
-| 05 | [`guardrails_and_mcp_authorization_over_http`](notebooks/05_guardrails_and_mcp_authorization_over_http.ipynb) | measure what each guardrail placement adds to TTFT and what it lets leak; size a held-back window from a TTFT budget; rotate a provider key with overlap; run the MCP client flow — discovery, CIMD, PKCE, step-up, refresh rotation with reuse detection, DPoP nonces | §6, §7, §8 | ~1.5 h | T0 |
+| 05 | [`guardrails_and_mcp_authorization_over_http`](notebooks/05_guardrails_and_mcp_authorization_over_http.ipynb) | measure what each guardrail placement adds to TTFT and what it lets leak; rotate a provider key under load without failing a request; run the MCP client flow — discovery, CIMD, PKCE, step-up; show a token minted for one MCP server refused at another; refresh rotation with reuse detection; DPoP nonces | §6, §7, §8 | ~1.5 h | T0 |
 
 | Tier | Where | What runs | In this lab |
 |---|---|---|---|
@@ -43,7 +43,7 @@ the key function, predict a number, pick a setting) each followed by a check tha
 ```bash
 cd gateway-lab
 python3 -m pip install -e ".[dev]"            # aiohttp, pyyaml, numpy; dev: pytest, jupyter. Optional: ".[dpop]" for ES256
-python3 -m pytest -q                          # 157 tests + 1 skipped, ~20 s, offline, real localhost HTTP
+python3 -m pytest -q                          # 165 tests + 2 skipped (166 + 1 with the [dpop] extra), ~25 s, offline, real localhost HTTP
 python3 -m gwlab stack --port 8080            # fakes + gateway; prints the admin token, a demo key and a curl line
 python3 -m gwlab key --tenant team-b          # another virtual key from the admin API
 python3 -m jupyterlab notebooks               # the exercises; answers in solutions/
@@ -58,7 +58,7 @@ curl -s localhost:8080/metrics | grep ^gwlab_
 curl -s localhost:8080/debug/state -H 'Authorization: Bearer dev-admin-token'     # breakers, buckets, recent decisions
 ```
 
-## The library (`gwlab/`, ~5,100 lines)
+## The library (`gwlab/`, ~5,400 lines)
 
 | Module | Lines | The idea |
 |---|---:|---|
@@ -67,14 +67,15 @@ curl -s localhost:8080/debug/state -H 'Authorization: Bearer dev-admin-token'   
 | `gateway/config.py` | ~260 | the YAML config: providers, the model catalogue with prices, aliases (ordered chains and policies), tenants, limits, cache, guardrails, breakers; `${VAR:-default}` from the environment |
 | `gateway/routing.py` | ~170 | fall-through classes, a consecutive-failure breaker per target (07.2's rule), capability/context/residency filters, ordered/cheapest/EWMA-TTFT/canary policies, chain availability and expected latency |
 | `gateway/ratelimit.py` | ~190 | token buckets with debt; RPM and TPM per tenant, per key, and gateway-wide; `reserve` (reserve → stream → reconcile, a hard cap) vs `per_request`; `x-ratelimit-*` headers |
-| `gateway/cache.py` | ~250 | exact and semantic caches in sqlite3 + numpy; the hashing embedder of `ragkit`; what is cacheable; tenant/alias/system-prompt namespaces; the entity guard; `cache_salt`; the labelled traffic sample and the threshold sweep |
+| `gateway/cache.py` | ~290 | exact and semantic caches in sqlite3 + numpy; the hashing embedder of `ragkit`; cacheability from the class the route declares (`metadata.cache_class`, allowlisted; a regex only vetoes); tenant/alias/system-prompt namespaces, plus the user for per-user classes; the entity guard; `cache_salt`; the labelled traffic sample and the threshold sweep |
 | `gateway/metering.py` | ~160 | dated price rows (verify), cost from canonical usage, $/1M blended and self-hosted, ledger rows, totals, chargeback by tokens or GPU-seconds, reconciliation |
 | `gateway/keys.py`, `store.py` | ~200 | virtual keys hashed at rest, scoped, budgeted, revocable; provider keys with rotation and overlap; the three sqlite tables |
 | `gateway/guardrails.py` | ~110 | a regex screener (a labelled stand-in) and the latency of each placement: inline, parallel, held-back windows, full, shadow |
 | `gateway/otel.py` | ~210 | spans with the GenAI names pinned (v1.41.0 ∩ genai main), OTLP/JSON lines and read-back, OTLP/HTTP export when installed |
 | `fakes.py` | ~560 | fake providers over HTTP in two dialects with vLLM's quirks, their own RPM/TPM windows, a 16-token-block prefix cache with `cache_salt`, heavy-tailed outputs, tool calls, reasoning tokens, and switchable faults; vLLM-named `/metrics` |
 | `mcp/` | ~830 | a fake authorization server and MCP server; the gateway's MCP client (discovery, CIMD, PKCE S256 with `resource`, per-principal tokens, step-up, rotation with reuse detection); DPoP proofs and nonces (ES256 with `cryptography`, else a labelled HMAC stand-in) |
-| `sse.py`, `tokens.py`, `promtext.py`, `client.py`, `bench.py`, `report.py`, `stack.py`, `env.py`, `__main__.py` | ~1,100 | SSE parsing and stream accumulation, the labelled token estimate, Prometheus text, a timing client, scripted tenants (open loop), tables, the in-process stack, tier detection, the CLI |
+| `t1.py` | ~160 | the T1 cells of notebooks 01–04 as functions: a gateway in front of a real vLLM, every result labelled `MEASURED` only when vLLM served it; stopping vLLM mid-run; the prefix-cache rule and salt asserted on measured rows; `/metrics` reconciliation that skips when vLLM is gone (tested offline against a stand-in) |
+| `sse.py`, `tokens.py`, `promtext.py`, `client.py`, `bench.py`, `report.py`, `stack.py`, `env.py`, `__main__.py` | ~1,100 | SSE parsing and stream accumulation, the labelled token estimate, Prometheus text, a timing client, scripted tenants (open loop), tables, the in-process stack, tier detection (T1 only if vLLM answers `/health`), the CLI |
 
 This lab never imports the core package (`gateway-core`, `gwcore`) next door; its tests pin its numbers to the
 repo's canonical homes instead ([`tests/test_repo_numbers.py`](tests/test_repo_numbers.py)): `scalelab.capacity.cost_per_call`
@@ -97,11 +98,13 @@ whose prefix cache and `usage` it depends on.
 
 - **Simulated vs measured.** The fake providers' latencies are sleeps and their token counts come from a word
   tokenizer; every response carries `x-gwlab-simulated: true` and every notebook labels such numbers. With
-  `GWLAB_VLLM_URL` the same cells measure a real vLLM.
+  `GWLAB_VLLM_URL` set and vLLM answering `/health`, the T1 cells measure a real vLLM, and label a row `MEASURED`
+  only when vLLM served it (`gwlab/t1.py`; a fallback to a fake is labelled `SIMULATED`).
 - **Compressed time.** Notebook 04 compresses the rate-limit "minute" to 2 s so a run takes seconds; the
   arithmetic is the same at 60 s.
 - **Stand-ins, labelled.** The guardrail is a regex with a simulated check time, the semantic cache's embedder is
-  lexical (a hashing embedder), the cache classifier is a regex, the fake AS auto-approves the `login_hint`
+  lexical (a hashing embedder), the cache's second guard is a regex that can only veto a declared class (the class
+  itself is declared by the route, never inferred), the fake AS auto-approves the `login_hint`
   principal (there is no browser), tokens are HS256 between the two fakes, and without `cryptography` DPoP proofs
   are HMAC-signed — not RFC 9449-conformant. Loopback HTTP `client_id` URLs are accepted by the fake AS in
   development only.
@@ -120,7 +123,8 @@ Read from upstream sources on 2026-09-26 (the topic's fact sheet names each file
   no `@ / \` or NUL) and salts the first block only; `--enable-prompt-tokens-details` adds `cached_tokens`;
   `--enable-force-include-usage` also turns on continuous usage; a mid-stream failure is an `error` object in a
   `data:` event inside the HTTP 200, then `[DONE]`; `ErrorInfo.code` is the HTTP status as an int; `--api-key`
-  guards `/v1` only; reasoning text is `reasoning`.
+  guards only `/v1`, `/v2`, `/inference` and `/cohere` (`GUARDED_PREFIX`; `/health`, `/metrics` and the rest stay
+  open); reasoning text is `reasoning`.
 - OpenAI chat completions (openai-openapi 2.3.0): `include_usage` sends a final chunk with `choices: []` and
   `usage: null` on other chunks; `max_tokens` is deprecated for `max_completion_tokens`; `Retry-After` is in the
   spec, the `x-ratelimit-*` headers only in prose docs.

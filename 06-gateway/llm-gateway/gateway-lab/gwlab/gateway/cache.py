@@ -183,7 +183,7 @@ class GatewayCache:
             if rows:
                 self.stats["exact"] += 1
                 self.store.execute("UPDATE cache SET hits=hits+1 WHERE ns=? AND key=? AND kind='exact'", (ns, self.exact_key(body)))
-                return Lookup("exact", json.loads(rows[0]["response"]), 1.0)
+                return Lookup("exact", json.loads(rows[0]["response"]), 1.0, matched=last_user_text(body))
         if self.cfg.semantic and self.single_turn(body):
             q = last_user_text(body)
             rows = self.store.query("SELECT key, query, entities, vec, response FROM cache "

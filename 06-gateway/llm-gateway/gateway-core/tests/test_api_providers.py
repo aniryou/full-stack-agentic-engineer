@@ -135,5 +135,7 @@ def test_max_completion_tokens_bounds_reasoning_and_visible_tokens_together():
     events = list(p.chat(api.chat_request("m", [{"role": "user", "content": "hi"}], stream=True, include_usage=True,
                                           max_completion_tokens=60)).events)
     assert events[-2]["usage"]["completion_tokens"] == 60 and events[-3]["choices"][0]["finish_reason"] == "length"
+    assert events[-2]["usage"]["completion_tokens_details"]["reasoning_tokens"] == 60          # reasoning first, capped
+    assert sum(1 for e in events if e != api.DONE and e.get("choices")) == 60                   # 60 deltas, none visible
     whole = p.chat(api.chat_request("m", [{"role": "user", "content": "hi"}], max_completion_tokens=500))
     assert whole.body["usage"]["completion_tokens"] == 140 and whole.body["choices"][0]["finish_reason"] == "stop"

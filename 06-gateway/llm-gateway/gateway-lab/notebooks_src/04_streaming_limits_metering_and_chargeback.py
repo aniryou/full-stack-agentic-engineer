@@ -25,7 +25,7 @@
 
 # %%
 import statistics, time
-from gwlab import bench, client, env, promtext, report
+from gwlab import bench, client, env, promtext, report, t1
 from gwlab.fakes import FakeSpec
 from gwlab.gateway import metering
 from gwlab.gateway.adapters import normalise_usage, payload
@@ -184,8 +184,8 @@ print("rows billed from an estimate:", sum(r["usage_source"] == "estimate" for r
 # price row `p` (`p.input`, `p.cached`, `p.output`, dollars per 1M tokens): uncached prompt tokens at the input
 # rate, cached ones at the cached rate, completion tokens — reasoning included — at the output rate. The check
 # prices every row of the runs above with the model that served it and compares with the ledger, then the
-# scaling primer's §3.4 call (5,000 in, 2,700 cached, 350 out on `gemini-3.5-flash`: $0.007005) and the same call
-# reported in Anthropic's shape (normalise it first).
+# scaling primer's §3.4 call (5,000 in, 2,700 cached, 350 out on `gemini-3.5-flash`: $0.007005) and the primer's
+# §1.5 call — the same plus 1,200 thinking tokens — reported in Anthropic's shape (normalise it first).
 
 # %% exercise
 def price(row: dict, p) -> float:
@@ -204,10 +204,12 @@ for s, _, _ in runs.values():
 call = {"prompt_tokens": 5000, "cached_tokens": 2700, "completion_tokens": 350}
 assert abs(price(call, metering.PRICES["gemini-3.5-flash"]) - 0.007005) < 1e-12
 an = normalise_usage("anthropic", payload("anthropic_message")["usage"])
-assert abs(price({"prompt_tokens": an.prompt_tokens, "cached_tokens": an.cached_tokens, "completion_tokens": an.completion_tokens},
-                 metering.PRICES["claude-haiku-4-5"]) - 0.00432) < 1e-12
-print(f"✅ {n} ledger rows re-priced exactly; the §3.4 call is $0.007005 on gemini-3.5-flash, $0.00432 on claude-haiku-4-5 "
-      "(prices dated 2026-09-26, verify)")
+thinking = price({"prompt_tokens": an.prompt_tokens, "cached_tokens": an.cached_tokens, "completion_tokens": an.completion_tokens},
+                 metering.PRICES["claude-haiku-4-5"])
+assert (an.prompt_tokens, an.completion_tokens, an.reasoning_tokens) == (5000, 1550, 1200)
+assert abs(thinking - (0.00432 + 1200 * 5.00 / 1e6)) < 1e-12
+print(f"✅ {n} ledger rows re-priced exactly; the §3.4 call is $0.007005 on gemini-3.5-flash; the §1.5 call on "
+      f"claude-haiku-4-5 is ${thinking:.5f}, of which $0.00600 is its 1,200 thinking tokens (prices dated 2026-09-26, verify)")
 
 # %% [markdown]
 # ## Worked example: $ per 1M tokens, hosted and self-hosted
@@ -284,24 +286,21 @@ for label, st in (("per_request run", runs["per_request"][0]), ("reserve run + w
 # %% [markdown]
 # ## T1: reconcile with a real vLLM
 #
-# With `GWLAB_VLLM_URL` set: scrape vLLM's `/metrics`, send twenty requests through a gateway whose first target is
-# vLLM, scrape again, and compare the ledger with the counters' differences.
+# With `GWLAB_VLLM_URL` set (and vLLM answering `/health`): scrape vLLM's `/metrics`, send twenty requests through a
+# gateway whose first target is vLLM, scrape again, and compare the ledger's vLLM rows with the counters' differences
+# (`gwlab.t1.reconcile`; if `/metrics` stops answering the cell skips instead of failing).
 
 # %%
 for st, _, _ in runs.values():
     st.stop()
 if tiers["vllm_url"]:
-    url = tiers["vllm_url"].rstrip("/")
-    before = promtext.parse(client.get_text(url + "/metrics"))
-    t1 = LocalStack(config="vllm", upstreams={"local": url}, fakes={"acme": FakeSpec(name="acme")}).start()
-    k1 = t1.issue_key("team-a")
-    bench.run(t1.url, [bench.TenantScript("team-a", k1, rate=4, n=20, max_tokens=64)], seed=1)
-    after = promtext.parse(client.get_text(url + "/metrics"))
-    delta = {k: promtext.total(after, k) - promtext.total(before, k) for k in ("vllm:prompt_tokens_total", "vllm:generation_tokens_total")}
-    rec = metering.reconcile(t1.ledger(), {"local": {"prompt_tokens": delta["vllm:prompt_tokens_total"],
-                                                     "generation_tokens": delta["vllm:generation_tokens_total"]}})
-    print("MEASURED\n" + report.reconcile_table(rec))
-    t1.stop()
+    out = t1.reconcile(tiers["vllm_url"], n=20, fallback=FakeSpec(name="acme"))
+    if out is None:
+        print("T1 skipped: vLLM's /metrics did not answer (is it running? deploy/any-gpu/serve.sh)")
+    else:
+        tag = "MEASURED" if out["served_by_vllm"] == out["sent"] else (
+            f"MEASURED for the {out['served_by_vllm']} of {out['sent']} requests vLLM served; the rest fell back (SIMULATED)")
+        print(tag + "\n" + report.reconcile_table(out["reconcile"]))
 else:
     print("T1 skipped: deploy/any-gpu/serve.sh, then export GWLAB_VLLM_URL=http://127.0.0.1:8000")
 
@@ -326,6 +325,11 @@ else:
 # Up to 6,000. Buckets shared between replicas live in Redis behind a Lua script (one round trip per check) or
 # are split per replica and re-balanced; the scaling primer §5.1 says the same about request buckets.
 #
-# **Drill 3.** *Why reserve the caller's `max_completion_tokens` instead of an average?* — It is the only bound
-# known at admission; reserving the average admits too much when the tail arrives. Reconciliation returns the
-# unused part within the same request, so honest callers who set a tight cap get more throughput.
+# **Drill 3.** *Why not reserve the caller's `max_completion_tokens` for every request?* — The cap bounds the
+# reservation from above; reserving it for every stream holds budget for the stream's whole life (at a 16K cap the
+# core's experiment served 26.5 % of the limit, PRIMER §4.3). The default reservation is an estimate sized by
+# simulation on your own output distribution (gateway-core notebook 04, exercise 4.3) — `default_output_estimate`
+# here — with debits for what streams past it and reconciliation at the end; honest callers who set a tight cap get
+# it reserved as given, and more throughput. Reserve the full cap only where a provider 429 is unacceptable, or
+# where the provider itself charges `max_tokens` at admission (PRIMER §4.2): then reserve what you send upstream —
+# as this gateway does by forwarding the reserved bound as `max_completion_tokens` — or send what you reserved.
