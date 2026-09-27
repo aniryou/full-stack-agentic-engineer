@@ -229,9 +229,10 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   the tolerance and returns the pinned value, so a primer row is formatted from the pin and must still appear verbatim);
   every trained or sampled number in `test_primer_numbers.py`, `test_seqkd.py`, `test_draft.py` and `test_eval.py` is
   pinned that way with a tolerance at least twice the measured spread (0.005 floor), closed-form numbers stay exact, and
-  each primer claim behind a pinned number (soft beats hard, on-policy removes the bias and β = 0 > 0.5 > 1, the head
-  start at 20 steps, the speedup peak at 16 units, the tail gap) is asserted on the host running the test — all hold in
-  every run measured. Thresholds that the kernels crossed moved to what they guarantee (own-prefix accuracy after GKD
+  each primer claim behind a pinned number (soft beats hard, on-policy removes the bias with β = 0 ahead on every
+  column and β = 1 far behind, the head start at 20 steps, the speedup peak at 16 units, greedy acceptance capped by the
+  target's mean top-1 probability, the tail gap) is asserted on the host running the test — all hold in every run
+  measured; a strict β = 0.5 > β = 1 ordering at position 12 does not (the two overlap across kernels) and is not asserted. Thresholds that the kernels crossed moved to what they guarantee (own-prefix accuracy after GKD
   > 0.96 / 0.90, was > 0.98 / 0.97; per-position spread < 0.05, was 0.03). The primer keeps its reference-run digits and
   says so (header note; one sentence each at the §4, §7 and §8 tables), notebooks 01, 02 and 04 carry a one-line note
   and were rebuilt, `CONTRIBUTING.md` "Numbers" gained the rule. The suite passes under every kernel, level and

@@ -279,7 +279,8 @@ and minimises JSD(β) (`onpolicy.gkd_train()` implements the same loop).
 
 On-policy data fixes it; the divergence decides how fast. (These are the primer's least reproducible rows after
 §7's small drafts: on-policy training samples its own data, and across the CPU kernels tested the β = 0 row moves by
-up to ±0.01 / ±0.04 / ±0.05, the β = 1 row by ±0.03 / ±0.08 / ±0.07; the order of the rows does not change.) In
+up to ±0.01 / ±0.04 / ±0.05, the β = 1 row by ±0.03 / ±0.08 / ±0.07; β = 0 stays ahead on every column and the
+reverse end far behind on all 121 contexts, while the middle row's lead at position 12 is within the spread.) In
 this toy the reverse end is slow from every start tried (rule accuracy over all 121 contexts after 300 steps,
 `eval.vs_truth()`, notebook 02):
 

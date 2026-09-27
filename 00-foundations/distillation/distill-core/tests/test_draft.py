@@ -45,9 +45,10 @@ def test_a_draft_distilled_from_the_target_accepts_more(drafts):
     near(a["off-the-shelf"]["alpha"], 0.890, 0.005)                # the reference run; other CPUs' kernels land
     near(a["kd"]["alpha"], 0.988, 0.05)                            # within this of it (tests/pins.py)
     assert a["off-the-shelf"]["alpha"] < a["seqkd"]["alpha"] < a["kd"]["alpha"]
+    cap = target.probs(target.positions(text)[0]).max(1).mean()    # the target's mean top-1 probability (≈ 0.8)
     for v in a.values():
         assert abs(v["alpha"] + v["tv"] - 1) < 1e-12 and v["kl"] >= 0
-        assert v["greedy"] <= 0.8 + 1e-3                           # greedy drafting is capped by the target's top-1
+        assert v["greedy"] <= cap + 1e-9                           # greedy drafting is capped by it, exactly
 
 
 def test_speedup_prefers_the_distilled_draft(drafts):
