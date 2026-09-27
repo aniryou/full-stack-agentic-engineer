@@ -543,6 +543,37 @@ nav:
                       - "12 · Resource estimation: cost, throughput, latency (solution)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/12_resource_estimation.ipynb"
                       - "13 · Code review exercises — read, spot, rank, fix (solution)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/13_code_review_exercises.ipynb"
                       - "14 · Capstone: the bank customer-service agent (solution)": "layers/07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/solutions/14_capstone_bank_agent.ipynb"
+          - "Agent memory":
+              - "layers/07-application-agent-framework/agent-memory/index.md"
+              - "Agent memory primer": "layers/07-application-agent-framework/agent-memory/PRIMER.md"
+              - "Memory core":
+                  - "layers/07-application-agent-framework/agent-memory/memory-core/index.md"
+                  - "Notebooks":
+                      - "01 · Records and the write path": "layers/07-application-agent-framework/agent-memory/memory-core/notebooks/01_records_and_the_write_path.ipynb"
+                      - "02 · Retrieval and the planted-facts harness": "layers/07-application-agent-framework/agent-memory/memory-core/notebooks/02_retrieval_and_the_planted_facts_harness.ipynb"
+                      - "03 · The context budget and the prefix cache": "layers/07-application-agent-framework/agent-memory/memory-core/notebooks/03_the_context_budget_and_the_prefix_cache.ipynb"
+                      - "04 · Consolidation, forgetting and deletion": "layers/07-application-agent-framework/agent-memory/memory-core/notebooks/04_consolidation_forgetting_and_deletion.ipynb"
+                      - "05 · Memory tools and memory poisoning": "layers/07-application-agent-framework/agent-memory/memory-core/notebooks/05_memory_tools_and_memory_poisoning.ipynb"
+                  - "Solutions":
+                      - "01 · Records and the write path (solution)": "layers/07-application-agent-framework/agent-memory/memory-core/solutions/01_records_and_the_write_path.ipynb"
+                      - "02 · Retrieval and the planted-facts harness (solution)": "layers/07-application-agent-framework/agent-memory/memory-core/solutions/02_retrieval_and_the_planted_facts_harness.ipynb"
+                      - "03 · The context budget and the prefix cache (solution)": "layers/07-application-agent-framework/agent-memory/memory-core/solutions/03_the_context_budget_and_the_prefix_cache.ipynb"
+                      - "04 · Consolidation, forgetting and deletion (solution)": "layers/07-application-agent-framework/agent-memory/memory-core/solutions/04_consolidation_forgetting_and_deletion.ipynb"
+                      - "05 · Memory tools and memory poisoning (solution)": "layers/07-application-agent-framework/agent-memory/memory-core/solutions/05_memory_tools_and_memory_poisoning.ipynb"
+              - "Memory lab":
+                  - "layers/07-application-agent-framework/agent-memory/memory-lab/index.md"
+                  - "Notebooks":
+                      - "01 · A memory store on SQLite: records, vectors, full text": "layers/07-application-agent-framework/agent-memory/memory-lab/notebooks/01_a_memory_store_on_sqlite.ipynb"
+                      - "02 · A memory service and an agent": "layers/07-application-agent-framework/agent-memory/memory-lab/notebooks/02_a_memory_service_and_an_agent.ipynb"
+                      - "03 · Memory layouts and the prefix cache": "layers/07-application-agent-framework/agent-memory/memory-lab/notebooks/03_memory_layouts_and_the_prefix_cache.ipynb"
+                      - "04 · Consolidation as a scheduled job": "layers/07-application-agent-framework/agent-memory/memory-lab/notebooks/04_consolidation_as_a_scheduled_job.ipynb"
+                      - "05 · Evaluate, forget and audit": "layers/07-application-agent-framework/agent-memory/memory-lab/notebooks/05_evaluate_forget_and_audit.ipynb"
+                  - "Solutions":
+                      - "01 · A memory store on SQLite: records, vectors, full text (solution)": "layers/07-application-agent-framework/agent-memory/memory-lab/solutions/01_a_memory_store_on_sqlite.ipynb"
+                      - "02 · A memory service and an agent (solution)": "layers/07-application-agent-framework/agent-memory/memory-lab/solutions/02_a_memory_service_and_an_agent.ipynb"
+                      - "03 · Memory layouts and the prefix cache (solution)": "layers/07-application-agent-framework/agent-memory/memory-lab/solutions/03_memory_layouts_and_the_prefix_cache.ipynb"
+                      - "04 · Consolidation as a scheduled job (solution)": "layers/07-application-agent-framework/agent-memory/memory-lab/solutions/04_consolidation_as_a_scheduled_job.ipynb"
+                      - "05 · Evaluate, forget and audit (solution)": "layers/07-application-agent-framework/agent-memory/memory-lab/solutions/05_evaluate_forget_and_audit.ipynb"
           - "Long-running durable":
               - "layers/07-application-agent-framework/long-running-durable/index.md"
               - "Long-running durable primer": "layers/07-application-agent-framework/long-running-durable/PRIMER.md"
