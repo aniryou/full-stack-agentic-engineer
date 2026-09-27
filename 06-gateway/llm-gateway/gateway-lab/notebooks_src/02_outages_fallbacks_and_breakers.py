@@ -141,6 +141,7 @@ print(f"[SIMULATED] acme failed {fa:.1%} of its attempts, bolt {fb:.1%}: predict
       f"(acme alone: {1 - fa:.2f})")
 print("✅ two lossy targets in independent failure domains; put both behind one common failure and (1 − c) caps it")
 
+# %% [markdown]
 # ## Exercise 2.3 — what a fallback costs in latency
 #
 # On the same run, a request either got `acme` at once (TTFT ≈ acme's), or paid a failed attempt and then got

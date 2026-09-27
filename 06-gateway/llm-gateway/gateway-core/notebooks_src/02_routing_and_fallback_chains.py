@@ -215,6 +215,7 @@ assert at_50_rps == (502, 52, 10), at_50_rps
 print(f"✅ at 50 requests a second, {at_50_rps[0]} requests wait on a 10 s timeout before the breaker opens; a 1 s "
       f"first-byte deadline cuts that to {at_50_rps[1]}, a fast 503 to {at_50_rps[2]}. The breaker needs fast failures.")
 
+# %% [markdown]
 # ## Exercise 2.5 — fall back only before the first byte
 # Write `relay(events)`: walk a provider's stream events. If an event with an `"error"` key arrives before any content
 # chunk has been relayed, return `"fall through"`. Otherwise return `(relayed, outcome)`: how many chunks with choices
@@ -277,6 +278,7 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.ch
       f"a whole-response timeout can be no shorter than {full_response_s:.2f} s, which puts the mean at {mean_with_it:.3f} s "
       "-- over budget, so time out on the first byte and on the whole response separately")
 
+# %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Clients ask for aliases; each alias is an ordered chain of provider, model and region,
 # filtered by what the request needs — tools, reasoning effort, context, residency — and ordered by a policy: as

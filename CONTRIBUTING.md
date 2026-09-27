@@ -129,7 +129,10 @@ that makes torch importable.
   `# %% exercise` with `### BEGIN SOLUTION` / `### END SOLUTION`, and `# %% check`) and build them with
   `python3 tools/build_notebooks.py` in the lab. The builder writes both folders, puts the Colab bootstrap cell (its
   `BOOTSTRAP` constant) first and mints stable cell ids, so rebuilding a clean tree is a no-op. Never edit these
-  `.ipynb` files by hand; `python3 tools/ci/ci.py builders` lists every builder.
+  `.ipynb` files by hand; `python3 tools/ci/ci.py builders` lists every builder. A heading (`# ## …`) needs a
+  `# %% [markdown]` line of its own: after a code, exercise or check cell without one, the builder writes it and the
+  prose under it as comments at the end of that cell. [`tools/ci/nb_sources.py`](tools/ci/nb_sources.py) checks
+  every source for this through `tools/ci/ci.py check`.
 - **Hand-written notebooks** get their Colab cell from `python3 tools/inject_colab_bootstrap.py <lab-dir>`, which is
   idempotent and replaces only its own cell. Never run it on a percent-source lab.
 - **Exercises:** a blank stops at its first exercise with `NotImplementedError`, and every exercise is followed by a
@@ -196,7 +199,7 @@ MIT `LICENSE`, and a change is published under the licence of the files it touch
 
 | `tools/ci/run_local.sh` | What it checks | CI job |
 |---|---|---|
-| `--check` | every test file belongs to a lab in `tools/ci/labs.json`, every listed directory exists, every lab with a notebook runner has a solutions step, every notebook follows the layout; then the tests of `tools/ci` itself | lab list complete, CI helpers tested |
+| `--check` | every test file belongs to a lab in `tools/ci/labs.json`, every listed directory exists, every lab with a notebook runner has a solutions step, every notebook follows the layout, every heading in a percent-format notebook source is in a markdown cell; then the tests of `tools/ci` itself | lab list complete, CI helpers tested |
 | `<lab-id> …` | the lab installs as its README says, without torch, and its tests pass (`--list` prints the ids) | tests (`<lab-id>`) |
 | `--solutions <lab-id>` | every solution notebook runs clean and every blank stops at its first exercise | solutions (manual: Actions → tests → Run workflow) |
 | `--notebooks` | every notebook has a Colab setup cell, and every builder and the injector leave the committed tree unchanged (commit first: it needs a clean tree) | notebook rebuilds are no-ops |

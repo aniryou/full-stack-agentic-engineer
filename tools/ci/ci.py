@@ -4,8 +4,9 @@
     python3 tools/ci/ci.py matrix [--solutions]   # JSON list of {id, dir, python} for the job matrix
     python3 tools/ci/ci.py run <id> <phase>       # phase: install | test | solutions, in the lab directory
     python3 tools/ci/ci.py check                  # every directory with tests is in labs.json, each exists,
-                                                  # every lab with a notebook runner has a solutions step, and
-                                                  # every notebook follows the notebooks/ + solutions/ layout
+                                                  # every lab with a notebook runner has a solutions step,
+                                                  # every notebook follows the notebooks/ + solutions/ layout and
+                                                  # every heading in a percent-format source is in a markdown cell
     python3 tools/ci/ci.py builders               # every notebook builder, one path per line
     python3 tools/ci/ci.py bootstrap-targets      # notebooks the Colab injector owns (first cell tagged)
     python3 tools/ci/ci.py bootstrap-check        # the injector would not change what their setup cell does
@@ -113,6 +114,8 @@ def cmd_check(argv: list[str]) -> int:
                  for lab_id in without_solutions(tracked("*/tools/run_notebooks.py", "*/scripts/run_notebooks.py"), labs)]
     layout = nb_layout()
     problems += [f"notebook layout: {nb}: {why}" for nb, why in layout.deviations(layout.tracked_notebooks())]
+    sources = nb_sources()
+    problems += [f"notebook source: {p}:{n}: {why}" for p, n, why in sources.findings(sources.tracked_sources())]
     for p in problems:
         print(p)
     print(f"{len(labs)} labs, {len(problems)} problems")
@@ -154,6 +157,14 @@ def cmd_bootstrap_targets(argv: list[str]) -> int:
 def nb_layout():
     """tools/ci/nb_layout.py: the one notebook layout (notebooks/ + solutions/) and its guard."""
     spec = importlib.util.spec_from_file_location("nb_layout", REPO / "tools" / "ci" / "nb_layout.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def nb_sources():
+    """tools/ci/nb_sources.py: every heading in a percent-format notebook source sits in a markdown cell."""
+    spec = importlib.util.spec_from_file_location("nb_sources", REPO / "tools" / "ci" / "nb_sources.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
