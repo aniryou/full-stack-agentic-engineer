@@ -186,4 +186,4 @@ print("saved → artifacts/word_vectors.npz")
 # is the same factorization with a better loss. (2) Similarity and analogies are
 # properties of the *co-occurrence statistics*, not of neural magic. (3) Everything
 # downstream — sentence encoders, CLIP, recommenders — repeats this pattern with
-# richer context definitions. → Exercises: `exercises/ex01.ipynb`.
+# richer context definitions. → Exercises: `ex01.ipynb`.
