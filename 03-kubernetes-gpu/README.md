@@ -7,7 +7,7 @@ Kueue quotas, and how to get GPU capacity — from zero, on Spot or through queu
 ## Where this layer sits
 
 ```
-   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, memory, durable execution, retrieval
    06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
    05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
    04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels

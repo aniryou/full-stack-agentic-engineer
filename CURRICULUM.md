@@ -4,9 +4,9 @@ A study plan for this repository: the order to work through it, what each module
 measure, where the material lives, roughly how long it takes and what hardware it needs. It covers all eight
 layers, `00-foundations` to `07-application-agent-framework`. Layers 01–05 each have a topic in the same shape — a
 primer, a minimal core and a detailed lab — and layer 04 also has two deep dives (vLLM's source and FlashAttention).
-Four more topics have the same shape: mixture-of-experts and RL and thinking models in 00, quantization in 04 and
-sandboxed execution in 07. The path below weaves them together with the other topics in 00, 04, 06 and 07. Where to
-run each tier, what it costs and how to obtain GPUs is in [`COMPUTE.md`](COMPUTE.md).
+Five more topics have the same shape: mixture-of-experts and RL and thinking models in 00, quantization in 04, and
+sandboxed execution and agent memory in 07. The path below weaves them together with the other topics in 00, 04, 06
+and 07. Where to run each tier, what it costs and how to obtain GPUs is in [`COMPUTE.md`](COMPUTE.md).
 
 *As of 2026-09-26. Product names, versions and prices are the ones in each primer's Verify list; re-check them there.
 Every time in this file (hours per step, module or route) is an estimate for an engineer comfortable with Python who
@@ -20,13 +20,14 @@ does every exercise; treat it as a budget, not a measurement.*
   that explain the engine's behaviour (01, 02) → back to the engine with real measurements → up through
   Kubernetes (03) and the orchestrator (05) → the gateway (06) and the agents (07), whose workloads shape every
   layer below.
-- **Three artifacts per topic in the nine main topics** (one each in 01, 02, 03 and 05; `serving-engine` and
-  `quantization` in 04; `mixture-of-experts` and `rl-and-thinking-models` in 00; `sandboxed-execution` in 07):
+- **Three artifacts per topic in the ten main topics** (one each in 01, 02, 03 and 05; `serving-engine` and
+  `quantization` in 04; `mixture-of-experts` and `rl-and-thinking-models` in 00; `sandboxed-execution` and
+  `agent-memory` in 07):
   a `PRIMER.md` (concepts, worked numbers), a *core* (a minimal from-scratch implementation that runs on a
   laptop) and a *lab* (the detailed version: real GPUs, a real engine, a GCP deployment, each with an offline fallback).
 - **Every concept is learnable at T0** — a laptop or Colab CPU, $0. Real GPUs (T1, T2) and Google Cloud (T3) turn
   predictions into measurements; they are optional steps, never prerequisites.
-- **Budget about 269 hours** end to end, about 129.5 of them in layers 01–05; shorter routes are in §3.3.
+- **Budget about 282.5 hours** end to end, about 129.5 of them in layers 01–05; shorter routes are in §3.3.
 - **Every module ends in a design review:** the two-minute explanation and its drills. §5 indexes every drill in
   the repo and adds cross-layer ones.
 
@@ -34,7 +35,7 @@ does every exercise; treat it as a budget, not a measurement.*
 
 ## 1. How to use it
 
-### 1.1 Three artifacts per topic (the nine main topics)
+### 1.1 Three artifacts per topic (the ten main topics)
 
 | Artifact | What it is | Tier | How to use it |
 |---|---|---|---|
@@ -42,9 +43,9 @@ does every exercise; treat it as a budget, not a measurement.*
 | `<topic>/<core>/` | the minimal implementation: standard library + numpy, offline, readable in a sitting; 4–6 notebooks | T0 | where the concept is learned; do every exercise |
 | `<topic>/<lab>/` | the detailed implementation: T0 fallbacks, GPU code paths, `deploy/` targets (any GPU box, kind or compose, GCP Terraform) | T0 → T3 | run at T0 first, then again on whatever hardware you have |
 
-Each `<topic>/README.md` gives the order to work the topic and its tier table. The notebooks of these nine topics —
-`roofline-and-fabric`, `cuda-and-nccl`, `gpu-scheduling`, `serving-engine`, `serving-orchestration` and the four
-newer topics (00.4, 00.5, 04.9, 07.5) — share one pattern: exercises in `notebooks/`,
+Each `<topic>/README.md` gives the order to work the topic and its tier table. The notebooks of these ten topics —
+`roofline-and-fabric`, `cuda-and-nccl`, `gpu-scheduling`, `serving-engine`, `serving-orchestration` and the five
+newer topics (00.4, 00.5, 04.9, 07.5, 07.6) — share one pattern: exercises in `notebooks/`,
 worked answers in `solutions/`, both generated from `notebooks_src/` by the lab's `tools/build_notebooks.py`. Every
 such notebook states its tier, opens with "The one-minute version", works examples, sets 3–6 exercises each
 followed by a check cell that prints ✅, and ends with "In a design review". The other topics (01's
@@ -93,7 +94,7 @@ the larger items are proposed as new topics in §6.
 | **04** Inference engine | [kv-cache](04-inference-engine/kv-cache/), [paged-attention](04-inference-engine/paged-attention/), [flash-attention](04-inference-engine/flash-attention/): primers, minimal numpy implementations, practice; [`kernel-core`](04-inference-engine/kernel-core/README.md) (numpy core for the three kernel topics, 51 tests); [`serving-engine/`](04-inference-engine/serving-engine/): [PRIMER](04-inference-engine/serving-engine/PRIMER.md), [`mini-engine-core`](04-inference-engine/serving-engine/mini-engine-core/) (6 notebooks, 75 tests; a numpy nano-engine), [`vllm-serving-lab`](04-inference-engine/serving-engine/vllm-serving-lab/) (6 notebooks, 74 tests; load generator, metrics, sizing, fake server; any-GPU, Cloud Run and GKE deploys). Two deep dives: [`vllm-internals/`](04-inference-engine/vllm-internals/README.md) (a primer on vLLM `main` at `5840d95`, a source map, 1 notebook) and the [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) (`fa_calculators.py` with 49 tests, a companion notebook). [`quantization/`](04-inference-engine/quantization/README.md): [PRIMER](04-inference-engine/quantization/PRIMER.md), [`quant-core`](04-inference-engine/quantization/quant-core/) (5 notebooks, 86 tests; formats, granularity, GPTQ, AWQ, SmoothQuant, KV quantization, a per-GPU cost model), [`quant-lab`](04-inference-engine/quantization/quant-lab/) (5 notebooks, 94 tests; compressed-tensors checkpoints and llm-compressor recipes, FP16 vs INT4 vs FP8 in vLLM, lm-eval, FP8 KV, NVFP4 and MXFP4; any-GPU deploy, the serving lab's Cloud Run and GKE for T3) | CUDA-graph capture as an operating concern (capture sizes, memory, when to `--enforce-eager`; 04.8 reads the modes in source); async scheduling and CPU–GPU overlap; hybrid and sliding-window KV groups; multimodal prefill and the encoder cache; cross-layer KV sharing. Thin: tokenizer/detokenizer overhead and SSE backpressure, structured-output cost, MoE inside the engine, LoRA loading, SGLang's RadixAttention. KV quantization is now 04.9.4. SGLang and TensorRT-LLM measured, long-context serving (§6) |
 | **05** Orchestrator | [`serving-orchestration/`](05-orchestrator/serving-orchestration/): [PRIMER](05-orchestrator/serving-orchestration/PRIMER.md), [`orchestrator-core`](05-orchestrator/serving-orchestration/orchestrator-core/) (5 notebooks, 66 tests; a discrete-event fleet simulator), [`inference-gateway-lab`](05-orchestrator/serving-orchestration/inference-gateway-lab/) (5 notebooks, 84 tests; a router with the llm-d endpoint picker's filters → scorers → picker, fake backends, an HPA recommender; compose, kind + llm-d, GKE Inference Gateway) | cost-aware routing across heterogeneous GPUs; request cancellation, migration and drain; multi-cluster and multi-region (§6); endpoint health, eviction and retry; coordinating several router replicas; fleet observability. Thin: SLO planners, canary and model rewrite, session affinity in the lab router, a precise KV-event index; KV tiers on real hardware (§6) |
 | **06** Gateway | [identity and security](06-gateway/identity-security/README.md) (a core with a Mistral provider path, a GCP lab); [scaling, admission and cost](06-gateway/scaling-admission-cost/README.md) (one lab: a hosted Gemini pool by default, a Mistral provider and a vLLM fleet behind a backend switch) | the LLM gateway itself (§6): model routing and fallback chains, semantic caching, token metering and chargeback, OpenTelemetry GenAI conventions, streaming-aware rate limits, provider-key management and virtual keys, tenant isolation, vendor-neutral guardrail placement and cost. Identity: the MCP client-side authorization flow (discovery → PKCE → code → token), DPoP nonces, the SPIFFE Workload API and SVID rotation |
-| **07** Agents and applications | agent fundamentals (2 labs), long-running durable execution (a primer with drills, a core, a lab), retrieval (3 labs, a primer); [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md): [PRIMER](07-application-agent-framework/sandboxed-execution/PRIMER.md), [`sandbox-core`](07-application-agent-framework/sandboxed-execution/sandbox-core/) (5 notebooks, 89 tests; attack probes, a process sandbox, the execution contract, an egress proxy, policy rendered to Kubernetes, warm-pool sizing), [`sandbox-lab`](07-application-agent-framework/sandboxed-execution/sandbox-lab/) (5 notebooks, 122 tests; a network namespace, hardened Docker and gVisor, pod-per-execution on kind, an agent whose code tools fail closed; Docker, kind and GKE Sandbox deploys) | agent memory, episodic and semantic (a paragraph each, no lab); evals at scale; A2A across processes; structured outputs and JSON mode; reflection loops; per-turn cost budgets tied to 04.3's prefix-cache numbers; where prompt-injection defence splits between 06 and 07; streaming and online index updates (`minifaiss` has no delete or update), filtered ANN, retrieval observability; a real durable-engine comparison (Temporal, Restate, Workflows); computer-use agents (§6). Tool-execution sandboxing is now 07.5 |
+| **07** Agents and applications | agent fundamentals (2 labs), long-running durable execution (a primer with drills, a core, a lab), retrieval (3 labs, a primer); [`sandboxed-execution/`](07-application-agent-framework/sandboxed-execution/README.md): [PRIMER](07-application-agent-framework/sandboxed-execution/PRIMER.md), [`sandbox-core`](07-application-agent-framework/sandboxed-execution/sandbox-core/) (5 notebooks, 89 tests; attack probes, a process sandbox, the execution contract, an egress proxy, policy rendered to Kubernetes, warm-pool sizing), [`sandbox-lab`](07-application-agent-framework/sandboxed-execution/sandbox-lab/) (5 notebooks, 122 tests; a network namespace, hardened Docker and gVisor, pod-per-execution on kind, an agent whose code tools fail closed; Docker, kind and GKE Sandbox deploys); [`agent-memory/`](07-application-agent-framework/agent-memory/README.md): [PRIMER](07-application-agent-framework/agent-memory/PRIMER.md), [`memory-core`](07-application-agent-framework/agent-memory/memory-core/) (5 notebooks, 85 tests; typed records, the write path, generative-agents retrieval, the context budget and the prefix cache, consolidation and deletion, a planted-facts harness), [`memory-lab`](07-application-agent-framework/agent-memory/memory-lab/) (5 notebooks, 175 tests; SQLite with FTS5 and vectors and a pgvector twin, a memory service and an agent, prefix hits measured on vLLM, consolidation as a scheduled job, a deletion checked on disk; compose, any-GPU and printed Cloud Run deploys) | evals at scale; A2A across processes; structured outputs and JSON mode; reflection loops beyond 07.6's brief; where prompt-injection defence splits between 06 and 07 for tools and retrieval (07.6.5 settles it for memory content); streaming and online index updates (`minifaiss` has no delete or update; `memory-core`'s flat index and `memory-lab`'s SQLite and pgvector stores delete, so the gap is the from-scratch ANN), filtered ANN, retrieval observability; a real durable-engine comparison (Temporal, Restate, Workflows); computer-use agents (§6). Tool-execution sandboxing is now 07.5, agent memory 07.6 |
 
 ---
 
@@ -133,11 +134,13 @@ numbers are what they are. The path is a spiral around the engine:
 - **06 and 07 last**, as the workload that drives all of it. Turns, sessions and shared prefixes are what the engine
   caches and the router exploits, and the gateway bounds them. The spiral closes when an agent's prompt layout (07)
   shows up as a prefix-cache hit rate (04) and a routing decision (05).
-- **The four newer topics sit where their prerequisites are.** Mixture-of-experts (00.4) comes right after the
+- **The five newer topics sit where their prerequisites are.** Mixture-of-experts (00.4) comes right after the
   roofline, because which experts a step streams is a roofline question; quantization (04.9) once the engine has
   been measured, as the deep dive behind its §8; RL and thinking models (00.5) after reading the real engine,
   because thinking workloads reshape the KV budget, the router (05) and the gateway's cost (06); sandboxed
-  execution (07.5) right after the agent loop and platform (07.1, 07.2), whose `run_code` tool it makes safe.
+  execution (07.5) right after the agent loop and platform (07.1, 07.2), whose `run_code` tool it makes safe; agent
+  memory (07.6) last, after retrieval (07.4) and durable execution (07.3), whose embedder, fusion, metrics and
+  scheduled jobs it reuses, and after 04.3, whose block rules price its context budget.
 
 If you already build agents, skim 07.1 and 06.1 first for motivation, then start the spiral.
 
@@ -176,10 +179,11 @@ Hours are estimates, as above.
 | 26 | 07 | 07.5 | sandboxed-execution PRIMER; `sandbox-core` 01–05; `sandbox-lab` 01–05 | 12 | T0 | T0 + Docker; 05 at T3 |
 | 27 | 07 | 07.3 | durable PRIMER; `lra-core` 01–03; `lra-gcp` 00–05 | 10 | T0 | T0 (T3 optional) |
 | 28 | 07 | 07.4 | vector-databases and embeddings primers, `embeddings-lab`, `rag-from-scratch`, `vector_stores` | 28 | T0 | T0 |
+| 29 | 07 | 07.6 | agent-memory PRIMER; `memory-core` 01–05; `memory-lab` 01–05 | 13.5 | T0 | T0; lab 01's pgvector part at T0 + Docker; lab 02, 03 and 05 at T1; lab 04's GCP part at T3 |
 
-Total: about 269 hours. Steps 3–22 other than 9 and 15 (layers 01–05, including the kernel topics of layer 04,
+Total: about 282.5 hours. Steps 3–22 other than 9 and 15 (layers 01–05, including the kernel topics of layer 04,
 quantization and the two deep dives) are about 129.5 hours, of which the three T3 steps (16, 19, 22) are 8 and
-optional. The four newer topics — 00.4 (step 9), 04.9 (13), 00.5 (15) and 07.5 (26) — are 68.5 of the hours.
+optional. The five newer topics — 00.4 (step 9), 04.9 (13), 00.5 (15), 07.5 (26) and 07.6 (29) — are 82 of the hours.
 "T0 + Docker" means a laptop with Docker for kind or compose; without Docker those notebooks fall back to a bundled
 simulator.
 
@@ -188,7 +192,7 @@ simulator.
 | Route | For | Modules, in order | Hours |
 |---|---|---|---:|
 | Serving-infrastructure core | the stack from engine to fleet, all at T0 | 00.2 → 04.0 → 04.1–04.3 (core 01–03) → 01.1–01.3 (core 01–03) → 04.9.1–04.9.3 (quantization core 01–03) → 02.3 (core 03) → 05.1–05.5 (core 01–05) → 03.3–03.5 (core 03–05), reading the matching primer sections | ~45 |
-| Agent builder | what agent design does to the layers below | 07.1 → 06.1–06.3 → 04.3 (core 03, lab 04) → 05.2 and 05.5 (core 02, 05) → 00.5.5 (RL and thinking-models primer §7: what thinking does to serving) → 06.6 (identity core) → 07.5 (sandbox core 01–05) → 07.2 (notebooks 04, 08, 09) → 07.3 (a durable core) | ~35 |
+| Agent builder | what agent design does to the layers below | 07.1 → 06.1–06.3 → 04.3 (core 03, lab 04) → 07.6.3 (memory core 03) → 05.2 and 05.5 (core 02, 05) → 00.5.5 (RL and thinking-models primer §7: what thinking does to serving) → 06.6 (identity core) → 07.5 (sandbox core 01–05) → 07.2 (notebooks 04, 08, 09) → 07.3 (a durable core) | ~36.5 |
 | Measurement weekend | turning predictions into measurements | the one-GPU, two-GPU and NVLink sessions in [`COMPUTE.md`](COMPUTE.md) §7, after the matching core notebooks | ~10 GPU-hours |
 
 ### 3.4 One home per cross-layer concept
@@ -199,10 +203,10 @@ is where it is taught most completely; the other places apply it and can link th
 | Concept | Taught most completely in | Why there | Also applied in |
 |---|---|---|---|
 | Little's law | 07.5.5 (sandboxed-execution PRIMER §6, `sandbox-core` notebook 05) | the only place that states the law, separates the mean it gives from the size you need, and sizes the pool with Erlang C, each step computed by a named function (`pool.mean_occupancy`, `pool.erlang_c`) | 00.2 (concurrency = RPS × duration), 06.1 (turns and sessions in flight), 05.2 (the router's per-endpoint cap), 04.1, 01 and 02 labs, 07.2 notebook 12 |
-| Prefix caching | 04.3 (serving-engine PRIMER §5, `mini-engine-core` 03, `vllm-serving-lab` 04) | block hashing with a parent hash, refcounts, LRU eviction and the radix-tree alternative, implemented, then measured on a real engine | 04.8 (vLLM's block pool in source), 05.2 and 05.5 (routing on it, KV tiers), 07.2 notebook 04 (prompt layout), 00.5.5 (dropped thinking), 00.2 (why agents are prefill-dominated), 06.1 (cost per conversation) |
+| Prefix caching | 04.3 (serving-engine PRIMER §5, `mini-engine-core` 03, `vllm-serving-lab` 04) | block hashing with a parent hash, refcounts, LRU eviction and the radix-tree alternative, implemented, then measured on a real engine | 04.8 (vLLM's block pool in source), 05.2 and 05.5 (routing on it, KV tiers), 07.2 notebook 04 (prompt layout), 00.5.5 (dropped thinking), 00.2 (why agents are prefill-dominated), 06.1 (cost per conversation), 07.6.3 (memory layout) |
 | Token bucket | 06.3 (scaling primer §5.1, `agentic-scaling-lab` notebook 03) | tied to the 429 feedback loop and to admission control, with an exercise that implements it | 07.2 notebook 07 (limits on the agent's API); the 05 primer's §3 leaves per-tenant buckets to this layer |
 | Circuit breaker | 07.2 (`gcp-agent-platform-lab` notebook 10) | the full state machine with half-open as an exercise, plus bulkheads, composed deadlines and a fallback chain | 06.3 (a breaker per model at the gateway), 07.3 (durable [PRIMER](07-application-agent-framework/long-running-durable/PRIMER.md) §3.4: budgets as the breaker around an autonomous loop) |
-| Prompt injection | 06.6 (identity primer §6, `agentic-identity-gcp-lab` notebook 05) | the threat model and the controls that hold whatever the model does: policy outside the model, scoped delegated tokens, input and output screening, egress | 07.2 notebook 11 (the in-agent layers: escaped data blocks, screening, redaction, an eval golden case), 07.5.4 (code tools behind an egress proxy) |
+| Prompt injection | 06.6 (identity primer §6, `agentic-identity-gcp-lab` notebook 05) | the threat model and the controls that hold whatever the model does: policy outside the model, scoped delegated tokens, input and output screening, egress | 07.2 notebook 11 (the in-agent layers: escaped data blocks, screening, redaction, an eval golden case), 07.5.4 (code tools behind an egress proxy), 07.6.5 (memory poisoning: provenance and trust on the write path, fenced data on the read path) |
 | Durable-execution invariants | 07.3 ([`PRIMER.md`](07-application-agent-framework/long-running-durable/PRIMER.md) §3, "The five invariants") | the fullest list — durable state, idempotent actions, exclusive progress, bounded execution, hygienic context — each with where it lives and how sagas, fan-out and approvals apply it | `lra-core` and the [lra-gcp design notes](07-application-agent-framework/long-running-durable/lra-gcp/docs/primer.md) (three invariants, in code), 06.2 (the turn as the unit of work) |
 
 ---
@@ -440,6 +444,29 @@ the gVisor install), [`kind`](07-application-agent-framework/sandboxed-execution
 the proxy, the admission policy; no gVisor), [`gcp/terraform`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gcp/terraform/) and
 [`gke`](07-application-agent-framework/sandboxed-execution/sandbox-lab/deploy/gke/) (a GKE Sandbox node pool with private nodes and no NAT).
 
+#### 07.6 Agent memory — [`agent-memory`](07-application-agent-framework/agent-memory/README.md)
+
+"Remember what matters, for whom and for how long — and prove you forgot." Primer: [`PRIMER.md`](07-application-agent-framework/agent-memory/PRIMER.md). Core:
+[`memory-core`](07-application-agent-framework/agent-memory/memory-core/) (package `memcore`, standard library + numpy: typed records, the write path,
+generative-agents retrieval, the context budget and the prefix cache, consolidation and deletion, a planted-facts harness). Lab:
+[`memory-lab`](07-application-agent-framework/agent-memory/memory-lab/) (package `memlab`: SQLite with FTS5 and vectors and a pgvector twin, a memory service and an
+agent, prefix hits measured on vLLM, consolidation as a scheduled job, a deletion checked on disk). No GPU needed; T1 swaps in a real
+model or embedder.
+
+| Module | You can … | Primer | Core notebook | Lab notebook | Hours | Tier |
+|---|---|---|---|---|---:|---|
+| **07.6.1 Records and the write path** | name the four kinds of memory and their lifetimes; write a typed record with scope, source, provenance, confidence and a deletion key; gate writes by source and confidence, screen before persistence, merge duplicates, make a retried turn write once; store records in SQLite with FTS5 and vectors | §1 What an agent remembers · §2 The write path: extraction, provenance and write policy | [`01_records_and_the_write_path`](07-application-agent-framework/agent-memory/memory-core/notebooks/01_records_and_the_write_path.ipynb) | [`01_a_memory_store_on_sqlite`](07-application-agent-framework/agent-memory/memory-lab/notebooks/01_a_memory_store_on_sqlite.ipynb) | 2.5 | T0 (+ Docker for pgvector) |
+| **07.6.2 Retrieval, and measuring it** | score memories by similarity, recency and importance and say where the generative-agents paper and its code differ; pack the top-k into a token budget; build a planted-facts benchmark in LongMemEval's and LoCoMo's task shapes and read recall, stale answers and abstention with Wilson intervals; find the knee of recall against tokens | §3 Retrieval: similarity, recency and importance · §4 Measuring memory: planted facts across sessions | [`02_retrieval_and_the_planted_facts_harness`](07-application-agent-framework/agent-memory/memory-core/notebooks/02_retrieval_and_the_planted_facts_harness.ipynb) | [`05_evaluate_forget_and_audit`](07-application-agent-framework/agent-memory/memory-lab/notebooks/05_evaluate_forget_and_audit.ipynb) (the harness) | 3 | T0 (T1 embedder) |
+| **07.6.3 The context budget and the prefix cache** | predict the prefix-cache hit rate of three memory layouts from vLLM's block rules, then measure it; turn lost hits into TTFT and dollars per turn, extraction included; cap memory at the recall knee; give each tenant its own cache salt | §5 The context budget: tokens, the prefix cache and cost per turn | [`03_the_context_budget_and_the_prefix_cache`](07-application-agent-framework/agent-memory/memory-core/notebooks/03_the_context_budget_and_the_prefix_cache.ipynb) | [`03_memory_layouts_and_the_prefix_cache`](07-application-agent-framework/agent-memory/memory-lab/notebooks/03_memory_layouts_and_the_prefix_cache.ipynb) | 2.5 | T0 → T1 |
+| **07.6.4 Consolidation, forgetting and deletion** | consolidate episodes into facts with supersede and precedence rules, as a durable scheduled job that survives a crash; compare recall after consolidation with raw episodes at a fixed budget; forget by decay, TTL and caps; follow a deletion through records, vectors, indexes, derived facts, caches and the database file | §7 Consolidation, forgetting and deletion | [`04_consolidation_forgetting_and_deletion`](07-application-agent-framework/agent-memory/memory-core/notebooks/04_consolidation_forgetting_and_deletion.ipynb) | [`04_consolidation_as_a_scheduled_job`](07-application-agent-framework/agent-memory/memory-lab/notebooks/04_consolidation_as_a_scheduled_job.ipynb), [`05_evaluate_forget_and_audit`](07-application-agent-framework/agent-memory/memory-lab/notebooks/05_evaluate_forget_and_audit.ipynb) (the deletion) | 3 | T0 (T3 printed) |
+| **07.6.5 Memory tools, tenancy and poisoning** | compare `remember` / `recall` / `forget` tools, retrieval before every turn and a pinned profile on the harness; key scope to the verified principal; stop a poisoned tool result from becoming a standing instruction; say which controls belong to the gateway (06) and which to the agent (07) | §6 Memory as tools, or memory before every turn · §8 Tenancy, trust and memory poisoning · §9 Where to run it | [`05_memory_tools_and_memory_poisoning`](07-application-agent-framework/agent-memory/memory-core/notebooks/05_memory_tools_and_memory_poisoning.ipynb) | [`02_a_memory_service_and_an_agent`](07-application-agent-framework/agent-memory/memory-lab/notebooks/02_a_memory_service_and_an_agent.ipynb) | 2.5 | T0 → T1 |
+
+Deploy targets: [`local`](07-application-agent-framework/agent-memory/memory-lab/deploy/local/) (compose: the memory service, a fake model server and, optionally,
+Postgres + pgvector; `up.sh` prints the commands without Docker), [`any-gpu`](07-application-agent-framework/agent-memory/memory-lab/deploy/any-gpu/)
+(the 04 serving lab's `serve.sh` with tool calling, `--enable-prompt-tokens-details` and an embedder on vLLM's pooling
+runner), [`gcp`](07-application-agent-framework/agent-memory/memory-lab/deploy/gcp/) (consolidation as a Cloud Run job on Cloud Scheduler and the model on the
+serving lab's Cloud Run GPU, printed as commands; no Terraform).
+
 ---
 
 ## 5. Design-review drills
@@ -454,8 +481,8 @@ the proxy, the admission policy; no gVisor), [`gcp/terraform`](07-application-ag
 | 01 | [gpu-deployment exercises](01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-exercises.md) | recall, eight numerical workouts, design scenarios, a self-assessment; answer key in Part D |
 | 01–05 | "In a design review" in each new primer: [01](01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), [02](02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md), [03](03-kubernetes-gpu/gpu-scheduling/PRIMER.md), [04](04-inference-engine/serving-engine/PRIMER.md), [05](05-orchestrator/serving-orchestration/PRIMER.md) | a two-minute walkthrough of the layer and six drill questions with answers |
 | 04 | "In a design review" in the [vllm-internals primer](04-inference-engine/vllm-internals/vllm-internals-primer.md) and the [FlashAttention deep dive](04-inference-engine/flash-attention/flash-attention-deep-dive.md) | the engine as vLLM builds it and the attention-kernel choice, each with drill questions |
-| 00, 04, 07 | "In a design review" in the four newer primers: [mixture-of-experts](00-foundations/mixture-of-experts/PRIMER.md#in-a-design-review), [RL and thinking models](00-foundations/rl-and-thinking-models/PRIMER.md#in-a-design-review), [quantization](04-inference-engine/quantization/PRIMER.md#in-a-design-review), [sandboxed execution](07-application-agent-framework/sandboxed-execution/PRIMER.md#in-a-design-review) | a two-minute walkthrough of the topic and six drill questions with answers (seven for sandboxed execution); the MoE primer adds its failure modes as a table ([§8](00-foundations/mixture-of-experts/PRIMER.md#8-in-a-design-review-failure-modes)) |
-| 01–05, 00.4, 00.5, 04.9, 07.5 | the closing "In a design review" of every core and lab notebook | a two-minute explanation of the notebook's idea and 2–3 questions with short answers |
+| 00, 04, 07 | "In a design review" in the five newer primers: [mixture-of-experts](00-foundations/mixture-of-experts/PRIMER.md#in-a-design-review), [RL and thinking models](00-foundations/rl-and-thinking-models/PRIMER.md#in-a-design-review), [quantization](04-inference-engine/quantization/PRIMER.md#in-a-design-review), [sandboxed execution](07-application-agent-framework/sandboxed-execution/PRIMER.md#in-a-design-review), [agent memory](07-application-agent-framework/agent-memory/PRIMER.md#in-a-design-review) | a two-minute walkthrough of the topic and six drill questions with answers (seven for sandboxed execution); the MoE primer adds its failure modes as a table ([§8](00-foundations/mixture-of-experts/PRIMER.md#8-in-a-design-review-failure-modes)) |
+| 01–05, 00.4, 00.5, 04.9, 07.5, 07.6 | the closing "In a design review" of every core and lab notebook | a two-minute explanation of the notebook's idea and 2–3 questions with short answers |
 | 06 | [scaling primer](06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §8 "Walking the design in a review" | a 45-minute flow for a scaling prompt and the questions that change the design |
 | 06 | [Mistral scaling primer](06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md) §8 "Walking the design in a review" | the hosted-vs-self-hosted walkthrough, with two designs worked in outline |
 | 06 | [identity primer](06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §11 "Design drills" · [`09_code_evaluation_drills`](06-gateway/identity-security/agentic-identity-gcp-lab/notebooks/09_code_evaluation_drills.ipynb) | five system-design prompts, spot-the-bug drills, trade-offs to argue |
@@ -486,6 +513,8 @@ Answer aloud first, then read the sketch.
 | 13 | INT4 weights made decode about 3× faster, but long-prompt TTFT did not improve and got slightly worse. | W4A16 cuts the bytes decode streams, but its kernels dequantize to 16-bit before the matrix multiply, so prefill does the same FLOPs plus the dequantization. On an L4 its GEMM turns compute-bound at about 120 tokens per step and has no edge over BF16 by about 460, so long prefill chunks gain nothing. Prefill gets faster only with formats the tensor cores multiply natively — FP8 W8A8 on Ada or Hopper, INT8 W8A8 with SmoothQuant on older GPUs, NVFP4 on Blackwell — and check what the checkpoint actually runs as (an FP8 checkpoint on an A100 is weight-only). | 04.9, 01.2, 04.2 |
 | 14 | "Qwen3-30B-A3B is 3B active, so it runs like a 3B model on our one 24 GB GPU for a low-traffic tool." | Memory follows the total: 61.1 GB in BF16 and 30.5 GB in FP8, so only 4-bit experts (18.5 GB) fit, leaving room for about five 4K-token sessions. Decode streams only the active experts at batch 1, but a batch reads the union of its tokens' experts, so the saving fades as traffic grows; an MoE pays at large batch with expert parallelism. For low traffic on one GPU, a dense model of the active size is usually the better choice. | 00.4, 00.2, 01.2, 04.9 |
 | 15 | A web page told the agent to "check connectivity", and its code tool posted the service's API key to an unknown host. | The code ran with the agent's ambient authority: its environment, its files and an open network. Treat a code tool as DESTRUCTIVE tier and remove that authority: a sandbox with a clean environment, its own UID, a budget for every resource and no network by default (a network namespace, or a default-deny NetworkPolicy); allowed APIs only through an egress proxy that injects the credential outbound, refuses redirects and `CONNECT`, and audits every decision. The hosts a tool call declares are the model's claim, not a control. Give the agent its own principal with scoped, delegated tokens so a leak is bounded. | 07.5, 06.6, 07.1 |
+| 16 | After long-term memory was added, TTFT p50 tripled and input cost rose 40% for a small gain in recall. | Memory is re-retrieved every turn and injected above the history, so the prefix changes each turn and every history block after it misses the prefix cache: the conversation re-prefills on every turn. Pin a per-session profile or append per-turn memory at the tail; cap injected tokens at the recall-vs-budget knee; watch `prompt_tokens_details.cached_tokens` or `vllm:prefix_cache_hits` / `queries` per turn. | 07.6.3, 04.3, 07.2 |
+| 17 | A user asked the assistant to forget their address; a week later it quoted it back. | Deleting the record did not delete the fact: it lived on in a consolidated summary derived from it, in the full-text index (FTS5 keeps deleted terms until a merge or secure-delete), in a WAL file, a cached prompt prefix, a log or an eval set. Give every record a deletion key and provenance, propagate to what was derived, vacuum the indexes, evict the caches, and test deletion by searching the bytes on disk. | 07.6.4, 04.3, 06.6 |
 
 ---
 
@@ -493,9 +522,10 @@ Answer aloud first, then read the sketch.
 
 Areas the repo does not cover yet, in rough priority order within each layer. Suggested homes follow `CLAUDE.md`'s
 rule of one topic sub-folder per sub-domain; new material still arrives through `raw/`. Built from this list so far
-(2026-09-26): MoE architectures, now [`mixture-of-experts`](00-foundations/mixture-of-experts/README.md) (00.4). The
-other three newer topics — RL and thinking models (00.5), quantization (04.9) and sandboxed execution (07.5) — were
-not on it; nothing else below has been built.
+(2026-09-26): MoE architectures, now [`mixture-of-experts`](00-foundations/mixture-of-experts/README.md) (00.4), and
+agent memory, now [`agent-memory`](07-application-agent-framework/agent-memory/README.md) (07.6). The other three
+newer topics — RL and thinking models (00.5), quantization (04.9) and sandboxed execution (07.5) — were not on it;
+nothing else below has been built.
 
 | Layer | Topic | What it would teach | Suggested home |
 |---|---|---|---|
@@ -511,6 +541,5 @@ not on it; nothing else below has been built.
 | 05 | Multi-cluster and multi-region serving | routing across clusters and regions, capacity failover, data residency, global vs regional endpoints | `05-orchestrator/multi-cluster/` |
 | 05 | KV tiers on real hardware | LMCache or Mooncake with vLLM at T1/T2, measured against `fleetsim.kvtier` | `05-orchestrator/serving-orchestration/` |
 | 06 | An LLM gateway | model routing and fallback chains across models and providers; semantic caching (what is safe to cache, similarity thresholds, invalidation); token metering and per-tenant chargeback; OpenTelemetry GenAI semantic conventions for spans and metrics; streaming-aware rate limits | `06-gateway/llm-gateway/` |
-| 07 | Agent memory | episodic, semantic and procedural memory; write policies, retrieval, decay and consolidation; deletion and privacy | `07-application-agent-framework/agent-memory/` |
 | 07 | Computer-use agents | screenshot-to-action loops, browser and desktop sandboxes (07.5 covers code execution and §7 of its primer sketches these), latency and cost per action, verifying effects | `07-application-agent-framework/computer-use/` |
 | 07 | Evals at scale | dataset versioning, judge calibration at volume, offline and online evals, regression gates in CI, the cost of evaluation | `07-application-agent-framework/evals/` |

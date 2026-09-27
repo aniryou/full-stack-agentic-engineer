@@ -3,12 +3,13 @@
 Build the agent the whole stack serves: after this layer you can write an agent loop with tool contracts, a step
 budget and an approval gate; design the platform around it (state, context for cache hits, MCP tools, evals,
 tracing); make a long-running agent survive crashes, duplicate deliveries and multi-day waits; build retrieval from
-embeddings to hybrid search and evaluate it; and run model-written code without handing it your keys.
+embeddings to hybrid search and evaluate it; run model-written code without handing it your keys; and give an
+agent a long-term memory that fits its token budget, stays inside its tenant and forgets when asked.
 
 ## Where this layer sits
 
 ```
-   07 Agents and applications         the agent: loop, tools, sandboxes, state, durable execution, retrieval
+   07 Agents and applications         the agent: loop, tools, sandboxes, state, memory, durable execution, retrieval
    06 Gateway                         who may run what: identity, policy, rate limits, admission, cost
    05 Orchestrator                    many engine replicas as one service: routing, autoscaling, P/D split
    04 Inference engine                one model on its GPUs: the step loop, the KV cache, batching, kernels
@@ -24,7 +25,7 @@ orchestrator (05) routes and the engine (04) caches.
 *Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
 rented for an hour; T3 = the Google Cloud deployment, optional.* "T0 + Docker" is a laptop with Docker, still free.
 No topic here needs a GPU; model API keys are optional everywhere (each lab runs a scripted or fake model at T0).
-Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 07.1–07.5).
+Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 07.1–07.6).
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
@@ -32,6 +33,7 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
 | [`sandboxed-execution/`](sandboxed-execution/README.md) | say what a `run_code` tool can reach when the model is hijacked, which control bounds each risk, how much isolation you need (process → container → gVisor → microVM) and what a pool of sandboxes costs; then enforce it on Docker, kind and GKE — a [PRIMER](sandboxed-execution/PRIMER.md), [`sandbox-core`](sandboxed-execution/sandbox-core/README.md) (standard library, 5 notebooks) and [`sandbox-lab`](sandboxed-execution/sandbox-lab/README.md) (5 notebooks) | ~4 h primer + core; ~8 h lab | T0, T0 + Docker, T3 |
 | [`long-running-durable/`](long-running-durable/README.md) | state the durable-execution invariants (durable state, intent before act, leases, budgets, park instead of wait) and run fan-out/fan-in, human-in-the-loop, sagas, scheduled ticks, slow tools and a model-chosen tool loop on a queue, a store and stateless compute — the [primer](long-running-durable/PRIMER.md) (with design drills), then [`lra-core`](long-running-durable/lra-core/README.md) (standard library, 3 notebooks) → [`lra-gcp`](long-running-durable/lra-gcp/README.md) (6 notebooks; optional ADK 2 and Mistral paths) | ~10 h (the core, then the lab) | T0 (T3 optional) |
 | [`retrieval-rag/`](retrieval-rag/vector-databases-primer.md) | explain embeddings as factorizations and contrastive training; choose and tune an ANN index (IVF, PQ, HNSW); build hybrid search with fusion and reranking; evaluate retrieval with recall@k, MRR and nDCG — the [vector-databases primer](retrieval-rag/vector-databases-primer.md), [`embeddings-lab`](retrieval-rag/embeddings-lab/README.md) (numpy, 6 notebooks + exercises), [`rag-from-scratch`](retrieval-rag/rag-from-scratch/README.md) (7 notebooks) and [`vector_stores`](retrieval-rag/vector_stores/README.md) (FAISS index families and GraphRAG rebuilt in numpy) | ~28 h | T0 (`rag-from-scratch`'s semantic embedder: T0 + torch, or Colab) |
+| [`agent-memory/`](agent-memory/README.md) | decide what an agent writes to memory, from which source and for whom; retrieve by similarity, recency and importance inside a per-turn token budget; lay memory out so the prefix cache survives, and price a turn with and without it; consolidate episodes into facts on a schedule; forget by decay, TTL and budget; carry a deletion to every copy; keep another tenant's memory, and an attacker's, out of the prompt — a [PRIMER](agent-memory/PRIMER.md), [`memory-core`](agent-memory/memory-core/README.md) (standard library + numpy, 5 notebooks) and [`memory-lab`](agent-memory/memory-lab/README.md) (5 notebooks: SQLite with FTS5 and a pgvector twin, a memory service and an agent, prefix-cache hits on vLLM, a scheduled consolidation job, a deletion checked on disk) | ~13.5 h: the primer, ~6 h core, ~6.5 h lab | T0, T0 + Docker, T1, T3 (printed) |
 
 ## Start here
 
@@ -42,7 +44,8 @@ Times are rough and come from the repo's curriculum ([`CURRICULUM.md`](../CURRIC
    or at least 04 (context and caching), 08 (evals) and 09 (tracing) if time is short.
 3. Then the topic your design needs: [`sandboxed-execution/`](sandboxed-execution/README.md) for code-running tools,
    the [durable-execution primer](long-running-durable/PRIMER.md) for anything that waits, the
-   [vector-databases primer](retrieval-rag/vector-databases-primer.md) for retrieval.
+   [vector-databases primer](retrieval-rag/vector-databases-primer.md) for retrieval, and
+   [`agent-memory/`](agent-memory/README.md) for anything the agent must remember across sessions.
 
 ## Run it
 
@@ -56,6 +59,9 @@ cd ../sandbox-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q 
 python3 -m sandboxlab env                                                                                    # which isolation levels this machine can run
 cd ../../long-running-durable/lra-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q  # 13 tests, standard library
 cd ../../retrieval-rag/rag-from-scratch && python3 -m pip install -r requirements.txt && python3 -m pytest -q   # 12 tests
+cd ../../agent-memory/memory-core && python3 -m pip install -e ".[dev]" && python3 -m pytest -q              # 85 tests, ~20 s (1 skip by design)
+cd ../memory-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                               # 175 tests, ~20 s, offline (1 skip by design)
+python3 -m memlab demo                                                                                       # write, recall, forget, count the bytes left on disk
 ```
 
 Then open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`) or from the Colab links below.
@@ -63,9 +69,10 @@ Then open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`) or f
 ## How it fits
 
 **Builds on** nothing from the layers below for the loop itself (07.1 is standard-library Python). Three places lean
-on lower layers: context layout for cache hits (platform lab notebook 04) is the agent side of layer 04's
-[prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching); sandboxed execution starts from
-the layer 06 identity primer's §6.2 and puts its pods on the Kubernetes of layer 03
+on lower layers: context layout for cache hits (platform lab notebook 04) and where agent memory sits in the prompt
+([`agent-memory`](agent-memory/PRIMER.md#5-the-context-budget-tokens-the-prefix-cache-and-cost-per-turn) §5) are the
+agent side of layer 04's [prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching);
+sandboxed execution starts from the layer 06 identity primer's §6.2 and puts its pods on the Kubernetes of layer 03
 ([`gpu-scheduling`](../03-kubernetes-gpu/gpu-scheduling/README.md)); and the platform lab's cost estimates use
 00's [capacity planning](../00-foundations/gpu-capacity-planning/README.md). In the
 [curriculum's spiral](../CURRICULUM.md#31-why-this-order) this layer comes last, as the workload that shapes every
@@ -76,16 +83,16 @@ layer below; if you already build agents, the curriculum suggests skimming 07.1 
 
 - At T0 every model is scripted or fake, so latencies and costs in the labs are simulated; a Gemini, Mistral or other
   model key swaps in a real model where a lab supports it.
-- The Google Cloud paths (the durable labs' deploys, the sandbox lab's GKE Sandbox pool) are optional T3 steps. The
-  durable lab's default install is pydantic plus FastAPI; its ADK 2 path (the `adk` extra, ~220 MB with the Google
-  Cloud clients, measured 2026-09-26, verify) and its Mistral Workflows path (Python 3.12–3.14) are optional, and
-  their tests and notebook skip without them.
+- The Google Cloud paths (the durable labs' deploys, the sandbox lab's GKE Sandbox pool, the memory lab's printed
+  consolidation job) are optional T3 steps. The durable lab's default install is pydantic plus FastAPI; its ADK 2
+  path (the `adk` extra, ~220 MB with the Google Cloud clients, measured 2026-09-26, verify) and its Mistral
+  Workflows path (Python 3.12–3.14) are optional, and their tests and notebook skip without them.
 - [`long-running-durable/`](long-running-durable/README.md) is one primer, one core and one lab: the earlier Google
   Cloud and Mistral editions were folded into [`lra-gcp`](long-running-durable/lra-gcp/README.md) (the topic README
   lists what came from each); `lra-core` and `lra-gcp` keep short design notes of their own beside the topic
   [`PRIMER.md`](long-running-durable/PRIMER.md).
-- Product facts (ADK, MCP, gVisor, GKE Sandbox, model names) are dated September 2026 and marked (verify) in each
-  lab; not covered yet: agent memory beyond a paragraph, evals at scale, computer-use agents
+- Product facts (ADK, MCP, gVisor, GKE Sandbox, pgvector, managed memory services, model names) are dated September
+  2026 and marked (verify) in each lab; not covered yet: evals at scale, computer-use agents
   ([`CURRICULUM.md`](../CURRICULUM.md) §2).
 
 <!-- colab-links:start -->
