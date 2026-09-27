@@ -7,7 +7,7 @@ import pytest
 
 from scalelab.admission import AdmissionConfig, AdmissionController
 from scalelab.capacity import Scenario, cost_per_call, gsus_needed, plan
-from scalelab.clock import CLOCK
+from scalelab.clock import CLOCK, run_in_virtual_time
 from scalelab.loop import Budget, Store, run_turn
 from scalelab.model import FakeModel, SharedPool
 from scalelab.resilience import CircuitBreaker, CircuitOpen, RateLimited, TokenBucket, backoff, call_with_retries
@@ -179,12 +179,18 @@ def test_level_hysteresis():
 
 # --- simulation ---------------------------------------------------------------------------------
 
-async def test_overload_regimes():
-    results = {}
-    for name, kw, users in [("naive", dict(pool_tpm=3_000_000, naive=True), 100),
-                            ("capped", dict(pool_tpm=3_000_000, max_inflight=30), 100)]:
-        CLOCK.reset(0.02)
-        results[name] = await simulate(make_setup(**kw), users=users, duration_s=40, think_s=5)
-    s = compare(results)
+def test_overload_regimes():
+    # Deterministic: a virtual-time event loop (sleeps cost no wall-clock, so a busy CPU cannot shift the numbers)
+    # and seeded randomness, including the retry jitter's module-level `random`.
+    async def regimes():
+        results = {}
+        for name, kw, users in [("naive", dict(pool_tpm=3_000_000, naive=True), 100),
+                                ("capped", dict(pool_tpm=3_000_000, max_inflight=30), 100)]:
+            CLOCK.reset(0.02)
+            results[name] = await simulate(make_setup("hosted", **kw), users=users, duration_s=40, think_s=5)
+        return results
+
+    random.seed(0)
+    s = compare(run_in_virtual_time(regimes()))
     assert s.loc["naive", "rate_limited_calls"] > 20 and s.loc["naive", "p95_s"] > s.loc["capped", "p95_s"]
     assert s.loc["capped", "rate_limited_calls"] == 0 and s.loc["capped", "shed"] > 0 and s.loc["capped", "failed"] == 0

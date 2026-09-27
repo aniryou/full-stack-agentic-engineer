@@ -1,0 +1,5 @@
+# core.py and workflow.py are standard library only; these run the tests and the notebooks.
+pytest>=8
+nbformat>=5.10
+nbclient>=0.10
+ipykernel>=6.29

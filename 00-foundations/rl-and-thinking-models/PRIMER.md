@@ -640,9 +640,10 @@ $0.035355 with) and illustrative accuracies — easy requests (70%) 0.95 off / 0
 0.85 on — thinking everywhere reaches 0.934 at $0.037853 per correct answer, thinking only on hard requests 0.920 at
 $0.016859, never thinking 0.755 at $0.009278. That is routing by effort at the gateway: the 06 layer's
 [scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) prices
-output (thinking included) at six times input on its model and sets thinking levels per task (§3.4, §5.5), and the
-Mistral variant's reference architecture routes task × level × mode to a model, a `reasoning_effort` and an output
-cap. It needs a classifier, or a cheap first pass, that knows which requests are hard.
+output (thinking included) at six times input on its model and sets thinking levels per task (§3.4, §5.5), and its
+[Mistral primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md)
+routes task × level × mode to a model, a `reasoning_effort` and an output cap (§5.3, §5.5). It needs a classifier,
+or a cheap first pass, that knows which requests are hard.
 
 **Speculative decoding on long outputs.** A decode-dominant workload is where speculation pays
 ([serving-engine primer §7](../../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding)): one target

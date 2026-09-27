@@ -36,7 +36,7 @@ notebook ends with *The one-minute version*: how to explain that topic in a desi
 | 00 | Setup and the fake model | — | drive a function-calling model three ways; see caching and usage |
 | 01 | Agent loop and tools | [sandbox](../../sandboxed-execution/PRIMER.md) §3 | tool contracts from signatures, structured errors, idempotency, the loop with budgets and parallel calls |
 | 02 | Workflows and multi-agent | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §1.7 | sequential/parallel/loop agents, delegation, when an extra agent earns its keep |
-| 03 | State, sessions, checkpoints | [durable](../../long-running-durable/00_primer.md) §2–§3 | event log vs working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
+| 03 | State, sessions, checkpoints | [durable](../../long-running-durable/PRIMER.md) §2–§3 | event log vs working state, compare-and-set, durable tasks that resume after a crash, pause/approve |
 | 04 | Context engineering and caching | [scaling](../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 | cache-friendly layout, compaction, tool-result shaping, token budgets |
 | 05 | MCP server, client, gateway | [MCP revisions](docs/MCP_REVISIONS.md); [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 | a teaching subset of MCP (2026-07-28 shape): stateless requests, mirrored headers, MRTR, Tasks; a policy gateway |
 | 06 | OAuth and identity propagation | [identity](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5, §7.1 | PKCE, resource indicators, audience-bound tokens, step-up, token exchange, the confused deputy |

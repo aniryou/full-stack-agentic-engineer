@@ -71,8 +71,8 @@ NOTEBOOK_DIRS = {"notebooks": "Notebooks", "exercises": "Exercises", "practice":
 # is an answer key only when an exercise twin sits beside it (01_x_worked next to 01_x_practice or 01_x, or the
 # same number next to a *_practice/*_exercise notebook) and the folder keeps no solutions/ or worked/ folder of its
 # own. Otherwise it is a worked lesson and stays an ordinary notebook: kv-cache's 01_kv_cache_worked comes before
-# 02_kv_cache_practice (no twin), and long-running-agents-gcp reads 01..04_*_worked first, then the *_practice
-# notebooks, whose answers are in notebooks/solutions/ (the answers live elsewhere).
+# 02_kv_cache_practice (no twin), and a folder that reads its *_worked notebooks first and keeps the *_practice
+# answers in a solutions/ folder lists the worked ones as lessons (the answers live elsewhere).
 # Kept identical to tools/gen_colab_index.py.
 ROOT = REPO
 SOLUTION_DIRS = {"solutions", "worked"}
@@ -635,7 +635,7 @@ ACRONYMS = {w.lower(): w for w in (
     "Mistral K8s").split()}
 COMPOUNDS = ("long-running",)          # hyphenated words that stay hyphenated in a title
 SLUGLIKE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
-# A folder named for a provider variant (agent-core vs mistral-agent-core) says so in its title.
+# A folder named for a provider variant (lab-mistral/ or mistral-lab/ beside lab/) says so in its title.
 VARIANTS = {"mistral": ("Mistral",), "gcp": ("GCP", "Google Cloud")}
 DIR_TITLES = {"docs": "Docs", "solutions": "Solutions", "worked": "Worked", **NOTEBOOK_DIRS}
 TITLE_SPLIT = re.compile(r"\s+[—–]\s+|:\s+")
@@ -781,8 +781,8 @@ def nav_for_dir(repo_dir: str) -> list:
     here_nb = sorted(rp for rp in notebooks if posixpath.dirname(rp) == repo_dir)
     in_solutions_dir = posixpath.basename(repo_dir) in SOLUTION_DIRS
     blanks = [rp for rp in here_nb if in_solutions_dir or not is_solution(rp, here_nb)]
-    # Worked lessons come before the exercises that follow them (long-running-agents-gcp: 01..04_*_worked, then
-    # 01..04_*_practice); elsewhere the file names already give that order.
+    # Worked lessons come before the exercises that follow them (01..04_*_worked, then 01..04_*_practice);
+    # elsewhere the file names already give that order.
     blanks.sort(key=lambda rp: (not WORKED_STEM.search(posixpath.basename(rp)[:-len(".ipynb")]), rp))
     sols = [rp for rp in here_nb if not in_solutions_dir and is_solution(rp, here_nb)]
     subdirs = sorted({rp[len(repo_dir) + 1:].split("/")[0] for rp in list(pages) + list(notebooks)
@@ -820,13 +820,13 @@ def nav_for_dir(repo_dir: str) -> list:
 
 
 def variant_of(repo_path: str) -> tuple[str, ...]:
-    """The provider a path's folders name (lab-mistral/, mistral-agent-core/ -> ("Mistral",)), if any."""
+    """The provider a path's folders name (lab-mistral/, mistral-lab/ -> ("Mistral",)), if any."""
     tokens = {t for part in repo_path.split("/")[:-1] for t in re.split(r"[-_]", part.lower())}
     return next((words for token, words in VARIANTS.items() if token in tokens), ())
 
 
 def mark_variant_duplicates(items: list) -> list:
-    """A page title used more than once in the nav (agent-core's and mistral-agent-core's "01 · The agent loop")
+    """A page title used more than once in the nav ("01 · The agent loop" in both lab/ and mistral-lab/)
     names its provider when its folder is a provider variant, so search results and tabs tell them apart."""
     counts: dict[str, int] = {}
 

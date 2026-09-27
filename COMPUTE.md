@@ -97,8 +97,9 @@ Consequences for the labs:
 ### 3.1 Laptop or CI (T0)
 
 - Python 3.10+ with numpy runs every core; the labs' `requirements.txt` add what their notebooks need. One
-  exception: the Mistral durable lab (`long-running-agents-mistral`) needs Python 3.12 or later for
-  `mistralai-workflows` (`>=3.12,<3.15` as of 3.15.0, 2026-09-26 `(verify)`); its standard-library core runs on 3.10.
+  exception: the optional Mistral Workflows path of the durable lab (`lra-gcp`'s `mistral` extra) needs Python 3.12
+  or later for `mistralai-workflows` (`>=3.12,<3.15` as of 3.15.0, 2026-09-26 `(verify)`); the rest of the lab, the
+  Mistral adapter included, runs on 3.11.
 - Docker is needed only for the local cluster and serving stacks: layer 03's
   [`deploy/kind/`](03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/kind/) (kind with fake `nvidia.com/gpu`
   capacity, Kueue, JobSet, LWS; optional KWOK for hundreds of fake nodes) and layer 05's
@@ -365,8 +366,8 @@ No GPU is needed anywhere in this lab: its tiers are T0, T0 + Docker and T3.
 | Labs | Tier | Notes |
 |---|---|---|
 | 00 transformers, capacity planning, model landscape; 01 gpu-primer and gpu-deployment exercises; 04 kv-cache, paged-attention, flash-attention (practice and deep-dive notebooks) | T0 | numpy and matplotlib; the transformer walkthrough notebooks and both kv-cache notebooks use CPU PyTorch (preinstalled on Colab) |
-| 06 identity labs, scaling labs | T0 | `agentic-identity-gcp-lab`'s Terraform is an optional T3 step; the Mistral variants run fully offline on scripted or fake clients; a `MISTRAL_API_KEY` only switches on live calls (per-token cost, no GPU) and un-skips one test |
-| 07 agent labs, long-running labs, retrieval labs | T0 | Gemini, Mistral, Anthropic or OpenAI keys are optional; `rag-from-scratch` embeds with a hashing embedder at T0 (labelled; not semantic, so its retrieval numbers are illustrative) and, with torch installed (T0 + torch, or Colab), with the ~90 MB `all-MiniLM-L6-v2` model on CPU — `sentence-transformers` pulls in torch, a multi-GB install; the long-running labs' GCP deploys are optional T3 steps |
+| 06 identity labs, scaling labs | T0 | `agentic-identity-gcp-lab`'s Terraform is an optional T3 step; their Mistral provider paths (the scaling lab's fleet backend, the identity core's Mistral file) run fully offline on scripted, simulated or fake clients; a `MISTRAL_API_KEY` only switches on live calls (per-token cost, no GPU) and un-skips one test |
+| 07 agent labs, durable labs (`lra-core`, `lra-gcp`), retrieval labs | T0 | Gemini, Mistral, Anthropic or OpenAI keys are optional; `rag-from-scratch` embeds with a hashing embedder at T0 (labelled; not semantic, so its retrieval numbers are illustrative) and, with torch installed (T0 + torch, or Colab), with the ~90 MB `all-MiniLM-L6-v2` model on CPU — `sentence-transformers` pulls in torch, a multi-GB install; the durable labs' GCP deploys are optional T3 steps, and `lra-gcp`'s ADK 2 path (the `adk` extra, ~220 MB, 2026-09-26 `(verify)`) is optional |
 
 ---
 

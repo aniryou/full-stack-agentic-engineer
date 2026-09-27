@@ -158,7 +158,7 @@ Everything in this repository that does not carry its own licence — the primer
 guide, the site's text and the code outside the labs — is under the MIT licence in [`LICENSE`](LICENSE). A lab
 with its own `LICENSE` file keeps it: most are MIT as well, and two are Apache 2.0 —
 [`agentic-identity-gcp-lab`](06-gateway/identity-security/agentic-identity-gcp-lab/LICENSE) (06) and
-[`lra-gcp`](07-application-agent-framework/long-running-durable/lra/lra-gcp/LICENSE) (07). Third-party names and
+[`lra-gcp`](07-application-agent-framework/long-running-durable/lra-gcp/LICENSE) (07). Third-party names and
 products are trademarks of their owners and are mentioned only to explain how they work.
 
 ## Maintaining the repo

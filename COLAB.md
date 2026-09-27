@@ -14,8 +14,8 @@ Each layer README ends with a *Run in Colab* section: one line per lab, exercise
 - [03 · Kubernetes and GPU scheduling](03-kubernetes-gpu/README.md#run-in-colab) — 18 notebooks
 - [04 · Inference engine](04-inference-engine/README.md#run-in-colab) — 50 notebooks
 - [05 · Orchestrator](05-orchestrator/README.md#run-in-colab) — 20 notebooks
-- [06 · Gateway](06-gateway/README.md#run-in-colab) — 49 notebooks
-- [07 · Agents and applications](07-application-agent-framework/README.md#run-in-colab) — 126 notebooks
+- [06 · Gateway](06-gateway/README.md#run-in-colab) — 43 notebooks
+- [07 · Agents and applications](07-application-agent-framework/README.md#run-in-colab) — 110 notebooks
 
 ## Keeping your work
 Colab opens a fresh copy from GitHub each time. To keep your edits, use *File -> Save a copy in Drive*
