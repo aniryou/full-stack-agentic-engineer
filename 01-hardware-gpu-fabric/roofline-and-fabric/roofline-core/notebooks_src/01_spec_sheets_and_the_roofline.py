@@ -10,7 +10,7 @@
 # Their ratio is the **ridge point**: the arithmetic intensity (FLOPs per byte moved) a
 # kernel needs before the math units, not memory, become the limit. After this notebook
 # you can read a datasheet without falling into its traps, place any kernel on the
-# roofline `min(peak, intensity × bandwidth)`, and say *why* a batch-1 LLM decode runs at
+# roofline $\min(\text{peak}, \text{intensity} \times \text{bandwidth})$, and say *why* a batch-1 LLM decode runs at
 # a fraction of a percent of peak. Primer: `../PRIMER.md` §1–2.
 
 # %%
@@ -44,7 +44,7 @@ print("\nFP32 on CUDA cores vs bf16 on tensor cores (H100):", h100.tflops["fp32"
 
 # %% [markdown]
 # ## The ridge point of every device in the catalogue
-# `ridge = peak / bandwidth`, in FLOP per byte. Compute-first generations push it up
+# $\text{ridge} = \text{peak} / \text{bandwidth}$, in FLOP per byte. Compute-first generations push it up
 # (A100 80GB 153 → H100 295 → GB200 312: FLOPs grew faster than bandwidth); memory
 # refreshes pull it back down (H200 is an H100 with more bandwidth: 206). Every narrower
 # precision doubles it again — fp8 needs twice the intensity of bf16 to pay off.
@@ -60,9 +60,9 @@ for ridge, name, p, r8 in sorted(rows):
 # %% [markdown]
 # ## Kernels on the roofline
 # Compulsory bytes: each operand read once, each result written once (what a perfectly
-# fused and tiled kernel would move). A GEMM of `m×k` by `k×n` does `2mnk` FLOPs over
-# `(mk + kn + mn)·b` bytes, so a square GEMM has intensity `2n/(3b)`; a GEMV (one token
-# through a weight matrix, `m = 1`) has about `2/b` = 1 FLOP/B at bf16.
+# fused and tiled kernel would move). A GEMM of $m \times k$ by $k \times n$ does ${2mnk}$ FLOPs over
+# $(mk + kn + mn) \cdot b$ bytes, so a square GEMM has intensity $2n/(3b)$; a GEMV (one token
+# through a weight matrix, $m = 1$) has about $2/b = 1$ FLOP/B at bf16.
 
 # %%
 N = 1 << 26
@@ -169,8 +169,8 @@ print("✅ read like a planner: dense peaks, per-direction links, bytes not bits
 # %% [markdown]
 # ## Exercise 1.3 — when does a square GEMM become compute-bound?
 # Write `gemm_intensity(m, n, k, b)` and `smallest_compute_bound_square(device, precision, b)`:
-# the smallest integer `n` for which an `n×n×n` GEMM reaches the ridge. Predict first: the
-# intensity is `2n/(3b)`, so `n ≥ 1.5 · b · ridge`. Which needs the larger matrix, a T4 or an H100?
+# the smallest integer $n$ for which an $n \times n \times n$ GEMM reaches the ridge. Predict first: the
+# intensity is $2n/(3b)$, so $n \ge 1.5 \cdot b \cdot \text{ridge}$. Which needs the larger matrix, a T4 or an H100?
 
 # %% exercise
 def gemm_intensity(m: int, n: int, k: int, b: float = 2) -> float:
@@ -218,8 +218,8 @@ print("✅ a 768^3 GEMM saturates a T4 (I = 256 > 203) but starves an H100 (256 
 
 # %% [markdown]
 # ## Exercise 1.5 — how many tokens reach the ridge?
-# During decode every weight matrix is multiplied by a `[tokens × d]` activation. Write
-# `tokens_to_ridge(device, d)`: the smallest number of tokens `m` for which
+# During decode every weight matrix is multiplied by a $[\text{tokens} \times d]$ activation. Write
+# `tokens_to_ridge(device, d)`: the smallest number of tokens $m$ for which
 # `gemm(m, d, d, b)` is compute-bound on `device` at `precision`. Predict first: roughly the
 # ridge itself. Then predict what FP8 (1-byte operands *and* the fp8 peak) does to the answer.
 
@@ -241,7 +241,7 @@ print("✅ ~300 tokens per weight read on an H100 (d=8192: 319), unchanged by FP
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Every kernel pays max(FLOPs / peak, bytes / bandwidth). The
+# **The two-minute version.** "Every kernel pays $\max(\text{FLOPs}/\text{peak}, \text{bytes}/\text{bandwidth})$. The
 # ratio peak / bandwidth — about 295 FLOP per byte for an H100 in bf16 — is the intensity
 # you need before compute is the limit. Elementwise ops are near 0.2, a GEMV is 1, a big
 # square GEMM is over 1,000. So I read a datasheet for dense peak at my precision and for
