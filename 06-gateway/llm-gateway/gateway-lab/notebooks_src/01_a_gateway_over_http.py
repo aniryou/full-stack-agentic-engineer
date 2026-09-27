@@ -280,6 +280,7 @@ assert bad.status == 400
 print(f"✅ four bodies translated as the gateway does and accepted by bolt; without max_tokens: {bad.status} "
       f"{bad.json['error']['message']!r}")
 
+# %% [markdown]
 # ## Worked example: spans, written as OTLP/JSON lines and read back
 #
 # Every request produces one SERVER span (`POST /v1/chat/completions`) and one CLIENT span per upstream target

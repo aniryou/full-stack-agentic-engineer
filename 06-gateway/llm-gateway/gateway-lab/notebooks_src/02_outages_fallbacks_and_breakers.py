@@ -143,11 +143,12 @@ print(f"[SIMULATED] acme failed {fa:.1%} of its attempts, bolt {fb:.1%}: predict
       f"(acme alone: {1 - fa:.2f})")
 print("✅ two lossy targets in independent failure domains; put both behind one common failure and (1 − c) caps it")
 
+# %% [markdown]
 # ## Exercise 2.3 — what a fallback costs in latency
 #
 # On the same run, a request either got `acme` at once (TTFT ≈ acme's), or paid a failed attempt and then got
 # `bolt`. Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`: the mean TTFT of
-# the requests that succeeded — `(1 − p)·t₁ + p·(1 − p₂)·(f + t₂)`, divided by the probability of success.
+# the requests that succeeded — $(1 - p)\,t_1 + p\,(1 - p_2)\,(f + t_2)$, divided by the probability of success.
 # The check fills in the components *measured* on the run (each target's TTFT from the requests it served, the
 # failed attempt's duration from the gateway's decision log) and compares with the measured mean.
 
