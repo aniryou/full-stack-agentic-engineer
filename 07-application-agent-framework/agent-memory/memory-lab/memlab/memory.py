@@ -86,6 +86,14 @@ def resolve(existing: list[MemoryRecord], new: MemoryRecord) -> tuple[str, Memor
     return "UPDATE", current
 
 
+def history_end(records: list[MemoryRecord], slot: str, valid_from: float) -> float | None:
+    """Where a late-arriving older value stops being true: the start of the next known value of the slot
+    (active or already superseded), or None if nothing later is known."""
+    later = [r.valid_from for r in records if r.slot == slot and r.valid_from > valid_from
+             and r.status in ("active", "superseded")]
+    return min(later) if later else None
+
+
 class LocalMemory:
     """One ``(tenant, user)``'s memory, in-process: policy → resolve → store → audit."""
 
@@ -130,7 +138,7 @@ class LocalMemory:
                 rec.status = "flagged"
                 out["reasons"] = out["reasons"] + [f"contradicts a {other.trust}-sourced fact; flagged, not applied"]
             if action == "ADD_HISTORY":
-                rec.valid_to = other.valid_from
+                rec.valid_to = history_end(self.store.records(self.tenant, self.user, slot=slot), slot, rec.valid_from)
                 rec.status = "superseded"
                 rec.superseded_at = now
             rid, created = self.store.add(rec, idempotency_key=key)

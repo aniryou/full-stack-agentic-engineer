@@ -17,7 +17,10 @@
 # |---|---|---|
 # | memory **before the history** | the block right after the system prompt | the block and the *whole history* after it |
 # | a **pinned profile** + `recall` | nothing in the prefix (sorted, byte-identical) | the new turn only (plus a tool round) |
-# | memory **at the tail**, request-scoped | the end of the prompt | the last reply, the new message, the block |
+# | memory **at the tail**, request-scoped | the new user message (block in front of its text) | the previous user message, the last reply, the new message, the block |
+#
+# The tail is where ADK's `PreloadMemoryTool` puts preloaded memory. A variant, `tail_after`, appends the block
+# *after* the user's text instead, so next turn the previous user message is still an exact prefix.
 #
 # Missed tokens are prefilled again: TTFT (a roofline estimate here, `minengine.perf.step_cost`'s model)
 # and dollars (cached input is billed at a tenth, `scalelab.capacity.cost_per_call`). Primer:
@@ -43,7 +46,7 @@ LABEL = "MEASURED" if real else "SIMULATED"
 print("target:", URL, "|", LABEL)
 
 # %% [markdown]
-# ## Worked example: one session, three layouts
+# ## Worked example: one session, three layouts and a variant
 #
 # The same user (a few facts, forty episodic notes), the same eight turns — each a question about the user
 # plus ~250 tokens of pasted notes, the way tool results and documents grow an agent's history. Each run
@@ -52,7 +55,7 @@ print("target:", URL, "|", LABEL)
 # the model's, so the prediction is not shown).
 
 # %%
-runs = {layout: cb.run_layout(URL, layout, turns=8) for layout in cb.LAYOUTS}
+runs = {layout: cb.run_layout(URL, layout, turns=8) for layout in cb.LAYOUTS + cb.VARIANTS}
 print(runs["before_history"].table(), "\n")
 print(runs["tail"].table(), "\n")
 print(cb.summary(runs))
@@ -80,9 +83,9 @@ assert real or math.isclose(hit_rate(before, after), again.hit_rate, rel_tol=1e-
 #   when `pinned` is not None;
 # * `"before_history"`: the memory `block` as a system message right after those, then `history`, then the
 #   user message;
-# * `"tail"`: `history`, then one user message `f"{user}\n\n{block}"` (the block appended);
-# * `"tail_before"`: `history`, then `f"{block}\n\n{user}"` (the block in front — where ADK's
-#   `PreloadMemoryTool` inserts it).
+# * `"tail"`: `history`, then one user message `f"{block}\n\n{user}"` (the block in front of the user's
+#   text — where ADK's `PreloadMemoryTool` inserts it);
+# * `"tail_after"`: `history`, then `f"{user}\n\n{block}"` (the block appended).
 #
 # With `block=None`, every layout is just system (+ pinned) + history + user.
 
@@ -97,9 +100,9 @@ def build_prompt(layout, system, pinned, block, history, user):
     msgs += list(history)
     content = user
     if block and layout == "tail":
-        content = f"{user}\n\n{block}"
-    elif block and layout == "tail_before":
         content = f"{block}\n\n{user}"
+    elif block and layout == "tail_after":
+        content = f"{user}\n\n{block}"
     return msgs + [{"role": "user", "content": content}]
     ### END SOLUTION
 
@@ -108,7 +111,7 @@ store = SQLiteMemoryStore(":memory:")
 cb.seed_memory(store)
 mem = LocalMemory(store, "acme", "u1")
 hist = [{"role": "user", "content": "Hello."}, {"role": "assistant", "content": "Hi!"}]
-for layout in ("before_history", "tail", "tail_before"):
+for layout in ("before_history", "tail", "tail_after"):
     agent = MemoryAgent(ScriptedModel(), mem, mode="implicit", layout=layout, instruction=cb.SYSTEM)
     agent.pinned = "PROFILE" if layout == "tail" else None
     block = mem.render(mem.recall("Which city is my home city?", 3))
@@ -257,12 +260,13 @@ if fake:
 #
 # **Two minutes.** "Memory is re-retrieved every turn, so it is the most volatile part of the prompt, and
 # the prefix cache only reuses from token zero. If we inject it after the system prompt, every history block
-# after it misses and each turn prefills the whole conversation again — here a 38% hit rate against 77% for
-# the same memory appended to the new user message, and about twice the prefill time and dollars per
-# session (simulated; the T1 run measures it). So: stable things first — system prompt, tools, a pinned
-# per-session profile sorted so it is byte-identical — and per-turn memory at the tail, request-scoped.
-# We watch `cached_tokens` per request and `prefix_cache_hits / queries` per replica, and we salt the cache
-# per tenant so one tenant's prefix is never another's hit."
+# after it misses and each turn prefills the whole conversation again: in this notebook's simulated session a
+# 38% hit rate against 67% for the same memory at the tail of the prompt (77% when the block follows the
+# user's text), and about twice the prefill time and dollars per session — the T1 run measures it. So: stable
+# things first — system prompt, tools, a pinned per-session profile sorted so it is byte-identical — and
+# per-turn memory at the tail, request-scoped. We watch `cached_tokens` per request and
+# `prefix_cache_hits / queries` per replica, and we salt the cache per tenant so one tenant's prefix is never
+# another's hit."
 #
 # **Drill 1.** *After adding memory, TTFT p50 tripled and input cost rose. Why, and what do you change?* —
 # The block went in above the history, so the prefix changed every turn and the conversation was re-prefilled

@@ -25,7 +25,7 @@ import json
 
 from memcore import (DAY, POISONED_PAGE, MemoryAgent, MemoryRecord, MemoryStore, Scope, UserTurn, compare_modes,
                      extract, fence)
-from memcore.agent import AuditEvent
+from memcore.agent import ToolCall
 
 ALICE, BOB = Scope("acme", "alice"), Scope("acme", "bob")
 
@@ -130,7 +130,7 @@ for scope, city in [(ALICE, "Lisbon"), (BOB, "Porto")]:
         store.put(rec)
 agent = MemoryAgent(store, ALICE, mode="tools")
 agent.start_session("s1", 2 * DAY)
-out = agent._tool(__import__("memcore").agent.ToolCall("recall", {"query": "home city", "user": "bob"}),
+out = agent._tool(ToolCall("recall", {"query": "home city", "user": "bob"}),
                   UserTurn("x"), 2 * DAY, False, [], 0)
 print("a hijacked recall asking for bob gets:", [line for line in out.splitlines() if "home city" in line])
 

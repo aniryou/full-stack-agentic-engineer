@@ -18,7 +18,7 @@ episodes become facts, and what "forget" has to touch — because you will have 
 
 *Tier T0 = laptop or Colab CPU, free: everything here runs with no GPU, no model and no network.* Each notebook opens
 with "The one-minute version", works examples against the code, sets exercises with a check cell that prints ✅, and
-ends with "In a design review". Finished versions are in [`solutions/`](solutions/). About 6 hours with the primer
+ends with "In a design review". Finished versions are in [`solutions/`](solutions/). About 6 hours for the notebooks, 7.5 with the primer
 (the repo's curriculum, module 07.6).
 
 | Notebook | You will be able to… | Primer | Time | Tier |

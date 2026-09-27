@@ -161,14 +161,20 @@ class FakeLLMServer:
 
     def app(self) -> web.Application:
         app = web.Application()
-        app.router.add_get("/health", lambda r: web.Response(status=200, headers={"x-memlab-simulated": "true"}))
-        app.router.add_get("/version", lambda r: web.json_response({"version": "memlab-fakeserver", "simulated": True}))
+        app.router.add_get("/health", self._health)
+        app.router.add_get("/version", self._version)
         app.router.add_get("/v1/models", self._models)
         app.router.add_get("/metrics", self._metrics)
         app.router.add_post("/v1/chat/completions", self._chat)
         app.router.add_post("/v1/embeddings", self._embeddings)
         app.router.add_post("/reset_prefix_cache", self._reset)
         return app
+
+    async def _health(self, request):
+        return web.Response(status=200, headers={"x-memlab-simulated": "true"})
+
+    async def _version(self, request):
+        return web.json_response({"version": "memlab-fakeserver", "simulated": True})
 
     async def _models(self, request):
         data = [{"id": m, "object": "model", "owned_by": "memlab (simulated)", "created": 0}
@@ -271,10 +277,8 @@ class FakeLLMServer:
                   f'vllm:request_success_total{{{lab},finished_reason="stop"}} {m["success"]}',
                   "# HELP vllm:time_to_first_token_seconds Histogram of time to first token in seconds (SIMULATED).",
                   "# TYPE vllm:time_to_first_token_seconds histogram"]
-        cum = 0
-        for edge, c in zip(TTFT_BUCKETS, m["ttft_buckets"]):
-            cum = c
-            lines.append(f'vllm:time_to_first_token_seconds_bucket{{{lab},le="{edge}"}} {cum}')
+        for edge, cumulative in zip(TTFT_BUCKETS, m["ttft_buckets"]):     # each observation counted in every le >= it
+            lines.append(f'vllm:time_to_first_token_seconds_bucket{{{lab},le="{edge}"}} {cumulative}')
         lines += [f'vllm:time_to_first_token_seconds_bucket{{{lab},le="+Inf"}} {m["ttft_count"]}',
                   f"vllm:time_to_first_token_seconds_sum{{{lab}}} {m['ttft_sum']:.6f}",
                   f"vllm:time_to_first_token_seconds_count{{{lab}}} {m['ttft_count']}",

@@ -74,9 +74,12 @@ class OpenAIEmbeddings:
         return h
 
     def _discover_model(self) -> str:
+        """vLLM serves one model per process, so the first id is it; a server that lists several (this lab's
+        fake serves chat and embeddings together) is asked for the one that looks like an embedder."""
         req = urllib.request.Request(self.url + "/v1/models", headers=self._headers())
         with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
-            return json.loads(r.read())["data"][0]["id"]
+            ids = [d["id"] for d in json.loads(r.read())["data"]]
+        return next((i for i in ids if any(w in i.lower() for w in ("embed", "hashing", "bge", "minilm"))), ids[0])
 
     def _batch(self, texts: list[str]) -> np.ndarray:
         body = json.dumps({"model": self.model_name, "input": texts}).encode()

@@ -2,8 +2,8 @@
 import pytest
 
 from memcore import (DAY, Budget, BudgetExceeded, MemoryAgent, MemoryStore, Scope, UserTurn, WritePolicy,
-                     build_store, compare_modes, evaluate, fence, generate, knee, recall_vs_budget, retrieve,
-                     summarize, wilson_interval)
+                     build_store, compare_modes, evaluate, fence, generate, knee, recall_vs_budget, summarize,
+                     wilson_interval)
 from memcore.records import MemoryRecord
 
 U = Scope("acme", "alice")

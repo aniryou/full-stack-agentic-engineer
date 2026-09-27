@@ -1,0 +1,12 @@
+notebooks
+solutions
+notebooks_src
+tests
+reports
+_run_outputs
+deploy
+**/__pycache__
+**/*.db
+**/*.db-wal
+**/*.db-shm
+*.egg-info

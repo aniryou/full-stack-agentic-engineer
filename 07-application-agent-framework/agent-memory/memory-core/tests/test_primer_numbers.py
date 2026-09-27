@@ -6,8 +6,6 @@ dated prices - 2,000 tokens, $1.50 per M - are quoted, not computed.)
 import re
 from pathlib import Path
 
-import pytest
-
 from memcore import (DAY, GPUS, HOUR, LAYOUTS, LLMS, MemoryAgent, MemoryRecord, MemoryStore, PrefixCache, Scope,
                      Surfaces, UserTurn, Writer, build_store, call_cost, compare_modes, compute_ttft, evaluate,
                      expected_cached_tokens, extract, generate, hit_rate, hits_per_turn, idempotency_key, knee,
@@ -97,8 +95,8 @@ def test_s3_retrieval_numbers():
         w.write(MemoryRecord(text, "semantic", ALICE, "user", key=key, value=value, importance=i, created_at=day * DAY))
     counts = [len(retrieve(store, ALICE, "What is the user's home city?", now=6 * DAY, budget_tokens=b,
                            touch=False).records) for b in (15, 30, 60)]
-    assert counts == [1, 2, 3]
-    present("Budgets of 15, 30 and 60 tokens return one, two and three of four facts")
+    assert counts == [1, 2, 3] and len(store.records(ALICE)) == 3
+    present("Budgets of 15, 30 and 60 tokens return one, two and all three active facts")
 
 
 def test_s4_harness_numbers():

@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass, field
 
 from .extract import day, extract
-from .memory import resolve
+from .memory import history_end, resolve
 from .records import MemoryRecord, content_hash, default_deletion_key
 from .store.sqlite import SQLiteMemoryStore
 
@@ -180,15 +180,18 @@ class ConsolidationJob:
         return plan
 
     def _apply(self, run: str, tenant: str, user: str, a: dict) -> dict:
-        if a["action"] in ("NOOP", "SKIP_LOW_CONFIDENCE", "ADD_HISTORY"):
+        if a["action"] in ("NOOP", "SKIP_LOW_CONFIDENCE"):
             if a["action"] == "NOOP" and a["other"]:
                 self.store.set_fields(a["other"], last_accessed=self.clock())
             return {"id": a["other"]}
-        status = "flagged" if a["action"] == "FLAG" else "active"
+        status = {"FLAG": "flagged", "ADD_HISTORY": "superseded"}.get(a["action"], "active")
         rec = MemoryRecord(tenant, user, a["text"], kind="semantic", source="consolidation", trust=a["trust"],
                            slot=a["slot"], value=a["value"], provenance=[a["evidence"]], confidence=a["confidence"],
                            importance=a["importance"], created_at=self.clock(), valid_from=a["valid_from"],
                            status=status, deletion_key=default_deletion_key(tenant, user, a["slot"]), id=a["id"])
+        if a["action"] == "ADD_HISTORY":                     # a late episode: kept as history, closed where the
+            rec.valid_to = history_end(self.store.records(tenant, user, slot=a["slot"]), a["slot"], a["valid_from"])
+            rec.superseded_at = self.clock()                  # next known value begins (as LocalMemory does)
         rid, created = self.store.add(rec, idempotency_key=content_hash(run, a["slot"], a["value"], a["evidence"]))
         if a["action"] == "UPDATE" and a["other"]:
             old = self.store.get(a["other"])

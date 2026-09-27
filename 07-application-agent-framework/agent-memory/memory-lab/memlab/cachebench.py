@@ -9,10 +9,11 @@ after it can hit:
   after it misses; the whole conversation is prefilled again on every turn.
 * ``pinned`` — a profile rendered once per session right after the system prompt (byte-identical every
   turn) and ``recall`` as a tool: the prefix only grows.
-* ``tail`` — memory appended to the new user message, request-scoped (never persisted): only the last
-  reply, the new message and the new block are new. ``tail_before`` puts it in front of the user's text,
-  where ADK's ``PreloadMemoryTool`` inserts it; the previous user message then changes next turn and is
-  recomputed too.
+* ``tail`` — memory in the new user message, in front of the user's text (where ADK's ``PreloadMemoryTool``
+  inserts it), request-scoped (never persisted): the previous user message changed, so it, the last reply,
+  the new message and the new block are prefilled.
+* ``tail_after`` (a variant) — the block appended *after* the user's text: next turn the previous user
+  message is still an exact prefix, so only the last reply, the new message and the block are new.
 
 ``run_layout`` drives a real ``MemoryAgent`` against an OpenAI-compatible server — the fake server
 (simulated) at T0, vLLM with ``--enable-prompt-tokens-details`` at T1 (measured) — and records per turn
@@ -40,7 +41,7 @@ from .store.sqlite import SQLiteMemoryStore
 
 BLOCK_SIZE = 16            # vLLM's CacheConfig.DEFAULT_BLOCK_SIZE (v0.30.0)
 LAYOUTS = ("before_history", "pinned", "tail")
-VARIANTS = ("tail_before",)          # ADK's placement: the block in front of the user's text
+VARIANTS = ("tail_after",)           # the block after the user's text instead of in front of it
 
 
 # ------------------------------------------------------------------------ vLLM's hit rules (serving lab 4.1)

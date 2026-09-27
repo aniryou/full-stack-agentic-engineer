@@ -175,7 +175,7 @@ class SQLiteMemoryStore:
             raise RuntimeError(f"FTS5 secure-delete is not available in SQLite {sqlite3.sqlite_version}")
         if want and not existed:     # set it before the first insert (persisted in the FTS config table)
             self.con.execute("INSERT INTO memories_fts(memories_fts, rank) VALUES('secure-delete', 1)")
-        self.fts_secure_delete = bool(want) or self._fts_secure_delete_on()
+        self.fts_secure_delete = self._fts_secure_delete_on()   # an existing file keeps the setting it was made with
 
     # ------------------------------------------------------------------ plumbing
     def _fts_secure_delete_on(self) -> bool:
@@ -363,27 +363,29 @@ class SQLiteMemoryStore:
             raise ValueError("mode is 'logical' or 'purge'")
         rep = DeletionReport(deletion_key, tenant)
         with self._lock:
-            q, args = "SELECT rowid, id, embedding FROM memories WHERE tenant=? AND deletion_key=?", [tenant, deletion_key]
+            q = "SELECT rowid, id, user_id, embedding FROM memories WHERE tenant=? AND deletion_key=?"
+            args = [tenant, deletion_key]
             if user is not None:
                 q += " AND user_id=?"
                 args.append(user)
-            targets = {r["id"]: (r["rowid"], bytes(r["embedding"])) for r in self.con.execute(q, args)}
+            targets = {r["id"]: (r["rowid"], bytes(r["embedding"]), r["user_id"]) for r in self.con.execute(q, args)}
             direct = set(targets)
             if include_derived and targets:
                 frontier = set(targets)
-                rows = self.con.execute("SELECT rowid, id, provenance, embedding FROM memories WHERE tenant=?",
+                rows = self.con.execute("SELECT rowid, id, user_id, provenance, embedding FROM memories WHERE tenant=?",
                                         (tenant,)).fetchall()
                 while frontier:
                     nxt = set()
                     for r in rows:
                         if r["id"] not in targets and frontier & set(json.loads(r["provenance"])):
-                            targets[r["id"]] = (r["rowid"], bytes(r["embedding"]))
+                            targets[r["id"]] = (r["rowid"], bytes(r["embedding"]), r["user_id"])
                             nxt.add(r["id"])
                     frontier = nxt
-            blobs = [b for _, b in targets.values()]
+            blobs = [b for _, b, _ in targets.values()]
+            users = {u for _, _, u in targets.values()}
             self.con.execute("BEGIN IMMEDIATE")
             try:
-                for rid, (rowid, _) in targets.items():
+                for rid, (rowid, _, _) in targets.items():
                     self.con.execute("DELETE FROM memories_fts WHERE rowid=?", (rowid,))
                     self.con.execute("DELETE FROM memories WHERE id=?", (rid,))
                 self.con.execute("COMMIT")
@@ -397,11 +399,8 @@ class SQLiteMemoryStore:
             if targets and self.con.execute("SELECT 1 FROM sqlite_master WHERE name='job_checkpoints'").fetchone():
                 # an in-flight consolidation run keeps what it extracted in its checkpoints: drop them (the run's
                 # steps are idempotent, so a resume redoes them without the deleted episodes)
-                users = {r[0] for r in self.con.execute(
-                    f"SELECT DISTINCT user_id FROM memories WHERE id IN ({','.join('?' * len(targets))})", list(targets))}
-                users |= {user} if user else set()
                 n = 0
-                for u in users or {"%"}:
+                for u in sorted(users):
                     n += self.con.execute("DELETE FROM job_checkpoints WHERE run_id LIKE ?",
                                           (f"consolidate/{tenant}/{u}/%",)).rowcount
                 rep.counts["checkpoints"] = n

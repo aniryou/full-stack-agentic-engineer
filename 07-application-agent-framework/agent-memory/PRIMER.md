@@ -46,17 +46,18 @@ comes from the verified principal. After this primer you can walk that design in
 ## 1. What an agent remembers
 
 **Working memory is the context window.** agent-core's loop (07.1, notebook
-[`03_state_and_control`](../agent-fundamentals/agent-core/notebooks/03_state_and_control.ipynb), "Multi-turn memory") passes the whole transcript back as `history`. That is honest — nothing said in the session is lost — and
-it is the baseline this topic replaces. Its cost grows every turn because the prompt re-sends it: a 20-turn session
+[`03_state_and_control`](../agent-fundamentals/agent-core/notebooks/03_state_and_control.ipynb), "Multi-turn memory")
+passes the whole transcript back as `history`. That is honest — nothing said in the session is lost — and it is the
+baseline this topic replaces. Its cost grows every turn because the prompt re-sends it: a 20-turn session
 with a 2,000-token system prompt and 160 tokens per exchange sends **71,200** input tokens in all
 (`memcore.budget.hits_per_turn("none", turns=20)`), cheap only because an append-only transcript is an almost
 perfect prefix-cache customer (95.6% of those tokens hit, §5). Two limits remain: it ends with the session, and
 what is compacted into a summary is paraphrased — the durable primer's rule (`long-running-durable/PRIMER.md` §3.5
 "Context hygiene — every fact has a shelf life": "summaries paraphrase"; "stale context is worse than missing
 context"). The 07.2 lab makes the same point from the other side: notebook
-[`03_state_sessions_checkpoints`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/03_state_sessions_checkpoints.ipynb) §1 ("The
-event log is the source of truth") keeps events as the record and derives what the model sees; its scoped state keys
-(`user:`, `app:`, `temp:`) are "a promise about lifetime".
+[`03_state_sessions_checkpoints`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/03_state_sessions_checkpoints.ipynb)
+§1 ("The event log is the source of truth") keeps events as the record and derives what the model sees; its scoped
+state keys (`user:`, `app:`, `temp:`) are "a promise about lifetime".
 
 **Long-term memory has three kinds, one shape.** The vector-databases primer's "Agent memory" pattern
 ([§17 Use-case patterns](../retrieval-rag/vector-databases-primer.md)) names them — episodic (conversation turns),
@@ -113,8 +114,9 @@ what a standing instruction planted by a web page looks like); a **confidence fl
 persistence** — a secret (`sk-…`, `password: …`, a card-number shape) is `REJECT`ed, injection phrasing is
 `QUARANTINE`d (07.2 notebook
 [`11_security_prompt_injection`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/11_security_prompt_injection.ipynb)
-§4 "Screening: injection phrases, secrets, PII" has the full rule set; §6 "Redact before you log" applies to memory text too); and every other **tool-sourced** record is
-`QUARANTINE`d — stored, never retrieved until a human promotes it (§8).
+§4 "Screening: injection phrases, secrets, PII" has the full rule set; §6 "Redact before you log" applies to memory
+text too); and every other **tool-sourced** record is `QUARANTINE`d — stored, never retrieved until a human promotes
+it (§8).
 
 Six writes through one `memcore.write.Writer` show every branch (memory-core notebook 01, worked example 4):
 
@@ -184,7 +186,7 @@ weight of 3 suits long episodes) — a single aggregate would pick the wrong one
 
 **Top-k in a token budget.** The ranked list is packed greedily — take each record that still fits, skip one that
 does not and keep looking (`memcore.retrieve.pack`) — so a long record never blocks shorter ones behind it. Budgets
-of 15, 30 and 60 tokens return one, two and three of four facts in notebook 02's worked example 3.
+of 15, 30 and 60 tokens return one, two and all three active facts in notebook 02's worked example 3.
 
 **As-of filters.** A supersession closes a fact instead of deleting it, so `retrieve(..., as_of=t)` can return the
 fact that held at `t` — "where did the user live on day 2?" — including superseded ones; a normal query never sees
@@ -228,7 +230,9 @@ retrieval or write-path miss — which is what a memory benchmark should isolate
 
 - **accuracy** with a **Wilson interval** (07.2 notebook
   [`08_evals_trajectory_judge_gates`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb) §4; restated as
-  `memcore.harness.wilson_interval` and pinned to its numbers: 45/50 → (0.7864, 0.9565), 0/20 → (0.0, 0.1611));
+  `memcore.harness.wilson_interval` — centre `(p + z²/2n) / (1 + z²/n)`, half-width
+  `z·√(p(1−p)/n + z²/4n²) / (1 + z²/n)`, clipped to [0, 1] — and pinned to its numbers: 45/50 → (0.7864, 0.9565),
+  0/20 → (0.0, 0.1611));
 - **recall within the budget** — was every evidence value in the packed context?;
 - **stale answers** — the superseded value given for a knowledge update;
 - **abstention** — right answers to the unanswerable questions, reported separately because a memory that stores
@@ -294,8 +298,8 @@ exercise 3.4 ("lay out an agent prompt for the cache") and 07.2 notebook
 `agentlab.agents.context.ContextBuilder` lays a prompt out as `[system + static] [memory] [summary] [recent turns]
 [current turn]`: its `memory_provider` block is the **pinned** layout only if the provider returns the same bytes all
 session — its exercise 6.5 asks for at most three facts, sorted, byte-identical across turns — and becomes
-**before_history** the moment it re-retrieves per turn; ADK already uses the tail layout for preloaded memory, inserting it "at the
-current-turn boundary … before the latest ordinary user batch" so it never enters a reusable prefix
+**before_history** the moment it re-retrieves per turn. ADK already uses the tail layout for preloaded memory,
+inserting it "at the current-turn boundary … before the latest ordinary user batch" so it never enters a reusable prefix
 (`google/adk-python` `models/llm_request.py`, ADK 2.10.0, verify).
 
 **TTFT lost.** Prefill time comes from `memcore.budget.prefill_seconds`, a restatement of
@@ -309,7 +313,8 @@ about 49 ms per 1,000 uncached tokens on that model
 ([capacity primer](../../00-foundations/gpu-capacity-planning/PRIMER.md), item 4 "Prefill — compute-bound": "RAG and
 agents are prefill-dominated, so prefix caching … is the biggest single win").
 
-**Dollars per turn.** `memcore.budget.turn_cost` prices a turn with a dated table: the
+**Dollars per turn.** A call costs `(uncached input × input price + cached input × cached price + output × output
+price) / 10⁶`; `memcore.budget.turn_cost` prices a turn with a dated table: the
 [scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)'s §3.4 "Cost
 per conversation" call — 5,000 input tokens of which 2,700 cached, 350 output, Gemini 3.5 Flash at $1.50 /
 $0.15 cached / $9.00 per M (5 Sep 2026, verify) — is **$0.007005** (`memcore.budget.call_cost`, reproducing
@@ -475,8 +480,9 @@ sensitive.
 who sends the same prefix, and TTFT reveals a hit. vLLM's `cache_salt` enters the first block's hash only and the
 chain carries it (vllm-internals primer [§4.3 "Block hashes: a chain over the
 prefix"](../../04-inference-engine/vllm-internals/vllm-internals-primer.md)): with salts, a tenant re-sending a
-64-token prompt hits 48 tokens and another tenant sending the same prompt hits 0 (`memcore.budget.PrefixCache`). The salt must be secret, random and
-per tenant; vLLM v0.30.0 validates at most 128 characters although its schema says 1,024 (verify).
+64-token prompt hits 48 tokens and another tenant sending the same prompt hits 0 (`memcore.budget.PrefixCache`). The
+salt must be secret, random and per tenant; vLLM v0.30.0 validates at most 128 characters although its schema says
+1,024 (verify).
 
 ## 9. Where to run it
 
@@ -487,6 +493,8 @@ per tenant; vLLM v0.30.0 validates at most 128 characters although its schema sa
 | **T1** — one small GPU | a real embedder (`BAAI/bge-small-en-v1.5`, 384-d, `vllm serve … --runner pooling`) on the paraphrase subset; a 0.5–1.5B chat model with tool calls (`Qwen/Qwen2.5-1.5B-Instruct`, `--enable-auto-tool-choice --tool-call-parser hermes`) and `--enable-prompt-tokens-details` for measured `cached_tokens` — via the serving lab's [`deploy/any-gpu/`](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/any-gpu/) (all verify) | free on Colab/Kaggle T4, ~$0.3–0.7/h rented |
 | **T3** — Google Cloud | consolidation as a Cloud Run job on Cloud Scheduler (an HTTP target on `run.googleapis.com/v2/.../jobs/<job>:run` with an **OAuth** token, not OIDC, because the target is a Google API); the model on the serving lab's Cloud Run GPU — the lab prints the commands; no Terraform | pay per use |
 
+GCP is one target, never a prerequisite: T1 runs on any GPU box — a free Colab or Kaggle T4, a rented 24 GB card on
+RunPod, Vast or Lambda, or a GCP L4 Spot VM — and the T3 schedule is a cron on any machine that can reach your store.
 Prices and obtainability: [`COMPUTE.md`](../../COMPUTE.md). pgvector notes: `vector` indexes up to 2,000 dimensions
 (`halfvec` 4,000); HNSW defaults `m = 16`, `ef_construction = 64`, `hnsw.ef_search = 40`; `hnsw.iterative_scan`
 (since 0.8.0) for filtered queries; "Vacuuming can take a while for HNSW indexes" (0.8.6, verify).

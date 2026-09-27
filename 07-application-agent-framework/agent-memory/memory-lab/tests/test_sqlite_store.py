@@ -167,3 +167,14 @@ def test_raw_fts5_bm25_formula_matches_sqlite():
         idf = max(math.log((len(toks) - n + 0.5) / (n + 0.5)), 1e-6)
         want = -idf * d.count("dog") * 2.2 / (d.count("dog") + 1.2 * (0.25 + 0.75 * len(d) / avg))
         assert math.isclose(got, want, rel_tol=1e-9)
+
+
+def test_reopening_a_file_keeps_its_fts_setting(tmp_path, clock):
+    if not sqlite_features()["fts5_secure_delete"]:
+        pytest.skip("this SQLite has no FTS5 secure-delete")
+    path = tmp_path / "r.db"
+    SQLiteMemoryStore(path, clock=clock, fts_secure_delete=False).close()
+    assert SQLiteMemoryStore(path, clock=clock).fts_secure_delete is False
+    path2 = tmp_path / "s.db"
+    SQLiteMemoryStore(path2, clock=clock).close()
+    assert SQLiteMemoryStore(path2, clock=clock).fts_secure_delete is True

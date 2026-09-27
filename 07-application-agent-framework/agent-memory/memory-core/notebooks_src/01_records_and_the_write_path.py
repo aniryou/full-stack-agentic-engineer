@@ -21,8 +21,7 @@
 # %%
 import hashlib
 
-from memcore import (DAY, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, count_tokens, extract,
-                     idempotency_key, read_facts)
+from memcore import DAY, MemoryRecord, MemoryStore, Scope, WritePolicy, Writer, extract, idempotency_key
 
 ALICE = Scope("acme", "alice", session="s1")
 
