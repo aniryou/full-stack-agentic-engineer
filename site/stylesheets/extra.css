@@ -159,7 +159,9 @@
 .md-typeset table:not([class]) :is(th, td).fse-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+.md-typeset table:not([class]) td.fse-num {
+  white-space: nowrap;           /* the numbers; a long header over them may still wrap */
 }
 
 /* Record tables as cards (tools/site/hooks.py marks them .fse-stacked: a table whose rows carry a paragraph, like
