@@ -8,6 +8,11 @@
  *    gets .fse-num on all its cells, header included: right-aligned, tabular figures, no wrapping.
  * 3. "(verify)" — the repo's mark on a dated product fact — is wrapped in <span class="fse-verify"> so it reads as
  *    a tag beside the fact rather than as part of the sentence. Code, headings and links are left alone.
+ * 5. Inline maths and the punctuation around it stay on one line. Browsers may break a line between an inline
+ *    formula (an atomic inline box) and the comma, colon or bracket next to it, so ", a" or ":" can start a line.
+ *    Each inline formula is wrapped with the bracket before it and the punctuation after it in a no-wrap span;
+ *    runs once the page is parsed (arithmatex spans) and again after MathJax has typeset (notebook pages, see
+ *    site/javascripts/mathjax.js).
  * 4. A code block on a Markdown page that is a little wider than the column (the layer READMEs' stack diagram is
  *    117 characters; formula fences and ASCII diagrams are alike) gets .fse-shrink-1 / .fse-shrink-2, a 10% or 20%
  *    smaller font, when that makes it fit; anything wider keeps its horizontal scroll. Notebook cells are real code
@@ -74,7 +79,28 @@
       else if (ratio <= 1.25) pre.classList.add("fse-shrink-2");
     });
   }
-  function run() { mark(); tagVerify(); shrinkWidePre(); }
+  var AFTER = /^[,.;:!?)\]]+/, BEFORE = /[(\[]$/;
+  function glueMath() {
+    var nodes = document.querySelectorAll(".md-typeset span.arithmatex, .md-typeset mjx-container");
+    nodes.forEach(function (el) {
+      if (el.getAttribute && el.getAttribute("display") === "true") return;
+      if (el.closest(".fse-mathglue")) return;
+      var target = el.closest("span.arithmatex") || el;
+      if (target.parentElement && target.parentElement.classList.contains("fse-mathglue")) return;
+      var next = target.nextSibling, prev = target.previousSibling, after = "", before = "", m;
+      if (next && next.nodeType === 3 && (m = next.nodeValue.match(AFTER))) { after = m[0]; next.nodeValue = next.nodeValue.slice(m[0].length); }
+      if (prev && prev.nodeType === 3 && (m = prev.nodeValue.match(BEFORE))) { before = m[0]; prev.nodeValue = prev.nodeValue.slice(0, -m[0].length); }
+      if (!after && !before) return;
+      var wrap = document.createElement("span");
+      wrap.className = "fse-mathglue";
+      target.parentNode.insertBefore(wrap, target);
+      if (before) wrap.appendChild(document.createTextNode(before));
+      wrap.appendChild(target);
+      if (after) wrap.appendChild(document.createTextNode(after));
+    });
+  }
+  window.fseGlueMath = glueMath;
+  function run() { mark(); tagVerify(); shrinkWidePre(); glueMath(); }
   var resizeTimer = null;
   window.addEventListener("resize", function () {
     clearTimeout(resizeTimer);

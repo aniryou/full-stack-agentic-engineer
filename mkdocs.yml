@@ -68,7 +68,8 @@ extra_javascript:
   - javascripts/tables.js
 
 markdown_extensions:
-  - attr_list
+  # No attr_list: nothing uses `{: .class }`, and the extension swallows a paragraph's or table cell's closing
+  # "{0, 0.5, …, 6}" as attributes (the quantization primer's E2M1 row lost its set).
   - md_in_html
   - tables
   # Callouts: written in the repo as GitHub alerts (`> [!NOTE]`), which tools/site/hooks.py turns into these.

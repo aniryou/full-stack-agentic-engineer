@@ -285,6 +285,18 @@
   font-size: 0.66em;
 }
 
+/* A long inline formula scrolls inside its own box on a phone instead of widening the whole page. */
+.md-typeset mjx-container:not([display="true"]) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* An inline formula and the bracket or punctuation around it stay on one line (site/javascripts/tables.js). */
+.md-typeset .fse-mathglue {
+  white-space: nowrap;
+}
+
 /* Display maths (arithmatex on pages, MathJax on notebooks) gets air and scrolls inside its own box. */
 .md-typeset .arithmatex:not(span),
 .md-typeset mjx-container[display="true"] {

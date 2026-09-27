@@ -92,11 +92,12 @@ the link (beside "Open in Colab") in their first cell.
 
 ## Markdown extensions and features
 
-`mkdocs.yml` keeps only what the pages use: `attr_list` and `md_in_html` (the landing page's HTML), `tables`, `toc`
+`mkdocs.yml` keeps only what the pages use: `md_in_html`, `tables`, `toc`
 with permalinks, `pymdownx.highlight` / `superfences` (code and Mermaid), `admonition` and `pymdownx.details`
 (the callouts the hook makes from GitHub alerts), and `pymdownx.arithmatex` with `\( \)` inline (what the
 generator makes of `$...$`) and `$$`, `\[ \]` and `\begin{}` display. A bare `$` is always a dollar. Tabs are not
-enabled: nothing uses them.
+enabled: nothing uses them; nor is `attr_list`, which would swallow a paragraph's or table cell's closing
+`{0, 0.5, …, 6}` as attributes.
 
 `site/stylesheets/extra.css` is where the reading experience is set: on desktop the page grid may grow to 72rem
 (Material's default 61rem leaves 688px for content beside two sidebars, too little for a 7-column table or a
