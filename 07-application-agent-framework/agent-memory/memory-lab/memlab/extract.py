@@ -53,27 +53,27 @@ SLOTS: dict[str, Slot] = {s.name: s for s in (
          (r"\bI work (?:at|for) (?P<value>[A-Z][A-Za-z]+)", r"\bI (?:just )?(?:joined|started at) (?P<value>[A-Z][A-Za-z]+)"),
          ("employer", "work at", "work for", "company", "firm", "salary"), importance=6),
     Slot("pet", "Pet: the user has a {value}.",
-         (r"\bmy (?P<animal>dog|cat)(?:'s name)? is (?:called |named )?(?P<name>[A-Z][a-z]+)",
+         (r"\b(?i:my) (?P<animal>dog|cat)(?:'s name)? is (?:called |named )?(?P<name>[A-Z][a-z]+)",
           r"\bI have a (?P<animal>dog|cat) (?:called|named) (?P<name>[A-Z][a-z]+)"),
          ("pet", "dog", "cat", "animal", "puppy", "kitten"), importance=5),
     Slot("diet", "Diet: the user is {value}.",
          (r"\bI(?:'m| am) (?:a )?(?P<value>vegetarian|vegan|pescatarian)",),
          ("diet", "recipe", "dinner", "meal", "cook", "eat"), importance=7),
     Slot("drink", "Favourite drink: the user's favourite drink is {value}.",
-         (r"\bmy favou?rite drink is (?P<value>[a-z]+(?: [a-z]+)?)",),
+         (r"\b(?i:my) favou?rite drink is (?P<value>[a-z]+(?: [a-z]+)?)",),
          ("favourite drink", "favorite drink", "drink", "beverage", "sip"), importance=3),
     Slot("allergy", "Allergy: the user is allergic to {value}.",
          (r"\bI(?:'m| am) allergic to (?P<value>[a-z]+)",),
          ("allergic", "allergy", "allergies", "react badly"), importance=8,
          hedges=(r"\bI think\b", r"\bmaybe\b", r"\bnot sure\b")),
     Slot("manager", "Manager: the user's manager is {value}.",
-         (r"\bmy manager is (?P<value>[A-Z][a-z]+)", r"\bI report to (?P<value>[A-Z][a-z]+)"),
+         (r"\b(?i:my) manager is (?P<value>[A-Z][a-z]+)", r"\bI report to (?P<value>[A-Z][a-z]+)"),
          ("manager", "boss", "report to", "supervisor"), importance=5),
     Slot("trip", "Trip: the user took a trip to {value}.",
          (r"\bI (?:took a trip|went on a trip|travelled|traveled) to (?P<value>[A-Z][a-z]+)",),
          ("trip", "trips", "travel", "journeys", "abroad"), multi=True, importance=4),
     Slot("address", "Home address: the user lives at {value}.",
-         (r"\bmy (?:home )?address is (?P<value>\d+ [A-Z][a-z]+(?: [a-z]+)* [A-Z][a-z]+)",),
+         (r"\b(?i:my) (?:home )?address is (?P<value>\d+ [A-Z][a-z]+(?: [a-z]+)* [A-Z][a-z]+)",),
          ("address", "street", "postal"), importance=9),
 )}
 
@@ -156,6 +156,18 @@ def is_question(text: str) -> bool:
     t = text.strip().lower()
     return t.endswith("?") or t.startswith(("what", "which", "where", "when", "how", "who", "can you suggest",
                                             "suggest", "do you know"))
+
+
+QUESTION_RE = re.compile(r"[^.?!\n]*\?")
+MEMORY_BLOCK = re.compile(r"<<<MEMORY.*?<<<END MEMORY>>>", re.S)
+
+
+def focus(text: str) -> str:
+    """The question a message asks (its first ``...?`` sentence), or the whole message if it asks none;
+    a request-scoped memory block in front of it is skipped."""
+    text = MEMORY_BLOCK.sub("", text).strip()
+    m = QUESTION_RE.search(text)
+    return m.group(0).strip() if m else text
 
 
 def is_forget_request(text: str) -> bool:

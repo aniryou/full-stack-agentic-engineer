@@ -23,7 +23,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
-from .extract import UNKNOWN, answer, extract, is_forget_request, is_question, question_slot
+from .extract import UNKNOWN, answer, extract, focus, is_forget_request, is_question, question_slot
 from .records import count_tokens
 
 _ids = itertools.count(1)
@@ -106,6 +106,7 @@ def prompt_tokens(messages: list[dict]) -> int:
 # ------------------------------------------------------------------------------------------- scripted
 FIRST_PERSON = re.compile(r"\b(my|me|i|i'm|mine)\b", re.I)
 INSTRUCTION_IN_DATA = re.compile(r"\bremember (?:that )?(?P<text>[^.\n]+\.)", re.I)
+FORGET_IN_DATA = re.compile(r"\bforget (?:everything )?(?:about )?(?:the user'?s? )?(?P<subject>[a-z_ ]+?)(?:[.\n]|$)", re.I)
 
 
 class ScriptedModel:
@@ -153,8 +154,7 @@ class ScriptedModel:
     def _decide(self, messages, last, names):
         if last["role"] == "user":
             text = last.get("content") or ""
-            # the user message may carry a transient memory block at the tail: the question is its last line
-            question = text.split("<<<END MEMORY>>>")[-1].strip()
+            question = focus(text)        # skips a request-scoped memory block and any pasted context
             if is_forget_request(question) and "forget" in names:
                 slot = question_slot(question) or question
                 return Response(tool_calls=[ToolCall("forget", {"subject": slot})])
@@ -170,7 +170,7 @@ class ScriptedModel:
         if last["role"] == "tool":
             tool = last.get("name", "")
             q = next((m for m in reversed(messages) if m["role"] == "user"), {"content": ""})
-            question = (q.get("content") or "").split("<<<END MEMORY>>>")[-1].strip()
+            question = focus(q.get("content") or "")
             if tool == "recall":
                 return answer(question, self._context(messages)) if is_question(question) else "Noted."
             if tool == "remember":
@@ -184,9 +184,13 @@ class ScriptedModel:
                     return "I did not delete anything: " + str(result.get("message", "the request was declined"))
                 n = (result.get("data") or {}).get("forgotten", 0)
                 return f"Done — I have forgotten that ({n} records)." if n else "I found nothing to forget."
-            m = INSTRUCTION_IN_DATA.search(last.get("content") or "")
+            content = last.get("content") or ""
+            m = INSTRUCTION_IN_DATA.search(content)
             if m and "remember" in names:          # gullible: obeys an instruction found in data
                 return Response(tool_calls=[ToolCall("remember", {"text": m.group("text").strip(), "kind": "semantic"})])
+            f = FORGET_IN_DATA.search(content)
+            if f and "forget" in names:
+                return Response(tool_calls=[ToolCall("forget", {"subject": f.group("subject").strip()})])
             return "Here is what I found: " + (last.get("content") or "")[:120]
         return UNKNOWN
 

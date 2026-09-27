@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Every surface a fact can reach, in the order a forget should visit them (PRIMER §7's checklist).
-SURFACES = ("records", "vectors", "fts_rows", "derived", "idempotency", "prompt_cache", "audit_log",
-            "eval_sets", "backups")
+SURFACES = ("records", "vectors", "fts_rows", "derived", "checkpoints", "idempotency", "prompt_cache",
+            "audit_log", "eval_sets", "backups")
 
 
 @dataclass

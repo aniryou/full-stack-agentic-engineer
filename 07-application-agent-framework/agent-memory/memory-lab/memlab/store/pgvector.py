@@ -2,7 +2,7 @@
 
 The one idea: moving the store from a file to a server changes the operations, not the design. The
 record is the same row; the vector is a ``vector(1024)`` column; the full-text index is a generated
-``tsvector`` with a GIN index; hybrid search is RRF (k = 60) written in SQL; the partition predicate
+``tsvector`` (the ``english`` configuration: stemmed, like the SQLite store's porter tokenizer) with a GIN index; hybrid search is RRF (k = 60) written in SQL; the partition predicate
 ``tenant = … AND user_id IN (…, '*')`` is in every statement. Two things differ and are the lesson:
 
 * **Filtered ANN.** pgvector applies a WHERE filter *after* the HNSW index scan: "if a condition matches
@@ -31,7 +31,7 @@ import numpy as np
 from ..deletion import DeletionReport
 from ..embedders import HashingEmbedder, tokenize
 from ..records import MemoryRecord
-from .sqlite import RRF_K, Hit
+from .sqlite import RRF_K, STOPWORDS, Hit
 
 DIM = 1024
 INDEXABLE_MAX_DIM = 2000        # pgvector: `vector` indexes up to 2,000 dims (halfvec 4,000)
@@ -68,7 +68,7 @@ def ddl(dim: int = DIM) -> list[str]:
   status          text NOT NULL,
   idempotency_key text UNIQUE,
   embedding       vector({dim}) NOT NULL,
-  fts             tsvector GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED
+  fts             tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
 )""",
         "CREATE INDEX IF NOT EXISTS memories_partition ON memories (tenant, user_id, status)",
         "CREATE INDEX IF NOT EXISTS memories_deletion ON memories (tenant, deletion_key)",
@@ -104,7 +104,7 @@ vec AS (
 fts AS (
   SELECT id, ts_rank_cd(fts, q) AS text_score,
          row_number() OVER (ORDER BY ts_rank_cd(fts, q) DESC) - 1 AS rank
-  FROM part, to_tsquery('simple', %(tsq)s) AS q
+  FROM part, to_tsquery('english', %(tsq)s) AS q
   WHERE fts @@ q ORDER BY text_score DESC LIMIT %(depth)s
 )
 SELECT p.id, p.tenant, p.user_id, p.scope, p.session_id, p.agent, p.kind, p.text, p.source, p.trust, p.slot,
@@ -180,6 +180,7 @@ RUN_START = """INSERT INTO job_runs (run_id, status, started_at) VALUES (%(run_i
 ON CONFLICT (run_id) DO NOTHING"""
 RUN_STATUS = "SELECT status FROM job_runs WHERE run_id = %(run_id)s"
 RUN_FINISH = "UPDATE job_runs SET status = 'done', finished_at = %(now)s, report = %(report)s::jsonb WHERE run_id = %(run_id)s"
+CHECKPOINT_CLEAR = "DELETE FROM job_checkpoints WHERE run_id = %(run_id)s"
 
 
 def statements(dim: int = DIM) -> dict[str, str]:
@@ -189,7 +190,7 @@ def statements(dim: int = DIM) -> dict[str, str]:
                purge_full=PURGE_FULL, iterative_scan=ITERATIVE_SCAN, records=RECORDS, get=GET, set_fields=SET_FIELDS,
                partitions=PARTITIONS, acquire_lease=ACQUIRE_LEASE, lease=LEASE, release=RELEASE,
                checkpoint_get=CHECKPOINT_GET, checkpoint_save=CHECKPOINT_SAVE, steps=STEPS, run_start=RUN_START,
-               run_status=RUN_STATUS, run_finish=RUN_FINISH)
+               run_status=RUN_STATUS, run_finish=RUN_FINISH, checkpoint_clear=CHECKPOINT_CLEAR)
     out.update({f"purge_{i}": s for i, s in enumerate(PURGE)})
     out.update({f"job_ddl_{i}": s for i, s in enumerate(JOB_DDL)})
     return out
@@ -209,8 +210,9 @@ def to_positional(sql: str) -> tuple[str, list[str]]:
 
 
 def tsquery(text: str) -> str:
-    """``[a-z0-9]+`` tokens OR-ed for ``to_tsquery('simple', …)`` — passed as a parameter, never interpolated."""
-    return " | ".join(dict.fromkeys(tokenize(text)))
+    """``[a-z0-9]+`` tokens minus stopwords, OR-ed for ``to_tsquery('english', …)`` (stemmed, like the SQLite
+    store's porter tokenizer) — passed as a parameter, never interpolated."""
+    return " | ".join(t for t in dict.fromkeys(tokenize(text)) if t not in STOPWORDS)
 
 
 def vector_literal(v) -> str:
@@ -361,3 +363,6 @@ class PgJobTables:
 
     def finish(self, run: str, report: dict, now: float) -> None:
         self.con.execute(RUN_FINISH, {"run_id": run, "now": now, "report": json.dumps(report)})
+
+    def clear(self, run: str) -> int:
+        return self.con.execute(CHECKPOINT_CLEAR, {"run_id": run}).rowcount

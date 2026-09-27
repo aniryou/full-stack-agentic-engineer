@@ -16,7 +16,6 @@ import math
 import random
 from dataclasses import dataclass
 
-from .agent import MemoryAgent, UserTurn, read_answer
 from .consolidate import Consolidator
 from .records import DAY, HOUR, Scope
 from .retrieve import retrieve
@@ -36,6 +35,18 @@ PARAPHRASE = {"name": "How should we address the user?", "employer": "Who signs 
               "pet": "What animal shares the user's flat?", "language": "Which tongue is the user studying?"}
 FILLER = ["The weather has been strange all week.", "I spent the morning answering email.",
           "The train was late again today.", "I finally finished that long report.", "We had a team lunch at noon."]
+
+
+def read_answer(slots, records, as_of: float | None = None) -> str | None:
+    """The reader: for each slot, the newest value in context (valid at `as_of` if given); None = abstain."""
+    found_all = []
+    for slot in slots:
+        found = [(r.valid_from, v) for r in records for k, v in read_facts(r.text) if k == slot
+                 and (as_of is None or r.is_valid(as_of))]
+        if not found:
+            return None
+        found_all.append(max(found)[1])
+    return "; ".join(found_all)
 
 
 @dataclass
@@ -176,6 +187,7 @@ def knee(rows, tol: float = 0.02) -> int:
 
 def compare_modes(seeds=range(30), budget_tokens: int = 60, profile_tokens: int = 60) -> dict:
     """The same user through the agent in three memory modes; score the last session's turns."""
+    from .agent import MemoryAgent, UserTurn          # the agent reads with read_answer above
     out = {}
     for mode in ("tools", "implicit", "pinned"):
         ok = need = mem = calls = turns = stable = 0

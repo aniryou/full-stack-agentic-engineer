@@ -14,7 +14,8 @@ tool > inferred, a weaker contradiction is flagged — ``memory.resolve``) → `
 step) → ``reflect`` (if the window's importance sum crosses a threshold, one insight citing its
 evidence — the generative-agents trigger, 150 in their code) → ``mark`` (consolidated episodes get a
 TTL: forgetting by decay). ``crash_at="apply:2"`` raises ``SimulatedCrash`` *after* that step's effect
-and *before* its checkpoint — the worst place to die.
+and *before* its checkpoint — the worst place to die. Checkpoints hold the text the run extracted, so a
+finished run deletes them (and a forget deletes an in-flight run's): they are a copy like any other.
 
 On Google Cloud this is a Cloud Run job started by Cloud Scheduler (``gcp_commands``; T3, printed).
 """
@@ -151,6 +152,7 @@ class ConsolidationJob:
 
         rep.status = "done"
         self.jobs.finish(run, rep.__dict__, self.clock())
+        self.jobs.clear(run)          # the checkpoints hold extracted text: a copy the deletion checklist would chase
         self.jobs.release(run, self.worker)
         return rep
 

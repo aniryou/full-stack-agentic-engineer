@@ -14,7 +14,7 @@ expired, wrong audience, missing scope), not the same cryptography.
 Endpoints (JSON):
 
     POST   /v1/memories                 write one memory; header Idempotency-Key makes a retry a replay
-    POST   /v1/memories/search          {"query", "k", "budget_tokens"} or {"profile": true, "k"}
+    POST   /v1/memories/search          {"query", "k", "budget_tokens", "kinds", "as_of"} or {"profile": true, "k"}
     DELETE /v1/memories?subject=...     forget by subject or deletion key; returns the DeletionReport
     POST   /v1/memories/{id}/promote    a reviewer (scope memory.review) promotes a quarantined record
     GET    /healthz, /metrics
@@ -205,8 +205,9 @@ class MemoryService:
         if body.get("profile"):
             items = mem.profile(k, budget)
         else:
+            kinds = body.get("kinds")
             items = mem.recall(str(body.get("query", "")), k, budget, as_of=body.get("as_of"),
-                               session=body.get("session"))
+                               session=body.get("session"), kinds=tuple(kinds) if kinds else None)
         self._count("search")
         return web.json_response({"ok": True, "items": items, "scope": mem.scope})
 
@@ -331,8 +332,8 @@ class RemoteMemory:
         status, body = self.client.write(text, idempotency_key, **fields)
         return body if status < 500 else {"ok": False, "error": "server_error"}
 
-    def recall(self, query: str, k: int = 5, budget_tokens: int | None = None, **_) -> list[dict]:
-        status, body = self.client.search(query, k, budget_tokens)
+    def recall(self, query: str, k: int = 5, budget_tokens: int | None = None, *, kinds=None, **_) -> list[dict]:
+        status, body = self.client.search(query, k, budget_tokens, **({"kinds": list(kinds)} if kinds else {}))
         return body.get("items", []) if status == 200 else []
 
     def profile(self, max_items: int = 6, budget_tokens: int | None = None) -> list[dict]:

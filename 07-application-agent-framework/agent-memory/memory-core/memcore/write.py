@@ -30,14 +30,14 @@ SLOTS = {
     "seat_preference": ("seat preference", 4, [r"(?i:i prefer) (?P<v>window|aisle)(?i: seats)"]),
     "pet": ("pet", 3, [r"(?i:my pet is an?) (?P<v>[a-z]+)"]),
     "language": ("language", 4, [r"(?i:i am learning) (?P<v>[A-Z][a-z]+)"]),
-    "procedure": ("standing preference", 6, [r"(?i:please always) (?P<v>[a-z][a-z ]+)"]),
+    "procedure": ("standing preference", 6, [r"(?i:please always|for this user, always) (?P<v>[a-z][a-z0-9 -]*[a-z0-9])"]),
 }
 NOUN_TO_KEY = {noun: key for key, (noun, _, _) in SLOTS.items()}
 FACT_RE = re.compile(r"(?i:the user's) (?P<noun>[a-z ]+) is (?P<v>[A-Za-z][A-Za-z ]*)\.")
 
 
 def fact_text(key: str, value: str) -> str:
-    return f"The user's {SLOTS[key][0]} is {value}."
+    return f"For this user, always {value}." if key == "procedure" else f"The user's {SLOTS[key][0]} is {value}."
 
 
 def read_facts(text: str) -> list[tuple[str, str]]:

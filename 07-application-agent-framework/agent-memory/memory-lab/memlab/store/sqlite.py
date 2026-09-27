@@ -12,6 +12,8 @@ remove it — FTS5 ``secure-delete`` (or ``optimize``), a WAL checkpoint, ``VACU
 
 Facts this module relies on (SQLite 3.45.1 here; measured 2026-09-26, facts sheet §12):
 
+* The FTS5 tokenizer is ``porter unicode61`` (stemmed); the question's stopwords are dropped from the
+  MATCH expression.
 * ``bm25()`` returns ``-1 × score`` — negative, lower is better — with k1 = 1.2, b = 0.75 and an IDF
   floored at 1e-6 (ragkit's BM25 uses k1 = 1.5). Its statistics are table-wide: another tenant's rows
   change your ranking (not your result set) unless each tenant has its own FTS table.
@@ -70,7 +72,13 @@ CREATE INDEX IF NOT EXISTS memories_partition ON memories (tenant, user_id, stat
 CREATE INDEX IF NOT EXISTS memories_deletion  ON memories (tenant, deletion_key);
 CREATE INDEX IF NOT EXISTS memories_slot      ON memories (tenant, user_id, slot);
 """
-FTS_SCHEMA = "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(text, tokenize='unicode61')"
+# Porter stemming on top of unicode61: "trips" finds "trip", "moved" finds "move" — lexical, still not semantic.
+FTS_SCHEMA = "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(text, tokenize='porter unicode61')"
+# Words that carry no retrieval signal in a question; dropped from the lexical leg only (the vectors keep them,
+# as ragkit's hashing embedder does).
+STOPWORDS = frozenset("a an and any are am as at be can could did do does for from have has how i in is it me my "
+                      "of on or our please the these those to was were what when where which who why will with "
+                      "would you your".split())
 
 _COLS = [f.name for f in fields(MemoryRecord)]
 
@@ -103,8 +111,9 @@ def rrf(rankings: list[list[str]], k: int = RRF_K) -> list[tuple[str, float]]:
 
 
 def fts_query(text: str) -> str:
-    """A safe FTS5 MATCH expression: the query's ``[a-z0-9]+`` tokens, each quoted, OR-ed together."""
-    toks = list(dict.fromkeys(tokenize(text)))
+    """A safe FTS5 MATCH expression: the query's ``[a-z0-9]+`` tokens minus stopwords, each quoted (so no
+    FTS5 syntax can be injected), OR-ed together."""
+    toks = [t for t in dict.fromkeys(tokenize(text)) if t not in STOPWORDS]
     return " OR ".join(f'"{t}"' for t in toks)
 
 
@@ -385,6 +394,17 @@ class SQLiteMemoryStore:
             rep.counts.update(records=len(direct), vectors=len(targets), fts_rows=len(targets),
                               derived=len(targets) - len(direct))
             rep.steps.append("DELETE rows + FTS5 rows")
+            if targets and self.con.execute("SELECT 1 FROM sqlite_master WHERE name='job_checkpoints'").fetchone():
+                # an in-flight consolidation run keeps what it extracted in its checkpoints: drop them (the run's
+                # steps are idempotent, so a resume redoes them without the deleted episodes)
+                users = {r[0] for r in self.con.execute(
+                    f"SELECT DISTINCT user_id FROM memories WHERE id IN ({','.join('?' * len(targets))})", list(targets))}
+                users |= {user} if user else set()
+                n = 0
+                for u in users or {"%"}:
+                    n += self.con.execute("DELETE FROM job_checkpoints WHERE run_id LIKE ?",
+                                          (f"consolidate/{tenant}/{u}/%",)).rowcount
+                rep.counts["checkpoints"] = n
             if mode == "purge":
                 self._purge(rep)
         if self.path != ":memory:":
@@ -552,4 +572,9 @@ class SQLiteJobTables:
         with self.store._lock:
             self.store.con.execute("UPDATE job_runs SET status='done', finished_at=?, report=? WHERE run_id=?",
                                    (now, json.dumps(report), run))
+
+    def clear(self, run: str) -> int:
+        """Drop a finished run's checkpoints: they hold the text it extracted, and nothing needs them now."""
+        with self.store._lock:
+            return self.store.con.execute("DELETE FROM job_checkpoints WHERE run_id=?", (run,)).rowcount
 
