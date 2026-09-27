@@ -14,7 +14,7 @@
 #    driver cannot JIT-compile that toolkit's PTX, and APIs newer than the driver fail. A newer
 #    *major* needs a newer driver, or the forward-compatibility package on a data-center GPU.
 # 2. **Kernel image and GPU.** SASS built for `sm_XY` runs only on compute capability `X.Z` with
-#    `Z >= Y`. PTX for `compute_XY` can be JIT-compiled for any newer GPU. With neither you get
+#    $Z \ge Y$. PTX for `compute_XY` can be JIT-compiled for any newer GPU. With neither you get
 #    *"no kernel image is available for execution on the device"*.
 #
 # A container carries the CUDA runtime and libraries. The **host** provides the driver: the
@@ -59,11 +59,11 @@ for gpu in ("T4", "A100", "L4", "H100", "B200", "RTX 5090"):
 # `"sm_90a"`, `"compute_80"` or `"compute_120"`. The digits are major then one minor digit, so
 # `sm_100` is 10.0 and `sm_120` is 12.0. `cc` is a string like `"8.9"`.
 #
-# * SASS `sm_XY`: same major **and** device minor >= Y. With the `a` suffix: exactly X.Y.
-# * PTX `compute_XY`: device CC >= X.Y as a (major, minor) pair, across majors too. With `a`:
+# * SASS `sm_XY`: same major **and** device minor $\ge Y$. With the `a` suffix: exactly X.Y.
+# * PTX `compute_XY`: device CC $\ge X.Y$ as a (major, minor) pair, across majors too. With `a`:
 #   exactly X.Y.
 # * `f` (family-specific, CUDA 12.9+; verify): SASS and PTX alike stay inside the family, the same
-#   major with device minor >= Y. `sm_100f` runs on 10.0 and 10.3, never on 12.0.
+#   major with device minor $\ge Y$. `sm_100f` runs on 10.0 and 10.3, never on 12.0.
 
 # %% exercise
 def _parse(target):
