@@ -7,14 +7,20 @@
 # ## The one-minute version
 # Quantizing **activations** is what lets a GEMM run on INT8 or FP8 tensor cores: both operands become 8-bit
 # codes, the products accumulate in a wide register (INT32 or FP32), and the two scales are applied once per
-# output in the **epilogue** — `y = s_x[token] · s_w[channel] · Σ qx·qw`. That factoring is why activation
-# scales can be per token and weight scales per output channel but neither can vary along the reduction axis,
-# and why block formats (DeepSeek-V3's 128×128 FP8) rescale one partial sum per 128-wide block. Some layers
-# stay in 16-bit — the LM head, embeddings, norms, the attention softmax — because their errors are expensive
-# or they save nothing. The **KV cache** is an activation stored for later: quantized once, read at every
+# output in the **epilogue** — $y = s_x[\text{token}] \cdot s_w[\text{channel}] \cdot \sum q_x \cdot q_w$. That
+# factoring is why activation scales can be per token and weight scales per output channel but neither can vary
+# along the reduction axis, and why block formats (DeepSeek-V3's 128×128 FP8) rescale one partial sum per
+# 128-wide block.
+#
+# Some layers stay in 16-bit — the LM head, embeddings, norms, the attention softmax — because their errors are
+# expensive or they save nothing.
+#
+# The **KV cache** is an activation stored for later: quantized once, read at every
 # decode step. FP8 halves its bytes (twice the sessions) with 3 mantissa bits of error, *if* its scale fits the
 # data — vLLM's default scale is 1.0. Keys have outlier channels and values do not, so 2–4-bit schemes (KIVI)
-# quantize keys per channel and values per token. After this notebook you can implement a W8A8 GEMM epilogue,
+# quantize keys per channel and values per token.
+#
+# After this notebook you can implement a W8A8 GEMM epilogue,
 # say which layers to leave alone, and size and judge a quantized KV cache.
 #
 # Primer: `../PRIMER.md` §5 *Weight-and-activation quantization* and §6 *KV-cache quantization*; the kernel-side
@@ -32,8 +38,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Worked example 1 — a W8A8 INT8 GEMM, exactly
-# Quantize X per token and W per output channel, multiply the integer codes with integer accumulation, then
-# apply `s_x · s_w`. The result equals the fake-quantized product to rounding — the scales really do factor out.
+# Quantize $X$ per token and $W$ per output channel, multiply the integer codes with integer accumulation, then
+# apply $s_x \cdot s_w$. The result equals the fake-quantized product to rounding — the scales really do factor out.
 
 # %%
 Xa, Wa = rng.standard_normal((16, 4096)), rng.standard_normal((1024, 4096)) * 0.02
@@ -77,7 +83,7 @@ for fmt in ("int8", "fp8"):
 #
 # ## Worked example 3 — block-scaled FP8, as DeepSeek-V3 stores it
 # Weights: one scale per 128×128 tile. Activations: one scale per token per 128 channels, computed on the fly.
-# The GEMM loops over 128-wide k blocks and rescales each partial sum by its own two scales before adding it.
+# The GEMM loops over 128-wide $k$ blocks and rescales each partial sum by its own two scales before adding it.
 
 # %%
 Xb, Wb = rng.standard_normal((16, 512)), rng.standard_normal((512, 512))
@@ -92,7 +98,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
     print(f"{label:38} relative output error {np.linalg.norm(Yb - refb) / np.linalg.norm(refb):.4f}")
 
 # %% [markdown]
-# For FP8 the granularity hardly matters at these ranges (a 30× tile is far inside E4M3's 2^14.8), and per-token
+# For FP8 the granularity hardly matters at these ranges (a 30× tile is far inside E4M3's $2^{14.8}$), and per-token
 # INT8 is more precise than any FP8 (7 bits against 3). Block scales earn their place when ranges are extreme — in
 # training, and for models whose weights and activations span more than FP8's range — and because a kernel that
 # already tiles by 128 can apply a per-tile scale for free (DeepGEMM, CUTLASS block-scaled GEMMs on SM90+; there
@@ -100,7 +106,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
 #
 # ## Worked example 4 — FP4 W4A4: sixteen activations share one scale
 # On Blackwell, NVFP4 W4A4 quantizes activations too: E2M1 values with one E4M3 scale per **16** channels of each
-# token. An outlier channel sets its block's scale at `amax / 6`. With an outlier 30× the typical value, a typical
+# token. An outlier channel sets its block's scale at $\mathrm{amax}/6$. With an outlier 30× the typical value, a typical
 # neighbour lands at 6/30 = 0.2 on the E2M1 grid — below the 0.25 that rounds up to E2M1's smallest step, 0.5 — so
 # most of the 15 neighbours become **zero**. The tiny model's first up-projection input has its four outlier
 # channels in three of its four 16-channel blocks:
@@ -222,9 +228,9 @@ for label, b in (("bf16 KV", 16), ("FP8 KV", 8), ("4-bit KIVI (5 bits/elem)", 5)
 # request that wrote it did. A scheme whose scales depended on the *reading* request would break sharing.
 #
 # ## Exercise 4.1 — the epilogue
-# Write `int8_w8a8(X, W)`: per-token activation scales `s_x = max|x_t| / 127`, per-output-channel weight scales
-# `s_w = max|w_j| / 127`, codes `round(x / s)` clipped to ±127, an `int64` matrix product of the codes, then the
-# epilogue. Return the float result.
+# Write `int8_w8a8(X, W)`: per-token activation scales $s_x = \max|x_t|/127$, per-output-channel weight scales
+# $s_w = \max|w_j|/127$, codes $\operatorname{round}(x/s)$ clipped to ±127, an `int64` matrix product of the codes,
+# then the epilogue. Return the float result.
 
 # %% exercise
 def int8_w8a8(X, W):
@@ -243,7 +249,7 @@ print("✅ codes times codes, then s_x[t] * s_w[j]: the scales never enter the i
 # %% [markdown]
 # ## Exercise 4.2 — how long can the reduction be?
 # In the worst case every product is 127 × 127 (or 128 × 128 with the full −128…127 range) with the same sign.
-# Compute `k_max_restricted` and `k_max_full`: the largest K for which the accumulator stays below 2³¹.
+# Compute `k_max_restricted` and `k_max_full`: the largest $K$ for which the accumulator stays below 2³¹.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -260,8 +266,9 @@ print(f"✅ {k_max_restricted:,} and {k_max_full:,}: far above any hidden size (
 # %% [markdown]
 # ## Exercise 4.3 — KIVI's keys: per channel, grouped over tokens
 # Write `keys_per_channel(Kmat, bits, group)` for `Kmat[tokens, channels]`: for each channel and each run of
-# `group` consecutive tokens, asymmetric min-max quantization (`scale = (max − min) / (2^bits − 1)` after
-# widening to include 0, `zero = round(−min / scale)`, codes clipped to 0…2^bits − 1). Return the dequantized keys.
+# `group` consecutive tokens, asymmetric min-max quantization ($\mathrm{scale} = (\mathrm{max} - \mathrm{min})/(2^{\mathrm{bits}} - 1)$
+# after widening to include 0, $\mathrm{zero} = \operatorname{round}(-\mathrm{min}/\mathrm{scale})$, codes clipped to
+# $0 \ldots 2^{\mathrm{bits}} - 1$). Return the dequantized keys.
 
 # %% exercise
 def keys_per_channel(Kmat, bits, group):
@@ -304,7 +311,7 @@ print("✅ 43 -> 87 -> 140 -> 234 sessions: the KV format, not the weight format
 # %% [markdown]
 # ## Exercise 4.5 — calibrate a v_scale
 # A model's values are small (`Vs = V * 2e-3`). With vLLM's default scale 1.0 they fall into FP8's subnormals.
-# Compute the per-tensor `v_scale` llm-compressor would write (amax / 448) and the attention-output error with it.
+# Compute the per-tensor `v_scale` llm-compressor would write ($\mathrm{amax}/448$) and the attention-output error with it.
 
 # %% exercise
 Vs = V * 2e-3
@@ -324,7 +331,9 @@ print(f"✅ v_scale {v_scale:.2e}: error {err_calibrated:.4f} vs {err_default:.4
 # once per output in the epilogue, so we can use per-token activation scales and per-channel weight scales for
 # free; we choose dynamic activation scales because they never saturate on inputs calibration did not see. We
 # leave the LM head, embeddings, norms, the attention softmax and MoE routers in 16-bit: the head's errors land on
-# the logits and a router's are discrete. The KV cache is separate: FP8 halves it — twice the sessions — and costs
+# the logits and a router's are discrete.
+#
+# "The KV cache is separate: FP8 halves it — twice the sessions — and costs
 # under 1% of attention-output error when its scales fit the data; vLLM's default scale is 1.0, so we calibrate
 # k_scale and v_scale for any model whose K or V are far from order one. Below 8 bits we would want keys quantized
 # per channel, KIVI-style, because keys carry outlier channels; and we would check that prefix-cached blocks keep
@@ -332,8 +341,8 @@ print(f"✅ v_scale {v_scale:.2e}: error {err_calibrated:.4f} vs {err_default:.4
 #
 # **Drills**
 # 1. *Why can activation scales be per token but not per input channel in a W8A8 GEMM?* — A per-input-channel
-#    scale varies along the reduction axis, so it cannot be factored out of Σ qx·qw into the epilogue (SmoothQuant
-#    moves that variation into the weights instead).
+#    scale varies along the reduction axis, so it cannot be factored out of $\sum q_x \cdot q_w$ into the epilogue
+#    (SmoothQuant moves that variation into the weights instead).
 # 2. *FP8 KV on a model whose values have magnitude 1e-3, no calibration: what happens?* — With the default scale
 #    1.0 most values are E4M3 subnormals or zero; attention output error jumps from ~0.3% to ~5% (worked example 6).
 # 3. *Keys per channel, values per token — why the asymmetry?* — Keys have fixed outlier channels, so a per-token
