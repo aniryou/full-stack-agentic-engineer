@@ -381,7 +381,6 @@ class FakeProvider:
         ttft = (s.ttft_s + s.prefill_s_per_token * (len(ids) - cached)) * s.time_scale
         itl = s.itl_s * s.time_scale
         self.running += 1
-        generated = 0
         rid = uuid.uuid4().hex[:16]
         state = {"generated": 0}
 

@@ -227,6 +227,8 @@ class MCPClient:
 
     def _discover(self, resource: str, challenge: str | None) -> dict:
         prm = next((d for d in map(self.net.get, prm_urls(resource, challenge)) if d), None)
+        if prm is None:
+            raise PermissionError("no protected-resource metadata at any well-known location")
         issuer = prm["authorization_servers"][0]
         meta = next((d for d in map(self.net.get, as_metadata_urls(issuer)) if d), None)
         if meta is None or meta["issuer"] != issuer:
@@ -291,7 +293,10 @@ class MCPClient:
         for _ in range(max_steps):
             tok = self.tokens.get((principal, resource))
             if tok and tok["exp"] <= self.clock.now():
-                tok = self.refresh(principal, resource)
+                try:
+                    tok = self.refresh(principal, resource)
+                except PermissionError:                        # refused (revoked, reused): start over
+                    tok = self.tokens.pop((principal, resource), None) and None
             status, h, body = server.call(tool, self._headers("POST", resource, tok, resource))
             if status == 200:
                 return body

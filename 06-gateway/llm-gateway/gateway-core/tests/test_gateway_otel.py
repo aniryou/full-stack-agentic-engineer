@@ -94,7 +94,7 @@ def test_vllm_targets_get_a_per_tenant_cache_salt():
     seen = []
     orig = provs["self"].chat
     provs["self"].chat = lambda body: seen.append(body) or orig(body)
-    gw.handle(k, ask())
+    gw.handle(k, ask(max_completion_tokens=100))                          # lab/llm has a 4,096-token window
     assert keys.valid_cache_salt(seen[0]["cache_salt"]) and seen[0]["cache_salt"] == keys.cache_salt("acme", gw.salt_secret)
     assert "metadata" not in seen[0] and seen[0]["stream_options"] == {"include_usage": True}
 
@@ -112,3 +112,30 @@ def test_spans_export_as_otlp_json_and_read_back(tmp_path):
     assert bad["attrs"]["error.type"] == "503" and bad["attrs"]["gen_ai.provider.name"] == "gcp.gemini"
     assert good["attrs"]["gen_ai.usage.output_tokens"] == 40 and good["attrs"]["gen_ai.response.finish_reasons"] == ["stop"]
     assert server["attrs"]["gw.attempts"] == 2 and good["attrs"]["gen_ai.response.time_to_first_chunk"] == pytest.approx(0.3)
+
+
+def test_client_errors_never_trip_a_providers_breaker_and_provider_auth_errors_are_ours():
+    gw, k, provs, _ = make(google={"outages": [(0, 1e9, 400)]})
+    for _ in range(5):                                           # five bad requests in a row
+        assert gw.handle(k, ask()).status == 400
+    assert gw.router.breakers[CHAIN["chat"][0]].state(0) == "closed"
+    gw2, k2, _, _ = make(google={"outages": [(0, 1e9, 401)]})
+    r = gw2.handle(k2, ask())
+    assert r.status == 502 and r.body["error"]["code"] == "upstream_configuration"   # never tell the caller its key is bad
+
+
+def test_residency_comes_from_the_key_and_nothing_capable_is_a_400():
+    gw, k, provs, _ = make()
+    eu = gw.keys.issue("eu-bank", regions={"europe-west4"})              # no target in the chain is in that region
+    r = gw.handle(eu, ask())
+    assert r.status == 400 and r.body["error"]["code"] == "no_capable_target" and r.attempts == []
+    us = gw.keys.issue("us-lab", regions={"us-central1"})
+    assert gw.handle(us, ask(max_completion_tokens=100)).served_by.model == "lab/llm"
+    assert gw.handle(us, ask()).status == 400          # the default 4,096-token output cap does not fit a 4K window
+
+
+def test_the_screener_is_linear_on_long_input():
+    import time
+    t = time.perf_counter()
+    assert not RegexScreener().check("x" * 200_000, "input").block
+    assert time.perf_counter() - t < 2.0                                  # an unbounded pattern took minutes here

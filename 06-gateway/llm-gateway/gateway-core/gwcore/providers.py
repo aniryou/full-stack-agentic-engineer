@@ -95,7 +95,7 @@ def normalize_stream(dialect: str, events: list) -> list:
                     if "functionCall" in part:            # Gemini sends whole calls, not argument fragments
                         i = len(calls)
                         calls[i] = i
-                        emit(tool_calls=[{"index": i, "id": f"call_{i}", "type": "function", "function": {
+                        emit(tool_calls=[{"index": i, "id": part["functionCall"].get("id") or f"call_{i}", "type": "function", "function": {
                             "name": part["functionCall"]["name"], "arguments": json.dumps(part["functionCall"].get("args", {}))}}])
                     elif part.get("thought"):
                         emit(reasoning=part.get("text", ""))

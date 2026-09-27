@@ -290,6 +290,8 @@ class Gateway:
         self.m_cache.labels(result=look.kind or ("bypass" if look.reason not in ("miss", "below threshold", "entity guard") else "miss")).inc()
         dec["cache"] = {"result": look.kind or "miss", "reason": look.reason, "score": round(look.score, 4), "matched": look.matched}
         if look.kind:
+            if input_check is not None and await input_check:     # a parallel input check still gets its say
+                return self._finish_error(span, dec, self.error(400, "content_filter", "blocked by the gateway's input guardrail"))
             return await self._serve_cached(request, span, dec, key, alias, body, look, t0, stream, want_usage)
 
         # 4. admit
@@ -305,7 +307,7 @@ class Gateway:
         # 5. route
         plan = self.router.plan(alias, tenant, Needs(prompt_est, res.reserved_output, bool(body.get("tools")), rid))
         dec["plan"], dec["skipped"] = plan.ids(), plan.skipped
-        last_err, outcome, served = None, None, None
+        last_err, outcome, served, tried = None, None, None, None
         for n, model in enumerate(plan.targets, 1):
             br = self.router.breakers[model.id]
             if not br.allow():
@@ -313,6 +315,7 @@ class Gateway:
                 self.m_att.labels(target=model.id, outcome="breaker_open").inc()
                 continue
             prov = self.cfg.providers[model.provider]
+            tried = model
             cspan = self.tracer.start(f"chat {model.upstream}", "client", parent=span, **{
                 otel.OPERATION: "chat", otel.PROVIDER: prov.otel_name or DIALECTS[prov.dialect]["otel_provider"],
                 otel.REQUEST_MODEL: model.upstream, otel.SERVER_ADDRESS: prov.base_url.split("//")[-1].split(":")[0],
@@ -349,10 +352,17 @@ class Gateway:
 
         # 8. account
         if served is None:
-            self.limiter.reconcile(res, 0, 0)            # nothing ran: refund the whole reservation
             resp = self._no_answer(dec, outcome, last_err)
             err_code = json.loads(resp.body)["error"]["code"]
-            self._ledger(dec, key, alias, None, Usage(0, 0, source="none"), resp.status, stream, t0, None, err_code, None)
+            if outcome is not None and outcome.usage is not None and tried is not None:
+                # the upstream answered before a parallel input check blocked it: the provider bills it, so do we
+                self.limiter.reconcile(res, outcome.usage.prompt_tokens, outcome.usage.completion_tokens)
+                cost = cost_usd(outcome.usage, tried.price)
+                self.keys.add_spend(key.key_id, cost)
+                self._ledger(dec, key, alias, tried, outcome.usage, resp.status, stream, t0, None, err_code, None, cost)
+            else:
+                self.limiter.reconcile(res, 0, 0)        # nothing ran: refund the whole reservation
+                self._ledger(dec, key, alias, None, Usage(0, 0, source="none"), resp.status, stream, t0, None, err_code, None)
             return self._finish_error(span, dec, resp)
         return await self._account(request, span, dec, key, alias, served, outcome, res, body, stream, t0)
 
@@ -481,7 +491,7 @@ class Gateway:
             if g.output in ("window", "full"):
                 if not (final or (g.output == "window" and new >= g.window_tokens)):
                     return
-                if held and await self._screen("output", acc.content, "block"):
+                if new > 0 and await self._screen("output", acc.content, "block"):   # nothing new: nothing to check
                     st["blocked"] = True
                     return
                 st["window_start"] = acc.content_chunks
@@ -695,8 +705,12 @@ class Gateway:
 
     # ------------------------------------------------------------------------------------------ MCP (PRIMER §8)
     async def handle_mcp(self, request):
-        """Agents reach MCP servers through the gateway: the virtual key names the principal; the gateway holds
-        (and obtains, with the OAuth flow) the MCP token for (principal, resource, scopes). Never passthrough."""
+        """Agents reach MCP servers through the gateway: the virtual key names the tenant; the gateway holds (and
+        obtains, with the OAuth flow) the MCP token for (principal, resource, scopes). Never passthrough.
+
+        The user part of the principal (`x-gwlab-user`) is *asserted by the calling agent* inside its verified
+        tenant — a lab simplification; a real deployment takes the user from a verified token (delegated identity,
+        identity primer §3.5), never from a header."""
         try:
             key = self.keys.verify(bearer(request.headers))
         except KeyError401 as e:

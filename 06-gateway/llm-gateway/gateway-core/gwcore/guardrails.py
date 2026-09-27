@@ -17,7 +17,7 @@ RULES = {
     "prompt_injection": r"ignore (all |any )?(previous|prior|above) instructions|disregard .{0,30}(system prompt|instructions)",
     "secret": r"\b(?:sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16})\b",
     "card_number": r"\b(?:\d[ -]?){13,16}\b",
-    "email": r"[\w.+-]+@[\w-]+\.[\w.]+",
+    "email": r"\b[\w.+-]{1,64}@[\w-]{1,63}\.[\w.]{2,63}\b",   # bounded: an unbounded [\w]+@ is quadratic on long input
 }
 BLOCKING = {"input": {"prompt_injection", "secret"}, "tool_call": {"secret"}, "tool_result": {"prompt_injection"},
             "output_stream": {"secret", "card_number"}, "output_final": {"secret", "card_number"}}

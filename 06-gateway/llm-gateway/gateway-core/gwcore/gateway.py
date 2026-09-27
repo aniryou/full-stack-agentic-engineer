@@ -79,7 +79,7 @@ class Gateway:
         if stream:
             upstream["stream_options"] = {"include_usage": True}   # always meter; strip the chunk if not asked
         attempts, debited = [], 0
-        for target in self.router.candidates(request["model"], request, now=t_start, tier=vk.tier,
+        for target in self.router.candidates(request["model"], upstream, now=t_start, tier=vk.tier, regions=vk.regions,
                                              prompt_tokens=prompt_est, request_id=rid):   # 5. walk the chain
             if not self.router.allow(target, self.clock.now()):
                 attempts.append((target, "breaker open"))
@@ -97,15 +97,19 @@ class Gateway:
                 if resp.status is None:
                     self.clock.sleep(self.timeout)                  # no answer: our timeout decides
                 code = ((resp.body or {}).get("error") or {}).get("code")
-                self.router.observe(target, False, self.clock.now())
+                if resp.status is None or resp.status == 429 or resp.status >= 500:
+                    self.router.observe(target, False, self.clock.now())   # only the provider's health trips its breaker
                 self.tracer.end(span, error=str(code or resp.status or "timeout"))
                 attempts.append((target, resp.status or "timeout"))
                 if falls_through(resp.status, code):
                     continue
                 if lim:
                     lim.finish(rid)
-                return self._fail(server, resp.status, (resp.body or {}).get("error", {}).get("message", ""),
-                                  "invalid_request_error", code, attempts=attempts)
+                if resp.status == 400:                              # the client's request: the same everywhere
+                    return self._fail(server, 400, resp.body["error"].get("message", ""), "invalid_request_error", code,
+                                      attempts=attempts)
+                return self._fail(server, 502, f"upstream {target.provider} refused our credentials or model id",
+                                  "api_error", "upstream_configuration", attempts=attempts)   # ours, not the caller's
             frames, first, acc = [], None, api.StreamAccumulator()  # 6. relay and meter
             if stream:
                 for ev in resp.events:
@@ -163,6 +167,9 @@ class Gateway:
             return Result(200, headers, None if stream else resp.body, frames, target, attempts, row)
         if lim:
             lim.finish(rid)
+        if not attempts:                                            # filters left nothing: capabilities, context, region
+            return self._fail(server, 400, "no target in the chain can serve this request", "invalid_request_error",
+                              "no_capable_target")
         return self._fail(server, 503, "every target in the chain failed", "service_unavailable_error", "no_healthy_target",
                           {"retry-after": "1"}, attempts)
 

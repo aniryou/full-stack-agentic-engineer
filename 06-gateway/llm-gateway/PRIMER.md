@@ -31,8 +31,7 @@ A gateway is worth its hop when many apps, tenants and providers meet: one API (
 server-sent events) in front of every provider, with the differences pushed into **adapters that are mostly data**.
 It makes the decisions that must be made once, centrally: **whether** a request runs (the key, the tenant's budget
 and token limits, a guardrail) and **which** model, provider, region or pool serves it (an alias resolves to an ordered
-**fallback chain**). Inside a self-hosted pool the 05 router picks the replica and the engine batches; the gateway
-does neither.
+**fallback chain**). Inside a self-hosted pool the 05 router picks the replica and the engine batches, not the gateway.
 
 Five mechanisms carry the design. **Fallback chains** fall through only on failures another target could fix — 429,
 5xx, a timeout, a context too long — never on a bad request or a content-policy refusal, and **never after the
@@ -106,9 +105,10 @@ error (`api.error_body()`):
 ### 1.4 Chat completions and SSE as the lingua franca
 
 The OpenAI chat-completions request (`model`, `messages`, `tools`, `max_completion_tokens`, `stream`, …) is the API
-every other gateway, engine and SDK speaks, including vLLM. A streamed answer is a sequence of
-`chat.completion.chunk` objects, each sent as an SSE frame `data: {…}` and a blank line, ended by `data: [DONE]`
-(`api.sse()`, `api.parse_sse()`). Three details decide whether a gateway meters correctly:
+every gateway, engine and SDK speaks, vLLM's API server included (serving-engine PRIMER §1; the 04 lab's
+[`fakeserver.py`](../../04-inference-engine/serving-engine/vllm-serving-lab/servelab/fakeserver.py) emulates it). A
+streamed answer is a sequence of `chat.completion.chunk` objects, each an SSE frame `data: {…}` and a blank line,
+ended by `data: [DONE]` (`api.sse()`, `api.parse_sse()`). Three details decide whether a gateway meters correctly:
 
 - **Usage arrives only if asked.** With `stream_options.include_usage: true`, one extra chunk with `choices: []` and
   the request's `usage` is sent before `[DONE]`; if the stream is interrupted it may never arrive (the OpenAPI
@@ -152,9 +152,9 @@ gateway that bills candidates alone under-bills a thinking call (§5.2). vLLM fi
 
 What does not normalise cleanly is the stream. Anthropic sends named events (`message_start` with the input usage,
 `content_block_delta` carrying `text_delta`, `input_json_delta` or `thinking_delta`, `message_delta` with cumulative
-output usage, `message_stop` and no `[DONE]`); Gemini sends whole function calls, not argument fragments, and flags
-thought parts; vLLM names the reasoning text `reasoning` (it renames an incoming `reasoning_content`), and OpenAI's
-schema has neither. `providers.normalize_stream()` turns the first two into canonical chunks, and the exercise shows
+output usage, `message_stop` and no `[DONE]`); the Gemini API sends whole function calls, not argument fragments
+(`partial_args` is Vertex-only), and flags thought parts `thought: true`; vLLM names the reasoning text `reasoning` (it
+renames an incoming `reasoning_content`), and OpenAI's schema has neither. `providers.normalize_stream()` turns the first two into canonical chunks, and the exercise shows
 what is lost: the Anthropic stream carries no thinking-token count (only the non-streamed `Usage` does), so a
 streamed Anthropic call normalises to `reasoning_tokens` 0 — a field to reconcile later, not to invent.
 
@@ -194,7 +194,7 @@ region against the tenant's residency — then **orders** by a policy:
 |---|---|---|
 | `ordered` | the chain as written | a primary and its siblings (the default) |
 | `cheapest` | blended $ for this request's prompt and output cap (`routing.blended_cost()`) | quality is equal across the chain |
-| `ewma_ttft` | a per-target moving average of TTFT (`routing.ewma()`, α = 0.2) | latency-sensitive routes; unmeasured targets first so they get measured |
+| `ewma_ttft` | a per-target moving average of TTFT (`routing.ewma()`, α = 0.2; TTFT as serving-engine PRIMER §11 defines it) | latency-sensitive routes; unmeasured targets first so they get measured |
 | `canary` | a stable hash of the request id against the targets' weights | a new model on a share of traffic |
 | tier | a separate chain per tier (`chat@gold`) | paid tiers get the better or less contended model |
 | effort | the reasoning filter above | only thinking models take high `reasoning_effort` |
@@ -231,7 +231,8 @@ Retries with full jitter, `Retry-After` and a deadline are the scaling primer's 
 ([`agentlab/reliability/breaker.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/reliability/breaker.py)).
 The gateway applies one breaker **per target** (`routing.Breaker`), following 07.2's rule: open after `threshold`
 consecutive failures, fail fast for `cooldown` seconds, then let exactly one probe decide. (`scalelab`'s breaker trips
-on a failure *ratio* in a window instead; either works per target — name the one you run.)
+on a failure *ratio* in a window instead; either works per target — name the one you run.) 07.2's `FallbackChain`
+labels a result served by a fallback as degraded; the gateway does the same with `Result.attempts` and a header.
 
 A breaker learns only as fast as failures complete. With a 10 s timeout and 50 requests a second, the first
 10 × 50 = 500 requests are all in flight before the breaker has seen three failures. Fast failure signals — connect
@@ -264,9 +265,8 @@ shape priced by `metering.price_call()`:
 | no fallback at all | 0.577 s, but 5 % of requests fail | 5 % | — |
 
 The timeout adds 0.05 × (10 − 0.15) = 0.49 s to the *mean* and puts every failed request's p95 at ten seconds; the
-breaker (§2.4) and a first-byte deadline are what bring it back. The fallbacks here are cheaper per call than the
-primary, so the mean cost barely moves; a fallback to a *pricier* model at full traffic is how an outage doubles a
-bill (drill 1).
+breaker (§2.4) and a first-byte deadline bring it back. The fallbacks here are cheaper per call than the primary, so
+the mean cost barely moves; a fallback to a *pricier* model at full traffic is how an outage doubles a bill (drill 1).
 
 ### 2.6 A self-hosted target is a pool
 
@@ -278,9 +278,9 @@ affinity and KV load are the router's signals. Two things cross the boundary. Pr
 pool's priority, and the directions differ — vLLM's `priority` is *lower = earlier* (and non-zero values error unless
 the server runs `--scheduling-policy priority`), llm-d's `InferenceObjective.priority` is *higher = first* (§3.2
 there), Envoy's `backendRefs.priority` 0 is the primary — so map tiers explicitly. And cost: a pool has no per-token
-price; its bill is split by GPU time (§5.4). Comparing a hosted provider with your own pool is module 06.5's
-break-even ([Mistral scaling primer](../scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md)
-§3.5–3.6).
+price; its bill is split by GPU time (§5.4). Hosted provider or own pool is module 06.5's break-even
+([Mistral scaling primer](../scaling-admission-cost/agentic-scaling-lab-mistral/docs/01-scaling-primer.md) §3.5–3.6);
+a Provisioned Throughput commitment is a target too, with its own quota and spill-over (scaling primer §3.5).
 
 ---
 
@@ -504,9 +504,8 @@ available; the rates above are the fallback.
 
 The ledger and the provider's usage export must agree, and drift has causes you can name: retries the provider billed
 but the ledger recorded once (bill every attempt that reached the model), cut streams billed on estimates, cached
-tokens priced wrongly, a tokenizer mismatch in estimates. `Ledger.reconcile()` compares per-model totals and flags any
-field off by more than a tolerance (1 % by default); run it daily and alert on it, beside the scaling primer's
-cost-per-conversation alert (§5.10).
+tokens priced wrongly, a tokenizer mismatch in estimates. `Ledger.reconcile()` compares per-model totals and flags
+any field off by more than a tolerance (1 % by default); run it daily, alert on it beside cost per conversation (§5.10).
 
 ### 5.6 Traces are not the ledger: GenAI spans
 
@@ -519,8 +518,8 @@ v1.41.0 (April 2026) is the last semantic-conventions release that defines them,
 replaced the `gen_ai.client.token.usage` histogram with counters, both unreleased. `otel.py` pins the names the two
 agree on — the same constants as the 07.2 lab's
 [`tracing.py`](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/observability/tracing.py)
-(a test compares them) plus `gen_ai.provider.name` (required; no well-known value exists for a self-hosted server,
-so `vllm` is this core's choice), `gen_ai.response.model` (the model that actually answered — the alias goes in
+(its notebook 09; a test compares them) plus `gen_ai.provider.name` (required; there is no well-known value for a
+self-hosted server, so `vllm` is our choice), `gen_ai.response.model` (the model that actually answered — the alias goes in
 `gen_ai.request.model` on the server span), `gen_ai.response.time_to_first_chunk` and `gen_ai.request.stream` — and
 defaults to the released names where they disagree, keeping the map (`otel.RENAMED_ON_MAIN`). Spans are written as
 OTLP/JSON, one export request per line, with hex ids, integer span kinds and nanosecond timestamps as strings, and
@@ -534,9 +533,9 @@ never a request or conversation id.
 ### 6.1 Virtual keys
 
 Apps get **virtual keys**, not provider keys (`keys.KeyStore`): stored only as a SHA-256 hash (as LiteLLM's
-`hash_token` does), shown once, **scoped** (which aliases), **budgeted** (dollars; `authorize()` refuses when `spent`
-reaches `max_budget`), limited (tokens per minute, §4), tiered, and **revocable** in one call. A leaked virtual key is
-one tenant's budget for as long as it takes to revoke it; a leaked provider key is every tenant's.
+`hash_token` does), shown once, **scoped** (which aliases), **budgeted** (dollars — the scaling primer's §5.11 dollar
+budget, per key; `authorize()` refuses at `max_budget`), limited (tokens per minute, §4), tiered, and **revocable**. A
+leaked virtual key is one tenant's budget until it is revoked; a leaked provider key is every tenant's.
 
 ### 6.2 Provider keys only in the gateway
 
@@ -563,7 +562,7 @@ before forwarding, and sets per-tenant fields itself.
 | Engine prefix cache | `cache_salt` = base64url(HMAC-SHA256(gateway secret, tenant)), 43 characters (`keys.cache_salt()`) | a timing side channel across tenants (serving-engine PRIMER §5) |
 | Ledger | tenant and key id on every row | spend nobody can bill |
 | Traces | tenant attribute; content opt-in and redacted | one tenant's prompts on another's dashboard |
-| Residency | the chain's region filter (§2.2) | data processed outside the region |
+| Residency | the key's regions, applied as the chain's region filter (§2.2) | data processed outside the region |
 | Priority | tier → pool priority, directions mapped (§2.6; 05 PRIMER §3.2) | the batch job ahead of the interactive agent |
 
 vLLM v0.30.0 validates `cache_salt`: non-empty, at most 128 characters, none of `@ / \` or NUL
@@ -591,9 +590,10 @@ connections before the old SVID expires (verify: this is operational practice, n
 
 A guardrail is a check at a **hook** — the input, a tool call, a tool result, the streamed output, the final output
 (`guardrails.HOOKS`) — at a **placement** that decides its latency and exposure. The core's checker is a regex
-screener (`guardrails.RegexScreener`, labelled a stand-in): real checkers are classifiers such as Llama Prompt Guard 2
-(22M and 86M parameters, a 512-token window, input-side) or Llama Guard (1B, 8B, 12B; prompts and responses), or a
-managed service such as Model Armor (identity primer §4.1, §6.1: start in `INSPECT_ONLY`, then block).
+screener (`guardrails.RegexScreener`, a labelled stand-in whose patterns are bounded: an unbounded `[\w]+@` is
+quadratic on a long prompt, and a check on every request must not be the cheapest DoS). Real checkers are classifiers
+such as Llama Prompt Guard 2 (22M and 86M parameters, a 512-token window, input-side) or Llama Guard (1B, 8B, 12B;
+prompts and responses), or a managed service such as Model Armor (identity primer §4.1, §6.1: `INSPECT_ONLY` first).
 
 | Placement | How | TTFT added | Exposure |
 |---|---|---|---|
@@ -702,8 +702,7 @@ records the scopes each token carries (`MCPClient.tokens`); the reference Python
 right for a desktop client and wrong for a gateway. Tokens are short-lived; refresh tokens for public clients
 **rotate** — every refresh returns a new one and invalidates the old — and the AS keeps the family: if an old refresh
 token is presented again, someone has a copy, so the AS **revokes the whole grant**, the active tokens included
-(OAuth 2.1 §4.3.1; `FakeAS.token()`, tested by replaying a rotated token). The refresh request also carries
-`resource`.
+(OAuth 2.1 §4.3.1; `FakeAS.token()`, tested by replaying a rotated token). Refresh requests carry `resource` too.
 
 ### 8.4 Step-up
 
@@ -735,15 +734,14 @@ library has none. The lab signs with `cryptography` when it is installed.
 | Tier | What runs | Cost |
 |---|---|---|
 | T0 in-process | all of `gateway-core`: providers, the chain, caches, limits, ledger, spans and the MCP flow on a virtual clock | free |
-| T0 on localhost | [`gateway-lab`](gateway-lab/): an async OpenAI-compatible gateway over HTTP in front of fake providers | free |
+| T0 on localhost | [`gateway-lab`](gateway-lab/): an async OpenAI-compatible gateway over HTTP in front of fake providers, built like the 05 lab's [`igwlab` router](../../05-orchestrator/serving-orchestration/inference-gateway-lab/igwlab/router/server.py) | free |
 | T0 + Docker | the lab's compose stack: the gateway and two fake providers, one set to fail | free |
 | T1 | the gateway in front of one real vLLM (`vllm/vllm-openai:v0.30.0`, Qwen2.5-0.5B-Instruct, `--enable-prompt-tokens-details`) on a free Colab or Kaggle T4, with a fake provider as the fallback | free, or ~$0.3–0.7 an hour rented (verify) |
 | T3 | the gateway on Cloud Run or GKE with the 04 lab's [Cloud Run or GKE vLLM](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/) or the 05 lab's [GKE Inference Gateway](../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gke/) as upstreams; no new Terraform | pay per use; see [`COMPUTE.md`](../../COMPUTE.md) |
 
-On Google Cloud the gateway is a stateless service (Cloud Run: request timeout up to 60 minutes, streams not capped,
-scaling primer §5.7) with provider keys in Secret Manager, limits and caches in Memorystore, and spans to Cloud Trace
-over OTLP; Apigee and Agent Gateway are the managed pieces the scaling primer's §9 and the identity primer's §10 map
-(verify). Elsewhere it is the same container on any VM or cluster; prices and obtainability are in `COMPUTE.md`.
+On Google Cloud the gateway is a stateless service (Cloud Run: requests up to 60 minutes, streams not capped, scaling
+primer §5.7) with keys in Secret Manager, limits and caches in Memorystore and spans to Cloud Trace over OTLP; Apigee
+and Agent Gateway are the managed pieces (scaling primer §9, identity primer §10; verify). Elsewhere: any VM or cluster.
 
 ### 9.2 Build or adopt
 
@@ -816,8 +814,7 @@ union of scopes, DPoP nonces — tokens per principal and resource, never in the
 
 5. *The app sets an `X-Tenant` header and the gateway uses it for the cache namespace. What is wrong?* — Anything the
    caller sets, an attacker sets: one tenant can read another's cache, spend its budget and poison its answers. The
-   tenant must come from the verified key; the cache namespace, limits, ledger and `cache_salt` all derive from it
-   (§6.3, §6.4).
+   tenant comes from the verified key; the cache namespace, limits, ledger and `cache_salt` derive from it (§6.3, §6.4).
 
 6. *An MCP server returns 403 insufficient_scope for `close_ticket`. What does the gateway do, and what must it never
    do?* — Re-authorize that principal for that resource with the union of the scopes it holds and the one demanded
@@ -834,7 +831,6 @@ union of scopes, DPoP nonces — tokens per principal and resource, never in the
 | Alias | The model name a client asks for (`chat`); resolves to a fallback chain. |
 | Fallback chain | An ordered list of (provider, model, region) targets tried until one answers. |
 | Falls through | A failure another target could fix (429, 5xx, timeout, context length); the next target is tried. |
-| First byte | The first chunk relayed to the client; after it, no fallback. |
 | Breaker | Per-target state machine: open after consecutive failures, one probe after the cooldown. |
 | Common-mode failure | One failure that takes every target down (the gateway, a shared region). |
 | Exact / semantic cache | Reuse a stored answer on an identical key / on a query similar above a threshold. |

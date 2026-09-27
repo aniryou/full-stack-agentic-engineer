@@ -93,3 +93,12 @@ def test_dpop_nonces_from_the_as_and_the_resource_server():
     assert client.nonces == {auth.issuer: "as-nonce-1", RES: "rs-nonce-1"}
     assert client.tokens[("alice", RES)]["type"] == "DPoP"
     assert "not RFC 9449" in HMACSigner.label
+
+
+def test_a_refused_refresh_starts_a_fresh_authorization():
+    clock, auth, _, client = world()
+    client.call("alice", RES, "list_tickets")
+    auth.revoked.add(auth.access[client.tokens[("alice", RES)]["access"]]["grant"])   # the AS revoked the grant
+    clock.sleep(301)
+    assert client.call("alice", RES, "list_tickets")["result"].startswith("list_tickets")
+    assert sum("discovered" in line for line in client.log) == 2

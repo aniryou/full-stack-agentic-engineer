@@ -30,6 +30,7 @@ class VirtualKey:
     max_budget: float | None = None        # dollars
     tpm: int | None = None
     tier: str = "standard"
+    regions: frozenset | None = None       # residency: the regions this tenant's requests may be served from
     spent: float = 0.0
     revoked: bool = False
 
@@ -43,8 +44,9 @@ class KeyStore:
         """Returns the plaintext key once; only its hash is kept."""
         plain = "sk-gw-" + "".join(self.rng.choice("abcdefghijkmnopqrstuvwxyz23456789") for _ in range(32))
         h = key_hash(plain)
-        models = scope.pop("models", None)
-        self.by_hash[h] = VirtualKey(h[:12], tenant, h, frozenset(models) if models else None, **scope)
+        models, regions = scope.pop("models", None), scope.pop("regions", None)
+        self.by_hash[h] = VirtualKey(h[:12], tenant, h, frozenset(models) if models else None, **scope,
+                                     regions=frozenset(regions) if regions else None)
         return plain
 
     def verify(self, presented: str) -> VirtualKey:

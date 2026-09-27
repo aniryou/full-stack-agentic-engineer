@@ -8,3 +8,5 @@ dist/
 .venv/
 _run_outputs/
 .DS_Store
+_spans_*.jsonl
+.gwlab-gpu/
