@@ -86,16 +86,16 @@ This is the mental model that makes GPU performance predictable.
 
 Define **arithmetic intensity** as FLOPs performed per byte moved from HBM. Every kernel sits somewhere on:
 
-```
-achievable FLOP/s = min( peak FLOP/s ,  arithmetic intensity × memory bandwidth )
-```
+$$
+\text{achievable FLOP/s} = \min(\text{peak FLOP/s},\ \text{arithmetic intensity} \times \text{memory bandwidth})
+$$
 
 For an H100, peak BF16 tensor throughput is about 990 TFLOP/s against 3.35 TB/s of bandwidth. The crossover is around **295 FLOPs per byte**. Below that intensity you are memory-bound and the ALUs idle no matter what you do.
 
 Where common operations land:
 
 - **Elementwise ops** (ReLU, add, layernorm): intensity near 1. Hopelessly memory-bound. This is why kernel *fusion* is the single highest-leverage optimisation in deep learning: it removes round trips to HBM.
-- **Attention, naively written**: materialises an N×N score matrix in HBM. Memory-bound and quadratic in memory, which is exactly the problem FlashAttention solves by tiling the computation so the score matrix never leaves shared memory.
+- **Attention, naively written**: materialises an $N \times N$ score matrix in HBM. Memory-bound and quadratic in memory, which is exactly the problem FlashAttention solves by tiling the computation so the score matrix never leaves shared memory.
 - **Large dense matmul**: intensity scales with tile size. This is the one thing that genuinely saturates the ALUs.
 - **LLM decoding, batch size 1**: you read every weight in the model to produce one token. At 2 FLOPs per parameter and 2 bytes per parameter, intensity is **1 FLOP per byte** at BF16 (2 at FP8, 4 at FP4). Catastrophically memory-bound, and the reason a 70B model at batch 1 runs at a fraction of a percent of peak FLOPS.
 
@@ -107,7 +107,7 @@ That last point is worth sitting with. **Most inference is bandwidth-bound, not 
 
 If you learned CUDA before roughly 2018, you learned a machine whose fundamental operation was the fused multiply-add on a scalar lane. That machine no longer describes where the performance is.
 
-Starting with Volta, each SM contains **Tensor Cores**: dedicated units that consume small matrix tiles and produce a matrix multiply-accumulate in a few cycles, `D = A×B + C`. They are fed cooperatively by a whole warp (or, on Hopper and later, a warpgroup of four warps) rather than by individual threads.
+Starting with Volta, each SM contains **Tensor Cores**: dedicated units that consume small matrix tiles and produce a matrix multiply-accumulate in a few cycles, $D = A \times B + C$. They are fed cooperatively by a whole warp (or, on Hopper and later, a warpgroup of four warps) rather than by individual threads.
 
 The magnitude of the shift:
 
@@ -141,7 +141,7 @@ This entire trend is aimed at low-precision dense linear algebra. Workloads that
 
 The other large change since the classic CUDA era is that a fast kernel is now an explicitly *pipelined* program, not a loop that loads and computes.
 
-- **Async copy** (Ampere): copy from HBM to shared memory without staging through registers, so compute on tile *n* overlaps with the load of tile *n+1*.
+- **Async copy** (Ampere): copy from HBM to shared memory without staging through registers, so compute on tile $n$ overlaps with the load of tile ${n+1}$.
 - **TMA, the Tensor Memory Accelerator** (Hopper): a dedicated DMA engine. A single thread issues a descriptor and the hardware moves an entire multidimensional tile, handling addressing and boundary conditions. This removes an enormous amount of index arithmetic from the inner loop.
 - **Warp specialisation**: rather than every warp doing the same thing, some warps become *producers* that only issue TMA loads while others become *consumers* that only issue Tensor Core instructions, coordinated through asynchronous barriers. The SM starts to look like a small dataflow machine.
 
@@ -232,11 +232,13 @@ Rubin entered full production around CES 2026 with volume shipments targeting th
 ## 9. Numbers worth memorising
 
 **Model memory:**
+
 - Weights: 2 bytes per parameter at BF16. A 70B model needs 140 GB, so it does not fit on one 80 GB H100.
 - Training: roughly 16 bytes per parameter with Adam (weights, gradients, and two optimiser moments in FP32), before activations. This is why training needs an order of magnitude more memory than inference.
 - KV cache: `2 × layers × kv_heads × head_dim × seq_len × batch × 2 bytes`. At long context and high batch, this exceeds the weights, which is what motivated MQA, GQA, and MLA.
 
 **Rules of thumb:**
+
 - Forward pass costs about 2 FLOPs per parameter per token; a training step costs about 6.
 - If arithmetic intensity is below ~300 FLOP/byte on modern hardware, you are memory-bound and should stop optimising arithmetic.
 - Achieving 40–50% of peak FLOPS (Model FLOPs Utilisation) on a large training run is good. Above 50% is excellent.
