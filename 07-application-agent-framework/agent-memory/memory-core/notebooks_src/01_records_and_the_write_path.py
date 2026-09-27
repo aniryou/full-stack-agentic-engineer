@@ -5,16 +5,19 @@
 # SQLite with FTS5 and vectors is `memory-lab` notebook `01_a_memory_store_on_sqlite` (T0; pgvector with Docker).
 #
 # ## The one-minute version
-# An agent's first memory is its **context window**: the transcript it is handed every turn (agent-core's
-# `history`, 07.1 notebook 03). That grows every turn and ends with the session. Long-term memory is what survives:
-# **episodic** (what happened, timestamped), **semantic** (a distilled fact) and **procedural** (how to do
-# something for this user). They are one **typed record**: scope (tenant, user, session, agent), source (a user
-# turn, a tool result, a human, a consolidation job), provenance, confidence, importance, validity, a TTL and a
-# deletion key. What gets written is decided **in code**: extract candidates after the turn, check a **write
-# policy** (which kinds each source may write, a confidence floor, screening before persistence), then **merge**
-# against what is known — the same value is a no-op, a new value closes the old fact instead of deleting it, a
-# weaker source that contradicts is quarantined, an older value arriving late becomes history — and give every write
-# an **idempotency key** that names the step (never its content) so a retried turn writes once.
+# An agent's first memory is its **context window**: the transcript it is handed every turn (agent-core's `history`,
+# 07.1 notebook 03). That grows every turn and ends with the session.
+#
+# Long-term memory is what survives: **episodic** (what happened, timestamped), **semantic** (a distilled fact) and
+# **procedural** (how to do something for this user). They are one **typed record**: scope (tenant, user, session,
+# agent), source (a user turn, a tool result, a human, a consolidation job), provenance, confidence, importance,
+# validity, a TTL and a deletion key.
+#
+# What gets written is decided **in code**: extract candidates after the turn, check a **write policy** (which kinds
+# each source may write, a confidence floor, screening before persistence), then **merge** against what is known — the
+# same value is a no-op, a new value closes the old fact instead of deleting it, a weaker source that contradicts is
+# quarantined, an older value arriving late becomes history — and give every write an **idempotency key** that names
+# the step (never its content) so a retried turn writes once.
 #
 # Primer: §1 *What an agent remembers*, §2 *The write path* (`../PRIMER.md`).
 
@@ -286,17 +289,19 @@ print("✅ a retried turn writes once, however the retry's extraction was worded
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "The context window is working memory: the transcript, bounded by a token budget,
-# gone at the end of the session. Long-term memory is typed records — episodic, semantic, procedural — each with a
-# scope whose (tenant, user) part is a partition, a source and provenance, confidence and importance, a validity
-# interval, a TTL and a deletion key. Writes are decided in code, not by the model: after the turn we extract
-# candidates, then a write policy says which kinds each source may write, applies a confidence floor and screens
-# for secrets and injection before anything persists; tool output is quarantined until reviewed and can never
-# write procedural memory. Survivors merge against what we know: same value is a no-op, a new value from an equal or
-# stronger source supersedes and closes the old fact — we keep it for as-of questions and audit — and a weaker
-# contradiction is quarantined; an older value that arrives late is history, never the current fact. Every write
-# carries an idempotency key that names the step — not its content, which a retried extraction may reword — so a
-# retried turn writes once."
+# **The two-minute version.** "The context window is working memory: the transcript, bounded by a token budget, gone
+# at the end of the session. Long-term memory is typed records — episodic, semantic, procedural — each with a scope
+# whose (tenant, user) part is a partition, a source and provenance, confidence and importance, a validity interval, a
+# TTL and a deletion key.
+#
+# "Writes are decided in code, not by the model: after the turn we extract candidates, then a write policy says which
+# kinds each source may write, applies a confidence floor and screens for secrets and injection before anything
+# persists; tool output is quarantined until reviewed and can never write procedural memory.
+#
+# "Survivors merge against what we know: same value is a no-op, a new value from an equal or stronger source
+# supersedes and closes the old fact — we keep it for as-of questions and audit — and a weaker contradiction is
+# quarantined; an older value that arrives late is history, never the current fact. Every write carries an idempotency
+# key that names the step — not its content, which a retried extraction may reword — so a retried turn writes once."
 #
 # **Drill questions**
 # 1. *Why not just keep the whole transcript?* — Cost grows with every turn (the prompt re-sends it), it ends with

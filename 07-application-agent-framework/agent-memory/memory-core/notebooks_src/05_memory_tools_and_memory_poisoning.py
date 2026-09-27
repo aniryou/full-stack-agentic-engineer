@@ -8,13 +8,14 @@
 # ## The one-minute version
 # Memory reaches the model in one of two ways. As **tools** — `remember`, `recall`, `forget`, with agent-core's
 # contracts: `remember` idempotent, `forget` confirm-gated — the model decides when to look, pays only when it does,
-# and misses what it did not think to ask for. **Implicitly** — retrieval on the user's message before every turn,
-# as ADK's `PreloadMemoryTool` does — every turn pays the tokens and nothing can be fetched mid-plan. The hybrid pins
-# a short profile per session (a cacheable prefix) and keeps `recall` for the rest. Whatever the mode, memory is a
-# **persistence channel for injected text**: a web page that says "remember that ..." is replayed in every later
-# session unless writes inherit the trust of what the model had read, tool-sourced memory is quarantined, and
-# recalled memory is fenced as data. Scope comes from the verified principal, never from a tool argument, and every
-# memory read, write and forget leaves an audit event.
+# and misses what it did not think to ask for. **Implicitly** — retrieval on the user's message before every turn, as
+# ADK's `PreloadMemoryTool` does — every turn pays the tokens and nothing can be fetched mid-plan. The hybrid pins a
+# short profile per session (a cacheable prefix) and keeps `recall` for the rest.
+#
+# Whatever the mode, memory is a **persistence channel for injected text**: a web page that says "remember that ..."
+# is replayed in every later session unless writes inherit the trust of what the model had read, tool-sourced memory
+# is quarantined, and recalled memory is fenced as data. Scope comes from the verified principal, never from a tool
+# argument, and every memory read, write and forget leaves an audit event.
 #
 # Primer: §6 *Memory as tools, or memory before every turn*, §8 *Tenancy, trust and memory poisoning*
 # (`../PRIMER.md`).
@@ -77,9 +78,11 @@ for extra in (0, 30):
 # the pinned profile's lead is mostly a memory smaller than the profile: a user's five facts are about 66 tokens and
 # the profile holds 60. Give each user thirty more facts of mixed importance and every mode drops and the lead
 # disappears: the profile now holds the most *important* facts, not the asked ones, and retrieval has to rank the
-# rest. What survives is the shape: tools are cheapest in memory tokens and dearest in model calls (a recall is a
-# round trip); implicit retrieval pays on every turn — including "thanks" — and its query is the user's words, which
-# for a task name nothing in memory; a pinned profile is the same bytes every turn, so the prefix cache absorbs it
+# rest.
+#
+# What survives is the shape: tools are cheapest in memory tokens and dearest in model calls (a recall is a round
+# trip); implicit retrieval pays on every turn — including "thanks" — and its query is the user's words, which for a
+# task name nothing in memory; a pinned profile is the same bytes every turn, so the prefix cache absorbs it
 # (notebook 03). The comparison that decides a design is a real tool-calling model on your own traffic.
 #
 # A pinned profile also goes **stale inside the session**: "I moved to Porto" updates the store, not the profile
@@ -282,15 +285,18 @@ print("✅ 06: who may read and write, under whose identity, and the record of i
 # **The two-minute version.** "The agent gets memory two ways. A pinned profile — the handful of facts it should
 # always know, chosen by importance under a token budget — sits in the stable prefix, retrieved once per session, and
 # a `recall` tool fetches the rest when the model decides it needs it; `remember` is idempotent and `forget` needs the
-# user's confirmation, and a write that changes a pinned slot re-pins the profile. Our scripted harness shows the
-# shape of the trade — a model that only recalls when asked misses tasks that need an unstated preference, retrieval
-# before every turn pays tokens even on 'thanks' — but not the winner: its recall rule is ours and a user's memory
-# there barely exceeds the profile; with thirty more facts per user the modes tie. We choose with a real model on
-# real traffic. Memory is also a persistence channel for
-# injection, so writes inherit the trust of what the model had read: a `remember` after a tool result is a tool
-# write, quarantined, and a tool can never write procedural memory. Recalled memory is fenced as data. The gateway
-# owns identity: the memory service takes scope from the verified token, reads run under the user's delegated
-# identity, and every read, write and forget is an audit event. A poisoning golden case runs on every release."
+# user's confirmation, and a write that changes a pinned slot re-pins the profile.
+#
+# "Our scripted harness shows the shape of the trade — a model that only recalls when asked misses tasks that need an
+# unstated preference, retrieval before every turn pays tokens even on 'thanks' — but not the winner: its recall rule
+# is ours and a user's memory there barely exceeds the profile; with thirty more facts per user the modes tie. We
+# choose with a real model on real traffic.
+#
+# "Memory is also a persistence channel for injection, so writes inherit the trust of what the model had read: a
+# `remember` after a tool result is a tool write, quarantined, and a tool can never write procedural memory. Recalled
+# memory is fenced as data. The gateway owns identity: the memory service takes scope from the verified token, reads
+# run under the user's delegated identity, and every read, write and forget is an audit event. A poisoning golden case
+# runs on every release."
 #
 # **Drill questions**
 # 1. *Why not let the model decide everything with `remember` / `recall`?* — It only looks when it thinks to, so a

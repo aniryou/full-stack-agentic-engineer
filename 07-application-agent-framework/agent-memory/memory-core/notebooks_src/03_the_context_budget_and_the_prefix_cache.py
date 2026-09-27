@@ -7,15 +7,18 @@
 #
 # ## The one-minute version
 # Memory costs tokens twice: the tokens you inject, and the prefix-cache hits you destroy. An engine reuses KV only
-# for an **exact prefix, in full blocks** (vLLM: 16 tokens, each block named by a hash chained to its parent; the
-# last token of a prompt is always recomputed). If memory is re-retrieved every turn and placed **before the
-# history**, the prefix changes right after the system prompt and every history block behind it misses: the whole
-# conversation re-prefills on every turn. Two layouts keep the history a stable prefix: a **profile pinned once per
-# session**, or per-turn memory at the **tail**, just before the new user message (ADK's `PreloadMemoryTool` inserts
-# there). You can predict the hit rate of each layout from the block rules and turn the lost hits into TTFT with a
-# roofline model — the self-hosted cost. A hosted API is different: it bills the cached rate only once a request
-# clears its caching minimum (4,096 tokens on Gemini 3.x), so below it the layout does not change the bill at all.
-# And extraction has a price too.
+# for an **exact prefix, in full blocks** (vLLM: 16 tokens, each block named by a hash chained to its parent; the last
+# token of a prompt is always recomputed).
+#
+# If memory is re-retrieved every turn and placed **before the history**, the prefix changes right after the system
+# prompt and every history block behind it misses: the whole conversation re-prefills on every turn. Two layouts keep
+# the history a stable prefix: a **profile pinned once per session**, or per-turn memory at the **tail**, just before
+# the new user message (ADK's `PreloadMemoryTool` inserts there).
+#
+# You can predict the hit rate of each layout from the block rules and turn the lost hits into TTFT with a roofline
+# model — the self-hosted cost. A hosted API is different: it bills the cached rate only once a request clears its
+# caching minimum (4,096 tokens on Gemini 3.x), so below it the layout does not change the bill at all. And extraction
+# has a price too.
 #
 # Primer: §5 *The context budget: tokens, the prefix cache and cost per turn*; the block rules are
 # serving-engine PRIMER §5 and mini-engine-core notebook 03 exercise 3.4.
@@ -95,7 +98,8 @@ print("\nover 20 turns:", {l: f"{hit_rate(hits_per_turn(l, turns=20)):.1%}" for 
 #
 # ## Worked example 4 — what the lost hits cost: time on your GPUs (SIMULATED), dollars on a hosted API
 # Turn 8 of the default session. Time, for a self-hosted engine: memcore's restatement of `minengine.perf.step_cost`
-# for one prefill chunk (`prefill_seconds`, roofline: max(bytes / 0.8 BW, FLOPs / 0.6 peak) + 2 ms).
+# for one prefill chunk (`prefill_seconds`, roofline:
+# $\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$).
 
 # %%
 l4, q15, h100, l8 = GPUS["L4"], LLMS["qwen2.5-1.5b"], GPUS["H100-SXM"], LLMS["llama-3.1-8b"]
@@ -193,9 +197,9 @@ print("✅ the three rules, on 500 random pairs")
 
 # %% [markdown]
 # ## Exercise 3.2 — predict the hits without simulating
-# For the default session (system S = 2,000, memory M = 400, user 40, reply 120, B = 16), write the cached tokens
-# of turn `t ≥ 2` for each layout as a closed form. Hint: work out the common prefix with the previous request's
-# prompt + reply, then round down to a block — and remember the previous request's last token.
+# For the default session (system $S = 2{,}000$, memory $M = 400$, user 40, reply 120, $B = 16$), write the cached
+# tokens of turn $t \ge 2$ for each layout as a closed form. Hint: work out the common prefix with the previous
+# request's prompt + reply, then round down to a block — and remember the previous request's last token.
 
 # %% exercise
 def predicted_cached(layout, t):
@@ -290,15 +294,17 @@ print(f"✅ uncached tokens per turn {bad} -> {good}: stable first, history appe
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Memory costs tokens twice — what we inject and the prefix-cache hits we break. The
-# engine reuses KV only for an exact prefix in full 16-token blocks, so where memory goes decides the hit rate. If
-# we re-retrieve memory every turn and put it before the history, the prefix changes right after the system prompt
-# and the whole history re-prefills every turn: in our 8-turn model the hit rate falls from 88% to 58% and turn-8 TTFT
-# on an L4 goes from 15 to 68 ms (simulated) on our own engine; on a hosted API the bill moves only once prompts clear
+# engine reuses KV only for an exact prefix in full 16-token blocks, so where memory goes decides the hit rate. If we
+# re-retrieve memory every turn and put it before the history, the prefix changes right after the system prompt and
+# the whole history re-prefills every turn: in our 8-turn model the hit rate falls from 88% to 58% and turn-8 TTFT on
+# an L4 goes from 15 to 68 ms (simulated) on our own engine; on a hosted API the bill moves only once prompts clear
 # the provider's caching minimum (4,096 tokens on Gemini 3.x), and then the session costs 46% more than with a pinned
-# profile (a 4,000-token system prompt). So the layout is: system prompt and tools, then a profile retrieved once per session, then the append-only history, then
-# per-turn memory and anything volatile at the tail — which is where ADK's preload puts it too. We cap injected
-# memory at the recall knee, extract in the background rather than on every turn, salt the prefix cache per
-# tenant, and watch `cached_tokens` per turn to catch a layout regression."
+# profile (a 4,000-token system prompt).
+#
+# "So the layout is: system prompt and tools, then a profile retrieved once per session, then the append-only history,
+# then per-turn memory and anything volatile at the tail — which is where ADK's preload puts it too. We cap injected
+# memory at the recall knee, extract in the background rather than on every turn, salt the prefix cache per tenant,
+# and watch `cached_tokens` per turn to catch a layout regression."
 #
 # **Drill questions**
 # 1. *TTFT tripled after we added long-term memory, for a small recall gain. Why?* — Memory is re-retrieved per

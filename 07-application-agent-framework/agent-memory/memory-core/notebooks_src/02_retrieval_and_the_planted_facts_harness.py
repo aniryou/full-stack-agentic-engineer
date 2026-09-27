@@ -8,13 +8,15 @@
 # Retrieval decides which memories reach the prompt, so it decides what the agent "remembers". Similarity alone
 # returns the most *on-topic* memory; the generative-agents score (Park et al. 2023) adds **recency** and
 # **importance**, each normalised to [0, 1] over the candidates. It exists in two forms that disagree — the paper's
-# (all weights 1, recency 0.995 per hour since last access; verify) and the reference code's (weights 0.5 / 3 / 2,
-# and a rank-based recency that gives the **oldest** memory the largest term). Whatever the score, the result is
-# packed into a **token budget** per turn. You cannot tune any of this without a benchmark, so the harness plants
-# facts about a user across sessions, changes one, slips a false claim in through a tool, and asks questions in
-# LongMemEval's and LoCoMo's task shapes: extraction, preference, multi-session, temporal, knowledge update,
-# abstention, adversarial. It reports accuracy with a Wilson interval, recall within the budget, stale answers and
-# abstention — and a paraphrase subset that a lexical embedder misses by design.
+# (all weights 1, recency 0.995 per hour since last access; verify) and the reference code's (weights 0.5 / 3 / 2, and
+# a rank-based recency that gives the **oldest** memory the largest term). Whatever the score, the result is packed
+# into a **token budget** per turn.
+#
+# You cannot tune any of this without a benchmark, so the harness plants facts about a user across sessions, changes
+# one, slips a false claim in through a tool, and asks questions in LongMemEval's and LoCoMo's task shapes:
+# extraction, preference, multi-session, temporal, knowledge update, abstention, adversarial. It reports accuracy with
+# a Wilson interval, recall within the budget, stale answers and abstention — and a paraphrase subset that a lexical
+# embedder misses by design.
 #
 # Primer: §3 *Retrieval: similarity, recency and importance*, §4 *Measuring memory* (`../PRIMER.md`).
 
@@ -41,7 +43,7 @@ for other in ["the user moved to porto", "Where does the user live?", "user live
     print(f"cos(user lives in lisbon, {other!r:32}) = {float(q @ emb.encode(other)):.4f}")
 
 # %% [markdown]
-# 0.2236 = 1/√(4·5): one shared token (`user`) out of four and five. "Where does the user live?" is the same
+# $0.2236 = 1/\sqrt{4 \cdot 5}$: one shared token (`user`) out of four and five. "Where does the user live?" is the same
 # question a person would ask about the first text, and scores no better than the unrelated move: `live` is not
 # `lives`. That is the **paraphrase miss** the harness measures below; a real embedder closes most of it (T1).
 #
@@ -61,7 +63,7 @@ for form in ("paper", "code"):
 # %% [markdown]
 # Both forms rank B, A, C here, for different reasons. In the paper form, recency and relevance cancel between A
 # and B and B's importance decides. In the code form, relevance is weighted 3 and importance 2, and the recency
-# term — `0.99 ** rank` over the memories sorted by last access, oldest first — gives **C, the stalest**, the
+# term — $0.99^{\text{rank}}$ over the memories sorted by last access, oldest first — gives **C, the stalest**, the
 # full recency point. That inversion does not matter on this example; it matters on a knowledge update, where the
 # stale fact is exactly the one it favours (the harness shows it below). The paper's form comes from the paper
 # alone (arXiv is unreachable here: verify); the code form was read from `joonspk-research/generative_agents`
@@ -166,7 +168,7 @@ for hint in (True, False):
 #
 # ## Exercise 2.1 — the paper's score
 # Implement `paper_score(hours_since_access, importance, relevance)`: min-max normalise each term over the
-# candidates (all equal → 0.5), recency = 0.995 ** hours, weights 1, 1, 1.
+# candidates (all equal → 0.5), $\text{recency} = 0.995^{\text{hours}}$, weights 1, 1, 1.
 
 # %% exercise
 def paper_score(hours, importance, relevance):
@@ -190,7 +192,7 @@ print("✅ the paper form: A 2.0000, B 2.1364, C 0.4286")
 # %% [markdown]
 # ## Exercise 2.2 — the code's recency
 # Implement `code_recency(last_accessed)` as the reference code does: sort by last access **ascending** (oldest
-# first) and give the i-th (from 1) the value `0.99 ** i`, returned in the input's order.
+# first) and give the $i$-th (from 1) the value $0.99^i$, returned in the input's order.
 
 # %% exercise
 def code_recency(last_accessed):
@@ -268,9 +270,14 @@ print("✅ greedy with skip — a long record never blocks shorter ones behind i
 
 # %% [markdown]
 # ## Exercise 2.5 — the Wilson interval
-# Implement `wilson(passes, n, z=1.96)` (07.2 notebook 08 §4). With `p = passes / n`:
-# centre = (p + z²/2n) / (1 + z²/n), half-width = z·√(p(1−p)/n + z²/4n²) / (1 + z²/n), clipped to [0, 1];
-# `(0.0, 1.0)` when n = 0.
+# Implement `wilson(passes, n, z=1.96)` (07.2 notebook 08 §4). With $p = \text{passes}/n$:
+#
+# $$
+# \text{centre} = \frac{p + z^2/2n}{1 + z^2/n}, \qquad
+# \text{half-width} = \frac{z\sqrt{p(1-p)/n + z^2/4n^2}}{1 + z^2/n},
+# $$
+#
+# clipped to [0, 1]; `(0.0, 1.0)` when $n = 0$.
 
 # %% exercise
 def wilson(passes, n, z=1.96):
@@ -315,15 +322,16 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Retrieval is where memory quality is decided, so we score and we measure. Each
-# candidate in the user's partition gets the generative-agents score — recency, importance and relevance, each
-# min-max normalised — and we use the paper's form: recency decays with hours since last use. The reference code's
-# form ranks by access order oldest-first and served stale facts on 70% of knowledge updates over raw episodes in our
-# harness (27% once we removed the harness's slot hints), so we do not copy it. The ranked list is packed into a per-turn token budget, greedily with skip, and as-of queries
-# can reach closed facts. We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes — shapes,
-# not their data — and report accuracy with a Wilson interval, recall within the budget, stale answers and
-# abstention separately, because a memory that stores nothing still gets the abstention questions right. The knee
-# of recall against budget sets the budget: 90 tokens here. A paraphrase subset tells us what a real embedder must
-# buy over a lexical one."
+# candidate in the user's partition gets the generative-agents score — recency, importance and relevance, each min-max
+# normalised — and we use the paper's form: recency decays with hours since last use. The reference code's form ranks
+# by access order oldest-first and served stale facts on 70% of knowledge updates over raw episodes in our harness
+# (27% once we removed the harness's slot hints), so we do not copy it. The ranked list is packed into a per-turn
+# token budget, greedily with skip, and as-of queries can reach closed facts.
+#
+# "We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes — shapes, not their data — and
+# report accuracy with a Wilson interval, recall within the budget, stale answers and abstention separately, because a
+# memory that stores nothing still gets the abstention questions right. The knee of recall against budget sets the
+# budget: 90 tokens here. A paraphrase subset tells us what a real embedder must buy over a lexical one."
 #
 # **Drill questions**
 # 1. *Why add recency and importance to similarity?* — Similarity finds the most on-topic memory; the most useful
