@@ -9,7 +9,7 @@
 #
 # ## The one-minute version
 #
-# * **Sequence-level distillation's dataset is a pipeline with a yield at every stage:** prompts × n samples, then
+# * **Sequence-level distillation's dataset is a pipeline with a yield at every stage:** prompts × $n$ samples, then
 #   the verifier, then deduplication, then a length cap, then JSONL. You pay for every token the teacher
 #   generated, not for the ones you keep (PRIMER §3 "Sequence-level distillation: learning from the teacher's outputs").
 # * **A served teacher gives you three things:** samples; the top-k log-probabilities of each sampled token (at
@@ -164,10 +164,11 @@ print("token lists line up" if ALIGNED else "token lists do NOT line up: teacher
 # %% [markdown]
 # ## Exercise 2.3 — the per-token reward
 #
-# With the student's own log-probabilities `s.logprobs` and the teacher's `SCORED`, both lists of `(token,
-# logprob)` pairs, write `rewards(scored, own)`: the per-token reward `r_t = log π_teacher − log π_student` as a
-# list. Then `worst`: the index of the most negative reward. The sequence's total reward is minus its log-ratio,
-# and its expectation over the student's samples is minus the reverse KL (PRIMER §4).
+# With the student's own log-probabilities `s.logprobs` and the teacher's `SCORED`, both lists of `(token, logprob)`
+# pairs, write `rewards(scored, own)`: the per-token reward
+# $r_t = \log \pi_{\text{teacher}} - \log \pi_{\text{student}}$ as a list. Then `worst`: the index of the most
+# negative reward. The sequence's total reward is minus its log-ratio, and its expectation over the student's samples
+# is minus the reverse KL (PRIMER §4).
 
 # %% exercise
 def rewards(scored: list, own: list) -> list:
@@ -303,7 +304,7 @@ target.stop()
 # samples and scores through the API, and run the teacher in-process for logits.
 #
 # **Drill 2.** *Our SFT data yield is 60%. Is that bad?* It is a cost, not a defect: you paid for 100% of the tokens.
-# Check where the rejects are (by kind and difficulty). If the hard problems lose all their samples, raise n for
+# Check where the rejects are (by kind and difficulty). If the hard problems lose all their samples, raise $n$ for
 # them, or the student never sees them (PRIMER §5).
 #
 # **Drill 3.** *Can a Qwen2.5-7B teacher logit-distil into Qwen2.5-0.5B?* Not as is: `vocab_size` is 152,064 against
