@@ -12,8 +12,10 @@ minimise and what each one makes a too-small student do; distillation from the t
 and from the teacher's scores of the student's own samples (on-policy); distilling a thinking model's traces;
 feature distillation, pruning and tokenizer mismatch; a draft model for speculative decoding as a student
 whose metric is acceptance; how to measure a student; and the economics — the one-off bill against the
-per-token saving. It builds on the [transformer primer](../transformers/docs/transformer-primer.md) (§6
-training), the [capacity primer](../gpu-capacity-planning/PRIMER.md), the
+per-token saving.
+
+It builds on the [transformer primer](../transformers/docs/transformer-primer.md) (§6 training), the
+[capacity primer](../gpu-capacity-planning/PRIMER.md), the
 [roofline primer](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (§3, §8), the
 [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md) (§7) and the
 [RL and thinking-models primer](../rl-and-thinking-models/PRIMER.md) (§1–§7), and does not repeat them. Every
@@ -24,22 +26,27 @@ tiny transformer four ways in torch and a real 0.5–0.6B student with TRL and v
 
 ## The one-minute version
 
-A teacher's output is a distribution, and its **soft targets** p = softmax(z/T) say how wrong each wrong answer
-is — information a hard label does not carry, so a student learns more per example from them than a same-size
-model trained from scratch on the same tokens. The classic loss is α·T²·KL(p_T ‖ q_T) + (1 − α)·CE, whose
-soft term's gradient on the student's logits is T·(q_T − p_T). When the student cannot copy the teacher, the
-**divergence** decides what it gets wrong: forward KL makes it cover every mode (and fill the gaps between them), reverse KL
-makes it commit to the modes it can fit. **Sequence-level distillation** is SFT on text the teacher wrote — it
-needs only samples, and it pays for every token the verifier throws away; its flaw is **exposure bias**, since
-the student trains on the teacher's prefixes and decodes on its own. **On-policy distillation** samples from the
-student and asks the teacher to score every token: RL with a dense reward r_t = log π_T − log π_S, one teacher
-forward pass per token. Distilling a **thinking model** copies its procedure and its thinking-length
-distribution, not its knowledge. A **draft model** is a student whose metric is acceptance, α = 1 − TV. Measure
-students by agreement *and* by task accuracy with intervals, per slice. The payoff is serving: a 1.5B student is
-~16× cheaper per token on the roofline than a 32B teacher served on two H100s (the 96× you get against one H100
-is a teacher with no room left to batch), against a one-off bill dominated by the teacher's tokens — so
-break-even is days to years depending on volume and on where those tokens come from, and a cascade sits in
-between.
+A teacher's output is a distribution, and its **soft targets** $p = \operatorname{softmax}(z/T)$ say how wrong each
+wrong answer is — information a hard label does not carry, so a student learns more per example from them than a
+same-size model trained from scratch on the same tokens. The classic loss is
+$\alpha \cdot T^2 \cdot \mathrm{KL}(p_T \,\Vert\, q_T) + (1 - \alpha) \cdot \mathrm{CE}$, whose soft term's gradient on
+the student's logits is $T \cdot (q_T - p_T)$.
+
+- When the student cannot copy the teacher, the **divergence** decides what it gets wrong: forward KL makes it cover
+  every mode (and fill the gaps between them), reverse KL makes it commit to the modes it can fit.
+- **Sequence-level distillation** is SFT on text the teacher wrote — it needs only samples, and it pays for every
+  token the verifier throws away; its flaw is **exposure bias**, since the student trains on the teacher's prefixes
+  and decodes on its own.
+- **On-policy distillation** samples from the student and asks the teacher to score every token: RL with a dense
+  reward $r_t = \log \pi_T - \log \pi_S$, one teacher forward pass per token.
+- Distilling a **thinking model** copies its procedure and its thinking-length distribution, not its knowledge.
+- A **draft model** is a student whose metric is acceptance, $\alpha = 1 - \mathrm{TV}$.
+- Measure students by agreement *and* by task accuracy with intervals, per slice.
+
+The payoff is serving: a 1.5B student is ~16× cheaper per token on the roofline than a 32B teacher served on two
+H100s (the 96× you get against one H100 is a teacher with no room left to batch), against a one-off bill dominated
+by the teacher's tokens — so break-even is days to years depending on volume and on where those tokens come from,
+and a cascade sits in between.
 
 ---
 
@@ -47,8 +54,8 @@ between.
 
 **The cost argument, from the roofline.** Decode streams the weights and each sequence's KV cache every step
 ([roofline primer §3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#3-llm-inference-on-the-roofline));
-prefill costs about 2·N FLOPs per token. A student with a twentieth of the parameters streams a twentieth of the
-weight bytes per decode step and needs a twentieth of the prefill FLOPs:
+prefill costs about $2 \cdot N$ FLOPs per token. A student with a twentieth of the parameters streams a twentieth
+of the weight bytes per decode step and needs a twentieth of the prefill FLOPs:
 
 | Qwen2.5 (bf16) | Parameters | Weights | KV per token | Prefill per token | Batch-1 decode, 1K context, H100 | Sessions of 2K on one H100 |
 |---|---|---|---|---|---|---|
@@ -68,8 +75,8 @@ into dollars with
 **Three routes to a small model.** Train it small from scratch; prune a large one and repair it; or distil —
 train it on a teacher's outputs. The routes combine (prune, then distil, §6). Why does a distilled student beat
 a same-size model trained from scratch on the *same* tokens? A hard label is one sample from the teacher's
-distribution; the soft target is the distribution. In the core's toy language (after tokens a, b the next is
-(a + b) mod 11 with probability 0.8 and each neighbour with 0.1), a 16-unit student given the same contexts
+distribution; the soft target is the distribution. In the core's toy language (after tokens $a$, $b$ the next is
+$(a + b) \bmod 11$ with probability 0.8 and each neighbour with 0.1), a 16-unit student given the same contexts
 reaches (notebook 01, `tinylm.train()` with `losses.hard_ce()` or `losses.kd()`):
 
 | Examples (per context) | Hard labels: rule accuracy / KL to the truth | Soft targets: rule accuracy / KL |
@@ -108,10 +115,10 @@ the mechanism behind those lines.
 
 ## 2. Soft targets, temperature and the choice of divergence
 
-**Soft targets and dark knowledge** (Hinton, Vinyals & Dean 2015). A teacher's logits z give
-p_T = softmax(z/T). At T = 1 a confident teacher's small probabilities are tiny; raising T flattens the
-distribution and makes the ranking of wrong answers carry weight. Five tokens, teacher z = (4, 3, 1, 0, −1),
-student v = (3, 3.5, 0, 0.5, −1) (`losses.softmax()`):
+**Soft targets and dark knowledge** (Hinton, Vinyals & Dean 2015). A teacher's logits $z$ give
+$p_T = \operatorname{softmax}(z/T)$. At T = 1 a confident teacher's small probabilities are tiny; raising $T$ flattens
+the distribution and makes the ranking of wrong answers carry weight. Five tokens, teacher $z$ = (4, 3, 1, 0, −1),
+student $v$ = (3, 3.5, 0, 0.5, −1) (`losses.softmax()`):
 
 | | token 0 | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|---|
@@ -122,50 +129,69 @@ student v = (3, 3.5, 0, 0.5, −1) (`losses.softmax()`):
 The hard label says "token 0"; the soft target also says token 1 is a far better second choice than tokens 3
 and 4 — the dark knowledge. KL(p ‖ q) = 0.25650 nats at T = 1 (`losses.kl()`).
 
-**The loss and its gradient.**
+**The loss and its gradient** (`losses.hinton()`, `losses.kd()`).
 
-```
-L = α·T²·KL(p_T ‖ q_T) + (1 − α)·CE(y, q_1)                                   losses.hinton()
-∂KL(p_T ‖ q_T)/∂v_i = (q_T,i − p_T,i) / T        so   ∂(T²·KL)/∂v_i = T·(q_T,i − p_T,i)     losses.kd()
-```
+$$
+\begin{aligned}
+\mathcal{L} &= \alpha \cdot T^2 \cdot \mathrm{KL}(p_T \,\Vert\, q_T) + (1 - \alpha) \cdot \mathrm{CE}(y, q_1) \\[6pt]
+\frac{\partial\, \mathrm{KL}(p_T \,\Vert\, q_T)}{\partial v_i} &= \frac{q_{T,i} - p_{T,i}}{T} \\[6pt]
+\text{so} \quad \frac{\partial\, (T^2 \cdot \mathrm{KL})}{\partial v_i} &= T \cdot (q_{T,i} - p_{T,i})
+\end{aligned}
+$$
 
-The derivation is one line: KL = Σ p log p − Σ p log q_T and ∂log q_T,j/∂v_i = (1[i = j] − q_T,i)/T. At T = 2 the
-gradient of the KL is (−0.073543, 0.071047, −0.016410, 0.015853, 0.003053), which finite differences confirm (the
-core's tests). Soft-target cross-entropy (`losses.soft_ce()`) has the same gradient; a hard label is the same loss
-with p one-hot (`losses.hard_ce()`).
+The derivation is one line: $\mathrm{KL} = \sum p \log p - \sum p \log q_T$ and
+$\partial \log q_{T,j} / \partial v_i = (\mathbf{1}[i = j] - q_{T,i})/T$. At T = 2 the gradient of the KL is
+(−0.073543, 0.071047, −0.016410, 0.015853, 0.003053), which finite differences confirm (the core's tests).
+Soft-target cross-entropy (`losses.soft_ce()`) has the same gradient; a hard label is the same loss with $p$
+one-hot (`losses.hard_ce()`).
 
-**Why T².** The KL itself shrinks roughly as 1/T² when T grows, and so does its gradient, so without the factor a
-soft term at T = 4 is drowned by the hard-label term and α stops meaning what it says (`losses.kd(scale=False)`):
+**Why T².** The KL itself shrinks roughly as $1/T^2$ when $T$ grows, and so does its gradient, so without the
+factor a soft term at T = 4 is drowned by the hard-label term and $\alpha$ stops meaning what it says
+(`losses.kd(scale=False)`):
 
 | T | 1 | 2 | 4 | 10 | 100 | 1000 |
 |---|---|---|---|---|---|---|
 | KL(p_T ‖ q_T) | 0.25650 | 0.06639 | 0.01596 | 0.00242 | 0.00002 | 0.00000 |
 | T²·KL | 0.25650 | 0.26558 | 0.25542 | 0.24196 | 0.23129 | 0.23013 |
 
-**The high-T limit is logit matching.** Expanding softmax(v/T) ≈ 1/N + (v_i − v̄)/(NT) gives
-T²·KL → (1/2N)·Σ((v_i − v̄) − (z_i − z̄))², mean-squared error on centred logits (Caruana's model compression):
-0.23000 for the example (`losses.logit_mse()`). TRL applies no T²: `GKDTrainer` computes its divergence at T = 1
-(its `temperature` only sets sampling), and `DistillationTrainer` divides both logits by its `temperature`
-(default 1.0) inside the loss; NVIDIA ModelOpt's `LogitsDistillationLoss` multiplies by T² (verify). Treat T and α
-as knobs to sweep.
+**The high-T limit is logit matching.** Expanding $\operatorname{softmax}(v/T) \approx 1/N + (v_i - \bar v)/(NT)$
+gives
 
-**Why a soft target is worth more per example.** The gradient from a sampled hard label is onehot(y) − q; its
-expectation over y ~ p is p − q, the soft-target gradient, and its extra variance is exactly 1 − Σp²
-(`losses.label_noise()`): 0.34 per example for the toy language's 0.8/0.1/0.1. The soft target delivers the
-expectation with no sampling noise — the §1 table is that variance at work.
+$$
+T^2 \cdot \mathrm{KL} \;\to\; \frac{1}{2N} \sum_i \bigl((v_i - \bar v) - (z_i - \bar z)\bigr)^2,
+$$
+
+mean-squared error on centred logits (Caruana's model compression): 0.23000 for the example (`losses.logit_mse()`).
+TRL applies no $T^2$: `GKDTrainer` computes its divergence at T = 1 (its `temperature` only sets sampling), and
+`DistillationTrainer` divides both logits by its `temperature` (default 1.0) inside the loss; NVIDIA ModelOpt's
+`LogitsDistillationLoss` multiplies by $T^2$ (verify). Treat $T$ and $\alpha$ as knobs to sweep.
+
+**Why a soft target is worth more per example.** The gradient from a sampled hard label is
+$\operatorname{onehot}(y) - q$; its expectation over $y \sim p$ is ${p - q}$, the soft-target gradient, and its
+extra variance is exactly $1 - \sum p^2$ (`losses.label_noise()`): 0.34 per example for the toy language's
+0.8/0.1/0.1. The soft target delivers the expectation with no sampling noise — the §1 table is that variance at work.
+
+### The choice of divergence
 
 **Forward against reverse KL.** A student too small to match the teacher must choose what to get wrong:
 
-```
-forward KL(p ‖ q) = Σ p·log(p/q)   paid wherever the teacher has mass the student lacks → mode-covering    (SFT, KD; GKD β = 0)
-reverse KL(q ‖ p) = Σ q·log(q/p)   paid wherever the student has mass the teacher lacks → mode-seeking     (GKD β = 1; sampled-token reward)
-JSD(β) = β·KL(p ‖ m) + (1 − β)·KL(q ‖ m),  m = β·p + (1 − β)·q                                  divergences.jsd()
-```
+$$
+\begin{aligned}
+\text{forward } \mathrm{KL}(p \,\Vert\, q) &= \sum p \log(p/q) \\
+\text{reverse } \mathrm{KL}(q \,\Vert\, p) &= \sum q \log(q/p) \\
+\mathrm{JSD}(\beta) &= \beta \cdot \mathrm{KL}(p \,\Vert\, m) + (1 - \beta) \cdot \mathrm{KL}(q \,\Vert\, m), \\
+m &= \beta p + (1 - \beta)\, q
+\end{aligned}
+$$
 
-Whose samples you train on (GKD's λ, §4) and which divergence you minimise (its β) are separate choices: GKD runs
-either divergence on either data. Reverse KL is the natural partner of the student's own samples, because its
-per-token estimate needs only the teacher's log-probability of the token the student sampled. MiniLLM's argument
-(Gu et al.) is that for generation the reverse direction is right: a forward-KL student
+- forward KL: paid wherever the teacher has mass the student lacks → mode-covering (SFT, KD; GKD β = 0)
+- reverse KL: paid wherever the student has mass the teacher lacks → mode-seeking (GKD β = 1; sampled-token reward)
+- $\mathrm{JSD}(\beta)$: `divergences.jsd()`
+
+Whose samples you train on (GKD's $\lambda$, §4) and which divergence you minimise (its $\beta$) are separate
+choices: GKD runs either divergence on either data. Reverse KL is the natural partner of the student's own samples,
+because its per-token estimate needs only the teacher's log-probability of the token the student sampled. MiniLLM's
+argument (Gu et al.) is that for generation the reverse direction is right: a forward-KL student
 "overestimates the low-probability regions of the teacher distribution" and samples text the teacher would never
 write. The core fits a one-bump student (a discretised Gaussian) to a two-bump teacher on 11 tokens, modes at 2
 and 8 (`divergences.fit_bump()`, notebook 02):
@@ -183,14 +209,16 @@ the argmax is used); for generation every sampled token conditions the next, so 
 low-probability mass is what it writes.
 
 **TRL's convention.** `generalized_jsd_loss(student_logits, teacher_logits, beta)` computes exactly the table's
-three rows: β = 0 is KL(teacher ‖ student), β = 1 is KL(student ‖ teacher), both exact at the endpoints, and the
-interior is the mixture JSD (≤ ln 2) — so the loss scale jumps at the ends, by ~1/β as β → 0 and by ~1/(1 − β) as
-β → 1. On the five-token example:
+three rows: β = 0 is $\mathrm{KL}(\text{teacher} \,\Vert\, \text{student})$, β = 1 is
+$\mathrm{KL}(\text{student} \,\Vert\, \text{teacher})$, both exact at the endpoints, and the interior is the mixture
+JSD ($\le \ln 2$) — so the loss scale jumps at the ends, by $\sim 1/\beta$ as $\beta \to 0$ and by
+$\sim 1/(1 - \beta)$ as $\beta \to 1$. On the five-token example:
 0.256501 at β = 0, 0.023026 at 0.1, 0.064431 at 0.5, 0.024067 at 0.9, 0.271424 at β = 1 (`losses.gkd()`).
-**Total variation** TV = ½Σ|p − q| is the fourth measure worth knowing: 1 − TV is a draft's acceptance rate (§7).
-This is the same KL that RL uses as its penalty to a reference model
-([RL primer §2](../rl-and-thinking-models/PRIMER.md#2-policy-gradients-over-token-sequences)), pointed the other
-way: RL keeps the policy near the reference; distillation pulls it onto the teacher.
+
+**Total variation** $\mathrm{TV} = \tfrac{1}{2} \sum \lvert p - q \rvert$ is the fourth measure worth knowing:
+$1 - \mathrm{TV}$ is a draft's acceptance rate (§7). This is the same KL that RL uses as its penalty to a reference
+model ([RL primer §2](../rl-and-thinking-models/PRIMER.md#2-policy-gradients-over-token-sequences)), pointed the
+other way: RL keeps the policy near the reference; distillation pulls it onto the teacher.
 
 ## 3. Sequence-level distillation: learning from the teacher's outputs
 
@@ -200,7 +228,7 @@ so it works through any API, and it is the recipe behind the R1 distills and the
 strong-to-weak distillation — the recipe and its numbers are in the
 [RL primer §1 and §5](../rl-and-thinking-models/PRIMER.md#5-thinking-models).
 
-**The pipeline and its bookkeeping** (`seqkd.pipeline()`): generate n samples per prompt at a temperature →
+**The pipeline and its bookkeeping** (`seqkd.pipeline()`): generate $n$ samples per prompt at a temperature →
 verify → deduplicate → SFT. Every stage has a price. Twenty prompts × 8 samples × 12 tokens from the toy teacher:
 
 | Sampling | Generated | Pass the verifier | Unique | Teacher tokens paid | Tokens used |
@@ -231,19 +259,23 @@ its own, per position and over the whole output so far (`seqkd.exposure_bias()`,
 | supervised KD on the greedy text (GKD λ = 0) | 1.000 | 1.000 | 0.788 | 0.774 | 0.650 | 0.190 | 0.652 |
 
 The SFT student never slips because it never varies: trained on one greedy output per prompt, it copied that
-output, not the teacher. The KD student matches the teacher's distribution on the teacher's text, so at T = 1 it
-samples off the rule's cycle: its samples follow the rule 0.792 of the time at position 1, like the teacher's,
-then 0.636 by position 4, where the teacher's stay between 0.78 and 0.81. Each slip lands it in contexts no
-training example covered, where its top token is wrong about a quarter of the time: per-position accuracy drops
-to 0.788 by position 4 and then stays there (0.774 at position 12). What compounds with length is the output as a
-whole: the chance that the KD student's top token has been right at every position falls to 0.650 by position 4
-and 0.190 by position 12, where the teacher's stays at 1.000. Two cures: cover more of the states the student will
-visit (sample the teacher at T > 0, more samples per prompt, more tokens paid), or train on the student's own
-states (§4).
+output, not the teacher.
+
+The KD student matches the teacher's distribution on the teacher's text, so at T = 1 it samples off the rule's
+cycle: its samples follow the rule 0.792 of the time at position 1, like the teacher's, then 0.636 by position 4,
+where the teacher's stay between 0.78 and 0.81. Each slip lands it in contexts no training example covered, where
+its top token is wrong about a quarter of the time: per-position accuracy drops to 0.788 by position 4 and then
+stays there (0.774 at position 12).
+
+What compounds with length is the output as a whole: the chance that the KD student's top token has been right at
+every position falls to 0.650 by position 4 and 0.190 by position 12, where the teacher's stays at 1.000. Two cures:
+cover more of the states the student will visit (sample the teacher at T > 0, more samples per prompt, more tokens
+paid), or train on the student's own states (§4).
 
 **Rationales as extra supervision.** "Distilling step-by-step" (Hsieh et al.) trains a small T5 student to
-predict both the label and the teacher's rationale, loss = α·label + (1 − α)·rationale with α = 0.5 recommended
-(its README; verify); reasoning traces (§5) are the generative version of the same idea.
+predict both the label and the teacher's rationale,
+$\text{loss} = \alpha \cdot \text{label} + (1 - \alpha) \cdot \text{rationale}$ with α = 0.5 recommended (its README;
+verify); reasoning traces (§5) are the generative version of the same idea.
 
 **Worked: the fixed cost of a SeqKD run.** 100,000 prompts × one 2,000-token completion = 2 × 10⁸ teacher tokens;
 at $9.00 per million output tokens (the 06 lab's Gemini 3.5 Flash price, dated 2026-09-05 there, verify) that is
@@ -258,9 +290,9 @@ $1,800; generating them on the 32B self-hosted on two H100s, at §9's roofline c
 **The method** (Agarwal et al., GKD; Gu et al., MiniLLM). Sample a continuation from the *student*; ask the
 teacher for its distribution (or just its log-probability of each sampled token) at every position; minimise a
 divergence there. The student learns exactly on the prefixes it will produce, so exposure bias has nowhere to
-hide. TRL's `GKDTrainer` mixes the data sources per batch — with probability λ the student generates (on-policy);
-otherwise, with `seq_kd=True`, the teacher generates; otherwise the dataset's completion is used (supervised KD) —
-and minimises JSD(β) (`onpolicy.gkd_train()` implements the same loop).
+hide. TRL's `GKDTrainer` mixes the data sources per batch — with probability $\lambda$ the student generates
+(on-policy); otherwise, with `seq_kd=True`, the teacher generates; otherwise the dataset's completion is used
+(supervised KD) — and minimises $\mathrm{JSD}(\beta)$ (`onpolicy.gkd_train()` implements the same loop).
 
 **Exposure bias removed.** Continue the §3 KD student with GKD at λ = 1 for 300 steps (notebook 02):
 
@@ -280,24 +312,38 @@ tried (rule accuracy over all 121 contexts after 300 steps, `eval.vs_truth()`, n
 | the SFT student (§3) | 0.190 | 0.007 | 0.950 | 0.372 |
 | a fresh 16-unit student | 0.074 | 0.083 | 0.992 | 0.479 |
 
-Reverse KL's gradient on a logit is q_i·(log q_i − log p_i − KL): it lifts a token in proportion to the student's
-own probability of it, so it sharpens what the student already proposes and barely finds what it does not. Where
-the §3 students are wrong they give the right token 0.029 and 0.007, so starting from them does not help here. A
-fresh student commits early under β = 1 and ends in the same state: where it is wrong after 300 steps it puts 0.757
-on a wrong token and 0.034 on the right one. Notebook 02's exercise 2.3 shows the extreme: for a student with almost
-all its mass on a token the teacher gives 0.0001, the reverse-KL gradient is 0.0055 of the forward one
-(`losses.gkd()`). The published recipes start on-policy distillation from an SFT checkpoint (Qwen3's strong-to-weak
-stage, the tinker-cookbook; verify). On a real model that checkpoint already writes in the teacher's format and
-puts mass near its modes, which a lookup-table toy cannot show; what the toy shows is that a warm start does not
-rescue reverse KL where the student is confidently wrong. Sweep β; TRL's docs put it as "the optimal beta varied
-depending on the task".
+Reverse KL's gradient on a logit is $q_i \cdot (\log q_i - \log p_i - \mathrm{KL})$: it lifts a token in proportion
+to the student's own probability of it, so it sharpens what the student already proposes and barely finds what it
+does not. Where the §3 students are wrong they give the right token 0.029 and 0.007, so starting from them does not
+help here. A fresh student commits early under β = 1 and ends in the same state: where it is wrong after 300 steps
+it puts 0.757 on a wrong token and 0.034 on the right one.
+
+Notebook 02's exercise 2.3 shows the extreme: for a student with almost all its mass on a token the teacher gives
+0.0001, the reverse-KL gradient is 0.0055 of the forward one (`losses.gkd()`).
+
+The published recipes start on-policy distillation from an SFT checkpoint (Qwen3's strong-to-weak stage, the
+tinker-cookbook; verify). On a real model that checkpoint already writes in the teacher's format and puts mass near
+its modes, which a lookup-table toy cannot show; what the toy shows is that a warm start does not rescue reverse KL
+where the student is confidently wrong. Sweep $\beta$; TRL's docs put it as "the optimal beta varied depending on
+the task".
+
+### The policy-gradient view
 
 **On-policy distillation is RL with a dense reward.** Reverse KL over whole sequences is
-KL(π_S ‖ π_T) = E_{y~π_S}[log π_S(y) − log π_T(y)], and because E[∇log π_S] = 0 its gradient is REINFORCE:
 
-```
-−∇KL(π_S ‖ π_T) = E_{y~π_S}[ R(y)·∇log π_S(y) ],   R(y) = Σ_t r_t,   r_t = log π_T(y_t | y_<t) − log π_S(y_t | y_<t)
-```
+$$
+\mathrm{KL}(\pi_S \,\Vert\, \pi_T) = \mathbb{E}_{y \sim \pi_S}\bigl[\log \pi_S(y) - \log \pi_T(y)\bigr],
+$$
+
+and because $\mathbb{E}[\nabla \log \pi_S] = 0$ its gradient is REINFORCE:
+
+$$
+\begin{aligned}
+-\nabla \mathrm{KL}(\pi_S \,\Vert\, \pi_T) &= \mathbb{E}_{y \sim \pi_S}\bigl[R(y) \cdot \nabla \log \pi_S(y)\bigr], \\
+R(y) &= \sum_t r_t, \\
+r_t &= \log \pi_T(y_t \mid y_{<t}) - \log \pi_S(y_t \mid y_{<t})
+\end{aligned}
+$$
 
 That is [RL primer §2](../rl-and-thinking-models/PRIMER.md#2-policy-gradients-over-token-sequences)'s KL penalty
 with the teacher as the reference and no task reward — `rlcore.pg.reinforce_grad(policy, trajs, "mean",
@@ -305,28 +351,34 @@ ref=teacher, beta=1.0)` with zero rewards; `onpolicy.advantages()` uses the same
 average, and the core's test checks it against rlcore's function on rlcore's own bracket task. Where GRPO's
 verifier gives one number per sequence
 ([RL primer §4](../rl-and-thinking-models/PRIMER.md#4-rl-with-verifiable-rewards-and-grpo)), every token gets its
-own. The core checks the identity exactly: over all 125 three-token continuations of a 5-token language, the
-estimator's expectation (`onpolicy.exact_pg_grad()`) equals −∇KL by finite differences of `onpolicy.exact_seq_kl()`
-to 9 digits. Tinker's recipe uses the per-token form — token t's advantage is r_t alone
-(`kl_discount_factor=0`, verify) — which is what GKD's per-position β = 1 loss equals in expectation
+own.
+
+The core checks the identity exactly: over all 125 three-token continuations of a 5-token language, the
+estimator's expectation (`onpolicy.exact_pg_grad()`) equals $-\nabla \mathrm{KL}$ by finite differences of
+`onpolicy.exact_seq_kl()` to 9 digits. Tinker's recipe uses the per-token form — token $t$'s advantage is $r_t$
+alone (`kl_discount_factor=0`, verify) — which is what GKD's per-position β = 1 loss equals in expectation
 (`onpolicy.token_pg_identity()`); on the same enumerable task that estimator is biased for the sequence KL (its
 expectation differs by 31% of the gradient's norm, because it ignores how a token changes the states after it)
 and quieter (total variance 1.86 against 3.15 per batch of 64).
 
+### Cost, tokenizers and TRL
+
 **Compute per student token.** In on-policy distillation the teacher never generates: it scores the student's
-tokens in one prefill-shaped forward pass, 2·N_T FLOPs per token, beside the student's 2·N_S to generate and 6·N_S
-to train (`onpolicy.flops_per_prompt()`). For an 8B student and a 32B teacher that is 128 GFLOP per student token,
-against 64 for GRPO (80 with a reference model's forward pass for its KL penalty): a teacher four times the
-student's size makes each on-policy token twice as dear. At sixteen 4K-token samples per prompt that is 8.39 × 10¹⁵
-FLOPs against 4.19 × 10¹⁵ (5.24 × 10¹⁵ with the reference). FLOPs flatter the student's decode-bound generation
-against the teacher's prefill-shaped scoring, so in GPU time the teacher's pass costs less than its FLOPs suggest,
-but the saving is not in the step. It is in the number of steps: the dense signal needs far fewer. Qwen3's report
-compares the two from the same off-policy-distilled 8B checkpoint: RL reached AIME'24 67.6 in 17,920 GPU-hours,
-on-policy distillation 74.4 in 1,800 (verify). The tinker-cookbook recipe distils Qwen3.5-9B-Base from Qwen3.5-9B,
-a teacher of the same size, with rank-128 LoRA: SFT on OpenThoughts3 (traces another model wrote) reaches AIME'24
-~65%, then on-policy distillation ~76.7% in 200 steps of 512 prompt groups with rollouts of up to 16K tokens, not a
-small budget (verify). Both compare against a teacher that already exists; its training cost is not in either
-number.
+tokens in one prefill-shaped forward pass, $2 \cdot N_T$ FLOPs per token, beside the student's $2 \cdot N_S$ to
+generate and $6 \cdot N_S$ to train (`onpolicy.flops_per_prompt()`). For an 8B student and a 32B teacher that is 128
+GFLOP per student token, against 64 for GRPO (80 with a reference model's forward pass for its KL penalty): a
+teacher four times the student's size makes each on-policy token twice as dear. At sixteen 4K-token samples per
+prompt that is 8.39 × 10¹⁵ FLOPs against 4.19 × 10¹⁵ (5.24 × 10¹⁵ with the reference).
+
+FLOPs flatter the student's decode-bound generation against the teacher's prefill-shaped scoring, so in GPU time
+the teacher's pass costs less than its FLOPs suggest, but the saving is not in the step. It is in the number of
+steps: the dense signal needs far fewer. Qwen3's report compares the two from the same off-policy-distilled 8B
+checkpoint: RL reached AIME'24 67.6 in 17,920 GPU-hours, on-policy distillation 74.4 in 1,800 (verify).
+
+The tinker-cookbook recipe distils Qwen3.5-9B-Base from Qwen3.5-9B, a teacher of the same size, with rank-128 LoRA:
+SFT on OpenThoughts3 (traces another model wrote) reaches AIME'24 ~65%, then on-policy distillation ~76.7% in 200
+steps of 512 prompt groups with rollouts of up to 16K tokens, not a small budget (verify). Both compare against a
+teacher that already exists; its training cost is not in either number.
 
 **The shared-tokenizer requirement.** Per-token scores need the teacher to read the student's tokens. TRL's GKD
 raises if the two configs' `vocab_size` differ; Qwen2.5-7B and larger have 152,064 against 151,936 for the small
@@ -335,7 +387,7 @@ Qwen2.5 and all Qwen3 models, so a 0.5B cannot be GKD-distilled from a 7B even t
 
 **TRL, concretely (1.14.0, verify).** `GKDConfig`/`GKDTrainer` are experimental — `from trl.experimental.gkd
 import GKDConfig, GKDTrainer` — with defaults `lmbda=0.5`, `beta=0.5`, `temperature=0.9` (sampling only: the loss
-runs at T = 1), `max_new_tokens=128`, `seq_kd=False`; λ is a per-batch coin flip. `DistillationTrainer` /
+runs at T = 1), `max_new_tokens=128`, `seq_kd=False`; $\lambda$ is a per-batch coin flip. `DistillationTrainer` /
 `DistillationConfig` are stable API (`from trl import …`): always on-policy, `beta=1.0` (reverse KL) by default,
 `max_completion_length=512`, `temperature=1.0` applied to both logits, and its quick start is exactly
 Qwen2.5-0.5B-Instruct ← Qwen2.5-1.5B-Instruct. A served teacher gives the needed log-probabilities through vLLM's
@@ -346,9 +398,11 @@ impractical, so API teachers support the sampled-token reward, not full logit KD
 
 **Traces are the data.** A thinking model's output — its reasoning and its answer — is the SFT target, so what a
 small student inherits is the teacher's **procedure**: its format, its steps and how long it thinks. The core's toy
-uses rlcore's ThinkTask formula: think L tokens, then answer, right with probability 1 − e0·(1 − q)^L (e0 = 0.8,
-q = 0.1, at most 32 tokens). A policy is a stopping rule, and SFT on traces — maximum likelihood — has a closed form
-for it: the fraction of traces that stopped at each length among those that reached it (`reasoning.LengthPolicy.fit()`).
+uses rlcore's ThinkTask formula: think $L$ tokens, then answer, right with probability $1 - e_0 \cdot (1 - q)^L$
+($e_0 = 0.8,\; q = 0.1$, at most 32 tokens).
+
+A policy is a stopping rule, and SFT on traces — maximum likelihood — has a closed form for it: the fraction of
+traces that stopped at each length among those that reached it (`reasoning.LengthPolicy.fit()`).
 The teacher is what 16,000 REINFORCE rollouts produced (`reasoning.reinforce()`, as in
 [RL primer §2](../rl-and-thinking-models/PRIMER.md#2-policy-gradients-over-token-sequences)); 1,000 of its traces
 distil into a student that copies it (`reasoning.distil()`, `LengthPolicy.expected()`, notebook 03):
@@ -385,13 +439,14 @@ with 1,000 rollouts reaches 0.445, with 4,000 0.699, with 16,000 0.884. A trace 
 reward carries one bit. (The toy has no capability ceiling; R1's authors note that a small base with RL alone may
 not reach distillation's result at all.)
 
-**What does not transfer: knowledge.** Accuracy depends on the solver's own q. Give the student half the teacher's
-q (0.05): it copies the teacher's 19.91-token thinking exactly and scores 0.706, not 0.893 — and its own best length
-at a cost of 0.01 per token is 27.5 tokens, not the 19.9 it copied (`ThinkToy.optimal_length()`; the teacher's RL ran
-with no length cost, so its 19.9 is where 16,000 rollouts left it, not an optimum). Distillation copies the procedure
-the teacher arrived at, not the one the student needs; evaluate at the student's own best budget,
-and consider a short RL stage after distillation. Long-tail facts are the same story at scale: the model-landscape
-primer's Inkling-Small beat its parent on reasoning and lost on factuality
+**What does not transfer: knowledge.** Accuracy depends on the solver's own $q$. Give the student half the
+teacher's $q$ (0.05): it copies the teacher's 19.91-token thinking exactly and scores 0.706, not 0.893 — and its own
+best length at a cost of 0.01 per token is 27.5 tokens, not the 19.9 it copied (`ThinkToy.optimal_length()`; the
+teacher's RL ran with no length cost, so its 19.9 is where 16,000 rollouts left it, not an optimum).
+
+Distillation copies the procedure the teacher arrived at, not the one the student needs; evaluate at the student's
+own best budget, and consider a short RL stage after distillation. Long-tail facts are the same story at scale: the
+model-landscape primer's Inkling-Small beat its parent on reasoning and lost on factuality
 ([§4.10](../model-landscape/open-weight-llms-primer.md#410-thinking-machines-lab-us)).
 
 ## 6. Feature distillation, pruning and vocabulary mismatch
@@ -407,11 +462,12 @@ teacher — EAGLE's draft head reads the target's hidden states (§7).
 **Pruning, then distillation.** Minitron prunes a trained model's embedding width, attention heads and MLP width
 (and depth) by activation importance on a small calibration set, then repairs it with KD from the unpruned parent.
 Its README reports Minitron 8B and 4B from Nemotron-4 15B with "up to 40x fewer training tokens per model", "compute
-cost savings of 1.8x" for the family and "up to a 16% improvement in MMLU" over training from scratch (verify). The
-core does it in miniature (`TinyLM.prune_width()`, notebook 01): the 64-unit teacher pruned to its 16 most active
-units on the student's 242 training contexts, then KD from the parent on those contexts, against fresh 16-unit
-students given the same KD (rule accuracy, mean and range over five data draws; four initialisations each for the
-fresh students):
+cost savings of 1.8x" for the family and "up to a 16% improvement in MMLU" over training from scratch (verify).
+
+The core does it in miniature (`TinyLM.prune_width()`, notebook 01): the 64-unit teacher pruned to its 16 most
+active units on the student's 242 training contexts, then KD from the parent on those contexts, against fresh
+16-unit students given the same KD (rule accuracy, mean and range over five data draws; four initialisations each
+for the fresh students):
 
 | KD steps | 0 | 20 | 100 |
 |---|---|---|---|
@@ -426,8 +482,8 @@ steps, not a better student, which is the shape of Minitron's claim too: fewer t
 and 70B models into the pretraining stage … as token-level targets", and KD "was used after pruning to recover
 performance" (model card); Gemma 2's 2B and 9B were trained with knowledge distillation, and Gemma 3's
 instruction-tuned models were post-trained with KD and RL (transformers docs). Pretraining-scale logit KD needs the
-teacher's forward pass over trillions of tokens — 2·N_T·D FLOPs on top of the student's 6·N_S·D — which is why it is
-done by the teacher's owner.
+teacher's forward pass over trillions of tokens — $2 \cdot N_T \cdot D$ FLOPs on top of the student's
+$6 \cdot N_S \cdot D$ — which is why it is done by the teacher's owner.
 
 **A dense student from an MoE teacher.** Nothing changes in the method; the teacher's cost does. An MoE teacher's
 forward pass costs its *active* parameters per token, but its memory is its total, and its decode batch shape is
@@ -450,19 +506,25 @@ engine, quantization and routing of layers 04–06 apply unchanged, and they com
 
 **The draft is a student whose metric is acceptance.** Speculative decoding
 ([serving-engine primer §7](../../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding)) accepts a
-drafted token with probability min(1, p/q), so per position
+drafted token with probability $\min(1, p/q)$, so per position
 
-```
-α = Σ_v min(p(v), q(v)) = 1 − TV(p, q)                 draft.acceptance_rate()   (minengine.spec.acceptance_rate)
-E[tokens per pass] = (1 − α^(k+1)) / (1 − α)            draft.expected_tokens()   (minengine.spec.expected_tokens)
-speedup = E / (k·c + 1),  c = a draft step in target steps    draft.speedup()   (minengine.spec.speedup)
-```
+$$
+\begin{aligned}
+\alpha &= \sum_v \min\bigl(p(v), q(v)\bigr) = 1 - \mathrm{TV}(p, q) \\[6pt]
+E[\text{tokens per pass}] &= \frac{1 - \alpha^{k+1}}{1 - \alpha} \\[6pt]
+\text{speedup} &= \frac{E}{k \cdot c + 1}, \\[4pt]
+c &= \text{a draft step in target steps}
+\end{aligned}
+$$
 
-On that primer's own p = (0.5, 0.3, 0.15, 0.05) and q = (0.2, 0.2, 0.2, 0.4): α = 0.6, 2.3056 tokens per pass at
-k = 4, and at c = 0.1 the best depth is k = 3 with a 1.6738× speedup (`draft.best_k()`); the core's tests
+The three formulas are `draft.acceptance_rate()`, `draft.expected_tokens()` and `draft.speedup()`
+(`minengine.spec.acceptance_rate`, `minengine.spec.expected_tokens`, `minengine.spec.speedup`).
+
+On that primer's own $p$ = (0.5, 0.3, 0.15, 0.05) and $q$ = (0.2, 0.2, 0.2, 0.4): α = 0.6, 2.3056 tokens per pass
+at k = 4, and at c = 0.1 the best depth is k = 3 with a 1.6738× speedup (`draft.best_k()`); the core's tests
 reproduce `minengine.spec` on these inputs and on that primer's α = 0.8 examples. A draft is good exactly when its
 distribution is close to the target's **on the target's own text** — which is what distilling from the target
-optimises. By Pinsker, TV ≤ √(KL/2): driving the KL down drives acceptance up.
+optimises. By Pinsker, $\mathrm{TV} \le \sqrt{\mathrm{KL}/2}$: driving the KL down drives acceptance up.
 
 **Distilled against off-the-shelf.** The core's target is a fine-tuned dialect of the toy language (its noise all
 goes to one neighbour). Three 16-unit drafts, scored on the target's samples (`draft.acceptance_on_text()`,
@@ -481,12 +543,14 @@ SpecForge's data preparation regenerates the assistant responses with the target
 with the target model's output distribution" (verify).
 
 **Greedy drafting caps acceptance.** vLLM's draft models propose their argmax by default
-(`draft_sample_method="greedy"`, verify), and the acceptance is then p(argmax q), not Σ min(p, q): 0.05 against 0.6
-on the primer's p and q (`draft.greedy_acceptance()`). When the target samples at T = 1, greedy acceptance can never
-exceed the target's top-token probability — 0.800 for every draft above, and for a perfect one.
+(`draft_sample_method="greedy"`, verify), and the acceptance is then $p(\operatorname{argmax} q)$, not
+$\sum \min(p, q)$: 0.05 against 0.6 on the primer's p and q (`draft.greedy_acceptance()`). When the target samples
+at T = 1, greedy acceptance can never exceed the target's top-token probability — 0.800 for every draft above, and
+for a perfect one.
 
-**Acceptance against draft size.** Logit-KD drafts of growing width against the same target (c = draft parameters ÷
-target parameters, the memory-bound view of a decode step, `draft.draft_cost()`):
+**Acceptance against draft size.** Logit-KD drafts of growing width against the same target
+($c = \text{draft parameters} \div \text{target parameters}$, the memory-bound view of a decode step,
+`draft.draft_cost()`):
 
 | Draft hidden units | 4 | 8 | 16 | 32 |
 |---|---|---|---|---|
@@ -494,10 +558,11 @@ target parameters, the memory-bound view of a decode step, `draft.draft_cost()`)
 | α (logit KD) | 0.589 | 0.722 | 0.988 | 0.995 |
 | speedup at k = 4 | 1.56× | 1.72× | 2.26× | 1.60× |
 
-α saturates once the draft can hold the target; c keeps growing; the speedup peaks at the smallest draft that holds
-the target's behaviour. Below that size the capacity gap, not the training data, sets α. For a real pair,
-Qwen3-0.6B drafting for Qwen3-4B (same 151,936 vocabulary) has c ≈ 0.148 by weight bytes, so k = 4 gives 1.45×,
-1.74× and 2.11× at α = 0.6, 0.7 and 0.8 — a model, before per-step overheads (measure c, as the serving primer says).
+$\alpha$ saturates once the draft can hold the target; $c$ keeps growing; the speedup peaks at the smallest draft
+that holds the target's behaviour. Below that size the capacity gap, not the training data, sets $\alpha$. For a
+real pair, Qwen3-0.6B drafting for Qwen3-4B (same 151,936 vocabulary) has c ≈ 0.148 by weight bytes, so k = 4 gives
+1.45×, 1.74× and 2.11× at α = 0.6, 0.7 and 0.8 — a model, before per-step overheads (measure $c$, as the serving
+primer says).
 
 **Draft-as-student designs** (verify). EAGLE trains a one-layer head that extrapolates the target's
 second-to-top-layer features; EAGLE-3 fuses low-, mid- and high-level target features and, in its training code,
@@ -509,18 +574,20 @@ original data is unavailable), reporting 2.2–3.6×. vLLM 0.30.0 serves them th
 the draft's `vocab_size` to equal the target's (Qwen2.5-0.5B cannot draft for Qwen2.5-7B).
 
 **Reading vLLM's counters** (`vllm:spec_decode_num_drafts`, `…_num_draft_tokens`, `…_num_accepted_tokens`,
-`…_num_accepted_tokens_per_pos`, verify). "Mean acceptance length" = 1 + accepted ÷ drafts = E[tokens per pass]; α
-is the position-0 rate when the draft samples (`draft_sample_method="probabilistic"`, which the lab's
-`serve_with_draft.sh` sets), while under the default greedy drafting the position-0 rate is p(argmax q); the logged
-"draft acceptance rate" is accepted ÷ drafted = (E − 1)/k — 0.3264 at α = 0.6,
-k = 4 (`draft.vllm_view()`). Per-position rates that fall faster than α^(i+1) mean correlated acceptance, and the
-i.i.d. formula over-predicts deep drafts. The lab measures all of this for a real pair under vLLM
-([`distill-lab`](distill-lab/) notebook `04_a_distilled_draft_in_vllm`, T1).
+`…_num_accepted_tokens_per_pos`, verify). "Mean acceptance length" =
+$1 + \text{accepted} \div \text{drafts} = E[\text{tokens per pass}]$; $\alpha$ is the position-0 rate when the draft
+samples (`draft_sample_method="probabilistic"`, which the lab's `serve_with_draft.sh` sets), while under the
+default greedy drafting the position-0 rate is $p(\operatorname{argmax} q)$; the logged "draft acceptance rate" is
+$\text{accepted} \div \text{drafted} = (E - 1)/k$ — 0.3264 at α = 0.6, k = 4 (`draft.vllm_view()`). Per-position
+rates that fall faster than $\alpha^{i+1}$ mean correlated acceptance, and the i.i.d. formula over-predicts deep
+drafts. The lab measures all of this for a real pair under vLLM ([`distill-lab`](distill-lab/) notebook
+`04_a_distilled_draft_in_vllm`, T1).
 
 ## 8. Measuring a student
 
-**Agreement with the teacher** needs no labels: mean KL(p_teacher ‖ p_student) per position, top-1 agreement, and
-top-k overlap — agreement on the plausible set (`eval.kl()`, `eval.argmax_agreement()`, `eval.topk_overlap()`).
+**Agreement with the teacher** needs no labels: mean $\mathrm{KL}(p_{\text{teacher}} \,\Vert\, p_{\text{student}})$
+per position, top-1 agreement, and top-k overlap — agreement on the plausible set (`eval.kl()`,
+`eval.argmax_agreement()`, `eval.topk_overlap()`).
 The definitions are those of [quantization §8](../../04-inference-engine/quantization/PRIMER.md#8-measuring-the-accuracy-you-pay)
 (`quantcore.eval.kl`, `argmax_agreement`; reproduced in the core's tests) — a quantized model is a student too,
 and quantization-aware distillation ([quantization §7](../../04-inference-engine/quantization/PRIMER.md#7-quantization-aware-training-and-qlora-in-brief))
@@ -533,11 +600,19 @@ uses exactly §2's loss. Over the toy's 121 contexts (notebook 05):
 | 8 units, KD on everything (§1's capacity gap) | 0.322 | 0.934 | 0.826 |
 
 **Task accuracy with intervals, per slice.** What users feel is task accuracy, and a single number hides where a
-student fails. Report it per slice with a Wilson interval — centre (p + z²/2n)/(1 + z²/n), half-width
-z·√(p(1 − p)/n + z²/4n²)/(1 + z²/n) (`eval.wilson_interval()`, as the 07 platform lab's
+student fails. Report it per slice with a Wilson interval —
+
+$$
+\begin{aligned}
+\text{centre} &= \frac{p + z^2/(2n)}{1 + z^2/n}, \\[6pt]
+\text{half-width} &= \frac{z \cdot \sqrt{p(1 - p)/n + z^2/(4n^2)}}{1 + z^2/n}
+\end{aligned}
+$$
+
+(`eval.wilson_interval()`, as the 07 platform lab's
 [evals notebook](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb)
 and [`memory-core`](../../07-application-agent-framework/agent-memory/memory-core/) compute it). The toy's items:
-continue a prompt greedily for n tokens, correct if all follow the rule; "common" prompts are the 20 the students
+continue a prompt greedily for $n$ tokens, correct if all follow the rule; "common" prompts are the 20 the students
 were trained from, "rare" the other 101 (`eval.capability_gap()`):
 
 | Student | Common, n = 2 or 8 | Rare, n = 2 | Rare, n = 8 |
@@ -550,8 +625,8 @@ Every student is perfect on the slice a quick eval would use. The gap is in the 
 (a long output visits many contexts, and an error rate of 6.6% per context compounds) — and 20 items cannot bound
 anything tighter than 84–100%. Where students fail at scale follows the same pattern: long-tail facts and rare
 knowledge, multi-step problems, instruction edge cases and safety behaviour the distillation data under-covers.
-Compare student and teacher on the *same* items and count the flips (`eval.compare()`, McNemar's z as quantization
-§8's `paired_z`).
+Compare student and teacher on the *same* items and count the flips (`eval.compare()`, McNemar's $z$ as
+quantization §8's `paired_z`).
 
 **When agreement is the wrong metric.** A weak teacher (trained on only 605 tokens) is right on 0.950 of contexts.
 A student trained on its samples *filtered by the verifier* is right on 0.975 — better than its teacher — while
@@ -581,15 +656,17 @@ GPU-hour on demand (September 2026, verify —
 | Qwen2.5-0.5B (student) | 1 | 2821 | 21.50 ms | 131,218 | $0.0233 |
 
 All are HBM-bound at this ITL. On one H100 the 32B's weights leave 6.47 GB of the usable 72 for KV, room for 12
-sequences of 2K: a capacity-starved deployment nobody would run, and the 96× it gives is an artefact of that. Split
-over two H100s (ideal tensor parallelism with the all-reduces not counted, `cost.tp_group()`; the roofline
+sequences of 2K: a capacity-starved deployment nobody would run, and the 96× it gives is an artefact of that.
+
+Split over two H100s (ideal tensor parallelism with the all-reduces not counted, `cost.tp_group()`; the roofline
 primer's §5.3 prices them) it runs batch 146 at $0.890 per million, and the student is 16× cheaper per token: 21×
 fewer weight bytes and 9× less KV per token let it run 16× the batch per GPU at the same step time. At TP = 4 the
 teacher reaches $0.631 and the ratio 11×. At a 10 ms ITL the 32B cannot serve on one H100 at all — batch 1 already
-takes 19.3 ms — while the 1.5B still runs batch 517. The core's tests reproduce the roofline primer's §8.1 table
-with the same functions (Llama-3.1-8B: batch 68, 9.93 ms, 6,847 tokens/s, $0.446 per million). These are bounds:
-real engines reach a fraction of them. The like-for-like ratio is the number to carry: about an order of
-magnitude.
+takes 19.3 ms — while the 1.5B still runs batch 517.
+
+The core's tests reproduce the roofline primer's §8.1 table with the same functions (Llama-3.1-8B: batch 68,
+9.93 ms, 6,847 tokens/s, $0.446 per million). These are bounds: real engines reach a fraction of them. The
+like-for-like ratio is the number to carry: about an order of magnitude.
 
 **The fixed cost** (`cost.fixed_cost()`, §3's example): teacher generation $1,800 through an API at $9.00/M or
 $177.91 on the 32B self-hosted at TP = 2, plus the student's SFT, 1.300 GPU-hours ($14.30) at 40% MFU. The teacher's
@@ -598,11 +675,13 @@ extra and not small.
 
 **Break-even** (`cost.break_even()`) is that bill over the saving per token. With the self-hosted teacher,
 $192.21 ÷ ($0.890 − $0.056 per million) is 230.6 million tokens: 4.6 days at 50 million output tokens a day ($41.68
-a day saved), 46.1 days at 5 million, 230.6 days at 1 million. Generating the data on the teacher you already serve
-puts break-even near the volume the teacher wrote for the student (here 2 × 10⁸ tokens), whatever the teacher
-costs per token. Buying those tokens through an API instead makes it $1,814.30 ÷ $0.834, 2,176.5 million tokens:
-43.5 days at 50 million a day, 435.3 at 5 million. All of it is before evals and engineering, and the slow cases
-are longer than many models stay in service. At low volume, distil for latency or for control, not for cost.
+a day saved), 46.1 days at 5 million, 230.6 days at 1 million.
+
+Generating the data on the teacher you already serve puts break-even near the volume the teacher wrote for the
+student (here 2 × 10⁸ tokens), whatever the teacher costs per token. Buying those tokens through an API instead
+makes it $1,814.30 ÷ $0.834, 2,176.5 million tokens: 43.5 days at 50 million a day, 435.3 at 5 million. All of it
+is before evals and engineering, and the slow cases are longer than many models stay in service. At low volume,
+distil for latency or for control, not for cost.
 
 **The cascade.** Instead of replacing the teacher, route: the student answers, and a gate escalates what it would
 get wrong (`cost.cascade()`). With 500-token answers at the costs above (the teacher at TP = 2) and illustrative
@@ -644,14 +723,17 @@ routes a third of calls to a Flash-Lite tier the same way).
 | **T3** GCP | teacher inference through the 04 serving lab's Cloud Run GPU or GKE deploys ([`vllm-serving-lab/deploy/gcp/`](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/)); no new Terraform | the teacher as a served endpoint |
 
 **Fitting a T4** (predicted from the fact sheet's arithmetic, 2026-09-27 — verify on hardware; the lab's
-`hf/memory.py` computes them). Full fine-tuning with AdamW and an fp32 master copy is ~16 bytes per parameter: 7.90
-GB for Qwen2.5-0.5B, which fits a T4's ~15 GiB with gradient checkpointing and short sequences; 24.7 GB for a 1.5B,
-which does not. Logit KD adds the frozen teacher (1.5B in fp16: 3.09 GB) and its logits, and the logits dominate:
-one fp32 `[tokens, 151,936]` tensor is 2.49 GB per 4,096 tokens — chunk the loss (TRL's distillation loss works in
-256-position chunks) or use LoRA (r = 16 on every linear layer of the 0.5B: 8.8 M trainable parameters). A T4 has no
-bf16: load the trainable model in fp32 and set `fp16=True, bf16=False` (TRL's configs default to bf16 unless
-`fp16` is set; training fp16-loaded weights with `fp16=True` fails with "Attempting to unscale FP16 gradients").
-Serve the teacher with `vllm serve … --dtype half`; the RL primer's
+`hf/memory.py` computes them). Full fine-tuning with AdamW and an fp32 master copy is ~16 bytes per parameter:
+7.90 GB for Qwen2.5-0.5B, which fits a T4's ~15 GiB with gradient checkpointing and short sequences; 24.7 GB for a
+1.5B, which does not.
+
+Logit KD adds the frozen teacher (1.5B in fp16: 3.09 GB) and its logits, and the logits dominate: one fp32
+`[tokens, 151,936]` tensor is 2.49 GB per 4,096 tokens — chunk the loss (TRL's distillation loss works in
+256-position chunks) or use LoRA (r = 16 on every linear layer of the 0.5B: 8.8 M trainable parameters).
+
+A T4 has no bf16: load the trainable model in fp32 and set `fp16=True, bf16=False` (TRL's configs default to bf16
+unless `fp16` is set; training fp16-loaded weights with `fp16=True` fails with "Attempting to unscale FP16
+gradients"). Serve the teacher with `vllm serve … --dtype half`; the RL primer's
 [§9](../rl-and-thinking-models/PRIMER.md#9-where-to-run-it) has the T4 vLLM recipe, and
 [`COMPUTE.md`](../../COMPUTE.md) the prices and how to obtain each tier. GCP is one target, never a prerequisite.
 
@@ -663,30 +745,35 @@ Serve the teacher with `vllm serve … --dtype half`; the RL primer's
 cost scales with the bytes a step streams: against a 32B teacher on two H100s, a 1.5B student serves 16× the batch
 per GPU under the same ITL and is ~16× cheaper per token on the roofline (96× against one H100, where the teacher
 has no room to batch, which is not a fair baseline). We distil rather than train small from scratch because the
-teacher's distribution carries far more per example than a label. The first stage is sequence-level: generate with
-the teacher, verify, deduplicate, decontaminate, SFT — it works through any API, and its bill is teacher tokens,
-including the ones the verifier throws away. SFT on teacher text has exposure bias — the student trains on the
-teacher's prefixes and decodes on its own — so the second stage is on-policy: the student samples, the teacher
-scores every token in one forward pass, and we minimise a divergence there; it is RL with a dense per-token
-reward and needs a shared tokenizer. We start it from the SFT student, as the published recipes do, and sweep β:
-reverse KL lifts a token only in proportion to the student's own probability of it, so it is slow wherever the
-student is confidently wrong, and in our toy the forward end converged fastest from every start. For a thinking
-model, traces copy the procedure and the thinking length — so we cap length in
-the data if we need a cheaper student, and size serving for the tail we inherit. We gate the student on task
-accuracy with intervals per slice, not on agreement with the teacher, and ship it behind a cascade if it is only
-good enough on easy traffic. Break-even is the teacher-token bill over the per-token saving: days at tens of
-millions of tokens a day, months below that."
+teacher's distribution carries far more per example than a label.
+
+"The first stage is sequence-level: generate with the teacher, verify, deduplicate, decontaminate, SFT — it works
+through any API, and its bill is teacher tokens, including the ones the verifier throws away. SFT on teacher text
+has exposure bias — the student trains on the teacher's prefixes and decodes on its own — so the second stage is
+on-policy: the student samples, the teacher scores every token in one forward pass, and we minimise a divergence
+there; it is RL with a dense per-token reward and needs a shared tokenizer.
+
+"We start it from the SFT student, as the published recipes do, and sweep $\beta$: reverse KL lifts a token only in
+proportion to the student's own probability of it, so it is slow wherever the student is confidently wrong, and in
+our toy the forward end converged fastest from every start. For a thinking model, traces copy the procedure and the
+thinking length — so we cap length in the data if we need a cheaper student, and size serving for the tail we
+inherit.
+
+"We gate the student on task accuracy with intervals per slice, not on agreement with the teacher, and ship it
+behind a cascade if it is only good enough on easy traffic. Break-even is the teacher-token bill over the per-token
+saving: days at tens of millions of tokens a day, months below that."
 
 **Drill questions**
 
 1. *Why does a distilled student beat the same model fine-tuned on the same labelled data?* — The soft target is the
-   teacher's whole distribution: it ranks the wrong answers, and a sampled label adds 1 − Σp² of gradient noise per
-   example. In the core, two examples per context gave 0.876 rule accuracy with soft targets and 0.678 with labels.
+   teacher's whole distribution: it ranks the wrong answers, and a sampled label adds $1 - \sum p^2$ of gradient
+   noise per example. In the core, two examples per context gave 0.876 rule accuracy with soft targets and 0.678
+   with labels.
 2. *Our distilled model writes blends of two valid answers. What happened and what do you change?* — A student too
    small for the teacher's modes, trained with forward KL (SFT, KD), covers both and puts mass between them — 45% of
-   the toy student's samples landed where the teacher gives under 1%. Use reverse KL or a JSD with β near 1 on the
-   student's own samples (the recipes start from the SFT student; sweep β, since reverse KL is slow where the
-   student is confidently wrong), or a larger student.
+   the toy student's samples landed where the teacher gives under 1%. Use reverse KL or a JSD with $\beta$ near 1 on
+   the student's own samples (the recipes start from the SFT student; sweep $\beta$, since reverse KL is slow where
+   the student is confidently wrong), or a larger student.
 3. *Teacher-forced validation loss is great; generations degrade after a few sentences. Why?* — Exposure bias: the
    metric is computed on the teacher's prefixes. Measure on the student's own samples; add on-policy data (λ > 0).
    In the core, supervised KD fell from 1.000 on the teacher's prefixes to 0.788 on its own by position 4, and only
@@ -696,10 +783,11 @@ millions of tokens a day, months below that."
    (19.9 tokens against 19.9 in the toy), where the model it replaced answered directly.
    Filter traces by length (budget-aware distillation), add a thinking budget, and size `max_model_len` for the
    inherited tail (RL primer §7).
-5. *The draft model from the same family accepts only 0.55 on our fine-tuned target. Fix?* — Acceptance is 1 − TV
-   between the pair on *this* traffic; the off-the-shelf draft never saw the fine-tune. Distil the draft from the
-   target's own outputs or logits (0.890 → 0.988 in the toy), draft probabilistically for sampled traffic (greedy
-   caps it at the target's top-token probability), and pick the size where E/(k·c + 1) peaks.
+5. *The draft model from the same family accepts only 0.55 on our fine-tuned target. Fix?* — Acceptance is
+   $1 - \mathrm{TV}$ between the pair on *this* traffic; the off-the-shelf draft never saw the fine-tune. Distil the
+   draft from the target's own outputs or logits (0.890 → 0.988 in the toy), draft probabilistically for sampled
+   traffic (greedy caps it at the target's top-token probability), and pick the size where $E/(k \cdot c + 1)$
+   peaks.
 6. *Is distilling worth it at 5M output tokens a day?* — Compute it: the one-off bill is mostly teacher tokens
    ($178 on a self-hosted teacher, $1,800 through an API, for 2 × 10⁸ tokens) against a saving of ~$0.83 per million
    over the teacher on two H100s — 46 days with self-hosted data, 435 with API-bought data, before evals and
@@ -712,28 +800,28 @@ millions of tokens a day, months below that."
 | Term | Meaning |
 |---|---|
 | Teacher / student | the model whose behaviour is copied / the (usually smaller) model trained to copy it |
-| Soft targets | the teacher's full output distribution, softmax(z/T), used as the training target |
+| Soft targets | the teacher's full output distribution, $\operatorname{softmax}(z/T)$, used as the training target |
 | Dark knowledge | the relative probabilities a teacher assigns to wrong answers |
-| Temperature T | divides logits before the softmax; T > 1 flattens, exposing small probabilities |
-| T² factor | multiplies the soft loss so its gradient does not fade as 1/T² |
-| Logit matching | MSE on centred logits: the T → ∞ limit of T²·KL |
-| Forward KL, KL(p ‖ q) | teacher-weighted; mode-covering; what SFT and KD minimise (GKD β = 0) |
-| Reverse KL, KL(q ‖ p) | student-weighted; mode-seeking; GKD β = 1, TRL's `DistillationTrainer` default and what the sampled-token reward estimates; on-policy data can use either divergence |
-| Generalised JSD(β) | β·KL(p ‖ m) + (1 − β)·KL(q ‖ m), m = βp + (1 − β)q; TRL: β = 0 forward, β = 1 reverse |
-| Total variation (TV) | ½Σ\|p − q\|; 1 − TV is a draft's acceptance rate |
+| Temperature $T$ | divides logits before the softmax; T > 1 flattens, exposing small probabilities |
+| $T^2$ factor | multiplies the soft loss so its gradient does not fade as $1/T^2$ |
+| Logit matching | MSE on centred logits: the $T \to \infty$ limit of $T^2 \cdot \mathrm{KL}$ |
+| Forward KL, $\mathrm{KL}(p \,\Vert\, q)$ | teacher-weighted; mode-covering; what SFT and KD minimise (GKD β = 0) |
+| Reverse KL, $\mathrm{KL}(q \,\Vert\, p)$ | student-weighted; mode-seeking; GKD β = 1, TRL's `DistillationTrainer` default and what the sampled-token reward estimates; on-policy data can use either divergence |
+| Generalised $\mathrm{JSD}(\beta)$ | $\beta \cdot \mathrm{KL}(p \,\Vert\, m) + (1 - \beta) \cdot \mathrm{KL}(q \,\Vert\, m)$, $m = \beta p + (1 - \beta)\, q$; TRL: β = 0 forward, β = 1 reverse |
+| Total variation (TV) | $\tfrac{1}{2} \sum \lvert p - q \rvert$; $1 - \mathrm{TV}$ is a draft's acceptance rate |
 | SeqKD | sequence-level KD: SFT on teacher-generated outputs |
 | Supervised KD | the teacher's distribution as target on fixed (dataset or teacher) text: GKD with λ = 0 |
 | Exposure bias | training on the teacher's prefixes, decoding on one's own: the student reaches states it never trained on, and whole outputs go wrong more often with length |
 | On-policy distillation / GKD | the student samples; the teacher scores its tokens; minimise a divergence there |
-| λ (lmbda) | GKD's fraction of batches generated by the student |
-| Per-token reward | r_t = log π_T(y_t \| ·) − log π_S(y_t \| ·): reverse KL as a dense RL reward |
+| $\lambda$ (lmbda) | GKD's fraction of batches generated by the student |
+| Per-token reward | $r_t = \log \pi_T(y_t \mid \cdot) - \log \pi_S(y_t \mid \cdot)$: reverse KL as a dense RL reward |
 | Rejection sampling | keeping only the teacher samples a verifier accepts |
 | Budget-aware distillation | training on traces capped in length to get a student that thinks less |
 | Feature distillation | matching hidden states or attention maps, with a layer mapping |
 | Width / depth pruning | removing hidden units, heads or layers by importance, then repairing with KD |
 | ULD / GOLD | cross-tokenizer distillation by sorted probabilities / aligned spans |
 | Draft model | a small model proposing tokens for speculative decoding; a student measured by acceptance |
-| Acceptance rate α | Σ min(p, q) per position; vLLM's position-0 rate when the draft samples (p(argmax q) when it drafts greedily) |
+| Acceptance rate $\alpha$ | $\sum \min(p, q)$ per position; vLLM's position-0 rate when the draft samples ($p(\operatorname{argmax} q)$ when it drafts greedily) |
 | Cascade | student first, a gate escalating hard requests to the teacher |
 | Break-even | the one-off distillation bill divided by the per-token saving |
 
@@ -741,7 +829,7 @@ millions of tokens a day, months below that."
 
 Papers:
 
-- Hinton, Vinyals & Dean, *Distilling the Knowledge in a Neural Network* (arXiv:1503.02531) — soft targets, T².
+- Hinton, Vinyals & Dean, *Distilling the Knowledge in a Neural Network* (arXiv:1503.02531) — soft targets, $T^2$.
 - Buciluă, Caruana & Niculescu-Mizil, *Model Compression*, KDD 2006; Ba & Caruana, *Do Deep Nets Really Need to be
   Deep?* (arXiv:1312.6184) — logit matching.
 - Kim & Rush, *Sequence-Level Knowledge Distillation* (arXiv:1606.07947) — SeqKD.
@@ -795,15 +883,15 @@ versions you pin.
 
 - **TRL 1.14.0** (with transformers 5.x, which pip resolves for it: `warmup_ratio` is gone, `warmup_steps` < 1 is a
   ratio): `GKDTrainer`/`GKDConfig` under `trl.experimental.gkd` (`from trl import GKDTrainer` fails);
-  defaults `lmbda` 0.5, `beta` 0.5, `temperature` 0.9 (sampling only; the loss at T = 1, no T²), `max_new_tokens`
-  128, `seq_kd` False, a per-batch λ coin flip, the `vocab_size` check; `DistillationTrainer`/`DistillationConfig`
+  defaults `lmbda` 0.5, `beta` 0.5, `temperature` 0.9 (sampling only; the loss at T = 1, no $T^2$), `max_new_tokens`
+  128, `seq_kd` False, a per-batch $\lambda$ coin flip, the `vocab_size` check; `DistillationTrainer`/`DistillationConfig`
   stable, always on-policy, `beta` 1.0, `temperature` 1.0 on both logits, `max_completion_length` 512, 256-position
   loss chunks, its Qwen2.5-0.5B ← 1.5B quick start; GOLD (`use_uld_loss`) and MiniLLM experimental; `SFTConfig` and
   the other configs defaulting to bf16 unless `fp16` is set.
 - **vLLM 0.30.0:** `--speculative-config` and its `method` values, `draft_sample_method="greedy"` by default (then
-  the position-0 acceptance counter reads p(argmax q)),
+  the position-0 acceptance counter reads $p(\operatorname{argmax} q)$),
   `draft_model`'s equal-vocab-size check, `use_heterogeneous_vocab`; the `vllm:spec_decode_*` counters and the
-  logged "draft acceptance rate" = accepted ÷ drafted; `prompt_logprobs`, `--max-logprobs` default 20,
+  logged "draft acceptance rate" = $\text{accepted} \div \text{drafted}$; `prompt_logprobs`, `--max-logprobs` default 20,
   `--logprobs-mode` default `raw_logprobs`; `--dtype half` on a T4.
 - **Models:** Qwen2.5-0.5B/1.5B/32B, Qwen3-0.6B/4B and Llama-3.1-8B shapes in `cost.SHAPES`; config `vocab_size`
   151,936 for small Qwen2.5 and all Qwen3, 152,064 for Qwen2.5-7B and larger; licences (Qwen Apache 2.0,
