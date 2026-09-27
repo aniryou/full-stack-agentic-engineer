@@ -1,0 +1,15 @@
+{"_label": "sample output in the documented format (illustrative): the event sequence of a streamed Anthropic Messages response with one text block and one tool call (RawMessageStreamEvent)",
+ "events": [
+  ["message_start", {"type": "message_start", "message": {"id": "msg_01S", "type": "message", "role": "assistant", "model": "claude-haiku-4-5", "content": [], "stop_reason": null, "usage": {"input_tokens": 40, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 1}}}],
+  ["content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}],
+  ["ping", {"type": "ping"}],
+  ["content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Checking the "}}],
+  ["content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "weather."}}],
+  ["content_block_stop", {"type": "content_block_stop", "index": 0}],
+  ["content_block_start", {"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "toolu_01W", "name": "get_weather", "input": {}}}],
+  ["content_block_delta", {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "{\"city\": \"Pa"}}],
+  ["content_block_delta", {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "ris\"}"}}],
+  ["content_block_stop", {"type": "content_block_stop", "index": 1}],
+  ["message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use", "stop_sequence": null}, "usage": {"output_tokens": 27}}],
+  ["message_stop", {"type": "message_stop"}]
+ ]}

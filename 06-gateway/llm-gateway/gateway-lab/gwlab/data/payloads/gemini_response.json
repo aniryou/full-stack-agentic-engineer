@@ -1,0 +1,5 @@
+{"_label": "sample output in the documented format (illustrative): the last streamed GenerateContentResponse of a Gemini call; thoughtsTokenCount is OUTSIDE candidatesTokenCount (python-genai types.py GenerateContentResponseUsageMetadata; wire names camelCase)",
+ "candidates": [{"content": {"role": "model", "parts": [{"text": "It is 17."}]}, "finishReason": "STOP", "index": 0}],
+ "usageMetadata": {"promptTokenCount": 5000, "cachedContentTokenCount": 2700, "candidatesTokenCount": 230,
+                   "thoughtsTokenCount": 120, "totalTokenCount": 5350},
+ "modelVersion": "gemini-3.5-flash"}
