@@ -74,11 +74,13 @@ assert np.allclose(softmax(np.array([[1000.0, 1000.0]])), [[0.5, 0.5]]), "must n
 print("✅ softmax")''',
 ),
 (
-"""## 2. Scaled dot-product attention
+r"""## 2. Scaled dot-product attention
 
-`Attention(Q, K, V) = softmax(Q Kᵀ / √d_k) · V`
+$$
+\operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) \cdot V
+$$
 
-- `scores[i, j]` = how well query *i* matches key *j*, divided by √d_k
+- `scores[i, j]` = how well query $i$ matches key $j$, divided by $\sqrt{d_k}$
 - `weights` = softmax over each row
 - `out[i]` = weighted average of the value vectors""",
 '''def attention(Q, K, V, mask=None):
@@ -114,7 +116,7 @@ print("✅ attention")''',
 (
 """## 3. The causal mask
 
-Return an `(n, n)` boolean array that is `True` where token *i* is allowed to attend to token *j*:
+Return an `(n, n)` boolean array that is `True` where token $i$ is allowed to attend to token $j$:
 a token may look at itself and at everything before it, never ahead.""",
 '''def causal_mask(n):
     return np.tril(np.ones((n, n), dtype=bool))''',
@@ -163,7 +165,7 @@ print("✅ heads")''',
 (
 """## 5. Multi-head attention
 
-Project the input into Q, K, V, split each into heads, run `attention` per head with the causal mask,
+Project the input into $Q$, $K$, $V$, split each into heads, run `attention` per head with the causal mask,
 merge the heads, and apply the output projection `Wo`.""",
 '''def multi_head_attention(x, p, causal=True):
     n, d = x.shape
@@ -230,10 +232,10 @@ assert changed.tolist() == [3, 4, 5], f"tokens changed by nudging token 3: {chan
 print("✅ block")''',
 ),
 (
-"""## 7. Count the parameters
+r"""## 7. Count the parameters
 
-Per block: attention has four `d × d` matrices, the MLP has `d × 4d` and `4d × d`. Add the token embedding table
-(`vocab × d`, counted twice if untied) and the position table (`ctx × d`). Ignore biases and norms.""",
+Per block: attention has four $d \times d$ matrices, the MLP has $d \times 4d$ and $4d \times d$. Add the token embedding table
+($\text{vocab} \times d$, counted twice if untied) and the position table ($\text{ctx} \times d$). Ignore biases and norms.""",
 '''def gpt_params(d, L, vocab, ctx, tied=True):
     per_block = 12 * d * d                       # 4 d^2 attention + 8 d^2 MLP
     embeddings = vocab * d * (1 if tied else 2)
@@ -272,11 +274,11 @@ None,
 None,
 ),
 (
-"""**Question.** Section 3 of this notebook used a *causal* mask. Would the shuffle test above still pass with `causal=True`? Try it, then explain why in one sentence.
+r"""**Question.** Section 3 of this notebook used a *causal* mask. Would the shuffle test above still pass with `causal=True`? Try it, then explain why in one sentence.
 
 <details><summary>Answer</summary>
 
-No. The causal mask is defined in terms of positions (token *i* may see tokens ≤ *i*), so it already injects order: after shuffling, a token is allowed to see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
+No. The causal mask is defined in terms of positions (token $i$ may see tokens $\le i$), so it already injects order: after shuffling, a token is allowed to see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
 </details>""",
 None, None, None,
 ),
