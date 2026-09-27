@@ -49,7 +49,7 @@ Each lab has its own environment (a venv each).
 ```bash
 cd identity-security/agentic-identity-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q   # 32 tests (3 skip without the Mistral client or a key)
 cd ../agentic-identity-gcp-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q                      # 41 tests, ~6 s
-cd ../../scaling-admission-cost/agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q  # 36 tests, ~3 s
+cd ../../scaling-admission-cost/agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q  # 37 tests, ~3 s
 ```
 
 Then open the notebooks in JupyterLab (`python3 -m pip install jupyterlab`; the identity cores keep theirs beside

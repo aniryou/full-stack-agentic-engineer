@@ -9,7 +9,7 @@ rate limits, retries, circuit breakers and admission control that keep the servi
 1. Read the [scaling primer](agentic-scaling-lab/docs/01-scaling-primer.md) §1–3: what is different about scaling
    agents, the dimensions of scale, the arithmetic worked (about 40 min).
 2. `cd agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m scalelab.capacity` — under a second:
-   the capacity plan for 100,000 conversations a day; then `python3 -m pytest -q` (36 tests, ~3 s).
+   the capacity plan for 100,000 conversations a day; then `python3 -m pytest -q` (37 tests, ~3 s).
 3. Open [`01_scaling_math`](agentic-scaling-lab/notebooks/01_scaling_math.ipynb) and work notebooks 01–04 in order;
    then `05_hosted_or_own_gpus` with the [Mistral primer](agentic-scaling-lab/docs/mistral/01-scaling-primer.md)
    §3.5–3.6 for the hosted-versus-own-GPUs decision.
@@ -30,7 +30,7 @@ The lab's backend is a switch: `make_setup(mode, provider=...)` in code, or `SCA
 ## Run it
 
 ```bash
-cd agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 36 tests, ~3 s
+cd agentic-scaling-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q          # 37 tests, ~3 s
 python3 -m scalelab.capacity                                                                # the capacity plan (Gemini)
 python3 -m scalelab.mistral                                                                 # Mistral's API or a fleet, and the break-even
 python3 -m scalelab.serving                                                                 # one vLLM replica per model and GPU

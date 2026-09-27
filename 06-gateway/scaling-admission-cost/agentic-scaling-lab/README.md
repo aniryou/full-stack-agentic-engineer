@@ -9,7 +9,7 @@ retries, breakers, degrade levels, shedding); and say at what GPU price a self-h
 1. Read [`docs/01-scaling-primer.md`](docs/01-scaling-primer.md) Parts 1–3 (about 45 min): why agents scale
    differently, and the arithmetic.
 2. `python -m pip install -e ".[dev]" && python -m scalelab.capacity` — the capacity plan in a second; then
-   `python -m pytest -q` (36 tests, ~3 s).
+   `python -m pytest -q` (37 tests, ~3 s).
 3. Open [`notebooks/01_scaling_math.ipynb`](notebooks/01_scaling_math.ipynb) and work through 01–04; then
    `05_hosted_or_own_gpus` for the fleet.
 
@@ -47,9 +47,9 @@ python -m pip install -e ".[dev]"
 python -m scalelab.capacity                 # the Gemini capacity plan
 python -m scalelab.mistral                  # Mistral's API or a fleet: the plan, the fleet, the break-even
 python -m scalelab.serving                  # one vLLM replica per model and GPU (estimates)
-python -m pytest -q                         # 36 tests, ~3 s; the load simulations run in virtual time
+python -m pytest -q                         # 37 tests, ~3 s; the load simulations run in virtual time
 jupyter lab notebooks/                      # start with 01_scaling_math.ipynb
-SCALELAB_BACKEND=local jupyter lab notebooks/   # the same notebooks' load tests against a vLLM fleet
+SCALELAB_BACKEND=local jupyter lab notebooks/   # notebook 04's load test and exercise (d) on a vLLM fleet
 ```
 
 `docs/03-capacity-plan.md` is generated (a test checks it):
