@@ -184,18 +184,21 @@ print("   Docker row says it is illustrative, because it was not measured on thi
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "The code the model writes is untrusted input, so I design for a fully hijacked
-# model and ask what it can reach. The answer has to be: nothing with ambient authority — no
-# credentials, no network, no durable filesystem. On a laptop I get most of the way with a process
-# sandbox: a clean environment, a throwaway workspace, `RLIMIT_CPU`/`AS`/`FSIZE`/`NOFILE`, a wall
-# timeout that kills the whole process group, output truncation, and — running as a dedicated
-# unprivileged UID — the agent's files and other processes become unreadable and a fork bomb hits
-# `RLIMIT_NPROC`. What a process sandbox cannot do is isolate the kernel or, without a network
-# namespace, touch the network. For untrusted code from the open internet I run a hardened
-# container — `--network none`, `--read-only`, `--cap-drop ALL`, `no-new-privileges`, a tight
-# seccomp profile, `--pids-limit`, `--memory`, non-root — and for the highest blast radius I add
-# gVisor, so the syscalls hit a user-space kernel written in Go instead of the host kernel. I prove
-# each layer with the probe suite: the verdict is `CONTAINED` or `LEAKED`, measured, not asserted."
+# **Two minutes.** "The code the model writes is untrusted input, so I design for a fully hijacked model and
+# ask what it can reach. The answer has to be: nothing with ambient authority — no credentials, no network, no
+# durable filesystem.
+#
+# "On a laptop I get most of the way with a process sandbox: a clean environment, a throwaway workspace,
+# `RLIMIT_CPU`/`AS`/`FSIZE`/`NOFILE`, a wall timeout that kills the whole process group, output truncation,
+# and — running as a dedicated unprivileged UID — the agent's files and other processes become unreadable and
+# a fork bomb hits `RLIMIT_NPROC`. What a process sandbox cannot do is isolate the kernel or, without a
+# network namespace, touch the network.
+#
+# "For untrusted code from the open internet I run a hardened container — `--network none`, `--read-only`,
+# `--cap-drop ALL`, `no-new-privileges`, a tight seccomp profile, `--pids-limit`, `--memory`, non-root — and
+# for the highest blast radius I add gVisor, so the syscalls hit a user-space kernel written in Go instead of
+# the host kernel. I prove each layer with the probe suite: the verdict is `CONTAINED` or `LEAKED`, measured,
+# not asserted."
 #
 # **Drill 1.** *We run the executor as root in a container; isn't that fine because it's
 # "contained"?* — Root in the container is root against the container's kernel surface; a kernel

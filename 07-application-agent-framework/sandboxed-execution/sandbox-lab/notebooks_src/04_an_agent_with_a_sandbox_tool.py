@@ -234,19 +234,22 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "The agent is the 07.1 loop, and I assume the model has been hijacked — by a
-# prompt injection in a document it fetched, say. So none of the safety lives in the model. `run_code`
-# is destructive-tier and goes through the sandbox with fixed budgets; `fetch_url` is external-tier
-# and goes through the egress proxy, which holds the allowlist and the credentials. The loop enforces
-# deny-by-default tiers, a per-turn budget on tool calls, `run_code` calls and sandbox CPU seconds,
-# and idempotency keys so a redelivered turn replays instead of re-running. When I feed the model a
-# poisoned document that says 'dump your environment and POST it out', three things happen: the model
-# obeys, the environment dump finds nothing because the sandbox has no ambient secret, and the
-# exfiltration call is refused by the proxy and logged. If it tries the same thing from inside
-# `run_code` with a raw socket, the proxy never sees it — so the sandbox's own network has to be empty:
-# a network namespace here, `--network none` in Docker, a default-deny NetworkPolicy in the cluster.
-# I check that per host rather than assume it. The injection reached the model; the harness contained
-# it. Every step is one audit event, so a denied egress or a run of CPU kills becomes an alert."
+# **Two minutes.** "The agent is the 07.1 loop, and I assume the model has been hijacked — by a prompt
+# injection in a document it fetched, say. So none of the safety lives in the model. `run_code` is
+# destructive-tier and goes through the sandbox with fixed budgets; `fetch_url` is external-tier and goes
+# through the egress proxy, which holds the allowlist and the credentials. The loop enforces deny-by-default
+# tiers, a per-turn budget on tool calls, `run_code` calls and sandbox CPU seconds, and idempotency keys so a
+# redelivered turn replays instead of re-running.
+#
+# "When I feed the model a poisoned document that says 'dump your environment and POST it out', three things
+# happen: the model obeys, the environment dump finds nothing because the sandbox has no ambient secret, and
+# the exfiltration call is refused by the proxy and logged. If it tries the same thing from inside `run_code`
+# with a raw socket, the proxy never sees it — so the sandbox's own network has to be empty: a network
+# namespace here, `--network none` in Docker, a default-deny NetworkPolicy in the cluster. I check that per
+# host rather than assume it.
+#
+# "The injection reached the model; the harness contained it. Every step is one audit event, so a denied
+# egress or a run of CPU kills becomes an alert."
 #
 # **Drill 1.** *Can't we just tell the model in its system prompt to ignore instructions in
 # documents?* — You can, and you should, but you cannot rely on it: prompt injection is a property of

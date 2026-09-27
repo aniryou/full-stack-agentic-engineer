@@ -196,18 +196,22 @@ print("   and one snapshot must never be restored into two tenants (PRIMER §2, 
 # ## In a design review
 #
 # **Two minutes.** "On GKE the strongest isolation is a node-pool setting: a second pool with
-# `sandbox_config { type = \"GVISOR\" }`, and every pod with `runtimeClassName: gvisor` runs on it
-# under a user-space kernel, on nodes nothing else touches. GKE taints and labels those nodes and
-# creates the RuntimeClass, so a pod needs only the class name. I make the cluster private with no
-# Cloud NAT, so nothing has a route to the internet and images come from Artifact Registry over
-# Private Google Access — which is still a path to Google APIs, so the sandbox's default-deny
-# NetworkPolicy closes it too. The egress proxy reaches only in-cluster upstreams unless I deliberately
-# turn NAT on, and even then NetworkPolicy on Dataplane V2 keeps the sandboxes off the internet —
-# gVisor is a kernel boundary, not a network one. The one thing a NetworkPolicy cannot do is block the node-local metadata server, so the
-# cloud-credential defence is `GKE_METADATA` mode, no mounted token, and a KSA with no IAM binding.
-# The pool is Spot and scales from zero, so it costs nothing idle; the trade is a 40-to-50-second
-# cold start on the first execution, which is why interactive traffic gets a warm pool. The manifests
-# are the ones I validated on kind, with one field changed."
+# `sandbox_config { type = \"GVISOR\" }`, and every pod with `runtimeClassName: gvisor` runs on it under a
+# user-space kernel, on nodes nothing else touches. GKE taints and labels those nodes and creates the
+# RuntimeClass, so a pod needs only the class name.
+#
+# "I make the cluster private with no Cloud NAT, so nothing has a route to the internet and images come from
+# Artifact Registry over Private Google Access — which is still a path to Google APIs, so the sandbox's
+# default-deny NetworkPolicy closes it too. The egress proxy reaches only in-cluster upstreams unless I
+# deliberately turn NAT on, and even then NetworkPolicy on Dataplane V2 keeps the sandboxes off the internet —
+# gVisor is a kernel boundary, not a network one.
+#
+# "The one thing a NetworkPolicy cannot do is block the node-local metadata server, so the cloud-credential
+# defence is `GKE_METADATA` mode, no mounted token, and a KSA with no IAM binding.
+#
+# "The pool is Spot and scales from zero, so it costs nothing idle; the trade is a 40-to-50-second cold start
+# on the first execution, which is why interactive traffic gets a warm pool. The manifests are the ones I
+# validated on kind, with one field changed."
 #
 # **Drill 1.** *`terraform validate` fails on the sandbox pool — the value looks right.* — The
 # provider validates `sandbox_config.type` against `"GVISOR"` exactly; `"gvisor"` (what `gcloud`

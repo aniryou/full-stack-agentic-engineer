@@ -235,19 +235,21 @@ print("its NetworkPolicy dataplane (kindnetd) fails open, and there is no VM or 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "On Kubernetes a sandbox is a pod, and I make its controls mandatory rather than
-# hoped-for. The namespace is Pod Security `restricted`, which gives me non-root, drop-all, no
-# privilege escalation and a seccomp profile — but PSS enforces on Pods, so a bad *Job* is accepted
-# and only its Pods are rejected, which you catch in the Job's events, not at `kubectl apply`. So I
-# add a ValidatingAdmissionPolicy for the sandbox-specific rules: a required RuntimeClass,
-# `automountServiceAccountToken: false`, a read-only root, only sized `emptyDir` volumes, no Secrets
-# in the environment, and on Jobs a deadline, `backoffLimit: 0` and a TTL. One execution is one Job:
-# a fresh pod, cold start, deleted after its TTL; when latency matters I keep a warm pool and
-# `kubectl exec` into an idle pod, deleting it after one use so no state carries over. Egress is a
-# default-deny NetworkPolicy with a single rule to the proxy — no DNS even — and the credential
-# lives in the proxy's Secret, never in the sandbox. I generate every object from one policy, so the
-# securityContext, the NetworkPolicy and the admission policy cannot drift apart, and I validate the
-# YAML against the target Kubernetes version in CI."
+# **Two minutes.** "On Kubernetes a sandbox is a pod, and I make its controls mandatory rather than hoped-for.
+# The namespace is Pod Security `restricted`, which gives me non-root, drop-all, no privilege escalation and a
+# seccomp profile — but PSS enforces on Pods, so a bad *Job* is accepted and only its Pods are rejected, which
+# you catch in the Job's events, not at `kubectl apply`. So I add a ValidatingAdmissionPolicy for the
+# sandbox-specific rules: a required RuntimeClass, `automountServiceAccountToken: false`, a read-only root,
+# only sized `emptyDir` volumes, no Secrets in the environment, and on Jobs a deadline, `backoffLimit: 0` and
+# a TTL.
+#
+# "One execution is one Job: a fresh pod, cold start, deleted after its TTL; when latency matters I keep a
+# warm pool and `kubectl exec` into an idle pod, deleting it after one use so no state carries over. Egress is
+# a default-deny NetworkPolicy with a single rule to the proxy — no DNS even — and the credential lives in the
+# proxy's Secret, never in the sandbox.
+#
+# "I generate every object from one policy, so the securityContext, the NetworkPolicy and the admission policy
+# cannot drift apart, and I validate the YAML against the target Kubernetes version in CI."
 #
 # **Drill 1.** *We applied a restricted-PSS label and a Job with a privileged pod template went
 # through. Bug?* — No: `enforce` applies to Pods. The Job object is created; its Pods are rejected
