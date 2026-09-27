@@ -10,7 +10,7 @@
 #
 # ## The one-minute version
 #
-# The KV cache costs `2 x layers x kv_heads x head_dim x bytes` per token, vLLM turns every byte
+# The KV cache costs $2 \times \mathrm{layers} \times \mathrm{kv\_heads} \times \mathrm{head\_dim} \times \mathrm{bytes}$ per token, vLLM turns every byte
 # left after weights and overheads into blocks of it, and each decode step reads all of it for
 # every running sequence. `--kv-cache-dtype fp8` stores K and V in one byte:
 #
@@ -46,9 +46,14 @@ print(kv.table("qwen2.5-1.5b-instruct", "T4"))
 #
 # ## Exercise 4.1 — KV bytes per token from `config.json`
 #
-# Write `kv_bytes(config, dtype_bytes)`: `2 x num_hidden_layers x num_key_value_heads x head_dim x
-# dtype_bytes`. Use the config's `head_dim` when it has one — Qwen3-0.6B's is 128 although
-# `hidden_size / num_attention_heads` is 64.
+# Write `kv_bytes(config, dtype_bytes)`:
+#
+# $$
+# 2 \times \mathrm{num\_hidden\_layers} \times \mathrm{num\_key\_value\_heads} \times \mathrm{head\_dim} \times \mathrm{dtype\_bytes}.
+# $$
+#
+# Use the config's `head_dim` when it has one — Qwen3-0.6B's is 128 although
+# $\mathrm{hidden\_size}/\mathrm{num\_attention\_heads}$ is 64.
 
 # %% exercise
 def kv_bytes(config, dtype_bytes):
@@ -67,8 +72,8 @@ print("✅ bytes per token (bf16 / fp8):", {n: (kv_bytes(c, 2), kv_bytes(c, 1)) 
 # %% [markdown]
 # ## Exercise 4.2 — from a KV budget to blocks and sessions
 #
-# vLLM allocates `floor(budget / (block_size x bytes_per_token))` blocks; a session of `T` tokens needs
-# `ceil(T / block_size)` of them. Write `blocks_and_sessions(budget_bytes, bytes_per_token,
+# vLLM allocates $\lfloor \mathrm{budget}/(\mathrm{block\_size} \times \mathrm{bytes\_per\_token}) \rfloor$ blocks; a
+# session of `T` tokens needs $\lceil T/\mathrm{block\_size} \rceil$ of them. Write `blocks_and_sessions(budget_bytes, bytes_per_token,
 # session_tokens, block_size=16)` returning `(blocks, sessions)` (sessions as a float, like vLLM's
 # "Maximum concurrency").
 
@@ -154,7 +159,7 @@ for ctx in (256, 1024, 2048, 4096, 8192):
 # ## Exercise 4.4 — where the KV read catches up with the weight read
 #
 # Write `crossover_context(streamed_weight_bytes, kv_bytes_per_token, batch)`: the context length at
-# which `batch x context x kv_bytes_per_token` equals the weights one step streams.
+# which $\mathrm{batch} \times \mathrm{context} \times \mathrm{kv\_bytes\_per\_token}$ equals the weights one step streams.
 
 # %% exercise
 def crossover_context(streamed_weight_bytes, kv_bytes_per_token, batch):
@@ -177,7 +182,7 @@ print(f"✅ batch 32, FP8 weights: KV = weights at {c16:,.0f} tokens with bf16 K
 #
 # The tiny model with each KV dtype emulated (K is quantized after RoPE, as vLLM caches it). FP8's
 # per-tensor scale divides K and V before rounding; vLLM uses 1.0 unless the checkpoint carries
-# calibrated `k_scale`/`v_scale` (llm-compressor's `kv_cache_scheme`: `amax / 448` per layer).
+# calibrated `k_scale`/`v_scale` (llm-compressor's `kv_cache_scheme`: $\mathrm{amax}/448$ per layer).
 
 # %%
 calib_ids = np.concatenate(tm.make_task("add", 256, 7), axis=1)
@@ -198,16 +203,16 @@ print("measured on the bundled tiny model (T0); K/V amax per layer:",
 print(E.table(rows))
 
 # %% [markdown]
-# With `|K|, |V| <= 14` the default scale of 1.0 is as good as a calibrated one: E4M3's relative
+# With $|K|, |V| \le 14$ the default scale of 1.0 is as good as a calibrated one: E4M3's relative
 # precision is the same in every binade, so the scale only matters at the ends of the range. A
-# scale 100x too small saturates everything at 448 x scale (accuracy 0); a scale of 1,000 pushes
+# scale 100x too small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0); a scale of 1,000 pushes
 # typical values into the subnormals, where precision runs out. Integer KV formats are the opposite:
 # their error depends on the scale everywhere, which is why they use dynamic per-token-head scales.
 #
 # ## Exercise 4.5 — is this FP8 scale safe?
 #
-# Write `fp8_scale_check(amax, rms, scale)`: return `"saturates"` if `amax / scale > 448`,
-# `"underflows"` if `rms / scale < 2**-6` (typical values below E4M3's smallest normal), else `"ok"`.
+# Write `fp8_scale_check(amax, rms, scale)`: return `"saturates"` if $\mathrm{amax}/\mathrm{scale} > 448$,
+# `"underflows"` if $\mathrm{rms}/\mathrm{scale} < 2^{-6}$ (typical values below E4M3's smallest normal), else `"ok"`.
 
 # %% exercise
 def fp8_scale_check(amax, rms, scale):
