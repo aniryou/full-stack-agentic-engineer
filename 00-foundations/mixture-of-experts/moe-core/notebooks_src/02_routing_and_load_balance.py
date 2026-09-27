@@ -8,13 +8,16 @@
 # A router is trained by the same loss as the experts, and that loss rewards sending a token to whichever expert
 # is *already* good at it. The expert that wins early gets the gradient, improves, and wins more; an expert that
 # gets no tokens never trains and never gets a chance. Left alone, a layer **collapses** onto a few experts — the
-# rest are dead weight in HBM. Balance has to be imposed: an **auxiliary loss** `E · Σ f_e · P_e` (Switch/GShard,
-# smallest when token shares f and mean probabilities P are both uniform); a **capacity** per expert with the
-# overflow dropped, or **dropless** routing with padding (MegaBlocks, and every inference engine); a
-# **selection-only bias** stepped against the load (DeepSeek-V3's auxiliary-loss-free balancing); or
-# **expert-choice** routing, where experts pick tokens. The **z-loss** keeps router logits small for bf16. After
-# this notebook you can compute each of these by hand, watch a router collapse and recover, and say what each fix
-# costs.
+# rest are dead weight in HBM.
+#
+# Balance has to be imposed: an **auxiliary loss** $E \cdot \sum f_e \cdot P_e$ (Switch/GShard, smallest when token
+# shares $f$ and mean probabilities $P$ are both uniform); a **capacity** per expert with the overflow dropped, or
+# **dropless** routing with padding (MegaBlocks, and every inference engine); a **selection-only bias** stepped
+# against the load (DeepSeek-V3's auxiliary-loss-free balancing); or **expert-choice** routing, where experts pick
+# tokens. The **z-loss** keeps router logits small for bf16.
+#
+# After this notebook you can compute each of these by hand, watch a router collapse and recover, and say what each
+# fix costs.
 #
 # Primer: `../PRIMER.md` §3 *Routing and load balance* and §4 *Training MoE in brief*.
 
@@ -29,10 +32,10 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Worked example 1 — the Switch loss, in both normalisations
-# `f_e` is the share of the batch's assignments that went to expert e and `P_e` the mean router probability of e.
-# transformers' `load_balancing_loss_func` lets Σ f = k, so a perfectly uniform router scores **k** (2 for Mixtral);
-# Megatron and MegaBlocks divide by k, so uniform scores **1**. Both are E at worst (k = 1, one expert takes all).
-# Only P carries a gradient: f comes out of a top-k.
+# $f_e$ is the share of the batch's assignments that went to expert $e$ and $P_e$ the mean router probability of
+# $e$. transformers' `load_balancing_loss_func` lets $\sum f = k$, so a perfectly uniform router scores **$k$** (2 for
+# Mixtral); Megatron and MegaBlocks divide by $k$, so uniform scores **1**. Both are $E$ at worst ($k = 1$, one
+# expert takes all). Only $P$ carries a gradient: $f$ comes out of a top-k.
 
 # %%
 t, e, k = 64, 8, 2
@@ -48,10 +51,11 @@ print(f"z-loss of all-zero logits over 8 experts: (ln 8)^2 = {R.z_loss(np.zeros(
 
 # %% [markdown]
 # ## Worked example 2 — capacity, dropping, and dropless padding
-# With a capacity factor, expert e takes at most `int(factor · k · T / E)` rows; the rest are **dropped** — those
+# With a capacity factor, expert $e$ takes at most `int(factor · k · T / E)` rows; the rest are **dropped** — those
 # tokens skip the expert and ride the residual connection. Dropless routing keeps every assignment and instead
-# pads each expert's rows to the kernel's block size: vLLM's `moe_align_block_size` sorts the T·k slots by expert
-# and pads each segment to a multiple of `BLOCK_SIZE_M` with a pad id (T·k), so no block GEMM mixes experts.
+# pads each expert's rows to the kernel's block size: vLLM's `moe_align_block_size` sorts the $T \cdot k$ slots by
+# expert and pads each segment to a multiple of `BLOCK_SIZE_M` with a pad id ($T \cdot k$), so no block GEMM mixes
+# experts.
 
 # %%
 logits = np.random.default_rng(1).standard_normal((256, 8)) + np.array([1.5, 0.8, 0, 0, 0, 0, 0, 0])  # 0, 1 popular
@@ -85,7 +89,7 @@ for b in ("none", "aux", "bias"):
 
 # %% [markdown]
 # Without balancing the router starts 55/45 on two experts and ends with one expert taking 95% — the other three
-# never learn anything. With the aux loss (α = 0.1) or the DeepSeek-style bias, all four experts carry about a
+# never learn anything. With the aux loss ($\alpha = 0.1$) or the DeepSeek-style bias, all four experts carry about a
 # quarter and the task loss is three to five times lower. Look at the placements: the bias run gives each cluster
 # its own expert almost cleanly; the aux run balances too, but its gradient insists on equal counts while the
 # clusters are unequal (124, 117, 135, 136 tokens), so it splits two clusters across experts — the quality cost of
@@ -104,8 +108,8 @@ for seed in range(10):
 
 # %% [markdown]
 # ## Exercise 2.1 — the Switch loss
-# Write `switch_loss(probs, idx)` in transformers' convention: `E · Σ_e f_e · P_e` with `f_e` = assignments to e
-# divided by T (so Σ f = k) and `P_e` = mean of `probs[:, e]`.
+# Write `switch_loss(probs, idx)` in transformers' convention: $E \cdot \sum_e f_e \cdot P_e$ with $f_e$ = assignments
+# to $e$ divided by $T$ (so $\sum f = k$) and $P_e$ = mean of `probs[:, e]`.
 
 # %% exercise
 def switch_loss(probs, idx):
@@ -181,8 +185,8 @@ print(f"✅ load after 400 bias steps: {counts.tolist()} (max/mean {R.stats(coun
 
 # %% [markdown]
 # ## Exercise 2.4 — how strong must the aux loss be?
-# On task seed 4, train with the aux loss at α = 0.01 and α = 0.1. Before running, predict which one still
-# collapses; set `collapsed` to the α that does and `balanced` to the one that does not.
+# On task seed 4, train with the aux loss at $\alpha = 0.01$ and $\alpha = 0.1$. Before running, predict which one
+# still collapses; set `collapsed` to the $\alpha$ that does and `balanced` to the one that does not.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -201,8 +205,8 @@ print("✅ α = 0.01 is too weak to pull tokens off the winning expert here; 0.1
 
 # %% [markdown]
 # ## Exercise 2.5 — balanced on average, collapsed per sequence
-# Build `probs` and `idx` for 4 sequences of 16 tokens and 4 experts, top-1, in which **sequence i sends every
-# token to expert i** with probability 1. Then set `batch_loss` (Megatron convention over the whole batch) and
+# Build `probs` and `idx` for 4 sequences of 16 tokens and 4 experts, top-1, in which **sequence $i$ sends every
+# token to expert $i$** with probability 1. Then set `batch_loss` (Megatron convention over the whole batch) and
 # `seq_loss` (`R.sequence_aux_loss`).
 
 # %% exercise
@@ -222,18 +226,19 @@ print("✅ the batch-level loss says perfect (1.0), the sequence-level one says 
 # ## In a design review
 # **The two-minute version.** "A learned router is a feedback loop: the expert that wins tokens early trains on
 # them and keeps winning, so without a counter-force the layer collapses onto a few experts and the rest are dead
-# HBM. Training adds one: the Switch auxiliary loss E·Σ f·P — minimised at k in transformers' convention and 1 in
-# Megatron's, so check which before comparing coefficients — plus a small z-loss for bf16 stability. Capacity
-# factors bound each expert's work by dropping overflow tokens, which is fine for training throughput and
-# unacceptable at inference, so engines are dropless and pad instead. DeepSeek-V3 moved balancing out of the loss:
-# a per-expert bias, stepped by a fixed rate against the load, changes which experts are chosen but never the
-# weights, so the task gradient stays clean. Balance at training time is on average; at inference, a skewed
-# workload still makes hot experts, and that is an expert-parallel problem."
+# HBM. Training adds one: the Switch auxiliary loss $E \cdot \sum f \cdot P$ — minimised at $k$ in transformers'
+# convention and 1 in Megatron's, so check which before comparing coefficients — plus a small z-loss for bf16
+# stability. Capacity factors bound each expert's work by dropping overflow tokens, which is fine for training
+# throughput and unacceptable at inference, so engines are dropless and pad instead.
+#
+# "DeepSeek-V3 moved balancing out of the loss: a per-expert bias, stepped by a fixed rate against the load, changes
+# which experts are chosen but never the weights, so the task gradient stays clean. Balance at training time is on
+# average; at inference, a skewed workload still makes hot experts, and that is an expert-parallel problem."
 #
 # **Drill questions**
 # 1. *A paper says 'aux loss coefficient 0.01'; your framework's loss reads 2.0 on a uniform router. Why?* —
-#    transformers' convention counts all k assignments (Σ f = k); Megatron's divides by k. Same coefficient, a
-#    k-times different gradient.
+#    transformers' convention counts all $k$ assignments ($\sum f = k$); Megatron's divides by $k$. Same coefficient,
+#    a $k$-times different gradient.
 # 2. *Why can't DeepSeek's bias just be added to the combine weights too?* — Then it would change every token's
 #    output and the task gradient would fight it; as a selection-only term it steers load without biasing outputs.
 # 3. *Expert-choice routing is perfectly balanced. Why don't decode engines use it?* — Each expert picks from the
