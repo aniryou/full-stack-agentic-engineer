@@ -87,9 +87,11 @@ sub-folder for a new sub-domain; reuse an existing one when it fits. Kebab-case 
   folder, no notebook at a lab's top level, no answer key beside its blank under a suffix. The guard is `tools/ci/nb_layout.py`
   (run alone, it lists every tracked notebook with its lab, role and twin, then every deviation), which `tools/ci/ci.py check`
   runs; the Colab-link and site generators know this one rule (a notebook is an answer key exactly when its folder is `solutions/`).
-- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the lab-list check and the
-  notebook-layout guard (`tools/ci/ci.py check`), the notebook rebuilds (they must be no-ops), the Colab-link and site generators
-  and the link check on every push and pull request; `tools/ci/run_local.sh <lab-id>|--check|--notebooks|--docs|--colab-index`
+- **CI:** `.github/workflows/tests.yml` runs every lab's T0 tests (the list is `tools/ci/labs.json`), the lab-list check, the
+  notebook-layout guard and the percent-source heading guard (`tools/ci/ci.py check`; a heading in a code, exercise or check
+  cell of a percent-format source fails it: it needs a `# %% [markdown]` line of its own, or the builder writes it and the
+  prose under it as comments), the notebook rebuilds (they must be no-ops), the Colab-link and site generators and the link
+  check on every push and pull request; `tools/ci/run_local.sh <lab-id>|--check|--notebooks|--docs|--colab-index`
   runs the same thing locally. A new lab with tests must be added to `tools/ci/labs.json`, and its notebooks must follow the
   layout (`tools/ci/run_local.sh --check` verifies both), or the "lab list complete" job goes red.
 - **Redo an exercise:** `git restore <notebook>` returns it to the committed blank; for percent-source
@@ -219,3 +221,9 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
 - Root `.gitignore` keeps caches/venvs/`.DS_Store` out; per-lab `.gitignore` files are retained too.
+- 2026-09-27: seven headings in the `gateway-core`, `gateway-lab` and `memory-core` notebook sources (three exercise
+  statements, a worked example's introduction, two "In a design review" sections and a worked example's heading) followed a
+  code or check cell without a `# %% [markdown]` line of their own, so the built notebooks showed them as comments at the
+  end of that cell. The markers were added and the twelve notebooks rebuilt (the ids of the cells after each inserted cell
+  shifted, as the builders mint them by position); `tools/ci/nb_sources.py`, run by `ci.py check`, now fails on a heading
+  outside a markdown cell in any percent-format source.
