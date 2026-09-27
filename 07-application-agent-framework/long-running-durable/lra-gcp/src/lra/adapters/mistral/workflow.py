@@ -84,6 +84,9 @@ class InvoiceAgent:
             key = f"{workflows.get_execution_id()}:{len(journal)}"           # (2) idempotency key
             intent = {"type": "intent", "tool": d["tool"], "args": d["args"], "key": key, "done": False}
             journal.append(intent)
+            if d["tool"] not in TOOLS:                                        # a made-up tool: tell the model
+                intent.update(done=True, result={"error": f"unknown tool {d['tool']!r}"})
+                continue
             if d["tool"] in gated_tools:                                      # (5) park on a human
                 self.decision = None
                 try:

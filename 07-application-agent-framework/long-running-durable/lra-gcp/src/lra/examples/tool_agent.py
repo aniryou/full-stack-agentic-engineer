@@ -11,7 +11,12 @@ side effect happens. The fix is structural and takes two effect records per turn
                                                    ``run_id:N`` goes downstream too (defence in depth)
 
 A tool listed in ``gated`` parks the run on a human approval between the two (``Wait``); a rejection
-is fed back to the model as the tool's result, so the model can choose again. The journal lives in
+is fed back to the model as the tool's result, so the model can choose again. Two model mistakes are
+observations too, never a failed run: a tool name the model made up is journaled as
+``{"error": "unknown tool ..."}`` without calling anything, and a tool that raises :class:`ToolError`
+(a declared, non-retryable failure: bad arguments, "no such invoice") has its message recorded as the
+effect's result, so it is not re-run on a retry. The model reads either one and can correct itself.
+Any other exception (a timeout, a 503) is infrastructure: the engine retries the step. The journal lives in
 ``ctx.state["journal"]`` as decision/intent pairs, which is also the prompt: recorded facts, never
 the model's memory. ``max_steps`` in the run's :class:`Budget` bounds the loop in code.
 
@@ -28,6 +33,10 @@ from typing import Any, Callable, Iterable
 from ..core.models import Budget
 from ..core.workflow import Done, Next, StepContext, Wait, Workflow
 from ..patterns.hitl import approval_key
+
+
+class ToolError(Exception):
+    """A non-retryable tool failure. The loop journals it as the call's result and asks the model again."""
 
 
 class ScriptedDecider:
@@ -95,8 +104,18 @@ def make_tool_agent(
             if payload.get("decision") != "approve":                        # tell the model why, let it choose again
                 intent.update(done=True, result={"rejected": payload.get("comment", "rejected")})
                 return Next("decide")
-        tool = tools[intent["tool"]]
-        result = ctx.effect(f"act:{n}", lambda: tool(**intent["args"], key=intent["key"]))
+        tool = tools.get(intent["tool"])
+        if tool is None:                                    # a made-up tool: tell the model, call nothing
+            intent.update(done=True, result={"error": f"unknown tool {intent['tool']!r}"})
+            return Next("decide")
+
+        def call() -> dict[str, Any]:
+            try:
+                return tool(**intent["args"], key=intent["key"])
+            except ToolError as e:                          # recorded once, like a result; not retried
+                return {"error": str(e)}
+
+        result = ctx.effect(f"act:{n}", call)
         intent.update(done=True, result=result)
         return Next("decide")
 

@@ -72,6 +72,17 @@ def test_rejection_is_fed_back_to_the_model():
     run(go())
 
 
+def test_a_made_up_tool_is_fed_back_to_the_model():
+    async def go():
+        fresh([{"tool": "refund", "args": {"amount": 42}}, {"final": "No refund tool; nothing done."}])
+        async with local_worker([mw.InvoiceAgent], [mw.decide, mw.charge]) as client:
+            h = await start(client, "refund invoice 42", "wf-unknown", gated_tools=[])
+            r = (await h.result())["result"]
+        assert r["status"] == "DONE" and mw.PAYMENTS.charges == {} and mw.MODEL.calls == 2
+        assert r["journal"][1]["result"] == {"error": "unknown tool 'refund'"}
+    run(go())
+
+
 def test_approval_timeout_and_budget():
     async def go():
         fresh(SCRIPT)

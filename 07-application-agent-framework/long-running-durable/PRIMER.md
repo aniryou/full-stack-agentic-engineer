@@ -120,7 +120,7 @@ flowchart LR
   C --> N[enqueue run-step-N+1]
   M -- final --> D[SUCCEEDED]
 ```
-**Failure modes → mitigations:** crash after side effect (memo + key) · duplicate delivery (journal index guard + named tasks) · zombie worker (lease TTL) · runaway (budget) · unknown tool / tool error (journal as observation, let the model correct itself) · hot document (one run = one writer; fine).
+**Failure modes → mitigations:** crash after side effect (memo + key) · duplicate delivery (journal index guard + named tasks) · zombie worker (lease TTL) · runaway (budget) · unknown tool / declared tool error (`ToolError`: journal it as the call's result, let the model correct itself; any other exception is retried as infrastructure; `tests/test_tool_agent_and_patterns.py`) · hot document (one run = one writer; fine).
 
 ### P2 · Orchestrator / workers, fan-out–fan-in (`patterns/orchestrator_worker.py`, notebook 03)
 Planner LLM → N subtasks → Pub/Sub topic (or N Cloud Tasks) → idempotent workers → transactional counter on the run doc → *the write that reaches N* enqueues the named `aggregate` task → synthesis LLM. **Fan-in is the hard part**: side effects outside the transaction; late duplicates must also observe `all_done` (the enqueue is idempotent, so let them); N > ~50 writers on one Firestore doc contend (~1 write/s guidance) → one doc per subtask + count query, or hand the join to **Cloud Workflows `parallel`** (`workflows/research_approval.yaml`).

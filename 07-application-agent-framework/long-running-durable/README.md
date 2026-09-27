@@ -24,7 +24,7 @@ T1/T2 do not apply; model keys are optional (every notebook runs a scripted mode
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | explain the five invariants, eight patterns and three reference architectures; quote the Google Cloud limits that decide a design; estimate wake-ups, writes and tokens; answer the design drills in §11 | 2 h | T0 |
 | [`lra-core`](lra-core/README.md) | build the durable loop from scratch in ~250 lines of standard library (store, named-task queue, lease, checkpoint-before-enqueue, effect records, reaper) and break it at every crash window, including a real two-process crash; 3 notebooks | 2 h | T0 (T3 optional: one Cloud Run service) |
-| [`lra-gcp`](lra-gcp/README.md) | run the full engine (pydantic only offline): fan-out/fan-in, human-in-the-loop, sagas, reflection, budgets, versioning, scheduled ticks, long-running tools, a model-chosen tool loop; Firestore, Cloud Tasks, Pub/Sub, Cloud Run, Cloud Workflows and Terraform; optional ADK 2 and Mistral paths; 6 notebooks | 8 h | T0, T3 |
+| [`lra-gcp`](lra-gcp/README.md) | run the full engine (pydantic only offline): fan-out/fan-in, human-in-the-loop, sagas, reflection, budgets, versioning, scheduled ticks, long-running tools, a model-chosen tool loop; Firestore, Cloud Tasks, Pub/Sub, Cloud Run, Cloud Workflows and Terraform; optional ADK 2 and Mistral paths; 6 notebooks | 6 h (8 h with the optional paths) | T0, T3 |
 
 The topic folds three earlier lineages into one: from the Google Cloud edition (a standard-library core and an ADK-based lab) came this primer, its drills, the ADK 2 ticket-queue workflow, the scheduled and long-running-tool patterns and the two-process crash; from the Mistral edition, the Mistral adapter, the Mistral Workflows version and their tests; and the engine, its tests and its notebooks are the `lra` lineage's.
 
@@ -38,7 +38,7 @@ python3 tools/run_notebooks.py solutions     # the worked answers run clean
 
 cd ../lra-gcp
 python3 -m pip install -e ".[dev,services]"  # pydantic, FastAPI for the services, Jupyter's runner
-python3 -m pytest -q                         # 70 tests: 63 pass, 7 skip without the optional extras, ~15 s
+python3 -m pytest -q                         # 73 tests: 66 pass, 7 skip without the optional extras, ~15 s
 python3 scripts/local_demo.py                # fan-out -> crash -> reaper -> 3-day wait -> approval -> saga rollback
 ```
 

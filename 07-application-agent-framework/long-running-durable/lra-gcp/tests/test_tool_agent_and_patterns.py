@@ -12,7 +12,7 @@ import pytest
 
 from lra import Engine, Event, RunStatus, SimulatedCrash, Workflow, Next, Done
 from lra.adapters.memory import FakeClock, FakeLLM, InMemoryEventBus, InMemoryStateStore, InMemoryTaskQueue, LocalRunner
-from lra.examples.tool_agent import PaymentAPI, ScriptedDecider, make_tool_agent
+from lra.examples.tool_agent import PaymentAPI, ScriptedDecider, ToolError, make_tool_agent
 from lra.patterns.async_tool import backoff, job_key, poll_job
 from lra.patterns.hitl import approval_key
 from lra.patterns.scheduled import tick, window_of
@@ -126,6 +126,60 @@ def test_rejection_is_fed_back_to_the_model():
     r = store.get(run.run_id)
     assert r.status == RunStatus.SUCCEEDED and pay.charges == {}
     assert r.state["journal"][1]["result"] == {"rejected": "vendor not onboarded"}
+
+
+def drain(runner, clock, rounds=20):
+    for _ in range(rounds):                                  # retries are scheduled with a back-off
+        runner.run_until_idle()
+        clock.advance(seconds=3600)
+
+
+def test_an_unknown_tool_is_an_observation_not_a_failed_run():
+    pay = PaymentAPI()
+    decider = ScriptedDecider([{"tool": "refund", "args": {"amount": 42}},     # the model made the name up
+                               {"tool": "charge", "args": {"amount": 42}}, {"final": "Charged 42."}])
+    engine, runner, clock, store = engine_for(make_tool_agent(decider, {"charge": pay}, gated=()))
+    run = engine.start("tool_agent", {"goal": "pay invoice 42"})
+    drain(runner, clock)
+    r = store.get(run.run_id)
+    assert r.status == RunStatus.SUCCEEDED and decider.calls == 3
+    assert r.state["journal"][1]["result"] == {"error": "unknown tool 'refund'"}   # what the model reads next
+    assert pay.charges == {f"{run.run_id}:3": 42.0}
+
+
+def test_a_tool_error_is_recorded_once_and_fed_back_to_the_model():
+    calls = []
+
+    def lookup(invoice, key):
+        calls.append(key)
+        raise ToolError(f"no invoice {invoice}")
+
+    decider = ScriptedDecider([{"tool": "lookup", "args": {"invoice": "INV-9"}}, {"final": "No such invoice."}])
+    engine, runner, clock, store = engine_for(make_tool_agent(decider, {"lookup": lookup}, gated=()))
+    run = engine.start("tool_agent", {"goal": "pay INV-9"})
+    drain(runner, clock)
+    r = store.get(run.run_id)
+    assert r.status == RunStatus.SUCCEEDED and r.result == {"result": "No such invoice."}
+    assert r.state["journal"][1]["result"] == {"error": "no invoice INV-9"}
+    assert len(calls) == 1                                   # a declared error is not retried
+
+
+def test_any_other_exception_is_infrastructure_and_the_step_is_retried():
+    attempts = []
+
+    def flaky(amount, key):
+        attempts.append(key)
+        if len(attempts) < 2:
+            raise TimeoutError("upstream 503")
+        return {"ok": amount}
+
+    decider = ScriptedDecider([{"tool": "flaky", "args": {"amount": 1}}, {"final": "ok"}])
+    engine, runner, clock, store = engine_for(make_tool_agent(decider, {"flaky": flaky}, gated=()))
+    run = engine.start("tool_agent", {"goal": "x"})
+    drain(runner, clock)
+    r = store.get(run.run_id)
+    assert r.status == RunStatus.SUCCEEDED and r.state["journal"][1]["result"] == {"ok": 1}
+    assert attempts == [f"{run.run_id}:1"] * 2 and decider.calls == 2   # same key on the retry; the model was not re-asked
 
 
 def test_approval_timeout_fails_the_run_and_the_step_budget_stops_a_model_that_never_finishes():

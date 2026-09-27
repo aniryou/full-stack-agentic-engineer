@@ -17,7 +17,8 @@ a loop in which the model chooses the next tool, and the same engine on Firestor
 
 *T0 = a laptop or Colab CPU, free: in-memory adapters with the same semantics, a scripted model, no key, no cloud
 project. T3 = the Google Cloud deployment (Terraform in `infra/terraform/`), optional, billed per use.* Time: about
-8 h after [`lra-core`](../lra-core/README.md) (rough); module 07.3 in [`CURRICULUM.md`](../../../CURRICULUM.md).
+6 h after [`lra-core`](../lra-core/README.md) for notebooks 00–03 and 05 and the docs, 8 h with the optional ADK path and
+a read of the deploy (rough); module 07.3 in [`CURRICULUM.md`](../../../CURRICULUM.md) budgets 10 h for the primer, the core and this lab.
 Each blank in `notebooks/` stops at its first exercise until you fill it in.
 
 | Path | You will be able to… | Time | Tier |
@@ -27,7 +28,7 @@ Each blank in `notebooks/` stops at its first exercise until you fill it in.
 | `02_human_in_the_loop` | suspend for days, resume idempotently by key, reject, time out through the reaper, auto-approve, cancel | 45 min | T0 |
 | `03_fanout_saga_reflection` | fan out into child runs, treat partial failure as data, write the fan-in counter, compensate a saga in reverse, bound a reflection loop, fail closed on budget and deadline | 1 h | T0 |
 | `04_adk_workflow` | run the same shapes on ADK 2's `Workflow` (interrupts, resume, routing, the staleness guard, the new-invocation mistake) and build the graph yourself | 45 min | T0 with the `adk` extra |
-| `05_tool_loop_and_mistral` | journal a model's decision before acting on it, approve exactly what runs, then swap in Mistral (function calling, the `LLM` port) and see the loop on Mistral Workflows | 1 h | T0 |
+| `05_tool_loop_and_mistral` | journal a model's decision before acting on it, approve exactly what runs, feed a made-up tool or a tool error back to the model as an observation, then swap in Mistral (function calling, the `LLM` port) and see the loop on Mistral Workflows | 1 h | T0 |
 | [`docs/`](docs/) | [`primer.md`](docs/primer.md) (the engine's design notes: 13 patterns with GCP mappings, reference architecture, scale and cost, security, testing), [`code-evaluation-drills.md`](docs/code-evaluation-drills.md), [`runbook.md`](docs/runbook.md), [`gcp-cheatsheet.md`](docs/gcp-cheatsheet.md) (delivery semantics, limits, CLI and SDK snippets, IAM), [`mistral.md`](docs/mistral.md) | 2 h | T0 |
 | `src/lra/` | `core/` (engine, models, workflow DSL, ports), `adapters/memory`, `adapters/gcp` (Firestore, Cloud Tasks, Pub/Sub, Gemini), `adapters/mistral` (optional), `patterns/` (hitl, reflection, orchestrator_worker, saga, scheduled, async_tool), `examples/` (research pipeline, procurement saga, tool agent) | — | T0 |
 | `services/`, `workflows/`, `infra/terraform/` | Cloud Run `api` and `worker`, the same flow in Cloud Workflows (`parallel`, callbacks, compensation), Terraform for all of it | 1 h to read; deploy ~15 min | T3 |
@@ -37,7 +38,7 @@ Each blank in `notebooks/` stops at its first exercise until you fill it in.
 
 ```bash
 python3 -m pip install -e ".[dev,services]"
-python3 -m pytest -q          # 70 tests: 63 pass, 7 skip (Google Cloud clients, ADK 2, Mistral Workflows), ~15 s
+python3 -m pytest -q          # 73 tests: 66 pass, 7 skip (Google Cloud clients, ADK 2, Mistral Workflows), ~15 s
 python3 scripts/local_demo.py
 make notebooks                # the solutions run clean; each blank stops at its first exercise
 ```
@@ -45,9 +46,9 @@ make notebooks                # the solutions run clean; each blank stops at its
 The optional extras add paths, never requirements: `pip install -e ".[dev,services,gcp]"` runs the four Google Cloud
 adapter tests against fake clients (no credentials); `".[adk]"` (ADK 2 and the Google Cloud clients, about 220 MB,
 measured 2026-09-26, verify) runs the two ADK test files, notebook 04 and `make adk-demo`; `".[mistral]"` adds the
-`mistralai` SDK and, on Python 3.12–3.14, Mistral Workflows (see [`docs/mistral.md`](docs/mistral.md)), whose four
+`mistralai` SDK and, on Python 3.12–3.14, Mistral Workflows (see [`docs/mistral.md`](docs/mistral.md)), whose five
 tests start a local Temporal dev server downloaded from `temporal.download` on first use. With every extra (`gcp`, `adk`,
-`mistral`) on Python 3.12 and that download reachable, 77 tests run.
+`mistral`) on Python 3.12 and that download reachable, 81 tests run.
 
 ## The engine in one picture
 

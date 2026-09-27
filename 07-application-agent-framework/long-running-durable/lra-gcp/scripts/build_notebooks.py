@@ -918,6 +918,30 @@ print("charges:", pay.charges, "| payment API calls:", pay.calls, "| model calls
 assert pay.calls == 1 and decider.calls == 2 and r.status == RunStatus.SUCCEEDED
 '''
 )
+nb5.md("## When the model gets it wrong\n\nTwo mistakes are the model's to fix, not the engine's: a tool name it made up, and a tool that answers with a declared, non-retryable error (`ToolError`: bad arguments, no such invoice). The loop journals either one as the call's result and asks the model again; the run does not fail. Any other exception (a timeout, a 503) is infrastructure, and the engine retries the step under the same key.")
+nb5.code(
+    '''
+from lra.examples.tool_agent import ToolError
+
+def lookup(invoice, key):
+    if invoice != "INV-1042":
+        raise ToolError(f"no invoice {invoice}")
+    return {"invoice": invoice, "amount": 42}
+
+pay = PaymentAPI()
+decider = ScriptedDecider([{"tool": "refund", "args": {"amount": 42}},           # a tool that does not exist
+                           {"tool": "lookup", "args": {"invoice": "INV-1024"}},  # a typo in the argument
+                           {"tool": "lookup", "args": {"invoice": "INV-1042"}},
+                           {"tool": "charge", "args": {"amount": 42}}, {"final": "Charged 42."}])
+engine, runner, clock, store = tool_harness(make_tool_agent(decider, {"charge": pay, "lookup": lookup}, gated=()))
+run = engine.start("tool_agent", {"goal": "pay invoice INV-1042"})
+runner.run_until_idle()
+r = store.get(run.run_id); show(r); show_journal(r)
+assert r.status == RunStatus.SUCCEEDED and decider.calls == 5
+assert r.state["journal"][1]["result"] == {"error": "unknown tool 'refund'"}
+assert r.state["journal"][3]["result"] == {"error": "no invoice INV-1024"}
+'''
+)
 nb5.md("## Approve what you execute\n\nA gated tool parks the run with the *exact* proposed call in the journal. Approval executes that call; a rejection becomes the tool's result, so the model can choose again. A double click is a no-op.")
 nb5.code(
     '''
