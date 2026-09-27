@@ -439,16 +439,16 @@ for doc_id, text in docs.items():
         chunks.append(Chunk(f"{doc_id}#{i}", doc_id, ctext, heading))
 print(len(chunks), "chunks indexed")
 """),
-    md("""
+    md(r"""
 ### Exercise 1 — BM25 scoring
 
-BM25 scores a query term `t` in document `i` as
+BM25 scores a query term $t$ in document $i$ as
 
-```
-idf(t) · f(t,i)·(k1+1) / ( f(t,i) + k1·(1 − b + b·|d_i|/avgdl) )
-```
+$$
+\mathrm{idf}(t) \cdot \frac{f(t,i) \cdot (k_1 + 1)}{f(t,i) + k_1 \cdot (1 - b + b \cdot \lvert d_i \rvert / \mathrm{avgdl})}
+$$
 
-where `f(t,i)` is the term's frequency in doc `i`, `|d_i|` its length, `avgdl`
+where ${f(t,i)}$ is the term's frequency in doc $i$, $\lvert d_i \rvert$ its length, $\mathrm{avgdl}$
 the mean length. Fill in that formula (the `idf` and counts are precomputed).
 """),
     ex(
@@ -565,15 +565,17 @@ for q in ["what does ERR_4290 mean",                       # lexical
     print("  dense:", [i.split('#')[0] for i in dense_ids(q, 3)])
     print("  bm25 :", [i.split('#')[0] for i in bm25_ids(q, 3)])
 """),
-    md("""
+    md(r"""
 ### Exercise 2 — Reciprocal Rank Fusion
 
 RRF combines ranked lists using only **rank position**, so it doesn't care that
 BM25 and cosine scores live on different scales:
 
-```
-score(d) = Σ_lists 1 / (k + r(d))      # k = 60; r(d) = 1 for the top result of a list
-```
+$$
+\mathrm{score}(d) = \sum_{\text{lists}} \frac{1}{k + r(d)}
+$$
+
+$k = 60$; $r(d) = 1$ for the top result of a list.
 
 (`enumerate` counts from 0, so in code that is `1 / (k + rank + 1)`.)
 
@@ -768,8 +770,8 @@ You cannot improve what you don't measure, and "the demo looked good" is not
 measurement. With the labelled `qrels` we can score each retriever with two
 standard metrics:
 
-* **Hit@k** — is *any* gold document in the top *k*? (Did we fetch something useful?)
-* **Recall@k** — are *all* the gold documents in the top *k*? (Did we fetch everything
+* **Hit@k** — is *any* gold document in the top $k$? (Did we fetch something useful?)
+* **Recall@k** — are *all* the gold documents in the top $k$? (Did we fetch everything
   the answer needs?) On a one-gold question the two agree; on a two-gold (multihop)
   question hit@k can say 1.0 while half the answer is missing.
 * **MRR** — 1/rank of the first gold hit. (How high did it land?)
