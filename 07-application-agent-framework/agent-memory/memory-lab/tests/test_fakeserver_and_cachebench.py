@@ -100,12 +100,38 @@ def test_step_cost_and_cost_pins():
 def test_layouts_predicted_equals_simulated_and_the_ordering_holds(server):
     runs = {l: cb.run_layout(server.url, l, turns=8) for l in cb.LAYOUTS + cb.VARIANTS}
     for r in runs.values():
-        assert r.source.startswith("SIMULATED")
+        assert r.cached_source.startswith("SIMULATED") and r.timing.startswith("SIMULATED (roofline, L4")
         assert all(row.cached_tokens == row.predicted_cached for row in r.rows), r.layout
     rate = {k: round(r.hit_rate, 3) for k, r in runs.items()}
     assert rate == {"before_history": 0.38, "pinned": 0.899, "tail": 0.674, "tail_after": 0.77}, rate
     assert runs["tail"].prefill_ms < runs["before_history"].prefill_ms * 0.6
-    assert runs["tail_after"].cost_usd < runs["tail"].cost_usd < runs["before_history"].cost_usd
+    # every prompt of the implicit layouts is under the provider's 4,096-token minimum: nothing is billed cached, so
+    # on the bill the layouts differ only by their prompt lengths - the saving is the engine's, in prefill time
+    assert max(r.prompt_tokens for k in ("before_history", "tail", "tail_after") for r in runs[k].rows) < 4096
+    assert runs["tail_after"].cost_usd == runs["tail"].cost_usd
+    assert abs(runs["before_history"].cost_usd / runs["tail"].cost_usd - 1) < 0.01
+    every_hit = cb.Price(1.5, 9.0, 0.15)                                  # a provider with no minimum
+    cost = {k: sum(cb.turn_cost(every_hit, r.prompt_tokens, 60, r.cached_tokens or 0) for r in runs[k].rows)
+            for k in ("before_history", "tail", "tail_after")}
+    assert cost["tail_after"] < cost["tail"] < cost["before_history"]
+
+
+def test_a_real_target_labels_each_column_by_what_it_is():
+    """At T1 only the cached tokens are measured: the time is a roofline model and the dollars a price table."""
+    run = cb.LayoutRun("tail", "MEASURED on http://gpu-box:8000", timing="SIMULATED (roofline, T4 + qwen2.5-1.5b)",
+                       dollars="gemini-3.5-flash list prices (verify)")
+    assert run.source.startswith("cached tokens MEASURED") and "prefill ms SIMULATED" in run.source
+    text = cb.summary({"tail": run})
+    assert "hit rate    : cached tokens MEASURED" in text and "prefill ms  : SIMULATED (roofline, T4" in text
+    assert "MEASURED" not in text.split("prefill ms  :")[1]
+
+
+def test_reset_prefix_cache_answers_like_vllm(server):
+    """vLLM v0.30.0's dev endpoint clears the whole cache and answers only {"success": bool}: no count, no salt."""
+    cb.run_layout(server.url, "pinned", turns=2)
+    req = urllib.request.Request(server.url + "/reset_prefix_cache", data=b"", method="POST")
+    assert json.loads(urllib.request.urlopen(req).read()) == {"success": True}
+    assert len(server.cache.blocks) == 0
 
 
 def test_metrics_window_equals_per_request_usage(server):

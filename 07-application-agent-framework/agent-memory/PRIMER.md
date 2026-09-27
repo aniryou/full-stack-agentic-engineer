@@ -194,7 +194,8 @@ at a 60-token budget over the harness's 30 users, the code form answers **70.0%*
 the superseded value, the paper form **0.0%**; the code form's recall is higher (35.8% vs 17.6%, its relevance
 weight of 3 suits long episodes) — a single aggregate would pick the wrong one (`memcore.harness.evaluate`, notebook
 02). Those episode numbers lean on the harness's slot hints (§4): without them the code form serves the stale value
-on **26.7%** of knowledge updates and the paper form on 0.0% — smaller, same direction. Reads are writes in the reference code: retrieval moves `last_accessed` of what it returns to now, and so does
+on **26.7%** of knowledge updates and the paper form on 0.0% — smaller, same direction. Reads are writes in the
+reference code: retrieval moves `last_accessed` of what it returns to now, and so does
 `memcore.retrieve.retrieve()` unless `touch=False`.
 
 **Top-k in a token budget.** The ranked list is packed greedily — take each record that still fits, skip one that
@@ -208,7 +209,8 @@ them. This is the valid-time half of a bi-temporal model (§7).
 **What is not new here.** Hybrid search (BM25 + vectors + reciprocal rank fusion, `ragkit.reference`,
 `reciprocal_rank_fusion(k=60)`, `1 / (k + rank + 1)` with rank from 0) is 07.4's topic and applies unchanged — note
 that Graphiti's `rrf` scores `1 / (rank + 1)` (`rank_const=1`, rank from 0), i.e. **k = 0** in ragkit's formula, where
-ragkit uses 60, so Graphiti weights the top of each list far more heavily (verify). An ANN index pays only at tenant or corpus scale: one user's memory is tens to thousands of
+ragkit uses 60, so Graphiti weights the top of each list far more heavily (verify). An ANN index pays only at tenant
+or corpus scale: one user's memory is tens to thousands of
 records, and a flat scan of one partition is exact and fast; `minifaiss`'s HNSW (`M0 = 2M`, 07.4
 `vector_stores`) has no delete at all, which is why `MemoryStore` keeps a flat index that removes the row (§7).
 
@@ -250,7 +252,8 @@ facts, about 66 tokens — small enough for a profile to hold nearly all of it (
 **Metrics, each for a reason** (`memcore.harness.summarize`):
 
 - **accuracy** with a **Wilson interval** (07.2 notebook
-  [`08_evals_trajectory_judge_gates`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb) §4; restated as
+  [`08_evals_trajectory_judge_gates`](../agent-fundamentals/gcp-agent-platform-lab/notebooks/08_evals_trajectory_judge_gates.ipynb)
+  §4; restated as
   `memcore.harness.wilson_interval` — centre `(p + z²/2n) / (1 + z²/n)`, half-width
   `z·√(p(1−p)/n + z²/4n²) / (1 + z²/n)`, clipped to [0, 1] — and pinned to its numbers: 45/50 → (0.7864, 0.9565),
   0/20 → (0.0, 0.1611));
@@ -267,7 +270,8 @@ user share one store and one write path — and here the misses are not even ran
 question, the preference paraphrase. Resampling users instead (a per-user cluster bootstrap,
 `memcore.harness.cluster_interval`, reported by `summarize()` as `cluster`) gives 92.3%–92.3%: this harness's
 uncertainty lives in *which question types it asks*, not in which users. So compare designs per question type
-(`by_type`), and read any interval as a statement about this generator, not about your users. Recall against the budget (`memcore.harness.recall_vs_budget`):
+(`by_type`), and read any interval as a statement about this generator, not about your users. Recall against the
+budget (`memcore.harness.recall_vs_budget`):
 
 | Budget (tokens) | 15 | 30 | 45 | 60 | 90 | 120 |
 |---|---|---|---|---|---|---|
@@ -434,8 +438,9 @@ groups statements by slot and applies three rules (`memcore.consolidate.plan_key
    (`memcore.records.SOURCE_TRUST`). Tool-sourced episodes are quarantined on write, so they are never read at all.
 2. **Newer supersedes older, and the older is kept**, closed with `valid_to` = the newer's `valid_from`. "Newer" is
    valid time, not arrival order: the fact already on file joins the statements at its own `valid_from`, so a
-   backfilled window or a re-run never lets an old value supersede a newer one (Lisbon from a day-0–4 window
-   consolidated after Porto from day 5 becomes history closed at day 5). This is bi-temporal: valid time (`valid_from`/`valid_to`) plus system time (`created_at`/`superseded_at`). Graphiti names
+   backfilled window or a re-run never lets an old value supersede a newer one (Lisbon, day 1, from a day-0–4
+   window consolidated after Porto from day 5, becomes history closed at day 5). This is bi-temporal: valid time
+   (`valid_from`/`valid_to`) plus system time (`created_at`/`superseded_at`). Graphiti names
    the same pair `valid_at`/`invalid_at` and `created_at`/`expired_at`, and its `resolve_edge_contradictions` closes
    a contradicted edge instead of deleting it (`graphiti_core`, 0.30.2); it has **no `valid_to` field** — memcore's
    `valid_to` plays `invalid_at` (verify).
@@ -458,11 +463,13 @@ evidence — with the explicit exits of the lra-gcp primer's §3.8 reflection lo
 expires (a crash at t, a second worker refused at t + 30 s, admitted at t + 61 s with a 60 s lease); a **heartbeat**
 that renews the lease before every slot and a **fence** that checks it is still ours before writing — a worker that is
 slow rather than dead (90 s per slot against a 60 s lease) finds its run taken over and stops with `LeaseLost`
-instead of writing alongside its successor (§3.3's "the second half": check before you save); a **checkpoint** after
+instead of writing alongside its successor — the durable primer's §3.3 "Exclusivity — leases, not locks": "Long
+steps extend the lease (heartbeat)", and a check on every save is "the second half"; a **checkpoint** after
 every slot, so the resumed run skips finished slots; and fact ids derived from (run id, slot, position), so a slot
 re-applied after a crash overwrites instead of duplicating. The crash hook fires at the worst place — after a slot's
 writes, before its checkpoint — so the resumed run re-applies that slot: five facts after a crash and a resume, the
-same as a clean run, where random ids would leave seven. On GCP this is a Cloud Run job fired by Cloud Scheduler (the lab's `deploy/gcp/` README).
+same as a clean run, where random ids would leave seven. On GCP this is a Cloud Run job fired weekly by Cloud
+Scheduler (the lab's `deploy/gcp/` README).
 
 **Facts beat raw episodes at a fixed budget.** At 60 tokens, consolidated facts reach **90.9%** recall and raw
 episodes **17.6%** (§4's table): facts are short, deduplicated, and written in the vocabulary questions use; closed
@@ -610,7 +617,7 @@ re-prefill the conversation every turn, which in our model costs 53 ms of prefil
 API once the prompt clears its 4,096-token caching minimum, 46% more per session. Episodes become facts in a weekly
 consolidation job with a run id, a lease with a heartbeat, and checkpoints; forgetting is decay, TTL and caps; and a
 deletion follows provenance to every copy — records, vectors, full-text indexes, derived facts, logs, eval sets — lists
-derived records it cannot match for review, rotates the tenant's cache salt, and puts backups and evicted-but-resident
+derived records it cannot match for review, rotates the tenant's cache salt, and puts backups and unreachable-but-resident
 cache blocks on a stated expiry. Writes inherit the trust of what the model read, recalled memory is fenced as data, scope
 comes from the verified token, and every read, write and forget is audited."
 

@@ -8,6 +8,7 @@
     cachebench               prefix-cache hits per memory layout against a server (fake or real)
     harness                  the planted-facts eval across memory modes
     consolidate              run the consolidation job over every partition with episodes in the window
+                             (default: the previous ISO week, Monday 00:00 UTC to Monday 00:00 UTC)
     gcp-commands             print the Cloud Run job + Cloud Scheduler commands (T3; nothing is run)
     residue                  count occurrences of a string in a SQLite file and its WAL
 """
@@ -42,7 +43,8 @@ def cmd_demo(a) -> int:
     from .deletion import residue
     from .memory import LocalMemory
     from .store.sqlite import SQLiteMemoryStore
-    path = Path(a.db or Path(tempfile.mkdtemp(prefix="memlab-")) / "demo.db")
+    scratch = None if a.db else Path(tempfile.mkdtemp(prefix="memlab-"))
+    path = Path(a.db) if a.db else scratch / "demo.db"
     store = SQLiteMemoryStore(path, fts_secure_delete=not a.no_secure_delete)
     mem = LocalMemory(store, "acme", "u1")
     mem.remember("Home address: the user lives at 12 Rua das Flores.", slot="address", value="12 Rua das Flores",
@@ -53,7 +55,13 @@ def cmd_demo(a) -> int:
     print("on disk before forget:", residue(path, ["Flores"]))
     rep = mem.forget("address", mode=a.mode, needles=["Flores"])
     print(rep.table())
-    print("database:", path)
+    store.close()
+    if scratch is not None and not a.keep:
+        import shutil
+        shutil.rmtree(scratch, ignore_errors=True)
+        print("database: removed (pass --db PATH or --keep to look at it)")
+    else:
+        print("database:", path)
     return 0 if rep.clean or a.mode == "logical" else 1
 
 
@@ -98,8 +106,8 @@ def cmd_cachebench(a) -> int:
     from . import cachebench as cb
     from .fakeserver import FakeLLMServer
     if a.url:
-        runs = {layout: cb.run_layout(a.url, layout, turns=a.turns, api_key=os.environ.get("MEMLAB_API_KEY"))
-                for layout in cb.LAYOUTS}
+        runs = {layout: cb.run_layout(a.url, layout, turns=a.turns, api_key=os.environ.get("MEMLAB_API_KEY"),
+                                      gpu=a.gpu, llm=a.llm) for layout in cb.LAYOUTS}
     else:
         with FakeLLMServer(enable_prompt_tokens_details=True) as url:
             runs = {layout: cb.run_layout(url, layout, turns=a.turns) for layout in cb.LAYOUTS}
@@ -123,7 +131,7 @@ def cmd_harness(a) -> int:
 
 
 def cmd_consolidate(a) -> int:
-    from .consolidate import ConsolidationJob, due_partitions, shard, window
+    from .consolidate import ConsolidationJob, due_partitions, shard, week_window, window
     if a.pg_dsn or os.environ.get("MEMLAB_PG_DSN"):
         from .store.pgvector import PgVectorStore
         store = PgVectorStore(a.pg_dsn or os.environ["MEMLAB_PG_DSN"])
@@ -131,8 +139,8 @@ def cmd_consolidate(a) -> int:
     else:
         from .store.sqlite import SQLiteMemoryStore
         store = SQLiteMemoryStore(a.db)
-    end = time.time() if a.end is None else a.end
-    start, end = window(end, a.window_days)
+    # default: the previous ISO week, aligned to Monday 00:00 UTC, so a retried trigger is the same window and run
+    start, end = week_window(time.time(), a.window_days) if a.end is None else window(a.end, a.window_days)
     index = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     count = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     parts = shard(due_partitions(store, start, end), index, count)
@@ -145,7 +153,7 @@ def cmd_consolidate(a) -> int:
 def cmd_gcp(a) -> int:
     from .consolidate import cleanup_commands, gcp_commands
     print("# T3, printed only (verify each flag against the current gcloud reference before running)")
-    for c in gcp_commands(a.project, a.region, tasks=a.tasks):
+    for c in gcp_commands(a.project, a.region, tasks=a.tasks, sql_instance=a.sql_instance):
         print(c)
     print("# cleanup")
     for c in cleanup_commands(a.project, a.region):
@@ -167,6 +175,7 @@ def main(argv=None) -> int:
     s.add_argument("--db")
     s.add_argument("--mode", choices=("purge", "logical"), default="purge")
     s.add_argument("--no-secure-delete", action="store_true", help="leave FTS5 secure-delete off (optimize instead)")
+    s.add_argument("--keep", action="store_true", help="keep the temporary database instead of deleting it")
     s.set_defaults(fn=cmd_demo)
     s = sub.add_parser("serve")
     s.add_argument("--db", default="memory.db")
@@ -189,6 +198,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("cachebench")
     s.add_argument("--url", help="a server to measure (default: an in-process fake server)")
     s.add_argument("--turns", type=int, default=8)
+    s.add_argument("--gpu", default="L4", help="the roofline's GPU for the (simulated) prefill column: T4, L4, H100-SXM")
+    s.add_argument("--llm", default="qwen2.5-1.5b", help="the roofline's model: qwen2.5-0.5b, qwen2.5-1.5b, llama-3.1-8b")
     s.set_defaults(fn=cmd_cachebench)
     s = sub.add_parser("harness")
     s.add_argument("--seed", type=int, default=7)
@@ -207,6 +218,7 @@ def main(argv=None) -> int:
     s.add_argument("--project", default="PROJECT_ID")
     s.add_argument("--region", default="us-central1")
     s.add_argument("--tasks", type=int, default=1)
+    s.add_argument("--sql-instance", default="memlab-pg", help="the Cloud SQL instance name (not created here)")
     s.set_defaults(fn=cmd_gcp)
     s = sub.add_parser("residue")
     s.add_argument("--db", required=True)

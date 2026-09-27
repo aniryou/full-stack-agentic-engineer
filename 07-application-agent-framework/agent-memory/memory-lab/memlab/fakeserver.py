@@ -182,10 +182,13 @@ class FakeLLMServer:
         return web.json_response({"object": "list", "data": data})
 
     async def _reset(self, request):
+        """vLLM's dev-mode ``POST /reset_prefix_cache`` (v0.30.0): it clears EVERY tenant's cached blocks and answers
+        only ``{"success": bool}`` — false while running requests hold blocks. There is no eviction by salt or user.
+        How many blocks went is not in the answer; ``self.cache`` (this fake's own state) knows, SIMULATED."""
         with self._lock:
-            n = self.cache.reset()
+            self.cache.reset()
             self.m["resets"] += 1
-        return web.json_response({"ok": True, "blocks_evicted": n})
+        return web.json_response({"success": True})
 
     def handle_chat(self, body: dict) -> tuple[dict, dict]:
         """The request logic without HTTP (the tests and ``cachebench`` call it through HTTP; notebooks can

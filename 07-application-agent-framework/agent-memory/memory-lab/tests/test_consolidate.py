@@ -106,7 +106,21 @@ def test_gcp_commands_use_oauth_and_the_v2_run_uri():
     assert "--oauth-service-account-email" in joined and "oidc" not in joined.lower()
     assert "https://run.googleapis.com/v2/projects/p/locations/europe-west1/jobs/memlab-consolidate:run" in joined
     assert "--tasks 4" in joined and "--max-retries 3" in joined and "--http-method POST" in joined
-    assert all(c.startswith("gcloud ") for c in cmds + C.cleanup_commands())
+    programs = {c.split(" | ")[-1].split()[0] for c in cmds + C.cleanup_commands()}
+    assert programs == {"gcloud", "docker"}
+
+
+def test_the_schedule_is_as_weekly_as_the_run_id():
+    """A weekly run id with a daily trigger would make six of seven firings no-ops."""
+    cron = next(c for c in C.gcp_commands() if "scheduler jobs create" in c).split('--schedule "')[1].split('"')[0]
+    minute, hour, dom, month, dow = cron.split()
+    assert (dom, month, dow) == ("*", "*", "1")                          # Mondays
+    ids = {C.run_id("acme", "u1", C.week_window(ts_of("2026-09-21") + h * 3600)[1]) for h in range(0, 7 * 24, 5)}
+    assert ids == {"consolidate/acme/u1/2026-W39"}                       # every trigger that week: one run
+    start, end = C.week_window(ts_of("2026-09-23") + 3600)
+    assert (start, end) == (START, END)                                  # the previous ISO week, Monday to Monday
+    nxt = C.run_id("acme", "u1", C.week_window(ts_of("2026-09-28") + 3600)[1])
+    assert nxt == "consolidate/acme/u1/2026-W40"
 
 
 def test_a_late_episode_becomes_history_and_a_forget_clears_in_flight_checkpoints(tmp_path):

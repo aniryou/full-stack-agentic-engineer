@@ -53,8 +53,12 @@ def test_idempotency_key_replays_and_refuses_a_different_body(svc, store):
     s3, b3 = c.write("Diet: the user is vegetarian.", "k-1", slot="diet", value="vegetarian")
     assert (s1, s2, s3) == (201, 201, 422) and b2["replayed"] and b1["id"] == b2["id"]
     assert store.stats()["records"] == 1
-    # another tenant may use the same key string: keys are per tenant
+    # another tenant, or another user of the same tenant, may use the same key string: keys are per principal
     assert MemoryClient(s.url, v.mint("globex", "u1")).write("Diet: the user is vegan.", "k-1")[0] == 201
+    s4, b4 = MemoryClient(s.url, v.mint("acme", "u2")).write("Diet: the user is vegetarian.", "k-1", slot="diet",
+                                                             value="vegetarian")
+    assert s4 == 201 and not b4.get("replayed") and b4["id"] != b1["id"]
+    assert [r.value for r in store.records("acme", "u2")] == ["vegetarian"]
 
 
 def test_forget_deletes_idempotency_rows_and_stays_in_partition(svc, store):

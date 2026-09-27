@@ -4,7 +4,8 @@
 # **Tier:** T0 — a fake OpenAI-compatible server counts prefix-cache hits with vLLM's block rules and reports
 # them in `usage.prompt_tokens_details.cached_tokens`; its TTFTs come from a roofline model. Every number
 # from it is **simulated**. **T1:** set `MEMLAB_LLM_URL` to a real vLLM started with
-# `--enable-prompt-tokens-details` (`deploy/any-gpu/`) and the same cells **measure** the cached tokens.
+# `--enable-prompt-tokens-details` (`deploy/any-gpu/`) and the same cells **measure** the cached tokens — and only
+# those: the prefill column stays a roofline model and the dollars a price table, each labelled as such.
 #
 # ## The one-minute version
 #
@@ -22,8 +23,11 @@
 # The tail is where ADK's `PreloadMemoryTool` puts preloaded memory. A variant, `tail_after`, appends the block
 # *after* the user's text instead, so next turn the previous user message is still an exact prefix.
 #
-# Missed tokens are prefilled again: TTFT (a roofline estimate here, `minengine.perf.step_cost`'s model)
-# and dollars (cached input is billed at a tenth, `scalelab.capacity.cost_per_call`). Primer:
+# Missed tokens are prefilled again: TTFT on your own engine (a roofline estimate here, `minengine.perf.step_cost`'s
+# model), and dollars on a hosted API — where cached input is billed at a tenth (`scalelab.capacity.cost_per_call`)
+# only once a request clears the provider's caching minimum (4,096 tokens on Gemini 3.x, scaling primer §5.5,
+# verify). This notebook's session has a different shape from PRIMER §5's model (a shorter system prompt, 250
+# pasted tokens per turn, real retrieval), so its rates differ; the ordering is the same. Primer:
 # [`../../PRIMER.md`](../../PRIMER.md). The block rules themselves are exercises in 04.3
 # ([`vllm-serving-lab` notebook 04](../../../../04-inference-engine/serving-engine/vllm-serving-lab/notebooks/04_prefix_caching_for_agents.ipynb));
 # here they are library code: `cachebench.expected_cached_tokens`.
@@ -183,27 +187,40 @@ print(f"✅ [SIMULATED roofline] 2,000 tokens cold vs 1,800 cached on an L4: 78.
       f"this session's prefill: before_history {b.prefill_ms:.0f} ms vs tail {t.prefill_ms:.0f} ms")
 
 # %% [markdown]
-# ## Exercise 3.4 — what a miss costs in dollars
+# ## Exercise 3.4 — what a miss costs in dollars, on a hosted API
 #
-# Write `session_cost(rows, price)`: the sum over rows of `turn_cost` — (uncached input × input price +
-# cached input × cached price + output × output price) / 1e6 — with the row's `prompt_tokens`, its
-# `cached_tokens` (0 when unknown) and `completion` tokens taken as 60 per call. (The check also pins the
-# scaling primer §3.4 call: 5,000 input tokens with 2,700 cached and 350 output at `gemini-3.5-flash`'s
-# prices of 5 Sep 2026 (verify) cost $0.007005.)
+# Write `session_cost(rows, price, completion=60)`: the sum over rows of what a hosted API bills — (uncached input ×
+# `price.input` + cached input × `price.cached_input` + output × `price.output`) / 1e6 — with the row's
+# `prompt_tokens`, `completion` output tokens per call, and as cached input the row's `cached_tokens` (0 when
+# unknown) **only if** `prompt_tokens >= price.min_cached_prompt` — the provider's caching minimum (4,096 on
+# Gemini 3.x) — else 0. The check runs it twice: at `gemini-3.5-flash`'s prices with that minimum, and with a
+# provider that bills every engine hit as cached (`min_cached_prompt=0`). (It also pins the scaling primer §3.4
+# call: 5,000 input tokens with 2,700 cached and 350 output at the prices of 5 Sep 2026 (verify) cost $0.007005.)
 
 # %% exercise
 def session_cost(rows, price, completion=60):
     ### BEGIN SOLUTION
-    return sum(turn_cost(price, r.prompt_tokens, completion, r.cached_tokens or 0) for r in rows)
+    total = 0.0
+    for r in rows:
+        cached = (r.cached_tokens or 0) if r.prompt_tokens >= price.min_cached_prompt else 0
+        total += ((r.prompt_tokens - cached) * price.input + cached * price.cached_input
+                  + completion * price.output) / 1e6
+    return total
     ### END SOLUTION
 
 # %% check
 P = PRICES["gemini-3.5-flash"]
-assert math.isclose(turn_cost(P, 5000, 350, 2700), 0.007005)
+assert math.isclose(turn_cost(P, 5000, 350, 2700), 0.007005) and P.min_cached_prompt == 4096
+every_hit = cb.Price(P.input, P.output, P.cached_input, 0, "every engine hit billed")
 cost = {k: session_cost(r.rows, P) for k, r in runs.items()}
-assert cost["before_history"] > cost["tail"], cost
-print("✅ $ per 8-turn session at gemini-3.5-flash prices (verify):",
-      {k: round(v, 5) for k, v in cost.items()}, f"— before_history costs {cost['before_history'] / cost['tail']:.1f}x tail")
+ideal = {k: session_cost(r.rows, every_hit) for k, r in runs.items()}
+for k, r in runs.items():
+    assert math.isclose(cost[k], sum(turn_cost(P, x.prompt_tokens, 60, x.cached_tokens or 0) for x in r.rows)), k
+assert abs(cost["before_history"] / cost["tail"] - 1) < 0.01 < ideal["before_history"] / ideal["tail"] - 1
+print("✅ $ per 8-turn session [gemini-3.5-flash list prices, 4,096-token minimum (verify)]:",
+      {k: round(v, 5) for k, v in cost.items()})
+print(f"   below the minimum before_history costs {cost['before_history'] / cost['tail']:.2f}x tail; were every engine "
+      f"hit billed cached it would be {ideal['before_history'] / ideal['tail']:.2f}x")
 
 # %% [markdown]
 # ## Exercise 3.5 — one salt per tenant
@@ -239,13 +256,17 @@ print(f"✅ [SIMULATED] unsalted: tenant B's first request hit {unsalted[1]} tok
 # ## T1: measure it on vLLM
 #
 # Start vLLM with prefix-caching counters per request, then point this notebook at it and re-run from the
-# top: the tables above become measurements (and the `predicted` column goes blank — the tokenizer is the
-# model's). Keep the salt per run so runs do not warm each other.
+# top: the **hit rates** above become measurements (and the `predicted` column goes blank — the tokenizer is the
+# model's). The prefill column stays the roofline model — pass `gpu=` and `llm=` for the card and model you serve —
+# and the dollars stay list prices; the summary labels each column. To measure time, stream a request and time
+# its first token. Keep the salt per run so runs do not warm each other.
 
 # %%
 if real:
-    print(f"[MEASURED on {real}]")
-    print(cb.summary(cb.compare_layouts(real, turns=8, api_key=os.environ.get("MEMLAB_API_KEY"))))
+    print(f"[cached tokens MEASURED on {real}; prefill ms and $ modelled]")
+    print(cb.summary(cb.compare_layouts(real, turns=8, api_key=os.environ.get("MEMLAB_API_KEY"),
+                                        gpu=os.environ.get("MEMLAB_GPU", "L4"),
+                                        llm=os.environ.get("MEMLAB_ROOFLINE_LLM", "qwen2.5-1.5b"))))
 else:
     print("T0 here. On a GPU box (see deploy/any-gpu/README.md), from the repo root:")
     print('   MODEL=Qwen/Qwen2.5-1.5B-Instruct MAX_MODEL_LEN=8192 EXTRA_ARGS="--enable-auto-tool-choice '
@@ -262,7 +283,9 @@ if fake:
 # the prefix cache only reuses from token zero. If we inject it after the system prompt, every history block
 # after it misses and each turn prefills the whole conversation again: in this notebook's simulated session a
 # 38% hit rate against 67% for the same memory at the tail of the prompt (77% when the block follows the
-# user's text), and about twice the prefill time and dollars per session — the T1 run measures it. So: stable
+# user's text), and about twice the prefill time on our own engine (a roofline estimate; the T1 run measures the hit
+# rates). On a hosted API these prompts are below the provider's caching minimum, so the bill barely moves until
+# the prompt clears it — the latency and the GPU time are the cost. So: stable
 # things first — system prompt, tools, a pinned per-session profile sorted so it is byte-identical — and
 # per-turn memory at the tail, request-scoped. We watch `cached_tokens` per request and
 # `prefix_cache_hits / queries` per replica, and we salt the cache per tenant so one tenant's prefix is never

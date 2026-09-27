@@ -35,6 +35,8 @@ from memlab.deletion import residue
 
 print(env.banner())
 WORK = tempfile.mkdtemp(prefix="memlab-nb01-")
+import atexit, shutil
+atexit.register(shutil.rmtree, WORK, True)   # removed when the kernel exits, even if a cell stops early
 store = SQLiteMemoryStore(os.path.join(WORK, "memory.db"))
 print("SQLite features here:", sqlite_features())
 
@@ -259,6 +261,13 @@ else:
             pglast.parse_sql(pgv.to_positional(sql)[0])
         print(f"\nall {len(pgv.statements())} statements parse with Postgres's parser (pglast)")
     print("\n" + open(os.path.join(os.path.dirname(pgv.__file__), "..", "data", "samples", "pgvector_session.txt")).read())
+
+# %%
+import shutil
+for s in (store, naive):
+    s.close()
+shutil.rmtree(WORK, ignore_errors=True)    # this notebook's databases: a lab about forgetting leaves no copies behind
+print("removed", WORK)
 
 # %% [markdown]
 # ## In a design review

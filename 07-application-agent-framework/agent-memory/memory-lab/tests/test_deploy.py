@@ -96,4 +96,28 @@ def test_gcp_readme_uses_oauth_for_the_scheduler_and_no_terraform():
     assert "jobs/memlab-consolidate:run" in text and "verify" in text
     assert not list(DEPLOY.rglob("*.tf"))
     from memlab.consolidate import gcp_commands
-    assert "gcloud scheduler jobs create http memlab-consolidate-nightly" in "\n".join(gcp_commands())
+    assert "gcloud scheduler jobs create http memlab-consolidate-weekly" in "\n".join(gcp_commands())
+    assert "nightly" not in text
+
+
+def test_the_printed_gcp_path_can_reach_its_store():
+    """The job needs an image, an identity that may read its secret and connect to Cloud SQL, and the socket."""
+    from memlab.consolidate import cleanup_commands, gcp_commands
+    cmds = gcp_commands("p", "europe-west1", sql_instance="mem")
+    job = next(c for c in cmds if c.startswith("gcloud run jobs create"))
+    assert "--service-account memlab-job@p.iam.gserviceaccount.com" in job
+    assert "--set-cloudsql-instances p:europe-west1:mem" in job and "MEMLAB_PG_DSN=memlab-pg-dsn:latest" in job
+    joined = "\n".join(cmds)
+    for piece in ("gcloud artifacts repositories create memlab", "docker build -f deploy/local/Dockerfile",
+                  "docker push europe-west1-docker.pkg.dev/p/memlab/memlab:0.1.0",
+                  "gcloud secrets create memlab-pg-dsn", "--role roles/secretmanager.secretAccessor",
+                  "--role roles/cloudsql.client", "gcloud iam service-accounts create memlab-job"):
+        assert piece in joined, piece
+    order = [joined.index(p) for p in ("docker push", "gcloud secrets create", "gcloud run jobs create",
+                                       "gcloud scheduler jobs create")]
+    assert order == sorted(order)                                        # things exist before they are used
+    clean = cleanup_commands("my-project", "us-central1")
+    text = (DEPLOY / "gcp/README.md").read_text()
+    assert all(c in text for c in clean)                                 # the README's cleanup is the printed one
+    for created in ("memlab-scheduler@", "memlab-job@", "secrets delete memlab-pg-dsn", "repositories delete memlab"):
+        assert any(created in c for c in clean), created

@@ -62,7 +62,7 @@ class Surfaces:
 
 
 # Surfaces whose residue is expected after a correct deletion, and why: they are not rewritten, they age out.
-PENDING = {"backups": "expire on their retention schedule (or their key is shredded)",
+PENDING = {"backups": "they expire on their retention schedule, or their key is shredded",
            "prompt_cache_blocks": "unreachable under the rotated salt; resident until LRU eviction or a reset"}
 
 
@@ -78,7 +78,7 @@ class DeletionReport:
         for surface in self.removed:
             left = self.residue.get(surface, 0)
             mark = "✓" if left == 0 else ("pending" if surface in PENDING else "LEFT")
-            rows.append(f"{mark:8} {surface:19} removed {self.removed[surface]:3d}   still holding it: {left}"
+            rows.append(f"{mark:8} {surface:19} acted on {self.removed[surface]:3d}   still holding it: {left}"
                         + (f"  ({PENDING[surface]})" if left and surface in PENDING else ""))
         if self.review:
             rows.append(f"{'review':8} {'derived records':19} {len(self.review):3d} cite a deleted record without "

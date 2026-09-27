@@ -106,9 +106,11 @@ class MemoryService:
         self._runner: web.AppRunner | None = None
         self._ready = threading.Event()
         with store._lock:
-            store.con.execute("CREATE TABLE IF NOT EXISTS idempotency (tenant TEXT NOT NULL, key TEXT NOT NULL, "
-                              "request_hash TEXT NOT NULL, status INTEGER NOT NULL, response TEXT NOT NULL, "
-                              "record_id TEXT, created_at REAL NOT NULL, PRIMARY KEY (tenant, key))")
+            # keyed per principal (tenant, sub): two users of one tenant may send the same key string
+            store.con.execute("CREATE TABLE IF NOT EXISTS idempotency (tenant TEXT NOT NULL, sub TEXT NOT NULL, "
+                              "key TEXT NOT NULL, request_hash TEXT NOT NULL, status INTEGER NOT NULL, "
+                              "response TEXT NOT NULL, record_id TEXT, created_at REAL NOT NULL, "
+                              "PRIMARY KEY (tenant, sub, key))")
 
     @property
     def url(self) -> str:
@@ -168,7 +170,8 @@ class MemoryService:
         if key:
             with self.store._lock:
                 row = self.store.con.execute("SELECT request_hash, status, response FROM idempotency "
-                                             "WHERE tenant=? AND key=?", (claims["tenant"], key)).fetchone()
+                                             "WHERE tenant=? AND sub=? AND key=?",
+                                             (claims["tenant"], claims["sub"], key)).fetchone()
             if row:
                 if row["request_hash"] != req_hash:
                     return _err(422, "idempotency_key_reused", "this Idempotency-Key was used with a different body")
@@ -180,13 +183,13 @@ class MemoryService:
         fields = {k: body[k] for k in WRITE_FIELDS if k in body and k != "text"}
         if "provenance" in fields:
             fields["provenance"] = tuple(fields["provenance"])
-        out = mem.remember(body["text"], idempotency_key=f"svc:{claims['tenant']}:{key}" if key else None, **fields)
+        out = mem.remember(body["text"], idempotency_key=f"svc:{key}" if key else None, **fields)   # per partition
         status = 201 if out.get("ok") else 422
         if key:
             with self.store._lock:
-                self.store.con.execute("INSERT OR IGNORE INTO idempotency VALUES (?,?,?,?,?,?,?)",
-                                       (claims["tenant"], key, req_hash, status, json.dumps(out), out.get("id"),
-                                        self.store.clock()))
+                self.store.con.execute("INSERT OR IGNORE INTO idempotency VALUES (?,?,?,?,?,?,?,?)",
+                                       (claims["tenant"], claims["sub"], key, req_hash, status, json.dumps(out),
+                                        out.get("id"), self.store.clock()))
         self._count("write")
         return web.json_response(out, status=status)
 

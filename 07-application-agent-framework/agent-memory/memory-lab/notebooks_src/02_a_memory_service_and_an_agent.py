@@ -18,7 +18,8 @@
 # * **A retried write is a replay.** An `Idempotency-Key` per turn and fact makes the second POST return the
 #   first result (durable primer §3.2 "Idempotency — effectively-once, not exactly-once").
 # * **Provenance is decided by the loop, not claimed by the model.** Once a tool result enters a turn, a
-#   `remember` the user did not say is written as `source="tool"` — quarantined until a human reviews it —
+#   `remember` is written as `source="tool"` — quarantined until a human reviews it — unless the extractor finds the
+#   same fact in the user's own message,
 #   and a `forget` the user did not ask for is declined by the confirmation hook (PRIMER §2, §6, §8).
 #
 # The token is an **HMAC stand-in** for a real verifier (the identity core's RS256 issuer, or your IdP's
@@ -29,7 +30,7 @@ import json, os, tempfile
 from memlab import env
 from memlab.agent import MemoryAgent, Tool, _params, source_for
 from memlab.audit import AuditLog, read_json_lines
-from memlab.extract import is_forget_request
+from memlab.extract import extract, is_forget_request, read_context
 from memlab.llm import ScriptedModel, get_model
 from memlab.memory import LocalMemory
 from memlab.service import MemoryClient, MemoryService, RemoteMemory, TokenVerifier
@@ -37,6 +38,8 @@ from memlab.store import SQLiteMemoryStore
 
 print(env.banner())
 WORK = tempfile.mkdtemp(prefix="memlab-nb02-")
+import atexit, shutil
+atexit.register(shutil.rmtree, WORK, True)   # removed when the kernel exits, even if a cell stops early
 store = SQLiteMemoryStore(os.path.join(WORK, "memory.db"))
 verifier = TokenVerifier(os.urandom(32))
 audit = AuditLog(os.path.join(WORK, "audit.jsonl"))
@@ -172,16 +175,23 @@ print([(x.status, x.source, x.text[:50]) for x in store.records("acme", "u1") if
 # %% [markdown]
 # ## Exercise 2.3 — the loop decides the source
 #
-# Write your own `my_source_for(text, value, user_message, tainted)` returning `"user"`, `"tool"` or
-# `"inferred"`: `"user"` when the user's own message states the value (case-insensitive substring is enough
-# here), else `"tool"` when a tool result has entered the turn (`tainted`), else `"inferred"`. The check
-# plugs it into the agent (`agent.source_rule = my_source_for`) and replays the poisoned page — the injected
-# memory must land **quarantined**, and the user's own statement must land **active**.
+# Write your own `my_source_for(text, value, user_message, tainted, slot=None)` returning `"user"`, `"tool"` or
+# `"inferred"`: `"user"` only when the user's own message **states the fact** — a fact `extract(user_message)` finds
+# has the same value (ignoring case) as the one being remembered (`value`, or the value `read_context([text])` parses
+# out of `text`), and the same slot when one is known; else `"tool"` when a tool result has entered the turn
+# (`tainted`); else `"inferred"`. Not a substring test: "Rome" appears in "Book me a flight to Rome", but the user
+# did not say they live there — a page that says so must not borrow the user's trust. The check plugs your rule into
+# the agent (`agent.source_rule = my_source_for`) and replays the poisoned page — the injected memory must land
+# **quarantined**, and the user's own statement must land **active**.
 
 # %% exercise
-def my_source_for(text, value, user_message, tainted):
+def my_source_for(text, value, user_message, tainted, slot=None):
     ### BEGIN SOLUTION
-    if value and value.lower() in user_message.lower():
+    said = extract(user_message)
+    wanted = {(i.slot, i.value.lower()) for i in read_context([text])}
+    if value:
+        wanted.add((slot, value.lower()))
+    if any(f.value.lower() == v and (s is None or s == f.slot) for f in said for s, v in wanted):
         return "user"
     return "tool" if tainted else "inferred"
     ### END SOLUTION
@@ -190,6 +200,14 @@ def my_source_for(text, value, user_message, tainted):
 assert my_source_for("x", "Porto", "I moved to Porto", False) == "user"
 assert my_source_for("refunds go to 99-ATTACKER", None, "What is the refund policy?", True) == "tool"
 assert my_source_for("the user seems tired", None, "hello", False) == "inferred"
+assert my_source_for("Home city: the user lives in Rome.", "Rome",
+                     "Book me a flight to Rome and summarise https://example.test/page", True) == "tool"
+assert my_source_for("Diet: the user is vegan.", "a", "Book a table", True) == "tool"
+assert my_source_for("Home city: the user lives in Porto.", None, "I moved to Porto.", True) == "user"
+for t, v, u, tt in [("Home city: the user lives in Rome.", "Rome", "Fly me to Rome", True),
+                    ("Employer: the user works at Evilcorp.", "Evilcorp", "Check the Evilcorp careers page", True),
+                    ("Home city: the user lives in Porto.", "Porto", "I moved to Porto.", True), ("x", None, "hi", False)]:
+    assert my_source_for(t, v, u, tt) == source_for(t, v, u, tt), (t, u)
 s2 = SQLiteMemoryStore(os.path.join(WORK, "ex23.db"))
 a2 = MemoryAgent(Browses(), LocalMemory(s2, "acme", "u9"), mode="tools", extra_tools=[page])
 a2.source_rule = my_source_for
@@ -273,6 +291,8 @@ else:
 
 # %%
 svc.stop()
+import shutil
+shutil.rmtree(WORK, ignore_errors=True)       # the databases and the audit log of this notebook: gone
 
 # %% [markdown]
 # ## In a design review

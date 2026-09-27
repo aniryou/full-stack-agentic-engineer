@@ -3,7 +3,7 @@
 The one idea (PRIMER §7; lra-gcp primer §3.3, §3.13): consolidation is a batch job over one user's
 window of episodes, and a batch job that calls a model must survive being killed halfway. So it runs
 as a *durable run*: a deterministic ``run_id`` (``consolidate/acme/u1/2026-W39``, one per user and
-week — a retried schedule is the same run), a **lease** row so two workers never run it at once
+ISO week — a retried schedule is the same run), a **lease** row so two workers never run it at once
 (a crashed worker's lease expires and the next one takes over), a **checkpoint** row after every step
 so a resume skips finished work — the model calls above all — and **idempotent effects** so a step
 that crashed after writing but before checkpointing writes once when it re-runs.
@@ -16,6 +16,11 @@ evidence — the generative-agents trigger, 150 in their code) → ``mark`` (con
 TTL: forgetting by decay). ``crash_at="apply:2"`` raises ``SimulatedCrash`` *after* that step's effect
 and *before* its checkpoint — the worst place to die. Checkpoints hold the text the run extracted, so a
 finished run deletes them (and a forget deletes an in-flight run's): they are a copy like any other.
+
+The schedule matches the run id: **weekly** (Mondays 03:17 UTC), over the previous ISO week (``week_window``).
+A nightly trigger with a weekly id would make six of seven firings no-ops ("run already done") and land facts up
+to a week late while claiming to be nightly; a nightly job needs a per-day id and a one-day window. Facts the next
+turn needs come from extraction after the turn (PRIMER §2), not from this job.
 
 On Google Cloud this is a Cloud Run job started by Cloud Scheduler (``gcp_commands``; T3, printed).
 """
@@ -42,7 +47,8 @@ class LeaseHeld(RuntimeError):
 
 
 def run_id(tenant: str, user: str, window_end: float) -> str:
-    """One run per (tenant, user, ISO week of the window's end): a retried or duplicated trigger is the same run."""
+    """One run per (tenant, user, ISO week of the window's end): a retried or duplicated trigger is the same run,
+    and next week's trigger is a new one - so the trigger must be weekly too."""
     y, w, _ = dt.datetime.fromtimestamp(window_end, dt.timezone.utc).isocalendar()
     return f"consolidate/{tenant}/{user}/{y}-W{w:02d}"
 
@@ -211,40 +217,84 @@ def shard(parts: list[tuple[str, str]], index: int, count: int) -> list[tuple[st
     return [p for p in parts if int(content_hash(*p), 16) % count == index]
 
 
-def gcp_commands(project: str = "PROJECT_ID", region: str = "us-central1", job: str = "memlab-consolidate",
-                 image: str | None = None, schedule: str = "17 3 * * *", tasks: int = 1,
-                 service_account: str | None = None, db_secret: str = "memlab-pg-dsn") -> list[str]:
-    """The T3 path, printed (no Terraform in this lab): the job, its invoker, the schedule.
+def _names(project, region, job, repository, service_account, job_service_account, sql_instance):
+    return {"image": f"{region}-docker.pkg.dev/{project}/{repository}/memlab:0.1.0",
+            "sa": service_account or f"memlab-scheduler@{project}.iam.gserviceaccount.com",
+            "job_sa": job_service_account or f"memlab-job@{project}.iam.gserviceaccount.com",
+            "conn": f"{project}:{region}:{sql_instance}"}
 
-    Cloud Scheduler calls the Cloud Run Admin API's ``jobs/<job>:run`` with an **OAuth** token, because
-    the target is a ``*.googleapis.com`` API; OIDC is for your own ``*.run.app`` service (the lra-gcp
-    reaper). The v2 URI is the one Google's Terraform sample uses (facts sheet §13); ``--task-timeout``
-    and ``roles/run.invoker`` sufficing for ``run.jobs.run`` are (verify).
+
+def gcp_commands(project: str = "PROJECT_ID", region: str = "us-central1", job: str = "memlab-consolidate",
+                 image: str | None = None, schedule: str = "17 3 * * 1", tasks: int = 1,
+                 service_account: str | None = None, job_service_account: str | None = None,
+                 db_secret: str = "memlab-pg-dsn", sql_instance: str = "memlab-pg",
+                 repository: str = "memlab") -> list[str]:
+    """The T3 path, printed (no Terraform in this lab), in order: the image, the job's own identity and the secret
+    it may read, the job (connected to Cloud SQL), the scheduler's identity, the weekly schedule, a manual run.
+
+    Cloud Scheduler calls the Cloud Run Admin API's ``jobs/<job>:run`` with an **OAuth** token, because the target
+    is a ``*.googleapis.com`` API; OIDC is for your own ``*.run.app`` service (the lra-gcp reaper). The v2 URI is
+    the one Google's Terraform sample uses (facts sheet §13). The job runs as its own service account (never the
+    default compute one), which may read one secret and connect to Cloud SQL; ``--set-cloudsql-instances`` mounts
+    the instance's socket at ``/cloudsql/<connection name>``, so the DSN is ``host=/cloudsql/<p>:<r>:<instance>
+    dbname=memlab user=memlab password=...``. Verify: ``--task-timeout``, ``--set-secrets``,
+    ``--set-cloudsql-instances`` and ``--command/--args`` on ``gcloud run jobs create``, and ``roles/run.invoker``
+    sufficing for ``run.jobs.run``. A private-IP instance needs Direct VPC egress (``--network/--subnet``) instead.
     """
-    image = image or f"{region}-docker.pkg.dev/{project}/memlab/memlab:0.1.0"
-    sa = service_account or f"memlab-scheduler@{project}.iam.gserviceaccount.com"
+    n = _names(project, region, job, repository, service_account, None, sql_instance)
+    image = image or n["image"]
+    sa, job_sa = n["sa"], job_service_account or n["job_sa"]
     uri = f"https://run.googleapis.com/v2/projects/{project}/locations/{region}/jobs/{job}:run"
     return [
+        f"gcloud artifacts repositories create {repository} --project {project} --location {region} "
+        f"--repository-format docker",
+        f"gcloud auth configure-docker {region}-docker.pkg.dev --quiet",
+        f"docker build -f deploy/local/Dockerfile -t {image} .",
+        f"docker push {image}",
+        f"gcloud iam service-accounts create {job_sa.split('@')[0]} --project {project}",
+        f"printf %s \"$MEMLAB_PG_DSN\" | gcloud secrets create {db_secret} --project {project} "
+        f"--replication-policy automatic --data-file=-",
+        f"gcloud secrets add-iam-policy-binding {db_secret} --project {project} "
+        f"--member serviceAccount:{job_sa} --role roles/secretmanager.secretAccessor",
+        f"gcloud projects add-iam-policy-binding {project} --member serviceAccount:{job_sa} --role roles/cloudsql.client",
         f"gcloud run jobs create {job} --project {project} --region {region} --image {image} "
+        f"--service-account {job_sa} --set-cloudsql-instances {n['conn']} "
         f"--tasks {tasks} --max-retries 3 --task-timeout 900s "
         f"--set-secrets MEMLAB_PG_DSN={db_secret}:latest --set-env-vars MEMLAB_WINDOW_DAYS=7 "
-        f"--command python --args=-m,memlab,consolidate,--window-days,7",
+        f"--command python --args=-m,memlab,consolidate",
         f"gcloud iam service-accounts create {sa.split('@')[0]} --project {project}",
         f"gcloud run jobs add-iam-policy-binding {job} --project {project} --region {region} "
         f"--member serviceAccount:{sa} --role roles/run.invoker",
-        f"gcloud scheduler jobs create http {job}-nightly --project {project} --location {region} "
+        f"gcloud scheduler jobs create http {job}-weekly --project {project} --location {region} "
         f"--schedule \"{schedule}\" --time-zone UTC --uri {uri} --http-method POST "
         f"--oauth-service-account-email {sa}",
         f"gcloud run jobs execute {job} --project {project} --region {region} --wait",
     ]
 
 
-def cleanup_commands(project: str = "PROJECT_ID", region: str = "us-central1", job: str = "memlab-consolidate") -> list[str]:
-    return [f"gcloud scheduler jobs delete {job}-nightly --project {project} --location {region} --quiet",
-            f"gcloud run jobs delete {job} --project {project} --region {region} --quiet"]
+def cleanup_commands(project: str = "PROJECT_ID", region: str = "us-central1", job: str = "memlab-consolidate",
+                     db_secret: str = "memlab-pg-dsn", repository: str = "memlab") -> list[str]:
+    """Everything ``gcp_commands`` created, in reverse (the Cloud SQL instance and the model service have their own)."""
+    n = _names(project, region, job, repository, None, None, "memlab-pg")
+    return [f"gcloud scheduler jobs delete {job}-weekly --project {project} --location {region} --quiet",
+            f"gcloud run jobs delete {job} --project {project} --region {region} --quiet",
+            f"gcloud iam service-accounts delete {n['sa']} --project {project} --quiet",
+            f"gcloud projects remove-iam-policy-binding {project} --member serviceAccount:{n['job_sa']} "
+            f"--role roles/cloudsql.client --quiet",
+            f"gcloud secrets delete {db_secret} --project {project} --quiet",
+            f"gcloud iam service-accounts delete {n['job_sa']} --project {project} --quiet",
+            f"gcloud artifacts repositories delete {repository} --project {project} --location {region} --quiet"]
 
 
 def window(end: float, days: float = 7.0) -> tuple[float, float]:
+    return end - days * DAY, end
+
+
+def week_window(now: float, days: float = 7.0) -> tuple[float, float]:
+    """The window a weekly trigger at ``now`` consolidates: it ends at 00:00 UTC on the Monday of ``now``'s ISO
+    week, so every retry of the same week's trigger computes the same window (and ``run_id``)."""
+    midnight = now // DAY * DAY
+    end = midnight - dt.datetime.fromtimestamp(midnight, dt.timezone.utc).weekday() * DAY
     return end - days * DAY, end
 
 

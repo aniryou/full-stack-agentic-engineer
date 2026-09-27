@@ -66,9 +66,10 @@ def ddl(dim: int = DIM) -> list[str]:
   last_accessed   double precision NOT NULL,
   deletion_key    text NOT NULL,
   status          text NOT NULL,
-  idempotency_key text UNIQUE,
+  idempotency_key text,
   embedding       vector({dim}) NOT NULL,
-  fts             tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
+  fts             tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
+  UNIQUE (tenant, user_id, idempotency_key)
 )""",
         "CREATE INDEX IF NOT EXISTS memories_partition ON memories (tenant, user_id, status)",
         "CREATE INDEX IF NOT EXISTS memories_deletion ON memories (tenant, deletion_key)",
@@ -85,10 +86,11 @@ VALUES (%(id)s, %(tenant)s, %(user_id)s, %(scope)s, %(session_id)s, %(agent)s, %
   %(trust)s, %(slot)s, %(value)s, %(provenance)s::jsonb, %(confidence)s, %(importance)s, %(created_at)s,
   %(valid_from)s, %(valid_to)s, %(superseded_at)s, %(ttl_s)s, %(last_accessed)s, %(deletion_key)s, %(status)s,
   %(idempotency_key)s, %(embedding)s::vector)
-ON CONFLICT (idempotency_key) DO NOTHING
+ON CONFLICT (tenant, user_id, idempotency_key) DO NOTHING
 RETURNING id"""
 
-EXISTING_BY_KEY = "SELECT id FROM memories WHERE idempotency_key = %(idempotency_key)s"
+EXISTING_BY_KEY = ("SELECT id FROM memories WHERE tenant = %(tenant)s AND user_id = %(user_id)s "
+                   "AND idempotency_key = %(idempotency_key)s")
 
 # Hybrid search: the partition first (exact within one user), then cosine and full-text rankings, fused by RRF.
 SEARCH = f"""WITH part AS (
@@ -293,7 +295,8 @@ class PgVectorStore:
             "status": rec.status, "idempotency_key": idempotency_key, "embedding": vector_literal(vec)}).fetchone()
         if row:
             return row["id"], True
-        return self.con.execute(EXISTING_BY_KEY, {"idempotency_key": idempotency_key}).fetchone()["id"], False
+        return self.con.execute(EXISTING_BY_KEY, {"tenant": rec.tenant, "user_id": rec.user,
+                                                  "idempotency_key": idempotency_key}).fetchone()["id"], False
 
     def search(self, tenant: str, user: str, query: str, k: int = 5, *, statuses=("active",),
                session: str | None = None, now: float | None = None, touch: bool = True) -> list[Hit]:

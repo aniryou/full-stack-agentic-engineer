@@ -13,7 +13,8 @@
 # run** (lra-gcp primer §3.3 "Leases and the reaper", §3.13 "Scheduled and event-triggered runs"):
 #
 # * a **deterministic run id** — `consolidate/<tenant>/<user>/<ISO week>` — so a duplicated or retried
-#   trigger is the same run, and a finished run is a no-op;
+#   trigger is the same run, and a finished run is a no-op; the schedule is weekly to match (a daily trigger with a
+#   weekly id would do its work on one day in seven and do nothing on the other six);
 # * a **lease** row so two workers never run it at once; a crashed worker's lease expires and the next takes
 #   over;
 # * a **checkpoint** per step, so a resume skips finished work — above all the model calls;
@@ -53,6 +54,8 @@ def week_store(path):
     return store, clock
 
 WORK = tempfile.mkdtemp(prefix="memlab-nb04-")
+import atexit, shutil
+atexit.register(shutil.rmtree, WORK, True)   # removed when the kernel exits, even if a cell stops early
 START, END = ts_of("2026-09-14"), ts_of("2026-09-21")
 
 # %% [markdown]
@@ -117,6 +120,17 @@ assert my_run_id("acme", "u1", END) == C.run_id("acme", "u1", END) == "consolida
 assert my_run_id("acme", "u1", END + 3600) == my_run_id("acme", "u1", END)
 assert my_run_id("acme", "u1", ts_of("2027-01-01")) == "consolidate/acme/u1/2026-W53"   # ISO years differ from calendar years
 print("✅ the run id is a function of the work, not of the trigger:", my_run_id("acme", "u1", END))
+
+# %% [markdown]
+# The trigger has to fire as often as the id changes. `week_window(now)` gives the window a trigger at `now`
+# consolidates — the previous ISO week, Monday 00:00 to Monday 00:00 UTC — so every firing in one week names the
+# same run. If the schedule were daily, six of seven firings would find that run `done` and return:
+
+# %%
+fires = [ts_of("2026-09-21") + d * 86400 + 3 * 3600 + 17 * 60 for d in range(7)]       # 03:17 each day
+ids = [C.run_id("acme", "u1", C.week_window(t)[1]) for t in fires]
+print("a daily trigger's run ids this week:", sorted(set(ids)), "-> one run, six no-ops")
+print("so the schedule is weekly:", next(c for c in C.gcp_commands() if "scheduler jobs create" in c).split("--schedule ")[1][:13])
 
 # %% [markdown]
 # ## Exercise 4.2 — resolve a new fact against what memory holds
@@ -268,11 +282,14 @@ print(f"expired {n} episodes; left:", {k: sum(1 for r in clean.records('acme', '
 # %% [markdown]
 # ## T3, printed: a Cloud Run job on Cloud Scheduler
 #
-# The job is `python -m memlab consolidate --window-days 7` in the lab's image; Cloud Run jobs start `--tasks N`
-# copies and each takes the partitions whose hash lands on its `CLOUD_RUN_TASK_INDEX` (verify). Cloud Scheduler
-# calls the Cloud Run Admin API's `jobs/<job>:run` with an **OAuth** token (the target is a `googleapis.com`
-# API; OIDC is for your own `run.app` service, like the lra-gcp reaper). On GCP the store is Postgres +
-# pgvector (Cloud SQL, verify), never a SQLite file on an instance's ephemeral disk.
+# The job is `python -m memlab consolidate` in the lab's image — by default over the previous ISO week — started
+# every Monday at 03:17 UTC; Cloud Run jobs start `--tasks N` copies and each takes the partitions whose hash lands
+# on its `CLOUD_RUN_TASK_INDEX` (verify). Cloud Scheduler calls the Cloud Run Admin API's `jobs/<job>:run` with an
+# **OAuth** token (the target is a `googleapis.com` API; OIDC is for your own `run.app` service, like the lra-gcp
+# reaper). On GCP the store is Postgres + pgvector (Cloud SQL, verify), never a SQLite file on an instance's
+# ephemeral disk. The printed path is complete enough to work: the image is built and pushed, the job runs as its
+# own service account that may read the DSN secret and connect to Cloud SQL (`--set-cloudsql-instances`), and the
+# cleanup deletes everything the setup created (`deploy/gcp/README.md`).
 
 # %%
 for c in C.gcp_commands("my-project", "us-central1", tasks=4):
@@ -281,12 +298,16 @@ print("# cleanup")
 print("\n".join(C.cleanup_commands("my-project", "us-central1")))
 print("\nshard of 10 users across 4 tasks:",
       [len(C.shard([("acme", f"u{i}") for i in range(10)], k, 4)) for k in range(4)])
+import shutil
+shutil.rmtree(WORK, ignore_errors=True)    # this notebook's databases: gone
 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "Consolidation runs nightly as a Cloud Run job per shard of users. Each (tenant, user, week)
-# is one durable run with a deterministic id, so a double-fired schedule is a no-op. A lease row keeps two
+# **Two minutes.** "Consolidation runs weekly as a Cloud Run job per shard of users. Each (tenant, user, ISO week)
+# is one durable run with a deterministic id, and the schedule fires once a week to match, so a double-fired
+# schedule is a no-op and no firing is wasted; facts a user states mid-week reach memory at once through extraction
+# after the turn, the job only distils the week's episodes. A lease row keeps two
 # workers apart and expires when one dies; every step checkpoints, so a resume skips the model calls it
 # already paid for; writes carry idempotency keys derived from the run, so the step that died after writing
 # does not write twice. Resolution is deterministic: newer supersedes older with the old validity closed, a
@@ -296,6 +317,10 @@ print("\nshard of 10 users across 4 tasks:",
 #
 # **Drill 1.** *The scheduler fired twice at 03:17. What happens?* — Both triggers compute the same run id;
 # one takes the lease, the other gets `LeaseHeld` (or, if the first finished, sees the run `done`) and exits.
+#
+# **Drill 1b.** *Someone changed the schedule to daily. What breaks?* — Nothing visibly: the first firing of the
+# week does the work and the other six find the run `done`. That is the bug — a "daily" job that runs weekly. The
+# run id and the window must change with the schedule (a per-day id and a one-day window).
 #
 # **Drill 2.** *A worker died after writing a fact but before checkpointing. Duplicate?* — No: the resumed step
 # writes with the same idempotency key (run, slot, value, evidence) and the planned record id, so the store

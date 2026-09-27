@@ -75,6 +75,33 @@ def test_idempotent_add_and_immutable_text(mem_store):
         mem_store.set_fields(rid, text="something else")
 
 
+def test_idempotency_keys_are_scoped_to_the_partition(mem_store):
+    """Two tenants (or two users of one tenant) whose steps share a key string never replay each other's writes."""
+    from memlab.memory import LocalMemory
+    k = "monday:1:0"
+    a = LocalMemory(mem_store, "acme", "alice").remember("Pet: the user has a dog named Rex.", slot="pet",
+                                                         value="dog named Rex", idempotency_key=k)
+    b = LocalMemory(mem_store, "globex", "bob").remember("Pet: the user has a dog named Rex.", slot="pet",
+                                                         value="dog named Rex", idempotency_key=k)
+    c = LocalMemory(mem_store, "acme", "carol").remember("Pet: the user has a cat named Tom.", slot="pet",
+                                                         value="cat named Tom", idempotency_key=k)
+    assert [x["action"] for x in (a, b, c)] == ["ADD", "ADD", "ADD"] and len({a["id"], b["id"], c["id"]}) == 3
+    assert [r.text for r in mem_store.records("globex", "bob")] == ["Pet: the user has a dog named Rex."]
+    again = LocalMemory(mem_store, "acme", "alice").remember("Pet: the user has a dog named Rex.", slot="pet",
+                                                             value="dog named Rex", idempotency_key=k)
+    assert again["id"] == a["id"] and again["action"] in ("NOOP", "REPLAY")
+
+
+def test_a_different_write_under_a_known_key_is_refused(mem_store):
+    from memlab.memory import LocalMemory
+    m = LocalMemory(mem_store, "acme", "u1")
+    first = m.remember("Diet: the user is vegan.", slot="diet", value="vegan", idempotency_key="s:3:extract:0")
+    retry = m.remember("Diet: the user is vegetarian.", slot="diet", value="vegetarian",
+                       idempotency_key="s:3:extract:0")               # a retried extraction that came out different
+    assert first["action"] == "ADD" and (retry["ok"], retry["action"]) == (False, "CONFLICT")
+    assert [r.value for r in mem_store.records("acme", "u1")] == ["vegan"]
+
+
 def test_as_of_reads_superseded_facts(mem_store, clock):
     old = MemoryRecord("acme", "u1", "Home city: the user lives in Lisbon.", slot="home_city", created_at=100)
     new = MemoryRecord("acme", "u1", "Home city: the user lives in Porto.", slot="home_city", created_at=200)

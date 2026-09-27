@@ -142,6 +142,15 @@ class LocalMemory:
                 rec.status = "superseded"
                 rec.superseded_at = now
             rid, created = self.store.add(rec, idempotency_key=key)
+            prior = None if created else self.store.get(rid)
+            if prior is not None and (prior.text, prior.slot, (prior.value or "").lower()) != \
+                    (rec.text, rec.slot, (rec.value or "").lower()):
+                out.update(ok=False, action="CONFLICT", id=rid, replayed=False,
+                           reasons=out["reasons"] + ["idempotency key reused with a different write: replay the "
+                                                     "journaled step, do not re-derive it"])
+                self._audit("memory.write", "deny", out["reasons"], {"slot": slot, "kind": kind, "text": text},
+                            rid, session, rec.provenance)
+                return out
             if action == "UPDATE" and created:
                 self.store.supersede(other.id, at=rec.valid_from, now=now)
             out.update(id=rid, action=action if created else "REPLAY", replayed=not created, status=rec.status,

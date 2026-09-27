@@ -17,8 +17,9 @@
 # memory budget at the **knee** of recall versus tokens (PRIMER §5).
 #
 # **Forget** a fact everywhere it went (PRIMER §7): the record, its vector and FTS row, the facts *derived* from
-# it, the idempotency table, the engine's prefix cache, the eval set — and prove it by searching the files;
-# the audit log holds hashes only, so it is not one more copy; backups age out on their own schedule.
+# it, the idempotency table, the engine's prefix cache (which vLLM can only reset whole — per tenant you rotate the
+# cache salt), the eval set — and prove it by searching the files; the audit log holds hashes only, so it is not
+# one more copy; backups age out on their own schedule.
 #
 # **Audit** every read, write and forget with both identities (PRIMER §8; identity primer §9). Primer:
 # [`../../PRIMER.md`](../../PRIMER.md).
@@ -65,6 +66,11 @@ print(results["implicit"].table())
 # without being asked, for its tokens and a second model call. Abstention and the adversarial questions
 # are right everywhere because the scripted answerer never invents — a real model is not so polite, which is
 # why they are in the benchmark.
+#
+# This is not memory-core's harness (PRIMER §4, §6): other users, 84 questions, a 128-token budget, an answerer that
+# understands paraphrases and a scripted model that recalls on first-person questions. So its ranking of the modes
+# differs from PRIMER §6's table, and neither ranking is evidence about a real model — both script the model's
+# choices. What transfers is the method: the same questions, graded the same way, for every design you consider.
 #
 # ## Exercise 5.1 — grade an answer
 #
@@ -116,7 +122,9 @@ for p in curve:
 #
 # Write `my_knee(points, key="recall", frac=0.95)`: the point with the smallest `budget` whose `key` reaches
 # `frac` of the best value on the curve. Past it, more tokens buy almost nothing — and every token is paid on
-# every turn, and (notebook 03) can cost prefix-cache hits too.
+# every turn, and (notebook 03) can cost prefix-cache hits too. (This lab's knee is *relative* — 95% of the best;
+# memory-core's `knee(tol=0.02)` is *absolute* — within 2 points of the best. They pick the same budget when recall
+# saturates near 100% and can differ on a flat curve; PRIMER's Glossary names both. Say which one you used.)
 
 # %% exercise
 def my_knee(points, key="recall", frac=0.95):
@@ -149,6 +157,8 @@ print(f"✅ knee at {k['budget']} tokens: recall {k['recall']:.1%} of a best {ma
 
 # %%
 WORK = tempfile.mkdtemp(prefix="memlab-nb05-")
+import atexit, shutil
+atexit.register(shutil.rmtree, WORK, True)   # removed when the kernel exits, even if a cell stops early
 DB = os.path.join(WORK, "memory.db")
 store = SQLiteMemoryStore(DB, fts_secure_delete=False)       # the harder case: FTS5 keeps terms until optimize
 verifier = TokenVerifier(os.urandom(32))
@@ -164,7 +174,7 @@ for i in range(20):
 store.add(MemoryRecord("acme", "u1", f"Summary of week 37: the user shared their home address ({ADDRESS}) and "
                        "planned a trip.", source="consolidation", trust="user", provenance=[ep["id"]],
                        deletion_key="acme/u1/summary-2026-W37"))
-job = ConsolidationJob(store, worker="nightly")
+job = ConsolidationJob(store, worker="weekly")
 print(job.run("acme", "u1", ts_of("2026-09-01"), ts_of("2026-12-01")).line())
 eval_set = [{"id": "g1", "input": "What is my address?", "expected": ADDRESS, "user": "acme/u1"},
             {"id": "g2", "input": "What is my employer?", "expected": "Globex", "user": "acme/u1"}]
@@ -184,24 +194,31 @@ print("on disk:", residue(DB, [ADDRESS, "Flores"]), "| cached blocks in the engi
 # 1. `DELETE /v1/memories?subject=address` through the service (`client.forget("address")`): its report has the
 #    records, vectors, FTS rows, derived records (by provenance) and idempotency rows it removed — start from
 #    `report["counts"]`;
-# 2. `POST {llm_url}/reset_prefix_cache` evicts the engine's cached blocks (vLLM has this endpoint in dev mode,
-#    verify) — record `blocks_evicted` as `prompt_cache`;
+# 2. the engine's prefix cache. vLLM v0.30.0 cannot evict one tenant's or one user's blocks: its only tool is the
+#    dev-mode `POST {llm_url}/reset_prefix_cache` (the server must run with `VLLM_SERVER_DEV_MODE=1`, verify), which
+#    clears **every** tenant's cache and answers only `{"success": bool}` — false while running requests hold
+#    blocks, so check it. Call it, require `success`, and record `prompt_cache` as `cached_blocks`, the count the
+#    caller passes in: the fake server knows its own blocks (SIMULATED); a real vLLM does not report them. In
+#    production you would rather rotate the tenant's `cache_salt` (notebook 03, exercise 3.5, with an epoch in the
+#    HMAC input): its blocks become unreachable at once and age out under LRU, without cooling every other tenant's
+#    cache — the reset is the operator's runbook step for the residue;
 # 3. remove every eval-set case that contains the needle (mutate the list) — `eval_sets`;
 # 4. count audit lines that contain the needle — `audit_log` (should be 0: the log holds hashes);
 # 5. put `"backups"` in `not_reachable`: they expire on their retention schedule, which the deletion policy
 #    must state.
 
 # %% exercise
-def forget_everywhere(client, llm_url, eval_set, needle, audit_path):
+def forget_everywhere(client, llm_url, eval_set, needle, audit_path, cached_blocks):
     ### BEGIN SOLUTION
     status, body = client.forget("address")
     r = body["report"]
     rep = DeletionReport(r["deletion_key"], r["tenant"], counts=dict(r["counts"]), steps=list(r["steps"]),
                          deleted_ids=list(r["deleted_ids"]))
-    req = urllib.request.Request(llm_url.rstrip("/") + "/reset_prefix_cache", data=b"{}", method="POST",
-                                 headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(llm_url.rstrip("/") + "/reset_prefix_cache", data=b"", method="POST")
     with urllib.request.urlopen(req, timeout=10) as resp:
-        rep.counts["prompt_cache"] = json.loads(resp.read())["blocks_evicted"]
+        if not json.loads(resp.read()).get("success"):
+            raise RuntimeError("the engine refused the reset (blocks still held): retry")
+    rep.counts["prompt_cache"] = cached_blocks
     hits = [c for c in eval_set if needle in json.dumps(c)]
     for c in hits:
         eval_set.remove(c)
@@ -212,11 +229,12 @@ def forget_everywhere(client, llm_url, eval_set, needle, audit_path):
     ### END SOLUTION
 
 # %% check
-rep = forget_everywhere(me, LLM, eval_set, ADDRESS, audit.path)
+held = len(fake.cache.blocks)                    # the fake's own state (SIMULATED): vLLM does not report this
+rep = forget_everywhere(me, LLM, eval_set, ADDRESS, audit.path, held)
 rep.residue = residue(DB, [ADDRESS, "Flores"])
 print(rep.table())
 assert rep.counts["records"] >= 2 and rep.counts["derived"] >= 1 and rep.counts["idempotency"] == 1, rep.counts
-assert rep.counts["prompt_cache"] > 0 and len(fake.cache.blocks) == 0
+assert rep.counts["prompt_cache"] == held > 0 and len(fake.cache.blocks) == 0
 assert rep.counts["eval_sets"] == 1 and [c["id"] for c in eval_set] == ["g2"] and rep.counts["audit_log"] == 0
 assert rep.clean, rep.residue
 assert all(ADDRESS not in i["text"] for i in me.search("what is my home address", k=5)[1]["items"])
@@ -247,6 +265,9 @@ assert denied == sum(e.decision == "deny" for e in audit.events)
 assert all(set(e) >= {"agent", "authority", "user", "tenant", "args_hash"} for e in events)
 print("✅", {f"{k[2]}": v for k, v in counts.items()}, "| denied:", denied)
 svc.stop(); fake.stop()
+store.close()
+import shutil
+shutil.rmtree(WORK, ignore_errors=True)    # the database, its WAL and the audit log of this notebook: gone
 
 # %% [markdown]
 # ## T1: a real embedder on the paraphrase subset
@@ -280,7 +301,8 @@ print(harness_markdown({"implicit (hashing)": base}, "computed: scripted model, 
 # fails — retrieval before every turn misses preferences, tools miss what the model does not ask for, a
 # pinned profile costs tokens and a call. We set the per-turn memory budget at the knee of recall versus
 # tokens. Forgetting is a checklist with counts: a deletion key on every record, provenance to reach derived
-# facts, the service's idempotency rows, a prefix-cache reset, the eval set, a purge of FTS and WAL — then we
+# facts, the service's idempotency rows, the engine's prefix cache (the tenant's salt rotated; a full reset as the
+# operator's step, since vLLM cannot evict one tenant's blocks), the eval set, a purge of FTS and WAL — then we
 # search the files for the bytes. Audit logs carry hashes, not memory; backups age out, and the policy says
 # how long."
 #

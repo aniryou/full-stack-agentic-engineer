@@ -64,13 +64,16 @@ CREATE TABLE IF NOT EXISTS memories (
   last_accessed   REAL NOT NULL,
   deletion_key    TEXT NOT NULL,
   status          TEXT NOT NULL,
-  idempotency_key TEXT UNIQUE,
+  idempotency_key TEXT,                   -- unique per (tenant, user_id): see memories_idempotency
   dim             INTEGER NOT NULL,
   embedding       BLOB NOT NULL           -- float32, little-endian, L2-normalised
 );
 CREATE INDEX IF NOT EXISTS memories_partition ON memories (tenant, user_id, status);
 CREATE INDEX IF NOT EXISTS memories_deletion  ON memories (tenant, deletion_key);
 CREATE INDEX IF NOT EXISTS memories_slot      ON memories (tenant, user_id, slot);
+-- Idempotency keys are unique per partition, never globally: two users (or tenants) whose steps happen to share a
+-- key string must not replay each other's writes.
+CREATE UNIQUE INDEX IF NOT EXISTS memories_idempotency ON memories (tenant, user_id, idempotency_key);
 """
 # Porter stemming on top of unicode61: "trips" finds "trip", "moved" finds "move" — lexical, still not semantic.
 FTS_SCHEMA = "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(text, tokenize='porter unicode61')"
@@ -208,12 +211,13 @@ class SQLiteMemoryStore:
     def add(self, rec: MemoryRecord, *, idempotency_key: str | None = None,
             embedding: np.ndarray | None = None) -> tuple[str, bool]:
         """Insert a record, its vector and its FTS row in one transaction. Returns ``(id, created)``;
-        a repeated ``idempotency_key`` returns the first write's id and ``created=False`` (durable
-        primer §3.2: a retried turn writes once)."""
+        a repeated ``idempotency_key`` *in the same (tenant, user) partition* returns the first write's id and
+        ``created=False`` (durable primer §3.2: a retried turn writes once)."""
         vec = self._vector(rec.text) if embedding is None else np.asarray(embedding, dtype="<f4").reshape(-1)
         with self._lock:
             if idempotency_key:
-                row = self.con.execute("SELECT id FROM memories WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+                row = self.con.execute("SELECT id FROM memories WHERE tenant=? AND user_id=? AND idempotency_key=?",
+                                       (rec.tenant, rec.user, idempotency_key)).fetchone()
                 if row:
                     return row["id"], False
             self.con.execute("BEGIN IMMEDIATE")

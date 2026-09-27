@@ -23,7 +23,7 @@ def test_placeholders_are_named_and_nothing_is_interpolated():
         assert "%s" not in sql and "{" not in sql and "}" not in sql, name
 
 
-@pytest.mark.parametrize("name", ["search", "forget", "records", "touch", "insert"])
+@pytest.mark.parametrize("name", ["search", "forget", "records", "touch", "insert", "existing"])
 def test_scope_is_in_every_per_user_statement(name):
     sql = STATEMENTS[name]
     assert "%(tenant)s" in sql, name
@@ -46,6 +46,13 @@ def test_ddl_facts():
         P.ddl(3072)
     assert P.storage_bytes(384) == 1544 and P.storage_bytes(1024) == 4104
     assert STATEMENTS["iterative_scan"] == "SET hnsw.iterative_scan = relaxed_order"
+
+
+def test_idempotency_is_unique_per_partition():
+    ddl = " ".join(P.ddl(1024))
+    assert "UNIQUE (tenant, user_id, idempotency_key)" in ddl and "idempotency_key text UNIQUE" not in ddl
+    assert "ON CONFLICT (tenant, user_id, idempotency_key) DO NOTHING" in STATEMENTS["insert"]
+    assert "user_id = %(user_id)s" in STATEMENTS["existing"]
 
 
 def test_forget_is_recursive_over_provenance():

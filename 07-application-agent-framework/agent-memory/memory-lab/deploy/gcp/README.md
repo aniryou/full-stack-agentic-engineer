@@ -5,18 +5,24 @@
 the GPU and Cloud Run infrastructure already has Terraform in the 04 serving lab.
 
 ```
-Cloud Scheduler "memlab-consolidate-nightly"  (cron 17 3 * * *, UTC)
+Cloud Scheduler "memlab-consolidate-weekly"  (cron 17 3 * * 1, UTC: Mondays)
    │  POST https://run.googleapis.com/v2/projects/<p>/locations/<r>/jobs/memlab-consolidate:run
-   │  OAuth access token of memlab-scheduler@<p>.iam.gserviceaccount.com
+   │  OAuth access token of memlab-scheduler@<p>.iam.gserviceaccount.com (roles/run.invoker on the job)
    ▼
 Cloud Run job "memlab-consolidate"  (--tasks N; each task takes the users whose hash lands on its index)
-   │  python -m memlab consolidate --window-days 7
+   │  runs as memlab-job@<p>: roles/secretmanager.secretAccessor on memlab-pg-dsn, roles/cloudsql.client
+   │  python -m memlab consolidate   → the previous ISO week, Monday 00:00 to Monday 00:00 UTC
    │  one durable run per (tenant, user, ISO week): lease row, checkpoints, idempotent writes
-   ▼
-Postgres + pgvector (Cloud SQL, verify) ◀── the memory service and the agent read and write the same tables
-   ▲
+   ▼  --set-cloudsql-instances <p>:<r>:memlab-pg  (socket at /cloudsql/<p>:<r>:memlab-pg)
+Postgres + pgvector (Cloud SQL, verify) ◀── the job's tables; a memory service on Postgres is yours to port
+   ▲                                        (memlab's service runs on SQLite only, see §2)
    │  the agent's model: vLLM on Cloud Run with one L4 (the 04 serving lab), tool calling on
 ```
+
+**Weekly, on purpose.** The run id is one per (tenant, user, ISO week), so the trigger is weekly too: a daily
+trigger with a weekly id would make six of seven firings no-ops ("run already done") and land facts up to a week
+late while calling itself daily. What the next turn needs comes from extraction after the turn (PRIMER §2), not from
+this job. A daily job needs a per-day run id and a one-day window (`--window-days 1` and an id by date).
 
 ## 1. The model: reuse the serving lab's Cloud Run GPU service
 
@@ -37,8 +43,21 @@ Then `gcloud run services proxy <service> --region <r> --port 8000 &` and `expor
 A Cloud Run instance's disk is ephemeral and SQLite has no network protocol, so on GCP the store is
 Postgres with the `vector` extension — Cloud SQL for PostgreSQL or AlloyDB both offer pgvector (verify the
 versions against 0.8.6, which this lab's SQL is written for). `memlab.store.pgvector` holds every statement
-(checked offline by Postgres's parser in the tests), including the job's lease and checkpoint tables. Put the
-DSN in Secret Manager as `memlab-pg-dsn`; the job reads it as `MEMLAB_PG_DSN`.
+(checked offline by Postgres's parser in the tests), including the job's lease and checkpoint tables; the
+consolidation job runs on it (`python -m memlab consolidate --pg-dsn` or `MEMLAB_PG_DSN`). **The memory service
+(`memlab serve`) is SQLite-only** — its idempotency table uses SQLite SQL — so on GCP the job is what this lab
+deploys; the service needs a Postgres port of its own before it can share these tables.
+
+The job reaches the instance through the Cloud SQL connector's Unix socket: `--set-cloudsql-instances
+<project>:<region>:<instance>` mounts `/cloudsql/<project>:<region>:<instance>`, and the DSN is
+
+```
+host=/cloudsql/<project>:<region>:memlab-pg dbname=memlab user=memlab password=...
+```
+
+(verify the flag on `gcloud run jobs create`; a private-IP instance needs Direct VPC egress, `--network/--subnet`,
+and a `host=<private IP>` DSN instead). Export it as `MEMLAB_PG_DSN` in your shell: the printed commands pipe it into
+Secret Manager as `memlab-pg-dsn` without writing it to a file, and the job reads it back as `MEMLAB_PG_DSN`.
 
 ## 3. The job and its schedule
 
@@ -46,10 +65,18 @@ DSN in Secret Manager as `memlab-pg-dsn`; the job reads it as `MEMLAB_PG_DSN`.
 python -m memlab gcp-commands --project my-project --region us-central1 --tasks 4
 ```
 
-prints, in order: `gcloud run jobs create` (image, `--tasks`, `--max-retries 3`, the secret, the command),
-a service account for the scheduler, `roles/run.invoker` on the job for it, `gcloud scheduler jobs create
-http` with `--oauth-service-account-email`, and a manual `gcloud run jobs execute --wait`. Build and push the
-image first (`deploy/local/Dockerfile`, to Artifact Registry `memlab/memlab:0.1.0`).
+prints, in order (run them from `memory-lab/`, the image's build context):
+
+1. **the image** — an Artifact Registry repository `memlab`, `gcloud auth configure-docker`, then `docker build -f
+   deploy/local/Dockerfile` and `docker push` of `memlab/memlab:0.1.0` (Docker on your machine; or Cloud Build);
+2. **the job's identity** — a service account `memlab-job` (never the default compute account), the secret
+   `memlab-pg-dsn` created from `$MEMLAB_PG_DSN`, `roles/secretmanager.secretAccessor` on that secret and
+   `roles/cloudsql.client` on the project for it;
+3. **the job** — `gcloud run jobs create` with `--service-account memlab-job@…`, `--set-cloudsql-instances`,
+   `--tasks`, `--max-retries 3`, `--set-secrets MEMLAB_PG_DSN=memlab-pg-dsn:latest` and the command;
+4. **the trigger** — a service account `memlab-scheduler`, `roles/run.invoker` on the job for it, `gcloud scheduler
+   jobs create http memlab-consolidate-weekly` with `--oauth-service-account-email`, and a manual
+   `gcloud run jobs execute --wait` to try it once.
 
 Why **OAuth, not OIDC**: the scheduler calls the Cloud Run Admin API (`run.googleapis.com`), which accepts OAuth
 access tokens; OIDC identity tokens are for invoking your own service's URL (the lra-gcp reaper does that,
@@ -60,8 +87,8 @@ which your gcloud prefers). Also verify: `--task-timeout`, `--set-secrets` and `
 `gcloud run jobs create`, and whether `roles/run.invoker` on the job is enough to run it (Google's sample
 grants `roles/run.developer` on the project).
 
-A double-fired schedule is harmless: both executions compute the same run id per user and week; one takes
-the lease, the other finds it held or the run done (notebook 04).
+A double-fired schedule is harmless: both executions compute the same window (the previous ISO week) and the same
+run id per user; one takes the lease, the other finds it held or the run done (notebook 04).
 
 ## Managed memory stores (dated 2026-09-26; verify before choosing)
 
@@ -84,12 +111,16 @@ idle — the largest line for a lab; the L4 service bills per second while an in
 
 ## Cleanup
 
+`python -m memlab gcp-commands` prints the same list after the setup commands:
+
 ```bash
-gcloud scheduler jobs delete memlab-consolidate-nightly --location us-central1 --quiet
-gcloud run jobs delete memlab-consolidate --region us-central1 --quiet
-gcloud iam service-accounts delete memlab-scheduler@my-project.iam.gserviceaccount.com --quiet
-gcloud secrets delete memlab-pg-dsn --quiet
-gcloud artifacts docker images delete us-central1-docker.pkg.dev/my-project/memlab/memlab:0.1.0 --quiet
+gcloud scheduler jobs delete memlab-consolidate-weekly --project my-project --location us-central1 --quiet
+gcloud run jobs delete memlab-consolidate --project my-project --region us-central1 --quiet
+gcloud iam service-accounts delete memlab-scheduler@my-project.iam.gserviceaccount.com --project my-project --quiet
+gcloud projects remove-iam-policy-binding my-project --member serviceAccount:memlab-job@my-project.iam.gserviceaccount.com --role roles/cloudsql.client --quiet
+gcloud secrets delete memlab-pg-dsn --project my-project --quiet
+gcloud iam service-accounts delete memlab-job@my-project.iam.gserviceaccount.com --project my-project --quiet
+gcloud artifacts repositories delete memlab --project my-project --location us-central1 --quiet
 # the Cloud SQL instance and the serving lab's Cloud Run service: see their own cleanup steps
 ```
 

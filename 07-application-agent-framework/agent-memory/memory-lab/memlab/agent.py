@@ -4,7 +4,8 @@ The one idea (PRIMER §6): *who decides when to read memory* is a design choice 
 
 * ``mode="tools"`` — ``remember`` / ``recall`` / ``forget`` are tools with 07.1's contract
   (``{"ok": True, "data": ...}`` or ``{"ok": False, "error": kind, ...}``). ``remember`` is idempotent
-  (the key is the turn and the fact), ``forget`` is confirm-gated. The model chooses when — and misses
+  (the key names the step — session, turn, which remember call — never the fact, which a retried model call may
+  word differently), ``forget`` is confirm-gated. The model chooses when — and misses
   what it did not think to ask for.
 * ``mode="implicit"`` — retrieval by the user's message before every model call, packed into a token
   budget and fenced as data. Nothing is missed for lack of asking, every turn pays the tokens, and it
@@ -18,8 +19,10 @@ The one idea (PRIMER §6): *who decides when to read memory* is a design choice 
 
 The write path is the same in every mode except ``tools``: facts extracted *after* the turn go through
 ``LocalMemory.remember`` (policy, resolution, audit). Provenance is tracked by the loop, not claimed by
-the model: once a tool result enters a turn the turn is *tainted*, and a ``remember`` whose text the
-user did not say is written with ``source="tool"`` — quarantined by the policy (PRIMER §8).
+the model: once a tool result enters a turn the turn is *tainted*, and a ``remember`` is written with
+``source="tool"`` — quarantined by the policy (PRIMER §8) — unless the same (slot, value) fact is one the extractor
+finds in the user's own message. A value merely *appearing* in the user's words is not the user stating it: "Book
+me a flight to Rome" does not say the user lives in Rome, whatever a page claims.
 
 This is 07.1's ``Agent.run`` re-implemented (labs do not import each other); ``ScriptedLLM`` there is
 ``llm.ScriptedModel`` here.
@@ -30,7 +33,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from .extract import extract
+from .extract import extract, read_context
 from .llm import Response, ToolCall
 from .records import content_hash, count_tokens
 
@@ -83,14 +86,22 @@ class Tool:
             return {"ok": False, "error": "tool_failure", "message": f"{type(e).__name__}: {e}"}
 
 
-def source_for(text: str, value: str | None, user_message: str, tainted: bool) -> str:
+def source_for(text: str, value: str | None, user_message: str, tainted: bool, slot: str | None = None) -> str:
     """Who is the source of a ``remember`` call? The *loop* decides, from what it saw, not the model:
-    ``user`` if the user's own message states it (the same fact, or its value verbatim); otherwise ``tool``
-    once a tool result entered the turn (the text probably came from there); otherwise ``inferred``."""
-    user_facts = {(f.slot, f.value) for f in extract(user_message)}
-    stated = any(f.text == text for f in extract(user_message)) or bool(value and value.lower() in user_message.lower())
-    if stated or any(v == value for _, v in user_facts if value):
+    ``user`` only if the extractor finds the same fact — same value, same slot when one is known — in the user's
+    own message; otherwise ``tool`` once a tool result entered the turn (the write inherits the lowest trust of
+    what the model had read); otherwise ``inferred``. Never a substring test: "Rome" in "a flight to Rome" is not
+    the user stating a home city."""
+    said = extract(user_message)
+    if any(f.text == text for f in said):
         return "user"
+    parsed = read_context([text])
+    candidates = {(i.slot, i.value.lower()) for i in parsed}
+    if value:
+        candidates.add((slot, value.lower()))
+    for f in said:
+        if any(v == f.value.lower() and (s is None or s == f.slot) for s, v in candidates):
+            return "user"
     return "tool" if tainted else "inferred"
 
 
@@ -153,14 +164,16 @@ class MemoryAgent:
         self.turn_index = 0
         self._tainted = False
         self._user_text = ""
+        self._remembers = 0
 
     # -- the three memory tools, bound to this agent -----------------------------------------------
     def memory_tools(self) -> list[Tool]:
         def remember(text: str, kind: str = "semantic", slot: str | None = None, value: str | None = None) -> dict:
-            source = self.source_rule(text, value, self._user_text, self._tainted)
+            source = self.source_rule(text, value, self._user_text, self._tainted, slot)
+            self._remembers += 1
             out = self.memory.remember(text, kind=kind, slot=slot, value=value, source=source,
                                        session=self.session, provenance=[f"{self.session}#{self.turn_index}"],
-                                       idempotency_key=content_hash(self.session, self.turn_index, slot, value, text))
+                                       idempotency_key=self.step_key("remember", self._remembers))
             if not out.get("ok", True):
                 raise ToolError("; ".join(out.get("reasons", [])) or "rejected", kind="rejected")
             return {k: out.get(k) for k in ("id", "action", "status", "decision") if k in out}
@@ -226,7 +239,7 @@ class MemoryAgent:
         if self.session is None:
             self.start_session("s0")
         self.turn_index += 1
-        self._tainted, self._user_text = False, user_message
+        self._tainted, self._user_text, self._remembers = False, user_message, 0
         history = list(history or [])
         block, mem_tokens = self._memory_block(user_message)
         messages = self.build(history, user_message, block)
@@ -270,13 +283,19 @@ class MemoryAgent:
             result = tool.run(tc.args)
         return {"role": "tool", "name": tc.name, "tool_call_id": tc.id, "content": json.dumps(result, default=str)}
 
+    def step_key(self, what: str, index: int) -> str:
+        """The idempotency key of one write step: the partition, the session, the turn, which write — no content.
+        A retried turn re-derives the same key even if its extraction comes back worded differently; the store
+        then refuses the different write (``CONFLICT``) instead of adding a second fact (PRIMER §2)."""
+        return content_hash(getattr(self.memory, "scope", ""), self.session, self.turn_index, what, index)
+
     def write_facts(self, user_message: str) -> list[dict]:
         """Extraction *after* the turn (PRIMER §2): every fact the user stated, through the write policy."""
         out = []
-        for f in extract(user_message):
+        for i, f in enumerate(extract(user_message)):
             out.append(self.memory.remember(f.text, kind=f.kind, slot=f.slot, value=f.value, source="user",
                                             confidence=f.confidence, importance=f.importance, session=self.session,
                                             provenance=[f"{self.session}#{self.turn_index}"],
-                                            idempotency_key=content_hash(self.session, self.turn_index, f.slot, f.value)))
+                                            idempotency_key=self.step_key("extract", i)))
         return out
 

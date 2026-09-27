@@ -1,5 +1,6 @@
 """Numbers this lab reproduces from elsewhere in the repo, pinned here and cross-checked by path import where
 the other package is present (labs never import each other at run time)."""
+import ast
 import importlib
 import importlib.util
 import math
@@ -87,15 +88,24 @@ def test_cost_per_call_equals_scalelab():
                                   cb.PRICES["gemini-3.5-flash"].cached_input)
     for args in ((5000, 350, 2700), (1449, 60, 0), (3442, 60, 1088)):
         assert math.isclose(cap.cost_per_call("gemini-3.5-flash", *args),
-                            cb.turn_cost(cb.PRICES["gemini-3.5-flash"], args[0], args[1], args[2]))
+                            cb.call_cost(cb.PRICES["gemini-3.5-flash"], args[0], args[1], args[2]))
+    assert math.isclose(cb.turn_cost(cb.PRICES["gemini-3.5-flash"], 5000, 350, 2700), 0.007005)   # above the minimum
 
 
-def test_wilson_interval_equals_agentlab_gate_when_importable():
-    root = repo_path("07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab")
-    pytest.importorskip("pydantic")
-    gate = import_from(root, "agentlab.evals.gate")
-    for k, n in ((45, 50), (0, 20), (20, 20), (7, 13)):
-        assert all(math.isclose(a, b) for a, b in zip(gate.wilson_interval(k, n), H.wilson_interval(k, n)))
+def function_from_source(path, name, **globals_):
+    """Compile one function out of a file whose package cannot be imported here (gate.py needs pydantic)."""
+    tree = ast.parse(Path(path).read_text())
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    ns = dict(globals_)
+    exec(compile(ast.Module([fn], []), str(path), "exec"), ns)
+    return ns[name]
+
+
+def test_wilson_interval_equals_agentlab_gate():
+    gate = repo_path("07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/agentlab/evals/gate.py")
+    theirs = function_from_source(gate, "wilson_interval", math=math)       # no pydantic needed: one function
+    for k, n in ((45, 50), (0, 20), (20, 20), (7, 13), (0, 0)):
+        assert all(math.isclose(a, b) for a, b in zip(theirs(k, n), H.wilson_interval(k, n))), (k, n)
 
 
 def test_serving_lab_expected_cached_tokens_asserts_are_ours():

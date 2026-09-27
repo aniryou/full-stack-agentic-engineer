@@ -16,9 +16,14 @@ after it can hit:
   message is still an exact prefix, so only the last reply, the new message and the block are new.
 
 ``run_layout`` drives a real ``MemoryAgent`` against an OpenAI-compatible server — the fake server
-(simulated) at T0, vLLM with ``--enable-prompt-tokens-details`` at T1 (measured) — and records per turn
-the prompt tokens, the cached tokens the server reported, what ``expected_cached_tokens`` predicted from
-the fake's tokenizer, the prefill time a roofline model gives for (cached, new), and the dollars.
+(simulated) at T0, vLLM with ``--enable-prompt-tokens-details`` at T1 — and records per turn the prompt
+tokens, the cached tokens the server reported, what ``expected_cached_tokens`` predicted from the fake's
+tokenizer, the prefill time a roofline model gives for (cached, new), and the dollars. Only the first two
+are ever **measured**, and only at T1: the prefill time is always the roofline's (SIMULATED, for the
+``gpu``/``llm`` you pass, L4 + Qwen2.5-1.5B by default), and the dollars are a hosted API's list prices —
+which bill the cached rate only once a request clears the provider's caching minimum (4,096 tokens on
+Gemini 3.x, verify), so at this bench's prompt sizes the layouts barely differ on that bill. Each run carries
+one label per column (``LayoutRun.source``), never one label for the table.
 
 Re-implemented here, each cited and reproduced in ``tests/test_repo_numbers.py``: the serving lab's
 ``expected_cached_tokens`` (its notebook 04, exercise 4.1), ``minengine.perf.step_cost`` (a roofline:
@@ -129,21 +134,36 @@ def prefill_ms(prompt_tokens: int, cached_tokens: int, gpu: str = "L4", llm: str
 # ------------------------------------------------------------------------ dollars (scalelab.capacity)
 @dataclass(frozen=True)
 class Price:
-    """$ per 1M tokens: uncached input, output, cached input."""
+    """$ per 1M tokens: uncached input, output, cached input; and the provider's caching minimum - the smallest
+    request billed at the cached rate (0: every cached token is billed cached)."""
     input: float
     output: float
     cached_input: float
+    min_cached_prompt: int = 0
+    name: str = "custom"
 
 
-PRICES = {   # scalelab.capacity.PRICES as of 5 Sep 2026 (verify before quoting)
-    "gemini-3.5-flash": Price(1.5, 9.0, 0.15),
+PRICES = {   # scalelab.capacity.PRICES as of 5 Sep 2026; the minimum from the scaling primer §5.5 (verify both)
+    "gemini-3.5-flash": Price(1.5, 9.0, 0.15, 4096, "gemini-3.5-flash"),
 }
 
 
-def turn_cost(price: Price, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float:
-    """``scalelab.capacity.cost_per_call``: (uncached·in + cached·cached_rate + out·out_rate) / 1e6 dollars."""
+def call_cost(price: Price, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float:
+    """``scalelab.capacity.cost_per_call``: (uncached·in + cached·cached_rate + out·out_rate) / 1e6 dollars, with
+    ``cached_tokens`` as the provider bills them."""
     uncached = input_tokens - cached_tokens
     return (uncached * price.input + cached_tokens * price.cached_input + output_tokens * price.output) / 1e6
+
+
+def billed_cached(price: Price, input_tokens: int, engine_cached: int) -> int:
+    """The engine's hits billed at the cached rate only if the request clears the provider's minimum. Assumes the
+    provider's cache hits the prefix vLLM's would (a modelling assumption, verify)."""
+    return engine_cached if input_tokens >= price.min_cached_prompt else 0
+
+
+def turn_cost(price: Price, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> float:
+    """One call on a hosted API: ``call_cost`` with the engine's hits passed through ``billed_cached``."""
+    return call_cost(price, input_tokens, output_tokens, billed_cached(price, input_tokens, cached_tokens))
 
 
 # ------------------------------------------------------------------------ the bench
@@ -203,8 +223,14 @@ class TurnRow:
 @dataclass
 class LayoutRun:
     layout: str
-    source: str                      # "SIMULATED (fake server)" or "MEASURED on <url>"
+    cached_source: str               # "SIMULATED (fake server)" or "MEASURED on <url>": the cached_tokens column
+    timing: str = "SIMULATED (roofline, L4 + qwen2.5-1.5b)"   # the prefill_ms column: never measured here
+    dollars: str = "gemini-3.5-flash list prices (verify)"      # the $ column: a price table, not a bill
     rows: list[TurnRow] = field(default_factory=list)
+
+    @property
+    def source(self) -> str:
+        return f"cached tokens {self.cached_source}; prefill ms {self.timing}; $ at {self.dollars}"
 
     @property
     def hit_rate(self) -> float:
@@ -271,7 +297,9 @@ def run_layout(url: str, layout: str, *, turns: int = 8, k: int = 5, budget_toke
                         k=k, budget_tokens=budget_tokens, instruction=SYSTEM, write_after_turn=False)
     agent.start_session(f"bench-{layout}")
     tok = _fake_tokenizer() if fake else None
-    run = LayoutRun(layout, "SIMULATED (fake server)" if fake else f"MEASURED on {url}")
+    minimum = f", cached rate from {price.min_cached_prompt:,} tokens" if price.min_cached_prompt else ""
+    run = LayoutRun(layout, "SIMULATED (fake server)" if fake else f"MEASURED on {url}",
+                    timing=f"SIMULATED (roofline, {gpu} + {llm})", dollars=f"{price.name} list prices{minimum} (verify)")
     history: list[dict] = []
     seen: list[list] = []          # every earlier request's prompt + output: the cache holds them all
     for t in range(turns):
@@ -312,12 +340,19 @@ def compare_layouts(url: str, **kw) -> dict[str, LayoutRun]:
 
 
 def summary(runs: dict[str, LayoutRun]) -> str:
-    rows = [f"{'layout':16s} {'hit rate':>8s} {'prefill ms':>10s} {'$ / session':>12s}  source"]
+    """One row per layout, and one provenance line per column: a measured hit rate never lends its label to a
+    modelled time or a list-price dollar figure."""
+    rows = [f"{'layout':16s} {'hit rate':>8s} {'prefill ms':>10s} {'$ / session':>12s}"]
     for name, r in runs.items():
-        rows.append(f"{name:16s} {r.hit_rate:8.1%} {r.prefill_ms:10.0f} {r.cost_usd:12.6f}  {r.source}")
+        rows.append(f"{name:16s} {r.hit_rate:8.1%} {r.prefill_ms:10.0f} {r.cost_usd:12.6f}")
+    first = next(iter(runs.values()))
+    rows += [f"  hit rate    : cached tokens {first.cached_source}",
+             f"  prefill ms  : {first.timing}",
+             f"  $ / session : {first.dollars}"]
     return "\n".join(rows)
 
 
 def as_dict(run: LayoutRun) -> dict:
-    return {"layout": run.layout, "source": run.source, "hit_rate": run.hit_rate, "prefill_ms": run.prefill_ms,
+    return {"layout": run.layout, "source": run.source, "cached_source": run.cached_source, "timing": run.timing,
+            "dollars": run.dollars, "hit_rate": run.hit_rate, "prefill_ms": run.prefill_ms,
             "cost_usd": run.cost_usd, "rows": [asdict(r) for r in run.rows]}

@@ -21,7 +21,7 @@ export MEMLAB_LLM_URL=http://127.0.0.1:8000
 | Flag | Why this lab needs it |
 |---|---|
 | `--enable-auto-tool-choice --tool-call-parser hermes` | lets the model emit `remember` / `recall` / `forget` calls; Qwen2.5's chat template uses Hermes-style tool calls (vLLM tool-calling docs, v0.30.0) |
-| `--enable-prompt-tokens-details` | adds `usage.prompt_tokens_details.cached_tokens` per request — notebook 03's measured column; without it only `/metrics` has hits |
+| `--enable-prompt-tokens-details` | adds `usage.prompt_tokens_details.cached_tokens` per request — notebook 03's measured column (the only measured one: its prefill times stay a roofline estimate and its dollars a price table); without it only `/metrics` has hits |
 | `GPU_MEM_UTIL=0.6` | leaves room on the same GPU for the embedder below (two vLLM processes, one model each) |
 
 `Qwen/Qwen2.5-1.5B-Instruct` is 1.54 B parameters, about 3.1 GB in BF16 (FP16 on a T4) with 28 KiB of KV per
@@ -48,7 +48,8 @@ does), never mix dimensions in one table.
 ```bash
 cd 07-application-agent-framework/agent-memory/memory-lab
 python -m memlab env                  # tier T1 when either URL answers and is not the fake server
-python -m memlab cachebench --url $MEMLAB_LLM_URL      # notebook 03's table, measured
+python -m memlab cachebench --url $MEMLAB_LLM_URL --gpu T4   # notebook 03's table: cached tokens measured,
+                                                             # prefill ms modelled for --gpu/--llm, $ at list prices
 jupyter lab notebooks                  # 02 (real tool calls), 03 (measured cached tokens), 05 (real embedder)
 ```
 
