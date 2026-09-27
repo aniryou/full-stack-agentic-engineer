@@ -90,7 +90,12 @@ scenario("s1")
 # (`deploy/kind/manifests/20-kueue-queues.yaml`). Kueue admits a workload if its request fits
 # the queue's **available** quota:
 #
-# `available = min(nominal + borrowingLimit - usage,  cohort nominal total - cohort usage)`
+# $$
+# \begin{aligned}
+# \text{available} = \min\big(&\text{nominal} + \texttt{borrowingLimit} - \text{usage}, \\
+# &\text{cohort nominal total} - \text{cohort usage}\big)
+# \end{aligned}
+# $$
 #
 # (no lending limits here). If it needs more than its own unused nominal quota, it *borrows*.
 #

@@ -58,15 +58,15 @@ for cmd in gke.gcloud_equivalents({**v, "enable_flex_start_pool": True, "enable_
 # 8 nodes at 0.02 reclaims per node-hour = 0.16 per hour. (Both this rate and the 0.005 per
 # node-hour of primer §7.2 are illustrative; real reclaim rates vary by zone, shape and hour.)
 # Each interruption loses the work since the last checkpoint plus a restart. With Poisson
-# interruptions at rate λ, checkpoints every τ hours and restart cost R, one τ-hour segment takes
-# on average `(1/λ + R)(e^(λτ) - 1)` hours, and a job of W hours has W/τ segments — primer §7.2's
+# interruptions at rate $\lambda$, checkpoints every $\tau$ hours and restart cost $R$, one $\tau$-hour segment takes
+# on average $(1/\lambda + R)(e^{\lambda\tau} - 1)$ hours, and a job of $W$ hours has $W/\tau$ segments — primer §7.2's
 # gang formula with checkpoints added.
 #
 # ## Exercise 4.1 — expected runtime on Spot
 # Implement `runtime_h(work_h, rate_per_h, checkpoint_every_h, restart_h)` (no checkpoints =
 # `checkpoint_every_h=None`, i.e. one segment of `work_h`). Then compute `slowdown`: how many
 # times longer a 10 h, 8-node job takes on Spot **without** checkpoints than with hourly ones
-# (λ = 0.16/h, R = 0.25 h).
+# ($\lambda$ = 0.16/h, $R$ = 0.25 h).
 
 # %% exercise
 import math
@@ -92,12 +92,12 @@ print(f"✅ hourly checkpoints: {runtime_h(10, 0.16, 1.0):.2f} h; none: {runtime
 
 # %% [markdown]
 # Checkpoints are not free, which is why "checkpoint more often" has an optimum. If writing one
-# takes C hours, each segment needs τ + C uninterrupted hours: `(1/λ + R)(e^(λ(τ + C)) - 1)`
+# takes $C$ hours, each segment needs $\tau + C$ uninterrupted hours: $(1/\lambda + R)(e^{\lambda(\tau + C)} - 1)$
 # (`capacity.expected_runtime_h(..., checkpoint_cost_h=C)`). Frequent checkpoints waste time
 # writing; rare ones waste work on every reclaim. The minimum sits near Young's interval
-# √(2C/λ) — derived for large jobs in layer 01's
+# $\sqrt{2C/\lambda}$ — derived for large jobs in layer 01's
 # [primer §7.2 *How often to checkpoint: Young/Daly*](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)
-# (`roofline.reliability.young_daly_interval`). With C = 3 min and λ = 0.16/h:
+# (`roofline.reliability.young_daly_interval`). With $C$ = 3 min and $\lambda$ = 0.16/h:
 
 # %%
 C = 0.05
@@ -370,15 +370,19 @@ if not ctx.startswith("gke_"):
 # *"We need 16 H100s for three days next week, and a small L4 serving fleet — how do we get the
 # capacity?"* — in two minutes: serving runs on on-demand (or a reservation) with Spot only for
 # surplus replicas, expressed as a ComputeClass so a stockout falls back instead of paging
-# someone. The training gang must start whole, so queue it: Kueue reserves quota, files a
+# someone.
+#
+# The training gang must start whole, so queue it: Kueue reserves quota, files a
 # ProvisioningRequest, and DWS flex-start delivers all nodes at once for up to 7 days — *if* the
 # queue for that shape is short relative to the slack. A deadline turns the queue's wait into a
 # probability; when it is not good enough (24 h slack needs a mean wait under ~8 h for 95 %),
-# a reservation or calendar mode is the only guarantee. Spot is right for checkpointed work, and
-# its real price is the interruption rate times nodes times lost work, with the checkpoint
-# interval near √(2C/λ). Small models share a GPU through time-sharing, with no isolation. Budget
-# cold start explicitly: image streaming, a weights path at hundreds of MB/s, a driver new enough
-# for the image's CUDA, and a startup probe that covers the load.
+# a reservation or calendar mode is the only guarantee.
+#
+# Spot is right for checkpointed work, and its real price is the interruption rate times nodes
+# times lost work, with the checkpoint interval near $\sqrt{2C/\lambda}$. Small models share a GPU
+# through time-sharing, with no isolation. Budget cold start explicitly: image streaming, a
+# weights path at hundreds of MB/s, a driver new enough for the image's CUDA, and a startup probe
+# that covers the load.
 #
 # **Drill 1.** *Why not run the 8-node training job on Spot to save 65 %?* Without frequent
 # checkpoints the gang restarts from zero on every reclaim; at 0.16 interruptions/hour a 72-hour

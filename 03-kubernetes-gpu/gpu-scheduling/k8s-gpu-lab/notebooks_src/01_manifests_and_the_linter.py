@@ -130,11 +130,11 @@ print(f"✅ load {load_s:.0f} s -> failureThreshold {threshold} x 10 s = {thresh
 
 # %% [markdown]
 # ## Stranded GPUs: the CPU request is a GPU decision
-# GPUs strand in two ways, and one formula covers both. For a pod shape of *k* GPUs, the pods
-# that still fit a node are the minimum over resources of ⌊free / request⌋, and the stranded
-# GPUs are the free GPUs minus *k* × that:
+# GPUs strand in two ways, and one formula covers both. For a pod shape of $k$ GPUs, the pods
+# that still fit a node are the minimum over resources of $\lfloor \mathit{free} / \mathit{request} \rfloor$, and the stranded
+# GPUs are the free GPUs minus $k$ × that:
 #
-# * **GPU-count fragmentation** — only GPUs bind: stranded = `free mod k` per node, the count
+# * **GPU-count fragmentation** — only GPUs bind: stranded = $\mathit{free} \bmod k$ per node, the count
 #   primer §3.4 *Fragmentation, measured* tracks (a 3-GPU pod shape leaves 2 of 8 GPUs idle).
 # * **Resource-bundle stranding** — CPU or memory binds first. A node is a bundle:
 #   `g2-standard-48` has 4 L4s and 48 vCPUs; after GKE's reservations about 47.8 vCPUs and
