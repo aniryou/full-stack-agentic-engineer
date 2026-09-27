@@ -186,3 +186,11 @@ def test_cards_only_on_markdown_pages(fresh):
     assert "fse-stacked" in out
     nb = nb_page()
     assert "fse-stacked" not in hooks.on_page_content(NB_HTML + MODULE_TABLE, nb, fresh, None)
+
+
+def test_hand_written_pages_get_inline_tex_converted_too():
+    md = "Loss $\\alpha T^2$ costs $5 and $10; `$x_1$` stays.\n\n```\n$a_b$\n```\n\nand $x_1$."
+    page_md = SimpleNamespace(file=SimpleNamespace(src_uri="guide/how-to-use.md"))
+    out = hooks.on_page_markdown(md, page_md, {}, None)
+    assert out == "Loss \\(\\alpha T^2\\) costs $5 and $10; `$x_1$` stays.\n\n```\n$a_b$\n```\n\nand \\(x_1\\)."
+    assert hooks.on_page_markdown(out, page_md, {}, None) == out       # idempotent on a generated page

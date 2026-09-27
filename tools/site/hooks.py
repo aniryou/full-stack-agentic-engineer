@@ -41,7 +41,7 @@ from pathlib import Path
 from mkdocs.utils import get_relative_url
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_site_content import is_solution  # noqa: E402
+from build_site_content import inline_tex_to_parens, is_solution  # noqa: E402
 
 log = logging.getLogger("mkdocs.hooks.site")
 
@@ -206,9 +206,45 @@ def github_alerts_to_admonitions(markdown: str) -> str:
 
 
 def on_page_markdown(markdown, page, config, files, **kwargs):
-    if page.file.src_uri.endswith(".md") and "[!" in markdown:
-        return github_alerts_to_admonitions(markdown)
+    """Markdown pages: GitHub alerts -> admonitions, and inline $...$ TeX -> \\( \\) for pages the generator did not
+    write (the hand-written ones under site/guide/); on generated pages the second step finds nothing to do."""
+    if not page.file.src_uri.endswith(".md"):
+        return markdown
+    if "[!" in markdown:
+        markdown = github_alerts_to_admonitions(markdown)
+    if "$" in markdown:
+        markdown = _inline_tex_outside_code(markdown)
     return markdown
+
+
+def _inline_tex_outside_code(markdown: str) -> str:
+    out, prose, fence = [], [], None
+
+    def flush():
+        if prose:
+            block = "\n".join(prose)
+            spans: list[str] = []
+            masked = re.sub(r"(`+)(.+?)\1", lambda m: spans.append(m.group(0)) or f"\x00{len(spans) - 1}\x00", block)
+            masked = inline_tex_to_parens(masked, entities=False)
+            out.append(re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], masked))
+            prose.clear()
+
+    for line in markdown.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            tok = stripped[:3]
+            if fence is None:
+                flush()
+                fence = tok
+            elif fence == tok:
+                fence = None
+            out.append(line)
+        elif fence:
+            out.append(line)
+        else:
+            prose.append(line)
+    flush()
+    return "\n".join(out)
 
 
 def on_page_content(html, page, config, files, **kwargs):
