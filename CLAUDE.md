@@ -265,6 +265,23 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   live outside the repo; the build log counts the MathJax pages, the cards and the lists it fixed. **Baseline
   unchanged: 385 notebooks.**
 
+- **2026-09-27 — distill-core: the CPU spread measured, and the claims hardened (PR #47, on top of #45's tolerances).**
+  The same `tests (distill-core)` failure (#43's run: `verified == 16` got 14, `0.650` got 0.6485, α `0.890` got 0.889,
+  six primer rows) was root-caused independently: `OPENBLAS_CORETYPE=Haswell` (what an AMD Zen runner uses),
+  `Prescott`, `Nehalem` or `Sandybridge` reproduces it on one machine, and numpy's SIMD level moves the numbers too.
+  #45 landed the `near()` tolerances first; this PR adds what was missing around them. `distill-core/tools/host_sensitivity.py`
+  recomputes every trained or sampled quantity the tests hold, exactly as the tests do, under five OpenBLAS kernels × four
+  numpy SIMD levels plus sixteen runs with the last bit of every `np.exp` / `np.tanh` result flipped at random (a stand-in
+  for kernels the machine cannot force), and prints the spread; its docstring keeps the 2026-09-27 table (hard-label
+  training, SFT, the reasoning toy and the 5-token identities identical everywhere; soft-target students ±0.025 in rule
+  accuracy and ×2.8 in KL; the on-policy GKD students ±0.05–0.08 and ±11–19 of 101 on the §8 rare slices; the 4- and
+  8-unit drafts ±0.05 and ±0.14 in α). Twenty perturbation seeds of the whole suite then showed which qualitative claims
+  hold on every run and which do not: β = 0 ahead of β = 0.5 and β = 1 on every column and at least 0.25 ahead of reverse
+  KL over all contexts, α rising with draft width, the rare-slice gap growing with output length — now asserted outright in
+  `test_primer_numbers.py`; a strict β = 0.5 > β = 1 order at position 12 overlaps across CPUs and is not. Notebooks 01, 02
+  and 04 say in one line that their printed numbers are one CPU's, and `CONTRIBUTING.md` "Numbers" carries the rule.
+  **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

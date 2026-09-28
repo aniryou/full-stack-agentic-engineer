@@ -123,6 +123,14 @@ that makes torch importable.
   `roofline.roofline.attainable()`), or marked `(verify)`. The core's tests pin it. The pattern to copy is
   `roofline-core`'s `tests/test_primer_numbers.py`: it recomputes every computed number the primer quotes and
   requires it verbatim, so a changed formula fails until the primer follows.
+- A trained or sampled number (a seeded run of a tiny model, a sample drawn from one) is one CPU's run: numpy's
+  OpenBLAS picks its matrix kernel per microarchitecture, the kernels round differently in the last bit, and a
+  few hundred Adam steps can grow that into a slightly different model. Hold such a number to the primer's value
+  within a tolerance measured across CPU variants, never with exact equality, and assert the primer's qualitative
+  claim outright; the pattern is `distill-core`'s `near()` in `tests/test_primer_numbers.py` (the primer's text
+  verbatim, each `#` a number within its tolerance) with `tools/host_sensitivity.py`, which recomputes the
+  numbers under every OpenBLAS kernel and numpy SIMD level the machine can force, plus last-bit perturbations,
+  and prints the spread.
 - When a formula or an explanation already has a home in the repo, cite it and reuse it; duplicating it is a major
   review finding (SPEC §6b and §6c). Labs are standalone packages (no lab's package imports another lab), so new code that
   needs such a formula re-implements it, and a test reproduces the home's numbers and says so

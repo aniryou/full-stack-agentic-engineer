@@ -79,8 +79,10 @@ for name, d in drafts.items():
 # %% [markdown]
 # The off-the-shelf draft knows the language but not the dialect: $\alpha = 0.890$. Distilled on the target's
 # distributions it reaches 0.988; from samples alone, 0.933 — samples estimate the target's distribution, soft targets
-# hand it over. At $k$ = 4 that is 1.86× against 2.26×. Note the greedy column: when the target samples at $T$ = 1, a
-# greedy draft is accepted with probability $p(\operatorname{argmax} q) \le \max p = 0.8$, however good the draft is.
+# hand it over. At $k$ = 4 that is 1.86× against 2.26× (one CPU's run: another machine's matrix kernel lands within a
+# few hundredths of these, and within ±0.14 of $\alpha$ for the 4- and 8-unit drafts of the next example). Note the
+# greedy column: when the target samples at $T$ = 1, a greedy draft is accepted with probability
+# $p(\operatorname{argmax} q) \le \max p = 0.8$, however good the draft is.
 #
 # ## Worked example 3 — acceptance against draft size
 

@@ -200,9 +200,17 @@ def test_s4_on_policy_removes_exposure_bias(lang, teacher, bench):
         rows.append((label, s))
     tols = {"(nothing: supervised KD only)": (0.02, 0.04, 0.05), "GKD λ = 1, β = 0 (forward)": (0.025, 0.15, 0.15),
             "GKD λ = 1, β = 0.5": (0.08, 0.15, 0.15), "GKD λ = 1, β = 1 (reverse)": (0.08, 0.2, 0.15)}
+    got = {}
     for label, m in rows:
         o = seqkd.own_accuracy(m, lang, bench["prompts"], 12, np.random.default_rng(5))
-        near(f"| {label} | # | # | # |", o[3], o[11], E.vs_truth(m, lang)["rule_acc"], tol=tols[label])
+        got[label] = (o[3], o[11], E.vs_truth(m, lang)["rule_acc"])
+        near(f"| {label} | # | # | # |", *got[label], tol=tols[label])
+    kd_only, fwd, mid, rev = (got[label] for label in tols)
+    assert fwd[0] > 0.96 and fwd[1] > 0.90 and fwd[2] > kd_only[2] + 0.5   # on-policy data fixes it (never below
+    assert all(f > x and f > r for f, x, r in zip(fwd, mid, rev))          # 0.986 / 0.948 on any CPU tried); forward
+    assert fwd[2] > rev[2] + 0.25                                          # KL is ahead on every column and reverse KL
+    #                                                                        far behind — β = 0.5 and β = 1 overlap at
+    #                                                                        position 12 across CPUs, so no order there
     o_fwd = seqkd.own_accuracy(rows[1][1], lang, bench["prompts"], 12, np.random.default_rng(5))
     near("on-policy training held #", o_fwd[3], tol=0.025)
     sft = TinyLM(11, 16, 8, seed=1)
@@ -371,6 +379,7 @@ def test_s7_distilled_against_off_the_shelf_and_size(draft_world):
     near("| α (logit KD) | # | # | # | # |", *al.values(), tol=(0.2, 0.5, 0.06, 0.02))
     near("| speedup at k = 4 | #× | #× | #× | #× |", *sp.values(), tol=(0.5, 1.5, 0.25, 0.08))
     assert max(sp, key=sp.get) == 16                                  # the smallest draft that holds the target
+    assert al[4] < al[8] < al[16] < al[32]                            # and α rises with width, on every CPU tried
     off, kd16 = Dr.acceptance_on_text(target, d["off"], text)["alpha"], al[16]
     near("(# → # in the toy)", off, kd16, tol=(0.008, 0.06))
     c = K.SHAPES["qwen3-0.6b"].params() / K.SHAPES["qwen3-4b"].params()
@@ -403,7 +412,7 @@ def test_s8_measuring_a_student(lang, teacher, bench):
         for n in (2, 8):                                            # the rare slice: a count and its Wilson interval
             k = int(ok(s, rare, n).sum())
             cells += [k / len(rare), *E.wilson_interval(k, len(rare))]
-        assert cells[0] < 1                                         # the gap is in the tail
+        assert cells[0] < 1 and cells[3] <= cells[0]                # the gap is in the tail, and grows with length
         near(f"| {label2} | {m}/{m} ({lo:.3f}–{hi:.3f}) | # (#–#) | # (#–#) |", *cells, tol=rtol)
     lo, _ = E.wilson_interval(20, 20)
     present(f"anything tighter than {lo * 100:.0f}–100%")
