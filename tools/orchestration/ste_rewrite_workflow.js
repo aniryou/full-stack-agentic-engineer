@@ -25,6 +25,17 @@ const INJECT = 'python3 ' + R + '/tools/inject_colab_bootstrap.py'
 const LAYER = args.layer
 const ITEMS = args.items
 
+// Two items may share one file when each owns a range of sections: the second names the first in "after" and starts
+// when the first has finished its last stage, so no two agents edit one file at the same time.
+const doneResolve = {}
+const donePromise = Object.fromEntries(ITEMS.map(i => [i.key, new Promise(res => { doneResolve[i.key] = res })]))
+const partNote = (item) => item.sections
+  ? `\n\nThis item covers only part of its file: ${item.sections}. Rewrite the prose of those sections only; every line outside them stays byte-identical to what it is now (another item owns the other sections${item.after ? ' and rewrote them before you started' : ' and rewrites them after you finish'}). Line numbers refer to the original at HEAD; use the headings as the boundaries. The linter and the checks run on the whole file; a linter finding outside your sections is not yours to repair, and a check that names a fragment outside your sections is not yours either.`
+  : ''
+const partVerifyNote = (item) => item.sections
+  ? `\n\nThis item covers only part of its file: ${item.sections}. Review those sections only, against the same sections of the original. The other sections ${item.after ? 'were rewritten by an earlier item and are not under review; do not report on them' : 'are not under review but must still be byte-identical to the original: diff them, and report any change there as blocking'}.`
+  : ''
+
 const COMMON = `Repository: ${R} (branch claude/asd-ste100-agent-rewrite-hfcxty). File paths below are relative to the repository root; the absolute path is ${R}/<path>. Use absolute paths in every command; when a command must run inside a lab, write "cd <absolute dir> && <command>" in that one command. The original of every prose file is at git HEAD: read it with "git show HEAD:<relative path>". Never run a git command that changes state (add, commit, stash, checkout, restore, reset, clean, rebase, merge, push): many agents work in this same checkout at the same time, on other files. Never pip install anything. Temporary files go under ${S}. Never put a model name or model identifier in any file. The style brief is ${STYLE}; read it completely before you start, in particular section 1 (what does not change, items 11 to 14 included), section 3 (vocabulary: the names of this layer) and section 3.5 (document types).`
 
 const REWRITE_RULES = `TASK: rewrite the prose of the files below into ASD-STE100 (Simplified Technical English), in place, as the brief says.
@@ -59,9 +70,9 @@ const kindNotes = (item) => {
       return `Markdown documents (brief, section 3.5: a primer, a README, docs). Headings, code blocks, link targets, tables' shapes, numbers and (verify) tags verbatim. Check each file with "${MDLINKS} <file>" (0 broken links).`
     case 'pct':
       return `Percent-format notebook sources (brief, section 1 item 12). Edit only the "# %% [markdown]" cells: one "# " comment per line, keep that prefix on every line, keep every heading inside its Markdown cell, keep the first cell's H1 and the "**Tier:**" line's facts. The "# %%", "# %% exercise" and "# %% check" cells are code and stay verbatim, comments included. After editing, from the lab directory ${lab}:
-  cd ${lab} && python3 ${item.builder || 'tools/build_notebooks.py'}        # rebuilds notebooks/ (blanks) and solutions/ from the sources
+  cd ${lab} && ${item.python || 'python3'} ${item.builder || 'tools/build_notebooks.py'}        # rebuilds notebooks/ (blanks) and solutions/ from the sources${item.python ? ' (this lab executes its notebooks at build time: use exactly this interpreter, whose packages are pinned, so the committed outputs rebuild byte for byte; a build takes a few minutes)' : ''}
   ${NBSRC}                                                   # every heading in a Markdown cell
-  cd ${lab} && python3 -m pytest -q -p no:warnings tests/test_notebook_tooling.py
+  cd ${lab} && python3 -m pytest -q -p no:warnings tests/test_notebook_tooling.py   # if the lab has it: a rebuild of unchanged sources is a no-op
   cd ${lab} && python3 tools/run_notebooks.py notebooks --expect-fail   # if the lab has tools/run_notebooks.py: every blank still stops at its first exercise
   ${LINT} <each source file>
 Another agent may be editing other sources of the same lab at the same time: if the tooling test reports a stale notebook that is not generated from your sources, rebuild once more and re-run; never edit another agent's sources. "git diff --stat" must show, among your files, only your sources and the notebooks generated from them.`
@@ -101,10 +112,10 @@ const verifyTargets = (item) => {
   }
 }
 
-const rewritePrompt = (item) => `${COMMON}\n\n${REWRITE_RULES}\n\nYour files (you own these and only these; no other agent touches them):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${kindNotes(item)}\n\n${checkList(item)}`
-const verifyPrompt = (item, round, prev) => `${COMMON}\n\n${VERIFY_RULES}\n\nFiles under review (round ${round}):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${verifyTargets(item)}\n\n${checkList(item)}\n\nNotes the rewriter was given for these files:\n${kindNotes(item)}` +
+const rewritePrompt = (item) => `${COMMON}\n\n${REWRITE_RULES}\n\nYour files (you own these and only these; no other agent touches them):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${kindNotes(item)}${partNote(item)}\n\n${checkList(item)}`
+const verifyPrompt = (item, round, prev) => `${COMMON}\n\n${VERIFY_RULES}\n\nFiles under review (round ${round}):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${verifyTargets(item)}${partVerifyNote(item)}\n\n${checkList(item)}\n\nNotes the rewriter was given for these files:\n${kindNotes(item)}${partNote(item)}` +
   (prev ? `\n\nThis is a re-check. The previous round's findings, and what a fixer did with them, are below. Check that each fix is in place and correct, that each rejection is justified, look for new problems the fixes introduced, then re-read the whole text once more against the original.\nPrevious findings: ${JSON.stringify(prev.findings)}\nFixer report: ${JSON.stringify(prev.fix)}` : '')
-const fixPrompt = (item, verify) => `${COMMON}\n\n${FIX_RULES}\n\nYour files (you own these and only these):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${kindNotes(item)}\n\n${checkList(item)}\n\nThe verifier's findings (JSON):\n${JSON.stringify(verify.findings, null, 1)}\n\nThe verifier's summary: ${verify.summary}`
+const fixPrompt = (item, verify) => `${COMMON}\n\n${FIX_RULES}\n\nYour files (you own these and only these):\n${fileList(item)}\n\nKind of files: ${item.kind}. ${kindNotes(item)}${partNote(item)}\n\n${checkList(item)}\n\nThe verifier's findings (JSON):\n${JSON.stringify(verify.findings, null, 1)}\n\nThe verifier's summary: ${verify.summary}`
 
 const LINT_SCHEMA = { type: 'object', properties: { errors: { type: 'integer' }, warnings: { type: 'integer' } }, required: ['errors', 'warnings'] }
 const STR_LIST = { type: 'array', items: { type: 'string' } }
@@ -146,11 +157,15 @@ log(`${LAYER}: ${ITEMS.length} items, ${ITEMS.reduce((n, i) => n + i.words, 0)} 
 
 const results = await pipeline(
   ITEMS,
-  (item) => agent(rewritePrompt(item), { label: `rewrite:${item.key}`, phase: 'Rewrite', model: 'opus', effort: effortFor(item), schema: REPORT_SCHEMA })
-    .then(r => { log(`rewrote ${item.key}: lint ${r ? r.lint.errors + ' errors / ' + r.lint.warnings + ' warnings' : 'no report'}`); return { item, rewrite: r, verify: [], fixes: [] } }),
+  (item) => (item.after ? donePromise[item.after].then(() => log(`${item.key}: ${item.after} is done, starting`)) : Promise.resolve())
+    .then(() => agent(rewritePrompt(item), { label: `rewrite:${item.key}`, phase: 'Rewrite', model: 'opus', effort: effortFor(item), schema: REPORT_SCHEMA }))
+    .then(r => { log(`rewrote ${item.key}: lint ${r ? r.lint.errors + ' errors / ' + r.lint.warnings + ' warnings' : 'no report'}`); return { item, rewrite: r, verify: [], fixes: [] } })
+    .catch(e => { doneResolve[item.key](); throw e }),
   (s) => agent(verifyPrompt(s.item, 1, null), { label: `verify:${s.item.key}`, phase: 'Verify', model: 'opus', effort: 'high', schema: FINDINGS_SCHEMA })
-    .then(v => { s.verify.push(v); log(`verified ${s.item.key}: ${v ? v.verdict + ' ' + JSON.stringify(counts(v)) : 'no report'}`); return s }),
+    .then(v => { s.verify.push(v); log(`verified ${s.item.key}: ${v ? v.verdict + ' ' + JSON.stringify(counts(v)) : 'no report'}`); return s })
+    .catch(e => { doneResolve[s.item.key](); throw e }),
   async (s) => {
+    try {
     let round = 0
     while (round < 2 && needsFix(s.verify[s.verify.length - 1])) {
       const v = s.verify[s.verify.length - 1]
@@ -165,6 +180,7 @@ const results = await pipeline(
       round++
     }
     return s
+    } finally { doneResolve[s.item.key]() }
   },
 )
 
