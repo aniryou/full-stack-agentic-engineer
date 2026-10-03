@@ -337,8 +337,11 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   1.7 hours; 3,987 sentences compared in round 1, 1 blocking, 43 major and 143 minor findings, 234 applied, 3
   rejected; the two left open (a "Right for:" label, a nine-sentence drill answer) applied by hand; roofline-core 65
   and gpu-bench-lab 97 tests pass with the cross-topic number tests; the 13 linter errors left in the roofline
-  primer are all fragments its tests pin (arrows and dashes in computed phrases). **Baseline unchanged: 385
-  notebooks.**
+  primer are all fragments its tests pin (arrows and dashes in computed phrases). **Layer 02** (8 groups, about
+  31k words: the CUDA-and-NCCL primer, READMEs, deploy notes and 11 notebook sources, the layer README): 40 agents
+  in 1.5 hours; 3,140 sentences compared, 3 blocking, 39 major and 74 minor findings, 147 applied, 2 rejected; the
+  three left open (the technical name "stream" used as a verb) applied by hand; cuda-nccl-core 140 and cuda-nccl-lab
+  130 tests pass; 0 linter errors. **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and

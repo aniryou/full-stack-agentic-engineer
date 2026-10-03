@@ -1,24 +1,26 @@
 # %% [markdown]
 # # 02 · Memory-bound kernels on a real GPU: effective bandwidth, launch overhead and CUDA Graphs
 #
-# **Tier:** T1 — any NVIDIA GPU (Colab or Kaggle T4, an L4, a rented RTX 4090) with `numba-cuda`
-# installed. Without a GPU — or with one that Numba cannot use (numba-cuda missing, a driver/toolkit
-# mismatch: `gpurt.kernels` detects it and says why) — the notebook takes its **T0 path**: the same
-# kernels run at toy sizes in the simulator (correctness only), and every number printed is labelled
-# *model prediction* — computed from byte counts and stated assumptions, never presented as a measurement.
+# **Tier:** T1. It needs any NVIDIA GPU (Colab or Kaggle T4, an L4, a rented RTX 4090) with `numba-cuda`
+# installed. If there is no GPU, or if Numba cannot use the GPU (no numba-cuda, a driver/toolkit
+# mismatch), the notebook takes its **T0 path**. `gpurt.kernels` detects the cause and tells you why.
+#
+# On the T0 path, the same kernels run at small sizes in the simulator (correctness only). The notebook labels each
+# printed number *model prediction*. It calculates these numbers from byte counts and stated assumptions,
+# and never shows them as a measurement.
 #
 # ## The one-minute version
 #
-# * A memory-bound kernel is timed in **bytes**: effective bandwidth = bytes the algorithm must move ÷
-#   time, compared with the datasheet peak. 80–90 % of peak means the kernel is done; the only way
+# * You measure a memory-bound kernel in **bytes**: effective bandwidth = bytes the algorithm must move ÷
+#   time. Compare it with the datasheet peak. At 80–90 % of peak, the kernel is done. The only way to make it
 #   faster is to move fewer bytes (fusion, lower precision).
-# * Measure the kernel, not the plumbing: data already on the device, CUDA events, a warm-up launch.
-# * Small launches are **latency-bound**: $t = \alpha + S/B$ with $\alpha$ a few microseconds of launch overhead —
-#   the same model notebook 04 fits to collectives.
-# * Access patterns and extra passes cost bandwidth: naive transpose ≪ tiled ≈ copy; fused softmax
-#   moves half the bytes of the unfused one.
-# * A step made of many tiny kernels is **launch-bound**: the CPU cannot issue kernels as fast as the GPU
-#   finishes them. CUDA Graphs replay the whole sequence with one launch.
+# * Measure the kernel, not the infrastructure code: data already on the device, CUDA events, a warm-up launch.
+# * Small launches are **latency-bound**: $t = \alpha + S/B$, where $\alpha$ is a few microseconds of launch
+#   overhead. Notebook 04 fits the same model to collectives.
+# * Access patterns and extra passes cost bandwidth. Naive transpose ≪ tiled ≈ copy. Fused softmax
+#   moves half the bytes of the unfused softmax.
+# * A step with many small kernels is **launch-bound**: the CPU cannot issue kernels as fast as the GPU
+#   finishes them. CUDA Graphs replay the full sequence with one launch.
 #
 # Concepts: [the primer](../../PRIMER.md) §2 *The execution model*, §3 *Memory access patterns*,
 # §4 *Streams, launch overhead and CUDA Graphs*. The roofline itself is layer 01.
@@ -62,7 +64,7 @@ else:
 # %% [markdown]
 # ## Bytes first
 #
-# Before timing anything, count what each kernel *must* move (`gpurt.kernels.traffic`):
+# Before you measure a time, count the bytes that each kernel *must* move (`gpurt.kernels.traffic`):
 
 # %%
 n = 1 << 24
@@ -76,9 +78,9 @@ for name, b in rows:
 # %% [markdown]
 # ## Exercise 2.1 — effective bandwidth
 #
-# Write `effective(n_elements, bytes_per_element, seconds, peak_gbps)` returning `(gbps, fraction_of_peak)`
-# (GB = 1e9 bytes). Use it on a hypothetical run: a `vec_add` of 2²⁴ floats (12 bytes per element) that
-# takes 0.70 ms on a T4 (320 GB/s).
+# Write `effective(n_elements, bytes_per_element, seconds, peak_gbps)`. It returns `(gbps, fraction_of_peak)`
+# (GB = 1e9 bytes). Use it on a hypothetical run. The run is a `vec_add` of 2²⁴ floats (12 bytes per
+# element) that takes 0.70 ms on a T4 (320 GB/s).
 
 # %% exercise
 def effective(n_elements: int, bytes_per_element: int, seconds: float, peak_gbps: float) -> tuple[float, float]:
@@ -95,11 +97,13 @@ print(f"✅ {gbps:.1f} GB/s = {frac:.0%} of peak: a streaming kernel at ~90 % ha
 # %% [markdown]
 # ## A bandwidth sweep: two regimes
 #
-# Time `copy` and `vec_add` on vectors of 2¹⁰ to 2²⁶ floats (4 KiB to 256 MiB each; 8 KiB–512 MiB of traffic
-# for copy, 12 KiB–768 MiB for vec_add). Small launches cost a roughly fixed $\alpha$ (launch + latency); large ones
-# approach the DRAM bandwidth $B$. On the T0 path we check correctness in the simulator and print what the α-β
-# model *predicts* for the reference GPU — and, if you brought back `out/kernels.json` from a GPU box
-# (`deploy/any-gpu`), what was measured there.
+# Measure the time of `copy` and `vec_add` on vectors of 2¹⁰ to 2²⁶ floats (4 KiB to 256 MiB each). The
+# traffic is 8 KiB–512 MiB for copy and 12 KiB–768 MiB for vec_add. Small launches cost an approximately
+# constant $\alpha$ (launch + latency). Large launches approach the DRAM bandwidth $B$.
+#
+# On the T0 path, we make sure in the simulator that the results are correct. We also print what the α-β model *predicts* for
+# the reference GPU. If you brought back `out/kernels.json` from a GPU box (`deploy/any-gpu`), we also print
+# the measurement from that box.
 
 # %%
 from gpurt.dist.alphabeta import AlphaBeta, fit  # noqa: E402
@@ -132,10 +136,10 @@ else:
 # %% [markdown]
 # ## Exercise 2.2 — where launch overhead stops mattering
 #
-# The two terms of $t = \alpha + S/B$ are equal at $S_{1/2} = \alpha \cdot B$, where the kernel reaches half
-# its asymptotic bandwidth. Write `crossover_elements(alpha_s, bw_Bps, bytes_per_element)`: the vector length
-# at which a kernel moving `bytes_per_element` bytes per element reaches that point. Evaluate it for a
-# copy-like kernel with $\alpha$ = 5 µs and $B$ = 256 GB/s (80 % of a T4).
+# The two terms of $t = \alpha + S/B$ are equal at $S_{1/2} = \alpha \cdot B$. At that size, the kernel gets
+# half of its asymptotic bandwidth. Write `crossover_elements(alpha_s, bw_Bps, bytes_per_element)`. It
+# returns the vector length at which a kernel that moves `bytes_per_element` bytes per element gets to that
+# point. Calculate it for a copy-like kernel with $\alpha$ = 5 µs and $B$ = 256 GB/s (80 % of a T4).
 
 # %% exercise
 def crossover_elements(alpha_s: float, bw_Bps: float, bytes_per_element: int) -> float:
@@ -152,9 +156,9 @@ print(f"✅ below ~{mine:,.0f} floats a copy is launch-bound on {'this GPU' if H
 # %% [markdown]
 # ## Transpose: the cost of strided stores
 #
-# Notebook 01 counted it: the naive transpose's stores touch 32 sectors per warp request instead of 4.
-# On a GPU the effect is smaller than 8× because L2 merges some partial sectors before they reach DRAM —
-# which is why you measure.
+# Notebook 01 counted it: the stores of the naive transpose touch 32 sectors per warp request, not 4.
+# On a GPU, the effect is smaller than 8×, because L2 merges some partial sectors before they get to DRAM.
+# This is why you measure.
 
 # %%
 if HAVE_GPU:
@@ -173,9 +177,9 @@ else:
 # %% [markdown]
 # ## Exercise 2.3 — a no-cache model of the naive transpose
 #
-# Half the bytes are loads at full efficiency, half are stores at efficiency $e$ (useful bytes ÷ bytes
-# moved; 1/8 for the naive transpose). If moving bytes runs at the copy bandwidth $B$, what effective
-# bandwidth does the transpose report? Write `naive_transpose_gbps(copy_gbps, store_efficiency)`.
+# Half of the bytes are loads at full efficiency. The other half are stores at efficiency $e$ (useful bytes
+# ÷ bytes moved, 1/8 for the naive transpose). If the hardware moves bytes at the copy bandwidth $B$, what
+# effective bandwidth does the transpose report? Write `naive_transpose_gbps(copy_gbps, store_efficiency)`.
 
 # %% exercise
 def naive_transpose_gbps(copy_gbps: float, store_efficiency: float) -> float:
@@ -198,10 +202,11 @@ else:
 # %% [markdown]
 # ## Fusion: softmax in one pass instead of four kernels
 #
-# The unfused softmax moves the matrix six times (24 B/element) in four launches; the fused *online*
-# softmax moves it three times (12 B/element) in one. In primer §3.5's terms: this unfused path already
-# merges subtract and exp (6RC instead of the primer's five-kernel 8RC), and the fused kernel is the
-# primer's *online* row (3RC), not the 2RC variant that reads a row once — the Triton cell below is that one.
+# The unfused softmax moves the matrix six times (24 B/element) in four launches. The fused *online*
+# softmax moves it three times (12 B/element) in one launch. In the terms of primer §3.5, this unfused path
+# already merges subtract and exp (6RC, not the primer's five-kernel 8RC). The fused kernel is the primer's
+# *online* row (3RC). It is not the 2RC variant that reads a row one time. The Triton cell in the next
+# subsection is that variant.
 
 # %%
 if HAVE_GPU:
@@ -218,10 +223,11 @@ elif KERNELS_RUN:
 # %% [markdown]
 # ### The same fusion in Triton (optional, T1)
 #
-# `gpurt.kernels.triton_kernels` writes the softmax at the *block* level, as `torch.compile` would: one
-# program per row, the row held in registers, one read and one write per element (8 B/element in float32,
-# the primer's 2RC row). With torch and triton on a GPU this cell checks it against `torch.softmax` and
-# times it next to the Numba kernels above.
+# `gpurt.kernels.triton_kernels` writes the softmax at the *block* level, in the same way as `torch.compile`.
+# It uses one program per row and holds the row in registers. It does one read and one write per element
+# (8 B/element in float32, the primer's 2RC row). With torch and triton on a GPU, this cell
+# compares the Triton softmax with `torch.softmax`. The cell also measures the time of the Triton softmax
+# next to the Numba kernels of the cells before.
 
 # %%
 from gpurt.kernels import triton_kernels  # noqa: E402
@@ -249,8 +255,8 @@ else:
 # %% [markdown]
 # ## Exercise 2.4 — predict the fusion speedup, including launches
 #
-# Write `softmax_times(rows, cols, bw_Bps, launch_s)` returning `(t_unfused, t_fused)`: 24 B/element and
-# four launches versus 12 B/element and one launch. Compare a large matrix with a tiny one.
+# Write `softmax_times(rows, cols, bw_Bps, launch_s)`. It returns `(t_unfused, t_fused)`: 24 B/element and
+# four launches, against 12 B/element and one launch. Compare a large matrix with a small one.
 
 # %% exercise
 def softmax_times(rows: int, cols: int, bw_Bps: float, launch_s: float) -> tuple[float, float]:
@@ -269,8 +275,9 @@ print(f"✅ large: {tu / tf:.2f}x (bytes decide); tiny: {tu_small / tf_small:.2f
 # %% [markdown]
 # ## Determinism: atomics change the order of additions
 #
-# Floating-point addition is not associative. The atomic reduction adds block results in whatever order
-# blocks finish, so repeated runs can differ in the last bits; the two-pass reduction fixes the order.
+# Floating-point addition is not associative. The atomic reduction adds the block results in the order in
+# which the blocks finish. Thus repeated runs can be different in the last bits. The two-pass reduction
+# always uses the same order.
 
 # %%
 if HAVE_GPU:
@@ -287,9 +294,9 @@ else:
 # %% [markdown]
 # ## Launch overhead and CUDA Graphs
 #
-# `gpurt.launch.LaunchModel`: eager step $\approx n \cdot \max(k + g, L)$, graph step $\approx G + n \cdot (k + g)$
-# for $n$ kernels of $k$ µs, a GPU-side gap $g$, CPU launch cost $L$ and one graph launch $G$. On a GPU
-# with torch, `measure_graph_vs_eager()` measures the real thing.
+# `gpurt.launch.LaunchModel`: eager step $\approx n \cdot \max(k + g, L)$, graph step $\approx G + n \cdot (k + g)$.
+# Here $n$ is the number of kernels of $k$ µs, and $g$ is a GPU-side gap. $L$ is the CPU launch cost, and
+# $G$ is one graph launch. On a GPU with torch, `measure_graph_vs_eager()` measures the real values.
 
 # %%
 from gpurt.launch import measure_graph_vs_eager  # noqa: E402
@@ -311,10 +318,11 @@ else:
 # ## Exercise 2.5 — should this decode step be captured in a graph?
 #
 # A decode step runs `layers × kernels_per_layer` kernels. Write `decode_step(layers, kernels_per_layer,
-# kernel_us, model)` returning `(eager_us, graph_us, launch_bound)` with a `LaunchModel`. Evaluate primer
-# §4.2's scenario — 32 layers × 12 kernels = 384 kernels, ≈2 µs each at batch 1 and ≈20 µs at a large
-# batch, with its assumptions $L$ = 5 µs, $G$ = 10 µs and no GPU-side gap — and then add the gap the primer
-# leaves out: $g$ = 1 µs between consecutive kernels.
+# kernel_us, model)` with a `LaunchModel`. It returns `(eager_us, graph_us, launch_bound)`.
+#
+# Calculate the scenario of primer §4.2. It has 32 layers × 12 kernels = 384 kernels, ≈2 µs each at batch 1
+# and ≈20 µs at a large batch. Use its assumptions: $L$ = 5 µs, $G$ = 10 µs and no GPU-side gap. Then add the gap that the
+# primer leaves out: $g$ = 1 µs between consecutive kernels.
 
 # %% exercise
 def decode_step(layers: int, kernels_per_layer: int, kernel_us: float, model: LaunchModel):
@@ -338,23 +346,26 @@ print(f"✅ batch 1: {eager / graph:.2f}x faster as a graph, {eager_gap / graph_
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** For memory-bound kernels I report *effective bandwidth* — the bytes the algorithm
-# must move divided by the time — next to the datasheet peak. I measure with data on the device, CUDA
-# events around many back-to-back launches, after a warm-up. A size sweep shows two regimes: a latency
-# floor of a few microseconds per launch and a bandwidth plateau; the α-β fit gives both numbers and the
-# size where they cross. Anything near 80–90 % of peak is finished; below that, look at access patterns
-# (the naive transpose's strided stores) or extra passes (unfused softmax moves twice the bytes). When a
-# step is hundreds of tiny kernels, the CPU is the bottleneck, `GPU util` still reads high, and CUDA
-# Graphs — or fewer, fused kernels — are the fix.
+# **Two minutes.** For memory-bound kernels, I report *effective bandwidth* next to the datasheet peak.
+# Effective bandwidth is the bytes that the algorithm must move, divided by the time. I measure with data
+# on the device and CUDA events around many back-to-back launches, after a warm-up. A size sweep shows two
+# regimes: a latency floor of a few microseconds per launch, and a bandwidth plateau. The α-β fit gives the
+# two numbers and the size where they cross.
+#
+# A kernel near 80–90 % of peak is finished. Below that, look at access patterns (the strided stores of the
+# naive transpose) or extra passes (unfused softmax moves two times the bytes). When a step is hundreds of
+# small kernels, the CPU is the bottleneck, and `GPU util` still shows a high value. Then CUDA Graphs, or
+# fewer, fused kernels, are the solution.
 #
 # **Drill questions**
 #
-# 1. *The first call of my kernel takes 300 ms, the rest 50 µs. Is the GPU slow?* — No: the first call
-#    JIT-compiles (Numba, Triton, PTX JIT) and may create the CUDA context. Warm up before timing, and in
-#    production pre-compile or cache (engines warm up and capture graphs at start-up).
-# 2. *Our fused kernel reaches 88 % of peak DRAM bandwidth. How do we make it faster?* — Move fewer bytes:
-#    lower precision (bf16/fp8), fuse the neighbouring op, or avoid re-reading inputs. More threads will
-#    not help a saturated memory system.
-# 3. *When do CUDA Graphs not help?* — When kernels are long enough that the CPU keeps ahead (large
-#    batches, prefill), and when shapes change every step — a graph is captured per shape, so engines
-#    pad to a set of captured batch sizes.
+# 1. *The first call of my kernel takes 300 ms, and the other calls take 50 µs. Is the GPU slow?* No. The
+#    first call does a JIT compilation (Numba, Triton, PTX JIT), and it can also create the CUDA context. Do
+#    a warm-up before you measure the time. In production, compile in advance or cache the result (engines do
+#    a warm-up and capture graphs at start-up).
+# 2. *Our fused kernel gets 88 % of peak DRAM bandwidth. How do we make it faster?* Move fewer bytes: use
+#    lower precision (bf16/fp8), fuse the adjacent op, or do not read the inputs again. More threads do not
+#    help a saturated memory system.
+# 3. *When do CUDA Graphs not help?* They do not help when kernels are sufficiently long that the CPU stays
+#    ahead (large batches, prefill). They also do not help when shapes change at each step. An engine
+#    captures one graph per shape. Thus engines pad to a set of captured batch sizes.

@@ -1,25 +1,26 @@
 # %% [markdown]
 # # 04 · Compatibility and containers
 #
-# **Tier:** T0 (CPU; a rules engine over dated version tables, marked *verify*). On a real
+# **Tier:** T0 (CPU, a rules engine over dated version tables, marked *verify*). On a real
 # machine, the lab's `05_how_a_container_sees_a_gpu` (T1) reads `/dev/nvidia*`, the injected
 # `libcuda` mount and the driver and runtime versions from inside a container.
 #
 # ## The one-minute version
-# Whether a CUDA program runs comes down to **two independent gates**:
+# Two **independent gates** decide if a CUDA program runs:
 #
-# 1. **Driver and runtime.** The host driver must support the CUDA version your app or image was
-#    built with. Newer drivers run older runtimes. A newer runtime *of the same major* runs on
-#    any driver above that major's floor (*minor-version compatibility*), at two costs: the
-#    driver cannot JIT-compile that toolkit's PTX, and APIs newer than the driver fail. A newer
-#    *major* needs a newer driver, or the forward-compatibility package on a data-center GPU.
+# 1. **Driver and runtime.** The host driver must support the CUDA version that you used to build
+#    your app or image. Newer drivers run older runtimes. A newer runtime *of the same major* runs
+#    on any driver above the floor of that major (*minor-version compatibility*). This has two
+#    costs: the driver cannot JIT-compile the PTX of that toolkit, and APIs newer than the driver
+#    fail. A newer *major* needs a newer driver, or the forward-compatibility package on a
+#    data-center GPU.
 # 2. **Kernel image and GPU.** SASS built for `sm_XY` runs only on compute capability `X.Z` with
-#    $Z \ge Y$. PTX for `compute_XY` can be JIT-compiled for any newer GPU. With neither you get
-#    *"no kernel image is available for execution on the device"*.
+#    $Z \ge Y$. The driver can JIT-compile PTX for `compute_XY` for any newer GPU. If you have
+#    neither, you get *"no kernel image is available for execution on the device"*.
 #
-# A container carries the CUDA runtime and libraries. The **host** provides the driver: the
-# NVIDIA Container Toolkit injects `/dev/nvidia*`, `libcuda.so` and NVML when the container
-# starts. The "CUDA Version" in `nvidia-smi` is the *driver's maximum*, not what is installed.
+# A container carries the CUDA runtime and libraries. The **host** supplies the driver: the NVIDIA
+# Container Toolkit injects `/dev/nvidia*`, `libcuda.so` and NVML when the container starts. The
+# "CUDA Version" in `nvidia-smi` is the *driver's maximum*, not the installed version.
 #
 # Primer: §1 *The stack from driver to framework* and §6 *How a container gets a GPU* (`../../PRIMER.md`).
 
@@ -32,8 +33,8 @@ for drv in ("470.256.02", "535.183.01", "550.127.05", "570.86.10", "580.65.06"):
     print(f"driver {drv:>11} -> nvidia-smi says 'CUDA Version: {compat.driver_cuda(drv)}'")
 
 # %% [markdown]
-# `check()` walks both gates and names the error you would get. Three runs of the same
-# CUDA 12.4 application on an H100 with a 535 driver, which supports CUDA up to 12.2:
+# `check()` examines both gates and names the error that occurs. The next cell shows three runs of
+# the same CUDA 12.4 application on an H100 with a 535 driver. That driver supports CUDA up to 12.2:
 
 # %%
 print(compat.check("12.4", "535.183.01", gpu="H100", targets="8.0 9.0"), "\n")
@@ -41,8 +42,8 @@ print(compat.check("12.4", "535.183.01", gpu="H100", targets="8.0+PTX"), "\n")
 print(compat.check("13.0", "535.183.01", gpu="H100", targets="9.0"))
 
 # %% [markdown]
-# Targets use either spelling. `TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0+PTX"` means SASS for
-# sm_80, sm_86 and sm_90, plus PTX for compute_90 (the `+PTX`):
+# You can write targets in two forms. `TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0+PTX"` means SASS for sm_80, sm_86
+# and sm_90, plus PTX for compute_90 (the `+PTX`):
 
 # %%
 print(compat.parse_targets("8.0 8.6 9.0+PTX"))
@@ -55,15 +56,15 @@ for gpu in ("T4", "A100", "L4", "H100", "B200", "RTX 5090"):
 # %% [markdown]
 # ## Exercise 4.1: the binary-compatibility rules
 #
-# Write `sass_runs(target, cc)` and `ptx_runs(target, cc)` for targets like `"sm_86"`,
-# `"sm_90a"`, `"compute_80"` or `"compute_120"`. The digits are major then one minor digit, so
-# `sm_100` is 10.0 and `sm_120` is 12.0. `cc` is a string like `"8.9"`.
+# Write `sass_runs(target, cc)` and `ptx_runs(target, cc)` for targets like `"sm_86"`, `"sm_90a"`,
+# `"compute_80"` or `"compute_120"`. The digits are the major, then one minor digit. Thus `sm_100` is
+# 10.0 and `sm_120` is 12.0. `cc` is a string like `"8.9"`.
 #
 # * SASS `sm_XY`: same major **and** device minor $\ge Y$. With the `a` suffix: exactly X.Y.
 # * PTX `compute_XY`: device CC $\ge X.Y$ as a (major, minor) pair, across majors too. With `a`:
 #   exactly X.Y.
-# * `f` (family-specific, CUDA 12.9+; verify): SASS and PTX alike stay inside the family, the same
-#   major with device minor $\ge Y$. `sm_100f` runs on 10.0 and 10.3, never on 12.0.
+# * `f` (family-specific, CUDA 12.9+, verify): SASS and PTX both stay in the family, that is, the
+#   same major with device minor $\ge Y$. `sm_100f` runs on 10.0 and 10.3, never on 12.0.
 
 # %% exercise
 def _parse(target):
@@ -105,11 +106,18 @@ print("✅ SASS: within a major, upward only. PTX: upward across majors. 'a': on
 # %% [markdown]
 # ## Exercise 4.2: predict the verdict
 #
-# For each scenario, predict `None` if it runs or the CUDA error **code** it fails with
-# (35 insufficient driver, 100 no device, 209 no kernel image, 222 unsupported PTX,
-# 803 driver mismatch, 804 forward compatibility on unsupported hardware). Reason it out first.
-# Forward compatibility also needs a kernel-driver branch the cuda-compat package supports:
-# `compat.COMPAT_BRANCHES` lists them (dated, verify).
+# For each scenario, predict `None` if it runs, or the CUDA error **code** that it fails with. The
+# codes are:
+#
+# * 35 insufficient driver
+# * 100 no device
+# * 209 no kernel image
+# * 222 unsupported PTX
+# * 803 driver mismatch
+# * 804 forward compatibility on unsupported hardware
+#
+# Think about the reason first. Forward compatibility also needs a kernel-driver branch that the cuda-compat package
+# supports: `compat.COMPAT_BRANCHES` lists them (dated, verify).
 
 # %% exercise
 scenarios = {
@@ -143,13 +151,14 @@ print("✅ all eight verdicts right. Scenario e is the classic: a wheel with no 
 # %% [markdown]
 # ## Exercise 4.3: choose the CUDA version for a fleet's base image
 #
-# A fleet has three node pools with drivers `535.183.01`, `550.127.05` and `570.86.10`, running
-# L4, A100 and H100 GPUs. Your kernels ship SASS for all three GPUs. Compute:
+# A fleet has three node pools with drivers `535.183.01`, `550.127.05` and `570.86.10`. The pools run
+# L4, A100 and H100 GPUs. Your kernels ship SASS for all three GPUs. Calculate these values:
 #
-# * `native`: the newest CUDA that every pool supports **without** relying on minor-version compatibility
-# * `with_minor_compat`: the newest CUDA version in `compat.CUDA_MIN_DRIVER` that runs on every
-#   pool **by** minor-version compatibility (same major as every driver, every driver above that
-#   major's floor in `compat.MINOR_COMPAT_FLOOR`)
+# * `native`: the newest CUDA that each pool supports **without** the help of minor-version
+#   compatibility
+# * `with_minor_compat`: the newest CUDA version in `compat.CUDA_MIN_DRIVER` that runs on each pool
+#   **by** minor-version compatibility. For this, the version must have the same major as each
+#   driver, and each driver must be above the floor of that major in `compat.MINOR_COMPAT_FLOOR`.
 
 # %% exercise
 drivers = ["535.183.01", "550.127.05", "570.86.10"]
@@ -175,9 +184,9 @@ print("   CUDA 13 needs a driver upgrade.")
 # %% [markdown]
 # ## Anatomy of a GPU container
 # The image ships the **userland** (CUDA runtime, cuBLAS, cuDNN, NCCL, your framework). The host
-# ships the **driver**. At container start the NVIDIA Container Toolkit, either through an OCI
-# prestart hook or a CDI spec, adds the device nodes and bind-mounts the host's user-mode driver
-# libraries, which must match the host kernel module exactly.
+# ships the **driver**. When the container starts, the NVIDIA Container Toolkit adds the device
+# nodes. It uses an OCI prestart hook or a CDI spec. It also bind-mounts the user-mode driver
+# libraries of the host. These libraries must match the host kernel module exactly.
 
 # %%
 for path in ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/usr/lib/x86_64-linux-gnu/libcuda.so.1",
@@ -189,7 +198,7 @@ for path in ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/usr/lib/x86_
 # %% [markdown]
 # ## Exercise 4.4: diagnose five container stories
 #
-# Predict `None` (it works) or the error code for each. `compat.explain_container()` is the
+# Predict `None` (it works) or the error code for each story. `compat.explain_container()` is the
 # referee.
 #
 # 1. `docker run my-image python -c "import torch; torch.zeros(1).cuda()"`, but the run command
@@ -198,8 +207,8 @@ for path in ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/usr/lib/x86_
 #    self-contained". The production host runs a different driver.
 # 3. A CUDA 13.0 image that includes `cuda-compat`, on an L4 host with driver 535.
 # 4. The same image on a workstation RTX 4090 with driver 535.
-# 5. A CUDA 12.8 image whose wheel has SASS for 8.0, 8.6 and 9.0 but no PTX, on a GKE L4 node
-#    with driver 535.
+# 5. A CUDA 12.8 image on a GKE L4 node with driver 535. The wheel in the image has SASS for 8.0,
+#    8.6 and 9.0 but no PTX.
 
 # %% exercise
 stories = {
@@ -228,24 +237,27 @@ print("   nothing in the image may pretend to be the driver")
 # %% [markdown]
 # ## In a design review
 #
-# **The two-minute version.** "We pin a driver branch per node pool and build images against a
-# CUDA version at or below what that driver supports, or within its major if we have checked that
-# every kernel ships SASS for our GPUs. Images carry only userland: CUDA runtime, libraries,
-# framework. The NVIDIA Container Toolkit injects the device nodes and the host's libcuda and NVML
-# at start, so user-mode and kernel-mode driver always match. We never copy libcuda into an image.
-# Our wheels list their targets (`torch.cuda.get_arch_list()`), and we check them against each
-# GPU generation before rollout. New architectures (Blackwell, CC 10.x and 12.x) need wheels built
-# with CUDA 12.8 or later. Upgrading the driver is the rollout gate, not the image."
+# **The two-minute version.** "We pin a driver branch per node pool. We build images against a CUDA
+# version at or below the version that this driver supports. Or we build within its major, if a
+# check showed that each kernel ships SASS for our GPUs.
+#
+# "Images carry only userland: CUDA runtime, libraries, framework. The NVIDIA Container Toolkit
+# injects the device nodes and the host's libcuda and NVML at start. Thus the user-mode driver and
+# the kernel-mode driver always match. We never copy libcuda into an image.
+#
+# "Our wheels list their targets (`torch.cuda.get_arch_list()`). We compare them with each GPU
+# generation before rollout. New architectures (Blackwell, CC 10.x and 12.x) need wheels built with
+# CUDA 12.8 or later. The driver upgrade is the rollout gate, not the image."
 #
 # **Drill questions**
 #
 # 1. *`nvidia-smi` says CUDA 12.2 while `nvcc --version` in the container says 12.4. Which is
-#    wrong?* Neither. The first is the driver's maximum and the second is the toolkit in the
-#    image. It runs by minor-version compatibility, but PTX JIT and APIs newer than 12.2 will
-#    not work.
+#    incorrect?* Neither. The first is the driver's maximum, and the second is the toolkit in the
+#    image. It runs by minor-version compatibility. But PTX JIT and APIs newer than 12.2 will not
+#    work.
 # 2. *PyTorch on a new RTX 50-series card says "no kernel image is available". Why?* The wheel
 #    has no sm_120 SASS and no PTX that can JIT to 12.0. Install a build made with CUDA 12.8+
 #    that targets sm_120.
 # 3. *After a host driver upgrade, `nvidia-smi` says "Driver/library version mismatch". Why?*
-#    The kernel module still loaded is the old one, while the user-space NVML is new. Reboot
-#    (or reload the module) so they match.
+#    The kernel module in memory is still the old one, but the user-space NVML is new. Reboot
+#    (or reload the module) so that they match.
