@@ -1,29 +1,34 @@
 # deploy/gcp — a zonal GKE cluster for the GPU runtime lab (T3, optional)
 
-**What it does:** `terraform/` creates a VPC, a node service account with minimal roles, a zonal GKE
-Standard cluster with DCGM metrics and Google Managed Prometheus, a CPU system pool, and GPU pools
-that autoscale **from zero** with GKE-managed NVIDIA drivers:
+**What it does:** `terraform/` creates a VPC and a node service account with minimal roles. It also
+creates a zonal GKE Standard cluster with DCGM metrics and Google Managed Prometheus. The cluster has a
+CPU system pool and GPU pools. The GPU pools autoscale **from zero** with GKE-managed NVIDIA drivers:
 
 | Pool | Default | Machine | GPUs | Purpose |
 |---|---|---|---|---|
 | `system` | on, 1 node | e2-standard-4 | — | kube-system, collectors |
-| `l4` | on, 0→2, Spot | g2-standard-4 | 1 x L4 | smoke test, CUDA sample, kernels |
-| `l4x2` | on, 0→2, Spot | g2-standard-24 | 2 x L4 | nccl-tests (PCIe, no NVLink) |
+| `l4` | on, 0 to 2, Spot | g2-standard-4 | 1 x L4 | smoke test, CUDA sample, kernels |
+| `l4x2` | on, 0 to 2, Spot | g2-standard-24 | 2 x L4 | nccl-tests (PCIe, no NVLink) |
 | `l4-shared` | off | g2-standard-4 | 1 x L4, time-shared | GPU time-sharing |
 | `a100-mig` | off | a2-highgpu-1g | 1 x A100 as MIG slices | MIG |
 
 Then run the workloads in [`../gke`](../gke/README.md).
 
-**Cost (idle):** the GKE cluster management fee (one zonal cluster is covered by the GKE free-tier
-credit — verify) plus one e2-standard-4 (a few dollars a day — verify). **GPU pools cost nothing
-until a pod requests a GPU**; an L4 Spot node is a fraction of the ~$0.70/hr on-demand L4 price
-(Spot discounts are 60–91 %, verify current prices). Always `terraform destroy` at the end of a session.
+**Cost (idle):** the idle cost is the GKE cluster management fee and one e2-standard-4. The GKE
+free-tier credit covers one zonal cluster (verify). One e2-standard-4 costs a few dollars a day
+(verify).
+
+**GPU pools cost nothing until a pod requests a GPU.** An L4 Spot node costs a fraction of the
+~$0.70/hr on-demand L4 price. Spot discounts are 60–91 % (verify current prices). At the end of a
+session, always run `terraform destroy`.
 
 **Prerequisites**
 
-* A project on a *paid* billing account (GPUs are not usable on a Free Trial account; credits carry over).
-* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota — for Spot VMs the
-  *preemptible* L4 quota (verify names in *IAM & Admin → Quotas*). New projects often start at 0: request it.
+* A project on a *paid* billing account. You cannot use GPUs on a Free Trial account. Your credits
+  carry over.
+* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota. For Spot VMs, this is the
+  *preemptible* L4 quota (verify the names on the *Quotas* page of *IAM & Admin*). New projects
+  frequently start at 0. Request the quota.
 * `gcloud auth application-default login`, Terraform >= 1.9, `kubectl` with `gke-gcloud-auth-plugin`.
 
 ```bash
@@ -40,15 +45,19 @@ cd ../gcp/terraform && terraform destroy
 
 **Design notes (what each choice teaches):**
 
-* *Zonal, one control plane* — the cheapest GKE shape; regional clusters triple the node count.
-* *GKE-managed drivers* (`gpu_driver_installation_config`) — GKE installs the NVIDIA driver on COS and
-  its device plugin mounts it into pods at `/usr/local/nvidia`; the alternative is
-  `INSTALLATION_DISABLED` plus the NVIDIA GPU Operator (primer §6, §9).
-* *Autoscale from zero + Spot* — the default for anything bursty; Spot nodes can be preempted, so
-  long jobs need checkpoints (layer 03 covers obtainability: reservations, DWS flex-start).
-* *DCGM + Managed Prometheus* — the profiling fields (`DCGM_FI_PROF_*`) that make `GPU_UTIL`
-  interpretable (primer §8, notebook 06).
-* *Time-sharing and MIG pools off by default* — they exist to be switched on for one experiment and off again.
+* *Zonal, one control plane*: this is the GKE shape with the lowest cost. A regional cluster has three
+  times the node count.
+* *GKE-managed drivers* (`gpu_driver_installation_config`): GKE installs the NVIDIA driver on COS. Its
+  device plugin mounts the driver into pods at `/usr/local/nvidia`. The alternative is
+  `INSTALLATION_DISABLED` with the NVIDIA GPU Operator (primer §6, §9).
+* *Autoscale from zero + Spot*: this is the default for any workload with bursts. The platform can
+  preempt Spot nodes. Thus long jobs must write checkpoints. Layer 03 tells how to get the GPUs:
+  reservations, DWS flex-start.
+* *DCGM + Managed Prometheus*: they give the profiling fields (`DCGM_FI_PROF_*`). With these fields,
+  you can understand what `GPU_UTIL` shows (primer §8, notebook 06).
+* *Time-sharing and MIG pools off by default*: these pools are for one experiment. Set a pool on for
+  the experiment, and then set it off again.
 
-Things marked `# VERIFY:` in the `.tf` files (zones offering L4/A100, GKE-supported MIG partition
-sizes) are product facts to re-check before applying.
+Some items in the `.tf` files have the mark `# VERIFY:`. Examples are the zones that offer L4/A100 and
+the MIG partition sizes that GKE supports. These items are product facts. Examine them again before you
+apply the configuration.

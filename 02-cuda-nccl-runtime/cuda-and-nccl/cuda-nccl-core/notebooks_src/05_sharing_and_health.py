@@ -6,18 +6,21 @@
 # sample exporter output.
 #
 # ## The one-minute version
-# * There are three ways to share one GPU. **MIG** partitions it into up to 7 isolated instances
-#   with fixed shapes. **MPS** runs several processes' kernels on the SMs at the same time: it
-#   is efficient but weakly isolated. **Time-slicing** gives each process the whole GPU in turns:
-#   there is no isolation, and latency multiplies with the number of busy tenants.
-# * MIG shapes are constrained: 7 compute slices, 8 memory slices, and fixed start positions.
-#   `3g + 3g + 1g` does **not** fit, even though 3 + 3 + 1 = 7.
-# * For LLM serving, the best "sharing" is usually **one engine per GPU batching many requests**.
-#   Continuous batching shares the weight reads, which no GPU-level mechanism can do.
-# * **GPU utilization** is the fraction of *time* any kernel is running. One small kernel on 8
-#   of 132 SMs reads 100%. Judge load by SM active, tensor active and DRAM active.
-# * **XIDs** are triaged by who acts: the app owner (13, 31, 43), the node operator (63, 94) or
-#   the hardware path (48, 79, 95).
+# * There are three ways to share one GPU. **MIG** partitions the GPU into up to 7 isolated
+#   instances with shapes that do not change. **MPS** runs the kernels of several processes on the SMs at the
+#   same time. It is efficient, but its isolation is weak. **Time-slicing** gives the whole GPU to
+#   each process in turns. It has no isolation, and the latency multiplies with the number of busy
+#   tenants.
+# * MIG shapes have limits: 7 compute slices, 8 memory slices, and start positions that do not
+#   change.
+#   `3g + 3g + 1g` does **not** fit, but 3 + 3 + 1 = 7.
+# * For LLM serving, the best "sharing" is usually **one engine for each GPU, which batches many
+#   requests**. Continuous batching shares the weight reads. No GPU-level mechanism can do this.
+# * **GPU utilization** is the fraction of *time* in which at least one kernel runs. One small
+#   kernel on 8 of 132 SMs shows 100%. Use SM active, tensor active and DRAM active to find the
+#   load.
+# * The triage of **XIDs** depends on who acts. That is the app owner (13, 31, 43), the node
+#   operator (63, 94) or the hardware path (48, 79, 95).
 #
 # Primer: §7 *Sharing a GPU* and §8 *Health and observability* (`../../PRIMER.md`).
 
@@ -38,10 +41,12 @@ for mix in (["4g.40gb", "2g.20gb", "1g.10gb"], ["3g.40gb", "2g.20gb", "1g.10gb",
     print(f"\n{' + '.join(mix)} ->", "does not fit" if pl is None else S.layout(gpu, pl))
 
 # %% [markdown]
-# Why does `3g + 3g + 1g` fail? A 3g instance takes 3 compute slices but **4 memory slices**, and
-# it may only start at slice 0 or 4. Two of them use all 8 memory slices, so the seventh compute
-# slice has no memory left to pair with. Creation order matters too: create small instances
-# first, without choosing where they go, and they can block the big ones:
+# Why does `3g + 3g + 1g` fail? A 3g instance uses 3 compute slices but **4 memory slices**. It
+# can start only at slice 0 or 4. Two 3g instances use all 8 memory slices. Thus no memory slice
+# is available for the seventh compute slice.
+#
+# The order of creation is also important. If you create small instances first and do not
+# select where they go, they can block the large ones:
 
 # %%
 arrivals = ["1g.10gb", "1g.10gb", "1g.10gb", "4g.40gb"]
@@ -54,11 +59,12 @@ print("  ", S.layout(gpu, S.pack(gpu, arrivals)))
 # %% [markdown]
 # ## Exercise 5.1: validate and search MIG layouts
 #
-# Write `valid_layout(gpu, placement)` for a list of `(profile_name, start)` pairs. Every start
-# must be one the profile allows (`p.starts`), and no two instances may share a memory slice
-# (instance `p` at `s` occupies memory slices `s .. s + p.mem_slices - 1`). Then write
-# `fits(gpu, requests)`, which brute-forces every combination of allowed starts and returns
-# True if any is valid.
+# Write `valid_layout(gpu, placement)` for a list of `(profile_name, start)` pairs. Each start
+# must be a start that the profile permits (`p.starts`). Two instances must not share a memory
+# slice. Instance `p` at `s` uses memory slices `s .. s + p.mem_slices - 1`.
+#
+# Then write `fits(gpu, requests)`. This function examines every combination of permitted starts by brute
+# force. It returns True if one combination is valid.
 
 # %% exercise
 profiles = {g: {p.name: p for p in S.MIG[g]} for g in S.MIG}
@@ -96,10 +102,12 @@ print("✅ your brute force agrees with the planner on", len(mixes), "mixes")
 
 # %% [markdown]
 # ## Turns, overlap or partitions: what latency does a tenant see?
-# The model is idealised: it counts SM capacity only, while memory bandwidth and L2 contention
-# would make MPS and time-slicing worse. One request needs 10 ms of GPU time when alone. `util`
-# is the share of the GPU its kernels can fill. Small-batch decode of a small model is far below
-# 1, and a big prefill is about 1. There are four busy tenants:
+# The model is a simplification. It counts only SM capacity. In practice, memory bandwidth and L2
+# contention make MPS and time-slicing worse.
+#
+# One request needs 10 ms of GPU time when it is alone. `util` is the share of the GPU that the
+# kernels of the request can fill. For small-batch decode of a small model, `util` is much less
+# than 1. For a large prefill, it is approximately 1. There are four busy tenants:
 
 # %%
 for util in (0.2, 1.0):
@@ -111,18 +119,21 @@ for mode, t in S.TRAITS.items():
 
 # %% [markdown]
 # * With **small kernels** (util 0.2), MPS overlaps four tenants at no cost, because together
-#   they still fit on the SMs. Time-slicing makes each wait for the others' turns (about 3.8x).
-#   MIG gives each tenant a fixed 1/7 of the GPU (1.4x) but a *guaranteed* one.
-# * With **saturating kernels** (util 1.0), nothing can make four tenants faster than 4x. MIG's
-#   fixed slice (7x) is the price of isolation.
+#   they still fit on the SMs. Time-slicing makes each tenant wait for the turns of the others
+#   (approximately 3.8x). MIG gives each tenant a constant 1/7 of the GPU (1.4x), but MIG
+#   *guarantees* this share.
+# * With **kernels that fill the whole GPU** (util 1.0), nothing can make four tenants faster
+#   than 4x. The constant slice of MIG (7x) is the cost of isolation.
 #
 # ## Exercise 5.2: time-slicing latency from first principles
 #
-# The GPU runs one context at a time, round-robin, for a quantum $q$ each, and pays $s$ for every
-# context switch. Our request needs $W$ of GPU time, so $k = \lceil W/q \rceil$ quanta. The other ${N-1}$
-# tenants always have work. Between two of our quanta, each of them runs a quantum, with a switch
-# before each, plus one more switch back to us. If our first quantum starts right away, when do
-# we finish? Write `timeslice_best(W, N, q, s)`.
+# The GPU runs one context at a time, in round-robin order. Each context runs for a quantum $q$.
+# Each context switch costs $s$. Our request needs $W$ of GPU time. Thus it needs
+# $k = \lceil W/q \rceil$ quanta. The other ${N-1}$ tenants always have work.
+#
+# Between two of our quanta, each of the other tenants runs one quantum, with a switch before
+# each quantum. After that, one more switch gives the GPU back to us. If our first quantum starts
+# immediately, when does our request finish? Write `timeslice_best(W, N, q, s)`.
 
 # %% exercise
 def timeslice_best(W, N, q=2.0, s=0.05):
@@ -144,16 +155,17 @@ print(f"✅ 10 ms of work with 4 busy tenants finishes after {timeslice_best(10,
 # %% [markdown]
 # ## Exercise 5.3: pick the sharing mode
 #
-# For each situation pick `"mig"`, `"mps"`, `"time_slicing"` or `"none"` (whole GPUs, no
-# sharing). Remember that MIG exists only on A100/A30/H100/H200/B200-class GPUs, and not on L4
-# or T4.
+# For each situation, select `"mig"`, `"mps"`, `"time_slicing"` or `"none"` (whole GPUs, not
+# shared). Remember: MIG is available only on A100/A30/H100/H200/B200-class GPUs. It is not
+# available on L4 or T4.
 #
-# * **a.** Three customers' inference endpoints with latency SLOs on one H100. A noisy customer
-#   must not affect the others.
-# * **b.** One team runs six small embedding-model replicas on an L4, each keeping about 10% of
-#   the SMs busy. They trust each other and want throughput.
-# * **c.** Ten students' Jupyter notebooks on one T4. They sit mostly idle, and each wants "a GPU".
-# * **d.** A 70B model serving 200 concurrent chats on 8 H100s.
+# * **a.** Three customers have inference endpoints with latency SLOs on one H100. A noisy
+#   customer must not affect the others.
+# * **b.** One team runs six small embedding-model replicas on an L4. Each replica keeps
+#   approximately 10% of the SMs busy. They trust each other and want throughput.
+# * **c.** Ten students have Jupyter notebooks on one T4. The notebooks are idle most of the
+#   time, and each student wants "a GPU".
+# * **d.** A 70B model serves 200 concurrent chats on 8 H100s.
 
 # %% exercise
 choice = {"a": "?", "b": "?", "c": "?", "d": "?"}
@@ -171,8 +183,9 @@ print("   and a big model shares best inside its engine (continuous batching), n
 
 # %% [markdown]
 # ## Health: GPU utilization is a time measure
-# A decode loop at small batch launches one kernel after another, each filling only 16 of the
-# H100's 132 SMs, with short gaps between launches. The timeline is simulated:
+# A decode loop at small batch launches one kernel after another. Each kernel fills only 16 of
+# the 132 SMs of the H100. There are short gaps between the launches. The next cell simulates the
+# timeline:
 
 # %%
 kernels = [(t, t + 20.0, 16) for t in np.arange(0, 1000, 25.0)]      # 20 us kernels every 25 us, 16 SMs
@@ -188,11 +201,11 @@ for finding in H.diagnose(sample):
 # %% [markdown]
 # ## Exercise 5.4: compute the two counters yourself
 #
-# Write `counters(kernels, n_sms, window)` for kernels given as `(start, end, sms_busy)` with
-# **integer** microsecond times. `gpu_util` is the share of the window in which at least one
+# Write `counters(kernels, n_sms, window)` for kernels in the form `(start, end, sms_busy)`, with
+# **integer** times in microseconds. `gpu_util` is the share of the window in which at least one
 # kernel runs. `sm_active` is the average over the window of
 # $\min(\text{total SMs busy}, n_{\text{sms}}) / n_{\text{sms}}$.
-# Kernels may overlap. (Stepping through the window 1 us at a time is fine.)
+# Kernels can overlap. (You can go through the window 1 us at a time.)
 
 # %% exercise
 def counters(kernels, n_sms, window):
@@ -218,9 +231,9 @@ print("✅ the first case reads GPU util 100% with 6% of the SMs busy; alert on 
 
 # %% [markdown]
 # ## Triage: throttling and XIDs
-# `DCGM_FI_DEV_CLOCKS_EVENT_REASONS` is a bitmask. Power capping under load is normal, and
-# hardware slowdowns are not. XIDs are the driver's error codes in the kernel log (`dmesg`) and
-# in DCGM. What matters is **who has to act**:
+# `DCGM_FI_DEV_CLOCKS_EVENT_REASONS` is a bitmask. A slowdown from the power cap under load is
+# normal. A hardware slowdown is not normal. XIDs are the error codes of the driver in the kernel
+# log (`dmesg`) and in DCGM. The important question is **who must act**:
 
 # %%
 for mask in (0x4, 0x44, 0x88):
@@ -232,9 +245,12 @@ for code in (13, 31, 48, 63, 79, 94, 95):
 # %% [markdown]
 # ## Exercise 5.5: triage a night of events
 #
-# Here is a fleet's overnight log of XIDs (`(node, xid)`). Return the set of nodes to **drain**
-# (any XID whose owner is `"hardware"`, or XID 63, whose pending row remap needs a GPU reset)
-# and the set of nodes whose **app owners to notify** (owner `"app"`). Use `H.triage_xid`.
+# This is the log of XIDs from a fleet for one night (`(node, xid)`). Use `H.triage_xid`, and
+# return two sets:
+#
+# * The set of nodes to **drain**. These are the nodes with an XID whose owner is `"hardware"`,
+#   or with XID 63. XID 63 has a pending row remap, and the row remap needs a GPU reset.
+# * The set of nodes whose **app owners** you must notify (owner `"app"`).
 
 # %% exercise
 events = [("gpu-a1", 13), ("gpu-a2", 79), ("gpu-a3", 31), ("gpu-a3", 45), ("gpu-b1", 63),
@@ -254,23 +270,26 @@ print("   as a likely symptom and fix the hardware first")
 # %% [markdown]
 # ## In a design review
 #
-# **The two-minute version.** "LLM replicas get whole GPUs. The engine's continuous batching is
-# our sharing mechanism, because it shares the weight reads across requests. Small models and
-# multi-tenant endpoints go on MIG slices when tenants need isolation (A100/H100 class), with the
-# layout planned up front, since profiles have fixed placements. Cooperative small workloads
-# share through MPS, and idle-heavy dev notebooks through time-slicing. We alert on DCGM SM
-# active, tensor active and DRAM active, never on GPU util. Hardware XIDs (48, 79, 95) and
-# pending row remaps drain the node automatically, while app XIDs (13, 31, 43) notify the service
-# owner."
+# **The two-minute version.** "LLM replicas get whole GPUs. Continuous batching in the engine is
+# our mechanism to share a GPU, because it shares the weight reads across requests. When tenants
+# need isolation, small models and multi-tenant endpoints go on MIG slices (A100/H100 class). We
+# plan the layout in advance, because the placements of the profiles do not change.
+#
+# "Cooperative small workloads share a GPU through MPS. Dev notebooks that are idle most of the
+# time share a GPU through time-slicing. We alert on DCGM SM active, tensor active and DRAM
+# active, never on GPU util. Hardware XIDs (48, 79, 95) and pending row remaps drain the node
+# automatically. App XIDs (13, 31, 43) notify the service owner."
 #
 # **Drill questions**
 #
-# 1. *Why not time-slice an H100 across seven customers' endpoints?* There is no memory or fault
-#    isolation (one tenant can OOM the others), and latency grows with the number of busy
-#    tenants. Use seven `1g.10gb` MIG instances: fixed, isolated, predictable.
-# 2. *The dashboard says 100% GPU utilization but throughput is poor. Where do you look?* GPU
-#    util only says *some* kernel was running. Check SM active and tensor active. Small-batch
-#    decode, launch gaps or tiny grids show high util with low SM active. Batch more, capture
-#    CUDA graphs.
-# 3. *A node logs XID 79. Whose problem is it?* The hardware path: the GPU fell off the PCIe bus.
-#    Drain, reboot, run diagnostics, and RMA if it repeats. It is not an application bug.
+# 1. *Why not use time-slicing to share an H100 across the endpoints of seven customers?*
+#    Time-slicing has no memory isolation and no fault isolation. One tenant can cause an OOM in
+#    the other tenants. Also, the latency increases with the number of busy tenants. Use seven
+#    `1g.10gb` MIG instances: they do not change, they are isolated and they are predictable.
+# 2. *The dashboard shows 100% GPU utilization, but the throughput is poor. Where do you look?*
+#    GPU util only tells you that *some* kernel ran. Examine SM active and tensor active.
+#    Small-batch decode, launch gaps or small grids show high util with low SM active. Batch more
+#    requests. Capture CUDA graphs.
+# 3. *A node logs XID 79. Whose problem is it?* It is a problem for the hardware path: the GPU
+#    fell off the PCIe bus. Drain the node, reboot it and run diagnostics. If the error occurs
+#    again, request an RMA. It is not an application bug.

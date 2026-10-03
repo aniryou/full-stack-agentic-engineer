@@ -1,17 +1,25 @@
 # cuda-nccl-core — the GPU software substrate, simulated on a CPU
 
-After these five notebooks you can predict, on a laptop and without a GPU, how many memory transactions a
-warp costs, what limits occupancy, what tiling, fusion and CUDA Graphs save, what a collective costs and what
-nccl-tests will report, whether a CUDA build runs under a given driver and GPU, how to share a GPU, and when
-"GPU util" misleads.
+After these five notebooks, you can predict these things on a laptop, without a GPU:
+
+- How many memory transactions a warp costs.
+- What limits occupancy.
+- What tiling, fusion and CUDA Graphs save.
+- What a collective costs, and what nccl-tests will report.
+- If a CUDA build runs under a given driver and GPU.
+- How to share a GPU.
+- When "GPU util" gives an incorrect picture.
 
 ## Start here
 
-1. `python3 -m pytest -q` in this folder — 141 tests, ~30 s.
-2. Paste the tour below into a `python3` prompt: a column walk costs 32 sectors, a ring all-reduce prints its
-   six steps, busbw reads 447 GB/s, and a CUDA 12.4 build fails on driver 535 with error 222, with the reason.
-3. Open [`notebooks/01_simt_warps_and_memory.ipynb`](notebooks/01_simt_warps_and_memory.ipynb) with the
-   [primer](../PRIMER.md) §2–§3 beside it.
+1. Run `python3 -m pytest -q` in this folder. The 141 tests run in ~30 s.
+2. Paste the tour in the code block that comes next into a `python3` prompt. The tour shows these results:
+   - A column walk costs 32 sectors.
+   - A ring all-reduce prints its six steps.
+   - busbw reads 447 GB/s.
+   - A CUDA 12.4 build fails on driver 535 with error 222. The tour also gives the reason.
+3. Open [`notebooks/01_simt_warps_and_memory.ipynb`](notebooks/01_simt_warps_and_memory.ipynb). Keep §2–§3 of the
+   [primer](../PRIMER.md) open beside it.
 
 ```python
 import numpy as np
@@ -26,18 +34,25 @@ print(compat.check("12.4", "535.183.01", gpu="H100", targets="8.0+PTX"))  # fail
 
 ## What you get
 
-Everything here is **T0** — laptop or Colab CPU, free: no GPU, no network, no Docker. Each notebook has a
-`**Tier:**` line, *The one-minute version*, worked examples, exercises (`# YOUR CODE HERE`) each followed by a
-check cell that prints ✅ when you are right, and *In a design review* drills; worked answers are in
-`solutions/`. Times include the matching primer sections; the course plan budgets about 9 hours for all five.
+Everything here is **T0**: a laptop or a Colab CPU, at no cost, with no GPU, no network and no Docker. Each
+notebook has these parts:
+
+- A `**Tier:**` line.
+- *The one-minute version*.
+- Worked examples.
+- Exercises (`# YOUR CODE HERE`). After each exercise, a check cell prints ✅ when your answer is correct.
+- *In a design review* drills.
+
+The worked answers are in `solutions/`. The times include the primer sections of each notebook. The course plan
+gives about 9 hours to all five notebooks.
 
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`01_simt_warps_and_memory`](notebooks/01_simt_warps_and_memory.ipynb) | count sectors, predict coalescing, derive the gcd(s, 32) bank-conflict rule, pick the padding that fixes a transpose, and measure the SIMT efficiency of ragged loops | §2, §3 | 1½–2 h | T0 |
-| [`02_tiling_fusion_and_occupancy`](notebooks/02_tiling_fusion_and_occupancy.ipynb) | derive the tiled-GEMM traffic formula, work the register limit by hand, choose a GEMM tile for an L4, write online softmax, and tell when a decode step is launch-bound (CUDA Graphs) | §2–§4 | 1½–2 h | T0 |
-| [`03_collectives_from_scratch`](notebooks/03_collectives_from_scratch.ipynb) | write ring reduce-scatter and all-gather yourself (the check replays your message schedule), compute the α-β time and crossover and busbw like nccl-tests, size the tensor-parallel decode all-reduce you would ship, and find a hang | §5 | 2–2½ h | T0 |
-| [`04_compatibility_and_containers`](notebooks/04_compatibility_and_containers.ipynb) | apply the SASS/PTX rules, predict error codes, choose a fleet's CUDA version, and explain five container failure stories | §1, §6 | 1½–2 h | T0 |
-| [`05_sharing_and_health`](notebooks/05_sharing_and_health.ipynb) | lay out MIG instances, model time-slicing latency, choose a sharing mode, read GPU util against SM active, and triage a night of XIDs | §7, §8 | 1½–2 h | T0 |
+| [`01_simt_warps_and_memory`](notebooks/01_simt_warps_and_memory.ipynb) | Count sectors and predict coalescing. Derive the gcd(s, 32) bank-conflict rule. Select the padding that repairs a transpose. Measure the SIMT efficiency of ragged loops. | §2, §3 | 1½–2 h | T0 |
+| [`02_tiling_fusion_and_occupancy`](notebooks/02_tiling_fusion_and_occupancy.ipynb) | Derive the tiled-GEMM traffic formula. Calculate the register limit by hand. Select a GEMM tile for an L4. Write online softmax. Find when a decode step is launch-bound (CUDA Graphs). | §2–§4 | 1½–2 h | T0 |
+| [`03_collectives_from_scratch`](notebooks/03_collectives_from_scratch.ipynb) | Write ring reduce-scatter and all-gather yourself. The check replays your message schedule. Calculate the α-β time and the crossover, and calculate busbw like nccl-tests. Calculate the size of the tensor-parallel decode all-reduce for a deployment that you put in production. Find a hang. | §5 | 2–2½ h | T0 |
+| [`04_compatibility_and_containers`](notebooks/04_compatibility_and_containers.ipynb) | Apply the SASS/PTX rules and predict error codes. Select the CUDA version of a fleet. Explain five container failure stories. | §1, §6 | 1½–2 h | T0 |
+| [`05_sharing_and_health`](notebooks/05_sharing_and_health.ipynb) | Lay out MIG instances. Model time-slicing latency. Select a mode to share a GPU. Read GPU util against SM active. Do the triage of a night of XIDs. | §7, §8 | 1½–2 h | T0 |
 
 ## Run it
 
@@ -48,9 +63,9 @@ python3 -m pytest -q                          # 141 tests, ~30 s
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
-On Colab, each notebook's first cell clones the repo and installs this package; the Colab links are in the
-[layer README](../../README.md). `notebooks/` and `solutions/` are generated from `notebooks_src/*.py`
-(percent format with `### BEGIN SOLUTION` blocks). Edit the sources, then:
+On Colab, the first cell of each notebook clones the repo and installs this package. The Colab links are in the
+[layer README](../../README.md). The builder generates `notebooks/` and `solutions/` from
+`notebooks_src/*.py` (percent format with `### BEGIN SOLUTION` blocks). Edit the sources, then run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # rebuild both variants
@@ -58,37 +73,41 @@ python3 tools/run_notebooks.py solutions                # solutions must run cle
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 ```
 
-`make check` runs all three plus the tests.
+`make check` runs all three commands and the tests.
 
 ## How it fits
 
-This is the minimal core of the [`cuda-and-nccl`](../README.md) topic: every formula and worked number in its
-[primer](../PRIMER.md) is computed here. The detailed lab, [`cuda-nccl-lab`](../cuda-nccl-lab/), runs the same
-ideas for real: the same kernels in Numba (the CUDA simulator on a CPU, then any GPU), collectives over OS
-pipes, gloo and NCCL, nccl-tests output (bundled samples, or your own from two or more GPUs) parsed into
-algbw/busbw and an α-β fit, what a container actually sees of its GPU, and MIG, time-sharing and DCGM on
-GKE (optional).
+This is the minimal core of the [`cuda-and-nccl`](../README.md) topic. It computes every formula and worked number
+in the [primer](../PRIMER.md) of the topic. The detailed lab, [`cuda-nccl-lab`](../cuda-nccl-lab/), runs the same
+ideas for real:
+
+- The same kernels in Numba (the CUDA simulator on a CPU, then any GPU).
+- Collectives over OS pipes, gloo and NCCL.
+- nccl-tests output (bundled samples, or your own from two or more GPUs). The lab parses it into algbw/busbw and an
+  α-β fit.
+- What a container really sees of its GPU.
+- MIG, time-sharing and DCGM on GKE (optional).
 
 ## Going further / caveats
 
-- Every output is **simulated**: a model of documented NVIDIA behaviour, not a measurement. The lab measures.
-- Version tables, per-SM limits and MIG profiles are dated September 2026 and marked *verify* in the code and in
-  the primer's [Verify list](../PRIMER.md#verify-list).
-- Where to run the GPU parts and what they cost: [`COMPUTE.md`](../../../COMPUTE.md).
+- Every output is **simulated**. It is a model of documented NVIDIA behaviour, not a measurement. The lab measures.
+- The version tables, per-SM limits and MIG profiles are dated September 2026. They have the *verify* mark in the
+  code and in the [Verify list](../PRIMER.md#verify-list) of the primer.
+- [`COMPUTE.md`](../../../COMPUTE.md) tells where to run the GPU parts and what they cost.
 
 ## The library
 
-Seven files (package `gpusim`), about 900 lines of code; the rest is docstrings and comments. Each module
-opens with the one idea it teaches:
+The library has seven files (package `gpusim`) and about 900 lines of code. The rest is docstrings and comments.
+Each module starts with the one idea that it teaches:
 
 | File | Lines | What it teaches |
 |------|-------|-----------------|
 | `gpusim/simt.py` | ~120 | a warp is the unit: sectors per request (coalescing), bank conflicts, divergence cost |
-| `gpusim/occupancy.py` | ~130 | resident warps per SM and what limits them (the `cuda_occupancy.h` rules); waves; Little's law |
-| `gpusim/tiling.py` | ~120 | bytes and launches: tiled GEMM traffic (with a simulated tiled kernel), fused and online softmax, CUDA Graphs vs eager |
-| `gpusim/collectives.py` | ~420 | ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces; α-β costs; algbw/busbw; TP and EP message sizes; finding the call that hangs |
-| `gpusim/compat.py` | ~270 | driver ↔ CUDA runtime ↔ compute capability: SASS vs PTX, minor-version and forward compatibility (with the kernel-driver branches each `cuda-compat` supports), the error each failure produces, what a container gets from the host |
-| `gpusim/sharing.py` | ~150 | MIG profile placement (a packer and a first-fit that fragments), time-slicing latency, MPS vs MIG vs turns |
-| `gpusim/health.py` | ~130 | GPU util vs SM active, clock-event (throttle) bits, XID triage by owner, alert severities |
+| `gpusim/occupancy.py` | ~130 | resident warps per SM and what limits them (the `cuda_occupancy.h` rules), waves, Little's law |
+| `gpusim/tiling.py` | ~120 | bytes and launches: tiled GEMM traffic (with a simulated tiled kernel), fused and online softmax, CUDA Graphs against eager mode |
+| `gpusim/collectives.py` | ~420 | Ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces. α-β costs, algbw/busbw, TP and EP message sizes. A search for the call that hangs. |
+| `gpusim/compat.py` | ~270 | The relation of driver, CUDA runtime and compute capability: SASS against PTX, minor-version and forward compatibility (with the kernel-driver branches that each `cuda-compat` supports). The error that each failure causes. What a container gets from the host. |
+| `gpusim/sharing.py` | ~150 | MIG profile placement (a packer and a first-fit that fragments), time-slicing latency, MPS against MIG against turns |
+| `gpusim/health.py` | ~130 | GPU util against SM active, clock-event (throttle) bits, XID triage by owner, alert severities |
 
 MIT licensed.
