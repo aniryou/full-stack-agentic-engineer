@@ -47,6 +47,14 @@ ING_ALLOW = {
     "warning", "warnings", "logging", "monitoring", "tracing", "streaming", "routing", "ordering", "pricing",
     "batching", "caching", "sharding", "training", "embedding", "embeddings", "fine-tuning", "billing", "mapping",
     "mappings", "setting", "settings", "ceiling", "spring", "offspring", "ping", "pending",  # pending: status word
+    # technical names of the other layers (a noun or an adjective that names a thing, not a verb form)
+    "scheduling", "gang-scheduling", "autoscaling", "serving", "decoding", "prefilling", "sampling", "pooling",
+    "learning", "thinking", "reasoning", "pretraining", "post-training", "fine-tuning", "paging", "masking",
+    "tiling", "coalescing", "pipelining", "indexing", "ranking", "reranking", "chunking", "sandboxing",
+    "throttling", "rate-limiting", "load-balancing", "metering", "signing", "hashing", "binding", "alerting",
+    "offloading", "profiling", "benchmarking", "clocking", "swapping", "upcasting", "downcasting", "rounding",
+    "overfitting", "underfitting", "upsampling", "downsampling", "scaling-law", "forwarding", "windowing",
+    "casting", "padding", "striding", "unrolling", "vectorizing", "warming", "cooling", "wiring", "packaging",
 }
 IRREGULAR_PARTICIPLES = (
     "built", "done", "made", "taken", "given", "kept", "held", "sent", "put", "lost", "found", "won", "begun",
@@ -277,9 +285,36 @@ def lint_notebook(path: pathlib.Path) -> tuple[list[Finding], dict]:
     return findings, stats
 
 
+def lint_percent_source(path: pathlib.Path) -> tuple[list[Finding], dict]:
+    """A percent-format notebook source: the ``# %% [markdown]`` cells, with the leading ``# `` stripped."""
+    findings: list[Finding] = []
+    stats = {"sentences": 0, "words": 0, "max_words": 0, "passive": 0, "ing": 0}
+    lines = path.read_text(encoding="utf-8").split("\n")
+    in_md, start, buf = False, 0, []
+
+    def flush():
+        if in_md and buf:
+            f, st = lint_markdown("\n".join(buf), line_offset=start)
+            findings.extend(f)
+            for k in stats:
+                stats[k] = max(stats[k], st[k]) if k == "max_words" else stats[k] + st[k]
+
+    for i, ln in enumerate(lines, 1):
+        if ln.startswith("# %%"):
+            flush()
+            in_md, start, buf = "[markdown]" in ln, i, []
+            continue
+        if in_md:
+            buf.append(ln[2:] if ln.startswith("# ") else ln[1:] if ln.startswith("#") else ln)
+    flush()
+    return findings, stats
+
+
 def lint_path(path: pathlib.Path):
     if path.suffix == ".ipynb":
         return lint_notebook(path)
+    if path.suffix == ".py":
+        return lint_percent_source(path)
     return lint_markdown(path.read_text(encoding="utf-8"))
 
 
@@ -288,7 +323,7 @@ def collect(args: list[str]) -> list[pathlib.Path]:
     for a in args:
         p = pathlib.Path(a)
         if p.is_dir():
-            out += sorted(q for q in p.rglob("*") if q.suffix in (".md", ".ipynb")
+            out += sorted(q for q in p.rglob("*") if (q.suffix in (".md", ".ipynb") or (q.suffix == ".py" and "notebooks_src" in q.parts))
                           and not SKIP_DIRS & set(q.parts))
         else:
             out.append(p)
