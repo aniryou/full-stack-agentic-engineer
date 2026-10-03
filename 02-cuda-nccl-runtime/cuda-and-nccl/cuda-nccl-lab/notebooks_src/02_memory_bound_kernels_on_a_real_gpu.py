@@ -79,8 +79,8 @@ for name, b in rows:
 # ## Exercise 2.1 — effective bandwidth
 #
 # Write `effective(n_elements, bytes_per_element, seconds, peak_gbps)`. It returns `(gbps, fraction_of_peak)`
-# (GB = 1e9 bytes). Use it on a hypothetical run: a `vec_add` of 2²⁴ floats (12 bytes per element) that
-# takes 0.70 ms on a T4 (320 GB/s).
+# (GB = 1e9 bytes). Use it on a hypothetical run. The run is a `vec_add` of 2²⁴ floats (12 bytes per
+# element) that takes 0.70 ms on a T4 (320 GB/s).
 
 # %% exercise
 def effective(n_elements: int, bytes_per_element: int, seconds: float, peak_gbps: float) -> tuple[float, float]:
@@ -101,7 +101,7 @@ print(f"✅ {gbps:.1f} GB/s = {frac:.0%} of peak: a streaming kernel at ~90 % ha
 # traffic is 8 KiB–512 MiB for copy and 12 KiB–768 MiB for vec_add. Small launches cost an approximately
 # constant $\alpha$ (launch + latency). Large launches approach the DRAM bandwidth $B$.
 #
-# On the T0 path, we check correctness in the simulator. We also print what the α-β model *predicts* for
+# On the T0 path, we make sure in the simulator that the results are correct. We also print what the α-β model *predicts* for
 # the reference GPU. If you brought back `out/kernels.json` from a GPU box (`deploy/any-gpu`), we also print
 # the measurement from that box.
 
@@ -225,8 +225,9 @@ elif KERNELS_RUN:
 #
 # `gpurt.kernels.triton_kernels` writes the softmax at the *block* level, in the same way as `torch.compile`.
 # It uses one program per row and holds the row in registers. It does one read and one write per element
-# (8 B/element in float32, the primer's 2RC row). With torch and triton on a GPU, this cell compares it with `torch.softmax`.
-# It also measures its time next to the Numba kernels of the cells before.
+# (8 B/element in float32, the primer's 2RC row). With torch and triton on a GPU, this cell
+# compares the Triton softmax with `torch.softmax`. The cell also measures the time of the Triton softmax
+# next to the Numba kernels of the cells before.
 
 # %%
 from gpurt.kernels import triton_kernels  # noqa: E402
@@ -317,9 +318,10 @@ else:
 # ## Exercise 2.5 — should this decode step be captured in a graph?
 #
 # A decode step runs `layers × kernels_per_layer` kernels. Write `decode_step(layers, kernels_per_layer,
-# kernel_us, model)` with a `LaunchModel`. It returns `(eager_us, graph_us, launch_bound)`. Calculate the
-# scenario of primer §4.2: 32 layers × 12 kernels = 384 kernels, ≈2 µs each at batch 1 and ≈20 µs at a
-# large batch. Use its assumptions: $L$ = 5 µs, $G$ = 10 µs and no GPU-side gap. Then add the gap that the
+# kernel_us, model)` with a `LaunchModel`. It returns `(eager_us, graph_us, launch_bound)`.
+#
+# Calculate the scenario of primer §4.2. It has 32 layers × 12 kernels = 384 kernels, ≈2 µs each at batch 1
+# and ≈20 µs at a large batch. Use its assumptions: $L$ = 5 µs, $G$ = 10 µs and no GPU-side gap. Then add the gap that the
 # primer leaves out: $g$ = 1 µs between consecutive kernels.
 
 # %% exercise

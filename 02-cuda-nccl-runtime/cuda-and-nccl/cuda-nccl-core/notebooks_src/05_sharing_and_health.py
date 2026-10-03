@@ -17,8 +17,8 @@
 #   batches many requests**. Continuous batching shares the weight reads. No GPU-level mechanism
 #   can do this.
 # * **GPU utilization** is the fraction of *time* in which at least one kernel runs. One small
-#   kernel on 8 of 132 SMs shows 100%. Use SM active, tensor active and DRAM active to find the
-#   load.
+#   kernel on 8 of 132 SMs shows 100%. Use SM active, tensor active and DRAM active to measure
+#   the load.
 # * The triage of **XIDs** depends on who acts. Each XID has one of three owners: the app owner
 #   (13, 31, 43), the node operator (63, 94) or the hardware path (48, 79, 95).
 #
@@ -232,8 +232,8 @@ print("✅ the first case reads GPU util 100% with 6% of the SMs busy; alert on 
 # %% [markdown]
 # ## Triage: throttling and XIDs
 # `DCGM_FI_DEV_CLOCKS_EVENT_REASONS` is a bitmask. A slowdown from the power cap under load is
-# normal. A hardware slowdown is not normal. XIDs are the error codes of the driver in the kernel
-# log (`dmesg`) and in DCGM. The important question is **who must act**:
+# normal. But a hardware slowdown is not normal. XIDs are the error codes of the driver in the
+# kernel log (`dmesg`) and in DCGM. The important question is **who must act**:
 
 # %%
 for mask in (0x4, 0x44, 0x88):
@@ -245,8 +245,8 @@ for code in (13, 31, 48, 63, 79, 94, 95):
 # %% [markdown]
 # ## Exercise 5.5: triage a night of events
 #
-# This is the log of XIDs from a fleet for one night (`(node, xid)`). Use `H.triage_xid`, and
-# return two sets:
+# This is the log of XIDs from a fleet for one night (`(node, xid)`). Use `H.triage_xid`.
+# Return two sets:
 #
 # * The set of nodes to **drain**. These are the nodes with an XID whose owner is `"hardware"`,
 #   or with XID 63. XID 63 has a pending row remap, and the row remap needs a GPU reset.
@@ -287,9 +287,9 @@ print("   as a likely symptom and fix the hardware first")
 #    the other tenants. Also, the latency increases with the number of busy tenants. Use seven
 #    `1g.10gb` MIG instances: each has a constant, isolated and predictable share of the GPU.
 # 2. *The dashboard shows 100% GPU utilization, but the throughput is poor. Where do you look?*
-#    GPU util only tells you that *some* kernel ran. Examine SM active and tensor active.
-#    Small-batch decode, launch gaps or small grids show high util with low SM active. Batch more
-#    requests. Capture CUDA graphs.
-# 3. *A node logs XID 79. Whose problem is it?* It is a problem for the hardware path: the GPU
-#    disconnected from the PCIe bus. Drain the node, reboot it and run diagnostics. If the error
-#    occurs again, request an RMA. It is not an application bug.
+#    Examine SM active and tensor active, because GPU util only tells you that *some* kernel
+#    ran. Small-batch decode, launch gaps or small grids show high util with low SM active. Batch
+#    more requests. Capture CUDA graphs.
+# 3. *A node logs XID 79. Whose problem is it?* It is a problem for the hardware path, not an
+#    application bug: the GPU disconnected from the PCIe bus. Drain the node, then reboot it. Run
+#    diagnostics. If the error occurs again, request an RMA.

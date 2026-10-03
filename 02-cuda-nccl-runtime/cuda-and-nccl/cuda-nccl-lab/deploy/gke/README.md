@@ -8,7 +8,7 @@ GKE cluster with L4 nodes. The checks are:
 - nccl-tests across two L4s
 - GPU time-sharing
 - a MIG slice
-- DCGM alert rules for Google Managed Prometheus.
+- DCGM alert rules for Google Managed Prometheus
 
 **Cost:** each Job starts a Spot GPU node from zero. It releases the node when the pod finishes. The
 cluster autoscaler removes a node that is not necessary after approximately ten minutes (verify for
@@ -47,10 +47,10 @@ DRY_RUN=1 ./run.sh nccl   # print the kubectl commands only
 When a Job fails, `run.sh` stops at once, because it polls for *Complete* or *Failed*. It still saves
 the log of the Job.
 
-Every GPU pod requests `nvidia.com/gpu` in `limits`. You cannot overcommit an extended resource, thus
+Every GPU pod requests `nvidia.com/gpu` in `limits`. You cannot overcommit an extended resource. Thus
 the requests are equal to the limits. Each GPU pod also selects an accelerator with
-`cloud.google.com/gke-accelerator`. It also has a toleration for the `nvidia.com/gpu` taint. Primer §6
-tells how the device plugin changes that request into device nodes and a driver mount. Layer 03 tells
+`cloud.google.com/gke-accelerator`, and it has a toleration for the `nvidia.com/gpu` taint. Primer §6
+shows how the device plugin changes that request into device nodes and a driver mount. Layer 03 shows
 how the scheduler places the pod
 ([`03-kubernetes-gpu/gpu-scheduling`](../../../../../03-kubernetes-gpu/gpu-scheduling)).
 
@@ -61,8 +61,8 @@ explorer*, change to PromQL. While `./run.sh nccl` runs, compare `DCGM_FI_PROF_S
 `DCGM_FI_DEV_GPU_UTIL`. Notebook 06 explains what each field means. It also explains why `GPU_UTIL`
 alone gives an incorrect picture.
 
-**Which rules can fire depends on the exported fields** (`gpurt.dcgm.EXPORTED_BY`). The lab got
-`gpurt.dcgm.EXPORTED_BY` from the upstream files on 2026-09-26 (verify for your versions):
+**Which rules can fire depends on the exported fields** (`gpurt.dcgm.EXPORTED_BY`). The lab took
+the data in `gpurt.dcgm.EXPORTED_BY` from the upstream files on 2026-09-26 (verify for your versions):
 
 | Exporter | Missing fields | Rules that can never fire |
 |---|---|---|
@@ -98,6 +98,6 @@ The alternative is Cloud Monitoring alerting policies with a PromQL condition (T
 `google_monitoring_alert_policy`, `conditions.condition_prometheus_query_language.query` in provider
 8.4.0). These policies use the same expressions from `06-dcgm-alert-rules.yaml`.
 
-Some items in the manifests have the mark `VERIFY:`. These items are image tags, GKE node-label values
+Some items in the manifests have the mark `VERIFY:`. Examples are image tags, GKE node-label values
 and MIG profiles. These items are product details. Before you rely on them, examine them again against the
 current documentation.

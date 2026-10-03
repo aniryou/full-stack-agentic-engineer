@@ -26,7 +26,7 @@ session, always run `terraform destroy`.
 
 * A project on a *paid* billing account. You cannot use GPUs on a Free Trial account. Your credits
   carry over.
-* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota. For Spot VMs, the regional L4
+* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota. For Spot VMs, the applicable regional
   quota is the *preemptible* L4 quota (verify the names on the *Quotas* page of *IAM & Admin*). New projects
   frequently start at 0. Request the quota.
 * `gcloud auth application-default login`, Terraform >= 1.9, `kubectl` with `gke-gcloud-auth-plugin`.
@@ -51,7 +51,7 @@ cd ../gcp/terraform && terraform destroy
   device plugin mounts the driver into pods at `/usr/local/nvidia`. The alternative is
   `INSTALLATION_DISABLED` with the NVIDIA GPU Operator (primer §6, §9).
 * *Autoscale from zero + Spot*: this is the default for any workload with bursts. The platform can
-  preempt Spot nodes. Thus long jobs must write checkpoints. Layer 03 tells how to get the GPUs:
+  preempt Spot nodes. Thus long jobs must write checkpoints. Layer 03 shows how to get the GPUs:
   reservations, DWS flex-start.
 * *DCGM + Managed Prometheus*: they give the profiling fields (`DCGM_FI_PROF_*`). With these fields,
   you can understand what `GPU_UTIL` shows (primer §8, notebook 06).

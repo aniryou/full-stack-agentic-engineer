@@ -19,7 +19,7 @@ build in `~/.cache/nccl-tests-v2.20.0`. If you started the exporter, run `docker
 | `run_nccl_tests.sh` | It builds NVIDIA/nccl-tests against the NCCL that you already have (the system NCCL or the pip wheel of PyTorch). Then it does a sweep of `all_reduce`/`all_gather` on every local GPU. `DRY_RUN=1` prints the steps. |
 | `Dockerfile.nccl-tests` | The same build in a CUDA *devel* image. The image contains nvcc and NCCL. |
 | `Dockerfile.lab` | The lab on `python:3.12-slim`. The base image has no CUDA. The CUDA userland comes from pip wheels, and `libcuda` comes from the host. |
-| `dcgm-counters.csv` | The collectors for dcgm-exporter: the stock defaults, and also the fields that `gpurt.dcgm` must have (clock-event reasons, SM active, SM occupancy). |
+| `dcgm-counters.csv` | The collectors for dcgm-exporter: the stock defaults, and also the fields that are necessary for `gpurt.dcgm` (clock-event reasons, SM active, SM occupancy). |
 
 ## 1. Any GPU box, plain pip (VM, rented container, your workstation)
 
@@ -53,16 +53,15 @@ the α term.
 
 ## 2. Colab (one T4, free)
 
-In Colab, open the menu *Runtime*, then *Change runtime type*, then select *T4 GPU*. Then open a notebook
+In Colab, open the menu *Runtime*, then *Change runtime type*. Select *T4 GPU*. Then open a notebook
 through the Colab links in the layer README. The first cell clones the repository and installs the lab.
 
 Numba cannot use the GPU if numba-cuda or its NVVM is not available, or if the driver and the toolkit do not
 agree. In that case, `gpurt.kernels` finds the problem before it selects its mode. It then uses the
 simulator and prints the reason. To repair the problem with Numba, run `!pip install -q "numba-cuda[cu12]"`. Then start
-the session again.
+the session again. Colab preinstalls numba-cuda at some times and not at others (verify).
 
-Colab preinstalls numba-cuda at some times and not at others (verify). Colab gives
-one GPU. Thus Colab supports T1 only.
+Colab gives one GPU. Thus Colab supports T1 only.
 
 ## 3. Kaggle, two T4s (free T2 — collectives over PCIe)
 
@@ -95,7 +94,7 @@ as `PIX`, `PHB` or `SYS`, and never `NV#`. Thus PCIe Gen3 x16 sets the upper lim
 This limit is 15.75 GB/s per direction on paper, and less in practice. The plateau is lower again if
 NCCL must go through host memory (`via SHM` in `NCCL_DEBUG=INFO`).
 
-Measure the plateau, and do not trust these limits. Exercise 4.5 of notebook 04 compares your plateau
+Measure the plateau. Do not trust these limits. Exercise 4.5 of notebook 04 compares your plateau
 with the link. The same all-reduce on an NVLink box is one to two orders of magnitude faster.
 
 ## 4. Docker on a machine you control (driver + NVIDIA Container Toolkit installed)

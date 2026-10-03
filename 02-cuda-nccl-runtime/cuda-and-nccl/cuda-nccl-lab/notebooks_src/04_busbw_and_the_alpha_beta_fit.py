@@ -70,8 +70,8 @@ for r in res.rows[::2]:
 # ## Exercise 4.2 — fit α and B yourself
 #
 # Fit $t = \alpha + S/B$ to (size, time) by least squares on the **relative** error. Minimise
-# $\sum ((\alpha + \beta \cdot S - t)/t)^2$ with $\beta = 1/B$. Then a 20 µs point and a 5 ms point have the
-# same weight. Divide each row of the linear system $[1, S] \cdot [\alpha, \beta] = t$ by $t$. Use
+# $\sum ((\alpha + \beta \cdot S - t)/t)^2$ with $\beta = 1/B$. The relative error gives a 20 µs point and a 5 ms
+# point the same weight. Divide each row of the linear system $[1, S] \cdot [\alpha, \beta] = t$ by $t$. Use
 # `np.linalg.lstsq`. Return `(alpha_s, bw_Bps)`.
 
 # %% exercise
@@ -198,8 +198,9 @@ print("✅ below the link? NCCL_DEBUG=INFO shows the transport (P2P, SHM, NET); 
 # ## Your own numbers
 #
 # The same parser reads the tables that `gpurt.dist` prints. The next cell does a fast sweep of the CPU
-# transport of this machine (the notebook 03 backend). This sweep is a measurement, and of a much different
-# fabric. The fit tells you its $\alpha$ and $B$. The fit error tells you how well a straight line describes it.
+# transport of this machine (the notebook 03 backend). This sweep is a measurement on a much different
+# fabric. The fit tells you the $\alpha$ and $B$ of this transport. The fit error tells you how well a straight
+# line describes this transport.
 #
 # Then the cell parses and summarises, in the same way, each nccl-tests or `gpurt.dist` log that you brought
 # back from a GPU box. These logs go into the lab's `out/` (`deploy/any-gpu`) or into `deploy/gke/out/`

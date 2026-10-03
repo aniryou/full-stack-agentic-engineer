@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 03 · Collectives with torch.distributed: semantics, a real ring, and the NCCL path
 #
-# **Tier:** T0. With PyTorch (Colab, Kaggle, most laptops), the sweeps use `torch.distributed`
+# **Tier:** T0. With PyTorch installed (Colab, Kaggle, most laptops), the sweeps use `torch.distributed`
 # with the **gloo** backend on CPU. Without PyTorch, they use the **ring over OS pipes** of this lab
 # (`gpurt.dist.pipes`), a real multi-process ring all-reduce. **T2**: on two or more GPUs (Kaggle's free
 # 2×T4), the same code runs on **NCCL**. Each time measurement in this notebook is a real measurement of the
@@ -164,7 +164,7 @@ assert all(r.wrong == 0 for r in ar)
 
 # %% [markdown]
 # For comparison, the next cell runs a point-to-point ring shift (`sendrecv`, busbw factor 1) over the same
-# transport. For a ring all-reduce, the design of busbw makes it read like the bandwidth of one link. Thus,
+# transport. For a ring all-reduce, the design of busbw makes it comparable to the bandwidth of one link. Thus,
 # at large sizes, we expect it to be of the same order as the send/recv bandwidth.
 
 # %%
@@ -270,9 +270,11 @@ else:
 # that you can compare with the link.
 #
 # Then I show the traffic of each parallelism. Tensor parallelism is two all-reduces per layer of
-# batch × hidden values. In decode, this is kilobytes, thus latency is the largest cost. FSDP is
-# reduce-scatter and all-gather of parameters. MoE is all-to-all. Before I give any bandwidth, I examine the
-# result (`#wrong = 0`) and name the transport that NCCL selected.
+# batch × hidden values. In decode, these values are kilobytes. Thus latency is the largest cost. FSDP is
+# reduce-scatter and all-gather of parameters. MoE is all-to-all.
+#
+# Before I give any bandwidth, I examine the result (`#wrong = 0`) and name the transport that NCCL
+# selected.
 #
 # **Drill questions**
 #
@@ -283,6 +285,6 @@ else:
 #    tens of microseconds, times 2 × layers per token. Keep TP in the NVLink domain. Use pipeline or data
 #    parallelism across nodes.
 # 3. *A job hangs in all_reduce. What are the first checks?* Did each rank call the same collectives in the
-#    same order, with the same shapes and dtypes? (A skipped call on one rank is the usual cause of a hang.)
+#    same order, with the same shapes and dtypes? A skipped call on one rank is the standard example of a hang.
 #    Did one rank stop? Then use `NCCL_DEBUG=INFO` to see the transport. Also use the collective
 #    timeout/watchdog settings of your framework to change a silent hang into an error.

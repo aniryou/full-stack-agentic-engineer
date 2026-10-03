@@ -12,8 +12,8 @@
 # ## The one-minute version
 #
 # * **Share a GPU only for many small things** (notebooks, small models, low-QPS endpoints). The continuous
-#   batching of an LLM engine already shares the weight reads of the GPU across requests. This sharing is
-#   better than any split at the GPU level.
+#   batching of an LLM engine already shares the weight reads of the GPU across requests. Thus the engine
+#   shares the GPU better than any split at the GPU level.
 # * **MIG** divides an A100/H100-class GPU into hardware partitions. Each partition has its own SMs, L2 and
 #   memory. MIG gives isolation and a geometry that does not change. **Time-slicing** lets several processes
 #   take turns on a whole GPU. It operates on any GPU and gives no isolation. **MPS** runs kernels from several
@@ -146,9 +146,9 @@ print(dcgm.report(text))
 #
 # * **node-a** is an LLM decode server. Its DRAM is busy, and its tensor pipes are idle most of the time. Its
 #   frame buffer is 89 % full because the engine pre-allocates its KV cache. Thus memory-used is *not* a health
-#   signal. The KV-usage metric of the engine is a health signal.
-# * **node-b** reads 97 % "utilised" with 9 % of its SMs active. The cause is small kernels or batches, or the
-#   GPU is launch-bound. Batch more, or capture CUDA Graphs (notebook 02).
+#   signal. The KV-usage metric of the engine itself is a health signal.
+# * **node-b** reads 97 % "utilised" with 9 % of its SMs active. The cause is small kernels, small batches or a
+#   launch-bound GPU. Batch more, or capture CUDA Graphs (notebook 02).
 # * **node-c** is a GPU that an idle notebook holds after an application XID.
 # * **node-d** trains at full load. But it had a thermal slowdown, and it has a remapped row that waits for a
 #   reset.
@@ -228,8 +228,8 @@ print("✅ nobody is paged tonight; node-d gets a ticket (thermal + pending row 
 # `PROF_SM_OCCUPANCY` commented out. The example list of DCGM fields that Google gives for GMP has the profiling
 # fields but no XID, row-remap or clock-event fields. The managed package of GKE is similar to this list (verify).
 #
-# If the exporter never exports the field of a rule, the rule never fires. Nothing tells you about it: the
-# dashboard is quiet. `dcgm.EXPORTED_BY` records the upstream lists (read 2026-09-26, verify for your
+# If the exporter never exports the field of a rule, the rule never fires. Nothing tells you that the rule is
+# blind: the dashboard is quiet. `dcgm.EXPORTED_BY` records the upstream lists (read 2026-09-26, verify for your
 # versions). `deploy/any-gpu/dcgm-counters.csv` is the stock list plus the three fields that the stock list
 # does not have.
 #
@@ -260,7 +260,7 @@ print("✅ with the stock counters the utilisation paradox is invisible (no SM_A
 # `deploy/any-gpu/README.md` §6 runs dcgm-exporter in Docker with the counters CSV of the lab. It saves a
 # scrape to `out/dcgm.prom`. On a rented A100/H100 *VM*, it also gives the manual steps for MIG
 # (`nvidia-smi mig`) and MPS (`nvidia-cuda-mps-control`). This notebook reads a scrape that you bring back.
-# Its values are measurements from your GPU.
+# The values of that scrape are measurements from your GPU.
 
 # %%
 scrapes = sorted(LAB.glob("out/*.prom")) + sorted(LAB.glob("deploy/*/out/*.prom"))
@@ -278,7 +278,7 @@ if not scrapes:
 #
 # The next code cell prints the rules. `dcgm.rules_manifest()` generates them, and
 # `deploy/gke/06-dcgm-alert-rules.yaml` stores them. The rules are a **`ClusterRules`** object, because a
-# namespaced GMP `Rules` object evaluates only metrics from its own namespace. The exporter never runs in the
+# namespaced GMP `Rules` object evaluates only metrics from its own namespace. Also, the exporter never runs in the
 # namespace of the workloads.
 #
 # The `namespace`/`pod` target labels of the scraper have priority. Thus the workload labels of the exporter
@@ -328,7 +328,7 @@ print("\n".join(dcgm.rules_manifest().splitlines()[:34]))
 #    busy, the cause is small kernels, small batches or a launch-bound workload. In that case, batch, fuse, or
 #    use CUDA Graphs. Look at DRAM_ACTIVE: if the workload is bandwidth bound, move fewer bytes. Look at
 #    PIPE_TENSOR_ACTIVE to see if the tensor cores are in use at all.
-# 3. *XID 79 at 3 am on one node. Who acts, and how?* This is a hardware fault: the GPU fell off the bus. The
+# 3. *XID 79 at 3 am on one node. Who acts, and how?* This is a hardware fault: the GPU "fell off the bus". The
 #    automation drains the node (cordon, evict). The on-call engineer sends a page to the infrastructure team.
 #    Then the node gets a reboot and a diagnosis (`dcgmi diag`). If the fault occurs again, replace the
 #    hardware. The application team only needs the scheduler to schedule its pods again.

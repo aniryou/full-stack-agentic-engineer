@@ -9,8 +9,8 @@
 #
 # * A kernel is **the body of a loop**. `kernel[blocks, threads](args)` runs one copy per thread. Each copy
 #   finds its index as `cuda.grid(1) = blockIdx.x * blockDim.x + threadIdx.x`.
-# * The launch rounds the grid up to whole blocks. Thus the last block has idle threads: **the bounds check is
-#   part of the algorithm**.
+# * The launch configuration rounds the grid up to whole blocks. Thus the last block has idle threads: **the
+#   bounds check is part of the algorithm**.
 # * Threads of one block share fast on-chip **shared memory** and meet at `cuda.syncthreads()`. Blocks
 #   cannot wait for each other in a kernel. Combine their results with a second launch or with atomics.
 # * The **warp request** decides the memory speed. When 32 lanes ask for 32 consecutive floats, they touch four
@@ -225,9 +225,8 @@ for name, t in traces.items():
 # 32×32 tile into shared memory with row loads. It then syncs its threads and writes the transposed tile
 # back with row stores. The result is 4 sectors per request on the two sides.
 #
-# (The simulator counts the
-# requests to the memory system. On a GPU, L2 prevents a part of the waste of the naive kernel. Notebook 02
-# measures the remainder.)
+# The simulator counts the requests to the memory system. On a GPU, L2 removes a part of the waste of the
+# naive kernel. Notebook 02 measures the remainder.
 #
 # ## Exercise 1.4 — predict sectors per request
 #
@@ -339,7 +338,7 @@ print(f"✅ tile 16: 16x fewer loads, 4 FLOP/B — still below a T4's {balance:.
 #    strided: each warp store touches 32 sectors, not 4. Put a tile in shared memory first, so that the
 #    loads and the stores are row-contiguous. Pad the tile to `TILE + 1` to prevent 32-way bank conflicts.
 # 2. *Why does a tiled GEMM need two barriers per tile?* One barrier comes after the load, so that no
-#    thread reads a half-written tile. One barrier comes after the computation, so that no thread
+#    thread reads a half-written tile. The other barrier comes after the computation, so that no thread
 #    overwrites a tile that another thread still reads.
 # 3. *Why can blocks not sync in a kernel?* Blocks run in waves when SMs become free. A barrier across
 #    blocks that are not resident causes a deadlock. Divide the work into two launches (or use atomics or

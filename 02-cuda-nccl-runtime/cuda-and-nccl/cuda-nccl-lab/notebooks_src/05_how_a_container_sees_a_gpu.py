@@ -100,8 +100,8 @@ print(c.explain(docker))
 # %% [markdown]
 # ## The same GPU, the GKE way
 #
-# On GKE, the device plugin mounts the driver directory of the node at `/usr/local/nvidia`. (The
-# `nvidia/cuda` images already put `/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`.) The device nodes go
+# On GKE, the device plugin mounts the driver directory of the node at `/usr/local/nvidia`. The
+# `nvidia/cuda` images already put `/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`. The device nodes also go
 # into the cgroup of the pod.
 
 # %%
@@ -203,8 +203,8 @@ print(f"✅ {len(c.ARCH) * len(pairs)} (GPU, build) cases: SASS within a major f
 # %% [markdown]
 # ## Exercise 5.4 — a whole scenario
 #
-# An image has `nvidia/cuda:12.8.1-runtime` as its base and a PyTorch wheel whose arch list is
-# `["sm_75", "sm_80", "sm_86", "sm_90"]`. The image goes to three nodes. Write
+# An image has `nvidia/cuda:12.8.1-runtime` as its base. It also contains a PyTorch wheel whose arch list
+# is `["sm_75", "sm_80", "sm_86", "sm_90"]`. The image goes to three nodes. Write
 # `verdicts(driver_version, cc)`. It returns the pair `(driver_runtime(...), kernel_image(...))` for this
 # image. Use `c.cuda_of_driver` to change a driver version into the CUDA version that it supports.
 
@@ -268,10 +268,10 @@ else:
 # 1. *`nvidia-smi` works in the container, but `torch.cuda.is_available()` is False. Why?* `nvidia-smi`
 #    needs only NVML. torch needs a CUDA build of the wheel (a CPU-only wheel returns False). It also needs a
 #    driver that supports the CUDA version of the wheel. Also, `CUDA_VISIBLE_DEVICES` must not mask every GPU.
-# 2. *Why can the image not ship its own `libcuda.so`?* The user-mode driver talks to the kernel module
+# 2. *Why can the image not include its own `libcuda.so`?* The user-mode driver talks to the kernel module
 #    through a private interface. That interface changes with each driver build. A mismatch fails with 803.
 #    Only the host knows which build it runs. Thus the runtime injects the driver.
 # 3. *A new GPU generation arrives, and the image from last year fails with "no kernel image". What is the
-#    solution?* Build or install the framework again for the new compute capability (or ship PTX, so that
+#    solution?* Build or install the framework again for the new compute capability (or include PTX, so that
 #    the driver can JIT). An upgrade of the driver alone does not help, because the binary has
 #    nothing for that GPU.

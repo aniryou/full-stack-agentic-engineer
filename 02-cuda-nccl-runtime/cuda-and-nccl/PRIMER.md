@@ -49,7 +49,7 @@ primer and does not repeat it.
   isolated). Time-slicing takes turns (no isolation). For LLM serving, the batching in the engine is the best way
   to share a GPU.
 - **Health:** "GPU util" is the share of *time* when a kernel ran. It does not show how much of the GPU the kernel
-  used. Read SM active, tensor active and DRAM active. Triage XIDs by who must act.
+  used. Read SM active, tensor active and DRAM active. Sort XIDs by who must act.
 
 ---
 
@@ -158,7 +158,7 @@ SASS/PTX targets of your build.
 |---|---|---|---|
 | CUDA driver version is insufficient for CUDA runtime version | 35 | The runtime is a newer major, or it is below the minor-compat floor. | Install a newer driver, use an older CUDA, or use `cuda-compat` (data center). |
 | API call is not supported in the installed CUDA driver | 36 | A minor-compat app called a newer API. | Install a newer driver. |
-| no CUDA-capable device is detected | 100 | The container has no injected GPU, or the driver does not know the GPU. | `--gpus`, CDI device, `nvidia.com/gpu` request, newer driver |
+| no CUDA-capable device is detected | 100 | The container has no injected GPU, or the driver does not know the GPU. | Use `--gpus`, a CDI device or an `nvidia.com/gpu` request, or install a newer driver. |
 | no kernel image is available for execution on the device | 209 | The binary has no SASS for this CC and no usable PTX. | Build for this sm, or add `+PTX`. |
 | the provided PTX was compiled with an unsupported toolchain | 222 | The PTX is newer than the JIT of the driver. | Include SASS in the binary, or install a newer driver. |
 | system not yet initialized | 802 | The NVSwitch system has no fabric manager. | Start `nvidia-fabricmanager` (the same version as the driver). |
@@ -196,7 +196,7 @@ per-thread loop of L[t] iterations              each warp runs max(L) iterations
 The loop case is the case that causes problems for inference code. With one thread per sequence and long-tailed
 lengths, SIMT efficiency was **24%** in notebook 01, and **96%** after a sort by length. This is why kernels over
 ragged batches put the sequences into buckets by length. It is also why attention kernels divide the work into
-*tiles of tokens*, not threads per sequence. Since Volta, each thread has its own program counter, thus divergent
+*tiles of tokens*, not threads per sequence. Since Volta, each thread has its own program counter, and thus divergent
 lanes can make independent progress. The cost model does not change.
 
 ### 2.3 Occupancy
@@ -246,7 +246,7 @@ tiles. They still saturate the machine ("better performance at lower occupancy",
 as a means.
 
 A grid runs in **waves** of `SMs × blocks_per_SM` blocks. 140 blocks, with one block per SM, on 132 SMs take two
-waves. The second wave is 6% full, thus the result is **53% efficiency** (`gpusim.occupancy.waves()`). Decode
+waves. The second wave is 6% full. Thus the result is **53% efficiency** (`gpusim.occupancy.waves()`). Decode
 kernels with few blocks have this problem. This is why split-K and split-KV exist.
 
 ---
@@ -271,7 +271,7 @@ capability 6.0+, a warp request costs one transaction per **distinct sector** th
 This has two consequences for inference. **Layout is performance**: struct-of-arrays is faster than
 array-of-structs. Matrices have a layout in which the index that changes fastest is the index that consecutive
 lanes walk. **Paged KV caches** stay coalesced, although their blocks are in different places in memory. Each block
-stores the keys and values of its tokens contiguously (kilobytes per block), thus a warp still reads whole sectors.
+stores the keys and values of its tokens contiguously (kilobytes per block), and thus a warp still reads whole sectors.
 That is one reason why the blocks cannot be too small
 ([PagedAttention primer](../../04-inference-engine/paged-attention/paged-attention-primer.md)).
 
@@ -342,7 +342,7 @@ Each kernel boundary is a round trip through HBM. Take a row-wise softmax of a 4
 | online (two passes, running max and sum) | 1 | 96 MiB (3RC) | 30 µs |
 
 When the max increases, the online variant rescales its running sum by $\exp(m_{\text{old}} - m_{\text{new}})$.
-This makes the result exact (`softmax_online()`). FlashAttention fuses the softmax *into* QKᵀ and PV, thus the
+This makes the result exact (`softmax_online()`). FlashAttention fuses the softmax *into* QKᵀ and PV. Thus the
 score matrix never gets to HBM
 ([FlashAttention primer §4–5](../../04-inference-engine/flash-attention/flash-attention-primer.md)). Elementwise
 chains fuse in the same way: $k$ unfused ops move $k$ times the bytes of one fused kernel (`elementwise_traffic()`).
@@ -351,10 +351,10 @@ chains fuse in the same way: $k$ unfused ops move $k$ times the bytes of one fus
 
 One L2 cache serves all SMs. It is approximately 4 MB on a T4, 40 MB on an A100, 48 MB on an L4, 50 MB on an
 H100 (verify). In L2, the tiled GEMM of §3.4 gets back its last ~20×. Blocks that run at the same time on nearby
-tiles read the same $A$ and $B$ panels, thus the later readers hit in L2. This is why GEMM libraries launch tiles in
+tiles read the same $A$ and $B$ panels. Thus the later readers hit in L2. This is why GEMM libraries launch tiles in
 a *swizzled* order (nearby tiles together).
 
-Decode shows the limit. A 17.5 GB weight shard is 350× an H100's L2, thus each step streams its weights from HBM,
+Decode shows the limit. A 17.5 GB weight shard is 350× an H100's L2. Thus each step streams its weights from HBM,
 whatever the policy is. On CC 8.0+, you can pin small hot data with the access policy window of a stream
 (`cudaAccessPolicyWindow`). `gpusim` counts only HBM bytes. Thus it gives a bound on what L2 can save, and it does
 not simulate L2.
@@ -389,12 +389,12 @@ attention and sampling kernels. Many of them are a few microseconds long.
 ### 4.3 CUDA Graphs, and why engines capture decode
 
 A **CUDA Graph** records a sequence of kernels (and memcpys, and NCCL calls) one time. Then it replays the sequence
-with one launch. The price is that the graph is rigid. The capture freezes the shapes and the memory addresses, thus
+with one launch. The price is that the graph is rigid. The capture freezes the shapes and the memory addresses. Thus
 you copy the inputs into static buffers. There must be no host synchronization inside the graph, and the control
 flow does not change.
 
 Thus engines **capture one graph per batch-size bucket** for decode. They pad each batch up to the nearest captured
-size. Prefill has variable shapes, thus it runs in eager mode or as *piecewise* graphs around attention. A capture
+size. Prefill has variable shapes. Thus it runs in eager mode or as *piecewise* graphs around attention. A capture
 costs startup time and GPU memory. This is why vLLM's `--enforce-eager` exists: it saves both, but decode becomes
 slower.
 
@@ -440,7 +440,7 @@ step  6 all-gather       0->1:c2   1->2:c3   2->3:c0   3->0:c1      everyone has
 
 Each rank sends ${2(p-1)}$ messages of ${S/p}$, which is **$2(p-1)/p \cdot S$** bytes in total. Because no
 point-to-point algorithm sends less, the ring is bandwidth-optimal. The ring reduces each chunk exactly one time and
-then copies it, thus all ranks end with bitwise-identical results. A different algorithm adds in a different order.
+then copies it. Thus all ranks end with bitwise-identical results. A different algorithm adds in a different order.
 Thus the ring and tree results are different in the last bits (notebook 03 shows it).
 
 ### 5.3 The α-β cost of each algorithm
@@ -595,7 +595,7 @@ with the flight recorder dumps of PyTorch or with `NCCL_DEBUG=INFO` logs. The ch
    flight recorder (`TORCH_NCCL_TRACE_BUFFER_SIZE`, verify names). Use NCCL's RAS client (`ncclras`, NCCL 2.24+) to
    see the state of each rank. Use `py-spy dump` for Python stacks.
 2. **Make sure that the control flow is rank-uniform.** Also make sure that each rank reached the same call count.
-3. **Examine the path.** In a node, the correct output of `NCCL_DEBUG=INFO` is P2P or NVLS. SHM inside one node means
+3. **Examine the path.** In a node, the `NCCL_DEBUG=INFO` log must show the P2P or NVLS transport. SHM inside one node means
    that P2P is off. Possible causes are ACS or IOMMU on PCIe, containers without a shared IPC namespace, or
    `NCCL_P2P_DISABLE`. Compare with `nvidia-smi topo -m`.
 4. **Examine the environment.** Look for an incorrect `NCCL_SOCKET_IFNAME` and firewalls between nodes. Make sure
@@ -613,7 +613,7 @@ Containers share the host kernel. Thus the **kernel-mode driver is always the ho
 container needs four things:
 
 - the **device nodes** (`/dev/nvidia0`, one per GPU, plus `/dev/nvidiactl`, `/dev/nvidia-uvm` and
-  `/dev/nvidia-uvm-tools`, and `/dev/nvidia-caps/*` for MIG), which its cgroup permits,
+  `/dev/nvidia-uvm-tools`, and `/dev/nvidia-caps/*` for MIG), with permission from its cgroup for each of them,
 - the **user-mode driver libraries** (`libcuda.so`, `libnvidia-ml.so`, `libnvidia-ptxjitcompiler.so`, ...) at
   *exactly* the version of the host driver,
 - the host utilities that it wants (`nvidia-smi`),
@@ -725,7 +725,7 @@ clients on that GPU (verify for your driver). MPS is applicable to cooperative w
 ### 7.4 Time-slicing: turns
 
 The device plugin (or GKE's `max_shared_clients_per_gpu`) advertises one GPU as $N$ schedulable replicas. The GPU
-runs one context at a time, round-robin. There is **no memory isolation**, thus one tenant can cause an OOM in the
+runs one context at a time, round-robin. There is **no memory isolation**. Thus one tenant can cause an OOM in the
 other tenants. There is also no performance isolation.
 
 Take $N$ busy tenants and a request that needs $W$ of GPU time, in quanta $q$, with a switch cost $s$. At best, the
@@ -835,9 +835,9 @@ XIDs are the error reports of the driver (in `dmesg` and DCGM). What is importan
 | 63 | row-remapping (or page-retirement) event | node | A remap is pending until the GPU resets. Drain the node, then reset the GPU. |
 | 94 | contained ECC error | node | Only the affected app crashed. Restart it. Reset the GPU after you drain the node. |
 | 48, 95 | double-bit ECC error, uncontained ECC error | hardware | Drain and reset now. If it occurs again, send the GPU for RMA. |
-| 64 | row-remapper failure | hardware | drain, RMA |
+| 64 | row-remapper failure | hardware | Drain the node. Send the GPU for RMA. |
 | 74, 79 | NVLink error, GPU fell off the bus | hardware | Drain, reboot, diagnose (PCIe, power, thermals). If it occurs again, send the GPU for RMA. |
-| 92, 119 | high single-bit ECC rate, GSP RPC timeout | node | schedule diagnostics, reset, update the driver |
+| 92, 119 | high single-bit ECC rate, GSP RPC timeout | node | Schedule diagnostics. Reset the GPU. Update the driver. |
 
 Since A100, the GPU **remaps rows** of HBM that show memory errors. It does not retire pages. The remap takes
 effect at the next GPU reset. A remap *failure* means that you must replace the GPU. `gpusim.health.alerts()` maps
@@ -886,7 +886,7 @@ GKE Standard cluster with these node pools:
 - an `l4x2` pool of `g2-standard-24` nodes (2 × L4, also Spot and from zero) that hosts the 2-GPU nccl-tests Job,
 - optional time-sharing and MIG pools.
 
-**Elsewhere.** **Colab** gives one T4 (CC 7.5, thus no bf16 tensor cores). **Kaggle** gives **2 × T4 over PCIe**
+**Elsewhere.** **Colab** gives one T4 (CC 7.5, and thus no bf16 tensor cores). **Kaggle** gives **2 × T4 over PCIe**
 for free. That is a real 2-GPU NCCL box without NVLink. There, `NCCL_DEBUG=INFO` shows P2P or SHM over PCIe, and
 PCIe sets the limit for busbw.
 
@@ -904,14 +904,14 @@ with fake GPU capacity (layer 03) lets you try the scheduler, not CUDA. It has n
 **The two-minute walkthrough.** "Each node pool pins one driver branch. Images contain only CUDA userland. We build
 them at or below the CUDA version of that driver, or in its major. Each image passes a check that every kernel has
 SASS for our GPUs (`torch.cuda.get_arch_list()`). The NVIDIA Container Toolkit injects the libcuda and the devices
-of the host, thus the user-mode and kernel-mode drivers always match.
+of the host, and thus the user-mode and kernel-mode drivers always match.
 
 "Our hot kernels are memory-bound. We count bytes and sectors, and we tile and fuse. At small batch, the launch path
 is the largest cost. Thus we capture decode as CUDA Graphs per batch bucket.
 
 "We run tensor parallelism inside the NVLink domain. Decode all-reduces are approximately 0.5 MB, far below the
 ~7 MB latency/bandwidth crossover. Thus we use a few-step all-reduce (two-shot or NVLS) inside the graph. Before any
-model runs, we measure nccl-tests busbw and compare it with the NVLink rate.
+model runs, we examine the fabric. We measure nccl-tests busbw and compare it with the NVLink rate.
 
 "We give whole GPUs to large models. Small multi-tenant endpoints get MIG layouts that we plan. Dev notebooks get
 time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware XIDs drain nodes automatically."
@@ -925,9 +925,9 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
 2. *TP=8 decode spends 40% of the step in all-reduce, yet NVLink is nearly idle. Why?* The messages are hundreds of
    KB. Thus the 14 $\alpha$-steps of a ring are the largest cost. The all-reduce is latency-bound, not
    bandwidth-bound. Use fewer steps (two-shot or one-shot custom all-reduce, NVLS). Capture them in CUDA graphs.
-   Fuse them with the norm. Or decrease the TP degree for this model.
+   Fuse them with the norm. As an alternative, decrease the TP degree for this model.
 3. *nccl-tests on one 8×H100 node shows all-reduce busbw of 100 GB/s. What do you check?* First, make sure that NCCL
-   uses NVLink at all. The correct report from `NCCL_DEBUG=INFO` is P2P or NVLS, not SHM or NET. Then examine the
+   uses NVLink at all. The `NCCL_DEBUG=INFO` log must show P2P or NVLS, not SHM or NET. Then examine the
    fabric manager status and `nvidia-smi topo -m`. Look for `NCCL_P2P_DISABLE` left set, and for containers without
    shared IPC. On NVLink 4, the expected busbw is a few hundred GB/s, near the link rate, not 100.
 4. *The dashboard shows 100% GPU utilization but low tokens/s. Is the GPU saturated?* Not necessarily. GPU util is
@@ -950,16 +950,16 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
 |---|---|
 | SM | streaming multiprocessor: 4 sub-partitions, each with a warp scheduler and a register-file slice |
 | warp | 32 threads issued together, the unit of scheduling |
-| SIMT, divergence | One instruction stream per warp. Lanes on different branches serialize. |
+| SIMT, divergence | one instruction stream per warp, and lanes on different branches serialize |
 | occupancy | resident warps / maximum warps per SM |
-| sector, line | 32-byte unit of global-memory traffic. A 128-byte cache line = 4 sectors. |
-| coalescing | The accesses of a warp combine into few sectors. |
+| sector, line | the 32-byte unit of global-memory traffic (a 128-byte cache line = 4 sectors) |
+| coalescing | the combination of the accesses of a warp into few sectors |
 | bank conflict | lanes that hit different 4-byte words in the same one of 32 shared-memory banks |
-| compute capability (CC) | The architecture version of a GPU, X.Y. SASS uses `sm_XY`. |
+| compute capability (CC) | the architecture version of a GPU, X.Y (SASS uses `sm_XY`) |
 | SASS, PTX, fatbin | machine code, a virtual ISA that the driver JIT-compiles, a binary that holds more than one of each |
 | minor-version compatibility | a newer runtime on an older driver of the same CUDA major, with limits |
 | forward compatibility | `cuda-compat`: a newer user-mode driver on an older kernel module (data-center GPUs) |
-| stream | An in-order queue of GPU work. Different streams can overlap. |
+| stream | an in-order queue of GPU work (different streams can overlap) |
 | CUDA Graph | a captured sequence of GPU work replayed with one launch |
 | collective | communication operation defined over all ranks of a communicator |
 | $\alpha$, $B$ | per-step latency, per-direction link bandwidth (layer 01 writes $B$ as $\beta$) |
@@ -969,9 +969,9 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
 | NVLS, SHARP | in-network reduction in NVSwitch (NVLink SHARP) or InfiniBand switches |
 | CDI | Container Device Interface: a spec that names the devices, mounts and hooks to inject |
 | MIG, MPS, time-slicing | partition, overlap, turns: the three ways to share a GPU |
-| DCGM | Data Center GPU Manager. dcgm-exporter publishes its fields to Prometheus. |
+| DCGM | Data Center GPU Manager, whose fields dcgm-exporter publishes to Prometheus |
 | XID | a driver error code in the kernel log |
-| row remapping | The GPU replaces faulty HBM rows (A100+). The change takes effect after a GPU reset. |
+| row remapping | the replacement of faulty HBM rows by the GPU (A100+), with effect after a GPU reset |
 
 ---
 
@@ -1030,7 +1030,7 @@ The date of this list is 2026-09-26. Each fact in it can change. Do a check of e
 | NCCL and PyTorch environment-variable names (`TORCH_NCCL_*`) | primer §5.7–5.8 | verify for your versions |
 | DCGM field names. `CLOCK_THROTTLE_REASONS` has the new name `CLOCKS_EVENT_REASONS`. | `health` | verify |
 | XID meanings and recommended actions | `health.XIDS` | verify |
-| Docker/containerd/CRI-O native CDI support versions. Docker's `--gpus` adds the prestart hook itself. | primer §6.2 | verify |
+| The versions of Docker, containerd and CRI-O that support CDI natively. Docker's `--gpus` adds the prestart hook itself. | primer §6.2 | verify |
 | L2 sizes: T4 4 MB, A100 40 MB, L4 48 MB, H100 50 MB | primer §3.6 | verify |
 | vLLM flags (`--enforce-eager`, CUDA-graph capture sizes) | primer §4.3 | verify |
 | GKE driver auto-install from 1.32.2-gke.1297000, `gpu_driver_version` values | primer §9 | from project FACTS (2026-09-26) |
