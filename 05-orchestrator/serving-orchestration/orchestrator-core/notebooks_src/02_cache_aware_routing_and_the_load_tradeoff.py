@@ -312,8 +312,8 @@ print("✅ phantom_share works, and your prediction held")
 # request waits until the running requests of a slot drain.
 #
 # This example has twenty-four Zipf-popular adapters over four replicas. That is more adapters than the 16 slots of
-# the fleet. The traffic is 2 req/s of chat. The example runs it with and without the LoRA affinity filter of the
-# EPP.
+# the fleet. The traffic is 2 req/s of chat. The example runs this traffic with and without the LoRA affinity
+# filter of the EPP.
 
 # %%
 from fleetsim import (ApproxPrefixIndex, KVCacheUtilizationScorer, LoraAffinityFilter, PrefixCacheScorer,
@@ -405,8 +405,8 @@ print(f"✅ loads {without['adapter loads']} -> {with_f['adapter loads']}, p95 T
 # max.
 #
 # "Then I adjust the prefix weight on a replay of our traffic. I monitor the hit rate *and* the per-replica load
-# together, because the failure is a hot spot, not a low hit rate. If we take the TTFT-gated affinity filter of
-# llm-d instead, I make sure that the gate estimate is what really slows our hot replicas. That estimate is the
+# together, because the failure is a hot spot, not a low hit rate. If we use the TTFT gate of the llm-d affinity
+# filter instead, I make sure that its estimate is what really slows our hot replicas. That estimate is the
 # prefill backlog. I also count how often the gate breaks stickiness.
 #
 # "For hard guarantees, bounded-load consistent hashing limits each replica to
@@ -415,7 +415,7 @@ print(f"✅ loads {without['adapter loads']} -> {with_f['adapter loads']}, p95 T
 # **Drills**
 # 1. *Why not hash on the session id, and stop there?* It ignores load. A few long sessions on one replica wait
 #    behind each other, and nothing moves them. A hash of the session id is a good *score*, not a policy.
-# 2. *Hit rate fell from 0.85 to 0.55 after a deploy. Where do you look?* Look at the prompt layout. A timestamp or
+# 2. *Hit rate decreased from 0.85 to 0.55 after a deploy. Where do you look?* Look at the prompt layout. A timestamp or
 #    a user id in front of the system prompt breaks every block after it. Then look at the block size. After that,
 #    look at the router weights and the per-replica load.
 # 3. *What does $\varepsilon = 0.25$ give you?* No replica ever holds more than

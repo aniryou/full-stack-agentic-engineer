@@ -387,7 +387,7 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 # ## In a design review
 # **Two-minute version.** "I scale the model servers with an HPA, through KEDA, so that it can go to zero where that
 # makes sense. The HPA scales on the work in flight. If our traffic is uniform, that is running plus waiting
-# requests, and also the requests that the router holds. If prompt sizes are different, that is seconds of prefill
+# requests, and also the requests that the router holds. If prompt sizes are not uniform, that is seconds of prefill
 # backlog plus KV occupancy, because a request count calibrated on chat under-scales RAG. The target comes from a
 # load test at the SLO, minus a margin.
 #
@@ -408,8 +408,8 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 #    $\lceil 20 / 2 \rceil = 10$. The zeros only stop a small change. At 10.5 each, it still holds, but a
 #    calculation that ignores the Pending pods gives 11.
 # 4. *We adjusted our in-flight target on chat, and then the RAG traffic doubled. What breaks?* The count gives too
-#    small a weight to RAG. Here, SLO attainment fell from 0.94 to about 0.7. Scale on seconds of prefill backlog
+#    small a weight to RAG. Here, SLO attainment decreased from 0.94 to about 0.7. Scale on seconds of prefill backlog
 #    plus KV, or calculate the target again for every mix.
-# 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. That
-#    includes the node after the cluster autoscaler removes the idle GPU node (~400 s here). `minReplicas: 0` also
-#    needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.
+# 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. After
+#    the cluster autoscaler removes the idle GPU node, the cold start also includes a new node (~400 s here).
+#    `minReplicas: 0` also needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.

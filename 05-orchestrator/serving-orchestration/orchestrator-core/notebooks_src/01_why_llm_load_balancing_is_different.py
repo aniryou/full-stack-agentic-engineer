@@ -7,8 +7,8 @@
 #
 # ## The one-minute version
 # A web load balancer assumes three things about requests: they are small, they are similar and they have no state.
-# Thus, when it divides them equally *by count*, it also divides the *work* equally. LLM requests break all three
-# assumptions:
+# Under these assumptions, when it divides them equally *by count*, it also divides the *work* equally. LLM requests
+# break all three assumptions:
 #
 # 1. **The cost of requests is different by one to two orders of magnitude, and nobody knows it at the start.** A
 #    6,000-token RAG prompt has five times the prefill of a chat turn. Nobody knows the output length until the
@@ -362,6 +362,6 @@ print(f"✅ λ = {lam:.2f}/s x W = {w:.1f} s = {lam * w:.0f} in flight (the simu
 #    that does not starve the GPUs.
 # 4. *Why put requests in a queue in the router at all?* When a request is in the queue of an engine, the router has
 #    committed it to that replica. A request in the router can still go to the replica that becomes free first. The
-#    router can also put it in order by priority, or shed it with a 429. But this is true only if the cap has the
-#    correct size for the load. A cap that is too low starves the fleet. A cap that is too high never puts a request
-#    in the queue.
+#    router can also put it in order by priority, or shed it with a 429. But the router can do these things only if
+#    the cap has the correct size for the load. A cap that is too low starves the fleet. A cap that is too high never
+#    puts a request in the queue.
