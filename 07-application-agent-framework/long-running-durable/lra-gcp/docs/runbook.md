@@ -8,29 +8,39 @@ export PROJECT_ID=... REGION=asia-southeast1
 gcloud run services update-traffic lra-worker --to-revisions=PREV=100 --region $REGION   # rollback
 ```
 
-Before removing a workflow version from the image: `agent_runs where workflow_version == X and status in (PENDING, RUNNING, WAITING, COMPENSATING)` must be empty, or those runs will fail with "no longer deployed".
+Before you remove a workflow version from the image, make sure that this query gives no result:
+`agent_runs where workflow_version == X and status in (PENDING, RUNNING, WAITING, COMPENSATING)`. If it gives a
+result, those runs will fail with "no longer deployed".
 
 ## Dashboards / alerts (from the `agent-events` stream)
 
 | Signal | Query | Page when |
 |---|---|---|
-| Stuck runs | `status == WAITING and wait.timeout_at < now` | > 0 for 10 min (reaper not running?) |
-| Dying workers | `reap.leases_recovered` per hour | rising trend |
-| Retry storm | `step.retry` per step per 10 min | > 5 % of steps |
-| Money at risk | `run.compensation_failed` on `agent-alerts` | any |
-| Cost | `run.succeeded` cost_usd p95 | > budget × 0.8 |
+| Stuck runs | `status == WAITING and wait.timeout_at < now` | > 0 for 10 min. Possible cause: the reaper does not run. |
+| Workers that crash | `reap.leases_recovered` per hour | The trend increases. |
+| Retry storm | `step.retry` per step per 10 min | > 5 % of steps. |
+| Money at risk | `run.compensation_failed` on `agent-alerts` | Any event. |
+| Cost | `run.succeeded` cost_usd p95 | > budget × 0.8. |
 
 ## Common incidents
 
-**Runs pile up in RUNNING with expired leases.** Worker is crashing or timing out. Check Cloud Run logs for the run ids; raise `--timeout`, lower `--concurrency`, or split the step. The reaper will re-drive once fixed.
+**Runs collect in RUNNING with expired leases.** The worker crashes or stops at its timeout. Examine the Cloud Run
+logs for the run ids. Increase `--timeout`, decrease `--concurrency`, or divide the step. When you repair the worker,
+the reaper re-drives the runs.
 
-**A run is WAITING but the reviewer says they approved.** `GET /runs/{id}` → check `wait.key`; the approval was probably POSTed with a different key (wrong gate) → `applied:false` in the API log. Re-POST with the right key; duplicates are harmless.
+**A run is WAITING, but the reviewer says that they approved it.** Examine `wait.key` in the response to `GET /runs/{id}`. It is
+probable that the approval came in a POST with a different key (an incorrect gate). If so, the API log shows
+`applied:false`. Send the POST again with the correct key. A duplicate POST causes no damage.
 
-**Run FAILED with "compensation of X failed".** Manual undo required. The effect record in `agent_effects/{run}:X` has the external id. After fixing, set `status=COMPENSATED` via the admin path (or re-enqueue the compensation) and record the manual action in the run's history.
+**A run goes to FAILED with "compensation of X failed".** Reverse the effect by hand. The effect record in
+`agent_effects/{run}:X` has the external id. After you repair the problem, set `status=COMPENSATED` through the admin
+path, or enqueue the compensation again. Then record the manual action in the history of the run.
 
-**Budget-failed runs after a model price change.** Update `pricing_per_1m` in `GeminiLLM`; historical `cost_usd` is not recomputed.
+**Runs fail on their budget after the price of a model changes.** Change `pricing_per_1m` in `GeminiLLM`. The old
+`cost_usd` values stay as they are, because the engine does not calculate them again.
 
-**Cloud Tasks "AlreadyExists" spam in logs.** Expected during recovery (reaper re-enqueue vs in-flight retry). Only investigate if a run is not progressing.
+**The logs show many Cloud Tasks "AlreadyExists" messages.** These messages are normal during a recovery. They
+occur when the reaper enqueues a task again while a retry of the same task is in flight. If a run does not continue, examine the messages. If all the runs continue, no action is necessary.
 
 ## Manual operations
 

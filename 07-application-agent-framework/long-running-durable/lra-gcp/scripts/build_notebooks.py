@@ -115,10 +115,11 @@ def show(run):
 # =============================================================================
 nb0 = NB(
     "00 · The core idea — a durable agent loop in 60 lines",
-    "Before the engine, the *idea*. Using only the standard library we build a run store, a task queue and a worker, "
-    "then break it with a crash and a duplicate delivery. The three invariants of the engine (`docs/primer.md` §2) are the whole game:\n\n"
-    "1. **Checkpoint before enqueue.**\n2. **`(run, step, attempt)` identifies work; anything else is stale.**\n"
-    "3. **Record side effects before the checkpoint, keyed by intent.**",
+    "This notebook shows the *idea* before the engine. We use only the standard library to build a run store, a task queue "
+    "and a worker. Then we break the loop with a crash and a duplicate delivery. Everything depends on the three invariants of "
+    "the engine (`docs/primer.md` §2):\n\n"
+    "1. **Write the checkpoint before you enqueue the task.**\n2. **`(run, step, attempt)` identifies the work. Any other task is stale.**\n"
+    "3. **Record side effects before the checkpoint, with the intent as the key.**",
 )
 nb0.md("## The store, the queue and the run document")
 nb0.code(
@@ -144,7 +145,7 @@ def start(run_id, first_step):
     enqueue(run_id, first_step, 1)
 ''',
 )
-nb0.md("## Steps with an idempotent side effect\n\n`effect()` runs `fn` at most once per `(run, intent)`. Note the order: the effect is recorded *before* the caller checkpoints.")
+nb0.md("## Steps with an idempotent side effect\n\n`effect()` runs `fn` at most one time for each `(run, intent)`. Look at the order: `effect()` records the effect *before* the caller writes the checkpoint.")
 nb0.code(
     '''
 def effect(run_id, intent, fn):
@@ -171,7 +172,7 @@ STEPS = {"reserve": reserve, "charge": charge, "ship": ship}
 ''',
     intent='"charge"',
 )
-nb0.md("## The worker\n\nThis is the loop the whole repo elaborates. Fill in the guard and the ordering.")
+nb0.md("## The worker\n\nThe whole repository builds on this loop. Fill in the guard and the order of the operations.")
 nb0.code(
     '''
 CRASH_AFTER_COMMIT = {"on": False}
@@ -220,7 +221,7 @@ print(RUNS["order-1"]["status"], RUNS["order-1"]["state"], "charges:", CHARGES)
 assert RUNS["order-1"]["status"] == "SUCCEEDED" and CHARGES == ["charged"]
 '''
 )
-nb0.md("## Crash after the checkpoint, before the enqueue\n\nThe run is consistent (`step=ship`, attempt 1) but no task exists. Something must re-drive it: that is the **reaper**. Because the checkpoint already moved on, the reaper's re-enqueue is the *only* task that can execute.")
+nb0.md("## Crash after the checkpoint, before the enqueue\n\nThe run is consistent (`step=ship`, attempt 1), but no task exists. Something must re-drive the run, and that is the job of the **reaper**. The checkpoint already moved on, so the task that the reaper enqueues again is the *only* task that can execute.")
 nb0.code(
     '''
 CHARGES.clear()
@@ -243,7 +244,7 @@ print(drain())
 assert RUNS["order-2"]["status"] == "SUCCEEDED" and CHARGES == ["charged"], "exactly one charge"
 '''
 )
-nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) is at-least-once. Deliver the `charge` task twice and watch the guard reject the second.")
+nb0.md("## Duplicate delivery\n\nCloud Tasks (and every real queue) gives at-least-once delivery. Deliver the `charge` task two times. Then look at how the guard rejects the second delivery.")
 nb0.code(
     '''
 CHARGES.clear()
@@ -259,21 +260,22 @@ print(drain())
 )
 nb0.md(
     "## What the real engine adds\n\n"
-    "* **Leases** so two replicas can't run the same step concurrently (`Engine.execute_task`).\n"
-    "* **Retries** with backoff by bumping the attempt (so the old task becomes stale).\n"
-    "* **`Wait`** for human input, **`FanOut`** into child runs, **compensation** for sagas, **budgets**.\n"
-    "* **Optimistic concurrency** on `version` instead of the single-threaded dict here.\n\n"
+    "* **Leases**, so that two replicas cannot run the same step at the same time (`Engine.execute_task`).\n"
+    "* **Retries** with backoff, through an increase of the attempt, so that the old task becomes stale.\n"
+    "* **`Wait`** for input from a person, **`FanOut`** into child runs, **compensation** for sagas, and **budgets**.\n"
+    "* **Optimistic concurrency** on `version`, in place of the single-threaded dict of this notebook.\n\n"
     "Continue with `01_durable_execution`."
 )
 
 # =============================================================================
 nb1 = NB(
     "01 · Durable execution with the `lra` engine",
-    "Same invariants, real engine: leases, optimistic concurrency, explicit retries, a reaper. Everything runs on in-memory "
-    "adapters that mimic Firestore/Cloud Tasks semantics, with a controllable clock and chaos hooks.",
+    "This notebook has the same invariants and a real engine: leases, optimistic concurrency, explicit retries and a reaper. "
+    "Everything runs on in-memory adapters that copy the semantics of Firestore and Cloud Tasks. Everything also runs with "
+    "a clock that you control and with chaos hooks.",
 )
 nb1.code(SETUP)
-nb1.md("## A three-step workflow\n\nSteps return `Next`, `Done`, `Wait` or `FanOut`. They mutate `ctx.state`, call the model through `ctx.llm` (budgeted), and do side effects through `ctx.effect` (idempotent).")
+nb1.md("## A three-step workflow\n\nSteps return `Next`, `Done`, `Wait` or `FanOut`. A step changes `ctx.state`. It calls the model through `ctx.llm`. Each call through `ctx.llm` counts against the budget. The step does side effects through `ctx.effect`, and each side effect through `ctx.effect` is idempotent.")
 nb1.code(
     '''
 wf = Workflow("triage", version="1", default_budget=Budget(max_steps=10, max_cost_usd=0.5))
@@ -304,7 +306,7 @@ engine.registry.register(wf)
     attempts="3",
     effect_key='"update-ticket"',
 )
-nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` delivers one due task, exactly like one Cloud Tasks push.")
+nb1.md("## Run it one task at a time\n\n`LocalRunner.step()` delivers one task that is due, the same as one push from Cloud Tasks.")
 nb1.code(
     '''
 run = engine.start("triage", {"ticket": "I was charged twice"})
@@ -318,8 +320,8 @@ assert r.status == RunStatus.SUCCEEDED and r.attempt_of("classify") == {{classif
 ''',
     classify_attempts="2",
 )
-nb1.md("The first `classify` attempt hit the simulated 503; the engine bumped the attempt (making the old task stale), enqueued a delayed retry, and the runner fast-forwarded the clock to it. Retries live in run history, not hidden in the queue.")
-nb1.md("## Chaos: crash after the checkpoint, before the enqueue\n\nThe chaos hook raises `SimulatedCrash` at a named point. A real crash never releases its lease, so the reaper must wait for it to expire.")
+nb1.md("The first `classify` attempt got the simulated 503. The engine increased the attempt. The new attempt made the old task stale. Then the engine enqueued a delayed retry, and the runner moved the clock forward to that retry. The retries are in the run history. The queue does not hide them.")
+nb1.md("## Chaos: crash after the checkpoint, before the enqueue\n\nThe chaos hook raises `SimulatedCrash` at a named point. A real crash never releases its lease. Thus the reaper must wait until the lease expires.")
 nb1.code(
     '''
 crashed = []
@@ -347,7 +349,7 @@ assert store.get(run.run_id).status == RunStatus.SUCCEEDED
     chaos_point='"after_commit_before_enqueue"',
     advance_s="61",
 )
-nb1.md("## Crash after the side effect, before the checkpoint\n\nThe most expensive window: the effect happened, the checkpoint didn't. On redelivery the engine re-runs the step, finds the effect record, and skips it.")
+nb1.md("## Crash after the side effect, before the checkpoint\n\nThis is the crash window with the highest cost. The effect occurred, but the checkpoint did not. When the queue delivers the task again, the engine runs the step again. It finds the effect record and does not do the effect again.")
 nb1.code(
     '''
 TICKETS_UPDATED.clear(); crashed.clear()
@@ -370,7 +372,7 @@ assert r.status == RunStatus.SUCCEEDED and len(TICKETS_UPDATED) == {{n_effects}}
     chaos_point='"after_step_before_commit"',
     n_effects="1",
 )
-nb1.md("## Leases: a second worker\n\nTwo replicas receive the same task 50 ms apart. The loser gets `lease-held`, which the HTTP layer maps to **503** so Cloud Tasks retries later.")
+nb1.md("## Leases: a second worker\n\nTwo replicas receive the same task with 50 ms between them. The replica that loses gets `lease-held`. The HTTP layer returns `lease-held` as **503**, so Cloud Tasks retries later.")
 nb1.code(
     '''
 engine, runner, clock, store, queue, bus = harness(routes=routes)
@@ -386,16 +388,16 @@ assert store.get(run.run_id).current_step == {{after_b}}
 ''',
     after_b='"lookup"',
 )
-nb1.md("## Takeaways\n\n* Retries are **explicit attempts**; the old task becomes stale by construction.\n* Two crash windows, two recovery mechanisms: reaper (lost enqueue) and effect records (lost checkpoint).\n* The worker is stateless — every replica can execute any step; the lease is the only coordination.")
+nb1.md("## Takeaways\n\n* Retries are **explicit attempts**. The design makes the old task stale.\n* There are two crash windows and two recovery mechanisms: the reaper (for a lost enqueue) and the effect records (for a lost checkpoint).\n* The worker is stateless. Every replica can execute any step. The lease is the only coordination.")
 
 # =============================================================================
 nb2 = NB(
     "02 · Human-in-the-loop: suspend for days, resume from anywhere",
-    "A `Wait` outcome parks the run: no task, no lease, no compute. An external event with the matching key resumes it. "
-    "Timeouts are absolute timestamps enforced by the reaper.",
+    "A `Wait` outcome makes the run wait. The run then has no task, no lease and no compute. An external event with the key "
+    "of the wait resumes the run. Timeouts are absolute timestamps, and the reaper enforces them.",
 )
 nb2.code(SETUP)
-nb2.md("## An approval gate\n\n`patterns.hitl.request_approval` records what is being approved and returns `Wait`. `approval_decision` reads the event after resume and fails the run on reject/timeout.")
+nb2.md("## An approval gate\n\n`patterns.hitl.request_approval` records what the approval is for, and returns `Wait`. After the resume, `approval_decision` reads the event. If the event is a rejection or a timeout, `approval_decision` fails the run.")
 nb2.code(
     '''
 from lra.patterns.hitl import request_approval, approval_decision
@@ -442,7 +444,7 @@ assert r.status == RunStatus.WAITING and r.wait.key == {{expected_key}}
 ''',
     expected_key='f"manager:{run.run_id}"',
 )
-nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does exactly this. Duplicates and wrong-gate events return `None`, never an error.")
+nb2.md("## Resume — idempotent and key-scoped\n\nThe API endpoint `POST /runs/{id}/events` does this same thing. A duplicate event and an event for an incorrect gate return `None`, never an error.")
 nb2.code(
     '''
 wrong = Event(run_id=run.run_id, key="cfo:" + run.run_id, payload={"decision": "approve"})
@@ -479,7 +481,7 @@ assert r3.status == RunStatus.{{status}}
 ''',
     status="FAILED",
 )
-nb2.md("## Auto-approve on timeout (`on_timeout=\"resume\"`)\n\nOnly for effects you would be comfortable auto-approving. The resumed step sees `{\"timed_out\": True}` in the event payload.")
+nb2.md("## Auto-approve on timeout (`on_timeout=\"resume\"`)\n\nUse `on_timeout=\"resume\"` only for effects where an automatic approval is acceptable to you. The resumed step sees `{\"timed_out\": True}` in the event payload.")
 nb2.code(
     '''
 soft = Workflow("soft_gate")
@@ -498,7 +500,7 @@ assert store.get(run4.run_id).result == {"auto_approved": True}
 ''',
     policy='"resume"',
 )
-nb2.md("## Cancel while waiting\n\nNo task will ever run for a waiting run, so cancel finishes it immediately (and would compensate if anything compensable had completed).")
+nb2.md("## Cancel while waiting\n\nNo task will ever run for a run that waits. Thus a cancel ends the run immediately. If a step with a compensation completed before the cancel, the cancel also compensates that step.")
 nb2.code(
     '''
 run5 = engine.start("expense", {"amount": 400}); runner.run_until_idle()
@@ -507,12 +509,13 @@ print(store.get(run5.run_id).status.value)
 print("late approval:", engine.resume(Event(run_id=run5.run_id, key=f"manager:{run5.run_id}", payload={"decision": "approve"})))
 '''
 )
-nb2.md("## The same gate in Cloud Workflows and ADK\n\n* **Cloud Workflows**: `events.create_callback_endpoint` → send the URL to the reviewer → `events.await_callback(timeout=259200)`. See `workflows/research_approval.yaml`.\n* **ADK 2**: a node yields an event with `long_running_tool_ids`; the webhook resumes the invocation with a `FunctionResponse`. See `examples/adk_agent_engine/`.")
+nb2.md("## The same gate in Cloud Workflows and ADK\n\n* **Cloud Workflows**: call `events.create_callback_endpoint`, then send the URL to the reviewer, then call `events.await_callback(timeout=259200)`. See `workflows/research_approval.yaml`.\n* **ADK 2**: a node yields an event with `long_running_tool_ids`. The webhook resumes the invocation with a `FunctionResponse`. See `examples/adk_agent_engine/`.")
 
 # =============================================================================
 nb3 = NB(
     "03 · Fan-out/fan-in, saga compensation, bounded reflection, budgets",
-    "The research pipeline in `lra.examples` composes every pattern. Here we drive it, break it, and watch it recover.",
+    "The research pipeline in `lra.examples` uses all of the patterns together. In this notebook, we run the pipeline, break it "
+    "and look at how it recovers.",
 )
 nb3.code(SETUP)
 nb3.md("## Orchestrator–worker: a plan becomes child runs")
@@ -533,8 +536,8 @@ print("reflection:", parent.state["reflect_loop"]["exit_reason"])
 ''',
     wait_kind='"children"',
 )
-nb3.md("Children are **runs**: they have their own ids (`parent--childkey`, so respawning after a crash is idempotent), budgets, retries and history. The parent slept while they ran.")
-nb3.md("## Partial failure is data\n\nOne subtopic's source is permanently down. The child fails after its 3 attempts; the aggregator decides that 2/3 is enough.")
+nb3.md("The children are **runs**. Each child has its own id (`parent--childkey`), budget, retries and history. Because of this id, a second spawn of the children after a crash is idempotent. The parent waited while the children ran.")
+nb3.md("## Partial failure is data\n\nThe source of one subtopic is permanently down. The child fails after its 3 attempts. The aggregator decides that 2/3 is sufficient.")
 nb3.code(
     '''
 routes = research_routes()
@@ -554,12 +557,13 @@ assert parent.status == RunStatus.WAITING and failed[0].attempt_of("research") =
 )
 nb3.md(
     "## The fan-in counter, by hand\n\n"
-    "Children finish in any order and their completion notices are delivered at least once. The parent keeps a "
-    "counter, and the write that makes it reach `expected` wakes the aggregator. Write the rule the store applies "
-    "atomically (`InMemoryStateStore.record_child_result` under a lock; Firestore in a transaction): record each "
-    "child **once**, and report *all done* for every notice once the count is reached, including a late duplicate "
-    "(its wake-up is a named, de-duplicated task, so letting it try again is harmless; answering *not done* could "
-    "strand the parent if the first wake-up was lost)."
+    "Children finish in any order, and their completion notices have at-least-once delivery. The parent keeps a "
+    "counter. The write that makes the counter reach `expected` wakes the aggregator.\n\n"
+    "Write the rule that the store applies atomically (`InMemoryStateStore.record_child_result` under a lock, "
+    "Firestore in a transaction). Record each child **one time**. When the counter gets to `expected`, report "
+    "*all done* for every notice, and for a late duplicate too. The wake-up of that duplicate is a named, de-duplicated "
+    "task, so another try causes no harm. If the first wake-up did not arrive and the store answers *not done*, it is "
+    "possible that the parent stays stuck."
 )
 nb3.code(
     '''
@@ -579,7 +583,7 @@ assert seen == [False, False, False, True, True] and fan["completed"] == 3 and f
     not_seen='child_key not in fan["results"]',
     all_done='fan["completed"] >= fan["expected"]',
 )
-nb3.md("## Saga: undo in reverse order\n\n`procurement`: reserve stock → charge → book shipment. Shipment fails after the first two succeeded; the engine runs their compensations in reverse, using the stored effect records.")
+nb3.md("## Saga: undo in reverse order\n\n`procurement` has three steps: reserve stock, charge, and book the shipment. The shipment fails after the first two steps succeeded. The engine then runs their compensations in reverse order, and it uses the stored effect records.")
 nb3.code(
     '''
 from lra.examples.procurement_saga import ExternalSystems
@@ -595,7 +599,7 @@ assert [c[0] for c in ExternalSystems.calls] == {{expected_calls}}
 ''',
     expected_calls='["reserve_stock", "charge", "refund", "release_stock"]',
 )
-nb3.md("## Write your own compensable step\n\n`compensating(effect_key, undo)` builds an idempotent compensation that reads the effect record.")
+nb3.md("## Write your own compensable step\n\n`compensating(effect_key, undo)` makes an idempotent compensation that reads the effect record.")
 nb3.code(
     '''
 from lra.patterns.saga import compensating
@@ -619,7 +623,7 @@ assert r.status == RunStatus.COMPENSATED and CALLS == [("open", "T-1"), ("close"
 ''',
     effect_key='"open"',
 )
-nb3.md("## Reflection loop exits, and the budget failing closed\n\nMake the critic never satisfied: the loop must exit on `max iterations`. Then give the run a tiny step budget: it must fail *before* another model call.")
+nb3.md("## Reflection loop exits, and the budget failing closed\n\nMake the critic never satisfied. The loop must then exit on `max iterations`. After that, give the run a small step budget. The run must fail *before* another model call.")
 nb3.code(
     '''
 engine, runner, clock, store, queue, bus = harness(routes=research_routes(first_score=3, second_score=3))
@@ -638,7 +642,7 @@ assert r.status == RunStatus.FAILED and "step budget" in r.error and len(engine.
     iterations="2",
     max_steps="6",
 )
-nb3.md("## Deadlines are absolute\n\nA run that waited past its deadline must not publish when the approval finally arrives.")
+nb3.md("## Deadlines are absolute\n\nA run that waited beyond its deadline must not publish when the approval arrives at last.")
 nb3.code(
     '''
 engine, runner, clock, store, queue, bus = harness()
@@ -652,23 +656,24 @@ assert r.status == RunStatus.FAILED and "publish" not in r.completed_steps
 ''',
     hours="2",
 )
-nb3.md("## Takeaways\n\n* Fan-out = child runs; fan-in = an atomic counter on the parent; partial failure is data.\n* Sagas need effect records, not recomputation, and compensations must be idempotent.\n* Every loop has three exits, and budgets/deadlines gate the *next* model call, not the current one.")
+nb3.md("## Takeaways\n\n* A fan-out is a set of child runs. A fan-in is an atomic counter on the parent. Partial failure is data.\n* Sagas need the effect records, not a new calculation. Compensations must be idempotent.\n* Every loop has three exits. Budgets and deadlines are a gate for the *next* model call, not for the current one.")
 
 
 # =============================================================================
 nb4 = NB(
     "04 · The same patterns with ADK 2 `Workflow` (optional: the `adk` extra)",
-    "Google's ADK 2 gives you the primitives natively: **interrupts** (`RequestInput`), **resumability** "
-    "(`ResumabilityConfig`), **re-run or complete on resume** (`rerun_on_resume`, for the node that interrupted), **routing** (`ctx.route`) and pluggable "
-    "**session stores** (SQLite → Cloud SQL). This notebook runs the ticket-queue graph in "
-    "`examples/adk_ticket_queue/nightly_workflow.py` *without a model* so you can see the mechanics; `use_model=True` "
-    "puts Gemini in the `plan` node.\n\n"
-    "Needs `pip install -e \".[adk]\"` (ADK 2 and the Google Cloud clients, about 220 MB; measured 2026-09-26, verify). "
-    "Without it, `scripts/run_notebooks.py` skips this notebook; every other notebook runs on the default install.\n\n"
+    "Google's ADK 2 gives you these primitives as part of the framework:\n\n"
+    "* **interrupts** (`RequestInput`)\n* **resumability** (`ResumabilityConfig`)\n"
+    "* **re-run or complete on resume** (`rerun_on_resume`, for the node that interrupted)\n* **routing** (`ctx.route`)\n"
+    "* **session stores** that you can replace (from SQLite to Cloud SQL)\n\n"
+    "This notebook runs the ticket-queue graph in `examples/adk_ticket_queue/nightly_workflow.py` *without a model*, so "
+    "that you can see the mechanics. `use_model=True` puts Gemini in the `plan` node.\n\n"
+    "This notebook needs `pip install -e \".[adk]\"` (ADK 2 and the Google Cloud clients, about 220 MB, measured 2026-09-26, verify). "
+    "If you do not install the `adk` extra, `scripts/run_notebooks.py` skips this notebook. Every other notebook runs on the default install.\n\n"
     "```mermaid\nflowchart LR\n  S((START)) --> B[agree_budget<br/>RequestInput 'budget'<br/>rerun_on_resume=True]\n"
     "  B --> P[plan<br/>judgement]\n  P --> Q[queue_up<br/>side effect, runs once]\n"
     "  Q --> C[check_front<br/>RequestInput 'wake'<br/>rerun_on_resume=True]\n  C -- ready --> Y[buy<br/>idempotency key]\n"
-    "  C -- sold_out --> A[abandon]\n```\n(Cells use top-level `await`: Jupyter already runs an event loop.)",
+    "  C -- sold_out --> A[abandon]\n```\n(The cells use top-level `await`, because Jupyter already runs an event loop.)",
     requires=("google.adk",),
 )
 nb4.code(
@@ -695,7 +700,7 @@ print("stopped on:", r1["interrupts"], "| venue calls:", venue.calls)
 assert r1["interrupts"] == [ASK_BUDGET]
 '''
 )
-nb4.md("The graph asked a question and **stopped**. The invocation lives in the session store; the Python process could exit here.\n\nAnswer it by resuming the *same invocation* with a `FunctionResponse` whose id is the interrupt id:")
+nb4.md("The graph asked a question and **stopped**. The invocation is in the session store, and the Python process can stop at this point.\n\nTo answer the question, resume the *same invocation* with a `FunctionResponse` that has the interrupt id as its id:")
 nb4.code(
     '''
 r2 = await run_until_interrupt(runner, "u1", session.id, invocation_id=r1["invocation_id"], answers={ASK_BUDGET: {"budget": 250}})
@@ -703,7 +708,7 @@ print("stopped on:", r2["interrupts"], "| venue calls:", venue.calls, "| state:"
 assert r2["interrupts"] == [WAKE] and venue.calls == ["join_queue"]
 '''
 )
-nb4.md("Four nodes ran off one answer: `plan` chose Saturday (the weekend rule), `queue_up` took **one** ticket, `check_front` found us at #14,203 and parked on `wake`.\n\n## Wake-ups (what Cloud Scheduler → Pub/Sub → `/wake` does)")
+nb4.md("Four nodes ran from one answer. `plan` selected Saturday (the weekend rule), `queue_up` took **one** ticket, and `check_front` found us at #14,203 and waited on `wake`.\n\n## Wake-ups (what Cloud Scheduler → Pub/Sub → `/wake` does)")
 nb4.code(
     '''
 ticket = (await state())["ticket"]
@@ -717,7 +722,7 @@ print("order:", (await state())["order"])
 assert venue.calls == ["join_queue", "purchase"] and r4["interrupts"] == []
 '''
 )
-nb4.md("`queue_up` never re-ran across the wake-ups: a resume continues from the node that interrupted, and nodes that already finished are not replayed. `check_front`, the node that interrupted, re-ran on every wake-up because it is marked `rerun_on_resume=True`; with `False` ADK would mark it complete and take the resume input (`{\"ok\": true}`) as its output, without looking at the queue. `buy` executed once, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
+nb4.md("`queue_up` never ran again during the wake-ups. A resume continues from the node that interrupted, and ADK does not replay the nodes that already finished. `check_front` is the node that interrupted. It ran again on every wake-up because it has `rerun_on_resume=True`. With `False`, ADK marks it complete, uses the resume input (`{\"ok\": true}`) as its output and does not look at the queue. `buy` executed one time, with an idempotency key.\n\n## Staleness guard: the world changed while we waited")
 nb4.code(
     '''
 venue2 = Venue(); svc2 = InMemorySessionService(); runner2 = Runner(app=build_app(venue2), session_service=svc2)
@@ -731,7 +736,7 @@ print("calls:", venue2.calls, "| orders:", venue2.orders, "| routed to abandon:"
 assert venue2.orders == {} and "purchase" not in venue2.calls
 '''
 )
-nb4.md("## The classic mistake: a new invocation instead of a resume\n\nTyping in the chat box (no `invocation_id`) starts a **new** invocation: the graph replays from START, and answering the budget again takes a second queue ticket.")
+nb4.md("## The classic mistake: a new invocation instead of a resume\n\nA message in the chat box (no `invocation_id`) starts a **new** invocation. The graph replays from START. When you answer the budget question again, the graph takes a second queue ticket.")
 nb4.code(
     '''
 venue3 = Venue(); svc3 = InMemorySessionService(); runner3 = Runner(app=build_app(venue3), session_service=svc3)
@@ -746,11 +751,11 @@ assert venue3.calls.count("join_queue") == 2
 )
 nb4.md(
     "## Your turn: build the graph\n\n"
-    "Complete the nodes; `check_adk_workflow` runs your graph through a budget answer and three wake-ups:\n\n"
-    "* `agree_budget` interrupts with `interrupt_id=ASK_BUDGET` until the budget arrives, and **re-runs on resume**.\n"
-    "* `queue_up` is a side effect: one ticket across all wake-ups (it finishes before any interrupt, so resuming the same invocation never replays it).\n"
-    "* `check_front` interrupts while we are still queued and must re-check the world on every wake-up (`rerun_on_resume`?); at the front it routes to `\"ready\"` with at least two seats left, else `\"sold_out\"`.\n"
-    "* Wire `START → agree_budget → plan → queue_up → check_front → {\"ready\": buy, \"sold_out\": abandon}`."
+    "Complete the nodes. `check_adk_workflow` runs your graph through a budget answer and three wake-ups:\n\n"
+    "* `agree_budget` interrupts with `interrupt_id=ASK_BUDGET` until the budget arrives, and **runs again on resume**.\n"
+    "* `queue_up` is a side effect: one ticket for all of the wake-ups. It finishes before any interrupt, so a resume of the same invocation never replays it.\n"
+    "* `check_front` interrupts while we are still in the queue. It must examine the world again on every wake-up (`rerun_on_resume`?). At the front, it sets the route to `\"ready\"` if at least two seats are still available, and to `\"sold_out\"` if not.\n"
+    "* Connect `START → agree_budget → plan → queue_up → check_front → {\"ready\": buy, \"sold_out\": abandon}`."
 )
 nb4.code(
     '''
@@ -809,27 +814,27 @@ print(check_adk_workflow(build_workflow))
 nb4.md(
     "## Deploying this shape on Google Cloud\n\n"
     "| Local | Cloud | Change |\n|---|---|---|\n"
-    "| `InMemorySessionService` | Cloud SQL (Postgres) via `DatabaseSessionService(\"postgresql+asyncpg://...?host=/cloudsql/...\")`, or Agent Runtime Sessions | a connection string |\n"
+    "| `InMemorySessionService` | Cloud SQL (Postgres) through `DatabaseSessionService(\"postgresql+asyncpg://...?host=/cloudsql/...\")`, or Agent Runtime Sessions | a connection string |\n"
     "| `adk web` | one Cloud Run service (`examples/adk_ticket_queue/main.py`) | a Dockerfile and an entry point |\n"
-    "| you calling `run_until_interrupt` | Cloud Scheduler → Pub/Sub → push → `POST /wake` | `trigger_sources=[\"pubsub\"]` plus the custom `/wake` |\n"
+    "| you call `run_until_interrupt` | Cloud Scheduler, then Pub/Sub, then a push to `POST /wake` | `trigger_sources=[\"pubsub\"]` and the custom `/wake` |\n"
     "| `Venue` | the real API with an `Idempotency-Key` header | none |\n\n"
-    "ADK's built-in Pub/Sub trigger route **creates a new session per message**; a long-running run needs a wake endpoint "
-    "that resumes an *existing* session, which is what `main.py` adds. The design questions for this notebook are in the "
-    "topic primer's drills (`../../PRIMER.md` §11, part D).\n\n"
-    "## Takeaways\n\n* `RequestInput` is one primitive for both \"waiting for a person\" and \"waiting for the world\".\n"
-    "* `rerun_on_resume` decides what a resumed node does: re-run and re-check (`True`) or take the resume input as its answer (`False`). Side effects stay safe because finished nodes are not replayed and they carry idempotency keys.\n"
-    "* Resume the invocation; don't start a new one.\n* Prompts can't wake themselves; something with a clock has to call the endpoint."
+    "The built-in Pub/Sub trigger route of ADK **creates a new session for each message**. A long-running run needs a wake "
+    "endpoint that resumes a session that *already exists*, and `main.py` adds this endpoint. The design questions for this "
+    "notebook are in the drills of the topic primer (`../../PRIMER.md` §11, part D).\n\n"
+    "## Takeaways\n\n* `RequestInput` is one primitive for two types of wait: a wait for a person and a wait for the world.\n"
+    "* `rerun_on_resume` decides what a resumed node does. With `True`, the node runs again and examines the world again. With `False`, the node uses the resume input as its answer. Side effects stay safe because ADK does not replay the finished nodes and the side effects have idempotency keys.\n"
+    "* Resume the invocation. Do not start a new one.\n* A prompt cannot wake itself. Something with a clock must call the endpoint."
 )
 
 # =============================================================================
 nb5 = NB(
     "05 · A model-chosen tool loop, and Mistral as the provider",
-    "In notebooks 01–03 the model writes text and the workflow fixes the order of steps. Here the model chooses the "
-    "*next action*: a tool call or a final answer. That makes the model call a non-deterministic side effect (primer §1.3): "
-    "ask again after a crash and it may choose a different call. The fix is to **journal the decision before acting on it**, "
-    "then act at most once under a stable idempotency key. The second half swaps in Mistral as the model provider "
-    "(offline, with a fake client) and shows the same loop on Mistral Workflows, where the platform provides the "
-    "journal, the retries and the wait.",
+    "In notebooks 01–03, the model writes text and the workflow sets the order of the steps. In this notebook, the model "
+    "selects the *next action*: a tool call or a final answer. Thus the model call becomes a non-deterministic side effect "
+    "(primer §1.3). If you ask again after a crash, it is possible that the model selects a different call. The solution is to "
+    "**write the decision to the journal before you act on it**. Then act at most one time, under a stable idempotency key.\n\n"
+    "In the second half of the notebook, Mistral becomes the model provider (offline, with a fake client). The second half also shows the "
+    "same loop on Mistral Workflows. There, the platform gives the journal, the retries and the wait.",
 )
 nb5.code(SETUP)
 nb5.code(
@@ -848,7 +853,7 @@ def show_journal(run):
         print("   ", e)
 '''
 )
-nb5.md("## Your turn: the two effect records of a turn\n\n`decide` records the model's decision with `ctx.effect` *before* anything acts on it; `act` runs the tool at most once, passing an idempotency key that is stable across retries (`run_id:N`, N = the intent's position in the journal) and unique across runs. Fill in both keys.")
+nb5.md("## Your turn: the two effect records of a turn\n\n`decide` records the decision of the model with `ctx.effect` *before* anything acts on it. `act` runs the tool at most one time. It gives the tool an idempotency key (`run_id:N`, where N is the position of the intent in the journal). The key is stable across retries and unique across runs. Fill in the two keys.")
 nb5.code(
     '''
 def build_loop(decider, tools):
@@ -897,7 +902,7 @@ assert pay.charges == {f"{run.run_id}:1": 42.0, f"{run.run_id}:3": 99.0} and dec
     decide_key='f"decide:{n}"',
     idem_key='f"{ctx.run_id}:{n + 1}"',
 )
-nb5.md("Without the decision record, the retry would have re-asked the model and acted on a different answer (`99` instead of the `42` it had chosen): the world and the run would disagree about what the agent decided. With it, the model was asked three times in all: `42` (recorded once, reused by the retry), then `99`, then `final`.\n\n## Crash after the charge\n\nThe library version, `lra.examples.tool_agent.make_tool_agent`, is the same loop plus an approval gate. Crash right after the charge: the retry re-executes *the same intent under the same key*, finds the effect record, and never re-asks the model.")
+nb5.md("If there is no decision record, the retry asks the model again and acts on a different answer. Here, that answer is `99` in place of the `42` that the model selected first. Then the world and the run do not agree about the decision of the agent. With the decision record, the `decide` step asked the model three times in all. The answers were `42` (recorded one time and used again by the retry), then `99`, then `final`.\n\n## Crash after the charge\n\nThe library version, `lra.examples.tool_agent.make_tool_agent`, is the same loop with an approval gate added. Cause a crash immediately after the charge. The retry executes *the same intent under the same key* again, finds the effect record and never asks the model again.")
 nb5.code(
     '''
 crashed = []
@@ -918,7 +923,7 @@ print("charges:", pay.charges, "| payment API calls:", pay.calls, "| model calls
 assert pay.calls == 1 and decider.calls == 2 and r.status == RunStatus.SUCCEEDED
 '''
 )
-nb5.md("## When the model gets it wrong\n\nTwo mistakes are the model's to fix, not the engine's: a tool name it made up, and a tool that answers with a declared, non-retryable error (`ToolError`: bad arguments, no such invoice). The loop journals either one as the call's result and asks the model again; the run does not fail. Any other exception (a timeout, a 503) is infrastructure, and the engine retries the step under the same key.")
+nb5.md("## When the model gets it wrong\n\nTwo types of mistake are for the model to correct, not for the engine. The first is a tool name that the model made up. The second is a tool that answers with a declared, non-retryable error (`ToolError`: incorrect arguments, no such invoice). The loop writes either one to the journal as the result of the call, and asks the model again. The run does not fail. Any other exception (a timeout, a 503) is an infrastructure problem, and the engine retries the step under the same key.")
 nb5.code(
     '''
 from lra.examples.tool_agent import ToolError
@@ -942,7 +947,7 @@ assert r.state["journal"][1]["result"] == {"error": "unknown tool 'refund'"}
 assert r.state["journal"][3]["result"] == {"error": "no invoice INV-1024"}
 '''
 )
-nb5.md("## Approve what you execute\n\nA gated tool parks the run with the *exact* proposed call in the journal. Approval executes that call; a rejection becomes the tool's result, so the model can choose again. A double click is a no-op.")
+nb5.md("## Approve what you execute\n\nA gated tool makes the run wait, with the *exact* proposed call in the journal. An approval executes that call. A rejection becomes the result of the tool, so the model can select again. A double click is a no-op.")
 nb5.code(
     '''
 pay = PaymentAPI()
@@ -958,7 +963,7 @@ r = store.get(run.run_id); show(r); show_journal(r)
 assert pay.charges == {} and r.result == {"result": "Not paid: vendor not onboarded."}
 '''
 )
-nb5.md("## Swap the model: Mistral decides, by function calling\n\n`lra.adapters.mistral.MistralDecider` turns the journal into a chat — the goal, then every earlier decision as an assistant tool call with its recorded result — and asks for the next call with `tool_choice=\"auto\"`. The fake client below speaks the SDK's response shape, so this runs offline; with `pip install -e \".[mistral]\"` and `MISTRAL_API_KEY`, `MistralDecider(TOOL_SPECS)` calls the real API (`python -m lra.adapters.mistral.demo live`). Mistral requires tool-call ids of exactly nine alphanumeric characters, so the adapter hashes the journal key.")
+nb5.md("## Swap the model: Mistral decides, by function calling\n\n`lra.adapters.mistral.MistralDecider` changes the journal into a chat. The chat has the goal first. Then it has every earlier decision as an assistant tool call with its recorded result. The adapter then asks for the next call with `tool_choice=\"auto\"`.\n\nThe fake client below uses the response shape of the SDK, so this cell runs offline. With `pip install -e \".[mistral]\"` and `MISTRAL_API_KEY`, `MistralDecider(TOOL_SPECS)` calls the real API (`python -m lra.adapters.mistral.demo live`). A tool-call id for Mistral must have exactly nine alphanumeric characters, so the adapter hashes the journal key.")
 nb5.code(
     '''
 from types import SimpleNamespace as NS
@@ -992,7 +997,7 @@ print("the tool result the model saw:", fake.requests[1]["messages"][-1]["conten
 assert r.status == RunStatus.SUCCEEDED and pay.charges == {f"{run.run_id}:1": 42.0}
 '''
 )
-nb5.md("## Your turn: the journal as the prompt\n\nRebuild `to_messages`: each decision becomes an assistant tool call, and the intent journaled right after it becomes the matching tool message — its recorded result, or `{\"pending\": true}` if it has not run. Fill in the tool-call id and the tool message's content.")
+nb5.md("## Your turn: the journal as the prompt\n\nBuild `to_messages` again. Each decision becomes an assistant tool call. The intent that comes immediately after the decision in the journal becomes the tool message for that call. The content of that message is the recorded result of the intent, or `{\"pending\": true}` if the intent has not run. Fill in the tool-call id and the content of the tool message.")
 nb5.code(
     '''
 def my_to_messages(goal, journal):
@@ -1023,7 +1028,7 @@ print("my_to_messages matches the adapter on", len(journals), "journals; ids loo
     cid='tool_call_id(intent["key"])',
     content='intent.get("result") if intent["done"] else {"pending": True}',
 )
-nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`, so every workflow in `lra.examples` runs on it unchanged; usage becomes cost for the run's budget (the prices in the adapter are illustrative).")
+nb5.md("## Mistral as the engine's model\n\n`MistralLLM` implements the same `LLM` port as `GeminiLLM` and `FakeLLM`. Thus every workflow in `lra.examples` runs on it with no change. The usage becomes cost for the budget of the run (the prices in the adapter are illustrative).")
 nb5.code(
     '''
 fake = FakeMistral([{"final": "billing"}])
@@ -1042,17 +1047,19 @@ assert r.result == "billing" and r.budget.tokens_used == 940
 )
 nb5.md(
     "## The same loop on Mistral Workflows\n\n"
-    "`lra/adapters/mistral/workflow.py` is this loop on Mistral Workflows, with Temporal underneath. What disappears is "
-    "the plumbing: no store, no queue, no lease, no reaper. The execution's **event history** is the store; every "
-    "**activity** (the model call and the charge) is recorded before it runs and retried on failure, never re-run once "
-    "complete; `workflow.wait_condition(...)` plus a **signal** is the approval gate, with a timeout; a loop bound in "
-    "deterministic workflow code plus `execution_timeout` is the budget. One subtlety: an *unexpected* exception in "
-    "workflow code fails only the workflow **task**, which the platform retries until the code is fixed and redeployed; "
-    "to fail an execution on purpose, raise `WorkflowError`.\n\n"
-    "It needs Python 3.12–3.14 and the `mistral` extra (`mistralai-workflows` 3.15 declares `Requires-Python >=3.12,<3.15`; "
-    "checked 2026-09-26, verify), and a local Temporal dev server that the SDK downloads on first use. "
-    "`python -m lra.adapters.mistral.demo workflow` runs the approval, crash-after-charge and timeout scenarios; "
-    "`tests/test_mistral_workflow.py` checks them. The cell below shows the gate when the extra is installed."
+    "`lra/adapters/mistral/workflow.py` is this loop on Mistral Workflows, with Temporal below it. The infrastructure code "
+    "goes away: there is no store, no queue, no lease and no reaper. In their place:\n\n"
+    "* The **event history** of the execution is the store.\n"
+    "* The platform records every **activity** (the model call and the charge) before the activity runs. The platform retries the activity "
+    "on failure, and never runs the activity again after the activity is complete.\n"
+    "* `workflow.wait_condition(...)` and a **signal** are the approval gate, with a timeout.\n"
+    "* A loop bound in deterministic workflow code and `execution_timeout` are the budget.\n\n"
+    "Note one detail that is easy to miss. An *unexpected* exception in workflow code fails only the workflow **task**. The platform "
+    "retries that task until you repair the code and deploy it again. To fail an execution on purpose, raise `WorkflowError`.\n\n"
+    "The Mistral Workflows loop needs Python 3.12–3.14 and the `mistral` extra (`mistralai-workflows` 3.15 declares `Requires-Python >=3.12,<3.15`, "
+    "checked 2026-09-26, verify). The loop also needs a local Temporal dev server, which the SDK downloads on first use. "
+    "`python -m lra.adapters.mistral.demo workflow` runs the approval, crash-after-charge and timeout scenarios. "
+    "`tests/test_mistral_workflow.py` has a test for each of these scenarios. If you installed the extra, the cell below shows the gate."
 )
 nb5.code(
     '''
@@ -1064,7 +1071,7 @@ else:
     print("Mistral Workflows is not installed here (Python 3.12+ and the mistral extra); read lra/adapters/mistral/workflow.py.")
 '''
 )
-nb5.md("## Takeaways\n\n* A model-chosen action is a side effect twice over: record the *decision*, then the *act*, each under its own key.\n* The journal is the prompt on every retry: recorded facts, never the model's memory.\n* The provider is one adapter (`MistralDecider`, `MistralLLM`); the invariants do not move. A durable-execution platform (Mistral Workflows, Temporal, Cloud Workflows) provides them for you, and you still pass idempotency keys downstream.")
+nb5.md("## Takeaways\n\n* A model-chosen action is two side effects. Record the *decision*, then the *act*, each under its own key.\n* On every retry, the journal is the prompt. It contains recorded facts, never the memory of the model.\n* The provider is one adapter (`MistralDecider`, `MistralLLM`). The invariants do not change. A durable-execution platform (Mistral Workflows, Temporal, Cloud Workflows) gives you the invariants, and you still pass idempotency keys downstream.")
 
 
 NOTEBOOKS = (("00_core_idea", nb0), ("01_durable_execution", nb1), ("02_human_in_the_loop", nb2),

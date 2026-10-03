@@ -282,6 +282,34 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   and 04 say in one line that their printed numbers are one CPU's, and `CONTRIBUTING.md` "Numbers" carries the rule.
   **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-03 — an experiment: the long-running-durable topic in ASD-STE100 (Simplified Technical English).** On
+  `claude/asd-ste100-agent-rewrite-hfcxty`, the prose of `07-application-agent-framework/long-running-durable/` (the
+  topic primer and README, the two lab READMEs and primers, the lab's five docs and the Markdown cells of its nine
+  notebook pairs: about 16,200 words of Markdown plus the notebook prose) was rewritten in STE. Code, code cells, tests
+  and deploy files are untouched, and every heading, link target, fenced block, formula, table row and number is
+  verbatim (checked by script; the H1s stay, so `mkdocs.yml` did not change). The brief is
+  `tools/orchestration/STE100-STYLE.md` (the writing rules paraphrased from Issue 8, the vocabulary and naming choices
+  for the topic, before/after examples; the dictionary itself is not reproduced) and the checker
+  `tools/orchestration/ste_lint.py` (sentence and paragraph length, modals, contractions, dashes, arrows, -ing forms,
+  passives, semicolons and the usual word replacements, over Markdown and notebook cells). Three helpers landed with
+  it: `nb_md.py` (dump and apply the Markdown cells of a blank and its solution twin), `nb_outputs.py` (carry the
+  recorded outputs over to a rebuilt notebook whose code did not change, so a Markdown-only rebuild keeps the
+  solutions' outputs) and `nb_exec.py` (execute a solution in place, in the repo's JSON layout). The rewrite ran as one
+  Workflow of 38 agents in about 65 minutes: seven rewriters with disjoint files, each followed by an adversarial
+  verifier that compared the result with `git show HEAD:` paragraph by paragraph (2,086 sentences in the first
+  round), then a fixer and a re-verification, up to two rounds. The verifiers raised 1 blocking, 33 major and 94 minor
+  findings in round 1; the fixers applied 179 and rejected 3; the two findings still open after round 3 (a Terraform
+  caveat whose claim had drifted, a parenthetical sentence in the runbook) and a dozen of the minor ones were applied by
+  hand at integration. Linter totals over the topic's 29 Markdown files and notebooks, before → after: errors 401 → 0,
+  warnings 842 → 28 (each a technical name, a product name, a quotation or a state), sentences 1,495 → 2,700, words
+  per sentence 12.0 → 8.7 (longest 76 → 25), probable passives 134 → 5, -ing forms 220 → 15, semicolons 341 → 1;
+  dashes, arrows, modals and contractions to 0. The Markdown grew from about 16,200 to 20,700 words. Every check
+  passes unchanged: both labs' tests, every solution runs and every blank stops at its first exercise, the builder,
+  the injector and the Colab index are no-ops, `mkdocs.yml` is unchanged, and the strict site build and the link check
+  pass. The rest of the repository keeps the writing rules in `CONTRIBUTING.md`; the topic README's Caveats say so.
+  Not done: docstrings and code comments, and a check against the STE dictionary proper (the linter is heuristic; the
+  verifiers read for meaning). **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).
