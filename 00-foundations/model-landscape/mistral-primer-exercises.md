@@ -29,7 +29,7 @@ In mid-2025, a team built its system on **Magistral Medium 1.2** (reasoning), **
 
 - (a) What is the migration path today?
 - (b) What do they gain?
-- (c) Name two things that are not obvious and that break or that you must change.
+- (c) Name two things that are not obvious: things that break, or things that you must do again.
 
 ### 4. Licensing triage
 For each use case, say if the licence permits it, and on which model:
@@ -74,7 +74,7 @@ Use five sentences and no notes. Why is Agentic Search better than one-shot RAG?
 | Large 3 | 160 × $0.50 = $80 | 240 × $0.05 = $12 | $60 | **$152** |
 | Medium 3.5 | 160 × $1.50 = $240 | 240 × $0.15 = $36 | $300 | **$576** |
 
-**(c)** Select Small 4. Its cost is ~11× lower than the cost of Medium 3.5, and the workload needs none of the agentic capability of Medium. Also, `reasoning_effort` gives you more capability on the hard cases, and you do not change models. These facts can change my decision:
+**(c)** Select Small 4. Its cost is ~11× lower than the cost of Medium 3.5, and the workload needs none of the agentic capability of Medium. Also, `reasoning_effort` gives you a reserve of reasoning for the hard cases, and you do not change models. These facts can change my decision:
 
 - The summaries go to a downstream agent that does multi-step tool calls.
 - A quality evaluation on the team's own documents shows that Small 4 fails on long-document coherence. In that case, Large 3, not Medium 3.5, is the next step. Large 3 is still lower in cost than Medium, and Mistral made it for long context.
@@ -89,7 +89,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 - **Adjudication draft:** Small 4, with `reasoning_effort` set to match the complexity of the claim. Use Medium 3.5 only if the workflow calls multiple tools over a long horizon.
 - **Safety:** Use Shieldstral if the outputs go to end users and the deployment is isolated. Use Moderation 2 if the API is acceptable (it is free).
 
-**The signal that routes to a human is OCR 4's confidence score**, per page and per word, together with the block type. This signal is better for routing than a request to the model for its own uncertainty. The calibrated per-word scores of OCR 4 make that request unnecessary.
+**The signal that routes to a person is OCR 4's confidence score**, per page and per word, together with the block type. This signal is better for routing than a request to the model for its own uncertainty. The calibrated per-word scores of OCR 4 make that request unnecessary.
 
 ### 3. Migration case
 
@@ -105,7 +105,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 
 **(c) Two non-obvious breaks:**
 
-- **Verbosity changes.** `reasoning_effort="high"` gives approximately the verbosity of the old Magistral. `"none"` gives approximately the chat style of Small 3.2. But do a new benchmark of anything that you adjusted to a specific output length, latency budget or token cost. It is not sufficient to point it at the new model.
+- **Verbosity changes.** `reasoning_effort="high"` gives approximately the verbosity of the old Magistral. `"none"` gives approximately the chat style of Small 3.2. But do a new benchmark of anything that you adjusted to a specific output length, latency budget or token cost. It is not sufficient to point that configuration at the new model.
 - **Infrastructure shape changes.** Devstral Small was a 24B dense model that fits one GPU. Small 4 is a 119B-total, ~6.5B-active MoE (verify, 2026-09). All 119B parameters must be in memory: about 240 GB in BF16 and 120 GB in FP8 (params × bytes, [capacity primer](../gpu-capacity-planning/PRIMER.md)). Thus, in FP8, the model needs two H100s or one H200 before any KV cache. It is possible that a team that self-hosts Devstral Small on one modest GPU must provision its hardware again completely. Or the team can move down to Ministral 3 14B and accept the trade in capability.
 
 ### 4. Licensing triage
@@ -122,7 +122,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 
 **(a)** Self-host open-weight models in-country. Use Small 4 or Large 3 for the assistant, and Ministral 3 if the footprint must be small. Run OCR 4 in a single container on the bank's own infrastructure. Build and keep the Search Toolkit index in-country. Use Forge for domain adaptation on the language of the internal credit policies. Forge gives version control, lineage and rollback for the audit trail.
 
-**(b) The trap:** Regional Endpoints let you select **Europe or the US**. Neither is Singapore. For a no-data-leaves-Singapore constraint, regional endpoints are not applicable. You need to self-host, or to use a cloud region inside Singapore. The statement "Just use regional endpoints" has an incorrect idea of what the feature does.
+**(b) The trap:** Regional Endpoints let you select **Europe or the US**. Neither is Singapore. For a no-data-leaves-Singapore constraint, regional endpoints are not applicable. You need to self-host, or to use a cloud region inside Singapore. The statement "Just use regional endpoints" shows an incorrect idea of what the feature does.
 
 **(c)** These components must be in-country:
 
@@ -131,7 +131,7 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 - the OCR container
 - the search index
 - the fine-tuning data and Forge's artefacts
-- the logs and traces, because the prompts and outputs also contain the personal data.
+- the logs and traces, because the prompts and outputs also contain the personal data
 
 The options for the GPUs are the bank's own data centre, a hyperscaler region in Singapore, or a sovereign-cloud service.
 
@@ -144,10 +144,6 @@ Before you approve the design, examine these items:
 
 ### 6. Explain-it drill
 
-1. The index only finds candidate documents. The model decides what to examine inside them.
-2. Iteration lets the model recover from a weak first retrieval. Thus the model is not stuck with bad chunks.
-3. Targeted navigation is better than repeated broad search. It adds accuracy and *decreases* tokens, because precision replaces retries.
-4. Then retrieval quality scales with model capability, and your chunking strategy does not set a limit on it.
-5. Also, the method is model-agnostic. Thus it improves when models improve, with no infrastructure changes.
+The index only finds candidate documents, and the model decides what to examine inside them. Iteration lets the model recover from a weak first retrieval, and thus the model is not stuck with bad chunks. Targeted navigation is better than repeated broad search: it adds accuracy and *decreases* tokens, because precision replaces retries. Then retrieval quality scales with model capability, and your chunking strategy does not set a limit on it. Also, the method is model-agnostic, and thus it improves when models improve, with no infrastructure changes.
 
 Tools: **search, open, navigate, read, grep.**

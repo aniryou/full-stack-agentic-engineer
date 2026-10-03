@@ -4,7 +4,7 @@ After this core, you can do these things in `rlcore`:
 
 - Derive what an RL post-training step does to a model, and write it in code. This covers REINFORCE, the KL
   penalty and its closed form, Bradley–Terry and DPO, and GRPO with the DAPO corrections.
-- Predict how RL hacks a verifier, and why thinking becomes longer.
+- Predict how RL exploits a bug in a verifier, and why thinking becomes longer.
 - Select between longer thinking and more samples.
 - Calculate the size of a fleet for a thinking model.
 
@@ -33,11 +33,11 @@ versions are in [`solutions/`](solutions/). The notebooks and the primer take ap
 |---|---|---|---|---|
 | [`01_policy_gradients_on_a_toy_task`](notebooks/01_policy_gradients_on_a_toy_task.ipynb) | Derive the softmax log-probability gradient and REINFORCE. Show why a baseline is important (without one, a constant reward is only noise). Calculate the KL-regularised optimum in closed form. See RL exploit a verifier with a bug (true accuracy goes from 29.7% to 4.9% while the reward gets to 99.4%). See RL also make thinking longer when thinking has no cost. Predict the optimal thinking length. | §1, §2 | ~2 h | T0 |
 | [`02_preferences_reward_models_and_dpo`](notebooks/02_preferences_reward_models_and_dpo.ipynb) | Fit a Bradley–Terry reward model. Run RLHF (reward model + RL with a KL penalty) and DPO on the same pairs, and get both to the closed form. Read the DPO metrics of TRL (and why rewards/chosen decreases). Calculate GAE. See RL over-optimise a length-biased reward model, and select the KL budget. | §3 | ~2 h | T0 |
-| [`03_grpo_with_verifiable_rewards`](notebooks/03_grpo_with_verifiable_rewards.ipynb) | Calculate the group advantages of TRL, k3 and the clipped surrogate by hand. See RL sharpen (effective correct answers go from 13.9 to 2.4), and see an entropy bonus get diversity back. Measure the length bias of the per-sequence average against the exact gradient. Find if the extra rollouts of dynamic sampling are worth their cost. Estimate how much of an RL step is generation. Write the `GRPOConfig` of DAPO and of R1. | §1, §4, §8 | ~2.5 h | T0 |
+| [`03_grpo_with_verifiable_rewards`](notebooks/03_grpo_with_verifiable_rewards.ipynb) | Calculate three things by hand: the group advantages of TRL, k3 and the clipped surrogate. See RL sharpen (effective correct answers go from 13.9 to 2.4), and see an entropy bonus get diversity back. Measure the length bias of the per-sequence average against the exact gradient. Compare the cost of the extra rollouts of dynamic sampling with what they give. Estimate how much of an RL step is generation. Write the `GRPOConfig` of DAPO and of R1. | §1, §4, §8 | ~2.5 h | T0 |
 | [`04_test_time_compute`](notebooks/04_test_time_compute.ipynb) | Estimate pass@k without bias, and use pass^k for reliability. Predict when majority vote helps and when it makes the result worse. Compare a verifier with a noisy reward model. Divide a token budget between samples and thinking. Tell when a smaller model with more samples is better. | §6 | ~1.5 h | T0 |
 | [`05_thinking_models_and_the_serving_workload`](notebooks/05_thinking_models_and_the_serving_workload.ipynb) | Show how rejection-sampling SFT and distillation copy thinking behaviour. Calculate the size of a heavy-tailed thinking workload with the formulas of the capacity primer plus HBM and ITL caps. Select `max_model_len`, and select a thinking budget instead of `max_tokens`. Predict prefix-cache hits when templates remove old thinking. Route effort by cost per correct answer. | §5, §7 | ~2 h | T0 |
 
-§9 (where to run it) has no notebook. The notebooks of the lab are its T1 half.
+§9 (where to run it) has no notebook. The notebooks of the lab are the T1 half of §9.
 
 ## Run it
 
@@ -78,7 +78,7 @@ Read the modules in this order. Each module starts with a docstring that gives t
 ## What the tests prove
 
 `tests/` has one focused test per concept (57, plus 8 notebook-tooling checks). The tests run offline in ~50 s in
-all. These tests carry the correctness claims:
+all. The tests in this list carry the correctness claims:
 
 - **The gradients are right.** `grad_logprob` agrees with finite differences. The mean of 400 REINFORCE estimates
   has a correlation above 0.95 with the exact gradient of P(correct), which the test calculates by enumeration. The
@@ -93,7 +93,7 @@ all. These tests carry the correctness claims:
   tokens have no cost, and less long when tokens have a cost. The gold quality of a length-biased reward model goes
   to a peak and then decreases, while its score increases. The update of the per-sequence average points away from
   the true gradient (cosine < 0.8) and increases truncation. But the update of the token-level average (> 0.95)
-  decreases truncation. The tests are in `test_pg.py`, `test_pref.py` and `test_grpo.py`.
+  decreases truncation (`test_pg.py`, `test_pref.py`, `test_grpo.py`).
 - **Formulas pinned to hand-computed and reference values:** TRL's advantages (±0.865875 and 1.4997/−0.4999), k3 at
   ±0.1 and 0.5, the clip's gradient mask and the three normalisers. The tests also pin DAPO's overlong penalty
   (0, −0.5, −1.0, −1), the DPO loss 0.598139 and GAE. They also pin the unbiased pass@k (0.916667, 0.728022,
@@ -113,12 +113,12 @@ A table of per-state softmaxes is a language model without generalisation. Each 
 visits. This is why the thinking length increases slowly in the ThinkTask runs. It is also why the reach of DPO
 beyond its pairs is exact here, but a property of the network in practice.
 
-The effects are reward hacking, length growth, over-optimisation, the length bias and diversity collapse. The
-direction of each effect does not change across seeds (the tests examine this). But the magnitudes are those of the
-toy. The entropy effect of clip-higher is a measurement by DAPO. This core does not reproduce it.
+The toy shows these effects: reward hacking, length growth, over-optimisation, the length bias and diversity
+collapse. The direction of each effect does not change across seeds (the tests examine this). But the magnitudes
+are those of the toy. The entropy effect of clip-higher is a measurement by DAPO. This core does not reproduce it.
 
 `ttc.question_set()` is a model of benchmark difficulty, not a benchmark. Each latency, GPU count and dollar figure
-from `rlcore.workload` is a **model**, not a measurement. The model is the formulas of the capacity primer with its
+from `rlcore.workload` is a **model**, not a measurement. The model uses the formulas of the capacity primer with its
 round datasheet numbers (verify), plus a roofline step. The lab measures a real vLLM server.
 
 ## Regenerating notebooks
@@ -137,11 +137,11 @@ and installs this package (see [`../../../COLAB.md`](../../../COLAB.md)).
 
 ## When you outgrow this
 
-Then go to [`../thinking-lab/`](../thinking-lab/). In the lab, you do these things:
+Go to [`../thinking-lab/`](../thinking-lab/). In the lab, you do these things:
 
 - Train a small transformer with SFT, then with GRPO, in torch.
 - Serve a real thinking model (Qwen3-0.6B) in vLLM with `--reasoning-parser` on a free T4.
-- Run best-of-n and majority vote against it.
+- Run best-of-n and majority vote against that thinking model.
 - Measure what long outputs do to ITL and KV usage.
 - Run one GRPO step with vLLM as the rollout engine.
 

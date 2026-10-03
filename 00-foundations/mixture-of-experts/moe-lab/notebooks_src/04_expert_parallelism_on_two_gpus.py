@@ -188,8 +188,8 @@ for b in (8, 32, 128):
 # %% [markdown]
 # This case is two GPUs over PCIe and a small MoE. From batch 8 up, the three layouts are within ~10% of each
 # other in this model, because each GPU mostly waits on its own HBM. Batch 1 makes them different. TP divides
-# each of the $k$ touched experts over both GPUs. Under EP, the $k$ experts of a layer rarely divide evenly
-# (the per-layer imbalance of 1.25). DP+EP also streams the full attention weights on both GPUs for one
+# each of the $k$ touched experts over both GPUs. But under EP, the $k$ experts of a layer rarely divide
+# evenly (the per-layer imbalance of 1.25). DP+EP also streams the full attention weights on both GPUs for one
 # request.
 #
 # It is possible that what this roofline leaves out is more important. TP divides the GEMM of each expert in
@@ -359,8 +359,8 @@ else:
 # prefill, it is the GPU whose experts got the most tokens. That is where hot experts hurt, and the effect
 # becomes worse as the number of experts per GPU decreases.
 #
-# "For a small MoE on two T4s, the layouts are close in our model. Our plan is to run all three with
-# `vllm bench serve` and keep the fastest at our concurrency. EP is worth its cost at scale: many GPUs, DP
+# "For a small MoE on two T4s, the layouts are close in our model. Our recommendation is to run all three
+# with `vllm bench serve` and keep the fastest at our concurrency. EP is worth its cost at scale: many GPUs, DP
 # attention, DeepEP over NVLink and RDMA. At that scale, it lets each expert see the tokens of the whole
 # cluster."
 #

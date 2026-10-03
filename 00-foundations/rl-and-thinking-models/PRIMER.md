@@ -40,8 +40,8 @@ many things, and **RL** changes which of these things it actually does.
   $\exp(\text{reward}/\beta)$.
 - **Preferences** become rewards through Bradley–Terry. **DPO** inverts that closed form, and thus it does not use a
   reward model.
-- Where you can check the answers, **GRPO** samples a group for each prompt. It uses the group mean as the baseline,
-  and it has no value model.
+- Where a check of the answers is possible, **GRPO** samples a group for each prompt. It uses the group mean as the
+  baseline, and it has no value model.
 - Models that got this training on math and code learned to **think**. Long chains of thought grew because they
   increased the reward.
 - RL optimises exactly the reward that you write down. Thus the policy exploits loopholes, and anything that has no
@@ -158,7 +158,7 @@ while the baselined one stays 0.029. ${R - b}$ is the **advantage**. These are t
 
 **The KL penalty to a reference model.** Maximise
 $\mathbb{E}[R] - \beta \cdot \mathrm{KL}(\pi \parallel \pi_{\text{ref}})$. Here $\pi_{\text{ref}}$ is the frozen SFT
-model. As reward shaping, the penalty is $R - \beta \cdot (\log \pi(y) - \log \pi_{\text{ref}}(y))$. This has exactly
+model. As reward shaping, the objective uses the shaped reward $R - \beta \cdot (\log \pi(y) - \log \pi_{\text{ref}}(y))$. This has exactly
 the gradient of $-\beta \cdot \mathrm{KL}$, because $\mathbb{E}[\nabla \log \pi] = 0$ (the PPO-RLHF form). GRPO puts
 the penalty in the loss instead (§4).
 
@@ -186,7 +186,7 @@ What the penalty implies: $\pi^*$ can only move mass among the completions that 
 A completion with $\pi_{\text{ref}}(y) = 0$ stays at 0 for every $\beta$. RL sharpens. It does not invent.
 
 **Reward hacking.** RL optimises exactly the reward that you write down. The core's `buggy_verify` returns *pass* at
-the moment when the bracket depth goes below zero. It is a harness that counts an early exit as a success. 200 of 256
+the moment when the bracket depth goes below zero. `buggy_verify` acts like a harness that counts an early exit as a success. 200 of 256
 strings pass it, and 14 strings have balanced brackets. The SFT reference passes it 72.7% of the time and is right
 29.7%.
 
@@ -288,8 +288,8 @@ $r = 3 \cdot \text{balanced}$. There are 4,096 pairs from the SFT reference (59%
 | DPO, 150 epochs (`pref.dpo_step()`), KL(π_DPO ‖ π*) = 0.0094 | 0.889 |
 
 The implicit reward separates balanced from unbalanced strings by 2.94 (true gap 3). At the end, TRL's metrics read
-rewards/chosen −0.407, rewards/rejected −1.524, margins +1.118, accuracies 0.705. Thus the log-ratios of the chosen
-strings *decreased*.
+rewards/chosen −0.407, rewards/rejected −1.524, margins +1.118, accuracies 0.705. These metrics show that the log-ratios of
+the chosen strings *decreased*.
 
 **What DPO gives up.**
 
@@ -303,8 +303,8 @@ strings *decreased*.
   to pay for a wider margin at every $\beta$. Thus the loss drives $\pi(\text{rejected})$ towards 0, whatever $\beta$
   is, and the KL term no longer regularises. $\beta$ only rescales how fast the loss saturates. In practice, the
   brakes are an early stop, or the constant target margin of IPO (in the next list).
-- **No reward model is left behind.** Thus you have no reward model to rerank samples, to monitor drift or to use
-  again for best-of-n.
+- **No reward model is left behind.** Thus nothing is available to rerank samples, to monitor drift or to use again
+  for best-of-n.
 
 **Three variants, one line each.**
 
@@ -347,7 +347,7 @@ its most common form. The defences:
 
 | Task | Verifier | Watch for |
 |---|---|---|
-| math | extract the final answer (R1: a `\boxed{}` answer), then check equivalence (TRL `accuracy_reward` uses `math-verify`) | extraction failures with the score "incorrect", answers that exploit the parser |
+| math | extract the final answer (R1: a `\boxed{}` answer), then examine the equivalence (TRL `accuracy_reward` uses `math-verify`) | extraction failures with the score "incorrect", answers that exploit the parser |
 | code | run the tests in a sandbox | exit-code and harness loopholes (§2). Run untrusted code in isolation ([sandboxed-execution primer](../../07-application-agent-framework/sandboxed-execution/PRIMER.md)) |
 | format | a regex, for example TRL's `think_format_reward` `^<think>(?!.*<think>)(.*?)</think>.*$` | the format becomes the goal |
 
@@ -391,8 +391,8 @@ estimator k3 has no bias, is never negative $(e^d \ge 1 + d)$ and is quieter (Sc
 Worked values: $\log(\pi_{\text{ref}}/\pi)$ = 0.1 → 0.0051709; −0.1 → 0.0048374; 0.5 → 0.1487213.
 
 Take two three-way distributions with KL 0.1168. 100,000 samples give k1 mean 0.1186 with std 0.460 (minimum −0.693)
-and k3 mean 0.1163 with std 0.106 (`grpo.k1()`, `grpo.k3()`, notebook 03). TRL's default is β = 0, and then TRL
-loads no reference model at all. The R1 paper's setting is β = 0.001, as TRL's docs say (verify).
+and k3 mean 0.1163 with std 0.106 (`grpo.k1()`, `grpo.k3()`, notebook 03). TRL's default is β = 0 (verify), and then
+TRL loads no reference model at all. The R1 paper's setting is β = 0.001, as TRL's docs say (verify).
 
 ### Clipping, entropy and the length bias
 
@@ -500,10 +500,10 @@ explicitly (notebook 03, exercise 3.6).
 ## 5. Thinking models
 
 **Long chain-of-thought as a learned behaviour.** DeepSeek-R1-Zero applied GRPO directly to DeepSeek-V3-Base. It
-used rule-based accuracy and format rewards, and a template that asks for reasoning inside `<think>` tags. Over
-thousands of RL steps, AIME 2024 pass@1 rose from 15.6% to 71.0% (86.7% with a majority vote).
+used rule-based accuracy and format rewards, and a template that asks for reasoning inside `<think>` tags.
 
-The responses grew from hundreds to thousands of reasoning tokens. Reflection ("wait…") appeared by itself. The
+Over thousands of RL steps, AIME 2024 pass@1 rose from 15.6% to 71.0% (86.7% with a majority vote). The
+responses grew from hundreds to thousands of reasoning tokens. Reflection ("wait…") appeared by itself. The
 paper calls this the "aha moment". The training also produced endless repetition, poor readability and a mix of
 languages (verify).
 
@@ -573,7 +573,7 @@ and 350 output tokens costs $0.007005; the same call with 3,500 output tokens co
 The recommended sampling is also different:
 
 - Qwen3 thinking mode: temperature 0.6, top-p 0.95, top-k 20. Greedy decoding "can lead to performance degradation
-  and endless repetitions".
+  and endless repetitions" (verify).
 - DeepSeek-R1: temperature 0.6 and no system prompt (verify).
 
 The serving-engine primer §6 explains the mechanics of sampling.
@@ -606,8 +606,8 @@ helps questions where an attempt can come to a dead end, *if* something can sele
 | gain per 1K tokens | +0.461 | +0.224 | +0.115 | +0.047 | +0.015 | +0.004 |
 
 Accuracy levels off near 0.65, the share of attempts that start on a workable approach. Thinking cannot rescue a
-dead end. Also, a constant budget over-thinks. Compare it with a model that stops when it cracks a question. The
-constant budget spends 41% of a fixed 4,000-token think after the model already has the answer (notebook 04,
+dead end. Also, a fixed budget over-thinks. Compare it with a model that stops when it cracks a question. The
+fixed budget spends 41% of a fixed 4,000-token think after the model already has the answer (notebook 04,
 exercise 4.6). This is the case for adaptive budgets.
 
 **Parallel: best-of-n, verifiers and votes.** With a perfect verifier, $n$ samples give $1 - (1 - p)^n$. A reward
@@ -682,7 +682,7 @@ of a checker, decide if it wins. Measure it on your evals.
 **Output-heavy, decode-dominant, heavy-tailed.** A chat request is prompt-heavy. A thinking request spends most of
 its life in decode, and its length depends on how hard the question is. A lognormal with median 1,500 thinking
 tokens and $\sigma = 1$ has mean 2,473, p90 5,403 and p99 15,361 (`workload.lognormal_mean()`,
-`workload.lognormal_quantile()`). The p99 equals ten times the median.
+`workload.lognormal_quantile()`). The p99 is ten times the median.
 
 On a small model, the KV of one trace is the size of the model. Qwen3-0.6B holds 115 kB of KV per token in fp16
 (114,688 B, `workload.kv_per_token_kb()`). Thus an 8K-token trace holds 0.94 GB against 1.19 GB of weights.
@@ -707,8 +707,8 @@ calculates the fleet for an internal assistant with [`capacity.py`](../gpu-capac
 are 8.33 requests/s, 1,500 tokens in, 300 out, 40 ms TPOT, Mistral Small 3 (24B) in FP8 on H100s. `workload.plan()`
 restates those formulas (Little's law, then GPUs per constraint). It reproduces the primer's numbers in a test.
 
-It also adds what `decode_aggregate` leaves out. HBM and the ITL SLO cap the batch per GPU, and the step is
-$\max(\text{bytes}/\text{bandwidth}, \text{FLOPs}/\text{peak})$. Like the primer, it assumes that **every output
+`workload.plan()` also adds what `decode_aggregate` leaves out. HBM and the ITL SLO cap the batch per GPU, and the step is
+$\max(\text{bytes}/\text{bandwidth}, \text{FLOPs}/\text{peak})$. Like the primer, `workload.plan()` assumes that **every output
 token takes the SLO's TPOT**. Thus a request lives TTFT + out × 40 ms, whatever the load is.
 
 `workload.plan_steady()` drops that assumption. In it, the lifetime of a request comes from the step at which the
@@ -744,8 +744,8 @@ SLOs.
 
 With either method, ten times the output needs eighteen times the GPUs for memory. The numbers are 5.12 vs 0.283 at
 the SLO's TPOT, 2.75 vs 0.15 at the step the fleet runs at. Concurrency grows with the output, and each live session
-holds 1.8× the KV. This is the 18.2× of KV-token-steps from earlier in this section, which shows through Little's
-law.
+holds 1.8× the KV. This is the 18.2× of KV-token-steps from earlier in this section. Little's
+law makes the 18.2× visible in the GPU count.
 
 The primer's `decode_aggregate` puts all 1,000 live requests of the convention in one batch. That is 246 GB of KV on
 an 80 GB card. Decode *throughput* is not the binding constraint.
@@ -792,7 +792,7 @@ sequence is a hit.
 **Streaming reasoning and vLLM's `--reasoning-parser`.** `vllm serve Qwen/Qwen3-0.6B --reasoning-parser qwen3`
 divides the output into `message.reasoning` and `message.content` (streamed as `delta.reasoning` and
 `delta.content`). vLLM 0.30 names the field `reasoning`. SGLang, the DeepSeek API and Qwen's docs use
-`reasoning_content`. Thus a portable client reads both.
+`reasoning_content` (verify). Thus a portable client reads both.
 
 Parser names use underscores in vLLM (`qwen3`, `deepseek_r1`, `openai_gptoss`) and hyphens in SGLang
 (`deepseek-r1`). `--enable-reasoning` no longer exists. Structured output applies after the end of thinking, unless
@@ -852,7 +852,7 @@ compute. You must measure the acceptance on reasoning text, and not assume it (v
 
 | Framework | Rollouts | Notes |
 |---|---|---|
-| TRL `GRPOTrainer` | `use_vllm=True`: `vllm_mode="colocate"` or `"server"`. The colocate mode puts vLLM in the trainer process, on the same GPU (`vllm_gpu_memory_utilization` 0.3), and sleep mode frees it during the optimizer step. The server mode puts `vllm serve` on other GPUs and sends the weights over NCCL | A sequence-level importance weight corrects the train–inference log-prob mismatch. By default, it masks the weight outside $[C_{\min}, 3.0]$ (`vllm_importance_sampling_mode="sequence_mask"`, and the `*_truncate` modes truncate instead) (verify) |
+| TRL `GRPOTrainer` | `use_vllm=True`: `vllm_mode="colocate"` or `"server"`. The colocate mode puts vLLM in the trainer process, on the same GPU (`vllm_gpu_memory_utilization` 0.3), and sleep mode frees it during the optimizer step. The server mode puts `vllm serve` on other GPUs and sends the weights over NCCL | A sequence-level importance weight corrects the train–inference log-prob mismatch. By default, TRL masks the weight outside $[C_{\min}, 3.0]$ (`vllm_importance_sampling_mode="sequence_mask"`, and the `*_truncate` modes truncate instead) (verify) |
 | verl | `rollout.name`: `hf`, `vllm` or `sglang`. `rollout.n` samples per prompt. HybridFlow's `ActorRolloutRefWorker` puts actor, rollout and reference on the same GPUs | `algorithm.adv_estimator=grpo`, `kl_loss_type=low_var_kl` (k3), `loss_agg_mode` (verify) |
 | OpenRLHF | Ray + vLLM, with PPO, GRPO, REINFORCE++ | this primer only names it (unverified) |
 
@@ -905,7 +905,7 @@ see that the policy exploits it.
 | §2–4 policy gradients, DPO, GRPO | `rl-core` notebooks 01–03 | `thinking-lab` 01: a small transformer, trained from scratch with SFT then GRPO in torch. It takes about a minute on a laptop CPU, so it is T0 too | same, faster | — |
 | §5, §7 a real thinking model | `rl-core` notebook 05, and the lab's fake server (labelled simulated) | `Qwen/Qwen3-0.6B` in vLLM 0.30 with `--reasoning-parser qwen3 --dtype half`, and `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` with `deepseek_r1` | `Qwen/Qwen3-4B`, `Qwen/Qwen3-4B-Thinking-2507` in bf16 | the 04 lab's [Cloud Run and GKE deploys](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/) with a thinking model and `--reasoning-parser` |
 | §6 test-time compute | `rl-core` notebook 04 | best-of-n and majority vote on Qwen3-0.6B (lab 03) | a 4B model | — |
-| §8 one RL step with an engine | the lab's rollout records on the small transformer | vLLM 0.30 generates the rollouts for `Qwen/Qwen2.5-0.5B-Instruct`, and transformers takes the step (lab 05). TRL 1.14's `GRPOTrainer` with colocated vLLM in fp16 is the packaged alternative (fit to 15 GB: verify) | same, with room | — |
+| §8 one RL step with an engine | the lab's rollout calculations and records on the small transformer | vLLM 0.30 generates the rollouts for `Qwen/Qwen2.5-0.5B-Instruct`, and transformers takes the step (lab 05). TRL 1.14's `GRPOTrainer` with colocated vLLM in fp16 is the packaged alternative (fit to 15 GB: verify) | same, with room | — |
 
 A T4 has 15 GiB usable, no bf16 and no FP8. The minimum for vLLM 0.30 is compute capability 7.5, and on a T4 vLLM uses
 the Triton attention backend (verify). The 04 lab's `servelab.sizing.size()` predicts 6,969 KV blocks for Qwen3-0.6B
@@ -926,9 +926,9 @@ RL increases the probability of the model's own samples in proportion to how the
 only reweight what the SFT model already samples: with a KL penalty, the optimum is the reference times
 $\exp(\text{reward}/\beta)$. Thus we invest in the SFT model and in the reward.
 
-"Where we can check the answers, we use verifiable rewards and GRPO. That means G samples per prompt,
-group-normalised advantages, no value model, a token-level loss, and a mask on truncated completions. Where we cannot
-check them, we use preferences through Bradley–Terry. We use DPO when we want the KL-regularised optimum without a
+"Where a check of the answers is possible, we use verifiable rewards and GRPO. That means G samples per prompt,
+group-normalised advantages, no value model, a token-level loss, and a mask on truncated completions. Where no check
+is possible, we use preferences through Bradley–Terry. We use DPO when we want the KL-regularised optimum without a
 reward model. We also use a length-controlled eval, because the biases of the annotators become the reward.
 
 "Most of an RL step is generation. Thus the rollout side is a problem of inference serving, and async rollouts trade
@@ -963,7 +963,7 @@ correct answer."
    output length, and KV per session scales with average context. Thus memory binds. In the capacity primer's
    example, 10× output needed 18× the GPUs for memory. The numbers are 5.12 against 0.28 at the SLO's TPOT, 2.75
    against 0.15 at the step the fleet runs at. That is 3 H100s instead of 1. Also, a tight ITL SLO caps the batch
-   before HBM does. Do not calculate the fleet at the SLO's TPOT when you compare SLOs. That method makes the looser
+   before HBM does. Be careful when you calculate the fleet at the SLO's TPOT to compare SLOs. That method makes the looser
    SLO seem to cost more. TTFT does not change, but the time to the first answer token changes.
 5. *Users get empty answers from the thinking model. Why, and the fix?* `max_tokens` counts reasoning. Some
    requests still think at the cap. They return `finish_reason="length"` with empty content (17.7% at a 4K cap in
@@ -985,7 +985,7 @@ correct answer."
 | Trajectory / completion | one sampled output. $\log \pi(y)$ is the sum of the log-probabilities of its tokens |
 | SFT | supervised fine-tuning: maximum likelihood on demonstrations |
 | Reward model (RM) | a network trained on preference pairs to score completions (Bradley–Terry) |
-| Verifier | a program that checks a completion (answer equivalence, unit tests, a format regex) |
+| Verifier | a program that examines a completion (answer equivalence, unit tests, a format regex) |
 | RLVR | reinforcement learning with verifiable rewards |
 | REINFORCE | the score-function gradient $\mathbb{E}[(R - b) \nabla \log \pi(y)]$ |
 | Baseline / advantage | $b$, subtracted from the reward with no bias to the gradient / ${R - b}$ |

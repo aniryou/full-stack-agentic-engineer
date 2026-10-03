@@ -10,7 +10,7 @@
 
 Language, code, protein sequences and audio are all sequences of discrete symbols. What each symbol means depends on the symbols around it. The word "Bank" alone can mean more than one thing. The word "bank" three words after "river" means only one thing. The job of a sequence model is to change each symbol into a vector. That vector holds what the symbol means *here*, with all the symbols around it as context.
 
-Until 2017, the standard answer was the recurrent network (RNN, LSTM). It reads tokens one at a time, and it moves a hidden state forward from each token to the next. This design has two problems. First, information from far back must stay through many sequential updates, and it loses quality. Thus, long-range dependencies were hard to learn.
+Until 2017, the standard answer was the recurrent network (RNN, LSTM). It reads tokens one at a time, and it moves a hidden state forward from each token to the next. This design has two problems. First, information from far back must go through many sequential updates, and it loses quality. Thus, long-range dependencies were hard to learn.
 
 The second problem is more decisive. Step $t$ cannot start until step ${t-1}$ is complete. Thus, training cannot run in parallel across the sequence. GPUs are throughput machines, and a model that forces serial computation wastes them. Convolutions run in parallel, but each layer sees only a fixed local window.
 
@@ -30,7 +30,7 @@ Each token gets three vectors from its current representation, through three lea
 
 Take "it" in *"The animal didn't cross the street because it was too tired."*
 
-A useful query for "it" encodes approximately "pronoun, needs an antecedent." The key for "animal" matches that query well. The key for "street" does not. The token "it" receives a mixture of values, with most of the weight on "animal". Its representation now holds "refers to the animal." Nobody writes this into a program. It comes out of training.
+For example, a useful query for "it" can encode a description such as "pronoun, needs an antecedent." The key for "animal" matches that query well. The key for "street" does not. The token "it" receives a mixture of values, with most of the weight on "animal". Its representation now holds "refers to the animal." Nobody writes this into a program. It comes out of training.
 
 ### 2.2 The formula, term by term
 
@@ -57,7 +57,7 @@ $$
 \end{aligned}
 $$
 
-At the end, token 3 holds mostly the value of token 1, with a small part of each other value. Note two things. First, the weights are a convex combination. Thus, attention calculates an average of the values, and it does not make one value larger. Second, the output is in value space. $W_V$ sets what a token *receives*, not the raw embedding of the token that it attends to.
+At the end, token 3 holds mostly the value of token 1, with a small part of each other value. Note two things. First, the weights are a convex combination. Thus, attention calculates an average of the values, and it does not make one value larger. Second, the output is in value space. What a token *receives* comes from $W_V$, not from the raw embedding of the token that it attends to.
 
 ### 2.4 Self-attention and cross-attention
 
@@ -92,7 +92,7 @@ The matrix that flows through the stack has the shape ($n$ tokens × $d_{\text{m
 
 ### 3.1 Multi-head attention
 
-One attention operation calculates one $n \times n$ pattern of relations. But a token has several kinds of relation that are useful to monitor at the same time:
+One attention operation calculates one $n \times n$ pattern of relations. But a token has several kinds of relation that are useful to track at the same time:
 
 - syntactic (what is my subject?)
 - positional (what came immediately before me?)
@@ -122,7 +122,7 @@ Each sub-layer *adds* its output to its input, and does not replace the input: $
 
 First, you can train deep stacks. Gradients flow directly back through the additions. Thus, a 100-block model does not get the vanishing gradients that limited deep networks before ResNets.
 
-Second, a single **residual stream** goes through the full network. Each block reads from it and writes a small increment. This is the mental model that experienced practitioners actually use. The stream is a shared workspace, $d_{\text{model}}$ wide, in which the representation of a token builds up. Early blocks usually write syntactic and positional features, and later blocks write more abstract features. The final representation is the sum of the contributions of all blocks.
+Second, a single **residual stream** goes through the full network. Each block reads from it and writes a small increment. This picture of one shared stream is the mental model that experienced practitioners actually use. The stream is a shared workspace, $d_{\text{model}}$ wide, in which the representation of a token builds up. Early blocks usually write syntactic and positional features, and later blocks write more abstract features. The final representation is the sum of the contributions of all blocks.
 
 **Normalization** (LayerNorm, or now more frequently RMSNorm) scales the vector of each token to unit scale before each sub-layer. It keeps activations in a numerically comfortable range. It also makes training much less sensitive to the learning rate.
 
@@ -143,11 +143,11 @@ If you put $L$ blocks in a stack, each token gets $L$ rounds of "gather context,
 
 Models do not see characters or words. They see **tokens** from a fixed vocabulary. Usually, byte-pair encoding (BPE) builds this vocabulary. Common words are single tokens, and the tokenizer divides rare words into pieces. Vocabularies go from ~32k (Llama 2) to 128k–200k (recent models). In English, a token is approximately three-quarters of a word on average.
 
-**Practitioner note.** Tokenization causes more of the unusual behaviors of models than you expect. Arithmetic is hard partly because the tokenizer divides numbers in ways that are not consistent. To spell words and to count letters is hard because the model never sees letters. Text that is not in English costs more tokens, and thus more money and context, because vocabularies favor English. When a model cannot count the r's in "strawberry", the cause is tokenization, not stupidity.
+**Practitioner note.** Tokenization causes more of the unusual behaviors of models than you expect. Arithmetic is hard partly because the tokenizer divides numbers in ways that are not consistent. It is hard to spell words and to count letters, because the model never sees letters. Text that is not in English costs more tokens, and thus more money and context, because vocabularies favor English. When a model cannot count the r's in "strawberry", the cause is tokenization, not stupidity.
 
 ### 4.2 Embeddings
 
-A learned table of shape $(\text{vocab} \times d_{\text{model}})$ maps each token id to its initial vector. This vector is the start contents of the residual stream of that token. At the output, a linear map of shape $(d_{\text{model}} \times \text{vocab})$ changes the final stream into a score (logit) for each vocabulary entry. This map is the "unembedding", or LM head. Softmax changes those scores into next-token probabilities. Some models share the two matrices (GPT-2, Gemma), and the Llama family keeps them separate.
+A learned table of shape $(\text{vocab} \times d_{\text{model}})$ maps each token id to its initial vector. This vector is the initial contents of the residual stream of that token. At the output, a linear map of shape $(d_{\text{model}} \times \text{vocab})$ changes the final stream into a score (logit) for each vocabulary entry. This map is the "unembedding", or LM head. Softmax changes those scores into next-token probabilities. Some models share the two matrices (GPT-2, Gemma), and the Llama family keeps them separate.
 
 ### 4.3 Position: attention has no sense of order
 
@@ -182,7 +182,7 @@ In the rest of this primer, "Transformer" means decoder-only, unless the text sa
 
 Take a long sequence of tokens. At each position $t$, the model outputs a distribution over the token at ${t+1}$. The loss is the cross-entropy against the token that actually came next, averaged over all positions. Pretraining of an LLM runs this over trillions of tokens. Distillation trains on the same cross-entropy. Its target is the whole next-token distribution of a larger model, not the one-hot next token ([distillation primer §2](../../distillation/PRIMER.md#2-soft-targets-temperature-and-the-choice-of-divergence)).
 
-The causal mask makes this efficient. Position $t$ sees only positions $\le t$. Thus, one forward pass over a sequence of length $n$ makes $n$ next-token predictions, each conditioned on exactly the correct prefix. You get $n$ training examples for the price of one pass, and the model calculates them in parallel. (During training, the model always sees the true prefix and never its own predictions. This is "teacher forcing.")
+The causal mask makes this efficient. Position $t$ sees only positions $\le t$. Thus, one forward pass over a sequence of length $n$ makes $n$ next-token predictions, each conditioned on exactly the correct prefix. You get $n$ training examples for the price of one pass, and the model calculates them in parallel. During training, the model always sees the true prefix and never its own predictions. This is "teacher forcing."
 
 An RNN gives the same $n$ examples, but it calculates them serially. This parallelism, more than any representational advantage, is the reason why Transformers scaled and RNNs did not.
 
@@ -196,17 +196,17 @@ Three quantities set what a pretrained model can do:
 
 Scaling laws (Kaplan et al., 2020, and Hoffmann et al., "Chinchilla", 2022) showed two things. First, the loss decreases as a smooth power law in each quantity. Second, for a fixed compute budget, there is an optimal balance. This balance is roughly 20 tokens per parameter, if the training cost is the only thing that is important to you.
 
-In practice, the training of models now goes far past that point (Llama-3 8B on ~15 trillion tokens, nearly 2,000 per parameter). The reason is that a smaller model with longer training costs less to *serve*. Over the life of a model, the cost to serve it is the largest cost.
+In practice, the training of models now goes far past that point (Llama-3 8B on ~15 trillion tokens, nearly 2,000 per parameter). The reason is that a smaller model with longer training costs less to *serve*. Also, over the life of a model, the cost to serve it is the largest cost.
 
 **Practitioner note.** This is why people who train large models feel that architecture debates have low stakes. The block changed in details since 2017 (Section 9), but not in kind. Nearly all the capability gain came from $N$, $D$, data quality and the training procedure. The first question about a proposed architectural change is this: does it move the scaling curve, or only the constant in front of it?
 
 ### 6.3 Post-training is not architecture
 
-None of these behaviors is architectural: obedience to instructions, chat behavior, refusals and tool use. They come from more training of the same network:
+None of these behaviors is architectural: instruction following, chat behavior, refusals and tool use. They come from more training of the same network:
 
-- supervised fine-tuning on curated examples
-- then preference optimization (RLHF, DPO and their successors)
-- and, more and more, reinforcement learning on tasks with answers that you can examine for correctness.
+1. Supervised fine-tuning on curated examples.
+2. Then, preference optimization (RLHF, DPO and their successors).
+3. More and more, reinforcement learning on tasks with answers that you can examine for correctness.
 
 The pretrained model is a document-continuation engine. Post-training shapes what it continues into. Keep the two separate in your mind. When you do this, much of the confusion about what a model "knows" and what it "does" goes away. The [RL and thinking-models primer](../../rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training) tells, in §1–4, how those post-training steps work: policy gradients, reward models and DPO, and GRPO with verifiable rewards.
 
@@ -233,7 +233,7 @@ This single fact explains most of the economics of LLM serving. It explains thes
 - why throughput increases steeply with batch size
 - why quantization of weights to 8 or 4 bits makes decode faster, but does not decrease the FLOPs
 - why time-to-first-token and tokens-per-second are separate metrics with separate bottlenecks
-- why speculative decoding works. A forward pass over five draft tokens costs approximately the same as a pass over one. Thus, a small model can propose tokens, and the large model can verify them in a single pass.
+- why speculative decoding works: a forward pass over five draft tokens costs approximately the same as a pass over one. Thus, a small model can propose tokens, and the large model can verify them in a single pass.
 
 ### 7.3 The cost of context
 
@@ -251,7 +251,7 @@ Temperature, top-p, top-k and repetition penalties act on the output distributio
 
 ### 8.1 Parameter accounting
 
-Per block, without biases and norms (both are negligible):
+Per block, if you do not count biases and norms (both are negligible):
 
 | Component | Parameters |
 |---|---|
@@ -279,7 +279,7 @@ The fields of the Hugging Face `config.json` map directly onto this primer:
 |---|---|
 | `hidden_size` | $d_{\text{model}}$, the residual stream width |
 | `num_hidden_layers` | $L$, the number of blocks |
-| `num_attention_heads` | $h$, head dimension = `hidden_size` / $h$ |
+| `num_attention_heads` | $h$. Head dimension = `hidden_size` / $h$. |
 | `num_key_value_heads` | K/V heads for GQA. It equals $h$ for standard attention. |
 | `intermediate_size` | MLP hidden width |
 | `vocab_size` | rows in the embedding table |
@@ -337,11 +337,11 @@ A model can fail a task in one step that it can do in ten. In that case, the lim
 
 **In-context learning is a learned circuit, not a magic property.** The best-studied example is the *induction head*. An induction head is a pair of attention heads that together implement "find the last time this token appeared and copy what followed it". It comes out early in training. It explains much of the ability of a model to learn patterns from a few examples in the prompt.
 
-The architecture does not contain this circuit, and training finds it. Much of what looks like reasoning is a stack of learned circuits like this one.
+The architecture does not contain this circuit, but training finds it. Much of what looks like reasoning is a stack of learned circuits like this one.
 
 **Long context is neither free nor fully used.** If you double the window, the KV memory doubles and the attention cost increases. Also, models do not attend to all of the window equally. They often give more weight to the start and the end ("lost in the middle"). A 128k window is a capacity, not a promise that 128k tokens carry equal weight.
 
-**Tokens are the unit of everything.** Cost, context, latency and a full class of failure modes all have tokens as their unit. Learn to think in tokens.
+**Tokens are the unit of everything.** Cost, context, latency and a complete class of failure modes all have tokens as their unit. Learn to think in tokens.
 
 **The architecture is rarely the interesting variable.** In most applied work, data, post-training, prompts, retrieval and the decoding strategy have the largest effect on the outcomes. Knowledge of the architecture is important because it tells you what is *possible* and what things *cost*, not because you will change it.
 
@@ -416,7 +416,7 @@ loss = F.cross_entropy(logits[:, :-1].reshape(-1, logits.size(-1)),
                        idx[:, 1:].reshape(-1))
 ```
 
-The loss compares the prediction of each position with the token that actually came next. Note one practical detail. With the default initialization of PyTorch, the start loss is far above $\ln(\text{vocab}) \approx 10.8$. GPT-2 initializes weights with standard deviation 0.02, and this brings the initial loss to roughly that value. At the start, a well-initialized language model predicts a near-uniform distribution. A start loss far from $\ln(\text{vocab})$ is a common early signal of a bug.
+The loss compares the prediction of each position with the token that actually came next. Note one practical detail. With the default initialization of PyTorch, the initial loss is far above $\ln(\text{vocab}) \approx 10.8$. GPT-2 initializes weights with standard deviation 0.02, and this brings the initial loss to roughly that value. At the start, a well-initialized language model predicts a near-uniform distribution. An initial loss far from $\ln(\text{vocab})$ is a common early signal of a bug.
 
 Replace `nn.LayerNorm` with RMSNorm, the position table with RoPE and the MLP with SwiGLU. Then share K/V across groups of heads. The result is a modern open-weight model.
 

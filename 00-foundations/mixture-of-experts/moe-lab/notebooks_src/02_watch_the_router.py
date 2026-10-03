@@ -3,20 +3,20 @@
 #
 # **Tier:** T1: a real MoE on one GPU. A free Colab/Kaggle T4 runs OLMoE-1B-7B in fp16 through transformers,
 # or granite-3.0 MoE. Any GPU with `vllm serve --enable-return-routed-experts` is also applicable. T0: bundled
-# traces in the documented format of vLLM (**illustrative**: `tools/make_fixtures.py` generated them, they are
-# not a capture from OLMoE). T0 also uses real traces from the small MoE of notebook 01 when the environment
+# traces in the documented format of vLLM (**illustrative**: `tools/make_fixtures.py` generated them, and they
+# are not a capture from OLMoE). T0 also uses real traces from the small MoE of notebook 01 when the environment
 # has torch. The notebook selects the best source that it can find and labels it.
 #
 # ## The one-minute version
 #
 # * It is low-cost to capture the decisions of the router. There are two methods. The first is **forward
 #   hooks** on the router modules of a Hugging Face MoE. Transformers v5 fuses the experts into 3D tensors,
-#   thus put the hook on the router, not on the experts. The second is the vLLM
+#   thus put the hook on the router, not on the experts. The second is the vLLM flag
 #   `--enable-return-routed-experts`. It returns a base64 `.npy` of shape `(tokens − 1, layers, k)` with every
 #   response.
 # * **Utilisation is uneven**: in each layer, a few experts take a multiple of their fair share. The EPLB of
 #   vLLM measures it as *balancedness* = mean load / max load. In a small sample, part of what you see is
-#   noise. Compare it with what uniform routing shows at the same sample size.
+#   noise. Compare the measured balancedness with what uniform routing shows at the same sample size.
 # * **The hot set moves with the traffic**: code, math, prose and other languages make different experts
 #   active. This effect is larger in some layers than in others.
 # * Under expert parallelism, each GPU owns a contiguous block of experts. Thus hot experts that share a GPU
@@ -206,9 +206,11 @@ print(f"✅ first quarter of layers {div[:L // 4].mean():.3f}, last quarter {div
 # With `--enable-expert-parallel` and the default `--expert-placement-strategy linear` of vLLM, EP rank $r$
 # holds experts `[r·E/ep, (r+1)·E/ep)`. The alternative, `round_robin`, puts expert $e$ on rank
 # $e \bmod \mathit{ep}$. vLLM uses it only for models with expert groups, like DeepSeek-V3. For other models,
-# vLLM uses linear (checked on vLLM main, Sep 2026, make sure that this is true for your version). Write
-# `rank_loads(counts, ep)`. It returns `[layers, ep]`, the assignments per rank under linear placement. Then
-# calculate the **imbalance** max/mean for each layer.
+# vLLM uses linear. We examined these two rules on vLLM main, Sep 2026. Make sure that they are true for your
+# version.
+#
+# Write `rank_loads(counts, ep)`. It returns `[layers, ep]`, the assignments per rank under linear placement.
+# Then calculate the **imbalance** max/mean for each layer.
 
 # %% exercise
 def rank_loads(counts, ep):
@@ -309,8 +311,8 @@ else:
 # `MOELAB_TOPK`) from its `config.json`. If you do not, the capture stops with an error. It does not guess.
 #
 # Then write your own prompts for each domain (`hooks.capture_vllm(..., prompts={...})`). Use a few hundred
-# tokens per domain at least. Use more before you make conclusions (the baseline of Exercise 2.3 tells you how
-# many).
+# tokens per domain at least. Use more tokens before you come to a conclusion (the baseline of Exercise 2.3
+# tells you how many).
 
 # %% [markdown]
 # ## In a design review
@@ -325,8 +327,8 @@ else:
 # of experts, and the busiest GPU sets the step. The imbalance increases as the number of experts per GPU
 # decreases.
 #
-# "The remedies are measured placement and replicas of hot experts (EPLB), not topic-based assignment. Each
-# replica costs HBM."
+# "The remedies are placement from the measured load and replicas of hot experts (EPLB), not topic-based
+# assignment. Each replica costs HBM."
 #
 # **Drill 1.** *Balancedness is 0.6 on 500 tokens. Do we need EPLB?* First, calculate the uniform baseline at
 # 500 tokens (Exercise 2.3). If it is also ~0.6, you measured noise. Collect more traffic.
@@ -335,6 +337,6 @@ else:
 # experts are one fused 3D tensor (`gate_up_proj [E, 2I, d]`), not per-expert modules. The output of the
 # router already names the experts that each token uses.
 #
-# **Drill 3.** *EP=2 looked balanced. At EP=16, the step became slower than expected. Why?* With 64 experts,
-# EP=16 leaves 4 experts per GPU, and one hot expert now is most of the load of its GPU. At EP=2, it averaged
-# with 31 other experts.
+# **Drill 3.** *EP=2 looked balanced. At EP=16, the step became slower than expected. Why?* Because EP=16 leaves
+# 4 of the 64 experts on each GPU, one hot expert now has the largest effect on the load of its GPU. At EP=2,
+# it averaged with 31 other experts.

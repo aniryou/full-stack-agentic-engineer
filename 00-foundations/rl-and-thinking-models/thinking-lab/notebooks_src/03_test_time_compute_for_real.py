@@ -16,8 +16,8 @@
 # * Measure them correctly. **pass@k**, the chance that at least one of $k$ samples is correct, needs
 #   the unbiased estimator `1 − C(n−c, k)/C(n, k)` from $n \ge k$ samples. The shortcut
 #   `1 − (1 − c/n)^k` is biased. Another measure is **pass^k**, the chance that *all* $k$ are
-#   correct. It is the reliability that an agent needs, and it *decreases* with $k$. **maj@k** needs no verifier, only answers that you can
-#   compare.
+#   correct. It is the reliability that an agent needs, and it *decreases* with $k$. **maj@k**
+#   needs no verifier, only answers that you can compare.
 # * pass@k is an upper bound, and only a perfect verifier gets to it. Majority vote and a noisy
 #   reward model stay below it. Majority vote can *lose* accuracy when an incorrect answer is the
 #   most common one.
@@ -107,8 +107,8 @@ print("✅ the plug-in understates pass@k, and only through problems the model s
 # ## Exercise 3.2 — majority vote
 #
 # Return the most common answer. Ignore `None`: it is no answer, for example because the output
-# ended during the thinking. If two answers have the same count, select the answer that appeared
-# *first*. If there are no answers, return `None`.
+# ended during the thinking. If two or more answers have the highest count, select the answer of
+# those that appeared *first*. If there are no answers, return `None`.
 
 # %% exercise
 def my_vote(answers: list):
@@ -165,9 +165,11 @@ for mode in ("off", "on"):
 # Best-of-k with the noisy reward model increases at first, and then it can *decrease*. With more
 # samples, an incorrect sample has more chances to get the top score. That is reward
 # over-optimisation at inference time. It is also the reason to trust a verifier more than a reward
-# model, where a verifier exists. The pass^k column decreases: an agent that runs the same step many
-# times sees the chance that every one of $k$ attempts succeeds. Thinking increases every column,
-# and each thinking sample costs approximately ten times the tokens.
+# model, where a verifier exists.
+#
+# The pass^k column decreases: an agent that runs the same step many times sees the chance that
+# every one of $k$ attempts succeeds. Thinking increases every column, and each thinking sample
+# costs approximately ten times the tokens.
 #
 # ## Exercise 3.3 — pass^k on the records, and the independence shortcut
 #
@@ -218,8 +220,8 @@ print("✅ averaged over problems of mixed difficulty, pass^k is higher than acc
 #   million.
 # * The selected answer is correct with the probability `accuracy`.
 #
-# Then compare three strategies with the numbers from the table that the first code cell prints, at
-# an output price of $2.00 per million tokens. This is an illustrative price. The 06 gateway lab's
+# Then compare three strategies with the numbers from the tables in the previous cells, at an output
+# price of $2.00 per million tokens. This is an illustrative price. The 06 gateway lab's
 # `cost_per_call` has dated prices. The three strategies are thinking off × maj@8, thinking on × 1
 # sample, and a 512-token budget × 1 sample.
 

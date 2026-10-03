@@ -2,9 +2,9 @@
 # # 04 · Test-time compute
 #
 # **Tier:** T0: CPU only, numpy, no network, well under a minute. A population of 400 synthetic questions
-# replaces a benchmark. Every number is exact or a seeded simulation. The `thinking-lab` notebook `03_test_time_compute_for_real`
-# does the same measurements on a real thinking model (Qwen3-0.6B in vLLM, best-of-n and majority vote). That
-# notebook is T1, and at T0 it replays bundled outputs.
+# replaces a benchmark. Every number is exact or a seeded simulation. The `thinking-lab` notebook
+# `03_test_time_compute_for_real` does the same measurements on a real thinking model (Qwen3-0.6B in vLLM,
+# best-of-n and majority vote). That notebook is T1, and at T0 it replays bundled outputs.
 #
 # ## The one-minute version
 # There are two ways to spend more inference on one question.
@@ -91,7 +91,7 @@ print("(the last three rows are Monte Carlo estimates, 20,000 trials each: the v
       "line only by sampling noise, about ±0.01)")
 
 # %% [markdown]
-# A noisy scorer turns "more samples" into "more chances for the scorer to make an error". The gains become flat
+# A noisy scorer turns "more samples" into "more chances to select an incorrect sample". The gains become flat
 # well below the line of the verifier. A scorer with a *systematic* bias (the reward model of notebook 02 that
 # likes long answers) is worse. Then best-of-n selects for the bias. This is why RL with verifiable rewards and
 # test-time search both depend on checkers.
@@ -135,7 +135,7 @@ for label, pop in (("questions only slow (a = 1)", only_slow), ("slow or dead-en
 #
 # ## Worked example 6 — a smaller model with more samples
 # There is a large model and a small model. The small model costs a fifth as much per token and is weaker on both
-# axes. Give the small model the same compute, that is five times the tokens.
+# axes. Give the small model the same compute, that is, five times the tokens.
 
 # %%
 big = ttc.question_set(median_q=1 / 1000, viable=(4.0, 1.0), seed=1)
@@ -160,7 +160,7 @@ for method in ("verifier", "vote"):
 # 1 - \prod_{i=n-c+1}^{n} \left(1 - \frac{k}{i}\right),
 # $$
 #
-# Return 1.0 when ${n - c < k}$.
+# and return 1.0 when ${n - c < k}$.
 
 # %% exercise
 def my_pass_at_k(n, c, k):
@@ -258,8 +258,8 @@ print(f"✅ with a verifier: {best[0]} samples of {best[1]} tokens ({best[2]:.3f
 # model that always thinks for exactly $L$ tokens spends $L$. A model that stops as soon as it cracks the question
 # spends $\mathbb{E}[\min(L_{\text{crack}}, L)] = (1 - (1 - q)^L)/q$ (and the full $L$ when it never cracks it).
 # For the questions in `qs`, calculate `waste`. This is the fraction of an $L$ = 4,000 thinking budget that the
-# model spends *after* it already cracked the question. Average it over the questions, and weight it by $a$ (the
-# chance that the attempt was on a workable approach).
+# model spends *after* it already cracked the question. Calculate it as an average over the
+# questions, weighted by $a$ (the chance that the attempt was on a workable approach).
 
 # %% exercise
 L_fixed = 4000
@@ -284,7 +284,7 @@ print(f"✅ {waste:.0%} of a fixed 4K-token think happens after the answer is fo
 # majority vote works when mistakes are scattered. It makes the result worse when there is a common
 # misconception.
 #
-# "Returns decrease each time the budget doubles. One budget for all questions wastes tokens on questions that
+# "Returns decrease each time the budget doubles. A fixed budget wastes tokens on questions that
 # the model solves early. Thus we set effort per request class, not globally. We report pass@1 and, for agent
 # flows, pass^k. pass^k is reliability across repeated requests, which more samples do not improve. We estimate
 # pass@k with the unbiased estimator from $n \ge k$ samples, with confidence intervals."

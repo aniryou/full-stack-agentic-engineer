@@ -3,9 +3,8 @@
 #
 # **Tier:** T1: vLLM generates $G$ = 8 rollouts for each of 8 prompts with `Qwen/Qwen2.5-0.5B-Instruct` (the
 # quick-start model of TRL). A verifier scores them, and transformers takes one GRPO step on a T4. The cell at the
-# end runs only with a GPU, `vllm` and `transformers`. `deploy/any-gpu/rl_step.sh` wraps it.
-#
-# T0 (default): the same bookkeeping on the rollouts of the tiny transformer. With torch, a bfloat16 "engine" copy
+# end runs only with a GPU, `vllm` and `transformers`, and `deploy/any-gpu/rl_step.sh` wraps that cell. T0
+# (default): the same bookkeeping on the rollouts of the tiny transformer. With torch, a bfloat16 "engine" copy
 # generates them now, and a float32 "trainer" copy scores them again. Without torch, the notebook uses a recorded
 # set (illustrative).
 #
@@ -61,7 +60,8 @@ print(table([{"prompt": k, "rewards": "".join(str(int(r.reward)) for r in g), "m
 # * `advantages`: a map from the prompt id to the list of group-normalised advantages, `(r − mean) / (std + 1e-4)`
 #   with Bessel's std, in rollout order.
 # * `kept`: the prompt ids that the dynamic sampling of DAPO keeps. These are the groups whose rewards are *not* all
-#   equal. The other groups give zero gradient. In a full trainer, new prompts replace them.
+#   equal. The other groups give zero gradient. A trainer replaces them with new
+#   prompts.
 
 # %% exercise
 def grpo_batch(rollouts: list) -> tuple:
@@ -131,7 +131,7 @@ print(f"✅ [{LABEL.split(':')[0]}] mean |log p_trainer - log p_sampler| = {stat
 # * sampling tricks such as top-k or FP8 KV,
 # * weights that are one step stale.
 #
-# TRL logs it as `sampling/sampling_logp_difference/mean`.
+# TRL logs the mismatch as `sampling/sampling_logp_difference/mean`.
 #
 # ## Worked example: the rollout phase is a serving problem with a straggler
 #
@@ -168,8 +168,8 @@ print(table([{"rollouts": len(lens), "mean tokens": round(ph["mean"]), "longest"
 # two shares:
 #
 # * `truncated`: the share of these 512 simulated rollouts that are longer than the cap.
-# * `hit_correct`: take the rollouts that are correct in the uncapped outcome of the simulated model. `hit_correct`
-#   is the share of these rollouts that get a penalty below 0.
+# * `hit_correct`: the share of the correct rollouts (correct in the uncapped outcome of the simulated model) that
+#   get a penalty below 0.
 #
 # Then set `cap` to the smallest cap in `CAPS` that gives a penalty to at most 5% of these correct rollouts.
 
@@ -226,8 +226,8 @@ print(f"✅ {idle_share(lens):.0%} of the slot-steps are idle while the tail fin
 # After each optimizer step, the engine needs the new weights. Return these values:
 #
 # * the bytes of a full sync,
-# * the bytes of a delta sync when only `changed` of the bf16 weight bytes change. The measurement of verl shows
-#   that more than 99% do not change from one step to the next.
+# * the bytes of a delta sync when only `changed` of the bf16 weight bytes change (verl measured more than 99%
+#   unchanged between two steps),
 # * the seconds that each sync takes at `link_gbs` gigabytes per second.
 #
 # Use the 494 M parameters of Qwen2.5-0.5B-Instruct.
@@ -296,9 +296,9 @@ else:
 # attack that.
 #
 # "The new weights go back to the engine in every step. A full copy is the size of the model. Delta sync sends ~50×
-# fewer bytes when 2% of the weights change (Exercise 5.5). But verl measured 1.3–21× less wall time. This is
-# because the work to calculate and encode the diff and the constant overheads stay (PRIMER §8 "The RL training
-# stack in brief", verify). The serving skills transfer directly: batch shape, KV capacity and tail latency."
+# fewer bytes when 2% of the weights change (Exercise 5.5). But verl measured 1.3–21× less wall time. This is because
+# three costs stay: the diff calculation, the encoding and the constant overheads (PRIMER §8 "The RL training stack in
+# brief", verify). The serving skills transfer directly: batch shape, KV capacity and tail latency."
 #
 # **Drill 1.** *Half of our groups have all-correct rewards. Is that a problem?* Those prompts are too easy for the
 # current policy, and they give no gradient. Filter them out (dynamic sampling), increase the difficulty, or accept
@@ -308,7 +308,7 @@ else:
 # shapes and sometimes stale weights. Thus they are different from the log-probs of the trainer. The trainer
 # recomputes them, and the ratio corrects the update (`vllm_importance_sampling_correction` of TRL, on by default).
 #
-# **Drill 3.** *Rollouts are 70% of step time, and more GPUs do not help. Why?* The longest completions set the
-# limit of the phase, not the throughput. Overlap generation with training (one-step-off or fully async RL, which
-# accept some staleness). Or put a cap on the lengths (budgets, overlong shaping), or pack new prompts into the
-# slots that become free.
+# **Drill 3.** *Rollouts are 70% of step time, and more GPUs do not help. Why?* The longest completions, not the
+# throughput, set the limit of the phase. Overlap generation with training (one-step-off or fully async RL, which
+# accept some staleness). Or put a cap on the lengths (budgets, overlong shaping), or pack new prompts into the slots
+# that become free.

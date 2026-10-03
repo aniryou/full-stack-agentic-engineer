@@ -9,9 +9,9 @@
 # A language model is a **policy**. At each position, it selects a token from $\pi(a \mid s)$. A completion is a
 # trajectory. Its log-probability is the sum of the log-probabilities of its tokens.
 #
-# - RL for LLMs is **sample, score, reweight**. Sample completions and score each one (here with a verifier).
-#   Then increase the log-probability of the completions that scored above a **baseline**, and decrease the
-#   log-probability of the other completions. The formula is
+# - RL for LLMs is **sample, score, reweight**. It samples completions and scores each one (here with a
+#   verifier). Then it increases the log-probability of the completions that scored above a **baseline**, and
+#   decreases the log-probability of the other completions. The formula is
 #   $\nabla \mathbb{E}[R] = \mathbb{E}[(R - b)\,\nabla \log \pi(y)]$ (REINFORCE). The baseline changes the noise,
 #   but never the direction.
 # - A **KL penalty** to the frozen reference, $R - \beta \log(\pi/\pi_{\text{ref}})$, gives the optimum a closed

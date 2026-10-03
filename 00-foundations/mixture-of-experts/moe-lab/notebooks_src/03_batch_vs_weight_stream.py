@@ -19,8 +19,8 @@
 #   wants large batches.
 # * The fused MoE kernel sorts the token–expert pairs by expert. It pads the rows of each expert to a tile
 #   (`BLOCK_SIZE_M`). At batch 1, almost every row that it multiplies is padding. This causes no problem,
-#   because the step is memory-bound. It is also the reason that the tuned kernel configs use the batch size
-#   as their key.
+#   because the step is memory-bound. The padding is also the reason that the tuned kernel configs use the
+#   batch size as their key.
 #
 # Concepts: PRIMER §5 "MoE at inference: which experts a step touches" and §6 "Running MoE on GPUs"
 # ([`PRIMER.md`](../../PRIMER.md)). The formulas are those of layer 01 ([roofline PRIMER
@@ -58,8 +58,8 @@ print(f"GPU for predictions: {GPU.name} | MoE {MOE.name} (active {MOE.active_par
 # ## Worked example: layer 01's MoE table, reproduced
 #
 # This is Mixtral-8x7B on an H200 at 1K context (layer 01 PRIMER §3.6, where
-# `roofline-core/tests/test_primer_numbers.py` pins the numbers). At batch 1, it reads 2.00 experts per layer
-# and 25.6 GB (5.34 ms). At batch 16, it reads 7.92 experts and 94.4 GB (19.66 ms).
+# `roofline-core/tests/test_primer_numbers.py` pins the numbers). At batch 1, a decode step reads 2.00 experts
+# per layer and 25.6 GB (5.34 ms). At batch 16, a decode step reads 7.92 experts and 94.4 GB (19.66 ms).
 
 # %%
 print("batch  Mixtral experts/layer  step bytes  step time   Qwen3-30B-A3B experts/layer")
@@ -211,8 +211,8 @@ for i, b in enumerate(BATCHES):
 # The MoE starts near the dense model (a similar active size). It increases until its full expert set streams.
 # Then both curves become flat until the KV reads and the compute become the most important costs.
 #
-# For both models, the throughput still increases with batch. The cost per token of the MoE decreases when
-# many tokens share the stream of every expert. That is why MoE serving is about large batches. It is also why
+# For both models, the throughput still increases with batch. For the MoE, this is because the cost per token
+# decreases when many tokens share the stream of every expert. That is why MoE serving is about large batches. It is also why
 # expert parallelism (notebook 04) exists: to put more tokens in front of each expert per step.
 #
 # ## Exercise 3.5 — how the fused MoE kernel lays tokens out
@@ -377,7 +377,7 @@ else:
 # "The step stays memory-bound until each expert sees sufficient tokens. Thus the compute-bound crossover
 # moves out by total/active: 754 for Mixtral against 207 for Llama-3.1-8B.
 #
-# "Thus we plan MoE capacity at high batch, where the cost per token is lowest. We treat batch-1 latency as
+# "For these reasons, we plan MoE capacity at high batch, where the cost per token is lowest. We treat batch-1 latency as
 # the easy case. The simulation gives the shape, and two measured points calibrate it."
 #
 # **Drill 1.** *Our MoE has 1/5 the active parameters of the dense model, but only 1.3x its throughput at

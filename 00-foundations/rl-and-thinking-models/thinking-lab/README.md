@@ -63,7 +63,7 @@ python3 -m jupyterlab notebooks                # the exercises; answers in solut
 ```
 
 To measure a real engine instead (T1/T3), start one. [`deploy/any-gpu/`](deploy/any-gpu/) has the Colab/Kaggle T4
-recipe. Then run `export THINKLAB_URL=http://127.0.0.1:8000`. Also set `THINKLAB_API_KEY`. For a private Cloud Run
+recipe. Then run `export THINKLAB_URL=http://127.0.0.1:8000`. You can also set `THINKLAB_API_KEY`. For a private Cloud Run
 service, set `THINKLAB_BEARER=$(gcloud auth print-identity-token)` instead. The notebooks find the engine and measure
 it.
 
@@ -74,15 +74,15 @@ simulated. `THINKLAB_NO_TORCH=1` shows the recorded-run path, also when torch is
 
 | Module | Lines | The idea |
 |---|---:|---|
-| `tinyrl/` | ~540 | The scratchpad task and its verifier (pure Python). A small decoder-only transformer with the same structure as `00-foundations/transformers/lessons/03_tiny_gpt.py`. An SFT warm-up, then GRPO with TRL's names and defaults, a pluggable loss and `grpo_from` for experiments from one SFT model. Rollouts from a bf16 "engine" copy, which an fp32 "trainer" copy scores again. A recorded run for machines without torch. |
+| `tinyrl/` | ~540 | The scratchpad task and its verifier (pure Python). A small decoder-only transformer with the same structure as `00-foundations/transformers/lessons/03_tiny_gpt.py`. An SFT warm-up, then GRPO with TRL's names and defaults, a pluggable loss and `grpo_from` for experiments from one SFT model. Rollouts from a bf16 "engine" copy. An fp32 "trainer" copy scores the rollouts again. A recorded run for machines without torch. |
 | `thinking/` | ~680 | An OpenAI-compatible client that reads `reasoning` *and* `reasoning_content`, and measures the time when the answer starts. Request bodies for the thinking switch, budgets and effort. Budget strategies (truncate, native, Qwen's two-call recipe). pass@k, pass^k, majority vote, best-of-n, cost per correct answer. A generated eval set of verifiable problems. Recorded simulated outcomes. |
 | `parsers.py` | ~180 | vLLM's `deepseek_r1` and `qwen3` semantics, gpt-oss Harmony channels, a streaming splitter that holds back split tags, and answer extraction. |
 | `templates.py` | ~110 | How Qwen3 renders the history (it drops the reasoning before the last user message), and the cached-prefix arithmetic that comes from it. |
 | `fakemodel.py` | ~160 | The simulated thinking model: log-normal thinking lengths by difficulty, accuracy that increases with thinking, and distractor answers. |
-| `engine.py` | ~270 | The emulator of time: FCFS continuous batching, KV blocks, recompute preemption and a roofline step time. Qwen3 profiles whose numbers reproduce `servelab.sizing`. |
+| `engine.py` | ~270 | The emulator of request latencies and step times: FCFS continuous batching, KV blocks, recompute preemption and a roofline step time. Qwen3 profiles whose numbers reproduce `servelab.sizing`. |
 | `fakeserver.py` | ~460 | The fake vLLM over HTTP: chat completions (streaming, `n`, `continue_final_message`), the reasoning switches and budgets, `usage.completion_tokens_details.reasoning_tokens`, cached tokens, and `/metrics` with vLLM's names. |
-| `workload.py` | ~370 | Length statistics, the steady-state serving shape, the capacity primer's arithmetic, open-loop load with gauge polls, and modes that it compares in virtual time. |
-| `rollout.py` | ~250 | The records of the RL step (advantages, dynamic sampling, IS corrections, DAPO shaping, aggregations, straggler time, weight sync), and the T1 vLLM + transformers step. |
+| `workload.py` | ~370 | Length statistics, the steady-state serving shape, the capacity primer's arithmetic, open-loop load with gauge polls, and a comparison of modes in virtual time. |
+| `rollout.py` | ~250 | The arithmetic of the RL step (advantages, dynamic sampling, IS corrections, DAPO shaping, aggregations, straggler time, weight sync), and the T1 vLLM + transformers step. |
 | `metrics.py`, `report.py`, `env.py`, `__main__.py` | ~570 | A Prometheus writer and parser, and PromQL quantiles. Labelled tables and reports. Tier detection. The CLI. |
 
 The lab has three siblings:
@@ -124,12 +124,12 @@ make check                                              # all of the above + tes
   server knows the eval answers, and it gives the correct answer with a probability that increases with its thinking.
   Its latencies come from a roofline step model of Qwen3-0.6B on a T4. The bundled JSON, SSE and raw-text files are
   sample output in the documented format (illustrative). Each table tells which kind it shows.
-- **The simulated model is not Qwen3.** Its accuracy curve, length distribution and distractors are parameters. Their
-  values make the model behave in a plausible way. Conclusions such as "where thinking pays per token" (notebook 04)
+- **The simulated model is not Qwen3.** Its accuracy curve, length distribution and distractors are parameters. The lab
+  selected their values so that the model behaves in a plausible way. Conclusions such as "where thinking pays per token" (notebook 04)
   are about the method. Measure your own model before you act on the numbers.
 - **Checked by construction.** The T1 paths (vLLM serving, the GRPO step) and the GCP deploys use the interfaces of
   vLLM v0.30.0, TRL 1.14.0 and the 04 lab's Terraform. The checks on them are `bash -n`, `DRY_RUN=1`, schema
-  validation and tests. They did not run on a GPU here.
+  validation and tests. The T1 paths and the GCP deploys did not run on a GPU here.
 
 ## Verify list (facts dated 2026-09-26 that move)
 

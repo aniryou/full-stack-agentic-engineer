@@ -55,7 +55,7 @@ EXERCISES = [
 (
 """## 1. Softmax
 
-Change a row of scores into a probability distribution. First, exponentiate the scores. Then divide them by the row sum.
+Change a row of scores into a probability distribution. First, exponentiate the scores. Then divide the results by their row sum.
 The cell already does the max-subtraction for you. This step changes nothing mathematically, and it prevents overflow.""",
 '''def softmax(x, axis=-1):
     x = x - x.max(axis=axis, keepdims=True)   # stability trick (given)
@@ -136,7 +136,7 @@ print("✅ causal mask")''',
 (
 """## 4. Splitting into heads
 
-Heads are only slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/h)`. Then each head has its own
+Heads are only slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/h)`. Thus, each head has its own
 `(n, d_head)` matrix. Also write the inverse, which concatenates the heads back. This exercise needs no arithmetic, only reshapes and a transpose.""",
 '''def split_heads(x, h):
     n, d = x.shape
@@ -204,7 +204,7 @@ print("✅ multi-head attention")''',
 (
 """## 6. The block
 
-The block makes two residual updates to the stream. Each update operates on a normalised copy of the stream (pre-norm):
+The block makes two residual updates to the stream. Each update uses a normalised copy of the stream (pre-norm):
 
     x = x + Attention(Norm(x))
     x = x + MLP(Norm(x))""",
@@ -259,7 +259,7 @@ print("✅ parameter count")''',
 (
 """## 8. Prove it to yourself: attention is order-blind
 
-This cell has nothing to fill in (it uses your exercises 1-5). Run it. Then answer the question in the next cell.""",
+The next code cell has nothing to fill in (it uses your exercises 1-5). Run it. Then answer the question that comes after it.""",
 '''X = rng.standard_normal((5, 8))
 p = init_block(d=8, h=2)
 perm = rng.permutation(5)
@@ -279,7 +279,7 @@ r"""**Question.** Section 3 of this notebook used a *causal* mask. Will the shuf
 
 <details><summary>Answer</summary>
 
-No. The definition of the causal mask uses positions (token $i$ can see tokens $\le i$). Thus, the mask already adds order. After a shuffle, a token can see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
+No. The definition of the causal mask uses positions (token $i$ can see tokens $\le i$). Thus, the mask already adds order. This is because after a shuffle, a token can see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
 </details>""",
 None, None, None,
 ),
@@ -298,7 +298,7 @@ def build(solution):
     title = "# Attention practice" + (" — solutions" if solution else "")
     intro = """This notebook is a companion to `docs/transformer-primer.md` (Sections 2, 3, 8) and to `lessons/01_attention.py` and `lessons/02_block.py`.
 
-Each exercise has a cell with `...` blanks to fill in. A check cell comes after it. Run the check.
+Each exercise has a cell with `...` blanks to fill in. A check cell comes after that cell. Run the check.
 When your implementation is correct, the check prints ✅. When your implementation is not correct, the check tells you the problem.
 While blanks stay in the cell, the check stops with `NotImplementedError`.
 

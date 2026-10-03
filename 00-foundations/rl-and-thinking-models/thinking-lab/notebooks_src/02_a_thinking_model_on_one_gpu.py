@@ -18,7 +18,7 @@
 #   one of the two names gets nothing from the other kind of server, and it shows no error.
 # * `max_tokens` counts reasoning tokens. It is not a thinking budget. If you set it too low, the
 #   response has `content: null` with `finish_reason: "length"`. Two budgets end the thinking and
-#   still get an answer: `thinking_token_budget` (vLLM) or the two-call recipe of Qwen.
+#   still get an answer: `thinking_token_budget` (vLLM) and the two-call recipe of Qwen.
 # * Thinking tokens are output tokens. The bill counts them as output, the engine decodes them one
 #   step at a time, and they stay in KV. On Qwen3-0.6B, an 8K-token trace holds approximately as many
 #   bytes of KV as all the weights of the model.
@@ -312,7 +312,7 @@ print(f"✅ smallest budget within 5 points of unlimited: {best.budget} "
 # On the real model, examine these things:
 #
 # * Make sure that the fp16 outputs on a T4 make sense. The training of Qwen3 used bf16. Make sure
-#   that there are no NaNs or garbage.
+#   that there are no NaNs and no text that makes no sense.
 # * Make sure that `usage.completion_tokens_details.reasoning_tokens` has a value. It needs the
 #   parser.
 # * Find how accuracy changes between thinking off and on, and across budgets, on *these* problems.

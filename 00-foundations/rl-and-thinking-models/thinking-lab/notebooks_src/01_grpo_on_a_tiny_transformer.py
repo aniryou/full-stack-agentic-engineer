@@ -3,14 +3,14 @@
 #
 # **Tier:** T0 with torch on a laptop CPU. The training run takes about a minute. We examined this notebook
 # on a shared 4-core container: ~40 s for the run, under a minute in all. T1 (any GPU) runs the same code
-# faster, but this model does not need that speed. Without torch, the notebook still runs. Then the
-# training cells show a recorded run, labelled illustrative, and the torch checks tell you that the
-# notebook skipped them.
+# faster, but this model does not need that speed. Without torch, the notebook still runs. In that
+# case, the training cells show a recorded run, labelled illustrative, and the torch checks tell you
+# that the notebook skipped them.
 #
 # ## The one-minute version
 #
 # * **RL for a language model is "sample, score, reweight".** Sample completions from the model, and
-#   give each completion a score with a reward. Then raise the probability of the tokens in the
+#   give each completion a score with a reward. Then increase the probability of the tokens in the
 #   completions that scored above the baseline. This is the policy gradient over token sequences
 #   (PRIMER §2 "Policy gradients over token sequences").
 # * **GRPO** makes the *group* the baseline. Sample $G$ completions per prompt. The advantage of a
@@ -74,8 +74,8 @@ print("broken format     ", render(broken).ljust(46), "reward", reward(p, broken
 # 5. `<eos>`
 #
 # Ignore the tokens after `<eos>`: they are padding. The answer must be equal to `problem.answer`.
-# In all other cases, return 0.0. The token ids: the digits are 0–9. The first code cell imports
-# `THINK`, `END_THINK` and `EOS`.
+# In all other cases, return 0.0. The token ids: the digits are 0–9. The import cell near the top of
+# the notebook imports `THINK`, `END_THINK` and `EOS`.
 
 # %% exercise
 def my_reward(problem, completion: list) -> float:
@@ -212,8 +212,8 @@ else:
           "produced; compare them with the recorded run (THINKLAB_NO_TORCH=1) or try another seed.")
 
 # %% [markdown]
-# Read the curves as follows. The numbers are the ones that the previous cell printed, for the run
-# that you have:
+# Read the curves as follows. The numbers are the ones that the two previous code cells printed, for
+# the run that you have:
 #
 # * **reward**: expect it to increase from the SFT mix toward the ceiling of Exercise 1.2. Expect
 #   **length**, the mean completion in tokens, to increase from about 7 (half 4, half 10) toward 10.
@@ -224,7 +224,7 @@ else:
 #   resamples them ("dynamic sampling"), and that is why TRL logs this number.
 # * **kl** is the $k_3$ estimate that TRL logs over one batch. Thus it is noisy. In the recorded run,
 #   it increases over the first ten steps and never becomes stable. Some batches show a spike to
-#   0.1–0.4, and its largest value is at the last step. Nothing pulls the policy back (`beta = 0`).
+#   0.1–0.4, and the largest value of kl is at the last step. Nothing pulls the policy back (`beta = 0`).
 #   Exercise 1.5 finds the cause of the spikes.
 #
 # `clip_frac` is 0 at every step. With `num_iterations = 1`, the trainer uses the rollouts for
@@ -383,8 +383,8 @@ print("✅ the spikes are k3's variance where π_θ << π_ref: unbiased on avera
 # The *true* KL for this choice has a bound. As $\pi_\theta$(`</think>`) $\to 0$, it goes to
 # $\log(1/0.5)$ = 0.69 nats per completion. The variance of the estimator has no bound: it grows
 # like $\pi_{\text{ref}}^2/\pi_\theta$. With `beta > 0`, the same term is in the *loss*, thus those
-# rare tokens also get large gradients. Read a logged KL as a mean over a series of steps, not step
-# by step.
+# rare tokens also get large gradients. Read a logged KL as a moving mean over steps, not step by
+# step.
 #
 # ## On a real GPU (T1)
 #
@@ -419,7 +419,7 @@ print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder ta
 # The advantage is the reward minus the group mean, divided by the group std. Thus we need no value
 # model, for the training or for the serving.
 #
-# "We showed the mechanism on a toy: a 100K-parameter transformer that can add six digits only if it
+# "We made sure of the mechanism on a toy: a 100K-parameter transformer that can add six digits only if it
 # writes partial sums first. A warm-up showed both behaviours. After it, a reward for correct answers
 # alone took accuracy from 0.63 to 0.94 in the recorded run. It took the full-scratchpad share from
 # 54% to 96%. Completion length rose with it, because thinking was what made the answers correct.
@@ -443,5 +443,5 @@ print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder ta
 #
 # **Drill 3.** *`clip_frac` is always 0. Is the clip broken?* No. With one gradient step per rollout
 # batch (`num_iterations=1`, the default of TRL), the importance ratio is exactly 1. The clip acts
-# only when the trainer uses a batch again, or when weights that differ from the weights of the
-# trainer generated the batch.
+# only in two cases. The trainer uses a batch again, or the batch came from weights that differ from
+# the weights of the trainer.

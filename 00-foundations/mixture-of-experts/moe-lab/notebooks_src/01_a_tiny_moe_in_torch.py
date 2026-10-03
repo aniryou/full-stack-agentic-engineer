@@ -13,10 +13,10 @@
 #   times. The FLOPs per token increase approximately $k$ times.
 # * Nothing in the next-token loss asks the router to spread the tokens. With top-1 routing, the experts that
 #   the router selects early get the gradient, become better and get more selections. This is **router
-#   collapse**: a few experts carry the traffic, and the other experts get almost no tokens. The cause at the
-#   start is that the router sees almost the same input for every token. Real hidden states share a large
-#   common direction, thus the same few experts win from step 0. Dead experts still cost memory, and the model
-#   loses the capacity that these experts had to add. In serving, the GPU that holds a hot expert does the
+#   collapse**: a few experts carry the traffic, and the other experts get almost no tokens. At the start, the
+#   router sees almost the same input for every token, because real hidden states share a large common
+#   direction. Thus the same few experts win from step 0. Dead experts still cost memory, and the model loses
+#   the capacity that these experts were there to add. In serving, the GPU that holds a hot expert does the
 #   most work.
 # * There are two solutions. The first is the **Switch auxiliary loss** $\alpha \cdot E \cdot \sum f_e P_e$,
 #   which pushes the probabilities of the router toward uniform. The second is the **auxiliary-loss-free bias
@@ -208,7 +208,7 @@ print("✅ uniform -> k (HF normalisation), full collapse -> E; Megatron's versi
 #
 # The three runs have the same model, the same data and the same seed. Only the balance method is different:
 #
-# * `none`.
+# * `none`: no balance method.
 # * `aux`: the loss of Exercise 1.3 with $\alpha = 0.1$. This is larger than the usual 0.01, because a
 #   400-step run has only a short time.
 # * `bias`: the auxiliary-loss-free rule of Exercise 1.4, with a step of 0.01 for each update.
@@ -364,8 +364,8 @@ print("✅ a healthy router keys on the token in front of it far more than on th
 # ## Worked example: record the router with hooks (a preview of notebook 02)
 #
 # `TinyTopKRouter` returns `(logits, weights, indices)`, as the Hugging Face v5 routers do.
-# `moelab.hooks.RouterRecorder` is for OLMoE, Mixtral and Qwen-MoE. Thus it records `TinyTopKRouter` with no
-# change.
+# `moelab.hooks.RouterRecorder` is for OLMoE, Mixtral and Qwen-MoE. Because `TinyTopKRouter` returns the same
+# tuple, the recorder records it with no change.
 
 # %%
 if HAS_TORCH:
@@ -399,11 +399,11 @@ else:
 # specialise, but by token much more than by topic. Thus the hot set changes with the traffic mix, and we
 # measure it. We do not guess it."
 #
-# **Drill 1.** *Your aux loss reads 2.0. Does the router collapse?* It depends on the normalisation. The
+# **Drill 1.** *Your aux loss reads 2.0. Is the router in collapse now?* It depends on the normalisation. The
 # transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2 is ideal), and the loss of
 # Megatron and of MegaBlocks is 1. Look at the max/mean load and the dead experts, not at the raw loss.
 #
-# **Drill 2.** *Why does the DeepSeek-V3 bias not change the outputs in the way that the aux loss can?* The
+# **Drill 2.** *Why does the DeepSeek-V3 bias not make the outputs worse in the way that the aux loss can?* The
 # rule adds the bias to the scores only for the top-k selection. The gate weights come from the unbiased
 # scores. Also, no gradient term competes with the language-model loss.
 #

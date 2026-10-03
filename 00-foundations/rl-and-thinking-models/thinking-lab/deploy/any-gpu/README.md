@@ -49,7 +49,7 @@ os.environ["THINKLAB_URL"] = "http://127.0.0.1:8000"     # the notebooks now mea
 ```
 
 Or, from a terminal on any GPU box, run `./serve.sh` (Qwen3-0.6B) or `MODEL=Qwen/Qwen3-1.7B ./serve.sh`.
-Free Colab sessions have limits, and Colab does not guarantee them. Kaggle gives about 30 GPU-hours a week (verify,
+Free Colab sessions have limits. Colab does not guarantee a session. Kaggle gives about 30 GPU-hours a week (verify,
 see [`COMPUTE.md`](../../../../../COMPUTE.md)).
 
 ## The flags that matter for thinking models
@@ -83,7 +83,7 @@ push the new weights back into vLLM. TRL's colocate mode does that at each step.
 
 For a full TRL run, start from `thinklab.rollout.trl_grpo_config("T4")`. It sets these values (TRL 1.14.0 names):
 
-- `fp16=True, bf16=False`. A T4 has no bf16, and `GRPOConfig` turns bf16 on if you do not set this value.
+- `fp16=True, bf16=False`. A T4 has no bf16, and `GRPOConfig` turns bf16 on if you do not set `fp16`.
 - `use_vllm=True, vllm_mode="colocate"`.
 - `num_generations=8`.
 - `max_completion_length=256`.
@@ -95,9 +95,7 @@ The `[vllm]` extra of TRL 1.14.0 pins `vllm>=0.20.0,<=0.30.0`.
 * **RunPod / Vast.ai** give you a container. Select the `vllm/vllm-openai:v0.30.0` image. Put
   `Qwen/Qwen3-4B --reasoning-parser qwen3 --max-model-len 16384` in the container arguments. Expose port 8000. Set
   `--api-key`, because the endpoint is public. A 24 GB RTX 4090 costs approximately $0.3-0.4/hr (verify in
-  [`COMPUTE.md`](../../../../../COMPUTE.md)).
-
-  Per-second billing makes the cost of an hour's session a few cents.
+  [`COMPUTE.md`](../../../../../COMPUTE.md)). Per-second billing makes the cost of an hour's session cents.
 * **Lambda** (and GCP Compute Engine) give you a VM. Install Docker and the NVIDIA Container Toolkit (layer 02), or
   run `pip install vllm`. Then run `./serve.sh`.
 * If you do not want the network in your latencies, run the notebooks **on the same machine**

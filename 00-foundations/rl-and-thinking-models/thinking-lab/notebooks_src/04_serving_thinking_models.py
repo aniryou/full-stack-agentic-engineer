@@ -105,10 +105,10 @@ print(f"✅ [{LABEL}] with thinking on, the mean output grows {statistics.fmean(
 # %% [markdown]
 # ## Worked example: the capacity primer's arithmetic, with long outputs
 #
-# The worked example of the capacity primer serves Mistral Small 3 (24B) on H100s in fp8. It has 8.33 requests per
-# second, 1,500 tokens in and 300 out, and 40 ms per output token. The next cell uses the same formulas with
-# 3,000-token outputs (thinking plus answer). `capacity_primer_view` re-implements `capacity.py`.
-# `tests/test_reuse.py` compares it with that file.
+# The worked example of the capacity primer serves Mistral Small 3 (24B) on H100s in fp8. The workload of that
+# example is 8.33 requests per second, 1,500 tokens in and 300 out, and 40 ms per output token. The next cell uses
+# the same formulas with 3,000-token outputs (thinking plus answer). `capacity_primer_view` re-implements
+# `capacity.py`. `tests/test_reuse.py` compares it with that file.
 
 # %%
 rps = 10_000 * 0.10 * 0.5 / 60
@@ -124,7 +124,7 @@ print(f"memory: {views[1][1]['gpus_for_memory'] / views[0][1]['gpus_for_memory']
 # increases 10×. Also, the average context of each session almost doubles (from 1,650 to 3,000 tokens).
 #
 # These formulas charge every token at the 40 ms of the SLO. This gives a GPU count that is too high (6 here). It
-# also makes a looser SLO seem to cost more. PRIMER §7 "What thinking does to serving" closes Little's law on the
+# also makes a looser SLO seem to cost more. PRIMER §7 "What thinking does to serving" applies Little's law at the
 # step at which the fleet really runs (`rlcore.workload.plan_steady`: 3 GPUs). It still finds 18× the GPUs for KV
 # (2.75 against 0.15). `derive_shape` (in the check of Exercise 4.2) works the same way: it uses the ITL at the batch.
 #
@@ -277,7 +277,8 @@ print(f"[{LABEL}] turn 2: prompt {c2.prompt_tokens} tokens, cached {c2.cached_to
 # prompt. Return the number of prompt tokens that come from the cache. Calculate it in three steps:
 #
 # 1. Find the length of the common prefix of `prev` and `nxt`.
-# 2. Set its maximum to `len(nxt) − 1`. The engine always computes at least the last prompt token.
+# 2. If the length is more than `len(nxt) − 1`, use `len(nxt) − 1`. The engine always computes at least the
+#    last prompt token.
 # 3. Round it *down* to whole blocks.
 
 # %% exercise
@@ -364,7 +365,7 @@ target.stop()
 # export THINKLAB_URL=http://127.0.0.1:8000
 # ```
 #
-# Run the notebook again. Then the length table, the live run and the two-turn `cached_tokens` become measurements.
+# Run the notebook again. The length table, the live run and the two-turn `cached_tokens` become measurements.
 # Then change one knob at a time. Monitor `vllm:kv_cache_usage_perc`, `vllm:num_preemptions` and
 # `vllm:inter_token_latency_seconds`. Change these knobs:
 #
@@ -372,9 +373,9 @@ target.stop()
 # * `--max-num-seqs 32`.
 # * The rate.
 #
-# Speculative decoding (04 serving-engine PRIMER §7 "Speculative decoding") is worth a test on long outputs. An
-# n-gram draft finds repetition in reasoning traces. Also, the long decode is memory-bound, and speculation pays in
-# that condition. Measure it with notebook 05 of the 04 lab.
+# Speculative decoding (04 serving-engine PRIMER §7 "Speculative decoding") is worth a test on long outputs, for
+# two reasons. First, the n-gram draft method finds repetition in reasoning traces. Second, the long decode is
+# memory-bound, and speculation pays in that condition. Measure it with notebook 05 of the 04 lab.
 
 # %% [markdown]
 # ## In a design review
@@ -387,9 +388,9 @@ target.stop()
 # capacity primer, that is about 18 times the GPUs for KV. TTFT almost does not change, but the *answer* starts
 # seconds later.
 #
-# "We limit the tail with a thinking budget, and we set `max_model_len` from that budget. This also sets the worst
-# case that the KV pool must hold. We route by effort at the gateway, so the model thinks only where thinking pays.
-# We also record the cost per correct answer. Multi-turn chats do not reuse the thinking KV, because the template
+# "We limit the tail with a thinking budget, and we set `max_model_len` from that budget. `max_model_len` also sets the
+# worst case that the KV pool must hold. We route by effort at the gateway, so the model thinks only where thinking
+# pays. We also record the cost per correct answer. Multi-turn chats do not reuse the thinking KV, because the template
 # drops it. The prefix cache stops at the last assistant header, and the engine prefills the answer again."
 #
 # **Drill 1.** *We turned on thinking and TTFT is unchanged, but users say that it became slow. Which metric?*
@@ -398,8 +399,8 @@ target.stop()
 #
 # **Drill 2.** *KV usage gets to 100%, and `vllm:num_preemptions` increases only on the thinking route. What are
 # the solutions?* The solutions are a thinking budget (a shorter tail), a lower `max_model_len` to match it, fewer
-# concurrent sequences per replica (`--max-num-seqs`), or more replicas. The long tail fills the pool,
-# not the mean.
+# concurrent sequences per replica (`--max-num-seqs`), or more replicas. The long tail fills the pool.
+# The mean does not fill it.
 #
 # **Drill 3.** *Why is our multi-turn prefix hit rate lower with the thinking model?* The template renders the
 # earlier assistant turns without their reasoning. The generated tokens of turn $N$ are not a prefix of the prompt of

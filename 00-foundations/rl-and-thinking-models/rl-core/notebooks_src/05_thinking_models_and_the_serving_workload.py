@@ -1,9 +1,11 @@
 # %% [markdown]
 # # 05 · Thinking models and the serving workload
 #
-# **Tier:** T0. It needs only a CPU, the standard library and numpy, and no network. It runs in well under a
-# minute. Every latency and GPU count is a **model**, not a measurement: the capacity primer's formulas plus a
-# roofline step. Two `thinking-lab` notebooks ask the same questions against a server:
+# **Tier:** T0. It needs only a CPU, the standard library and numpy. It needs no network. It runs in well under a
+# minute. Every latency and GPU count is a **model**, not a measurement. The model is the capacity primer's
+# formulas plus a roofline step.
+#
+# Two `thinking-lab` notebooks ask the same questions against a server:
 # `02_a_thinking_model_on_one_gpu` and `04_serving_thinking_models`. The server is a T0 fake server that emits
 # `reasoning` deltas, or real vLLM with Qwen3 and `--reasoning-parser` on a T4.
 #
@@ -37,7 +39,8 @@ H100, SMALL = w.GPUS["H100"], w.MISTRAL_SMALL
 # ## Worked example 1 — how a model comes to think: rejection sampling, then distillation
 # The recipe of DeepSeek-R1 alternates RL with **rejection-sampling SFT**. This method samples many answers, keeps
 # the correct answers and fine-tunes on them. On the ThinkTask, correct answers are longer on average, because
-# thinking helps. Thus an imitation of the answers that stay makes the thinking longer, even with no RL at all.
+# thinking helps. Thus an imitation of the correct answers that the method keeps makes the thinking longer, even
+# with no RL at all.
 
 # %%
 think = ThinkTask(e0=0.8, q=0.15, max_think=16)
@@ -71,9 +74,9 @@ for name, p in (("teacher (RL)", teacher), ("student (SFT on traces)", student))
 
 # %% [markdown]
 # The student gets the thinking behaviour of the teacher from the outputs of the teacher only. This is why the R1
-# distills (Qwen- and Llama-based, 1.5B–70B) used only SFT on ~800k samples. It is also why, in the R1 comparison,
-# the distillation of a strong model gave better results than RL directly on the small base. The numbers are AIME
-# 2024: 72.6 against 47.0 for 32B (primer §5, verify).
+# distills (Qwen- and Llama-based, 1.5B–70B) used only SFT on ~800k samples. This is also why, in the R1
+# comparison, the distillation of a strong model gave better results than RL directly on the small base. The scores
+# on AIME 2024 are 72.6 against 47.0 for 32B (primer §5, verify).
 #
 # ## Worked example 2 — a heavy-tailed length distribution
 # Thinking lengths change with the difficulty of the question. The result is a mixture that looks lognormal. The
@@ -95,11 +98,11 @@ print(f"Qwen3-0.6B: {kv:.0f} kB of KV per token ({kv * 1000:,.0f} B); an 8K-toke
 # ## Worked example 3 — the capacity primer's bank, with and without thinking
 # `00-foundations/gpu-capacity-planning` calculates the size of an internal assistant. The workload is 8.33
 # requests/s, 1,500 tokens in, 300 out and 40 ms TPOT, with Mistral Small 3 (24B) in FP8 on H100s. `w.plan` gives
-# the same numbers. Then it adds the thing that its `decode_aggregate` does not include: HBM and the ITL SLO limit
-# the batch per GPU.
+# the same numbers as the capacity primer. Then it adds the thing that the `decode_aggregate` of the capacity primer
+# does not include: HBM and the ITL SLO limit the batch per GPU.
 #
 # Like the primer, `w.plan` gives every output token the TPOT of the SLO. But `w.plan_steady`
-# lets a request live as long as the step at which the fleet actually runs. Then
+# lets a request live as long as the step at which the fleet actually runs. With this model,
 # $N = \text{rps} \cdot (\text{TTFT} + \text{out} \cdot \operatorname{step}(b))/b$ GPUs hold a steady batch $b$ per
 # GPU (`w.gpus_for_batch`).
 
@@ -122,9 +125,9 @@ print(f"decode_aggregate alone would batch all 1,000 on one GPU: "
 
 # %% [markdown]
 # Ten times the output tokens needs eighteen times the GPUs for memory. The numbers are 5.12 against 0.28 at the
-# TPOT of the SLO, and 2.75 against 0.15 at the step at which the fleet runs. The concurrency increases with the
-# output (Little's law). Also, each live session holds 1.8× the KV (3,000 average context against 1,650). The
-# decode *throughput* that is necessary is not the binding constraint.
+# TPOT of the SLO, and 2.75 against 0.15 at the step at which the fleet runs. There are two causes. The concurrency
+# increases with the output (Little's law). Also, each live session holds 1.8× the KV (3,000 average context
+# against 1,650). The decode *throughput* that is necessary is not the binding constraint.
 #
 # Read the last two rows of `w.plan` carefully. A 20 ms SLO halves the lifetime that the convention assumes. Thus
 # it needs *fewer* GPUs (3) than the 40 ms SLO (6). That is an artefact.
@@ -303,8 +306,8 @@ print(f"✅ turn 2: {prompt2:,} tokens, {hit2:,} cached, {prefill2} prefilled �
 # %% [markdown]
 # ## Exercise 5.5 — route by effort
 # Use `acc`, `share`, `no_think` and `thinking` from worked example 7. Set `best_policy` to the routing with the
-# lowest cost per correct answer. The routing is a `{"easy": ..., "hard": ...}` with the values "on" or "off". The
-# overall accuracy must be at least 0.90.
+# lowest cost per correct answer. The routing is a dictionary `{"easy": ..., "hard": ...}` with the values "on" or
+# "off". The overall accuracy must be at least 0.90.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -347,9 +350,9 @@ print(f"✅ keeping only correct samples: thinking {before['length']:.2f} → {a
 # prefill-heavy chat workload into a decode-heavy workload with a heavy tail. Our p99 thinking length is ten times
 # the median.
 #
-# "The KV grows while a request thinks. Thus the memory-time per request goes as $P \cdot L + L^2/2$. At the same
-# arrival rate, 10× the output is ~18× the GPUs for memory. These are the capacity primer's formulas, with HBM and
-# the ITL SLO as the limits of the batch. When the ITL SLO is tight, it binds first.
+# "The KV grows while a request thinks. Thus the memory-time per request goes as $P \cdot L + L^2/2$. Thus, at the
+# same arrival rate, 10× the output is ~18× the GPUs for memory. This calculation uses the capacity primer's
+# formulas, with HBM and the ITL SLO as the limits of the batch. When the ITL SLO is tight, it binds first.
 #
 # "We calculate the size at the step at which the fleet actually runs, not at the TPOT of the SLO. If we do not,
 # the looser SLO seems to have a higher cost. We set max_model_len for the tail. We control the cost with a

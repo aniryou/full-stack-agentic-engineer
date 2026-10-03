@@ -82,8 +82,8 @@ for p_old in (0.01, 0.5, 0.9):
 
 # %% [markdown]
 # The cap is multiplicative. Thus a token that the model rarely selects can increase only by a small quantity in
-# one update. A likely token has only 1 as its cap. This is the argument of DAPO that a symmetric clip drives the
-# entropy down. The solution of DAPO is **clip-higher** ($\varepsilon_{\text{low}}$ 0.2,
+# one update. But a likely token has only 1 as its cap. This asymmetry is the argument of DAPO that a symmetric
+# clip drives the entropy down. The solution of DAPO is **clip-higher** ($\varepsilon_{\text{low}}$ 0.2,
 # $\varepsilon_{\text{high}}$ 0.28).
 #
 # Note the TRL default `num_iterations=1`. If you sample and update with the same weights, $\rho \equiv 1$ and the
@@ -104,9 +104,9 @@ for name, fn in (("k1", grpo.k1), ("k3", grpo.k3)):
 print("k3 at log(π_ref/π) = 0.1, −0.1, 0.5:", [round(float(grpo.k3(0.0, d)), 7) for d in (0.1, -0.1, 0.5)])
 
 # %% [markdown]
-# Both are unbiased. $k_3$ is never negative and has a fraction of the spread. This is important when the loss
-# sums it over thousands of tokens. TRL's default is $\beta$ = 0: no reference model in memory at all (DAPO also
-# does not use the KL). The DeepSeek-R1 recipe used $\beta$ = 0.001 (per TRL's docs, verify).
+# Both are unbiased. $k_3$ is never negative and has a fraction of the spread. The low spread is important when
+# the loss sums $k_3$ over thousands of tokens. TRL's default is $\beta$ = 0: no reference model in memory at all
+# (DAPO also does not use the KL). The DeepSeek-R1 recipe used $\beta$ = 0.001 (per TRL's docs, verify).
 #
 # ## Worked example 4 — GRPO on the bracket task
 # The run uses eight samples per prompt, two groups per step and $\mu$ = 4 gradient steps per batch. Thus the clip
@@ -203,8 +203,8 @@ for ds in (False, True):
 # Without dynamic sampling, the engine generates more than half of every batch, and then that part contributes
 # nothing. Thus the effective batch size changes from step to step. DAPO over-samples and keeps only informative
 # groups, so every trained batch is full. DAPO pays for this in rollouts (here, about twice as many groups
-# generated per step). TRL has no flag for it, and logs `frac_reward_zero_std`. In DAPO's ablation, this was the
-# largest single gain (AIME 2024 avg@32: from 42 to 50, with simple GRPO at 30, primer §4, verify).
+# generated per step). TRL has no flag for dynamic sampling, and it logs
+# `frac_reward_zero_std`. In DAPO's ablation, this was the largest single gain (AIME 2024 avg@32: from 42 to 50, with simple GRPO at 30, primer §4, verify).
 #
 # ## Worked example 7 — where the compute goes
 # One synchronous RL step has 512 prompts × 16 samples = 8,192 completions of a 7.6B model on 64 H100s. The
@@ -230,8 +230,8 @@ print(f"generate {r['generate_s']:.0f} s, train {r['train_s']:.0f} s → rollout
 # must absorb.
 #
 # ## Exercise 3.1 — group advantages, as TRL computes them
-# `rewards` has shape (n_groups, G). Subtract the mean of each group. Divide by its std **with Bessel's
-# correction** plus 1e-4.
+# `rewards` has shape (n_groups, G). Subtract the mean of each group. Divide by the std of each
+# group **with Bessel's correction** plus 1e-4.
 
 # %% exercise
 def my_group_advantages(rewards):
@@ -328,7 +328,7 @@ print("✅ a graded penalty inside the last 20 tokens, so 'nearly too long' is a
 # Fill two `GRPOConfig`s:
 #
 # - `dapo_cfg`: DAPO's recipe. It has clip-higher (0.2/0.28), token-level loss, no KL, overlong filtering, soft
-#   overlong punishment with a cache of 4,096, dynamic sampling, $G$ = 16.
+#   overlong punishment with a cache of 4,096, dynamic sampling, and $G$ = 16.
 # - `r1_cfg`: GRPO as DeepSeekMath defined it and R1 used it. It has per-sequence mean, division by the group std,
 #   $\varepsilon$ = 0.2 on both sides, and $\beta$ = 0.001. (The R1 paper itself writes one ratio per whole
 #   completion, primer §4.)
@@ -352,8 +352,8 @@ print("✅ TRL's defaults are neither: beta=0.0, loss_type='dapo', no clip-highe
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "For tasks that a program can grade (math answers, unit tests, output formats), we
-# use RL with verifiable rewards and GRPO. Each prompt gets a group of $G$ samples. The group mean is the
+# **The two-minute version.** "For tasks where we can do a check of the result (math answers, unit tests, output
+# formats), we use RL with verifiable rewards and GRPO. Each prompt gets a group of $G$ samples. The group mean is the
 # baseline. Thus there is no value model. The memory holds the policy, a reference only if $\beta > 0$, and the
 # rollout engine.
 #

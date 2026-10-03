@@ -76,8 +76,8 @@ For prices, free tiers and how to get GPUs on GCP and on other platforms, see [`
 | | Read | For |
 |---|---|---|
 | before | [`transformers`](../transformers/) (primer §6 training, §7 inference) and [`gpu-capacity-planning`](../gpu-capacity-planning/PRIMER.md) | The training objective and what post-training is. Weights, KV bytes, TTFT and TPOT, which §7 uses again and reproduces. |
-| beside | [`04 serving-engine`](../../04-inference-engine/serving-engine/README.md) primer §5, §6, §7, §11, and [`vllm-internals`](../../04-inference-engine/vllm-internals/README.md) §9 | Prefix caching, sampling, speculative decoding and measurement. This is the engine that a rollout generator and a thinking model both run on. Also LoRA adapters in flight. |
-| after | [`distillation`](../distillation/README.md) (primer §3, §4, §5) | How to copy a teacher into a small student. This covers SFT on its traces and on-policy distillation as RL with a dense per-token reward. It also covers what a distilled thinking model gets from the teacher. |
+| beside | [`04 serving-engine`](../../04-inference-engine/serving-engine/README.md) primer §5, §6, §7, §11, and [`vllm-internals`](../../04-inference-engine/vllm-internals/README.md) §9 | Prefix caching, sampling, speculative decoding and measurement. These sections describe the engine that a rollout generator and a thinking model both run on. They also cover LoRA adapters in flight. |
+| after | [`distillation`](../distillation/README.md) (primer §3, §4, §5) | How to copy a teacher into a small student. This covers SFT on the traces of the teacher and on-policy distillation as RL with a dense per-token reward. It also covers what a distilled thinking model gets from the teacher. |
 | after | [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) | Cost per conversation, output pricing and routing by effort at the gateway. |
 | after | [`07-application-agent-framework`](../../07-application-agent-framework/): the evals notebook of the platform lab, and [`sandboxed-execution`](../../07-application-agent-framework/sandboxed-execution/README.md) | Evals with intervals for the true objective. How to run model-generated code and tool calls for agentic RL rollouts. |
 
@@ -87,9 +87,9 @@ For prices, free tiers and how to get GPUs on GCP and on other platforms, see [`
   does not change across seeds, and tests pin it. But the magnitudes are those of the toy. The serving numbers come
   from the formulas of the capacity primer plus a roofline step, not from hardware.
 - **Measured only in the lab.** Real reasoning outputs, ITL under long outputs and GRPO on a transformer come from
-  the lab. They come from its T0 runs (torch on CPU) and its T1 runs. The fake server and the bundled outputs of the lab have the
-  labels simulated or illustrative.
-- **Dated facts.** Some facts have a date. They are the reasoning flags and field names of vLLM 0.30.0
-  (`reasoning`, not `reasoning_content`) and the `GRPOConfig` defaults of TRL 1.14.0. They are also the Qwen3 and
-  DeepSeek-R1 facts and all prices. These facts are as of September 2026, and they have the mark `(verify)`. The
+  the lab. They come from its T0 runs (torch on CPU) and its T1 runs. The fake server and the bundled outputs of
+  the lab are labelled simulated or illustrative.
+- **Dated facts.** These facts have a date: the reasoning flags and field names of vLLM 0.30.0 (`reasoning`, not
+  `reasoning_content`) and the `GRPOConfig` defaults of TRL 1.14.0. The Qwen3 and DeepSeek-R1 facts and all prices
+  also have a date. These facts are as of September 2026, and they have the mark `(verify)`. The
   [Verify list](PRIMER.md#verify-list) of the primer collects them.

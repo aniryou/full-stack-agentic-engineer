@@ -17,7 +17,7 @@
 #   and substitutes $r$ into Bradley–Terry. The constant cancels. Then the policy trains directly on pairs with a
 #   classification loss.
 # - Its **implicit reward** $\beta \log(\pi/\pi_{\text{ref}})$ is what TRL logs as `rewards/chosen`. DPO gives up
-#   two things. It sees only the pairs (no exploration). Also, it optimises the *margin*, thus the likelihood of
+#   two things. It sees only the pairs (no exploration). Second, it optimises the *margin*, thus the likelihood of
 #   the chosen answer can decrease.
 # - Also, any bias in the annotators (for example, a taste for long answers) becomes the reward. Harder
 #   optimisation turns that bias into padding.
@@ -64,8 +64,8 @@ print("σ(2 − 1) =", round(float(pref.bt_prob(2, 1)), 4), "= σ(12 − 11) =",
 #
 # ## Worked example 2 — RLHF in two stages: fit a reward model, then RL against it with a KL penalty
 # The preferences are over bracket strings, from a true reward $r = 3 \cdot \text{balanced}$. The notebook samples
-# the pairs from the reference, as the collection of a real dataset does. Stage 1 fits a one-feature reward
-# model. Stage 2 runs REINFORCE with $\beta$ = 1 against it. The target is the closed form
+# the pairs from the reference. A real dataset gets its pairs in the same way. Stage 1 fits a one-feature
+# reward model. Stage 2 runs REINFORCE with $\beta$ = 1 against it. The target is the closed form
 # $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$.
 
 # %%
@@ -111,8 +111,8 @@ print(f"implicit reward β·log(π/π_ref): balanced minus unbalanced = {ir[ok >
 # - `rewards/chosen` is **negative**: the log-ratios of the chosen strings decreased.
 #
 # DPO pushes the *margin*. When the two answers of a pair share most of their tokens (here: the same states), DPO
-# also wins with a decrease of both log-ratios. The rejected one decreases faster. Monitor that metric in real
-# runs. A chosen log-probability that decreases is the usual first sign of over-training.
+# also wins with a decrease of both log-ratios. The rejected one decreases faster. Monitor `rewards/chosen` in
+# real runs. A chosen log-probability that decreases is the usual first sign of over-training.
 #
 # ## Worked example 4 — PPO's value side, in brief: GAE
 # PPO gives every token its own advantage from a learned value model ${V(s)}$:
@@ -122,7 +122,8 @@ print(f"implicit reward β·log(π/π_ref): balanced minus unbalanced = {ir[ok >
 # $$
 #
 # In RLHF, the reward-model score is on the last token, and $-\beta \log(\pi/\pi_{\text{ref}})$ is on every
-# token. The value model is typically as large as the policy. GRPO saves this memory (notebook 03).
+# token. The value model is typically as large as the policy. GRPO saves the memory of this value model
+# (notebook 03).
 
 # %%
 r_tok, v_tok = [0.0, 0.0, 1.0], [0.5, 0.6, 0.8]
@@ -302,9 +303,9 @@ print("✅ IPO stops at a margin of 1/(2β) = 5; DPO's loss keeps (slowly) payin
 #
 # "DPO gets the same KL-regularised optimum in closed form: $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$. Thus
 # $r$ is $\beta \log(\pi/\pi_{\text{ref}})$, up to a constant that cancels in the pairwise likelihood. We train
-# the policy directly on pairs with a classification loss. This needs two networks and no samples. We monitor
-# rewards/margins and rewards/chosen. We expect the chosen log-ratio to decrease, but a collapse means
-# over-training.
+# the policy directly on pairs with a classification loss. This needs two networks, and the policy does not
+# sample. We monitor rewards/margins and rewards/chosen. We expect the chosen log-ratio to decrease, but a
+# collapse means over-training.
 #
 # "The main risk on each path is the preference data itself. The biases of the annotators become the reward,
 # length above all. Harder optimisation turns them into the behaviour. Thus we control for length, cap the KL
@@ -317,7 +318,8 @@ print("✅ IPO stops at a margin of 1/(2β) = 5; DPO's loss keeps (slowly) payin
 #    the $Z$ term cancels. Thus you can write the likelihood in terms of the policy alone.
 # 2. *rewards/chosen decreases during DPO. Is it a bug?* Answer: not necessarily. DPO optimises the margin. A
 #    decrease of both log-ratios (the rejected one faster) wins it. A collapse of the chosen
-#    log-probability or a degradation of the generations is a cause for concern. Then decrease the learning rate or the epochs, and increase $\beta$.
+#    log-probability or a degradation of the generations is a cause for concern. If that occurs, decrease the
+#    learning rate or the epochs, and increase $\beta$.
 # 3. *After RLHF, answers are 3× longer, and the win-rate against the old model is up. Do you ship it?* Answer:
 #    not on that evidence. Length is the classic reward-model exploit, and judges share the bias. Compare at
 #    matched length or with a length-controlled judge. Also examine the task accuracy.
