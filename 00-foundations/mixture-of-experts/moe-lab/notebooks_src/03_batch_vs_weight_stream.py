@@ -389,5 +389,5 @@ else:
 # experts). Under EP, it hurts (the GPU that holds the hot experts is the slowest).
 #
 # **Drill 3.** *Is the padding in the fused MoE kernel wasted money at batch 1?* It wastes FLOPs, not time.
-# The step is memory-bound, thus the idle tensor cores cost nothing. It is important near the compute-bound
+# The step is memory-bound. Thus the idle tensor cores cost nothing. It is important near the compute-bound
 # regime, where a tuned `BLOCK_SIZE_M` for each batch size recovers it.

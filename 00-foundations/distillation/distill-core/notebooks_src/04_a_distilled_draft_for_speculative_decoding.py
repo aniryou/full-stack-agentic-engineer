@@ -176,7 +176,7 @@ print("✅ α = 0.8, k = 4 → 3.36 tokens per pass; at c = 0.1 the best depth i
 # ## Exercise 4.3 — greedy against probabilistic drafting
 # Use a *perfect* draft ($q$ = $p$ at each position). The target samples at $T$ = 1. Predict `greedy_alpha`, the mean
 # acceptance when the draft proposes its argmax. Also predict `prob_alpha`, the mean acceptance when the draft samples
-# from $q$. (In this dialect, the target's top token has probability 0.8 at each context.)
+# from $q$. In this dialect, the target's top token has probability 0.8 at each context.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -242,7 +242,7 @@ print("✅ 16 units: the smallest draft that holds the target — more acceptanc
 #
 # "We select the draft size where the speedup gets to its maximum. We make sure that the vocabularies are the same (vLLM
 # needs this). For sampled traffic, we make probabilistic drafts, because the target's top-token probability puts a cap
-# on greedy drafts. Also, we read vLLM's counters correctly: $\alpha$ is the position-0 rate, and the 'draft acceptance
+# on the acceptance of greedy drafts. Also, we read vLLM's counters correctly: $\alpha$ is the position-0 rate, and the 'draft acceptance
 # rate' is $\left(E - 1\right)/k$."
 #
 # **Drill questions**

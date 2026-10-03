@@ -16,7 +16,7 @@ You can defend these numbers in a design review.
 2. Run `cd moe-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`. The 75 tests run in ~30 s.
    Then open [`01_the_moe_layer`](moe-core/notebooks/01_the_moe_layer.ipynb).
 3. If torch is installed, train a small MoE in the lab, [`moe-lab/`](moe-lab/README.md). A CPU is sufficient for
-   this step. Use notebook [`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb). If you have
+   this step. Use the notebook [`01_a_tiny_moe_in_torch`](moe-lab/notebooks/01_a_tiny_moe_in_torch.ipynb). If you have
    a GPU of any type, run [`02_watch_the_router`](moe-lab/notebooks/02_watch_the_router.ipynb). It records the
    choices of a real router.
 
@@ -36,9 +36,9 @@ optional.*
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`PRIMER.md`](PRIMER.md) | Explain the concepts of §1–9. The first four sections are about why sparsity, the MoE layer, routing and load balance, and training in brief. The next two are about which experts a step touches, and how MoE runs on GPUs (fused kernels, EP, wide-EP, offload, quantized experts). The last three are about sizing and cost, failure modes, and where to run it. After them come a design-review walkthrough and six drills. Every computed number comes from the core. | ~2 h. Read it together with the core. | — |
+| [`PRIMER.md`](PRIMER.md) | Explain the concepts of §1–9. The first four sections are about the reasons for sparsity, the MoE layer, routing and load balance, and training in brief. The next two are about which experts a step touches, and how MoE runs on GPUs (fused kernels, EP, wide-EP, offload, quantized experts). The last three are about sizing and cost, failure modes, and where to run it. After them come a design-review walkthrough and six drills. Every computed number comes from the core. | ~2 h. Read it together with the core. | — |
 | [`moe-core/`](moe-core/README.md) | **predict**: the package `moecore` has six numpy modules (`moe`, `routing`, `train`, `touched`, `ep`, `sizing`) and five fill-in notebooks. It reproduces the MoE table of layer 01 and the all-to-all numbers of layer 02. | ~7 h with the primer | T0 |
-| [`moe-lab/`](moe-lab/README.md) | **measure**: the package is `moelab`. It has a small MoE in torch, router hooks on real MoE models, and a measurement of decode step time against batch in vLLM. It also has `--enable-expert-parallel` on two GPUs, and offload and 4-bit experts on a 16–24 GB GPU. It has `deploy/any-gpu/` and GKE manifests for the `l4x2` pool of the 02 lab. Every notebook falls back to a labelled T0 path. | ~8.5 h | T0 to T3 |
+| [`moe-lab/`](moe-lab/README.md) | **measure**: the package is `moelab`. It has a small MoE in torch, router hooks on real MoE models, and a measurement of decode step time against batch in vLLM. It also runs `--enable-expert-parallel` on two GPUs, and it runs offload and 4-bit experts on a 16–24 GB GPU. It has `deploy/any-gpu/` and GKE manifests for the `l4x2` pool of the 02 lab. Every notebook falls back to a labelled T0 path. | ~8.5 h | T0 to T3 |
 
 ### Work it in this order
 
@@ -77,7 +77,7 @@ the [layer README](../README.md).
 | **T2** | Kaggle 2×T4 (free, PCIe), a rented NVLink box | `--enable-expert-parallel` against tensor parallel on two GPUs | ~$0–25 per session |
 | **T3** | GCP: the cuda-and-nccl lab's `l4x2` pool (2 × L4) | a vLLM Deployment with EP = 2 on GKE, from the lab's manifests (no new Terraform) | pay per use |
 
-Prices and obtainability change monthly. See [`COMPUTE.md`](../../COMPUTE.md). The whole learning path is in
+Prices and availability change monthly. See [`COMPUTE.md`](../../COMPUTE.md). The whole learning path is in
 [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ## How it fits

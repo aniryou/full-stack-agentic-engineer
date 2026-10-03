@@ -2,11 +2,13 @@
 
 **What it does:** this deploy serves Qwen1.5-MoE-A2.7B-Chat with vLLM. The model has 14.3 B parameters
 and is 28.6 GB in bf16. 28.6 GB is more than one 24 GB L4 holds. vLLM runs on one `g2-standard-24` node
-(2 × L4, PCIe, no NVLink), as `--tensor-parallel-size 2 --enable-expert-parallel` by default. Then the
-deploy measures the serving performance of the model from a CPU Job with `vllm bench serve`. `./run.sh layout` changes the layout
-between TP, TP+EP and DP+EP on the same node. These layouts give the comparison of notebook 04 on managed hardware.
+(2 × L4, PCIe, no NVLink) with `--tensor-parallel-size 2 --enable-expert-parallel` by default. Then the
+deploy measures the serving performance of the model from a CPU Job with `vllm bench serve`.
 
-**No new Terraform.** The cluster is the cluster of layer 02. The Terraform in
+`./run.sh layout` changes the layout between TP, TP+EP and DP+EP on the same node. These layouts give
+the comparison of notebook 04 on managed hardware.
+
+**No new Terraform.** The cluster comes from layer 02. The Terraform in
 [`02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform/`](../../../../../02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/gcp/terraform/)
 creates a zonal GKE Standard cluster. The `l4x2` pool of this cluster is on by default, uses Spot, has
 0 to 2 nodes and has a GKE-managed driver. This pool is exactly the node that these manifests select
@@ -42,12 +44,12 @@ of Qwen1.5-MoE-A2.7B in `moelab.configs` by the served model id.
 got. It also shows the warning *"Using default MoE config. Performance might be sub-optimal!"* This message tells
 you that vLLM has no tuned fused-MoE config for the L4 (notebook 05).
 
-Between layouts, compare two values. The first value is the mean ITL at concurrency 1 (EP does not
-divide the experts of a token equally between the GPUs). The second value is the output tokens per
+Between layouts, compare two values. The first value is the mean ITL at concurrency 1, because EP does
+not divide the experts of a token equally between the GPUs. The second value is the output tokens per
 second at concurrency 16. Notebook 04 predicts both.
 
-**Driver.** The `vllm/vllm-openai:v0.30.0` image is a CUDA 13 build. This build must have an NVIDIA
-driver from the 580 series (verify).
+**Driver.** The `vllm/vllm-openai:v0.30.0` image is a CUDA 13 build. An NVIDIA driver from the 580
+series (verify) is necessary for this build.
 
 The pools of layer 02 install the `DEFAULT` driver of GKE. If the pod fails with a CUDA driver/runtime
 mismatch, set `gpu_driver_version = "LATEST"` in the `terraform.tfvars` of that lab. Then run

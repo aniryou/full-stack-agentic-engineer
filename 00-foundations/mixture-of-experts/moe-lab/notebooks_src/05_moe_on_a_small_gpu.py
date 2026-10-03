@@ -4,12 +4,13 @@
 # **Tier:** T1: one 16 GB T4 (free on Colab/Kaggle) or a 24 GB L4/RTX 4090. You run `vllm serve` with
 # `--cpu-offload-gb` or a 4-bit checkpoint. The notebook reads the start-up log and measures the step.
 # T0: the sizing arithmetic (**simulated**) and two start-up logs with the documented words of vLLM
-# (**illustrative**). The two logs come from the sizing of this notebook, thus they agree with it by construction.
+# (**illustrative**). The two logs come from the sizing of this notebook, thus they agree with it by
+# construction.
 #
 # ## The one-minute version
 #
-# * The **total** number of parameters sets the memory size. OLMoE-1B-7B runs 1.3 B parameters per token. But all 6.9 B
-#   (13.8 GB in 16-bit) must stay resident. On a 16 GB T4, this leaves no KV cache.
+# * The **total** number of parameters sets the memory size. OLMoE-1B-7B runs 1.3 B parameters per
+#   token. But all 6.9 B (13.8 GB in 16-bit) must stay resident. On a 16 GB T4, this leaves no KV cache.
 # * **4-bit experts** (GPTQ/AWQ INT4, or MXFP4 in gpt-oss) decrease the bytes of the experts by ~3.8x, with no
 #   PCIe traffic. They have an accuracy cost, and you measure it. They work only where kernels exist. The MXFP4
 #   path of vLLM needs compute capability 8.0 and bf16. A T4 does not have them.
@@ -17,15 +18,15 @@
 #   memory. It reads these bytes over PCIe **in every forward pass**, and the experts that the router
 #   selects do not change this. Thus its cost per step is constant, and the batch amortises it.
 # * **llama.cpp `--n-cpu-moe`** keeps the experts in CPU RAM. In small-batch decode, it *computes them
-#   on the CPU* and reads only the touched experts. Thus it is low-cost for one user. As the batch
-#   increases, the CPU FLOP/s set the limit of this path. For large prompt batches, it copies those weights to the GPU by
-#   default (`--op-offload`). The flag `--no-op-offload` keeps the work on the CPU. We read this from
-#   `common/arg.cpp`, verify.
+#   on the CPU* and reads only the touched experts, thus it is low-cost for one user. As the batch
+#   increases, the CPU FLOP/s set the limit of this path. For large prompt batches, it copies those
+#   weights to the GPU by default (`--op-offload`). The flag `--no-op-offload` keeps the work on the
+#   CPU. We read this default and the two flags from `common/arg.cpp`, verify.
 # * The memory that stays after the weights is KV cache. MoE did not make it smaller.
 #
 # The concepts are in the primer ([`PRIMER.md`](../../PRIMER.md)):
 #
-# * §6 "Running MoE on GPUs" (expert offload, quantized experts).
+# * §6 "Running MoE on GPUs" (expert offloading, quantized experts).
 # * §7 "Sizing and cost".
 # * §8 "In a design review: failure modes" (MoE on one 24 GB GPU, quantization of experts).
 #
@@ -182,8 +183,9 @@ for fname, gname, off in (("vllm_startup_olmoe_t4_offload.log", "T4", 3.0), ("vl
 # %% [markdown]
 # ## Exercise 5.4 — the price of each way off the GPU
 #
-# Write `offload_ms(gib, pcie_gbs)`. It gives the cost of UVA offload per step. UVA offload reads every
-# offloaded byte over PCIe in every forward pass (GiB = $2^{30}$ bytes, GB/s = $10^9$).
+# Write `offload_ms(gib, pcie_gbs)`. It gives the cost of UVA offload per step. This cost occurs at
+# each step because UVA offload reads every offloaded byte over PCIe in every forward pass
+# (GiB = $2^{30}$ bytes, GB/s = $10^9$).
 #
 # Then write `cpu_experts_ms(model, batch, cpu_bw_gbs=40, cpu_tflops=0.3)`. It gives the cost per step of
 # CPU experts in the style of llama.cpp, as `max(read, compute)`:
@@ -334,8 +336,9 @@ print(rep.to_markdown())
 # This is a constant toll per step, and only a large batch amortises it.
 #
 # "The CPU experts of llama.cpp read only the touched experts and compute them on the CPU. That is the correct
-# shape for a single user, but it does not scale with batch. Whatever we select, the memory that stays is
-# KV cache. MoE does not make it smaller."
+# shape for a single user, but it does not scale with batch.
+#
+# "Also, whatever we select, the memory that stays is KV cache. MoE does not make it smaller."
 #
 # **Drill 1.** *We offloaded 3 GiB with `--cpu-offload-gb`. Routing is sparse, thus only the touched experts
 # cross PCIe, correct?* No. UVA offload reads the offloaded tensors in every forward pass, and the routing

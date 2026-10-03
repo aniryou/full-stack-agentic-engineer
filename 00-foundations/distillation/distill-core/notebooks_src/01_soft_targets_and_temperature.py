@@ -16,7 +16,7 @@
 # increases. As $T \to \infty$, the soft term becomes a match of the centred logits.
 #
 # A hard label is the same loss with
-# a one-hot target. A sample of that label adds $1 - \sum p^2$ of noise per example, and the teacher's distribution does
+# a one-hot target. A label that you sample adds $1 - \sum p^2$ of noise per example, and the teacher's distribution does
 # not add this noise. That is why a student learns more per example from soft targets than a same-size model that
 # trains from scratch on the same tokens.
 #
@@ -93,7 +93,7 @@ print(f"label noise of one hard example, 1 − Σp² = {L.label_noise(lang.true_
 # The two runs use the same student, the same contexts and the same number of steps. One student trains on the sampled
 # next token. These are hard labels: the student is a same-size model that trains from scratch on the same tokens. The
 # other student trains on the teacher's distribution at those contexts (KD at $T$ = 1). $N$ = 242 is two examples per
-# context on average. $N$ = 605 is five examples per context.
+# context on average. $N$ = 605 is five examples per context on average.
 
 # %%
 results = {}
@@ -162,7 +162,7 @@ for steps in (0, 20, 100):
 # prune by importance, then distil from the parent, with many fewer training tokens per model.
 #
 # ## Exercise 1.1 — temperature
-# Write `softmax_T(z, T)`. It returns the softmax of $z\,/\,T$ along the last axis. Make it numerically stable:
+# Write `softmax_T(z, T)`. Return the softmax of $z\,/\,T$ along the last axis. Make it numerically stable:
 # subtract the max.
 
 # %% exercise
@@ -223,7 +223,7 @@ print(f"✅ the limit is {limit:.2f}: at very high T distillation is logit match
 
 # %% [markdown]
 # ## Exercise 1.4 — Hinton's full loss
-# Write `hinton_loss(v, z, y, T, alpha)`. It returns `(loss, grad)` as the mean over the rows:
+# Write `hinton_loss(v, z, y, T, alpha)`. Return `(loss, grad)` as the mean over the rows:
 #
 # $$
 # \alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}(y, q_1).

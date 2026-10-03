@@ -12,8 +12,8 @@ Then the notebooks run the same code against it.
 
 The lab pins everything to **vLLM v0.30.0** (`vllm/vllm-openai:v0.30.0`) and **TRL 1.14.0**, the versions that
 the repo uses. On 2026-09-27, a check compared the flags and field names with their sources. The lab also built its
-`SFTConfig`, `GKDConfig` and `DistillationConfig` arguments against TRL 1.14.0 with transformers 5.17.0. That is
-the version that pip resolves for the `transformers>=4.56.2` of TRL. That build was a CPU check, not a training run.
+`SFTConfig`, `GKDConfig` and `DistillationConfig` arguments against TRL 1.14.0 with transformers 5.17.0. Transformers
+5.17.0 is the version that pip resolves for the `transformers>=4.56.2` requirement of TRL. That build was a CPU check, not a training run.
 When you move to other versions, do the check again.
 
 ## Which models on which card

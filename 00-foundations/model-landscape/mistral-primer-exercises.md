@@ -29,7 +29,7 @@ In mid-2025, a team built its system on **Magistral Medium 1.2** (reasoning), **
 
 - (a) What is the migration path today?
 - (b) What do they gain?
-- (c) Name two things that are not obvious: things that break, or things that you must do again.
+- (c) Name two things that are not obvious: things that break, or things that need more work.
 
 ### 4. Licensing triage
 For each use case, say if the licence permits it, and on which model:
@@ -77,7 +77,7 @@ Use five sentences and no notes. Why is Agentic Search better than one-shot RAG?
 **(c)** Select Small 4. Its cost is ~11× lower than the cost of Medium 3.5, and the workload needs none of the agentic capability of Medium. Also, `reasoning_effort` gives you a reserve of reasoning for the hard cases, and you do not change models. These facts can change my decision:
 
 - The summaries go to a downstream agent that does multi-step tool calls.
-- A quality evaluation on the team's own documents shows that Small 4 fails on long-document coherence. In that case, Large 3, not Medium 3.5, is the next step. Large 3 is still lower in cost than Medium, and Mistral made it for long context.
+- A quality evaluation on the team's own documents shows that Small 4 fails on long-document coherence. In that case, Large 3, not Medium 3.5, is the next step. This is because Large 3 is still lower in cost than Medium, and Mistral made it for long context.
 
 The point of the exercise: **the high-cost model is rarely the answer, and the low-cost answer is not the smallest model.**
 
@@ -103,10 +103,10 @@ The point of the exercise: **the high-cost model is rarely the answer, and the l
 - No routing logic to maintain, and no errors in routing logic.
 - Reasoning becomes a per-request parameter, not a model choice.
 
-**(c) Two non-obvious breaks:**
+**(c) Two breaks that are not obvious:**
 
 - **Verbosity changes.** `reasoning_effort="high"` gives approximately the verbosity of the old Magistral. `"none"` gives approximately the chat style of Small 3.2. But do a new benchmark of anything that you adjusted to a specific output length, latency budget or token cost. It is not sufficient to point that configuration at the new model.
-- **Infrastructure shape changes.** Devstral Small was a 24B dense model that fits one GPU. Small 4 is a 119B-total, ~6.5B-active MoE (verify, 2026-09). All 119B parameters must be in memory: about 240 GB in BF16 and 120 GB in FP8 (params × bytes, [capacity primer](../gpu-capacity-planning/PRIMER.md)). Thus, in FP8, the model needs two H100s or one H200 before any KV cache. It is possible that a team that self-hosts Devstral Small on one modest GPU must provision its hardware again completely. Or the team can move down to Ministral 3 14B and accept the trade in capability.
+- **Infrastructure shape changes.** Devstral Small was a 24B dense model that fits one GPU, but Small 4 is a 119B-total, ~6.5B-active MoE (verify, 2026-09). All 119B parameters must be in memory: about 240 GB in BF16 and 120 GB in FP8 (params × bytes, [capacity primer](../gpu-capacity-planning/PRIMER.md)). Thus, in FP8, the model needs two H100s or one H200 before any KV cache. It is possible that a team that self-hosts Devstral Small on one small GPU must provision its hardware again completely. Or the team can move down to Ministral 3 14B and accept the trade in capability.
 
 ### 4. Licensing triage
 
@@ -144,6 +144,6 @@ Before you approve the design, examine these items:
 
 ### 6. Explain-it drill
 
-The index only finds candidate documents, and the model decides what to examine inside them. Iteration lets the model recover from a weak first retrieval, and thus the model is not stuck with bad chunks. Targeted navigation is better than repeated broad search: it adds accuracy and *decreases* tokens, because precision replaces retries. Then retrieval quality scales with model capability, and your chunking strategy does not set a limit on it. Also, the method is model-agnostic, and thus it improves when models improve, with no infrastructure changes.
+The index only finds candidate documents, and the model decides what to examine inside them. Iteration lets the model recover from a weak first retrieval, and thus the model is not stuck with bad chunks. Targeted navigation is better than repeated broad search: it adds accuracy and *decreases* tokens, because precision replaces retries. As a result, retrieval quality scales with model capability, and your chunking strategy does not set a limit on it. Also, the method is model-agnostic, and thus it improves when models improve, with no infrastructure changes.
 
 Tools: **search, open, navigate, read, grep.**

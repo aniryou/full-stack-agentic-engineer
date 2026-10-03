@@ -158,7 +158,7 @@ while the baselined one stays 0.029. ${R - b}$ is the **advantage**. These are t
 
 **The KL penalty to a reference model.** Maximise
 $\mathbb{E}[R] - \beta \cdot \mathrm{KL}(\pi \parallel \pi_{\text{ref}})$. Here $\pi_{\text{ref}}$ is the frozen SFT
-model. As reward shaping, the objective uses the shaped reward $R - \beta \cdot (\log \pi(y) - \log \pi_{\text{ref}}(y))$. This has exactly
+model. As reward shaping, the objective uses the shaped reward $R - \beta \cdot (\log \pi(y) - \log \pi_{\text{ref}}(y))$. The penalty part of this shaped reward has exactly
 the gradient of $-\beta \cdot \mathrm{KL}$, because $\mathbb{E}[\nabla \log \pi] = 0$ (the PPO-RLHF form). GRPO puts
 the penalty in the loss instead (§4).
 
@@ -168,7 +168,7 @@ $$
 \pi^*(y) = \frac{\pi_{\text{ref}}(y) \exp\big(R(y)/\beta\big)}{Z}, \qquad \mathrm{KL}(\pi^* \parallel \pi_{\text{ref}}) = \frac{\mathbb{E}_{\pi^*}[R]}{\beta} - \log Z
 $$
 
-This is the result for the SFT reference, with R = 1 for a balanced string (`pg.kl_optimal()` over all 256
+The table gives the result for the SFT reference, with R = 1 for a balanced string (`pg.kl_optimal()` over all 256
 strings):
 
 | β | 10 | 1 | 0.3 | 0.1 |
@@ -178,7 +178,7 @@ strings):
 
 The penalty exists for three reasons:
 
-- The reward is trustworthy only near the data that it comes from.
+- The reward is trustworthy only near the data that it was built on.
 - Fluency and language come from the reference.
 - The penalty slows the collapse onto one answer.
 
@@ -190,7 +190,7 @@ the moment when the bracket depth goes below zero. `buggy_verify` acts like a ha
 strings pass it, and 14 strings have balanced brackets. The SFT reference passes it 72.7% of the time and is right
 29.7%.
 
-The table shows the result after 200 REINFORCE steps against it (`pg.train_reinforce()`, notebook 01, worked
+The table shows the result after 200 REINFORCE steps against `buggy_verify` (`pg.train_reinforce()`, notebook 01, worked
 example 6):
 
 | Training | Passes the buggy check | Truly balanced | P(starts with `)`) | KL to $\pi_{\text{ref}}$ |
@@ -303,7 +303,7 @@ the chosen strings *decreased*.
   to pay for a wider margin at every $\beta$. Thus the loss drives $\pi(\text{rejected})$ towards 0, whatever $\beta$
   is, and the KL term no longer regularises. $\beta$ only rescales how fast the loss saturates. In practice, the
   brakes are an early stop, or the constant target margin of IPO (in the next list).
-- **No reward model is left behind.** Thus nothing is available to rerank samples, to monitor drift or to use again
+- **DPO leaves no reward model behind.** Thus nothing is available to rerank samples, to monitor drift or to use again
   for best-of-n.
 
 **Three variants, one line each.**
@@ -357,7 +357,7 @@ makes the group statistics of GRPO work. On-policy distillation is the dense-rew
 token that the student samples ([distillation §4](../distillation/PRIMER.md#4-on-policy-distillation)).
 
 **GRPO.** For each prompt, sample a group of $G$ completions from $\pi_{\text{old}}$ and score them. Give every token
-of completion $i$ the same advantage. This is the GRPO of DeepSeekMath, which R1 adopted, and TRL's `GRPOTrainer`.
+of completion $i$ the same advantage. This is the GRPO of DeepSeekMath, which R1 adopted. TRL's `GRPOTrainer` implements the same method.
 
 DeepSeekMath writes the ratio per token and averages the tokens of each completion $(1/\lvert o_i \rvert)$. The R1
 paper's eq. 1 writes one ratio per whole completion, $\pi_\theta(o_i)/\pi_{\text{old}}(o_i)$, averaged over the group
@@ -457,7 +457,7 @@ Take a nine-prompt ThinkTask dataset with four prompts per step. Without dynamic
 are silent. With dynamic sampling, every group that the trainer uses is informative, at 8.2 groups generated per step
 instead of 4.0 (notebook 03).
 
-DAPO's ablation (AIME 2024 avg@32) adds one technique at a time:
+DAPO's ablation (AIME 2024 avg@32, verify) adds one technique at a time:
 
 - "naive GRPO": 30,
 - plus overlong filtering: 36,
@@ -557,7 +557,7 @@ the server (verify). The same templates drop the thinking of earlier turns from 
 | Control | What it does | Watch for |
 |---|---|---|
 | `max_tokens` | caps reasoning + answer together | the output ends inside `<think>`: empty content, `finish_reason="length"` (§7) |
-| vLLM `thinking_token_budget` (request) | When reasoning reaches the budget, it forces the end-of-think string. It needs `--reasoning-parser` (and optionally `--reasoning-config`). −1 = unlimited | vLLM-specific (verify) |
+| vLLM `thinking_token_budget` (request) | When reasoning reaches the budget, vLLM forces the end-of-think string. The budget needs `--reasoning-parser` (and optionally `--reasoning-config`). −1 = unlimited | vLLM-specific (verify) |
 | Qwen's two-call recipe | Call 1 with `max_tokens` = budget. If the model still thinks, append a text and continue. The text is "Considering the limited time by the user, I have to give the solution based on the thinking directly now.\n</think>.\n\n" | two requests, and the second request does the prefill again |
 | `reasoning_effort` | vLLM accepts none … max. For Qwen3, any value but `"none"` only sets `enable_thinking=True` | on Qwen3 it is a switch, not a length control (verify) |
 | gpt-oss effort | low / medium / high, written into the system prompt (Harmony format, default medium) | other values give an error (verify) |
@@ -747,7 +747,7 @@ the SLO's TPOT, 2.75 vs 0.15 at the step the fleet runs at. Concurrency grows wi
 holds 1.8× the KV. This is the 18.2× of KV-token-steps from earlier in this section. Little's
 law makes the 18.2× visible in the GPU count.
 
-The primer's `decode_aggregate` puts all 1,000 live requests of the convention in one batch. That is 246 GB of KV on
+If you use only the primer's `decode_aggregate`, it puts all 1,000 live requests of the convention in one batch. That is 246 GB of KV on
 an 80 GB card. Decode *throughput* is not the binding constraint.
 
 **ITL is the binding SLO; TTFT less so.** Thinking does not change the prompt, and thus TTFT stays the same. But the
@@ -773,11 +773,11 @@ trace that outgrows the pool preempts the newest request.
 **Thinking is dropped from history: prefix-cache implications.** Qwen3's template (and gpt-oss's: "CoT is dropped
 during all previous turns") renders earlier assistant turns without their reasoning (verify). The KV of turn N holds
 prompt + thinking + answer. The prompt of turn N+1 contains only the answer.
-
 Thus the prefix-cache hit
 ([serving-engine primer §5](../../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching): full 16-token blocks
-only) ends where the prompt of turn N ended. Then the engine prefills the answer again. The table uses `workload.turn_prefills()` with a
-1,000-token system prompt, and turns of 100 user + 800 thinking + 200 answer tokens:
+only) ends where the prompt of turn N ended. Then the engine prefills the answer again.
+
+The table uses `workload.turn_prefills()` with a 1,000-token system prompt, and turns of 100 user + 800 thinking + 200 answer tokens:
 
 | Turn | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
@@ -857,8 +857,9 @@ compute. You must measure the acceptance on reasoning text, and not assume it (v
 | OpenRLHF | Ray + vLLM, with PPO, GRPO, REINFORCE++ | this primer only names it (unverified) |
 
 **Weight sync.** After each optimizer step, the rollout engine needs the new weights. In a colocated setup, it gets
-them through shared memory. In a disaggregated setup, it gets them through an NCCL broadcast. In the report of verl,
-over 99% of BF16 weight bytes do not change from step to step. Thus delta sync is 1.3–21× faster (verify).
+them through shared memory. In a disaggregated setup, it gets them through an NCCL broadcast. The report of verl
+says that over 99% of BF16 weight bytes do not change from step to step. The report says that delta sync is thus
+1.3–21× faster (verify).
 
 With LoRA, the engine loads adapters instead of full weights. Then vLLM's `--max-loras` must cover every adapter
 version in flight. TRL's async guidance is at least `max_staleness` + 2. The
@@ -909,8 +910,8 @@ see that the policy exploits it.
 
 A T4 has 15 GiB usable, no bf16 and no FP8. The minimum for vLLM 0.30 is compute capability 7.5, and on a T4 vLLM uses
 the Triton attention backend (verify). The 04 lab's `servelab.sizing.size()` predicts 6,969 KV blocks for Qwen3-0.6B
-at `max_model_len=8192` on a T4. That is 13.6 concurrent 8K-token requests. It predicts no room at all for Qwen3-8B in
-fp16.
+at `max_model_len=8192` on a T4. That is 13.6 concurrent 8K-token requests. `servelab.sizing.size()` predicts no room at all for
+Qwen3-8B in fp16.
 
 Kaggle's free 2×T4 does not change the picture for thinking models. A rented 24 GB L4 or RTX 4090 runs a 4B thinking
 model with room for long traces. You can rent it as a container on RunPod or Vast.ai, or as a VM on Lambda or a GCP

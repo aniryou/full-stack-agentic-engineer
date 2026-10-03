@@ -46,7 +46,7 @@ are in [`solutions/`](solutions/). The notebooks take about 7 hours with the pri
 | [`01_the_moe_layer`](notebooks/01_the_moe_layer.ipynb) | Route tokens through the real routers (Mixtral, OLMoE and Qwen3's `norm_topk_prob` settings, DeepSeek-V3, gpt-oss, Llama 4). Tell why their weights are different. Write the sparse forward pass. Count total and active parameters from a config. Name the "active" convention that a published number uses. Give the argument for fine-grained experts. | §1, §2 | ~1.5 h | T0 |
 | [`02_routing_and_load_balance`](notebooks/02_routing_and_load_balance.ipynb) | Calculate the Switch loss in both normalisations, the z-loss, capacity and token drops, and dropless padding. Give a router a balanced load with DeepSeek's bias. See a small MoE collapse and then recover (hand-written gradients). | §3, §4 | ~1.5 h | T0 |
 | [`03_which_experts_a_batch_touches`](notebooks/03_which_experts_a_batch_touches.ipynb) | Derive E(1 − (1 − k/E)^T). Reproduce the MoE table of layer 01. Predict the decode crossover from weights streamed ÷ weights multiplied (about total ÷ active). Explain rows per expert (B·k/E), and why MoE wants large batches. Show what skew does (simulated). | §5 | ~1.5 h | T0 |
-| [`04_expert_parallelism_and_all_to_all`](notebooks/04_expert_parallelism_and_all_to_all.ipynb) | Calculate the cost of dispatch and combine on NVLink, PCIe and InfiniBand. Explain the published numbers of DeepEP. Treat each rank as its own roofline, and see why skew slows the GEMMs of prefill but the exchanges of decode. Rebalance. Compare TP, vLLM's default exchange and all-to-all kernels. Select a wide-EP degree, and calculate the cost of a two-node fabric. | §6 | ~1.5 h | T0 |
+| [`04_expert_parallelism_and_all_to_all`](notebooks/04_expert_parallelism_and_all_to_all.ipynb) | Calculate the cost of dispatch and combine on NVLink, PCIe and InfiniBand. Explain the published numbers of DeepEP. Treat each rank as its own roofline. Then see why skew slows the GEMMs of prefill but the exchanges of decode. Rebalance. Compare TP, vLLM's default exchange and all-to-all kernels. Select a wide-EP degree, and calculate the cost of a two-node fabric. | §6 | ~1.5 h | T0 |
 | [`05_sizing_and_cost`](notebooks/05_sizing_and_cost.ipynb) | Size memory by total, prefill by active and decode by bytes streamed. Make a budget for one small GPU the way vLLM does. Plan GPUs and EP degree against an ITL target. Calculate the cost per million tokens against a dense model, and against a dense model of the active size. Calculate the cost of CPU offload on a small GPU. | §7, §8 | ~1 h | T0 |
 
 ## Run it
@@ -79,13 +79,13 @@ offline, in ~30 s. These tests carry the claims:
 - **Sparse == dense.** For all five router families, the grouped forward equals every expert on every token
   (weighted by a dense gate) to 10⁻¹². With E = k = 1, the layer is the dense MLP. Experts that the router does not
   select run on no rows (`test_moe.py`).
-- **Repo numbers, reproduced.** The tests reproduce the table in PRIMER §3.6 of layer 01. The table gives Mixtral on
-  an H200 (25,631,531,008 bytes and 5.34 ms at batch 1 … 21.20 ms at 64) and Qwen3's experts per layer. The tests also
-  reproduce the crossovers 207 / 754 / 2,055 of that primer. A check makes sure that layer 01's primer still prints
-  those rows (`test_touched.py`). They reproduce layer 02's 4 MiB, 22 µs pairwise and 10 µs direct all-to-all (`test_ep.py`).
-  From the capacity primer, the tests reproduce the 17.6 ms floor of Mistral Large 3 and the prefill of
-  2 × active × tokens. They also reproduce the lab's `moelab.offload.fit` numbers for OLMoE on a T4 and Qwen3-30B-A3B on an L4 (both in
-  `test_sizing.py`).
+- **Repo numbers, reproduced.** The tests reproduce the table in PRIMER §3.6 of layer 01 and the crossovers
+  207 / 754 / 2,055 of that primer. The table gives Mixtral on an H200 (25,631,531,008 bytes and 5.34 ms at batch 1 …
+  21.20 ms at 64) and Qwen3's experts per layer. A check makes sure that layer 01's primer still prints those rows
+  (`test_touched.py`). The tests also reproduce layer 02's 4 MiB, 22 µs pairwise and 10 µs direct all-to-all
+  (`test_ep.py`). In `test_sizing.py`, the tests reproduce the 17.6 ms floor of Mistral Large 3 and the prefill of
+  2 × active × tokens from the capacity primer. The same file also reproduces the lab's `moelab.offload.fit` numbers
+  for OLMoE on a T4 and Qwen3-30B-A3B on an L4.
 - **The slowest rank, in both regimes.** Each EP rank is its own roofline. A skewed decode batch keeps the expert
   time of every rank equal (weight reads), and costs only at the busiest port. But a prefill-sized batch makes the
   rows of the busiest rank the layer time (`test_ep.py`).
@@ -93,9 +93,9 @@ offline, in ~30 s. These tests carry the claims:
   30,531,911,680 / 3,352,821,760 exactly. They match these to 0.01B: DeepSeek-V3 671.03B / 37.55B, gpt-oss-120b
   116.83B / 5.13B (LM head only), Llama 4 Maverick 400.71B / 17.18B and six more (`test_moe.py`).
 - **Balance.** The Switch loss is k (hf) or 1 (Megatron) when the routing is uniform. Its gradient matches finite
-  differences, and the bias rule is a sign step. The tests reproduce the docstring example of vLLM's
-  `moe_align_block_size` (`test_routing.py`). The gradients of the trainer match finite differences. Without load
-  balance, at least one expert becomes dead on every seed that the tests tried. With the aux loss or the bias, all
+  differences. The bias rule is a sign step. The tests reproduce the docstring example of vLLM's
+  `moe_align_block_size` (`test_routing.py`). The gradients of the trainer match finite differences, and without load
+  balance at least one expert becomes dead on every seed that the tests tried. With the aux loss or the bias, all
   four experts carry 15–40% and the loss is lower (`test_train.py`).
 - **Formulas pinned to hand-computed values:** The tests pin DeepEP's published 98 GB/s from the byte formula, and
   EPLB's 2.38 GiB per redundant DeepSeek-V3 expert. They also pin MXFP4 gpt-oss at 65.2 / 13.8 GB, sessions that

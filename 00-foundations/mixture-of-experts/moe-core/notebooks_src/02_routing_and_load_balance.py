@@ -7,8 +7,8 @@
 # ## The one-minute version
 # The same loss trains the router and the experts. That loss gives a reward when the router sends a token to the
 # expert that is *already* good at it. The expert that wins early gets the gradient, becomes better, and wins more. An
-# expert that gets no tokens never trains and never gets a chance. If nothing stops it, a layer **collapses** onto a
-# few experts. The other experts are dead weight in HBM.
+# expert that gets no tokens never trains and never gets a chance. If nothing stops this effect, a layer
+# **collapses** onto a few experts. The other experts are dead weight in HBM.
 #
 # You must force the balance. These are the methods:
 # - an **auxiliary loss** $E \cdot \sum f_e \cdot P_e$ (Switch/GShard). It is smallest when the shares of tokens $f$ and
@@ -201,8 +201,9 @@ print(f"✅ load after 400 bias steps: {counts.tolist()} (max/mean {R.stats(coun
 
 # %% [markdown]
 # ## Exercise 2.4 — how strong must the aux loss be?
-# On task seed 4, train with the aux loss at $\alpha = 0.01$ and $\alpha = 0.1$. Before you run it, predict which one
-# still collapses. Set `collapsed` to the $\alpha$ that collapses. Set `balanced` to the $\alpha$ that does not.
+# On task seed 4, train with the aux loss at $\alpha = 0.01$ and $\alpha = 0.1$. Before you run the training, predict
+# which one still collapses. Set `collapsed` to the $\alpha$ at which the router still collapses. Set `balanced` to
+# the $\alpha$ at which it does not.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -248,7 +249,7 @@ print("✅ the batch-level loss says perfect (1.0), the sequence-level one says 
 # convention of transformers and 1 in the convention of Megatron. Thus, find which convention applies before you
 # compare coefficients. Training also adds a small z-loss for bf16 stability.
 #
-# "Capacity factors put a limit on the work of each expert, because they drop the overflow tokens. A drop of
+# "Capacity factors put a limit on the work of each expert: the layer drops the overflow tokens. A drop of
 # tokens is satisfactory for training throughput, but not acceptable at inference. Thus engines are dropless and
 # pad the rows instead.
 #

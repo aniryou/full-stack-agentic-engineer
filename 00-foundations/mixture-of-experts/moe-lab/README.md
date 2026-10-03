@@ -44,7 +44,7 @@ predicts what this lab measures. The lab never imports it.
 | Tier | Where | What runs | In this lab |
 |---|---|---|---|
 | **T0** | laptop, Colab CPU, CI | the tiny MoE (torch on CPU, optional), every simulator, bundled traces, bench results and logs | all notebooks, all tests |
-| **T1** | one GPU: Colab/Kaggle T4 (free), a 24 GB L4 or RTX 4090 | `vllm serve` with OLMoE-1B-7B, granite-3.0 MoE, Qwen1.5-MoE INT4, Qwen3-30B-A3B INT4 (24 GB), gpt-oss-20b (L4, not T4). Also transformers and hooks. | `MOELAB_URL=...` or `MOELAB_START_VLLM=1`, [`deploy/any-gpu/`](deploy/any-gpu/) |
+| **T1** | one GPU: Colab/Kaggle T4 (free), a 24 GB L4 or RTX 4090 | `vllm serve` with OLMoE-1B-7B, granite-3.0 MoE, Qwen1.5-MoE INT4, Qwen3-30B-A3B INT4 (24 GB), gpt-oss-20b (L4, not T4). Also transformers with hooks. | `MOELAB_URL=...` or `MOELAB_START_VLLM=1`. Also [`deploy/any-gpu/`](deploy/any-gpu/). |
 | **T2** | two GPUs: Kaggle "GPU T4 x2" (free, PCIe) or a rented pair | TP, TP+EP and DP+EP, `vllm bench serve` for each | notebook 04, [`deploy/any-gpu/bench_layouts.sh`](deploy/any-gpu/bench_layouts.sh) |
 | **T3** | GCP: layer 02's GKE cluster, its 2 × L4 `l4x2` pool | Qwen1.5-MoE-A2.7B with `--enable-expert-parallel` (28.6 GB: more than one L4) | [`deploy/gke/`](deploy/gke/). Manifests only, no new Terraform. |
 
@@ -123,8 +123,8 @@ make check                                              # all of the above + tes
 - **Three labels.** *Measured* numbers come only from a GPU or from a server that you connect the lab to.
   *Simulated* numbers come from the roofline (and an alpha-beta link) with stated efficiencies. `stream.SimParams`
   gives 70% of bandwidth, 50% of FLOP/s and 2.5 ms per step. The `ep.LINKS` values for PCIe pairs are assumptions.
-  Notebook 03 shows how to calibrate them. *Illustrative* fixtures have the documented shape, and the lab made them
-  from its own models. Thus, agreement with them proves only that the parsers work.
+  Notebook 03 shows how to calibrate the stated efficiencies of the simulation. *Illustrative* fixtures have the
+  documented shape, and the lab made them from its own models. Thus, agreement with them proves only that the parsers work.
 - **The toy is a toy.** The collapse of the tiny MoE and its token-over-domain specialisation are real outputs of
   this code on a toy task. The collapse numbers are max/mean 5.9–6.8 and 5–6 dead experts without load balance,
   and 1.04–1.17 with it, for seeds 0–2. These outputs show the mechanism, not the magnitude in a real model. The

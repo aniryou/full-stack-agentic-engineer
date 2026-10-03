@@ -67,7 +67,7 @@ Read the modules in this order. Each module starts with a docstring that gives t
 
 | File | Lines | What it teaches |
 |------|------:|-----------------|
-| [`rlcore/tasks.py`](rlcore/tasks.py) | ~165 | Two verifiable toy environments. `SeqTask` has balanced brackets, with a true verifier and a verifier with a bug, or any reward function. `ThinkTask` has think tokens until the answer, P(correct \| L) = 1 − e0·(1 − q)^L, truncation against budget forcing, exact length distributions and the optimal length. The code selects the states so that the reward depends only on the final state. |
+| [`rlcore/tasks.py`](rlcore/tasks.py) | ~165 | Two verifiable toy environments. `SeqTask` has balanced brackets, with a true verifier and a verifier with a bug, or any reward function. `ThinkTask` has think tokens until the answer, P(correct \| L) = 1 − e0·(1 − q)^L, truncation against budget forcing, exact length distributions and the optimal length. The design of the states makes the reward depend only on the final state. |
 | [`rlcore/policy.py`](rlcore/policy.py) | ~85 | A policy as a table of softmaxes: seeded token-by-token sampling, per-token log-probabilities, the closed-form gradient `onehot − π`, explicit reference/old-policy copies, exact sequence probabilities. |
 | [`rlcore/pg.py`](rlcore/pg.py) | ~105 | REINFORCE. Baselines (none, mean, leave-one-out) and gradient variance. The KL penalty as reward shaping. An entropy bonus. SFT. Exact expectations and KL by enumeration. The KL-regularised optimum π_ref·exp(R/β)/Z. |
 | [`rlcore/pref.py`](rlcore/pref.py) | ~140 | The Bradley–Terry fit. The DPO loss, its gradient and the metric names of TRL. IPO, the implicit reward and GAE. A response catalogue and a length-biased annotator. |
@@ -77,33 +77,33 @@ Read the modules in this order. Each module starts with a docstring that gives t
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (57, plus 8 notebook-tooling checks). The tests run offline in ~50 s in
+`tests/` has one focused test per concept (57, plus 8 checks of the notebook tools). The tests run offline in ~50 s in
 all. The tests in this list carry the correctness claims:
 
-- **The gradients are right.** `grad_logprob` agrees with finite differences. The mean of 400 REINFORCE estimates
+- **The gradients are correct.** `grad_logprob` agrees with finite differences. The mean of 400 REINFORCE estimates
   has a correlation above 0.95 with the exact gradient of P(correct), which the test calculates by enumeration. The
   step of DPO agrees with finite differences of its loss. The hand-derived gradient of GRPO agrees with finite
-  differences of the objective, with the clipped surrogate plus β·k3, every `loss_type`, and the clip active. The
-  tests are in `test_tasks_policy.py`, `test_pg.py`, `test_pref.py` and `test_grpo.py`.
+  differences of the objective. This holds with the clipped surrogate plus β·k3, every `loss_type`, and the clip
+  active (`test_tasks_policy.py`, `test_pg.py`, `test_pref.py`, `test_grpo.py`).
 - **The closed forms hold.** `kl_optimal` gets a higher E[R] − β·KL than other policies, and its KL equals
   E[R]/β − log Z. DPO on 4,096 Bradley–Terry pairs gets to within 0.02 nats of π*. Its implicit reward finds the
-  true gap of 3 to within 0.15. The tests are in `test_pg.py` and `test_pref.py`.
+  true gap of 3 to within 0.15 (`test_pg.py`, `test_pref.py`).
 - **The failure modes are real, not staged.** RL on the verifier with the bug decreases true accuracy to below 8%
   while the reward goes above 99%. With β = 0.3, true accuracy stays above 30%. RL makes thinking longer when
   tokens have no cost, and less long when tokens have a cost. The gold quality of a length-biased reward model goes
   to a peak and then decreases, while its score increases. The update of the per-sequence average points away from
-  the true gradient (cosine < 0.8) and increases truncation. But the update of the token-level average (> 0.95)
-  decreases truncation (`test_pg.py`, `test_pref.py`, `test_grpo.py`).
+  the true gradient (cosine < 0.8) and increases truncation. But the update of the token-level average
+  (cosine > 0.95) decreases truncation (`test_pg.py`, `test_pref.py`, `test_grpo.py`).
 - **Formulas pinned to hand-computed and reference values:** TRL's advantages (±0.865875 and 1.4997/−0.4999), k3 at
   ±0.1 and 0.5, the clip's gradient mask and the three normalisers. The tests also pin DAPO's overlong penalty
   (0, −0.5, −1.0, −1), the DPO loss 0.598139 and GAE. They also pin the unbiased pass@k (0.916667, 0.728022,
   0.914746), pass^k and exact majority votes. With a dominant misconception, each extra vote decreases accuracy.
-  With a narrow misconception, this occurs only after ~130 votes. The tests are in `test_grpo.py`, `test_pref.py`
-  and `test_ttc.py`.
-- **Existing repo numbers reproduced.** The tests reproduce the bank example of the capacity primer: 12.07 s, 100.6
+  With a narrow misconception, this occurs only after ~130 votes (`test_grpo.py`, `test_pref.py`,
+  `test_ttc.py`).
+- **Numbers from the repo, reproduced.** The tests reproduce the bank example of the capacity primer: 12.07 s, 100.6
   live, 88.8 and 355.1 sessions per GPU, and 8,929 and 20,615 tokens/s. Every memory quantity is in GB = 10⁹ bytes.
   The tests compare these numbers as constants, and also with `capacity.py`, function by function. They also
-  reproduce the `cost_per_call` of the 06 scaling lab ($0.007005, $0.035355). The tests are in `test_workload.py`.
+  reproduce the `cost_per_call` of the 06 scaling lab: $0.007005 and $0.035355 (`test_workload.py`).
 - **The primer says what the code computes.** `test_primer_numbers.py` calculates again each computed number in
   `../PRIMER.md`. Each number must appear verbatim.
 
@@ -146,5 +146,5 @@ Go to [`../thinking-lab/`](../thinking-lab/). In the lab, you do these things:
 - Run one GRPO step with vLLM as the rollout engine.
 
 The engine below the lab is [`04-inference-engine/serving-engine`](../../../04-inference-engine/serving-engine/README.md).
-The lab builds on the sizing in [`gpu-capacity-planning`](../../gpu-capacity-planning/PRIMER.md). For where each tier
+The lab builds on the size calculations in [`gpu-capacity-planning`](../../gpu-capacity-planning/PRIMER.md). For where each tier
 runs and what it costs, see [`COMPUTE.md`](../../../COMPUTE.md). The core has an MIT licence.

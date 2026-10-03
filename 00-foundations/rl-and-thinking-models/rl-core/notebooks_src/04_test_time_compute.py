@@ -93,8 +93,8 @@ print("(the last three rows are Monte Carlo estimates, 20,000 trials each: the v
 # %% [markdown]
 # A noisy scorer turns "more samples" into "more chances to select an incorrect sample". The gains become flat
 # well below the line of the verifier. A scorer with a *systematic* bias (the reward model of notebook 02 that
-# likes long answers) is worse. Then best-of-n selects for the bias. This is why RL with verifiable rewards and
-# test-time search both depend on checkers.
+# likes long answers) is worse. With such a scorer, best-of-n selects for the bias. This is why RL with verifiable
+# rewards and test-time search both depend on checkers.
 #
 # ## Worked example 4 — thinking longer: diminishing returns
 # This is the accuracy of one sample as the thinking budget increases.
@@ -149,7 +149,7 @@ for method in ("verifier", "vote"):
 
 # %% [markdown]
 # With a verifier, the small model wins at equal compute. Its many low-cost samples cover the dead ends. With only
-# a vote, the large model wins. Its single samples are correct sufficiently often, and the samples of the small model
+# a vote, the large model wins. Its single samples are correct sufficiently often, but the samples of the small model
 # are not. The result for "a smaller model with more samples" is a property of the task *and* of the presence of
 # a checker. Measure it on your own evals (the 07.2 evals notebook has the intervals that such comparisons need).
 #

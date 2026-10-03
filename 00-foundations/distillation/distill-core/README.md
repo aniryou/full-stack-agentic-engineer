@@ -33,10 +33,10 @@ the primer, the work takes about 11 hours in all.
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
 | [`01_soft_targets_and_temperature`](notebooks/01_soft_targets_and_temperature.ipynb) | Calculate soft targets at a temperature. Derive the KD gradient T·(q_T − p_T), and why T² is there. Find the logit-matching limit. Show that soft targets do better than hard labels at two examples per context (0.876 against 0.678). See the capacity gap. Prune a teacher by activation importance, and repair it by distillation. Over five seeds, see that pruning gives a head start in steps, not a better student. | §1, §2, §6 | ~1.5 h | T0 |
-| [`02_forward_reverse_kl_and_on_policy_distillation`](notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) | Fit a one-mode student to a two-mode teacher under forward KL, reverse KL and JSD(β). Calculate the cost of a SeqKD pipeline in teacher tokens. Measure exposure bias: 1.000 on the prefixes of the teacher, and 0.788 on the prefixes of the student per position. Only 0.190 of the outputs of the student are correct through position 12. Remove the exposure bias with GKD. See reverse KL converge slowly from every start. The cause is that reverse KL almost does not increase the probability of a token to which the student gives a low probability. Show that on-policy distillation is exactly REINFORCE with a dense reward, and find what it costs per token against GRPO. | §2, §3, §4 | ~2 h | T0 |
+| [`02_forward_reverse_kl_and_on_policy_distillation`](notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) | Fit a one-mode student to a two-mode teacher under forward KL, reverse KL and JSD(β). Calculate the cost of a SeqKD pipeline in teacher tokens. Measure exposure bias: 1.000 on the prefixes of the teacher, and 0.788 on the prefixes of the student per position. Only 0.190 of the outputs of the student are correct through position 12. Remove the exposure bias with GKD. See reverse KL converge slowly from every start. The cause is that reverse KL increases the probability of a token by only a small quantity when the student gives it a low probability. Show that on-policy distillation is exactly REINFORCE with a dense reward, and find what it costs per token against GRPO. | §2, §3, §4 | ~2 h | T0 |
 | [`03_distilling_reasoning_traces`](notebooks/03_distilling_reasoning_traces.ipynb) | Distil an RL-trained thinker from its traces by maximum likelihood in closed form. See the student take the thinking-length distribution of the thinker. Exchange accuracy for tokens with trace filters. On the student, get better results than RL at equal samples (0.892 against 0.445). Show why knowledge does not transfer. | §3, §5 | ~1.5 h | T0 |
-| [`04_a_distilled_draft_for_speculative_decoding`](notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) | Calculate acceptance, tokens per pass and speedup. Show that a draft distilled from a fine-tuned target does better than an off-the-shelf one (α 0.988 against 0.890). See how the top-token probability of the target sets a limit on a greedy draft. Select a draft size. Read the counters of vLLM. | §7 | ~1.5 h | T0 |
-| [`05_measuring_a_student_and_the_economics`](notebooks/05_measuring_a_student_and_the_economics.ipynb) | Measure agreement (KL, top-1, top-k) and accuracy with Wilson intervals per slice. Find a student that does better than its teacher but agrees with it less. Calculate the cost of the teacher and the student on the roofline. The result is ~16× per token against the teacher on two H100s, and 96× against one. One H100 is a baseline with insufficient capacity. Calculate the fixed cost, the break-even and the cost per correct answer of a cascade. | §1, §8, §9 | ~2 h | T0 |
+| [`04_a_distilled_draft_for_speculative_decoding`](notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) | Calculate acceptance, tokens per pass and speedup. Show that a draft distilled from a fine-tuned target does better than an off-the-shelf one (α 0.988 against 0.890). See how the top-token probability of the target sets a limit on greedy acceptance. Select a draft size. Read the counters of vLLM. | §7 | ~1.5 h | T0 |
+| [`05_measuring_a_student_and_the_economics`](notebooks/05_measuring_a_student_and_the_economics.ipynb) | Measure agreement (KL, top-1, top-k) and accuracy with Wilson intervals per slice. Find a student that does better than its teacher but agrees with it less. Calculate the cost of the teacher and the student on the roofline. The result is ~16× per token against the teacher on two H100s, and 96× against one. The teacher on one H100 is a baseline with insufficient capacity. Calculate the fixed cost, the break-even and the cost per correct answer of a cascade. | §1, §8, §9 | ~2 h | T0 |
 
 §10 (where to run it) has no notebook. The notebooks of the lab are its T1 half.
 
@@ -87,7 +87,7 @@ Read the modules in this order. Each module opens with a docstring that states t
 `tests/` has one focused test per concept (78 tests plus 8 notebook-tooling checks, all offline, ~30 s in total). The tests
 that carry the correctness claims are these:
 
-- **The gradients are right.** The gradient of each loss matches finite differences. The losses are soft CE, T²·KL,
+- **The gradients are correct.** The gradient of each loss matches finite differences. The losses are soft CE, T²·KL,
   Hinton's mix, logit MSE and TRL's JSD at five values of β. The backward pass of the network and ∇ of weighted
   log-probabilities also match finite differences (`test_losses.py`, `test_tinylm.py`).
 - **The formulas hold, pinned to hand-computed values.** These values are the soft targets of the five-token
@@ -114,8 +114,8 @@ that carry the correctness claims are these:
 
   The tests are `test_seqkd.py`, `test_primer_numbers.py`, `test_cost.py`, `test_onpolicy.py`, `test_draft.py`,
   `test_reasoning.py` and `test_eval.py`.
-- **Existing repo numbers reproduced** (`test_repo_numbers.py`). The name of each test says whose numbers it
-  reproduces. The numbers are these:
+- **Numbers from other parts of the repo, reproduced** (`test_repo_numbers.py`). The name of each test says whose
+  numbers it reproduces. The numbers are these:
   - §7 of the serving primer (`minengine.spec`): α = 0.6 from its p and q. At α = 0.8, k = 4 gives 3.36 tokens per
     pass. At draft cost c = 0.1, the best k is 6, at 2.47×.
   - The §3.3 and §8.1 tables of the roofline primer, and `max_batch_by_memory` over 2 and 4 devices. The values
@@ -130,8 +130,8 @@ that carry the correctness claims are these:
   The tests hold these numbers as constants. When the originals are in the checkout, the tests also compare
   function by function against them. They load the originals by path and leave no cache behind.
 - **The primer says what the code computes.** The tests recompute every computed number in `../PRIMER.md`
-  (`test_primer_numbers.py`). The exact numbers must appear verbatim. They include closed forms on fixed logits,
-  enumerations, parameter counts, roofline costs and Wilson intervals of fixed counts.
+  (`test_primer_numbers.py`). The exact numbers must appear verbatim. They include closed forms on given logits,
+  enumerations, parameter counts, roofline costs and Wilson intervals of given counts.
 
   A number from a trained or sampled toy model is one seeded run on one CPU. This is important because the matmul
   kernels of OpenBLAS and the SIMD loops of numpy round differently in the last bit on each CPU family. Training
@@ -151,11 +151,11 @@ capacity knob, and you know the truth exactly. But `ModLang` is not text. Its gr
 cycles of the rule, and this makes exposure bias visible here. In real text, the same mechanism spreads over far
 more states.
 
-Reverse KL is slow here from every start that the tests tried (KD, SFT, fresh). The cause is that it increases the
-probability of a token only in proportion to the probability that the student gives that token. On a lookup table,
-students are often confidently incorrect. The recipes start on-policy distillation from an SFT checkpoint, because
-on a real model that checkpoint already writes in the format of the teacher. The toy does not show if this reason is
-true or false.
+Reverse KL is slow here from every start that the tests tried (KD, SFT, fresh). The cause is that reverse KL increases
+the probability of a token only in proportion to the probability that the student gives that token. Also, on a lookup
+table, students are often confidently incorrect. The recipes start on-policy distillation from an SFT checkpoint,
+because on a real model that checkpoint already writes in the format of the teacher. The toy does not show if this
+reason is true or false.
 
 The teacher of the reasoning toy is narrow (RL made it on one task). It is not heavy-tailed like a real thinking
 model. Every serving cost is an ideal roofline bound with list prices marked (verify), not a measurement. The lab
@@ -164,7 +164,7 @@ measures real engines.
 ## Regenerating notebooks
 
 The builder generates `notebooks/` and `solutions/` from `notebooks_src/*.py` (percent format with
-`### BEGIN SOLUTION` blocks). Edit the sources, then run these commands:
+`### BEGIN SOLUTION` blocks). Edit the sources. Then run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # rebuild both variants

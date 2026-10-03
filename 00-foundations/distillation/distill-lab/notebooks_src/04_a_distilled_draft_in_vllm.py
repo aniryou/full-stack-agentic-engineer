@@ -19,7 +19,7 @@
 #   distilled draft for speculative decoding".
 # * **Distillation of the draft on the target's outputs raises $\alpha$.** The makers of an off-the-shelf small model
 #   of the same family trained it on other data. That mismatch of distributions lowers $\alpha$. For a draft, do *not*
-#   filter by a verifier. The goal is to match the target, also where the target makes mistakes.
+#   filter by a verifier. The reason is that the goal is to match the target, also where the target makes mistakes.
 # * **Read vLLM's numbers carefully.** By default, vLLM 0.30.0 makes *greedy* drafts. Thus the acceptance is
 #   $p(\operatorname{argmax} q)$, not $\sum \min(p, q)$. Its "acceptance rate" is
 #   $\text{accepted} / \text{drafted} = (E - 1)/k$, not $\alpha$. $\alpha$ is the per-position rate at position 0. The
@@ -127,7 +127,7 @@ print(table([{"draft": m, "alpha (sampled draft)": ALPHA[m], "greedy draft": GRE
 #
 # You have the $\alpha$ and the cost ratio $c$ of each draft. Write `best_draft(alphas, c, k_max=8)`. It returns the
 # `(name, k, speedup)` with the highest `DR.speedup(alpha, k, c)`. The search covers every draft and every $k$ from 1
-# to `k_max`. Leave out `"target itself"`. It is not a draft that you can afford.
+# to `k_max`. Leave out `"target itself"`, because the target is not a draft that you can afford.
 
 # %% exercise
 def best_draft(alphas: dict, c: float, k_max: int = 8) -> tuple:
@@ -151,8 +151,9 @@ print(f"✅ best: {name} at k = {k}, {sp:.2f}x. " + ("The drafts distilled on th
 
 # %% [markdown]
 # Note two things. In the recorded run, the **unfiltered** distilled draft has the higher $\alpha$. This is one run,
-# so examine the alpha table before this cell for your run. That is the expected direction, because the verifier
-# filter trained the other draft toward *better* answers than the target gives. That is the incorrect goal for a draft.
+# so examine the alpha table before this cell for your run. A higher $\alpha$ for the unfiltered draft is the expected
+# direction. The reason is that the verifier filter trained the other draft toward *better* answers than the target
+# gives. Better answers are the incorrect goal for a draft.
 #
 # Also, the $c$ of the tiny models (a quarter of the target) makes a long $k$ high-cost. A real 0.6B draft for a 4B
 # target has $c \approx 0.15$ by weight bytes. Thus its best $k$ is larger (Exercise 4.4).
@@ -246,15 +247,16 @@ if env.server_url():
 #
 # EAGLE-3 heads are the same idea at the feature level. An EAGLE-3 head is a small head. Its training uses a
 # soft-target cross-entropy to the frozen target's distribution, from the target's hidden states. The training code is
-# in the `eagle` repository. SpecForge trains these heads for vLLM and SGLang. The quoted speedups are for 13B targets on
-# 2× RTX 3090 (verify before you quote them for your setup).
+# in the `eagle` repository. SpecForge trains these heads for vLLM and SGLang. The quoted speedups of EAGLE-3 heads are
+# for 13B targets on 2× RTX 3090 (verify before you quote them for your setup).
 #
 # ## In a design review
 #
 # **Two minutes:** "A draft model is a student whose only metric is acceptance: $\alpha = \sum \min(p, q)$. The
 # speedup comes from $\alpha$, $k$ and the relative cost of the draft. We distil the draft on the target's own outputs.
 # We do not filter them for correctness, because the draft's job is to predict the target, also where the target
-# makes mistakes. On our toy, that raised $\alpha$ over an off-the-shelf model that its makers trained on other data.
+# makes mistakes. On our toy, this distillation raised $\alpha$ over an off-the-shelf model that its makers trained on
+# other data.
 #
 # "We examine vLLM's counters the correct way. The mean acceptance length is the numerator of the speedup. The logged
 # 'acceptance rate' is $\left(E - 1\right)/k$, and $\alpha$ is the rate of position 0. Greedy drafts, the default method
@@ -266,7 +268,7 @@ if env.server_url():
 # inter-token latency at your batch size, not from that rate.
 #
 # **Drill 2.** *Is it correct to train the draft on verified outputs?* No. Verification makes it a better model and
-# a worse predictor of the target. Train it on the target's own samples, at the temperature that you serve at.
+# a worse predictor of the target. Train it on the target's own samples, at the temperature that you use when you serve.
 #
 # **Drill 3.** *The distilled draft doubled $\alpha$ at batch 1, but throughput at batch 64 decreased. Why?* At batch
 # 64, the target step is compute-bound. The verification of $k$ + 1 tokens per sequence costs up to $k$ + 1 times as

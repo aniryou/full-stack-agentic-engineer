@@ -87,7 +87,7 @@ print(f"a perfect teacher at T = 1 passes (0.8)^12 = {0.8 ** 12:.3f} of 12-token
 #
 # Then compare each student's accuracy on the teacher's prefixes and on its own prefixes, sampled at $T$ = 1. The
 # accuracy asks one question: is the student's top token the token of the rule? Measure it per position. Also measure
-# it over the full output so far, that is, correct at each position up to this one.
+# the chance that the student is correct at all positions up to this one.
 
 # %%
 greedy = seqkd.teacher_data(teacher, prompts, 1, 12, np.random.default_rng(1), T=0.0)
@@ -132,8 +132,8 @@ print("  KD     ", " ".join(f"{x:.2f}" for x in eb_kd["sampled_on_rule"]))
 # incorrect approximately one quarter of the time. Per position, its accuracy decreases from 1.000 on the teacher's
 # prefixes to 0.788 by position 4, and then stays there.
 #
-# What becomes worse with length is the full output. The chance that the student was correct at each position
-# decreases to 0.650 by position 4 and to 0.190 by position 12. The teacher's chance stays at 1.000. That is exposure
+# What becomes worse with length is the full output. The chance that the student was correct at all positions so
+# far decreases to 0.650 by position 4 and to 0.190 by position 12. But the teacher's chance stays at 1.000. That is exposure
 # bias.
 #
 # Your numbers can differ in the last digits. A seeded run is the run of one CPU. The on-policy rows of the next example
@@ -374,21 +374,21 @@ print(f"✅ predicted {yield_12:.3f}, measured {measured:.3f} over 4,000 samples
 # **The two-minute version.** "Sequence-level distillation is SFT on text that the teacher wrote. It needs only the
 # teacher's samples. Thus it works through any API, and the R1 distills came from it.
 #
-# "We set its budget by the teacher tokens that we pay for, not the tokens that we keep, because the verifier
-# discards most long samples. Also, we sample at the temperature that we want the student to have. SFT on greedy
-# outputs gives a student that copied one output, not the teacher.
+# "The SeqKD budget counts the teacher tokens that we pay for, not the tokens that we keep, because the verifier
+# discards most long samples. Also, we sample at the temperature that we want the student to have. This is because SFT on
+# greedy outputs gives a student that copied one output, not the teacher.
 #
-# "Its weak point is exposure bias. The student trains on the teacher's prefixes, but it decodes on its own prefixes.
-# On-policy distillation repairs that. The student samples, the teacher scores each token, and we minimise a divergence
-# there.
+# "The weak point of sequence-level distillation is exposure bias. The student trains on the teacher's prefixes, but
+# it decodes on its own prefixes. On-policy distillation repairs that. The student samples, the teacher scores each
+# token, and we minimise a divergence there.
 #
 # "As RL, on-policy distillation is REINFORCE with a dense per-token reward, $\log \pi_T - \log \pi_S$. It costs one
 # teacher forward pass per student token. With a large teacher, this makes each step more costly than a GRPO step.
 # But on-policy distillation wins on the number of steps.
 #
 # "We select the divergence and we know what it does. Forward KL makes a small student cover everything, the gaps
-# between the teacher's modes included. Reverse KL makes the student commit. It increases the probability of a token
-# only by a small quantity when the student gives that token a low probability. Thus it is slow where the student is
+# between the teacher's modes included. Reverse KL makes the student commit. Reverse KL increases the probability of a
+# token only by a small quantity when the student gives that token a low probability. Thus it is slow where the student is
 # confidently incorrect.
 #
 # "The recipes start on-policy distillation from an SFT student. We sweep $\beta$, and in this toy, forward KL won from every start."

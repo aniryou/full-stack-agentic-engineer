@@ -95,8 +95,8 @@ print("✅ 112 KiB per token; an 8K trace = 0.94 GB of KV for a 1.19 GB model; 1
 # ## Worked example: what comes back
 #
 # The next cell shows the same question with thinking on and with thinking off, as vLLM v0.30.0
-# returns it. It also shows the field name that SGLang uses. These files are sample output in the documented
-# format (illustrative). The field names are real. We wrote the text for this lab.
+# returns it. It also shows the field name that SGLang uses. These files are sample output in the
+# documented format (illustrative). The field names are real. We wrote the text for this lab.
 
 # %%
 on = json.loads(SAMPLES.joinpath("vllm_chat_qwen3_thinking.json").read_text())
@@ -121,9 +121,9 @@ for name, d in (("vLLM thinking on", on), ("vLLM thinking off", off), ("SGLang",
 # DeepSeek-R1-style templates put `<think>\n` into the *prompt*. Thus the output usually starts in
 # the middle of a thought and contains only `</think>`. Return `(reasoning, content)`:
 #
-# * If the text starts with `<think>`, remove it.
-# * If there is no `</think>`, everything is reasoning and content is `None`. The output ended
-#   during the thinking.
+# * If there is an opening `<think>` tag, remove it.
+# * If there is no `</think>`, everything is reasoning and content is `None`. The output stopped
+#   before the model completed its thinking.
 # * In all other cases, reasoning is the text before the first `</think>`, and content is the text
 #   after it (`None` if empty).
 
@@ -271,10 +271,10 @@ for name, fn in (("max_tokens=64 (trap)", lambda: B.truncate(client, hard.messag
 # ## Exercise 2.5 — choose a budget from a sweep
 #
 # `rows` is a sweep of accuracy against budget (`budget=None` means unlimited thinking). Write
-# `pick_budget(rows, tolerance)`. It returns the *smallest* budget whose accuracy is within
+# `pick_budget(rows, tolerance)`. It must return the *smallest* budget whose accuracy is within
 # `tolerance` (absolute) of the unlimited row. Then report the output tokens per correct answer for
-# that budget and for unlimited thinking. (Against a real T4, the sweep sends 180 requests, and some
-# of them are thousands of tokens long. Expect several minutes for the sweep.)
+# that budget and for unlimited thinking. Against a real T4, the sweep sends 180 requests, and some
+# of them are thousands of tokens long. Expect several minutes for the sweep.
 
 # %% exercise
 def pick_budget(rows: list, tolerance: float = 0.05):

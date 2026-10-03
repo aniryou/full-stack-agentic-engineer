@@ -36,9 +36,9 @@ Two things are different for a teacher:
 
 The 04 lab's [`gke/vllm.yaml`](../../../../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/gke/vllm.yaml)
 serves `Qwen/Qwen2.5-1.5B-Instruct`, the default teacher here. Add `--max-logprobs=20` to its `args`. Apply the manifest
-to the cluster of the 04 lab (`./cluster.sh`), or to the Terraform clusters of layer 03 or 05. Then run
-`kubectl port-forward svc/vllm 8000:8000`. After that, run `export DISTILLAB_URL=http://127.0.0.1:8000`. Examine
-the service name and port in that manifest.
+to the 04 lab's cluster (`./cluster.sh`), or to the Terraform clusters of layer 03 or 05. Examine the service name
+and port in that manifest. Then run `kubectl port-forward svc/vllm 8000:8000`. After that, run
+`export DISTILLAB_URL=http://127.0.0.1:8000`.
 
 ## Cost and cleanup
 

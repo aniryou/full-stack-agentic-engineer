@@ -200,11 +200,12 @@ for ds in (False, True):
           f"silent groups in the trained batch {trained_silent:.0%}")
 
 # %% [markdown]
-# Without dynamic sampling, the engine generates more than half of every batch, and then that part contributes
-# nothing. Thus the effective batch size changes from step to step. DAPO over-samples and keeps only informative
-# groups, so every trained batch is full. DAPO pays for this in rollouts (here, about twice as many groups
-# generated per step). TRL has no flag for dynamic sampling, and it logs
-# `frac_reward_zero_std`. In DAPO's ablation, this was the largest single gain (AIME 2024 avg@32: from 42 to 50, with simple GRPO at 30, primer §4, verify).
+# Without dynamic sampling, more than half of every batch contributes nothing after the engine generates it. Thus
+# the effective batch size changes from step to step. DAPO over-samples and keeps only informative groups, so
+# every trained batch is full. DAPO pays for this in rollouts (here, about twice as many groups generated per
+# step). TRL has no flag for dynamic sampling, and it logs `frac_reward_zero_std`. In DAPO's ablation, dynamic
+# sampling was the largest single gain (AIME 2024 avg@32: from 42 to 50, with simple GRPO at 30, primer §4,
+# verify).
 #
 # ## Worked example 7 — where the compute goes
 # One synchronous RL step has 512 prompts × 16 samples = 8,192 completions of a 7.6B model on 64 H100s. The
@@ -225,9 +226,9 @@ print(f"generate {r['generate_s']:.0f} s, train {r['train_s']:.0f} s → rollout
 # still puts half of the step into generation. Most of that half is a wait for a few long completions. verl
 # reports ~70% for rollouts in DAPO-32B training (primer §8, verify).
 #
-# That is why RL frameworks embed vLLM or SGLang. It is also why they move to one-step-off-policy and fully
-# asynchronous rollouts. The price is stale samples that the clipped ratio (and importance-sampling corrections)
-# must absorb.
+# Because generation takes this much of the step, RL frameworks embed vLLM or SGLang. It is also why they move to
+# one-step-off-policy and fully asynchronous rollouts. The price is stale samples that the clipped ratio (and
+# importance-sampling corrections) must absorb.
 #
 # ## Exercise 3.1 — group advantages, as TRL computes them
 # `rewards` has shape (n_groups, G). Subtract the mean of each group. Divide by the std of each
@@ -360,8 +361,8 @@ print("✅ TRL's defaults are neither: beta=0.0, loss_type='dapo', no clip-highe
 # "Groups that are all correct or all incorrect carry no gradient. Thus we monitor frac_reward_zero_std. We
 # resample or curate prompts to stay near 50% solvable.
 #
-# "We use the token-level loss. A per-sequence average under-weights long completions and moves the model into
-# long, truncated answers. We mask truncated completions and add a soft overlong penalty near the cap. The clip is
+# "We use the token-level loss because a per-sequence average under-weights long completions and moves the model
+# into long, truncated answers. We mask truncated completions and add a soft overlong penalty near the cap. The clip is
 # important only with several updates per batch or off-policy rollouts.
 #
 # "Most of each step is generation. Generation is decode-bound and waits for the longest completion. Thus the

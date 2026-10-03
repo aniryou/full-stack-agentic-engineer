@@ -56,8 +56,8 @@ term on the logits of the student is $T \cdot (q_T - p_T)$.
   prefixes and decodes on its own.
 - **On-policy distillation** samples from the student and asks the teacher to give a score to every token. It is RL
   with a dense reward $r_t = \log \pi_T - \log \pi_S$, with one forward pass of the teacher per token.
-- When you distil a **thinking model**, the student copies its procedure and the distribution of its thinking
-  length, not its knowledge.
+- When you distil a **thinking model**, the student copies the procedure of that model and the distribution of
+  its thinking length, not its knowledge.
 - A **draft model** is a student whose metric is acceptance, $\alpha = 1 - \mathrm{TV}$.
 - Measure students by agreement *and* by task accuracy with intervals, per slice.
 
@@ -131,8 +131,8 @@ Apache 2.0. DeepSeek-R1 is MIT, and its README says that the series permits "dis
 
 The Llama 3.1 and 3.2 licences have a condition for a model that trains on Llama outputs and that you distribute.
 The name of that model must have "Llama" at the start (verify). Some hosted-API terms put limits on the use of
-outputs to build models that compete with theirs (verify). Read the terms that you use. The student is also under
-the licence of its base model (the R1 Qwen distills keep the Apache 2.0 of Qwen).
+outputs to build competing models (verify). Read the terms that you use. The student is also under
+the licence of its base model (the R1 Qwen distills keep the Apache 2.0 of Qwen, verify).
 
 **Where this starts.** The [RL primer §1](../rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training)
 puts distillation in post-training (SFT on the outputs of a stronger model). Its
@@ -190,10 +190,9 @@ $$
 that is, the mean-squared error on centred logits (Caruana's model compression): 0.23000 for the example
 (`losses.logit_mse()`).
 
-TRL applies no $T^2$. `GKDTrainer` calculates its divergence at T = 1, and its `temperature` sets only the sampling.
-`DistillationTrainer` divides both logits by its `temperature` (default 1.0) in the loss. The
-`LogitsDistillationLoss` of NVIDIA ModelOpt multiplies by $T^2$ (verify). Treat $T$ and $\alpha$ as settings to
-sweep.
+TRL applies no $T^2$ (verify). `GKDTrainer` calculates its divergence at T = 1, and its `temperature` sets only the
+sampling. `DistillationTrainer` divides both logits by its `temperature` (default 1.0) in the loss. The
+`LogitsDistillationLoss` of NVIDIA ModelOpt multiplies by $T^2$ (verify). Treat $T$ and $\alpha$ as settings to sweep.
 
 **Why a soft target is worth more per example.** The gradient from a sampled hard label is
 $\operatorname{onehot}(y) - q$. Its expectation over $y \sim p$ is ${p - q}$, the soft-target gradient. Its extra
@@ -305,7 +304,7 @@ The SFT student never makes an error, because its samples are always the same. I
 prompt, and it copied that output, not the teacher.
 
 The KD student matches the teacher's distribution on the teacher's text. At T = 1, it thus samples off the cycle of
-the rule. So its samples follow the rule 0.792 of the time at position 1, like the teacher's, then 0.636 by position
+the rule. Here, its samples follow the rule 0.792 of the time at position 1, like the teacher's, then 0.636 by position
 4, where the teacher's stay between 0.78 and 0.81. Each error puts it in contexts that no training example covered.
 There, its top token is incorrect about a quarter of the time. Thus per-position accuracy drops to 0.788 by position
 4 and then stays there (0.774 at position 12).
@@ -423,7 +422,7 @@ the gradient's norm, because it does not include how a token changes the states 
 tokens of the student in one prefill-shaped forward pass, at $2 \cdot N_T$ FLOPs per token. The student adds
 $2 \cdot N_S$ to generate and $6 \cdot N_S$ to train (`onpolicy.flops_per_prompt()`).
 
-Take an 8B student and a 32B teacher. Here, that is 128 GFLOP per student token, against 64 for GRPO (80 with a
+Take an 8B student and a 32B teacher. For this pair, that is 128 GFLOP per student token, against 64 for GRPO (80 with a
 reference model's forward pass for its KL penalty). A teacher four times the student's size makes each on-policy
 token twice as dear. At sixteen 4K-token samples per prompt, that is 8.39 × 10¹⁵ FLOPs against 4.19 × 10¹⁵ (5.24 ×
 10¹⁵ with the reference).
@@ -443,9 +442,9 @@ Both results compare against a teacher that already exists. The training cost of
 number.
 
 **The shared-tokenizer requirement.** For per-token scores, the teacher must read the tokens of the student. TRL's
-GKD raises an error if the `vocab_size` of the two configs is different. Qwen2.5-7B and larger have 152,064, against
-151,936 for the small Qwen2.5 and all Qwen3 models. Thus you cannot use GKD to distil a 0.5B from a 7B, although
-the token ids match (verify). The cross-tokenizer methods are in §6.
+GKD raises an error if the `vocab_size` of the two configs is different (verify). Qwen2.5-7B and larger have 152,064,
+against 151,936 for the small Qwen2.5 and all Qwen3 models (verify). Thus you cannot use GKD to distil a 0.5B from a
+7B, although the token ids match. The cross-tokenizer methods are in §6.
 
 **TRL, concretely (1.14.0, verify).** `GKDConfig`/`GKDTrainer` are experimental:
 `from trl.experimental.gkd import GKDConfig, GKDTrainer`. Their defaults are `lmbda=0.5`, `beta=0.5`,
@@ -486,7 +485,7 @@ model comes with the distillation
 with a KV that grows while it thinks). Fewer traces give a student that stops too early. 10, 30, 100, 300 and 1,000
 traces reach 0.710, 0.824, 0.864, 0.883 and 0.893. The student learns the length from the tail of the data.
 
-**Filtering sets the accuracy–length trade.** From the same 1,000 traces:
+**The filter sets the accuracy–length trade.** From the same 1,000 traces:
 
 | Keep | Traces kept | Accuracy | Mean length | Tokens per correct answer |
 |---|---|---|---|---|
@@ -521,22 +520,22 @@ at scale. The Inkling-Small of the model-landscape primer beat its parent on rea
 
 ## 6. Feature distillation, pruning and vocabulary mismatch
 
-**Matching features.** The encoder era distilled more than outputs:
+**Matching features.** The encoder era distilled more than outputs (verify):
 
 - DistilBERT has a "triple loss": masked-LM, distillation and a cosine loss on hidden states.
 - TinyBERT matches attention maps and hidden states, layer by layer.
-- MiniLM matches the self-attention distributions of the last layer (verify).
+- MiniLM matches the self-attention distributions of the last layer.
 
 These methods need a layer mapping, that is, which student layer copies which teacher layer. They also need
 projections where the widths are different. Decoder LMs mostly distil logits and sequences instead, because the output
-distribution is what generation uses. Also, it needs no mapping, and it works across architectures (a dense student of
-an MoE teacher). Feature matching stays in use where you build the student from the teacher. For example, the draft
-head of EAGLE reads the hidden states of the target (§7).
+distribution is what generation uses. Also, logit and sequence distillation need no mapping, and they work across
+architectures (a dense student of an MoE teacher). Feature matching stays in use where you build the student from the
+teacher. For example, the draft head of EAGLE reads the hidden states of the target (§7).
 
 **Pruning, then distillation.** Minitron prunes the embedding width, the attention heads and the MLP width (and the
 depth) of a trained model. It selects by activation importance on a small calibration set. Then it repairs the model
 with KD from the unpruned parent. For Minitron 8B and 4B from Nemotron-4 15B, its README reports "up to 40x
-fewer training tokens per model". It also reports "compute cost savings of 1.8x" for the family, and "up to a 16%
+fewer training tokens per model" (verify). It also reports "compute cost savings of 1.8x" for the family, and "up to a 16%
 improvement in MMLU" over training from scratch (verify).
 
 The core does the same at a small scale (`TinyLM.prune_width()`, notebook 01). It prunes the 64-unit teacher to its
@@ -666,7 +665,7 @@ With vLLM 0.30.0 (verify), you serve these designs through `--speculative-config
 `draft_model`, `eagle`, `eagle3`, `medusa`, `mtp`, `ngram` and others. For `draft_model`, the `vocab_size` of the
 draft must be equal to the `vocab_size` of the target. Thus Qwen2.5-0.5B cannot be a draft for Qwen2.5-7B.
 
-**Reading vLLM's counters** (`vllm:spec_decode_num_drafts`, `…_num_draft_tokens`, `…_num_accepted_tokens`,
+**The counters of vLLM** (`vllm:spec_decode_num_drafts`, `…_num_draft_tokens`, `…_num_accepted_tokens`,
 `…_num_accepted_tokens_per_pos`, verify). "Mean acceptance length" =
 $1 + \text{accepted} \div \text{drafts} = E[\text{tokens per pass}]$. $\alpha$ is the position-0 rate when the draft
 samples (`draft_sample_method="probabilistic"`, which the lab's `serve_with_draft.sh` sets). But in the default
@@ -751,7 +750,7 @@ the score of the student on that benchmark measures memory, not skill. Remove th
 and the outputs (§3).
 
 For thinking students, evaluate with the full generation length. By default, lm-eval's gsm8k uses greedy decoding
-and 256 generated tokens. This is too few for a trace (the lab's notebook 03, verify).
+and 256 generated tokens (verify). This is too few for a trace (the lab's notebook 03).
 
 ## 9. The economics of a student
 
@@ -785,8 +784,8 @@ fraction of them. The like-for-like ratio is the number to remember: approximate
 
 **The fixed cost** (`cost.fixed_cost()`, §3's example) has two parts. The teacher generation is $1,800 through an API
 at $9.00/M, or $177.91 on the 32B self-hosted at TP = 2. The SFT of the student adds 1.300 GPU-hours ($14.30) at 40%
-MFU. The teacher's tokens are 93% of it self-hosted and 99% through the API. Evals, engineering and the work to keep
-a second model current are extra, and they are not small.
+MFU. The two parts together are the fixed cost. The teacher's tokens are 93% of it self-hosted and 99% through the
+API. Evals, engineering and the work to keep a second model current are extra, and they are not small.
 
 **Break-even** (`cost.break_even()`) is that bill divided by the cost reduction per token. With the self-hosted teacher,
 $192.21 ÷ ($0.890 − $0.056 per million) is 230.6 million tokens: 4.6 days at 50 million output tokens a day ($41.68
@@ -838,7 +837,7 @@ routes a third of calls to a Flash-Lite tier in the same way.
 | **T1** a rented 24 GB GPU (an L4 or RTX 4090: RunPod or Vast.ai containers, Lambda VMs, a GCP `g2-standard-4` Spot L4) | Qwen3-4B as target with a Qwen3-0.6B draft (off-the-shelf, then distilled) under `--speculative-config`, and 1.5–1.7B students | spec-decode acceptance and speedup, measured |
 | **T3** GCP | Teacher inference through the 04 serving lab's Cloud Run GPU or GKE deploys ([`vllm-serving-lab/deploy/gcp/`](../../04-inference-engine/serving-engine/vllm-serving-lab/deploy/gcp/)). No new Terraform. | the teacher as a served endpoint |
 
-**Fitting a T4** (predicted from the arithmetic of the fact sheet, 2026-09-27, verify). Measure these numbers on
+**What fits on a T4** (predicted from the arithmetic of the fact sheet, 2026-09-27, verify). Measure these numbers on
 hardware to make sure. The lab's `hf/memory.py` calculates them. Full fine-tuning with AdamW and an fp32 master copy
 is ~16 bytes per parameter. That is 7.90 GB for Qwen2.5-0.5B, which fits the ~15 GiB of a T4 with gradient
 checkpointing and short sequences. It is 24.7 GB for a 1.5B, which does not fit.
@@ -986,23 +985,23 @@ Code and documentation (read 2026-09-27):
   licences), `github.com/deepseek-ai/DeepSeek-R1`, `github.com/QwenLM/Qwen3` and the transformers model docs
   (DistilBERT, Gemma 2, Gemma 3).
 - In this repo:
-  - the [transformer primer](../transformers/docs/transformer-primer.md),
-  - the [capacity primer](../gpu-capacity-planning/PRIMER.md) and [`capacity.py`](../gpu-capacity-planning/capacity.py),
-  - the [roofline primer](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) and
-    [`roofline-core`](../../01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/) (`roofline.llm`, `roofline.cost`),
-  - the [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md) and
-    [`mini-engine-core`](../../04-inference-engine/serving-engine/mini-engine-core/) (`minengine.spec`),
-  - the [quantization primer](../../04-inference-engine/quantization/PRIMER.md) and
-    [`quant-core`](../../04-inference-engine/quantization/quant-core/) (`quantcore.eval`),
-  - the [RL and thinking-models primer](../rl-and-thinking-models/PRIMER.md) and [`rl-core`](../rl-and-thinking-models/rl-core/)
-    (`rlcore.pg`, `rlcore.tasks.ThinkTask`), with its fact sheet
-    [`tools/orchestration/facts/rl-and-thinking-models.md`](../../tools/orchestration/facts/rl-and-thinking-models.md)
-    (the R1, Qwen3 and ThinkTask facts that this primer uses again),
-  - the [mixture-of-experts primer](../mixture-of-experts/PRIMER.md),
-  - the [model-landscape primer](../model-landscape/open-weight-llms-primer.md),
-  - the [agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) (`scalelab`),
-  - the 07 [platform lab](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/) (evals) and
-    [agent-memory primer](../../07-application-agent-framework/agent-memory/PRIMER.md) (`memcore.harness.wilson_interval`).
+    - the [transformer primer](../transformers/docs/transformer-primer.md),
+    - the [capacity primer](../gpu-capacity-planning/PRIMER.md) and [`capacity.py`](../gpu-capacity-planning/capacity.py),
+    - the [roofline primer](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) and
+      [`roofline-core`](../../01-hardware-gpu-fabric/roofline-and-fabric/roofline-core/) (`roofline.llm`, `roofline.cost`),
+    - the [serving-engine primer](../../04-inference-engine/serving-engine/PRIMER.md) and
+      [`mini-engine-core`](../../04-inference-engine/serving-engine/mini-engine-core/) (`minengine.spec`),
+    - the [quantization primer](../../04-inference-engine/quantization/PRIMER.md) and
+      [`quant-core`](../../04-inference-engine/quantization/quant-core/) (`quantcore.eval`),
+    - the [RL and thinking-models primer](../rl-and-thinking-models/PRIMER.md) and [`rl-core`](../rl-and-thinking-models/rl-core/)
+      (`rlcore.pg`, `rlcore.tasks.ThinkTask`), with its fact sheet
+      [`tools/orchestration/facts/rl-and-thinking-models.md`](../../tools/orchestration/facts/rl-and-thinking-models.md)
+      (the R1, Qwen3 and ThinkTask facts that this primer uses again),
+    - the [mixture-of-experts primer](../mixture-of-experts/PRIMER.md),
+    - the [model-landscape primer](../model-landscape/open-weight-llms-primer.md),
+    - the [agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) (`scalelab`),
+    - the 07 [platform lab](../../07-application-agent-framework/agent-fundamentals/gcp-agent-platform-lab/) (evals) and
+      [agent-memory primer](../../07-application-agent-framework/agent-memory/PRIMER.md) (`memcore.harness.wilson_interval`).
 
 ## Verify list
 
@@ -1011,41 +1010,41 @@ the check again against the versions that you pin.
 
 - **TRL 1.14.0**, with transformers 5.x, which pip resolves for it (`warmup_ratio` is gone, and `warmup_steps` < 1
   is a ratio):
-  - `GKDTrainer`/`GKDConfig` under `trl.experimental.gkd` (`from trl import GKDTrainer` fails),
-  - their defaults: `lmbda` 0.5, `beta` 0.5, `temperature` 0.9 (sampling only, the loss at T = 1, no $T^2$),
-    `max_new_tokens` 128, `seq_kd` False,
-  - a per-batch $\lambda$ coin flip, and the `vocab_size` check,
-  - `DistillationTrainer`/`DistillationConfig` stable and always on-policy: `beta` 1.0, `temperature` 1.0 on both
-    logits, `max_completion_length` 512, 256-position loss chunks,
-  - its quick start, Qwen2.5-0.5B from 1.5B,
-  - GOLD (`use_uld_loss`) and MiniLLM experimental,
-  - `SFTConfig` and the other configs with bf16 as the default, unless you set `fp16`.
+    - `GKDTrainer`/`GKDConfig` under `trl.experimental.gkd` (`from trl import GKDTrainer` fails),
+    - their defaults: `lmbda` 0.5, `beta` 0.5, `temperature` 0.9 (sampling only, the loss at T = 1, no $T^2$),
+      `max_new_tokens` 128, `seq_kd` False,
+    - a per-batch $\lambda$ coin flip, and the `vocab_size` check,
+    - `DistillationTrainer`/`DistillationConfig` stable and always on-policy: `beta` 1.0, `temperature` 1.0 on both
+      logits, `max_completion_length` 512, 256-position loss chunks,
+    - its quick start, Qwen2.5-0.5B from 1.5B,
+    - GOLD (`use_uld_loss`) and MiniLLM experimental,
+    - `SFTConfig` and the other configs with bf16 as the default, unless you set `fp16`.
 - **vLLM 0.30.0:**
-  - `--speculative-config` and its `method` values,
-  - `draft_sample_method="greedy"` by default (then the position-0 acceptance counter reads
-    $p(\operatorname{argmax} q)$),
-  - the equal-vocab-size check of `draft_model`, and `use_heterogeneous_vocab`,
-  - the `vllm:spec_decode_*` counters, and the logged "draft acceptance rate" = $\text{accepted} \div \text{drafted}$,
-  - `prompt_logprobs`, `--max-logprobs` default 20, `--logprobs-mode` default `raw_logprobs`,
-  - `--dtype half` on a T4.
+    - `--speculative-config` and its `method` values,
+    - `draft_sample_method="greedy"` by default (then the position-0 acceptance counter reads
+      $p(\operatorname{argmax} q)$),
+    - the equal-vocab-size check of `draft_model`, and `use_heterogeneous_vocab`,
+    - the `vllm:spec_decode_*` counters, and the logged "draft acceptance rate" = $\text{accepted} \div \text{drafted}$,
+    - `prompt_logprobs`, `--max-logprobs` default 20, `--logprobs-mode` default `raw_logprobs`,
+    - `--dtype half` on a T4.
 - **Models:**
-  - the Qwen2.5-0.5B/1.5B/32B, Qwen3-0.6B/4B and Llama-3.1-8B shapes in `cost.SHAPES`,
-  - config `vocab_size` 151,936 for small Qwen2.5 and all Qwen3, and 152,064 for Qwen2.5-7B and larger,
-  - licences (Qwen Apache 2.0, DeepSeek-R1 MIT with distillation permitted, the Llama clause on model names),
-  - hosted-API terms.
+    - the Qwen2.5-0.5B/1.5B/32B, Qwen3-0.6B/4B and Llama-3.1-8B shapes in `cost.SHAPES`,
+    - config `vocab_size` 151,936 for small Qwen2.5 and all Qwen3, and 152,064 for Qwen2.5-7B and larger,
+    - licences (Qwen Apache 2.0, DeepSeek-R1 MIT with distillation permitted, the Llama clause on model names),
+    - hosted-API terms.
 - **Results quoted:**
-  - Qwen3 Table 21 (8B: RL 67.6 at 17,920 GPU-hours, on-policy distillation 74.4 at 1,800),
-  - tinker-cookbook (Qwen3.5-9B-Base from Qwen3.5-9B, rank-128 LoRA: ~65% to ~76.7% AIME'24, 200 steps × 512
-    groups, 16K-token rollouts),
-  - the on-policy stage of Qwen3 and of the tinker-cookbook, which starts from an SFT checkpoint,
-  - Minitron (40× fewer tokens, 1.8×, up to 16% MMLU),
-  - the Llama 3.2 and Gemma 2/3 distillation statements,
-  - EAGLE 3×, EAGLE-3 5.6× (13B, 2×RTX 3090), Medusa 2.2–3.6×,
-  - the regeneration step of SpecForge,
-  - the α = 0.5 of distilling step-by-step,
-  - the triple loss of DistilBERT,
-  - TinyBERT and MiniLM, described but not quantified,
-  - the lm-eval gsm8k defaults (greedy, 256 tokens).
+    - Qwen3 Table 21 (8B: RL 67.6 at 17,920 GPU-hours, on-policy distillation 74.4 at 1,800),
+    - tinker-cookbook (Qwen3.5-9B-Base from Qwen3.5-9B, rank-128 LoRA: ~65% to ~76.7% AIME'24, 200 steps × 512
+      groups, 16K-token rollouts),
+    - the on-policy stage of Qwen3 and of the tinker-cookbook, which starts from an SFT checkpoint,
+    - Minitron (40× fewer tokens, 1.8×, up to 16% MMLU),
+    - the Llama 3.2 and Gemma 2/3 distillation statements,
+    - EAGLE 3×, EAGLE-3 5.6× (13B, 2×RTX 3090), Medusa 2.2–3.6×,
+    - the regeneration step of SpecForge,
+    - the α = 0.5 of distilling step-by-step,
+    - the triple loss of DistilBERT,
+    - TinyBERT and MiniLM, described but not quantified,
+    - the lm-eval gsm8k defaults (greedy, 256 tokens).
 - **Prices and hardware:** H100 ~$11/GPU-hour on demand (Spot ~$3.7), Gemini 3.5 Flash $9.00/M output (06 lab,
   2026-09-05), and the device figures in `cost.GPUS` (roofline.specs'). The T4 fits (16 bytes per parameter for
   AdamW with an fp32 master, 2.49 GB of fp32 logits per 4,096 tokens) are predictions.

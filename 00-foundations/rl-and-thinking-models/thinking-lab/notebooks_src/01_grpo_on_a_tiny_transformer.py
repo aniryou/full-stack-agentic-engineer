@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 01 · GRPO on a tiny transformer: a model discovers that thinking pays
 #
-# **Tier:** T0 with torch on a laptop CPU. The training run takes about a minute. We examined this notebook
+# **Tier:** T0 with torch on a laptop CPU. The training run takes about a minute. We ran this notebook
 # on a shared 4-core container: ~40 s for the run, under a minute in all. T1 (any GPU) runs the same code
 # faster, but this model does not need that speed. Without torch, the notebook still runs. In that
 # case, the training cells show a recorded run, labelled illustrative, and the torch checks tell you
@@ -142,8 +142,9 @@ print(f"chance = 1/base = {1 / task.base:.2f}")
 #
 # ## Exercise 1.2 — predict the reward before RL starts, and where it can end
 #
-# After SFT, the model thinks with the probability `share`. When it thinks, it is correct with the
-# probability `acc_think`. When it does not think, it is correct with the probability `acc_direct`.
+# Use this model of the policy after SFT. The model thinks with the probability `share`. When it
+# thinks, it is correct with the probability `acc_think`. When it does not think, it is correct with
+# the probability `acc_direct`.
 # Write the expected reward. Then compare it with the run.
 #
 # The accuracies come from the table of the warm-up example. The share comes from the step-0 batch
@@ -229,7 +230,7 @@ else:
 #
 # `clip_frac` is 0 at every step. With `num_iterations = 1`, the trainer uses the rollouts for
 # exactly one gradient step. Thus $\pi_\theta = \pi_{\text{old}}$ when the trainer calculates the
-# loss. The ratio is exactly 1, and the clip never binds. Exercise 1.4 changes that.
+# loss. Thus the ratio is exactly 1, and the clip never binds. Exercise 1.4 changes that.
 #
 # ## Exercise 1.3 — the GRPO loss, in torch
 #
@@ -443,5 +444,5 @@ print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder ta
 #
 # **Drill 3.** *`clip_frac` is always 0. Is the clip broken?* No. With one gradient step per rollout
 # batch (`num_iterations=1`, the default of TRL), the importance ratio is exactly 1. The clip acts
-# only in two cases. The trainer uses a batch again, or the batch came from weights that differ from
-# the weights of the trainer.
+# only in two cases: the trainer uses a batch again, or the batch came from weights that are not the
+# trainer's weights.

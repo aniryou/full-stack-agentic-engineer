@@ -66,7 +66,7 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
 
 | Tier | What you run in this topic | Hardware and cost |
 |---|---|---|
-| **T0** | Every core notebook. The lab runs the distillation of a small transformer on CPU (torch), and its fake OpenAI-compatible teacher (labelled simulated). It also has bundled traces and curves (labelled illustrative). | Laptop, Colab CPU or CI. The cost is $0. |
+| **T0** | Every core notebook. The lab runs the distillation of a small transformer on CPU (torch), and its fake OpenAI-compatible teacher (labelled simulated). It also uses its bundled traces and curves (labelled illustrative). | Laptop, Colab CPU or CI. The cost is $0. |
 | **T1** | Qwen2.5-1.5B-Instruct as the teacher in vLLM on a T4 with `--dtype half`. SFT and logit KD of Qwen2.5-0.5B-Instruct with TRL. On-policy GKD. Reasoning traces from Qwen3-1.7B or DeepSeek-R1-Distill-Qwen-1.5B. Qwen3-4B with a Qwen3-0.6B draft on a 24 GB card. | Colab/Kaggle T4 (free, fp16 only). Any 24 GB GPU (~$0.3–0.7/hr, verify). |
 | **T3** | Teacher inference behind the Cloud Run GPU or GKE deploy of the 04 serving lab. This topic adds no new Terraform. | GCP, pay per use. For cleanup, see the `deploy/` READMEs of that lab. |
 
@@ -87,10 +87,10 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
 - **Toys, labelled.** The teachers and students of the core are one-hidden-layer networks on a toy language with a
   known truth. Tests pin the direction of each effect, but the magnitudes are those of the toy. The reasoning toy
   is the ThinkTask formula of rlcore, not a language model.
-- **Bounds, not measurements.** The serving costs are those of an ideal roofline decode step. This is the
-  arithmetic of `roofline.llm` and `roofline.cost` in layer 01, and the tests reproduce it. Real engines reach a
-  fraction of these costs. The measured throughput, the real teachers and the real students are in the T1 runs of
-  the lab. The fake server and the bundled outputs of the lab are labelled simulated or illustrative.
+- **Bounds, not measurements.** The serving costs are those of an ideal roofline decode step. This is the arithmetic
+  of `roofline.llm` and `roofline.cost` in layer 01, and the tests reproduce it. Real engines reach a fraction of the
+  throughput of this ideal step. The measured throughput, the real teachers and the real students are in the T1 runs
+  of the lab. The fake server and the bundled outputs of the lab are labelled simulated or illustrative.
 - **Dated facts.** The facts that follow are as of September 2026, and each one has the mark `(verify)`. They are
   the distillation trainers and defaults of TRL 1.14.0, and the speculative-decoding flags and metrics of vLLM
   0.30.0. They are also the Qwen3, DeepSeek-R1, Minitron and EAGLE results, the licences and all prices. The

@@ -107,8 +107,8 @@ print("✅ the plug-in understates pass@k, and only through problems the model s
 # ## Exercise 3.2 — majority vote
 #
 # Return the most common answer. Ignore `None`: it is no answer, for example because the output
-# ended during the thinking. If two or more answers have the highest count, select the answer of
-# those that appeared *first*. If there are no answers, return `None`.
+# stopped before the model completed its thinking. If two or more answers have the highest count,
+# select the one of those answers that appeared *first*. If there are no answers, return `None`.
 
 # %% exercise
 def my_vote(answers: list):
@@ -297,7 +297,8 @@ print("✅ the best option changes with the budget: direct answers, then budgete
 # %% [markdown]
 # ## On a real GPU (T1)
 #
-# Point `THINKLAB_URL` at a real server. Set `COLLECT = True`, and run the notebook again.
+# Point `THINKLAB_URL` at a real server. Set `COLLECT = True`. Then run the notebook again.
+#
 # `recorded.collect` asks for `n=8` choices per request. Thus vLLM prefills the prompt one time and
 # decodes eight sequences in the same batch. Parallel sampling has a low cost in prefill, and it
 # costs the same KV and decode as eight requests. The T1 path has no reward model.
@@ -327,6 +328,7 @@ print("✅ the best option changes with the budget: direct answers, then budgete
 # is the modal answer on a problem, more votes make the incorrect answer win more reliably. Examine
 # the share of problems where the correct answer is modal.
 #
-# **Drill 3.** *pass@1 is 90%, so the five-step agent succeeds 90% of the time?* The calculation
-# applies only if you run each step one time and the steps are independent. It gives $0.9^5$ ≈ 59%.
+# **Drill 3.** *pass@1 is 90%, so the five-step agent succeeds 90% of the time?* You can calculate
+# the success of the agent from pass@1 only if you run each step one time and the steps are
+# independent. That calculation gives $0.9^5$ ≈ 59%.
 # If a step must succeed every time that the agent retries or repeats it, measure pass^k.

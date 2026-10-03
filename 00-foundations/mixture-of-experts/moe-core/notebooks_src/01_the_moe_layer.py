@@ -75,8 +75,8 @@ print("token of each slot (slot // k)   :", (order // 2).tolist())
 # The cell puts the router logits of one token through the rules of each family (`moe.ROUTERS`). Look at the weights:
 # - Mixtral renormalises them to 1.
 # - OLMoE (`norm_topk_prob=False`, also the default of transformers for Qwen2/Qwen3-MoE) keeps the raw softmax mass.
-#   But reports say that the released Qwen3 MoE configs set it true (verify: read the config of the checkpoint). Thus
-#   those configs give weights as Mixtral does.
+#   But reports say that the released Qwen3 MoE configs set this flag true (verify: read the config of the
+#   checkpoint). Thus those configs give weights as Mixtral does.
 # - gpt-oss selects on the logits and does a softmax over only those $k$. This is *exactly* the renormalised softmax of
 #   Mixtral (the exponent ratios are the same).
 # - DeepSeek-V3 uses sigmoid scores, renormalises them and multiplies them by 2.5.
@@ -243,11 +243,10 @@ print(f"✅ same FLOPs, same parameters; {combos_coarse} expert sets vs {combos_
 # ## In a design review
 # **The two-minute version.** "An MoE layer replaces the MLP of the block with $E$ expert MLPs and a linear router.
 # Each token gives a score to all $E$ experts and keeps its top-k. It adds the outputs of those $k$ experts with the
-# router weights. Models that have a shared expert also add that expert. All $E$ experts stay in memory, but each token
-# calculates only $k$ of them.
+# router weights. Models that have a shared expert also add that expert.
 #
-# "Thus a model like Mixtral holds 46.7B parameters but runs 12.9B per token, and
-# DeepSeek-V3 holds 671B and runs approximately 37B.
+# "All $E$ experts stay in memory, but each token calculates only $k$ of them. Thus a model like Mixtral holds 46.7B
+# parameters but runs 12.9B per token, and DeepSeek-V3 holds 671B and runs approximately 37B.
 #
 # "The routers differ: softmax or sigmoid, renormalised or not, and the selection-only bias of DeepSeek. The 'active'
 # numbers also differ: gpt-oss counts only the LM head, and DeepSeek counts both embedding tables. Kernels sort the

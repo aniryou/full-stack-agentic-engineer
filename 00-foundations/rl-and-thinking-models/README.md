@@ -16,7 +16,7 @@ After this topic, you can do these things:
    approximately 50 s. Then open
    [`01_policy_gradients_on_a_toy_task`](rl-core/notebooks/01_policy_gradients_on_a_toy_task.ipynb). See how RL
    exploits a verifier that has a bug.
-3. Use any GPU. A free Colab T4 is sufficient. Serve a real thinking model, and turn its thinking on and off:
+3. Use any GPU. A free Colab T4 is sufficient. Serve a real thinking model. Then turn its thinking on and off:
    [`thinking-lab/notebooks/02_a_thinking_model_on_one_gpu.ipynb`](thinking-lab/notebooks/02_a_thinking_model_on_one_gpu.ipynb).
 
 ## What you get
@@ -28,7 +28,7 @@ a multi-GPU box, rented for an hour. T3 is the Google Cloud deployment, and it i
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | Explain post-training and thinking models in nine sections. The first three are §1 from pretraining to post-training, §2 policy gradients over token sequences and §3 learning from preferences. Then come §4 RL with verifiable rewards and GRPO, §5 thinking models and §6 test-time compute. The last three are §7 what thinking does to serving, §8 the RL training stack in brief and §9 where to run it. Each formula has a worked number and the core function that calculates it. After the sections come "In a design review", a glossary, sources and a dated Verify list. | ~2.5 h, read together with the core | — |
 | [`rl-core/`](rl-core/) | Build it yourself in `rlcore` (standard library + numpy, ~1,000 lines). It has verifiable toy tasks, a table-of-softmaxes policy, REINFORCE and the KL closed form, and Bradley–Terry and DPO. It also has GRPO with TRL's options and DAPO's corrections, pass@k and budget allocation, and the serving workload model built on the capacity primer. There are five fill-in notebooks. | ~10 h | T0 |
-| [`thinking-lab/`](thinking-lab/) | Train a small transformer with SFT, then with GRPO, in torch. Serve Qwen3 in vLLM with `--reasoning-parser`, with thinking on and off, and with budgets. Run best-of-n and majority vote on a real model. Measure ITL, KV usage and preemptions when outputs are long. Run one GRPO step in which vLLM generates the rollouts. The package is `thinklab`. A fake server and bundled outputs let every notebook run at T0. | ~10 h | T0 to T1 (T3 through the deploys of the 04 lab) |
+| [`thinking-lab/`](thinking-lab/) | Train a small transformer with SFT, then with GRPO, in torch. Serve Qwen3 in vLLM with `--reasoning-parser`, with thinking on and off, and with budgets. Run best-of-n and majority vote on a real model. Measure ITL, KV usage and preemptions when outputs are long. Run one GRPO step in which vLLM generates the rollouts. The package is `thinklab`, and its fake server and bundled outputs let every notebook run at T0. | ~10 h | T0 to T1 (T3 through the deploys of the 04 lab) |
 
 ### Work it in this order
 
@@ -65,7 +65,7 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
 
 | Tier | What you run in this topic | Hardware and cost |
 |---|---|---|
-| **T0** | All core notebooks. From the lab: the GRPO on a small transformer on CPU (torch), the fake OpenAI-compatible server and the bundled model outputs (labelled illustrative). The fake server sends reasoning with heavy-tailed lengths (labelled simulated). | laptop, Colab CPU or CI, $0 |
+| **T0** | All core notebooks. From the lab: the GRPO on a small transformer on CPU (torch), the fake OpenAI-compatible server (labelled simulated) and the bundled model outputs (labelled illustrative). The fake server sends reasoning with heavy-tailed lengths. | laptop, Colab CPU or CI, $0 |
 | **T1** | Qwen3-0.6B or DeepSeek-R1-Distill-Qwen-1.5B in vLLM on a T4 with `--dtype half`. Qwen3-4B on a 24 GB card. Best-of-n and votes on real outputs. One GRPO step in which vLLM generates the rollouts. | Colab/Kaggle T4 (free, fp16 only), any 24 GB GPU (~$0.3–0.7/hr, verify) |
 | **T3** | A thinking model behind the Cloud Run GPU deploy or the GKE deploy of the 04 serving lab. This topic adds no new Terraform. | GCP, pay per use. For cleanup, see the `deploy/` READMEs of that lab. |
 
@@ -87,9 +87,9 @@ For prices, free tiers and how to get GPUs on GCP and on other platforms, see [`
   does not change across seeds, and tests pin it. But the magnitudes are those of the toy. The serving numbers come
   from the formulas of the capacity primer plus a roofline step, not from hardware.
 - **Measured only in the lab.** Real reasoning outputs, ITL under long outputs and GRPO on a transformer come from
-  the lab. They come from its T0 runs (torch on CPU) and its T1 runs. The fake server and the bundled outputs of
-  the lab are labelled simulated or illustrative.
-- **Dated facts.** These facts have a date: the reasoning flags and field names of vLLM 0.30.0 (`reasoning`, not
-  `reasoning_content`) and the `GRPOConfig` defaults of TRL 1.14.0. The Qwen3 and DeepSeek-R1 facts and all prices
-  also have a date. These facts are as of September 2026, and they have the mark `(verify)`. The
-  [Verify list](PRIMER.md#verify-list) of the primer collects them.
+  the lab. The lab gets them in its T0 runs (torch on CPU) and its T1 runs. The lab labels its fake server and its
+  bundled outputs simulated or illustrative.
+- **Dated facts.** The reasoning flags and field names of vLLM 0.30.0 (`reasoning`, not `reasoning_content`) are
+  as of September 2026. The `GRPOConfig` defaults of TRL 1.14.0, the Qwen3 and DeepSeek-R1 facts and all prices are
+  also as of September 2026. All of these facts have the mark `(verify)`. The [Verify list](PRIMER.md#verify-list) of
+  the primer collects them.

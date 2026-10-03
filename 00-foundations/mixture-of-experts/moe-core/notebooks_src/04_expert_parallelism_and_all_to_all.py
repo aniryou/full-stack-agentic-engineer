@@ -17,10 +17,10 @@
 # Mixtral-like layer at 256 tokens per GPU. The default exchange of vLLM moves the volume of tensor parallelism
 # instead.
 #
-# Then all ranks wait for the **slowest rank**. The expert work of each rank is a roofline of its own. In prefill, the
-# rank that holds the hot experts computes the most rows and sets the step. In memory-bound decode, every rank streams
-# its touched experts, whatever the skew, and the skew goes to the link of the hot rank. That is why engines rebalance
-# and replicate hot experts (the EPLB of vLLM).
+# Then all ranks wait for the **slowest rank**. The expert work of the slowest rank is a roofline of its own. In
+# prefill, the rank that holds the hot experts computes the most rows and sets the step. In memory-bound decode,
+# every rank streams its touched experts, whatever the skew, and the skew goes to the link of the hot rank. That is why
+# engines rebalance and replicate hot experts (the EPLB of vLLM).
 #
 # Large MoE deployments use EP together with **data-parallel attention** (wide-EP). The attention and its KV are per
 # rank, and the experts are spread thin. This layout frees HBM for KV, and it collects the tokens of every rank at
@@ -62,9 +62,10 @@ for tok in (8, 64, 4096):
 
 # %% [markdown]
 # Decode moves a small quantity of data per layer (latency-bound: $\alpha$ is the largest term). Prefill moves a large
-# quantity (bandwidth-bound). For DeepSeek at 4,096 tokens per GPU, one dispatch is 231 MiB. That is ~0.5 ms on NVLink
-# and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies two kernel families: low-latency (decode,
-# CUDA-graph friendly) and high-throughput (prefill, which forwards over NVLink and then over RDMA).
+# quantity (bandwidth-bound). For DeepSeek at 4,096 tokens per GPU, one dispatch is 231 MiB. That dispatch takes ~0.5 ms
+# on NVLink and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies two kernel families: low-latency
+# (decode, CUDA-graph friendly) and high-throughput (prefill). The high-throughput kernels forward the data over NVLink
+# and then over RDMA.
 #
 # The formula explains the published EP8 low-latency figures of DeepEP. The dispatch is 128
 # tokens × 8 × (7,168 + 7,168/128 × 4) B = 7,569,408 B in 77 µs = 98.3 GB/s (reported 98).
@@ -181,7 +182,7 @@ print(f"✅ DeepEP EP8 low-latency: dispatch {dispatch(128, 8, 7168, 1, 128) / 7
 # - pairwise = ${p - 1}$ steps, each of $\alpha + \text{size}/p \div B$.
 # - direct = one step of $\alpha + (p - 1)/p \cdot \text{size} \div B$.
 #
-# Calculate again the 22 µs and 10 µs of layer 02 for 4 MiB on 8 GPUs (450 GB/s, $\alpha$ = 2 µs).
+# Calculate the 22 µs and 10 µs of layer 02 again for 4 MiB on 8 GPUs (450 GB/s, $\alpha$ = 2 µs).
 
 # %% exercise
 def a2a(size, p, gbs, alpha_us, algo="direct"):

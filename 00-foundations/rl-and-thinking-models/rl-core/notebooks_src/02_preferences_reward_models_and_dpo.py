@@ -13,12 +13,12 @@
 # - **RLHF** then maximises $\mathbb{E}[r] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$ with PPO. PPO is a
 #   clipped policy-gradient step, plus a **value model** for the baseline (GAE).
 # - **DPO** uses the fact that the KL-regularised optimum has a closed form,
-#   $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$. DPO inverts it, $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \text{const}$,
-#   and substitutes $r$ into Bradley–Terry. The constant cancels. Then the policy trains directly on pairs with a
-#   classification loss.
+#   $\pi^* \propto \pi_{\text{ref}} \exp(r/\beta)$. DPO inverts it,
+#   $r = \beta \log(\pi^*/\pi_{\text{ref}}) + \text{const}$, and substitutes $r$ into Bradley–Terry. The constant
+#   cancels. Then the policy trains directly on pairs with a classification loss.
 # - Its **implicit reward** $\beta \log(\pi/\pi_{\text{ref}})$ is what TRL logs as `rewards/chosen`. DPO gives up
-#   two things. It sees only the pairs (no exploration). Second, it optimises the *margin*, thus the likelihood of
-#   the chosen answer can decrease.
+#   two things. First, it sees only the pairs (no exploration). Second, it optimises the *margin*, thus the
+#   likelihood of the chosen answer can decrease.
 # - Also, any bias in the annotators (for example, a taste for long answers) becomes the reward. Harder
 #   optimisation turns that bias into padding.
 #

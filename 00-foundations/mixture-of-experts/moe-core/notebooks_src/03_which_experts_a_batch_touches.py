@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 03 · Which experts a batch touches
 #
-# **Tier:** T0. It needs numpy and arithmetic, and a few seconds. Every step time here is a roofline bound
+# **Tier:** T0. It uses numpy and arithmetic, and it takes a few seconds. Every step time here is a roofline bound
 # (simulated). To measure decode step time against batch for a real MoE and a dense model, continue with
 # `../moe-lab/notebooks/03_batch_vs_weight_stream.ipynb` (T1). When that notebook finds no GPU, it prints the
 # predictions of this notebook.
@@ -78,8 +78,9 @@ print("\ndecode turns compute-bound (c = 0, H200, ridge 206):", x)
 # %% [markdown]
 # Mixtral decodes like a 13B model at batch 1 and like a 47B model from batch 16. Throughput still increases with the
 # batch, because more tokens share the full weight stream. But the step is memory-bound until a batch 3.6 times that
-# of the dense model. For fine-grained Qwen3, it is 9.9 times. This is its streamed ÷ multiplied weight ratio, without
-# the input embedding. The model gathers the input embedding and does not stream it.
+# of the dense model. For fine-grained Qwen3, the batch is 9.9 times that of the dense model. This factor is the
+# streamed ÷ multiplied weight ratio of Qwen3, without the input embedding. The model gathers the input embedding
+# and does not stream it.
 #
 # ## Worked example 3 — the KV cache does not care
 # An MoE caches exactly what its attention caches. The GQA of Mixtral has the shape of Llama-3.1-8B, so both store
@@ -175,7 +176,7 @@ print(f"✅ predicted {predicted:.0f}, bisection says {actual:,} - the ratio car
 
 # %% [markdown]
 # ## Exercise 3.5 — rows per expert
-# In the step, each touched expert runs a GEMM on the rows routed to it. On average, this is
+# In the step, each touched expert runs a GEMM on the rows routed to it. On average, an expert gets
 # $\text{batch} \times k \div E$ rows. That row count is the arithmetic intensity of the expert GEMM (FLOP per weight
 # byte at 2-byte weights). For batch 256, set `rows` to a dict of rows per expert for Mixtral (8, 2), Qwen3 (128, 8)
 # and DeepSeek-V3 (256, 8). Set `batch_for_ridge` to the batch that each model needs. At that batch, the average
@@ -196,8 +197,8 @@ print("✅ each expert sees only B·k/E of the batch: DeepSeek-V3 needs ~6,600 t
 
 # %% [markdown]
 # ## Exercise 3.6 — skew changes the bytes
-# Hot experts are a property of the workload: a code-heavy batch favours a few experts. Make a model of this with Zipf
-# popularity $s = 1.0$ (simulated) for Qwen3-30B-A3B at batch 16, 1K context. Set `skew_touched` from
+# Hot experts are a property of the workload: a code-heavy batch favours a few experts. Make a model of the hot experts
+# with Zipf popularity $s = 1.0$ (simulated) for Qwen3-30B-A3B at batch 16, 1K context. Set `skew_touched` from
 # `T.touched_mc`. Then set `speedup` = uniform step time ÷ skewed step time
 # (`T.decode_step(..., touched=skew_touched)`).
 
@@ -229,9 +230,9 @@ print(f"✅ skew: {skew_touched:.1f} experts touched instead of {T.experts_touch
 # context the KV share increases again."
 #
 # **Drill questions**
-# 1. *Mixtral at batch 1 and at batch 64: how do the bytes per step compare?* 25.6 GB against 101.7 GB on the
-#    roofline. At batch 1, the step reads 2 of 8 experts per layer. At batch 64, it reads all 8. Both also read the
-#    KV.
+# 1. *Mixtral at batch 1 and at batch 64: how do the bytes per step compare?* On the roofline, the step reads 25.6 GB
+#    at batch 1 and 101.7 GB at batch 64. At batch 1, the step reads 2 of 8 experts per layer. At batch 64, it reads
+#    all 8. Both also read the KV.
 # 2. *Why is 'decode is compute-bound from batch ≈ ridge' incorrect for MoE?* The weight stream approaches the total
 #    parameters, but the FLOPs change with the active parameters. Thus the crossover is ridge × (streamed ÷
 #    multiplied).

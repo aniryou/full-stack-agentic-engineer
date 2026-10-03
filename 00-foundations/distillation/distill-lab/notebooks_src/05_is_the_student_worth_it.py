@@ -18,9 +18,9 @@
 #   hard problems, while they are far apart on the hardest slice. Report the accuracy per difficulty with Wilson
 #   intervals. Use paired comparisons.
 # * **The economics** (PRIMER §9 "The economics of a student"). The student costs less per token, because each GPU
-#   holds many more of its sequences. Its weights and its KV per sequence are both smaller. Calculate the cost of the
-#   teacher on the GPUs that you really give it (two H100s for a 32B). Do not use one card that it barely fits on.
-#   Distillation has a fixed cost: the teacher's tokens plus $6 \cdot N \cdot D$ of training. Break-even is that fixed
+#   holds many more of its sequences. This is because its weights and its KV per sequence are both smaller. Calculate
+#   the cost of the teacher on the GPUs that you really give it (two H100s for a 32B). Do not use one card that it
+#   barely fits on. Distillation has a fixed cost: the teacher's tokens plus $6 \cdot N \cdot D$ of training. Break-even is that fixed
 #   cost divided by the decrease in cost per token.
 # * **The cascade:** send easy queries to the student and hard queries to the teacher. Measure the cascade by the
 #   cost per *correct* answer, not by the cost per token.
@@ -70,8 +70,8 @@ print(table([{k: round(v, 3) if isinstance(v, float) else v for k, v in PAIRED.i
 # Write `wilson(passes, n, z=1.96)`. The centre is $(p + z^2/2n) / (1 + z^2/n)$. The half-width is
 # $z\,\sqrt{p(1 - p)/n + z^2/4n^2} / (1 + z^2/n)$. Clip the interval to [0, 1]. Return `(0, 1)` for $n$ = 0.
 #
-# The interval stays useful at 0/$n$ and $n$/$n$, where $p \pm 1.96\,\mathrm{SE}$ becomes a single point. The eval gates of
-# the 07 agent lab and `memory-core` use this interval.
+# The interval stays useful at 0/$n$ and $n$/$n$, where $p \pm 1.96\,\mathrm{SE}$ becomes a single point. `memory-core`
+# and the eval gates of the 07 agent lab use this interval.
 
 # %% exercise
 def wilson(passes: int, n: int, z: float = 1.96) -> tuple:
@@ -243,7 +243,7 @@ print(f"✅ with an accuracy floor of {FLOOR}: teacher from difficulty {BEST if 
       "nothing extra, cost per correct answer alone favours the cheap model, so state the accuracy the product needs first")
 
 # %% [markdown]
-# The router needs a difficulty signal or a confidence signal that it can calculate before it answers (06
+# The router needs a difficulty signal or a confidence signal that it can calculate before a model answers (06
 # scaling-admission-cost: routing by cost). In real traffic, the router does not know the difficulty. It has one of
 # these proxies:
 #
@@ -318,7 +318,7 @@ print(table([
 #
 # **Drill 1.** *Offline agreement with the teacher is 97%, but users say that the student became worse on hard
 # tickets. What do you examine?* Examine the task accuracy on a hard slice with its own interval, paired against the
-# teacher on the same items. Agreement is an average that includes the easy positions. Then decide if you route that
+# teacher on the same items. Agreement is an average over easy positions. Then decide if you route that
 # slice to the teacher.
 #
 # **Drill 2.** *The student is 21× smaller. Against the teacher on one H100, its cost per token is 96× lower. Against

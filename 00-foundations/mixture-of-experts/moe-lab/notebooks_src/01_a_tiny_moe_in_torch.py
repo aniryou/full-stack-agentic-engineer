@@ -26,8 +26,8 @@
 #   the router explains most of the selection, and the domain explains almost none. Measure. Do not assume.
 #
 # Concepts: PRIMER §2 "The MoE layer", §3 "Routing and load balance" and §4 "Training MoE in brief"
-# ([`PRIMER.md`](../../PRIMER.md)). The numpy layer and the trainer of the `moe-core` of this topic teach the
-# same ideas with manual gradients. This notebook is the torch version, with the shape of the real models.
+# ([`PRIMER.md`](../../PRIMER.md)). This topic has a `moe-core`. Its numpy layer and its trainer teach the same
+# ideas with manual gradients. This notebook is the torch version, with the shape of the real models.
 
 # %%
 import numpy as np
@@ -174,12 +174,14 @@ print("✅ E = 1 is the dense MLP; sparse dispatch gives what computing every ex
 # ## Exercise 1.3 — the Switch auxiliary loss
 #
 # For router probabilities `probs [N, E]` and the selected `idx [N, k]`, write `switch_aux_loss(probs, idx)` =
-# $E \cdot \sum_e f_e \cdot P_e$. Here $f_e = (\text{assignments to } e) / N$, thus $\sum f_e = k$. $P_e$ is
+# $E \cdot \sum_e f_e \cdot P_e$. Here $f_e = (\text{assignments to } e) / N$. Thus $\sum f_e = k$. $P_e$ is
 # the mean probability of $e$ over the tokens.
 #
 # This is the normalisation of the transformers `load_balancing_loss_func`. Fully uniform routing gives
-# **$k$**, not 1. Megatron and MegaBlocks divide by $k$, thus their loss is 1 at balance. Say which one you
-# mean. Only $P$ carries a gradient. $f$ comes out of a top-k.
+# **$k$**, not 1. Megatron and MegaBlocks divide by $k$. Thus their loss is 1 at balance. Say which one you
+# mean.
+#
+# Only $P$ carries a gradient. $f$ comes out of a top-k.
 
 # %% exercise
 def switch_aux_loss(probs, idx):
@@ -303,7 +305,7 @@ print(f"✅ max/mean load {before['max_over_mean']:.2f} -> {after['max_over_mean
 #
 # Serve the model with expert parallelism over `ep` GPUs and the default "linear" placement of vLLM. In this
 # placement, GPU $r$ holds experts `[r·E/ep, (r+1)·E/ep)`. Every GPU must complete its experts before the
-# layer ends. Thus the step waits for the busiest GPU. Write `ep_slowdown(load, ep)`. It is the share of the
+# layer ends. Thus the step waits for the busiest GPU. Write `ep_slowdown(load, ep)`. It returns the share of the
 # assignments on the busiest GPU, divided by the balanced share `1/ep` (1.0 = no waste).
 
 # %% exercise
@@ -385,8 +387,8 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "An MoE layer is a router plus $E$ ordinary MLPs. Each token runs $k$ of them, thus we pay
-# memory for all $E$ and compute for $k$. The router needs help to spread the load. With no help, top-1
+# **Two minutes:** "An MoE layer is a router plus $E$ ordinary MLPs. Each token runs $k$ of them. Thus we
+# pay memory for all $E$ and compute for $k$. The router needs help to spread the load. With no help, top-1
 # routing collapses. In our toy, the busiest expert carried 6-7x its share within 400 steps, most experts were
 # dead, and the loss was worse.
 #
@@ -407,6 +409,6 @@ else:
 # rule adds the bias to the scores only for the top-k selection. The gate weights come from the unbiased
 # scores. Also, no gradient term competes with the language-model loss.
 #
-# **Drill 3.** *Can we assign experts to "the code GPU" and "the prose GPU"?* Not on the evidence. Routers key
-# mostly on local token features. Here, in the balanced runs, the current token explains ~0.8 of the
+# **Drill 3.** *Can we assign experts to "the code GPU" and "the prose GPU"?* Not on the evidence. Routers select
+# experts mostly by local token features. Here, in the balanced runs, the current token explains ~0.8 of the
 # selection, and the domain explains ~0.04. Balance by measured load (EPLB, redundant experts), not by topic.

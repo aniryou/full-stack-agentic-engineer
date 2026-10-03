@@ -94,13 +94,13 @@ os.environ["MOELAB_URL"] = "http://127.0.0.1:8000"    # notebooks 02, 03 and 05 
 ```
 
 `--cpu-offload-gb 3` is the smallest offload that leaves room on a 16 GB T4 for four 4K-token sequences
-(`python -m moelab fit --model olmoe-1b-7b --gpu T4`). Each GiB above that costs ~89 ms per step over PCIe Gen3
+(`python -m moelab fit --model olmoe-1b-7b --gpu T4`). Each offloaded GiB costs ~89 ms per step over PCIe Gen3
 (verify).
 
 An offload pins host memory. Colab's free runtime has roughly 12 GB of RAM (verify). Thus, keep
 `--cpu-offload-gb` well below it. On Kaggle's two T4s, `!bash deploy/any-gpu/bench_layouts.sh` from the lab
-directory runs the TP against EP comparison. The cell at the end of notebook 04 also runs it. There, OLMoE in fp16
-uses about 6.5 GiB per GPU, and no offload is necessary.
+directory runs the TP against EP comparison. The cell at the end of notebook 04 also runs it. On the two T4s, OLMoE
+in fp16 uses about 6.5 GiB per GPU, and no offload is necessary.
 
 ## Rented GPUs (RunPod, Vast.ai, Lambda)
 

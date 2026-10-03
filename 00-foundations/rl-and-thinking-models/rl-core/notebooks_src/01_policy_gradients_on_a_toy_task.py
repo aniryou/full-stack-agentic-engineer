@@ -71,8 +71,8 @@ print(f"log π(y) = {base.token_logprobs(traj).sum():.3f} = 8·log(1/2) = {8 * m
 # %% [markdown]
 # ## Worked example 3 — pretrain → SFT → RL
 # This is post-training on a small scale. **SFT** is maximum likelihood on demonstrations. Two gradient steps on
-# the 14 balanced strings give a weak reference model. This model is correct 29.7% of the time. Then do **RL**:
-# sample 16 completions, score them, reweight, and repeat.
+# the 14 balanced strings give a weak reference model. This model is correct 29.7% of the time. Then the notebook
+# does **RL**: it samples 16 completions, scores them, reweights, and repeats.
 
 # %%
 demos = [task.as_trajectory(s) for s in seqs if task.verify(s)]
@@ -136,7 +136,7 @@ print(f"REINFORCE with β = 0.3 reaches P = {pg.expected(leashed, task, task.ver
 # %% [markdown]
 # $\pi^*$ can move mass only among the completions that $\pi_{\text{ref}}$ already produces. A completion with
 # $\pi_{\text{ref}}(y) = 0$ stays at 0 for every $\beta$. This is the precise sense in which RL "sharpens" and
-# does not invent. It is also the formula that DPO inverts in notebook 02.
+# does not invent. The closed form of $\pi^*$ is also the formula that DPO inverts in notebook 02.
 #
 # ## Worked example 6 — reward hacking: RL finds the verifier's bug
 # `buggy_verify` returns *pass* as soon as the depth goes negative (think of a test harness that counts an early

@@ -33,7 +33,7 @@ Openness is a spectrum. These are the useful distinctions:
 These points are important in practice:
 
 - **OSI's Open Source AI Definition (Oct 2024)** says that an open-source AI system must have data information, code and parameters. Most "open" LLMs fail on data. "Open weight" is the honest term.
-- **What is usually withheld even by open labs:** the pretraining corpus, the RL environments and reward models, and the full post-training recipe. Sometimes the labs also keep back a capability that exists in the closed version of the model. Alibaba's open 2.4T checkpoint is text-only, and its thinking is always on. But the hosted `qwen3.8-max` API adds vision, video and a default 1M context. Meta said that it will keep some capabilities out of its open releases, in particular cyber-offensive code generation.
+- **What even open labs usually keep back:** the pretraining corpus, the RL environments and reward models, and the full post-training recipe. Sometimes the labs also keep back a capability that exists in the closed version of the model. Alibaba's open 2.4T checkpoint is text-only, and its thinking is always on. But the hosted `qwen3.8-max` API adds vision, video and a default 1M context. Meta said that it will keep some capabilities out of its open releases, in particular cyber-offensive code generation.
 - **Transparency decreases while capability increases.** Stanford's Foundation Model Transparency Index decreased from 58 to 40. The labs disclose less about data, parameter counts and compute.
 - **Variants per family:** base, instruct, thinking or reasoning (usually with an effort dial), coder, vision, omni, guard/safety, embedding. Distilled small models are a large share of the ecosystem.
 
@@ -49,7 +49,7 @@ These points are important in practice:
 | Jul–Dec 2023 | Llama 2, Mistral 7B, Mixtral 8x7B | Open weights that you can use commercially. MoE becomes common |
 | 2024 | Llama 3.1-405B, Qwen 2.5, Gemma, DeepSeek-V2 (MLA) and V3 (FP8, ~$5.6M run). OSI publishes OSAID | 405B matched the closed frontier for a short time. Chinese labs take the lead in efficiency |
 | Jan 2025 | DeepSeek-R1 under MIT | An open release reproduces RL reasoning. The market has a shock |
-| 2025 | Qwen3, Kimi K2 (1T, Muon), GLM-4.5–4.7, gpt-oss (Aug). Llama 4 disappoints and Meta puts Behemoth aside. Mistral Large 3 and Ministral 3 (Dec), OLMo 3, Granite 4, Nemotron 3 Nano | Chinese labs lead the release cadence. Reports say that Meta moves to closed models |
+| 2025 | Qwen3, Kimi K2 (1T, Muon), GLM-4.5–4.7, gpt-oss (Aug). Llama 4 disappoints and Meta puts Behemoth aside. Mistral Large 3 and Ministral 3 (Dec), OLMo 3, Granite 4, Nemotron 3 Nano | Chinese labs are far ahead in release cadence. Reports say that Meta moves to closed models |
 | Feb–Mar 2026 | Qwen 3.5 (397B-A17B), Nemotron Coalition (16 Mar), Mistral Small 4, Leanstral, Forge | Open development by coalitions starts |
 | Apr 2026 | Gemma 4 Apache 2.0 (2 Apr), Meta's closed Muse Spark (8 Apr), Qwen 3.6 open tier (22 Apr), DeepSeek V4 (24 Apr) | Google stops the use of its custom license. DeepSeek releases 1.6T/1M under MIT |
 | May–Jun 2026 | Qwen 3.7 closed (May), MiniMax M3 (1 Jun), Nemotron 3 Ultra (4 Jun), Kimi K2.7 Code (12 Jun), GLM-5.2 (13 Jun) | Three frontier open code models in two weeks |
@@ -109,7 +109,7 @@ The closed reference points for calibration are Claude Opus 5 (AA Intelligence I
 
 **Position and the reversal:** until the end of the 3.7 generation, Alibaba kept the frontier closed (3.7-Max, 3.7-Plus, a robotics VLA). It kept the open tier one generation behind. The 3.8 generation reversed that within ten days of launch. But an asymmetry is still there. The open 2.4T checkpoint is **text-only, with thinking forced on and native 262K context**. The hosted API keeps vision, video, optional thinking and a default 1M window.
 
-**Why Qwen3.8-27B is the important one:** it gets **52 on the Artificial Analysis Intelligence Index**. That is **up 14 points over Qwen3.6-27B on an architecturally identical model**. All of that delta comes from post-training. It is the clearest demonstration this year that the headroom that still exists is in RL and data recipes, not in parameter count. It runs on ~17 GB at 4-bit (an 18 GB Ollama download) on a single 3090 or 4090. Community members who adjusted the setup report ~114 tok/s for one user on a power-limited 3090, and ~1,000 tok/s aggregate across 64 parallel streams.
+**Why Qwen3.8-27B is the important one:** it gets **52 on the Artificial Analysis Intelligence Index**. That is **up 14 points over Qwen3.6-27B on an architecturally identical model**. All of that delta comes from post-training. This post-training result shows most clearly this year that the headroom that still exists is in RL and data recipes, not in parameter count. It runs on ~17 GB at 4-bit (an 18 GB Ollama download) on a single 3090 or 4090. Community members who adjusted the setup report ~114 tok/s for one user on a power-limited 3090, and ~1,000 tok/s aggregate across 64 parallel streams.
 
 **Benchmarks, with the asterisk:** Alibaba's own card reports SWE-bench Pro 61.7, Terminal-Bench 2.1 73.0 (up from 63.4) and OSWorld-Verified 84.3 (up from 63.9). It also reports LiveCodeBench v6 90.3 and IFBench 79.5. On the card, the model beats Claude Opus 4.6 Max on 16 of 24 rows. It loses on GPQA Diamond, Terminal-Bench and Humanity's Last Exam (30.8 against 40.0). Several of those benchmarks are in-house or "corrected" versions.
 
@@ -312,15 +312,15 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 **The shape of the frontier, honestly:**
 
-- **Open is at parity or ahead** on agentic coding (multiple open models above 80% SWE-bench Verified). It is also at parity or ahead on computer use and desktop control. Reports put Qwen3.8-Max at 86.1 OSWorld-Verified, ahead of GPT-5.6 Sol Max and Fable 5. The same is true for instruction following, long-context retrieval, extraction, classification and most multilingual work.
+- **Open is at parity or ahead** on agentic coding (multiple open models above 80% SWE-bench Verified). It is also at parity or ahead on computer use and desktop control. Reports put Qwen3.8-Max at 86.1 OSWorld-Verified, ahead of GPT-5.6 Sol Max and Fable 5. Open is also at parity or ahead on instruction following, long-context retrieval, extraction, classification and most multilingual work.
 - **Open is behind** on hard knowledge reasoning and on the solution of abstract problems. Examples are Humanity's Last Exam (Qwen3.8-27B 30.8 against Opus 4.6 Max 40.0, Fable 5 at 53.3), GPQA Diamond and ARC-AGI-2/3. Open is also behind on research synthesis, and on reliability for truly new tasks.
 - **Open has won on price and forced the closed tier to respond.** Open API list prices are ~8x below closed prices on average, and DeepSeek's are ~30x below on output tokens. On 30 July, OpenAI cut the Terra price by 20% and the Luna price by 80%. It gave improvements in serving cost as the reason. That was the steepest cut of the year from a US lab, and a direct answer to the Chinese open tier.
-- **Usage and enterprise adoption still diverge.** Reports put Chinese models at ~61% of OpenRouter traffic in June 2026. Menlo's enterprise survey put Chinese open models at ~1% of LLM API usage in enterprises. Both are true, because the populations are different.
+- **Usage and enterprise adoption still show different results.** Reports put Chinese models at ~61% of OpenRouter traffic in June 2026. Menlo's enterprise survey put Chinese open models at ~1% of LLM API usage in enterprises. Both are true, because the populations are different.
 
 **The three structural shifts to take away:**
 
-1. **Scale has bifurcated.** The open flagships are 0.4–2.8T MoE models that almost nobody hosts on their own hardware. People use them through hosted endpoints. There, the open/closed difference becomes only a question of licenses and provenance, not of deployment. The models that people actually run are 4–35B. That tier got much better in 2026.
-2. **The pattern of tiers no longer holds, and the change is uneven.** Alibaba opened a Max-class model, and Meta made a commitment to open its flagship. NVIDIA and Thinking Machines open everything. Google, Mistral and Alibaba still keep a closed top tier. Treat open weights as a strategic lever that any lab can withdraw, not as a principle. For example, Alibaba released its 3.7 generation entirely closed, one generation before it opened a 2.4T flagship.
+1. **Scale has divided into two groups.** The open flagships are 0.4–2.8T MoE models that almost nobody hosts on their own hardware. People use them through hosted endpoints. There, the open/closed difference becomes only a question of licenses and provenance, not of deployment. The models that people actually run are 4–35B. That tier got much better in 2026.
+2. **The pattern of tiers starts to break down, and the change is uneven.** Alibaba opened a Max-class model, and Meta made a commitment to open its flagship. NVIDIA and Thinking Machines open everything. Google, Mistral and Alibaba still keep a closed top tier. Treat open weights as a strategic lever that any lab can withdraw, not as a principle. For example, Alibaba released its 3.7 generation entirely closed, one generation before it opened a 2.4T flagship.
 3. **America re-entered, but China still sets the pace.** Muse Glimmer, Inkling, Nemotron 3 Ultra and gpt-oss are real US open contributions. Nemotron is the most transparent release from any large lab. But the top of the open leaderboard is Moonshot, DeepSeek, Alibaba, Z.ai and MiniMax. The architectural innovations that everyone now copies are MLA/CSA, mHC, KDA, LatentMoE, MSA and Muon at scale. They came mostly from labs that operate under GPU export constraints.
 
 ---
@@ -345,7 +345,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 1. **Scale and revenue thresholds**: MAU, monthly revenue, TTM revenue with affiliates included, and what occurs when you cross them. Three of 2026's flagship open models have these.
 2. **Field-of-use restrictions**: the Qwen3.8-Max MaaS clause is the clearest example. If you resell inference, read it first.
 3. **Acceptable-use policies**: can the provider update them without your agreement? Do they bind your downstream users?
-4. **Attribution and naming**: "Built with X" in product names or docs.
+4. **Attribution and name requirements**: "Built with X" in product names or docs.
 5. **Outputs**: who owns them, and if you can train other models on them.
 6. **Derivatives**: can you release fine-tuned weights, and under what license?
 7. **Patent grant**: Apache 2.0 has one. MIT does not.
@@ -393,7 +393,7 @@ The ladder is now standard: SFT, then RL with verifiable rewards (the GRPO linea
 
 ### The adaptation ladder (cheapest first)
 
-1. **Prompt and harness adjustment**: frequently the largest single improvement. LangChain reached top open-model agent accuracy on Nemotron 3 Ultra. It adjusted only the prompts, tools and middleware. Also, Meta measures Muse Spark 1.2 inside its co-trained Muse Code harness. In vendor charts, you cannot separate the model from the harness.
+1. **Prompt and harness adjustment**: frequently the largest single improvement. LangChain adjusted only the prompts, tools and middleware, and thus reached top open-model agent accuracy on Nemotron 3 Ultra. Also, Meta measures Muse Spark 1.2 inside its co-trained Muse Code harness. In vendor charts, you cannot separate the model from the harness.
 2. **Retrieval and tool grounding**: the same as for closed models. But you can put the model in the same location as the data.
 3. **PEFT**: LoRA/QLoRA through TRL, Unsloth, Axolotl or LLaMA-Factory. It takes hours on one GPU for a 27B model.
 4. **Full post-training and RL**: NeMo, TRL and verl-style stacks, or managed routes (Mistral Forge, Thinking Machines' Tinker). Harvey reached frontier-class legal accuracy on Nemotron at ≥10x lower cost per run. Arcee got to ~$0.90 per million output tokens.
@@ -468,7 +468,7 @@ An inspection of the weights cannot exclude backdoors. Thus provenance and lab r
 
 - **United States.** The 2025 AI Action Plan encouraged open models. A 2 June 2026 executive order told agencies to build classified benchmarks for advanced cyber capabilities. A voluntary frontier test program came after it. **On 4 August 2026, the White House told industry that open-weight models, Chinese ones included, will stay outside that program.**
 
-    Five Democratic senators pushed for mandatory tests. Industry coalitions warned that restrictions on open development will give China an advantage. Critics say that the shape of the policy is odd. The reviewers will examine models locked inside corporate infrastructure, and skip the models that anyone can download and change. Chip export controls are still the main lever on Chinese labs. The US cancelled the January 2025 model-weight export rule in May 2025.
+    Five Democratic senators pushed for mandatory tests. Industry coalitions warned that restrictions on open development will give China an advantage. Critics say that the shape of the policy is odd. In the view of the critics, the reviewers will examine models locked inside corporate infrastructure, and skip the models that anyone can download and change. Chip export controls are still the main lever on Chinese labs. The US cancelled the January 2025 model-weight export rule in May 2025.
 
 - **China.** Open weights operate as industrial strategy and as a way to set standards. Zhipu and MiniMax both listed in Hong Kong in January 2026. The permissive licenses are deliberate. But the 2026 flagships show a drift toward revenue-conditioned licenses.
 - **Asia-Pacific.** Sovereign programs in Singapore, India, Malaysia, Korea and Japan usually start from open weights. Then they post-train for local languages and regulatory context. This is where the near-term regional enterprise demand is.
