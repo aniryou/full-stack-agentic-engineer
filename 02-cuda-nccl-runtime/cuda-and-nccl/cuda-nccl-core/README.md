@@ -48,11 +48,11 @@ gives about 9 hours to all five notebooks.
 
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`01_simt_warps_and_memory`](notebooks/01_simt_warps_and_memory.ipynb) | Count sectors and predict coalescing. Derive the gcd(s, 32) bank-conflict rule. Select the padding that repairs a transpose. Measure the SIMT efficiency of ragged loops. | §2, §3 | 1½–2 h | T0 |
+| [`01_simt_warps_and_memory`](notebooks/01_simt_warps_and_memory.ipynb) | Count sectors and predict coalescing. Derive the gcd(s, 32) bank-conflict rule. Select the padding that removes the bank conflicts of a transpose. Measure the SIMT efficiency of ragged loops. | §2, §3 | 1½–2 h | T0 |
 | [`02_tiling_fusion_and_occupancy`](notebooks/02_tiling_fusion_and_occupancy.ipynb) | Derive the tiled-GEMM traffic formula. Calculate the register limit by hand. Select a GEMM tile for an L4. Write online softmax. Find when a decode step is launch-bound (CUDA Graphs). | §2–§4 | 1½–2 h | T0 |
-| [`03_collectives_from_scratch`](notebooks/03_collectives_from_scratch.ipynb) | Write ring reduce-scatter and all-gather yourself. The check replays your message schedule. Calculate the α-β time and the crossover, and calculate busbw like nccl-tests. Calculate the size of the tensor-parallel decode all-reduce for a deployment that you put in production. Find a hang. | §5 | 2–2½ h | T0 |
+| [`03_collectives_from_scratch`](notebooks/03_collectives_from_scratch.ipynb) | Write ring reduce-scatter and all-gather yourself. The check replays your message schedule. Calculate the α-β time and the crossover, and calculate busbw like nccl-tests. Calculate the size of the tensor-parallel decode all-reduce for a production deployment. Find a hang. | §5 | 2–2½ h | T0 |
 | [`04_compatibility_and_containers`](notebooks/04_compatibility_and_containers.ipynb) | Apply the SASS/PTX rules and predict error codes. Select the CUDA version of a fleet. Explain five container failure stories. | §1, §6 | 1½–2 h | T0 |
-| [`05_sharing_and_health`](notebooks/05_sharing_and_health.ipynb) | Lay out MIG instances. Model time-slicing latency. Select a mode to share a GPU. Read GPU util against SM active. Do the triage of a night of XIDs. | §7, §8 | 1½–2 h | T0 |
+| [`05_sharing_and_health`](notebooks/05_sharing_and_health.ipynb) | Lay out MIG instances. Calculate the time-slicing latency with a model. Select a mode to share a GPU. Read GPU util against SM active. Do the triage of a night of XIDs. | §7, §8 | 1½–2 h | T0 |
 
 ## Run it
 
@@ -105,8 +105,8 @@ Each module starts with the one idea that it teaches:
 | `gpusim/simt.py` | ~120 | a warp is the unit: sectors per request (coalescing), bank conflicts, divergence cost |
 | `gpusim/occupancy.py` | ~130 | resident warps per SM and what limits them (the `cuda_occupancy.h` rules), waves, Little's law |
 | `gpusim/tiling.py` | ~120 | bytes and launches: tiled GEMM traffic (with a simulated tiled kernel), fused and online softmax, CUDA Graphs against eager mode |
-| `gpusim/collectives.py` | ~420 | Ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces. α-β costs, algbw/busbw, TP and EP message sizes. A search for the call that hangs. |
-| `gpusim/compat.py` | ~270 | The relation of driver, CUDA runtime and compute capability: SASS against PTX, minor-version and forward compatibility (with the kernel-driver branches that each `cuda-compat` supports). The error that each failure causes. What a container gets from the host. |
+| `gpusim/collectives.py` | ~420 | ring, tree, one-/two-shot and in-switch all-reduce, reduce-scatter, all-gather, broadcast and all-to-all on simulated ranks, with step traces. The module also calculates α-β costs, algbw/busbw and TP and EP message sizes, and it finds the call that hangs. |
+| `gpusim/compat.py` | ~270 | the relation of driver, CUDA runtime and compute capability: SASS against PTX, and minor-version and forward compatibility (with the kernel-driver branches that each `cuda-compat` supports). The module also gives the error that each failure causes, and what a container gets from the host. |
 | `gpusim/sharing.py` | ~150 | MIG profile placement (a packer and a first-fit that fragments), time-slicing latency, MPS against MIG against turns |
 | `gpusim/health.py` | ~130 | GPU util against SM active, clock-event (throttle) bits, XID triage by owner, alert severities |
 

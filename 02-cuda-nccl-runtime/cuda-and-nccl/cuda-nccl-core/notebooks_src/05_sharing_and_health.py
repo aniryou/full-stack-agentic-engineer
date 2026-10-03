@@ -7,20 +7,20 @@
 #
 # ## The one-minute version
 # * There are three ways to share one GPU. **MIG** partitions the GPU into up to 7 isolated
-#   instances with shapes that do not change. **MPS** runs the kernels of several processes on the SMs at the
-#   same time. It is efficient, but its isolation is weak. **Time-slicing** gives the whole GPU to
-#   each process in turns. It has no isolation, and the latency multiplies with the number of busy
-#   tenants.
-# * MIG shapes have limits: 7 compute slices, 8 memory slices, and start positions that do not
-#   change.
-#   `3g + 3g + 1g` does **not** fit, but 3 + 3 + 1 = 7.
-# * For LLM serving, the best "sharing" is usually **one engine for each GPU, which batches many
-#   requests**. Continuous batching shares the weight reads. No GPU-level mechanism can do this.
+#   instances, each with one of the shapes that the GPU permits. **MPS** runs the kernels of
+#   several processes on the SMs at the same time. It is efficient, but its isolation is weak.
+#   **Time-slicing** gives the whole GPU to each process in turns. It has no isolation, and the
+#   latency multiplies with the number of busy tenants.
+# * MIG shapes have limits: 7 compute slices, 8 memory slices, and a set of permitted start
+#   positions for each profile. 3 + 3 + 1 = 7, but `3g + 3g + 1g` does **not** fit.
+# * For LLM serving, the best "sharing" is usually **one engine for each GPU, and that engine
+#   batches many requests**. Continuous batching shares the weight reads. No GPU-level mechanism
+#   can do this.
 # * **GPU utilization** is the fraction of *time* in which at least one kernel runs. One small
 #   kernel on 8 of 132 SMs shows 100%. Use SM active, tensor active and DRAM active to find the
 #   load.
-# * The triage of **XIDs** depends on who acts. That is the app owner (13, 31, 43), the node
-#   operator (63, 94) or the hardware path (48, 79, 95).
+# * The triage of **XIDs** depends on who acts. Each XID has one of three owners: the app owner
+#   (13, 31, 43), the node operator (63, 94) or the hardware path (48, 79, 95).
 #
 # Primer: §7 *Sharing a GPU* and §8 *Health and observability* (`../../PRIMER.md`).
 
@@ -63,8 +63,8 @@ print("  ", S.layout(gpu, S.pack(gpu, arrivals)))
 # must be a start that the profile permits (`p.starts`). Two instances must not share a memory
 # slice. Instance `p` at `s` uses memory slices `s .. s + p.mem_slices - 1`.
 #
-# Then write `fits(gpu, requests)`. This function examines every combination of permitted starts by brute
-# force. It returns True if one combination is valid.
+# Then write `fits(gpu, requests)`. This function examines every combination of permitted
+# starts by brute force. It returns True if at least one combination is valid.
 
 # %% exercise
 profiles = {g: {p.name: p for p in S.MIG[g]} for g in S.MIG}
@@ -106,8 +106,8 @@ print("✅ your brute force agrees with the planner on", len(mixes), "mixes")
 # contention make MPS and time-slicing worse.
 #
 # One request needs 10 ms of GPU time when it is alone. `util` is the share of the GPU that the
-# kernels of the request can fill. For small-batch decode of a small model, `util` is much less
-# than 1. For a large prefill, it is approximately 1. There are four busy tenants:
+# kernels of the request can fill. For small-batch decode of a small model, this share is much
+# less than 1. For a large prefill, it is approximately 1. There are four busy tenants:
 
 # %%
 for util in (0.2, 1.0):
@@ -205,7 +205,7 @@ for finding in H.diagnose(sample):
 # **integer** times in microseconds. `gpu_util` is the share of the window in which at least one
 # kernel runs. `sm_active` is the average over the window of
 # $\min(\text{total SMs busy}, n_{\text{sms}}) / n_{\text{sms}}$.
-# Kernels can overlap. (You can go through the window 1 us at a time.)
+# Kernels can overlap. You can go through the window 1 us at a time.
 
 # %% exercise
 def counters(kernels, n_sms, window):
@@ -273,23 +273,23 @@ print("   as a likely symptom and fix the hardware first")
 # **The two-minute version.** "LLM replicas get whole GPUs. Continuous batching in the engine is
 # our mechanism to share a GPU, because it shares the weight reads across requests. When tenants
 # need isolation, small models and multi-tenant endpoints go on MIG slices (A100/H100 class). We
-# plan the layout in advance, because the placements of the profiles do not change.
+# plan the layout in advance, because each profile can start only at permitted slices.
 #
 # "Cooperative small workloads share a GPU through MPS. Dev notebooks that are idle most of the
 # time share a GPU through time-slicing. We alert on DCGM SM active, tensor active and DRAM
 # active, never on GPU util. Hardware XIDs (48, 79, 95) and pending row remaps drain the node
-# automatically. App XIDs (13, 31, 43) notify the service owner."
+# automatically. But app XIDs (13, 31, 43) notify the service owner."
 #
 # **Drill questions**
 #
 # 1. *Why not use time-slicing to share an H100 across the endpoints of seven customers?*
 #    Time-slicing has no memory isolation and no fault isolation. One tenant can cause an OOM in
 #    the other tenants. Also, the latency increases with the number of busy tenants. Use seven
-#    `1g.10gb` MIG instances: they do not change, they are isolated and they are predictable.
+#    `1g.10gb` MIG instances: each has a constant, isolated and predictable share of the GPU.
 # 2. *The dashboard shows 100% GPU utilization, but the throughput is poor. Where do you look?*
 #    GPU util only tells you that *some* kernel ran. Examine SM active and tensor active.
 #    Small-batch decode, launch gaps or small grids show high util with low SM active. Batch more
 #    requests. Capture CUDA graphs.
 # 3. *A node logs XID 79. Whose problem is it?* It is a problem for the hardware path: the GPU
-#    fell off the PCIe bus. Drain the node, reboot it and run diagnostics. If the error occurs
-#    again, request an RMA. It is not an application bug.
+#    disconnected from the PCIe bus. Drain the node, reboot it and run diagnostics. If the error
+#    occurs again, request an RMA. It is not an application bug.

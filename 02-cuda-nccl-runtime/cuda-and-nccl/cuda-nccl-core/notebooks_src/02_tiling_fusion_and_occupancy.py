@@ -43,10 +43,10 @@ for label, (bm, bn) in [("naive (1x1)", (1, 1)), ("tile 32x32", (32, 32)), ("til
 # the GEMM has no reuse, it streams 275 GB, which takes 82 ms at H100 bandwidth. A 128x128
 # shared-memory tile decreases global traffic by approximately 126x.
 #
-# **L2** closes the remainder of the gap to the compulsory 0.1 GB. Many thread blocks reuse the same
+# **L2** removes the rest of the gap to the compulsory 0.1 GB. Many thread blocks reuse the same
 # $A$ and $B$ panels while those panels are still in the 50 MB L2. Thus HBM sees much less than the
-# "global traffic" column. (The roofline and the ridge point are the topic of layer 01. Here we
-# count bytes.)
+# "global traffic" column. The roofline and the ridge point are the topic of layer 01. Here we
+# count bytes.
 #
 # The simulator runs a real tiled GEMM on the CPU and counts its global loads:
 
@@ -83,7 +83,7 @@ print("✅ traffic = (M*K*ceil(N/BN) + K*N*ceil(M/BM) + M*N) x bytes, matching t
 
 # %% [markdown]
 # Look at the last shape, $M = 8$: a decode-sized GEMM with 8 tokens against a 4096x4096 weight.
-# Most of its traffic is the read of $B$ (the weights) one time. That is the batch-1 decode problem
+# Most of its traffic is one read of $B$ (the weights). That is the batch-1 decode problem
 # in one line: no tile size can increase the intensity above the limit that $M$ sets.
 #
 # ## Tiles cost shared memory, and shared memory caps occupancy
@@ -176,7 +176,7 @@ for v in ("unfused", "fused", "online"):
 # When a row is too long to hold on chip, the **online** version streams the row one time. During
 # that pass, it keeps the current max $m$ and the current sum $s$. When the max increases, it
 # rescales $s$ by $\exp(m_{\text{old}} - m_{\text{new}})$. Then it streams the row again to write the
-# output. FlashAttention goes one step more: it fuses the softmax *into* the $QK^{\top}$ and ${PV}$
+# output. FlashAttention does one more step: it fuses the softmax *into* the $QK^{\top}$ and ${PV}$
 # matmuls. Thus the score matrix never gets to HBM at all.
 #
 # ## Exercise 2.4: online softmax
@@ -283,8 +283,9 @@ print("tail effect:", occ.waves(140, n_sms=132, blocks_per_sm=1), "<- 140 blocks
 # decreases GEMM traffic by approximately 128x, and L2 captures the reuse between tiles. Fusion
 # removes the round trips between kernels.
 #
-# "A fused softmax makes 2 HBM passes per element, and not approximately 8. FlashAttention never
-# writes the score matrix at all. At small batch, decode is hundreds of microsecond-scale kernels.
+# "A fused softmax makes 2 HBM passes per element. An unfused softmax makes approximately 8.
+# FlashAttention never writes the score matrix at all. At small batch, decode is hundreds of
+# microsecond-scale kernels.
 # Thus the CPU launch path becomes the bottleneck, and we capture CUDA graphs per batch size.
 #
 # "We set occupancy with Little's law, not as a target. We want sufficient bytes in flight to cover

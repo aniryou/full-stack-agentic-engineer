@@ -40,7 +40,7 @@ for r in res.rows[:3] + res.rows[-3:]:
 # ## Exercise 4.1 — recompute the columns
 #
 # Write `recompute(size_bytes, time_us, op, n)`. It returns `(algbw, busbw)` in GB/s (1e9). The check
-# compares the result with each printed row (nccl-tests rounds the printed values to two decimals).
+# compares the result with each printed row (each printed value has two decimals after rounding).
 
 # %% exercise
 def recompute(size_bytes: int, time_us: float, op: str, n: int) -> tuple[float, float]:

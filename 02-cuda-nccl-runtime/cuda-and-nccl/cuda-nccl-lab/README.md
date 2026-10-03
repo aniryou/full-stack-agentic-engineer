@@ -5,8 +5,8 @@ After this lab, you can do these things:
 - Write a CUDA kernel and do a check of it on a laptop. Then measure its time on a GPU.
 - Measure an all-reduce and read its busbw the way nccl-tests does.
 - Calculate α and β from a sweep.
-- From inside a container, find why it does or does not see its GPU.
-- Read DCGM metrics correctly, also when "GPU util" gives an incorrect picture.
+- From inside a container, find why the container does or does not see its GPU.
+- Read DCGM metrics correctly, even when "GPU util" gives an incorrect picture.
 
 ## Start here
 
@@ -74,7 +74,7 @@ PyTorch. Then run `python -m gpurt.kernels.bench` and `torchrun --nproc_per_node
 [`deploy/gke`](deploy/gke/README.md) runs each Job and saves its log under `out/`. With `DRY_RUN=1`, it only prints
 the commands.
 
-**Regenerating and checking** (the builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py`):
+**To rebuild and do the checks** (the builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py`):
 
 ```bash
 python3 tools/build_notebooks.py                        # notebooks_src/*.py -> notebooks/ + solutions/
@@ -109,7 +109,8 @@ section *The library* names the primer section that it measures. Each notebook l
   again.
 * **Cost.** T1 is free on Colab or Kaggle, and an hour on a rented NVLink box costs approximately $2–25 (verify).
   When the GKE cluster is idle, it costs one e2-standard-4 system node, a few dollars a day. GKE's free-tier credit
-  covers its management fee for one zonal cluster (verify). Its GPU pools cost nothing until a pod asks for a GPU.
+  covers the management fee of one zonal cluster (verify). The GPU pools of the cluster cost nothing until a pod asks
+  for a GPU.
   Run `terraform destroy` after each session. [`COMPUTE.md`](../../../COMPUTE.md) gives the prices and tells how
   easy it is to get the hardware.
 
@@ -118,30 +119,30 @@ section *The library* names the primer section that it measures. Each notebook l
 | Module | The one idea | Primer |
 |---|---|---|
 | `gpurt/env.py` | Numba selects the simulator or the GPU one time, at import. Decide first, and do not initialise CUDA. When a GPU is visible but Numba cannot use it, fall back to the simulator and say why. | §1 |
-| `gpurt/kernels/elementwise.py` | A kernel is a loop body. Bounds checks. Grid-stride loops. | §2 |
-| `gpurt/kernels/reduction.py` | Shared memory and barriers. Two-pass (deterministic) against atomic. | §2, §3 |
+| `gpurt/kernels/elementwise.py` | a kernel is a loop body, with bounds checks and grid-stride loops | §2 |
+| `gpurt/kernels/reduction.py` | shared memory and barriers, two-pass (deterministic) against atomic | §2, §3 |
 | `gpurt/kernels/matmul.py` | tiling: `tile`× fewer global loads through shared memory | §3 |
 | `gpurt/kernels/transpose.py` | coalescing (4 against 32 sectors per warp request) and bank-conflict padding | §3 |
 | `gpurt/kernels/softmax.py` | fusion: online softmax moves half the bytes of four separate kernels | §3 |
-| `gpurt/kernels/trace.py` | Record every access that a simulated warp makes. From these accesses, get the sectors per request, from the kernel itself. | §3 |
+| `gpurt/kernels/trace.py` | record every access that a simulated warp makes, then get the sectors per request from the kernel itself | §3 |
 | `gpurt/kernels/traffic.py` | the bytes/FLOPs that each kernel must move, datasheet peaks (verify) | §3 |
-| `gpurt/kernels/bench.py` | Measure the kernel, not the infrastructure code: device data, CUDA events, warm-up (T1). | §2–§4 |
+| `gpurt/kernels/bench.py` | measure the kernel, not the infrastructure code: device data, CUDA events, warm-up (T1) | §2–§4 |
 | `gpurt/kernels/triton_kernels.py` | the same ideas in Triton, block-level programming (optional, T1) | §1, §3 |
 | `gpurt/launch.py` | launch-bound steps and CUDA Graphs: model (T0) and measurement (T1, torch) | §4 |
 | `gpurt/dist/busbw.py` | algbw against busbw, and the buffer size rule (16-byte per-rank chunks), exactly as nccl-tests v2.20.0 defines them | §5 |
 | `gpurt/dist/alphabeta.py` | `t = α + S/B`, the half-bandwidth size, ring costs | §5 |
-| `gpurt/dist/semantics.py` | What each collective computes. The ring schedule (with the step numbers of primer §5.2), and a NumPy executor that does a check of any schedule. | §5 |
-| `gpurt/dist/sweep.py` | one benchmark loop for every backend: size, check, warm up, time, average, report | §5 |
+| `gpurt/dist/semantics.py` | what each collective computes, the ring schedule (with the step numbers of primer §5.2), and a NumPy executor that does a check of any schedule | §5 |
+| `gpurt/dist/sweep.py` | one benchmark loop for every backend: set the size, do a check, warm up, measure the time, calculate the average, report | §5 |
 | `gpurt/dist/pipes.py` | a real ring all-reduce across OS processes (T0, no torch) | §5 |
 | `gpurt/dist/bench.py` | torch.distributed: gloo on CPU and NCCL on GPUs, with spawn or `torchrun` | §5 |
-| `gpurt/nccltests.py` | Parse `*_perf` output (v2.20.0 and older layouts, per-iteration columns). Calculate its numbers again, and fit it. | §5 |
-| `gpurt/container.py` | Device nodes and injected driver files (toolkit against GKE). Versions give compat verdicts (from the driver table of the core). | §1, §6 |
-| `gpurt/dcgm.py` | From DCGM text: SM active against GPU util, clock events, XID owners and alert rules. Also, which rules can fire with the fields of your exporter. | §8 |
+| `gpurt/nccltests.py` | parse `*_perf` output (v2.20.0 and older layouts, per-iteration columns), calculate its numbers again, and fit it | §5 |
+| `gpurt/container.py` | device nodes and injected driver files (toolkit against GKE), and compat verdicts from the versions (with the driver table of the core) | §1, §6 |
+| `gpurt/dcgm.py` | from DCGM text: SM active against GPU util, clock events, XID owners, alert rules, and the rules that can fire with your exporter's fields | §8 |
 
 The same kernel source serves both tiers. The tests run it in the simulator. `tools/check_ptx.py` compiles every
-kernel to PTX for `sm_75` and `sm_89`, and it rejects float64 arithmetic. `make ptx-check` runs it.
-`tests/test_ptx.py` also runs it when numba-cuda is available, and skips without numba-cuda. No GPU is necessary for
-that, but the repository leaves the kernel runs on a GPU to you.
+kernel to PTX for `sm_75` and `sm_89`, and it rejects float64 arithmetic. `make ptx-check` runs `tools/check_ptx.py`.
+`tests/test_ptx.py` also runs it when numba-cuda is installed, and skips without numba-cuda. The PTX compilation needs
+no GPU, but the repository leaves the kernel runs on a GPU to you.
 
 One detail of the simulator is important. Numba's simulator creates the shared array of a block only at its first
 use, and without a lock. This can give two threads different arrays, but only in rare cases. When `gpurt.kernels`

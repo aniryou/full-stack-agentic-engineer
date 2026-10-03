@@ -7,10 +7,10 @@ your own machine. Nothing in this folder is specific to GCP.
 
 **Cost:** Colab (one T4) and Kaggle (two T4s, 30 GPU-hours/week) are free. A rented 24 GB GPU costs
 approximately $0.3–0.7/hr. One hour on a multi-GPU NVLink box costs $2–25. Prices change. Read the
-compute guide of the repository, and examine the prices of the provider (verify).
+compute guide of the repository. Then examine the prices of the provider (verify).
 
 **Cleanup:** after your work, stop or delete the notebook, the pod or the VM. Billing continues
-while it exists. If you ran the scripts locally, then delete `out/` (gitignored) and the nccl-tests
+while the notebook, the pod or the VM exists. If you ran the scripts locally, then delete `out/` (gitignored) and the nccl-tests
 build in `~/.cache/nccl-tests-v2.20.0`. If you started the exporter, run `docker rm -f dcgm-exporter`.
 
 | File | What it is |
@@ -58,11 +58,11 @@ through the Colab links in the layer README. The first cell clones the repositor
 
 Numba cannot use the GPU if numba-cuda or its NVVM is not available, or if the driver and the toolkit do not
 agree. In that case, `gpurt.kernels` finds the problem before it selects its mode. It then uses the
-simulator and prints the reason. To repair this, run `!pip install -q "numba-cuda[cu12]"`. Then start
+simulator and prints the reason. To repair the problem with Numba, run `!pip install -q "numba-cuda[cu12]"`. Then start
 the session again.
 
 Colab preinstalls numba-cuda at some times and not at others (verify). Colab gives
-one GPU, thus it supports T1 only.
+one GPU. Thus Colab supports T1 only.
 
 ## 3. Kaggle, two T4s (free T2 — collectives over PCIe)
 
@@ -116,7 +116,7 @@ docker run --rm --gpus all --shm-size=1g nccl-tests all_reduce_perf -b 8 -e 256M
 ```
 
 Run the probe one time **without** `--gpus all`. The output then has no device nodes and no driver
-files. The container runtime decides if a container has a GPU. The image does not decide this. The
+files. This shows that the container runtime decides if a container has a GPU. The image does not decide this. The
 shared-memory transport of NCCL must have more than the default 64 MB `/dev/shm` of Docker. Pass
 `--shm-size=1g` or `--ipc=host`.
 
@@ -134,7 +134,8 @@ For this section, you must have a *VM* (Lambda, a GCP GPU VM, your workstation) 
 NVIDIA Container Toolkit. RunPod/Vast containers cannot run Docker or change GPU modes.
 
 **DCGM metrics without Kubernetes.** The stock exporter does not export some fields that the lab reads.
-Thus give it the collectors file of the lab. The profiling (`DCGM_FI_PROF_*`) fields must have `SYS_ADMIN`:
+Thus give it the collectors file of the lab. To export the profiling (`DCGM_FI_PROF_*`) fields, the exporter
+must have `SYS_ADMIN`:
 
 ```bash
 mkdir -p out
@@ -148,8 +149,8 @@ python -m gpurt.dcgm < out/dcgm.prom                           # notebook 06 rea
 docker rm -f dcgm-exporter
 ```
 
-On a consumer GPU (RTX 4090), it is possible that the profiling fields are not available. The profiling
-support of DCGM is mainly for data-center GPUs (verify). `gpurt.dcgm.report` tells you which rules then
+On a consumer GPU (RTX 4090), the profiling fields can be absent, because DCGM supports
+profiling mainly on data-center GPUs (verify). `gpurt.dcgm.report` tells you which rules then
 cannot fire.
 
 **MIG by hand (A100/H100 VM, root).** For MIG mode, the GPU must be idle. On some systems, you must

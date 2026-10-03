@@ -3,22 +3,21 @@
 #
 # **Tier:** T0: the GKE manifests and Terraform pool definitions of the lab, a bundled dcgm-exporter scrape and
 # the alert rules. This notebook evaluates all of them offline. The scrape has **illustrative** values in the
-# documented format of the exporter. It does not come from a real cluster.
-#
-# **T1/T2**: any GPU VM that you control (Lambda, a GCP VM, your workstation). Run dcgm-exporter in Docker and
-# read a real scrape here. On a rented A100/H100 VM, partition the GPU with MIG or share it with MPS by hand
+# documented format of the exporter, not values from a real cluster. **T1/T2**: any GPU VM that you control
+# (Lambda, a GCP VM, your workstation), where you run dcgm-exporter in Docker and read a real scrape here. On
+# a rented A100/H100 VM, partition the GPU with MIG or share it with MPS by hand
 # (`deploy/any-gpu/README.md` §6). **T3**: the same manifests and rules on the GKE cluster of the lab
 # (`deploy/gcp/terraform`, `deploy/gke/run.sh`), with DCGM metrics in Cloud Monitoring.
 #
 # ## The one-minute version
 #
 # * **Share a GPU only for many small things** (notebooks, small models, low-QPS endpoints). The continuous
-#   batching of an LLM engine already shares the weight reads of the GPU across requests. This is better than
-#   any split at the GPU level.
+#   batching of an LLM engine already shares the weight reads of the GPU across requests. This sharing is
+#   better than any split at the GPU level.
 # * **MIG** divides an A100/H100-class GPU into hardware partitions. Each partition has its own SMs, L2 and
-#   memory. MIG gives isolation and a geometry that does not change. **Time-slicing** lets several processes take turns on a
-#   whole GPU. It operates on any GPU and gives no isolation. **MPS** runs kernels from several processes at the
-#   same time. It gives better utilisation and weak isolation.
+#   memory. MIG gives isolation and a geometry that does not change. **Time-slicing** lets several processes
+#   take turns on a whole GPU. It operates on any GPU and gives no isolation. **MPS** runs kernels from several
+#   processes at the same time. It gives better utilisation and weak isolation.
 # * On GKE, each mode is a **node-pool setting** (`gpu_partition_size`, `gpu_sharing_config`) together with
 #   **node labels** that the pods select. The setting changes how many `nvidia.com/gpu` the node advertises.
 # * **`DCGM_FI_DEV_GPU_UTIL` is not utilisation**: it is the fraction of the time in which any kernel ran. For
@@ -61,7 +60,7 @@ for name, doc in manifests.items():
 #
 # Write `node_offer(pool)` for pools that have the shape of the Terraform `gpu_pools` entries. Return
 # `(gpus_advertised_per_node, node_selector)`. The first value is the count of `nvidia.com/gpu` that a node
-# advertises. The second value is the labels that a pod must select. `MIG_A100_40GB` gives the number of MIG
+# advertises. The second value is the set of labels that a pod must select. `MIG_A100_40GB` gives the number of MIG
 # instances per A100 40GB GPU for each profile (verify for your GPU).
 
 # %% exercise
@@ -147,7 +146,7 @@ print(dcgm.report(text))
 #
 # * **node-a** is an LLM decode server. Its DRAM is busy, and its tensor pipes are idle most of the time. Its
 #   frame buffer is 89 % full because the engine pre-allocates its KV cache. Thus memory-used is *not* a health
-#   signal. The KV-usage metric of the engine is the health signal.
+#   signal. The KV-usage metric of the engine is a health signal.
 # * **node-b** reads 97 % "utilised" with 9 % of its SMs active. The cause is small kernels or batches, or the
 #   GPU is launch-bound. Batch more, or capture CUDA Graphs (notebook 02).
 # * **node-c** is a GPU that an idle notebook holds after an application XID.
@@ -157,8 +156,9 @@ print(dcgm.report(text))
 # ## Exercise 6.3 — decode clock-event reasons, and why PromQL needs floor and modulo
 #
 # `DCGM_FI_DEV_CLOCKS_EVENT_REASONS` is the bitmask of NVML. Write `reasons(mask)`. It returns the names from
-# `dcgm.THROTTLE_BITS` whose bits are set, from the lowest bit to the highest bit. Then write `promql_bit_set(mask, bit)`. It
-# examines one bit with only division, floor and modulo, because PromQL has no bitwise AND.
+# `dcgm.THROTTLE_BITS` whose bits are set, from the lowest bit to the highest bit. Then write
+# `promql_bit_set(mask, bit)`. It examines one bit with only division, floor and modulo, because PromQL has no
+# bitwise AND.
 
 # %% exercise
 def reasons(mask: int) -> list[str]:
@@ -192,14 +192,14 @@ print("✅ decoded; the deployed rule tests bits 0x20|0x40 as:", thermal_rule.ex
 # An XID that is not in the table of the lab goes to the node operator at `warning` (`GpuXidUnknown`). It
 # never goes silently to an application team.
 #
-# The XID rules have one subtle point. `DCGM_FI_DEV_XID_ERRORS` is a gauge that holds the *last* XID that DCGM
-# saw. The gauge does not go back to 0 after a repair of the GPU (verify for your DCGM version). If an alert
-# reads only the value, the alert never resolves. Thus each deployed XID rule also has the condition
-# `changes(DCGM_FI_DEV_XID_ERRORS[15m]) > 0`. The rule fires when the XID appears, and it resolves 15 minutes
-# later.
+# The XID rules have one point that is easy to miss. `DCGM_FI_DEV_XID_ERRORS` is a gauge that holds the
+# *last* XID that DCGM saw. The gauge does not go back to 0 after a repair of the GPU (verify for your DCGM
+# version). If an alert reads only the value, the alert never resolves. Thus each deployed XID rule also has
+# the condition `changes(DCGM_FI_DEV_XID_ERRORS[15m]) > 0`. The rule fires when the XID appears, and it
+# resolves 15 minutes later.
 #
-# The drain keeps the state of the node, not the alert. One snapshot cannot show a change, so `dcgm.evaluate`
-# treats a present XID as recent.
+# Because the alert resolves, the drain keeps the state of the node, and the alert does not. One snapshot
+# cannot show a change, so `dcgm.evaluate` treats a present XID as recent.
 #
 # Write `worst_alert(snapshot)`. It returns the most severe severity of the rules that fire for one GPU, or
 # `None`. `dcgm.evaluate([snapshot])` gives `(rule, severity, gpu)` tuples.
@@ -225,8 +225,8 @@ print("✅ nobody is paged tonight; node-d gets a ticket (thermal + pending row 
 #
 # Each rule reads some DCGM fields (`rule.fields`). No exporter configuration exports all of these fields by
 # default. The stock dcgm-exporter does not export the clock-event bitmask. It also has `PROF_SM_ACTIVE` and
-# `PROF_SM_OCCUPANCY` commented out. Google's GMP DCGM example list has the profiling fields but no XID,
-# row-remap or clock-event fields. The managed package of GKE is similar to this list (verify).
+# `PROF_SM_OCCUPANCY` commented out. The example list of DCGM fields that Google gives for GMP has the profiling
+# fields but no XID, row-remap or clock-event fields. The managed package of GKE is similar to this list (verify).
 #
 # If the exporter never exports the field of a rule, the rule never fires. Nothing tells you about it: the
 # dashboard is quiet. `dcgm.EXPORTED_BY` records the upstream lists (read 2026-09-26, verify for your
@@ -260,7 +260,7 @@ print("✅ with the stock counters the utilisation paradox is invisible (no SM_A
 # `deploy/any-gpu/README.md` §6 runs dcgm-exporter in Docker with the counters CSV of the lab. It saves a
 # scrape to `out/dcgm.prom`. On a rented A100/H100 *VM*, it also gives the manual steps for MIG
 # (`nvidia-smi mig`) and MPS (`nvidia-cuda-mps-control`). This notebook reads a scrape that you bring back.
-# The values are measured, on your GPU.
+# Its values are measurements from your GPU.
 
 # %%
 scrapes = sorted(LAB.glob("out/*.prom")) + sorted(LAB.glob("deploy/*/out/*.prom"))
@@ -276,15 +276,16 @@ if not scrapes:
 # If you set `enable_dcgm = true` in the Terraform, GKE runs the exporter. GKE sends the `DCGM_FI_*` metrics
 # to Cloud Monitoring through Managed Prometheus. *Metrics explorer* accepts PromQL.
 #
-# The next code cell prints the rules. They are a **`ClusterRules`** object. `dcgm.rules_manifest()`
-# generates them, and `deploy/gke/06-dcgm-alert-rules.yaml` stores them. A namespaced GMP `Rules` object
-# evaluates only metrics from its own namespace. The exporter never runs in the namespace of the workloads.
+# The next code cell prints the rules. `dcgm.rules_manifest()` generates them, and
+# `deploy/gke/06-dcgm-alert-rules.yaml` stores them. The rules are a **`ClusterRules`** object, because a
+# namespaced GMP `Rules` object evaluates only metrics from its own namespace. The exporter never runs in the
+# namespace of the workloads.
 #
 # The `namespace`/`pod` target labels of the scraper have priority. Thus the workload labels of the exporter
 # arrive as `exported_namespace`/`exported_pod` (verify).
 #
 # Rules only *evaluate*. Alerts that fire go to the managed Alertmanager of GMP, which needs receivers
-# (`deploy/gke/alertmanager/alertmanager.example.yaml`). They do not go to Cloud Monitoring alerting policies.
+# (`deploy/gke/alertmanager/alertmanager.example.yaml`). The alerts do not go to Cloud Monitoring alerting policies.
 # Also, the managed exporter has its own field list. With that list, it is possible that the health rules are
 # blind (verify). See the section *A rule is only as good as the fields behind it*.
 #
@@ -304,12 +305,12 @@ print("\n".join(dcgm.rules_manifest().splitlines()[:34]))
 # ## In a design review
 #
 # **Two minutes.** First, I ask if it is necessary to share the GPU at all. An inference engine with
-# continuous batching shares a GPU better than any partition of the GPU. Thus GPU sharing is for many small things
-# that come in bursts.
+# continuous batching shares a GPU better than any partition of the GPU. Thus GPU sharing is for many small
+# things that come in bursts.
 #
 # If the tenants need isolation (memory, faults, predictable latency), I use MIG on an A100/H100-class GPU. I
-# accept that its slice sizes do not change. If the tenants are cooperative dev workloads, time-slicing on any GPU is
-# sufficient. MPS is between the two.
+# accept that its slice sizes do not change. If the tenants are cooperative dev workloads, time-slicing on any
+# GPU is sufficient. MPS is between the two.
 #
 # On GKE, each mode is a node-pool setting that multiplies the advertised `nvidia.com/gpu`. The pods select the
 # labels of the pool.
@@ -324,8 +325,8 @@ print("\n".join(dcgm.rules_manifest().splitlines()[:34]))
 #    guaranteed memory or protection from the crashes of the other team. For example, each team gets 3g.20gb.
 #    Use time-slicing only if both teams accept contention and a shared 40 GB.
 # 2. *GPU util is 100 % but throughput is poor. Next step?* Look at SM_ACTIVE and SM_OCCUPANCY. If few SMs are
-#    busy, the cause is small kernels, small batches or a launch-bound workload. Then batch, fuse, or use
-#    CUDA Graphs. Look at DRAM_ACTIVE: if the workload is bandwidth bound, move fewer bytes. Look at
+#    busy, the cause is small kernels, small batches or a launch-bound workload. In that case, batch, fuse, or
+#    use CUDA Graphs. Look at DRAM_ACTIVE: if the workload is bandwidth bound, move fewer bytes. Look at
 #    PIPE_TENSOR_ACTIVE to see if the tensor cores are in use at all.
 # 3. *XID 79 at 3 am on one node. Who acts, and how?* This is a hardware fault: the GPU fell off the bus. The
 #    automation drains the node (cordon, evict). The on-call engineer sends a page to the infrastructure team.

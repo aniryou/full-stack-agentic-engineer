@@ -85,7 +85,7 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
   - Layer 03 ([`03-kubernetes-gpu/gpu-scheduling/`](../../03-kubernetes-gpu/gpu-scheduling/)): the device plugin,
     MIG and time-sharing at cluster level.
   - Layer 04 ([`04-inference-engine/serving-engine/`](../../04-inference-engine/serving-engine/)): these kernels,
-    CUDA Graphs and TP all-reduces inside an engine. Also the
+    CUDA Graphs and TP all-reduces inside an engine. Layer 04 also has the
     [FlashAttention](../../04-inference-engine/flash-attention/flash-attention-primer.md) and
     [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md) primers.
   - Layer 05 ([`serving-orchestration`](../../05-orchestrator/serving-orchestration/README.md)): the KV transfer
@@ -93,11 +93,11 @@ On Colab, the first cell of each notebook clones the repo and installs its lab. 
 
 ## Going further / caveats
 
-- **Simulated vs measured.** Everything in `cuda-nccl-core` is simulated. It is a model of documented NVIDIA
+- **Simulated against measured.** Everything in `cuda-nccl-core` is simulated. It is a model of documented NVIDIA
   behaviour, not a measurement. The lab labels its T0 model output as predictions. Its pipes and gloo sweeps are
   real timings of a CPU backend, not of a GPU fabric. Its bundled nccl-tests, probe and DCGM outputs are illustrative
   samples in the documented formats of the tools.
-- **Real hardware.** T1 is free on Colab or Kaggle. Kaggle's 2 × T4 is a free T2 box, but it has PCIe only, thus it
+- **Real hardware.** T1 is free on Colab or Kaggle. Kaggle's 2 × T4 is a free T2 box, but it has PCIe only. Thus, it
   gives no NVLink numbers. A rented 24 GB GPU costs approximately $0.3–0.7/hr, and an hour on a multi-GPU NVLink box
   costs $2–25 (verify). [`COMPUTE.md`](../../COMPUTE.md) gives the prices and tells how easy it is to get the hardware.
 - **Google Cloud (T3).** When the GKE cluster of the lab is idle, it costs the management fee and one e2-standard-4

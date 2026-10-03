@@ -14,7 +14,7 @@ CPU system pool and GPU pools. The GPU pools autoscale **from zero** with GKE-ma
 
 Then run the workloads in [`../gke`](../gke/README.md).
 
-**Cost (idle):** the idle cost is the GKE cluster management fee and one e2-standard-4. The GKE
+**Cost (idle):** the cluster management fee of GKE and one e2-standard-4. The GKE
 free-tier credit covers one zonal cluster (verify). One e2-standard-4 costs a few dollars a day
 (verify).
 
@@ -26,8 +26,8 @@ session, always run `terraform destroy`.
 
 * A project on a *paid* billing account. You cannot use GPUs on a Free Trial account. Your credits
   carry over.
-* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota. For Spot VMs, this is the
-  *preemptible* L4 quota (verify the names on the *Quotas* page of *IAM & Admin*). New projects
+* GPU quota in the region: `GPUS_ALL_REGIONS` >= 2 and the regional L4 quota. For Spot VMs, the regional L4
+  quota is the *preemptible* L4 quota (verify the names on the *Quotas* page of *IAM & Admin*). New projects
   frequently start at 0. Request the quota.
 * `gcloud auth application-default login`, Terraform >= 1.9, `kubectl` with `gke-gcloud-auth-plugin`.
 
@@ -55,8 +55,8 @@ cd ../gcp/terraform && terraform destroy
   reservations, DWS flex-start.
 * *DCGM + Managed Prometheus*: they give the profiling fields (`DCGM_FI_PROF_*`). With these fields,
   you can understand what `GPU_UTIL` shows (primer §8, notebook 06).
-* *Time-sharing and MIG pools off by default*: these pools are for one experiment. Set a pool on for
-  the experiment, and then set it off again.
+* *Time-sharing and MIG pools off by default*: these pools are for one experiment. Set a pool to on for
+  the experiment. Then set it to off again.
 
 Some items in the `.tf` files have the mark `# VERIFY:`. Examples are the zones that offer L4/A100 and
 the MIG partition sizes that GKE supports. These items are product facts. Examine them again before you

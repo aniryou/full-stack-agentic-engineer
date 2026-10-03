@@ -157,8 +157,8 @@ print("✅ all eight verdicts right. Scenario e is the classic: a wheel with no 
 # * `native`: the newest CUDA that each pool supports **without** the help of minor-version
 #   compatibility
 # * `with_minor_compat`: the newest CUDA version in `compat.CUDA_MIN_DRIVER` that runs on each pool
-#   **by** minor-version compatibility. That is, the same major as each driver, and each driver
-#   above the floor of that major in `compat.MINOR_COMPAT_FLOOR`.
+#   **by** minor-version compatibility. For this, the version must have the same major as each
+#   driver, and each driver must be above the floor of that major in `compat.MINOR_COMPAT_FLOOR`.
 
 # %% exercise
 drivers = ["535.183.01", "550.127.05", "570.86.10"]
@@ -207,8 +207,8 @@ for path in ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/usr/lib/x86_
 #    self-contained". The production host runs a different driver.
 # 3. A CUDA 13.0 image that includes `cuda-compat`, on an L4 host with driver 535.
 # 4. The same image on a workstation RTX 4090 with driver 535.
-# 5. A CUDA 12.8 image whose wheel has SASS for 8.0, 8.6 and 9.0, but no PTX. It runs on a GKE
-#    L4 node with driver 535.
+# 5. A CUDA 12.8 image on a GKE L4 node with driver 535. The wheel in the image has SASS for 8.0,
+#    8.6 and 9.0 but no PTX.
 
 # %% exercise
 stories = {

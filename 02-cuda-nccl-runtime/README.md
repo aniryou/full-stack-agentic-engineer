@@ -37,14 +37,14 @@ This layer is the software that changes raw GPUs into a multi-GPU compute substr
 ## What you get
 
 **Tiers:** T0 is a laptop or a Colab CPU, at no cost. T1 is one small GPU (a Colab or Kaggle T4, or a rented card).
-T2 is a multi-GPU box that you rent for an hour. Kaggle's 2 × T4 is one at no cost. T3 is the Google Cloud
+T2 is a multi-GPU box that you rent for an hour. Kaggle's 2 × T4 is a multi-GPU box at no cost. T3 is the Google Cloud
 deployment, and it is optional.
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`cuda-and-nccl/PRIMER.md`](cuda-and-nccl/PRIMER.md) | explain the layer in a design review. The primer has nine sections from the driver stack to DCGM, worked numbers, drills with answers and a dated verify list. | ~9 h with the core | read |
-| [`cuda-and-nccl/cuda-nccl-core/`](cuda-and-nccl/cuda-nccl-core/README.md) | predict sectors, bank conflicts, occupancy, and GEMM and softmax traffic. Also predict collective costs and busbw, compatibility errors, MIG layouts and XID owners. Seven numpy simulators do these predictions (5 notebooks). | (with the primer) | T0 |
-| [`cuda-and-nccl/cuda-nccl-lab/`](cuda-and-nccl/cuda-nccl-lab/README.md) | examine it in practice (6 notebooks). Run Numba CUDA kernels in the simulator, then on a GPU. Measure collectives as nccl-tests does, with an α-β fit. Find what a container sees of its GPU. See DCGM on GKE. The lab also has deploy assets for any GPU box, GKE and Terraform. | ~7 h at T0 (01–05), ~2 h for 06 | T0 to T3 |
+| [`cuda-and-nccl/cuda-nccl-core/`](cuda-and-nccl/cuda-nccl-core/README.md) | predict sectors, bank conflicts, occupancy, and GEMM and softmax traffic. Also predict collective costs and busbw, compatibility errors, MIG layouts and XID owners. The core makes these predictions with seven numpy simulators (5 notebooks). | (with the primer) | T0 |
+| [`cuda-and-nccl/cuda-nccl-lab/`](cuda-and-nccl/cuda-nccl-lab/README.md) | examine the layer in practice (6 notebooks). Run Numba CUDA kernels in the simulator, then on a GPU. Measure collectives as nccl-tests does, with an α-β fit. Find what a container sees of its GPU. See DCGM on GKE. The lab also has deploy assets for any GPU box, GKE and Terraform. | ~7 h at T0 (01–05), ~2 h for 06 | T0 to T3 |
 
 ## Run it
 
@@ -56,15 +56,15 @@ python3 -m pip install -r requirements.txt && python3 -m pytest -q    # 130 pass
 python3 -m gpurt.dist.bench --backend pipes --nranks 2 -e 4M          # a real ring all-reduce, no GPU
 ```
 
-You can also open any notebook from the "Run in Colab" section in Colab. Its first cell clones the repo and installs the lab.
+You can also open any notebook in Colab through its link in the "Run in Colab" section. Its first cell clones the repo and installs the lab.
 
 ## How it fits
 
-- **Builds on** layer 01 ([`01-hardware-gpu-fabric`](../01-hardware-gpu-fabric/README.md)). These are necessary
-  first: the roofline, the memory hierarchy, link rates and the α-β model in
+- **Builds on** layer 01 ([`01-hardware-gpu-fabric`](../01-hardware-gpu-fabric/README.md)). You must know these
+  topics first: the roofline, the memory hierarchy, link rates and the α-β model in
   [roofline-and-fabric](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2, §4 and §5. The
-  [curriculum's spiral](../CURRICULUM.md#31-why-this-order) comes to this layer after 00, the concepts of layer 04
-  and 01. Thus you learn tiling, fusion and CUDA Graphs on an engine that you know already. Nothing in 04 is a
+  [curriculum's spiral](../CURRICULUM.md#31-why-this-order) comes to this layer after layer 00, the concepts of
+  layer 04, and layer 01. Thus you learn tiling, fusion and CUDA Graphs on an engine that you know already. Nothing in 04 is a
   prerequisite for this layer.
 - **Leads to** layers 03, 04 and 05. Layer 03 ([`03-kubernetes-gpu/`](../03-kubernetes-gpu/)) has the device plugin,
   MIG and time-sharing per node pool. Layer 04 ([`04-inference-engine`](../04-inference-engine/README.md)) has
@@ -74,8 +74,8 @@ You can also open any notebook from the "Run in Colab" section in Colab. Its fir
 ## Going further / caveats
 
 - The core is a simulation. It is a model of documented NVIDIA behaviour. The lab marks its T0 model output as
-  predictions, and its sample tool outputs as illustrative. For real measurements, a GPU is necessary. A GPU is at no
-  cost on Colab or Kaggle (2 × T4, PCIe only). A rented NVLink box costs approximately $2–25 for an hour (verify).
+  predictions, and its sample tool outputs as illustrative. For real measurements, a GPU is necessary. You can use a GPU at
+  no cost on Colab or Kaggle (2 × T4, PCIe only). A rented NVLink box costs approximately $2–25 for an hour (verify).
 - The GKE deployment is optional. GPU pools scale from zero. The idle cluster costs a few dollars a day (verify).
   `terraform destroy` ends it. For the prices, see [`COMPUTE.md`](../COMPUTE.md).
 - The driver tables, MIG profiles, DCGM field lists and versions have the date 2026-09-26 and the tag (verify).

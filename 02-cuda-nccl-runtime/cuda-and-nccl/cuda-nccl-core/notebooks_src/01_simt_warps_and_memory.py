@@ -47,7 +47,7 @@ for label, addr in patterns:
 # * `a[lane]`: 32 x 4 B = 128 contiguous bytes, aligned, thus **4 sectors**. This is the ideal.
 # * `a[lane + 1]`: the same 128 bytes with an offset of 4. Thus they cross into a fifth sector, and
 #   the warp uses 80% of the bytes that the memory system moves. Misalignment has a small cost.
-# * `a[2 * lane]`: each second float. Thus the warp needs 8 sectors, and it discards half of each
+# * `a[2 * lane]`: one float in two. Thus the warp needs 8 sectors, and it discards half of each
 #   sector.
 # * `a[32 * lane]`: each lane goes into its own sector, thus 32 sectors for 128 useful bytes. A read
 #   of a *column* of a row-major float matrix with 32+ columns looks like this.
@@ -144,8 +144,8 @@ print("✅ all four predictions right:", truth)
 #
 # Write `conflict_degree(byte_addresses)` for one warp of **4-byte** shared-memory accesses. A word
 # is `addr // 4`, and its bank is `word % 32`. The degree is the largest number of *different* words
-# that go into one bank. When several lanes read the same word, that is a broadcast, and it counts
-# one time.
+# that go into one bank. When several lanes read the same word, that access is a broadcast. A
+# broadcast counts one time.
 
 # %% exercise
 def conflict_degree(byte_addresses):

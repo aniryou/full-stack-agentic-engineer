@@ -24,7 +24,7 @@ primer and does not repeat it.
 
 ## The one-minute version
 
-- **Two gates decide whether CUDA code runs.** First, the host *driver* must support the CUDA *runtime* that you
+- **Two gates decide if CUDA code runs.** First, the host *driver* must support the CUDA *runtime* that you
   used to build your app. A newer driver runs an older runtime. A newer runtime of the same major version runs by
   minor-version compatibility. A newer major version needs a newer driver, or the forward-compatibility package on
   a data-center GPU. Second, the binary must contain a *kernel image* for the GPU. That image is SASS for its
@@ -42,7 +42,7 @@ primer and does not repeat it.
   with illustrative numbers), the all-reduce is latency-bound. The all-reduces of tensor-parallel decode are well
   below that limit. Thus engines use algorithms with few steps. The **busbw** of nccl-tests normalises to the
   per-link bandwidth. Thus you can compare it with the spec.
-- **A container brings CUDA; the host brings the driver.** The NVIDIA Container Toolkit injects `/dev/nvidia*`,
+- **A container brings CUDA. The host brings the driver.** The NVIDIA Container Toolkit injects `/dev/nvidia*`,
   `libcuda` and NVML when the container starts. It uses an OCI hook or a CDI spec. Do not build `libcuda` into an
   image.
 - **Sharing:** MIG partitions the GPU (isolated, shapes that do not change). MPS overlaps processes (efficient, weakly
@@ -159,15 +159,15 @@ SASS/PTX targets of your build.
 | CUDA driver version is insufficient for CUDA runtime version | 35 | The runtime is a newer major, or it is below the minor-compat floor. | Install a newer driver, use an older CUDA, or use `cuda-compat` (data center). |
 | API call is not supported in the installed CUDA driver | 36 | A minor-compat app called a newer API. | Install a newer driver. |
 | no CUDA-capable device is detected | 100 | The container has no injected GPU, or the driver does not know the GPU. | `--gpus`, CDI device, `nvidia.com/gpu` request, newer driver |
-| no kernel image is available for execution on the device | 209 | no SASS for this CC and no usable PTX | Build for this sm, or add `+PTX`. |
+| no kernel image is available for execution on the device | 209 | The binary has no SASS for this CC and no usable PTX. | Build for this sm, or add `+PTX`. |
 | the provided PTX was compiled with an unsupported toolchain | 222 | The PTX is newer than the JIT of the driver. | Include SASS in the binary, or install a newer driver. |
-| system not yet initialized | 802 | an NVSwitch system without fabric manager | Start `nvidia-fabricmanager` (the same version as the driver). |
+| system not yet initialized | 802 | The NVSwitch system has no fabric manager. | Start `nvidia-fabricmanager` (the same version as the driver). |
 | system has unsupported display driver / cuda driver combination | 803 | The user-mode libcuda does not match the kernel module. | Remove libcuda from the image. Correct the compat branch. |
-| forward compatibility was attempted on non supported HW | 804 | `cuda-compat` on GeForce | Install a newer driver instead. |
+| forward compatibility was attempted on non supported HW | 804 | The app uses `cuda-compat` on GeForce. | Install a newer driver instead. |
 | Failed to initialize NVML: Driver/library version mismatch | (NVML) | The user-space NVML is new, but the old kernel module stays loaded. | After a driver upgrade, reboot or load the module again. |
 
-(The table is `gpusim.compat.ERRORS`. Notebook 04 has drills for 35, 100, 209, 222, 803 and 804. `check()` does
-not model 36, 802 or NVML.)
+The table is `gpusim.compat.ERRORS`. Notebook 04 has drills for 35, 100, 209, 222, 803 and 804. `check()` does
+not model 36, 802 or NVML.
 
 ---
 
@@ -202,8 +202,8 @@ lanes can make independent progress. The cost model does not change.
 ### 2.3 Occupancy
 
 **Occupancy** = resident warps / the SM's maximum. A block is resident only if all of its resources fit. Thus the
-number of blocks per SM is the minimum over four limits (`gpusim.occupancy.occupancy()`, which follows NVIDIA's
-`cuda_occupancy.h`):
+number of blocks per SM is the minimum over four limits (`gpusim.occupancy.occupancy()`, which uses the arithmetic of
+NVIDIA's `cuda_occupancy.h`):
 
 $$
 \begin{aligned}
@@ -417,10 +417,10 @@ Each of $p$ ranks holds a buffer. What each rank holds after the operation defin
 | broadcast | every rank has the buffer of the root | weights or config from rank 0 |
 | reduce | root has the elementwise sum | rarely |
 | **all-reduce** | every rank has the sum | tensor parallelism, 2 per layer |
-| **reduce-scatter** | rank $r$ has chunk $r$ of the sum | sequence parallelism, the first half of all-reduce |
+| **reduce-scatter** | rank $r$ has chunk $r$ of the sum | sequence parallelism and the first half of all-reduce |
 | **all-gather** | every rank has the concatenation | sharded weights (FSDP), logits, sequence parallelism |
 | **all-to-all** | rank $r$'s chunk $j$ goes to rank $j$ | MoE expert parallelism: dispatch and combine |
-| send / recv | point-to-point | pipeline parallelism, KV transfer (layer 05) |
+| send / recv | point-to-point | pipeline parallelism and KV transfer (layer 05) |
 
 ### 5.2 All-reduce = reduce-scatter + all-gather
 
@@ -454,7 +454,7 @@ $T = a \cdot \alpha + c \cdot S/B$ (`cost_terms()`, `model_time()`):
 | Algorithm | Steps $a$ | Bandwidth factor $c$ | Needs |
 |---|---|---|---|
 | ring all-reduce | ${2(p-1)}$ | ${2(p-1)/p}$ | a ring (any topology) |
-| binomial tree all-reduce (reduce, then broadcast) | $2\lceil \log_2 p \rceil$ | $2\lceil \log_2 p \rceil$ | nothing, for the smallest messages only |
+| binomial tree all-reduce (reduce, then broadcast) | $2\lceil \log_2 p \rceil$ | $2\lceil \log_2 p \rceil$ | nothing, for small messages only |
 | NCCL double binary tree (pipelined, a model and not a simulation) | $\approx 2\lceil \log_2 p \rceil$ + pipeline fill | $\approx 2$ | NCCL's tree algorithm |
 | one-shot (every rank pulls all buffers) | 1 | ${p-1}$ | all-to-all links (NVSwitch) |
 | two-shot (direct reduce-scatter + all-gather) | 2 | ${2(p-1)/p}$ | all-to-all links |
@@ -463,7 +463,7 @@ $T = a \cdot \alpha + c \cdot S/B$ (`cost_terms()`, `model_time()`):
 | pairwise all-to-all / direct all-to-all | ${p-1}$ / 1 | ${(p-1)/p}$ | |
 | pipelined chain broadcast, $k$ chunks | ${p+k-2}$ | $(p+k-2)/k \to 1$ | |
 
-Pipelining trades $\alpha$ for $\beta$. If you divide a message into $k$ pieces, you add $k$ steps, but each step
+A pipeline trades $\alpha$ for $\beta$. If you divide a message into $k$ pieces, you add $k$ steps, but each step
 becomes smaller. The optimum is $k^{\ast} = \sqrt{S/(\alpha \cdot B)}$: 12 chunks for 128 MiB with the numbers in
 §5.4 (`optimal_chunks()`). `best_algorithm()`, `sweep()` and `tp_comm()` pipeline at $k^{\ast}$, unless you give a
 different value (`pipeline_chunks()`). In-switch reduction moves almost half the bytes of the ring ($S$ instead of
@@ -520,9 +520,9 @@ At 128 MiB, in-switch reduction wins (349 µs at $k^{\ast}$ = 12). Two-shot and 
 
 **Tensor parallelism** (Megatron-style) divides each attention and MLP layer column-wise, then row-wise. It does an
 all-reduce of a `tokens × hidden × 2 B` activation **two times per layer**. For a 70B-class model (hidden 8,192, 80
-layers) at TP=8, that is 160 all-reduces per step. (Layer 01's
+layers) at TP=8, that is 160 all-reduces per step. Layer 01's
 [§5.3](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md#5-fabrics-quantitatively) gives the cost at
-batch 1.) `gpusim.collectives.tp_comm()` gives this table:
+batch 1. `gpusim.collectives.tp_comm()` gives this table:
 
 | Step | Message | Ring | Two-shot | Regime |
 |---|---|---|---|---|
@@ -584,9 +584,9 @@ TP and EP inside the NVLink domain, PP and DP across it.
 ### 5.8 Debugging hangs and slowness
 
 NCCL matches collectives **by issue order on a communicator**. It does not examine names or sizes. The $k$-th
-call on each rank is the same collective. A rank can take a data-dependent branch, crash, go OOM, or issue calls in
-a different order. Then the other ranks stay blocked. A size mismatch can cause a hang, or it can corrupt the data
-with no error.
+call on each rank is the same collective. Thus, if one rank takes a data-dependent branch, crashes, goes OOM, or
+issues calls in a different order, the other ranks stay blocked. A size mismatch can cause a hang, or it can corrupt
+the data with no error.
 
 `gpusim.collectives.first_mismatch()` finds the first call where the per-rank logs do not agree. You do the same
 with the flight recorder dumps of PyTorch or with `NCCL_DEBUG=INFO` logs. The checklist:
@@ -594,11 +594,11 @@ with the flight recorder dumps of PyTorch or with `NCCL_DEBUG=INFO` logs. The ch
 1. **Make hangs into errors.** Set timeouts and async error handling (`TORCH_NCCL_ASYNC_ERROR_HANDLING`). Use the
    flight recorder (`TORCH_NCCL_TRACE_BUFFER_SIZE`, verify names). Use NCCL's RAS client (`ncclras`, NCCL 2.24+) to
    see the state of each rank. Use `py-spy dump` for Python stacks.
-2. **Check control flow is rank-uniform**. Also make sure that each rank reached the same call count.
-3. **Check the path.** In a node, the correct output of `NCCL_DEBUG=INFO` is P2P or NVLS. SHM inside one node means
-   that P2P is off. The causes are ACS or IOMMU on PCIe, containers without a shared IPC namespace, or
+2. **Make sure that the control flow is rank-uniform.** Also make sure that each rank reached the same call count.
+3. **Examine the path.** In a node, the correct output of `NCCL_DEBUG=INFO` is P2P or NVLS. SHM inside one node means
+   that P2P is off. Possible causes are ACS or IOMMU on PCIe, containers without a shared IPC namespace, or
    `NCCL_P2P_DISABLE`. Compare with `nvidia-smi topo -m`.
-4. **Check the environment.** Look for an incorrect `NCCL_SOCKET_IFNAME` and firewalls between nodes. Make sure
+4. **Examine the environment.** Look for an incorrect `NCCL_SOCKET_IFNAME` and firewalls between nodes. Make sure
    that the network plugin is available. Look for a small `/dev/shm` in containers (`--ipc=host` or
    `--shm-size`). Look for NCCL versions that do not match. Make sure that NVSwitch systems have a fabric manager.
 5. **Then measure.** Run nccl-tests on the same nodes. Compare busbw with the link rate (the lab's notebook 04).
@@ -731,8 +731,8 @@ other tenants. There is also no performance isolation.
 Take $N$ busy tenants and a request that needs $W$ of GPU time, in quanta $q$, with a switch cost $s$. At best, the
 request finishes after $W + (\lceil W/q \rceil - 1) \cdot ((N-1)(q+s) + s)$. That occurs when it arrives just as its
 turn starts (`gpusim.sharing.timeslice_latency()`). For example, 10 ms of work with 4 busy tenants, 2 ms quanta and
-50 µs switches takes **34.8 ms at best**. If the request arrives just after its turn, this adds one more round of
-the turns of the other tenants, 6.2 ms. That gives **41.0 ms at worst** and **37.9 ms on average**.
+50 µs switches takes **34.8 ms at best**. If the request arrives just after its turn, the late arrival adds one more
+round of the turns of the other tenants, 6.2 ms. That gives **41.0 ms at worst** and **37.9 ms on average**.
 
 Idle tenants cost nothing. This is why time-slicing is good for notebooks and dev work that comes in bursts.
 
@@ -745,7 +745,7 @@ request fill. The time-slicing column is the mean over arrival times from §7.4 
 | Kernel size | Exclusive | Time-slicing | MPS | MIG (1g each) |
 |---|---|---|---|---|
 | small (util 0.2) | 10 ms | 37.9 ms | 10 ms | 14 ms |
-| saturating (util 1.0) | 10 ms | 37.9 ms | 40 ms | 70 ms |
+| fills the GPU (util 1.0) | 10 ms | 37.9 ms | 40 ms | 70 ms |
 
 | Need | Choose |
 |---|---|
@@ -784,12 +784,12 @@ fields instead:
 | `DCGM_FI_PROF_SM_OCCUPANCY` | resident warps / maximum | headroom to hide latency (§2.3) |
 | `DCGM_FI_PROF_PIPE_TENSOR_ACTIVE` | share of cycles when the tensor pipes are busy | high in prefill and large batches |
 | `DCGM_FI_PROF_DRAM_ACTIVE` | share of cycles when the memory interface is busy | high in decode: memory-bound |
-| `DCGM_FI_PROF_PCIE_*_BYTES`, `DCGM_FI_PROF_NVLINK_*_BYTES` | link traffic | loads, offload, collectives |
+| `DCGM_FI_PROF_PCIE_*_BYTES`, `DCGM_FI_PROF_NVLINK_*_BYTES` | link traffic | model load, offload, collectives |
 | `DCGM_FI_DEV_FB_USED` / `FB_FREE` | framebuffer memory | Near-full is *normal* for engines that pre-allocate KV. Use the KV-usage metric of the engine. |
 | `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_SM_CLOCK` | power, temperature, clocks | with the throttle reasons of §8.3 |
 | `DCGM_FI_DEV_XID_ERRORS` | last XID error | triage in §8.4 |
 
-**Check which fields your exporter exports.** The default counters file of stock dcgm-exporter
+**Find which fields your exporter exports.** The default counters file of stock dcgm-exporter
 (`default-counters.csv`) has `DCGM_FI_PROF_SM_ACTIVE` and `DCGM_FI_PROF_SM_OCCUPANCY` only as comments. It does not
 include `DCGM_FI_DEV_CLOCKS_EVENT_REASONS` (§8.3). Thus, by default, you get neither the first two rows of the table
 nor the throttle bits.
@@ -799,7 +799,7 @@ The lab supplies a counters file that adds all three
 exporter are `gpurt.dcgm.EXPORTED_BY`. [`deploy/gke/README.md`](cuda-nccl-lab/deploy/gke/README.md) shows which
 alert rules can fire with each exporter.
 
-Google's managed-Prometheus DCGM field list (its `nvidia-dcgm` example, which GKE's managed package is similar to)
+The DCGM field list of Google's managed Prometheus (its `nvidia-dcgm` example, which GKE's managed package is similar to)
 has SM active, occupancy and tensor active. But it has no XID or row-remap fields, and no clock-event or DRAM fields
 (verify). Thus, on GKE, the §8.3–8.4 signals need a self-managed exporter with that counters file.
 
@@ -981,9 +981,9 @@ time-slicing. We alert on SM active and engine metrics, not GPU util. Hardware X
   PTX compatibility. <https://docs.nvidia.com/cuda/cuda-c-programming-guide/>
 - NVIDIA, *CUDA C++ Best Practices Guide*: coalescing, shared memory, occupancy. <https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/>
 - NVIDIA, *CUDA Compatibility* (minor-version and forward compatibility) and the *CUDA Toolkit Release Notes*
-  (driver table). <https://docs.nvidia.com/deploy/cuda-compatibility/>. These copies were the reference for the
-  check of `gpusim.compat`: the driver table in meson's `mesonbuild/modules/cuda.py`, and `NVIDIA_REQUIRE_CUDA` in
-  NVIDIA's `nvidia/cuda` images.
+  (driver table). <https://docs.nvidia.com/deploy/cuda-compatibility/>. The check of `gpusim.compat` used these
+  copies: the driver table in meson's `mesonbuild/modules/cuda.py`, and `NVIDIA_REQUIRE_CUDA` in NVIDIA's
+  `nvidia/cuda` images.
 - NVIDIA, `cuda_occupancy.h` (part of the CUDA Toolkit): the occupancy arithmetic that `gpusim` uses.
 - NVIDIA, *Nsight Compute* documentation, Memory Workload Analysis: sectors per request, bank conflicts.
 - V. Volkov, *Better Performance at Lower Occupancy*, GTC 2010.

@@ -13,7 +13,7 @@
 #   bandwidth-optimal, but its latency term increases with $p$.
 # * Below a crossover size ($S^{\ast} = p \cdot \alpha \cdot B$ for the ring), a collective is
 #   **latency-bound**.
-#   Tensor-parallel all-reduces during decode are a few hundred KB, thus they are latency-bound.
+#   Tensor-parallel all-reduces during decode are a few hundred KB. Thus they are latency-bound.
 #   During prefill, they are tens of MB and bandwidth-bound. Different algorithms are the best in
 #   each regime.
 # * **busbw** (nccl-tests) $= \text{algbw} \times 2(p-1)/p$ for all-reduce. It changes "bytes per
@@ -158,7 +158,7 @@ print("✅ ring all-reduce = reduce-scatter + all-gather: 2(p-1) steps of S/p by
 
 # %% [markdown]
 # ## Reading traces
-# `gpusim.collectives` runs the same schedules (and some more) and records each message. The next
+# `gpusim.collectives` runs the same schedules (and a few more) and records each message. The next
 # cell shows the ring and three other ways to all-reduce the same 4 ranks:
 
 # %%
@@ -171,7 +171,7 @@ for algo in ("ring", "tree", "two_shot", "switch"):
 # %% [markdown]
 # * **tree** (binomial): it divides the number of active ranks by two in each step. Thus it needs
 #   $2\lceil \log_2 p \rceil$ steps, and not ${2(p-1)}$. But each message is the *full* buffer. Thus
-#   the tree has a low latency cost and a poor bandwidth. NCCL's real tree is a *pipelined double
+#   the tree has a low latency cost and a high bandwidth cost. NCCL's real tree is a *pipelined double
 #   binary tree*. It keeps the $\log p$ steps and gets back most of the bandwidth.
 # * **two_shot**: a direct reduce-scatter, then a direct all-gather. That is 2 steps with the same
 #   bytes as the ring. But it needs each rank to reach all other ranks at the same time (NVSwitch).
@@ -272,8 +272,8 @@ print("✅ busbw, not algbw, is the number to hold against the link spec")
 # all-reduces the activations two times per layer: after the output projection of attention, and
 # after the MLP. The message is `tokens x hidden x 2 bytes`. The next cell uses a 70B-class dense
 # model (hidden 8192, 80 layers) at TP=8, with the same illustrative $\alpha$ = 2 us and
-# $B$ = 450 GB/s. (Layer 01 §5.3 gives the cost of batch 1. Here we compare batch 32 with prefill,
-# and the ring with a two-shot all-reduce.)
+# $B$ = 450 GB/s. Layer 01 §5.3 gives the cost of batch 1. Here we compare batch 32 with prefill,
+# and the ring with a two-shot all-reduce.
 
 # %%
 for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
@@ -298,9 +298,9 @@ for phase, tokens in (("decode, batch 32", 32), ("prefill, 8k tokens", 8192)):
 # * `ring_ms_per_step`: all 160 all-reduces with a ring
 # * `best_algo`: the fastest of `C.best_algorithm` for this message
 #
-# (`best_algorithm` pipelines the in-switch algorithm at its best depth for each size,
+# `best_algorithm` pipelines the in-switch algorithm at its best depth for each size,
 # `C.pipeline_chunks()`. For a 1 MiB message, that is a single chunk, because more chunks only add
-# $\alpha$-steps.)
+# $\alpha$-steps.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -330,16 +330,16 @@ for algo in ("pairwise", "direct"):
 
 # %% [markdown]
 # Pipeline parallelism sends one `tokens x hidden` activation per stage boundary per micro-batch
-# (point-to-point, not per layer). That is small. This is why PP can operate on the slower scale-out
-# network, while TP and EP stay in the NVLink domain.
+# (point-to-point, not per layer). That is small. This is why the slower scale-out network is
+# sufficient for PP, while TP and EP stay in the NVLink domain.
 #
 # ## Exercise 3.6: find the hang
 #
-# NCCL has no names for collectives. On each rank, the $k$-th call on a communicator is the *same*
-# collective. Write `first_bad_call(calls)`, where `calls[rank]` is the list of `(op, nbytes)` of
-# that rank. For the first mismatch, return `(index, sorted list of ranks that disagree with the
-# majority)`. If a rank has no call at that index, that
-# counts as a disagreement. If all ranks agree, return `None`.
+# NCCL has no names for collectives. The $k$-th call on a communicator is the *same* collective on
+# all ranks. Write `first_bad_call(calls)`, where `calls[rank]` is the list of `(op, nbytes)` of
+# that rank. For the first mismatch, return
+# `(index, sorted list of ranks that disagree with the majority)`. If a rank has no call at that
+# index, the absent call counts as a disagreement. If all ranks agree, return `None`.
 
 # %% exercise
 def first_bad_call(calls):
