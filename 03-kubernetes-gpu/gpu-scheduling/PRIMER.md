@@ -125,7 +125,7 @@ Two consequences are important to say in a review:
 * **The scheduler and the kubelet keep separate books.** The scheduler binds a pod with the last node status
   that it saw. The kubelet admits the pod against the devices that it actually has. If a device failed between
   these two events, the pod fails with `UnexpectedAdmissionError`. The message is `Allocate failed due to requested number of devices unavailable for nvidia.com/gpu. Requested: 2, Available: 1, which is unexpected`
-  (`Kubelet.admit()`, with the words of the kubelet). Then the controller of the pod must create it again.
+  (`Kubelet.admit()`, with the words of the kubelet). Then the controller of the pod must create the pod again.
 
 ### 1.3 Labels: which GPU, and where
 
@@ -216,14 +216,14 @@ There are two ways to get them:
 |---|---|---|
 | What installs the driver | a driver container per node (or a pre-installed host driver) | GKE's driver installer. It is automatic on control planes ≥ 1.32.2-gke.1297000. The version is `DEFAULT`, `LATEST` (COS only) or `INSTALLATION_DISABLED` per node pool. |
 | Device plugin | NVIDIA device plugin | Google's GPU device plugin (open source: `GoogleCloudPlatform/container-engine-accelerators`) |
-| Also brings | NFD, GPU Feature Discovery labels, DCGM + dcgm-exporter, MIG manager, node status exporter, validator. The `ClusterPolicy` CRD configures them, plus the `NVIDIADriver` CRD for per-pool drivers. | time-sharing, MPS and MIG as node-pool settings, and GPU metrics in Cloud Monitoring (layer 02 §8–9) |
+| Also brings | NFD, GPU Feature Discovery labels, DCGM + dcgm-exporter, MIG manager, node status exporter, validator. The `ClusterPolicy` CRD configures these components, and the `NVIDIADriver` CRD configures per-pool drivers. | time-sharing, MPS and MIG as node-pool settings, and GPU metrics in Cloud Monitoring (layer 02 §8–9) |
 | You own | versions and upgrades of every component, and compatibility with the node OS and kernel | the selection of the driver channel. You get less choice and fewer components. |
 | Typical home | on-prem, self-managed clusters, other clouds, GKE with installation disabled | GKE Standard and Autopilot |
 
 The choice is important for more than convenience. The driver version sets a limit on which CUDA userlands in
 your images work (layer 02 §1). A driver upgrade is a node drain. Also, a GPU node is `Ready` before its GPUs are
 allocatable, because the driver and plugin start after the kubelet. Thus the cluster autoscaler treats GPU nodes
-without allocatable GPUs as `resourceUnready`, not as usable (section 7). Also, a node that stays in that state
+without allocatable GPUs as `resourceUnready`, not as usable (section 7). For the same reason, a node that stays in that state
 usually means a failure of the driver install.
 
 ---
@@ -261,7 +261,7 @@ became GA in 1.34. DynamicResources has no weight, because it implements no Scor
 | NodeResourcesFit | requests ≤ allocatable − requested | 1 | **the only place that counts GPUs** |
 | PodTopologySpread, InterPodAffinity | spread / affinity rules | 2, 2 | spread of replicas |
 | DynamicResources | DRA claims allocatable (also PostFilter, Reserve, PreBind) | – (no Score) | section 1.5 |
-| NodeResourcesBalancedAllocation, ImageLocality | – | 1, 1 | pull toward spread pods and toward cached images |
+| NodeResourcesBalancedAllocation, ImageLocality | – | 1, 1 | pull toward a spread layout and toward cached images |
 | DefaultPreemption | PostFilter | – | section 3.5 |
 
 ### 3.2 Filter
@@ -302,7 +302,7 @@ The example is an 8-GPU node with 6 GPUs requested. A 1-GPU pod, with the score 
 * **The default scoring resources are `cpu` and `memory` (weight 1 each).** The default score does not include
   GPUs at all. Two nodes with the same CPU and memory use get the same score, with 1 or with 7 GPUs busy. GPU
   pods spread as a side effect of the CPU/memory spread.
-* **The scorer skips an extended resource that the pod does not request**. It does not get a score of zero. Thus
+* **The scorer skips an extended resource that the pod does not request.** The resource does not get a score of zero. Thus
   `nvidia.com/gpu` in the list does not keep CPU pods away from GPU nodes. Taints do that.
 
 To pack GPU pools, configure a scheduler profile with `MostAllocated` and a GPU weight:
@@ -430,7 +430,7 @@ nothing (`gang.admit_gangs()`). Then 4 GPUs are idle instead of 12, and B starts
 
 | Mechanism | How | Notes |
 |---|---|---|
-| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Job and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job still do not all fit on real nodes (fragmentation, pods that Kueue does not manage). `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. It is on by default since the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
+| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Job and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job still do not all fit on real nodes (fragmentation, pods that Kueue does not manage). `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. The setting is on by default since the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
 | **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | A `PodGroup` with `minMember`. The **Permit** stage holds reserved pods until the number of reserved pods is `minMember`. If that does not occur, it rejects them after a timeout. | It runs inside a second scheduler profile. The PodGroup API is `scheduling.x-k8s.io/v1alpha1` (verify). |
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler, common in HPC-style clusters |
 | **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`. The scheduler places a pod group together. | It is alpha in 1.35 behind the `GenericWorkload` feature gate, beta in 1.37, and 1.38 is the target for stable. These releases come from the KEP metadata (verify the release you run). Kueue plans to integrate the native gang scheduling. |
@@ -685,7 +685,7 @@ pending pods ─► simulate them on each node pool's template node ─► bin-p
   The request in the example is 4 + 2 + 1 + 1 GPUs. The simulator finds that one 8-GPU H100 node and two 4-GPU
   L4 nodes have the same waste (zero idle GPUs).
 
-  The simulator takes the H100 on its tie-break. Thus pods select one GPU type with a node selector. A `price` or
+  The simulator takes the H100 on its tie-break. Thus select one GPU type for the pods with a node selector. A `price` or
   `priority` expander, or a ComputeClass (7.3), expresses the cost.
 * **Down again**: a node goes away after it stays unneeded for `--scale-down-unneeded-time` (10 min), and no
   scale-up occurred for `--scale-down-delay-after-add` (10 min). For GPU nodes, only GPU utilisation counts
@@ -884,7 +884,7 @@ simulator instead.
 
 The same kind setup teaches sandbox pods for model-generated code in
 [07-application-agent-framework/sandboxed-execution](../../07-application-agent-framework/sandboxed-execution/README.md).
-These pods have a RuntimeClass, Pod Security *restricted*, a default-deny NetworkPolicy and an admission policy.
+The setup uses a RuntimeClass, Pod Security *restricted*, a default-deny NetworkPolicy and an admission policy.
 The kind cluster cannot run gVisor, but the GKE Sandbox node pool of that topic can.
 
 ### 10.2 KWOK and fake-gpu-operator
@@ -947,7 +947,7 @@ and weights come from a cache."
    for the shape.
 2. *Two training jobs have been "running" for an hour and neither has logged a step. What occurred?* Partial
    gang placement: each job holds some GPUs and waits for the rest. Admit jobs whole (Kueue with
-   `waitForPodsReady`, or a gang scheduler). Then one job runs, and the other waits and holds nothing.
+   `waitForPodsReady`, or a gang scheduler). Thus one job runs, and the other waits and holds nothing.
 3. *Team A has 16 GPUs of nominal quota, runs nothing, and its 16-GPU job is Pending. Why?* The ClusterQueue of
    team A lent its unused quota to the cohort, and `reclaimWithinCohort` is `Never`. Thus the borrowers keep the
    quota until they complete. Turn on reclaim, or set a `lendingLimit` to keep part of the quota home.
@@ -1044,8 +1044,8 @@ Dated 26 September 2026. Examine these facts again before you rely on any of the
 | Fact | Status here |
 |---|---|
 | Kueue latest release v0.19.6, API `kueue.x-k8s.io/v1beta2`, TAS beta and on by default | from upstream README / docs |
-| JobSet `jobset.x-k8s.io/v1alpha2` (release v0.12.0 in its README). LWS `leaderworkerset.x-k8s.io/v1`, tested on K8s 1.34–1.37. | from upstream READMEs |
-| DRA `resource.k8s.io/v1` GA in 1.34. NVIDIA DRA GPU plugin "not yet officially supported", ComputeDomains supported. | upstream. It changes fast. |
+| JobSet `jobset.x-k8s.io/v1alpha2` (release v0.12.0 in its README). LWS `leaderworkerset.x-k8s.io/v1`, with upstream tests on K8s 1.34–1.37. | from upstream READMEs |
+| DRA `resource.k8s.io/v1` GA in 1.34. NVIDIA DRA GPU plugin "not yet officially supported", ComputeDomains supported. | upstream. This support status changes fast. |
 | Native gang scheduling (KEP-4671): alpha 1.35, beta 1.37, stable targeted 1.38 | KEP metadata (verify the release you run) |
 | Kueue `waitForPodsReady` on by default (v1beta2 Configuration, timeout 30 min), and the `DisableWaitForPodsReady` alpha gate | Kueue v0.19.6 `apis/config/v1beta2/defaults.go` |
 | GKE GPU taint `nvidia.com/gpu=present:NoSchedule` and ExtendedResourceToleration on. `cloud.google.com/gce-topology-{block,subblock,host}` labels. | verify (the plugin is default-off upstream) |

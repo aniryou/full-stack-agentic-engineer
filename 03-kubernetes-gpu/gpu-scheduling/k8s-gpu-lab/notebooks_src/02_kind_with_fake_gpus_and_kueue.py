@@ -15,7 +15,7 @@
 # 2. The **kube-scheduler** binds each pod to a node. It looks at taints, selectors and free
 #    `nvidia.com/gpu`.
 #
-# On kind, the GPUs are fake. Each one is an extended resource that a patch writes into the node status. But
+# On kind, the GPUs are fake. Their count is an extended resource that a patch writes into the node status. But
 # everything that *decides* is real: kube-scheduler, Kueue v0.19, JobSet, LeaderWorkerSet. The simulation
 # covers only the device (no `/dev/nvidia*`, no CUDA). Primer §6 *Queues, quotas and
 # multi-tenancy with Kueue*, §4 *Gangs*, §5 *Topology-aware placement*, §10 *Learning locally*.
@@ -99,7 +99,7 @@ scenario("s1")
 # \end{aligned}
 # $$
 #
-# (This lab has no lending limits.) If the workload needs more than the unused nominal quota of its own
+# This lab has no lending limits. If the workload needs more than the unused nominal quota of its own
 # queue, it *borrows*.
 #
 # ## Exercise 2.2 — admit, borrow or wait?
@@ -152,20 +152,20 @@ scenario("s2")
 # * a **ProvisioningRequest admission check** (GKE's `l4-flex` flavor, notebook 04). Here, admission waits
 #   until DWS has created every node.
 #
-# A **plain-quota flavor**, such as GKE's `l4-spot` in `deploy/gke/10-kueue-gke.yaml`, does neither.
-# Admission means "the quota is yours". Then the pods wait for the cluster autoscaler, and the nodes arrive
-# one at a time. A Spot stockout can leave half of the gang Running, and this half holds GPUs while the rest
+# A **plain-quota flavor**, such as GKE's `l4-spot` in `deploy/gke/10-kueue-gke.yaml`, gives neither of
+# these guarantees that the gang fits. Admission means "the quota is yours". Then the pods wait for the
+# cluster autoscaler, and the nodes arrive one at a time. A Spot stockout can leave half of the gang Running, and this half holds GPUs while the rest
 # is Pending.
 #
 # The safety net of Kueue is **`waitForPodsReady`**. If not all the pods of an admitted workload are Ready
 # within `timeout`, Kueue evicts the workload. This releases the GPUs. Then Kueue requeues the workload with
 # exponential backoff.
 #
-# In Kueue v0.19, it is **on by default**. The v1beta2 Configuration sets these defaults: a 30 min
-# `timeout`, a `recoveryTimeout` equal to it, and `blockAdmission: false`
+# In Kueue v0.19, `waitForPodsReady` is **on by default**. The v1beta2 Configuration sets these defaults:
+# a 30 min `timeout`, a `recoveryTimeout` equal to it, and `blockAdmission: false`
 # (`apis/config/v1beta2/defaults.go` at v0.19.6). The shipped config file shows the setting only as a
-# comment, as an example of the knobs. To adjust it, edit the `kueue-manager-config` ConfigMap
-# (`kueue-system` namespace, key `controller_manager_config.yaml`). Then run
+# comment, as an example of the knobs. To adjust `waitForPodsReady`, edit the `kueue-manager-config`
+# ConfigMap (`kueue-system` namespace, key `controller_manager_config.yaml`). Then run
 # `kubectl -n kueue-system rollout restart deployment/kueue-controller-manager`:
 #
 # ```yaml
@@ -219,8 +219,8 @@ scenario("s3")
 # 4. the **lowest priority**.
 # 5. the **most recently admitted**.
 #
-# (The predictor evicts at once, thus the first rule never separates its candidates. Fair sharing is off in
-# this lab.)
+# The predictor evicts at once, thus the first rule never separates its candidates. Fair sharing is off in
+# this lab.
 #
 # ## Exercise 2.4 — order the candidates
 # Write `order_victims(candidates, preemptor_queue)`. Each candidate is a dict with `name`, `queue`,
@@ -318,8 +318,8 @@ print(kindsim.describe(kindsim.predict("k1")))
 # **Drill 1.** *A queued Job shows no pods at all. Is it broken?* No. Kueue keeps it suspended until it
 # admits the Job. Read the `QuotaReserved` condition of the Workload.
 #
-# **Drill 2.** *Why does a 4-pod subblock gang wait while the cluster has 6 free GPUs?* Because of the
-# required topology. No single subblock has 4 free GPUs, and TAS does not divide the gang.
+# **Drill 2.** *Why does a 4-pod subblock gang wait while the cluster has 6 free GPUs?* The cause is
+# the required topology. No single subblock has 4 free GPUs, and TAS does not divide the gang.
 #
 # **Drill 3.** *Kueue preempted a job of team-a, but nobody in team-a had a higher priority.* The job ran on
 # borrowed quota. The lender reclaimed it (`InCohortReclamation`).
@@ -329,5 +329,5 @@ print(kindsim.describe(kindsim.predict("k1")))
 #
 # The flavor is plain quota, thus admission never examined capacity. `waitForPodsReady` (on by default,
 # 30 min) evicts the gang, frees the GPUs of the three nodes and requeues the gang with backoff. An
-# admission that examines capacity prevents the half-started state. There are two kinds: a
+# admission that examines capacity prevents the half-started state. This admission can be a
 # ProvisioningRequest check (DWS flex-start: every node or none) or, on a fleet with a constant size, TAS.

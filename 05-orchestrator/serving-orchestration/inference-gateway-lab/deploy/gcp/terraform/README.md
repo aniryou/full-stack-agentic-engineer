@@ -23,17 +23,19 @@ PROJECT_ID=<id> ZONE=<zone> ../../gke/install.sh  # the workloads, see ../../gke
 
 Before you apply, make sure that you have these two things. GPUs need a **paid** billing account (not the free
 trial). They also need L4 quota (`GPUS_ALL_REGIONS` and `NVIDIA_L4_GPUS` in the region). Request the quota in IAM &
-Admin, Quotas. The default release channel is RAPID, because the GKE-managed InferencePool v1 CRD needs
+Admin, then Quotas. The default release channel is RAPID, because the GKE-managed InferencePool v1 CRD needs
 GKE ≥ 1.34.0-gke.1626000 (verify which channels carry it when you apply).
 
 **Cost (assumed us-central1 prices, verify):** With the GPU pool at 0, you pay for the system node (~$0.13/h), the
-load balancer when the Gateway exists (~$0.025/h) and the disks. This is approximately $0.16/h. Each L4 Spot node
-adds ~$0.28/h (on-demand ~$0.70/h). The pool is at 0 only while no vLLM pod exists. When `../../gke` is installed,
-`minReplicas: 1` keeps one L4 node up, also when it has no work (~$0.44/h). The free tier covers the cluster
+load balancer when the Gateway exists (~$0.025/h) and the disks. The total is approximately $0.16/h. Each L4 Spot node
+adds ~$0.28/h (on-demand ~$0.70/h).
+
+The pool is at 0 only while no vLLM pod exists. When `../../gke` is installed,
+`minReplicas: 1` keeps one L4 node up, also when the node has no work (~$0.44/h). The free tier covers the cluster
 management fee for one zonal cluster (verify). The platform can preempt Spot VMs at any time.
 
 **Cleanup:** Run `PROJECT_ID=<id> ../../gke/uninstall.sh`. It also removes the project-level IAM binding of the
-metrics adapter, which `terraform destroy` does not own. Then run `terraform destroy` (deletion protection is off).
+metrics adapter. `terraform destroy` does not own that binding. Then run `terraform destroy` (deletion protection is off).
 In the console, make sure that no `gke-igw-lab-*` disks or forwarding rules stay.
 
 The configuration passed offline validation with the google provider 8.4.0 (`terraform fmt -check`, `init`,

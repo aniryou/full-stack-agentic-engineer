@@ -9,11 +9,11 @@ example is one file, generated from `k8sgpu/gke.py`. You apply each one with `ap
 | `10-kueue-gke.yaml` | Kueue on GKE: flavor `l4-spot` (plain quota) and flavor `l4-flex` behind the `dws-prov` AdmissionCheck. That AdmissionCheck uses a `ProvisioningRequest` of class `queued-provisioning.gke.io` | `install-addons.sh` |
 | `20-dws-sample-job.yaml` | A 2-node gang. Kueue admits it only when DWS provisions both nodes. `provreq.kueue.x-k8s.io/maxRunDurationSeconds` sets the limit of the lease | `enable_flex_start_pool = true`, `install-addons.sh` |
 | `30-computeclass-l4.yaml` | A custom ComputeClass: Spot, then on-demand, then flex-start, for the same L4 shape. GKE creates the node pools on demand | GKE with node-pool auto-creation for ComputeClasses (>= 1.33.3-gke.1136000, verify) |
-| `40-serving-vllm-gcsfuse.yaml` | vLLM on one L4 through the ComputeClass. The FUSE CSI driver mounts the weights read-only from GCS. A startup probe has a size that suits the time to load the weights. `maxSurge: 0` (a lab choice: with one replica, every rollout is an outage) | the weights copied to the bucket |
+| `40-serving-vllm-gcsfuse.yaml` | vLLM on one L4 through the ComputeClass. The FUSE CSI driver mounts the weights read-only from GCS. A startup probe has a size that suits the time to load the weights. The Deployment sets `maxSurge: 0` (a lab choice: with one replica, every rollout is an outage) | the weights copied to the bucket |
 | `50-time-sharing-l4.yaml` | Four 1-GPU pods on one time-shared L4 (primer §9). The node advertises 4 `nvidia.com/gpu`. Every pod sees the same GPU. Nothing isolates the pods | `enable_time_sharing_pool = true` |
 
 **Cost.** Each GPU example creates one or two `g2-standard-4` L4 nodes. The nodes stay while the pods of the
-example run. A Spot node costs ~$0.25/h, an on-demand node ~$0.70/h, and flex-start has a discount (all verify).
+example run. A Spot node costs ~$0.25/h, an on-demand node costs ~$0.70/h, and flex-start has a discount (all verify).
 The DWS Job ends after 5 minutes. The serving Deployment runs until you delete it.
 
 **Clean up.** `deploy/gke/apply-examples.sh delete` drains the GPU nodes back to zero. Then run `terraform destroy`
@@ -31,7 +31,7 @@ not match, the container exits at start-up with *"CUDA driver version is insuffi
 **No Topology-Aware Scheduling on these pools.** The `l4-spot` and `l4-flex` flavors have no `topologyName`.
 Google's own Kueue TAS examples use the `cloud.google.com/gce-topology-{block,subblock,host}` labels on A3, A4
 and A4X node pools (GoogleCloudPlatform/cluster-toolkit `examples/gke-a3-*`, `gke-a4`, `gke-a4x`), but not on
-G2/L4. Examine your nodes with `kubectl get nodes -L cloud.google.com/gce-topology-host` (verify).
+G2/L4 (verify). Examine your nodes with `kubectl get nodes -L cloud.google.com/gce-topology-host`.
 The TAS flavor of the kind lab carries over to A3/A4 pools with the real labels. On L4, it teaches only the
 mechanism.
 

@@ -22,7 +22,7 @@
 # ```
 #
 # Terraform owns the cluster (zonal, Gateway API on, Managed Prometheus on) and the proxy-only subnet.
-# It also owns an L4 Spot node pool that autoscales from 0 to 2. Helm installs the EPP. From the same
+# It also owns a node pool of L4 Spot nodes that autoscales from 0 to 2. Helm installs the EPP. From the same
 # values, it also installs the InferencePool and the InferenceObjectives. Plain manifests add vLLM, the
 # Gateway/HTTPRoute, the PodMonitoring and the HPA. Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and
 # §10 Where to run it](../../PRIMER.md).
@@ -206,7 +206,7 @@ for m in hpa["spec"]["metrics"]:
 # | the sample reaches the HPA through Cloud Monitoring and the adapter | `ADAPTER_LAG_S` | assumption (verify) |
 # | the HPA controller's next sync | one full sync period, 15 s | kube-controller-manager default |
 # | GKE provisions a new L4 Spot node, and the node joins | `NODE_S` | assumption (verify). It is possible that you cannot get Spot at all. |
-# | the node pulls the vLLM image | `PULL_S` | assumption (verify). Image streaming makes it shorter. |
+# | the node pulls the vLLM image | `PULL_S` | assumption (verify). Image streaming makes the pull shorter. |
 # | weights download + load, until `/health` answers | `LOAD_S` | assumption (verify) |
 # | the readiness probe notices | one full probe period | `vllm.yaml` |
 #
@@ -278,10 +278,10 @@ print(f"✅ installed, busy or idle: ≈ ${lab_cost(1, 1):.2f}/h with its one L4
 # %% [markdown]
 # Keep the three states separate.
 #
-# **Installed and idle**: `lab_cost(1, 1)` ≈ \$0.44/h. The cost is this high because the
+# **Installed and idle**: `lab_cost(1, 1)` ≈ \$0.44/h. This cost occurs because the
 # `minReplicas: 1` of the HPA keeps one vLLM pod in operation, and thus one L4 Spot node. The GPU pool
-# never gets to 0 while the workloads exist. For that, you need scale-to-zero: KEDA or the alpha
-# `HPAScaleToZero`.
+# never gets to 0 while the workloads exist. To bring the pool to 0 with the workloads in place, you
+# need scale-to-zero: KEDA or the alpha `HPAScaleToZero`.
 #
 # **After `uninstall.sh`**: the pool drains to 0, and at most `lab_cost(1, 0)` ≈ \$0.16/h stays. This
 # is the system node and disks (~\$0.13/h plus disks). It also includes the forwarding rule of the
@@ -333,7 +333,8 @@ else:
 # "The llm-d router chart installs the endpoint picker with the same scorer config that we adjusted
 # locally. The chart also installs the InferencePool that selects the vLLM pods, and our three
 # InferenceObjectives. A Gateway of class `gke-l7-regional-external-managed` has an HTTPRoute to the
-# InferencePool. This makes the load balancer ask the EPP for a pod on each request.
+# InferencePool. This Gateway and its route make the load balancer ask the EPP for a pod on each
+# request.
 #
 # "Managed Prometheus scrapes vLLM. The custom-metrics adapter gives `vllm:num_requests_waiting` and
 # `vllm:num_requests_running` to the HPA. The queue is for bursts. The occupied batch slots are there

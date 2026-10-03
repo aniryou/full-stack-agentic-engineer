@@ -300,7 +300,7 @@ print("✅ reclaim takes only from borrowers, cheapest first, then gives back wh
 # preempt the newest, lowest-priority jobs.
 #
 # "Admission is all-or-nothing per job, and this also makes Kueue our gang admitter. BestEffortFIFO
-# keeps GPUs busy, and we look for large jobs that starve behind small jobs."
+# keeps GPUs busy, and we monitor the queues for large jobs that starve behind small jobs."
 #
 # **Drill questions.**
 #

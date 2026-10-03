@@ -91,8 +91,8 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 # One L4 node pool has zero nodes. A 1-hour inference job arrives at $t = 0$. The node needs 300 s
 # (illustrative) from creation to *allocatable GPUs*.
 #
-# The autoscaler removes a node after the node stays unneeded for 600 s (its default
-# `--scale-down-unneeded-time`). It also does not remove a node within 600 s of the last scale-up
+# The autoscaler removes a node after the node stays unneeded for 600 s (the autoscaler default
+# for `--scale-down-unneeded-time`). It also does not remove a node within 600 s of the last scale-up
 # (`--scale-down-delay-after-add`). `simulate()` models both. Here, the only scale-up is at
 # $t = 0$. Thus the unneeded time is the limit that controls the removal. `simulate()` does not
 # model the utilisation threshold or several pools.
@@ -193,11 +193,11 @@ print(f"✅ a 16-node gang on Spot takes {slowdown_16:.2f}x its work time withou
 # %% [markdown]
 # ## All-or-nothing provisioning
 #
-# A 16-node training job asks for capacity when the free capacity of the zone is low. The provider
-# grants each node that the job still needs with 3% probability per minute (a stockout model,
-# simulated). An
-# **ordinary** pool creates each node immediately when the provider grants it. The pool also bills
-# the node while the node waits for the other nodes. A **queued** pool (Kueue ProvisioningRequest,
+# A 16-node training job asks for capacity when the free capacity of the zone is low. For each
+# node that the job still needs, the probability that the provider grants the node is 3% per
+# minute (a stockout model, simulated). An **ordinary** pool creates each node immediately when the
+# provider grants it. The pool also bills the node while the node waits for the other nodes. A
+# **queued** pool (Kueue ProvisioningRequest,
 # or DWS flex-start with queued provisioning on GKE) holds the request until it can create all 16
 # nodes together.
 
@@ -253,7 +253,8 @@ print("✅ the ordinary pool paid for", round(ordinary["waiting_node_h"] - queue
 #
 # For each workload in the list, select one of `"on-demand"`, `"spot"`, `"flex-start"` or
 # `"reservation"`. `"flex-start"` is DWS: queued, all at once, time-bounded. `"reservation"` is
-# capacity held for you, and you pay for it if you use it or not. The workloads are:
+# capacity held for you, and you pay for it when you use it and also when you do not use it.
+# The workloads are:
 #
 # * **chat**: interactive inference. It scales from 0 to 6 L4 replicas with the traffic. The
 #   replicas are stateless.

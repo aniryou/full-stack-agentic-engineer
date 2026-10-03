@@ -133,8 +133,8 @@ print("unconstrained 3-node gang:", spread)
 #
 # With a topology constraint, Kueue uses **BestFit**. Among the domains that can hold the whole gang, it
 # takes the *tightest*. When it must divide a gang across child domains, it first takes the domains with
-# the most room. It selects the last domain as the tightest one that holds the remainder, and this keeps
-# large holes intact for large jobs. Then Kueue does the selection again one level down, over the
+# the most room. It selects the last domain as the tightest one that holds the remainder. This selection
+# keeps large holes intact for large jobs. Then Kueue does the selection again one level down, over the
 # children of *all* the domains that it selected.
 #
 # The gangs of the simulator have one pod shape. They have no leader pod set, no slices and no balanced

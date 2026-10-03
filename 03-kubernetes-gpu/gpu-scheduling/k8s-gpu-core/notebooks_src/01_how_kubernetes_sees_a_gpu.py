@@ -305,8 +305,8 @@ print("✅ topology-aware allocation inside one node - notebook 03 does the same
 # every physical GPU $N$ times (IDs `<uuid>::0 ... ::N-1`), and allocatable increases $N$-fold.
 #
 # The preferred allocation of the plugin takes replicas one at a time from the physical GPU with the
-# fewest replicas already allocated. This is its default *distributed* policy. A replica has no memory
-# limit and no guaranteed share of compute. The GPU divides its time equally between all the processes
+# fewest replicas already allocated. This is the default *distributed* policy of the plugin. A replica
+# has no memory limit and no guaranteed share of compute. The GPU divides its time equally between all the processes
 # on it.
 
 # %%

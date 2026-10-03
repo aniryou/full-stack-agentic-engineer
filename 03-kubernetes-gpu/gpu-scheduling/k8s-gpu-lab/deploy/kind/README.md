@@ -33,7 +33,7 @@ deploy/kind/down.sh                # delete everything
 | Script | Does |
 |---|---|
 | `up.sh` | It runs `kind create cluster` (image pinned in `../versions.env`) and preloads busybox. Then it runs the next three scripts in this table. Then it applies `manifests/0*-3*.yaml` |
-| `fake-gpus.sh` | It reads `topology.txt` and sets the node-pool, accelerator and `gce-topology-{block,subblock,host}` labels, the `nvidia.com/gpu=present:NoSchedule` taint, and the `nvidia.com/gpu` capacity through a status patch. **Re-run after a Docker restart**, because a kubelet that registers again sets the extended resources that it does not manage to zero |
+| `fake-gpus.sh` | It reads `topology.txt` and sets the node-pool, accelerator and `gce-topology-{block,subblock,host}` labels, the `nvidia.com/gpu=present:NoSchedule` taint, and the `nvidia.com/gpu` capacity through a status patch. **Re-run after a Docker restart**, because a kubelet that registers again sets unmanaged extended resources to zero |
 | `install-addons.sh` | It applies the JobSet, LeaderWorkerSet and Kueue release manifests (`kubectl apply --server-side`). Then it waits for the controllers |
 | `kwok.sh` | Optional. It installs the KWOK controller. Then it creates 32 fake 8-GPU H100 nodes (2 blocks x 4 subblocks x 4 hosts) and the `fleet` queue. `--delete` removes them |
 | `down.sh` | `kind delete cluster` |
@@ -106,6 +106,6 @@ namespaces. The queues stay.
 * **`failed calling webhook ... kueue`** immediately after the install: the webhook becomes ready later than its
   Deployment. `up.sh` retries. You can also wait 30 s and apply again.
 * **Image pulls fail / rate-limited**: run `docker pull busybox:1.38.0 && kind load docker-image busybox:1.38.0 --name gpu-lab`.
-* **A scenario differs from the prediction**: wait a minute, then run `python3 -m k8sgpu kind observe <s>`.
+* **A scenario differs from the prediction**: wait a minute. Then run `python3 -m k8sgpu kind observe <s>`.
   TAS requeues freed capacity in ~10 s batches. If the result still differs, the printed Workload condition
-  tells why. Then you found something that the predictor does not model.
+  tells why. In that case, you found something that the predictor does not model.

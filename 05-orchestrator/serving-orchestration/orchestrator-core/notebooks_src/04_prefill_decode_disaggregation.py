@@ -8,12 +8,12 @@
 # Prefill is compute-bound, and its load comes in bursts. Decode is memory-bound, and its load is steady. On a shared
 # engine, one 2,048-token prefill chunk makes every decode request in the batch wait half a second (on an L4).
 #
-# **Disaggregation** runs prefill on a pool of its own. It sends the KV cache of each prompt to a decode replica. Then
-# the decode steps no longer stop for a short time at random. The costs are:
+# **Disaggregation** runs prefill on a pool of its own. It sends the KV cache of each prompt to a decode replica. Thus
+# the decode steps no longer stop for short times. The costs are:
 #
 # * The **transfer**: $\text{prompt tokens} \:\times$ $\text{KV bytes/token} \:\div$ $\text{link bandwidth}$. The
 #   transfer adds to TTFT. On fast GPUs, the transfer needs RDMA-class links.
-# * **two pools to size**: the P:D ratio must match the input/output mix of the traffic. If it does not, one pool is
+# * **Two pools to size**: the P:D ratio must match the input/output mix of the traffic. If it does not, one pool is
 #   idle while requests wait in the queue of the other pool. Small fleets have bad fragmentation.
 # * An extra hop on short prompts. On short prompts, this hop gives no benefit.
 #
@@ -49,7 +49,7 @@ print(table([{"ITL p50": s["itl_p50"], "ITL p99": s["itl_p99"], "TPOT p95": s["t
 #
 # ## Exercise 4.1 — what the KV transfer costs
 # Write `kv_transfer_s(tokens, kv_bytes_per_token, link_gbps, latency_s=0.0)`. Convert the KV bytes of the prompt to
-# bits. Divide the bits by the speed of a link of `link_gbps` gigabits per second. Then add a constant latency.
+# bits. Divide the bits by the link speed, `link_gbps` gigabits per second. Then add a constant latency.
 
 # %% exercise
 def kv_transfer_s(tokens, kv_bytes_per_token, link_gbps, latency_s=0.0):
@@ -90,11 +90,10 @@ print(f"✅ L4 (prefill {6000 / L4_8B.compute_tok_s:.2f} s): {on_l4}\n   H100 (p
 # ## Worked example — every split of eight GPUs
 # The fleet has eight L4 replicas and a 100 Gb/s link. The traffic is 1.2 req/s of ~6k-token prompts. `search_pd`
 # runs every xPyD split on the same traffic (0 prefill = aggregated). The SLO is a TTFT of at most 3 s and a
-# TPOT of at most 80 ms. The
-# analytic plan is next to the results.
+# TPOT of at most 80 ms. The analytic plan is next to the results.
 #
-# (The fleets in this example have a constant size. `fleetsim` does not autoscale P/D pools. The planners of primer §4.5
-# do.)
+# The fleets in this example have a constant size. `fleetsim` does not autoscale P/D pools, but the planners of
+# primer §4.5 do.
 
 # %%
 def heavier():
@@ -107,10 +106,10 @@ plan = pd_plan(p, rate=1.2, isl=6060, osl=250, itl_slo_s=0.08)
 print({k: round(v, 2) for k, v in plan.items()})
 
 # %% [markdown]
-# The analytic plan asks for about 2.75 prefill replicas and 4.2 decode replicas. This is 3P5D, and 3P5D is also the
-# best split in the simulator. All the other splits have a bad balance. With too few prefill replicas, TTFT increases
-# to large values in the prefill queue. With too few decode replicas, TPOT increases to large values. The aggregated fleet meets
-# the TTFT SLO but not the tight TPOT SLO, because of the chunk stall.
+# The analytic plan asks for about 2.75 prefill replicas and 4.2 decode replicas. Rounded up, this plan is 3P5D, and
+# 3P5D is also the best split in the simulator. All the other splits have a bad balance. With too few prefill
+# replicas, TTFT increases very fast in the prefill queue. With too few decode replicas, TPOT increases very fast. The
+# aggregated fleet meets the TTFT SLO but not the tight TPOT SLO, because of the chunk stall.
 #
 # ## Exercise 4.3 — the decode side of the plan
 # The prefill side is a division: 1.2 req/s x 6,060 tokens over 3,781 tok/s at a 0.7 utilisation cap is 2.75
@@ -172,12 +171,12 @@ for budget in (2048, 1024, 512, 256):
 print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep"))
 
 # %% [markdown]
-# On this model and GPU, the chunk-budget knob gives results as good as the best split. It uses one pool, no network,
-# and no ratio to maintain. Two things that the step model leaves out make this result the optimistic end:
+# On this model and GPU, the chunk-budget knob gives results as good as the best split. This solution uses one pool,
+# no network, and no ratio to maintain. Two things that the step model leaves out make this result the optimistic end:
 #
-# * The model has no per-chunk efficiency loss. Real engines lose some prefill efficiency at small chunks.
-# * Its prefill compute is linear in tokens. It has no attention FLOPs, which add about +10 % for these 6k-token
-#   prompts, and more for longer prompts. Thus the TTFT of every row looks better than it is.
+# * The step model has no per-chunk efficiency loss. Real engines lose some prefill efficiency at small chunks.
+# * The prefill compute of the step model is linear in tokens. The step model has no attention FLOPs, which add about
+#   +10 % for these 6k-token prompts, and more for longer prompts. Thus the TTFT of every row looks better than it is.
 #
 # Larger models make each decode step shorter in comparison with a chunk. With these models, disaggregation becomes
 # the better choice (DistServe, Splitwise, the llm-d P/D guide: medium-large models, long inputs).
@@ -223,8 +222,8 @@ print("✅ conditional disaggregation: pay the hop only where the stall it remov
 #
 # "First, the stall that it removes: the p99 inter-token latency against our SLO, after we adjust the chunk budget.
 # Second, the KV transfer that it adds: $\text{prompt tokens} \times \text{KV bytes per token}$ over our link, in
-# comparison with the prefill time. Third, if the fleet is sufficiently large to divide at the P:D ratio of the
-# traffic without fragmentation.
+# comparison with the prefill time. Third, the size of the fleet: is it sufficiently large to divide at the P:D
+# ratio of the traffic without fragmentation?
 #
 # "If the answer is yes, we use xPyD, sized from that ratio, conditional on prompt length, over RDMA: llm-d or Dynamo
 # with NIXL. If the answer is no, we use an aggregated fleet with an adjusted chunk budget."
@@ -237,5 +236,5 @@ print("✅ conditional disaggregation: pay the hop only where the stall it remov
 #    Calculate the decode replicas from the output tokens/s at the ITL SLO, with the KV capacity as a limit.
 #    Calculate them again each time the input/output mix changes.
 # 3. *Why does a faster GPU make the network matter more?* The prefill time decreases as the FLOP/s increase, but
-#    the KV bytes stay the same. Thus the same transfer becomes a larger fraction of TTFT. Thus H100-class prefill
+#    the KV bytes stay the same. Thus the same transfer becomes a larger fraction of TTFT, and H100-class prefill
 #    needs RDMA or NVLink, not 100 GbE.

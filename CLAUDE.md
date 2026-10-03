@@ -341,7 +341,12 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   31k words: the CUDA-and-NCCL primer, READMEs, deploy notes and 11 notebook sources, the layer README): 40 agents
   in 1.5 hours; 3,140 sentences compared, 3 blocking, 39 major and 74 minor findings, 147 applied, 2 rejected; the
   three left open (the technical name "stream" used as a verb) applied by hand; cuda-nccl-core 140 and cuda-nccl-lab
-  130 tests pass; 0 linter errors. **Baseline unchanged: 385 notebooks.**
+  130 tests pass; 0 linter errors. **Layer 03** (8 groups, about 30k words: the GPU-scheduling primer, READMEs and
+  deploy notes, 9 notebook sources, the layer README): 42 agents in 1.4 hours; 2,969 sentences compared, 8 blocking, 32
+  major and 73 minor findings, 146 applied, 1 rejected, none left open, nothing to apply by hand; k8s-gpu-core 58 and
+  k8s-gpu-lab 127 tests pass; the 7 linter errors left are a table cell that `test_docs.py` pins and two quoted drill
+  questions in the lab's notebooks 03 and 04.
+  **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and

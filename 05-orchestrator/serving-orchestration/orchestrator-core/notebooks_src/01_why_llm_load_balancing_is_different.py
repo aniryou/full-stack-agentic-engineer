@@ -10,8 +10,9 @@
 # Thus, when it divides them equally *by count*, it also divides the *work* equally. LLM requests break all three
 # assumptions:
 #
-# 1. **The cost changes by one to two orders of magnitude, and nobody knows it at the start.** A 6,000-token RAG
-#    prompt has five times the prefill of a chat turn. Nobody knows the output length until the generation stops.
+# 1. **The cost of requests is different by one to two orders of magnitude, and nobody knows it at the start.** A
+#    6,000-token RAG prompt has five times the prefill of a chat turn. Nobody knows the output length until the
+#    generation stops.
 # 2. **Capacity is KV-cache memory and step time, not CPU.** A replica is "full" when its KV blocks are full.
 #    Overload shows as a queue and as preemption long before anything looks like a CPU alarm.
 # 3. **Replicas are caches.** The replica that already holds the prefix of a prompt serves it for a fraction of the
@@ -19,7 +20,7 @@
 #
 # After this notebook, you can explain these points with numbers:
 #
-# - why round-robin and least-connections give a higher latency than is possible,
+# - why round-robin and least-connections give a higher latency than necessary,
 # - why power-of-two-choices is the robust default when a router looks only at load,
 # - why the dispatch counters of the router itself are better than stale scraped metrics,
 # - how a router-side queue with a per-endpoint cap and priorities (llm-d flow control) protects interactive
@@ -146,8 +147,8 @@ print(f"✅ p2c works — the idle replica gets {share:.1%} of new requests, the
 # requests go to the same replica until the next scrape.
 #
 # In the next cell, traffic arrives in 5-second bursts of 16 req/s. The picker refreshes the snapshot at most every
-# `metrics_age` seconds. (By default, the EPP of llm-d refreshes every 50 ms. A router that gets its data from a
-# 15-s Prometheus scrape has much more stale data.)
+# `metrics_age` seconds. By default, the EPP of llm-d refreshes every 50 ms. A router that gets its data from a 15-s
+# Prometheus scrape has data that is much older.
 
 # %%
 bursts = [(t, 16.0 if (t // 5) % 4 == 1 else 2.0) for t in range(0, 240, 5)]
@@ -164,11 +165,11 @@ print(table(rows, title="simulated: bursty chat, 4x L4"))
 # %% [markdown]
 # The argmin router becomes worse as its data gets older. Power-of-two on the *same* stale data stays almost the
 # same, because two random candidates rarely both look idle (Mitzenmacher, "How useful is old information?"). The
-# counters of the router itself are never stale. They count the requests that the router dispatched and that it has
-# not seen finish. This is why load-aware routers keep these counters.
+# counters of the router itself count the requests that the router dispatched and that it has not seen finish. These
+# counters are never stale. Thus load-aware routers keep them.
 #
-# (The simulator models staleness as a maximum age. The simulator reads a snapshot again on the first look after the
-# snapshot expires.)
+# The simulator models staleness as a maximum age. The simulator reads a snapshot again on the first look after the
+# snapshot expires.
 
 # %% check
 by = {(r["metrics age s"], r["router"]): r["ttft_p95"] for r in rows}
@@ -220,8 +221,8 @@ print(f"✅ argmin sends all 8 to replica 1; p2c sends {mean:.2f} on average and
 #
 # * **a**: one router process, requests with large differences in size, and the router can count its own in-flight
 #   requests.
-# * **b**: twenty router replicas read a shared metrics snapshot that is a few seconds old. Each replica sees only
-#   its own traffic.
+# * **b**: twenty router replicas that each see only their own traffic, and a shared metrics snapshot that is a few
+#   seconds old.
 # * **c**: identical, small requests (for example, an embedding model with fixed-length inputs) and a low-cost,
 #   simple proxy.
 
@@ -241,9 +242,11 @@ print("✅ right signal for each situation")
 # ## Worked example — flow control: queue in the router, not in the engines
 # Each router in the earlier examples commits a request to a replica at the moment that the request arrives. If that
 # replica is busy, the request waits in the queue of *that* replica, even when a different replica becomes free
-# first. The **flow control** of llm-d holds the requests in the router instead. It dispatches a request only to an
+# first.
+#
+# The **flow control** of llm-d holds the requests in the router instead. It dispatches a request only to an
 # endpoint that is below a per-endpoint cap on requests in flight (its `concurrency-detector`, `maxConcurrency`). It
-# dispatches the highest priority first (`InferenceObjective.priority`), and FCFS in one priority.
+# dispatches the highest priority first (`InferenceObjective.priority`). In one priority, it dispatches in FCFS order.
 # `fleetsim.FlowControl` models exactly that, and also a TTL and a queue bound that shed requests.
 #
 # Two flows share four L4 replicas: an **interactive** chat (1 req/s, priority 1) and a **batch** job with RAG
@@ -333,8 +336,8 @@ print(f"✅ λ = {lam:.2f}/s x W = {w:.1f} s = {lam * w:.0f} in flight (the simu
 
 # %% [markdown]
 # ## In a design review
-# **Two-minute version.** "LLM requests are not interchangeable. Prefill work, KV memory and residency time each
-# change by an order of magnitude or more across a realistic mix. Also, nobody knows the output length at the start.
+# **Two-minute version.** "LLM requests are not interchangeable. Prefill work, KV memory and residency time are each
+# different by an order of magnitude or more across a realistic mix. Also, nobody knows the output length at the start.
 # Thus a count of requests does not balance work.
 #
 # "Load-aware routing needs a signal near to the cause of latency: the waiting queue of the engine and its KV usage.
@@ -355,8 +358,8 @@ print(f"✅ λ = {lam:.2f}/s x W = {w:.1f} s = {lam * w:.0f} in flight (the simu
 #    or use power-of-two.
 # 3. *What does Little's law tell you about a 20-replica fleet at 50 req/s with a 12 s mean E2E?* 600 requests in
 #    flight. That is approximately 30 per replica. You compare this number with the KV capacity and the
-#    `max_num_seqs` of each replica. It is also the lowest value of a flow-control `maxConcurrency` that does not
-#    starve the GPUs.
+#    `max_num_seqs` of each replica. The number 30 is also the lowest value of a flow-control `maxConcurrency`
+#    that does not starve the GPUs.
 # 4. *Why put requests in a queue in the router at all?* When a request is in the queue of an engine, the router has
 #    committed it to that replica. A request in the router can still go to the replica that becomes free first. The
 #    router can also put it in order by priority, or shed it with a 429. But this is true only if the cap has the

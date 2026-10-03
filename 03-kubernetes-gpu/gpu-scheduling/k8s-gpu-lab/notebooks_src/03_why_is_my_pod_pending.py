@@ -163,8 +163,9 @@ print("✅ five Kueue blockers, five different conversations with the queue owne
 # ## The whole diagnosis, every fixture
 # `pending.diagnose()` goes through the four gates in order and gives the repair. The events of the
 # autoscaler override the result of the scheduler when they explain it (a pool at max size, a stockout). The
-# next cell prints each diagnosis under the provenance of its fixture. The predictor simulated the fixture,
-# or a person wrote it by hand in the documented format. None of it is output recorded from a cluster.
+# next cell prints each diagnosis under the provenance of its fixture. Each fixture has one of two
+# provenances: the predictor simulated it, or a person wrote it by hand in the documented format. None of
+# the fixtures is output recorded from a cluster.
 
 # %%
 for name in pending.fixture_names():
@@ -211,10 +212,10 @@ print("✅ seven Pending pods, seven different fixes")
 
 # %% [markdown]
 # ## Live: the s6 zoo on your kind cluster
-# If the cluster from notebook 02 is up, the next cell creates the zoo. Fillers leave one free GPU per node,
-# then six workloads that cannot start arrive. Then the cell diagnoses every Pending pod with
-# `pending.diagnose_live`. This function gets the same JSON documents with `kubectl`. Offline, the cell
-# prints the commands.
+# If the cluster from notebook 02 is up, the next cell creates the zoo. The zoo starts with fillers that
+# leave one free GPU per node. After the fillers, the zoo adds six workloads that cannot start. Then the
+# cell diagnoses every Pending pod with `pending.diagnose_live`. This function gets the same JSON documents
+# with `kubectl`. Offline, the cell prints the commands.
 
 # %%
 READY, why = kindlab.cluster_status()

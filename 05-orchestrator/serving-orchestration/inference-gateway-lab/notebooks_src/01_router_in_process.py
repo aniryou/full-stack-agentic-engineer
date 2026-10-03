@@ -5,14 +5,14 @@
 # vLLM-shaped fake backends and the router start inside this notebook on free localhost ports, and
 # they talk real HTTP. `igwlab/fakebackend.py` emulates the backend *times*: prefill cost per
 # uncached token, decode cost per token, batch slots. Thus every latency in this notebook is
-# "measured on this machine, emulated backend". It is good for a comparison of routing policies,
-# but it is not a GPU benchmark.
+# "measured on this machine, emulated backend". These latencies are good for a comparison of routing
+# policies, but they are not a GPU benchmark.
 #
 # ## The one-minute version
 #
 # An LLM replica is a stateful cache with a queue in front of it. A request whose prompt prefix is
 # already in the KV cache of *that* replica skips most of its prefill. Thus the destination of a
-# request changes how much work the request is. Thus an LLM-aware router does these steps:
+# request changes how much work the request is. For this reason, an LLM-aware router does these steps:
 #
 # 1. **remembers what it sent where**: it keeps an approximate prefix index of chained block hashes.
 # 2. **reads each replica's load** from its `/metrics` (vLLM's `num_requests_waiting`, `kv_cache_usage_perc`).
@@ -150,9 +150,11 @@ print("✅ prefix_score matches the prefix-cache-scorer formula")
 #
 # One detail causes problems in production. The scorer reads the *current* metrics of each endpoint,
 # and it does not examine their freshness (llm-d-router v0.10.0 does the same). An endpoint that the
-# router has never scraped has all-zero metrics. Such an endpoint is a pod that became ready a moment
-# ago (`None` here). Write `queue_scores(waiting)` with exactly that behaviour. Then answer this
-# question: what is the score of a newly started replica, and what does that score do to the next burst?
+# router has never scraped has all-zero metrics. An example of such an endpoint is a pod that became
+# ready a moment ago (`None` here).
+#
+# Write `queue_scores(waiting)` with exactly that behaviour. Then answer this question: what is the
+# score of a newly started replica, and what does that score do to the next burst?
 
 # %% exercise
 def queue_scores(waiting: dict) -> dict:
@@ -184,8 +186,8 @@ print("✅ a never-scraped replica scores 1.0: it looks idle, so until its first
 # over all scorers. An endpoint without a score from a scorer gets 0 for that scorer. Then the
 # `max-score-picker` takes the highest total.
 #
-# Write `pick(scores, weights)`. It returns the name of the endpoint that wins. If two totals are
-# exactly equal, select the name that is first in alphabetical order. The lab's picker rotates ties
+# Write `pick(scores, weights)`. It returns the name of the endpoint that wins. If two or more
+# endpoints have exactly the same highest total, select the name that is first in alphabetical order. The lab's picker rotates ties
 # round-robin. The picker of llm-d-router v0.10.0 puts the candidates in a random order before a stable sort by
 # score. Thus the winner of its ties is random.
 
@@ -246,14 +248,15 @@ print(ascii_bars({k: r.summary()["ttft_p50_ms"] for k, r in results.items()}))
 # %% [markdown]
 # Look at two things. First, the **hit rate** of the weighted router is higher. The reason is that
 # the next turn of each session goes back to the replica that holds its history. Round-robin does the
-# prefill of the history again ~2/3 of the time. Second, **TTFT** decreases more than the hit rate
-# suggests. Each prefill that the router prevents also makes the queue of prefills shorter for all
-# other requests on that replica.
+# prefill of the history again ~2/3 of the time.
 #
-# The fake backend runs one prefill at a time per replica. It is like an engine whose prefills
-# compete for the GPU. `llm-d-inference-sim` does not put prefills in a queue. Thus on the notebook-04
-# stacks, the TTFT gap is smaller, but the hit-rate gap stays. The cost is imbalance: the requests go
-# where the cache is, not in an even split.
+# Second, **TTFT** decreases more than the hit rate suggests. The reason is that each prefill that
+# the router prevents also makes the queue of prefills shorter for all other requests on that
+# replica. The cost is imbalance: the requests go where the cache is, not in an even split.
+#
+# The queue of prefills exists because the fake backend runs one prefill at a time per replica. It
+# is like an engine whose prefills compete for the GPU. `llm-d-inference-sim` does not put prefills in a queue. Thus on the notebook-04
+# stacks, the TTFT gap is smaller, but the hit-rate gap stays.
 #
 # ## Exercise 1.4 — hit rate from the engines' own counters
 #
@@ -287,8 +290,8 @@ print(f"✅ counters and usage agree: hit rate {got:.1%}")
 # ## Exercise 1.5 — decision forensics
 #
 # The router records every routing decision (`stack.router.decisions`, and `GET /debug/state`).
-# Someone can ask you "why did this request go to b?". The useful answer gives the name of the
-# **decisive scorer**. That is the scorer whose *weighted* contribution has the largest difference
+# Someone can ask you "why did this request go to b?". For that question, the useful answer gives
+# the name of the **decisive scorer**. That is the scorer whose *weighted* contribution has the largest difference
 # between the winner and the runner-up.
 #
 # Write `decisive_scorer(decision)`. Use `decision.scores` (`{scorer: {endpoint: score}}`),
@@ -325,22 +328,22 @@ print("✅ decisive_scorer explains a decision")
 # **Two-minute walkthrough.** "Our replicas are caches. Thus we route like a cache-aware load
 # balancer, not like a web LB. For each request, the router hashes the prompt into 64-token blocks.
 # The hashes form a chain, so equal hashes mean an equal prefix. The router finds the replica that it
-# last sent each block to, and changes that into a prefix score per replica.
+# last sent each block to and changes this information into a prefix score per replica.
 #
 # "It also scrapes the vLLM metrics of every replica every 50 ms (the wait queue and the KV-cache
 # usage) and changes them into scores too. The total is a weighted sum (the llm-d default is prefix
 # 3, queue 2, KV 2), and the highest total wins. The picker breaks ties at random. We stream the
 # bytes back unchanged.
 #
-# "On a multi-turn agent workload, this keeps each session on the replica that holds its history.
+# "On a multi-turn agent workload, this routing keeps each session on the replica that holds its history.
 # The result is fewer prefilled tokens, shorter prefill queues and lower TTFT. The cost is an uneven
 # split, and the load scores put a limit on it."
 #
 # **Drill questions**
 #
 # 1. *Round-robin caches the system prompt on every replica after some time. Why does it still lose?*
-#    The history of each session increases, and only the replica that ran its last turn has it in its
-#    cache. Round-robin sends the next turn to a different replica ⅔ of the time and prefills the
+#    The history of each session increases. Only the replica that ran the last turn of the session
+#    has that history in its cache. Round-robin sends the next turn to a different replica ⅔ of the time and prefills the
 #    history again. It also keeps every prefix on every replica. This divides the effective cache
 #    capacity by the number of replicas.
 # 2. *Name three ways in which the prefix index can be incorrect.* The router writes the index at

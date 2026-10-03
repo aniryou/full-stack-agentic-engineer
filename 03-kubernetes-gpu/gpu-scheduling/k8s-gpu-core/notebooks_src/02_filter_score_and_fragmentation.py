@@ -140,8 +140,8 @@ print("✅ spread cluster:", free_now, "-> stranded", stranded(free_now, 8), "of
 # ## Exercise 2.3 — pick the scoring strategy for a mixed GPU cluster
 #
 # There are four 8-GPU nodes (96 cores, 768 GiB each). Some pods already run. On `h0`, a CPU-heavy
-# data-prep pod runs (48 cores, 384 GiB, **no GPU**), and it tolerates the GPU taint. On `h1` and on
-# `h2`, one 4-GPU embedding server runs on each. Now eight 1-GPU inference replicas arrive (8 cores, 64
+# data-prep pod runs (48 cores, 384 GiB, **no GPU**), and it tolerates the GPU taint. One 4-GPU
+# embedding server runs on `h1`, and one runs on `h2`. Now eight 1-GPU inference replicas arrive (8 cores, 64
 # GiB each). Then two 8-GPU fine-tuning pods arrive.
 #
 # Select `strategy` (`"LeastAllocated"` or `"MostAllocated"`) and the `resources` weights for
@@ -227,8 +227,8 @@ print("✅", actual)
 # Why does `cpu-0` say *affinity/selector* and not *Insufficient nvidia.com/gpu*? The filters run in
 # this order: unschedulable, taints, node affinity, then resources. The scheduler reports the first
 # failure. The correction is different for each reason. *Insufficient* means capacity (wait, preempt,
-# scale up). *affinity/selector* and *taint* mean that the pod asked for a node shape that does not
-# exist here.
+# scale up). The reasons *affinity/selector* and *taint* mean that the pod asked for a node shape that
+# does not exist here.
 #
 # ## Priority and preemption
 #
@@ -323,4 +323,5 @@ print("✅ victims:", [v.name for v in got], "- reprieve in order of importance,
 # 2. *Does the default scheduler consider GPUs when scoring?* No. By default, NodeResourcesFit uses cpu
 #    and memory for the score. GPUs are important only in the filter (the integer must fit).
 # 3. *Why can bin-packing hurt an inference service?* Replicas collect on few nodes. Thus one node
-#    failure or GPU failure removes several replicas. Balance it with topology spread constraints.
+#    failure or GPU failure removes several replicas. Balance the placement with topology spread
+#    constraints.

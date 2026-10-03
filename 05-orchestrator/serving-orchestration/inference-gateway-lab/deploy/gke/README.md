@@ -37,21 +37,23 @@ Notes:
   CRD rejects that value.
 - The metric names of the HPA obey the convention of the adapter for Managed Prometheus series
   (`prometheus.googleapis.com|<name>|<kind>`). The adapter README says to replace `/` with `|`. The
-  `prometheus.googleapis.com/<name>/<kind>` metric type has the mark VERIFY. `minReplicas` is 1.
-  Scale-to-zero needs the alpha `HPAScaleToZero` gate, or KEDA with a queue metric on the router side (notebook 03).
-- The HPA has **two** metrics, because an HPA on the queue only collapses the pool at full load (notebook 03). The
+  `prometheus.googleapis.com/<name>/<kind>` metric type has the mark VERIFY. `minReplicas` is 1,
+  because scale-to-zero needs the alpha `HPAScaleToZero` gate, or KEDA with a queue metric on the router side (notebook 03).
+- The HPA has **two** metrics, because an HPA with only the queue metric collapses the pool at full load (notebook 03). The
   queue (`waiting`, target 5) reacts to bursts. The occupied batch slots (`running`, target 24) hold the capacity
   after the queue is empty. The two targets come from `--max-num-seqs=32` in `vllm.yaml`. 24 is 75 % of the slots.
   5 comes from Little's law with a queue budget of 0.5 s and an *assumed* ~3 s for each request in the batch.
+
   Calibrate the two targets again from a load test on your model and GPU. The derivation is in `hpa.yaml` and in
   notebook 03 Exercise 3.4.
 - `vllm.yaml` sets `--enable-prompt-tokens-details`. Thus the responses carry
   `usage.prompt_tokens_details.cached_tokens`, and `igwlab.bench` can show the hit rate of each request.
 
 **Cost:** See the Terraform README. With these workloads installed, an hour with *no traffic* still costs ~$0.44
-(assumed prices, verify). `minReplicas: 1` keeps one vLLM pod, thus one L4 Spot node stays up. The GPU pool goes
+(assumed prices, verify). One L4 Spot node stays up, because `minReplicas: 1` keeps one vLLM pod. The GPU pool goes
 down to 0 only after `uninstall.sh`. Until `terraform destroy`, you pay for the system node and the disks
 (~$0.13–0.16/h). `uninstall.sh` deletes the Gateway, and with it the load balancer.
+
 **Cleanup:** Run `PROJECT_ID=<id> ./uninstall.sh`. It removes the workloads, the metrics adapter and the
-project-level IAM binding of the adapter, which `terraform destroy` does not remove. Then run `terraform destroy`
+project-level IAM binding of the adapter. `terraform destroy` does not remove that binding. Then run `terraform destroy`
 in `../gcp/terraform`.

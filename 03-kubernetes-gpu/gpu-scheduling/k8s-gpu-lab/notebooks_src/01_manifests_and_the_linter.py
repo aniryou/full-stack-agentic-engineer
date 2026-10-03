@@ -167,8 +167,8 @@ print("a3-highgpu-8g packed with 3-GPU pods strands", three_gpu, "GPUs =", 8 % 3
 # %% [markdown]
 # ## Exercise 1.3 — how many GPUs does a request strand?
 #
-# Write `stranded(node_cpu, node_mem, node_gpus, pod_cpu, pod_mem, pod_gpus)`. The function packs identical
-# pods onto one empty node until *any* resource runs out. Then it returns the number of idle GPUs.
+# Write `stranded(node_cpu, node_mem, node_gpus, pod_cpu, pod_mem, pod_gpus)`. In the function, pack identical
+# pods onto one empty node until *any* resource runs out. Return the number of idle GPUs.
 #
 # Then answer this question. On a `g2-standard-48`, a 1-GPU pod has memory 40 GiB. What is the largest
 # **whole** number of vCPUs that it can request with no stranded GPU? Put the answer in `max_cpu`.
@@ -318,18 +318,19 @@ print(m.to_yaml(rct))
 #
 # * The GPU is an integer extended resource that the device plugin advertises. Request it as a limit.
 # * GPU nodes have a taint. Thus the pod has a toleration for the taint and selects its accelerator.
-# * Set CPU and memory to the per-GPU share of the node. If not, you strand GPUs.
+# * Set CPU and memory to the per-GPU share of the node. If not, GPUs become stranded.
 # * A serving pod must have a startup probe sized to the weight load.
 # * Multi-pod jobs are gangs. Put them in a queue (Kueue) and pin them to a topology domain.
 # * Run the linter before you apply. CRDs accept broken pod templates.
 #
 # **Drill 1.** *You applied a JobSet with no error, but no pods ever appeared. Where do you look first?*
-# Look at the events on the child Jobs or on the JobSet. Its controller failed the pod validation that the
-# CRD did not do (for example, an incorrect `restartPolicy` or a GPU request without a limit).
+# Look at the events on the child Jobs or on the JobSet. The controller tried to create the pods. The pods
+# failed the pod validation that the CRD did not do (for example, an incorrect `restartPolicy` or a GPU
+# request without a limit).
 #
 # **Drill 2.** *Why does the API server reject `requests: {nvidia.com/gpu: 1}` without a limit, when it
 # accepts the same for CPU?* You cannot overcommit an extended resource, thus the limit is the allocation.
-# The API server rejects the request without the limit (and fills the request from the limit).
+# Thus the API server makes the limit necessary, and it fills the request from the limit.
 #
 # **Drill 3.** *A 4-GPU node runs only two 1-GPU pods, and the other GPUs are idle. Why?*
 # The CPU or memory requests of the pods are more than a quarter of the node's allocatable. The CPU ran out

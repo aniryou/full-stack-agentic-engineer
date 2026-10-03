@@ -1,7 +1,7 @@
 # deploy/local — the stack in Docker Compose (T0 + Docker, CPU only)
 
-This stack has three backends with the shape of vLLM, and the lab router in front of them. Prometheus scrapes all of
-them.
+This stack has three backends with the shape of vLLM, and the lab router in front of them. Prometheus scrapes the backends
+and the router.
 
 **Cost:** free (local CPU). **Cleanup:** run `./down.sh`.
 
@@ -24,7 +24,7 @@ other. The simulator runs each prefill independently. It only makes prefill and 
 the batch fills (`--time-factor-under-load`). Thus cache-aware routing saves less TTFT on the `sim` profile. On
 that profile, compare the hit rates and the per-endpoint split.
 
-(This stack has no GPU. For real vLLM, see [`../any-gpu`](../any-gpu/README.md).)
+This stack has no GPU. For real vLLM, see [`../any-gpu`](../any-gpu/README.md).
 
 ```bash
 ./up.sh                    # PROFILE=fake ./up.sh for the bundled backend; DRY_RUN=1 prints the steps

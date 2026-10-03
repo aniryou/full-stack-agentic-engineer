@@ -14,22 +14,22 @@
 # - It remembers its recommendations for 5 minutes before it scales down.
 # - It rate-limits scale-up (+100 % or +4 pods per 15 s).
 #
-# That rule works only if the metric **grows in proportion to load per replica**, **rises before latency does**, and
-# **has no cap**. For an LLM engine:
+# The rule of the HPA works only if the metric **grows in proportion to load per replica**, **rises before latency
+# does**, and **has no cap**. For an LLM engine:
 #
 # * **GPU utilisation** fails all three. Continuous batching keeps a kernel in operation whenever *any* request is
 #   in flight. Thus "utilisation" reads 100 % at a fraction of capacity. The HPA either holds the fleet at max or
 #   never moves.
-# * **Queue depth alone** is zero until the cliff, and then it jumps to a large value. When capacity catches up, it
-#   reads zero again. Then the HPA scales back down into the next cliff. The result is a sawtooth.
+# * **Queue depth alone** is zero until the cliff, and then it jumps to a large value. When capacity catches up, the
+#   queue depth reads zero again. Then the HPA scales back down into the next cliff. The result is a sawtooth.
 # * **KV-cache usage** and **running requests** are proportional, but they have a cap (100 %, `max_num_seqs`). The
 #   controller multiplies the average of the pods that report by their number. Thus a capped metric grows the fleet
-#   at most $\text{cap}/\text{target}$-fold per round. It climbs out of a large step one cold start at a time.
+#   at most $\text{cap}/\text{target}$-fold per round. The fleet climbs out of a large step one cold start at a time.
 # * **In-flight requests** (running + waiting, and also the requests that the gateway holds) are proportional and
-#   have no cap. The queue-based KEDA path of llm-d scales on this signal. But it counts *requests*. A target from a
-#   chat load test is incorrect for RAG, because a RAG request carries five times the prefill. The token-aware path
-#   of llm-d counts *work*: seconds of prefill backlog (in-flight uncached tokens ÷ prefill rate), together with KV
-#   occupancy for decode.
+#   have no cap. The queue-based KEDA path of llm-d scales on this signal. But this signal counts *requests*. A
+#   target from a chat load test is incorrect for RAG, because a RAG request carries five times the prefill. The
+#   token-aware path of llm-d counts *work*: seconds of prefill backlog (in-flight uncached tokens ÷ prefill rate),
+#   together with KV occupancy for decode.
 #
 # And for any signal, the **cold start** (node, image, weights, warm-up) decides how much traffic waits in a queue
 # while the capacity arrives. Scale-to-zero puts all of the cold start, node included, on every burst. Primer §4.
@@ -174,9 +174,9 @@ print("✅ the zeros never raise the count — desired is ceil(sum / target) eit
 
 # %% [markdown]
 # ## Worked example — take the target from the load test
-# Find the highest load that still meets the SLO (TTFT $\le$ 1 s in the earlier sweep). A target is the per-replica
-# value of the signal at that load, minus a margin. The margin gives time for the cold start. Here the margin is one
-# third.
+# The reference load is the highest load that still meets the SLO (TTFT $\le$ 1 s in the earlier sweep). A target is
+# the per-replica value of the signal at that load, minus a margin. The margin gives time for the cold start. Here
+# the margin is one third.
 
 # %%
 def pick_target(sweep, signal, slo_ttft_s, margin):
@@ -227,8 +227,8 @@ print("\n".join(lines))
 # * **Waiting per pod** scales up strongly, and then it sees an empty queue. It scales down after the 5-minute
 #   window and goes into the cliff again. This is the sawtooth in the middle of the peak.
 # * **KV usage** is proportional, but it has a cap of 1.0. Each round multiplies the *ready* pods by at most
-#   $1/\text{target}$. The pods that it asked for count only when they are ready and report values. Thus it climbs
-#   one cold start at a time.
+#   $1/\text{target}$. The pods that the HPA asked for count only when they are ready and report values. Thus the
+#   fleet climbs one cold start at a time.
 # * **In-flight total** (running + waiting + held at the gateway, averaged per replica) moves directly with demand.
 #   Of the signals that also scale back down, it has the best SLO attainment, at half the GPU-hours of the
 #   utilisation policy. The rest of its tail comes from the 30 s cold start, which the next table isolates.
@@ -298,10 +298,10 @@ print(table(mixed_rows, title=f"simulated: in-flight target {inflight_target} pe
 # from the new mix repairs this, until the mix changes again. **Request counts are a safe signal only when requests
 # are alike.**
 #
-# The token-aware path of llm-d measures work in its own units instead. The first unit is the prefill backlog in
+# The token-aware path of llm-d measures work in its own units instead. The first signal is the prefill backlog in
 # seconds (EPP in-flight uncached tokens ÷ `peakPrefillThroughput`), compared with a share of the TTFT SLO. The
-# second unit is KV occupancy for the decode side. The HPA takes the larger of the two recommendations. In
-# `fleetsim`, this is the metric `"backlog_s"`, and a second metric goes through
+# second signal is KV occupancy for the decode side. The HPA takes the larger of the two recommendations. In
+# `fleetsim`, the prefill backlog is the metric `"backlog_s"`, and a second metric goes through
 # `Autoscaler(..., also=[(metric, target, kind)])`.
 #
 # ## Exercise 3.5 — one autoscaler for both mixes
@@ -353,8 +353,8 @@ print("✅ one configuration, two traffic mixes: scale on work (prefill seconds,
 #
 # You save the money only when the cluster autoscaler removes the empty GPU node. It does this after 10 minutes with
 # no need for the node (`--scale-down-unneeded-time`, layer 03 §7.1). Thus the next burst waits for a new node and
-# also for the pod. That is ~300 s to allocatable GPUs (the assumption of layer 03), plus the 102 s from the earlier
-# worked example.
+# also for the pod. That is ~300 s to allocatable GPUs (the assumption of layer 03), plus the 102 s cold start. The
+# worked example "the cold start decides the tail" calculates that 102 s.
 #
 # Write `scale_to_zero(bursts, burst_min, rps, cold_start_s, usd_per_hour, idle_min=15)`. It returns
 # `(usd_saved_per_day, requests_delayed_per_day, mean_added_wait_s)`. You pay for the node from the first request of
@@ -387,9 +387,9 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 # ## In a design review
 # **Two-minute version.** "I scale the model servers with an HPA, through KEDA, so that it can go to zero where that
 # makes sense. The HPA scales on the work in flight. If our traffic is uniform, that is running plus waiting
-# requests, and also the requests that the router holds. If prompt sizes change, that is seconds of prefill backlog
-# plus KV occupancy, because a request count calibrated on chat under-scales RAG. The target comes from a load test
-# at the SLO, minus a margin.
+# requests, and also the requests that the router holds. If prompt sizes are different, that is seconds of prefill
+# backlog plus KV occupancy, because a request count calibrated on chat under-scales RAG. The target comes from a
+# load test at the SLO, minus a margin.
 #
 # "Not GPU utilisation: continuous batching puts it at its maximum at a fraction of capacity. Not the queue alone:
 # it reads zero whenever we have sufficient capacity, and the fleet goes up and down in a sawtooth. Scale-down keeps
@@ -411,5 +411,5 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 #    small a weight to RAG. Here, SLO attainment fell from 0.94 to about 0.7. Scale on seconds of prefill backlog
 #    plus KV, or calculate the target again for every mix.
 # 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. That
-#    includes the node after the cluster autoscaler removes the idle GPU node (~400 s here). It also needs an Object
-#    or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.
+#    includes the node after the cluster autoscaler removes the idle GPU node (~400 s here). `minReplicas: 0` also
+#    needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.

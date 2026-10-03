@@ -82,13 +82,12 @@ assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-onl
 # ([PRIMER §2.5](../../PRIMER.md)) puts the 3:2:2 EPP ahead of it.
 #
 # One reason is the fake backend. It runs one prefill at a time per replica, so the tokens in the
-# prefill queue *are* the delay. Two parts fit it well. The first is a filter with a gate on exactly
+# prefill queue *are* the delay. Two parts fit this backend well. The first is a filter with a gate on exactly
 # that value (in-flight uncached tokens ÷ prefill throughput). The second is a scorer that balances
-# tokens.
+# tokens. But the queue and KV scores of 3:2:2 see a request count and memory, not prefill work.
 #
-# The queue and KV scores of 3:2:2 see a request count and memory, not prefill work. On an engine
-# with chunked prefill, other prompt lengths or a hotter prefix, the order can change to the
-# opposite. That is why you adjust the weights on a replay of your own traffic.
+# On an engine with chunked prefill, other prompt lengths or a hotter prefix, the order can change to
+# the opposite. That is why you adjust the weights on a replay of your own traffic.
 #
 # ## Exercise 2.1 — when does affinity lose?
 #
@@ -119,12 +118,12 @@ print("✅ sticky_wins: a half-cached replica with a half-full queue still beats
 # ## Exercise 2.2 — the weight that makes affinity unconditional
 #
 # Start from the weighted sum itself. Each load score is in [0, 1]. Thus load scorers whose weights
-# sum to $W$ can move a total by $W$ at the most. Thus a replica with prefix ratio $r$ wins against
-# *any* cold replica at any load only if $\mathit{wp} \cdot r > W$.
+# sum to $W$ can move a total by $W$ at the most. For this reason, a replica with prefix ratio $r$
+# wins against *any* cold replica at any load only if $\mathit{wp} \cdot r > W$.
 #
-# The `prefix-cache-affinity-filter` README gives a consequence of this as the reason why the filter
-# exists. The consequence is that a weighted prefix scorer with a max-score picker makes popular
-# prefixes into hot spots. The inequality is ours.
+# The `prefix-cache-affinity-filter` README gives the reason why the filter exists: a weighted
+# prefix scorer with a max-score picker makes popular prefixes into hot spots. The inequality is
+# ours, not the README's.
 #
 # Write `min_prefix_weight(W, r)`. It returns the smallest weight for which a replica at ratio $r$
 # cannot lose to a cold one. Use `>=`. At exact equality, the picker breaks the tie.
@@ -145,10 +144,12 @@ print("✅ with the chart default (3 vs 2+2=4) a fully cached replica CAN lose t
 # ## The herd: why scraped metrics alone are not enough
 #
 # The router scrapes the metrics every 50 ms. Between two scrapes, every routing decision sees the
-# same numbers. In the next cell, each replica has **6 batch slots**. Replicas **b** and **c** each
-# get 3 requests that do *not* go through this router, and these requests make them busy. The
-# requests stand for another router replica or a batch job, and we send them directly. Thus the KV
-# usage of b and c is a small quantity higher at the last scrape.
+# same numbers.
+#
+# In the next cell, each replica has **6 batch slots**. Replicas **b** and **c** each get 3 requests
+# that do *not* go through this router, and these requests make them busy. These requests are like
+# the traffic of another router replica or a batch job. We send them directly to b and c. Thus the
+# KV usage of b and c is higher by a small quantity at the last scrape.
 #
 # Then we keep the view of the router the same: we stop the scraper after one refresh. Then we send a
 # burst of 12 requests at the same time. The free slots are a 6, b 3, c 3, which is exactly 12.
@@ -191,7 +192,7 @@ for cfg in ("load-only", "active-requests"):
 # `{"a": .., "b": .., "c": ..}`):
 #
 # * `load-only`: all queue scores are equal, because no request *waits*. The KV score of **a** is
-#   only a small quantity higher. Does the size of the difference matter to `max-score-picker`?
+#   higher, but only by a small quantity. Does the size of the difference matter to `max-score-picker`?
 # * `active-requests`: the router counts only the requests that *it* has in flight. It updates the
 #   counts when it dispatches a request.
 
@@ -240,8 +241,8 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
       f"{alone['load-only']:.0f} ms (scraped only) and {alone['active-requests']:.0f} ms (local only)")
 
 # %% [markdown]
-# Give the local signal the higher weight. Then the replica that is actually idle gets the largest
-# share, *and* the busy replicas take exactly what they have space for. Here, 6/3/3 fills the
+# When the local signal has the higher weight, the replica that is actually idle gets the largest
+# share. The busy replicas *also* take exactly what they have space for. Here, 6/3/3 fills the
 # 6 + 3 + 3 free slots. Thus no request waits, and the worst TTFT decreases several-fold against
 # either signal alone. If you give the stale signal the higher weight, the herd comes back (2:1 sends
 # all 12 to a).
@@ -249,8 +250,8 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
 # The split is this clean only because the burst matches the free slots. The lesson is the
 # mechanism. This is why the EPP's recommended load scorers read in-flight state that the router
 # keeps itself (`inflight-load-producer`). It is also why a router fleet with several replicas
-# depends on scraped signals and flow control. Each of those router replicas cannot see the
-# in-flight requests of the others.
+# depends on scraped signals and flow control. The reason is that each of those router replicas
+# cannot see the in-flight requests of the others.
 
 # %% [markdown]
 # ## Exercise 2.4 — an affinity threshold that fits the workload
@@ -258,8 +259,8 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
 # `sticky-until-saturated` keeps only the replicas whose prefix match ratio is ≥ `affinityThreshold`
 # (default 0.80). Take an agent session at turn $t$. The ratio on its *own* replica is approximately
 # "blocks of turn ${t-1}$'s prompt" / "blocks of turn $t$'s prompt". The reason is that every turn
-# adds a reply and a tool result. Calculate those ratios with the hash function of the router. Then select the
-# threshold.
+# adds a reply and a tool result. Calculate those ratios with the router's own hash function. Then
+# select the threshold.
 #
 # 1. `turn_ratios(prompts)`: the input is the request bodies of turns $0 \ldots T-1$ of one session.
 #    For each turn $t \ge 1$, return the ratio
@@ -391,12 +392,13 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 #
 # "We never route on scraped metrics alone. They are up to one scrape interval stale, so a burst goes
 # as a herd to the replica that looked the most idle. Thus we combine them with the router's own
-# in-flight counts. The thresholds come from the workload. The first resumed turn of our agents
-# shares only ~73% of its blocks with the previous turn. Thus we set the affinity threshold to 0.7,
-# not 0.8.
+# in-flight counts.
 #
-# "The prefix-aware token-load scorer covers the turns that the filter lets through. Under
-# saturation, the router drops only sheddable (negative-priority) objectives, with a 429."
+# "The thresholds come from the workload. The first resumed turn of our agents shares only ~73% of
+# its blocks with the previous turn. Thus we set the affinity threshold to 0.7, not 0.8. The
+# prefix-aware token-load scorer covers the turns that the filter lets through.
+#
+# "Under saturation, the router drops only sheddable (negative-priority) objectives, with a 429."
 #
 # **Drill questions**
 #
@@ -407,6 +409,7 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 # 2. *Why can a KV-usage difference of 0.03 send 100% of a burst to one replica?* `max-score-picker`
 #    takes the maximum. Any strict difference wins every decision until the next scrape changes it.
 # 3. *What does priority -10 mean for an InferenceObjective?* It is sheddable. Under saturation (with
-#    flow control off), the router rejects it with 429 before it schedules it. The router always
-#    routes a priority ≥ 0. With flow control on, the EPP puts requests in queues by priority band
-#    instead. The lab router does not have that path.
+#    flow control off), the router rejects a request of this priority with 429. It does this before
+#    it schedules the request. The router always routes a request with priority ≥ 0. With flow
+#    control on, the EPP puts requests in queues by priority band instead. The lab router does not
+#    have that path.

@@ -27,6 +27,7 @@
 # fake backend. It does not have the same contention. The fake puts prefills in a queue behind each
 # other, but the simulator does not. Thus cache-aware routing gives a smaller TTFT gain on the
 # simulator.
+#
 # Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and §10 Where to run it](../../PRIMER.md).
 
 # %%
@@ -98,9 +99,9 @@ print("kind simulator:", {k: f[k] for k in ("prefill-overhead", "prefill-time-pe
 # \text{TTFT} = \texttt{prefill-overhead} + (\text{prompt} - \text{cached}) \times \texttt{prefill-time-per-token}
 # $$
 #
-# Each output token adds `inter-token-latency`. As the batch fills, the simulator increases both
-# values by a factor of up to `time-factor-under-load`. Both engines cache prompts in **full 16-token
-# blocks**. An engine can use a block again only if all 16 of its tokens match. The engines never
+# Each output token adds `inter-token-latency`. As the batch fills, the simulator increases the TTFT
+# and the `inter-token-latency` by a factor of up to `time-factor-under-load`. Both engines cache
+# prompts in **full 16-token blocks**. An engine can use a block again only if all 16 of its tokens match. The engines never
 # cache a partial last block.
 #
 # ## Exercise 4.1 — predict the second turn
@@ -235,7 +236,7 @@ print("✅ a: same; b, c, f: the lab differs; d, e: the lab refuses — measure 
 # ## Exercise 4.3 — what an InferencePool selects
 #
 # An `InferencePool` (v1) names its members with `selector.matchLabels`. Every label must match, and
-# the pods must be in the same namespace. The pool lists up to 8 `targetPorts`. For the EPP,
+# the pods must be in the same namespace as the pool. The pool lists up to 8 `targetPorts`. For the EPP,
 # **each ready pod × each port is one endpoint** (`podIP:port`).
 #
 # Write `pool_endpoints(pool_spec, pods)`. Each pod is a dict
@@ -339,13 +340,13 @@ print("✅ to the EPP this pod looks far less loaded than it is: rank 1 (9 waiti
 #
 # - The fake backend always sends it.
 # - `llm-d-inference-sim` v0.11.2 sends it when `--enable-kvcache` is on (the stacks of the lab set
-#   it). It counts in the tokens and 16-token blocks of the simulator itself.
+#   it). The simulator counts the value in its own tokens and 16-token blocks.
 # - **vLLM sends it only when started with `--enable-prompt-tokens-details`** (the GPU and GKE paths
 #   of the lab set it).
 #
-# For an engine that does not send it, the result shows `n/a`, never 0%. Then the vLLM counters
-# `vllm:prefix_cache_hits_total` / `vllm:prefix_cache_queries_total` give the hit rate
-# (`igwlab.bench.engine_hit_rate`, the method of Exercise 1.4).
+# For an engine that does not send it, the result shows `n/a`, never 0%. For such an engine, the
+# vLLM counters `vllm:prefix_cache_hits_total` / `vllm:prefix_cache_queries_total` give the hit rate
+# instead (`igwlab.bench.engine_hit_rate`, the method of Exercise 1.4).
 
 # %%
 from igwlab.bench import compare, engine_hit_rate, run_bench
@@ -389,9 +390,9 @@ print(compare([result]))
 #    TTFT, the hit rate and the per-replica split. The hit rate comes from the responses, and also
 #    from the counters of vLLM.
 # 2. the live `vllm:num_requests_waiting/running` from each replica, and the proposal of the HPA of
-#    notebook 03. The targets come from *these* replicas. One is `IGW_SLOTS` batch slots (the
-#    `--max-num-seqs` of serve.sh, default 16). The other is the measured time that a request holds
-#    its slot.
+#    notebook 03. The targets come from two values of *these* replicas. One value is `IGW_SLOTS`
+#    batch slots (the `--max-num-seqs` of serve.sh, default 16). The other value is the measured
+#    time that a request holds its slot.
 #
 # If you do not set `IGW_BACKENDS`, the cell prints the commands and does nothing else (T0 stays offline).
 
@@ -472,8 +473,8 @@ else:
 #
 # "The simulator reproduces the TTFT formula and the prefix cache of each request, but not prefill
 # contention. Thus, on the simulator, we compare hit rates and per-replica splits, not TTFT. We also
-# know where the lab router and the EPP are different: the tie rule, flow control and data-parallel
-# metrics.
+# know where the lab router and the EPP are different: how they break exact ties, flow control and
+# data-parallel metrics.
 #
 # "On one rented GPU, we then put the same router in front of real vLLM replicas. We calculate the
 # autoscaling targets again from measured numbers. In production, two things change: the model
@@ -492,6 +493,6 @@ else:
 #    fails.
 # 3. *The bench shows a 0% hit rate against vLLM. Is prefix caching off?* Probably not. vLLM does not
 #    send `prompt_tokens_details` unless you start it with `--enable-prompt-tokens-details`. A bench
-#    that reads an absent field as 0 gives a false result. To know, read
+#    that reads an absent field as 0 gives a false result. To find the real hit rate, read
 #    `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (their increases during the
 #    run).

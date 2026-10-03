@@ -17,8 +17,8 @@
 #   SGLang HiCache). A fetch is faster than a recompute when the bandwidth of the tier is more than the rate at which
 #   prefill *produces* KV. This rate is $\text{KV bytes/token} \times \text{prefill tokens/s}$: about 0.5 GB/s for an
 #   8B model on an L4, and 4 GB/s on an H100.
-# * **Keep sessions near their KV** with sticky routing. Or make the KV available from all replicas with a **shared**
-#   tier. Then the router is free to balance load again. Thus memory removes the tension of notebook 02.
+# * **Keep sessions near their KV** with sticky routing, or make the KV available from all replicas with a
+#   **shared** tier. Then the router is free to balance load again. Thus memory removes the tension of notebook 02.
 #
 # Read Primer §6.
 
@@ -39,8 +39,8 @@ print(table(rows, title="KV working set of concurrent agent sessions, 8B model (
 # %% [markdown]
 # Two hundred coding-agent sessions at 30k tokens of context need ~800 GB of KV. That is the KV pool of fifteen
 # H100s, before any of the sessions has generated a token. At any instant, most of those sessions are idle, because
-# they wait for a tool. Thus the question is not "can HBM hold it" (no). The question is "where is the best place for
-# the idle ones, and what does it cost to bring one back?"
+# they wait for a tool. Thus the question is not "can HBM hold it" (no). The question is "where do the idle ones
+# stay, and what does it cost to bring one back?"
 #
 # ## Worked example — routing cannot fix a capacity problem
 # This example uses the same four-L4 fleet and EPP router as notebook 02. The pauses between turns are short (1–4 s)
@@ -57,7 +57,7 @@ print(table(rows, title="simulated: EPP 3:2:2 on 4x L4, agent sessions"))
 
 # %% [markdown]
 # With longer pauses, more sessions are alive at the same time. Thus the replica evicts the KV of each session before
-# its next turn. The hit rate goes back down to "system prompts only", whatever the router does.
+# its next turn. Then the hit rate goes back down to "system prompts only", whatever the router does.
 #
 # ## Exercise 5.1 — fetch or recompute?
 # A recompute of $n$ tokens of KV takes $n / \mathrm{prefill\_tok\_s}$. A fetch of these tokens takes
@@ -98,8 +98,8 @@ print("✅ the faster the GPU, the faster the tier must be to be worth it")
 # Write the core of a cache that offloads:
 #
 # * `put(key, gb)` puts the entry into the fast tier as the most recently used entry.
-# * While the fast tier is over capacity, **demote** its least recently used entry to the slow tier.
-# * While the slow tier is over capacity, **drop** its LRU entry.
+# * Then, while the fast tier is over capacity, `put` **demotes** its least recently used entry to the slow tier.
+# * While the slow tier is over capacity, `put` **drops** its LRU entry.
 # * `where(key)` returns `"fast"`, `"slow"` or `None`.
 
 # %% exercise
@@ -148,9 +148,9 @@ print("✅ TwoTier works — the same demotion chain as fleetsim.TieredKV")
 # turn, it finds where the context of the session is now, and what it costs to bring the context back. It gives a
 # score only to resumed turns, and its floor is the new tool-result tokens that the replica must prefill in all cases.
 #
-# (The tiers of the simulator are exclusive: an evicted session moves down one tier. In practice, offload keeps a copy
+# The tiers of the simulator are exclusive: an evicted session moves down one tier. In practice, offload keeps a copy
 # in the lower tier at the time when the engine writes the KV. Thus, count the capacity of a DRAM tier alone, not
-# HBM + DRAM.) First, the run with HBM only:
+# HBM + DRAM. First, the run with HBM only:
 
 # %%
 common = dict(kv_bytes_per_token=LLAMA_8B_KV, prefill_tok_s=H100_8B.compute_tok_s, replicas=4, session_rate=1.0,
@@ -209,7 +209,7 @@ print("✅", {k: round(v, 3) for k, v in got.items()})
 # %% [markdown]
 # A DRAM tier of moderate size with sticky routing serves nearly all resumed turns. Each turn costs a few tens of
 # milliseconds instead of a full re-prefill. Random routing wastes most of that tier, because each replica holds only
-# the sessions that it served by chance. But if the tier is a **shared** tier, the routing is free to follow the load
+# the sessions that it served by chance. But if the tier is a **shared** tier, the router is free to balance the load
 # again.
 #
 # ## Exercise 5.4 — size the DRAM tier
@@ -243,9 +243,9 @@ print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload �
 # "First, I will add a CPU-memory offload tier on every replica. It is faster than recompute on any GPU, because PCIe
 # moves KV faster than prefill creates it. I will also keep the routing session-sticky, with a load gate.
 #
-# "A shared KV store (LMCache or Mooncake over RDMA) lets any replica resume any session. We need it if we must
-# balance the load again freely or continue after the loss of a replica. I will calculate the size of the tiers from a replay of
-# session traces from production: the hit shares per tier and the recomputed-token floor."
+# "If we must balance the load again freely, or continue after the loss of a replica, we use a shared KV store. A
+# shared KV store (LMCache or Mooncake over RDMA) lets any replica resume any session. I will calculate the size of
+# the tiers from a replay of session traces from production: the hit shares per tier and the recomputed-token floor."
 #
 # **Drills**
 # 1. *Offload to NVMe or just recompute?* Compare the read bandwidth of the drive with
@@ -255,4 +255,4 @@ print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload �
 #    it. Random routing changes most resumes into misses, unless all the replicas share the tier.
 # 3. *What limits a shared tier?* Three things limit it. The first is its network bandwidth and latency against the
 #    break-even. The second is its capacity ($\text{sessions} \times \text{context} \times \text{bytes}$). The third
-#    is consistency: every replica must key the blocks with the same chain hashes and model version.
+#    is consistency: every replica must use the same chain hashes and model version in the block keys.

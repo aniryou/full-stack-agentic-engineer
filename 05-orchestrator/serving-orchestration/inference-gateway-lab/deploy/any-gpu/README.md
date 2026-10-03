@@ -8,7 +8,7 @@ The lab router routes across them, with the same code as notebooks 01–03. The 
 things:
 
 - They compare round-robin with the llm-d default weights.
-- They read the prefix-cache counters of the engines.
+- They read the prefix-cache counters that the engines record themselves.
 - They send live `vllm:num_requests_waiting` / `vllm:num_requests_running` scrapes to the HPA recommender.
 
 Every number that those cells print is a **measurement on your GPU**.
@@ -26,11 +26,11 @@ Then *terminate* the rented machine. The machine bills until you terminate it, n
 
 | Flag | Value | Why |
 |---|---|---|
-| `--served-model-name lab/llm` | | This is the name that the bench of the lab sends. Thus you do not edit a notebook |
+| `--served-model-name lab/llm` | | This is the name that the bench of the lab sends. Thus no notebook needs a change |
 | `--enable-prompt-tokens-details` | on | vLLM returns `usage.prompt_tokens_details.cached_tokens` only with this flag. Without it, the bench shows the hit rate as `n/a`. The notebook then uses the `vllm:prefix_cache_*` counters |
 | `--max-num-seqs` | 16 | The batch slots. The `running` HPA target is a fraction of this value. Thus set it, and do not use the much larger default of vLLM (verify the default for your GPU) |
-| `--gpu-memory-utilization` | 0.85 ÷ replicas per GPU | Many engines can share one GPU only if the sum of their fractions is less than 1 |
-| `--dtype half` | on a T4 | Turing has no bfloat16. `serve.sh` finds this. In compose, add the flag yourself |
+| `--gpu-memory-utilization` | 0.85 ÷ replicas per GPU | Two or more engines can share one GPU only if the sum of their fractions is less than 1 |
+| `--dtype half` | on a T4 | Turing has no bfloat16. `serve.sh` finds a T4 and sets the flag. In compose, add the flag yourself |
 | `--max-model-len` | 4096 | The agent sessions of the lab stay under ~3.5k tokens |
 
 The flag names are from vLLM 0.30.0 (verify for other releases). Layer 04's `vllm-serving-lab/deploy/any-gpu` has
@@ -56,8 +56,8 @@ Colab ends a session after a time with no activity, and the free GPU hours have 
 
 ## A rented box (RunPod, Vast.ai, Lambda, a GCP VM)
 
-- **Container hosts (RunPod, Vast.ai):** Select an image with CUDA and Python. Run `pip install -e .` for this lab
-  and for `vllm==0.30.0`, then run `./serve.sh`. Keep the ports private. Run the notebook or the bench on the same
+- **Container hosts (RunPod, Vast.ai):** Select an image with CUDA and Python. Install this lab with `pip install -e .`.
+  Install `vllm==0.30.0`. Then run `./serve.sh`. Keep the ports private. Run the notebook or the bench on the same
   machine, so that the network is not a part of your TTFT.
 - **VMs (Lambda, GCP Compute Engine):** Install Docker and the NVIDIA Container Toolkit (layer 02). Then use
   `docker compose -f docker-compose.yaml up -d --build`, or use `serve.sh` with pip.
@@ -66,6 +66,6 @@ Colab ends a session after a time with no activity, and the free GPU hours have 
 ## What changes from the fake backend
 
 The prefill and decode speeds, the batch contention and the `/metrics` are real. Two replicas that share one GPU
-also compete for its compute, and the fake backend never models this. A prefill on one replica makes the decode of
+also compete for its compute. The fake backend never models this competition. A prefill on one replica makes the decode of
 the other replica slower. Thus use a run on a shared GPU as a routing experiment (hit rate, per-replica split,
 relative TTFT). Use a run with one replica per GPU (Kaggle 2 × T4, T2) as the fair picture of capacity.
