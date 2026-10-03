@@ -1,7 +1,7 @@
 # MCP revisions: what the lab models, and what differs from 2025
 
 The `agentlab.mcp` package and notebook 05 have the shape of the **2026-07-28** revision of
-the Model Context Protocol. Many servers and SDKs in use still use a 2025 revision. Thus a
+the Model Context Protocol. Many servers and SDKs in operation still use a 2025 revision. Thus a
 design must say which revision it assumes. This page compares the revisions. It also lists
 where the subset that the lab teaches is different from the spec.
 

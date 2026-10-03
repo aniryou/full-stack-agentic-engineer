@@ -1,18 +1,21 @@
 # %% [markdown]
 # # 05 · Going live on Mistral
 #
-# The loop you built in notebooks 01–04 never mentions a provider. It only needs
-# something with a `.generate(messages, tools) -> Response` method. `FakeLLM` is that
-# for offline practice; `MistralLLM` is that for Mistral's API. **Swapping one for the
-# other is one line** — that is the whole point of keeping the loop provider-agnostic.
+# The loop that you built in notebooks 01–04 never mentions a provider. It only needs an
+# object with a `.generate(messages, tools) -> Response` method. `FakeLLM` is that
+# object for offline practice. `MistralLLM` is that object for the API of Mistral. **To
+# replace one with the other, you change one line.** That is the full reason to keep the
+# loop provider-agnostic.
 #
-# This notebook shows the swap and the small amount of translation the adapter does
-# between our shapes and Mistral's (`agentcore/mistral_llm.py`, the lab's only
-# provider-specific code; `docs/MISTRAL.md` is the reference). It runs **offline** at T0:
-# we exercise the pure conversion functions and drive the loop with a fake Mistral-shaped
-# client. The final cell calls the real API only when the optional `mistral` extra is
-# installed and `MISTRAL_API_KEY` is set; otherwise it stops with a labelled message,
-# which is not a failure.
+# This notebook shows the swap. It also shows the small quantity of translation that the
+# adapter does between our shapes and the shapes of Mistral. The adapter is
+# `agentcore/mistral_llm.py`, the only provider-specific code of the lab, and
+# `docs/MISTRAL.md` is the reference. The notebook runs **offline** at T0. It runs the
+# pure conversion functions, and it drives the loop with a fake Mistral-shaped client.
+#
+# The last cell calls the real API only when the optional `mistral` extra is installed
+# and `MISTRAL_API_KEY` is set. If not, the cell stops with a labelled message. This
+# stop is not a failure.
 
 # %%
 import json
@@ -21,8 +24,8 @@ from agentcore.mistral_llm import parse_response, to_mistral_messages, to_mistra
 
 # %% [markdown]
 # ## 1. Tools → Mistral's function shape
-# Our tool schema is `{"name","description","parameters"}`. Mistral (like the OpenAI
-# shape) wants each tool wrapped as `{"type":"function","function": {...}}`.
+# Our tool schema is `{"name","description","parameters"}`. Mistral wants each tool in a
+# wrapper, `{"type":"function","function": {...}}`, as the OpenAI shape does.
 
 # %%
 @tool
@@ -34,8 +37,8 @@ print(json.dumps(to_mistral_tools([get_balance.schema]), indent=2))
 
 # %% [markdown]
 # ## 2. Messages → Mistral's format
-# System, user and tool messages already match Mistral. Only our **assistant tool
-# calls** need reshaping: we carry `args` as a dict, Mistral wants
+# System, user and tool messages already match the format of Mistral. Only our
+# **assistant tool calls** need a new shape. We keep `args` as a dict, but Mistral wants
 # `function.arguments` as a JSON *string*.
 
 # %%
@@ -49,9 +52,9 @@ print("assistant tool call becomes:", json.dumps(converted[1]["tool_calls"][0], 
 
 # %% [markdown]
 # ## 3. Mistral's reply → our `Response`
-# A Mistral reply is `response.choices[0].message` with `.content` and `.tool_calls`
-# (each `tool_call` has `.id` and `.function.name` / `.function.arguments`). The
-# adapter turns that back into the `Response` the loop understands.
+# A Mistral reply is `response.choices[0].message`, with `.content` and `.tool_calls`.
+# Each `tool_call` has `.id` and `.function.name` / `.function.arguments`. The adapter
+# changes that reply back into the `Response` that the loop understands.
 
 # %%
 fake_reply = {"choices": [{"message": {"content": "", "tool_calls": [
@@ -61,9 +64,9 @@ print("parsed →", [(tc.name, tc.args, tc.id) for tc in r.tool_calls])
 
 # %% [markdown]
 # ## 4. The whole loop, offline, against a Mistral-shaped client
-# To prove the swap works without spending a token, here is a stand-in that returns
-# Mistral-shaped dicts. Notice `Agent` is unchanged from notebook 04 — only the model
-# object differs.
+# The next cell shows that the swap works, and it costs no token. It uses a stand-in
+# that returns Mistral-shaped dicts. Look at `Agent`: it is unchanged from notebook 04.
+# Only the model object is different.
 
 # %%
 class FakeMistralClient:
@@ -85,9 +88,10 @@ print("\nanswer:", result.text)
 
 # %% [markdown]
 # ## Exercise 5.1 — implement the tool converter
-# Without calling the library's `to_mistral_tools`, write `my_to_mistral_tools(schemas)`
-# that wraps each of our tool schemas as `{"type": "function", "function": <schema>}`,
-# returning `None` for an empty or missing list.
+# Write `my_to_mistral_tools(schemas)`. Do not call the `to_mistral_tools` of the
+# library. Your function puts each of our tool schemas in a wrapper,
+# `{"type": "function", "function": <schema>}`. For an empty or missing list, it returns
+# `None`.
 
 # %% exercise
 def my_to_mistral_tools(schemas):
@@ -104,9 +108,9 @@ print("✅ tool converter matches the library")
 
 # %% [markdown]
 # ## Exercise 5.2 — parse a Mistral tool-call reply
-# Write `first_tool_call(reply)` that, given a Mistral-shaped reply dict, returns
-# `(name, args_dict)` for the first tool call — parsing the JSON `arguments` string.
-# (This is the heart of what `parse_response` does.)
+# Write `first_tool_call(reply)`. The argument is a Mistral-shaped reply dict. The
+# function returns `(name, args_dict)` for the first tool call. It parses the JSON
+# `arguments` string. (This is the main part of what `parse_response` does.)
 
 # %% exercise
 def first_tool_call(reply):
@@ -122,21 +126,29 @@ print("✅ parsed the tool call:", name, args)
 
 # %% [markdown]
 # ## Exercise 5.3 — route a turn to the cheapest model that clears the bar
-# Part of the deployment story is choosing the *cheapest model that clears the bar* —
-# and, when the data must stay in your environment, only a model whose weights you can
-# run yourself. `CATALOGUE` is a snapshot of the table in `docs/MISTRAL.md` (list prices
-# per million tokens, 2026-09-19, illustrative — verify before quoting). `open_weight`
-# here means "you may run it yourself without a separate licence": Medium's weights are
-# published, but its modified MIT licence asks for a commercial licence above a revenue
-# threshold (`docs/MISTRAL.md`), so the snapshot marks it false. The strings do not
-# matter; the rule does.
+# One part of the deployment story is to select the *cheapest model that clears the
+# bar*. When the data must stay in your environment, it is also to select only a model
+# whose weights you can run yourself. `CATALOGUE` is a snapshot of the table in
+# `docs/MISTRAL.md`. Its prices are list prices per million tokens, from 2026-09-19, and
+# illustrative. Make sure that they are correct (verify) before you quote them.
 #
-# Write `pick_model(catalogue, need, self_host=False, input_tokens=5_000, output_tokens=300)`
-# that returns the **name** of the model whose `can` set contains `need` (and, if
-# `self_host`, whose `open_weight` is true) with the lowest cost for one call of that
-# size — `(input_tokens × input + output_tokens × output) / 1e6` — breaking a tie by
-# name, or `None` when no model qualifies. The check runs your rule against the snapshot
-# and against a few hundred random catalogues.
+# Here, `open_weight` means "you can run it yourself without a separate licence".
+# Mistral publishes the weights of Medium. But its modified MIT licence asks for a
+# commercial licence above a revenue threshold (`docs/MISTRAL.md`). Thus the snapshot
+# marks it false. The strings are not important. The rule is important.
+#
+# Write
+# `pick_model(catalogue, need, self_host=False, input_tokens=5_000, output_tokens=300)`.
+# It returns the **name** of the model that obeys these rules:
+#
+# * The `can` set of the model contains `need`.
+# * If `self_host` is true, the `open_weight` of the model is true.
+# * Of these models, it has the lowest cost for one call of that size:
+#   `(input_tokens × input + output_tokens × output) / 1e6`.
+# * If two models have the same cost, the name breaks the tie.
+#
+# If no model qualifies, the function returns `None`. The check runs your rule against
+# the snapshot and against a few hundred random catalogues.
 
 # %%
 CATALOGUE = [   # $ per 1M tokens (input, output); `can`: what the model is good enough at here
@@ -193,10 +205,11 @@ print("   tools, managed API:", pick_model(CATALOGUE, "tools"), "| tools, self-h
 
 # %% [markdown]
 # ## 5. Run it for real (only if you have a key)
-# This cell calls the live API when the `mistral` extra is installed
-# (`pip install -e ".[mistral]"` in this lab, or `pip install mistralai`) and
-# `MISTRAL_API_KEY` is set. Without them it prints a labelled stop and ends cleanly, so
-# the notebook still runs in CI and offline. A live call is billed per token.
+# This cell calls the live API when two conditions are true. First, the `mistral` extra
+# is installed (`pip install -e ".[mistral]"` in this lab, or `pip install mistralai`).
+# Second, `MISTRAL_API_KEY` is set. If not, the cell prints a labelled stop and ends
+# with no error. Thus the notebook still runs in CI and offline. Mistral bills a live
+# call per token.
 
 # %%
 import os
@@ -215,13 +228,18 @@ else:
 
 # %% [markdown]
 # ## The one-minute version (Mistral)
-# The deployment question is rarely "which model is smartest" — it is *which model
-# clears the bar at the lowest cost and the right deployment posture*. Several Mistral
-# models are **open-weight (Apache-2.0)** — Large 3, Small 4, the Ministral 3 family,
-# 2026-09-19 (verify) — so the same agent can run on weights in your own VPC or on-prem
-# when the data is regulated or must stay in one jurisdiction. In a design review, say:
-# start on the managed API with the cheapest model that passes your evals for the tool
-# loop, route the few turns that need step-by-step reasoning to a reasoning model, and
-# self-host an open-weight model when the data cannot leave your environment — the
-# exercise 5.3 rule, with your eval results as the `can` column. The loop does not change;
-# only the model object does.
+# The deployment question is rarely "which model is smartest". It is *which model clears
+# the bar at the lowest cost and the correct deployment posture*. Several Mistral models
+# are **open-weight (Apache-2.0)**: Large 3, Small 4 and the Ministral 3 family,
+# 2026-09-19 (verify). Thus, when the data is regulated or must stay in one
+# jurisdiction, the same agent can run on weights in your own VPC or on-prem.
+#
+# In a design review, say this:
+#
+# * Start on the managed API with the cheapest model that passes your evals for the tool
+#   loop.
+# * Route the few turns that need step-by-step reasoning to a reasoning model.
+# * Self-host an open-weight model when the data cannot leave your environment.
+#
+# This is the rule of exercise 5.3, with your eval results as the `can` column. The loop
+# does not change. Only the model object changes.
