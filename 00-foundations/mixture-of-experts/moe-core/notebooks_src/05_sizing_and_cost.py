@@ -3,8 +3,8 @@
 #
 # **Tier:** T0. It is arithmetic and takes a second. Every time and cost here is a roofline bound (simulated) with
 # illustrative prices. The measured counterpart is `../moe-lab/notebooks/05_moe_on_a_small_gpu.ipynb`. It shows what
-# actually fits a 16 or 24 GB GPU (T1, with CPU offload and INT4 experts). Without a GPU, it prints the sizes that
-# this notebook calculates.
+# actually fits a 16 or 24 GB GPU (T1, with CPU offload and INT4 experts). Without a GPU, the lab notebook prints the
+# sizes that this notebook calculates.
 #
 # ## The one-minute version
 # Three parameter counts set the size of three different things:
@@ -16,9 +16,12 @@
 # - **The time of a decode step changes with the bytes that the step streams at your batch.** At batch 1, these
 #   bytes are near the active count. At serving batches, they are near the total (notebook 03).
 #
-# Thus do these steps. First, select the GPU count that holds the weights plus the KV of your batch. This count is
-# the EP degree, with data-parallel attention. Then compare the step with the inter-token latency target. Then divide
-# the GPU-hours by the tokens.
+# Thus, do these steps:
+#
+# 1. Select the GPU count that holds the weights plus the KV of your batch. This count is the EP degree, with
+#    data-parallel attention.
+# 2. Compare the step with the inter-token latency target.
+# 3. Divide the GPU-hours by the tokens.
 #
 # An MoE looks low-cost, but it is low-cost only at large batch on sufficient GPUs. On one small GPU, it is a large
 # model with the FLOPs of a small model. If you offload experts to the CPU, every step becomes a PCIe transfer.
@@ -37,8 +40,8 @@ print(f"catalogue as of {S.AS_OF}; entries marked (verify) reproduce published t
 # %% [markdown]
 # ## Worked example 1 — memory by total
 # The table gives the weights at bf16, at FP8, and with the routed experts at 4.25 bits and the rest at bf16. The
-# 4.25 bits are MXFP4: four bits plus an 8-bit scale per 32 values. gpt-oss ships in this format. The attention alone
-# sets the KV per token.
+# 4.25 bits are MXFP4: four bits plus an 8-bit scale per 32 values. The gpt-oss checkpoints use this format. The
+# attention alone sets the KV per token.
 
 # %%
 print(f"{'model':24s} {'total':>8s} {'active':>7s} {'bf16 GB':>8s} {'FP8 GB':>7s} {'4.25b experts':>13s} {'KV KiB/token':>12s}")
@@ -50,13 +53,13 @@ for key in ("olmoe-1b-7b", "qwen1.5-moe-a2.7b", "gpt-oss-20b", "qwen3-30b-a3b", 
 
 # %% [markdown]
 # The 65.2 GB of gpt-oss-120b is why it fits one 80 GB GPU. The 13.8 GB of gpt-oss-20b is why it fits 16 GB, but
-# only on paper. The MXFP4 path of vLLM needs compute capability 8.0 and bf16, thus not a T4 (the fact sheet has the
-# details).
+# only on paper. The MXFP4 path of vLLM needs compute capability 8.0 and bf16. Thus the path does not run on a T4 (the
+# fact sheet has the details).
 #
 # ## Worked example 2 — the capacity primer's Mistral Large 3, reproduced
 # The model has 675B total and 41B active parameters. These numbers come from `00-foundations/gpu-capacity-planning`,
-# not from a config. In FP8, that is ~675 GB of weights. When you add the KV, this is more than the usable HBM of
-# 8×H100.
+# not from a config. In FP8, that is ~675 GB of weights. When you add the KV, the weights and the KV are more than
+# the usable HBM of 8×H100.
 #
 # At large batch, every step streams every expert. Thus 675 GB ÷ (8 × 4.8 TB/s) is the floor across 8 H200s.
 # But prefill costs the same as for a 41B dense model.
@@ -156,7 +159,7 @@ print(f"✅ Mixtral prefills {ratio:.1f}x cheaper than a dense 70B ({ttft_mixtra
 # ## Exercise 5.3 — the floor and the plan
 # Use DeepSeek-V3 in FP8 on 8 H200s. Set `floor_ms`: the time to stream all weights one time across 8 GPUs. Set
 # `plan_ms`: the `S.plan` step at batch 256, 4K context, 50 ms ITL, NVLink. Then set `overhead` = `plan_ms` −
-# `floor_ms`. Explain where the overhead comes from. (Use FP8 dispatch, `**FP8`, as in worked example 3.)
+# `floor_ms`. Explain where the overhead comes from. Use FP8 dispatch, `**FP8`, as in worked example 3.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -181,9 +184,9 @@ print(f"✅ floor {floor_ms:.1f} ms, plan {plan_ms:.1f} ms: the difference is ea
 # - Set `room_gib` to that space.
 # - Set `offload_gib` to the smallest `--cpu-offload-gb` (rounded up to 0.5 GiB) that holds 4 sequences of 4K tokens
 #   (`S.min_offload_gib`).
-# - Set `penalty_ms` to the cost per step when the T4 streams this offload over its PCIe Gen3
+# - Set `penalty_ms` to the cost per step when the offloaded weights stream over the PCIe Gen3 link of the T4
 #   (`S.offload_step_s(offload_gib, pcie_gbs=12)`, ~12 GB/s effective, verify).
-# - Set `slowdown` to (step + penalty) ÷ step. Calculate the step at the batch that the offload size is for:
+# - Set `slowdown` to (step + penalty) ÷ step. Calculate the step at the batch that you used for the offload size:
 #   `T.decode_step(o, D["t4"], 4, 4096, precision="fp16")`.
 
 # %% exercise
@@ -241,17 +244,17 @@ print(f"✅ at batch 64 the MoE is {cost_ratio:.1f}x cheaper per token than the 
 #
 # "Decode is the bytes that the step streams at our batch, and these are near the total already at modest batches.
 # Thus we run MoE at large batch on sufficient GPUs (the EP degree). The GPUs must hold the weights and the KV of the
-# batch, and the step must meet the ITL. The exchanges add to this time.
+# batch, and the step must meet the ITL. The exchanges add to the step time.
 #
 # "In this model, at batch 64, Mixtral costs about half as much per token as a dense 70B on H100s. At batch 1 on one
 # GPU, it decodes like a dense 13B, but it holds 47B. If we offload experts over PCIe, it becomes an order of
-# magnitude slower. At long context, the KV cache is again the largest part, exactly as for a dense model."
+# magnitude slower. At long context, the KV cache again sets the memory and the step time, exactly as for a dense
+# model."
 #
 # **Drill questions**
 # 1. *'It's only 3B active, it'll run on my 24 GB card.' Answer in numbers.* 30.5B total = 61 GB bf16, 30.5 GB FP8.
 #    With 4-bit experts, it is only ~18.5 GB. That leaves ~2 GiB of KV at the defaults of vLLM: five 4K sequences.
 # 2. *Why does the plan's step exceed the all-experts floor?* The causes are the KV reads, the replicated attention
 #    weights per rank (DP attention), and two all-to-alls per MoE layer.
-# 3. *When does a dense model win?* A dense model wins in these cases: low, bursty traffic (small batches), one small
-#    GPU, memory-bound long-context workloads. It also wins when the GPUs that hold the experts in the MoE option have
-#    a slow interconnect.
+# 3. *When does a dense model win?* A dense model wins with low, bursty traffic (small batches), one small GPU,
+#    memory-bound long-context workloads, or a slow interconnect between the expert GPUs.
