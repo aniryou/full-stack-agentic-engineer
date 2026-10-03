@@ -140,7 +140,7 @@ print("\nsteps:", r.steps, "| done:", r.done, "| answer:", r.text)
 
 # %% [markdown]
 # ## The one-minute version
-# When someone asks *"how does an agent work?"*, draw this loop with a budget: the model
-# call, the tool execution, the results added to the messages, and the next round. Then
-# say that the intelligence is **bounded by the harness**. The model only proposes. Your
-# code validates, runs, and decides when to stop.
+# When someone asks *"how does an agent work?"*, draw this loop with a budget. Show the
+# model call, the tool execution, the results added to the messages, and the next round.
+# Then say that **the harness sets the bounds** of the intelligence. The model only
+# proposes. Your code validates, runs, and decides when to stop.

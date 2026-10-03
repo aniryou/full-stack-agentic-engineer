@@ -67,9 +67,10 @@ print("✅ policy drives the loop without a fixed script")
 # A confused model can call the same tool with the same arguments forever, and use
 # tokens each time. Write `dedupe(tool_calls, seen)`. The argument `seen` is a set of
 # the signatures that already ran (use `tc.signature()`). Return only the calls whose
-# signature is **new**. Add them to `seen`. (In a loop in production, you also give the
-# model a "you already have this" note for the dropped calls. Here, you only filter
-# them.)
+# signature is **new**. Add them to `seen`.
+#
+# (In a loop in production, you also give the model a "you already have this" note for
+# the dropped calls. Here, you only filter them.)
 
 # %% exercise
 def dedupe(tool_calls, seen: set) -> list:

@@ -1,29 +1,30 @@
 # %% [markdown]
 # # 03 · Knobs and trade-offs: batch size, token budget, KV blocks and the latency-throughput curve
 #
-# **Tier:** T0 — every experiment restarts a fake vLLM with different flags (seconds each; all
-# results **simulated**). T1: with a GPU, vLLM installed and `SERVELAB_START_VLLM=1`, the same
-# sweeps restart a real `vllm serve` per config (a minute or two each) — same code, measured numbers.
+# **Tier:** T0. Each experiment starts a fake vLLM again with different flags (seconds each). It
+# gives only **simulated** results. T1: with a GPU, vLLM installed and `SERVELAB_START_VLLM=1`, the same
+# sweeps start a real `vllm serve` again for each config (a minute or two each). The code is the same,
+# and the numbers are measurements.
 #
 # ## The one-minute version
 #
-# A decode step reads all the weights once for the whole batch, so batching is nearly free until
-# the step becomes compute-bound or the KV reads catch up: **throughput rises with batch, per-token
+# A decode step reads all the weights one time for the whole batch. Thus, batching costs almost nothing until
+# the step becomes compute-bound or the KV reads catch up. The result: **throughput rises with batch, per-token
 # latency rises slowly**. Three flags shape the curve:
 #
 # | Flag | Raises | Costs |
 # |---|---|---|
 # | `--max-num-seqs` (batch cap) | throughput, fewer queued requests | a slower step for everyone (TPOT) |
-# | `--max-num-batched-tokens` (step token budget) | prefill speed of long prompts (TTFT) | decode stalls when a big prefill chunk shares the step (ITL tail) |
-# | KV blocks (`--gpu-memory-utilization`, `--kv-cache-dtype`, quantized weights, TP; `--num-gpu-blocks-override` for experiments) | concurrent requests held | when too few: preemption and recompute |
-# | `--max-model-len` | the longest request accepted | nothing in blocks: it sets the start-up fit check and the worst-case "Maximum concurrency" line, not the block count |
+# | `--max-num-batched-tokens` (step token budget) | prefill speed of long prompts (TTFT) | decode stalls when a large prefill chunk shares the step (ITL tail) |
+# | KV blocks (`--gpu-memory-utilization`, `--kv-cache-dtype`, quantized weights, TP, and `--num-gpu-blocks-override` for experiments) | concurrent requests that the engine holds | if there are too few: preemption and recompute |
+# | `--max-model-len` | the longest request that the engine accepts | nothing in blocks. It sets the start-up fit check and the worst-case "Maximum concurrency" line, not the block count. |
 #
-# Blocks are allocated as tokens arrive, and their number is fixed at start-up by the memory left
-# after weights, activations and CUDA graphs (notebook 01) — shrinking `--max-model-len` rejects
-# long requests but creates no blocks.
+# vLLM allocates blocks when tokens arrive. The memory that stays after the weights, the activations and
+# the CUDA graphs (notebook 01) sets the number of blocks at start-up. If you decrease `--max-model-len`,
+# vLLM rejects long requests, but it makes no new blocks.
 #
-# The way to choose is to measure **goodput at your SLO** for each setting on your workload, and to
-# find the highest request rate that still meets the SLO. Concepts: PRIMER §2 "Continuous batching",
+# To select a setting, measure **goodput at your SLO** for each setting on your workload. Then find the
+# highest request rate that still meets the SLO. Concepts: PRIMER §2 "Continuous batching",
 # §3 "Chunked prefill and prefill/decode interference", §11 "Measuring an engine" ([`PRIMER.md`](../../PRIMER.md)).
 
 # %%
@@ -48,13 +49,13 @@ print(P.describe())
 # %% [markdown]
 # ## Worked example: why batching is nearly free (the step-time model)
 #
-# The fake engine's step time is the roofline:
+# The step time of the fake engine is the roofline:
 #
 # $$
 # \text{overhead} + \max\left(\frac{\text{FLOPs}}{\text{FLOP/s}}, \frac{\text{bytes}}{\text{bandwidth}}\right)
 # $$
 #
-# For a decode step, bytes = all weights (once, shared by the batch) + every sequence's KV.
+# For a decode step, bytes = all weights (one time, shared by the batch) + the KV of each sequence.
 
 # %%
 print(f"{'batch':>6} {'step ms':>8} {'tok/s total':>12} {'tok/s per user':>15}")
@@ -63,16 +64,18 @@ for b in (1, 8, 32, 64, 128, 256):
     print(f"{b:>6} {t * 1e3:>8.2f} {b / t:>12,.0f} {1 / t:>15.1f}")
 
 # %% [markdown]
-# From 1 to 64 sequences the step slows by about 40% while total throughput grows more than 40x:
-# the weights are read once either way (numbers from the simulated profile above). Past that, each sequence's KV reads start to dominate (and, for bigger
-# models or longer prompts, compute). That is the whole economic case for continuous batching.
+# From 1 to 64 sequences, the step becomes approximately 40% slower, but the total throughput increases by
+# more than 40x. The engine reads the weights one time in both cases (the numbers come from the simulated
+# profile in the previous cell). After that point, the KV reads of each sequence start to become the largest
+# term. For larger models or longer prompts, compute becomes the largest term. This is the full economic case
+# for continuous batching.
 #
 # ## Exercise 3.1 — the decode step, and the largest batch that keeps a TPOT target
 #
-# Implement `decode_step_s(p, batch, context)` from the profile's fields (`overhead_s`,
-# `active_params`, `flops`, `weight_bytes`, `kv_bytes_per_token`, `mem_bw`) with the roofline above,
-# then `max_batch_for_tpot(p, tpot_s, context)`: the largest batch (up to 4,096) whose decode step
-# stays within `tpot_s`.
+# Write `decode_step_s(p, batch, context)` from the fields of the profile (`overhead_s`,
+# `active_params`, `flops`, `weight_bytes`, `kv_bytes_per_token`, `mem_bw`) with the roofline of the
+# previous worked example. Then write `max_batch_for_tpot(p, tpot_s, context)`. It returns the largest
+# batch (up to 4,096) with a decode step that stays within `tpot_s`.
 
 # %% exercise
 def decode_step_s(p, batch: int, context: int) -> float:
@@ -119,23 +122,23 @@ print(curve([r for r, _ in rows], [s.tpot.median for _, s in rows], "req/s", "TP
 engine.stop()
 
 # %% [markdown]
-# Past the knee the batch is large and prefills keep joining it: every user's tokens slow down
-# (TPOT), and served throughput stops tracking the offered rate. The flag that decides where each
-# request waits is next.
+# After the knee, the batch is large and prefills continue to join it. The tokens of each user become slower
+# (TPOT), and the served throughput no longer follows the offered rate. The next exercise is about the flag
+# that decides where each request waits.
 #
 # ## Exercise 3.2 — the token budget: long prompts versus everyone else's next token
 #
-# With chunked prefill, a step processes at most `max_num_batched_tokens` tokens: decodes first, then
-# a chunk of a waiting prompt. Write `stall_s(p, budget, decode_batch, context, long_prompt)`: the
-# duration of a step holding `decode_batch` decode tokens plus a prefill chunk of
+# With chunked prefill, a step processes at most `max_num_batched_tokens` tokens. The decodes go first,
+# then a chunk of a prompt that waits. Write `stall_s(p, budget, decode_batch, context, long_prompt)`. It
+# returns the duration of a step that holds `decode_batch` decode tokens and a prefill chunk of
 #
 # $$
 # \min(\mathtt{budget} - \mathtt{decode\_batch}, \mathtt{long\_prompt})
 # $$
 #
-# tokens — that is the inter-token gap every decoding request sees during that step (roofline as in
-# 3.1; the chunk's KV reads are its own tokens). Predict how ITL p99 for short requests and TTFT for
-# long prompts move as the budget grows, then run the sweep.
+# tokens. This duration is the inter-token gap that each request in decode sees during that step. Use the
+# roofline as in 3.1. The KV reads of the chunk are its own tokens. Predict how ITL p99 for short requests
+# and TTFT for long prompts change when the budget increases. Then run the sweep.
 
 # %% exercise
 def stall_s(p, budget: int, decode_batch: int, context: int, long_prompt: int) -> float:
@@ -164,9 +167,9 @@ print("✅ a small budget protects everyone's ITL; a big one gets long prompts t
 # %% [markdown]
 # ## Exercise 3.3 — choose `max_num_seqs` by goodput, not by throughput
 #
-# At 12 req/s we sweep the batch cap. Write `best_config(trials, min_attainment)`: among trials whose
-# SLO attainment is at least `min_attainment`, return the one with the highest output throughput
-# (tokens/s); `None` if no config meets the SLO. (`trial.summary.slo_attainment`,
+# At 12 req/s, we sweep the batch cap. Write `best_config(trials, min_attainment)`. Look at the trials
+# with an SLO attainment of at least `min_attainment`. From these trials, return the trial with the highest
+# output throughput (tokens/s). If no config meets the SLO, return `None`. (`trial.summary.slo_attainment`,
 # `trial.summary.output_throughput`.)
 
 # %%
@@ -199,10 +202,12 @@ print("✅ chosen:", choice and choice.config, "— the highest throughput among
 # %% [markdown]
 # ## Exercise 3.4 — the highest rate that still meets the SLO
 #
-# Capacity is a *rate at an SLO*. Write `max_rate(measure, lo, hi, target, iters)`: bisection in log
-# space ($\mathtt{mid} = \sqrt{\mathtt{lo} \cdot \mathtt{hi}}$), keeping `lo` meeting the target and
-# `hi` missing it; return the last good rate. Return `nan` if `lo` already misses, `hi` if even `hi`
-# meets it.
+# Capacity is a *rate at an SLO*.
+#
+# Write `max_rate(measure, lo, hi, target, iters)`. Use bisection in log
+# space ($\mathtt{mid} = \sqrt{\mathtt{lo} \cdot \mathtt{hi}}$). Keep `lo` at a rate that meets the target,
+# and `hi` at a rate that misses it. Return the last good rate. If `lo` already misses the target, return
+# `nan`. If even `hi` meets the target, return `hi`.
 
 # %% exercise
 def max_rate(measure, lo: float, hi: float, target: float = 0.9, iters: int = 4) -> float:
@@ -241,18 +246,24 @@ print(f"✅ with --max-num-seqs 8 this engine sustains about {cap:.1f} req/s at 
 # %% [markdown]
 # ## Exercise 3.5 — KV blocks and preemption
 #
-# When the running requests need more KV blocks than exist, the scheduler **preempts** the most
-# recently admitted request: frees its blocks, puts it back in the queue, and recomputes its prompt
-# (and the tokens it had generated) later — visible as `vllm:num_preemptions` and a long ITL gap.
-# Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`: the blocks that $n$
-# requests need to *finish* together. The check runs 12 simultaneous requests with exactly that
-# many blocks (`--num-gpu-blocks-override`, vLLM's flag for this experiment) and with a third of it
-# (`--max-model-len 1024`, because vLLM refuses to start unless one full-length request fits).
+# When the requests that run need more KV blocks than exist, the scheduler **preempts** the request that it
+# admitted most recently. It does these steps:
 #
-# The prompt lengths are exact only on the fake server, whose toy tokenizer makes one token per
-# word. A real tokenizer turns the same words into ~1.1-1.5 tokens each, and vLLM keeps one block
-# back as its "null block", so at T1 the check sizes the override from the server's own
-# `usage.prompt_tokens` for each prompt, plus that one block.
+# - It frees the blocks of the request.
+# - It puts the request back in the queue.
+# - Later, it recomputes the prompt (and the tokens that the request generated before).
+#
+# You can see this as `vllm:num_preemptions` and a long ITL gap.
+#
+# Write `blocks_needed(n_concurrent, prompt_len, max_tokens, block_size)`. It returns the blocks that $n$
+# requests need to *finish* together. The check runs 12 simultaneous requests with exactly that number of
+# blocks (`--num-gpu-blocks-override`, the vLLM flag for this experiment). Then it runs them with a third of
+# that number (`--max-model-len 1024`, because vLLM does not start unless one full-length request fits).
+#
+# The prompt lengths are exact only on the fake server. Its toy tokenizer makes one token for each
+# word. A real tokenizer makes ~1.1-1.5 tokens from each of the same words. Also, vLLM keeps one block
+# back as its "null block". Thus, at T1, the check calculates the override from the
+# `usage.prompt_tokens` of the server for each prompt, plus that one block.
 
 # %% exercise
 def blocks_needed(n_concurrent: int, prompt_len: int, max_tokens: int, block_size: int = 16) -> int:
@@ -287,24 +298,27 @@ print("✅ enough blocks for everyone's full length: no preemption; a third of i
 # %% [markdown]
 # ## Exercise 3.6 — tensor parallelism on two T4s (T2)
 #
-# Kaggle's free "GPU T4 x2" box is the cheapest place to try tensor parallelism (two GPUs on PCIe,
-# no NVLink). With `--tensor-parallel-size 2` each GPU holds half of every weight matrix *and* half
-# of the KV heads (PRIMER §9 "Parallelism inside the engine"), and every layer adds two
+# The free "GPU T4 x2" box of Kaggle is the lowest-cost place to try tensor parallelism (two GPUs on PCIe,
+# no NVLink). With `--tensor-parallel-size 2`, each GPU holds half of each weight matrix *and* half
+# of the KV heads (PRIMER §9 "Parallelism inside the engine"). Each layer adds two
 # all-reduces. Two predictions:
 #
-# 1. **Memory.** Write `tp_kv_tokens(model, gpu, tp)`: the KV token slots of one TP replica. Per GPU
-#    the budget is $\lceil 0.92 \times \text{memory} \rceil - {}$
-#    $\text{weights} / \mathtt{tp} - \text{overhead}$, one token costs
-#    $\mathtt{kv\_bytes\_per\_token} / \mathtt{tp}$ (never below one KV head per GPU), and the pool is
+# 1. **Memory.** Write `tp_kv_tokens(model, gpu, tp)`. It returns the KV token slots of one TP replica. For each
+#    GPU, the budget is $\lceil 0.92 \times \text{memory} \rceil - {}$
+#    $\text{weights} / \mathtt{tp} - \text{overhead}$. One token costs
+#    $\mathtt{kv\_bytes\_per\_token} / \mathtt{tp}$ (never below one KV head per GPU). The pool is
 #    $\lfloor \text{budget} / (16 \times \text{that}) \rfloor \times 16$ (the same blocks exist on
-#    every GPU). Use `sizing.weight_bytes(m, "half", tensor_parallel_size=tp)`,
+#    each GPU).
+#
+#    Use `sizing.weight_bytes(m, "half", tensor_parallel_size=tp)`,
 #    `sizing.kv_bytes_per_token(m, dtype="half", tensor_parallel_size=tp)` and
-#    `sum(sizing.overhead_estimate(m, dtype="half", tensor_parallel_size=tp).values())`; return 0 when
-#    the weights leave no room.
-# 2. **Latency.** Write `tp_decode_step_s(p, batch, context, tp, layers, allreduce_s)`: notebook 3.1's
-#    roofline with the FLOPs, the weight bytes and the KV bytes all divided by `tp`, plus
-#    $2 \times \mathtt{layers} \times \mathtt{allreduce\_s}$ for the all-reduces (their size,
-#    $\text{batch} \times \text{hidden} \times 2$ bytes, is tiny in decode, so latency dominates).
+#    `sum(sizing.overhead_estimate(m, dtype="half", tensor_parallel_size=tp).values())`. When
+#    the weights leave no space, return 0.
+# 2. **Latency.** Write `tp_decode_step_s(p, batch, context, tp, layers, allreduce_s)`. Use the roofline of
+#    notebook 3.1, and divide the FLOPs, the weight bytes and the KV bytes by `tp`. Then add
+#    $2 \times \mathtt{layers} \times \mathtt{allreduce\_s}$ for the all-reduces. Their size is
+#    $\text{batch} \times \text{hidden} \times 2$ bytes, which is small in decode. Thus, latency is the
+#    largest part of their time.
 
 # %% exercise
 def tp_kv_tokens(model: str, gpu_name: str, tp: int) -> int:
@@ -359,24 +373,29 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Decode is bandwidth-bound: one step reads the weights once for the whole batch,
-# so we batch as far as the TPOT target allows — `max-num-seqs` is a latency budget, not a
-# capacity number. The step token budget, `max-num-batched-tokens`, decides who waits when a long
-# prompt arrives: a big budget gives that prompt a fast TTFT and every decoding user a 100 ms
-# hiccup; a small one spreads the prefill thin. We give the engine enough KV blocks for the
-# concurrency we admit, because preemption means recomputing whole prompts. We pick each setting by
-# sweeping it on our own workload and keeping the one with the best goodput at the SLO, and we state
-# capacity as the highest rate that still meets the SLO — measured, then confirmed on the real GPU."
+# **Two minutes:** "Decode is bandwidth-bound. One step reads the weights one time for the whole batch.
+# Thus, we make the batch as large as the TPOT target permits. `max-num-seqs` is a latency budget, not a
+# capacity number.
 #
-# **Drill 1.** *Users complain about random pauses mid-answer; average ITL looks fine.* — Look at
-# ITL p99/max and at long prompts in the traffic: large prefill chunks share steps with decodes.
-# Lower `max-num-batched-tokens` (or cap `long-prefill-token-threshold`), or separate prefill (layer 05).
+# "The step token budget, `max-num-batched-tokens`, decides who waits when a long prompt arrives. A large
+# budget gives that prompt a fast TTFT, and it gives each user in decode a 100 ms pause. A small budget
+# divides the prefill into small chunks over many steps.
 #
-# **Drill 2.** *Why not set `max-num-seqs` to 1,024 everywhere?* — Past the point where KV reads or
-# compute dominate, each extra sequence slows every step; TPOT rises and, with too few KV blocks,
-# preemptions start. The right cap is the largest one that keeps TPOT within the SLO.
+# "We give the engine sufficient KV blocks for the concurrency that we admit, because preemption means that
+# the engine recomputes full prompts. We sweep each setting on our own workload and keep the setting with the
+# best goodput at the SLO. We state capacity as the highest rate that still meets the SLO. We measure it, and
+# then we confirm it on the real GPU."
 #
-# **Drill 3.** *`vllm:num_preemptions_total` is climbing. Three fixes?* — More KV blocks (higher
+# **Drill 1.** *Users complain about random pauses in the middle of an answer. The average ITL looks correct.*
+# Look at ITL p99/max and at the long prompts in the traffic. Large prefill chunks share steps with decodes.
+# Decrease `max-num-batched-tokens` (or set a cap with `long-prefill-token-threshold`), or separate the
+# prefill (layer 05).
+#
+# **Drill 2.** *Why not set `max-num-seqs` to 1,024 everywhere?* After the point where KV reads or
+# compute become the largest term, each more sequence makes every step slower. TPOT rises. With too few KV
+# blocks, preemptions also start. The correct cap is the largest cap that keeps TPOT within the SLO.
+#
+# **Drill 3.** *`vllm:num_preemptions_total` increases. What are three solutions?* More KV blocks (higher
 # `gpu-memory-utilization`, FP8 KV, smaller or quantized weights, TP), fewer concurrent sequences
-# (`max-num-seqs`), or another replica behind a router. Not a smaller `max-model-len`: it only
-# rejects longer requests; the block count comes from memory, and blocks fill as tokens arrive.
+# (`max-num-seqs`), or another replica behind a router. A smaller `max-model-len` is not a solution. It only
+# rejects longer requests. The block count comes from memory, and blocks fill when tokens arrive.

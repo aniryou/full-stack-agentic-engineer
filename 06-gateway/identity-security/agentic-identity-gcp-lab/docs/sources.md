@@ -11,7 +11,7 @@
 - **Agent Identity** (IAM) is SPIFFE-based.
     - Each agent has an X.509 cert (24h validity, auto-rotated). The tokens are cryptographically bound to the cert.
     - By default, the identity is not shareable. Nobody can impersonate it. It has no long-lived keys.
-    - Agent Identity became GA on 22 Apr 2026 (according to a third-party timeline). Auth Manager and the APIs became GA on 22 Aug 2026.
+    - Agent Identity became GA on 22 Apr 2026 (from a third-party timeline). Auth Manager and the APIs became GA on 22 Aug 2026.
       The Org Policy custom constraints and the VPC-SC integration became GA on 14 Aug 2026.
     - The SPIFFE ID is `spiffe://TRUST_DOMAIN/resources/SERVICE/RESOURCE_PATH`. The IAM principal is `principal://TRUST_DOMAIN/resources/SERVICE/RESOURCE_PATH`.
     - The trust domain is `agents.global.org-ORG_ID.system.id.goog` (org) or `agents.global.project-PROJECT_NUMBER.system.id.goog` (no org).
@@ -21,7 +21,7 @@
     - The supported runtimes are Agent Runtime, Gemini Enterprise and Cloud Run. The policy types are allow, deny, Principal Access Boundary and VPC-SC ingress/egress rules.
     - VPC-SC: add `agentidentity.googleapis.com` and `agentidentitycredentials.googleapis.com` to the perimeters. Use the restricted VIP.
     - A limitation: you cannot grant legacy bucket roles. The recommended default roles are `roles/aiplatform.expressUser`, `roles/serviceusage.serviceUsageConsumer` and `roles/browser`.
-    - Sources: https://docs.cloud.google.com/iam/docs/agent-identity-overview ; https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/agent-identity ;
+    - Sources: https://docs.cloud.google.com/iam/docs/agent-identity-overview, https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/agent-identity,
       https://arnav.au/2026/08/26/gcp-agent-identity-auth-manager-and-apis-what-ga-changes/
 - The credential acquisition table:
     - User-delegated: 3-legged OAuth (external tools).
@@ -30,7 +30,7 @@
     - Google APIs use mTLS and cert-bound tokens. Traffic across Agent Gateway also uses DPoP (RFC 9449). The result is "double-bound" credentials.
     - The default Google-managed Context-Aware Access policy makes it impossible to replay bound tokens. The opt-out env var (strongly discouraged) is
       `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False`.
-    - Source: https://docs.cloud.google.com/access-context-manager/docs/caa-agent-security ; https://docs.cloud.google.com/iam/docs/auth-agent-own-identity
+    - Source: https://docs.cloud.google.com/access-context-manager/docs/caa-agent-security, https://docs.cloud.google.com/iam/docs/auth-agent-own-identity
 - Deploy with identity:
     - Python: `client.agent_engines.create(agent=AdkApp(agent), config={"identity_type": types.IdentityType.AGENT_IDENTITY, ...})` with
       `vertexai.Client(project, location, http_options=dict(api_version="v1beta1"))`.
@@ -41,7 +41,7 @@
     - For an MCP server, use `--functional-type=mcp-server --identity-type=agent-identity|service-account`.
     - Cloud Run supports jobs for agents. Only services can be MCP servers.
     - A migration from an SA to an agent identity gives a NEW principal. The new principal inherits no permissions (use Policy Analyzer).
-    - Cloud Run registers them automatically in Agent Registry, under `/agents` and `/mcpServers`.
+    - Cloud Run registers the agents and MCP servers automatically in Agent Registry, under `/agents` and `/mcpServers`.
     - Source: https://docs.cloud.google.com/run/docs/ai/agent-platform-features
 - **Auth Manager** (Agent Identity auth manager) is a centralized credential vault and broker for outbound tool auth. It supports 3LO (user-delegated), 2LO and API key.
     - The resource is `projects/PROJECT_ID/locations/LOCATION/authProviders/NAME`. The callback is `https://agentidentitycredentials.googleapis.com/v1/projects/.../authProviders/NAME/oauthcallback`.
@@ -104,7 +104,7 @@
     - Confused deputy: proxies with static client IDs MUST get user consent for each dynamically registered client.
     - Client registration: Client ID Metadata Documents (SHOULD, `client_id_metadata_document_supported`), pre-registration, and DCR (MAY).
       The 2026-07-28 revision deprecates DCR in favor of CIMD.
-    - For a missing scope, the server returns 403 `insufficient_scope`, and a step-up flow follows. Tokens MUST NOT go in query strings.
+    - If the token does not have the necessary scope, the server returns 403 `insufficient_scope`, and a step-up flow follows. Tokens MUST NOT go in query strings.
     - Redirect URIs are localhost or HTTPS. Tokens are short-lived. Public clients use refresh rotation.
     - The 2026-07-28 changes:
         - Stateless operation (no sessions/initialize).
@@ -115,7 +115,7 @@
         - Credentials keyed by issuer.
         - `Mcp-Method`/`Mcp-Name` headers.
         - DCR deprecated.
-    - Sources: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization ; https://modelcontextprotocol.io/specification/2026-07-28/changelog
+    - Sources: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization, https://modelcontextprotocol.io/specification/2026-07-28/changelog
 - **A2A v1.0.0**:
     - The Agent Card has `securitySchemes` and `security`.
     - The scheme types are APIKeySecurityScheme, HTTPAuthSecurityScheme, OAuth2SecurityScheme, OpenIdConnectSecurityScheme and MutualTlsSecurityScheme.
@@ -133,7 +133,7 @@
     - ASI08 Cascading Failures.
     - ASI09 Human-Agent Trust Exploitation.
     - ASI10 Rogue Agents.
-    - Source: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ ; https://cycode.com/blog/owasp-top-10-agentic-applications/
+    - Source: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/, https://cycode.com/blog/owasp-top-10-agentic-applications/
 - Google, "An Introduction to Google's Approach for Secure AI Agents" (Jun 2025). Its principles:
     - Well-defined human controllers.
     - Limited agent powers.
@@ -148,7 +148,7 @@
     - RFC 8414 AS metadata.
     - RFC 7591 DCR.
     - RFC 9068 JWT access tokens.
-- The long-standing GCP features:
+- The GCP features with a long history:
     - Workload Identity Federation: external identities go to an STS token exchange (`sts.googleapis.com`), then to an optional SA impersonation.
     - Service account impersonation (`generateAccessToken`, short-lived).
     - Credential Access Boundaries / downscoped tokens (`google.auth.downscoped.Credentials`, Cloud Storage only).

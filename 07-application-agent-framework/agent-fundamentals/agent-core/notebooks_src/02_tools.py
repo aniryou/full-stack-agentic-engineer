@@ -30,8 +30,8 @@ print("bad args   :", get_order.run({}))                      # missing required
 # Look at the three result shapes that the model can receive:
 # `{"ok": True, "data": ...}`, a **structured error** with a `hint`, and an
 # `invalid_arguments` error. None of them is a crash. Because of this, the model can
-# recover. It can ask for the missing id, or it can apologise for the not-found result.
-# The whole turn does not fail.
+# recover. It can ask for the id that it does not have, or it can apologise for the
+# not-found result. The whole turn does not fail.
 
 # %% [markdown]
 # ## Exercise 2.1 — a tool with an enum-like check
@@ -69,7 +69,7 @@ print("✅ set_priority validates its input")
 #
 # A second call for the same order returns the **first** result, with
 # `{"already_done": True}` added. It does **not** refund or record again. This is also
-# true when the retry has a different amount.
+# true when the retry has a different `amount`.
 
 # %% exercise
 def make_refund_tool():
@@ -107,7 +107,7 @@ print("✅ refund is idempotent:", first["data"], "→", again["data"])
 # Give an `Agent` the `get_order` tool and a **scripted model**. The model must do these
 # steps:
 #
-# 1. Call `get_order` for a missing order, `ORD-9`.
+# 1. Call `get_order` for an order that does not exist, `ORD-9`.
 # 2. After it sees the `not_found` error, answer with the text
 #    `"I couldn't find order ORD-9 — can you confirm the number?"`.
 #

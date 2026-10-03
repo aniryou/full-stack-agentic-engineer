@@ -90,7 +90,7 @@ print("\nanswer:", result.text)
 # ## Exercise 5.1 — implement the tool converter
 # Write `my_to_mistral_tools(schemas)`. Do not call the `to_mistral_tools` of the
 # library. Your function puts each of our tool schemas in a wrapper,
-# `{"type": "function", "function": <schema>}`. For an empty or missing list, it returns
+# `{"type": "function", "function": <schema>}`. For an empty list or no list, it returns
 # `None`.
 
 # %% exercise

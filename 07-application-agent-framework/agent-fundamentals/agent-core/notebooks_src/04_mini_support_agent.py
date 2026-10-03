@@ -120,10 +120,12 @@ print("✅ irreversible action gated on human approval")
 # ## Exercise 4.3 — never act without a tool
 #
 # One property makes this agent trustworthy. Every factual claim comes from a tool
-# result, and every state change comes from a tool call. Write `used_a_tool(result)`. It
-# returns True if the transcript contains one or more `tool` messages. Then make sure
-# that the balance answer used a tool. (In evals in production, this is a *trajectory*
-# check: did the agent look before it spoke? The eval grades it as an absolute gate.)
+# result, and every state change comes from a tool call.
+#
+# Write `used_a_tool(result)`. It returns True if the transcript contains one or more
+# `tool` messages. Then make sure that the balance answer used a tool. (In evals in
+# production, this is a *trajectory* check: did the agent look before it spoke? The eval
+# grades it as an absolute gate.)
 
 # %% exercise
 def used_a_tool(result) -> bool:

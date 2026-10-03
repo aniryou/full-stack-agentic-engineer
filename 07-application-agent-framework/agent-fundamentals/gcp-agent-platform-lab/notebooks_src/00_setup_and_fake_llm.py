@@ -1,17 +1,17 @@
 # %% [markdown]
 # # 00 · Setup and the fake model
 #
-# Everything in this lab runs **offline**: a scripted `FakeLLM` stands in for Gemini so you
-# can practise the mechanics that design reviews actually probe — tool contracts, loops, state,
-# identity, evaluation, cost — without an API key. When you have a key, `agentlab.llm.gemini.GeminiLLM`
-# is a drop-in replacement (see `docs/GEMINI_ADAPTER.md`).
+# Everything in this lab runs **offline**. A scripted `FakeLLM` takes the place of Gemini.
+# Thus you can learn the mechanics that a design review really examines, and you need no API key.
+# These mechanics are tool contracts, loops, state, identity, evaluation and cost.
+# When you have a key, `agentlab.llm.gemini.GeminiLLM` is a drop-in replacement (see `docs/GEMINI_ADAPTER.md`).
 #
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md).
 #
-# In this notebook you will:
-# 1. drive a `FakeLLM` three ways (scripted queue, policy function, `KeywordPlanner`);
-# 2. see how token usage and *context caching* are reported;
-# 3. write your own planner policy — the same shape a real tool-calling model returns.
+# In this notebook, you will:
+# 1. Operate a `FakeLLM` in three ways: a scripted queue, a policy function and a `KeywordPlanner`.
+# 2. See how the model reports token usage and *context caching*.
+# 3. Write your own planner policy. It has the same shape as the output of a real tool-calling model.
 
 # %%
 from agentlab.llm import FakeLLM, KeywordPlanner, Rule, call, calls, scripted, text, count_tokens
@@ -19,8 +19,8 @@ from agentlab.llm import FakeLLM, KeywordPlanner, Rule, call, calls, scripted, t
 # %% [markdown]
 # ## 1. A scripted model
 #
-# `scripted(...)` returns one entry per model call, in order. Strings become plain text answers;
-# `call(...)` / `calls(...)` become tool-call turns — exactly the two shapes a function-calling model produces.
+# `scripted(...)` returns one entry for each model call, in order. A string becomes a plain text answer.
+# `call(...)` and `calls(...)` become tool-call turns. These are exactly the two shapes that a function-calling model produces.
 
 # %%
 llm = scripted(
@@ -37,8 +37,9 @@ r2 = await llm.generate([
 print("text:", r2.text, "| usage:", r2.usage)
 
 # %% [markdown]
-# Every response carries `usage` (input/output/cached tokens) and a simulated `latency_ms`.
-# The token count is an estimate (≈ 4 characters per token) — enough for budgets and cost maths to behave realistically.
+# Every response has `usage` (the input, output and cached tokens) and a simulated `latency_ms`.
+# The token count is an estimate (≈ 4 characters per token).
+# The estimate is sufficient to make the budgets and the cost calculations behave as in production.
 
 # %%
 print("tokens in 'Hello, agentic world':", count_tokens("Hello, agentic world"))
@@ -47,9 +48,9 @@ print("latency of the last call (ms):", round(r2.latency_ms, 1))
 # %% [markdown]
 # ## 2. Context caching, simulated
 #
-# Real models bill the *stable prefix* of a prompt at a steep discount when it repeats.
-# `FakeLLM` mimics that: identical leading messages across calls are reported as `cached_tokens`.
-# This is why prompt **layout** (stable material first) is a cost lever — Notebooks 04 and 12 measure it.
+# A real model bills the *stable prefix* of a prompt at a large discount when the prefix repeats.
+# `FakeLLM` copies this behaviour. When calls start with the same messages, it reports those tokens as `cached_tokens`.
+# This is why the prompt **layout** (the stable material first) is a control for cost. Notebooks 04 and 12 measure it.
 
 # %%
 policy_text = "Refund policy: " + "items may be returned within 30 days with proof of purchase. " * 40
@@ -63,10 +64,10 @@ for turn in ("Can I return shoes?", "What about electronics?", "And gift cards?"
 # %% [markdown]
 # ### Exercise 2.1 — break the cache, then explain it
 #
-# Change *one thing* about how the messages are built so that **no** tokens are cached on the second and third turns,
-# without changing the policy text itself. (Hint: what happens if the volatile part comes *before* the stable part?)
+# Change *one thing* in how you build the messages, so that the second and third turns cache **no** tokens.
+# Do not change the policy text. (Hint: what occurs if the volatile part comes *before* the stable part?)
 #
-# Then write one sentence in `explanation` on why that ordering is expensive in production.
+# Then write one sentence in `explanation`. Say why that order is high-cost in production.
 
 # %% exercise
 def build_uncacheable_messages(turn: str) -> list[dict]:
@@ -96,9 +97,12 @@ print("✅ cache broken as intended:", cached)
 # ## 3. A policy-driven model
 #
 # A **policy** is any function `(messages, tools) -> ModelResponse | str | list[ToolCall]`.
-# `KeywordPlanner` is a ready-made one: keywords in the latest user message → tool calls;
-# once tool results are present → a templated final answer. It is deliberately dumb — the point of the lab is
-# the *harness* around the model, which is where production systems succeed or fail.
+# `KeywordPlanner` is a ready-made policy, with two behaviours:
+# - When the latest user message contains keywords, it returns tool calls.
+# - When tool results are present, it returns a final answer from a template.
+#
+# It has no intelligence, and this is intentional. The lab is about the *harness* around the model.
+# Production systems succeed or fail in the harness.
 
 # %%
 planner = KeywordPlanner(
@@ -116,9 +120,10 @@ print("two rules matched → two parallel tool calls:", [tc.name for tc in r.too
 # %% [markdown]
 # ### Exercise 3.1 — extract arguments with a regex
 #
-# Write a `Rule` whose `args` function pulls the order id out of messages like
-# *"where is order ORD-10442?"* and *"status of ORD-7?"*, returning `{"order_id": "ORD-10442"}`.
-# If no id is present, return `{"order_id": None}` (the tool's schema validation will then produce a useful error — Notebook 01).
+# Write a `Rule` whose `args` function gets the order id from messages such as
+# *"where is order ORD-10442?"* and *"status of ORD-7?"*. The function returns `{"order_id": "ORD-10442"}`.
+# If no id is present, return `{"order_id": None}`.
+# Then the schema validation of the tool produces a useful error (Notebook 01).
 
 # %% exercise
 import re
@@ -143,14 +148,14 @@ print("✅ order rule works")
 # %% [markdown]
 # ### Exercise 3.2 — write a policy from scratch
 #
-# Implement `triage_policy(messages, tools)` with this behaviour:
+# Write `triage_policy(messages, tools)` with this behaviour:
 #
-# * If the messages after the last user turn contain a **tool result** → return the text
+# * If the messages after the last user turn contain a **tool result**, return the text
 #   `"Resolved: <content of the last tool result>"`.
-# * Else, if the last user message mentions `"refund"` → return a single tool call `issue_refund(order_id="ORD-1", amount=20.0)`.
-# * Else → return the text `"How can I help?"`.
+# * If not, and the last user message contains `"refund"`, return one tool call `issue_refund(order_id="ORD-1", amount=20.0)`.
+# * If not, return the text `"How can I help?"`.
 #
-# Use the helpers `text(...)` and `call(...)`. This is the same decision shape every function-calling model produces on each step.
+# Use the helpers `text(...)` and `call(...)`. Every function-calling model produces this same decision shape at each step.
 
 # %% exercise
 def triage_policy(messages, tools):
@@ -179,8 +184,8 @@ print("✅ triage policy behaves like a tool-calling model")
 # %% [markdown]
 # ## 4. What the model recorded
 #
-# `FakeLLM.calls` keeps every request it received. Exercises in later notebooks assert on it
-# ("did the agent send the tool result back?", "how many model calls did this turn cost?").
+# `FakeLLM.calls` keeps every request that it received. Exercises in later notebooks make assertions on it.
+# Two examples: "did the agent send the tool result back?" and "how many model calls did this turn cost?".
 
 # %%
 print("calls made to t_llm:", t_llm.call_count)
@@ -189,6 +194,7 @@ print("tools offered on the last call:", t_llm.calls[-1]["tools"])
 # %% [markdown]
 # ## The one-minute version
 #
-# When someone asks *"how does the agent decide what to do?"*, the answer is the policy shape you just wrote:
-# the model returns either text or structured tool calls against a schema, and **the runtime** validates, executes,
-# appends results and enforces budgets. The intelligence is bounded by the harness — which is the subject of Notebook 01.
+# When a person asks *"how does the agent decide what to do?"*, the answer is the policy shape that you wrote.
+# The model returns text or structured tool calls against a schema.
+# Then **the runtime** validates the calls, executes them, appends the results and enforces the budgets.
+# The harness sets the limits of the intelligence. Notebook 01 is about the harness.

@@ -14,29 +14,29 @@ the idea that the notebook shows.
 
 | Notebook | Primer | What you demonstrate |
 |---|---|---|
-| `01_agent_identity_and_principals` | §3.1–§3.3 | SPIFFE IDs and `principal://` members. A `principalSet` match on **exact** segments. A runtime CA certificate with the SPIFFE SAN. A certificate-bound token (`cnf.x5t#S256`). A replay from another certificate that fails with `BindingMismatch`. The own and the delegated `AuthorityContext`, and `audit_identities()`. |
-| `02_delegation_and_token_exchange` | §3.5, §4.3 | RFC 8693 exchange with the `act` claim. Scope narrowing. Nested `act.act` chains for sub-agents. Audience, expiry and scope failures. DPoP proofs, `ath` binding and `jti` replay. Credential Access Boundary JSON and its local evaluation. |
+| `01_agent_identity_and_principals` | §3.1–§3.3 | SPIFFE IDs and `principal://` members. A `principalSet` match on **exact** segments. A runtime CA certificate with the SPIFFE SAN. A certificate-bound token (`cnf.x5t#S256`). A replay from another certificate that fails with `BindingMismatch`. Own against delegated `AuthorityContext`, and `audit_identities()`. |
+| `02_delegation_and_token_exchange` | §3.5, §4.3 | RFC 8693 exchange with the `act` claim. Narrower scopes. Nested `act.act` chains for sub-agents. Audience, expiry and scope failures. DPoP proofs, `ath` binding and `jti` replay. Credential Access Boundary JSON and its local evaluation. |
 | `03_auth_manager_broker` | §4.3, §5 | 3LO, 2LO and API-key providers. The IAM binding on the provider. The `retrieveCredentials` outcomes. Consent and `finalize`. An access log that identifies the agent **and** the user. The ADK path: `crm_lookup`, then `adk_request_credential`, then finalize, then `resume_after_auth`. |
 | `04_policy_enforcement_point` | §4.1, §4.2, §4.4 | `policies/support-agent.yaml`, evaluated request by request. The evaluation covers unknown tool, principal, authority, scopes, constraints, egress, budgets, confirmation and the `unless` envelope. A `dry_run` of a plan. The ADK loop with `LocalStack`: default deny, auto-allow inside the envelope, confirmation approve/reject, `audit.timeline()`. |
 | `05_prompt_injection_and_guardrails` | §6 | `LocalScreener` (Model Armor shape) on injection, SDP and malicious URIs. The poisoned KB article. A hijacked model that deterministic controls contain. A blocked prompt that never reaches the model (`stack.llm.requests == []`). `EgressPolicy` SSRF cases. What Model Armor floor settings and templates do on GCP. |
 | `06_mcp_resource_server` | §7.1 | Protected Resource Metadata and the 401 challenge. An incorrect audience gets 401. A request without the necessary scope gets 403. `tools/list` annotations. Read scope against write scope on `tools/call`. A server where DPoP is necessary: it rejects the bearer token, accepts the proof and rejects the replay. ADK `McpToolset` with delegated audience-bound tokens. Row-level filters by subject. The separate upstream token (no passthrough). |
 | `07_a2a_agent_cards` | §7.2 | An Agent Card that you build, sign and verify. Tamper detection. Necessary scopes. `token_for_peer` and `authorize_inbound` with the hop chain. The rejection of a forwarded user token. A second hop. |
 | `08_audit_and_governance` | §9, §4.5 | Queries on the `AuditLog`: by agent, denials, approvals with approver, dual identity. A policy kill switch that takes effect without a redeploy. The revocation of Auth Manager consent. A burst-detection heuristic over destructive attempts. |
-| `09_code_evaluation_drills` | §11.2 | Eight "spot the bug" snippets. The bugs are token passthrough, `aud` not checked, allow-unknown-tools and a confirmation UI that shows the model's summary. The other bugs are a secret in `tool_context.state`, a substring egress match, a DPoP verifier that keeps no record of `jti` values and a `principalSet` prefix match. Each snippet has the correction and a runnable proof. |
+| `09_code_evaluation_drills` | §11.2 | Eight "spot the bug" snippets. The first four snippets contain token passthrough, `aud` not checked, allow-unknown-tools and a confirmation UI that shows the model's summary. The next two contain a secret in `tool_context.state` and a substring egress match. The last two contain a DPoP verifier that keeps no record of `jti` values and a `principalSet` prefix match. Each snippet has the correction and a runnable proof. |
 
 ## The practice / solution workflow
 
 1. **Read the worked notebook** (`NN_*.ipynb`) from top to bottom. Then run it. Each cell states the
    security idea, runs it, and asserts the property that it claims.
-2. **Do the practice notebook** (`NN_*_practice.ipynb`, in this folder). It keeps the narrative. But it
-   replaces the key lines with `____` blanks (an argument, a method name, an expected value) or with a
-   `raise NotImplementedError("fill me")` in a function body. Every exercise ends with `assert` checks.
+2. **Do the practice notebook** (`NN_*_practice.ipynb`, in this folder). It keeps the narrative but
+   replaces the key lines with `____` blanks (an argument, a method name, an expected value). Or it
+   puts a `raise NotImplementedError("fill me")` in a function body. Every exercise ends with `assert` checks.
    If the cell runs with no output, your answer is correct. Practice notebooks do not run until you
    fill the blanks.
 3. **Compare with the solution** (`../solutions/NN_*_practice.ipynb`, the same file name). The solution
    is the completed practice notebook. Every solution runs from end to end with no error.
 4. **Say it out loud.** The last cell of every notebook is the one-minute version. The notebooks exist
-   so that you can *show* each claim, and you do not only describe it. For example, the replay fails,
+   so that you can *show* each claim, instead of a description of it. For example, the replay fails,
    the check rejects the audience mismatch, and the controls contain the hijacked model.
 
 ## Running

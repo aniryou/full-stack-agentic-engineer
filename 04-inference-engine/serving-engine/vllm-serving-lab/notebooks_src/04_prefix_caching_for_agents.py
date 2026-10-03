@@ -1,28 +1,28 @@
 # %% [markdown]
 # # 04 · Prefix caching for agents: measure the hit rate, then design prompts that earn it
 #
-# **Tier:** T0 — the fake vLLM implements vLLM's block-hash prefix cache (results **simulated**).
-# T1/T3: point `SERVELAB_URL` at a real vLLM; the hit rate comes from its `/metrics` either way, and
-# per-request cached tokens appear when the server runs with `--enable-prompt-tokens-details` (a
-# `vllm serve` flag in v0.30.0, checked against its source).
+# **Tier:** T0. The fake vLLM implements the block-hash prefix cache of vLLM, and it gives **simulated** results.
+# T1/T3: point `SERVELAB_URL` at a real vLLM. In both cases, the hit rate comes from its `/metrics`. The cached
+# tokens of each request appear when the server runs with `--enable-prompt-tokens-details`. This is a
+# `vllm serve` flag in v0.30.0, and this statement agrees with its source.
 #
 # ## The one-minute version
 #
-# vLLM keys each full KV block (16 tokens) by a hash of **its tokens and the hash of the block
-# before it**. A new request reuses the longest run of leading blocks whose hashes are already in
-# the cache and computes only the rest: prefill work and TTFT drop in proportion. Two consequences
-# decide everything for agents:
+# vLLM gives each full KV block (16 tokens) a key: a hash of **its tokens and the hash of the block
+# before it**. A new request reuses the longest series of blocks from the start of the prompt with hashes that
+# are already in the cache. It computes only the remainder. Thus, the prefill work and TTFT decrease in
+# proportion. Two consequences decide everything for agents:
 #
-# * a hit needs an **identical prefix from token 0** — one changed token early (a timestamp in the
-#   system prompt, a reordered tool list) invalidates every block after it;
-# * an agent conversation is **append-only**, so turn $n+1$ can reuse all of turn $n$ — prompt,
-#   tool results and the model's own reply — if the client resends them byte for byte.
+# * A hit needs an **identical prefix from token 0**. One changed token near the start (a timestamp in the
+#   system prompt, a reordered tool list) makes every block after it invalid.
+# * An agent conversation is **append-only**. Thus, turn $n+1$ can reuse all of turn $n$: the prompt,
+#   the tool results and the reply of the model. The condition is that the client sends them again byte for byte.
 #
-# The engine counts it: `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (tokens).
-# Concepts: PRIMER §5 "Prefix caching" ([`PRIMER.md`](../../PRIMER.md)); paging and sharing in
-# [`04-inference-engine/paged-attention`](../../../paged-attention/paged-attention-primer.md). The
-# agent loops that produce these prompts — long stable prefixes, tool results appended turn after
-# turn — are built in [`07-application-agent-framework`](../../../../07-application-agent-framework/).
+# The engine counts the hits: `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (tokens).
+# Concepts: PRIMER §5 "Prefix caching" ([`PRIMER.md`](../../PRIMER.md)). For paging and for blocks that requests share, see
+# [`04-inference-engine/paged-attention`](../../../paged-attention/paged-attention-primer.md).
+# [`07-application-agent-framework`](../../../../07-application-agent-framework/) builds the agent loops that make
+# these prompts: long stable prefixes, and tool results that the loop appends turn after turn.
 
 # %%
 import math
@@ -57,9 +57,11 @@ for name, r in (("first ", cold), ("second", warm)):
 # %% [markdown]
 # ## Worked example: the hash chain, block by block
 #
-# Hash each 16-token block together with the previous block's hash. Compare the first prompt with
-# (a) the second one, which differs only in the final question, and (b) a copy with one word
-# changed in the first sentence of the system prompt.
+# Hash each 16-token block together with the hash of the previous block. Compare the first prompt with
+# two other prompts:
+#
+# - (a) the second prompt, which is different only in the final question,
+# - (b) a copy with one changed word in the first sentence of the system prompt.
 
 # %%
 def chain(tokens, bs=16):
@@ -86,13 +88,17 @@ for name, other in (("(a) different final question", q2), ("(b) one word changed
 # %% [markdown]
 # ## Exercise 4.1 — how many tokens will hit?
 #
-# The previous request processed `prev` (its prompt *and* generated tokens). Write
-# `expected_cached_tokens(prev, new, block_size)` for a request `new` arriving right after, applying
-# vLLM's three rules: only **full** blocks are cached; the last token of `prev` never had its KV
-# computed (it was sampled, not fed back), so `prev` left `(len(prev) - 1) // block_size` blocks; and
-# at least one token of `new` is always recomputed to get logits, so at most
-# `(len(new) - 1) // block_size` blocks can hit. Within those limits, hits are the full blocks of
-# the common prefix.
+# The previous request processed `prev` (its prompt *and* the generated tokens). Write
+# `expected_cached_tokens(prev, new, block_size)` for a request `new` that arrives immediately after it.
+# Use the three rules of vLLM:
+#
+# - vLLM caches only **full** blocks.
+# - vLLM never computed the KV of the last token of `prev` (it sampled the token, but did not feed it back).
+#   Thus, `prev` left `(len(prev) - 1) // block_size` blocks.
+# - vLLM always recomputes at least one token of `new` to get logits. Thus, at most
+#   `(len(new) - 1) // block_size` blocks can hit.
+#
+# Within those limits, the hits are the full blocks of the common prefix.
 
 # %% exercise
 def expected_cached_tokens(prev: list, new: list, block_size: int = 16) -> int:
@@ -121,9 +127,9 @@ print("✅ expected_cached_tokens reproduces the engine's hits, including the mo
 # %% [markdown]
 # ## Exercise 4.2 — the hit rate from two scrapes
 #
-# Counters are cumulative; the hit rate of a window is the ratio of the counter *increases*. Write
-# `hit_rate(before, after)` from two parsed scrapes (`scrape.value(name)` sums a metric; the names are
-# `M.PREFIX_HITS` and `M.PREFIX_QUERIES`). Return `nan` when nothing was queried.
+# Counters are cumulative. The hit rate of a window is the ratio of the counter *increases*. Write
+# `hit_rate(before, after)` from two parsed scrapes. (`scrape.value(name)` sums a metric. The names are
+# `M.PREFIX_HITS` and `M.PREFIX_QUERIES`.) If there were no queries, return `nan`.
 
 # %% exercise
 def hit_rate(before, after) -> float:
@@ -144,18 +150,21 @@ print(f"✅ [{LABEL}] the repeated request hit {hit_rate(s0, s1):.1%} of its pro
 # %% [markdown]
 # ## Exercise 4.3 — three prompt layouts for the same agent, predicted then measured
 #
-# Six agent sessions, three turns each (the user's request, then two tool results; the model's reply
-# is appended after every turn). Same content, three layouts (see `agent_sessions`):
-# `"stable"` (shared system prompt and tool list, append-only history), `"shuffled_tools"` (each
-# session lists the tools in its own order), `"timestamp_first"` (a fresh timestamp on the first
-# line of every request).
+# The workload has six agent sessions with three turns each. Each session has the request of the user, then two
+# tool results. After every turn, the session appends the reply of the model. The content is the same in three
+# layouts (see `agent_sessions`):
 #
-# Predict each layout's hit rate *as a number* before measuring it. Write
-# `predicted_hit_rate(requests, block_size)` for `requests = [(prompt_ids, output_ids), ...]` in
-# arrival order: every earlier request left its prompt *and* output in the cache (assume nothing is
-# evicted — the pool is far bigger than this workload), so a request hits the longest prefix it
-# shares with any earlier one, under the rules of exercise 4.1 (reuse `expected_cached_tokens`).
-# Return total hits / total prompt tokens — what `vllm:prefix_cache_hits / queries` measures.
+# - `"stable"`: a shared system prompt and tool list, and an append-only history.
+# - `"shuffled_tools"`: each session lists the tools in its own order.
+# - `"timestamp_first"`: a new timestamp on the first line of every request.
+#
+# Predict the hit rate of each layout *as a number* before you measure it.
+#
+# Write `predicted_hit_rate(requests, block_size)` for `requests = [(prompt_ids, output_ids), ...]` in
+# arrival order. Each earlier request left its prompt *and* output in the cache. Assume that vLLM evicts
+# nothing, because the pool is much larger than this workload. Thus, a request hits the longest prefix that it
+# shares with any earlier request, under the rules of exercise 4.1 (reuse `expected_cached_tokens`).
+# Return total hits / total prompt tokens. This is the value that `vllm:prefix_cache_hits / queries` measures.
 
 # %% exercise
 def predicted_hit_rate(requests: list, block_size: int = 16) -> float:
@@ -205,12 +214,16 @@ print("✅ the hit rate is predictable from the prompt layout alone: one timesta
 # %% [markdown]
 # ## Exercise 4.4 — fix the template
 #
-# The agent below renders its prompt with the time on the first line and the tools in whatever
-# order the registry returns them. Write `render_cache_friendly(system, tools, history, new_message,
-# now)` that keeps every earlier token identical from turn to turn: stable system prompt with the
-# tools in a **deterministic** order first, the history exactly as it was sent before, and the
-# dynamic facts (the time) attached to the **new** message only. The caller appends what you return
-# for the new message to the history, so it stays verbatim afterwards.
+# The agent in the next cell renders its prompt with the time on the first line. It puts the tools in the
+# order that the registry returns them. Write `render_cache_friendly(system, tools, history, new_message,
+# now)`. It must keep every earlier token identical from turn to turn:
+#
+# - First, the stable system prompt with the tools in a **deterministic** order.
+# - Then the history, exactly as the agent sent it before.
+# - The dynamic facts (the time) go only on the **new** message.
+#
+# The caller appends the text that you return for the new message to the history. Thus, that text stays
+# verbatim after that.
 
 # %%
 def render_naive(system, tools, history, new_message, now):
@@ -244,10 +257,10 @@ print(f"✅ turn 2 reuses {expected_cached_tokens(prev, new)} of {len(prev)} tok
 # %% [markdown]
 # ## Exercise 4.5 — what a hit is worth in TTFT
 #
-# Prefill is compute-bound, so a hit saves roughly the prefill time of the cached tokens. Write
-# `ttft_estimate(p, prompt_tokens, cached_tokens)` for an otherwise idle engine: one step that
-# prefills only the uncached tokens (use `p.prefill_s(tokens, context=cached_tokens)`). Then predict
-# the saving for a 6,000-token agent prompt with 5,000 tokens cached, and compare with a
+# Prefill is compute-bound. Thus, a hit saves approximately the prefill time of the cached tokens. Write
+# `ttft_estimate(p, prompt_tokens, cached_tokens)` for an engine that has no other work. The estimate is one step
+# that prefills only the uncached tokens (use `p.prefill_s(tokens, context=cached_tokens)`). Then predict
+# the TTFT decrease for a 6,000-token agent prompt with 5,000 cached tokens. Compare the prediction with a
 # measurement on this server.
 
 # %% exercise
@@ -281,37 +294,42 @@ target.stop()
 # %% [markdown]
 # ## Capacity: cached prefixes share the pool with running requests
 #
-# Cached blocks live in the same KV pool as the requests being served: they stay cached only while
-# they are free and not yet reallocated (least recently freed goes first). A tool-using agent's
-# shared prefix (here ~1,500 tokens = ~94 blocks) is tiny next to a T4's ~66,000 blocks, so it
-# survives; per-session histories are what gets evicted under load. When sessions are routed to
-# different replicas, each replica needs its own copy — which is why routers in layer 05 send a
-# session back to the replica that holds its prefix.
+# Cached blocks are in the same KV pool as the requests that the engine serves. A block stays cached only
+# while it is free and vLLM did not allocate it again yet. (vLLM reallocates the least recently freed block
+# first.)
+#
+# The shared prefix of an agent that uses tools (here ~1,500 tokens = ~94 blocks) is small next to the
+# ~66,000 blocks of a T4. Thus, the prefix stays in the cache. Under load, vLLM evicts the per-session
+# histories. If the router sends sessions to different replicas, each replica needs its own copy. This is why
+# the routers in layer 05 send a session back to the replica that holds its prefix.
 #
 # ## In a design review
 #
-# **Two minutes:** "vLLM caches KV per 16-token block, keyed by a hash chained through every earlier
-# block, so reuse needs an identical prefix from the first token. Our agent's system prompt and tool
-# schemas are ~1,500 tokens on every request and the conversation only grows, so we lay the prompt
-# out stable-first — system prompt, tools in a fixed order, then history appended verbatim — and
-# attach timestamps and per-request facts to the newest message. We verify it from the engine:
-# `prefix_cache_hits / prefix_cache_queries` over a window, which should sit near the fraction of
-# each prompt that repeats. A hit saves prefill compute on the cached tokens, so TTFT follows the
-# uncached tail — and the first engineer to put `datetime.now()` on line 1 of the system prompt
-# turns that off for everyone."
+# **Two minutes:** "vLLM caches KV per 16-token block. The key is a hash chain through every earlier
+# block. Thus, reuse needs an identical prefix from the first token. The system prompt and the tool schemas of
+# our agent are ~1,500 tokens on every request, and the conversation only grows.
 #
-# **Drill 1.** *The hit rate dropped from 80% to 3% after a release. Where do you look first?* —
-# The prompt template: something dynamic moved into the prefix (a timestamp, a request id, a
-# shuffled tool list, a changed chat template). Diff the first blocks of two consecutive requests.
+# "Thus, we put the stable parts of the prompt first: the system prompt, then the tools in a fixed order, then
+# the history, appended verbatim. We attach timestamps and per-request facts to the newest message. We examine
+# the result on the engine with `prefix_cache_hits / prefix_cache_queries` over a window. We expect this ratio to
+# be near the fraction of each prompt that repeats.
 #
-# **Drill 2.** *Does caching change the model's output?* — Semantically no: a hit reuses the K/V of
-# exactly the same tokens (vLLM also salts the hash with LoRA ids and an optional per-request
-# `cache_salt`, so different adapters or tenants never share blocks; verify). Bitwise, not
-# guaranteed: the cached K/V were computed in a different batch and chunk shape than a
-# recomputation would use, and floating-point reductions in another order can differ in the last
-# bits — enough to flip a near-tie in greedy decoding now and then. If you need bit-reproducible
-# outputs, turn on vLLM's batch-invariant mode (`VLLM_BATCH_INVARIANT=1` in v0.30.0; verify its
-# cost and coverage for your model).
+# "A hit saves prefill compute on the cached tokens. Thus, TTFT follows the uncached tail. The first engineer who
+# puts `datetime.now()` on line 1 of the system prompt stops this benefit for everyone."
 #
-# **Drill 3.** *Why is the hit on a fully repeated prompt one block short?* — The last token is
-# always recomputed to produce logits, so at most `(len - 1) // 16` blocks can hit.
+# **Drill 1.** *The hit rate dropped from 80% to 3% after a release. Where do you look first?*
+# The prompt template. Something dynamic moved into the prefix (a timestamp, a request id, a
+# shuffled tool list, a changed chat template). Make a diff of the first blocks of two consecutive requests.
+#
+# **Drill 2.** *Does caching change the model's output?* Semantically, no. A hit reuses the K/V of
+# exactly the same tokens. Also, vLLM adds a salt to the hash: the LoRA ids and an optional per-request
+# `cache_salt`. Thus, different adapters or tenants never share blocks (verify).
+#
+# Bitwise, there is no guarantee. vLLM computed the cached K/V in a different batch and chunk shape than a
+# recomputation uses. Floating-point reductions in a different order can be different in the last bits. This
+# difference is sufficient to change a near-tie in greedy decoding from time to time. If you need
+# bit-reproducible outputs, turn on the batch-invariant mode of vLLM (`VLLM_BATCH_INVARIANT=1` in v0.30.0).
+# Examine its cost and coverage for your model (verify).
+#
+# **Drill 3.** *Why is the hit on a fully repeated prompt one block short?* vLLM always recomputes the last
+# token to make logits. Thus, at most `(len - 1) // 16` blocks can hit.
