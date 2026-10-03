@@ -1,10 +1,10 @@
 # %% [markdown]
 # # 05 · GKE Inference Gateway
 #
-# **Tier:** T3 — deploying needs a GCP project with billing, L4 quota and ~an hour of an L4 Spot VM.
-# This notebook itself runs offline (T0): it inspects the Terraform and manifests in `deploy/`,
-# builds the Kubernetes objects in Python, validates them against the upstream CRD schemas, and
-# prints the plan. Nothing here calls Google Cloud unless you set `IGW_GKE=1` (read-only `kubectl`).
+# **Tier:** T3. A deployment needs a GCP project with billing, L4 quota and ~an hour of an L4 Spot VM.
+# This notebook itself runs offline (T0). It examines the Terraform and the manifests in `deploy/`,
+# and it builds the Kubernetes objects in Python. Then it validates them against the upstream CRD
+# schemas and prints the plan. Nothing here calls Google Cloud unless you set `IGW_GKE=1` (read-only `kubectl`).
 #
 # ## The one-minute version
 #
@@ -21,10 +21,10 @@
 # InferenceObjective premium(100) / standard(0) / batch(-10) ← header x-llm-d-inference-objective
 # ```
 #
-# Terraform owns the cluster (zonal, Gateway API on, Managed Prometheus on), the proxy-only subnet and
-# an L4 Spot node pool that autoscales 0 → 2. Helm installs the EPP (and, from the same values, the
-# InferencePool and InferenceObjectives). Plain manifests add vLLM, the Gateway/HTTPRoute, the
-# PodMonitoring and the HPA. Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and
+# Terraform owns the cluster (zonal, Gateway API on, Managed Prometheus on) and the proxy-only subnet.
+# It also owns a node pool of L4 Spot nodes that autoscales from 0 to 2. Helm installs the EPP. From the same
+# values, it also installs the InferencePool and the InferenceObjectives. Plain manifests add vLLM, the
+# Gateway/HTTPRoute, the PodMonitoring and the HPA. Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and
 # §10 Where to run it](../../PRIMER.md).
 
 # %%
@@ -56,17 +56,25 @@ defaults = dict(re.findall(r'variable "([a-z_]+)" \{[^}]*?default\s+=\s+("[^"]*"
 print("\ncheap defaults:", {k: defaults[k] for k in ("zone", "gpu_machine_type", "gpu_type", "gpu_spot", "gpu_max_nodes", "release_channel")})
 
 # %% [markdown]
-# Things to notice: the cluster is **zonal** (one control plane zone); the GPU pool has
-# `min_node_count = 0`, so no GPU VM exists until a vLLM pod is pending; `spot = true`; GKE installs
-# the NVIDIA driver (`gpu_driver_version = "DEFAULT"`); `gateway_api_config` installs the Gateway API
-# and GKE's GatewayClasses; the **proxy-only subnet** (`purpose = "REGIONAL_MANAGED_PROXY"`) is where a
-# regional Application Load Balancer runs its Envoys — without it the Gateway never gets an address.
+# Note these things:
+#
+# - The cluster is **zonal** (one control plane zone).
+# - The GPU pool has `min_node_count = 0`. Thus no GPU VM exists until a vLLM pod is pending.
+# - `spot = true`.
+# - GKE installs the NVIDIA driver (`gpu_driver_version = "DEFAULT"`).
+# - `gateway_api_config` installs the Gateway API and the GatewayClasses of GKE.
+# - A regional Application Load Balancer runs its Envoys in the **proxy-only subnet**
+#   (`purpose = "REGIONAL_MANAGED_PROXY"`). Without this subnet, the Gateway never gets an address.
 #
 # ## The Kubernetes objects, built and checked offline
 #
-# `igwlab.k8s` builds each object and `k8s.check()` validates it against the upstream CRD schema
-# snapshots in `igwlab/crds/` (InferencePool v1 from GIE v1.6.2, InferenceObjective v1alpha2 from
-# llm-d-router v0.10.0, Gateway/HTTPRoute v1 from Gateway API v1.6.2, PodMonitoring v1 from GMP).
+# `igwlab.k8s` builds each object. `k8s.check()` validates it against the snapshots of the upstream
+# CRD schemas in `igwlab/crds/`:
+#
+# - InferencePool v1 from GIE v1.6.2,
+# - InferenceObjective v1alpha2 from llm-d-router v0.10.0,
+# - Gateway/HTTPRoute v1 from Gateway API v1.6.2,
+# - PodMonitoring v1 from GMP.
 
 # %%
 schemas = k8s.load_schemas()
@@ -78,15 +86,15 @@ for f in ("gke/gateway.yaml", "gke/podmonitoring-vllm.yaml", "gke/rendered/infer
 # %% [markdown]
 # ## Exercise 5.1 — what the API server catches, and what it lets through
 #
-# A schema check stops some mistakes at `kubectl apply`; others apply cleanly and break the data
-# path. Below are six variants of the lab's objects (the shipped ones are in `deploy/gke/`: the
-# InferencePool as the chart renders it, the HTTPRoute in `gateway.yaml`; the vLLM pods are
-# labelled `app: vllm-qwen`). For each, predict one of:
+# A schema check stops some mistakes at `kubectl apply`. Other mistakes apply with no error and break
+# the data path. The next cell shows six variants of the objects of the lab. The shipped objects are
+# in `deploy/gke/`: the InferencePool as the chart renders it, and the HTTPRoute in `gateway.yaml`.
+# The vLLM pods have the label `app: vllm-qwen`. For each variant, predict one of these results:
 #
-# * `"rejected"` — the API server refuses it (CRD schema or CEL rule);
-# * `"no-endpoints"` — it applies, but the pool contains no pod, so every request fails;
-# * `"no-epp"` — it applies and traffic flows, but the load balancer never asks the EPP (no prefix
-#   affinity, no queue awareness, no objectives or shedding);
+# * `"rejected"`: the API server refuses it (CRD schema or CEL rule).
+# * `"no-endpoints"`: it applies, but the pool contains no pod. Thus every request fails.
+# * `"no-epp"`: it applies and traffic flows, but the load balancer never asks the EPP. Thus there is
+#   no prefix affinity, no queue awareness, and no objectives or shedding.
 # * `"ok"`.
 
 # %%
@@ -146,14 +154,15 @@ print("✅ the schema stops A-C at apply time; D and E apply cleanly and fail la
 # %% [markdown]
 # ## Exercise 5.2 — pick the failure mode
 #
-# `endpointPickerRef.failureMode` decides what the load balancer does when it cannot reach the EPP:
-# `FailOpen` forwards the request to some pod of the pool without asking; `FailClose` fails it. Pick
-# the mode for each pool and justify it to yourself (the solution states the reasoning):
+# `endpointPickerRef.failureMode` decides what the load balancer does when it cannot reach the EPP.
+# `FailOpen` sends the request to a pod of the pool and does not ask the EPP. `FailClose` fails the
+# request. Select the mode for each pool. Then find the reason for each choice (the solution states
+# the reasons):
 #
-# * `"chat"` — every pod serves the same model; the product prefers a slower answer to an error.
-# * `"adapters"` — requests name LoRA adapters, and each adapter is loaded (statically,
-#   `--lora-modules`) on only some pods; the EPP's LoRA affinity is what sends a request to a pod
-#   that has its adapter. A pod without it answers 404 "model does not exist".
+# * `"chat"`: every pod serves the same model. The product prefers a slower answer to an error.
+# * `"adapters"`: requests name LoRA adapters. Only some pods load each adapter, and they load it
+#   statically (`--lora-modules`). It is the LoRA affinity of the EPP that sends a request to a pod
+#   that has its adapter. A pod without the adapter answers 404 "model does not exist".
 
 # %% exercise
 failure_mode = {}      # {"chat": "FailOpen" | "FailClose", "adapters": ...}
@@ -173,9 +182,9 @@ print(f"✅ FailOpen when routing only optimizes, FailClose when it decides corr
 # ## From Prometheus series to an HPA metric name
 #
 # Managed Service for Prometheus stores a scraped series `NAME` of kind `KIND` in Cloud Monitoring as
-# the metric type `prometheus.googleapis.com/NAME/KIND`; the Custom Metrics Stackdriver Adapter
-# exposes metric types to the HPA with `/` replaced by `|` (its README says so; the GMP naming is
-# marked VERIFY in the manifest). The shipped HPA uses two of them:
+# the metric type `prometheus.googleapis.com/NAME/KIND`. The Custom Metrics Stackdriver Adapter gives
+# metric types to the HPA, and it replaces `/` with `|`. The README of the adapter says so. The
+# manifest has a VERIFY mark on the GMP name format. The shipped HPA uses two of these metric types:
 
 # %%
 hpa = yaml.safe_load((DEPLOY / "gke/hpa.yaml").read_text())
@@ -187,22 +196,22 @@ for m in hpa["spec"]["metrics"]:
 # %% [markdown]
 # ## Exercise 5.3 — how late is the first extra replica?
 #
-# A burst starts at $t$ = 0 and pushes `vllm:num_requests_waiting` far above target. Predict the
-# **worst-case** time until a new vLLM pod receives traffic. The chain, in order, and where each
-# number comes from:
+# A burst starts at $t$ = 0 and pushes `vllm:num_requests_waiting` far above the target. Predict the
+# **worst-case** time until a new vLLM pod receives traffic. The table gives the chain of steps in
+# sequence, and the source of each number:
 #
 # | step | worst case | source |
 # |---|---|---|
 # | GMP scrapes the pod | one full scrape interval (the burst lands just after a scrape) | `podmonitoring-vllm.yaml` |
 # | the sample reaches the HPA through Cloud Monitoring and the adapter | `ADAPTER_LAG_S` | assumption (verify) |
 # | the HPA controller's next sync | one full sync period, 15 s | kube-controller-manager default |
-# | a new L4 Spot node is provisioned and joins | `NODE_S` | assumption (verify; Spot may not be obtainable at all) |
-# | the vLLM image is pulled | `PULL_S` | assumption (verify; image streaming shortens it) |
+# | GKE provisions a new L4 Spot node, and the node joins | `NODE_S` | assumption (verify). It is possible that you cannot get Spot at all. |
+# | the node pulls the vLLM image | `PULL_S` | assumption (verify). Image streaming makes the pull shorter. |
 # | weights download + load, until `/health` answers | `LOAD_S` | assumption (verify) |
 # | the readiness probe notices | one full probe period | `vllm.yaml` |
 #
-# (The scale-up policy — 1 pod per 60 s — does not delay the *first* pod.) Write `worst_case_s()`
-# reading the two intervals from the files; it returns seconds.
+# The scale-up policy (1 pod per 60 s) does not delay the *first* pod. Write `worst_case_s()`. It
+# reads the two intervals from the files and returns seconds.
 
 # %%
 ADAPTER_LAG_S = 60      # Cloud Monitoring ingestion + adapter read (assumption, verify)
@@ -230,10 +239,17 @@ print(f"✅ ~{worst_case_s() / 60:.1f} min worst case (assumptions); only {detec
 # %% [markdown]
 # ## Exercise 5.4 — what an hour of the lab costs
 #
-# Write `lab_cost(hours, gpu_nodes, prices)` in dollars for `hours` of: `gpu_nodes` L4 Spot VMs, one
-# system VM, the regional load balancer's forwarding rule, and the cluster management fee minus the
-# free-tier credit (which covers one zonal cluster, so the fee nets to 0 here). The prices below are
-# **assumptions to verify** (us-central1, Sep 2026), not quotes — see `COMPUTE.md` at the repo root.
+# Write `lab_cost(hours, gpu_nodes, prices)`. It returns the cost in dollars for `hours` of these
+# items:
+#
+# - `gpu_nodes` L4 Spot VMs,
+# - one system VM,
+# - the forwarding rule of the regional load balancer,
+# - the cluster management fee minus the free-tier credit. The credit covers one zonal cluster, so the
+#   net fee is 0 here.
+#
+# The prices in the next cell are **assumptions to verify** (us-central1, Sep 2026). They are not
+# quotes. Refer to `COMPUTE.md` at the repo root.
 
 # %% exercise
 PRICES = {                         # USD per hour — VERIFY before relying on them
@@ -260,20 +276,28 @@ print(f"✅ installed, busy or idle: ≈ ${lab_cost(1, 1):.2f}/h with its one L4
       f"uninstalled but not destroyed, a forgotten day still costs up to ≈ ${lab_cost(24, 0):.2f}")
 
 # %% [markdown]
-# Read the three states apart. **Installed and idle**: `lab_cost(1, 1)` ≈ \$0.44/h, because the
-# HPA's `minReplicas: 1` keeps one vLLM pod and so one L4 Spot node up — the GPU pool never reaches
-# 0 while the workloads exist (that needs scale-to-zero: KEDA or the alpha `HPAScaleToZero`).
-# **After `uninstall.sh`**: the pool drains to 0 and at most `lab_cost(1, 0)` ≈ \$0.16/h remains — the
-# system node and disks (~\$0.13/h plus disks), and the load balancer's forwarding rule only while a
-# Gateway still exists (`uninstall.sh` deletes it; `lab_cost` counts it anyway, as an upper bound).
+# Keep the three states separate.
+#
+# **Installed and idle**: `lab_cost(1, 1)` ≈ \$0.44/h. This cost occurs because the
+# `minReplicas: 1` of the HPA keeps one vLLM pod in operation, and thus one L4 Spot node. The GPU pool
+# never gets to 0 while the workloads exist. To bring the pool to 0 with the workloads in place, you
+# need scale-to-zero: KEDA or the alpha `HPAScaleToZero`.
+#
+# **After `uninstall.sh`**: the pool drains to 0, and at most `lab_cost(1, 0)` ≈ \$0.16/h stays. This
+# is the system node and disks (~\$0.13/h plus disks). It also includes the forwarding rule of the
+# load balancer, but only while a Gateway still exists. `uninstall.sh` deletes the Gateway.
+# `lab_cost` counts the rule anyway, as an upper limit.
+#
 # **After `terraform destroy`**: \$0.
-# That last step is the one people forget.
+# That last step is the step that people forget.
 #
 # ## The plan
 #
-# `deploy/gke/install.sh` in dry-run mode — the exact order matters: CRDs before the chart that
-# creates objects of those kinds; the InferencePool (Helm) before the HTTPRoute that references it;
-# the metrics adapter before the HPA that needs its API.
+# The next cell runs `deploy/gke/install.sh` in dry-run mode. The exact sequence is important:
+#
+# - the CRDs before the chart that creates objects of those kinds,
+# - the InferencePool (Helm) before the HTTPRoute that refers to it,
+# - the metrics adapter before the HPA that needs its API.
 
 # %%
 env = {"DRY_RUN": "1", "PROJECT_ID": "my-project", "PATH": "/usr/bin:/bin"}
@@ -283,8 +307,8 @@ print("\n".join(l for l in out.splitlines() if l.startswith(("==>", "+ "))))
 # %% [markdown]
 # ## If you have deployed it
 #
-# With `IGW_GKE=1` and `kubectl` pointed at the cluster, this cell prints read-only status; otherwise
-# it prints what to run.
+# If you set `IGW_GKE=1` and `kubectl` points at the cluster, this cell prints the read-only status.
+# If not, it prints what to run.
 
 # %%
 if os.environ.get("IGW_GKE") == "1" and shutil.which("kubectl"):
@@ -302,28 +326,34 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two-minute walkthrough.** "On GKE we use Gateway mode. Terraform creates a zonal Standard cluster
-# with the Gateway API and Managed Prometheus enabled, a proxy-only subnet for the regional load
-# balancer, and an L4 Spot pool that scales from zero. vLLM runs one replica per L4. The llm-d router
-# chart installs the endpoint picker with the same scoring config we tuned locally, plus the
-# InferencePool that selects the vLLM pods and our three InferenceObjectives. A Gateway of class
-# `gke-l7-regional-external-managed` with an HTTPRoute to the InferencePool makes the load balancer
-# ask the EPP for a pod on every request.
+# **Two-minute walkthrough.** "On GKE, we use Gateway mode. Terraform creates a zonal Standard cluster
+# with the Gateway API and Managed Prometheus on. It also creates a proxy-only subnet for the regional
+# load balancer. It also creates an L4 Spot pool that scales from zero. vLLM runs one replica per L4.
 #
-# "Managed Prometheus scrapes vLLM, the custom-metrics adapter exposes `vllm:num_requests_waiting` and
-# `vllm:num_requests_running` to the HPA — the queue for bursts, the occupied batch slots so it does not scale
-# away capacity once the queue drains — and the HPA adds at most one replica a minute; the first extra replica
-# still arrives minutes after a burst, because a Spot node, the image and the weights come first. With one
-# replica always up, an idle hour costs about $0.44 (one L4 Spot node plus the fixed parts); only uninstalling
-# the workloads brings the GPU pool to zero, and only `terraform destroy` stops the rest."
+# "The llm-d router chart installs the endpoint picker with the same scorer config that we adjusted
+# locally. The chart also installs the InferencePool that selects the vLLM pods, and our three
+# InferenceObjectives. A Gateway of class `gke-l7-regional-external-managed` has an HTTPRoute to the
+# InferencePool. This Gateway and its route make the load balancer ask the EPP for a pod on each
+# request.
+#
+# "Managed Prometheus scrapes vLLM. The custom-metrics adapter gives `vllm:num_requests_waiting` and
+# `vllm:num_requests_running` to the HPA. The queue is for bursts. The occupied batch slots are there
+# so that the HPA does not remove capacity when the queue drains. The HPA adds at most one replica a
+# minute. The first extra replica still arrives minutes after a burst, because a Spot node, the image
+# and the weights come first.
+#
+# "With one replica always up, an idle hour costs about $0.44 (one L4 Spot node plus the constant parts).
+# Only an uninstall of the workloads brings the GPU pool to zero, and only `terraform destroy` stops
+# the rest."
 #
 # **Drill questions**
 #
 # 1. *Why a proxy-only subnet?* Regional (and internal) Application Load Balancers run managed Envoy
-#    proxies inside your VPC; they need their own subnet with purpose `REGIONAL_MANAGED_PROXY`.
+#    proxies in your VPC. They need their own subnet with purpose `REGIONAL_MANAGED_PROXY`.
 # 2. *What breaks if the HTTPRoute points at a Service instead of the InferencePool?* The load balancer
-#    balances by its own policy and never calls the EPP: no prefix affinity, no queue awareness, no
-#    objectives or shedding.
-# 3. *The EPP pod crashes — what happens to traffic?* It depends on the pool's `failureMode`: `FailClose`
-#    fails requests until an EPP is back (safe but unavailable); `FailOpen` routes without scoring.
-#    Run 2+ EPP replicas (active-passive with leader election by default in the chart).
+#    balances by its own policy and never calls the EPP. Thus there is no prefix affinity, no queue
+#    awareness, and no objectives or shedding.
+# 3. *The EPP pod crashes. What occurs to traffic?* It depends on the `failureMode` of the pool.
+#    `FailClose` fails requests until an EPP is back (safe but unavailable). `FailOpen` routes the
+#    requests with no scores. Run 2+ EPP replicas. By default, the chart makes them active-passive with
+#    leader election.

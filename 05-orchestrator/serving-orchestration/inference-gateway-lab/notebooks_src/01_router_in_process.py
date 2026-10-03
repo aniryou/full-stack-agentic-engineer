@@ -1,25 +1,26 @@
 # %% [markdown]
 # # 01 · A cache-aware router, in process
 #
-# **Tier:** T0 — laptop or Colab CPU; no GPU, no Docker, no network. Three vLLM-shaped fake
-# backends and the router start inside this notebook on free localhost ports and talk real HTTP.
-# Backend *timing* is emulated (`igwlab/fakebackend.py`: prefill cost per uncached token, decode
-# cost per token, batch slots), so every latency below is "measured on this machine, emulated
-# backend": good for comparing routing policies, not a GPU benchmark.
+# **Tier:** T0. It runs on a laptop or Colab CPU, with no GPU, no Docker and no network. Three
+# vLLM-shaped fake backends and the router start inside this notebook on free localhost ports, and
+# they talk real HTTP. `igwlab/fakebackend.py` emulates the backend *times*: prefill cost per
+# uncached token, decode cost per token, batch slots. Thus every latency in this notebook is
+# "measured on this machine, emulated backend". These latencies are good for a comparison of routing
+# policies, but they are not a GPU benchmark.
 #
 # ## The one-minute version
 #
-# An LLM replica is a stateful cache with a queue in front of it: a request whose prompt prefix
-# is already in *that* replica's KV cache skips most of its prefill. So where a request goes
-# changes how much work it is. An LLM-aware router therefore:
+# An LLM replica is a stateful cache with a queue in front of it. A request whose prompt prefix is
+# already in the KV cache of *that* replica skips most of its prefill. Thus the destination of a
+# request changes how much work the request is. For this reason, an LLM-aware router does these steps:
 #
-# 1. **remembers what it sent where** — an approximate prefix index of chained block hashes;
-# 2. **reads each replica's load** from its `/metrics` (vLLM's `num_requests_waiting`, `kv_cache_usage_perc`);
-# 3. **scores every candidate per signal and adds the scores with weights** (filters → scorers → picker);
+# 1. **remembers what it sent where**: it keeps an approximate prefix index of chained block hashes.
+# 2. **reads each replica's load** from its `/metrics` (vLLM's `num_requests_waiting`, `kv_cache_usage_perc`).
+# 3. **scores every candidate per signal and adds the scores with weights** (first filters, then scorers, then the picker).
 # 4. **streams the response back byte for byte**.
 #
-# After this notebook you can explain each step with numbers, and show on an agentic workload why
-# round-robin loses. Background: [PRIMER §1 Why a layer above the engine and §2 Routing signals and
+# After this notebook, you can explain each step with numbers. You can also show on an agentic
+# workload why round-robin loses. Background: [PRIMER §1 Why a layer above the engine and §2 Routing signals and
 # algorithms](../../PRIMER.md).
 
 # %%
@@ -49,10 +50,10 @@ def chat(url, messages, max_tokens=8, stream=False, headers=None):
 # %% [markdown]
 # ## One request, end to end
 #
-# The router picks a backend, forwards the unmodified body, and streams the Server-Sent Events back
-# as they arrive. It adds one header, `x-gateway-destination-endpoint` — the same header name the
-# llm-d EPP uses to tell Envoy which pod to send the request to. The fake backend also names
-# itself in `x-inference-pod` (as `llm-d-inference-sim` does).
+# The router selects a backend and forwards the unchanged body. Then it streams the Server-Sent
+# Events back when they arrive. It adds one header, `x-gateway-destination-endpoint`. The llm-d EPP
+# uses the same header name to tell Envoy which pod must get the request. The fake backend also gives
+# its name in `x-inference-pod`, as `llm-d-inference-sim` does.
 
 # %%
 hdrs, raw = chat(stack.router_url, [{"role": "user", "content": "Say hello."}], max_tokens=4, stream=True)
@@ -62,8 +63,10 @@ print(raw.decode()[:600])
 # %% [markdown]
 # ## What the router scrapes
 #
-# Every 50 ms (llm-d's default base tick) the router GETs each backend's `/metrics` and keeps the
-# few gauges it routes on. Below: the raw vLLM-named series, then the router's view of them.
+# Every 50 ms (llm-d's default base tick), the router sends a GET request to the `/metrics` of each backend.
+# It keeps
+# the few gauges that it uses to route. The next cell prints the raw vLLM-named series, then the
+# router's view of them.
 
 # %%
 text = stack.backend_metrics()["a"]
@@ -74,10 +77,15 @@ print("\nrouting view:", extract_vllm(Families.from_text(text)))
 # %% [markdown]
 # ## Remembering prefixes: pseudo-tokens and chained block hashes
 #
-# The router does not run the model's tokenizer. Like the EPP's default `estimate` token producer
-# it packs the request bytes (tool schemas, then role + content of each message) into **4-byte
-# pseudo-tokens**, cuts them into blocks of 64 and hashes each block *together with the previous
-# block's hash*. Two prompts that agree for the first $N$ blocks therefore share exactly $N$ hashes.
+# The router does not run the model's tokenizer. It does the same as the EPP's default `estimate`
+# token producer:
+#
+# - It packs the request bytes into **4-byte pseudo-tokens**: first the tool schemas, then the role
+#   and the content of each message.
+# - It divides the pseudo-tokens into blocks of 64.
+# - It hashes each block *together with the previous block's hash*.
+#
+# Thus two prompts that agree for the first $N$ blocks share exactly $N$ hashes.
 
 # %%
 from igwlab.router import PrefixIndex, block_hashes, estimate_tokens
@@ -98,22 +106,22 @@ idx.add(h1, "a")                        # "we routed turn 1 to a"
 print("turn-2 match per endpoint:", idx.match(h2), f"-> prefix score on a = {idx.match(h2)['a'] / len(h2):.2f}")
 
 # %% [markdown]
-# Turn 1's *last* block was partial (fewer than 64 tokens), so in turn 2 — where the conversation
-# continues — that block has different content and a different hash. The router can only count
-# full-block agreement. That is one of the reasons the index is *approximate*.
+# The *last* block of turn 1 was partial (fewer than 64 tokens). In turn 2, the conversation
+# continues, so that block has different content and a different hash. The router can count only
+# the agreement of full blocks. That is one of the reasons why the index is *approximate*.
 #
 # ## Exercise 1.1 — the prefix-cache score
 #
-# Implement the `prefix-cache-scorer` formula (llm-d router, v0.10):
+# Write the code for the `prefix-cache-scorer` formula (llm-d router, v0.10):
 #
 # $$
 # \text{score} = w \cdot \min\left(1, \frac{\mathrm{matched\_tokens}}{\text{scale}}\right)^2
 #   + (1 - w) \cdot \frac{\mathrm{match\_blocks}}{\mathrm{total\_blocks}},
 # $$
 #
-# with $\mathrm{matched\_tokens} =$ $\mathrm{match\_blocks} \times \mathrm{block\_size}$; a request with
-# `total_blocks == 0` scores 0. With the default $w = 0$ it is just the fraction of the prompt's blocks
-# already cached there.
+# Here, $\mathrm{matched\_tokens} =$ $\mathrm{match\_blocks} \times \mathrm{block\_size}$. A request
+# with `total_blocks == 0` gets the score 0. With the default $w = 0$, the score is only the fraction
+# of the prompt's blocks that are already in the cache of that endpoint.
 
 # %% exercise
 def prefix_score(match_blocks, total_blocks, block_size=64, w=0.0, scale=8192):
@@ -137,13 +145,17 @@ print("✅ prefix_score matches the prefix-cache-scorer formula")
 # %% [markdown]
 # ## Exercise 1.2 — the queue score, and the replica nobody has scraped yet
 #
-# `queue-scorer` turns the scraped `vllm:num_requests_waiting` of each endpoint into a score with a
-# min-max normalization: $(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$; if every endpoint has
-# the same queue, they all get the neutral score **1.0**. The detail that bites in production: the
-# scorer reads each endpoint's *current* metrics with no freshness check (llm-d-router v0.10.0 does the
-# same), and an endpoint that has never been scraped — a pod that became ready a moment ago, `None`
-# here — has all-zero metrics. Implement `queue_scores(waiting)` with exactly that behaviour, then
-# answer: what does a freshly started replica score, and what does that do to the next burst?
+# The `queue-scorer` changes the scraped `vllm:num_requests_waiting` of each endpoint into a score
+# with a min-max normalization: $(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$. If all
+# endpoints have the same queue, they all get the neutral score **1.0**.
+#
+# One detail causes problems in production. The scorer reads the *current* metrics of each endpoint,
+# and it does not examine their freshness (llm-d-router v0.10.0 does the same). An endpoint that the
+# router has never scraped has all-zero metrics. An example of such an endpoint is a pod that became
+# ready a moment ago (`None` here).
+#
+# Write `queue_scores(waiting)` with exactly that behaviour. Then answer this question: what is the
+# score of a newly started replica, and what does that score do to the next burst?
 
 # %% exercise
 def queue_scores(waiting: dict) -> dict:
@@ -171,11 +183,14 @@ print("✅ a never-scraped replica scores 1.0: it looks idle, so until its first
 # %% [markdown]
 # ## Exercise 1.3 — the weighted pick
 #
-# The scheduler adds, for each endpoint, $\text{weight} \times \operatorname{clamp}(\text{score}, 0, 1)$
-# over all scorers (an unscored endpoint contributes 0 for that scorer) and the `max-score-picker`
-# takes the highest total. Implement `pick(scores, weights)` → the winning endpoint name; break exact
-# ties by the alphabetically smallest name (the lab's picker rotates ties round-robin; llm-d-router
-# v0.10.0 shuffles the candidates at random before a stable sort by score, so its ties land at random).
+# For each endpoint, the scheduler adds $\text{weight} \times \operatorname{clamp}(\text{score}, 0, 1)$
+# over all scorers. An endpoint without a score from a scorer gets 0 for that scorer. Then the
+# `max-score-picker` takes the highest total.
+#
+# Write `pick(scores, weights)`. It returns the name of the endpoint that wins. If two or more
+# endpoints have exactly the same highest total, select the name that is first in alphabetical order. The lab's picker rotates ties
+# round-robin. The picker of llm-d-router v0.10.0 puts the candidates in a random order before a stable sort by
+# score. Thus the winner of its ties is random.
 
 # %% exercise
 def pick(scores: dict, weights: dict) -> str:
@@ -200,14 +215,16 @@ print("✅ pick reproduces the weighted-sum scheduler")
 # %% [markdown]
 # ## Round-robin versus the weighted scorer on an agentic workload
 #
-# 18 agent sessions × 5 turns. Each session belongs to one of 4 agent "programs" (a ~8 KB system
-# prompt + 3 tool schemas it re-sends on every call) and every turn re-sends the whole history plus
-# a new ~3 KB tool result (the cell prints the exact sizes). Sessions start over the first 0.5 s and
-# run closed-loop (next turn after the previous reply + 0–20 ms of tool time). We run the same
-# sessions against two fresh stacks:
+# The workload is 18 agent sessions × 5 turns. Each session belongs to one of 4 agent "programs". A
+# program is a ~8 KB system prompt and 3 tool schemas, and the session sends them again on every
+# call. Every turn also sends the whole history again, plus a new ~3 KB tool result. The cell prints
+# the exact sizes.
 #
-# * `round-robin` — the preset with no scorers (every total ties at 0; the picker rotates);
-# * `default-weighted` — the llm-d Helm chart's default: `prefix-cache-scorer` ×3,
+# The sessions start during the first 0.5 s and run closed-loop: the next turn comes after the
+# previous reply plus 0–20 ms of tool time. We run the same sessions against two new stacks:
+#
+# * `round-robin`: the preset with no scorers. All totals are equal at 0, and the picker rotates.
+# * `default-weighted`: the default of the llm-d Helm chart, with `prefix-cache-scorer` ×3,
 #   `queue-scorer` ×2, `kv-cache-utilization-scorer` ×2.
 #
 # $$
@@ -230,22 +247,25 @@ print("\nTTFT p50 (ms, emulated backend):")
 print(ascii_bars({k: r.summary()["ttft_p50_ms"] for k, r in results.items()}))
 
 # %% [markdown]
-# Two things to notice. The weighted router's **hit rate** is higher because each session's next
-# turn goes back to the replica that holds its history (round-robin re-prefills the history ~2/3
-# of the time). And **TTFT** falls further than the hit rate suggests, because every avoided
-# prefill also shortens the queue of prefills in front of everyone else on that replica — the fake
-# backend runs one prefill at a time per replica, like an engine whose prefills contend for the GPU.
-# (`llm-d-inference-sim` does not queue prefills, so on the notebook-04 stacks the TTFT gap is
-# smaller while the hit-rate gap stays.) The price is imbalance: requests follow the cache, not an
-# even split.
+# Look at two things. First, the **hit rate** of the weighted router is higher. The reason is that
+# the next turn of each session goes back to the replica that holds its history. Round-robin does the
+# prefill of the history again ~2/3 of the time.
+#
+# Second, **TTFT** decreases more than the hit rate suggests. The reason is that each prefill that
+# the router prevents also makes the queue of prefills shorter for all other requests on that
+# replica. The cost is imbalance: the requests go where the cache is, not in an even split.
+#
+# The queue of prefills exists because the fake backend runs one prefill at a time per replica. It
+# is like an engine whose prefills compete for the GPU. `llm-d-inference-sim` does not put prefills in a queue. Thus on the notebook-04
+# stacks, the TTFT gap is smaller, but the hit-rate gap stays.
 #
 # ## Exercise 1.4 — hit rate from the engines' own counters
 #
-# The benchmark computed the hit rate from each response's `usage.prompt_tokens_details`. An
-# operator would read it from Prometheus instead: `vllm:prefix_cache_hits_total` and
-# `vllm:prefix_cache_queries_total` are counters **in tokens**, so the hit rate over an interval is
-# the ratio of their *increases*, summed over replicas. Implement it from two scrapes of every
-# backend (`before`, `after`: `{name: metrics text}`).
+# The benchmark calculated the hit rate from the `usage.prompt_tokens_details` of each response. An
+# operator reads it from Prometheus instead. `vllm:prefix_cache_hits_total` and
+# `vllm:prefix_cache_queries_total` are counters **in tokens**. Thus the hit rate over an interval is
+# the ratio of their *increases*, with each increase added over all replicas. Write this calculation
+# from two scrapes of every backend (`before`, `after`: `{name: metrics text}`).
 
 # %% exercise
 def hit_rate_from_counters(before: dict, after: dict) -> float:
@@ -270,11 +290,14 @@ print(f"✅ counters and usage agree: hit rate {got:.1%}")
 # %% [markdown]
 # ## Exercise 1.5 — decision forensics
 #
-# Every routing decision is recorded (`stack.router.decisions`, and `GET /debug/state`). When you
-# are asked "why did this request go to b?", the useful answer names the **decisive scorer**: the
-# one whose *weighted* contribution differs most between the winner and the runner-up.
-# Implement `decisive_scorer(decision)` using `decision.scores` (`{scorer: {endpoint: score}}`),
-# `decision.weights` and `decision.totals`; unscored endpoints count as 0; clamp scores to [0, 1].
+# The router records every routing decision (`stack.router.decisions`, and `GET /debug/state`).
+# Someone can ask you "why did this request go to b?". For that question, the useful answer gives
+# the name of the **decisive scorer**. That is the scorer whose *weighted* contribution has the largest difference
+# between the winner and the runner-up.
+#
+# Write `decisive_scorer(decision)`. Use `decision.scores` (`{scorer: {endpoint: score}}`),
+# `decision.weights` and `decision.totals`. An endpoint without a score counts as 0. Clamp the scores
+# to [0, 1].
 
 # %% exercise
 def decisive_scorer(decision) -> str:
@@ -303,26 +326,32 @@ print("✅ decisive_scorer explains a decision")
 # %% [markdown]
 # ## In a design review
 #
-# **Two-minute walkthrough.** "Our replicas are caches, so we route like a cache-aware load
-# balancer, not like a web LB. For each request the router hashes the prompt into 64-token blocks
-# (chained hashes, so equal hashes mean an equal prefix), looks up which replica it last sent each
-# block to, and turns that into a prefix score per replica. It also scrapes every replica's vLLM
-# metrics every 50 ms — waiting queue and KV-cache usage — and scores those. The total is a
-# weighted sum (the llm-d default is prefix 3, queue 2, KV 2), the highest total wins, and ties
-# are broken at random. We stream the bytes back untouched. On a multi-turn agent workload that keeps each
-# session on the replica that holds its history: fewer prefilled tokens, shorter prefill queues,
-# lower TTFT; the cost is an uneven split, which the load scores bound."
+# **Two-minute walkthrough.** "Our replicas are caches. Thus we route like a cache-aware load
+# balancer, not like a web LB. For each request, the router hashes the prompt into 64-token blocks.
+# The hashes form a chain, so equal hashes mean an equal prefix. The router finds the replica that it
+# last sent each block to and changes this information into a prefix score per replica.
+#
+# "It also scrapes the vLLM metrics of every replica every 50 ms (the wait queue and the KV-cache
+# usage) and changes them into scores too. The total is a weighted sum (the llm-d default is prefix
+# 3, queue 2, KV 2), and the highest total wins. The picker breaks ties at random. We stream the
+# bytes back unchanged.
+#
+# "On a multi-turn agent workload, this routing keeps each session on the replica that holds its history.
+# The result is fewer prefilled tokens, shorter prefill queues and lower TTFT. The cost is an uneven
+# split, and the load scores put a limit on it."
 #
 # **Drill questions**
 #
-# 1. *Round-robin eventually caches the system prompt everywhere — so why does it still lose?*
-#    Each session's growing history is cached only where its last turn ran; round-robin sends the
-#    next turn elsewhere ⅔ of the time and re-prefills it. It also stores every prefix on every
-#    replica, dividing effective cache capacity by the replica count.
-# 2. *Name three ways the prefix index can be wrong.* It is written at routing time (before the
-#    engine caches anything); engines evict blocks the index still lists; pseudo-token blocks do not
-#    align with the engine's 16-token KV blocks; traffic from another router replica is invisible.
-#    Precise alternatives subscribe to the engines' KV-cache events.
-# 3. *Why must the router pass SSE bytes through unmodified?* Re-encoding adds latency to every
-#    token, can split multi-byte characters or events, and breaks usage chunks and `[DONE]`
-#    handling in clients; TTFT/ITL are user-visible.
+# 1. *Round-robin caches the system prompt on every replica after some time. Why does it still lose?*
+#    The history of each session increases. Only the replica that ran the last turn of the session
+#    has that history in its cache. Round-robin sends the next turn to a different replica ⅔ of the time and prefills the
+#    history again. It also keeps every prefix on every replica. This divides the effective cache
+#    capacity by the number of replicas.
+# 2. *Name three ways in which the prefix index can be incorrect.* The router writes the index at
+#    routing time, before the engine caches anything. The engines evict blocks that the index still
+#    lists. The pseudo-token blocks do not align with the engine's 16-token KV blocks. The router
+#    cannot see the traffic from another router replica. Precise alternatives subscribe to the
+#    KV-cache events of the engines.
+# 3. *Why must the router pass SSE bytes through unchanged?* If the router encodes the bytes again,
+#    it adds latency to every token. It can also divide multi-byte characters or events. It also
+#    breaks how clients process the usage chunks and `[DONE]`. TTFT and ITL are visible to the user.
