@@ -1,6 +1,6 @@
 # Working in this repository
 
-This file is the brief every contributor (human or agent) follows so the lab stays coherent.
+This file is the brief that every contributor (a person or an agent) obeys. Thus the lab stays coherent.
 
 ## Layout
 
@@ -22,22 +22,24 @@ This file is the brief every contributor (human or agent) follows so the lab sta
 
 ## Rules
 
-1. **Do not modify `agentlab/llm/` or `agentlab/agents/`** (the core) unless you own that change; every notebook
-   depends on them. If you need something from the core, note it in your report instead.
-2. Dependencies: standard library + `pydantic` + `httpx` only. No network calls, no API keys, no sleeping
-   longer than a few hundred milliseconds in tests or notebooks (inject clocks/sleepers where timing matters).
-3. Every module gets a `tests/test_<module>.py`; run it with `python3 -m pytest -q tests/test_<module>.py`.
-4. Every notebook source follows `notebooks_src/README.md` and the pattern in `notebooks_src/00_setup_and_fake_llm.py`:
-   heading + the concept it teaches (see `docs/PRIMER_MAP.md`) + "you will" list → worked examples → 4–7 exercises each with a check cell →
-   a *The one-minute version* cell. Build and verify with:
+1. **Do not change `agentlab/llm/` or `agentlab/agents/`** (the core) unless you own that change. Every notebook
+   depends on them. If you need something from the core, record it in your report. Do not change the core.
+2. Dependencies: only the standard library, `pydantic` and `httpx`. In tests or notebooks, make no network calls.
+   Use no API keys. Do not put in a sleep longer than a few hundred milliseconds. Where the time is important,
+   inject clocks/sleepers.
+3. Every module has a `tests/test_<module>.py`. Run it with `python3 -m pytest -q tests/test_<module>.py`.
+4. Every notebook source obeys `notebooks_src/README.md` and uses the pattern in `notebooks_src/00_setup_and_fake_llm.py`.
+   First come a heading, the concept that the notebook teaches (see `docs/PRIMER_MAP.md`) and a "you will" list.
+   Then come worked examples. After them come 4–7 exercises, each with a check cell. Last comes a
+   *The one-minute version* cell. Build the notebook and examine it with these commands:
 
        python3 tools/build_notebooks.py notebooks_src/NN_name.py
        python3 tools/run_notebooks.py solutions/NN_name.ipynb            # must PASS
        python3 tools/run_notebooks.py notebooks/NN_name.ipynb --expect-fail   # must stop at the first exercise
 
-5. Solution blocks are complete statements at statement level (never inside an expression).
-6. Prefer teaching the mechanism over API coverage: a learner should be able to explain *why* after each exercise.
-7. Tone: precise, warm, no filler. Comments say why, not what.
+5. Solution blocks are complete statements at statement level. They are never inside an expression.
+6. Give priority to the mechanism, not to API coverage. The goal is that a learner can explain *why* after each exercise.
+7. Tone: precise and warm, with no filler. Comments tell why, not what.
 
 ## Core API cheat-sheet (agentlab.agents / agentlab.llm)
 

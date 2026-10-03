@@ -1,26 +1,29 @@
 # %% [markdown]
 # # 03 · GPTQ, AWQ and SmoothQuant from scratch
 #
-# **Tier:** T0 — numpy, under a minute on a laptop. The model is `quantcore.TinyModel`: a residual MLP stack
-# whose RMSNorm gains make four activation channels 25–40× larger than the rest (like the "massive
-# activations" of real LLMs), trained in closed form on a synthetic 16-class task. No download. Running the same
-# algorithms on a real 0.5B checkpoint with llm-compressor is the lab's notebook 01 (T1).
+# **Tier:** T0. It needs numpy and runs in under a minute on a laptop. The model is `quantcore.TinyModel`, a
+# residual MLP stack. Its RMSNorm gains make four activation channels 25–40× larger than the rest (like the
+# "massive activations" of real LLMs). Its weights come from training in closed form on a synthetic 16-class task.
+#
+# There is no download. The lab's notebook 01 (T1) runs the same algorithms on a real 0.5B checkpoint with
+# llm-compressor.
 #
 # ## The one-minute version
-# Round-to-nearest (RTN) treats every weight alone. Calibration methods use a few hundred sample inputs to
-# decide *which* errors matter, and still produce an ordinary quantized checkpoint:
-# - **GPTQ** minimises the layer's output error $\lVert XW^\top - XQ^\top \rVert^2$. It rounds one input column at
-#   a time and pushes each column's rounding error onto the columns not yet rounded, weighted by the inverse
-#   Hessian $H = \frac{2}{n} X^\top X$ — the Optimal Brain Surgeon update. It wins where inputs are **correlated**.
-# - **AWQ** scales up the weight columns that meet **large activations** before rounding (and divides the
-#   activations, folding ${1/s}$ into the previous norm), with $s = (\operatorname{mean}|x|)^{\alpha}$ and
-#   $\alpha$ found by a 20-point search. It wins where a few input channels dominate.
-# - **SmoothQuant** is for W8A8: it moves activation outliers into the weights, $XW^\top = (X/s)(Ws)^\top$ with
-#   $s = \max|X|^{\alpha} / \max|W|^{1-\alpha}$, so a per-token INT8 activation scale is no longer set by one
-#   channel.
+# Round-to-nearest (RTN) treats every weight alone. Calibration methods use a few hundred sample inputs to decide
+# *which* errors are important. They still produce an ordinary quantized checkpoint:
+# - **GPTQ** minimises the output error of the layer, $\lVert XW^\top - XQ^\top \rVert^2$. It rounds one input
+#   column at a time. It pushes the rounding error of each column onto the columns that are not yet rounded,
+#   weighted by the inverse Hessian $H = \frac{2}{n} X^\top X$. This is the Optimal Brain Surgeon update. It wins
+#   where inputs are **correlated**.
+# - **AWQ** scales up the weight columns that meet **large activations**, before it rounds them. It also divides
+#   the activations, and folds ${1/s}$ into the previous norm. Here $s = (\operatorname{mean}|x|)^{\alpha}$, and a
+#   20-point search finds $\alpha$. It wins where a few input channels dominate.
+# - **SmoothQuant** is for W8A8. It moves activation outliers into the weights, $XW^\top = (X/s)(Ws)^\top$ with
+#   $s = \max|X|^{\alpha} / \max|W|^{1-\alpha}$. Thus one channel no longer sets a per-token INT8 activation scale.
 #
-# All three are exact reparameterisations or better-chosen codes: the served format and kernels do not change.
-# After this notebook you can implement each, say which layer each helps, and say what calibration data is for.
+# All three are exact reparameterisations or better-chosen codes. The served format and kernels do not change.
+# After this notebook, you can implement each one. You can also say which layer each one helps, and what
+# calibration data is for.
 #
 # Primer: `../PRIMER.md` §4 *Weight-only post-training quantization* and §5 *Weight-and-activation quantization*.
 
@@ -54,12 +57,13 @@ for bits in (8, 4, 3):
     report(f"RTN INT{bits} g32", quantize_model(m, "rtn", bits, 32))
 
 # %% [markdown]
-# INT8 is free; INT4 costs 6.6 points and INT3 22 on this small model (larger models tolerate RTN better — the
-# GPTQ paper's LLaMA-7B loses 0.6 perplexity at 4-bit RTN and 20 at 3-bit, verify). Note the flips: accuracy is a
-# net of right answers lost and wrong answers gained, so it understates the churn — KL and top-1 agreement see it.
+# INT8 has no cost. On this small model, INT4 costs 6.6 points and INT3 costs 22. Larger models tolerate RTN
+# better (the GPTQ paper's LLaMA-7B loses 0.6 perplexity at 4-bit RTN and 20 at 3-bit, verify). Look at the flips.
+# Accuracy is a net of correct answers lost and incorrect answers gained, thus it shows less churn than there is.
+# KL and top-1 agreement see the churn.
 #
 # ## Worked example 2 — GPTQ, one layer at a time
-# $H = \frac{2}{n} X^\top X$ is the curvature of the output error. Its spectrum says how correlated a layer's inputs are.
+# $H = \frac{2}{n} X^\top X$ is the curvature of the output error. Its spectrum shows how correlated the inputs of a layer are.
 
 # %%
 capt = m.calibration_inputs(X[:1000])          # the same layers' inputs on held-out data
@@ -73,11 +77,11 @@ for name in m.linears():
           f"-> {G.output_error(capt[name], W, g):.4f})")
 
 # %% [markdown]
-# The down-projections read a ReLU of a 64-dim stream spread over 256 dims, so their inputs live in 13–37
-# directions: rounding error along the other directions never reaches the output, and GPTQ steers it there —
-# 5–8× less output error, on held-out data too. The up-projections' inputs are dominated by the four outlier
-# channels, and GPTQ gains less there: 40% on the second block, almost nothing held-out on the first. Real LLM
-# layers are less redundant than this toy's, so expect a smaller but real gain.
+# The down-projections read a ReLU of a 64-dim stream spread over 256 dims, thus their inputs live in 13–37
+# directions. Rounding error along the other directions never reaches the output, and GPTQ steers the error there.
+# This gives 5–8× less output error, on held-out data too. The four outlier channels dominate the inputs of the
+# up-projections. GPTQ gains less there: 40% on the second block, and almost nothing held-out on the first.
+# Real LLM layers are less redundant than the layers of this toy, thus expect a smaller but real gain.
 
 # %%
 for bits in (4, 3):
@@ -87,9 +91,9 @@ print(f"act-order on blocks.0.down: output error {G.output_error(Xn, W, gptq.gpt
       f"-> {G.output_error(Xn, W, gptq.gptq(W, Xn, bits=4, group_size=32, actorder=True).w_hat):.4f}")
 
 # %% [markdown]
-# GPTQ recovers INT4 to within a point and INT3 to 6 points. **Act-order** (visit the most-used inputs
-# first, while the most columns remain to absorb their error) helps a little more; with static groups the
-# checkpoint layout is unchanged.
+# GPTQ recovers INT4 to within a point, and INT3 to 6 points. **Act-order** helps slightly more. It visits the
+# most-used inputs first, while the most columns stay to absorb their error. With static groups, the checkpoint
+# layout does not change.
 #
 # ## Worked example 3 — AWQ: a scale search, then RTN
 # The loss curve of the search on the first up-projection, relative to $\alpha = 0$ (which is RTN):
@@ -108,9 +112,9 @@ for name in m.linears():
           f"{G.output_error(Xn / s_, W * s_, q.w_hat):.4f}")
 
 # %% [markdown]
-# A U-shaped curve: too little scaling leaves the salient channels coarse, too much makes them set the group
-# scale for everyone. AWQ cuts the up-projections' error by ~25% and does little or nothing for the
-# down-projections, whose inputs have no dominant channels. On the model:
+# The curve has a U shape. With too small a scale, the salient channels stay coarse. With too large a scale, they
+# set the group scale for all other weights. AWQ cuts the error of the up-projections by ~25%. It gives a small
+# gain or no gain for the down-projections, whose inputs have no dominant channels. On the model:
 
 # %%
 ups = ["blocks.0.up", "blocks.1.up"]
@@ -123,14 +127,14 @@ for method in ("rtn", "awq", "gptq"):
     report(f"  {method}", quantize_model(m, method, 3, 32, calib=Xc, targets=ups))
 
 # %% [markdown]
-# On the layers with outlier channels AWQ beats GPTQ; on the model as a whole GPTQ's down-projection gains
-# dominate; and the two compose — AWQ's scales first, then GPTQ's rounding (llm-compressor's `AWQModifier`
-# followed by a `GPTQModifier`) — for the lowest KL of all (accuracy moves within its error bars at INT4 and
-# gains a point at INT3).
+# On the layers with outlier channels, AWQ beats GPTQ. On the model as a whole, the gains of GPTQ on the
+# down-projections dominate. Also, the two compose: first the scales of AWQ, then the rounding of GPTQ
+# (llm-compressor's `AWQModifier`, then a `GPTQModifier`). This gives the lowest KL of all. Accuracy moves within
+# its error bars at INT4 and gains a point at INT3.
 #
 # ## Worked example 4 — SmoothQuant for W8A8
-# W8A8 quantizes the up-projection's input per token; its four outlier channels set every token's scale. Sweep
-# $\alpha$ and fold the result into the RMSNorm gain.
+# W8A8 quantizes the input of the up-projection per token. Its four outlier channels set the scale of every token.
+# Sweep $\alpha$. Then fold the result into the RMSNorm gain.
 
 # %%
 print("output error by alpha:", {a: round(v, 4) for a, v in S.alpha_sweep(Xu, Wu).items()}, "| no smoothing:",
@@ -156,10 +160,11 @@ for label, logits in (("INT8 W8A8", w8a8_logits(m)), ("INT8 W8A8 + SmoothQuant 0
     print(f"{label:28} KL {r['kl']:.5f}  top-1 {r['top1']:.1%}  acc {r['acc']:.1%}")
 
 # %% [markdown]
-# Smoothing cuts the up-projection's output error 2.7× and the model's KL 2.7×, for free at run time. Accuracy
-# barely moves either way — W8A8 is gentle on this model — which is exactly why the eval has to look at KL too
-# (notebook 04 and primer §8). FP8 without smoothing keeps accuracy but has 6× the INT8 KL here: its per-token
-# scale handles the outliers, but 3 mantissa bits are coarser than INT8's 7 for well-scaled values.
+# SmoothQuant cuts the output error of the up-projection 2.7× and the KL of the model 2.7×, at no cost at run
+# time. Accuracy almost does not change either way (W8A8 is gentle on this model). That is exactly why the eval
+# must look at KL too (notebook 04 and primer §8). FP8 without SmoothQuant keeps accuracy, but here it has 6× the
+# INT8 KL. Its per-token scale handles the outliers. But for well-scaled values, 3 mantissa bits are coarser than
+# the 7 of INT8.
 #
 # ## Worked example 5 — what calibration data does, and does not do
 
@@ -178,20 +183,29 @@ accs = [E.compare(ref, quantize_model(m, "gptq", 3, 32, calib=D).forward(X), y)[
 print("GPTQ INT3 g32, three other 256-sample draws: acc " + ", ".join(f"{a:.1%}" for a in accs))
 
 # %% [markdown]
-# More samples help until $H$ is well estimated (a few hundred here; recipes use 128–512 sequences of 512–2,048
-# tokens). Past that, *which* samples you drew matters about as much as how many: three other 256-sample draws
-# spread over about a point, more than the 0.6 points between 256 and 1,024 samples. A narrow or even random calibration set does surprisingly well on this toy, because what GPTQ and AWQ
-# need — which channels are large, how inputs correlate — comes mostly from the model's own weights and norm gains,
-# which any input reveals. Calibration data does not teach the model anything and cannot fix a format that is too
-# coarse. On real models the text still matters (chat templates, languages, long contexts shift activation
-# statistics) — calibrate on data that looks like your traffic, and measure (§8).
+# More samples help until the estimate of $H$ is good (a few hundred here, and recipes use 128–512 sequences of
+# 512–2,048 tokens). After that point, *which* samples you drew is about as important as how many. Three other
+# 256-sample draws spread over about a point. This is more than the 0.6 points between 256 and 1,024 samples.
+#
+# A narrow or even random calibration set does surprisingly well on this toy. The reason is that GPTQ and AWQ need
+# to know which channels are large and how inputs correlate. This information comes mostly from the weights and
+# norm gains of the model itself, and any input shows it. Calibration data does not teach the model anything. It
+# cannot correct a format that is too coarse.
+#
+# On real models, the text is still important, because chat templates, languages and long contexts shift
+# activation statistics. Calibrate on data that looks like your traffic. Then measure (§8).
 #
 # ## Exercise 3.1 — the GPTQ loop
-# Write `gptq_per_channel(W, X, bits=4)`: symmetric full-convention INT`bits` with one scale per row computed
-# from `W` up front ($\mathrm{amax}/((2^{\mathrm{bits}} - 1)/2)$), $H = \frac{2}{n} X^\top X$, dampen the diagonal
-# by 1% of its mean, take `U = cholesky(inv(H)).T` (upper, $H^{-1} = U^\top U$), then for each column $j$: quantize
-# it, compute $\mathrm{err} = (w_j - q_j)/U_{jj}$ and subtract `outer(err, U[j, j+1:])` from the columns after it.
-# Return the dequantized weight.
+# Write `gptq_per_channel(W, X, bits=4)`. Do these steps:
+#
+# 1. Use symmetric full-convention INT`bits`, with one scale per row. Calculate the scales from `W` at the start
+#    ($\mathrm{amax}/((2^{\mathrm{bits}} - 1)/2)$).
+# 2. Calculate $H = \frac{2}{n} X^\top X$.
+# 3. Dampen the diagonal by 1% of its mean.
+# 4. Take `U = cholesky(inv(H)).T` (upper, $H^{-1} = U^\top U$).
+# 5. For each column $j$, quantize it. Then calculate $\mathrm{err} = (w_j - q_j)/U_{jj}$. Then subtract
+#    `outer(err, U[j, j+1:])` from the columns after it.
+# 6. Return the dequantized weight.
 
 # %% exercise
 def gptq_per_channel(W, X, bits=4):
@@ -219,10 +233,13 @@ print(f"✅ your GPTQ matches quantcore's: output error {G.output_error(Xd, Wd, 
 
 # %% [markdown]
 # ## Exercise 3.2 — the AWQ search
-# Write `awq_alpha(W, X, bits=4, g=32, n_grid=20)`: for $\alpha = k/\mathrm{n\_grid}$,
-# $s = (\operatorname{mean}|x|)^{\alpha}$ (per input channel), normalised by `sqrt(s.max() · s.min())`; quantize
-# $W \cdot s$ with `gptq.rtn(·, bits, g)`; the loss is the mean squared difference between $(X/s)\,Q(Ws)^\top$ and
-# $XW^\top$. Return the best $\alpha$.
+# Write `awq_alpha(W, X, bits=4, g=32, n_grid=20)`. For each $\alpha = k/\mathrm{n\_grid}$, do these steps:
+#
+# 1. Calculate $s = (\operatorname{mean}|x|)^{\alpha}$ (per input channel). Normalise it by `sqrt(s.max() · s.min())`.
+# 2. Quantize $W \cdot s$ with `gptq.rtn(·, bits, g)`.
+# 3. Calculate the loss: the mean squared difference between $(X/s)\,Q(Ws)^\top$ and $XW^\top$.
+#
+# Return the best $\alpha$.
 
 # %% exercise
 def awq_alpha(W, X, bits=4, g=32, n_grid=20):
@@ -245,9 +262,9 @@ print(f"✅ same alpha as quantcore on both up-projections ({ref_alpha:.2f} on t
 
 # %% [markdown]
 # ## Exercise 3.3 — smooth and fold
-# SmoothQuant the **second** block's up-projection at $\alpha = 0.85$ on the calibration inputs, and fold the scale into
-# the model with `m.fold(...)` (it divides the RMSNorm gain by `s` and multiplies the weight's columns by `s`).
-# Set `sm` to the new model.
+# Use SmoothQuant on the up-projection of the **second** block, at $\alpha = 0.85$, on the calibration inputs.
+# Then fold the scale into the model with `m.fold(...)`. This function divides the RMSNorm gain by `s` and
+# multiplies the columns of the weight by `s`. Set `sm` to the new model.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -265,9 +282,9 @@ print(f"✅ same function; the up-projection's input max/median channel ratio fa
 
 # %% [markdown]
 # ## Exercise 3.4 — which layers does AWQ help?
-# Without running `awq` in the answer cell, predict for each linear whether AWQ at INT4 g32 cuts its calibration
-# output error by more than 10% versus RTN. Fill `helps` (name → bool) from what you know about each layer's
-# inputs (worked examples 2 and 3), then let the check measure it.
+# Do not run `awq` in the answer cell. For each linear, predict if AWQ at INT4 g32 cuts its calibration output
+# error by more than 10% against RTN. Fill `helps` (a map from name to bool). Use what you know about the inputs
+# of each layer (worked examples 2 and 3). Then let the check measure it.
 
 # %% exercise
 helps = {name: None for name in m.linears()}
@@ -285,10 +302,11 @@ print("✅ AWQ helps exactly the layers whose inputs have outlier channels: it r
 
 # %% [markdown]
 # ## Exercise 3.5 — how much calibration data?
-# "Enough" means: more would not make a difference this eval can see. Find the smallest calibration size among
-# 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) whose GPTQ INT3 g32 accuracy is below the 1,024-sample
-# result by less than two standard errors of the *difference* between two such runs: `2 * E.diff_stderr(p, p, n)`
-# with `p` the 1,024-sample accuracy and `n` the number of test points. Set `n_enough`.
+# "Enough" means this: more samples make no difference that this eval can see. Find the smallest calibration size
+# among 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) that meets one condition. Its GPTQ INT3 g32
+# accuracy is below the 1,024-sample result by less than two standard errors of the *difference* between two such
+# runs. That bar is `2 * E.diff_stderr(p, p, n)`, with `p` the 1,024-sample accuracy and `n` the number of test
+# points. Set `n_enough`.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -309,23 +327,28 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "We ship INT4 weights with GPTQ or AWQ, never plain round-to-nearest. Both use a
-# few hundred calibration samples and produce the same checkpoint format and kernels as RTN; they only choose
-# better codes. GPTQ minimises each layer's output error: it rounds column by column and lets the unrounded
-# columns compensate through the inverse Hessian of the calibration inputs, so it is strongest where inputs are
-# correlated. AWQ protects the weights that meet large activations by scaling them up before rounding and folding
-# the inverse into the previous norm; it is strongest where a few channels dominate. They compose — AWQ scales,
-# then GPTQ rounding — and on our toy that gives the lowest KL.
+# few hundred calibration samples. They produce the same checkpoint format and kernels as RTN, and only select
+# better codes.
 #
-# "For W8A8 INT8 we add SmoothQuant, which moves
-# activation outliers into the weights at no run-time cost. Calibration data should look like traffic, but it
-# does not teach the model anything: if a format is too coarse no calibration saves it."
+# "GPTQ minimises the output error of each layer. It rounds column by column, and lets the columns
+# that are not yet rounded compensate through the inverse Hessian of the calibration inputs. Thus it is strongest
+# where inputs are correlated.
+#
+# "AWQ protects the weights that meet large activations. It scales them up before it rounds them, and it folds
+# the inverse into the previous norm. It is strongest where a few channels dominate. The two methods compose: the
+# AWQ scales first, then the GPTQ rounding. On our toy, that gives the lowest KL.
+#
+# "For W8A8 INT8, we add SmoothQuant, which moves activation outliers into the weights at no run-time cost. We
+# calibrate on data that looks like traffic, but calibration data does not teach the model anything. If a format
+# is too coarse, no calibration saves it."
 #
 # **Drills**
-# 1. *What does GPTQ need from calibration data, and why a few hundred samples?* — Only $H = \frac{2}{n} X^\top X$
-#    per layer; it must be well conditioned in the input dimension, and damping (1% of the mean diagonal) covers
+# 1. *What does GPTQ need from calibration data, and why a few hundred samples?* Only $H = \frac{2}{n} X^\top X$
+#    per layer. It must be well conditioned in the input dimension, and damping (1% of the mean diagonal) covers
 #    the rest.
-# 2. *AWQ multiplies weight columns by $s$. Why is the model unchanged?* — The activations are divided by $s$, and
-#    that division is folded into the preceding RMSNorm gain (or the previous linear's rows):
+# 2. *AWQ multiplies weight columns by $s$. Why is the model unchanged?* AWQ divides the activations by $s$. It
+#    folds that division into the previous RMSNorm gain (or the rows of the previous linear):
 #    $(X/s)(Ws)^\top = XW^\top$.
-# 3. *SmoothQuant $\alpha = 0$ or 1?* — Neither: 0 leaves the activation outliers, 1 moves them all into the weights;
-#    the output error is lowest in between (0.5 here; 0.8–0.9 tuned for Llama-class models).
+# 3. *SmoothQuant $\alpha = 0$ or 1?* Neither. 0 leaves the activation outliers, and 1 moves them all into the
+#    weights. The output error is lowest between the two (0.5 here, and 0.8–0.9 when adjusted for Llama-class
+#    models).

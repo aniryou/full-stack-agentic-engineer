@@ -1,20 +1,29 @@
 # %% [markdown]
 # # 04 · Sampling and structured output
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. The same parameters are fields of vLLM's `SamplingParams`
-# and of its OpenAI-compatible API; `vllm-serving-lab` sends them to a real server (T1).
+# **Tier:** T0. It needs a CPU only and no network, and it runs in a few seconds. The same parameters are fields of
+# vLLM's `SamplingParams` and of its OpenAI-compatible API. `vllm-serving-lab` sends them to a real server (T1).
 #
 # ## The one-minute version
-# The forward pass produces **logits** — one score per vocabulary entry. The sampler turns them into one token
-# through a fixed pipeline: mask what is not allowed (structured output) → apply repetition/presence/frequency
-# **penalties** → if `temperature == 0` take the argmax → divide by **temperature** → cut the tail with
-# **min-p**, **top-k**, **top-p** → draw, with the request's **own seeded generator**. None of this changes the
-# model; it reshapes one distribution per step. **Structured output** is the same mechanism with a grammar behind
-# it: a finite-state machine says which tokens are legal next, the rest get $-\infty$. The model never learns the
-# schema; it is fenced in — which guarantees *syntax*, not *sense*. With real, multi-character tokens, computing
-# that mask per grammar state is the expensive part; you will build one.
+# The forward pass produces **logits**: one score per vocabulary entry. The sampler turns them into one token
+# through a pipeline of steps in a set order:
 #
-# Primer: §6 *Sampling and structured output* (`../../PRIMER.md`); background:
+# 1. Mask the tokens that the grammar does not permit (structured output).
+# 2. Apply the repetition, presence and frequency **penalties**.
+# 3. If `temperature == 0`, take the argmax.
+# 4. Divide by the **temperature**.
+# 5. Cut the tail with **min-p**, **top-k** and **top-p**.
+# 6. Draw a token with the request's **own seeded generator**.
+#
+# None of this changes the model. It changes the shape of one distribution per step. **Structured output** is the
+# same mechanism with a grammar behind it. A finite-state machine says which tokens are legal next, and the other
+# tokens get $-\infty$. The model never learns the schema. The mask holds the model inside the grammar, and that
+# guarantees *syntax*, not *sense*.
+#
+# With real, multi-character tokens, the calculation of that mask for each grammar state is the high-cost part. In
+# this notebook, you build one.
+#
+# Primer: §6 *Sampling and structured output* (`../../PRIMER.md`). Background:
 # `00-foundations/transformers/docs/transformer-primer.md` §7.4.
 
 # %%
@@ -50,9 +59,9 @@ for name, lg in [("flat  ", flat), ("peaked", peaked)]:
           f"min_p=0.1 -> {kept(min_p_filter(lg, 0.1))}")
 
 # %% [markdown]
-# **top-k** keeps five tokens whatever the shape of the distribution. **top-p** and **min-p** adapt: many tokens
-# when the model is unsure, few when it is confident — which is why they are the usual choice. Temperature
-# changes the shape, not the ranking: the argmax is the same at every temperature.
+# **top-k** keeps five tokens for any shape of the distribution. **top-p** and **min-p** adapt. They keep many
+# tokens when the model is unsure, and few tokens when it is confident. That is why they are the usual choice.
+# Temperature changes the shape, not the order of the tokens: the argmax is the same at each temperature.
 #
 # ## Worked example 2 — greedy loops, penalties break them
 
@@ -67,9 +76,9 @@ for label, p in [("greedy                    ", SamplingParams(max_tokens=40, te
 
 # %% [markdown]
 # ## Worked example 3 — seeds: reproducible, whatever else is in the batch
-# Each request gets its own random generator (seeded from `seed`, or from the engine's seed and the request's
-# index). So a seeded request's output does not depend on which other requests shared its steps — the property
-# you need to replay a production incident.
+# Each request gets its own random generator. The seed of that generator comes from `seed`, or from the engine's
+# seed and the index of the request. Thus the output of a seeded request does not depend on the other requests that
+# shared its steps. You need this property to replay a production incident.
 
 # %%
 sp = SamplingParams(max_tokens=16, temperature=0.9, seed=7)
@@ -82,12 +91,14 @@ print("in a crowd:", repr(crowd.text), "- identical:", alone.text == crowd.text)
 print("seed 8    :", repr(other.text))
 
 # %% [markdown]
-# (On a GPU, bitwise batch invariance is harder than this: batch size changes kernel choices and reduction order,
-# so logits differ in the last bits. vLLM offers a batch-invariant mode for that, at some speed cost — verify.)
+# (On a GPU, bitwise batch invariance is more difficult than this. The batch size changes the kernel choices and the
+# reduction order, so the logits are different in the last bits. For that, vLLM has a batch-invariant mode, at
+# some cost in speed, verify.)
 #
 # ## Worked example 4 — logprobs are the model's, not the sampler's
-# vLLM V1 returns logprobs of the **raw** logits by default (`logprobs_mode="raw_logprobs"`), before temperature,
-# penalties or masks. They tell you what the model believed, even when the sampler overruled it.
+# vLLM V1 returns logprobs of the **raw** logits by default (`logprobs_mode="raw_logprobs"`). These are the logprobs
+# before temperature, penalties or masks. They tell you what the model believed, even when the sampler went against
+# the model.
 
 # %%
 o = Engine(model, num_blocks=64, block_size=4).generate(
@@ -110,18 +121,23 @@ for o in outs:
     print(f"{o.text!r:22} {o.finish_reason:22} model's own log-probability of this text: {forced:7.1f}")
 
 # %% [markdown]
-# Every output is valid — and the model's own log-probability of it is astronomically low: it would never have
-# produced `{` unprompted. The mask **forces** syntax. It cannot supply meaning: if the model does not know the
-# answer, the grammar makes it say `"yes"` or `"no"` anyway. Real engines compile JSON schemas or regexes into
-# token-level automata (xgrammar, llguidance, outlines — verify current vLLM backends); with a BPE vocabulary each
-# token spans several characters, so computing the mask per step over ~100k tokens is the engineering problem.
+# Each output is valid. But the model's own log-probability of each output is extremely low. Without the mask, the
+# model never produces `{`. The mask **forces** syntax. It cannot supply meaning. If the model does not know the
+# answer, the grammar makes it say `"yes"` or `"no"` all the same.
+#
+# Real engines compile JSON schemas or regexes into token-level automata (xgrammar, llguidance, outlines: verify the
+# current vLLM backends). With a BPE vocabulary, each token contains several characters. Thus the calculation of the
+# mask for each step over ~100k tokens is the problem that an engineer must solve.
 #
 # ## Worked example 6 — a grammar over characters, a vocabulary of multi-character tokens
 # Take the JSON schema `{"type": "object", "properties": {"n": {"type": "integer", "minimum": 0}},
 # "required": ["n"]}` with no optional whitespace. The legal outputs are `{"n": 0}`, `{"n": 7}`, `{"n": 2026}`, …
-# (JSON forbids leading zeros). A structured-output backend compiles the schema into an automaton over
-# **characters** — written out by hand below — while the vocabulary, like any BPE tokenizer's, mixes single
-# characters with merges such as `{"n": ` or `1}` that cross several automaton states in one token.
+# (JSON does not permit leading zeros).
+#
+# A structured-output backend compiles the schema into an automaton over
+# **characters**. The next cell writes that automaton by hand. But the vocabulary, like the vocabulary of any BPE
+# tokenizer, mixes single characters with merges such as `{"n": ` or `1}`. Such a merge crosses several automaton
+# states in one token.
 
 # %%
 PREFIX = '{"n": '
@@ -150,13 +166,13 @@ print(f"{len(VOCAB_TXT)} tokens; the single token {PREFIX!r} takes the DFA from 
 print("in state 6, a quote ->", char_step(6, '"'), "(illegal: a number must come next)")
 
 # %% [markdown]
-# A token is legal in a state only if **every** character of it is legal in turn, starting from that state — so
-# the mask depends on the state, and one token can move the automaton several states at once. Exercise 4.6
-# precomputes the whole table.
+# A token is legal in a state only if **every** character of it is legal in turn, from that state. Thus the mask
+# depends on the state, and one token can move the automaton several states at once. Exercise 4.6 precomputes the
+# whole table.
 #
 # ## Exercise 4.1 — top-p (nucleus) filtering
-# Keep the smallest set of highest-probability tokens whose total probability reaches $p$; set the rest to $-\infty$.
-# The top token is always kept.
+# Keep the smallest set of highest-probability tokens whose total probability gets to $p$. Set the other tokens to
+# $-\infty$. Always keep the top token.
 
 # %% exercise
 def my_top_p(logits, p):
@@ -197,8 +213,9 @@ print("✅ min-p's threshold scales with the model's confidence")
 
 # %% [markdown]
 # ## Exercise 4.3 — the repetition penalty
-# vLLM's (and Hugging Face's) rule: for every token that appears in the prompt **or** the output so far, divide
-# its logit by `penalty` if it is positive, multiply it by `penalty` if it is negative (both push it down).
+# Use the rule of vLLM (and of Hugging Face). Find each token that is in the prompt **or** in the output until now.
+# If its logit is positive, divide the logit by `penalty`. If its logit is negative, multiply the logit by
+# `penalty`. Both operations push the logit down.
 
 # %% exercise
 def my_repetition_penalty(logits, seen_ids, penalty):
@@ -219,9 +236,15 @@ print("✅ repetition penalty matches the engine's")
 
 # %% [markdown]
 # ## Exercise 4.4 — your own FSM: an integer from 0 to 255
-# Write an FSM with the engine's protocol — `start()`, `allowed(state)` (a boolean mask over the `VOCAB` = 257
-# token ids; byte `b"7"[0]` is the digit 7, `EOS` ends the output), `advance(state, token)`. Legal outputs:
-# `0`–`255` in decimal, no leading zeros, then EOS. Use the digits typed so far (a string) as the state.
+# Write an FSM with the engine's protocol:
+#
+# * `start()`
+# * `allowed(state)`: a boolean mask over the `VOCAB` = 257 token ids. Byte `b"7"[0]` is the digit 7, and `EOS` ends
+#   the output.
+# * `advance(state, token)`
+#
+# The legal outputs are the integers from `0` to `255` in decimal, with no leading zeros, then EOS. Use the
+# digits typed until now (a string) as the state.
 
 # %% exercise
 class ByteIntFSM:
@@ -258,13 +281,13 @@ assert all(v.isdigit() and 0 <= int(v) <= 255 and (v == "0" or v[0] != "0") for 
 print("✅ every output is a legal integer:", values)
 
 # %% [markdown]
-# The model's corpus contains no digits at all, so it has no opinion about which number to pick, and it prefers
-# to stop after one digit (its corpus has an end-of-text, but no digit ever follows a digit). The grammar
+# The model's corpus contains no digits at all. Thus the model has no opinion about which number to select. It
+# prefers to stop after one digit: its corpus has an end-of-text, but no digit ever follows a digit. The grammar
 # guaranteed the *format*. The *value* is the model's job.
 #
 # ## Exercise 4.5 — which settings are deterministic?
-# Ignoring exact ties between logits, which of these make the sampled token independent of the seed for **any**
-# logits? Fill in `True` / `False`.
+# Ignore exact ties between logits. Which of these settings make the sampled token independent of the seed for
+# **any** logits? Fill in `True` / `False`.
 
 # %% exercise
 deterministic = {"temperature=0": None, "top_k=1": None, "min_p=1.0": None, "top_p=0.01": None,
@@ -289,12 +312,13 @@ print("✅ only argmax-equivalent settings are seed-independent for every distri
 
 # %% [markdown]
 # ## Exercise 4.6 — compile the token mask table
-# Using worked example 6's `char_step`, `STATES` and `VOCAB_TXT`: for every automaton state `s` and every token
-# `t`, precompute the state after feeding **all** of `t`'s characters from `s`, or `None` if any character is
-# illegal. Return `table[s]`, a list aligned with the vocabulary. The engine's mask in state `s` is then
-# `table[s][t] is not None`, and advancing after a sampled token is one lookup. Doing this ahead of time for
-# ~100k tokens and thousands of states — and for the rest, fast enough to overlap the GPU's forward pass — is
-# what xgrammar and llguidance are built for.
+# Use `char_step`, `STATES` and `VOCAB_TXT` from worked example 6. For each automaton state `s` and each token `t`,
+# precompute the state after you feed **all** of `t`'s characters from `s`. If a character is illegal, the result is
+# `None`. Return `table[s]`, a list aligned with the vocabulary. The engine's mask in state `s` then becomes
+# `table[s][t] is not None`, and the advance after a sampled token is one lookup.
+#
+# The purpose of xgrammar and llguidance is to do this ahead of time for ~100k tokens and thousands of states. For
+# the rest, they do it sufficiently fast to overlap the GPU's forward pass.
 
 # %% exercise
 def compile_token_table(vocab, states, step):
@@ -343,31 +367,40 @@ print(f"   {top!r} came out as {len(spellings[top])} different token sequences, 
       " / ".join("|".join(VOCAB_TXT[t] for t in seq) for seq in sorted(spellings[top], key=len)[:2]))
 
 # %% [markdown]
-# Three things real backends handle that this toy already shows. **The mask is per state**: `07` is legal after
-# `{"n": 1` and illegal right after `{"n": `, so the engine needs the automaton's state for every request, every
-# step. **One text, many token sequences**: the grammar allows all of them, so a constrained model can be pushed
-# into tokenizations it rarely saw in training, and a client that re-tokenizes the returned text gets different
-# ids — different block names in the prefix cache (primer §5). **A length cap cuts a legal prefix**: grammar
-# masking guarantees the output *so far* is legal, not that it finishes — check `finish_reason` (vLLM: `length`)
-# before parsing.
+# This toy already shows three things that real backends handle:
+#
+# * **The mask is per state**: `07` is legal after `{"n": 1` and illegal immediately after `{"n": `. Thus the engine
+#   needs the state of the automaton for each request, in each step.
+# * **One text, many token sequences**: the grammar permits all of them. Thus the mask can push a constrained model
+#   into tokenizations that it rarely saw in training. Also, a client that tokenizes the returned text again gets
+#   different ids. These are different block names in the prefix cache (primer §5).
+# * **A length cap cuts a legal prefix**: the grammar mask guarantees that the output *so far* is legal, not that it
+#   finishes. Examine `finish_reason` (vLLM: `length`) before you parse the output.
 #
 # ## In a design review
-# **The two-minute version.** "The engine's sampler is a pipeline over logits: grammar mask, penalties, then greedy
-# or temperature, min-p, top-k, top-p, and a draw from the request's own seeded generator. It reshapes the model's
-# distribution per step; it never changes the model. For production we default to temperature with top-p or min-p
-# because they adapt to the model's confidence, we fix seeds when we need replayable outputs, and we log raw
-# logprobs because they show what the model believed.
+# **The two-minute version.** "The engine's sampler is a pipeline over logits. It applies the grammar mask and the
+# penalties. Then it takes the greedy token, or it applies temperature, min-p, top-k and top-p and draws from the
+# request's own seeded generator. It changes the shape of the model's distribution per step, but it never changes
+# the model.
 #
-# "For machine-readable output we use structured output: the engine compiles the JSON schema into a character
-# automaton, precomputes which of the vocabulary's multi-character tokens are legal in each state, and masks the
-# rest, so an output that finishes always parses (one cut by max_tokens does not — we check finish_reason). That
-# guarantees syntax, not correctness — a model that does not know the answer will still produce a well-formed one, so
-# we validate semantics downstream and watch the logprobs of constrained fields."
+# "For production, our default is temperature with top-p or min-p, because they adapt to the model's confidence. We
+# set the seed when we need outputs that we can replay. We log raw logprobs, because they show what the model
+# believed.
+#
+# "For machine-readable output, we use structured output. The engine compiles the JSON schema into a character
+# automaton. It precomputes which multi-character tokens of the vocabulary are legal in each state, and it masks
+# the other tokens. Thus an output that finishes always parses. An output that max_tokens cuts does not parse, so we
+# examine finish_reason.
+#
+# "That guarantees syntax, not correctness. A model that does not know the answer still produces a well-formed
+# answer. Thus we make sure downstream that the semantics are correct, and we monitor the logprobs of constrained
+# fields."
 #
 # **Drill questions**
-# 1. *Why prefer top-p or min-p over top-k?* — They adapt to the distribution: few tokens when the model is sure,
-#    many when it is not; top-k keeps the same number either way.
-# 2. *Structured output is on and the JSON always parses, but the values are wrong. Why?* — The mask enforces
-#    syntax only; the model's distribution over legal tokens can still be poor. Check logprobs, improve the prompt.
-# 3. *How do you make a sampled request reproducible?* — Set `seed`: the request gets its own generator, so
-#    batch composition does not change its draws (modulo GPU numerics).
+# 1. *Why prefer top-p or min-p over top-k?* They adapt to the distribution. They keep few tokens when the model is
+#    sure, and many tokens when it is not. But top-k keeps the same number in both cases.
+# 2. *Structured output is on and the JSON always parses, but the values are incorrect. Why?* The mask enforces
+#    syntax only. The model's distribution over legal tokens can still be poor. Examine the logprobs, and improve
+#    the prompt.
+# 3. *How do you make a sampled request reproducible?* Set `seed`. The request gets its own generator. Thus the
+#    composition of the batch does not change its draws (except for GPU numerics).
