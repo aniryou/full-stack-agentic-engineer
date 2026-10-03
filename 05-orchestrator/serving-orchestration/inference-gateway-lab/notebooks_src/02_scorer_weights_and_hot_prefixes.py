@@ -1,26 +1,34 @@
 # %% [markdown]
 # # 02 · Scorer weights, hot prefixes and the herd
 #
-# **Tier:** T0 — CPU only; fake backends and the router run in-process. Backend timing is emulated,
-# so latencies are "measured on this machine, emulated backend".
+# **Tier:** T0. It needs only a CPU. The fake backends and the router run in-process. The fake
+# backends emulate the backend times, so the latencies are "measured on this machine, emulated backend".
 #
 # ## The one-minute version
 #
-# Cache affinity and load balance pull in opposite directions. Pure affinity sends every request for a popular
-# prefix to the one replica that caches it — a **hot prefix** melts that replica while the others idle. Pure
-# load balancing ignores the cache. A weighted router sits in between, and the weights decide exactly *how
-# much* load a cache hit is worth: with prefix weight $\mathit{wp}$ and load weights summing to $W$, a fully
-# cached replica keeps winning until its load scores fall more than $\mathit{wp}$ below a cold, idle
-# replica's.
+# Cache affinity and load balance pull in opposite directions. Pure affinity sends every request for
+# a popular prefix to the one replica that has it in its cache. Thus a **hot prefix** overloads that
+# replica, and the other replicas are idle. Pure load balance ignores the cache. A weighted router sits
+# between the two, and the weights decide exactly *how much* load a cache hit is worth.
 #
-# The llm-d optimized baseline replaces the arithmetic with a rule — **sticky until saturated**: filter to
-# replicas holding ≥ 80% of the prompt unless their estimated prefill backlog is too far behind the best other
-# replica, then balance by tokens in flight.
+# Let the prefix weight be $\mathit{wp}$, and let the load weights sum to $W$. Then a fully cached
+# replica continues to win until its load scores are more than $\mathit{wp}$ below the load scores
+# of a cold, idle replica.
 #
-# Two more traps: **scrape lag** (every request between two scrapes sees the same stale numbers and herds onto
-# the replica that looked idlest) and **thresholds that ignore the workload** (an 80% affinity threshold never
-# fires for a turn whose new tokens are more than 20% of its prompt — on this lab's agents, the first resumed
-# turn of every session). Background:
+# The llm-d optimized baseline replaces the arithmetic with a rule, **sticky until saturated**. First,
+# it keeps only the replicas that hold ≥ 80% of the prompt. It does not use this filter if the
+# estimated prefill backlog of those replicas is too far behind the best other replica. Then it
+# balances the load by tokens in flight.
+#
+# There are two more traps:
+#
+# - **scrape lag**: every request between two scrapes sees the same stale numbers. Thus all of these
+#   requests go as a herd to the replica that looked the most idle.
+# - **thresholds that ignore the workload**: an 80% affinity threshold never applies to a turn whose
+#   new tokens are more than 20% of its prompt. On the agents of this lab, that is the first resumed
+#   turn of every session.
+#
+# Background:
 # [PRIMER §2 Routing signals and algorithms and §3 Flow control and priorities](../../PRIMER.md).
 
 # %%
@@ -35,15 +43,16 @@ from igwlab.stack import LocalStack
 # %% [markdown]
 # ## A hot prefix
 #
-# Same agentic sessions as notebook 01, except that 80% of them belong to one agent program
-# (`hot_share=0.8`): one system prompt dominates the traffic. Four policies, each on a fresh stack:
+# The agentic sessions are the same as in notebook 01, but 80% of them belong to one agent program
+# (`hot_share=0.8`). Thus one system prompt dominates the traffic. There are four policies, each on a
+# new stack:
 #
 # | preset | what it does |
 # |---|---|
 # | `prefix-only` | `prefix-cache-scorer` alone |
 # | `load-only` | `queue-scorer` + `kv-cache-utilization-scorer` (cache-blind) |
 # | `default-weighted` | prefix ×3, queue ×2, KV ×2 (the llm-d chart default) |
-# | `sticky-until-saturated` | `prefix-cache-affinity-filter` (≥ 0.8, TTFT gate) → `token-load-scorer` |
+# | `sticky-until-saturated` | `prefix-cache-affinity-filter` (≥ 0.8, TTFT gate), then `token-load-scorer` |
 
 # %%
 from collections import Counter
@@ -61,26 +70,31 @@ p90 = {k: r.summary()["ttft_p90_ms"] for k, r in hot_results.items()}
 assert p90["sticky-until-saturated"] < p90["default-weighted"] < p90["prefix-only"], p90   # what the text below reads
 
 # %% [markdown]
-# `prefix-only` sends everything for the hot program to one replica: a top hit rate and by far the
-# worst latency, because that replica's prefill queue grows while two replicas idle. `load-only` spreads
-# evenly and pays for it in re-prefilled histories. The weighted and sticky policies both keep most
-# of the hits while letting load push traffic off a busy replica — once a second replica has served
-# the hot prefix, the index lists it too and both become "sticky".
+# `prefix-only` sends all requests for the hot program to one replica. The result is a top hit rate
+# and by far the worst latency. The reason is that the prefill queue of that replica increases while
+# two replicas are idle. `load-only` spreads the requests evenly, and the cost is that the replicas
+# prefill the histories again. The weighted and sticky policies both keep most of the hits, and they
+# also let the load move traffic off a busy replica. When a second replica has served the hot prefix,
+# the index lists it too, and both replicas become "sticky".
 #
-# **This ranking belongs to this engine and this workload.** Here `sticky-until-saturated` has a
-# clearly shorter tail (p90) than the 3:2:2 chart default, while the primer's simulated fleet
-# ([PRIMER §2.5](../../PRIMER.md)) ranks the 3:2:2 EPP ahead of it. One reason is the fake backend: it runs one prefill at a time per
-# replica, so the tokens queued for prefill *are* the delay, and a filter gated on exactly that
-# (in-flight uncached tokens ÷ prefill throughput) plus a scorer that balances tokens fits it
-# well; the queue and KV scores of 3:2:2 see a request count and memory, not prefill work. On an
-# engine with chunked prefill, other prompt lengths or a hotter prefix the order can flip — which
-# is why the weights are tuned on a replay of your own traffic.
+# **This ranking belongs to this engine and this workload.** Here, `sticky-until-saturated` has a
+# clearly shorter tail (p90) than the 3:2:2 chart default. But the primer's simulated fleet
+# ([PRIMER §2.5](../../PRIMER.md)) puts the 3:2:2 EPP ahead of it.
+#
+# One reason is the fake backend. It runs one prefill at a time per replica, so the tokens in the
+# prefill queue *are* the delay. Two parts fit this backend well. The first is a filter with a gate on exactly
+# that value (in-flight uncached tokens ÷ prefill throughput). The second is a scorer that balances
+# tokens. But the queue and KV scores of 3:2:2 see a request count and memory, not prefill work.
+#
+# On an engine with chunked prefill, other prompt lengths or a hotter prefix, the order can change to
+# the opposite. That is why you adjust the weights on a replay of your own traffic.
 #
 # ## Exercise 2.1 — when does affinity lose?
 #
-# A *sticky* replica S holds a fraction $r$ of the prompt and has load scores $q_s$ (queue) and
-# $\mathit{kv}_s$ (KV); a *cold* replica C has no prefix but is idle (queue and KV scores both 1.0). Write
-# `sticky_wins(wp, wq, wkv, r, q_s, kv_s)` → `True` if S's weighted total is **strictly** higher than C's.
+# A *sticky* replica S holds a fraction $r$ of the prompt. It has the load scores $q_s$ (queue) and
+# $\mathit{kv}_s$ (KV). A *cold* replica C has no prefix, but it is idle: its queue and KV scores are
+# both 1.0. Write `sticky_wins(wp, wq, wkv, r, q_s, kv_s)`. Make it return `True` if the weighted
+# total of S is **strictly** higher than the total of C.
 
 # %% exercise
 def sticky_wins(wp, wq, wkv, r, q_s, kv_s) -> bool:
@@ -98,16 +112,21 @@ assert sticky_wins(3, 2, 2, 0.5, 0.0, 1.0) is False     # 1.5 + 0 + 2 = 3.5 < 4
 print("✅ sticky_wins: a half-cached replica with a half-full queue still beats a cold idle one (4.5 vs 4.0)")
 
 # %% [markdown]
-# Easy to mis-predict by eye — which is why the router records a per-scorer table for every decision.
+# It is easy to predict this incorrectly by eye. That is why the router records a per-scorer table
+# for every decision.
 #
 # ## Exercise 2.2 — the weight that makes affinity unconditional
 #
-# From the weighted sum itself: each load score lies in [0, 1], so load scorers whose weights sum to $W$ can
-# move a total by at most $W$. A replica with prefix ratio $r$ therefore beats *any* cold replica regardless
-# of load only if $\mathit{wp} \cdot r > W$. (The `prefix-cache-affinity-filter` README gives the consequence
-# — a weighted prefix scorer with a max-score picker hot-spots popular prefixes — as the reason the filter
-# exists; the inequality is ours.) Write `min_prefix_weight(W, r)`: the smallest weight for which a replica at
-# ratio $r$ cannot lose to a cold one (use `>=`; at exact equality the tie is broken by the picker).
+# Start from the weighted sum itself. Each load score is in [0, 1]. Thus load scorers whose weights
+# sum to $W$ can move a total by $W$ at the most. For this reason, a replica with prefix ratio $r$
+# wins against *any* cold replica at any load only if $\mathit{wp} \cdot r > W$.
+#
+# The `prefix-cache-affinity-filter` README gives the reason why the filter exists: a weighted
+# prefix scorer with a max-score picker makes popular prefixes into hot spots. The inequality is
+# ours, not the README's.
+#
+# Write `min_prefix_weight(W, r)`. It returns the smallest weight for which a replica at ratio $r$
+# cannot lose to a cold one. Use `>=`. At exact equality, the picker breaks the tie.
 
 # %% exercise
 def min_prefix_weight(load_weight_sum: float, r: float) -> float:
@@ -124,13 +143,18 @@ print("✅ with the chart default (3 vs 2+2=4) a fully cached replica CAN lose t
 # %% [markdown]
 # ## The herd: why scraped metrics alone are not enough
 #
-# Metrics are scraped every 50 ms; between two scrapes every routing decision sees the same numbers.
-# Below, each replica has **6 batch slots**, and replicas **b** and **c** are made busy by 3 requests
-# each that do *not* go through this router (another router replica, a batch job — we send them
-# directly), so their KV usage is a little higher at the last scrape. Then we freeze the router's view
-# (stop the scraper after one refresh) and fire a burst of 12 requests at once. Free slots: a 6, b 3,
-# c 3 — exactly 12. Compare a cache-blind policy on **scraped** signals (`load-only`) with one on the
-# router's **own in-flight counts** (`active-requests`).
+# The router scrapes the metrics every 50 ms. Between two scrapes, every routing decision sees the
+# same numbers.
+#
+# In the next cell, each replica has **6 batch slots**. Replicas **b** and **c** each get 3 requests
+# that do *not* go through this router, and these requests make them busy. These requests are like
+# the traffic of another router replica or a batch job. We send them directly to b and c. Thus the
+# KV usage of b and c is higher by a small quantity at the last scrape.
+#
+# Then we keep the view of the router the same: we stop the scraper after one refresh. Then we send a
+# burst of 12 requests at the same time. The free slots are a 6, b 3, c 3, which is exactly 12.
+# Compare a cache-blind policy on **scraped** signals (`load-only`) with a policy on the router's
+# **own in-flight counts** (`active-requests`).
 
 # %%
 from igwlab.fakebackend import EngineProfile
@@ -163,12 +187,14 @@ for cfg in ("load-only", "active-requests"):
 # %% [markdown]
 # ## Exercise 2.3 — predict the burst
 #
-# Before looking at the numbers above too closely, reason it out and write the per-replica counts
-# each policy produces for the 12-request burst (a dict `{"a": .., "b": .., "c": ..}`):
+# Do not examine the numbers from the previous cell too closely yet. First, think about the result.
+# Then write the count per replica that each policy gives for the 12-request burst (a dict
+# `{"a": .., "b": .., "c": ..}`):
 #
-# * `load-only`: queue scores all tie (nobody is *waiting*); the KV score of **a** is higher by a
-#   hair. Does the size of the difference matter to `max-score-picker`?
-# * `active-requests`: the router counts only requests *it* has in flight, updated at dispatch time.
+# * `load-only`: all queue scores are equal, because no request *waits*. The KV score of **a** is
+#   higher, but only by a small quantity. Does the size of the difference matter to `max-score-picker`?
+# * `active-requests`: the router counts only the requests that *it* has in flight. It updates the
+#   counts when it dispatches a request.
 
 # %% exercise
 def predict_burst(config: str) -> dict:
@@ -185,13 +211,14 @@ for cfg in ("load-only", "active-requests"):
 print("✅ predictions match: scraped signals herd, local counters spread (but are blind to b/c's external load)")
 
 # %% [markdown]
-# Neither is right on its own. The scraped view herds all 12 onto **a**, which has 6 slots: half the
-# burst waits for the first half to finish. The local view spreads 4/4/4 and sends 8 requests to b
-# and c, which have 3 free slots each: on each, one request finds every slot taken and waits for one
-# to free. Combine
-# them: `running-requests-size-scorer` (scraped: knows about the foreign load on b and c, but frozen)
-# plus `active-request-scorer` (local: instant, but partial). The *ratio* of their weights decides
-# whether freshness or knowledge wins:
+# Neither view is correct alone. The scraped view sends all 12 requests as a herd to **a**, which
+# has 6 slots. Thus half of the burst waits until the first half finishes. The local view spreads the
+# requests 4/4/4 and sends 8 requests to b and c, which have 3 free slots each. On each of b and c,
+# one request finds all slots full and waits until one slot becomes free.
+#
+# Combine the two signals: `running-requests-size-scorer` and `active-request-scorer`. The first uses
+# scraped data: it knows about the foreign load on b and c, but its data does not change. The second is local: it is
+# instant, but partial. The *ratio* of their weights decides if freshness or knowledge wins:
 
 # %%
 def mix(w_running, w_active):
@@ -214,27 +241,32 @@ print(f"✅ running x1 + active x2 fills the free slots exactly: max TTFT {ttfts
       f"{alone['load-only']:.0f} ms (scraped only) and {alone['active-requests']:.0f} ms (local only)")
 
 # %% [markdown]
-# With the local signal weighted higher, the truly idle replica gets the largest share *and* the
-# busy ones take exactly what they have room for — here 6/3/3 fills the 6 + 3 + 3 free slots, so no
-# request waits and the worst TTFT drops several-fold against either signal alone. Weight the stale
-# signal higher and the herd is back (2:1 sends all 12 to a). The split is only this clean because
-# the burst matches the free slots; the lesson is the mechanism. This is why the EPP's recommended
-# load scorers read in-flight state the router maintains itself (`inflight-load-producer`), and why
-# a router fleet with several replicas (each blind to the others' in-flight requests) leans on
-# scraped signals and flow control.
+# When the local signal has the higher weight, the replica that is actually idle gets the largest
+# share. The busy replicas *also* take exactly what they have space for. Here, 6/3/3 fills the
+# 6 + 3 + 3 free slots. Thus no request waits, and the worst TTFT decreases several-fold against
+# either signal alone. If you give the stale signal the higher weight, the herd comes back (2:1 sends
+# all 12 to a).
+#
+# The split is this clean only because the burst matches the free slots. The lesson is the
+# mechanism. This is why the EPP's recommended load scorers read in-flight state that the router
+# keeps itself (`inflight-load-producer`). It is also why a router fleet with several replicas
+# depends on scraped signals and flow control. The reason is that each of those router replicas
+# cannot see the in-flight requests of the others.
 
 # %% [markdown]
 # ## Exercise 2.4 — an affinity threshold that fits the workload
 #
-# `sticky-until-saturated` keeps only replicas whose prefix match ratio is ≥ `affinityThreshold`
-# (default 0.80). For an agent session, the ratio its *own* replica achieves at turn $t$ is roughly
-# "blocks of turn ${t-1}$'s prompt" / "blocks of turn $t$'s prompt" — every turn adds a reply and a tool
-# result. Compute those ratios with the router's own hashing, then pick the threshold.
+# `sticky-until-saturated` keeps only the replicas whose prefix match ratio is ≥ `affinityThreshold`
+# (default 0.80). Take an agent session at turn $t$. The ratio on its *own* replica is approximately
+# "blocks of turn ${t-1}$'s prompt" / "blocks of turn $t$'s prompt". The reason is that every turn
+# adds a reply and a tool result. Calculate those ratios with the router's own hash function. Then
+# select the threshold.
 #
-# 1. `turn_ratios(prompts)`: given the request bodies of turns $0 \ldots T-1$ of one session, return for
-#    each turn $t \ge 1$ the ratio `leading equal block hashes (turn t-1 vs turn t) / blocks of turn t`
-#    (use `estimate_tokens` and `block_hashes(tokens, 64, model)`).
-# 2. `choose_threshold(ratios)`: the largest multiple of 0.05 that is ≤ the smallest ratio.
+# 1. `turn_ratios(prompts)`: the input is the request bodies of turns $0 \ldots T-1$ of one session.
+#    For each turn $t \ge 1$, return the ratio
+#    `leading equal block hashes (turn t-1 vs turn t) / blocks of turn t`.
+#    Use `estimate_tokens` and `block_hashes(tokens, 64, model)`.
+# 2. `choose_threshold(ratios)`: return the largest multiple of 0.05 that is ≤ the smallest ratio.
 
 # %% exercise
 from igwlab.router import block_hashes, estimate_tokens
@@ -288,31 +320,34 @@ print(compare(res.values()))
 print("decisions the affinity filter narrowed to sticky replicas:", pinned, f"(of {len(decisions)})")
 
 # %% [markdown]
-# The lower threshold makes the filter pin many more turns — the first resumed turn of every session
-# now counts as sticky. The hit rate moves less than that count suggests (and can even tie on a
-# given run): when the filter keeps every replica, `token-load-scorer` charges each one only this
-# request's *uncached* tokens, so it usually picks the replica that holds the history anyway. The
-# threshold is the explicit rule; the prefix-aware load score is the safety net behind it.
+# With the lower threshold, the filter pins many more turns. The first resumed turn of every session
+# now counts as sticky. The hit rate changes less than that count suggests, and on a given run the
+# two hit rates can even be equal. When the filter keeps every replica, `token-load-scorer` charges
+# each replica only the *uncached* tokens of this request. Thus it usually selects the replica that
+# holds the history anyway. The threshold is the explicit rule, and the prefix-aware load score is
+# the safety net behind it.
 
 # %% [markdown]
 # ## Exercise 2.5 — saturation and shedding
 #
-# With flow control off (the llm-d default), admission is simple: a request whose
-# `InferenceObjective` has **priority < 0** is rejected with HTTP 429 when the pool is saturated;
-# everything else is routed. That is the only admission path the lab router implements: with
-# `featureGates: [flowControl]` the real EPP instead holds requests in router-side queues by
-# priority band (with fairness and TTLs, [PRIMER §3](../../PRIMER.md)); the lab router accepts the
-# gate with a warning and keeps shedding. Saturation comes from the `utilization-detector`:
+# With flow control off (the llm-d default), admission is simple. When the pool is saturated, the
+# router rejects with HTTP 429 each request whose `InferenceObjective` has **priority < 0**. The
+# router routes all other requests. That is the only admission path that the lab router has.
+#
+# With `featureGates: [flowControl]`, the real EPP instead holds requests in router-side queues by
+# priority band (with fairness and TTLs, [PRIMER §3](../../PRIMER.md)). The lab router accepts the
+# gate with a warning and continues to shed requests. The saturation comes from the
+# `utilization-detector`:
 #
 # $$
 # \text{saturation} = \text{mean over endpoints of }
 #   \max\left(\frac{\text{waiting}}{5}, \frac{\mathrm{kv\_usage}}{0.8}\right),
 # $$
 #
-# where an endpoint with stale or missing metrics counts as 1.0 and an empty pool is 1.0.
+# Here, an endpoint with stale metrics or no metrics counts as 1.0, and an empty pool is 1.0.
 #
-# Write `pool_saturation(endpoints)` for a list of `(waiting, kv_usage, fresh)` tuples, and
-# `shed(objectives, saturation)` → sorted names of objectives that would be rejected.
+# Write `pool_saturation(endpoints)` for a list of `(waiting, kv_usage, fresh)` tuples. Also write
+# `shed(objectives, saturation)`. It returns the sorted names of the objectives that the router rejects.
 
 # %% exercise
 def pool_saturation(endpoints, tq=5, tkv=0.8) -> float:
@@ -344,30 +379,37 @@ print("✅ saturation", round(pool_saturation(eps), 3), "-> sheds", shed({"premi
 # %% [markdown]
 # ## In a design review
 #
-# **Two-minute walkthrough.** "Affinity and load are one trade-off, and the weights price it. With
-# the chart default — prefix 3 against queue 2 plus KV 2 — a fully cached replica beats a cold idle
-# one (total 4) until its load scores are more than 3 points worse: even with the deepest queue in
-# the pool (queue score 0) it keeps winning while its KV score stays above 0.5, i.e. until its KV
-# usage is ~50 points above the idle replica's. So load alone rarely pushes a hot prefix off its
-# replica; it spreads because other replicas served it too (early ties, partial matches), and then
-# several are sticky — and when that is not enough we use the optimized baseline's TTFT-gated
-# affinity filter. Pure affinity melts one replica; pure load re-prefills every history.
+# **Two-minute walkthrough.** "Affinity and load are one trade-off, and the weights give it a price.
+# Take the chart default: prefix 3 against queue 2 plus KV 2. A fully cached replica wins against a
+# cold idle one (total 4) until its load scores are more than 3 points worse. It can have the deepest
+# queue in the pool (queue score 0) and still win while its KV score stays above 0.5. That is, it
+# wins until its KV usage is ~50 points above the KV usage of the idle replica.
 #
-# "We never route on scraped metrics alone: they are up to one scrape interval stale, so a burst herds onto
-# whoever looked idlest; we combine them with the router's own in-flight counts. Thresholds come from the
-# workload: our agents' first resumed turn shares only ~73% of its blocks with the turn before, so we set the
-# affinity threshold to 0.7, not 0.8, and the prefix-aware token-load scorer covers the turns the filter lets
-# through. Under saturation only sheddable (negative-priority) objectives are dropped, with a 429."
+# "Thus load alone rarely pushes a hot prefix off its replica. The hot prefix spreads because other
+# replicas served it too (early ties, partial matches), and then several replicas are sticky. When
+# that is not sufficient, we use the TTFT-gated affinity filter of the optimized baseline. Pure
+# affinity overloads one replica. Pure load prefills every history again.
+#
+# "We never route on scraped metrics alone. They are up to one scrape interval stale, so a burst goes
+# as a herd to the replica that looked the most idle. Thus we combine them with the router's own
+# in-flight counts.
+#
+# "The thresholds come from the workload. The first resumed turn of our agents shares only ~73% of
+# its blocks with the previous turn. Thus we set the affinity threshold to 0.7, not 0.8. The
+# prefix-aware token-load scorer covers the turns that the filter lets through.
+#
+# "Under saturation, the router drops only sheddable (negative-priority) objectives, with a 429."
 #
 # **Drill questions**
 #
-# 1. *A new tenant's traffic made p99 TTFT worse after you enabled prefix routing. First suspect?*
-#    A hot prefix: one system prompt dominating, all of it sticky to one replica. Check per-replica
-#    request counts and queue depth; raise load weights, use the affinity filter's TTFT gate, or add
-#    replicas.
+# 1. *After you turned on prefix routing, the traffic of a new tenant made p99 TTFT worse. What is the
+#    first suspect?* A hot prefix: one system prompt dominates, and all of its traffic is sticky to
+#    one replica. Examine the request counts and the queue depth per replica. Increase the load
+#    weights, use the TTFT gate of the affinity filter, or add replicas.
 # 2. *Why can a KV-usage difference of 0.03 send 100% of a burst to one replica?* `max-score-picker`
-#    takes the maximum; any strict difference wins every decision until the next scrape changes it.
-# 3. *What does priority -10 mean for an InferenceObjective?* Sheddable: under saturation (with flow
-#    control off) the router rejects it with 429 before scheduling; ≥ 0 is always routed. With flow
-#    control on, the EPP queues requests by priority band instead (the lab router does not implement
-#    that path).
+#    takes the maximum. Any strict difference wins every decision until the next scrape changes it.
+# 3. *What does priority -10 mean for an InferenceObjective?* It is sheddable. Under saturation (with
+#    flow control off), the router rejects a request of this priority with 429. It does this before
+#    it schedules the request. The router always routes a request with priority ≥ 0. With flow
+#    control on, the EPP puts requests in queues by priority band instead. The lab router does not
+#    have that path.

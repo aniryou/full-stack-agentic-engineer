@@ -1,22 +1,25 @@
 # %% [markdown]
 # # 04 · Prefill/decode disaggregation
 #
-# **Tier:** T0 — CPU only, about 15 seconds, no network. Every number below is **simulated** by `fleetsim`.
+# **Tier:** T0 (CPU only, about 15 seconds, no network). Every number in this notebook is a **simulated** number from
+# `fleetsim`.
 #
 # ## The one-minute version
-# Prefill is compute-bound and bursty; decode is memory-bound and steady. On a shared engine, one 2,048-token prefill
-# chunk makes every decoding request in the batch wait half a second (on an L4). **Disaggregation** runs prefill on
-# its own pool and ships each prompt's KV cache to a decode replica: decodes stop stuttering. The bill:
+# Prefill is compute-bound, and its load comes in bursts. Decode is memory-bound, and its load is steady. On a shared
+# engine, one 2,048-token prefill chunk makes every decode request in the batch wait half a second (on an L4).
 #
-# * the **transfer** — $\text{prompt tokens} \:\times$ $\text{KV bytes/token} \:\div$ $\text{link bandwidth}$ — added
-#   to TTFT, which needs RDMA-class links on fast GPUs;
-# * **two pools to size**: the P:D ratio must match the traffic's input/output mix, or one pool idles while the other
-#   queues — small fleets fragment badly;
-# * an extra hop, for nothing, on short prompts.
+# **Disaggregation** runs prefill on a pool of its own. It sends the KV cache of each prompt to a decode replica. Thus
+# the decode steps no longer have short stops. The costs are:
 #
-# The first fix to try is a smaller prefill chunk (chunked prefill already interleaves prefill with decode).
-# Disaggregation earns its keep with long prompts, tight inter-token SLOs, fast links, and fleets large enough to
-# split. Primer §5 (and `01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md` §8).
+# * The **transfer**: $\text{prompt tokens} \:\times$ $\text{KV bytes/token} \:\div$ $\text{link bandwidth}$. The
+#   transfer adds to TTFT. On fast GPUs, the transfer needs RDMA-class links.
+# * **Two pools to size**: the P:D ratio must match the input/output mix of the traffic. If it does not, one pool is
+#   idle while requests wait in the queue of the other pool. Small fleets have bad fragmentation.
+# * An extra hop on short prompts, where the hop gives no benefit.
+#
+# The first solution to try is a smaller prefill chunk, because chunked prefill already interleaves prefill with
+# decode. Disaggregation is worth its cost when you have long prompts, tight inter-token SLOs, fast links, and fleets
+# that are sufficiently large to divide. Read Primer §5 (and `01-hardware-gpu-fabric/gpu-deployment/gpu-deployment-primer.md` §8).
 
 # %%
 import dataclasses
@@ -41,12 +44,12 @@ print(table([{"ITL p50": s["itl_p50"], "ITL p99": s["itl_p99"], "TPOT p95": s["t
             title="simulated: 4 aggregated L4 replicas, ~6k-token prompts"))
 
 # %% [markdown]
-# The median gap between tokens is one ordinary decode step; the p99 gap is a prefill chunk that some other request
-# brought into the batch. Users see that as the stream freezing mid-sentence.
+# The median gap between tokens is one ordinary decode step. The p99 gap is a prefill chunk that a different request
+# brought into the batch. Users see this gap as a stream that stops for a moment in the middle of a sentence.
 #
 # ## Exercise 4.1 — what the KV transfer costs
-# Write `kv_transfer_s(tokens, kv_bytes_per_token, link_gbps, latency_s=0.0)`: the prompt's KV bytes, converted to
-# bits, over a link of `link_gbps` gigabits per second, plus a fixed latency.
+# Write `kv_transfer_s(tokens, kv_bytes_per_token, link_gbps, latency_s=0.0)`. Convert the KV bytes of the prompt to
+# bits. Divide the bits by the link speed, `link_gbps` gigabits per second. Then add a constant latency.
 
 # %% exercise
 def kv_transfer_s(tokens, kv_bytes_per_token, link_gbps, latency_s=0.0):
@@ -62,9 +65,9 @@ print("✅ kv_transfer_s works — 128 KiB per token adds up: a 4k prompt is hal
 
 # %% [markdown]
 # ## Exercise 4.2 — fast GPUs need fast links
-# A transfer is tolerable if it costs at most 10 % of the prefill it replaces. For a 6,000-token prompt, return the
-# links (from `links`, in Gb/s) that meet that budget on an **L4** and on an **H100** (prefill time =
-# `tokens / profile.compute_tok_s`).
+# A transfer is acceptable if it costs at most 10 % of the prefill that it replaces. For a 6,000-token prompt, return
+# the links that meet this budget on an **L4** and on an **H100**. Select the links from `links` (in Gb/s). The
+# prefill time is `tokens / profile.compute_tok_s`.
 
 # %% exercise
 links = {"10 GbE": 10, "25 GbE": 25, "100 GbE": 100, "400G RDMA": 400,
@@ -85,9 +88,12 @@ print(f"✅ L4 (prefill {6000 / L4_8B.compute_tok_s:.2f} s): {on_l4}\n   H100 (p
 
 # %% [markdown]
 # ## Worked example — every split of eight GPUs
-# Eight L4 replicas, 1.2 req/s of ~6k-token prompts, 100 Gb/s link. `search_pd` runs every xPyD split (0 prefill =
-# aggregated) on the same traffic; the SLO is TTFT <= 3 s and TPOT <= 80 ms. Next to it, the analytic plan. (The
-# fleets here are fixed-size: `fleetsim` does not autoscale P/D pools — the planners of primer §4.5 do.)
+# The fleet has eight L4 replicas and a 100 Gb/s link. The traffic is 1.2 req/s of ~6k-token prompts. `search_pd`
+# runs every xPyD split on the same traffic (0 prefill = aggregated). The SLO is a TTFT of at most 3 s and a
+# TPOT of at most 80 ms. The analytic plan is next to the results.
+#
+# The fleets in this example have a constant size. `fleetsim` does not autoscale P/D pools, but the planners of
+# primer §4.5 do.
 
 # %%
 def heavier():
@@ -100,19 +106,25 @@ plan = pd_plan(p, rate=1.2, isl=6060, osl=250, itl_slo_s=0.08)
 print({k: round(v, 2) for k, v in plan.items()})
 
 # %% [markdown]
-# The analytic plan asks for about 2.75 prefill and 4.2 decode replicas — 3P5D, which is also the simulator's winner.
-# Everything else is lopsided: too few prefill replicas and TTFT explodes in the prefill queue; too few decode
-# replicas and TPOT does. Aggregated serving meets the TTFT SLO but not the tight TPOT one, because of the chunk stall.
+# The analytic plan asks for about 2.75 prefill replicas and 4.2 decode replicas. Rounded up, this plan is 3P5D, and
+# 3P5D is also the best split in the simulator. All the other splits have a bad balance. With too few prefill
+# replicas, TTFT increases very fast in the prefill queue. With too few decode replicas, TPOT increases very fast. The
+# aggregated fleet meets the TTFT SLO but not the tight TPOT SLO, because of the chunk stall.
 #
 # ## Exercise 4.3 — the decode side of the plan
-# The prefill side is division: 1.2 req/s x 6,060 tokens over 3,781 tok/s at a 0.7 utilisation cap is 2.75
-# replicas. The decode side hinges on one number — how many requests a decode replica can batch — and that is capped
-# three ways: `profile.max_seqs`; the KV pool, which must hold every request's context (`profile.kv_blocks` blocks
-# of `profile.block` tokens; `ctx` tokens of context plus the next token need
-# $\lceil (\text{ctx} + 1) / \text{block} \rceil$ blocks); and
-# the ITL SLO, which one decode step for the whole batch, `decode_step_s(profile, batch, ctx)`, must meet. Write
-# `largest_decode_batch(profile, ctx, itl_slo_s)` (0 if even one request misses the SLO), and **predict** which cap
-# binds for the plan above — `ctx` = 6,060 + 250 / 2 = 6,185 on the L4 with an 80 ms SLO: `"kv"` or `"itl"`.
+# The prefill side is a division: 1.2 req/s x 6,060 tokens over 3,781 tok/s at a 0.7 utilisation cap is 2.75
+# replicas. The decode side depends on one number: the number of requests that a decode replica can batch. Three
+# limits apply to this number:
+#
+# * `profile.max_seqs`.
+# * The KV pool, which must hold the context of every request. The pool has `profile.kv_blocks` blocks of
+#   `profile.block` tokens. `ctx` tokens of context plus the next token need
+#   $\lceil (\text{ctx} + 1) / \text{block} \rceil$ blocks.
+# * The ITL SLO. One decode step for the whole batch, `decode_step_s(profile, batch, ctx)`, must meet this SLO.
+#
+# Write `largest_decode_batch(profile, ctx, itl_slo_s)`. If even one request misses the SLO, return 0. Then
+# **predict** which limit sets the batch for the plan of the worked example: `"kv"` or `"itl"`. For this plan, `ctx` =
+# 6,060 + 250 / 2 = 6,185 on the L4, with an 80 ms SLO.
 
 # %% exercise
 def largest_decode_batch(profile, ctx, itl_slo_s):
@@ -145,8 +157,9 @@ print(f"✅ batch {b} (KV fits {kv_fit}, the ITL SLO alone {itl_fit}) -> {n_d:.2
 
 # %% [markdown]
 # ## Worked example — try smaller prefill chunks first
-# Chunked prefill already interleaves prefill with decode; a smaller token budget per step makes each stall shorter.
-# Because a decode step is memory-bound, a small prefill chunk rides along almost for free (Sarathi-Serve's insight).
+# Chunked prefill already interleaves prefill with decode. A smaller token budget per step makes each stall shorter.
+# Because a decode step is memory-bound, a small prefill chunk goes into the same step at almost no cost (the insight
+# of Sarathi-Serve).
 
 # %%
 rows = []
@@ -158,19 +171,29 @@ for budget in (2048, 1024, 512, 256):
 print(table(rows, title="simulated: 8 aggregated L4 replicas, chunk budget sweep"))
 
 # %% [markdown]
-# On this model and GPU the chunk-budget knob does as well as the best split — one pool, no network, no ratio to
-# maintain. Two things the step model leaves out make this the optimistic end: it has no per-chunk efficiency loss
-# (real engines lose some prefill efficiency at small chunks), and its prefill compute is linear in tokens (no
-# attention FLOPs — about +10 % for these 6k-token prompts, more for longer ones), which flatters every row's TTFT.
-# Bigger models make each decode step shorter relative to a chunk — which is where disaggregation pulls ahead
-# (DistServe, Splitwise, the llm-d P/D guide: medium-large models, long inputs).
+# On this model and GPU, the chunk-budget knob gives results as good as the best split. This solution uses one pool,
+# no network, and no ratio to maintain. Two things that the step model leaves out make this result the optimistic end:
+#
+# * The step model has no per-chunk efficiency loss. Real engines lose some prefill efficiency at small chunks.
+# * The prefill compute of the step model is linear in tokens. The step model has no attention FLOPs, which add about
+#   +10 % for these 6k-token prompts, and more for longer prompts. Thus the TTFT of every row looks better than it is.
+#
+# Larger models make each decode step shorter in comparison with a chunk. With these models, disaggregation becomes
+# the better choice (DistServe, Splitwise, the llm-d P/D guide: medium-large models, long inputs).
 #
 # ## Exercise 4.4 — disaggregate only the prompts worth it
-# Real traffic mixes short chat turns with long RAG prompts. In llm-d the endpoint picker decides per request: it
-# picks the decode pod first, then its `prefix-based-pd-decider` sends the prompt to a prefill pod only if at least
-# `nonCachedTokens` of it are not cached on that decode pod (`pd_threshold` here); the decode pod's sidecar carries
-# the decision out. **Predict** which threshold gives a 2P6D fleet the best SLO attainment on this mix: `0`
-# (disaggregate everything), `2048` (only long prompts) or `100_000` (never — the prefill pool idles).
+# In practice, traffic mixes short chat turns with long RAG prompts. In llm-d, the endpoint picker decides for each
+# request. First, it selects the decode pod. Then its `prefix-based-pd-decider` examines the cache of that decode pod.
+# It sends the prompt to a prefill pod only if at least `nonCachedTokens` tokens of the prompt are not in that cache.
+#
+# In this notebook, `pd_threshold` holds the value of `nonCachedTokens`. The sidecar of the decode pod does what the
+# decision says.
+#
+# **Predict** which threshold gives a 2P6D fleet the best SLO attainment on this mix. The choices are:
+#
+# * `0` (disaggregate everything).
+# * `2048` (only long prompts).
+# * `100_000` (never: the prefill pool is idle).
 
 # %% exercise
 best_threshold = None
@@ -194,18 +217,25 @@ print("✅ conditional disaggregation: pay the hop only where the stall it remov
 
 # %% [markdown]
 # ## In a design review
-# **Two-minute version.** "Disaggregation separates two phases with opposite bottlenecks so each pool can be batched
-# and parallelised for its own phase, and decode never waits for a prefill chunk. Before proposing it I would check
-# three numbers: the stall it removes — p99 inter-token latency against our SLO, after tuning the chunk budget; the
-# KV transfer it adds — $\text{prompt tokens} \times \text{KV bytes per token}$ over our link, compared with the
-# prefill time; and whether the fleet is big enough to split at the traffic's P:D ratio without fragmenting. If yes,
-# xPyD sized from that ratio, conditional on prompt length, over RDMA — llm-d or Dynamo with NIXL. If not, aggregated
-# with a tuned chunk budget."
+# **Two-minute version.** "Disaggregation separates two phases that have opposite bottlenecks. Thus we can set the
+# batch and the parallelism of each pool for its own phase, and decode never waits for a prefill chunk. Before I
+# propose it, I will examine three numbers:
+#
+# "First, the stall that it removes: the p99 inter-token latency against our SLO, after we adjust the chunk budget.
+# Second, the KV transfer that it adds: $\text{prompt tokens} \times \text{KV bytes per token}$ over our link, in
+# comparison with the prefill time. Third, the size of the fleet: is it sufficiently large to divide at the P:D
+# ratio of the traffic without fragmentation?
+#
+# "If the answer is yes, we use xPyD, sized from that ratio, conditional on prompt length, over RDMA: llm-d or Dynamo
+# with NIXL. If the answer is no, we use an aggregated fleet with an adjusted chunk budget."
 #
 # **Drills**
-# 1. *When does disaggregation make things worse?* Short prompts (no stall to remove, an extra hop), slow links (the
-#    transfer rivals the prefill), a split that does not match the input/output ratio, and small fleets.
-# 2. *How do you size the pools?* Prefill replicas from prompt tokens/s at a utilisation cap; decode replicas from
-#    output tokens/s at the ITL SLO (bounded by KV capacity); re-derive whenever the input/output mix shifts.
-# 3. *Why does a faster GPU make the network matter more?* Prefill time shrinks with FLOP/s but the KV bytes do not;
-#    the same transfer becomes a larger fraction of TTFT, so H100-class prefill wants RDMA or NVLink, not 100 GbE.
+# 1. *When does disaggregation make things worse?* Short prompts make it worse: there is no stall to remove, and the
+#    hop is extra. Slow links make it worse: the transfer takes about as long as the prefill. A split that does not
+#    match the input/output ratio and small fleets also make it worse.
+# 2. *How do you size the pools?* Calculate the prefill replicas from the prompt tokens/s at a utilisation cap.
+#    Calculate the decode replicas from the output tokens/s at the ITL SLO, with the KV capacity as a limit.
+#    Calculate them again each time the input/output mix changes.
+# 3. *Why does a faster GPU make the network matter more?* The prefill time decreases as the FLOP/s increase, but
+#    the KV bytes stay the same. Thus the same transfer becomes a larger fraction of TTFT, and H100-class prefill
+#    needs RDMA or NVLink, not 100 GbE.

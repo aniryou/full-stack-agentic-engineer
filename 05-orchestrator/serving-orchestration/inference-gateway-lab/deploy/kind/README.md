@@ -1,17 +1,18 @@
 # deploy/kind — the real llm-d Router on a laptop (T0 + Docker, CPU only)
 
-A one-node kind cluster with:
+This is a kind cluster with one node. The cluster has these parts:
 
-- the CRDs: `InferencePool` v1 (Gateway API Inference Extension v1.6.2) and `InferenceObjective`
-  v1alpha2 (llm-d-router v0.10.0);
-- three `llm-d-inference-sim` pods (`sim-deployment.yaml`: the fake backend's per-request latency
-  formula and prefix cache, but no queueing of prefills behind each other — see `../local/README.md`);
-- the **llm-d Router in standalone mode** from the `llm-d-router-standalone` Helm chart
-  (`router-values.yaml`): the EPP plus an Envoy sidecar listening on :8081, an `InferencePool` named
-  after the release (`igw`) selecting `app: vllm-sim`, and the objectives `premium` (100) and `batch` (−10).
+- The CRDs: `InferencePool` v1 (Gateway API Inference Extension v1.6.2) and `InferenceObjective`
+  v1alpha2 (llm-d-router v0.10.0).
+- Three `llm-d-inference-sim` pods (`sim-deployment.yaml`). They have the per-request latency formula and the
+  prefix cache of the fake backend. But they do not put prefills in a queue behind each other (see
+  `../local/README.md`).
+- The **llm-d Router in standalone mode**, from the `llm-d-router-standalone` Helm chart (`router-values.yaml`).
+  It contains the EPP with an Envoy sidecar that listens on :8081, and an `InferencePool`. The pool has the name of
+  the release (`igw`) and selects `app: vllm-sim`. The Router also contains the objectives `premium` (100) and `batch` (−10).
   The EPP runs the lab preset `default-weighted` verbatim (`router.epp.pluginsCustomConfig`).
 
-**Cost:** free (local CPU). **Cleanup:** `./down.sh`.
+**Cost:** free (local CPU). **Cleanup:** run `./down.sh`.
 
 ```bash
 ./up.sh                                               # DRY_RUN=1 ./up.sh to see every command first
@@ -21,16 +22,16 @@ kubectl logs deploy/igw-epp -c epp | tail             # the EPP's own view (JSON
 ./down.sh                                             # deletes the kind cluster
 ```
 
-Requirements: Docker, `kind` (v0.30+; the node image `kindest/node:v1.34.0` is marked verify),
-`kubectl`, `helm` (v3.14+ for OCI charts). The chart's default EPP requests (8 CPU, 8 GiB) are reduced
-in `router-values.yaml` so it fits on a laptop.
+Requirements: Docker, `kind` (v0.30+), `kubectl` and `helm` (v3.14+ for OCI charts). The node image
+`kindest/node:v1.34.0` of kind has the mark verify. `router-values.yaml` decreases the default EPP requests of the
+chart (8 CPU, 8 GiB), so that the EPP fits on a laptop.
 
-Versions are env-overridable: `GAIE_VERSION` (v1.6.2), `ROUTER_VERSION` (v0.10.0),
-`ROUTER_CHART_VERSION` (defaults to `ROUTER_VERSION`; the llm-d guides use the floating channel `v0`).
-All marked (verify): check the release pages before relying on them.
+You can override the versions with environment variables: `GAIE_VERSION` (v1.6.2), `ROUTER_VERSION` (v0.10.0) and
+`ROUTER_CHART_VERSION`. `ROUTER_CHART_VERSION` has the default `ROUTER_VERSION`. The llm-d guides use the floating
+channel `v0`. All of these versions have the mark (verify). Examine the release pages before you trust them.
 
-**Optional — Gateway mode on kind.** Instead of the standalone chart, install a Gateway API
-implementation that supports InferencePool (the llm-d guides document agentgateway and Istio; verify
-current versions), then the `llm-d-router-gateway` chart with `--set httpRoute.create=true` and an
-HTTPRoute whose backendRef is the InferencePool. `deploy/gke/gateway.yaml` shows the object shapes
-(swap the GatewayClass for your implementation's).
+**Optional: Gateway mode on kind.** Instead of the standalone chart, install a Gateway API
+implementation that supports InferencePool. The llm-d guides document agentgateway and Istio (verify the current versions).
+Then install the `llm-d-router-gateway` chart with `--set httpRoute.create=true`, and an HTTPRoute whose backendRef
+is the InferencePool. `deploy/gke/gateway.yaml` shows the shapes of the objects. Replace the GatewayClass with the
+GatewayClass of your implementation.

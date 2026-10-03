@@ -1,24 +1,31 @@
 # %% [markdown]
 # # 01 · Why LLM load balancing is different
 #
-# **Tier:** T0 — CPU only, about 10 seconds, no network. Every number below is **simulated** by `fleetsim` (an engine
-# model built from spec-sheet arithmetic), not measured on a GPU.
+# **Tier:** T0. CPU only, about 10 seconds, no network. `fleetsim` **simulates** every number in this notebook.
+# `fleetsim` is an engine model that uses spec-sheet arithmetic. No number in this notebook comes from a measurement
+# on a GPU.
 #
 # ## The one-minute version
-# A web load balancer assumes requests are small, similar and stateless, so spreading them evenly *by count* spreads
-# the *work* evenly. LLM requests break all three assumptions:
+# A web load balancer assumes three things about requests: they are small, they are similar and they have no state.
+# Thus, when it divides them equally *by count*, it also divides the *work* equally. LLM requests break all three
+# assumptions:
 #
-# 1. **Cost varies by one to two orders of magnitude and is unknown up front.** A 6,000-token RAG prompt is five
-#    times the prefill of a chat turn, and nobody knows the output length until generation stops.
-# 2. **Capacity is KV-cache memory and step time, not CPU.** A replica is "full" when its KV blocks are; overload
-#    shows up as queueing and preemption long before anything looks like a CPU alarm.
-# 3. **Replicas are caches.** The replica that already holds a prompt's prefix serves it for a fraction of the cost —
-#    that is notebook 02.
+# 1. **The cost of requests is different by one to two orders of magnitude, and nobody knows it at the start.** A
+#    6,000-token RAG prompt has five times the prefill of a chat turn. Nobody knows the output length until the
+#    generation stops.
+# 2. **Capacity is KV-cache memory and step time, not CPU.** A replica is "full" when its KV blocks are full.
+#    Overload shows as a queue and as preemption long before anything looks like a CPU alarm.
+# 3. **Replicas are caches.** The replica that already holds the prefix of a prompt serves it for a fraction of the
+#    cost. Notebook 02 is about that.
 #
-# After this notebook you can explain, with numbers, why round-robin and least-connections leave latency on the
-# table, why power-of-two-choices is the robust default when load is all a router looks at, why a router's own
-# dispatch counters beat stale scraped metrics, and how a router-side queue with a per-endpoint cap and priorities
-# (llm-d flow control) protects interactive traffic — with the cap sized by Little's law.
+# After this notebook, you can explain these points with numbers:
+#
+# - why round-robin and least-connections give a higher latency than necessary,
+# - why power-of-two-choices is the robust default when a router looks only at load,
+# - why the dispatch counters of the router itself are better than stale scraped metrics,
+# - how a router-side queue with a per-endpoint cap and priorities (llm-d flow control) protects interactive
+#   traffic, with a cap that you calculate with Little's law.
+#
 # Primer: `05-orchestrator/serving-orchestration/PRIMER.md` §1–3.
 
 # %%
@@ -40,18 +47,23 @@ for label, tokens, kv in [("decode, batch 1, 2,000-token context", 1, 2001),
 print(table(rows, title="simulated step times, 8B bf16 on one L4"))
 
 # %% [markdown]
-# Read the table as a roofline. A decode step costs about the same whether it carries 1 request or 16 — the weights
-# are streamed once either way — so batching is nearly free throughput. A prefill chunk is compute-bound and ten
-# times longer; every request decoding in the same batch waits for it (notebook 04 is about that stall).
+# Read the table as a roofline. A decode step costs about the same with 1 request or 16 requests, because the engine
+# reads the weights one time in each case. Thus batching adds throughput at almost no cost. A prefill chunk is
+# compute-bound and ten times longer. Each request that decodes in the same batch waits for it (notebook 04 is about
+# that stall).
 #
 # ## Exercise 1.1 — how different are two requests?
-# A request occupies a replica in three currencies: **prefill compute** (its uncached prompt tokens divided by
-# `p.compute_tok_s`), **KV memory** ($\lceil (\text{prompt} + \text{output}) / \mathrm{p.block} \rceil$ blocks at the
-# end), and **residency** (it stays in the batch for roughly `output` decode steps; take `step_s = 0.07`, a typical
-# busy step here). Write `footprint(p, prompt, output, cached=0, step_s=0.07)` returning a dict with keys
-# `prefill_s`, `kv_blocks`, `residency_s` ($\text{prefill time} + \text{output} \times \mathrm{step\_s}$) and
-# `block_seconds` ($\mathrm{kv\_blocks} \times \mathrm{residency\_s}$ — the memory-time product a replica has to give
-# this request).
+# A request uses a replica in three currencies:
+#
+# - **prefill compute**: its uncached prompt tokens divided by `p.compute_tok_s`.
+# - **KV memory**: $\lceil (\text{prompt} + \text{output}) / \mathrm{p.block} \rceil$ blocks at the end.
+# - **residency**: the request stays in the batch for approximately `output` decode steps. Use `step_s = 0.07`, a
+#   typical busy step here.
+#
+# Write `footprint(p, prompt, output, cached=0, step_s=0.07)`. It returns a dict with the keys `prefill_s`,
+# `kv_blocks`, `residency_s` ($\text{prefill time} + \text{output} \times \mathrm{step\_s}$) and `block_seconds`
+# ($\mathrm{kv\_blocks} \times \mathrm{residency\_s}$). `block_seconds` is the memory-time product that a replica
+# must give to this request.
 
 # %% exercise
 import math
@@ -82,8 +94,8 @@ print("✅ footprint works")
 
 # %% [markdown]
 # ## Worked example — five routers, one heterogeneous fleet
-# Four L4 replicas serve a mix of chat turns and RAG requests near saturation. Every router below looks at **load
-# only** (notebook 02 adds the cache). `PowerOfTwo(d=1)` is plain random choice.
+# Four L4 replicas serve a mix of chat turns and RAG requests near saturation. Each router in this example looks at
+# **load only** (notebook 02 adds the cache). `PowerOfTwo(d=1)` is a plain random choice.
 
 # %%
 def mixed():
@@ -102,14 +114,16 @@ print(table([{"router": k, **{c: v[c] for c in cols}} for k, v in results.items(
             title=f"simulated: {len(expand(mixed()))} requests, 4x L4, chat + RAG"))
 
 # %% [markdown]
-# Random choice has the worst tail, and round-robin — perfectly fair *in request count* — is not far behind: it
-# hands a replica its next request on schedule even when that replica is chewing through two RAG prompts.
-# Least-outstanding and power-of-two react to what is actually in flight and cut the p95 roughly in half. The best
-# row looks at the engine's own **queue**: waiting requests are the direct cause of TTFT.
+# Random choice has the worst tail. Round-robin is perfectly fair *in request count*, but its tail is not far from
+# the worst. Round-robin gives a replica its next request on schedule, even when that replica still works through
+# two RAG prompts. Least-outstanding and power-of-two react to the requests that are really in flight. They decrease
+# the p95 by approximately one half. The best row looks at the **queue** of the engine itself, because the requests
+# in that queue are the direct cause of TTFT.
 #
 # ## Exercise 1.2 — power of two choices
-# Write `p2c(loads, rng)`: sample **two distinct** indices uniformly at random (`rng.sample`), return the one with the
-# lower load (ties: the first sampled). This is the whole algorithm; it needs no global scan and no coordination.
+# Write `p2c(loads, rng)`. Sample **two different** indices uniformly at random (`rng.sample`). Return the index
+# with the lower load. If the two loads are equal, return the first index that you sampled. This is the full
+# algorithm. It needs no global scan and no coordination.
 
 # %% exercise
 def p2c(loads, rng):
@@ -128,11 +142,13 @@ print(f"✅ p2c works — the idle replica gets {share:.1%} of new requests, the
 
 # %% [markdown]
 # ## Worked example — stale metrics make an argmin router herd
-# An endpoint picker that scrapes `/metrics` sees a snapshot. If it sends every request to the replica with the
-# lowest scraped `num_requests_running`, then every request in a burst sees the *same* minimum and lands on the same
-# replica until the next scrape. Below, traffic arrives in 5-second bursts of 16 req/s; the snapshot is refreshed at
-# most every `metrics_age` seconds. (llm-d's EPP refreshes every 50 ms by default; a router fed by a 15-s Prometheus
-# scrape would be far staler.)
+# An endpoint picker that scrapes `/metrics` sees a snapshot. If the picker sends each request to the replica with
+# the lowest scraped `num_requests_running`, each request in a burst sees the *same* minimum. Thus all these
+# requests go to the same replica until the next scrape.
+#
+# In the next cell, traffic arrives in 5-second bursts of 16 req/s. The picker refreshes the snapshot at most every
+# `metrics_age` seconds. By default, the EPP of llm-d refreshes every 50 ms. A router that gets its data from a 15-s
+# Prometheus scrape has data that is much older.
 
 # %%
 bursts = [(t, 16.0 if (t // 5) % 4 == 1 else 2.0) for t in range(0, 240, 5)]
@@ -147,10 +163,13 @@ for age in (0.05, 2.0, 10.0):
 print(table(rows, title="simulated: bursty chat, 4x L4"))
 
 # %% [markdown]
-# The argmin router degrades as its data ages; power-of-two on the *same* stale data barely moves, because two random
-# candidates rarely both look idle (Mitzenmacher, "How useful is old information?"). The router's own counters —
-# requests it dispatched and has not seen finish — are never stale, which is why load-aware routers keep them.
-# (The simulator models staleness as a maximum age: a snapshot is re-read on the first look after it expires.)
+# The argmin router becomes worse as its data gets older. Power-of-two on the *same* stale data stays almost the
+# same, because two random candidates rarely both look idle (Mitzenmacher, "How useful is old information?"). The
+# counters of the router itself count the requests that the router dispatched and that it has not seen finish. These
+# counters are never stale. Thus load-aware routers keep them.
+#
+# The simulator models staleness as a maximum age. The simulator reads a snapshot again on the first look after the
+# snapshot expires.
 
 # %% check
 by = {(r["metrics age s"], r["router"]): r["ttft_p95"] for r in rows}
@@ -161,10 +180,10 @@ print("✅ stale data makes argmin herd; p2c and the router's own counters do no
 
 # %% [markdown]
 # ## Exercise 1.3 — predict the herd
-# A router holds the stale snapshot `loads = [3, 1, 4, 2]` for a whole burst of 8 requests (it counts nothing
-# itself). Write `herd(loads, burst, picker, rng)` that applies `picker(loads, rng)` to each request of the burst
-# **without updating `loads`**, and returns how many requests each replica received. Then predict: how many of the 8
-# land on replica 1 with an argmin picker, and how many (on average) with `p2c`?
+# A router holds the stale snapshot `loads = [3, 1, 4, 2]` for a full burst of 8 requests. The router counts nothing
+# itself. Write `herd(loads, burst, picker, rng)`. It applies `picker(loads, rng)` to each request of the burst,
+# **and it does not update `loads`**. It returns the number of requests that each replica received. Then predict:
+# how many of the 8 go to replica 1 with an argmin picker, and how many (on average) with `p2c`?
 
 # %% exercise
 def herd(loads, burst, picker, rng):
@@ -197,13 +216,15 @@ print(f"✅ argmin sends all 8 to replica 1; p2c sends {mean:.2f} on average and
 
 # %% [markdown]
 # ## Exercise 1.4 — pick the load signal
-# For each situation, choose the router from `{"round-robin", "least-outstanding", "power-of-two"}` that a design
-# review should accept, using what this notebook showed. Put your answers in `choice`.
+# For each situation, select the router from `{"round-robin", "least-outstanding", "power-of-two"}` that a design
+# review accepts, on the evidence of this notebook. Put your answers in `choice`.
 #
-# * **a** — one router process, requests of very different sizes, the router can count its own in-flight requests.
-# * **b** — twenty router replicas (each sees only its own traffic) reading a shared metrics snapshot that is a few
+# * **a**: one router process, requests with large differences in size, and the router can count its own in-flight
+#   requests.
+# * **b**: twenty router replicas that each see only their own traffic, and a shared metrics snapshot that is a few
 #   seconds old.
-# * **c** — identical, tiny requests (e.g. an embedding model with fixed-length inputs) and a cheap, dumb proxy.
+# * **c**: identical, small requests (for example, an embedding model with fixed-length inputs) and a low-cost,
+#   simple proxy.
 
 # %% exercise
 choice = {"a": None, "b": None, "c": None}
@@ -219,14 +240,18 @@ print("✅ right signal for each situation")
 
 # %% [markdown]
 # ## Worked example — flow control: queue in the router, not in the engines
-# Every router above commits a request to a replica the moment it arrives; if that replica is busy, the request
-# waits in *its* queue even when another replica frees up first. llm-d's **flow control** holds requests in the
-# router instead and dispatches one only to an endpoint below a per-endpoint cap on requests in flight (its
-# `concurrency-detector`, `maxConcurrency`), highest priority first (`InferenceObjective.priority`), FCFS within a
-# priority. `fleetsim.FlowControl` models exactly that, plus a TTL and a queue bound that shed requests.
+# Each router in the earlier examples commits a request to a replica at the moment that the request arrives. If that
+# replica is busy, the request waits in the queue of *that* replica, even when a different replica becomes free
+# first.
 #
-# Two flows share four L4 replicas: an **interactive** chat (1 req/s, priority 1) and a **batch** job whose RAG
-# traffic bursts from 0.2 to 1.6 req/s for two minutes (priority 0). The burst saturates the fleet.
+# The **flow control** of llm-d holds the requests in the router instead. It dispatches a request only to an
+# endpoint that is below a per-endpoint cap on requests in flight (its `concurrency-detector`, `maxConcurrency`). It
+# dispatches the highest priority first (`InferenceObjective.priority`). In one priority, it dispatches in FCFS order.
+# `fleetsim.FlowControl` models exactly that, and also a TTL and a queue bound that shed requests.
+#
+# Two flows share four L4 replicas: an **interactive** chat (1 req/s, priority 1) and a **batch** job with RAG
+# traffic (priority 0). The batch traffic increases from 0.2 to 1.6 req/s for two minutes in a burst. The burst
+# saturates the fleet.
 
 # %%
 def two_flows():
@@ -254,20 +279,28 @@ for cap in (4, 32):
 print(table(flow_rows, title="simulated: interactive chat + a batch RAG burst on 4x L4 (SLO: TTFT <= 2 s)"))
 
 # %% [markdown]
-# Dispatching immediately lets the burst push the interactive flow past its 2 s SLO: it queues in the engines behind
-# batch prompts, and KV runs out (preemptions). A cap of 4 per endpoint **starves the GPUs**: the fleet can complete
-# at most $\text{cap} \times \text{replicas} / (\text{time in system})$ requests per second, fewer than arrive, so
-# the router queue grows to over a hundred and the batch flow waits minutes; priority keeps the interactive flow
-# moving, and the cap removes preemption (at most 4 requests hold KV per replica), but capacity sits idle. A cap of
-# 32 never binds: the router queue stays empty and priority has nothing to reorder. The cap is a sizing question.
+# With immediate dispatch, the burst pushes the interactive flow past its 2 s SLO. The interactive requests wait in
+# the queues of the engines behind batch prompts, and the KV cache runs out (preemptions).
+#
+# A cap of 4 per endpoint **starves the GPUs**. The fleet can complete at most
+# $\text{cap} \times \text{replicas} / (\text{time in system})$ requests per second, and that is fewer than arrive.
+# Thus the router queue grows to more than a hundred, and the batch flow waits for minutes. Priority keeps the
+# interactive flow in motion. The cap removes preemption, because at most 4 requests hold KV per replica. But
+# capacity stays idle.
+#
+# A cap of 32 is never the limit. The router queue stays empty, and priority has nothing to put in a new order. The
+# cap is a question of correct size.
 #
 # ## Exercise 1.5 — size the cap with Little's law
-# In steady state the number of requests in a system equals the arrival rate times the mean time each spends in it
-# (Little's law; it holds for any router and any queueing discipline). Write `concurrency_cap(peak_rps,
-# mean_e2e_s, replicas)`: the smallest integer per-endpoint cap that lets the fleet hold everything the peak puts in
-# flight. The check measures the peak's arrival rate and mean end-to-end time from the `immediate` run, compares
-# Little's law with the in-flight count the simulator actually saw, and runs your cap. Also **predict** which flow's
-# p95 TTFT improves most with your cap and priorities: `"interactive"` or `"batch"`.
+# In steady state, the number of requests in a system equals the arrival rate times the mean time that each request
+# spends there. This is Little's law. It is true for any router and any queue discipline.
+#
+# Write `concurrency_cap(peak_rps, mean_e2e_s, replicas)`. It returns the smallest integer per-endpoint cap that
+# lets the fleet hold everything that the peak puts in flight.
+#
+# The check measures the arrival rate and the mean end-to-end time of the peak from the `immediate` run. It compares
+# Little's law with the in-flight count that the simulator really saw. Then it runs your cap. Also **predict** which
+# flow gets the largest improvement in p95 TTFT with your cap and priorities: `"interactive"` or `"batch"`.
 
 # %% exercise
 import math
@@ -303,23 +336,32 @@ print(f"✅ λ = {lam:.2f}/s x W = {w:.1f} s = {lam * w:.0f} in flight (the simu
 
 # %% [markdown]
 # ## In a design review
-# **Two-minute version.** "LLM requests are not interchangeable: prefill work, KV memory and residency time each vary
-# by an order of magnitude or more across a realistic mix, and the output length is unknown up front. So counting
-# requests does not balance work. Load-aware routing needs a signal close to the cause of latency — the engine's
-# waiting queue and its KV usage — plus the router's own in-flight counters, which are never stale. When several
-# router replicas act on scraped metrics, argmin herds; power-of-two-choices keeps nearly all the benefit with none
-# of the coordination. Under saturation I hold requests in the router — flow control with a per-endpoint cap sized
-# by Little's law and a priority per workload — so interactive traffic jumps the queue instead of waiting behind a
-# batch job inside an engine. And all of this is before the biggest lever: replicas are caches (notebook 02)."
+# **Two-minute version.** "LLM requests are not interchangeable. Prefill work, KV memory and residency time are each
+# different by an order of magnitude or more across a realistic mix. Also, nobody knows the output length at the start.
+# Thus a count of requests does not balance work.
+#
+# "Load-aware routing needs a signal near to the cause of latency: the waiting queue of the engine and its KV usage.
+# It also needs the in-flight counters of the router itself, which are never stale.
+#
+# "When several router replicas act on scraped metrics, argmin causes a herd. Power-of-two-choices keeps almost all
+# the benefit and needs no coordination. Under saturation, I hold requests in the router. I use flow control with a
+# per-endpoint cap from Little's law and a priority for each workload. Thus interactive traffic goes to the front of
+# the queue, and it does not wait behind a batch job in an engine. And all of this comes before the largest lever:
+# replicas are caches (notebook 02)."
 #
 # **Drills**
-# 1. *Why does least-connections work for web servers but not here?* A connection is a proxy for work only when
-#    requests are similar; here a streaming connection can be 0.3 s or 30 s of engine time and 80 or 800 KV blocks.
-# 2. *Our router scrapes vLLM every 15 s via Prometheus. What breaks?* Argmin routing herds on the stale minimum; use
-#    the router's own in-flight counts, scrape the engines directly at sub-second intervals, or use power-of-two.
+# 1. *Why does least-connections work for web servers but not here?* A connection is a proxy for work only when the
+#    requests are similar. Here, a streaming connection can be 0.3 s or 30 s of engine time, and 80 or 800 KV
+#    blocks.
+# 2. *Our router scrapes vLLM every 15 s through Prometheus. What breaks?* Argmin routing causes a herd on the stale
+#    minimum. Use the in-flight counts of the router itself, or scrape the engines directly at sub-second intervals,
+#    or use power-of-two.
 # 3. *What does Little's law tell you about a 20-replica fleet at 50 req/s with a 12 s mean E2E?* 600 requests in
-#    flight — about 30 per replica, which you check against each replica's KV capacity and `max_num_seqs`, and
-#    which is the least a flow-control `maxConcurrency` can be without starving the GPUs.
-# 4. *Why queue in the router at all?* A request in an engine's queue is committed to that replica; in the router it
-#    can still go to whichever replica frees first, be ordered by priority, or be shed with a 429 — but only if the
-#    cap is sized to the load (too low starves the fleet, too high never queues).
+#    flight. That is approximately 30 per replica. You compare this number with the KV capacity and the
+#    `max_num_seqs` of each replica. The number 30 is also the lowest value of a flow-control `maxConcurrency`
+#    that does not starve the GPUs.
+# 4. *Why put requests in a queue in the router at all?* When a request is in the queue of an engine, the router has
+#    committed it to that replica. A request in the router can still go to the replica that becomes free first. The
+#    router can also put it in order by priority, or shed it with a 429. But this is true only if the cap has the
+#    correct size for the load. A cap that is too low starves the fleet. A cap that is too high never puts a request
+#    in the queue.

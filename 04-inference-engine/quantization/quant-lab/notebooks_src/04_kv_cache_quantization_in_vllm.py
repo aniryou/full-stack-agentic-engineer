@@ -1,30 +1,32 @@
 # %% [markdown]
 # # 04 · KV-cache quantization in vLLM: twice the sessions, a cheaper long-context step, and its conditions
 #
-# **Tier:** T0 — sizing reproduces the serving lab's memory model exactly; per-step times come from
-# the roofline emulator (**simulated**); the accuracy side is measured on the bundled tiny model with
-# each KV dtype emulated. T1 (Ada or newer: L4, RTX 4090, H100) — `vllm serve ... --kv-cache-dtype fp8`;
-# with `QUANTLAB_VLLM_LOG` and `QUANTLAB_URL` set, the last code cell reads the capacity and backend
-# back from its startup log and `/metrics` and measures decode at two context lengths. Without them it
+# **Tier:** T0: the sizing reproduces the memory model of the serving lab exactly. The per-step times come from
+# the roofline emulator (**simulated**). The notebook measures the accuracy side on the bundled tiny model, with
+# an emulation of each KV dtype.
+#
+# T1 (Ada or newer: L4, RTX 4090, H100): `vllm serve ... --kv-cache-dtype fp8`. When you set
+# `QUANTLAB_VLLM_LOG` and `QUANTLAB_URL`, the last code cell reads the capacity and backend back from
+# the startup log of vLLM and from `/metrics`. It also measures decode at two context lengths. Without them, it
 # parses a bundled log: **sample output in the documented format (illustrative)**.
 #
 # ## The one-minute version
 #
-# The KV cache costs $2 \times \mathrm{layers} \times \mathrm{kv\_heads} \times \mathrm{head\_dim} \times \mathrm{bytes}$ per token, vLLM turns every byte
-# left after weights and overheads into blocks of it, and each decode step reads all of it for
-# every running sequence. `--kv-cache-dtype fp8` stores K and V in one byte:
+# The KV cache costs $2 \times \mathrm{layers} \times \mathrm{kv\_heads} \times \mathrm{head\_dim} \times \mathrm{bytes}$ per token. vLLM turns
+# every byte that stays after the weights and overheads into blocks of KV cache. Each decode step reads all of
+# the KV cache of every sequence that runs. `--kv-cache-dtype fp8` stores K and V in one byte. This gives:
 #
-# * **about 2x the tokens** in the same memory (Llama-3.1-8B on an L4: 2,363 -> 4,727 blocks),
-#   independent of how the weights are quantized — the two multiply;
-# * a **cheaper decode step at long context**, where the KV read rivals the weight read;
-# * **conditions**: a backend that reads FP8 KV on your GPU — none on a T4; FlashInfer on an A100 or
-#   L4 (FlashAttention 2 has no FP8 KV, so the flag *changes the attention backend*); FlashAttention 3
-#   on an H100 (which also quantizes Q); FlashInfer on B200. Scales default to **1.0** unless the
+# * **about 2x the tokens** in the same memory (Llama-3.1-8B on an L4: from 2,363 to 4,727 blocks). This is
+#   independent of how you quantize the weights, and the two multiply.
+# * a **lower-cost decode step at long context**, where the KV read comes near the weight read.
+# * **conditions**: you need a backend that reads FP8 KV on your GPU. A T4 has none. An A100 or L4 uses
+#   FlashInfer (FlashAttention 2 has no FP8 KV, so the flag *changes the attention backend*). An H100 uses
+#   FlashAttention 3 (which also quantizes Q). A B200 uses FlashInfer. The default scales are **1.0**, unless the
 #   checkpoint carries calibrated `k_scale` / `v_scale`.
 #
-# Concepts: PRIMER §6 "KV-cache quantization" ([`PRIMER.md`](../../PRIMER.md)); the backend rules are
-# vllm-internals §6.3 ([`../../../vllm-internals/vllm-internals-primer.md`](../../../vllm-internals/vllm-internals-primer.md));
-# FP8 attention's error sources are the FlashAttention deep dive's §9.4
+# Concepts: PRIMER §6 "KV-cache quantization" ([`PRIMER.md`](../../PRIMER.md)). The backend rules are in
+# vllm-internals §6.3 ([`../../../vllm-internals/vllm-internals-primer.md`](../../../vllm-internals/vllm-internals-primer.md)).
+# The error sources of FP8 attention are in §9.4 of the FlashAttention deep dive
 # ([`../../../flash-attention/flash-attention-deep-dive.md`](../../../flash-attention/flash-attention-deep-dive.md)).
 
 # %%
@@ -39,10 +41,10 @@ print("\nQwen2.5-1.5B-Instruct on a T4")
 print(kv.table("qwen2.5-1.5b-instruct", "T4"))
 
 # %% [markdown]
-# The L4 rows are the serving lab's `sizing.size()` numbers to the block (this lab's tests pin them,
-# and compare against the serving lab's code when it is in the checkout). FP8 weights free 7 GB for KV;
-# FP8 KV halves every token; together an 8B model goes from 19 to 91 two-thousand-token sessions on
-# one 24 GB card. On a T4 the FP8 KV rows are arithmetic only: no attention backend there reads it.
+# The L4 rows are the `sizing.size()` numbers of the serving lab, to the block. The tests of this lab pin them,
+# and they compare against the code of the serving lab when it is in the checkout. FP8 weights free 7 GB for KV.
+# FP8 KV halves every token. Together, they take an 8B model from 19 to 91 two-thousand-token sessions on one 24
+# GB card. On a T4, the FP8 KV rows are arithmetic only, because no attention backend there reads FP8 KV.
 #
 # ## Exercise 4.1 — KV bytes per token from `config.json`
 #
@@ -52,7 +54,7 @@ print(kv.table("qwen2.5-1.5b-instruct", "T4"))
 # 2 \times \mathrm{num\_hidden\_layers} \times \mathrm{num\_key\_value\_heads} \times \mathrm{head\_dim} \times \mathrm{dtype\_bytes}.
 # $$
 #
-# Use the config's `head_dim` when it has one — Qwen3-0.6B's is 128 although
+# Use the `head_dim` of the config when it has one. The `head_dim` of Qwen3-0.6B is 128, although
 # $\mathrm{hidden\_size}/\mathrm{num\_attention\_heads}$ is 64.
 
 # %% exercise
@@ -72,10 +74,10 @@ print("✅ bytes per token (bf16 / fp8):", {n: (kv_bytes(c, 2), kv_bytes(c, 1)) 
 # %% [markdown]
 # ## Exercise 4.2 — from a KV budget to blocks and sessions
 #
-# vLLM allocates $\lfloor \mathrm{budget}/(\mathrm{block\_size} \times \mathrm{bytes\_per\_token}) \rfloor$ blocks; a
+# vLLM allocates $\lfloor \mathrm{budget}/(\mathrm{block\_size} \times \mathrm{bytes\_per\_token}) \rfloor$ blocks. A
 # session of `T` tokens needs $\lceil T/\mathrm{block\_size} \rceil$ of them. Write `blocks_and_sessions(budget_bytes, bytes_per_token,
-# session_tokens, block_size=16)` returning `(blocks, sessions)` (sessions as a float, like vLLM's
-# "Maximum concurrency").
+# session_tokens, block_size=16)`. It returns `(blocks, sessions)`, with sessions as a float, like the "Maximum
+# concurrency" of vLLM.
 
 # %% exercise
 def blocks_and_sessions(budget_bytes, bytes_per_token, session_tokens, block_size=16):
@@ -97,8 +99,8 @@ print(f"✅ bf16 weights + fp8 KV on an L4: {r.kv_budget_bytes / 2**30:.2f} GiB 
 # %% [markdown]
 # ## Worked example: which attention backend reads which KV dtype
 #
-# vLLM walks a per-GPU priority list and keeps the first backend that accepts the KV dtype
-# (`flash_attn.py`, `flashinfer.py`, `triton_attn.py` at v0.30.0 / main, Sep 2026 — verify):
+# vLLM goes through a priority list for each GPU. It keeps the first backend that accepts the KV dtype
+# (`flash_attn.py`, `flashinfer.py`, `triton_attn.py` at v0.30.0 / main, Sep 2026, verify):
 
 # %%
 dtypes = ("auto", "fp8", "fp8_e5m2", "int8_per_token_head", "nvfp4")
@@ -109,10 +111,14 @@ for g in ("T4", "A100-80GB", "L4", "H100-80GB", "B200", "RTXPRO6000"):
 # %% [markdown]
 # ## Exercise 4.3 — the FP8 KV rule in one function
 #
-# Encode the `auto` / `fp8` columns: below sm_80 only Triton exists (it reads FP8 only from sm_89, so
-# a T4 has no FP8 KV); FlashAttention needs sm_80 and reads FP8 KV only as FA3 on sm_90; FlashInfer
-# (sm_80+) reads FP8 and comes first on sm_100. Write `fp8_kv_backend(sm)` returning `"FLASH_ATTN"`,
-# `"FLASHINFER"` or `None` for `--kv-cache-dtype fp8`, and `default_backend(sm)` for `auto`.
+# Write the rules of the `auto` / `fp8` columns in code:
+#
+# * Below sm_80, only Triton exists. Triton reads FP8 only from sm_89, so a T4 has no FP8 KV.
+# * FlashAttention needs sm_80, and it reads FP8 KV only as FA3 on sm_90.
+# * FlashInfer (sm_80+) reads FP8, and it comes first on sm_100.
+#
+# Write `fp8_kv_backend(sm)`. It returns `"FLASH_ATTN"`, `"FLASHINFER"` or `None` for `--kv-cache-dtype fp8`.
+# Also write `default_backend(sm)` for `auto`.
 
 # %% exercise
 def default_backend(sm):
@@ -143,9 +149,9 @@ print("✅ on an L4 or A100 the fp8 flag moves attention from FlashAttention to 
 # %% [markdown]
 # ## Worked example: what FP8 KV does to a decode step, by context length
 #
-# FP8 weights on an L4, batch 32 (simulated). The step reads the weights once plus every sequence's
-# KV; below some context the weights dominate and the KV dtype barely matters, above it the KV read
-# does.
+# The next cell uses FP8 weights on an L4 at batch 32 (simulated). The step reads the weights one time, and it
+# also reads the KV of every sequence. Below some context, the weight read is the largest part of the step, and
+# the KV dtype is almost not important. Above that context, the KV read is the largest part.
 
 # %%
 w8 = {d: B.profile("llama-3.1-8b-instruct", "L4", "fp8", kv_cache_dtype=d) for d in ("auto", "fp8")}
@@ -158,8 +164,8 @@ for ctx in (256, 1024, 2048, 4096, 8192):
 # %% [markdown]
 # ## Exercise 4.4 — where the KV read catches up with the weight read
 #
-# Write `crossover_context(streamed_weight_bytes, kv_bytes_per_token, batch)`: the context length at
-# which $\mathrm{batch} \times \mathrm{context} \times \mathrm{kv\_bytes\_per\_token}$ equals the weights one step streams.
+# Write `crossover_context(streamed_weight_bytes, kv_bytes_per_token, batch)`. It returns the context length at
+# which $\mathrm{batch} \times \mathrm{context} \times \mathrm{kv\_bytes\_per\_token}$ equals the weight bytes that one step reads.
 
 # %% exercise
 def crossover_context(streamed_weight_bytes, kv_bytes_per_token, batch):
@@ -180,9 +186,10 @@ print(f"✅ batch 32, FP8 weights: KV = weights at {c16:,.0f} tokens with bf16 K
 # %% [markdown]
 # ## Worked example: the accuracy side, and the scale that can ruin it
 #
-# The tiny model with each KV dtype emulated (K is quantized after RoPE, as vLLM caches it). FP8's
-# per-tensor scale divides K and V before rounding; vLLM uses 1.0 unless the checkpoint carries
-# calibrated `k_scale`/`v_scale` (llm-compressor's `kv_cache_scheme`: $\mathrm{amax}/448$ per layer).
+# The next cell runs the tiny model with an emulation of each KV dtype. The emulation quantizes K after RoPE, as
+# vLLM caches it. FP8 divides K and V by a per-tensor scale, then rounds them. In vLLM, the scale is 1.0, unless the
+# checkpoint carries calibrated `k_scale`/`v_scale` (the `kv_cache_scheme` of llm-compressor: $\mathrm{amax}/448$
+# per layer).
 
 # %%
 calib_ids = np.concatenate(tm.make_task("add", 256, 7), axis=1)
@@ -203,16 +210,19 @@ print("measured on the bundled tiny model (T0); K/V amax per layer:",
 print(E.table(rows))
 
 # %% [markdown]
-# With $|K|, |V| \le 14$ the default scale of 1.0 is as good as a calibrated one: E4M3's relative
-# precision is the same in every binade, so the scale only matters at the ends of the range. A
-# scale 100x too small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0); a scale of 1,000 pushes
-# typical values into the subnormals, where precision runs out. Integer KV formats are the opposite:
-# their error depends on the scale everywhere, which is why they use dynamic per-token-head scales.
+# With $|K|, |V| \le 14$, the default scale of 1.0 is as good as a calibrated scale. The relative precision of
+# E4M3 is the same in every binade. Thus the scale is important only at the ends of the range. A scale 100x too
+# small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0). A scale of 1,000 pushes typical values
+# into the subnormals, where the precision runs out.
+#
+# Integer KV formats are the opposite. Their error depends on the scale everywhere. That is why they use dynamic
+# per-token-head scales.
 #
 # ## Exercise 4.5 — is this FP8 scale safe?
 #
-# Write `fp8_scale_check(amax, rms, scale)`: return `"saturates"` if $\mathrm{amax}/\mathrm{scale} > 448$,
-# `"underflows"` if $\mathrm{rms}/\mathrm{scale} < 2^{-6}$ (typical values below E4M3's smallest normal), else `"ok"`.
+# Write `fp8_scale_check(amax, rms, scale)`. Return `"saturates"` if $\mathrm{amax}/\mathrm{scale} > 448$. Return
+# `"underflows"` if $\mathrm{rms}/\mathrm{scale} < 2^{-6}$ (typical values below the smallest normal of E4M3). In
+# all other cases, return `"ok"`.
 
 # %% exercise
 def fp8_scale_check(amax, rms, scale):
@@ -240,12 +250,16 @@ print(f"✅ layer-0 K: amax {amax:.1f}, rms {rms:.2f} ->", {f"{s:g}": v for s, v
 # %% [markdown]
 # ## On a real GPU (T1): turn it on and read it back
 #
-# On an L4 or H100 (not a T4): start `vllm serve` with `--kv-cache-dtype fp8` (the command below),
-# keep its log (`... 2>&1 | tee vllm.log`), then set `QUANTLAB_VLLM_LOG=vllm.log` and
-# `QUANTLAB_URL=http://127.0.0.1:8000` and run this cell. It checks three things against the
-# prediction: the KV dtype and capacity (from the log, and from `/metrics`' `vllm:cache_config_info`),
-# the attention backend, and decode speed at a short and a long context. Run it once with the flag and
-# once without: the pair is the measurement. With neither variable set it parses a bundled sample log.
+# Use an L4 or H100 (not a T4). Start `vllm serve` with `--kv-cache-dtype fp8` (the command in the next cell).
+# Keep its log (`... 2>&1 | tee vllm.log`). Then set `QUANTLAB_VLLM_LOG=vllm.log` and
+# `QUANTLAB_URL=http://127.0.0.1:8000`. Then run this cell. It checks three things against the prediction:
+#
+# * the KV dtype and capacity (from the log, and from `vllm:cache_config_info` in `/metrics`),
+# * the attention backend,
+# * the decode speed at a short and a long context.
+#
+# Run it one time with the flag and one time without the flag. The pair is the measurement. If you set neither
+# variable, the cell parses a bundled sample log.
 
 # %%
 import os, pathlib
@@ -280,21 +294,24 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "The KV cache is the other big tensor, and on a 24 GB card it is the one that caps
-# concurrency. FP8 KV halves it: an 8B model on an L4 goes from 2,363 to 4,727 blocks with BF16 weights,
-# and to 11,383 with FP8 weights — 19 to 91 two-thousand-token sessions. It also makes long-context decode
-# cheaper: at batch 32 the KV read passes the weight read at about 1,900 tokens of context with BF16 KV.
-# It needs an attention backend that reads FP8: nothing on T4s; on L4s the flag switches us from
-# FlashAttention to FlashInfer, so we benchmark the pair, not just the dtype. We keep the default scale
-# of 1.0 only after checking the K/V ranges; if the model has large K values we ship calibrated
-# `k_scale`/`v_scale` in the checkpoint."
+# **Two minutes:** "The KV cache is the other large tensor. On a 24 GB card, it is the tensor that sets the limit
+# on concurrency. FP8 KV halves it. An 8B model on an L4 goes from 2,363 to 4,727 blocks with BF16 weights, and to
+# 11,383 with FP8 weights. That is 19 to 91 two-thousand-token sessions.
 #
-# **Drill 1.** *We turned on `--kv-cache-dtype fp8` on T4s and vLLM refused to start. Why?* — Triton's FP8
-# path needs sm_89 and FlashAttention/FlashInfer need sm_80; a T4 is sm_75. Use INT4 weights to free memory instead.
+# "FP8 KV also makes long-context decode lower-cost. At batch 32, the KV read passes the weight read at about
+# 1,900 tokens of context with BF16 KV. It needs an attention backend that reads FP8. T4s have none. On L4s, the
+# flag moves us from FlashAttention to FlashInfer. Thus we measure the pair, not only the dtype.
 #
-# **Drill 2.** *FP8 KV made our short-prompt throughput worse on L4s. How?* — The flag also moved attention
-# from FlashAttention 2 to FlashInfer; at short context the KV read is a small part of the step, so the
-# backend difference can dominate. Measure with the flag on and off at your real context lengths.
+# "We keep the default scale of 1.0 only after we examine the K/V ranges. If the model has large K values, we ship
+# calibrated `k_scale`/`v_scale` in the checkpoint."
 #
-# **Drill 3.** *Does FP8 KV break prefix caching?* — No: cached blocks are stored in FP8 and reused as
-# they are; a hit returns the same quantized K/V a recompute would write (deterministic scales).
+# **Drill 1.** *We turned on `--kv-cache-dtype fp8` on T4s and vLLM refused to start. Why?* The FP8 path of
+# Triton needs sm_89, and FlashAttention/FlashInfer need sm_80. A T4 is sm_75. To free memory, use INT4 weights
+# instead.
+#
+# **Drill 2.** *FP8 KV made our short-prompt throughput worse on L4s. How?* The flag also moved attention from
+# FlashAttention 2 to FlashInfer. At short context, the KV read is a small part of the step, and thus the backend
+# difference can be the main factor. Measure with the flag on and off at your real context lengths.
+#
+# **Drill 3.** *Does FP8 KV break prefix caching?* No. vLLM stores the cached blocks in FP8 and uses them again as
+# they are. A hit returns the same quantized K/V that a recompute writes (deterministic scales).
