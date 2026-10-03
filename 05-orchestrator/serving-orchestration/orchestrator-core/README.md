@@ -1,35 +1,42 @@
 # orchestrator-core — predict what a routing or scaling decision does to a fleet, on a laptop
 
-A fleet of LLM engines you can run on a CPU: **`fleetsim`**, a pure-Python discrete-event simulator of replicas with
-prefix caches, the routers in front of them, the Kubernetes HPA that sizes them, prefill/decode disaggregation and
-KV-cache tiers — so you can say which router, which autoscaling signal and which split a workload needs before you
-spend GPU hours.
+This is a fleet of LLM engines that you can run on a CPU. **`fleetsim`** is a discrete-event simulator in Python
+only. It simulates replicas with prefix caches, the routers in front of them and the Kubernetes HPA that sizes them.
+It also simulates prefill/decode disaggregation and KV-cache tiers. With it, you can say which router, which
+autoscaling signal and which split a workload needs, before you spend GPU hours.
 
 ## Start here
 
-1. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 66 tests in about 30 s, offline.
-2. Run the [snippet below](#run-it): power of two choices against the llm-d-style endpoint picker on agent sessions;
-   it prints hit rate and TTFT p95 (simulated) in under a second.
-3. Open [`notebooks/01_why_llm_load_balancing_is_different.ipynb`](notebooks/01_why_llm_load_balancing_is_different.ipynb)
-   with [PRIMER §1](../PRIMER.md#1-why-a-layer-above-the-engine) beside it.
+1. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. It runs 66 tests in about 30 s, offline.
+2. Run the [snippet in "Run it"](#run-it). It compares power of two choices with the llm-d-style endpoint picker on
+   agent sessions. In less than a second, it prints the hit rate and the TTFT p95 (simulated).
+3. Open [`notebooks/01_why_llm_load_balancing_is_different.ipynb`](notebooks/01_why_llm_load_balancing_is_different.ipynb).
+   Read [PRIMER §1](../PRIMER.md#1-why-a-layer-above-the-engine) with it.
 
 ## What you get
 
-*Tier: T0 = laptop or Colab CPU, free.* Everything here is T0: standard library only, deterministic under a seed,
-every simulation a few seconds on a CPU.
+*Tier: T0 = laptop or Colab CPU, free.* All of this core is T0. It uses the standard library only, it is
+deterministic under a seed, and each simulation takes a few seconds on a CPU.
 
 | Notebook | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`01_why_llm_load_balancing_is_different`](notebooks/01_why_llm_load_balancing_is_different.ipynb) | say what a request costs in prefill, KV and residency; rank five load-only routers on a heterogeneous fleet; explain power of two choices and herding on stale metrics; hold a burst in a router queue with priorities and a per-endpoint cap sized by Little's law | ~1.5 h | T0 |
-| [`02_cache_aware_routing_and_the_load_tradeoff`](notebooks/02_cache_aware_routing_and_the_load_tradeoff.ipynb) | compute chain hashes and the upstream scorer formulas; place prefix hashing, bounded loads, the weighted endpoint picker and the affinity filter's TTFT gate on the locality-vs-load spectrum; tune the prefix weight; survive a hot prefix; judge how stale an approximate index gets; route LoRA adapters | ~1.5 h | T0 |
-| [`03_autoscaling_on_the_right_signal`](notebooks/03_autoscaling_on_the_right_signal.ipynb) | compare GPU util, running, KV and queue under load, and five signals on a traffic step; apply the HPA rule with stabilization, policies and Pending pods; pick targets from a load test; budget cold start and headroom; explain why a request-count target does not transfer to a chat + RAG mix and a prefill-backlog + KV signal does; decide on scale-to-zero once the node goes too | ~1.5 h | T0 |
-| [`04_prefill_decode_disaggregation`](notebooks/04_prefill_decode_disaggregation.ipynb) | measure the prefill stall; price the KV transfer on L4 vs H100; search every xPyD split of eight GPUs against the analytic ratio; bound the decode batch by KV and ITL; try smaller chunks first; disaggregate conditionally | ~2 h | T0 |
-| [`05_kv_cache_tiers_and_agent_sessions`](notebooks/05_kv_cache_tiers_and_agent_sessions.ipynb) | size an agent fleet's KV working set; show why routing cannot fix a capacity problem; decide fetch vs recompute; run a two-tier LRU; predict sticky vs random vs shared tiers; size DRAM from a replay | ~2 h | T0 |
+| [`01_why_llm_load_balancing_is_different`](notebooks/01_why_llm_load_balancing_is_different.ipynb) | Say what a request costs in prefill, KV and residency. Rank five load-only routers on a heterogeneous fleet. Explain power of two choices, and herding on stale metrics. Hold a burst in a router queue with priorities and a per-endpoint cap that Little's law sizes | ~1.5 h | T0 |
+| [`02_cache_aware_routing_and_the_load_tradeoff`](notebooks/02_cache_aware_routing_and_the_load_tradeoff.ipynb) | Calculate chain hashes and the upstream scorer formulas. Put prefix hashing, bounded loads, the weighted endpoint picker and the TTFT gate of the affinity filter on the spectrum from locality to load. Adjust the prefix weight. Keep the fleet up under a hot prefix. Find how stale an approximate index becomes. Route LoRA adapters | ~1.5 h | T0 |
+| [`03_autoscaling_on_the_right_signal`](notebooks/03_autoscaling_on_the_right_signal.ipynb) | Compare GPU util, running, KV and queue under load, and five signals on a traffic step. Apply the HPA rule with stabilization, policies and Pending pods. Select targets from a load test. Make a budget for cold start and headroom. Explain why a request-count target does not transfer to a chat + RAG mix, and why a prefill-backlog + KV signal does. Decide on scale-to-zero when the node also goes | ~1.5 h | T0 |
+| [`04_prefill_decode_disaggregation`](notebooks/04_prefill_decode_disaggregation.ipynb) | Measure the prefill stall. Calculate the cost of the KV transfer on L4 against H100. Search every xPyD split of eight GPUs and compare it with the analytic ratio. Find the limit of the decode batch from KV and ITL. Try smaller chunks first. Use conditional disaggregation | ~2 h | T0 |
+| [`05_kv_cache_tiers_and_agent_sessions`](notebooks/05_kv_cache_tiers_and_agent_sessions.ipynb) | Find the size of the KV working set of an agent fleet. Show why routing cannot repair a capacity problem. Decide between fetch and recompute. Run a two-tier LRU. Predict and compare sticky, random and shared tiers. Find the DRAM size from a replay | ~2 h | T0 |
 
-Times are rough, include the matching [PRIMER](../PRIMER.md) section, and together come to roughly the 9 hours the
-repo's curriculum ([`CURRICULUM.md`](../../../CURRICULUM.md)) budgets for the primer and this core. Each notebook has a **Tier**
-line, "The one-minute version", worked examples, exercises with `# YOUR CODE HERE` followed by a check cell that
-prints ✅, and "In a design review" drills; worked answers are in [`solutions/`](solutions/).
+The times are approximate and include the related [PRIMER](../PRIMER.md) section. Their sum is approximately the 9
+hours that the curriculum of the repository ([`CURRICULUM.md`](../../../CURRICULUM.md)) gives to the primer and
+this core. Each notebook has these parts:
+
+- A **Tier** line.
+- "The one-minute version".
+- Worked examples.
+- Exercises with `# YOUR CODE HERE`, each with a check cell after it that prints ✅.
+- "In a design review" drills.
+
+The worked answers are in [`solutions/`](solutions/).
 
 ## Run it
 
@@ -49,11 +56,11 @@ for router in (PowerOfTwo(seed=1), epp((3, 2, 2))):              # load only vs 
     print(router.name, round(s["hit_rate"], 2), round(s["ttft_p95"], 2))   # simulated
 ```
 
-On Colab, the first cell of each notebook clones the repository and installs this package (see the repository's
-[`COLAB.md`](../../../COLAB.md)).
+On Colab, the first cell of each notebook clones the repository and installs this package (see the
+[`COLAB.md`](../../../COLAB.md) of the repository).
 
-`notebooks/` and `solutions/` are generated from `notebooks_src/*.py` (percent format with `### BEGIN SOLUTION`
-blocks). Edit the sources, then:
+The builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py` (percent format with
+`### BEGIN SOLUTION` blocks). Edit the sources, then run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # rebuild both variants
@@ -61,52 +68,58 @@ python3 tools/run_notebooks.py solutions                # solutions must run cle
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 ```
 
-`make check` runs all of it plus the tests.
+`make check` runs all of it, and the tests too.
 
 ## What the model leaves out
 
-Every number `fleetsim` prints is **simulated**: an engine model built from spec-sheet arithmetic (an 8B model on
-an L4 by default), not a measurement. It is for building intuition and checking designs. Read every simulated
-number with these in mind; each is also stated where it matters in the notebooks and the primer.
+Every number that `fleetsim` prints is **simulated**. It comes from an engine model that uses spec-sheet arithmetic
+(an 8B model on an L4 by default), and it is not a measurement. The model is for intuition and for a check of
+designs. Read every simulated number with the items in this list in mind. The notebooks and the primer also state
+each item where it is important.
 
-- **Prefill compute is linear in tokens.** Attention FLOPs (about 4 × layers × d_model × context per token) are
-  omitted: +10 % for a 6,000-token prompt on the 8B model, +16 % at 10,000, +50 % at 30,000. Long-context prefill,
-  P/D transfer budgets (notebook 04) and recompute costs (notebook 05) are optimistic by those amounts.
-- **No per-chunk efficiency loss.** A 256-token prefill chunk costs the same per token as a 2,048-token one, so the
-  chunk-budget sweep in notebook 04 is the optimistic end.
-- **Metric staleness is a maximum age.** A scraped snapshot is re-read on the first look after it expires — no
-  scrape jitter, no per-replica phase.
-- **P/D fleets are fixed-size.** `Fleet` refuses an autoscaler or flow control together with a prefill pool; the
-  KV transfer is priced for the blocks the decode replica lacks at hand-off.
-- **KV tiers are exclusive** (demote on evict); real offload keeps an inclusive copy in the lower tier.
-- **The HPA sees a starting replica as Pending for its whole cold start**; a real pod past its image pull is Running
-  with no sample (the same on a scale-up, counted at the target on a scale-down). Flow control checks a request's
-  TTL when it reaches the head of the router queue.
+- **Prefill compute is linear in tokens.** The model omits the attention FLOPs (about 4 × layers × d_model ×
+  context per token). They add +10 % for a 6,000-token prompt on the 8B model, +16 % at 10,000 and +50 % at
+  30,000. Thus long-context prefill, P/D transfer budgets (notebook 04) and recompute costs (notebook 05) are
+  optimistic by those quantities.
+- **No per-chunk efficiency loss.** A 256-token prefill chunk has the same cost per token as a 2,048-token chunk.
+  Thus the chunk-budget sweep in notebook 04 is the optimistic end.
+- **Metric staleness is a maximum age.** The simulator reads a scraped snapshot again on the first look after it
+  expires. It has no scrape jitter and no per-replica phase.
+- **P/D fleets have a constant size.** `Fleet` refuses an autoscaler or flow control together with a prefill pool.
+  The cost of the KV transfer is for the blocks that the decode replica does not have at hand-off.
+- **KV tiers are exclusive** (the simulator demotes a block when it evicts it). Real offload keeps an inclusive copy in the lower tier.
+- **The HPA sees a replica that starts as Pending for all of its cold start.** A real pod after its image pull is
+  Running with no sample. This is the same on a scale-up, and the HPA counts it at the target on a scale-down. Flow
+  control examines the TTL of a request when the request gets to the head of the router queue.
 - **Adapter loads cost an illustrative 0.2 s** that stalls the step (`EngineProfile.lora_load_s`).
 
-The engine profiles `L4_8B` and `H100_8B` are derived in `replica.engine_profile()` from spec-sheet numbers (verify
-them against layer 01's device catalogue). The simulator stops where real systems start: no network, no Envoy, no
-Kubernetes objects, no GPU. The next step is [`../inference-gateway-lab`](../inference-gateway-lab/): the same
-decisions as a real async router in front of OpenAI-compatible backends, HPA recommendations from scraped metrics,
-the llm-d Router on kind and GKE Inference Gateway on GCP.
+`replica.engine_profile()` derives the engine profiles `L4_8B` and `H100_8B` from spec-sheet numbers (verify them
+against the device catalogue of layer 01). The simulator stops where real systems start. It has no network, no
+Envoy, no Kubernetes objects and no GPU. The next step is [`../inference-gateway-lab`](../inference-gateway-lab/).
+It does the same decisions as a real async router in front of OpenAI-compatible backends. It also gives HPA
+recommendations from scraped metrics, the llm-d Router on kind, and GKE Inference Gateway on GCP.
 
 ## The library (read in this order)
 
 | File | Lines | What it teaches |
 |------|-------|-----------------|
-| `fleetsim/workload.py` | ~220 | a request is its lengths plus the chain hashes of its KV blocks; Poisson and bursty arrivals; chat, RAG and closed-loop agent sessions with growing histories, shared system prompts, LoRA ids and priorities |
-| `fleetsim/replica.py` | ~315 | a replica is a stateful cache: token-budget continuous batching with chunked prefill, a paged block pool with a hash prefix cache (LRU, tail blocks first), preemption by recompute, adapter slots, a roofline step time |
-| `fleetsim/routers.py` | ~340 | round-robin, least-outstanding, power-of-two, prefix hashing, consistent hashing with bounded loads, and the llm-d EPP shape (filters → weighted `prefix-cache` / `queue` / `kv-cache-utilization` / `token-load` scorers → max-score picker; the `prefix-cache-affinity-filter` with its TTFT gate and break counter), approximate vs precise prefix indexes |
-| `fleetsim/sim.py` | ~245 | the event loop: arrivals, engine steps, stale metric scrapes, session follow-ups, flow control (a router queue with per-endpoint caps, priorities, TTL and queue-bound shedding), P/D hand-offs, autoscaler ticks, cold starts |
-| `fleetsim/metrics.py` | ~75 | TTFT, ITL, TPOT percentiles, goodput, hit rate, imbalance, shed requests, adapter loads, GPU-hours — and text tables and sparklines |
-| `fleetsim/autoscale.py` | ~205 | the HPA exactly as `kube-controller-manager` computes it: milli-unit ratio, tolerance, Pending and missing pods, several metrics (the largest wins), stabilization windows, Pods/Percent policies, External metrics from zero; request, KV and prefill-backlog signals; cold-start anatomy |
-| `fleetsim/disagg.py` | ~75 | KV transfer time, decode batch at an ITL SLO, analytic P:D sizing, and a search over every xPyD split |
-| `fleetsim/kvtier.py` | ~130 | fetch vs recompute break-even, agent-session working sets, exclusive LRU tiers with demotion, a session replay over local and shared tiers |
+| `fleetsim/workload.py` | ~220 | A request is its lengths and the chain hashes of its KV blocks. Poisson and bursty arrivals. Chat, RAG and closed-loop agent sessions with histories that grow, shared system prompts, LoRA ids and priorities |
+| `fleetsim/replica.py` | ~315 | A replica is a stateful cache. It has token-budget continuous batching with chunked prefill. It has a paged block pool with a hash prefix cache (LRU, tail blocks first). It also has preemption by recompute, adapter slots and a roofline step time |
+| `fleetsim/routers.py` | ~340 | Round-robin, least-outstanding, power-of-two, prefix hashing, consistent hashing with bounded loads. The shape of the llm-d EPP: filters, then weighted `prefix-cache` / `queue` / `kv-cache-utilization` / `token-load` scorers, then a max-score picker. The `prefix-cache-affinity-filter` with its TTFT gate and break counter. Approximate and precise prefix indexes |
+| `fleetsim/sim.py` | ~245 | The event loop. It has arrivals, engine steps, stale metric scrapes and session follow-ups. It has flow control (a router queue with per-endpoint caps, priorities, TTL and queue-bound shedding). It also has P/D hand-offs, autoscaler ticks and cold starts |
+| `fleetsim/metrics.py` | ~75 | TTFT, ITL and TPOT percentiles, goodput, hit rate, imbalance, shed requests, adapter loads, GPU-hours. Also text tables and sparklines |
+| `fleetsim/autoscale.py` | ~205 | The HPA exactly as `kube-controller-manager` calculates it. This includes the milli-unit ratio, tolerance, Pending and missing pods, and many metrics (the largest wins). It also includes stabilization windows, Pods/Percent policies and External metrics from zero. Request, KV and prefill-backlog signals. The anatomy of a cold start |
+| `fleetsim/disagg.py` | ~75 | KV transfer time, the decode batch at an ITL SLO, an analytic calculation of the P:D size, and a search over every xPyD split |
+| `fleetsim/kvtier.py` | ~130 | The break-even of fetch against recompute, agent-session working sets, exclusive LRU tiers with demotion, a session replay over local and shared tiers |
 
-Each module opens with a docstring stating the one idea it teaches. **Size:** about 1,600 lines, of which about
-1,100 are code (the rest docstrings and comments) — over the 500–1,000 lines the curriculum aims for in a core. The
-overrun is deliberate: this layer's plan asks for routing, flow control, the HPA with its policies, P/D and KV tiers
-in one simulator, and each piece is kept faithful enough to the upstream component that its numbers mean something.
-Read `workload.py`, `replica.py`, `routers.py` and `sim.py` first; the other modules are independent of each other.
+Each module starts with a docstring that states the one idea that it teaches. **Size:** about 1,600 lines. About
+1,100 of them are code, and the rest are docstrings and comments. This is more than the 500–1,000 lines that the
+curriculum aims for in a core.
+
+The overrun is intentional. The plan of this layer asks for routing, flow control,
+the HPA with its policies, P/D and KV tiers in one simulator. Each piece stays sufficiently faithful to the upstream
+component, so that its numbers mean something.
+
+Read `workload.py`, `replica.py`, `routers.py` and `sim.py` first. The other modules are independent of each other.
 
 MIT licensed.

@@ -92,8 +92,8 @@ admission and cost to the gateway.
 ## Caveats
 
 - **Simulated vs measured.** The numbers of the core come from an engine model, not from a GPU. For the T0 latencies of
-  the lab, the HTTP is real, but the engine times are emulated. Use both to compare designs, and never as GPU numbers. The
-  ranking of routers changes with the engine and the workload (PRIMER §2.5). Expect this.
+  the lab, the HTTP is real, but the engine times are emulated. Use both to compare designs, and never as GPU numbers. Expect
+  that the ranking of routers changes with the engine and the workload (PRIMER §2.5).
 - **Untested on real infrastructure here.** The Docker, kind, GPU and GKE paths of the lab have only checks by
   construction (`bash -n`, `DRY_RUN=1`, Terraform `validate`, Kubernetes schema checks). Nobody executed them.
 - **Dated facts.** The product versions (llm-d Router v0.10.0, Gateway API Inference Extension v1.6.2, vLLM 0.30.0)

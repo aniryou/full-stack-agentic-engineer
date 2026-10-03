@@ -1,28 +1,31 @@
 # %% [markdown]
 # # 05 · Autoscaling and obtainability
 #
-# **Tier:** T0 — a discrete-time cluster-autoscaler simulation. Durations, prices, stockout and
-# preemption rates are **inputs you choose** (defaults are illustrative), and every output is
-# simulated. The real thing — GKE node pools from zero, Spot, DWS flex-start queued provisioning,
-# ComputeClass fallbacks — is lab notebook `04_gke_pools_dws_and_computeclasses` (T3; offline it
-# plans and inspects). Current prices and obtainability live in `COMPUTE.md` at the repo root.
+# **Tier:** T0. This notebook is a discrete-time simulation of the cluster autoscaler. Durations,
+# prices, stockout rates and preemption rates are **inputs that you select** (the defaults are
+# illustrative), and every output comes from the simulation. Lab notebook `04_gke_pools_dws_and_computeclasses`
+# (T3) does the real thing: GKE node pools from zero, Spot, DWS flex-start queued provisioning and
+# ComputeClass fallbacks. Offline, that notebook plans and inspects. Current prices and
+# obtainability are in `COMPUTE.md` at the repo root.
 #
 # ## The one-minute version
 #
 # A Pending GPU pod is a request for a machine. The **cluster autoscaler** simulates the pending
-# pods on each node pool's *template node*, estimates how many nodes each pool would need
-# (bin-packing), lets an **expander** pick a pool, and asks the cloud for nodes. Those nodes take
-# minutes to become useful — VM, driver, device plugin, image pull, model weights — and are removed
-# after sitting idle (10 minutes by default).
+# pods on the *template node* of each node pool. It estimates how many nodes each pool needs for
+# these pods (bin-packing). Then it lets an **expander** select a pool, and it asks the cloud for
+# nodes. These nodes become useful only after some minutes, because of the VM, the driver, the
+# device plugin, the image pull and the model weights. The autoscaler removes a node after the node
+# stays idle for a time (10 minutes by default).
 #
-# GPUs add two problems CPUs rarely have: **capacity may not exist** (stockouts; Spot reclaims) and
-# **gangs need every node at once** — a job needing 16 nodes that receives 11 pays for 11 idle nodes.
-# Queued, all-or-nothing provisioning (Kueue ProvisioningRequest, GKE DWS flex-start) fixes the
-# second; choosing the capacity type per workload (on-demand, Spot, reservation, flex-start) is how
-# you manage the first.
+# GPUs add two problems that CPUs rarely have. First, **capacity does not always exist** (stockouts
+# and Spot reclaims). Second, **gangs need every node at once**: a job that needs 16 nodes and
+# receives 11 pays for 11 idle nodes. Queued, all-or-nothing provisioning (Kueue
+# ProvisioningRequest, GKE DWS flex-start) is the solution to the second problem. You manage the
+# first problem when you select the capacity type for each workload (on-demand, Spot, reservation,
+# flex-start).
 #
-# After this notebook you can estimate time-to-capacity and idle cost, and pick a capacity type per
-# workload.
+# After this notebook, you can estimate the time-to-capacity and the idle cost. You can also select
+# a capacity type for each workload.
 #
 # Primer: §7 *Getting capacity* and §8 *Startup latency* in `../../PRIMER.md`.
 
@@ -38,18 +41,22 @@ for pending in ([1, 1, 1], [3, 3, 3], [4, 2, 1, 1], [8, 8, 8]):
           f"({nodes_needed(pending, pool.gpus_per_node)} node(s))" if pool else "(no pool can take them)")
 
 # %% [markdown]
-# Look at the third line: least-waste compares *idle resources*, not prices. For 4 + 2 + 1 + 1 GPUs one
-# 8-GPU H100 node and two 4-GPU L4 nodes are equally wasteful (zero idle GPUs), and the tie-break (fewer
-# nodes) picks the H100. (The real expander ranks idle CPU, then memory; either way, not dollars.) Pods
-# therefore select a GPU type with a node selector, and cost preferences go into a `price` or `priority`
-# expander or a GKE ComputeClass.
+# Look at the third line: least-waste compares *idle resources*, not prices. For 4 + 2 + 1 + 1 GPUs,
+# one 8-GPU H100 node and two 4-GPU L4 nodes have the same waste (zero idle GPUs). The tie-break
+# (fewer nodes) selects the H100. (The real expander ranks idle CPU, then memory. In both cases, it
+# does not rank dollars.) Thus pods select a GPU type with a node selector. Cost preferences go into
+# a `price` or `priority` expander, or into a GKE ComputeClass.
 #
 # ## Exercise 5.1 — how many new nodes?
 #
-# The autoscaler's estimate is a bin-packing of the pending pods onto empty copies of the pool's
-# template node. Implement **first-fit decreasing**: sort pods by GPU count, largest first; put each
-# on the first node with enough free GPUs, else open a new node. Raise `ValueError` if a pod can never
-# fit one node.
+# The estimate of the autoscaler is a bin-packing of the pending pods onto empty copies of the
+# template node of the pool. Implement **first-fit decreasing**:
+#
+# 1. Sort the pods by GPU count, largest first.
+# 2. Put each pod on the first node that has sufficient free GPUs.
+# 3. If no node has sufficient free GPUs, open a new node.
+#
+# If a pod can never fit on one node, raise `ValueError`.
 
 # %% exercise
 def ffd_nodes(pod_gpus: list, gpus_per_node: int) -> int:
@@ -81,11 +88,14 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 # %% [markdown]
 # ## Scale from zero, and back
 #
-# One L4 node pool at zero nodes, a 1-hour inference job arrives at $t = 0$. The node takes 300 s
-# (illustrative) from creation to *allocatable GPUs*; the autoscaler removes a node after it has
-# been unneeded for 600 s (its default `--scale-down-unneeded-time`), and not within 600 s of the last
-# scale-up (`--scale-down-delay-after-add`). `simulate()` models both; here the only scale-up is at
-# $t = 0$, so the unneeded time is what binds. (Not modelled: the utilisation threshold, several pools.)
+# One L4 node pool has zero nodes. A 1-hour inference job arrives at $t = 0$. The node needs 300 s
+# (illustrative) from creation to *allocatable GPUs*.
+#
+# The autoscaler removes a node after the node stays unneeded for 600 s (its default
+# `--scale-down-unneeded-time`). It also does not remove a node within 600 s of the last scale-up
+# (`--scale-down-delay-after-add`). `simulate()` models both. Here, the only scale-up is at
+# $t = 0$. Thus the unneeded time is the limit that controls the removal. (`simulate()` does not
+# model the utilisation threshold or several pools.)
 
 # %%
 l4 = NodePool("l4", gpus_per_node=1, max_nodes=4, boot_s=300, price_per_node_hr=0.70)   # illustrative price
@@ -97,9 +107,9 @@ print(f"billed {run['node_h']:.2f} node-h, busy {run['busy_node_h']:.2f} node-h,
 # %% [markdown]
 # ## Exercise 5.2 — predict the bill
 #
-# Same pool, but the job runs **2 hours** and the node boots in **420 s**. Predict when the job
-# starts, when the idle node is removed (the autoscaler checks every 30 s here), and the billed
-# node-hours.
+# The pool is the same, but the job runs for **2 hours** and the node boots in **420 s**. Predict
+# when the job starts. Predict when the autoscaler removes the idle node (here, the autoscaler
+# does a check every 30 s). Also predict the billed node-hours.
 
 # %% exercise
 # predicted_start_s = ...     seconds
@@ -123,17 +133,20 @@ print(f"✅ {r['node_h']:.3f} node-h billed for {r['busy_node_h']:.1f} h of work
 # %% [markdown]
 # ## Spot and gangs
 #
-# Spot capacity is cheap because the provider can reclaim it. For one node that is an occasional
-# restart. For a gang it compounds: if *any* node is reclaimed the collective breaks and, without
-# checkpoints, the whole job starts over. With independent reclaims at rate $\lambda$ per node-hour, a
-# gang of $N$ nodes survives $T$ hours with probability $e^{-N \cdot \lambda \cdot T}$, and the expected
-# wall-clock time to finish $T$ hours of work restarting from scratch is
+# Spot capacity is low-cost because the provider can reclaim it. For one node, a reclaim causes an
+# occasional restart. For a gang, the effect multiplies. If the provider reclaims *any* node, the
+# collective breaks. Without checkpoints, the whole job then starts again from zero.
+#
+# Let the reclaims be independent, at rate $\lambda$ per node-hour. Then a gang of $N$ nodes
+# survives $T$ hours with probability $e^{-N \cdot \lambda \cdot T}$. If the job loses all of its
+# work at each restart, the expected wall-clock time to finish $T$ hours of work is
 #
 # $$
 # \left(e^{N \cdot \lambda \cdot T} - 1\right) \cdot \left(\frac{1}{N \cdot \lambda} + R\right)
 # $$
 #
-# for a restart overhead $R$. The rate below is an illustrative input, not a measured Spot statistic.
+# for a restart overhead $R$. The rate in the next cell is an illustrative input, not a measured
+# Spot statistic.
 
 # %%
 rate = 0.005   # reclaims per node-hour (illustrative)
@@ -148,10 +161,10 @@ print([w for _, w in r["log"] if "Spot" in w])
 # %% [markdown]
 # ## Exercise 5.3 — the cost of restarting a gang
 #
-# Implement `expected_hours(work_h, nodes, rate, restart_h)` from the formula above (return
-# `work_h` when the rate is 0), then use it: how many times longer than the work itself does a
-# **16-node**, 24-hour job take at `rate = 0.005`, with a 15-minute restart overhead? Store it in
-# `slowdown_16`.
+# Implement `expected_hours(work_h, nodes, rate, restart_h)` from the formula in *Spot and gangs*.
+# When the rate is 0, return `work_h`. Then use the function for this question. A **16-node**,
+# 24-hour job runs at `rate = 0.005`, with a 15-minute restart overhead. How many times longer
+# than the work itself is its wall-clock time? Put the ratio in `slowdown_16`.
 
 # %% exercise
 import math
@@ -180,11 +193,13 @@ print(f"✅ a 16-node gang on Spot takes {slowdown_16:.2f}x its work time withou
 # %% [markdown]
 # ## All-or-nothing provisioning
 #
-# A 16-node training job asks for capacity while the zone is tight: each missing node is granted
-# with 3% probability per minute (a stockout model, simulated). An **ordinary** pool creates each
-# node as soon as it is granted — and bills it while it waits for the rest. A **queued** pool
-# (Kueue ProvisioningRequest; on GKE, DWS flex-start with queued provisioning) holds the request
-# until all 16 can be created together.
+# A 16-node training job asks for capacity when the free capacity of the zone is low. The provider
+# grants each node that the job still needs with 3% probability per minute (a stockout model,
+# simulated). An
+# **ordinary** pool creates each node immediately when the provider grants it. The pool also bills
+# the node while it waits for the other nodes. A **queued** pool (Kueue ProvisioningRequest, or on
+# GKE, DWS flex-start with queued provisioning) holds the request until it can create all 16 nodes
+# together.
 
 # %%
 kw = dict(gpus_per_node=8, boot_s=300, stockout=0.97)
@@ -198,10 +213,13 @@ print(f"ordinary, mean of 200 seeds: gang starts at {sum(r['gang_start_s'] for r
       f"billed while waiting {sum(r['waiting_node_h'] for r in runs) / 200:.1f} node-h")
 
 # %% [markdown]
-# One run is one draw of a random process, so look at the mean too. Same capacity, same start time in
-# this model — the difference is who pays for the wait (the queued pool pays only the boot). There is
-# a second failure mode queued provisioning prevents: an ordinary pool whose `max_nodes` is below
-# the gang size scales up *part* of the gang, and those nodes idle forever.
+# One run is one draw of a random process. Thus, look at the mean also. In this model, the two
+# pools have the same capacity and the same start time. The difference is who pays for the wait
+# (the queued pool pays only for the boot).
+#
+# Queued provisioning also prevents a second failure
+# mode. If the `max_nodes` of an ordinary pool is less than the gang size, the pool scales up
+# *part* of the gang. These nodes then stay idle forever.
 
 # %%
 for q in (False, True):
@@ -211,9 +229,9 @@ for q in (False, True):
 # %% [markdown]
 # ## Exercise 5.4 — billed while waiting
 #
-# Given the creation times of a gang's nodes (seconds) and the boot time, compute the node-hours
-# billed before the gang can start. The gang starts when the **last** node is Ready
-# (`max(created) + boot_s`); every node bills from its own creation until then.
+# You have the creation times of the nodes of a gang (seconds) and the boot time. Calculate the
+# node-hours billed before the gang can start. The gang starts when the **last** node is Ready
+# (`max(created) + boot_s`). Each node bills from its own creation until that time.
 
 # %% exercise
 def waiting_node_hours(created_s: list, boot_s: int) -> float:
@@ -233,13 +251,16 @@ print("✅ the ordinary pool paid for", round(ordinary["waiting_node_h"] - queue
 # %% [markdown]
 # ## Exercise 5.5 — pick a capacity type
 #
-# For each workload choose one of `"on-demand"`, `"spot"`, `"flex-start"` (DWS: queued, all at once,
-# time-bounded), `"reservation"` (capacity held for you, paid whether used or not):
+# For each workload in the list, select one of `"on-demand"`, `"spot"`, `"flex-start"` and
+# `"reservation"`. `"flex-start"` is DWS: queued, all at once, time-bounded. `"reservation"` is
+# capacity held for you, and you pay for it if you use it or not. The workloads are:
 #
-# * **chat** — interactive inference, scales 0 → 6 L4 replicas with traffic; replicas are stateless.
-# * **finetune** — 64 H100s for 3 days, starts sometime this week, checkpoints hourly.
-# * **embeddings** — nightly batch over a corpus; any pod can be retried; deadline is morning.
-# * **flagship** — 24/7 serving at steady high utilisation for a year.
+# * **chat**: interactive inference. It scales from 0 to 6 L4 replicas with the traffic. The
+#   replicas are stateless.
+# * **finetune**: 64 H100s for 3 days. It starts at some time this week. It writes a checkpoint
+#   every hour.
+# * **embeddings**: a nightly batch over a corpus. You can retry any pod. The deadline is morning.
+# * **flagship**: a model that serves 24/7 at steady high utilisation for a year.
 
 # %% exercise
 # capacity = {"chat": ..., "finetune": ..., "embeddings": ..., "flagship": ...}
@@ -274,15 +295,17 @@ for workload, want in ACCEPTED.items():
 print("✅", capacity)
 
 # %% [markdown]
-# On GKE a **custom ComputeClass** encodes such a preference list for one workload class —
-# e.g. reservation → Spot → on-demand → flex-start — and node auto-provisioning creates pools to
-# match (field names in the lab's `deploy/gke/` manifests; verify against the current CRD).
+# On GKE, a **custom ComputeClass** encodes such a preference list for one workload class. An
+# example order is reservation, then Spot, then on-demand, then flex-start. Node auto-provisioning
+# then creates pools that match the list. (The field names are in the `deploy/gke/` manifests of
+# the lab. Compare them with the current CRD.)
 #
 # ## From Pending to serving
 #
-# Even when capacity exists, a new replica is not useful until every stage below is done. The
-# inputs are illustrative; measure yours (lab notebook `04_gke_pools_dws_and_computeclasses`
-# shows where each shows up in node and pod events).
+# Even when capacity exists, a new replica is not useful until it completes every stage in the
+# next cell. The inputs are illustrative. Measure your own values. Lab notebook
+# `04_gke_pools_dws_and_computeclasses` shows where each stage appears in the node events and the
+# pod events.
 
 # %%
 # sizes in GB, rates in GB/s (gigabytes: a 10 Gbit/s link moves at most 1.25 GB/s)
@@ -292,28 +315,39 @@ for name, s in (("cold node, plain pull + download", cold), ("warm node, streame
     print(f"{name:<42}", {k: round(v) for k, v in s.items()})
 
 # %% [markdown]
-# The levers map to stages: a warm pool or low `min_nodes` removes `node`/`driver`; image streaming
-# or a secondary boot disk with the image preloaded shrinks `image`; weights from a nearby cache
-# (GCS FUSE with caching, Hyperdisk ML, a model streamer) shrink `weights`; startup probes keep
-# traffic away until `warmup` is done. Primer §8 has the details.
+# Each lever applies to a stage:
+#
+# * A warm pool or a low `min_nodes` removes `node`/`driver`.
+# * Image streaming, or a secondary boot disk with the image preloaded, decreases `image`.
+# * Weights from a nearby cache (GCS FUSE with caching, Hyperdisk ML, a model streamer) decrease
+#   `weights`.
+# * Startup probes keep traffic away until `warmup` is complete.
+#
+# Primer §8 has the details.
 #
 # ## In a design review
 #
-# **Two-minute version.** "GPU pools scale from zero with the cluster autoscaler, so a Pending pod
-# costs node creation, driver install, image pull and weight loading before it serves — minutes,
-# not seconds — and we size min nodes, image streaming and weight caching to our cold-start budget.
-# Scale-down waits ten minutes of idleness, which we pay for. Capacity is not guaranteed: stateless
-# inference runs on on-demand with a Spot tier behind it; interruptible batch runs on Spot; big
-# multi-node jobs go through Kueue with a ProvisioningRequest so they get all their nodes at once
-# from DWS flex-start instead of paying for a partial gang; steady baseline load sits on a
-# reservation. A ComputeClass expresses that fallback order per workload class."
+# **Two-minute version.** "Our GPU pools scale from zero with the cluster autoscaler. Thus a
+# Pending pod pays for node creation, driver install, image pull and weight load before it serves.
+# That is minutes, not seconds. We set min nodes, image streaming and weight caching for our
+# cold-start budget. Scale-down waits for ten minutes of idle time, and we pay for that time.
+#
+# "We have no guarantee of capacity. Stateless inference runs on on-demand capacity, with a Spot tier
+# behind it. Interruptible batch runs on Spot. Large multi-node jobs go through Kueue with a
+# ProvisioningRequest. Thus they get all their nodes at once from DWS flex-start, and they do not
+# pay for a partial gang. Steady baseline load stays on a reservation.
+#
+# "A ComputeClass gives that fallback order for each workload class."
 #
 # **Drill questions.**
 #
-# 1. *Why can't a 16-node training job just use an autoscaling Spot pool?* — Any reclaim restarts
-#    the gang; survival falls as $e^{-N \cdot \lambda \cdot T}$, and partial scale-ups bill idle nodes. Use queued
-#    provisioning (flex-start) or reservations, and checkpoint.
-# 2. *A replica takes 9 minutes from Pending to Ready. Where do you look first?* — Split it by stage:
-#    node provisioning and driver, image pull, weight download, warm-up; fix the largest.
-# 3. *What does all-or-nothing provisioning not fix?* — It does not create capacity: the gang still
-#    waits for the provider; it only stops you paying for, and fragmenting, the partial set.
+# 1. *Why can a 16-node training job not use an autoscaling Spot pool?* Any reclaim
+#    restarts the gang. Survival decreases as $e^{-N \cdot \lambda \cdot T}$. Partial scale-ups
+#    also bill idle nodes. Use queued provisioning (flex-start) or reservations. Also write
+#    checkpoints.
+# 2. *A replica needs 9 minutes from Pending to Ready. Where do you look first?* Divide the time
+#    by stage: node provisioning and driver, image pull, weight download, warm-up. Then repair the
+#    largest stage.
+# 3. *What does all-or-nothing provisioning not repair?* It does not create capacity. The gang
+#    still waits for the provider. It only stops two things: you do not pay for the partial set,
+#    and you do not fragment it.

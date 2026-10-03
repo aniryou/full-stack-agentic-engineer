@@ -1,24 +1,25 @@
 # %% [markdown]
 # # 01 · Manifests and the linter: what makes a pod a GPU pod
 #
-# **Tier:** T0 — laptop or Colab CPU, no cluster, $0. Everything here is builders, a linter and
-# arithmetic; notebook 02 applies the same objects to a kind cluster.
+# **Tier:** T0. It runs on a laptop or Colab CPU, with no cluster, at $0. Everything here is builders, a linter
+# and arithmetic. Notebook 02 applies the same objects to a kind cluster.
 #
 # ## The one-minute version
-# A GPU pod is ordinary Kubernetes plus a handful of load-bearing fields:
+# A GPU pod is ordinary Kubernetes plus a few fields. Each of these fields carries part of the load:
 #
-# * an **integer `nvidia.com/gpu` limit** — an *extended resource*, counted by the scheduler,
-#   never overcommitted, so request == limit (primer §1 *What Kubernetes sees*);
-# * a **toleration** for the `nvidia.com/gpu` taint and a **selector** for the accelerator model;
-# * **CPU/memory requests sized to the per-GPU share** of the node, or the node's other GPUs are
-#   stranded (primer §3.4 *Fragmentation, measured*, generalised below);
-# * a **startup probe** that outlasts the weight load (primer §8 *Startup latency*);
-# * for gangs, a **queue label** and a **topology annotation** that Kueue reads (primer §4 *Gangs*,
+# * an **integer `nvidia.com/gpu` limit**. It is an *extended resource*. The scheduler counts it and never
+#   overcommits it, thus request == limit (primer §1 *What Kubernetes sees*).
+# * a **toleration** for the `nvidia.com/gpu` taint and a **selector** for the accelerator model.
+# * **CPU/memory requests sized to the per-GPU share** of the node. If not, the other GPUs of the node become
+#   stranded (primer §3.4 *Fragmentation, measured*, which the section *Stranded GPUs* in this notebook makes
+#   more general).
+# * a **startup probe** that lasts longer than the weight load (primer §8 *Startup latency*).
+# * for gangs, a **queue label** and a **topology annotation**. Kueue reads them (primer §4 *Gangs*,
 #   §5 *Topology-aware placement*).
 #
-# By the end you can build these objects with `k8sgpu.manifests`, explain every finding of
-# `k8sgpu.lint`, and size the two numbers people get wrong: the startup-probe budget and the
-# CPU request of a 1-GPU pod. Primer: [`../../PRIMER.md`](../../PRIMER.md).
+# At the end, you can build these objects with `k8sgpu.manifests` and explain every finding of
+# `k8sgpu.lint`. You can also calculate the two numbers that people frequently set incorrectly: the
+# startup-probe budget and the CPU request of a 1-GPU pod. Primer: [`../../PRIMER.md`](../../PRIMER.md).
 
 # %%
 import copy
@@ -33,16 +34,19 @@ job = m.job("hello-gpu", "team-a", m.pod_template(m.pod_spec([c])))
 print(m.to_yaml(job))
 
 # %% [markdown]
-# Read the `resources` block: the GPU appears in **limits** and **requests** with the same whole
-# number; CPU has a request but no limit (a CFS limit throttles the process that feeds the GPU);
-# memory has both. The pod spec carries the toleration and the accelerator selector — the builder
-# adds them because without the toleration a GPU pod stays Pending on clusters that taint GPU
-# nodes and do not run the ExtendedResourceToleration admission plugin (kind, kubeadm defaults;
-# GKE enables the plugin, verify), and without the selector it can land on any GPU model.
+# Read the `resources` block. The GPU is in **limits** and in **requests**, with the same whole number.
+# CPU has a request but no limit, because a CFS limit throttles the process that feeds the GPU. Memory has
+# both. The pod spec has the toleration and the accelerator selector. The builder adds them for two reasons:
+#
+# * Without the toleration, a GPU pod stays Pending on some clusters. These clusters put a taint on GPU nodes
+#   and do not run the ExtendedResourceToleration admission plugin. Examples are kind and the kubeadm
+#   defaults. GKE turns on the plugin (verify).
+# * Without the selector, the scheduler can put the pod on any GPU model.
 #
 # ## What the API server rejects — and what it does not
-# `nvidia.com/gpu` is an extended resource: whole units, no overcommit. The API server enforces
-# that for Pods, Jobs and Deployments. The linter reproduces its three messages verbatim:
+# `nvidia.com/gpu` is an extended resource. It has whole units and no overcommit. The API server applies
+# these rules to Pods, Jobs and Deployments. The linter gives the same three messages as the API server, word
+# for word:
 
 # %%
 for res in ({"requests": {m.GPU: 1}},                        # request without a limit
@@ -51,10 +55,10 @@ for res in ({"requests": {m.GPU: 1}},                        # request without a
     print(res, "->", lint.check_gpu_resources(res))
 
 # %% [markdown]
-# A **CRD** that embeds a pod template (JobSet, LeaderWorkerSet) is validated against its own
-# schema only: `kubectl apply` succeeds, and the error appears minutes later, when the controller
-# tries to create pods — as an event on an object you are no longer looking at. The classic case:
-# a LeaderWorkerSet group is run by StatefulSets, which accept only `restartPolicy: Always`.
+# The API server validates a **CRD** that contains a pod template (JobSet, LeaderWorkerSet) against its own
+# schema only. Thus `kubectl apply` succeeds. The error comes minutes later, when the controller tries to
+# create pods. It is an event on an object that you no longer look at. The classic case is a
+# LeaderWorkerSet group. StatefulSets run this group, and StatefulSets accept only `restartPolicy: Always`.
 
 # %%
 tmpl = m.pod_template(m.pod_spec([m.GPUContainer(gpus=4)], shm_size="1Gi"))   # restartPolicy: Never (a Job habit)
@@ -64,14 +68,14 @@ print(lint.format_findings(lint.lint(lws)))
 # %% [markdown]
 # ## Exercise 1.1 — the API server's GPU rules
 #
-# Write `gpu_resources_ok(resources)` returning a list of problems (empty = accepted) for one
-# container's `resources` dict, applying the three rules for `nvidia.com/gpu`:
-# 1. a quantity must be a whole number (`"500m"` and `0.5` are not);
-# 2. a request needs a limit;
-# 3. if both are given they must be equal.
+# Write `gpu_resources_ok(resources)` for the `resources` dict of one container. It returns a list of
+# problems (an empty list means accepted). Apply the three rules for `nvidia.com/gpu`:
+# 1. a quantity must be a whole number (`"500m"` and `0.5` are not).
+# 2. a request must have a limit.
+# 3. if both are present, they must be equal.
 #
-# Use `lint.parse_quantity(q)` (returns an exact `Fraction`). Return any non-empty strings you
-# like; the check compares *which* rules fire, not the wording.
+# Use `lint.parse_quantity(q)`. It returns an exact `Fraction`. Return any non-empty strings that you
+# want. The check compares *which* rules find a problem, not the text of the messages.
 
 # %% exercise
 def gpu_resources_ok(resources: dict) -> list[str]:
@@ -100,15 +104,17 @@ print("✅ gpu_resources_ok agrees with the API server on", len(cases), "cases")
 # %% [markdown]
 # ## Exercise 1.2 — size the startup probe
 #
-# A serving pod loads weights before it answers `/health`. Until the **startup** probe succeeds
-# the kubelet does not run the liveness probe; if the startup probe fails `failureThreshold`
-# times, the container is killed and the load starts again — forever.
+# A serving pod loads weights before it answers `/health`. Until the **startup** probe succeeds, the
+# kubelet does not run the liveness probe. If the startup probe fails `failureThreshold` times, the kubelet
+# stops the container and the load starts again. This loop continues forever.
 #
-# Budget = `failureThreshold × periodSeconds`. Write `failure_threshold(load_s, period_s,
-# margin=1.5)`: the smallest integer threshold whose budget covers `load_s × margin`. Then set
-# two variables: `load_s`, the load time of an 8B model in bf16 (16 GB) read at 400 MB/s plus
-# 60 s of engine init (CUDA graphs, warm-up), and `threshold`, the failure threshold for it with
-# a 10 s period.
+# The budget is `failureThreshold × periodSeconds`. Write `failure_threshold(load_s, period_s,
+# margin=1.5)`. It returns the smallest integer threshold with a budget that covers `load_s × margin`.
+# Then set two variables:
+#
+# * `load_s`: the load time of an 8B model in bf16 (16 GB), read at 400 MB/s, plus 60 s of engine init
+#   (CUDA graphs, warm-up).
+# * `threshold`: the failure threshold for this load with a 10 s period.
 
 # %% exercise
 import math
@@ -130,21 +136,22 @@ print(f"✅ load {load_s:.0f} s -> failureThreshold {threshold} x 10 s = {thresh
 
 # %% [markdown]
 # ## Stranded GPUs: the CPU request is a GPU decision
-# GPUs strand in two ways, and one formula covers both. For a pod shape of $k$ GPUs, the pods
-# that still fit a node are the minimum over resources of $\lfloor \mathit{free} / \mathit{request} \rfloor$, and the stranded
-# GPUs are the free GPUs minus $k$ × that:
+# GPUs become stranded in two ways, and one formula covers the two ways. Take a pod shape of $k$ GPUs. The
+# number of pods that still fit on a node is the minimum, over all resources, of $\lfloor \mathit{free} / \mathit{request} \rfloor$. The
+# stranded GPUs are the free GPUs minus $k$ × that number:
 #
-# * **GPU-count fragmentation** — only GPUs bind: stranded = $\mathit{free} \bmod k$ per node, the count
-#   primer §3.4 *Fragmentation, measured* tracks (a 3-GPU pod shape leaves 2 of 8 GPUs idle).
-# * **Resource-bundle stranding** — CPU or memory binds first. A node is a bundle:
-#   `g2-standard-48` has 4 L4s and 48 vCPUs; after GKE's reservations about 47.8 vCPUs and
-#   181 GiB are allocatable (`k8sgpu.machines.allocatable`, formula marked *verify*). If each
-#   1-GPU pod asks for 16 vCPUs, only two pods fit and two GPUs idle — paid for, unusable.
+# * **GPU-count fragmentation**: only the GPUs run out. Stranded = $\mathit{free} \bmod k$ per node. This
+#   is the count that primer §3.4 *Fragmentation, measured* records (a 3-GPU pod shape leaves 2 of 8 GPUs
+#   idle).
+# * **Resource-bundle stranding**: CPU or memory runs out first. A node is a bundle. `g2-standard-48` has
+#   4 L4s and 48 vCPUs. After GKE's reservations, approximately 47.8 vCPUs and 181 GiB are allocatable
+#   (`k8sgpu.machines.allocatable`, formula marked *verify*). If each 1-GPU pod asks for 16 vCPUs, only two
+#   pods fit and two GPUs are idle. You pay for these two GPUs, but you cannot use them.
 #
-# The per-GPU share is the budget before anything else runs on the node. DaemonSets (logging,
-# monitoring, the device plugin) and injected sidecars (GKE's GCS FUSE sidecar, a service-mesh
-# proxy) take from the same bundle, so size pods against what is left; the numbers below use an
-# illustrative 0.5 vCPU / 1 GiB DaemonSet budget (read yours from `kubectl describe node`).
+# The per-GPU share is the budget before anything else runs on the node. DaemonSets (logging, monitoring, the
+# device plugin) and injected sidecars (GKE's GCS FUSE sidecar, a service-mesh proxy) take from the same
+# bundle. Thus, set the size of the pods against the resources that stay free. The numbers in the next cell
+# use an illustrative 0.5 vCPU / 1 GiB DaemonSet budget. Read your budget from `kubectl describe node`.
 
 # %%
 for name in ("g2-standard-4", "g2-standard-48", "a3-highgpu-8g"):
@@ -160,10 +167,11 @@ print("a3-highgpu-8g packed with 3-GPU pods strands", three_gpu, "GPUs =", 8 % 3
 # %% [markdown]
 # ## Exercise 1.3 — how many GPUs does a request strand?
 #
-# Write `stranded(node_cpu, node_mem, node_gpus, pod_cpu, pod_mem, pod_gpus)`: pack identical
-# pods onto one empty node until *any* resource runs out, and return the GPUs left idle.
-# Then answer: on a `g2-standard-48`, what is the largest **whole** number of vCPUs a 1-GPU pod
-# can request (memory 40 GiB) without stranding a GPU? Put it in `max_cpu`.
+# Write `stranded(node_cpu, node_mem, node_gpus, pod_cpu, pod_mem, pod_gpus)`. The function packs identical
+# pods onto one empty node until *any* resource runs out. Then it returns the number of idle GPUs.
+#
+# Then answer this question. On a `g2-standard-48`, a 1-GPU pod has memory 40 GiB. What is the largest
+# **whole** number of vCPUs that it can request with no stranded GPU? Put the answer in `max_cpu`.
 
 # %% exercise
 def stranded(node_cpu, node_mem, node_gpus, pod_cpu, pod_mem, pod_gpus) -> int:
@@ -187,11 +195,11 @@ print(f"✅ a 1-GPU pod on g2-standard-48 can ask for at most {max_cpu} vCPUs; 1
 
 # %% [markdown]
 # ## Gangs: a queue label and a topology annotation
-# A distributed job is useless until *all* its pods run: a gang. Kueue admits a JobSet as one
-# Workload (all pods or none), and with Topology-Aware Scheduling it also chooses **where**: the
-# pod-template annotation `kueue.x-k8s.io/podset-required-topology: <node label>` demands that
-# every pod lands inside one domain of that level (one host = one NVLink domain; one subblock =
-# a few hosts on the same leaf switch). The labels are GCE's placement labels (verify).
+# A gang is a distributed job that is of no use until *all* of its pods run. Kueue admits a JobSet as one
+# Workload (all pods or none). With Topology-Aware Scheduling, Kueue also selects **where** the pods go.
+# The pod-template annotation `kueue.x-k8s.io/podset-required-topology: <node label>` says that every pod
+# must go inside one domain of that level. One host is one NVLink domain, and one subblock is a few hosts on
+# the same leaf switch. The labels are GCE's placement labels (verify).
 
 # %%
 print("levels, coarse to fine:", m.GKE_TOPOLOGY_LEVELS)
@@ -199,10 +207,10 @@ print("levels, coarse to fine:", m.GKE_TOPOLOGY_LEVELS)
 # %% [markdown]
 # ## Exercise 1.4 — build a 2-host tensor-parallel gang
 #
-# Build `gang`: a JobSet named `tp16` in namespace `team-a`, queued on LocalQueue `gpu-queue`,
-# with one replicated job `workers` of **2 pods × 8 GPUs** (think: one model sharded over 16
-# GPUs on two 8-GPU hosts) whose pods must share a **subblock**. Each pod: 8 GPUs, 32 vCPUs,
-# 256Gi memory, a memory-backed `/dev/shm` of 16Gi, accelerator `nvidia-h100-80gb`.
+# Build `gang`. It is a JobSet with the name `tp16` in namespace `team-a`, in the LocalQueue `gpu-queue`.
+# It has one replicated job `workers` of **2 pods × 8 GPUs** (think of one model sharded over 16 GPUs on
+# two 8-GPU hosts). The pods of this job must share a **subblock**. Each pod has 8 GPUs, 32 vCPUs, 256Gi
+# memory, a memory-backed `/dev/shm` of 16Gi and the accelerator `nvidia-h100-80gb`.
 # Use `m.GPUContainer`, `m.pod_spec(..., accelerator=..., shm_size=...)`,
 # `m.topology_annotations`, `m.pod_template`, `m.replicated_job` and `m.jobset`.
 
@@ -228,13 +236,15 @@ print(m.to_yaml(gang)[:600], "...")
 # %% [markdown]
 # ## Exercise 1.5 — make a serving Deployment lint-clean
 #
-# The Deployment below serves a model on a `g2-standard-8` (1 L4, 8 vCPUs, 32 GB). Its weights
-# take about 240 s to load. Edit `broken` **in place** (it is a plain dict) until
+# The Deployment in the exercise cell serves a model on a `g2-standard-8` (1 L4, 8 vCPUs, 32 GB). Its
+# weights take approximately 240 s to load. Edit `broken` **in place** (it is a plain dict). Continue until
 # `lint.lint(broken, machine="g2-standard-8", expected_load_s=240)` returns no errors and no
-# warnings. Every finding names its fix. One of them is a trade-off, not a bug: a rolling update
-# surges an extra GPU pod by default. `maxSurge: 0, maxUnavailable: 1` avoids needing a spare GPU,
-# but with one replica every rollout is an outage lasting a whole cold start. That is fine for a
-# lab; production runs at least two replicas (on on-demand capacity first) or keeps surge headroom.
+# warnings. Every finding tells you its repair.
+#
+# One of the findings is a trade-off, not a bug. By default, a rolling update starts one more GPU pod (a
+# surge). With `maxSurge: 0, maxUnavailable: 1`, you do not need a spare GPU. But with one replica, every
+# rollout is an outage for the full time of a cold start. That is acceptable for a lab. A production
+# deployment runs at least two replicas (on on-demand capacity first) or keeps headroom for a surge.
 
 # %%
 print(lint.format_findings(lint.lint(
@@ -292,10 +302,10 @@ print(lint.format_findings(lint.lint(broken, machine="g2-standard-8", expected_l
 # %% [markdown]
 # ## Two more ways to ask for a GPU
 # **DRA** (Dynamic Resource Allocation, `resource.k8s.io/v1`, GA in Kubernetes 1.34) replaces
-# "give me 1 of this counter" with "give me a device matching this CEL expression": a driver
-# publishes devices and their attributes in `ResourceSlice`s, an admin defines `DeviceClass`es,
-# and a pod references a `ResourceClaimTemplate`. **GKE ComputeClasses** move the other half —
-# *which node to create* — into an ordered fallback list (notebook 04). Primer §1 and §9.
+# "give me 1 of this counter" with "give me a device matching this CEL expression". In DRA, a driver
+# publishes devices and their attributes in `ResourceSlice`s. An admin defines `DeviceClass`es, and a pod
+# refers to a `ResourceClaimTemplate`. **GKE ComputeClasses** move the other half of the decision, *which
+# node to create*, into an ordered fallback list (notebook 04). Primer §1 and §9.
 
 # %%
 rct = m.resource_claim_template("one-l4", "default",
@@ -304,21 +314,23 @@ print(m.to_yaml(rct))
 
 # %% [markdown]
 # ## In a design review
-# *"How do you run a GPU workload on Kubernetes without wasting GPUs?"* — in two minutes:
-# the GPU is an integer extended resource the device plugin advertises; request it as a limit.
-# GPU nodes are tainted, so the pod tolerates the taint and selects its accelerator. Size CPU
-# and memory to the node's per-GPU share or you strand GPUs. Serving pods need a startup probe
-# sized to the weight load. Multi-pod jobs are gangs: queue them (Kueue) and pin them to a
-# topology domain. And lint before you apply: CRDs accept broken pod templates.
+# *"How do you run a GPU workload on Kubernetes without wasting GPUs?"* The answer, in two minutes:
 #
-# **Drill 1.** *A JobSet was applied fine but no pods ever appeared. First place to look?*
-# Events on the child Jobs / the JobSet: its controller hit pod validation the CRD did not do
-# (e.g. a bad `restartPolicy` or a GPU request without a limit).
+# * The GPU is an integer extended resource that the device plugin advertises. Request it as a limit.
+# * GPU nodes have a taint. Thus the pod has a toleration for the taint and selects its accelerator.
+# * Set CPU and memory to the per-GPU share of the node. If not, you strand GPUs.
+# * A serving pod must have a startup probe sized to the weight load.
+# * Multi-pod jobs are gangs. Put them in a queue (Kueue) and pin them to a topology domain.
+# * Run the linter before you apply. CRDs accept broken pod templates.
 #
-# **Drill 2.** *Why is `requests: {nvidia.com/gpu: 1}` without a limit rejected when CPU is fine?*
-# Extended resources cannot be overcommitted, so the limit is the allocation; the API server
-# requires it (and fills the request from it).
+# **Drill 1.** *You applied a JobSet with no error, but no pods ever appeared. Where do you look first?*
+# Look at the events on the child Jobs or on the JobSet. Its controller failed the pod validation that the
+# CRD did not do (for example, an incorrect `restartPolicy` or a GPU request without a limit).
 #
-# **Drill 3.** *A 4-GPU node runs only two 1-GPU pods and the rest sit idle. Why?*
-# The pods' CPU or memory requests exceed a quarter of the node's allocatable: CPU ran out
-# before GPUs. Size requests to the per-GPU share.
+# **Drill 2.** *Why does the API server reject `requests: {nvidia.com/gpu: 1}` without a limit, when it
+# accepts the same for CPU?* You cannot overcommit an extended resource, thus the limit is the allocation.
+# The API server rejects the request without the limit (and fills the request from the limit).
+#
+# **Drill 3.** *A 4-GPU node runs only two 1-GPU pods, and the other GPUs are idle. Why?*
+# The CPU or memory requests of the pods are more than a quarter of the node's allocatable. The CPU ran out
+# before the GPUs. Set the requests to the per-GPU share.
