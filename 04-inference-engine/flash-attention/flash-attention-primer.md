@@ -77,7 +77,7 @@ Calculate the cost for one head at $N$ = 4096, $d$ = 64, fp16:
 
 Arithmetic intensity: `4.3e9 / 134e6` ≈ **32 FLOPs per byte**. Compared with the threshold of ~300, this kernel runs at approximately one tenth of the capability of the machine. It is almost fully memory-bound.
 
-The details make it worse. The two matmuls are efficient work for the tensor cores. But softmax, the mask, dropout and the scale are *elementwise* operations, with one or two FLOPs per element. Thus, each of them alone has a very low arithmetic intensity. In a simple implementation, each of them is a separate kernel launch that moves the full $N \times N$ matrix out of HBM and back. The problem is not the matmuls, but the trips to memory between them.
+The details make it worse. The two matmuls are efficient work for the tensor cores. But softmax, the mask, dropout and the scale are *elementwise* operations, with one or two FLOPs per element. Thus, each of them alone has a low arithmetic intensity. In a simple implementation, each of them is a separate kernel launch that moves the full $N \times N$ matrix out of HBM and back. The problem is not the matmuls, but the trips to memory between them.
 
 There is a second failure, and it is more difficult: **it is possible that the memory is not sufficient.** Peak memory is $O(N^2)$. If you double the context, the memory footprint becomes four times larger. Long-context work meets this limit first.
 
@@ -157,9 +157,9 @@ There is no approximation at any step. There is only a deferred normalization an
 
 Training needs gradients. The textbook backward pass for attention needs $P$, and $P$ is exactly the $N \times N$ matrix that the forward pass did not make. If the kernel stores $P$, the quadratic memory cost comes back immediately.
 
-FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$. That is $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again and calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
+FlashAttention **recomputes** $P$ instead. During the forward pass, it keeps only $O$ ($N \times d$) and the final softmax statistics for each row. It packs the statistics as the log-sum-exp $L = m + \log(\ell)$, that is, $N$ numbers, not $N^2$. In the backward pass, it loads the $Q$, $K$, $V$ tiles into SRAM again. Then it calculates each $S$ and $P$ tile again when it needs the tile. It uses the saved $L$ to normalize correctly without a second reduction pass.
 
-This method costs *more* FLOPs than a stored $P$. But it is still faster, because the kernel was never compute-bound. You use extra arithmetic, which the kernel has available, to get back bandwidth, which is limited. It is the same logic as gradient checkpointing. But here, the logic applies precisely at the level of one fused kernel, not at the level of full layers.
+This method costs *more* FLOPs than a stored $P$. But it is still faster, because the kernel was never compute-bound. The kernel has extra arithmetic, but bandwidth is scarce. Thus, you use the extra arithmetic to get back bandwidth. It is the same logic as gradient checkpointing. But here, the logic applies precisely at the level of one fused kernel, not at the level of full layers.
 
 ---
 
@@ -184,7 +184,7 @@ The last point is important. Around 2020–2021, there was a wave of "efficient 
 - Parallelism over the sequence dimension, not only over batch × heads. This is important when the batch is small and $N$ is large.
 - As few non-matmul FLOPs as possible.
 
-The last change is less obvious than it seems. On an A100, tensor-core matmul runs at 312 TFLOP/s, but general FP32 arithmetic runs at 19.5. Thus, a non-matmul FLOP costs ~16× a matmul FLOP. FA2 does the division that rescales the output at the end of the loop, not in each block. This change is worth real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
+The last change is less obvious than it seems. On an A100, tensor-core matmul runs at 312 TFLOP/s, but general FP32 arithmetic runs at 19.5. Thus, a non-matmul FLOP costs ~16× a matmul FLOP. When the kernel does the division that rescales the output at the end of the loop, not in each block, it gains real percentage points. Result: ~2× over FA1, ~70% of A100 peak (paper figures, verify).
 
 **FlashAttention-3** (2024): specific to Hopper. It uses asynchrony in three ways:
 
@@ -210,9 +210,9 @@ The responses are important to know, because they are specific:
 
 Each CTA calculates two query tiles of 128 tokens each, and it alternates them in a ping-pong schedule.
 
-The authors also wrote it fully in CuTe-DSL, embedded in Python. Its compile times are 20–30× faster than the compile times of approaches based on C++ templates (paper figure, verify). If you waited for a `flash-attn` build before, you will like this change. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, 71% utilization, 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
+The authors also wrote it fully in CuTe-DSL, embedded in Python. Its compile times are 20–30× faster than the compile times of approaches based on C++ templates (paper figure, verify). If you waited for a `flash-attn` build before, you will like this change. Performance, as the paper reports it (verify): up to 1605 TFLOP/s on B200 with BF16, at 71% utilization. That is 1.3× faster than cuDNN 9.13 and 2.7× faster than Triton.
 
-One useful note from the FA4 rollout (verify): for *inference decode*, FlashAttention-4 was at first slower than FlashAttention-2 on B200s, until FA4 got split-KV. The generation of one token at a time is a different case. A single query row against a long KV cache leaves most SMs idle, unless you split along the key dimension and reduce after that. Remember that "the fastest attention kernel" always depends on the shape.
+One useful note from the FA4 rollout (verify): for *inference decode*, FlashAttention-4 was at first slower than FlashAttention-2 on B200s, until split-KV came to FA4. The generation of one token at a time is a different case. A single query row against a long KV cache leaves most SMs idle, unless you split along the key dimension and reduce after that. Remember that "the fastest attention kernel" always depends on the shape.
 
 ---
 
@@ -246,7 +246,7 @@ It became clear that the online-softmax accumulator is a reusable primitive. Whe
 
 Attention is not high-cost because of the math. It is high-cost because the simple schedule moves a quadratic intermediate to and from slow memory three times. Tiling and online softmax remove those trips, and they do not change one result. Each later version is the same idea, adjusted again when the bottleneck of the hardware moves. The bottleneck was first bandwidth, then the division of work, then asynchrony. Now it is the exponential units and shared memory, which do not keep pace with the tensor cores.
 
-If you keep one general lesson from this primer, keep this one: **on modern accelerators, look at the memory schedule before you look at the FLOP count.**
+The one general lesson to keep from this primer: **on modern accelerators, look at the memory schedule before you look at the FLOP count.**
 
 ---
 
@@ -272,11 +272,11 @@ This table lists the product and paper facts that this primer states. Every othe
 |---|---|---|
 | H100 memory hierarchy (§2) | ~256 KB registers and ~256 KB shared memory/L1 per SM, ~33 MB SRAM total, 80 GB HBM at ~3.3 TB/s | Rounded datasheet figures. The SXM part is 3.35 TB/s, and 228 KB of it is usable shared memory. |
 | Peak bf16 matmul (§2) | H100 ~990 TFLOP/s, ridge ~300 FLOP/B, A100 ~200 FLOP/B (the 40 GB part) | Dense datasheet peaks. The A100 80 GB (2.0 TB/s) gives ~153. |
-| A100 matmul vs FP32 (§8) | 312 vs 19.5 TFLOP/s | datasheet |
-| FA1 traffic saving (§7) | up to 9× fewer HBM accesses on GPT-2 shapes | FA1 paper |
+| A100 matmul against FP32 (§8) | 312 against 19.5 TFLOP/s | datasheet |
+| FA1 traffic reduction (§7) | up to 9× fewer HBM accesses on GPT-2 shapes | FA1 paper |
 | FA2 (§8) | ~2× over FA1, ~70% of A100 peak | FA2 paper. The deep dive gives the 50–73% range. |
 | FA3 (§8) | ~740 TFLOP/s bf16, 75% of H100 | FA3 paper |
 | B200 tensor throughput (§8) | dense bf16 ~2.25 PFLOP/s, up from ~1 | datasheet |
 | FA4 (§8) | paper March 2026, up to 1605 TFLOP/s bf16 on B200 (71%), 1.3× cuDNN 9.13, 2.7× Triton, 20–30× faster compiles with CuTe-DSL | FA4 paper. The primer did not fetch it on this date. |
-| FA4 decode (§8) | initially slower than FA2 on B200 until split-KV was ported | Project history. Examine the current release notes. |
+| FA4 decode (§8) | initially slower than FA2 on B200, until split-KV came to FA4 | Project history. Examine the current release notes. |
 | FlexAttention (§9) | backed by FA4 on Blackwell | PyTorch release in use |

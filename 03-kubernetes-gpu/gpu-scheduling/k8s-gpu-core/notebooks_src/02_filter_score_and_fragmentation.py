@@ -9,11 +9,11 @@
 # kube-scheduler places **one pod at a time**. It sorts the queue by priority. In the **filter** step,
 # it removes the nodes that cannot run the pod, each with a reason. In the **score** step, it gives a
 # score to the other nodes, and then it binds the pod to the best node. When no node passes, it tries
-# **preemption** of lower-priority pods. If preemption does not help, it reports `0/N nodes are
-# available: ...`.
+# **preemption** of lower-priority pods. If preemption does not help, it reports
+# `0/N nodes are available: ...`.
 #
 # The score step decides GPU **fragmentation**. The default `NodeResourcesFit` strategy is
-# `LeastAllocated` over **cpu and memory**. It spreads pods and never looks at GPUs. Thus a series of
+# `LeastAllocated` over **cpu and memory**. It spreads pods and never looks at GPUs. Thus a stream of
 # 1-GPU pods lands one per node. Then an 8-GPU pod fits nowhere, although half the GPUs are free.
 # `MostAllocated` with a GPU weight packs the pods instead.
 #
@@ -60,8 +60,7 @@ print("free GPUs:", spread.free(), "| stranded for 8-GPU pods:", stranded_gpus(s
 # the configured resources. Here, *requested* already includes the pod that arrives:
 #
 # $$
-# \mathit{score} = \left\lfloor \frac{\sum_r \mathit{weight}_r \cdot \lfloor \min(\mathit{requested}_r,
-# \mathit{alloc}_r) \cdot 100 / \mathit{alloc}_r \rfloor}{\sum_r \mathit{weight}_r} \right\rfloor
+# \mathit{score} = \left\lfloor \frac{\sum_r \mathit{weight}_r \cdot \lfloor \min(\mathit{requested}_r, \mathit{alloc}_r) \cdot 100 / \mathit{alloc}_r \rfloor}{\sum_r \mathit{weight}_r} \right\rfloor
 # $$
 #
 # Write `most_allocated_score(rows)`. Here, `rows` is a list of `(requested_after, allocatable, weight)`
@@ -86,8 +85,8 @@ print("✅ score = weighted, integer, and includes the incoming pod")
 
 # %% [markdown]
 # Now pack the pods, and do not spread them. Use `MostAllocated` for the score, and give the GPU a
-# weight. In a real cluster, this is a `KubeSchedulerConfiguration` profile. It is a scheduler that you
-# run yourself, or a second profile that pods select with `schedulerName`:
+# weight. In a real cluster, this is a `KubeSchedulerConfiguration` profile. The profile is in a
+# scheduler that you run yourself, or it is a second profile that pods select with `schedulerName`:
 #
 # ```yaml
 # apiVersion: kubescheduler.config.k8s.io/v1
@@ -185,7 +184,7 @@ print("✅ both 8-GPU pods placed: only a score that weights the GPU keeps two w
 
 # %% [markdown]
 # Bin-packing has a price, and this price belongs in the same review. First, the replicas of one service
-# collect on one node. Then one node failure stops several of them, so add `topologySpreadConstraints`
+# collect on one node. If that node fails, several replicas stop. Thus, add `topologySpreadConstraints`
 # for those replicas. Also, other default score plugins pull the placement toward a spread:
 # `NodeResourcesBalancedAllocation`, and the default `PodTopologySpread` constraints for Deployment
 # pods. Thus, measure the result.
@@ -254,7 +253,7 @@ print("\n", d.node, d.message)
 # Write the per-node step of `DefaultPreemption`. First, remove **all** pods with lower priority than
 # the preemptor. If the preemptor still does not fit, return `None`. If it fits, add the pods back one
 # at a time, *most important first* (higher priority, then earlier `started`). Keep out only the pods
-# without which the preemptor cannot fit. Use `fits(node)` in the next cell, which runs the filters.
+# without which the preemptor cannot fit. Run the filters with `fits(node)` in the next cell.
 
 # %% exercise
 def victims_on(node: Node, preemptor: Pod) -> list | None:

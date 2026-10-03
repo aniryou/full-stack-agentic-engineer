@@ -28,7 +28,7 @@ Each busy Spot L4 node adds ~$0.25/h (us-central1, Sep 2026, verify). The table 
 [Cost](#cost-us-central1-sep-2026---verify).
 
 **Clean up.** Run `deploy/gke/apply-examples.sh delete`. Then run `terraform destroy` in `deploy/gcp/terraform`.
-One pass removes everything, except the APIs, which stay on (see [Clean up](#clean-up)).
+One pass removes everything, except the enabled APIs. They stay on (see [Clean up](#clean-up)).
 
 | File | Contents |
 |---|---|
@@ -46,8 +46,8 @@ One pass removes everything, except the APIs, which stay on (see [Clean up](#cle
   Trial account. When you upgrade the account, you keep the credits.
 * **GPU quota**: `GPUS_ALL_REGIONS` and the regional L4 quotas (on-demand and preemptible) often start at 0.
   Request 1-2 in IAM & Admin > Quotas. Google usually approves L4 requests fast (verify).
-* Flex-start and queued provisioning: read the current GKE docs for the supported GPU types and regions. Also
-  find out if your project must turn on something first (verify).
+* Flex-start and queued provisioning: read the current GKE docs. Find the supported GPU types and regions, and
+  the things that your project must turn on first (verify).
 
 ## Run it
 

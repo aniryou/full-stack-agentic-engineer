@@ -1,23 +1,26 @@
 # %% [markdown]
 # # 05 · KV-cache tiers and agent sessions
 #
-# **Tier:** T0 — CPU only, a few seconds, no network. Every number below is **simulated** by `fleetsim`; tier
-# bandwidths are stated assumptions, not measurements.
+# **Tier:** T0 (CPU only, a few seconds, no network). Every number in this notebook is a **simulated** number from
+# `fleetsim`. The tier bandwidths are assumptions that we state, not measurements.
 #
 # ## The one-minute version
-# An agent session re-sends its whole, growing history every turn and pauses between turns while tools run. That
-# makes its KV cache the most reusable state in the fleet — and the most evictable: the **working set**
-# ($\text{sessions} \times \text{context} \:\times$ $\text{KV bytes per token}$) is many times the HBM a replica can
-# spare, so LRU evicts a session during its tool call and the next turn re-prefills everything. Two moves fix it:
+# An agent session sends its full history again at every turn, and this history becomes longer at each turn. Between
+# turns, the session pauses while tools run. Thus its KV cache is the most reusable state in the fleet. It also has
+# the highest chance of eviction. The **working set** ($\text{sessions} \times \text{context} \:\times$
+# $\text{KV bytes per token}$) is many times the HBM that a replica can spare. Thus LRU evicts a session during its
+# tool call, and the next turn must prefill everything again.
+#
+# Two changes repair this problem:
 #
 # * **Offload** evicted KV to host DRAM, local NVMe or a remote store (vLLM's OffloadingConnector, LMCache, Mooncake,
-#   SGLang HiCache). Fetching beats recomputing whenever the tier's bandwidth exceeds the rate at which prefill
-#   *produces* KV: $\text{KV bytes/token} \times \text{prefill tokens/s}$ — about 0.5 GB/s for an 8B model on an L4,
-#   4 GB/s on an H100.
-# * **Keep sessions near their KV** — sticky routing — or make the KV reachable from anywhere with a **shared** tier,
-#   which frees the router to balance load again (notebook 02's tension, dissolved by memory).
+#   SGLang HiCache). A fetch is faster than a recompute when the bandwidth of the tier is more than the rate at which
+#   prefill *produces* KV. This rate is $\text{KV bytes/token} \times \text{prefill tokens/s}$: about 0.5 GB/s for an
+#   8B model on an L4, and 4 GB/s on an H100.
+# * **Keep sessions near their KV** with sticky routing. Or make the KV available from all replicas with a **shared**
+#   tier. Then the router is free to balance load again. Thus memory removes the tension of notebook 02.
 #
-# Primer §6.
+# Read Primer §6.
 
 # %%
 from fleetsim import (H100_8B, L4_8B, LLAMA_8B_KV, Fleet, Tier, TieredKV, agentic, breakeven_gb_s, epp, onload_s,
@@ -34,13 +37,14 @@ for sessions, ctx in ((50, 8_000), (200, 30_000), (1_000, 30_000)):
 print(table(rows, title="KV working set of concurrent agent sessions, 8B model (arithmetic)"))
 
 # %% [markdown]
-# Two hundred coding-agent sessions at 30k tokens of context need ~800 GB of KV — fifteen H100s' worth of KV pool,
-# before any of them has generated a token. Most of those sessions are idle at any instant (waiting on a tool), so
-# the question is not "can HBM hold it" (no) but "where should the idle ones live, and what does it cost to bring one
-# back?"
+# Two hundred coding-agent sessions at 30k tokens of context need ~800 GB of KV. That is the KV pool of fifteen
+# H100s, before any of the sessions has generated a token. At any instant, most of those sessions are idle, because
+# they wait for a tool. Thus the question is not "can HBM hold it" (no). The question is "where is the best place for
+# the idle ones, and what does it cost to bring one back?"
 #
 # ## Worked example — routing cannot fix a capacity problem
-# The same four-L4 fleet and EPP router as notebook 02, with short (1–4 s) and long (10–40 s) pauses between turns.
+# This example uses the same four-L4 fleet and EPP router as notebook 02. The pauses between turns are short (1–4 s)
+# or long (10–40 s).
 
 # %%
 rows = []
@@ -52,13 +56,13 @@ for think in ((1, 4), (10, 40)):
 print(table(rows, title="simulated: EPP 3:2:2 on 4x L4, agent sessions"))
 
 # %% [markdown]
-# Longer pauses mean more sessions are alive at once, so each session's KV is evicted before its next turn: the hit
-# rate falls back to "system prompts only", whatever the router does.
+# With longer pauses, more sessions are alive at the same time. Thus the replica evicts the KV of each session before
+# its next turn. The hit rate goes back down to "system prompts only", whatever the router does.
 #
 # ## Exercise 5.1 — fetch or recompute?
-# Recomputing $n$ tokens of KV takes $n / \mathrm{prefill\_tok\_s}$; fetching them takes
-# $n \times \mathrm{kv\_bytes\_per\_token} / \text{bandwidth}$. Write `fetch_beats_recompute(profile, tiers)`: the
-# names of the tiers whose read bandwidth exceeds the break-even
+# A recompute of $n$ tokens of KV takes $n / \mathrm{prefill\_tok\_s}$. A fetch of these tokens takes
+# $n \times \mathrm{kv\_bytes\_per\_token} / \text{bandwidth}$. Write `fetch_beats_recompute(profile, tiers)`. Return
+# the names of the tiers whose read bandwidth is more than the break-even
 # $\mathrm{kv\_bytes\_per\_token} \times \mathrm{prefill\_tok\_s}$ (in GB/s).
 
 # %% exercise
@@ -84,15 +88,19 @@ print(f"10k tokens on an H100: recompute {recompute_s(n, H100_8B.compute_tok_s) 
 print("✅ the faster the GPU, the faster the tier must be to be worth it")
 
 # %% [markdown]
-# One caveat on the break-even: `recompute_s` is linear in tokens, like the simulator's prefill. Attention adds
-# FLOPs that grow with context — for an 8B model about +16 % at 10k tokens and +50 % at 30k — so real long-context
-# recompute is slower than this and fetching wins by more. The tier bandwidths are assumptions to measure.
+# One caveat about the break-even: `recompute_s` is linear in tokens, as is the prefill of the simulator. Attention
+# adds FLOPs that increase with the context. For an 8B model, attention adds about +16 % at 10k tokens and +50 % at
+# 30k. Thus, in practice, a long-context recompute is slower than this, and a fetch wins by more. The tier bandwidths
+# are assumptions. Measure them.
 
 # %% [markdown]
 # ## Exercise 5.2 — two tiers, demote on evict
-# Implement the core of an offloading cache: `put(key, gb)` inserts into the fast tier as most recently used; while
-# the fast tier is over capacity, its least recently used entry is **demoted** to the slow tier; while the slow tier
-# is over capacity, its LRU entry is **dropped**. `where(key)` returns `"fast"`, `"slow"` or `None`.
+# Write the core of a cache that offloads:
+#
+# * `put(key, gb)` puts the entry into the fast tier as the most recently used entry.
+# * While the fast tier is over capacity, **demote** its least recently used entry to the slow tier.
+# * While the slow tier is over capacity, **drop** its LRU entry.
+# * `where(key)` returns `"fast"`, `"slow"` or `None`.
 
 # %% exercise
 from collections import OrderedDict
@@ -135,11 +143,14 @@ print("✅ TwoTier works — the same demotion chain as fleetsim.TieredKV")
 
 # %% [markdown]
 # ## Worked example — agent sessions over tiers
-# 600 agent sessions arrive at 1/s on four H100 replicas; each keeps ~8 GB of HBM for idle sessions (the rest serves
-# running requests — an assumption). `simulate_sessions` replays every turn: where is the session's context now,
-# and what does bringing it back cost? It scores resumed turns only; its floor is the new tool-result tokens that
-# must be prefilled anyway. (Its tiers are exclusive — an evicted session moves down a tier. Real offload keeps a
-# copy in the lower tier as KV is written, so count a DRAM tier's capacity alone, not HBM + DRAM.) First, HBM only:
+# 600 agent sessions arrive at 1/s on four H100 replicas. Each replica keeps ~8 GB of HBM for idle sessions. The rest
+# of the HBM serves the requests that run (this is an assumption). `simulate_sessions` replays every turn. For each
+# turn, it finds where the context of the session is now, and what it costs to bring the context back. It gives a
+# score only to resumed turns, and its floor is the new tool-result tokens that the replica must prefill in all cases.
+#
+# (The tiers of the simulator are exclusive: an evicted session moves down one tier. In practice, offload keeps a copy
+# in the lower tier at the time when the engine writes the KV. Thus, count the capacity of a DRAM tier alone, not
+# HBM + DRAM.) First, the run with HBM only:
 
 # %%
 common = dict(kv_bytes_per_token=LLAMA_8B_KV, prefill_tok_s=H100_8B.compute_tok_s, replicas=4, session_rate=1.0,
@@ -163,13 +174,17 @@ print(table([{c: r.get(c, 0.0) for c in cols} for r in rows], cols,
             title="simulated: where each resumed turn found its KV (share of turns)"))
 
 # %% [markdown]
-# HBM alone serves a minority of resumed turns even with sticky routing.
+# Even with sticky routing, HBM alone serves a minority of resumed turns.
 #
 # ## Exercise 5.3 — predict what a tier buys
-# Before running them, **predict**: of `"sticky + DRAM"` (64 GB of DRAM per replica, session-sticky routing),
-# `"random + DRAM"` (the same tiers, random routing) and `"random + shared"` (HBM plus the shared 1 TB store,
-# random routing), which recomputes the largest share of resumed prompt tokens? And does the shared tier get within
-# 2 percentage points of sticky routing's recomputed-token share?
+# Before you run the three cases, **predict** the results. The cases are:
+#
+# * `"sticky + DRAM"`: 64 GB of DRAM per replica, session-sticky routing.
+# * `"random + DRAM"`: the same tiers, random routing.
+# * `"random + shared"`: HBM plus the shared 1 TB store, random routing.
+#
+# Which case recomputes the largest share of resumed prompt tokens? Does the shared tier get within 2 percentage
+# points of the recomputed-token share of sticky routing?
 
 # %% exercise
 most_recompute = None
@@ -192,14 +207,15 @@ assert shared_matches_sticky == (abs(got["random + shared"] - got["sticky + DRAM
 print("✅", {k: round(v, 3) for k, v in got.items()})
 
 # %% [markdown]
-# A modest DRAM tier with sticky routing serves nearly all resumed turns, at a few tens of milliseconds instead of a
-# full re-prefill. Random routing wastes most of that tier — each replica only holds the sessions it happened to
-# serve — unless the tier is **shared**, in which case routing is free to chase load again.
+# A DRAM tier of moderate size with sticky routing serves nearly all resumed turns. Each turn costs a few tens of
+# milliseconds instead of a full re-prefill. Random routing wastes most of that tier, because each replica holds only
+# the sessions that it served by chance. But if the tier is a **shared** tier, the routing is free to follow the load
+# again.
 #
 # ## Exercise 5.4 — size the DRAM tier
-# The floor is what sticky routing reaches with unlimited DRAM. Write `smallest_dram(candidates, recompute_share,
-# tolerance)`: return the smallest candidate size whose recomputed-token share is within `tolerance` of the floor
-# (`recompute_share(gb)` runs the simulation for one size).
+# The floor is the value that sticky routing gets with unlimited DRAM. Write
+# `smallest_dram(candidates, recompute_share, tolerance)`. Return the smallest candidate size whose recomputed-token
+# share is within `tolerance` of the floor. `recompute_share(gb)` runs the simulation for one size.
 
 # %% exercise
 def smallest_dram(candidates, recompute_share, tolerance=0.01):
@@ -220,19 +236,23 @@ print(f"✅ {pick} GB of DRAM per replica reaches the floor for this workload �
 
 # %% [markdown]
 # ## In a design review
-# **Two-minute version.** "Agent sessions re-send a growing history and sit idle during tool calls, so their KV is
-# both the most reusable and the first to be evicted; the working set is many times what HBM can spare. I'd add a
-# CPU-memory offload tier on every replica first — it beats recompute on any GPU because PCIe moves KV faster than
-# prefill creates it — and keep routing session-sticky with a load gate. If we need to rebalance freely or survive
-# replica loss, a shared KV store (LMCache or Mooncake over RDMA) makes any replica able to resume any session. I'd
-# size the tiers from a replay of real session traces: hit shares per tier and the recomputed-token floor."
+# **Two-minute version.** "Agent sessions send a history again at each turn, and this history becomes longer. The
+# sessions are idle during tool calls. Thus their KV is the most reusable, and it is also the first KV that the
+# replica evicts. The working set is many times what HBM can spare.
+#
+# "First, I will add a CPU-memory offload tier on every replica. It is faster than recompute on any GPU, because PCIe
+# moves KV faster than prefill creates it. I will also keep the routing session-sticky, with a load gate.
+#
+# "A shared KV store (LMCache or Mooncake over RDMA) lets any replica resume any session. We need it if we must
+# balance the load again freely or continue after the loss of a replica. I will calculate the size of the tiers from a replay of
+# session traces from production: the hit shares per tier and the recomputed-token floor."
 #
 # **Drills**
-# 1. *Offload to NVMe or just recompute?* Compare the drive's read bandwidth with
-#    $\text{KV bytes/token} \times \text{prefill tokens/s}$: ~0.5 GB/s for an 8B model on an L4 (NVMe wins easily),
-#    ~4 GB/s on an H100 (a single drive is marginal).
-# 2. *Why does sticky routing matter more once you offload?* A local tier only helps the sessions that come back to
-#    it; random routing turns most resumes into misses unless the tier is shared.
-# 3. *What limits a shared tier?* Its network bandwidth and latency against the break-even, its capacity
-#    ($\text{sessions} \times \text{context} \times \text{bytes}$), and consistency: blocks must be keyed by the same
-#    chain hashes and model version everywhere.
+# 1. *Offload to NVMe or just recompute?* Compare the read bandwidth of the drive with
+#    $\text{KV bytes/token} \times \text{prefill tokens/s}$. This rate is ~0.5 GB/s for an 8B model on an L4, and NVMe
+#    wins by a large margin. On an H100, the rate is ~4 GB/s, and a single drive is at the limit.
+# 2. *Why does sticky routing matter more once you offload?* A local tier helps only the sessions that come back to
+#    it. Random routing changes most resumes into misses, unless all the replicas share the tier.
+# 3. *What limits a shared tier?* Three things limit it. The first is its network bandwidth and latency against the
+#    break-even. The second is its capacity ($\text{sessions} \times \text{context} \times \text{bytes}$). The third
+#    is consistency: every replica must key the blocks with the same chain hashes and model version.

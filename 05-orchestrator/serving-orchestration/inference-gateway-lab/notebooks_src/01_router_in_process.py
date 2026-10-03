@@ -5,8 +5,8 @@
 # vLLM-shaped fake backends and the router start inside this notebook on free localhost ports, and
 # they talk real HTTP. `igwlab/fakebackend.py` emulates the backend *times*: prefill cost per
 # uncached token, decode cost per token, batch slots. Thus every latency in this notebook is
-# "measured on this machine, emulated backend". It is good for a comparison of routing policies, not
-# as a GPU benchmark.
+# "measured on this machine, emulated backend". It is good for a comparison of routing policies,
+# but it is not a GPU benchmark.
 #
 # ## The one-minute version
 #

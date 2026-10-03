@@ -6,8 +6,7 @@ Make GPUs schedulable. After this layer, you can explain these things:
 - Why a GPU pod is Pending, and how to repair it.
 - How to place gangs without deadlock.
 - How to share a cluster between teams with Kueue quotas.
-- How to get GPU capacity and start it fast. You can get the capacity from zero, on Spot or through queued
-  provisioning.
+- How to get GPU capacity (from zero, on Spot or through queued provisioning) and start it fast.
 
 ## Where this layer sits
 
@@ -27,7 +26,7 @@ This layer is the cluster. It takes the GPUs that the runtime (02) makes availab
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`gpu-scheduling/`](gpu-scheduling/README.md) | read a `FailedScheduling` message and repair the pod. Measure GPU fragmentation. Place a gang in the smallest topology domain. Write Kueue ClusterQueues with borrowing, and predict which workloads Kueue preempts. Select between Spot, DWS flex-start and reservations, and make a budget for the startup latency. The topic has a primer, a pure-Python simulator, a kind cluster with fake GPUs, one real GPU VM and GKE. | ~9 h primer + core, ~5 h lab (+2 h on GKE) | T0 to T3 |
+| [`gpu-scheduling/`](gpu-scheduling/README.md) | read a `FailedScheduling` message and repair the pod. You can also measure GPU fragmentation and place a gang in the smallest topology domain. You can write Kueue ClusterQueues with borrowing, and predict which workloads Kueue preempts. You can select between Spot, DWS flex-start and reservations, and make a budget for the startup latency. The topic has a primer, a pure-Python simulator, a kind cluster with fake GPUs, one real GPU VM and GKE. | ~9 h primer + core, ~5 h lab (+2 h on GKE) | T0 to T3 |
 
 *Tiers: T0 is a laptop or a Colab CPU, at no cost. T1 is one small GPU (a Colab or Kaggle T4, or a rented card). T2
 is a multi-GPU box that you rent for an hour. T3 is the Google Cloud deployment, and it is optional.*
@@ -49,7 +48,7 @@ is a multi-GPU box that you rent for an hour. T3 is the Google Cloud deployment,
 | Path | What it is | Tier |
 |---|---|---|
 | [`PRIMER.md`](gpu-scheduling/PRIMER.md) | ten sections. The first is what Kubernetes sees: extended resources, the device plugin API, labels, taints and DRA. The second compares GPU Operator and managed drivers. The third is the scheduling cycle: filter, score, fragmentation and stranded GPUs, and preemption. The next three are gangs, topology-aware placement, and Kueue queues and quotas. The last four are how to get capacity, startup latency, how to share GPUs and how to learn locally. After them come a walkthrough for a design review, drills, a glossary, sources and a dated verify list. The worked numbers come from `k8s-gpu-core`, and the primer names the function next to each number. | read |
-| [`k8s-gpu-core/`](gpu-scheduling/k8s-gpu-core/) | the minimal implementation, package `gpusched`, with the standard library only. It has a simulator of the device plugin and kubelet, of kube-scheduler's filters, scores and preemption, and of gangs and Kueue TAS. The simulator also has Kueue quotas with borrowing, lending and reclaim, and a GPU cluster autoscaler. The autoscaler models scale from zero, Spot restarts, queued provisioning and startup latency. The core has five fill-in notebooks. | T0 |
+| [`k8s-gpu-core/`](gpu-scheduling/k8s-gpu-core/) | the minimal implementation, package `gpusched`, with the standard library only. It has a simulator of the device plugin and kubelet, of kube-scheduler's filters, scores and preemption, and of gangs and Kueue TAS. The simulator also has Kueue quotas with borrowing, lending and reclaim, and a GPU cluster autoscaler. The autoscaler includes scale from zero, Spot restarts, queued provisioning and startup latency. The core has five fill-in notebooks. | T0 |
 | [`k8s-gpu-lab/`](gpu-scheduling/k8s-gpu-lab/) | the detailed lab, package `k8sgpu`. At T0, it has typed manifest generators (Job, JobSet, LeaderWorkerSet, Kueue, DRA, ComputeClass) and a GPU pod-spec linter. It also has a "why is my pod Pending?" explainer with fixtures, a capacity-type chooser and an offline predictor for every kind scenario. At T0 + Docker, it has a kind cluster with fake `nvidia.com/gpu` capacity, the real kube-scheduler, Kueue v0.19.6, JobSet and LeaderWorkerSet. At T1/T2, it has k3s with the real NVIDIA device plugin on one GPU VM. At T3, it has GKE through Terraform: a Spot L4 pool from zero, and DWS flex-start queued provisioning through Kueue's ProvisioningRequest check. The T3 path also has ComputeClass fallbacks, GCS FUSE weights and time-sharing. The lab has four notebooks. | T0 to T3 |
 
 The suggested order is a primer section, then its core notebook, then the lab notebook, which is optional:
@@ -77,7 +76,7 @@ real control plane.
 | **T0** | laptop, Colab CPU, CI | the primer, all five core notebooks, and the lab's generators, linter, Pending explainer, capacity model and kind predictor | $0 |
 | **T0 + Docker** | a laptop with Docker | the lab's `deploy/kind`: the real kube-scheduler, Kueue, JobSet and LWS against fake GPUs. As an option, you can add hundreds of KWOK nodes. | $0 |
 | **T1 / T2** | any GPU VM you control (Lambda, a GCP VM) | the lab's `deploy/gpu-vm`: k3s with the real NVIDIA device plugin, GPU Feature Discovery labels, time-slicing | the VM's hourly price |
-| **T3** | GKE, via the lab's Terraform | zonal GKE Standard, a Spot L4 pool that scales from 0 to N, DWS flex-start through Kueue, ComputeClass, GCS FUSE, time-sharing | pay per use (~$0.23/h idle + ~$0.25/h per busy Spot L4 node) |
+| **T3** | GKE, through the lab's Terraform | zonal GKE Standard, a Spot L4 pool that scales from 0 to N, DWS flex-start through Kueue, ComputeClass, GCS FUSE, time-sharing | pay per use (~$0.23/h idle + ~$0.25/h per busy Spot L4 node) |
 
 ## How it fits
 
@@ -86,8 +85,8 @@ real control plane.
 in brief, and §4 for the parallelism menu). You also need
 [`roofline-and-fabric/`](../01-hardware-gpu-fabric/roofline-and-fabric/README.md): fabric bandwidth and why topology
 is important, cold-start arithmetic, checkpoint intervals, GPU families and obtainability. From layer 02
-([`02-cuda-nccl-runtime`](../02-cuda-nccl-runtime/README.md)), you need how a container gets a GPU, the mechanics of
-MIG, time-slicing and MPS, and DCGM health.
+([`02-cuda-nccl-runtime`](../02-cuda-nccl-runtime/README.md)), you need these subjects: how a container gets a GPU,
+the mechanics of MIG, time-slicing and MPS, and DCGM health.
 
 The [curriculum's spiral](../CURRICULUM.md#31-why-this-order) brings you here after you measure layer 04 on a GPU.
 Thus the pods that you schedule here are engines that you ran before. The engine itself is not a prerequisite.
@@ -95,7 +94,8 @@ Thus the pods that you schedule here are engines that you ran before. The engine
 **Leads to** layer 05 and layer 06. Layer 05 ([`05-orchestrator`](../05-orchestrator/README.md)) autoscales replicas
 and LeaderWorkerSet groups on queue and SLO signals, and it has prefill/decode disaggregation. Layer 06
 ([`agentic-scaling-lab`](../06-gateway/scaling-admission-cost/agentic-scaling-lab/)) has admission control and cost at
-the gateway. That is "shape demand to capacity" one layer above Kueue's quotas.
+the gateway. Admission control and cost at the gateway are "shape demand to capacity" one layer above Kueue's
+quotas.
 
 ## Caveats
 
@@ -106,7 +106,7 @@ the gateway. That is "shape demand to capacity" one layer above Kueue's quotas.
   necessary.
 - The product versions, GKE details and prices are as of September 2026. They have the (verify) tag.
 - This layer does not cover these topics yet: NUMA and CPU-manager alignment, Volcano beyond a table row and
-  MultiKueue. It also does not cover the mechanics of GPU Operator install and upgrade, or node health remediation. See
+  MultiKueue. It also does not cover how to install and upgrade GPU Operator, or the repair of node health. See
   [`CURRICULUM.md` §2](../CURRICULUM.md#2-what-each-layer-has-and-what-it-does-not-cover-yet).
 
 <!-- colab-links:start -->

@@ -72,7 +72,7 @@ These are the simplifications:
 
 - Preemption binds immediately. It does not nominate a node.
 - The simulator models Kueue with one resource group, flat cohorts, classic preemption and no admission
-  checks. It admits a preemptor in the same step that evicts its victims.
+  checks. It admits a preemptor in the same step in which it evicts the victims of that preemptor.
 - Gangs have one pod shape (no leader, no slices).
 - The least-waste expander ranks idle GPUs, not CPU and memory.
 - `simulate()` is one pool with no utilisation threshold.
@@ -105,14 +105,14 @@ To do an exercise again, run `git restore notebooks/<name>.ipynb`. It returns th
 
 ## Caveats: where the numbers come from
 
-This package calculates every worked number in the notebooks and in `../PRIMER.md`. It states the inputs
-next to each number. The package does not calculate the product facts (defaults, versions, discounts, MIG
+This package calculates every worked number in the notebooks and in `../PRIMER.md`. The notebooks and the primer state
+the inputs next to each number. The package does not calculate the product facts (defaults, versions, discounts, MIG
 profiles). The primer cites them in its Sources and Verify list. The durations, prices, stockout rates and
 preemption rates are **illustrative inputs** (for prices and obtainability, see
 [`COMPUTE.md`](../../../COMPUTE.md)). The outputs are **simulated**.
 
 The tests in `tests/` pin the formulas and reason strings to upstream sources. `tests/test_docs.py` also
 validates the primer's DRA manifest with `kubernetes-validate`. `requirements.txt` and the `dev` extra install
-`kubernetes-validate`. Without it, the test skips.
+`kubernetes-validate`. Without `kubernetes-validate`, the test skips.
 
 MIT licensed.

@@ -1,22 +1,26 @@
 # %% [markdown]
 # # 02 · Cache-aware routing and the load trade-off
 #
-# **Tier:** T0 — CPU only, about 15 seconds, no network. Every number below is **simulated** by `fleetsim`.
+# **Tier:** T0. CPU only, about 15 seconds, no network. `fleetsim` **simulates** every number in this notebook.
 #
 # ## The one-minute version
-# A replica's prefix cache turns a 6,000-token prefill into a few hundred tokens — but only on the replica that holds
-# the prefix. So routing has two goals that pull against each other:
+# The prefix cache of a replica changes a 6,000-token prefill into a few hundred tokens. But this occurs only on the
+# replica that holds the prefix. Thus routing has two goals that pull against each other:
 #
-# * **Locality** (prefix hash, session affinity): send a request where its prefix is cached. Hit rate and TTFT
-#   improve — until a *hot* prefix (one popular agent, one big tenant) overloads the replica that owns it.
-# * **Load** (round-robin, power-of-two): spread the work. No hot spots, but every replica re-prefills everything,
-#   and each replica's small cache has to hold everybody's prefixes.
+# * **Locality** (prefix hash, session affinity): send a request to the replica that has its prefix in the cache.
+#   The hit rate and TTFT improve, until a *hot* prefix (one popular agent, one large tenant) overloads the replica
+#   that owns it.
+# * **Load** (round-robin, power-of-two): spread the work. There are no hot spots. But each replica does the prefill
+#   of everything again, and the small cache of each replica must hold the prefixes of everybody.
 #
-# Production routers are knobs between the two. **Consistent hashing with bounded loads** keeps affinity but caps
-# any replica at $(1 + \varepsilon) \times \text{the average load}$. The **llm-d EPP** filters, then adds weighted
-# scores for prefix match, queue depth and KV use. **Sticky until saturated** keeps affinity until the estimated TTFT
-# penalty is too high. You will find the knob's optimum in numbers, see what each load gate can and cannot see, and
-# route LoRA adapters the same way. Primer: §2 and §7 (and §6 for why long pauses defeat any router).
+# Routers in production are knobs between the two goals. **Consistent hashing with bounded loads** keeps affinity,
+# but it limits each replica to $(1 + \varepsilon) \times \text{the average load}$. The **llm-d EPP** applies
+# filters first. Then it adds weighted scores for prefix match, queue depth and KV use. **Sticky until saturated**
+# keeps affinity until the estimated TTFT penalty is too high.
+#
+# In this notebook, you find the optimum of the knob in numbers. You see what each load gate can see and what it
+# cannot see. You also route LoRA adapters in the same way. Primer: §2 and §7. §6 tells why long pauses defeat any
+# router.
 
 # %%
 from fleetsim import (L4_8B, ConsistentHashBoundedLoad, Fleet, HashChain, PowerOfTwo, PrefixAffinityFilter,
@@ -39,13 +43,15 @@ print(f"{len(reqs)} requests; mean prompt {sum(r.prompt for r in reqs) / len(req
 # %% [markdown]
 # ## The identity a prefix cache matches on
 # vLLM hashes each **full** block of 16 tokens together with the hash of the block before it:
-# $h_i = H(h_{i-1}, \text{tokens of block } i)$. So block $i$ matches only if the *entire* prefix up to it matches —
-# the same paragraph at a different position is a different block, and a partial last block is never shared.
+# $h_i = H(h_{i-1}, \text{tokens of block } i)$. Thus block $i$ matches only if the *entire* prefix up to that block
+# matches. The same paragraph at a different position is a different block. The engine never shares a partial last
+# block.
 #
 # ## Exercise 2.1 — chain hashes
-# Write `block_hashes(tokens, block=16)` returning one hash per **full** block, chaining each block's hash to its
-# parent's: start from `parent = 0`, and for each block compute `parent = hash((parent, tuple(block_tokens)))`.
-# (Python's `hash` of a tuple of ints is deterministic, unlike its `str` hash.)
+# Write `block_hashes(tokens, block=16)`. It returns one hash for each **full** block, and the hash of each block
+# includes the hash of its parent. Start from `parent = 0`. For each block, calculate
+# `parent = hash((parent, tuple(block_tokens)))`. (The Python `hash` of a tuple of ints is deterministic. The Python
+# `hash` of a `str` is not.)
 
 # %% exercise
 def block_hashes(tokens, block=16):
@@ -67,10 +73,10 @@ print("✅ block_hashes works — a hit means the whole prefix matched")
 
 # %% [markdown]
 # ## Exercise 2.2 — two EPP scorers
-# The llm-d Router's `prefix-cache-scorer` scores an endpoint by **matched prefix blocks / total prompt blocks**; its
-# `queue-scorer` min-max normalises the scraped waiting-queue length:
-# **$(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$**, and gives every endpoint a neutral **1.0** if all queues
-# are equal. Write both.
+# The `prefix-cache-scorer` of the llm-d Router gives an endpoint the score **matched prefix blocks / total prompt
+# blocks**. Its `queue-scorer` applies a min-max normalization to the scraped waiting-queue length:
+# **$(\mathrm{maxQ} - q) / (\mathrm{maxQ} - \mathrm{minQ})$**. If all queues are equal, it gives each endpoint a
+# neutral **1.0**. Write both scorers.
 
 # %% exercise
 def prefix_score(request_hashes, cached):
@@ -101,8 +107,8 @@ print("✅ prefix_score and queue_scores match the upstream formulas")
 
 # %% [markdown]
 # ## Worked example — the whole spectrum on one workload
-# Four L4 replicas, agent sessions from six agents (Zipf-popular: the top agent sends about 40 % of sessions). SLO
-# for the attainment column: TTFT <= 1 s and TPOT <= 150 ms.
+# Four L4 replicas serve agent sessions from six agents. The agents are Zipf-popular: the top agent sends
+# approximately 40 % of sessions. The SLO for the attainment column is TTFT $\le$ 1 s and TPOT $\le$ 150 ms.
 
 # %%
 routers = {
@@ -131,22 +137,26 @@ for name, d in gates.items():
           f"{d['sticky'] + d['load_override']} decisions that had a sticky endpoint")
 
 # %% [markdown]
-# Read it left to right. Load-only routers (round-robin, power-of-two) balance perfectly and hit only on the system
-# prompts every replica ends up caching. Hashing the **system prompt** is locality with no brakes: the most popular
-# agent's replica melts (imbalance well above 2, TTFT in tens of seconds). Hashing the **session** works here because
-# sessions are many and small — but it cannot react when one replica gets unlucky. Bounded loads fix the melt at some
-# cost in hits. The EPP gets the history hits of affinity *and* reacts to queues.
+# Read the table from left to right. Load-only routers (round-robin, power-of-two) balance perfectly. They get hits
+# only on the system prompts, which all replicas cache after some time. A hash of the **system prompt** is locality
+# with no brakes. The replica of the most popular agent melts (imbalance well above 2, TTFT in tens of seconds).
 #
-# The last two rows are llm-d's current default composition, and on *this* workload it trails the tuned 3:2:2. The
-# reason is what its gate measures: estimated TTFT = the endpoint's uncached prompt tokens in flight / peak prefill
-# rate — the **prefill backlog**. Here a hot replica slows down from KV pressure and decode residency (see the
-# preemptions), which that estimate does not see, so the upstream 18 s gate never fires and the router is simply
-# sticky with a token-load tie-break. Tightening the gate to 0.5 s lets it break stickiness 14 times (of ~725
-# decisions) and recovers much of the gap. What the filter buys is one knob in TTFT seconds instead of weights to tune; it is
-# designed for prefill-bound traffic (upstream pairs it with `active-request-scorer` for decode-bound traffic).
+# A hash of the **session** works here, because the sessions are many and small. But it cannot react when one
+# replica is unlucky. Bounded loads repair the melt, at some cost in hits. The EPP gets the history hits of affinity
+# *and* reacts to queues.
+#
+# The last two rows are the current default composition of llm-d. On *this* workload, it is behind the adjusted
+# 3:2:2. The reason is what its gate measures: estimated TTFT = the endpoint's uncached prompt tokens in flight /
+# peak prefill rate. This is the **prefill backlog**. Here, a hot replica becomes slow because of KV pressure and
+# decode residency (see the preemptions). That estimate does not see these causes.
+#
+# Thus the upstream 18 s gate never acts, and the router is only sticky, with a token-load tie-break. A tighter gate
+# of 0.5 s lets it break stickiness 14 times (of ~725 decisions), and it recovers much of the gap. The filter gives
+# you one knob in TTFT seconds instead of weights to adjust. Its design is for prefill-bound traffic. The upstream
+# project pairs it with `active-request-scorer` for decode-bound traffic.
 #
 # ## Worked example — the knob: how much should cache locality weigh?
-# Keep queue and KV-utilisation weights at 2 and sweep the prefix-cache weight.
+# Keep the queue weight and the KV-utilisation weight at 2. Then sweep the prefix-cache weight.
 
 # %%
 sweep = []
@@ -156,17 +166,18 @@ for w in (0, 1, 3, 10, 30):
 print(table(sweep, ["prefix weight"] + cols, title="simulated: EPP weight sweep (queue 2, kv 2)"))
 
 # %% [markdown]
-# Hit rate saturates early, but imbalance keeps climbing with the weight: past the optimum, the router keeps sending
-# sessions to the replica that has their history even when its queue is long. Too little weight re-prefills
-# everything; too much rebuilds the prefix-hash hot spot. The optimum depends on the workload and moves when the
-# workload does — the reason llm-d's default replaced tuned weights with a filter whose load gate is stated in
-# TTFT seconds. The first table showed the price of that robustness: a gate only acts on the load it can see.
+# The hit rate saturates early, but the imbalance continues to increase with the weight. Past the optimum, the
+# router continues to send sessions to the replica that has their history, even when its queue is long. Too small a
+# weight prefills everything again, and too large a weight builds the prefix-hash hot spot again. The optimum
+# depends on the workload, and it moves when the workload moves. This is the reason that the default of llm-d
+# replaced adjusted weights with a filter that states its load gate in TTFT seconds. The first table showed the
+# price of that robustness: a gate acts only on the load that it can see.
 #
 # ## Exercise 2.3 — bounded loads
-# Write `bounded_pick(order, loads, eps)`: `order` is the list of replicas in clockwise ring order starting at the
-# request's hash; `loads` maps replica -> requests in flight. Capacity is
-# $\lceil (1 + \mathrm{eps}) \times (\text{total} + 1) / n \rceil$ (the $+1$ counts the request being placed); return
-# the first replica in `order` whose load is **below** capacity.
+# Write `bounded_pick(order, loads, eps)`. `order` is the list of replicas in clockwise ring order, from the hash of
+# the request. `loads` maps each replica to its requests in flight. The capacity is
+# $\lceil (1 + \mathrm{eps}) \times (\text{total} + 1) / n \rceil$ (the $+1$ counts the request that the router
+# places now). Return the first replica in `order` whose load is **below** capacity.
 
 # %% exercise
 def bounded_pick(order, loads, eps):
@@ -191,10 +202,15 @@ print(table(rows, ["eps"] + cols, title="simulated: bounded-load hashing on the 
 
 # %% [markdown]
 # ## Exercise 2.4 — find the band of weights that meets a target
-# The sweep above samples the prefix weight at only five points. With the queue and KV weights held at 2, find the
-# **lowest** and the **highest** integer prefix weight from 1 to 12 at which this workload reaches **hit rate >= 0.85**,
-# **p95 TTFT <= 0.6 s** and **imbalance <= 1.3** (one run takes under a second). Set `band = (lowest, highest)`, and
-# be ready to say which target stops the band at each end, and why.
+# The earlier sweep samples the prefix weight at only five points. Hold the queue and KV weights at 2. Find the
+# **lowest** and the **highest** integer prefix weight from 1 to 12 at which this workload meets all three targets:
+#
+# - **hit rate $\ge$ 0.85**
+# - **p95 TTFT $\le$ 0.6 s**
+# - **imbalance $\le$ 1.3**
+#
+# One run takes less than a second. Set `band = (lowest, highest)`. Be ready to say which target stops the band at
+# each end, and why.
 
 # %% exercise
 band = None
@@ -221,8 +237,8 @@ print(f"✅ prefix weights {band[0]}-{band[1]} meet all three targets on this wo
 
 # %% [markdown]
 # ## Exercise 2.5 — a hotter prefix
-# Make one agent dominant (Zipf 2.0: the top agent now sends about two thirds of the sessions). **Predict** which of
-# these routers suffers the largest p95 TTFT, then let the check run them: `"round-robin"`,
+# Make one agent dominant (Zipf 2.0: the top agent now sends approximately two thirds of the sessions). **Predict**
+# which of these routers gets the largest p95 TTFT. Then let the check run them: `"round-robin"`,
 # `"prefix-hash (system prompt)"`, `"prefix-hash (session)"`, `"EPP 3:2:2 (approx index)"`,
 # `"affinity + token load, 18 s gate"`.
 
@@ -243,11 +259,16 @@ print("✅ a hot prefix melts pure prefix hashing; the EPP spreads it and keeps 
 
 # %% [markdown]
 # ## Exercise 2.6 — how stale is an approximate index?
-# The EPP above never *sees* a replica's cache: its approximate index records the blocks of every request it sends
-# and forgets them LRU-first. Write `phantom_share(believed, actual)`: the fraction of blocks the router believes are
-# cached (`believed`, a set) that the replica no longer holds (`actual`, a set). The check measures it for an index
-# sized 15x too large for an L4's KV pool — a plausible misconfiguration when defaults are sized for bigger GPUs.
-# **Predict** first: does the oversized index cost this workload more than 0.05 of hit rate (`True` or `False`)?
+# The EPP in the earlier examples never *sees* the cache of a replica. Its approximate index records the blocks of
+# each request that it sends, and it forgets them LRU-first.
+#
+# Write `phantom_share(believed, actual)`. `believed` (a set) holds the blocks that the router believes are in the
+# cache. `actual` (a set) holds the blocks that the replica holds. The function returns the fraction of `believed`
+# that the replica no longer holds.
+#
+# The check measures this fraction for an index that is 15x too large for the KV pool of an L4. This is a plausible
+# misconfiguration when the default sizes are for larger GPUs. **Predict** first: does the oversized index cost this
+# workload more than 0.05 of hit rate (`True` or `False`)?
 
 # %% exercise
 def phantom_share(believed, actual):
@@ -277,17 +298,21 @@ assert loses_hit_rate == (hits["sized to the pool"] - hits["15x too large"] > 0.
 print("✅ phantom_share works, and your prediction held")
 
 # %% [markdown]
-# A mostly-phantom index barely hurts *this* workload: agent turns come back within seconds, so the entries the router
-# actually queries are fresh; the phantom ones belong to sessions that ended. It hurts when reuse is distant — long
-# tool pauses, many tenants, tiny caches — and that is also when *no* index can help, because the KV is gone
-# (notebook 05's topic). Precise, event-fed indexes (llm-d's precise-prefix-cache routing) earn their keep by also
-# tracking offloaded tiers and by sharing one view across router replicas.
+# An index with mostly phantom blocks does almost no damage to *this* workload. Agent turns come back in seconds,
+# thus the entries that the router really queries are fresh. The phantom entries belong to sessions that ended.
+#
+# The index does damage when the reuse is distant: long tool pauses, many tenants, small caches. In that case, also,
+# *no* index can help, because the KV is gone (the topic of notebook 05). Precise, event-fed indexes (the
+# precise-prefix-cache routing of llm-d) are worth their cost, because they also track offloaded tiers and share one
+# view across router replicas.
 #
 # ## Worked example — adapters are a cache too (multi-LoRA)
-# A replica can hold only `max_loras` adapters in a batch (vLLM `--max-loras`, 4 here), and loading one stalls the
-# step (`lora_load_s`, an illustrative 0.2 s). A request whose adapter has no free slot waits until a slot's
-# running requests drain. Twenty-four Zipf-popular adapters over four replicas — more adapters than the fleet's
-# 16 slots — at 2 req/s of chat, with and without the EPP's LoRA affinity filter.
+# A replica can hold only `max_loras` adapters in a batch (vLLM `--max-loras`, 4 here). When the replica loads an
+# adapter, the step stalls (`lora_load_s`, an illustrative 0.2 s). If the adapter of a request has no free slot, the
+# request waits until the running requests of a slot drain.
+#
+# This example has twenty-four Zipf-popular adapters over four replicas. That is more adapters than the 16 slots of
+# the fleet. The traffic is 2 req/s of chat, with and without the LoRA affinity filter of the EPP.
 
 # %%
 from fleetsim import (ApproxPrefixIndex, KVCacheUtilizationScorer, LoraAffinityFilter, PrefixCacheScorer,
@@ -314,15 +339,19 @@ for name, make in (("power-of-two", lambda: PowerOfTwo(seed=1)), ("EPP 3:2:2, no
 print(table(lora_rows, title="simulated: 24 adapters, 4x L4 with 4 adapter slots each, 2 req/s"))
 
 # %% [markdown]
-# Without affinity, every replica cycles through most adapters: hundreds of loads, and requests queue for a slot.
-# With the filter each adapter settles on a replica — loads drop to a few per adapter and TTFT recovers — and the
-# price is imbalance: the replica that owns the hottest adapters does more of the work.
+# Without affinity, each replica cycles through most adapters. There are hundreds of loads, and requests wait in a
+# queue for a slot. With the filter, each adapter settles on one replica. The loads decrease to a few per adapter,
+# and TTFT recovers. The price is imbalance: the replica that owns the hottest adapters does more of the work.
 #
 # ## Exercise 2.7 — the LoRA affinity filter
-# Write `lora_filter(adapter, loaded, max_loras)`: `loaded` maps replica -> tuple of resident adapters. Keep the
-# replicas that already have `adapter`; if none, the replicas with a free slot; if none, all replicas (the engine
-# will evict an idle adapter). No adapter (`None`): keep all. Then **predict**: with the filter, does imbalance go
-# up or down compared with the EPP without it (`"up"` or `"down"`)?
+# Write `lora_filter(adapter, loaded, max_loras)`. `loaded` maps each replica to a tuple of resident adapters.
+#
+# Keep the replicas that already have `adapter`. If there are none, keep the replicas with a free slot. If there are
+# none, keep all replicas (the engine will evict an idle adapter). If there is no adapter (`None`), keep all
+# replicas.
+#
+# Then **predict**: with the filter, does imbalance go up or down compared with the EPP without it (`"up"` or
+# `"down"`)?
 
 # %% exercise
 def lora_filter(adapter, loaded, max_loras):
@@ -369,22 +398,30 @@ print(f"✅ loads {without['adapter loads']} -> {with_f['adapter loads']}, p95 T
 
 # %% [markdown]
 # ## In a design review
-# **Two-minute version.** "Each replica is a cache, so routing decides the hit rate. Pure affinity maximises hits but
-# a popular prefix melts its replica; pure load balancing re-prefills everything. I would run the llm-d EPP pattern:
-# filter for adapter and prefix affinity, score queue depth and KV use, pick the max — and tune the prefix weight on
-# a replay of our traffic, watching hit rate *and* per-replica load together, because the failure is a hot spot, not
-# a low hit rate. If we take llm-d's affinity filter with a TTFT gate instead, I check that the gate's estimate —
-# prefill backlog — is what actually slows our hot replicas, and count how often it breaks. For hard guarantees,
-# bounded-load consistent hashing caps any replica at $(1 + \varepsilon) \times \text{average}$."
+# **Two-minute version.** "Each replica is a cache, thus routing decides the hit rate. Pure affinity gives the most
+# hits, but a popular prefix melts its replica. Pure load balance prefills everything again. My choice is the llm-d
+# EPP pattern. It applies filters for adapter and prefix affinity, scores queue depth and KV use, and selects the
+# max.
+#
+# "Then I adjust the prefix weight on a replay of our traffic. I monitor the hit rate *and* the per-replica load
+# together, because the failure is a hot spot, not a low hit rate. We can take the affinity filter of llm-d with a
+# TTFT gate instead. In that case, I make sure that the estimate of the gate is what really slows our hot replicas.
+# That estimate is the prefill backlog. I also count how often the gate breaks stickiness.
+#
+# "For hard guarantees, bounded-load consistent hashing limits each replica to
+# $(1 + \varepsilon) \times \text{average}$."
 #
 # **Drills**
-# 1. *Why not hash on the session id and be done?* It ignores load; a few long sessions on one replica queue behind
-#    each other, and nothing moves them. It is a good *score*, not a policy.
-# 2. *Hit rate fell from 0.85 to 0.55 after a deploy. Where do you look?* The prompt layout (a timestamp or user id
-#    ahead of the system prompt breaks every block after it), block size, then router weights and per-replica load.
-# 3. *What does $\varepsilon = 0.25$ buy you?* No replica ever holds more than
-#    $\lceil (1 + \varepsilon) \times (\text{in-flight} + 1) / n \rceil$ requests — about 1.25 x the average —
-#    whatever the key skew; the price is that overflow keys move to the next replica on the ring and miss there.
-# 4. *Sixteen LoRA adapters, four replicas with `--max-loras 4`: what does the router add?* Adapter affinity (keep
-#    replicas that have the adapter, else ones with a free slot) — without it every replica churns through adapters
-#    and requests wait for a slot; the price is imbalance, because a hot adapter pins its replica.
+# 1. *Why not hash on the session id, and stop there?* It ignores load. A few long sessions on one replica wait
+#    behind each other, and nothing moves them. The session id is a good *score*, not a policy.
+# 2. *Hit rate fell from 0.85 to 0.55 after a deploy. Where do you look?* Look at the prompt layout. A timestamp or
+#    a user id in front of the system prompt breaks every block after it. Then look at the block size. After that,
+#    look at the router weights and the per-replica load.
+# 3. *What does $\varepsilon = 0.25$ give you?* No replica ever holds more than
+#    $\lceil (1 + \varepsilon) \times (\text{in-flight} + 1) / n \rceil$ requests. That is approximately 1.25 x the
+#    average, for any key skew. The price is that overflow keys move to the next replica on the ring, and they miss
+#    there.
+# 4. *Sixteen LoRA adapters, four replicas with `--max-loras 4`: what does the router add?* Adapter affinity: keep
+#    the replicas that have the adapter, or else the replicas with a free slot. Without it, each replica cycles
+#    through adapters, and requests wait for a slot. The price is imbalance, because all the traffic of a hot
+#    adapter goes to its replica.

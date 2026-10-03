@@ -22,8 +22,8 @@ cluster, or to manage drivers in the cluster, use the GPU Operator instead (veri
 - Any box with an NVIDIA GPU.
 
 For prices and availability, see [`COMPUTE.md`](../../../../../COMPUTE.md). One hour is sufficient for all the
-steps in this file. RunPod and Vast.ai give you a *container*, not a VM. A container has no systemd and no
-kubelet of your own, thus k3s does not fit there.
+steps in this file. RunPod and Vast.ai give you a *container*, not a VM. In a container, you have no systemd and no
+kubelet of your own. Thus, k3s does not fit there.
 
 **Clean up.** `deploy/gpu-vm/down.sh` uninstalls k3s. Then **stop or delete the VM**. You pay for the GPU until
 you do.
@@ -69,8 +69,8 @@ deploy/gpu-vm/down.sh                          # uninstall k3s - then STOP THE V
 * **Labels come from GFD.** GFD writes `nvidia.com/gpu.product`, `.memory` (MiB), `.count`, `.replicas` and
   `nvidia.com/cuda.driver-version.*`. These labels are the vocabulary that a mixed fleet uses to select nodes.
   GKE uses `cloud.google.com/gke-accelerator` for the same purpose.
-* **Time-slicing is sharing without isolation.** On a 1-GPU VM, all four pods print the same GPU UUID. Nothing
-  limits the memory of one pod. With several GPUs, the plugin gives replicas from the least-loaded GPUs first,
+* **Time-slicing is sharing without isolation.** On a 1-GPU VM, all four pods print the same GPU UUID, and
+  nothing limits the memory of one pod. With several GPUs, the plugin gives replicas from the least-loaded GPUs first,
   so pods spread over the GPUs before two pods share a GPU. Thus, on an idle multi-GPU node, a container that
   requests `nvidia.com/gpu: 2` gets two different GPUs. But when the node is busy, the container can get two
   slices of the *same* GPU, and on a 1-GPU VM it always gets them. The `failRequestsGreaterThanOne` option of

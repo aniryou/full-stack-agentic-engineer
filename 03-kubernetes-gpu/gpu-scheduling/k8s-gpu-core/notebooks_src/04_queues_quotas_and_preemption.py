@@ -56,9 +56,10 @@ print(kueue.table())
 #   The queue never lends this part.
 # * The cohort pool = the sum over the members of $\text{nominal} - \text{guaranteed}$. The pool usage =
 #   the sum of $\max(0, \text{usage} - \text{guaranteed})$.
-# * $\text{available} =$ $\max(0, \text{guaranteed} - \text{usage}) +{}$ $(\text{pool} - \text{pool
-#   usage})$. If the queue sets a `borrowingLimit`, the cohort part has a maximum of $(\text{nominal} -
-#   \text{guaranteed}) -{}$ $\max(0, \text{usage} - \text{guaranteed}) +{}$ $\texttt{borrowingLimit}$.
+# * $\text{available} =$ $\max(0, \text{guaranteed} - \text{usage}) +{}$
+#   $(\text{pool} - \text{pool usage})$. If the queue sets a `borrowingLimit`, the cohort part has a
+#   maximum of $(\text{nominal} - \text{guaranteed}) -{}$ $\max(0, \text{usage} - \text{guaranteed}) +{}$
+#   $\texttt{borrowingLimit}$.
 #
 # ## Exercise 4.1 — how many GPUs can this ClusterQueue use right now?
 #
@@ -95,7 +96,8 @@ print("✅ available() matches Kueue's arithmetic and its documented examples")
 # %% [markdown]
 # ## When the owner comes back
 #
-# Now team A submits a 16-GPU job. It has a right to 16 GPUs, but 8 of its GPUs are on loan.
+# Now team A submits a 16-GPU job. The nominal quota of team A is 16 GPUs, but 8 of its GPUs are on
+# loan.
 
 # %%
 a1 = Workload("a1", "team-a/gpus", {GPU: 16})
@@ -128,10 +130,11 @@ print(kueue.table())
 #
 # The classic preemption of Kueue first makes a list of candidates. These are the workloads in the
 # preemptor's own ClusterQueue that its `withinClusterQueue` policy permits. They are also the workloads
-# of the ClusterQueues in the cohort that *borrow*, where `reclaimWithinCohort` permits it. Then Kueue
-# removes the candidates in this order until the preemptor fits: **other ClusterQueues first**, then
-# **lowest priority**, then **most recently admitted**. Write the sort. Each candidate is a dict with
-# `cq`, `priority` and `admitted` (the admission order, where a larger value is more recent).
+# of the ClusterQueues in the cohort that *borrow*, if `reclaimWithinCohort` permits their
+# preemption. Then Kueue removes the candidates in this order until the preemptor fits:
+# **other ClusterQueues first**, then **lowest priority**, then **most recently admitted**. Write the
+# sort. Each candidate is a dict with `cq`, `priority` and `admitted` (the admission order, where a
+# larger value is more recent).
 
 # %% exercise
 def preemption_order(candidates: list, my_cq: str) -> list:
@@ -301,9 +304,9 @@ print("✅ reclaim takes only from borrowers, cheapest first, then gives back wh
 #
 # **Drill questions.**
 #
-# 1. *Team A has 16 GPUs of nominal quota, uses none, and its 16-GPU job is Pending. Why?* The cohort
-#    borrowed its idle quota, and `reclaimWithinCohort` is `Never`. Turn on reclaim or set a
-#    `lendingLimit`.
+# 1. *Team A has 16 GPUs of nominal quota, uses none, and its 16-GPU job is Pending. Why?* Other queues
+#    in the cohort borrowed its idle quota, and `reclaimWithinCohort` is `Never`. Turn on reclaim or set
+#    a `lendingLimit`.
 # 2. *What is the difference between `borrowingLimit` and `lendingLimit`?* The borrowing limit sets the
 #    maximum that a queue can take above its nominal quota. The lending limit sets the maximum that it
 #    gives away (the rest is reserved).

@@ -13,10 +13,10 @@
 # an opaque integer. Thus a GPU request must be a whole number. It must equal its limit, and the
 # scheduler never overcommits it.
 #
-# Ordinary **labels** and **taints** answer two other questions. They tell *which* GPU it is (L4 or
-# H100), and *if* a pod can land on a GPU node at all. After this notebook, you can explain every GPU
-# line of `kubectl describe node`. You can also explain why the kubelet can reject a pod that the
-# scheduler placed.
+# Ordinary **labels** and **taints** answer two other questions. They tell *which* GPU a node has (L4
+# or H100), and *if* a pod can land on a GPU node at all. After this notebook, you can explain every
+# GPU line of `kubectl describe node`. You can also explain why the kubelet can still reject a pod that
+# the scheduler placed.
 #
 # Primer: §1 *What Kubernetes sees* and §2 *GPU Operator vs managed drivers* in `../../PRIMER.md`.
 
@@ -107,15 +107,15 @@ for pod in (web, trainer):
 # `kubernetes.io`. For these resources, the API server applies three rules and one default:
 #
 # * The quantity must be an integer. The message is `must be an integer`.
-# * If a container sets both a request and a limit, they must be equal. The message is `must be equal to
-#   nvidia.com/gpu limit of N`.
-# * The API server rejects a request without a limit. The message is `Limit must be set for non
-#   overcommitable resources`.
+# * If a container sets both a request and a limit, they must be equal. The message is
+#   `must be equal to nvidia.com/gpu limit of N`.
+# * The API server rejects a request without a limit. The message is
+#   `Limit must be set for non overcommitable resources`.
 # * If a container sets a limit and no request, the request gets the value of the limit by default.
 #
 # Write `gpu_request(requests, limits)`. It returns the effective GPU request as an integer, or 0 if the
-# container asks for none. When a rule rejects the request, it raises `ValueError`, and the message
-# contains the upstream text.
+# container asks for none. When a rule rejects the request, the function raises `ValueError`, and the
+# message contains the upstream text.
 
 # %% exercise
 def gpu_request(requests: dict, limits: dict) -> int:
@@ -149,9 +149,9 @@ print("✅ integers only, requests == limits: no fractional GPUs and no overcomm
 
 # %% [markdown]
 # **Why no fractions?** The scheduler and the kubelet only count. Thus, to share a GPU between several
-# pods, the device plugin must *advertise it as several units* (time-slicing, MPS). Or you must *split
-# it into real partitions* (MIG, where each partition is its own device). See primer §9, and layer 02
-# for the mechanics.
+# pods, the device plugin must *advertise it as several units* (time-slicing, MPS). Another possibility
+# is to *divide it into real partitions* (MIG, where each partition is its own device). See primer §9,
+# and layer 02 for the mechanics.
 #
 # Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a structured claim.
 # With DRA, you write this claim instead of `limits: {nvidia.com/gpu: 1}`:
@@ -229,9 +229,9 @@ print("✅ selector, taints and integer resources decide feasibility; nothing el
 # run anything:
 #
 # * `capacity` and `allocatable` in the node status.
-# * How many GPUs the scheduler now counts as free on this node ($\mathit{allocatable} -
-#   \mathit{requested}$).
-# * Can the kubelet admit a new 2-GPU pod?
+# * How many GPUs the scheduler now counts as free on this node
+#   ($\mathit{allocatable} - \mathit{requested}$).
+# * If the kubelet can admit a new 2-GPU pod.
 
 # %% exercise
 # predicted_capacity = ...              an int
@@ -262,7 +262,7 @@ print("✅", status, "- running pods keep their GPUs; new work sees one fewer")
 # %% [markdown]
 # After the status update, the scheduler does not *send* a 2-GPU pod here. The rejection in the previous
 # cell occurs in the window between the decision of the scheduler and the admission of the kubelet. The
-# two keep separate accounts, and the kubelet wins. The pod fails with the reason
+# two keep separate accounts, and the decision of the kubelet is final. The pod fails with the reason
 # `UnexpectedAdmissionError`, and its controller must create it again.
 #
 # ## Exercise 1.5 — keep a container's GPUs on one NVLink island
@@ -322,11 +322,11 @@ print("node status:", shared_kubelet.node_status())
 # A node has 8 GPUs and `replicas: 10`. Predict these values:
 #
 # * `allocatable` for `nvidia.com/gpu`.
-# * On the **fresh** node, how many **physical** GPUs supply a container that requests `nvidia.com/gpu:
-#   2`.
+# * On the **fresh** node, how many **physical** GPUs supply a container that requests
+#   `nvidia.com/gpu: 2`.
 # * The same number after the kubelet admits sixteen 1-replica pods (the plugin spreads them, two per
 #   GPU) and the two pods on `GPU-fake-0003` finish.
-# * Does the kubelet admit a 2-"GPU" container when the plugin sets `failRequestsGreaterThanOne: true`?
+# * If the kubelet admits a 2-"GPU" container when the plugin sets `failRequestsGreaterThanOne: true`.
 #   This NVIDIA option treats a shared request as "access to a GPU", so a request for more than one is
 #   an error.
 
@@ -372,8 +372,8 @@ print("✅ time-slicing multiplies the integer, not the hardware")
 
 # %% [markdown]
 # That was the default `distributed` policy of the plugin. The `--shared-devices-allocation-policy` flag
-# of the NVIDIA plugin also offers `packed` (v0.20.0 and later). On its main branch, it also offers
-# `spread` (verify, and see primer §9). The model takes the same names as
+# of the NVIDIA plugin also offers `packed` (v0.20.0 and later). On the main branch of the plugin, the
+# flag also offers `spread` (verify, and see primer §9). The model takes the same names as
 # `DevicePlugin(allocation_policy=...)`. The next cell sends the same 2-"GPU" request to a fresh node
 # under each policy:
 
@@ -393,8 +393,9 @@ for policy in ("distributed", "packed", "spread"):
 #
 # **Two-minute version.** "A GPU becomes schedulable through three hops. First, the NVIDIA device plugin
 # registers `nvidia.com/gpu` with the kubelet and sends the device health as a stream. The GPU Operator
-# installs the plugin, or GKE itself installs it. Then the kubelet turns that into capacity and
-# allocatable on the Node. Last, the scheduler sees an integer and never overcommits it.
+# installs the plugin, or GKE itself installs it. Then the kubelet turns the registration and the
+# device health into capacity and allocatable on the Node. Last, the scheduler sees an integer and
+# never overcommits it.
 #
 # "Requests are whole GPUs, and requests are equal to limits. We put a taint on GPU nodes, so only GPU
 # pods land there. The ExtendedResourceToleration admission plugin adds the toleration to GPU pods. It

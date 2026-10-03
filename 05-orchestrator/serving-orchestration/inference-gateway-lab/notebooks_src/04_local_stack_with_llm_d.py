@@ -1,15 +1,15 @@
 # %% [markdown]
 # # 04 · The local stack with llm-d, and real vLLM
 #
-# **Tier:** T0 walkthrough on any machine (reads the deploy files, dry-runs the scripts, runs the
-# in-process stack); **T0 + Docker** (still CPU only — the model servers are simulators) when the
-# compose or kind stack of `deploy/local` / `deploy/kind` is running; **T1/T2** when you point it at
-# real vLLM replicas on a GPU (`deploy/any-gpu`, environment variable `IGW_BACKENDS`). Each
-# measurement cell says which of these it ran on.
+# **Tier:** T0 walkthrough on any machine. It reads the deploy files, does a dry run of the scripts
+# and runs the in-process stack. **T0 + Docker** applies when the compose or kind stack of
+# `deploy/local` / `deploy/kind` runs. It still uses only the CPU, because the model servers are
+# simulators. **T1/T2** applies when you point it at real vLLM replicas on a GPU (`deploy/any-gpu`,
+# environment variable `IGW_BACKENDS`). Each measurement cell tells which of these it ran on.
 #
 # ## The one-minute version
 #
-# The decision logic you exercised in notebooks 01–02 exists as production components:
+# The decision logic of your exercises in notebooks 01–02 exists as production components:
 #
 # | piece | in-process (T0) | docker compose (`deploy/local`) | kind (`deploy/kind`) | any GPU box (`deploy/any-gpu`) |
 # |---|---|---|---|---|
@@ -19,11 +19,14 @@
 # | pool definition | a Python list | router flags | `InferencePool` v1 (selector + target ports) | `IGW_BACKENDS` |
 # | request classes | `RouterSettings.objectives` | `--objective` flags | `InferenceObjective` CRs | `--objective` flags |
 #
-# The EndpointPickerConfig is the same document everywhere (the kind Helm values embed the lab's
-# `default-weighted` preset verbatim) — but the lab router and the EPP do not run it identically,
-# and this notebook makes you name the differences. The simulator shares the fake backend's
-# *per-request* latency formula and 16-token prefix cache, not its contention: the fake queues
-# prefills behind each other, the simulator does not, so cache-aware routing wins less TTFT there.
+# The EndpointPickerConfig is the same document everywhere. The kind Helm values contain the
+# `default-weighted` preset of the lab with no change. But the lab router and the EPP do not run it in
+# the same way, and this notebook makes you name the differences.
+#
+# The simulator has the same *per-request* latency formula and the same 16-token prefix cache as the
+# fake backend. It does not have the same contention. The fake puts prefills in a queue behind each
+# other, but the simulator does not. Thus cache-aware routing gives a smaller TTFT gain on the
+# simulator.
 # Background: [PRIMER §9 The Kubernetes-native stack, September 2026 and §10 Where to run it](../../PRIMER.md).
 
 # %%
@@ -48,8 +51,8 @@ print("tools on this machine:", tools)
 # ## Path 1: docker compose
 #
 # `deploy/local/docker-compose.yaml` has two profiles: `sim` (the upstream simulator image) and `fake`
-# (the bundled fake backend, no registry pull). The router is the lab router with the
-# `default-weighted` preset; Prometheus scrapes everything.
+# (the bundled fake backend, with no pull from a registry). The router is the lab router with the
+# `default-weighted` preset. Prometheus scrapes everything.
 
 # %%
 compose = yaml.safe_load((DEPLOY / "local/docker-compose.yaml").read_text())
@@ -89,22 +92,23 @@ print("kind simulator:", {k: f[k] for k in ("prefill-overhead", "prefill-time-pe
                                            "time-factor-under-load", "block-size", "max-num-seqs")})
 
 # %% [markdown]
-# The simulator's `per-token` latency calculator is the fake backend's per-request model:
+# The `per-token` latency calculator of the simulator is the per-request model of the fake backend:
 #
 # $$
 # \text{TTFT} = \texttt{prefill-overhead} + (\text{prompt} - \text{cached}) \times \texttt{prefill-time-per-token}
 # $$
 #
-# and `inter-token-latency` per output token, both stretched by up to `time-factor-under-load` as the batch
-# fills. Both engines cache prompts in **full 16-token blocks**: a block is reusable only if every one of its
-# 16 tokens matches, and a partial last block is never cached.
+# Each output token adds `inter-token-latency`. As the batch fills, the simulator increases both
+# values by a factor of up to `time-factor-under-load`. Both engines cache prompts in **full 16-token
+# blocks**. An engine can use a block again only if all 16 of its tokens match. The engines never
+# cache a partial last block.
 #
 # ## Exercise 4.1 — predict the second turn
 #
-# An agent's turn 1 had `prev_prompt_tokens` prompt tokens; turn 2 re-sends all of them and appends
-# more, `prompt_tokens` in total, to the same replica. Predict how many of turn 2's tokens are
-# served from the prefix cache, and the TTFT the simulator (flags `f`) emulates for it when it runs
-# alone (no queueing, a batch of one). Return `(cached_tokens, ttft_seconds)`.
+# Turn 1 of an agent had `prev_prompt_tokens` prompt tokens. Turn 2 sends all of them again to the
+# same replica and adds more tokens, `prompt_tokens` in total. Predict how many tokens of turn 2 come
+# from the prefix cache. Also predict the TTFT that the simulator (flags `f`) emulates for turn 2.
+# Turn 2 runs alone: no queue, a batch of one. Return `(cached_tokens, ttft_seconds)`.
 
 # %% exercise
 def predict_turn2(prev_prompt_tokens: int, prompt_tokens: int, flags: dict, block: int = 16):
@@ -142,12 +146,18 @@ print(f"✅ predicted TTFT alone on the simulator: {ttft * 1e3:.1f} ms vs {predi
 # %% [markdown]
 # ## Path 2: kind + the real llm-d Router (standalone mode)
 #
-# `deploy/kind/up.sh` creates a cluster, installs the two CRDs (InferencePool v1 from the Gateway API
-# Inference Extension, InferenceObjective from llm-d-router), deploys three simulator pods, and installs
-# the `llm-d-router-standalone` Helm chart: an EPP Deployment with an Envoy sidecar that receives
-# client traffic on :8081 and asks the EPP (ext-proc) where to send each request. The chart mounts
-# `router.epp.pluginsCustomConfig[<pluginsConfigFile>]` as the EPP's `--config-file`. `DRY_RUN=1`
-# prints the steps without running anything:
+# `deploy/kind/up.sh` does these steps:
+#
+# 1. It creates a cluster.
+# 2. It installs the two CRDs: InferencePool v1 from the Gateway API Inference Extension, and
+#    InferenceObjective from llm-d-router.
+# 3. It deploys three simulator pods.
+# 4. It installs the `llm-d-router-standalone` Helm chart.
+#
+# The chart contains an EPP Deployment with an Envoy sidecar. The sidecar receives client traffic on
+# :8081 and asks the EPP (ext-proc) where to send each request. The chart mounts
+# `router.epp.pluginsCustomConfig[<pluginsConfigFile>]` as the `--config-file` of the EPP. With
+# `DRY_RUN=1`, the script prints the steps and runs nothing:
 
 # %%
 out = subprocess.run(["bash", str(DEPLOY / "kind/up.sh")], env={"DRY_RUN": "1", "PATH": "/usr/bin:/bin"},
@@ -162,11 +172,15 @@ print("objectives created by the chart:", values["router"]["inferenceObjectives"
 # %% [markdown]
 # ## Exercise 4.2 — same config, same behaviour?
 #
-# For each situation, decide how the EPP on kind (llm-d-router v0.10.0) and the lab router compare.
-# Answer `"same"` (same plugins, weights and formulas: they part only on exact ties and when the
-# prefix index runs out of room), `"differs"` (both accept it but behave differently in normal
-# operation) or `"lab-rejects"` (the lab router refuses the config). The lab's README lists its
-# deliberate differences; the modules state them too.
+# For each situation, compare the EPP on kind (llm-d-router v0.10.0) with the lab router. Give one of
+# these answers:
+#
+# - `"same"`: the same plugins, weights and formulas. The two are different only on exact ties and
+#   when the prefix index has no more space.
+# - `"differs"`: both accept the config, but they behave differently during normal operation.
+# - `"lab-rejects"`: the lab router refuses the config.
+#
+# The README of the lab lists its intentional differences. The modules also state them.
 #
 # | | situation |
 # |---|---|
@@ -220,10 +234,12 @@ print("✅ a: same; b, c, f: the lab differs; d, e: the lab refuses — measure 
 # %% [markdown]
 # ## Exercise 4.3 — what an InferencePool selects
 #
-# An `InferencePool` (v1) names its members with `selector.matchLabels` (every label must match, same
-# namespace) and lists up to 8 `targetPorts`; **each ready pod × each port is one endpoint**
-# (`podIP:port`) for the EPP. Write `pool_endpoints(pool_spec, pods)` for pods given as dicts
-# `{"labels": {...}, "ip": "...", "ready": bool}`; return a sorted list of `"ip:port"` strings.
+# An `InferencePool` (v1) names its members with `selector.matchLabels`. Every label must match, and
+# the pods must be in the same namespace. The pool lists up to 8 `targetPorts`. For the EPP,
+# **each ready pod × each port is one endpoint** (`podIP:port`).
+#
+# Write `pool_endpoints(pool_spec, pods)`. Each pod is a dict
+# `{"labels": {...}, "ip": "...", "ready": bool}`. Return a sorted list of `"ip:port"` strings.
 
 # %% exercise
 def pool_endpoints(pool_spec: dict, pods: list) -> list:
@@ -247,20 +263,23 @@ assert pool_endpoints({"selector": {"matchLabels": {"app": "vllm-sim", "tier": "
 print("✅ one endpoint per ready matching pod per target port (e.g. one vLLM data-parallel rank per port)")
 
 # %% [markdown]
-# Exercises 4.2 f and 4.3 fit together: a data-parallel pod that serves every rank behind **one**
-# port is one endpoint whose metrics carry several `engine` series, and the EPP reads only the
-# first; a pod that serves each rank on **its own** port, listed in `targetPorts`, gives the EPP one
-# endpoint per rank.
+# Exercises 4.2 f and 4.3 fit together. Take a data-parallel pod that serves all ranks behind **one**
+# port. It is one endpoint, and its metrics have several `engine` series. The EPP reads only the
+# first series. Another pod serves each rank on **its own** port, and `targetPorts` lists these ports.
+# That pod gives the EPP one endpoint per rank.
 #
 # ## Exercise 4.4 — read a data-parallel pod like the EPP does
 #
-# Below is **sample output in the documented vLLM/llm-d-inference-sim format (illustrative)** — not
-# captured from a live pod — for a pod with two data-parallel ranks. Write `epp_view(text)` →
-# `(waiting, running, kv_usage, running_loras)` the way the EPP's `core-metrics-extractor` (v0.10.0)
-# reads it: for each gauge it keeps **one** series — the one with the latest timestamp, and vLLM
-# exposes none, so the first one listed — and nothing is summed; LoRA adapters come from the
-# `running_lora_adapters` label of the `vllm:lora_requests_info` series with the **largest value**
-# (the value is a timestamp).
+# The next cell holds **sample output in the documented vLLM/llm-d-inference-sim format (illustrative)**
+# for a pod with two data-parallel ranks. It does not come from a live pod. Write `epp_view(text)`,
+# which returns `(waiting, running, kv_usage, running_loras)`. Read the text as the
+# `core-metrics-extractor` (v0.10.0) of the EPP reads it:
+#
+# - For each gauge, it keeps **one** series: the series with the latest timestamp. The vLLM output
+#   has no timestamp, so this is the first series in the list.
+# - It adds no series together.
+# - The LoRA adapters come from the `running_lora_adapters` label of the `vllm:lora_requests_info`
+#   series with the **largest value**. The value is a timestamp.
 
 # %% exercise
 SAMPLE = """# HELP vllm:num_requests_running Number of requests in model execution batches.
@@ -305,18 +324,28 @@ print("✅ to the EPP this pod looks far less loaded than it is: rank 1 (9 waiti
 # %% [markdown]
 # ## Measure whatever stack is running (T0, or T0 + Docker)
 #
-# The next cell looks for a router in this order: `IGW_ROUTER_URL` if you set it, the kind
-# port-forward (`kubectl port-forward svc/igw-epp 8081:8081` → `http://localhost:8081`), the compose
-# router (`http://localhost:9000`); otherwise it starts the in-process stack. It then runs the same
-# agentic sessions and says what it measured.
+# The next cell looks for a router in this sequence:
 #
-# The hit rate comes from `usage.prompt_tokens_details.cached_tokens`. The fake backend always sends
-# it; `llm-d-inference-sim` v0.11.2 sends it when `--enable-kvcache` is on (the lab's stacks set it),
-# counted in the simulator's own tokens and 16-token blocks; **vLLM sends it only when started with
-# `--enable-prompt-tokens-details`** (the lab's GPU and GKE paths set it). An engine that omits it
-# shows `n/a` — never 0% — and the vLLM counters `vllm:prefix_cache_hits_total` /
-# `vllm:prefix_cache_queries_total` give the hit rate instead (`igwlab.bench.engine_hit_rate`,
-# Exercise 1.4's method).
+# 1. `IGW_ROUTER_URL`, if you set it.
+# 2. The kind port-forward (`kubectl port-forward svc/igw-epp 8081:8081`, which gives
+#    `http://localhost:8081`).
+# 3. The compose router (`http://localhost:9000`).
+#
+# If it finds none, it starts the in-process stack. Then it runs the same agentic sessions and tells
+# what it measured.
+#
+# The hit rate comes from `usage.prompt_tokens_details.cached_tokens`. Not all engines send this
+# field:
+#
+# - The fake backend always sends it.
+# - `llm-d-inference-sim` v0.11.2 sends it when `--enable-kvcache` is on (the stacks of the lab set
+#   it). It counts in the tokens and 16-token blocks of the simulator itself.
+# - **vLLM sends it only when started with `--enable-prompt-tokens-details`** (the GPU and GKE paths
+#   of the lab set it).
+#
+# For an engine that does not send it, the result shows `n/a`, never 0%. Then the vLLM counters
+# `vllm:prefix_cache_hits_total` / `vllm:prefix_cache_queries_total` give the hit rate
+# (`igwlab.bench.engine_hit_rate`, the method of Exercise 1.4).
 
 # %%
 from igwlab.bench import compare, engine_hit_rate, run_bench
@@ -351,18 +380,20 @@ print(compare([result]))
 # %% [markdown]
 # ## T1/T2: the lab router in front of real vLLM
 #
-# With a GPU, start two or more vLLM replicas with `deploy/any-gpu/serve.sh` (pip) or its
-# `docker-compose.yaml`, and set `IGW_BACKENDS=r0=http://127.0.0.1:8001,r1=http://127.0.0.1:8002`
-# (what `serve.sh` prints). The cell below then puts a fresh in-process lab router in front of those
-# replicas for each policy — nothing about the engines is emulated — and prints:
+# If you have a GPU, start two or more vLLM replicas with `deploy/any-gpu/serve.sh` (pip) or its
+# `docker-compose.yaml`. Then set `IGW_BACKENDS=r0=http://127.0.0.1:8001,r1=http://127.0.0.1:8002`
+# (the value that `serve.sh` prints). For each policy, the next cell puts a new in-process lab router
+# in front of those replicas. It emulates nothing about the engines. It prints:
 #
-# 1. round-robin vs the llm-d default weights on the same agent sessions: TTFT, hit rate (from the
-#    responses, and from vLLM's own counters), per-replica split;
-# 2. live `vllm:num_requests_waiting/running` from each replica and what the notebook-03 HPA would
-#    propose, with targets derived from *these* replicas: `IGW_SLOTS` batch slots (serve.sh's
-#    `--max-num-seqs`, default 16) and the measured time a request holds its slot.
+# 1. round-robin against the llm-d default weights on the same agent sessions. For each, it gives
+#    TTFT, the hit rate and the per-replica split. The hit rate comes from the responses, and also
+#    from the counters of vLLM.
+# 2. the live `vllm:num_requests_waiting/running` from each replica, and the proposal of the HPA of
+#    notebook 03. The targets come from *these* replicas. One is `IGW_SLOTS` batch slots (the
+#    `--max-num-seqs` of serve.sh, default 16). The other is the measured time that a request holds
+#    its slot.
 #
-# Without `IGW_BACKENDS` it prints the commands and does nothing else (T0 stays offline).
+# If you do not set `IGW_BACKENDS`, the cell prints the commands and does nothing else (T0 stays offline).
 
 # %%
 from igwlab.autoscale import recommend_from_scrapes, waiting_target
@@ -433,28 +464,34 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two-minute walkthrough.** "Locally we run the real control plane against fake GPUs: three
-# `llm-d-inference-sim` pods that speak the OpenAI API and export vLLM's metric names, an
-# `InferencePool` selecting them by label, and the llm-d Router in standalone mode — Envoy in front,
-# asking the EPP over ext-proc for every request. The EPP's plugin config is the same document we
-# tuned in-process, and the simulator reproduces each request's TTFT formula and prefix cache — but
-# not prefill contention, so we compare hit rates and per-replica splits there, not TTFT. We also
-# know where the lab router and the EPP part ways: tie-breaking, flow control, data-parallel metrics.
+# **Two-minute walkthrough.** "Locally, we run the real control plane against fake GPUs. Three
+# `llm-d-inference-sim` pods speak the OpenAI API and export the metric names of vLLM. An
+# `InferencePool` selects them by label. The llm-d Router runs in standalone mode: Envoy is in front,
+# and it asks the EPP over ext-proc for each request. The plugin config of the EPP is the same
+# document that we adjusted in-process.
 #
-# "On one rented GPU we then put the same router in front of real vLLM replicas and re-derive the autoscaling
-# targets from measured numbers. What changes in production is the model servers (real vLLM on GPUs) and the
-# proxy (a cloud load balancer in Gateway mode); what no local stack tells us: cold-start times, network
-# effects and the real fleet's traffic."
+# "The simulator reproduces the TTFT formula and the prefix cache of each request, but not prefill
+# contention. Thus, on the simulator, we compare hit rates and per-replica splits, not TTFT. We also
+# know where the lab router and the EPP are different: the tie rule, flow control and data-parallel
+# metrics.
+#
+# "On one rented GPU, we then put the same router in front of real vLLM replicas. We calculate the
+# autoscaling targets again from measured numbers. In production, two things change: the model
+# servers (real vLLM on GPUs) and the proxy (a cloud load balancer in Gateway mode). No local stack
+# tells us these things: cold-start times, network effects and the traffic of the real fleet."
 #
 # **Drill questions**
 #
-# 1. *Standalone vs Gateway mode?* Standalone: a self-managed Envoy (sidecar or its own Deployment)
-#    in front of the EPP, no Gateway API needed. Gateway mode: an `HTTPRoute` on a shared Gateway
-#    points at the `InferencePool`, and the gateway implementation (Envoy Gateway, Istio,
-#    agentgateway, GKE's regional load balancer) calls the EPP.
-# 2. *Why must the CRDs be installed before the Helm chart?* The chart creates an `InferencePool` and
-#    `InferenceObjective` objects; without their CRDs the API server rejects them and the install fails.
-# 3. *The bench shows a 0% hit rate against vLLM — is prefix caching off?* Probably not: vLLM omits
-#    `prompt_tokens_details` unless started with `--enable-prompt-tokens-details`, and a bench that
-#    reads a missing field as 0 lies. Read `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total`
-#    (their increases over the run) to know.
+# 1. *What is the difference between standalone mode and Gateway mode?* In standalone mode, a
+#    self-managed Envoy (a sidecar or its own Deployment) is in front of the EPP. You do not need the
+#    Gateway API. In Gateway mode, an `HTTPRoute` on a shared Gateway points at the `InferencePool`.
+#    Then the gateway implementation (Envoy Gateway, Istio, agentgateway, the regional load balancer
+#    of GKE) calls the EPP.
+# 2. *Why must you install the CRDs before the Helm chart?* The chart creates an `InferencePool` and
+#    `InferenceObjective` objects. Without their CRDs, the API server rejects them, and the install
+#    fails.
+# 3. *The bench shows a 0% hit rate against vLLM. Is prefix caching off?* Probably not. vLLM does not
+#    send `prompt_tokens_details` unless you start it with `--enable-prompt-tokens-details`. A bench
+#    that reads an absent field as 0 gives a false result. To know, read
+#    `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` (their increases during the
+#    run).

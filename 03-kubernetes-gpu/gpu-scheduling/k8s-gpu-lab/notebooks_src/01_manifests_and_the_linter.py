@@ -5,7 +5,7 @@
 # and arithmetic. Notebook 02 applies the same objects to a kind cluster.
 #
 # ## The one-minute version
-# A GPU pod is ordinary Kubernetes plus a few fields. Each of these fields carries part of the load:
+# A GPU pod is ordinary Kubernetes plus a few fields. The design depends on each of these fields:
 #
 # * an **integer `nvidia.com/gpu` limit**. It is an *extended resource*. The scheduler counts it and never
 #   overcommits it, thus request == limit (primer §1 *What Kubernetes sees*).

@@ -3,7 +3,7 @@
 #
 # **Tier:** T0. This notebook is a discrete-time simulation of the cluster autoscaler. Durations,
 # prices, stockout rates and preemption rates are **inputs that you select** (the defaults are
-# illustrative), and every output comes from the simulation. Lab notebook `04_gke_pools_dws_and_computeclasses`
+# illustrative), and every output is simulated. Lab notebook `04_gke_pools_dws_and_computeclasses`
 # (T3) does the real thing: GKE node pools from zero, Spot, DWS flex-start queued provisioning and
 # ComputeClass fallbacks. Offline, that notebook plans and inspects. Current prices and
 # obtainability are in `COMPUTE.md` at the repo root.
@@ -43,8 +43,8 @@ for pending in ([1, 1, 1], [3, 3, 3], [4, 2, 1, 1], [8, 8, 8]):
 # %% [markdown]
 # Look at the third line: least-waste compares *idle resources*, not prices. For 4 + 2 + 1 + 1 GPUs,
 # one 8-GPU H100 node and two 4-GPU L4 nodes have the same waste (zero idle GPUs). The tie-break
-# (fewer nodes) selects the H100. (The real expander ranks idle CPU, then memory. In both cases, it
-# does not rank dollars.) Thus pods select a GPU type with a node selector. Cost preferences go into
+# (fewer nodes) selects the H100. The real expander ranks idle CPU, then memory, and it does not
+# rank dollars. Thus pods select a GPU type with a node selector. Cost preferences go into
 # a `price` or `priority` expander, or into a GKE ComputeClass.
 #
 # ## Exercise 5.1 — how many new nodes?
@@ -94,8 +94,8 @@ print("✅ pod shapes that do not divide the node waste GPUs before anything is 
 # The autoscaler removes a node after the node stays unneeded for 600 s (its default
 # `--scale-down-unneeded-time`). It also does not remove a node within 600 s of the last scale-up
 # (`--scale-down-delay-after-add`). `simulate()` models both. Here, the only scale-up is at
-# $t = 0$. Thus the unneeded time is the limit that controls the removal. (`simulate()` does not
-# model the utilisation threshold or several pools.)
+# $t = 0$. Thus the unneeded time is the limit that controls the removal. `simulate()` does not
+# model the utilisation threshold or several pools.
 
 # %%
 l4 = NodePool("l4", gpus_per_node=1, max_nodes=4, boot_s=300, price_per_node_hr=0.70)   # illustrative price
@@ -197,9 +197,9 @@ print(f"✅ a 16-node gang on Spot takes {slowdown_16:.2f}x its work time withou
 # grants each node that the job still needs with 3% probability per minute (a stockout model,
 # simulated). An
 # **ordinary** pool creates each node immediately when the provider grants it. The pool also bills
-# the node while it waits for the other nodes. A **queued** pool (Kueue ProvisioningRequest, or on
-# GKE, DWS flex-start with queued provisioning) holds the request until it can create all 16 nodes
-# together.
+# the node while the node waits for the other nodes. A **queued** pool (Kueue ProvisioningRequest,
+# or DWS flex-start with queued provisioning on GKE) holds the request until it can create all 16
+# nodes together.
 
 # %%
 kw = dict(gpus_per_node=8, boot_s=300, stockout=0.97)
@@ -251,7 +251,7 @@ print("✅ the ordinary pool paid for", round(ordinary["waiting_node_h"] - queue
 # %% [markdown]
 # ## Exercise 5.5 — pick a capacity type
 #
-# For each workload in the list, select one of `"on-demand"`, `"spot"`, `"flex-start"` and
+# For each workload in the list, select one of `"on-demand"`, `"spot"`, `"flex-start"` or
 # `"reservation"`. `"flex-start"` is DWS: queued, all at once, time-bounded. `"reservation"` is
 # capacity held for you, and you pay for it if you use it or not. The workloads are:
 #
@@ -260,7 +260,7 @@ print("✅ the ordinary pool paid for", round(ordinary["waiting_node_h"] - queue
 # * **finetune**: 64 H100s for 3 days. It starts at some time this week. It writes a checkpoint
 #   every hour.
 # * **embeddings**: a nightly batch over a corpus. You can retry any pod. The deadline is morning.
-# * **flagship**: a model that serves 24/7 at steady high utilisation for a year.
+# * **flagship**: 24/7 serving at steady high utilisation for a year.
 
 # %% exercise
 # capacity = {"chat": ..., "finetune": ..., "embeddings": ..., "flagship": ...}
@@ -297,8 +297,8 @@ print("✅", capacity)
 # %% [markdown]
 # On GKE, a **custom ComputeClass** encodes such a preference list for one workload class. An
 # example order is reservation, then Spot, then on-demand, then flex-start. Node auto-provisioning
-# then creates pools that match the list. (The field names are in the `deploy/gke/` manifests of
-# the lab. Compare them with the current CRD.)
+# then creates pools that match the list. The field names are in the `deploy/gke/` manifests of
+# the lab. Make sure that they agree with the current CRD.
 #
 # ## From Pending to serving
 #
@@ -328,8 +328,8 @@ for name, s in (("cold node, plain pull + download", cold), ("warm node, streame
 # ## In a design review
 #
 # **Two-minute version.** "Our GPU pools scale from zero with the cluster autoscaler. Thus a
-# Pending pod pays for node creation, driver install, image pull and weight load before it serves.
-# That is minutes, not seconds. We set min nodes, image streaming and weight caching for our
+# Pending pod must wait for node creation, driver install, image pull and weight load before it
+# serves. This wait is minutes, not seconds. We set min nodes, image streaming and weight caching for our
 # cold-start budget. Scale-down waits for ten minutes of idle time, and we pay for that time.
 #
 # "We have no guarantee of capacity. Stateless inference runs on on-demand capacity, with a Spot tier
@@ -349,5 +349,5 @@ for name, s in (("cold node, plain pull + download", cold), ("warm node, streame
 #    by stage: node provisioning and driver, image pull, weight download, warm-up. Then repair the
 #    largest stage.
 # 3. *What does all-or-nothing provisioning not repair?* It does not create capacity. The gang
-#    still waits for the provider. It only stops two things: you do not pay for the partial set,
-#    and you do not fragment it.
+#    still waits for the provider. It only stops two things: the payment for the partial set, and
+#    the fragmentation of that set.

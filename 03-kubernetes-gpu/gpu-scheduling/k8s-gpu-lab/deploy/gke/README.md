@@ -6,10 +6,10 @@ example is one file, generated from `k8sgpu/gke.py`. You apply each one with `ap
 | File | Shows | Needs |
 |---|---|---|
 | `00-smoke-l4.yaml` | Scale-from-zero of the Spot L4 pool, `nvidia-smi` from the GKE-installed driver | the Terraform |
-| `10-kueue-gke.yaml` | Kueue on GKE: flavor `l4-spot` (plain quota) and flavor `l4-flex` behind the `dws-prov` AdmissionCheck. That AdmissionCheck is a `ProvisioningRequest` of class `queued-provisioning.gke.io` | `install-addons.sh` |
+| `10-kueue-gke.yaml` | Kueue on GKE: flavor `l4-spot` (plain quota) and flavor `l4-flex` behind the `dws-prov` AdmissionCheck. That AdmissionCheck uses a `ProvisioningRequest` of class `queued-provisioning.gke.io` | `install-addons.sh` |
 | `20-dws-sample-job.yaml` | A 2-node gang. Kueue admits it only when DWS provisions both nodes. `provreq.kueue.x-k8s.io/maxRunDurationSeconds` sets the limit of the lease | `enable_flex_start_pool = true`, `install-addons.sh` |
 | `30-computeclass-l4.yaml` | A custom ComputeClass: Spot, then on-demand, then flex-start, for the same L4 shape. GKE creates the node pools on demand | GKE with node-pool auto-creation for ComputeClasses (>= 1.33.3-gke.1136000, verify) |
-| `40-serving-vllm-gcsfuse.yaml` | vLLM on one L4 through the ComputeClass. The FUSE CSI driver mounts the weights read-only from GCS. A startup probe sized for the load. `maxSurge: 0` (a lab choice: with one replica, every rollout is an outage) | the weights copied to the bucket |
+| `40-serving-vllm-gcsfuse.yaml` | vLLM on one L4 through the ComputeClass. The FUSE CSI driver mounts the weights read-only from GCS. A startup probe has a size that suits the time to load the weights. `maxSurge: 0` (a lab choice: with one replica, every rollout is an outage) | the weights copied to the bucket |
 | `50-time-sharing-l4.yaml` | Four 1-GPU pods on one time-shared L4 (primer §9). The node advertises 4 `nvidia.com/gpu`. Every pod sees the same GPU. Nothing isolates the pods | `enable_time_sharing_pool = true` |
 
 **Cost.** Each GPU example creates one or two `g2-standard-4` L4 nodes. The nodes stay while the pods of the
@@ -37,8 +37,8 @@ mechanism.
 
 **Admission is not placement on `l4-spot`.** A plain-quota flavor admits a workload when the quota is free. Then
 the autoscaler adds Spot nodes one at a time, and a stockout can leave part of a gang Running. The
-`waitForPodsReady` setting of Kueue v0.19 corrects that (on by default: 30 min timeout, then evict and requeue
-with backoff). Adjust it in the `kueue-manager-config` ConfigMap in `kueue-system`. `l4-flex` needs it less,
+`waitForPodsReady` setting of Kueue v0.19 (on by default: 30 min timeout, then evict and requeue with backoff)
+corrects that partial gang. Adjust it in the `kueue-manager-config` ConfigMap in `kueue-system`. `l4-flex` needs it less,
 because its ProvisioningRequest check admits only when every node exists.
 
 ## Run it

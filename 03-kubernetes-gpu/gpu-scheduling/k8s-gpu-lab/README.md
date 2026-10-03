@@ -20,7 +20,7 @@ The concepts are in the topic primer, [`../PRIMER.md`](../PRIMER.md). This lab c
 2. Run `python3 -m k8sgpu kind predict s2`. It prints the predictor's step-by-step outcome for a gang scenario
    (simulated).
 3. Open [`notebooks/01_manifests_and_the_linter.ipynb`](notebooks/01_manifests_and_the_linter.ipynb). If you have
-   Docker, start [`deploy/kind`](deploy/kind/README.md). Then continue with notebook 02.
+   Docker, start [`deploy/kind`](deploy/kind/README.md) and then continue with notebook 02.
 
 ## What you get: tiers
 
@@ -45,7 +45,7 @@ containers, not VMs. Thus the T1 path needs a VM provider (Lambda, GCP, others).
 
 The GPUs are an extended resource that `deploy/kind/fake-gpus.sh` patches into the node status. The
 scheduler counts them and the kubelet admits the pods. But there is no device plugin, no `/dev/nvidia*`
-and no CUDA. The pods print this.
+and no CUDA. The pods print that these three things are not there.
 
 ## Run it
 
@@ -75,7 +75,7 @@ On a GPU VM (T1/T2), run `deploy/gpu-vm/up.sh` (see its README). Then the same p
 | Module | What it teaches |
 |---|---|
 | `k8sgpu/manifests.py` | typed builders that make YAML for Job, JobSet, LeaderWorkerSet, Kueue (Topology, ResourceFlavor, ClusterQueue, LocalQueue, WorkloadPriorityClass, AdmissionCheck, ProvisioningRequestConfig), DRA `ResourceClaimTemplate` (`resource.k8s.io/v1`) and GKE `ComputeClass` |
-| `k8sgpu/lint.py` | a GPU pod-spec linter. It examines request == integer limit, GPU taint toleration (the match rule of Kubernetes), the accelerator selector, and the startup probe against the load time. It also examines no GPU on sidecars, and CPU/memory requests and **stranded GPUs** (it counts GKE's GCS FUSE sidecar). The last items are `/dev/shm` and its memory limit, the restart policy inside CRDs, and the rollout surge. |
+| `k8sgpu/lint.py` | a GPU pod-spec linter. It examines request == integer limit, GPU taint toleration (the match rule of Kubernetes), the accelerator selector, and the startup probe against the load time. It also makes sure that sidecars have no GPU, and examines CPU/memory requests and **stranded GPUs** (it counts GKE's GCS FUSE sidecar). The last items are `/dev/shm` and its memory limit, the restart policy inside CRDs, and the rollout surge. |
 | `k8sgpu/machines.py` | what a GPU node gives a pod: the GKE allocatable formula (verify), the per-GPU share, stranded GPUs and time-shared allocatable. Stranded GPUs use one formula. It is primer §3.4's `free mod k` when only GPUs bind, and the CPU/memory bundle otherwise. |
 | `k8sgpu/kindsim.py` | the **predictor**: Kueue quota/borrowing/classic preemption, TAS *BestFit* and *LeastFreeCapacity*, and the kube-scheduler's filters and its `0/N nodes are available` message |
 | `k8sgpu/scenarios.py` | the objects, steps and hand-written answer key of the kind lab (it renders `deploy/kind/`) |
@@ -93,14 +93,14 @@ The solutions are in `solutions/`.
 1. **`01_manifests_and_the_linter`** (T0): what makes a pod a GPU pod, the API server's GPU rules, and how CRDs defer validation. Then how to set the size of a startup probe, and stranded GPUs. Then how to build a lint-clean 16-GPU gang, and how to repair a serving Deployment. Primer §1, §3, §4, §5, §8.
 2. **`02_kind_with_fake_gpus_and_kueue`** (T0, live with Docker): the fake-GPU patch, the admit/borrow/wait arithmetic and TAS BestFit. Then admission against placement and `waitForPodsReady`, Kueue's victim order, borrow against preempt, and scenarios s1-s6 and k1. Primer §4, §5, §6, §10.
 3. **`03_why_is_my_pod_pending`** (T0, live with Docker): the scheduler's histogram, and the difference between too large, fragmented and busy. Then what Kueue waits for, how to select the repair, and the s6 zoo with a live diagnosis. Primer §3, §6, §7, §8.
-4. **`04_gke_pools_dws_and_computeclasses`** (T3, with a plan and an inspection offline): the Terraform's price and inventory, and the image's CUDA against the node driver. Then Spot's expected runtime and the checkpoint interval, a deadline as a probability, and how to select capacity. Then ComputeClass rungs, and DWS through Kueue (and why there is no TAS on L4). Last, time-sharing for one L4 and the cold-start budget. Primer §2, §7, §8, §9.
+4. **`04_gke_pools_dws_and_computeclasses`** (T3, and offline it plans and inspects): the price and the inventory of the Terraform. Then the CUDA of the image against the node driver. Then Spot's expected runtime and the checkpoint interval, a deadline as a probability, and how to select capacity. Then ComputeClass rungs, and DWS through Kueue (and why there is no TAS on L4). Last, time-sharing for one L4 and the cold-start budget. Primer §2, §7, §8, §9.
 
 ## The kind scenarios
 
 | Id | Shows | Expected outcome (answer key in `k8sgpu/scenarios.py`) |
 |---|---|---|
 | s1 | a fake GPU is a scheduling unit, and Kueue TAS packs | a plain Job on any GPU node. The Kueue Job lands on the same node (least free capacity that fits). |
-| s2 | gangs and topology | a 4-pod `required: host` gang on `host-a1-2`. An 8-pod `required: subblock` gang fills `subblock-a2`. A third gang waits (`allows to fit only 2 out of 4 pod(s)`) until the scenario deletes the blocker. Then it lands on `host-a1-1`. |
+| s2 | gangs and topology | a 4-pod `required: host` gang on `host-a1-2`. An 8-pod `required: subblock` gang fills `subblock-a2`. A third gang waits (`allows to fit only 2 out of 4 pod(s)`) until the scenario deletes the blocker. Then the third gang lands on `host-a1-1`. |
 | s3 | LeaderWorkerSet groups | group 0 (leader and worker, 4 GPUs each) in one subblock. When you scale to 2, group 1 is gated: `insufficient unused quota ... 4 more needed`. |
 | s4 | priority preemption | `a-high` preempts `a-low-2` (the newest low job, `InClusterQueue`) because team-a cannot borrow |
 | s5 | cohort borrowing and reclaim | team-a borrows 4 GPUs. team-b reclaims them: it preempts `a-job-3` (`InCohortReclamation`). |
@@ -135,7 +135,7 @@ The scripts are bash-3.2 compatible (macOS). They print every command. With `DRY
 
 ## Verify list (Sep 2026)
 
-The lab pins these releases. The last check of them was on 2026-09-26:
+The lab pins these releases. The check date is 2026-09-26:
 
 - kind v0.33.0 with `kindest/node:v1.34.11` (digest in `deploy/versions.env`).
 - Kueue v0.19.6 (API `kueue.x-k8s.io/v1beta2`, TAS beta and on by default, `waitForPodsReady` on by default with a
@@ -158,12 +158,12 @@ Google-owned repositories agree with these items. But it is still good to look a
 
 Examine these items again before you depend on them:
 
-- If G2/L4 nodes have `cloud.google.com/gce-topology-*` labels.
+- The `cloud.google.com/gce-topology-*` labels on G2/L4 nodes (present or not).
 - The automatic `nvidia.com/gpu=present:NoSchedule` taint and ExtendedResourceToleration on GKE.
 - The driver branch that GKE's `DEFAULT` installs.
 - ComputeClass field names.
 - Flex-start pricing and supported GPU types.
-- GKE's node-allocatable reservation formula.
+- The formula that GKE uses for the node-allocatable reservation.
 - All prices.
 
 MIT licensed.

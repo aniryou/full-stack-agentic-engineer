@@ -17,9 +17,10 @@
 # A **gang** gets an all-or-nothing placement. Kueue admits a whole workload or none of it. The
 # coscheduling plugin, Volcano and the new Kubernetes Workload API do the same at the pod level.
 #
-# But "all" is not sufficient. The pods of a job must also be **close**: inside one NVLink domain,
-# sub-block or block. The reason is that the collectives run at the speed of the slowest link that they
-# cross. Kueue's Topology-Aware Scheduling selects the tightest domain that holds the whole gang.
+# But "all" is not sufficient. The pods of a job must also be **near** each other: inside one NVLink
+# domain, sub-block or block. The reason is that the collectives run at the speed of the slowest link
+# that they cross. Kueue's Topology-Aware Scheduling selects the tightest domain that holds the whole
+# gang.
 #
 # After this notebook, you can show the deadlock and explain the solution. You can also select a
 # topology constraint for a workload.
@@ -44,8 +45,8 @@ print("\nA running:", running(A), "| B running:", running(B), "| free GPUs:", cl
 # %% [markdown]
 # Twelve GPUs are allocated and zero jobs run, and nothing will change. The three placed workers of each
 # job wait for their fourth worker. That worker waits for GPUs that the workers of the other job hold.
-# Preemption does not help (equal priority). A job with a higher priority evicts pods one at a time, for
-# its *first* worker only. The solution is to make one decision for the whole group at once.
+# Preemption does not help (equal priority). If a job has a higher priority, it evicts pods one at a
+# time, for its *first* worker only. The solution is to make one decision for the whole group at once.
 #
 # ## Exercise 3.1 — all or nothing
 #
@@ -79,10 +80,10 @@ print(fresh.show())
 print("✅ A runs on 8 GPUs; B waits holding nothing and starts when A finishes")
 
 # %% [markdown]
-# Kueue gives you this for a Job or JobSet. The workload stays **suspended** until its whole request
-# fits the quota of the queue. With TAS or a ProvisioningRequest, the request must also fit the nodes.
-# Then Kueue permits the creation of all of its pods at once. The function `admit_gangs` in the core
-# does the same loop over a FIFO of gangs:
+# Kueue gives you this all-or-nothing admission for a Job or JobSet. The workload stays **suspended**
+# until its whole request fits the quota of the queue. With TAS or a ProvisioningRequest, the request
+# must also fit the nodes. Then Kueue permits the creation of all of its pods at once. The function
+# `admit_gangs` in the core does the same loop over a FIFO of gangs:
 
 # %%
 again = make_cluster(hosts=3, gpus=4)
@@ -136,8 +137,8 @@ print("unconstrained 3-node gang:", spread)
 # large holes intact for large jobs. Then Kueue does the selection again one level down, over the
 # children of *all* the domains that it selected.
 #
-# (The gangs of the simulator have one pod shape. They have no leader pod set, no slices and no balanced
-# placement.)
+# The gangs of the simulator have one pod shape. They have no leader pod set, no slices and no balanced
+# placement.
 #
 # ## Exercise 3.2 — Kueue's BestFit
 #
@@ -272,9 +273,9 @@ print("✅", choices)
 # when not all of its pods become ready.
 #
 # "Placement is topology-aware. Kueue TAS reads the block, sub-block and host labels, and puts a gang in
-# the tightest domain that holds it. The constraint is required for inference groups whose shards
-# exchange data every token. It is preferred for long training jobs. It is unconstrained for
-# embarrassingly parallel batch."
+# the tightest domain that holds it. We use a required constraint for inference groups whose shards
+# exchange data every token. We use a preferred constraint for long training jobs, and no constraint
+# for embarrassingly parallel batch."
 #
 # **Drill questions.**
 #

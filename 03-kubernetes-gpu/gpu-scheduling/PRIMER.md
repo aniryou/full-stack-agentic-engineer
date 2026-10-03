@@ -119,7 +119,7 @@ injects device nodes and driver libraries. The container half is layer 02
 
 Two consequences are important to say in a review:
 
-* **A failing GPU does not evict anything.** A device can become Unhealthy (an XID error, a GPU that is no
+* **A GPU that fails does not evict anything.** A device can become Unhealthy (an XID error, a GPU that is no
   longer on the bus). Then allocatable decreases from 8 to 7 (`Kubelet.node_status()`). Pods that run keep their
   devices, and only new placements see the change. A node drain is an operational decision.
 * **The scheduler and the kubelet keep separate books.** The scheduler binds a pod with the last node status
@@ -193,8 +193,8 @@ can make decisions from attributes and from how pods share devices, not from cou
 
 The NVIDIA DRA driver (`kubernetes-sigs/dra-driver-nvidia-gpu`) officially supports **ComputeDomains**. A
 ComputeDomain is a multi-node NVLink (IMEX) domain for GB200/GB300-class racks. But in September 2026, the
-maintainers still marked the GPU-allocation plugin of the driver as not officially supported. That plugin was also off by
-default (verify before you rely on it).
+driver's GPU-allocation plugin was still not officially supported and was off by default (verify before you rely on
+it).
 
 Device plugins and DRA exist together. Most GPU fleets still schedule `nvidia.com/gpu` counts today. The DRA
 support of Kueue is near beta.
@@ -302,7 +302,7 @@ The example is an 8-GPU node with 6 GPUs requested. A 1-GPU pod, with the score 
 * **The default scoring resources are `cpu` and `memory` (weight 1 each).** The default score does not include
   GPUs at all. Two nodes with the same CPU and memory use get the same score, with 1 or with 7 GPUs busy. GPU
   pods spread as a side effect of the CPU/memory spread.
-* **An extended resource the pod does not request is skipped**. It does not get a score of zero. Thus
+* **The scorer skips an extended resource that the pod does not request**. It does not get a score of zero. Thus
   `nvidia.com/gpu` in the list does not keep CPU pods away from GPU nodes. Taints do that.
 
 To pack GPU pools, configure a scheduler profile with `MostAllocated` and a GPU weight:
@@ -402,7 +402,7 @@ evaluation pod of 8 GPUs. A priority-1000 serving pod needs 4 GPUs. Node *a* cos
 *b* costs one priority-500 victim. Thus the scheduler evicts the newer batch pod on *a*.
 
 Preemption does **not** do these things: evict pods of equal or higher priority, consolidate free GPUs, or
-understand jobs. Preemption can make room for the first pod of an 8-pod job. But this does nothing useful if the
+understand jobs. Preemption can make room for the first pod of an 8-pod job. But that room is of no use if the
 other seven pods cannot follow.
 
 ---
@@ -430,10 +430,10 @@ nothing (`gang.admit_gangs()`). Then 4 GPUs are idle instead of 12, and B starts
 
 | Mechanism | How | Notes |
 |---|---|---|
-| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Workload and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job do not all fit on real nodes (fragmentation, pods that Kueue does not manage). `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. It is on by default since the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
+| **Kueue** (job level) | The webhook of Kueue suspends queued Jobs at creation (`spec.suspend: true`). Plain pods get the scheduling gate `kueue.x-k8s.io/admission`. Kueue admits the whole Workload against quota. Then it unsuspends the Job and injects the node selectors of the flavor. | Quota is *logical*. It is possible that the pods of an admitted job still do not all fit on real nodes (fragmentation, pods that Kueue does not manage). `waitForPodsReady` evicts and requeues a job whose pods are not all Ready, with backoff. It is on by default since the v1beta2 Configuration: timeout 30 min, `recoveryTimeout` the same, `blockAdmission: false`. Only the alpha `DisableWaitForPodsReady` feature gate turns it off. `blockAdmission: true` admits one workload at a time. TAS (section 5) and ProvisioningRequest (section 7) do a check of physical capacity. |
 | **Coscheduling** plugin (kubernetes-sigs/scheduler-plugins) | A `PodGroup` with `minMember`. The **Permit** stage holds reserved pods until the number of reserved pods is `minMember`. If that does not occur, it rejects them after a timeout. | It runs inside a second scheduler profile. The PodGroup API is `scheduling.x-k8s.io/v1alpha1` (verify). |
 | **Volcano** | its own batch scheduler with `PodGroup.minAvailable`, queues and fair share | a replacement scheduler, common in HPC-style clusters |
-| **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`. The scheduler places a pod group together. | It is alpha in 1.35 behind the `GenericWorkload` feature gate, and beta in 1.37. The KEP metadata gives 1.38 as the target for stable (verify the release you run). Kueue plans to integrate it. |
+| **Kubernetes native** (KEP-4671) | `Workload` and `PodGroup` APIs in `scheduling.k8s.io`. The scheduler places a pod group together. | It is alpha in 1.35 behind the `GenericWorkload` feature gate, beta in 1.37, and 1.38 is the target for stable. These releases come from the KEP metadata (verify the release you run). Kueue plans to integrate the native gang scheduling. |
 
 The pattern that works today, on GKE and elsewhere, is Kueue in front of the default scheduler. Jobs wait in the
 queue as whole units. TAS or a ProvisioningRequest makes sure that the nodes exist and fit. `waitForPodsReady`
@@ -511,7 +511,7 @@ in `gpusched.gang`:
   pods to place. BestFit gives 3 + 3 + **1**, and keeps the 2-slot node whole.
 
   Below the selected domain, Kueue repeats the selection level by level, over the children of *all* selected
-  domains together. Thus the host split does not have to follow the sub-block split.
+  domains together. Thus the host split does not have to be the same as the sub-block split.
 * **LeastFreeCapacity** (unconstrained): one flat list of hosts, tightest first. It takes the tightest single host
   that holds the whole pod set. Only if no host does, it fills the smallest gaps first: 1 + 2 + 3 + 1 for the same
   example (`gang.least_free_capacity()`). This keeps large domains whole for constrained jobs.
@@ -619,12 +619,12 @@ a candidate from another queue only while that queue still borrows. Then it decr
 reverse order.
 
 With `reclaimWithinCohort: Any`, the 16-GPU job of team A preempts exactly the third job of B (the newest, which
-borrows), and Kueue admits it. B is back at its nominal 16. With `withinClusterQueue: LowerPriority`, a
+borrows). Then Kueue admits the job of team A. B is back at its nominal 16. With `withinClusterQueue: LowerPriority`, a
 priority-100 job in a full queue evicts the newest priority-0 job.
 
 **Fair sharing** is the alternative algorithm. Each ClusterQueue gets a weighted share value of the borrowable
-resources. Admission selects the lowest share first, and preemption takes from the highest share first. This
-occurs under `preemptionStrategies` such as `[LessThanOrEqualToFinalShare, LessThanInitialShare]`. Admission Fair
+resources. Admission selects the lowest share first, and preemption takes from the highest share first. Preemption
+obeys `preemptionStrategies` such as `[LessThanOrEqualToFinalShare, LessThanInitialShare]`. Admission Fair
 Sharing applies the idea to LocalQueues within a ClusterQueue.
 
 ### 6.4 Queueing strategy and flavors
@@ -660,7 +660,7 @@ Serving keeps 8 GPUs at home and lends the other 8. When serving scales up, it g
 (`borrowingLimit: 8`, `withinClusterQueue: LowerPriority`) fills idle quota, and puts its own jobs in order by
 priority. The same idea is the admission control of the gateway, one layer up
 ([agentic scaling primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3).
-It admits whole units of work against a budget, and it sheds the rest or puts the rest in a queue.
+The admission control of the gateway admits whole units of work against a budget. It sheds the rest or puts the rest in a queue.
 
 ---
 
@@ -685,7 +685,7 @@ pending pods ─► simulate them on each node pool's template node ─► bin-p
   The request in the example is 4 + 2 + 1 + 1 GPUs. The simulator finds that one 8-GPU H100 node and two 4-GPU
   L4 nodes have the same waste (zero idle GPUs).
 
-  It takes the H100 on its tie-break. Thus pods select one GPU type with a node selector. A `price` or
+  The simulator takes the H100 on its tie-break. Thus pods select one GPU type with a node selector. A `price` or
   `priority` expander, or a ComputeClass (7.3), expresses the cost.
 * **Down again**: a node goes away after it stays unneeded for `--scale-down-unneeded-time` (10 min), and no
   scale-up occurred for `--scale-down-delay-after-add` (10 min). For GPU nodes, only GPU utilisation counts
@@ -719,7 +719,7 @@ prices.
 $T$ hours with probability $e^{-N \cdot \lambda \cdot T}$ (`autoscaler.gang_survival()`). If every reclaim restarts
 the gang from the start, $T$ hours of work with restart overhead $R$ take
 $(e^{N \cdot \lambda \cdot T} - 1) \cdot (1/(N \cdot \lambda) + R)$ hours on average
-(`autoscaler.expected_runtime_h()`). The tests check this formula by Monte Carlo, with and without $R$. The table
+(`autoscaler.expected_runtime_h()`). The tests do a check of this formula by Monte Carlo, with and without $R$. The table
 uses an illustrative $\lambda$ = 0.005 per node-hour, and a 24-hour job with $R$ = 15 min:
 
 | Nodes | Survives 24 h | Expected wall-clock |
@@ -763,8 +763,8 @@ The lab's `deploy/gke/` has an example.
 
 **Autopilot** removes node pools entirely. A pod requests `nvidia.com/gpu` and selects an accelerator type. Then
 GKE provisions and bills per pod (verify selectors and limits). Outside GCP, the same ideas are Karpenter node pools
-with capacity types (AWS, Azure), and capacity reservations and blocks for ML. On-prem, the same idea is a fleet of
-constant size where quota (section 6) is the only elasticity (verify provider specifics).
+with capacity types (AWS, Azure), and capacity reservations and blocks for ML (verify provider specifics). On-prem,
+the same idea is a fleet of constant size where quota (section 6) is the only elasticity.
 
 ---
 
@@ -803,9 +803,9 @@ weights from a fast cache (4 GB/s). It takes **70 s**, most of it warm-up. These
   supported sources and registries).
 * **Weights**: mount a bucket with the **Cloud Storage FUSE CSI driver**
   (`addons_config.gcs_fuse_csi_driver_config`) and its caching options. Or mount a read-only-many **Hyperdisk ML**
-  volume. Or load the weights into GPU memory with a model streamer (verify current options per engine). Layer 01
+  volume. Or use a model streamer for streaming the weights into GPU memory (verify current options per engine). Layer 01
   §6.1 has the parallel-read arithmetic.
-* **Warm-up**: use a **startup probe** with a sufficient duration for load + CUDA-graph capture. Then the kubelet
+* **Warm-up**: use a **startup probe** with a sufficient duration for load + CUDA-graph capture. Thus the kubelet
   does not stop a pod that loads slowly. Use a readiness probe, so traffic arrives only when the engine serves.
   [`04-inference-engine/serving-engine/PRIMER.md`](../../04-inference-engine/serving-engine/PRIMER.md) §1 tells
   what the engine does at start-up.
@@ -961,8 +961,8 @@ and weights come from a cache."
    checkpoints.
 6. *A GPU node shows capacity 8, allocatable 7. What does that mean for the pods that run now and for new
    pods?* One device is Unhealthy. Pods that run keep their GPUs, and new pods see 7. A pod that the scheduler
-   placed on stale status can fail with `UnexpectedAdmissionError`. Drain and repair the node as an
-   operational decision.
+   placed on stale status can fail with `UnexpectedAdmissionError`. Drain and repair the node when you
+   decide to, not automatically.
 
 ---
 

@@ -5,7 +5,8 @@ change four workers into fake 4-GPU L4 nodes with GKE-style labels and taints. T
 JobSet and LeaderWorkerSet controllers.
 
 Then the scenarios in `workloads/` show quota, gangs, topology-aware placement, priority preemption and cohort
-reclaim. The real kube-scheduler and Kueue make these decisions. At the same time, the notebooks and `python -m k8sgpu kind run` compare each step with the bundled predictor.
+reclaim. The real kube-scheduler and Kueue make the decisions in these scenarios. At the same time, the notebooks
+and `python -m k8sgpu kind run` compare each step with the bundled predictor.
 
 **Cost.** $0. Everything runs in Docker on your machine. The cluster uses about 3-4 GB of Docker memory.
 
@@ -32,9 +33,9 @@ deploy/kind/down.sh                # delete everything
 | Script | Does |
 |---|---|
 | `up.sh` | It runs `kind create cluster` (image pinned in `../versions.env`) and preloads busybox. Then it runs the next three scripts in this table. Then it applies `manifests/0*-3*.yaml` |
-| `fake-gpus.sh` | It reads `topology.txt` and sets the node-pool, accelerator and `gce-topology-{block,subblock,host}` labels, the `nvidia.com/gpu=present:NoSchedule` taint, and the `nvidia.com/gpu` capacity through a status patch. **Re-run after a Docker restart**. When the kubelet registers again, it sets to zero the extended resources that it does not manage |
+| `fake-gpus.sh` | It reads `topology.txt` and sets the node-pool, accelerator and `gce-topology-{block,subblock,host}` labels, the `nvidia.com/gpu=present:NoSchedule` taint, and the `nvidia.com/gpu` capacity through a status patch. **Re-run after a Docker restart**, because a kubelet that registers again sets the extended resources that it does not manage to zero |
 | `install-addons.sh` | It applies the JobSet, LeaderWorkerSet and Kueue release manifests (`kubectl apply --server-side`). Then it waits for the controllers |
-| `kwok.sh` | Optional. It installs the KWOK controller, 32 fake 8-GPU H100 nodes (2 blocks x 4 subblocks x 4 hosts) and the `fleet` queue. `--delete` removes them |
+| `kwok.sh` | Optional. It installs the KWOK controller. Then it creates 32 fake 8-GPU H100 nodes (2 blocks x 4 subblocks x 4 hosts) and the `fleet` queue. `--delete` removes them |
 | `down.sh` | `kind delete cluster` |
 
 All scripts print each command (`+ kubectl ...`) and obey `DRY_RUN=1`. `CLUSTER_NAME` (default `gpu-lab`) and
@@ -61,9 +62,9 @@ upstream [dra-example-driver](https://github.com/kubernetes-sigs/dra-example-dri
 
 ## The cluster and the queues
 
-The lab fakes the block/subblock/host labels in the diagram that follows, to teach. No known source shows
-that real L4 (G2) nodes on GKE have GCE topology labels. Google's TAS examples use them on A3/A4/A4X (verify).
-Thus the lab's GKE flavors are plain quota. The mechanism that you use here is the one that those families use.
+The lab fakes the block/subblock/host labels in the diagram that follows, only to teach the mechanism. Real L4
+(G2) nodes on GKE are not known to have GCE topology labels, and Google's TAS examples use them on A3/A4/A4X
+(verify). Thus the lab's GKE flavors are plain quota. The mechanism that you use here is the one that those families use.
 
 ```text
 gpu-lab-control-plane                     (control-plane taint)
