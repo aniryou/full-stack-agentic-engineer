@@ -69,7 +69,7 @@ print("\nstats:", eng.kv.stats)
 # what vLLM reports as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
 #
 # ## Worked example 3 — a burst: three requests in the same step
-# An agent sends out three tool calls at once (a fan-out), all behind the same system prompt. Thus the scheduler
+# An agent sends out three tool calls at once, all behind the same system prompt. Thus the scheduler
 # admits all three in **one** step. The engine publishes a block when the scheduler **schedules** the tokens that
 # fill it (vLLM does it in `allocate_slots`). Thus the second and third requests adopt `r0`'s blocks while `r0` still
 # computes them.

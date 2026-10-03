@@ -63,7 +63,8 @@ print(raw.decode()[:600])
 # %% [markdown]
 # ## What the router scrapes
 #
-# Every 50 ms (llm-d's default base tick), the router GETs the `/metrics` of each backend. It keeps
+# Every 50 ms (llm-d's default base tick), the router sends a GET request to the `/metrics` of each backend.
+# It keeps
 # the few gauges that it uses to route. The next cell prints the raw vLLM-named series, then the
 # router's view of them.
 

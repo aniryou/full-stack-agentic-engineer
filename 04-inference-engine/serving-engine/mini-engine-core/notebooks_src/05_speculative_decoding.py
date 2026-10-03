@@ -1,19 +1,25 @@
 # %% [markdown]
 # # 05 · Speculative decoding
 #
-# **Tier:** T0 — CPU only, no network, about twenty seconds. Speed-ups on real hardware are **SIMULATED** here
-# (roofline model); `vllm-serving-lab` notebook `05_speculation_and_quantization_in_vllm` measures vLLM's
-# n-gram and EAGLE speculators on a GPU (T1).
+# **Tier:** T0. It needs a CPU only and no network, and it runs in about twenty seconds. The speed-ups on real
+# hardware are **SIMULATED** here (roofline model). `vllm-serving-lab` notebook `05_speculation_and_quantization_in_vllm`
+# measures the n-gram and EAGLE speculators of vLLM on a GPU (T1).
 #
 # ## The one-minute version
-# Decode is memory-bound: a forward pass over $k + 1$ positions costs about the same as over one, because the weight
-# read dominates. So let a cheap **proposer** guess $k$ tokens, and have the target model score all of them in
-# **one** pass. Keep draft token $x \sim q$ with probability $\min(1, p(x)/q(x))$; at the first rejection, sample a
-# replacement from the residual $\operatorname{norm}(\max(0, p - q))$ and stop; if all $k$ survive, take a bonus
-# token from the target. This rule makes the output distribution **exactly** the target's — speculation changes
-# speed, never quality. With acceptance rate $\alpha = \sum \min(p, q)$ one pass yields
-# $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens on average. Whether that is a speed-up depends on what the draft costs and
-# on whether the verify pass is still cheap — which stops being true once the batch is compute-bound.
+# Decode is memory-bound. A forward pass over $k + 1$ positions costs approximately the same as a pass over one
+# position, because the weight read dominates. Thus let a low-cost **proposer** guess $k$ tokens. Then let the target
+# model score all of them in **one** pass. For each draft token $x \sim q$, the rule is:
+#
+# * Keep the token with probability $\min(1, p(x)/q(x))$.
+# * At the first rejection, sample a replacement from the residual $\operatorname{norm}(\max(0, p - q))$, and stop.
+# * If all $k$ tokens survive, take a bonus token from the target.
+#
+# This rule makes the output distribution **exactly** the distribution of the target. Speculation changes the speed,
+# never the quality. With the acceptance rate $\alpha = \sum \min(p, q)$, one pass gives
+# $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens on average.
+#
+# If that is a speed-up or not depends on two things: the cost of the draft, and if the verify pass is still
+# low-cost. The verify pass is no longer low-cost when the batch is compute-bound.
 #
 # Primer: §7 *Speculative decoding* (`../../PRIMER.md`).
 
@@ -42,12 +48,13 @@ for _ in range(n):
 print("emitted frequencies:", (emitted / n).round(3), "vs p", p, "| accepted", accepted / n)
 
 # %% [markdown]
-# The draft proposes token 3 far too often (0.4 vs 0.05); verification rejects most of those, and the residual
-# re-assigns the mass to tokens 0 and 1, which the draft under-proposed. The emitted distribution is $p$.
+# The draft proposes token 3 much too often (0.4 against 0.05). The verification rejects most of those proposals.
+# The residual then moves the mass to tokens 0 and 1, which the draft proposed less often than the target. The
+# emitted distribution is $p$.
 #
 # ## Worked example 2 — a real draft/target pair
-# The target is `TinyLM()`; the draft is a model ten times smaller, with the same tokenizer (a requirement) and
-# similar "training data".
+# The target is `TinyLM()`. The draft is a model that is ten times smaller. It has the same tokenizer (a requirement)
+# and similar "training data".
 
 # %%
 target, draft = TinyLM(), TinyLM(SMALL, seed=1)
@@ -66,19 +73,25 @@ out, st = spec.speculative_generate(spec.lm_probs(target, 0), prompt, 40, k=4, d
 print("greedy speculation == greedy decoding:", out == target.generate_dense(prompt, 40), f"({st.passes} passes)")
 
 # %% [markdown]
-# Two things to notice. The measured tokens per pass match the formula at $k = 1$ and 2, within the noise of ~50
-# passes, but fall short of it at $k = 4$. That is not only noise: $(1 - \alpha^{k+1})/(1 - \alpha)$ assumes every
-# position is accepted independently with the same $\alpha$, while real acceptance varies by position (p10 to p90
-# above) and is correlated — a stretch the draft finds hard rejects early and often — so the formula over-predicts
-# deep speculation. Measure acceptance per position (vLLM exports `vllm:spec_decode_num_accepted_tokens_per_pos`)
-# before choosing $k$. And greedy speculation is not "close to" greedy decoding — it is identical, token for token,
-# because with temperature 0 both distributions are one-hot and the rule reduces to "accept iff the draft's argmax
-# equals the target's".
+# Look at two things.
+#
+# First, the measured tokens per pass agree with the formula at $k = 1$ and 2, within the noise of ~50 passes. But at
+# $k = 4$, they are less than the formula. This is not only noise. The formula $(1 - \alpha^{k+1})/(1 - \alpha)$
+# assumes that the target accepts each position independently, with the same $\alpha$. But the real acceptance
+# changes with the position (p10 to p90 in the printed output), and it is correlated. A part of the text that is hard
+# for the draft gets early and frequent rejections, thus the formula predicts too much for deep speculation.
+#
+# Measure the acceptance per position (vLLM exports `vllm:spec_decode_num_accepted_tokens_per_pos`) before you select
+# $k$.
+#
+# Second, greedy speculation is not "close to" greedy decoding. It is identical, token for token. With temperature 0,
+# both distributions are one-hot. Thus the rule becomes "accept iff the draft's argmax equals the target's".
 #
 # ## Worked example 3 — prompt lookup: free drafts when the output copies the context
-# N-gram (prompt-lookup) drafting proposes the tokens that followed the last occurrence of the current n-gram in
-# the context. No draft model at all. It shines when the output repeats the input — quoting a tool result, editing
-# code — and does nothing otherwise. `copy_target` is a toy target that copies (an "induction head").
+# N-gram (prompt-lookup) drafts are the tokens that came after the last occurrence of the current n-gram in the
+# context. This method uses no draft model at all. It gives the best results when the output repeats the input, for
+# example when the output quotes a tool result or edits code. In other cases, it does nothing. `copy_target` is a toy target
+# that copies (an "induction head").
 
 # %%
 def copy_target(tokens, n=4):
@@ -103,11 +116,16 @@ print(f"babbling target: {decode(out)!r:28} acceptance {st.acceptance:.2f}, {st.
 
 # %% [markdown]
 # ## Worked example 4 — when does it pay? (SIMULATED)
-# Llama-3.1-8B target, Llama-3.2-1B draft (same tokenizer) on an H100, $\alpha = 0.7$, $k = 4$. Plain decoding
-# costs one engine step per token. One speculative round is **one** engine step, so it pays the step's fixed
-# overhead (2 ms here) once, plus $k$ draft forwards — each a CUDA-graph replay and a draft sample, assumed to cost
-# 0.5 ms of overhead on top of its roofline time — plus one target verify pass of $k + 1$ tokens per request with
-# logits at all $k + 1$ positions (`perf.spec_speedup`). Batches whose KV cache would not fit are marked `--`.
+# The setup is a Llama-3.1-8B target and a Llama-3.2-1B draft (same tokenizer) on an H100, with $\alpha = 0.7$ and
+# $k = 4$. Plain decode costs one engine step per token. One speculative round is **one** engine step. Thus the round
+# pays these costs (`perf.spec_speedup`):
+#
+# * The constant overhead of the step (2 ms here), one time.
+# * $k$ draft forwards. Each forward is a CUDA-graph replay and a draft sample. The model assumes that each forward
+#   costs its roofline time plus 0.5 ms of overhead.
+# * One target verify pass of $k + 1$ tokens per request, with logits at all $k + 1$ positions.
+#
+# The output marks a batch with `--` when its KV cache does not fit.
 
 # %%
 G, T, D = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"], perf.LLMS["llama-3.2-1b"]
@@ -133,23 +151,28 @@ for ov in [0.0, 0.0005, 0.002]:
 print(f"an EAGLE-like head with c = 0.05 would give {spec.speedup(0.7, 4, 0.05):.2f}x at batch 1")
 
 # %% [markdown]
-# At batch 1 the gain is ~1.6× with these assumptions, and the draft's cost is why it is not more: four forwards of a
-# 1B model, each about 19% of an 8B step ($c \approx 0.19$: its weight read is ~17% of the target's, plus the assumed
-# 0.5 ms). The sensitivity rows show how much that rests on the overhead assumption: 1.9× if a draft forward cost
-# only its roofline time, 1.1× if each paid a full engine step's 2 ms — measure it before quoting a number. Draft
-# heads that ride on the target's own hidden states (EAGLE, MTP) cost a few percent of a target step: with $c = 0.05$
-# the same $\alpha$ and $k$ give the 2.31× printed above — which is why they, not separate draft models, dominate in
-# practice.
+# At batch 1, the gain is ~1.6× with these assumptions. The cost of the draft is the reason that the gain is not
+# more. The draft does four forwards of a 1B model. Each forward costs about 19% of an 8B step
+# ($c \approx 0.19$: its weight read is ~17% of the target's, plus the assumed 0.5 ms).
 #
-# The robust conclusion is the shape. At short contexts the verify pass ($B \times 5$ tokens) crosses the compute
-# knee as the batch grows, and speculation becomes a **slow-down** past ~100–250 requests (depending on the
-# overhead): the "free" positions are no longer free. At long contexts decode stays memory-bound on the KV read, so
-# speculation keeps paying — and memory caps the batch before compute does. In production that is why speculation is
-# usually tuned per workload (or switched off above a load threshold).
+# The sensitivity rows show how much that result depends on the overhead assumption. If a draft forward costs only its
+# roofline time, the gain is 1.9×. If each forward pays the full 2 ms of an engine step, the gain is 1.1×. Measure the
+# overhead before you quote a number.
+#
+# Draft heads that use the hidden states of the target itself (EAGLE, MTP) cost a few percent of a target step. With
+# $c = 0.05$, the same $\alpha$ and $k$ give the 2.31× that the cell printed. This is why these heads, not separate
+# draft models, dominate in practice.
+#
+# The conclusion that holds under all of these assumptions is the shape. At short contexts, the verify pass
+# ($B \times 5$ tokens) crosses the compute knee when the batch increases. Past ~100–250 requests (the point depends
+# on the overhead), speculation becomes a **slow-down**: the "free" positions are no longer free. At long contexts,
+# decode stays memory-bound on the KV read. Thus speculation continues to give a gain, and memory caps the batch before
+# compute does. That is why, in production, the speculation settings are usually specific to each workload (or
+# speculation is off above a load threshold).
 #
 # ## Exercise 5.1 — one position of verification
-# Implement the rule for a single draft token $x$ drawn from $q$: return `(True, x)` if accepted, else
-# `(False, y)` with $y$ drawn from the normalised residual.
+# Write the rule for one draft token $x$ sampled from $q$. If the rule accepts $x$, return `(True, x)`. If not, return
+# `(False, y)`, with $y$ sampled from the normalised residual.
 
 # %% exercise
 def accept_or_recover(p, q, x, rng):
@@ -173,8 +196,9 @@ print(f"✅ emitted tokens follow p (chi2 = {chi2:.1f}); acceptance {acc / 20000
 
 # %% [markdown]
 # ## Exercise 5.2 — expected tokens per target pass
-# Each draft token is accepted with probability $\alpha$ independently, and the first rejection ends the round, which
-# still emits one token (recovered or bonus). Write `expected_tokens(alpha, k)` (handle `alpha == 1`).
+# The target accepts each draft token independently, with probability $\alpha$. The first rejection ends the round.
+# The round still emits one token (recovered or bonus). Write `expected_tokens(alpha, k)`. Make sure that it also
+# handles `alpha == 1`.
 
 # %% exercise
 def expected_tokens(alpha, k):
@@ -193,7 +217,7 @@ print(f"✅ alpha 0.8, k 4: {expected_tokens(0.8, 4):.4f} tokens per pass (simul
 # %% [markdown]
 # ## Exercise 5.3 — choose k
 # If one draft step costs $c$ target steps, a round costs $k\,c + 1$ and emits `expected_tokens(α, k)`. Write
-# `best_k(alpha, c)` (search $k = 1, \ldots, 16$), then set `k_answer` for $\alpha = 0.6$, $c = 0.05$.
+# `best_k(alpha, c)` (search $k = 1, \ldots, 16$). Then set `k_answer` for $\alpha = 0.6$, $c = 0.05$.
 
 # %% exercise
 def best_k(alpha, c, k_max=16):
@@ -216,8 +240,8 @@ print(f"✅ alpha 0.6, c 0.05 -> k = {k_answer} ({spec.speedup(0.6, 4, 0.05):.2f
 
 # %% [markdown]
 # ## Exercise 5.4 — at what batch size does it stop paying?
-# Using `spec_speedup(B, ctx)` from worked example 4 (short 200-token contexts, $\alpha = 0.7$, $k = 4$), find the
-# smallest batch in `[1, 2, 4, ..., 512]` where speculation makes decoding **slower**.
+# Use `spec_speedup(B, ctx)` from worked example 4 (short 200-token contexts, $\alpha = 0.7$, $k = 4$). Find the
+# smallest batch in `[1, 2, 4, ..., 512]` at which speculation makes decode **slower**.
 
 # %% exercise
 batches = [2 ** i for i in range(10)]
@@ -231,8 +255,8 @@ print(f"✅ at context 200 speculation turns into a slow-down at batch {b_star} 
 
 # %% [markdown]
 # ## Exercise 5.5 — prompt lookup
-# Write `lookup(tokens, k, n)`: find the most recent **earlier** occurrence of the last $n$ tokens and return the
-# (up to) $k$ tokens that followed it; `[]` if there is none.
+# Write `lookup(tokens, k, n)`. It finds the most recent **earlier** occurrence of the last $n$ tokens. It returns the
+# (up to) $k$ tokens that came after that occurrence. If there is no occurrence, it returns `[]`.
 
 # %% exercise
 def lookup(tokens, k, n=3):
@@ -254,19 +278,24 @@ print("✅ 'the cat sat. the cat' ->", repr(decode(lookup(encode("the cat sat. t
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Decode is memory-bound, so the target can check several guessed tokens in the time of
-# one. A proposer — a small same-tokenizer model, an EAGLE head on the target's hidden states, the model's own
-# multi-token-prediction heads, or plain prompt lookup — drafts $k$ tokens; the target scores $k+1$ positions in one
-# pass; rejection sampling keeps exactly the target distribution, so quality is unchanged by construction.
+# **The two-minute version.** "Decode is memory-bound. Thus the target can examine several guessed tokens in the time
+# of one token. A proposer drafts $k$ tokens. It can be a small model with the same tokenizer, or an EAGLE head on the
+# hidden states of the target. It can also be the multi-token-prediction heads of the model itself, or plain prompt
+# lookup.
 #
-# "Gains are $1 + \alpha + \dots + \alpha^k$ tokens per pass minus the draft's cost; with $\alpha$ around 0.7 that is
-# 2–3x fewer target passes. It helps most at low batch and long context, and it can hurt at high batch with short
-# contexts, where the verify tokens are no longer free. For our agents, prompt lookup is attractive because they
-# quote tool output a lot; we would enable it per deployment and watch the acceptance rate and ITL, not assume them."
+# "The target scores $k+1$ positions in one pass. Rejection sampling keeps exactly the target distribution. Thus, by
+# construction, the quality does not change.
+#
+# "The gain is $1 + \alpha + \dots + \alpha^k$ tokens per pass, minus the cost of the draft. With $\alpha$ around 0.7,
+# that is 2–3x fewer target passes. It helps most at low batch and long context. It can hurt at high batch with short
+# contexts, where the verify tokens are no longer free.
+#
+# "For our agents, prompt lookup is a good option, because they quote tool output frequently. Our plan is to turn it
+# on per deployment, and to monitor the acceptance rate and ITL, not to assume them."
 #
 # **Drill questions**
-# 1. *Does speculative decoding change the output distribution?* — No: accept with $\min(1, p/q)$, resample
-#    rejections from $\operatorname{norm}(\max(0, p - q))$; the emitted token is distributed exactly as $p$.
-# 2. *$\alpha = 0.8$, $k = 4$: tokens per target pass?* — (1 − 0.8⁵)/(1 − 0.8) = 3.36.
-# 3. *Why can speculation make a busy server slower?* — At large batch the verify pass is compute-bound, so the $k$
-#    extra positions per request cost real FLOPs, and rejected ones are wasted.
+# 1. *Does speculative decoding change the output distribution?* No. Accept with $\min(1, p/q)$, and resample
+#    rejections from $\operatorname{norm}(\max(0, p - q))$. The emitted token has exactly the distribution $p$.
+# 2. *$\alpha = 0.8$, $k = 4$: tokens per target pass?* (1 − 0.8⁵)/(1 − 0.8) = 3.36.
+# 3. *Why can speculation make a busy server slower?* At large batch, the verify pass is compute-bound. Thus the $k$
+#    extra positions per request cost real FLOPs, and the rejected positions are a waste.

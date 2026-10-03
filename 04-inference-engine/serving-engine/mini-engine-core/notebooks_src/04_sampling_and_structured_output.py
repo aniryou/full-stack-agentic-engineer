@@ -243,8 +243,8 @@ print("✅ repetition penalty matches the engine's")
 #   the output.
 # * `advance(state, token)`
 #
-# The legal outputs are the integers from `0` to `255` in decimal, with no leading zeros, then EOS. Use the digits typed until now (a
-# string) as the state.
+# The legal outputs are the integers from `0` to `255` in decimal, with no leading zeros, then EOS. Use the
+# digits typed until now (a string) as the state.
 
 # %% exercise
 class ByteIntFSM:

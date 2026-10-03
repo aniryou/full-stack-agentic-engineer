@@ -246,8 +246,8 @@ print(f"âœ… {pick} GB of DRAM per replica reaches the floor for this workload â€
 # "First, I will add a CPU-memory offload tier on every replica. It is faster than recompute on any GPU, because PCIe
 # moves KV faster than prefill creates it. I will also keep the routing session-sticky, with a load gate.
 #
-# "A shared KV store (LMCache or Mooncake over RDMA) lets any replica resume any session. This is applicable if we
-# must balance the load again freely, or continue after the loss of a replica. I will calculate the size of the
+# "If we must balance the load again freely, or continue after the loss of a replica, a shared KV store helps.
+# With a shared KV store (LMCache or Mooncake over RDMA), any replica can resume any session. I will calculate the size of the
 # tiers from a replay of session traces from production: the hit shares per tier and the recomputed-token floor."
 #
 # **Drills**

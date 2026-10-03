@@ -345,7 +345,12 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   deploy notes, 9 notebook sources, the layer README): 42 agents in 1.4 hours; 2,969 sentences compared, 8 blocking, 32
   major and 73 minor findings, 146 applied, 1 rejected, none left open, nothing to apply by hand; k8s-gpu-core 58 and
   k8s-gpu-lab 127 tests pass; the 7 linter errors left are a table cell that `test_docs.py` pins and two quoted drill
-  questions in the lab's notebooks 03 and 04.
+  questions in the lab's notebooks 03 and 04. **Layer 05** (8 groups, about 33k words: the serving-orchestration primer,
+  READMEs and deploy notes, 10 notebook sources, the layer README): 42 agents in 1.5 hours; 3,348 sentences compared, 1
+  blocking, 59 major and 97 minor findings, 200 applied, 1 rejected; the three left open (the HTTP method GET used as a
+  verb, a cold-start figure whose scope had moved, an unclear "This") applied by hand; orchestrator-core 65 and
+  inference-gateway-lab 83 tests pass; the 3 linter errors left are one minus sign inside a formula that the linter reads
+  as a dash, in a source and its two notebooks.
   **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping

@@ -411,5 +411,6 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
 #    small a weight to RAG. Here, SLO attainment decreased from 0.94 to about 0.7. Scale on seconds of prefill backlog
 #    plus KV, or calculate the target again for every mix.
 # 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. After
-#    the cluster autoscaler removes the idle GPU node, the cold start also includes a new node (~400 s here).
+#    the cluster autoscaler removes the idle GPU node, the cold start also includes a new node. Then the full cold
+#    start is ~400 s here.
 #    `minReplicas: 0` also needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.
