@@ -1,22 +1,34 @@
 # roofline-core — predict what the hardware should do, with arithmetic
 
-After this core you can compute, from a spec sheet and a model config, whether an LLM step is compute- or
-memory-bound, what a collective costs, how long a cold start takes, how often a big job fails and what a token
-costs. It is seven small standard-library modules — a dated accelerator catalogue, the roofline, the FLOPs and bytes
-of an LLM step, the α-β cost of a collective, cold start, failure rates and the cost of a token — plus four fill-in
-notebooks.
+After this core, you can calculate these values from a spec sheet and a model config:
 
-**Tier T0** (laptop, Colab CPU or CI; no GPU, no network; free). This is the *minimal* core of the topic. The
-concepts are in [`../PRIMER.md`](../PRIMER.md) — every computed number it quotes comes from here and is pinned by
-`tests/test_primer_numbers.py`. The *detailed* lab, [`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same
-quantities on the hardware you have.
+- if an LLM step is compute-bound or memory-bound,
+- what a collective costs,
+- how long a cold start takes,
+- how often a large job fails,
+- what a token costs.
+
+The core has seven small standard-library modules and four fill-in notebooks. The modules cover these topics:
+
+- a dated accelerator catalogue,
+- the roofline,
+- the FLOPs and bytes of an LLM step,
+- the α-β cost of a collective,
+- cold start,
+- failure rates,
+- the cost of a token.
+
+**Tier T0** (laptop, Colab CPU or CI). It needs no GPU and no network, and it is free. This is the *minimal* core of
+the topic. [`../PRIMER.md`](../PRIMER.md) explains the concepts. Each computed number that the primer quotes comes
+from this core, and `tests/test_primer_numbers.py` pins it. The *detailed* lab,
+[`../gpu-bench-lab/`](../gpu-bench-lab/), measures the same quantities on the hardware that you have.
 
 ## Start here
 
 1. Read [`../PRIMER.md`](../PRIMER.md) §1–§2 (spec sheets and the roofline).
-2. Run the tests (below): 66 tests, ~30 s.
-3. Open [`notebooks/01_spec_sheets_and_the_roofline.ipynb`](notebooks/01_spec_sheets_and_the_roofline.ipynb); each
-   exercise's check cell prints ✅ when you are right.
+2. Run the tests (see "Run it"): 66 tests, ~30 s.
+3. Open [`notebooks/01_spec_sheets_and_the_roofline.ipynb`](notebooks/01_spec_sheets_and_the_roofline.ipynb). The
+   check cell of each exercise prints ✅ when your answer is correct.
 
 ## Run it
 
@@ -28,11 +40,11 @@ python3 -m pip install -r requirements-notebooks.txt   # JupyterLab (~250 MB), t
 python3 -m jupyterlab notebooks               # do the exercises
 ```
 
-`make setup test` and `make setup-notebooks lab` do the same (`make notebooks` and `make check` also need
-`make setup-notebooks`). On Colab you need neither file: the notebooks' first cell clones the repo and
+`make setup test` and `make setup-notebooks lab` do the same steps. `make notebooks` and `make check` also need
+`make setup-notebooks`. On Colab, you need neither file. The first cell of each notebook clones the repo and
 installs the library, and Colab already has Jupyter.
 
-The library itself needs nothing installed:
+The library itself needs no installed packages:
 
 ```python
 from roofline import fabric, llm, specs
@@ -54,40 +66,42 @@ fabric.tp_comm_time_across_nodes(m70, 4096, 8, 2, nv, ib)   # 0.075 s at TP=16 o
 
 | File | What it teaches |
 |------|-----------------|
-| `roofline/specs.py` | spec-sheet literacy: a dated (Sep 2026, verify) catalogue of 16 accelerators with **dense** peaks, per-direction links, `peak_from_clock`, `from_sparse` |
+| `roofline/specs.py` | How to read a spec sheet: a dated (Sep 2026, verify) catalogue of 16 accelerators with **dense** peaks, per-direction links, `peak_from_clock`, `from_sparse` |
 | `roofline/roofline.py` | `attainable = min(peak, I × BW)`, the ridge, kernel byte counts (elementwise, reduction, GEMM), tiling and fusion traffic (with extra inputs such as a residual), a text roofline chart |
-| `roofline/llm.py` | one engine step from a model config: prefill vs decode FLOPs and bytes, the step as one kernel and split per kernel (weight GEMMs vs attention), KV reads that cap decode, crossover batches, memory-bound batch limits, quantization schemes, MoE experts touched |
-| `roofline/fabric.py` | the link ladder, α-β, ring and recursive-doubling all-reduce, algbw/busbw, tensor-parallel cost per step in a node and across nodes, rails and hierarchical all-reduce, leaf-spine sizing, oversubscription, bisection, staged vs GPUDirect copies, `nvidia-smi topo -m` codes |
-| `roofline/storage.py` | checkpoint bytes, tier bandwidths (assumptions), parallel and streamed loading, a cold-start breakdown |
-| `roofline/reliability.py` | failure rates add, cluster MTBF from the Llama 3 data, Young/Daly checkpoint interval and waste, replicas as failure domains |
-| `roofline/cost.py` | $/GPU-hr → $/M tokens, utilisation, rent vs own break-even |
+| `roofline/llm.py` | One engine step from a model config. Prefill against decode FLOPs and bytes. The step as one kernel and divided per kernel (weight GEMMs against attention). KV reads that cap decode, crossover batches, memory-bound batch limits, quantization schemes, MoE experts touched. |
+| `roofline/fabric.py` | The link ladder, α-β, ring and recursive-doubling all-reduce, algbw/busbw. Tensor-parallel cost per step in a node and across nodes. Rails and hierarchical all-reduce, the size of a leaf-spine fabric, oversubscription, bisection. Staged against GPUDirect copies, `nvidia-smi topo -m` codes. |
+| `roofline/storage.py` | Checkpoint bytes, tier bandwidths (assumptions), parallel and streamed loading, a cold-start breakdown |
+| `roofline/reliability.py` | How failure rates add, cluster MTBF from the Llama 3 data, the Young/Daly checkpoint interval and its waste, replicas as failure domains |
+| `roofline/cost.py` | From $/GPU-hr to $/M tokens, utilisation, the break-even of rent against own |
 
-Read them in that order. Each module opens with a docstring stating the one idea it teaches.
+Read them in that order. Each module starts with a docstring. The docstring states the one idea that the module
+teaches.
 
 ## The notebooks
 
-Each opens with *The one-minute version*, works examples, then has 5–6 exercises (`# YOUR CODE HERE`)
-each followed by a check cell that prints ✅, and ends with *In a design review* (a two-minute
-explanation and drill questions). Solutions are in `solutions/`.
+Each notebook starts with *The one-minute version* and shows worked examples. Then it has 5–6 exercises
+(`# YOUR CODE HERE`). After each exercise, a check cell prints ✅. The notebook ends with *In a design review* (a
+two-minute explanation and drill questions). The solutions are in `solutions/`.
 
-1. **`01_spec_sheets_and_the_roofline`** — read a datasheet (dense vs sparse, per-direction links, bits vs
-   bytes), build the roofline, find when a GEMM becomes compute-bound, and why a kernel that saturates a T4
-   can starve an H100. Primer §1–2.
-2. **`02_llm_inference_on_the_roofline`** — prefill vs decode, the batch sweep, the KV ceiling on decode
-   intensity, the closed-form crossover batch, the step per kernel (GEMMs vs attention), predicting a
-   quantization speedup from bytes, picking a batch under an ITL SLO, MoE expert streaming, picking a GEMM
-   tile that fits shared memory and fusing an elementwise chain. Primer §3–4.
-3. **`03_fabrics_and_collective_cost`** — α-β, simulating a ring all-reduce, reading a busbw sweep, choosing
-   a TP degree against an ITL SLO in or across nodes, sizing a two-tier fabric, reading `nvidia-smi topo -m`.
-   Primer §5.
-4. **`04_loading_reliability_and_cost`** — streamed loading, a cold-start budget, the Young/Daly interval,
-   spares and failure-domain size, $/M tokens, rent vs own. Primer §6–8.
+1. **`01_spec_sheets_and_the_roofline`**: you read a datasheet (dense against sparse, per-direction links, bits
+   against bytes). You build the roofline and find when a GEMM becomes compute-bound. You also see why a kernel
+   that saturates a T4 can fail to keep an H100 busy. Primer §1–2.
+2. **`02_llm_inference_on_the_roofline`**: you examine prefill against decode, the batch sweep, the KV ceiling on
+   decode intensity and the closed-form crossover batch. You examine the step per kernel (GEMMs against attention)
+   and predict a quantization speedup from bytes. You select a batch under an ITL SLO and examine MoE expert streaming.
+   Last, you select a GEMM tile that fits shared memory and fuse an elementwise chain. Primer §3–4.
+3. **`03_fabrics_and_collective_cost`**: you examine α-β. You simulate a ring all-reduce and read a busbw sweep. You
+   select a TP degree against an ITL SLO in a node or across nodes. Then you calculate the size of a two-tier
+   fabric and read `nvidia-smi topo -m`. Primer §5.
+4. **`04_loading_reliability_and_cost`**: you examine streamed loading, a cold-start budget and the Young/Daly
+   interval. You also examine spares and failure-domain size, $/M tokens, and rent against own. Primer §6–8.
 
 ## Regenerating notebooks
 
-`notebooks/` and `solutions/` are generated from `notebooks_src/*.py` (percent format with
-`### BEGIN SOLUTION` blocks). The build and run tools need the notebook requirements, not just the test
-ones (`requirements.txt` is pytest only), so install those first. Edit the sources, then:
+The builder generates `notebooks/` and `solutions/` from `notebooks_src/*.py` (percent format with
+`### BEGIN SOLUTION` blocks). The build and run tools need the notebook requirements, not only the test
+requirements (`requirements.txt` is pytest only). Thus install the notebook requirements first. Edit the sources.
+Then run these commands:
 
 ```bash
 python3 -m pip install -r requirements-notebooks.txt    # nbformat, nbclient, ipykernel, JupyterLab (or make setup-notebooks)
@@ -96,13 +110,15 @@ python3 tools/run_notebooks.py solutions                # solutions must run cle
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 ```
 
-On Colab, each notebook's first cell clones the repository and installs this package; locally it finds
-`roofline/` by walking up from the notebook's directory. Charts use `matplotlib` if it is installed
-(`pip install -e ".[plot]"`) and fall back to text otherwise.
+On Colab, the first cell of each notebook clones the repository and installs this package. Locally, the notebook
+walks up from its directory until it finds `roofline/`. Charts use `matplotlib` when the package is present
+(`pip install -e ".[plot]"`). If the package is not present, the code draws the charts as text.
 
 ## Caveats: what the numbers are — and are not
 
-Every time here is a **roofline bound**: ideal overlap, compulsory traffic, peak clocks. Real kernels and
-engines land below it; the gap is what `gpu-bench-lab` and layer 04's `vllm-serving-lab` measure. Product
-facts are a dated snapshot marked (verify); link latencies (α) and storage bandwidths are labelled
-assumptions. MIT licensed.
+Each time in this core is a **roofline bound**. The bound assumes ideal overlap, compulsory traffic and peak clocks.
+Real kernels and engines do not reach it. `gpu-bench-lab` and the `vllm-serving-lab` of layer 04 measure the gap.
+The product facts are a dated snapshot with the tag (verify). The link latencies (α) and the storage bandwidths are
+assumptions, and they have that label.
+
+The core has the MIT license.

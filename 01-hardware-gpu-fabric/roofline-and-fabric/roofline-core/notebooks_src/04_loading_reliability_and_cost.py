@@ -1,22 +1,25 @@
 # %% [markdown]
 # # 04 · Loading, reliability and the cost of a token
 #
-# **Tier:** T0 — arithmetic with stated assumptions; no GPU. The measured counterpart for loading
-# is `gpu-bench-lab` notebook `04_weights_loading_and_cold_start` (T0 on your disk, T1 with a GPU).
+# **Tier:** T0. It is arithmetic with stated assumptions, with no GPU. The measured counterpart for the load of
+# weights is `gpu-bench-lab` notebook `04_weights_loading_and_cold_start` (T0 on your disk, T1 with a GPU).
 #
 # ## The one-minute version
 # Three fleet-level numbers come straight from the hardware. **Cold start**: weight bytes ÷ the
-# slowest bandwidth on the path, plus provisioning, image pull and engine init — parallel and
-# streamed loading attack the first term, warm pools and caches the rest. **Reliability**: failure
-# rates add, so a 16K-GPU job is interrupted every few hours even though each GPU runs for years;
-# training answers with checkpoints every $\sqrt{2 \cdot \text{checkpoint time} \cdot \mathrm{MTBF}}$, inference with
-# spare replicas, and bigger replicas are bigger failure domains. **Cost**:
+# slowest bandwidth on the path, plus provisioning, image pull and engine init. Parallel and
+# streamed loads attack the first term. Warm pools and caches attack the other terms.
+#
+# **Reliability**: failure rates add. Thus a 16K-GPU job has an interruption every few hours, although each GPU runs
+# for years. Training answers with checkpoints every $\sqrt{2 \cdot \text{checkpoint time} \cdot \mathrm{MTBF}}$. Inference
+# answers with spare replicas. Larger replicas are larger failure domains.
+#
+# **Cost**:
 #
 # $$
 # \text{\$/M tokens} = \frac{\text{\$/GPU-hr}}{\text{tokens/s} \times 3600 \times \text{utilisation}} \times 10^6
 # $$
 #
-# — every lever in this layer (batching, quantization, the right GPU, keeping it busy) shows up in
+# Every lever in this layer (batching, quantization, the correct GPU, a GPU that stays busy) appears in
 # that one line. Primer: `../PRIMER.md` §6–8.
 
 # %%
@@ -33,9 +36,9 @@ for tier, gbs in storage.ASSUMED_GBS.items():
 
 # %% [markdown]
 # ## Parallel and streamed loading
-# One HTTP stream from an object store is slow; many range reads in parallel add up until the NIC
-# (or the disk, or the service) caps them. Streaming chunks straight to the GPUs overlaps fetch and
-# copy, so the time tends to the slower hop instead of the sum.
+# One HTTP stream from an object store is slow. Many range reads in parallel add up until the NIC
+# (or the disk, or the service) caps them. If you stream chunks straight to the GPUs, the fetch and the
+# copy overlap. Thus the time tends to the slower hop instead of the sum.
 
 # %%
 fetch = storage.parallel_gbs(128, 0.1, storage.ASSUMED_GBS["nic-100g"])
@@ -46,9 +49,9 @@ print(f"70B onto 8 GPUs (PCIe Gen5 pinned): sequential {seq:.1f} s, streamed {st
 
 # %% [markdown]
 # ## A cold start, stage by stage
-# All stage times below are **assumptions** you should replace with measurements (provisioning
-# and image pull depend on your platform — see layers 03 and 05; engine init on the engine and its
-# settings — layer 04). The shape is the lesson: fix the biggest bar first.
+# All the stage times in the next cell are **assumptions**. Replace them with measurements. Provisioning
+# and image pull depend on your platform (see layers 03 and 05). Engine init depends on the engine and its
+# settings (layer 04). The shape is the lesson: work on the largest bar first.
 
 # %%
 scenarios = {
@@ -62,8 +65,8 @@ for name, kw in scenarios.items():
 # %% [markdown]
 # ## Failures are a rate, and rates add
 # The Llama 3 report (Meta, 2024) counts 419 unexpected interruptions in 54 days of pre-training on
-# 16,384 H100s. Backing out a per-GPU figure — it lumps GPU, host, network and software-detected
-# faults together — gives the rate every fleet calculation starts from.
+# 16,384 H100s. The report puts GPU, host, network and software-detected faults together in one count. A
+# per-GPU figure that you calculate back from it gives the rate that every fleet calculation starts from.
 
 # %%
 M = reliability.component_mtbf_from_observation(419, 54 * 24, 16384)
@@ -74,11 +77,11 @@ for n in (8, 64, 1024, 16384):
 
 # %% [markdown]
 # ## Checkpoint interval: Young/Daly
-# Checkpoint too often and you pay the write each time; too rarely and each failure throws away
-# more work. With checkpoint time $\delta$ and system MTBF $M$ the waste is $\approx \delta/\tau + \tau/(2M)$,
-# minimised at $\tau = \sqrt{2\delta M}$, where it equals $\sqrt{2\delta/M}$. Faster (asynchronous) checkpoints help
-# as a square root. Each failure also costs a restart $R$ (reschedule, reload, re-initialise): $R/M$ on top, which
-# $\tau$ cannot fix.
+# If you write a checkpoint too often, you pay the write each time. If you write one too rarely, each failure loses
+# more work. With checkpoint time $\delta$ and system MTBF $M$, the waste is $\approx \delta/\tau + \tau/(2M)$.
+# The waste has its minimum at $\tau = \sqrt{2\delta M}$, where it equals $\sqrt{2\delta/M}$. Faster (asynchronous)
+# checkpoints help as a square root. Each failure also costs a restart $R$ (reschedule, reload, re-initialise):
+# $R/M$ on top, which $\tau$ cannot decrease.
 
 # %%
 Ms = reliability.cluster_mtbf(M, 16384) * 3600
@@ -90,8 +93,8 @@ for delta in (60, 10):
 
 # %% [markdown]
 # ## Inference: replicas are failure domains
-# A TP=8 replica is down whenever any of its 8 GPUs is, so its MTBF is $M/8$. Needing 8 replicas up,
-# how many do you deploy? (MTTR of 48 h assumed: detect, drain, swap or repair the node.)
+# A TP=8 replica is down when any of its 8 GPUs is down. Thus its MTBF is $M/8$. If you need 8 replicas up,
+# how many do you deploy? (The calculation assumes an MTTR of 48 h: detect, drain, swap or repair the node.)
 
 # %%
 a8 = reliability.replica_availability(M, 8, 48)
@@ -101,10 +104,11 @@ for n in (8, 9, 10):
 
 # %% [markdown]
 # ## The cost of a token
-# Throughput from notebook 02's roofline (an upper bound, so these are lower bounds on cost), and
-# on-demand / Spot prices that you must check against today's list (`COMPUTE.md` at the repo root).
-# One rule picks every batch: the largest that meets a 10 ms ITL at 2K context and fits in HBM. A part
-# that cannot meet the SLO at any batch (the L4) is shown at its HBM limit and flagged — it is a slower product.
+# The throughput comes from the roofline of notebook 02. It is an upper bound, thus these costs are lower bounds.
+# You must compare the on-demand / Spot prices with today's list (`COMPUTE.md` at the repo root).
+# One rule selects every batch: the largest batch that meets a 10 ms ITL at 2K context and fits in HBM. The L4
+# cannot meet the SLO at any batch: it is a slower product. The table shows the L4 at its HBM limit and marks it
+# with a flag.
 
 # %%
 PRICES = {"L4 on-demand": 0.70, "H100 on-demand": 11.0, "H100 Spot": 3.7}   # $/GPU-hr, us-central1, Sep 2026 (verify)
@@ -128,8 +132,8 @@ print(f"\na fleet sized for its peak, loaded 20% / 100% / 60% across the day: ut
 
 # %% [markdown]
 # ## Exercise 4.1 — streamed loading
-# Write `streamed_load_time(n, fetch_gbs, h2d_gbs, chunk)`: chunks flow disk/network → host → GPU,
-# so the slower hop sets the rate and the faster hop adds one chunk of pipeline fill.
+# Write `streamed_load_time(n, fetch_gbs, h2d_gbs, chunk)`. Chunks flow from disk/network to host to GPU.
+# Thus the slower hop sets the rate, and the faster hop adds one chunk of pipeline fill.
 
 # %% exercise
 def streamed_load_time(n, fetch_gbs, h2d_gbs, chunk=0.25 * 2**30):
@@ -146,10 +150,10 @@ print(f"✅ streamed ≈ bytes / slower hop: 8B at 2 GB/s fetch -> {streamed_loa
 
 # %% [markdown]
 # ## Exercise 4.2 — a cold-start budget
-# Autoscaling wants a new Llama-3.1-70B replica (bf16, 8 GPUs) serving within 120 s on a warm
-# node pool: image pull 20 s and engine init 60 s (assumed). Write `required_fetch_gbs(n_bytes, budget_s, other_s)`
-# (weights streamed, so fetch is the bottleneck) and `streams_needed(required_gbs, per_stream_gbs, cap_gbs)`
-# (return `None` if even unlimited streams would hit the cap first).
+# Autoscaling wants a new Llama-3.1-70B replica (bf16, 8 GPUs) to serve within 120 s on a warm
+# node pool. Image pull is 20 s and engine init is 60 s (assumed). Write `required_fetch_gbs(n_bytes, budget_s, other_s)`.
+# You stream the weights, thus the fetch is the bottleneck. Also write `streams_needed(required_gbs, per_stream_gbs, cap_gbs)`.
+# If even unlimited streams hit the cap first, return `None`.
 
 # %% exercise
 def required_fetch_gbs(n_bytes, budget_s, other_s):
@@ -174,8 +178,8 @@ print(f"✅ 70B in 40 s needs {need:.2f} GB/s: 36 parallel streams; a 30 s budge
 
 # %% [markdown]
 # ## Exercise 4.3 — how often should a 4,096-GPU job checkpoint?
-# Using the per-GPU rate `M` above, write `young(delta_s, mtbf_s)` and `waste(tau_s, delta_s, mtbf_s)`
-# (first-order, no restart cost), and compute them for a 4,096-GPU job writing a checkpoint in 30 s.
+# Use the per-GPU rate `M` from the earlier cell. Write `young(delta_s, mtbf_s)` and `waste(tau_s, delta_s, mtbf_s)`
+# (first-order, no restart cost). Then calculate them for a 4,096-GPU job that writes a checkpoint in 30 s.
 
 # %% exercise
 def young(delta_s, mtbf_s):
@@ -200,7 +204,8 @@ print(f"✅ 4,096 GPUs (MTBF {m4096 / 3600:.1f} h), 30 s checkpoints: every {tau
 # %% [markdown]
 # ## Exercise 4.4 — spares, and the size of a failure domain
 # Write `p_at_least(k, n, a)` (binomial) and `replicas_needed(k, a, target)`. Then compare two ways to
-# serve the same capacity at 99.9%: 8 replicas of TP=8, or (with FP8 weights so it fits) 16 replicas of TP=4.
+# serve the same capacity at 99.9%. The first way is 8 replicas of TP=8. The second way is 16 replicas of TP=4,
+# with FP8 weights so that the model fits.
 
 # %% exercise
 def p_at_least(k, n, a):
@@ -226,8 +231,8 @@ print(f"✅ TP=8: 10 replicas = 80 GPUs for 64 GPUs of capacity; TP=4: 18 replic
 
 # %% [markdown]
 # ## Exercise 4.5 — dollars per million tokens
-# Write `cost_per_mtok(price_per_gpu_hr, tokens_per_s, utilisation)` and fill `table` with the cost of each
-# option in `thr` at 60% utilisation. Which GPU gives the cheaper token for Llama-3.1-8B — and which the faster one?
+# Write `cost_per_mtok(price_per_gpu_hr, tokens_per_s, utilisation)`. Then fill `table` with the cost of each
+# option in `thr` at 60% utilisation. Which GPU gives the lower-cost token for Llama-3.1-8B, and which gives the faster one?
 
 # %% exercise
 def cost_per_mtok(price_per_gpu_hr, tokens_per_s, utilisation=1.0):
@@ -250,9 +255,9 @@ print("✅ at 60% busy: L4 $1.10 (and it misses the 10 ms SLO), H100 on-demand $
 
 # %% [markdown]
 # ## Exercise 4.6 — rent or own?
-# An 8×H100 server: \$300k (assumed), 4-year life, 10.2 kW at full load (verify), PUE 1.3, \$0.10/kWh,
-# \$30k/year of fixed opex. Write `breakeven(rent_per_gpu_hr, fixed_per_gpu_hr, energy_per_gpu_hr)` — the
-# utilisation above which owning is cheaper — and compare against on-demand and Spot rental.
+# Take an 8×H100 server: \$300k (assumed), 4-year life, 10.2 kW at full load (verify), PUE 1.3, \$0.10/kWh,
+# and \$30k/year of fixed opex. Write `breakeven(rent_per_gpu_hr, fixed_per_gpu_hr, energy_per_gpu_hr)`. It
+# returns the utilisation above which ownership costs less. Then compare it against on-demand and Spot rental.
 
 # %%
 fixed, energy = cost.owned_cost_per_hour(300_000, 4, 10.2, pue=1.3, usd_per_kwh=0.10, opex_per_year=30_000)
@@ -276,19 +281,23 @@ print("✅ owning beats on-demand above ~14% utilisation but Spot only above ~42
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Cold start is bytes over the slowest bandwidth plus fixed stages:
-# 141 GB from one object-store stream is 23 minutes, from 128 parallel streams at a 100 Gb/s NIC
-# about 11 s, so I stream weights in parallel, keep a warm pool and cache the checkpoint locally,
-# and then engine init dominates. Reliability: failure rates add, so a 16K-GPU run is interrupted
-# every ~3 hours; checkpoint every $\sqrt{2\delta M}$ — about 19 minutes at a 60 s checkpoint — and make
-# checkpoints asynchronous. For serving, each TP=8 replica is an 8-GPU failure domain: 8 needed means
-# 10 deployed for 99.9%. Cost is \$/GPU-hr over tokens/s × utilisation, so I quote \$/M tokens at a
-# realistic utilisation, not at the roofline."
+# **The two-minute version.** "Cold start is bytes over the slowest bandwidth plus constant stages.
+# 141 GB from one object-store stream is 23 minutes. From 128 parallel streams at a 100 Gb/s NIC, it is
+# about 11 s. Thus I stream weights in parallel, keep a warm pool and cache the checkpoint locally.
+# Then engine init dominates.
+#
+# "Reliability: failure rates add. Thus a 16K-GPU run has an interruption every ~3 hours. Write a checkpoint
+# every $\sqrt{2\delta M}$, about 19 minutes at a 60 s checkpoint. Make the checkpoints asynchronous. For serving,
+# each TP=8 replica is an 8-GPU failure domain. When 8 are necessary, deploy 10 for 99.9%.
+#
+# "Cost is \$/GPU-hr over tokens/s × utilisation. Thus I quote \$/M tokens at a realistic utilisation, not at
+# the roofline."
 #
 # **Drill.**
-# 1. *Autoscaling takes 10 minutes; where do you look first?* — the stage table: usually the weight
-#    fetch (one slow stream) — parallel/streamed loads, a local or regional cache, smaller precision.
-# 2. *Checkpoint writes got 4× faster. How much less waste?* — $\text{waste} \propto \sqrt{\delta}$ at the optimum:
-#    half.
-# 3. *Should we buy GPUs because we are 60% utilised?* — only if 60% is above the break-even against
-#    the rental you would actually use: ~14% vs on-demand, ~42% vs Spot, higher against cheaper rentals.
+# 1. *Autoscaling takes 10 minutes. Where do you look first?* Look at the stage table first. Usually the
+#    weight fetch (one slow stream) is the slowest stage. Use parallel/streamed loads, a local or regional cache, or a smaller precision.
+# 2. *Checkpoint writes got 4× faster. How much less waste?* At the optimum, $\text{waste} \propto \sqrt{\delta}$.
+#    Thus the waste is half.
+# 3. *Is it correct to buy GPUs because we are 60% utilised?* Only if 60% is above the break-even against
+#    the rental that you actually use. The break-even is ~14% against on-demand, ~42% against Spot, and higher
+#    against lower-cost rentals.

@@ -332,7 +332,13 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   split was reverted because a test pinned the long sentence. All eight labs' tests pass (moe-core 74, moe-lab 113,
   distill-core 85, distill-lab 190, rl-core 64, thinking-lab 92, transformers 13, capacity 10), the cross-topic number
   tests pass, every builder and the injector are no-ops, `mkdocs.yml` is unchanged and the strict site build and the
-  link check pass. **Baseline unchanged: 385 notebooks.**
+  link check pass. **Layer 01** (11 groups, about 43k words: the roofline-and-fabric primer, READMEs and deploy
+  notes, its 8 notebook sources, the GPU and GPU-deployment primers and exercises, the layer README): 52 agents in
+  1.7 hours; 3,987 sentences compared in round 1, 1 blocking, 43 major and 143 minor findings, 234 applied, 3
+  rejected; the two left open (a "Right for:" label, a nine-sentence drill answer) applied by hand; roofline-core 65
+  and gpu-bench-lab 97 tests pass with the cross-topic number tests; the 13 linter errors left in the roofline
+  primer are all fragments its tests pin (arrows and dashes in computed phrases). **Baseline unchanged: 385
+  notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and

@@ -1,17 +1,20 @@
 # %% [markdown]
 # # 01 · Spec sheets and the roofline
 #
-# **Tier:** T0 — runs on a laptop, Colab CPU or CI; no GPU, no network. The measured
+# **Tier:** T0. It runs on a laptop, Colab CPU or CI, with no GPU and no network. The measured
 # counterpart is `gpu-bench-lab` notebook `01_measure_your_roofline` (T0 on your CPU, T1 on a GPU).
 #
 # ## The one-minute version
-# A GPU datasheet is a handful of numbers, and two of them decide almost everything:
-# **peak FLOP/s** (for the precision you actually run, *dense*) and **memory bandwidth**.
-# Their ratio is the **ridge point**: the arithmetic intensity (FLOPs per byte moved) a
-# kernel needs before the math units, not memory, become the limit. After this notebook
-# you can read a datasheet without falling into its traps, place any kernel on the
-# roofline $\min(\text{peak}, \text{intensity} \times \text{bandwidth})$, and say *why* a batch-1 LLM decode runs at
-# a fraction of a percent of peak. Primer: `../PRIMER.md` §1–2.
+# A GPU datasheet is a small set of numbers. Two of them decide almost everything:
+# **peak FLOP/s** (for the precision that you actually run, *dense*) and **memory bandwidth**.
+# Their ratio is the **ridge point**. It is the arithmetic intensity (FLOPs per byte moved) that a
+# kernel needs before the math units, not memory, become the limit. After this notebook, you can do three things:
+#
+# - Read a datasheet and know its traps.
+# - Put any kernel on the roofline $\min(\text{peak}, \text{intensity} \times \text{bandwidth})$.
+# - Say *why* a batch-1 LLM decode runs at a fraction of a percent of peak.
+#
+# Primer: `../PRIMER.md` §1–2.
 
 # %%
 from roofline import specs
@@ -25,14 +28,14 @@ print("NVLink as marketed:", h100.scaleup_gbs, "GB/s -> per direction:", h100.sc
 
 # %% [markdown]
 # ## Trap 1 — the asterisk
-# Datasheets headline tensor throughput *with 2:4 structured sparsity* (the asterisk), which
-# is exactly twice the dense rate. LLM inference runs dense, so the catalogue stores dense
-# numbers and `specs.from_sparse()` converts. H100's "1,979 TFLOPS\*" bf16 is 989 dense.
+# Datasheets give the headline tensor throughput *with 2:4 structured sparsity* (the asterisk).
+# That rate is exactly twice the dense rate. LLM inference runs dense. Thus the catalogue stores dense
+# numbers, and `specs.from_sparse()` converts them. The H100's "1,979 TFLOPS\*" bf16 is 989 dense.
 #
 # ## Where a peak comes from
 # A peak is units × work per clock × clock. Tensor-core work per SM per clock doubled from
-# Ampere to Hopper, which is most of the A100 → H100 jump. Sustained clocks under power
-# and thermal limits sit below the boost clock, so a peak is a ceiling, not a promise.
+# Ampere to Hopper. This change is most of the jump from A100 to H100. Power and thermal limits keep the
+# sustained clocks below the boost clock. Thus a peak is a ceiling, not a promise.
 
 # %%
 print(f"{'device':10s} {'SMs':>4s} {'FLOP/clk/SM':>12s} {'GHz':>5s} {'computed':>9s} {'datasheet':>10s}")
@@ -44,10 +47,11 @@ print("\nFP32 on CUDA cores vs bf16 on tensor cores (H100):", h100.tflops["fp32"
 
 # %% [markdown]
 # ## The ridge point of every device in the catalogue
-# $\text{ridge} = \text{peak} / \text{bandwidth}$, in FLOP per byte. Compute-first generations push it up
-# (A100 80GB 153 → H100 295 → GB200 312: FLOPs grew faster than bandwidth); memory
-# refreshes pull it back down (H200 is an H100 with more bandwidth: 206). Every narrower
-# precision doubles it again — fp8 needs twice the intensity of bf16 to pay off.
+# The ridge point is $\text{ridge} = \text{peak} / \text{bandwidth}$, in FLOP per byte. Compute-first generations push it up:
+# A100 80GB 153, then H100 295, then GB200 312. The ridge increases because FLOPs grew
+# faster than bandwidth. Memory
+# refreshes decrease it again: H200 is an H100 with more bandwidth, and its ridge is 206. Each narrower
+# precision doubles it again. The fp8 precision needs twice the intensity of bf16 to give a gain.
 
 # %%
 rows = []
@@ -59,10 +63,10 @@ for ridge, name, p, r8 in sorted(rows):
 
 # %% [markdown]
 # ## Kernels on the roofline
-# Compulsory bytes: each operand read once, each result written once (what a perfectly
-# fused and tiled kernel would move). A GEMM of $m \times k$ by $k \times n$ does ${2mnk}$ FLOPs over
-# $(mk + kn + mn) \cdot b$ bytes, so a square GEMM has intensity $2n/(3b)$; a GEMV (one token
-# through a weight matrix, $m = 1$) has about $2/b = 1$ FLOP/B at bf16.
+# The compulsory bytes are these: the kernel reads each operand one time and writes each result one time.
+# That is the quantity of bytes that a perfectly fused and tiled kernel moves. A GEMM of $m \times k$ by
+# $k \times n$ does ${2mnk}$ FLOPs over $(mk + kn + mn) \cdot b$ bytes. Thus a square GEMM has intensity
+# $2n/(3b)$. A GEMV (one token through a weight matrix, $m = 1$) has about $2/b = 1$ FLOP/B at bf16.
 
 # %%
 N = 1 << 26
@@ -91,7 +95,7 @@ else:
 # %% [markdown]
 # ## Exercise 1.1 — the roofline from scratch
 # Write `ridge(peak_tflops, bw_tbs)` (FLOP/byte) and `attainable(intensity, peak_tflops, bw_tbs)`
-# (TFLOP/s). Units: TFLOP/s is 1e12 FLOP/s, TB/s is 1e12 bytes/s — so they cancel neatly.
+# (TFLOP/s). Units: TFLOP/s is 1e12 FLOP/s, and TB/s is 1e12 bytes/s. Thus the two factors of 1e12 cancel.
 
 # %% exercise
 def ridge(peak_tflops: float, bw_tbs: float) -> float:
@@ -116,11 +120,16 @@ print("✅ ridge and attainable match the library for all", len(specs.DEVICES), 
 
 # %% [markdown]
 # ## Exercise 1.2 — read a datasheet
-# Below is a datasheet for an imaginary part, written the way vendors write them. Fill in
-# `read_sheet` so it returns the numbers you would actually plan with: **dense** tensor peaks
-# (the footnote tells you which lines are sparse), memory in GB and TB/s, the scale-up link
-# **per direction**, the network in **GB/s** (it is quoted in gigabits), and the bf16 ridge.
-# `num()` pulls the number out of a string for you.
+# The next cell has a datasheet for an imaginary part. It has the form that vendors use for their datasheets.
+# Fill in `read_sheet`. It must return the numbers that you actually plan with:
+#
+# - the **dense** tensor peaks (the footnote tells you which lines are sparse),
+# - the memory in GB and TB/s,
+# - the scale-up link **per direction**,
+# - the network in **GB/s** (the datasheet gives it in gigabits),
+# - the bf16 ridge.
+#
+# `num()` gets the number from a string for you.
 
 # %%
 import re
@@ -168,9 +177,10 @@ print("✅ read like a planner: dense peaks, per-direction links, bytes not bits
 
 # %% [markdown]
 # ## Exercise 1.3 — when does a square GEMM become compute-bound?
-# Write `gemm_intensity(m, n, k, b)` and `smallest_compute_bound_square(device, precision, b)`:
-# the smallest integer $n$ for which an $n \times n \times n$ GEMM reaches the ridge. Predict first: the
-# intensity is $2n/(3b)$, so $n \ge 1.5 \cdot b \cdot \text{ridge}$. Which needs the larger matrix, a T4 or an H100?
+# Write `gemm_intensity(m, n, k, b)` and `smallest_compute_bound_square(device, precision, b)`.
+# The second function returns the smallest integer $n$ for which an $n \times n \times n$ GEMM reaches the ridge.
+# Make a prediction first. The intensity is $2n/(3b)$, thus $n \ge 1.5 \cdot b \cdot \text{ridge}$. Which needs
+# the larger matrix, a T4 or an H100?
 
 # %% exercise
 def gemm_intensity(m: int, n: int, k: int, b: float = 2) -> float:
@@ -198,8 +208,8 @@ print("✅ H100 needs n >= 887, H200 n >= 619, T4 n >= 610: the higher the ridge
 # %% [markdown]
 # ## Exercise 1.4 — the ridge moved
 # The same kernel can be compute-bound on an old GPU and memory-bound on a new one. Write
-# `flips(kernels, old, new, p_old, p_new)` returning the names of kernels that are
-# compute-bound on `old` but memory-bound on `new` (use `rl.time_kernel(...).bound`).
+# `flips(kernels, old, new, p_old, p_new)`. It returns the names of the kernels that are
+# compute-bound on `old` but memory-bound on `new`. Use `rl.time_kernel(...).bound`.
 
 # %%
 square = [rl.gemm(n, n, n, 2, name=f"GEMM {n}^3") for n in (256, 512, 768, 1024, 2048)]
@@ -218,10 +228,11 @@ print("✅ a 768^3 GEMM saturates a T4 (I = 256 > 203) but starves an H100 (256 
 
 # %% [markdown]
 # ## Exercise 1.5 — how many tokens reach the ridge?
-# During decode every weight matrix is multiplied by a $[\text{tokens} \times d]$ activation. Write
-# `tokens_to_ridge(device, d)`: the smallest number of tokens $m$ for which
-# `gemm(m, d, d, b)` is compute-bound on `device` at `precision`. Predict first: roughly the
-# ridge itself. Then predict what FP8 (1-byte operands *and* the fp8 peak) does to the answer.
+# During decode, the model multiplies each weight matrix by a $[\text{tokens} \times d]$ activation. Write
+# `tokens_to_ridge(device, d)`. It returns the smallest number of tokens $m$ for which
+# `gemm(m, d, d, b)` is compute-bound on `device` at `precision`. Make a prediction first. A hint: the answer
+# is approximately the ridge itself. Then make a prediction of what FP8 (1-byte operands *and* the fp8 peak) does
+# to the answer.
 
 # %% exercise
 def tokens_to_ridge(device, d: int, precision: str = "bf16", b: float = 2) -> int:
@@ -242,17 +253,19 @@ print("✅ ~300 tokens per weight read on an H100 (d=8192: 319), unchanged by FP
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Every kernel pays $\max(\text{FLOPs}/\text{peak}, \text{bytes}/\text{bandwidth})$. The
-# ratio peak / bandwidth — about 295 FLOP per byte for an H100 in bf16 — is the intensity
-# you need before compute is the limit. Elementwise ops are near 0.2, a GEMV is 1, a big
-# square GEMM is over 1,000. So I read a datasheet for dense peak at my precision and for
-# bandwidth, compute the ridge, and place each kernel. If it is left of the ridge, faster
-# math is wasted: I cut bytes — fuse, tile, batch, quantize."
+# ratio peak / bandwidth is about 295 FLOP per byte for an H100 in bf16. It is the intensity
+# that you need before compute is the limit. Elementwise ops are near 0.2, a GEMV is 1, and a large
+# square GEMM is over 1,000."
+#
+# "Thus I read a datasheet for the dense peak at my precision and for the bandwidth. Then I calculate the ridge
+# and place each kernel. If a kernel is to the left of the ridge, faster math gives no gain. Thus I cut bytes:
+# I fuse, tile, batch and quantize."
 #
 # **Drill.**
-# 1. *The datasheet says 3,958 TFLOPS of FP8. What do you plan with?* — 1,979 dense; the
-#    headline assumes 2:4 sparsity, which inference does not use; and sustained clocks are lower still.
-# 2. *Why is batch-1 decode at <1% of peak on an H100?* — each token multiplies every weight
-#    once: ~2 FLOPs per 2-byte weight, 1 FLOP/B, 295× below the ridge; the GPU is a bandwidth machine here.
+# 1. *The datasheet says 3,958 TFLOPS of FP8. What do you plan with?* 1,979 dense. The
+#    headline assumes 2:4 sparsity, which inference does not use. Also, the sustained clocks are lower still.
+# 2. *Why is batch-1 decode at <1% of peak on an H100?* Each token multiplies every weight
+#    one time: ~2 FLOPs per 2-byte weight, thus 1 FLOP/B. This is 295× below the ridge. Here the GPU is a bandwidth machine.
 # 3. *We moved a workload from T4s to H100s and some kernels got no faster than bandwidth
-#    alone predicts. Why?* — the ridge moved from ~203 to ~295 FLOP/B; kernels between those
+#    alone predicts. Why?* The ridge moved from ~203 to ~295 FLOP/B. Kernels between those
 #    intensities (a 768³ GEMM) went from compute-bound to memory-bound.
