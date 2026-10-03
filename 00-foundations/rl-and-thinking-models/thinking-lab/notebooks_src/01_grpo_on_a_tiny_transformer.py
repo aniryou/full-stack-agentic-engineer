@@ -1,32 +1,33 @@
 # %% [markdown]
 # # 01 · GRPO on a tiny transformer: a model discovers that thinking pays
 #
-# **Tier:** T0 with torch on a laptop CPU (the training run takes about a minute; this notebook was
-# checked on a shared 4-core container: ~40 s for the run, under a minute in all). T1 (any GPU) runs
-# the same code faster, which this model does not need. Without torch the notebook still runs: the
-# training cells show a recorded run, labelled illustrative, and the torch checks say they were skipped.
+# **Tier:** T0 with torch on a laptop CPU. The training run takes about a minute. We examined this notebook
+# on a shared 4-core container: ~40 s for the run, under a minute in all. T1 (any GPU) runs the same code
+# faster, but this model does not need that speed. Without torch, the notebook still runs. Then the
+# training cells show a recorded run, labelled illustrative, and the torch checks tell you that the
+# notebook skipped them.
 #
 # ## The one-minute version
 #
-# * **RL for a language model is "sample, score, reweight".** Sample completions from the model,
-#   score each with a reward, and raise the probability of the tokens in completions that scored
-#   above the baseline — the policy gradient over token sequences (PRIMER §2 "Policy gradients over
-#   token sequences").
-# * **GRPO** makes the baseline the *group*: sample $G$ completions per prompt, and a completion's
-#   advantage is its reward minus the group mean, divided by the group's standard deviation. No
-#   value model is trained (PRIMER §4 "RL with verifiable rewards and GRPO").
-# * **Verifiable rewards** need no reward model: a program checks the final answer. Here the task
+# * **RL for a language model is "sample, score, reweight".** Sample completions from the model, and
+#   give each completion a score with a reward. Then raise the probability of the tokens in the
+#   completions that scored above the baseline. This is the policy gradient over token sequences
+#   (PRIMER §2 "Policy gradients over token sequences").
+# * **GRPO** makes the *group* the baseline. Sample $G$ completions per prompt. The advantage of a
+#   completion is its reward minus the group mean, divided by the standard deviation of the group.
+#   GRPO trains no value model (PRIMER §4 "RL with verifiable rewards and GRPO").
+# * **Verifiable rewards** need no reward model: a program examines the final answer. Here the task
 #   is the last digit of a sum of six base-5 digits. A 2-layer transformer cannot add six numbers in
-#   the one token it emits for the answer, but it can if it first writes the running sums in a
-#   `<think>` scratchpad. Each thinking token adds one more step of serial computation.
-# * **What you will watch:** a short supervised warm-up shows the model both behaviours, answering
-#   straight away and thinking first, half the time each. Then GRPO, rewarded only for correct
+#   the one token that it emits for the answer. But it can add them if it first writes the partial
+#   sums in a `<think>` scratchpad. Each thinking token adds one more step of serial computation.
+# * **What you will watch:** a short supervised warm-up shows the model both behaviours, half the
+#   time each: it answers straight away, or it thinks first. Then GRPO, with a reward only for correct
 #   answers, drives the thinking rate toward 100%, and the reward and the completion length rise
-#   *together*. This is R1-style rather than R1-Zero: a cold-start SFT shows the behaviour, and RL
-#   makes the model *choose* it (PRIMER §5 "Thinking models"). R1-Zero had no SFT and its traces grew
-#   gradually; `sft_mix="uniform"` (end of the notebook) is the closer analogue here.
-# * **What you will build:** the GRPO loss in torch, which you then train with, and a reading of the
-#   KL curve that explains its spikes.
+#   *together*. This is R1-style, not R1-Zero: a cold-start SFT shows the behaviour, and RL makes the
+#   model *select* it (PRIMER §5 "Thinking models"). R1-Zero had no SFT, and its traces grew
+#   gradually. Here, `sft_mix="uniform"` (end of the notebook) is the nearer analogue.
+# * **What you will build:** the GRPO loss in torch, and an analysis of the KL curve that explains
+#   its spikes. You then use your loss for the training.
 
 # %%
 import math, random, statistics
@@ -44,10 +45,10 @@ print("torch available:", HAVE_TORCH, "-> training cells run for real" if HAVE_T
 # %% [markdown]
 # ## Worked example: the task, three completions and the verifier
 #
-# Six digits in base 5, then `=`. A completion opens `<think>`, optionally writes running sums
-# (mod 5), closes `</think>`, gives the answer and `<eos>`. The verifier checks only the format and
-# the final answer, never the scratchpad. That makes it an *outcome* reward, like R1's rule-based
-# accuracy reward.
+# The prompt is six digits in base 5, then `=`. A completion opens `<think>`. It can write partial
+# sums (mod 5). Then it closes `</think>` and gives the answer and `<eos>`. The verifier examines only
+# the format and the final answer, never the scratchpad. Thus it is an *outcome* reward, like the
+# rule-based accuracy reward of R1.
 
 # %%
 task = DigitSum(k=6, base=5)
@@ -64,10 +65,17 @@ print("broken format     ", render(broken).ljust(46), "reward", reward(p, broken
 # %% [markdown]
 # ## Exercise 1.1 — write the verifier
 #
-# Return 1.0 when `completion` is `<think>`, zero or more digit tokens (0–9), `</think>`, the
-# answer digit, `<eos>`, in that order and nothing else before `<eos>` (tokens after `<eos>` are
-# padding and ignored). The answer must equal `problem.answer`. Return 0.0 otherwise. Token ids:
-# digits are 0–9, `THINK`, `END_THINK` and `EOS` are imported above.
+# Return 1.0 when `completion` has these tokens in this order, and nothing else before `<eos>`:
+#
+# 1. `<think>`
+# 2. zero or more digit tokens (0–9)
+# 3. `</think>`
+# 4. the answer digit
+# 5. `<eos>`
+#
+# Ignore the tokens after `<eos>`: they are padding. The answer must be equal to `problem.answer`.
+# In all other cases, return 0.0. The token ids: the digits are 0–9. The first code cell imports
+# `THINK`, `END_THINK` and `EOS`.
 
 # %% exercise
 def my_reward(problem, completion: list) -> float:
@@ -99,10 +107,11 @@ print("✅ your verifier agrees with thinklab's on 300 random (partly corrupted)
 # %% [markdown]
 # ## Worked example: the warm-up, and what a scratchpad is worth to this model
 #
-# Supervised fine-tuning on demonstrations, half with no scratchpad and half with the full one:
-# the "cold start" of the R1 recipe. Then we sample one completion per problem at temperature 1
-# and split accuracy by the scratchpad length the model *chose*. With torch this is measured now,
-# on this machine. Without torch it is the recorded run.
+# First comes supervised fine-tuning on demonstrations: half of them have no scratchpad, and half
+# have the full one. This is the "cold start" of the R1 recipe. Then we sample one completion per
+# problem at temperature 1. We show the accuracy for each scratchpad length that the model
+# *selected*. With torch, the notebook measures this now, on this machine. Without torch, the table
+# shows the recorded run.
 
 # %%
 if HAVE_TORCH:
@@ -120,23 +129,27 @@ print(table(rows, title=f"[{LABEL}] after SFT, one sample per problem (of {RUN['
 print(f"chance = 1/base = {1 / task.base:.2f}")
 
 # %% [markdown]
-# Without the scratchpad the model is at chance: it cannot compute a six-term sum in one step.
-# With it, it is nearly always right. The model already *can* think. It just does not yet
-# *choose* to. Nothing in SFT told it which behaviour is better; the verifier will.
+# Without the scratchpad, the model is at chance: it cannot calculate a six-term sum in one step.
+# With the scratchpad, it is almost always correct. The model already *can* think. But it does not
+# yet *select* that behaviour. Nothing in SFT told it which behaviour is better. The verifier will
+# tell it.
 #
-# The group-relative advantage, $(r - \operatorname{mean})/(\operatorname{std} + 10^{-4})$ with Bessel's std, is
-# derived and implemented in rl-core notebook 03 (exercise 3.1); here `train.group_advantages` computes it in
-# torch. When one completion in four is right it gets +1.4997 and each wrong one −0.4999: the rare
-# success is what the update is about. A group whose rewards are all equal gets zero advantages.
+# The rl-core notebook 03 (exercise 3.1) derives and implements the group-relative advantage,
+# $(r - \operatorname{mean})/(\operatorname{std} + 10^{-4})$ with Bessel's std. Here,
+# `train.group_advantages` calculates it in torch. When one completion in four is correct, that
+# completion gets +1.4997 and each incorrect one gets −0.4999. Thus the update is about the rare
+# success. A group with rewards that are all equal gets zero advantages.
 #
 # ## Exercise 1.2 — predict the reward before RL starts, and where it can end
 #
-# Suppose that after SFT the model thinks with probability `share`, is right with probability
-# `acc_think` when it does and `acc_direct` when it does not. Write the expected reward. Then check
-# it against the run. The accuracies come from the table above. The share comes from GRPO's own
-# step-0 batch: every completion is 4 tokens without a scratchpad or 10 with one, so the batch's
-# mean length gives its thinking share, `(length − 4) / 6`. With `share = 1` you get the ceiling RL
-# can reach by changing the *choice* alone.
+# After SFT, the model thinks with the probability `share`. When it thinks, it is correct with the
+# probability `acc_think`. When it does not think, it is correct with the probability `acc_direct`.
+# Write the expected reward. Then compare it with the run.
+#
+# The accuracies come from the table of the warm-up example. The share comes from the step-0 batch
+# of GRPO. Each completion is 4 tokens without a scratchpad or 10 tokens with one. Thus the mean
+# length of the batch gives its thinking share, `(length − 4) / 6`. With `share = 1`, you get the
+# ceiling that RL can reach when it changes only the *choice*.
 
 # %% exercise
 def expected_reward(share: float, acc_think: float, acc_direct: float) -> float:
@@ -157,9 +170,13 @@ print(f"✅ step-0 batch thought {share0:.0%} of the time: predicted reward {pre
 # %% [markdown]
 # ## Worked example: GRPO, and the curves this run produced
 #
-# `RUN` already holds the whole training run: 40 steps of 16 prompts × $G$ = 8 samples, `beta = 0`
-# (TRL's default: no reference-model penalty in the loss; the KL to the SFT model is still
-# *logged*), `loss_type = "dapo"`, `num_iterations = 1`.
+# `RUN` already holds the full training run, with these settings:
+#
+# * 40 steps of 16 prompts × $G$ = 8 samples.
+# * `beta = 0`. This is the default of TRL: the loss has no reference-model penalty. The trainer
+#   still *logs* the KL to the SFT model.
+# * `loss_type = "dapo"`.
+# * `num_iterations = 1`.
 
 # %%
 print(show(RUN))
@@ -167,8 +184,9 @@ if plot(RUN["rl"], "step", ["reward", "length", "frac_zero_std", "kl"], title=LA
     pass
 
 # %% [markdown]
-# Did *this* run learn? The next cell compares the evaluation before and after RL and the first
-# and last RL steps, and says so either way. Nothing below assumes the answer.
+# Did *this* run learn? The next cell compares the evaluation before RL with the evaluation after
+# RL. It also compares the first RL step with the last RL steps. Then it tells you the result, yes
+# or no. No cell after this one assumes the answer.
 
 # %%
 rl, before, after = RUN["rl"], RUN["before"], RUN["after"]
@@ -194,35 +212,45 @@ else:
           "produced; compare them with the recorded run (THINKLAB_NO_TORCH=1) or try another seed.")
 
 # %% [markdown]
-# How to read the curves (the numbers are the ones printed above, for whichever run you have):
+# Read the curves as follows. The numbers are the ones that the previous cell printed, for the run
+# that you have:
 #
-# * **reward** should climb from the SFT mix toward the ceiling of Exercise 1.2, and **length**,
-#   the mean completion in tokens, from about 7 (half 4, half 10) toward 10. Longer completions
-#   were never rewarded directly; length grows because thinking is *instrumentally* useful, the toy
-#   version of R1's response-length growth.
-# * **frac_zero_std**, the share of groups whose 8 rewards are all equal, *rises* as the policy
-#   gets good. Those groups have zero advantage and teach nothing. That is why DAPO resamples them
-#   ("dynamic sampling") and why TRL logs this number.
-# * **kl** is TRL's logged $k_3$ estimate over one batch, so it is noisy. In the recorded run it rises
-#   over the first ten steps and never settles: it spikes to 0.1–0.4 in some batches, and its
-#   largest value is at the last step. Nothing pulls the policy back (`beta = 0`), and Exercise 1.5
-#   finds where the spikes come from.
+# * **reward**: expect it to increase from the SFT mix toward the ceiling of Exercise 1.2. Expect
+#   **length**, the mean completion in tokens, to increase from about 7 (half 4, half 10) toward 10.
+#   The training never gave a reward to longer completions directly. Length grows because thinking
+#   is *instrumentally* useful. This is the toy version of the response-length growth of R1.
+# * **frac_zero_std** is the share of groups whose 8 rewards are all equal. It *increases* as the
+#   policy becomes better. Those groups have zero advantage and teach nothing. That is why DAPO
+#   resamples them ("dynamic sampling"), and that is why TRL logs this number.
+# * **kl** is the $k_3$ estimate that TRL logs over one batch. Thus it is noisy. In the recorded run,
+#   it increases over the first ten steps and never becomes stable. Some batches show a spike to
+#   0.1–0.4, and its largest value is at the last step. Nothing pulls the policy back (`beta = 0`).
+#   Exercise 1.5 finds the cause of the spikes.
 #
-# `clip_frac` is 0 at every step. With `num_iterations = 1` the rollouts are used for exactly one
-# gradient step, so $\pi_\theta = \pi_{\text{old}}$ when the loss is computed, the ratio is exactly 1 and the
-# clip never binds. Exercise 1.4 changes that.
+# `clip_frac` is 0 at every step. With `num_iterations = 1`, the trainer uses the rollouts for
+# exactly one gradient step. Thus $\pi_\theta = \pi_{\text{old}}$ when the trainer calculates the
+# loss. The ratio is exactly 1, and the clip never binds. Exercise 1.4 changes that.
 #
 # ## Exercise 1.3 — the GRPO loss, in torch
 #
-# Write the loss `train.py` minimises. Inputs are `(B, T)` tensors of per-token log-probabilities
-# under the current policy (`logp`), the policy that sampled the batch (`old_logp`) and the reference
-# (`ref_logp`), a `(B,)` tensor of advantages `adv` and a `(B, T)` float `mask` of live tokens.
-# Per token: `ρ = exp(logp − old_logp)`, loss `−min(ρ·A, clip(ρ, 1 − cfg.epsilon, 1 + cfg.epsilon_high)·A)`,
-# plus `cfg.beta · k3` when `cfg.beta > 0`, with `k3 = exp(d) − d − 1`, `d = ref_logp − logp`. Then
-# aggregate the live tokens as `cfg.loss_type` says: `"grpo"` averages each completion, then the
-# completions; `"dr_grpo"` divides the sum by `B · max_len`; `"dapo"` divides it by the number of live
-# tokens. The pieces, and the length bias of each aggregation, are derived in rl-core notebook 03
-# (exercises 3.2–3.4); here they have to work together, on tensors, with autograd.
+# Write the loss that `train.py` minimises. The inputs are:
+#
+# * `(B, T)` tensors of per-token log-probabilities under three policies: the current policy
+#   (`logp`), the policy that sampled the batch (`old_logp`) and the reference (`ref_logp`).
+# * a `(B,)` tensor of advantages, `adv`.
+# * a `(B, T)` float `mask` of live tokens.
+#
+# For each token, `ρ = exp(logp − old_logp)`. The loss of the token is
+# `−min(ρ·A, clip(ρ, 1 − cfg.epsilon, 1 + cfg.epsilon_high)·A)`. When `cfg.beta > 0`, add
+# `cfg.beta · k3`, with `k3 = exp(d) − d − 1` and `d = ref_logp − logp`. Then aggregate the live
+# tokens as `cfg.loss_type` specifies:
+#
+# * `"grpo"` calculates the mean of each completion, then the mean of the completions.
+# * `"dr_grpo"` divides the sum by `B · max_len`.
+# * `"dapo"` divides the sum by the number of live tokens.
+#
+# The rl-core notebook 03 (exercises 3.2–3.4) derives the pieces and the length bias of each
+# aggregation. Here, the pieces must work together, on tensors, with autograd.
 
 # %% exercise
 def my_grpo_loss(logp, old_logp, ref_logp, adv, mask, cfg, max_len: int):
@@ -269,15 +297,16 @@ else:
 # %% [markdown]
 # ## Exercise 1.4 — train with your loss, and make the clip bind
 #
-# The check below restarts GRPO from the same SFT model twice for 10 steps, both times minimising
-# *your* loss: once with `num_iterations = 1`, once with `num_iterations = 2` (each rollout batch
-# is used for two optimizer steps, as TRL does with $\mu > 1$). Before you run it, predict:
+# The check cell after the exercise starts GRPO again two times from the same SFT model, for 10
+# steps each time. Both runs minimise *your* loss. The first run uses `num_iterations = 1`. The
+# second run uses `num_iterations = 2`: it uses each rollout batch for two optimizer steps, as TRL
+# does with $\mu > 1$. Before you run the check, predict these values:
 #
-# * `clip_mu1`: the `clip_frac` the $\mu$ = 1 run logs at every step (a number);
+# * `clip_mu1`: the `clip_frac` that the $\mu$ = 1 run logs at every step (a number).
 # * `clip_binds_mu2`: will the $\mu$ = 2 run log `clip_frac > 0` at some step (`True` or `False`)?
 #
-# `clip_frac` is measured on the last pass over the batch. The check runs both, prints them side by
-# side and confirms that your loss actually trains the model.
+# The trainer measures `clip_frac` on the last pass over the batch. The check does the two runs and
+# prints them side by side. It also makes sure that your loss actually trains the model.
 
 # %% exercise
 clip_mu1 = None
@@ -313,14 +342,20 @@ else:
 # %% [markdown]
 # ## Exercise 1.5 — where the KL spikes come from
 #
-# After RL the policy almost never takes the no-scratchpad path: the probability it gives `</think>`
-# straight after `<think>` has fallen to a fraction of a percent, while the frozen SFT reference
-# still gives it about 0.5. When a batch happens to sample that token anyway, its $k_3$ term is huge.
-# Using `k3` from `thinklab.rollout` (defined in rl-core notebook 03, exercise 3.2), compute
-# `one_token`, the $k_3$ of a token with $\pi_\theta$ = 0.005 and $\pi_{\text{ref}}$ = 0.5, and `batch_kl`, what
-# that one token adds to the batch-mean kl the trainer logs when the batch has 128 completions of about 10
-# live tokens each. Then check the claim on the run: steps where *every* completion wrote the full
-# scratchpad (mean length exactly 10) should show only the scratchpad's small drift.
+# After RL, the policy almost never takes the no-scratchpad path. The probability that it gives
+# `</think>` directly after `<think>` has decreased to a fraction of a percent. But the frozen SFT
+# reference still gives that token about 0.5. When a batch samples that token by chance, its $k_3$
+# term is large.
+#
+# Use `k3` from `thinklab.rollout` (defined in rl-core notebook 03, exercise 3.2) to calculate two
+# values:
+#
+# * `one_token`: the $k_3$ of a token with $\pi_\theta$ = 0.005 and $\pi_{\text{ref}}$ = 0.5.
+# * `batch_kl`: what that one token adds to the batch-mean kl that the trainer logs. The batch has
+#   128 completions of about 10 live tokens each.
+#
+# Then examine the claim on the run. In the steps where *every* completion wrote the full
+# scratchpad (mean length exactly 10), expect only the small drift of the scratchpad.
 
 # %% exercise
 one_token = batch_kl = None
@@ -345,20 +380,28 @@ print("✅ the spikes are k3's variance where π_θ << π_ref: unbiased on avera
       "outweigh a thousand others. A policy that has abandoned a behaviour the reference liked shows them")
 
 # %% [markdown]
-# The *true* KL for this choice is bounded: as $\pi_\theta$(`</think>`) $\to 0$ it tends to $\log(1/0.5)$ =
-# 0.69 nats per completion. The estimator's variance is not bounded: it grows like
-# $\pi_{\text{ref}}^2/\pi_\theta$. With `beta > 0` the same term is in the *loss*, so those rare tokens also get
-# large gradients. Read a logged KL as a running mean over steps, not step by step.
+# The *true* KL for this choice has a bound. As $\pi_\theta$(`</think>`) $\to 0$, it goes to
+# $\log(1/0.5)$ = 0.69 nats per completion. The variance of the estimator has no bound: it grows
+# like $\pi_{\text{ref}}^2/\pi_\theta$. With `beta > 0`, the same term is in the *loss*, thus those
+# rare tokens also get large gradients. Read a logged KL as a mean over a series of steps, not step
+# by step.
 #
 # ## On a real GPU (T1)
 #
-# `TinyRLConfig(device="auto")` puts the model on CUDA when one is visible, and the whole run moves
-# with it (`python -m thinklab tinyrl` from a terminal). At this size a GPU mostly buys you the
-# freedom to scale the toy: more digits (`k=10`), a larger base, more layers, `num_iterations=2` to
-# make the clip bind, `beta=0.04` to watch the KL penalty hold the policy near the SFT model, or
-# `sft_mix="uniform"` to start from every scratchpad length and watch the length distribution shift
-# as a whole. The step that needs a GPU is notebook 05's: an engine generating rollouts for a real
-# 0.5B model.
+# `TinyRLConfig(device="auto")` puts the model on CUDA when a GPU is visible, and the full run moves
+# with it. From a terminal, the command is `python -m thinklab tinyrl`. At this size, a GPU mostly
+# gives you the freedom to scale the toy:
+#
+# * more digits (`k=10`)
+# * a larger base
+# * more layers
+# * `num_iterations=2`, to make the clip bind
+# * `beta=0.04`, to watch the KL penalty hold the policy near the SFT model
+# * `sft_mix="uniform"`, to start from every scratchpad length and watch the length distribution
+#   shift as a whole
+#
+# The step that needs a GPU is in notebook 05: an engine that generates rollouts for a real 0.5B
+# model.
 
 # %%
 print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder task; SFT needs more steps"},
@@ -371,29 +414,34 @@ print(table([{"knob": "k / base", "try": "10 / 10", "what changes": "a harder ta
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "RL post-training samples completions, scores them with a verifier and
-# reweights the tokens of the better ones. GRPO's baseline is the group: $G$ samples of the same
-# prompt, advantage = reward minus the group mean over the group std, so no value model has to
-# be trained or served.
+# **Two minutes:** "RL post-training samples completions, scores them with a verifier and reweights
+# the tokens of the better ones. The baseline of GRPO is the group: $G$ samples of the same prompt.
+# The advantage is the reward minus the group mean, divided by the group std. Thus we need no value
+# model, for the training or for the serving.
 #
-# "We verified the mechanism on a toy: a 100K-parameter transformer that can only add six digits if
-# it writes running sums first. After a warm-up that showed both behaviours, rewarding correct answers
-# alone took accuracy from 0.63 to 0.94 in the recorded run, and the full-scratchpad share from 54% to
-# 96%. Completion length rose with it, because thinking was what made answers right; the logged KL to
-# the SFT model is spiky, not a sign of drift, because $k_3$ is noisy where the policy has abandoned a
-# path the reference liked. The same dynamics, at scale, are why RL-trained reasoning models produce
-# long outputs. That is a serving problem as much as a training one (notebook 04)."
+# "We showed the mechanism on a toy: a 100K-parameter transformer that can add six digits only if it
+# writes partial sums first. A warm-up showed both behaviours. After it, a reward for correct answers
+# alone took accuracy from 0.63 to 0.94 in the recorded run. It took the full-scratchpad share from
+# 54% to 96%. Completion length rose with it, because thinking was what made the answers correct.
+#
+# "The logged KL to the SFT model has spikes, but they are not a sign of drift. The cause is that
+# $k_3$ is noisy where the policy no longer takes a path that the reference liked. The same
+# dynamics, at scale, are why RL-trained reasoning models produce long outputs. That is a serving
+# problem as much as a training one (notebook 04)."
 #
 # **Drill 1.** *Why does GRPO not need a critic, and what does that cost?* The group mean is the
-# baseline. That saves a policy-sized value model in memory and compute, but needs ${G > 1}$ samples
-# per prompt: $G$ times the generation per step, which is why rollouts dominate RL step time.
+# baseline. That saves a policy-sized value model in memory and compute. But GRPO needs ${G > 1}$
+# samples per prompt, that is, $G$ times the generation per step. That is why the rollouts use most
+# of the time of an RL step.
 #
-# **Drill 2.** *Reward went up and so did response length. Is that reward hacking?* Not by
-# itself. Check whether length *causes* correctness (accuracy by length, as in the table above) and
-# whether the verifier can be satisfied without doing the work. Also check the loss normalisation.
-# With per-sequence averaging (`"grpo"`), long wrong answers are under-penalised, which inflates
-# length on its own.
+# **Drill 2.** *Reward went up and so did response length. Is that reward hacking?* Not by itself.
+# Find out if length *causes* correctness: look at the accuracy for each length, as in the table of
+# the warm-up example. Also find out if the model can satisfy the verifier and not do the work.
+#
+# Also examine the loss normalisation. With the per-sequence mean (`"grpo"`), long incorrect answers get
+# too small a penalty. That alone increases the length.
 #
 # **Drill 3.** *`clip_frac` is always 0. Is the clip broken?* No. With one gradient step per rollout
-# batch (`num_iterations=1`, TRL's default) the importance ratio is exactly 1. The clip only acts
-# when a batch is reused, or generated by weights that differ from the trainer's.
+# batch (`num_iterations=1`, the default of TRL), the importance ratio is exactly 1. The clip acts
+# only when the trainer uses a batch again, or when weights that differ from the weights of the
+# trainer generated the batch.

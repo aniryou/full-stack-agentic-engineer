@@ -1,29 +1,30 @@
 # %% [markdown]
 # # 02 · A thinking model on one GPU: size it, switch it, parse it, budget it
 #
-# **Tier:** T1 — `Qwen/Qwen3-0.6B` (or 1.7B) served by vLLM v0.30.0 with `--reasoning-parser qwen3` on
-# a free Colab/Kaggle T4. Start it with [`deploy/any-gpu/serve.sh`](../deploy/any-gpu/serve.sh), then
-# `export THINKLAB_URL=http://127.0.0.1:8000` and every cell below measures the real model. T0 (the
-# default) uses bundled responses in vLLM's documented format (illustrative) and an in-process fake
-# server whose model and timing are **simulated**.
+# **Tier:** T1. vLLM v0.30.0 serves `Qwen/Qwen3-0.6B` (or 1.7B) with `--reasoning-parser qwen3` on a
+# free Colab/Kaggle T4. Start it with [`deploy/any-gpu/serve.sh`](../deploy/any-gpu/serve.sh). Then run
+# `export THINKLAB_URL=http://127.0.0.1:8000`, and every cell in this notebook measures the real model.
+# T0 (the default) uses bundled responses in the documented format of vLLM (illustrative). It also uses
+# an in-process fake server, and the model and the response times of that server are **simulated**.
 #
 # ## The one-minute version
 #
 # * A "thinking model" is ordinary weights plus four conventions. The **chat template** opens a
-#   `<think>` block; a server-side **reasoning parser** splits the output into `reasoning` and
-#   `content`; the **sampling settings** differ (Qwen3: T=0.6, top-p 0.95 when thinking, never
-#   greedy); and a **switch** (`chat_template_kwargs.enable_thinking` for Qwen3) turns it off.
-# * vLLM v0.30.0 returns `message.reasoning` / `delta.reasoning`. The field used to be
-#   `reasoning_content`, which SGLang and the DeepSeek API still use. A client that reads only one
-#   of them silently gets nothing from the other kind of server.
-# * `max_tokens` counts reasoning tokens. It is not a thinking budget: set too low, it returns
-#   `content: null` with `finish_reason: "length"`. Budgets that end the thinking and still get an
-#   answer are `thinking_token_budget` (vLLM) or Qwen's two-call recipe.
-# * Thinking tokens are output tokens: billed as output, decoded one step at a time, and held in
-#   KV. On Qwen3-0.6B an 8K-token trace holds about as many bytes of KV as the whole model's weights.
+#   `<think>` block. A server-side **reasoning parser** divides the output into `reasoning` and
+#   `content`. The **sampling settings** are different (Qwen3: T=0.6, top-p 0.95 when it thinks,
+#   never greedy). A **switch** (`chat_template_kwargs.enable_thinking` for Qwen3) turns thinking off.
+# * vLLM v0.30.0 returns `message.reasoning` / `delta.reasoning`. The old name of the field is
+#   `reasoning_content`, and SGLang and the DeepSeek API still use that name. A client that reads only
+#   one of the two names gets nothing from the other kind of server, and it shows no error.
+# * `max_tokens` counts reasoning tokens. It is not a thinking budget. If you set it too low, the
+#   response has `content: null` with `finish_reason: "length"`. Two budgets end the thinking and
+#   still get an answer: `thinking_token_budget` (vLLM) or the two-call recipe of Qwen.
+# * Thinking tokens are output tokens. The bill counts them as output, the engine decodes them one
+#   step at a time, and they stay in KV. On Qwen3-0.6B, an 8K-token trace holds approximately as many
+#   bytes of KV as all the weights of the model.
 #
-# Concepts: PRIMER §5 "Thinking models" and §7 "What thinking does to serving" ([`PRIMER.md`](../../PRIMER.md));
-# sampling knobs in the 04 serving-engine PRIMER §6 "Sampling and structured output".
+# Concepts: PRIMER §5 "Thinking models" and §7 "What thinking does to serving" ([`PRIMER.md`](../../PRIMER.md)).
+# For the sampling knobs, see the 04 serving-engine PRIMER §6 "Sampling and structured output".
 
 # %%
 import json
@@ -46,11 +47,11 @@ SAMPLES = resources.files("thinklab.data").joinpath("samples")
 # %% [markdown]
 # ## Worked example: size it before you serve it
 #
-# Weights = parameters × 2 bytes (fp16 on a T4, which has no bf16). KV per token = 2 (K and V) ×
-# layers × KV heads × head_dim × 2 bytes. The parameter counts and T4 block predictions below are
-# the 04 lab's `servelab.sizing` numbers for these configs (`tests/test_reuse.py` reproduces them
-# from that lab when it is present). Always read `head_dim` from `config.json`: Qwen3-0.6B's is
-# 128, not hidden / heads = 64.
+# Weights = parameters × 2 bytes (fp16 on a T4, because a T4 has no bf16). KV per token = 2 (K and
+# V) × layers × KV heads × head_dim × 2 bytes. The parameter counts and the T4 block predictions in
+# the next cell are the `servelab.sizing` numbers of the 04 lab for these configs. When that lab is
+# present, `tests/test_reuse.py` reproduces them from it. Always read `head_dim` from
+# `config.json`. For Qwen3-0.6B it is 128, not hidden / heads = 64.
 
 # %%
 QWEN3 = {   # layers, KV heads, head_dim (config.json); params from servelab.sizing.param_count
@@ -69,8 +70,8 @@ print("T4 predictions (servelab.sizing, gpu_memory_utilization 0.92, max_model_l
 # ## Exercise 2.1 — the KV of a thinking trace
 #
 # Write `kv_bytes(layers, kv_heads, head_dim, tokens, bytes_per_elem=2)`. Then answer the design
-# question: how many *full* 8K-token thinking traces of Qwen3-0.6B fit in the 111,504 KV-token
-# slots the T4 has left after weights?
+# question. How many *full* 8K-token thinking traces of Qwen3-0.6B fit in the 111,504 KV-token
+# slots that the T4 has free after the weights?
 
 # %% exercise
 def kv_bytes(layers: int, kv_heads: int, head_dim: int, tokens: int, bytes_per_elem: int = 2) -> int:
@@ -93,9 +94,9 @@ print("✅ 112 KiB per token; an 8K trace = 0.94 GB of KV for a 1.19 GB model; 1
 # %% [markdown]
 # ## Worked example: what comes back
 #
-# The same question answered with thinking on and off, as vLLM v0.30.0 returns it, and the SGLang
-# spelling. These files are sample output in the documented format (illustrative). The field
-# names are real; the text was written for this lab.
+# The next cell shows the same question with thinking on and with thinking off, as vLLM v0.30.0
+# returns it. It also shows the field name that SGLang uses. These files are sample output in the documented
+# format (illustrative). The field names are real. We wrote the text for this lab.
 
 # %%
 on = json.loads(SAMPLES.joinpath("vllm_chat_qwen3_thinking.json").read_text())
@@ -109,22 +110,22 @@ for name, d in (("vLLM thinking on", on), ("vLLM thinking off", off), ("SGLang",
           f"reasoning {(u.get('completion_tokens_details') or {}).get('reasoning_tokens', 'n/a')}")
 
 # %% [markdown]
-# Two things to notice. `completion_tokens` includes the reasoning (132 = 103 reasoning + 29
-# answer): that is what you pay for and what the engine decodes. And the no-thinking answer is
-# *wrong* (281); in these illustrative samples, as on real models, thinking buys accuracy on
-# multi-step arithmetic.
+# Look at two things. First, `completion_tokens` includes the reasoning (132 = 103 reasoning + 29
+# answer). You pay for all of these tokens, and the engine decodes all of them. Second, the
+# answer with thinking off is *incorrect* (281). In these illustrative samples, as on real models,
+# thinking increases the accuracy on multi-step arithmetic.
 #
 # ## Exercise 2.2 — parse raw output the way `--reasoning-parser deepseek_r1` does
 #
-# Without a server-side parser (for example `/v1/completions`), you split the text yourself.
-# DeepSeek-R1-style templates put `<think>\n` into the *prompt*, so the output usually starts
-# mid-thought and contains only `</think>`. Return `(reasoning, content)`:
+# Without a server-side parser (for example `/v1/completions`), you must divide the text yourself.
+# DeepSeek-R1-style templates put `<think>\n` into the *prompt*. Thus the output usually starts in
+# the middle of a thought and contains only `</think>`. Return `(reasoning, content)`:
 #
-# * drop an opening `<think>` if present;
-# * no `</think>` at all: everything is reasoning and content is `None` (the model was cut off
-#   while thinking);
-# * otherwise reasoning is what precedes the first `</think>` and content what follows (`None` if
-#   empty).
+# * If the text starts with `<think>`, remove it.
+# * If there is no `</think>`, everything is reasoning and content is `None`. The output ended
+#   during the thinking.
+# * In all other cases, reasoning is the text before the first `</think>`, and content is the text
+#   after it (`None` if empty).
 
 # %% exercise
 def split_r1(text: str) -> tuple:
@@ -151,11 +152,15 @@ print("✅ R1 semantics: no opening tag needed; no closing tag = all reasoning")
 # %% [markdown]
 # ## Exercise 2.3 — follow a stream: when does the *answer* start?
 #
-# A streamed response sends `delta.reasoning` chunks, then `delta.content` chunks. For a user
-# waiting for an answer, the moment that matters is the first *content* chunk, not the first
-# token. Given the parsed chunk payloads of the bundled stream, return the full reasoning text, the
-# full content text, and the 0-based index (among chunks that carry any text) of the first content
-# chunk. Read the reasoning under either field name.
+# A streamed response sends `delta.reasoning` chunks, then `delta.content` chunks. For a user who
+# waits for an answer, the important moment is the first *content* chunk, not the first token. You
+# get the parsed chunk payloads of the bundled stream. Return these three values:
+#
+# * the full reasoning text
+# * the full content text
+# * the 0-based index of the first content chunk, among the chunks that carry text
+#
+# Read the reasoning under each of the two field names.
 
 # %% exercise
 def follow_stream(chunks: list) -> tuple:
@@ -190,11 +195,13 @@ print(f"✅ 14 reasoning chunks before the answer starts at chunk {k}; works for
 # %% [markdown]
 # ## Worked example: thinking on vs off on the eval set
 #
-# Twenty generated problems (arithmetic, weekday, ordering and counting, each checked by a
-# program), with the model card's sampling for each mode. Against the fake server, the model's
-# answers are **simulated**: it knows the right answer and gives it with a probability that grows
-# with its thinking. Against a real server this is a measurement. Accuracy on 20 problems carries a
-# wide interval, so report it.
+# The eval set has twenty generated problems: arithmetic, weekday, order and count problems. A program
+# examines the answer to each problem. Each mode uses the sampling of the model card for that mode.
+# Against the fake server, the answers of the model are **simulated**. The fake model knows the
+# correct answer, and it gives that answer with a probability that grows with its thinking. Against
+# a real server, this is a measurement.
+#
+# Accuracy on 20 problems has a wide interval. Thus report the interval.
 
 # %%
 problems = make_evalset(20, seed=0)
@@ -211,14 +218,15 @@ for mode, kw in (("thinking off", {"thinking": False}), ("thinking on", {"thinki
 # %% [markdown]
 # ## Exercise 2.4 — the request bodies for three switches
 #
-# Build the JSON bodies vLLM v0.30.0 expects (model `"m"`, one user message `msgs`) for:
+# Build the JSON bodies that vLLM v0.30.0 expects (model `"m"`, one user message `msgs`) for these
+# three cases:
 #
-# 1. `off`: thinking disabled through the chat template, with the non-thinking sampling
-#    (temperature 0.7, top_p 0.8, top_k 20);
-# 2. `budget`: thinking on with a 256-token thinking budget (vLLM's request field) and the
-#    thinking sampling (0.6, 0.95, 20);
-# 3. `effort_none`: `reasoning_effort` set to `"none"`, no other switch. For Qwen3 vLLM turns
-#    this into `enable_thinking=False`. It is an on/off switch, not a length control.
+# 1. `off`: thinking off through the chat template, with the sampling for thinking off
+#    (temperature 0.7, top_p 0.8, top_k 20).
+# 2. `budget`: thinking on, with a 256-token thinking budget (the request field of vLLM) and the
+#    thinking sampling (0.6, 0.95, 20).
+# 3. `effort_none`: `reasoning_effort` set to `"none"`, and no other switch. For Qwen3, vLLM
+#    changes this into `enable_thinking=False`. It is an on/off switch, not a length control.
 
 # %% exercise
 msgs = [{"role": "user", "content": "What is 17 * 23 - 100?"}]
@@ -240,7 +248,7 @@ print("✅ bodies match; reasoning_effort='none' returned no reasoning from", LA
 # %% [markdown]
 # ## Worked example: the `max_tokens` trap, and two budgets that work
 #
-# One hard problem, three ways to bound it at 64 thinking tokens.
+# The next cell takes one hard problem and limits it to 64 thinking tokens in three ways.
 
 # %%
 hard = next(p for p in make_evalset(40, seed=3) if p.difficulty == 4)
@@ -253,20 +261,20 @@ for name, fn in (("max_tokens=64 (trap)", lambda: B.truncate(client, hard.messag
           f"output={c.completion_tokens} answer={c.answer!r}")
 
 # %% [markdown]
-# The trap spends 64 tokens and returns no answer. Both budgets end the thinking and get an answer
-# from what was thought so far. Qwen3's report says answering from truncated thinking "emerges
-# naturally" rather than being trained, so its accuracy is a curve you measure (next exercise). The
-# two-call recipe costs a second round trip and re-prefills the thinking. The native budget needs
-# `--reasoning-parser` on the server (and optionally `--reasoning-config` for the phrase it forces
-# before `</think>`).
+# The trap uses 64 tokens and returns no answer. The two budgets end the thinking and get an answer
+# from the thinking that the model did up to that point. The Qwen3 report says that an answer from
+# truncated thinking "emerges naturally" and does not come from training. Thus its accuracy is a
+# curve that you measure (Exercise 2.5). The two-call recipe costs a second round trip, and it
+# prefills the thinking again. The native budget needs `--reasoning-parser` on the server, and
+# optionally `--reasoning-config` for the phrase that it forces before `</think>`.
 #
 # ## Exercise 2.5 — choose a budget from a sweep
 #
-# `rows` is an accuracy-vs-budget sweep (`budget=None` is unlimited thinking). Write
-# `pick_budget(rows, tolerance)`: the *smallest* budget whose accuracy is within `tolerance`
-# (absolute) of the unlimited row. Then report output tokens per correct answer for it and for
-# unlimited thinking. (Against a real T4 the sweep sends 180 requests, some of them thousands of
-# tokens long. Expect it to take several minutes.)
+# `rows` is a sweep of accuracy against budget (`budget=None` means unlimited thinking). Write
+# `pick_budget(rows, tolerance)`. It returns the *smallest* budget whose accuracy is within
+# `tolerance` (absolute) of the unlimited row. Then report the output tokens per correct answer for
+# that budget and for unlimited thinking. (Against a real T4, the sweep sends 180 requests, and some
+# of them are thousands of tokens long. Expect several minutes for the sweep.)
 
 # %% exercise
 def pick_budget(rows: list, tolerance: float = 0.05):
@@ -301,11 +309,16 @@ print(f"✅ smallest budget within 5 points of unlimited: {best.budget} "
 # vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --dtype half --max-model-len 8192 --reasoning-parser deepseek_r1
 # ```
 #
-# Things to check on the real model: that fp16 outputs on a T4 are sane (Qwen3 is trained in bf16;
-# verify there are no NaNs or garbage); that `usage.completion_tokens_details.reasoning_tokens` is
-# filled (it needs the parser); how accuracy moves between thinking off and on and across budgets
-# on *these* problems; and how much of the budget the model uses. `deploy/any-gpu/README.md` has the
-# whole recipe, including Qwen3-1.7B and Qwen3-4B on a 24 GB card.
+# On the real model, examine these things:
+#
+# * Make sure that the fp16 outputs on a T4 make sense. The training of Qwen3 used bf16. Make sure
+#   that there are no NaNs or garbage.
+# * Make sure that `usage.completion_tokens_details.reasoning_tokens` has a value. It needs the
+#   parser.
+# * Find how accuracy changes between thinking off and on, and across budgets, on *these* problems.
+# * Find how much of the budget the model uses.
+#
+# `deploy/any-gpu/README.md` has the full recipe, with Qwen3-1.7B and Qwen3-4B on a 24 GB card.
 
 # %%
 target.stop()
@@ -313,25 +326,26 @@ target.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We serve a hybrid thinking model with vLLM's reasoning parser, so clients get
-# `reasoning` and `content` as separate fields. Our client reads both field names, because SGLang
-# and the DeepSeek API still call it `reasoning_content`. Thinking is a per-request product decision:
-# Qwen3's `enable_thinking` switch in `chat_template_kwargs`, the model card's sampling for each mode,
-# and never greedy decoding. We bound cost with `thinking_token_budget`, not `max_tokens`: a
-# `max_tokens` cap cuts the answer off, returns `content: null` and still bills every token. On a T4,
-# Qwen3-0.6B holds 111K KV tokens after its weights. An 8K-token trace takes 0.94 GB of KV, so a
-# handful of long thinkers fills the cache. Budgets and length distributions are capacity inputs,
-# not just quality knobs."
+# **Two minutes:** "We serve a hybrid thinking model with the reasoning parser of vLLM. Thus clients
+# get `reasoning` and `content` as separate fields. Our client reads the two field names, because
+# SGLang and the DeepSeek API still call the field `reasoning_content`. Thinking is a product
+# decision for each request. We use the `enable_thinking` switch of Qwen3 in `chat_template_kwargs`
+# and the sampling of the model card for each mode, and we never use greedy decoding.
 #
-# **Drill 1.** *Our client shows empty reasoning since the vLLM upgrade. Why?* vLLM renamed the
-# field from `reasoning_content` to `reasoning`, and the old attribute now reads as empty. Read
-# `reasoning` first and fall back to `reasoning_content`.
+# "We limit cost with `thinking_token_budget`, not with `max_tokens`. A `max_tokens` cap cuts off the
+# answer and returns `content: null`, but the bill still counts every token. On a T4, Qwen3-0.6B holds
+# 111K KV tokens after its weights. An 8K-token trace takes 0.94 GB of KV, thus a few long thinkers
+# fill the cache. Budgets and length distributions are capacity inputs, not only quality knobs."
 #
-# **Drill 2.** *Does `reasoning_effort="low"` make Qwen3 think less?* No. For Qwen3 vLLM maps any
+# **Drill 1.** *Our client shows empty reasoning since the vLLM upgrade. Why?* vLLM changed the name
+# of the field from `reasoning_content` to `reasoning`. The old attribute is now empty when you read
+# it. Read `reasoning` first. If it is empty, read `reasoning_content`.
+#
+# **Drill 2.** *Does `reasoning_effort="low"` make Qwen3 think less?* No. For Qwen3, vLLM maps each
 # effort other than `"none"` to `enable_thinking=True`. Only templates that use the effort (gpt-oss:
-# low/medium/high in its system prompt) change behaviour. Bound length with a budget instead.
+# low/medium/high in its system prompt) change the behaviour. Use a budget to limit the length.
 #
 # **Drill 3.** *We set `max_tokens=512` to cap cost and accuracy collapsed. What happened?* The
 # requests that needed more than 512 tokens of thinking ended inside `<think>` with no answer
-# (`finish_reason: "length"`, `content: null`). Use `thinking_token_budget` so the model is forced to
-# answer, and measure the accuracy-vs-budget curve to choose the value.
+# (`finish_reason: "length"`, `content: null`). Use `thinking_token_budget`, which forces the model
+# to answer. Then measure the curve of accuracy against budget, and select the value from it.

@@ -1,26 +1,35 @@
 # %% [markdown]
 # # 02 · Teacher data and a real student: from a served teacher to a 0.5B student on a T4
 #
-# **Tier:** T1: `vllm serve Qwen/Qwen2.5-1.5B-Instruct` generates the data on a Colab or Kaggle T4, then SFT and
-# logit KD train `Qwen/Qwen2.5-0.5B-Instruct` on the same card (model ids and fits: verify). T0 (default): the
-# same pipeline against this lab's fake teacher, whose answers and log-probabilities are **simulated**, and a tiny
-# student trained on its answers with torch on a CPU in about 15 seconds. The memory plans are **predicted** by a
-# calculator.
+# **Tier:** T1: `vllm serve Qwen/Qwen2.5-1.5B-Instruct` generates the data on a Colab or Kaggle T4. Then SFT and
+# logit KD train `Qwen/Qwen2.5-0.5B-Instruct` on the same card (model ids and fits: verify). T0 (default): the same
+# pipeline runs against this lab's fake teacher, whose answers and log-probabilities are **simulated**. A small
+# student trains on its answers with torch on a CPU in about 15 seconds. The memory plans are **predicted** values
+# from a calculator.
 #
 # ## The one-minute version
 #
-# * **Sequence-level distillation's dataset is a pipeline with a yield at every stage:** prompts × $n$ samples, then
-#   the verifier, then deduplication, then a length cap, then JSONL. You pay for every token the teacher
-#   generated, not for the ones you keep (PRIMER §3 "Sequence-level distillation: learning from the teacher's outputs").
-# * **A served teacher gives you three things:** samples; the top-k log-probabilities of each sampled token (at
-#   most 20 by default in vLLM); and its log-probability of *any* text you send (`prompt_logprobs`), which is the
-#   per-token reward of on-policy distillation (PRIMER §4 "On-policy distillation"). It does not give full
-#   distributions, so logit KD runs the teacher in-process.
-# * **The verifier is not optional.** A student trained on unfiltered teacher data learns the teacher's mistakes
+# * **Sequence-level distillation's dataset is a pipeline with a yield at every stage:**
+#   1. prompts × $n$ samples,
+#   2. then the verifier,
+#   3. then deduplication,
+#   4. then a length cap,
+#   5. then JSONL.
+#
+#   You pay for every token that the teacher generated, not only for the kept tokens (PRIMER §3 "Sequence-level
+#   distillation: learning from the teacher's outputs").
+# * **A served teacher gives you three things:**
+#   * samples,
+#   * the top-k log-probabilities of each sampled token (at most 20 by default in vLLM),
+#   * and its log-probability of *any* text that you send (`prompt_logprobs`), which is the per-token reward of
+#     on-policy distillation (PRIMER §4 "On-policy distillation").
+#
+#   It does not give full distributions, so logit KD runs the teacher in-process.
+# * **The verifier is not optional.** A student that trains on unfiltered teacher data learns the teacher's mistakes
 #   at the teacher's rate.
-# * **On a T4:** no bf16, trainable weights in fp32 with fp16 autocast, and at a 151,936-token vocabulary the logits
-#   are the biggest activation. Full logit KD of a 0.5B student from a 1.5B teacher does not fit unchunked. LoRA or a
-#   chunked loss does (PRIMER §10 "Where to run it").
+# * **On a T4:** there is no bf16, and the trainable weights are in fp32 with fp16 autocast. At a 151,936-token
+#   vocabulary, the logits are the largest activation. Full logit KD of a 0.5B student from a 1.5B teacher does not
+#   fit without a chunked loss. With LoRA or a chunked loss, it fits (PRIMER §10 "Where to run it").
 
 # %%
 import json, math, os, random, statistics
@@ -41,8 +50,9 @@ print(target)
 # ## Worked example: one teacher sample, with its top-k log-probabilities
 #
 # `top_logprobs: 5` asks for the five most likely tokens at every position of the sample. That is the most logit
-# information an OpenAI-compatible API returns. vLLM rejects more than `--max-logprobs` (20 by default), and
-# raising the limit to the whole vocabulary (`-1`) risks running out of memory.
+# information that an OpenAI-compatible API returns. vLLM rejects a request for more than `--max-logprobs` (20 by
+# default). If you increase the limit to the full vocabulary (`-1`), there is a risk that the server runs out of
+# memory.
 
 # %%
 p = D.make_set(8, seed=5, split="train")[5]
@@ -56,10 +66,10 @@ print("\nasking for 21:", err[:160])
 # %% [markdown]
 # ## Exercise 2.1 — a logit target from top-k log-probabilities
 #
-# Logit KD through an API has only the top k. Write `topk_target(top)` for one position: take the `(token,
-# logprob)` pairs, renormalise their probabilities to sum to 1, and return `(target, missing)`, where `target`
-# maps token to probability and `missing` is the mass the API did not return. Renormalising gives that missing
-# mass to the top k, so the student is taught a sharper teacher than the real one.
+# Logit KD through an API has only the top k. Write `topk_target(top)` for one position. Take the `(token,
+# logprob)` pairs and renormalise their probabilities to a sum of 1. Return `(target, missing)`, where `target`
+# maps token to probability and `missing` is the mass that the API did not return. A renormalisation gives that mass
+# to the top k. Thus the student learns from a sharper teacher than the real one.
 
 # %% exercise
 def topk_target(top: list) -> tuple:
@@ -82,9 +92,10 @@ print(f"✅ [{LABEL}] top-5 leaves out {statistics.fmean(missing):.1%} of the ma
 # %% [markdown]
 # ## Worked example: the teacher-data pipeline
 #
-# Training problems come from `distillab.data`, decontaminated against the eval split. The teacher answers each
-# four times at temperature 0.7. Everything generated is billed, and the verifier, deduplication and a length cap
-# decide what is kept. The per-kind table shows where the verifier throws the most away.
+# The training problems come from `distillab.data`, and the pipeline decontaminates them against the eval split. The
+# teacher answers each problem four times at temperature 0.7. The bill includes everything that the teacher
+# generates. The verifier, deduplication and a length cap decide what the pipeline keeps. The per-kind table shows
+# where the verifier discards the most samples.
 
 # %%
 TRAIN, dropped = D.decontaminate(D.make_set(200, seed=0, split="train"), D.make_set(200, seed=0))
@@ -98,10 +109,10 @@ print(table([r for r in TE.by_kind(SAMPLES) if r["difficulty"] >= 3], title="Tea
 # %% [markdown]
 # ## Exercise 2.2 — the bill, per kept sample
 #
-# At the 06 scaling lab's price for `gemini-3.5-flash` (\$1.50 per million input tokens and \$9.00 per million output,
-# checked 5 Sep 2026, verify), what did this dataset cost, and what did each *kept* sample cost? Write
-# `data_cost(samples, kept, model)` returning `(total_dollars, dollars_per_kept)`. Every generated sample is paid
-# for, kept or not.
+# Use the 06 scaling lab's price for `gemini-3.5-flash` (\$1.50 per million input tokens and \$9.00 per million
+# output, checked 5 Sep 2026, verify). At this price, what did this dataset cost, and what did each *kept* sample
+# cost? Write `data_cost(samples, kept, model)`, which returns `(total_dollars, dollars_per_kept)`. You pay for every
+# generated sample, kept or not.
 
 # %% exercise
 def data_cost(samples: list, kept: list, model: str = "gemini-3.5-flash") -> tuple:
@@ -122,8 +133,10 @@ print(f"✅ [{LABEL}] ${total:.4f} for {len(SAMPLES)} samples, ${per_kept * 1e3:
 # %% [markdown]
 # ## Worked example: the rows TRL reads
 #
-# Two formats (TRL 1.14.0's `dataset_formats.md`, verify): *prompt-completion* for `SFTTrainer`, where the loss
-# falls on the completion only, and *conversational* `messages` for `GKDTrainer` and `distillab.hf.kd`.
+# TRL reads two formats (TRL 1.14.0's `dataset_formats.md`, verify):
+#
+# * *prompt-completion* for `SFTTrainer`, where the loss applies to the completion only,
+# * *conversational* `messages` for `GKDTrainer` and `distillab.hf.kd`.
 
 # %%
 PC, MSG = TE.to_prompt_completion(KEPT), TE.to_messages(KEPT)
@@ -136,11 +149,11 @@ print(f"\nwrote {PATH_PC} ({len(PC)} rows) and {PATH_MSG}")
 # %% [markdown]
 # ## Worked example: the teacher scores a student's answer
 #
-# On-policy distillation samples from the *student* and asks the teacher for its log-probability of every
-# sampled token. Through an API that is `/v1/completions` with the chat-templated prompt plus the student's text,
-# `echo: true`, `max_tokens: 0` and `prompt_logprobs: 0` (`Client.score`). At T0 a second fake server plays a
-# weaker student (more slips). At T1 set `DISTILLAB_STUDENT_URL` to a second server with the student model (same
-# tokenizer). The two token lists must line up, which is why on-policy distillation needs a shared tokenizer.
+# On-policy distillation samples from the *student* and asks the teacher for its log-probability of every sampled
+# token. Through an API, that is `/v1/completions` with the chat-templated prompt plus the student's text,
+# `echo: true`, `max_tokens: 0` and `prompt_logprobs: 0` (`Client.score`). At T0, a second fake server acts as a
+# weaker student (more slips). At T1, set `DISTILLAB_STUDENT_URL` to a second server with the student model (same
+# tokenizer). The two token lists must align, and that is why on-policy distillation needs a shared tokenizer.
 
 # %%
 student_srv = None
@@ -164,11 +177,11 @@ print("token lists line up" if ALIGNED else "token lists do NOT line up: teacher
 # %% [markdown]
 # ## Exercise 2.3 — the per-token reward
 #
-# With the student's own log-probabilities `s.logprobs` and the teacher's `SCORED`, both lists of `(token, logprob)`
-# pairs, write `rewards(scored, own)`: the per-token reward
-# $r_t = \log \pi_{\text{teacher}} - \log \pi_{\text{student}}$ as a list. Then `worst`: the index of the most
-# negative reward. The sequence's total reward is minus its log-ratio, and its expectation over the student's samples
-# is minus the reverse KL (PRIMER §4).
+# You have the student's own log-probabilities `s.logprobs` and the teacher's `SCORED`. Both are lists of
+# `(token, logprob)` pairs. Write `rewards(scored, own)`. It returns the per-token reward
+# $r_t = \log \pi_{\text{teacher}} - \log \pi_{\text{student}}$ as a list. Then set `worst` to the index of the most
+# negative reward. The total reward of the sequence is minus its log-ratio, and its expectation over the student's
+# samples is minus the reverse KL (PRIMER §4).
 
 # %% exercise
 def rewards(scored: list, own: list) -> list:
@@ -197,10 +210,11 @@ print(f"✅ the most negative reward is at token {worst} ({SCORED[worst][0]!r}):
 # %% [markdown]
 # ## Worked example: a tiny student trained on the teacher's answers
 #
-# The `modsum` problems at difficulty 2 are the tiny task of notebook 01: six base-5 digits. The teacher's answers
-# to 600 of them convert to the tiny model's tokens (`from_teacher_text`). This cell always uses the fake teacher,
-# because a real model phrases its working its own way. Two students train with torch, one on everything the
-# teacher said and one on the verified answers only. Without torch the cell prints the pipeline's counts.
+# The `modsum` problems at difficulty 2 are the task of notebook 01: six base-5 digits. The teacher's answers to 600
+# of them convert to the tokens of the tiny transformer of notebook 01 (`from_teacher_text`). This cell always uses the fake teacher,
+# because a real model writes its steps in its own way. Two students train with torch. One trains on everything that
+# the teacher said, and one trains only on the answers that the verifier accepted. Without torch, the cell prints the
+# counts of the pipeline.
 
 # %%
 from distillab.tinylm.task import from_teacher_text
@@ -224,17 +238,19 @@ else:
     print("torch is missing: no tiny students (pip install torch, the CPU build is enough)")
 
 # %% [markdown]
-# The unfiltered student makes the teacher's mistakes at about the teacher's rate. It learned *how* to slip
-# from examples of slipping. The verified student makes almost none. Filtering costs you the rejected samples'
-# tokens and buys correctness. On real data the verifier is a test suite, an exact-match checker, or a judge, and
-# a judge's errors pass into the data the same way.
+# The unfiltered student makes the teacher's mistakes at about the teacher's rate. It learned *how* to slip from
+# examples of slips. The student that trained on accepted answers makes almost no mistakes. A filter costs you the
+# tokens of the rejected samples, and it gives you correctness. On real data, the verifier is a test suite, an
+# exact-match checker or a judge. Also, the errors of a judge go into the data in the same way as the errors of the
+# teacher.
 #
 # ## Exercise 2.4 — what fits on a T4
 #
-# `H.plan(student, gpu=..., regime=..., batch=..., seq=..., teacher=..., chunk=...)` predicts training memory
+# `H.plan(student, gpu=..., regime=..., batch=..., seq=..., teacher=..., chunk=...)` predicts the training memory
 # (`distillab.hf.memory`: 16 bytes per parameter for full fine-tuning with AdamW, 2 for a frozen 16-bit model, fp32
-# logits). Write `max_batch(student, teacher, regime, chunk, seq=512, gpu="T4")`: the largest batch from 1 to 64
-# whose plan fits, or 0 if none does. The check compares SFT, logit KD with and without chunking, and KD with LoRA.
+# logits). Write `max_batch(student, teacher, regime, chunk, seq=512, gpu="T4")`. It returns the largest batch from 1
+# to 64 whose plan fits, or 0 if no batch fits. The check compares SFT, logit KD with and without a chunked loss, and
+# KD with LoRA.
 
 # %% exercise
 def max_batch(student: dict, teacher, regime: str, chunk, seq: int = 512, gpu: str = "T4") -> int:
@@ -264,7 +280,7 @@ print("✅ the teacher's weights cost 3.1 GB, but its unchunked logits cost more
 # %% [markdown]
 # ## On a real GPU (T1)
 #
-# On a Colab or Kaggle T4 (`deploy/any-gpu/` has the recipe; model ids and fits are to verify):
+# On a Colab or Kaggle T4, run these commands. The recipe is in `deploy/any-gpu/` (model ids and fits: verify):
 #
 # ```bash
 # # 1. the teacher, with logprobs allowed (vLLM's default cap is 20)
@@ -276,8 +292,9 @@ print("✅ the teacher's weights cost 3.1 GB, but its unchunked logits cost more
 # python -m distillab.hf.kd --data _run_outputs/teacher_msgs.jsonl --out _run_outputs/student-kd --lora-r 16 --chunk 256
 # ```
 #
-# The student's accuracy against the teacher's goes through notebook 05. Qwen2.5 and Qwen3 are trained in bf16 and
-# a T4 runs fp16, so check the first losses for `nan` before you trust a run (verify per model).
+# Notebook 05 compares the accuracy of the student against the accuracy of the teacher. The training of Qwen2.5 and
+# Qwen3 used bf16, and a T4 runs fp16. Thus, examine the first losses for `nan` before you trust a run (verify per
+# model).
 
 # %%
 from distillab.hf import kd as KD, sft as SFT
@@ -291,23 +308,24 @@ target.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Our distillation data is a pipeline with a yield at each stage. Four samples per prompt from a
-# 1.5B teacher, then a verifier, then deduplication and a length cap, and we report the yield and the bill at
-# every stage, because every generated token is paid for. The verifier is mandatory. A student trained on the
-# teacher's unfiltered answers learns its mistakes at the teacher's rate. For on-policy distillation the API
-# teacher scores the student's own samples with `prompt_logprobs`, which gives a per-token reward that points at
-# the step where the student went wrong. Logit KD needs full distributions, so there the teacher runs in-process,
-# and on a T4 that means a chunked loss and LoRA."
+# **Two minutes:** "Our distillation data is a pipeline with a yield at each stage. We take four samples per prompt
+# from a 1.5B teacher. Then the pipeline applies a verifier, deduplication and a length cap. We report the yield and
+# the bill at every stage, because we pay for every generated token. The verifier is necessary. A student that trains
+# on the teacher's unfiltered answers learns its mistakes at the teacher's rate.
 #
-# **Drill 1.** *Why not do logit KD through the API?* It returns at most the top 20 log-probabilities per token
-# by default. Renormalising them hands the missing mass to the top k and teaches an over-confident target. Use
-# samples and scores through the API, and run the teacher in-process for logits.
+# "For on-policy distillation, the API teacher scores the student's own samples with `prompt_logprobs`. This gives a
+# per-token reward that points at the step where the student made an error. Logit KD needs full distributions, so
+# there the teacher runs in-process. On a T4, that means a chunked loss and LoRA."
+#
+# **Drill 1.** *Why not do logit KD through the API?* It returns at most the top 20 log-probabilities per token by
+# default. A renormalisation of them gives the mass of all other tokens to the top k, and it teaches an over-confident target.
+# Use samples and scores through the API. Run the teacher in-process for logits.
 #
 # **Drill 2.** *Our SFT data yield is 60%. Is that bad?* It is a cost, not a defect: you paid for 100% of the tokens.
-# Check where the rejects are (by kind and difficulty). If the hard problems lose all their samples, raise $n$ for
+# Find where the rejects are (by kind and difficulty). If the hard problems lose all their samples, increase $n$ for
 # them, or the student never sees them (PRIMER §5).
 #
-# **Drill 3.** *Can a Qwen2.5-7B teacher logit-distil into Qwen2.5-0.5B?* Not as is: `vocab_size` is 152,064 against
-# 151,936, and TRL's GKD and vLLM's draft check both reject the pair even though the token ids agree. Use SeqKD
-# (text is tokenizer-agnostic), a same-size-class teacher, or a cross-tokenizer method such as TRL's GOLD
-# (PRIMER §6 "Feature distillation, pruning and vocabulary mismatch").
+# **Drill 3.** *Can a Qwen2.5-7B teacher logit-distil into Qwen2.5-0.5B?* Not as it is. The `vocab_size` is 152,064
+# against 151,936. TRL's GKD and vLLM's draft check both reject the pair, although the token ids agree. Use SeqKD
+# (text is tokenizer-agnostic), a same-size-class teacher, or a cross-tokenizer method such as TRL's GOLD (PRIMER §6
+# "Feature distillation, pruning and vocabulary mismatch").

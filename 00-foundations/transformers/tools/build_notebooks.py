@@ -55,8 +55,8 @@ EXERCISES = [
 (
 """## 1. Softmax
 
-Turn a row of scores into a probability distribution: exponentiate, then divide by the row sum.
-The max-subtraction is already done for you; it changes nothing mathematically and prevents overflow.""",
+Change a row of scores into a probability distribution. First, exponentiate the scores. Then divide them by the row sum.
+The cell already does the max-subtraction for you. This step changes nothing mathematically, and it prevents overflow.""",
 '''def softmax(x, axis=-1):
     x = x - x.max(axis=axis, keepdims=True)   # stability trick (given)
     e = np.exp(x)                              # exponentiate
@@ -80,9 +80,9 @@ $$
 \operatorname{Attention}(Q, K, V) = \operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) \cdot V
 $$
 
-- `scores[i, j]` = how well query $i$ matches key $j$, divided by $\sqrt{d_k}$
-- `weights` = softmax over each row
-- `out[i]` = weighted average of the value vectors""",
+- `scores[i, j]` is how well query $i$ matches key $j$, divided by $\sqrt{d_k}$.
+- `weights` is the softmax over each row.
+- `out[i]` is the weighted average of the value vectors.""",
 '''def attention(Q, K, V, mask=None):
     d_k = Q.shape[-1]
     scores = Q @ K.T / np.sqrt(d_k)              # (n, m)
@@ -116,8 +116,8 @@ print("✅ attention")''',
 (
 """## 3. The causal mask
 
-Return an `(n, n)` boolean array that is `True` where token $i$ is allowed to attend to token $j$:
-a token may look at itself and at everything before it, never ahead.""",
+Return an `(n, n)` boolean array. The array is `True` where token $i$ can attend to token $j$.
+A token can look at itself and at everything before it, but never at a token after it.""",
 '''def causal_mask(n):
     return np.tril(np.ones((n, n), dtype=bool))''',
 '''# YOUR CODE HERE: replace each `...` below
@@ -136,8 +136,8 @@ print("✅ causal mask")''',
 (
 """## 4. Splitting into heads
 
-Heads are just slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/h)` so each head has its own
-`(n, d_head)` matrix, and write the inverse that concatenates them back. No arithmetic, just reshapes and a transpose.""",
+Heads are only slices of the feature dimension. Reshape `(n, d)` into `(h, n, d/h)`. Then each head has its own
+`(n, d_head)` matrix. Also write the inverse, which concatenates the heads back. This exercise needs no arithmetic, only reshapes and a transpose.""",
 '''def split_heads(x, h):
     n, d = x.shape
     return x.reshape(n, h, d // h).transpose(1, 0, 2)   # (n, d) -> (n, h, dh) -> (h, n, dh)
@@ -165,8 +165,8 @@ print("✅ heads")''',
 (
 """## 5. Multi-head attention
 
-Project the input into $Q$, $K$, $V$, split each into heads, run `attention` per head with the causal mask,
-merge the heads, and apply the output projection `Wo`.""",
+Project the input into $Q$, $K$, $V$. Split each one into heads. Run `attention` per head with the causal mask.
+Merge the heads. Then apply the output projection `Wo`.""",
 '''def multi_head_attention(x, p, causal=True):
     n, d = x.shape
     h = p["h"]
@@ -204,7 +204,7 @@ print("✅ multi-head attention")''',
 (
 """## 6. The block
 
-Two residual updates to the stream, each on a normalised copy of it (pre-norm):
+The block makes two residual updates to the stream. Each update operates on a normalised copy of the stream (pre-norm):
 
     x = x + Attention(Norm(x))
     x = x + MLP(Norm(x))""",
@@ -234,8 +234,9 @@ print("✅ block")''',
 (
 r"""## 7. Count the parameters
 
-Per block: attention has four $d \times d$ matrices, the MLP has $d \times 4d$ and $4d \times d$. Add the token embedding table
-($\text{vocab} \times d$, counted twice if untied) and the position table ($\text{ctx} \times d$). Ignore biases and norms.""",
+In each block, attention has four $d \times d$ matrices. The MLP has a $d \times 4d$ matrix and a $4d \times d$ matrix.
+Add the token embedding table ($\text{vocab} \times d$). If the table is untied, count it two times.
+Also add the position table ($\text{ctx} \times d$). Do not count biases and norms.""",
 '''def gpt_params(d, L, vocab, ctx, tied=True):
     per_block = 12 * d * d                       # 4 d^2 attention + 8 d^2 MLP
     embeddings = vocab * d * (1 if tied else 2)
@@ -258,7 +259,7 @@ print("✅ parameter count")''',
 (
 """## 8. Prove it to yourself: attention is order-blind
 
-Nothing to fill in (it uses your exercises 1-5). Run it, then answer the question in the next cell.""",
+This cell has nothing to fill in (it uses your exercises 1-5). Run it. Then answer the question in the next cell.""",
 '''X = rng.standard_normal((5, 8))
 p = init_block(d=8, h=2)
 perm = rng.permutation(5)
@@ -274,11 +275,11 @@ None,
 None,
 ),
 (
-r"""**Question.** Section 3 of this notebook used a *causal* mask. Would the shuffle test above still pass with `causal=True`? Try it, then explain why in one sentence.
+r"""**Question.** Section 3 of this notebook used a *causal* mask. Will the shuffle test in Section 8 still pass with `causal=True`? Try it. Then explain why in one sentence.
 
 <details><summary>Answer</summary>
 
-No. The causal mask is defined in terms of positions (token $i$ may see tokens $\le i$), so it already injects order: after shuffling, a token is allowed to see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
+No. The definition of the causal mask uses positions (token $i$ can see tokens $\le i$). Thus, the mask already adds order. After a shuffle, a token can see a different set of neighbours. Even without a positional embedding, a causal Transformer is not fully order-blind.
 </details>""",
 None, None, None,
 ),
@@ -295,11 +296,14 @@ def code(text):
 
 def build(solution):
     title = "# Attention practice" + (" — solutions" if solution else "")
-    intro = """Companion to `docs/transformer-primer.md` (Sections 2, 3, 8) and `lessons/01_attention.py`, `lessons/02_block.py`.
+    intro = """This notebook is a companion to `docs/transformer-primer.md` (Sections 2, 3, 8) and to `lessons/01_attention.py` and `lessons/02_block.py`.
 
-Each exercise has a cell with `...` blanks to fill in, followed by a check cell. Run the check; it prints ✅ when your
-implementation is right, tells you what's off when it isn't, and stops with `NotImplementedError` while blanks remain. Later exercises use earlier ones, so go in order.
-Solutions are in `../solutions/attention_practice.ipynb`; try to get each check to pass before looking."""
+Each exercise has a cell with `...` blanks to fill in. A check cell comes after it. Run the check.
+When your implementation is correct, the check prints ✅. When your implementation is not correct, the check tells you the problem.
+While blanks stay in the cell, the check stops with `NotImplementedError`.
+
+Later exercises use earlier ones. Thus, do the exercises in sequence.
+The solutions are in `../solutions/attention_practice.ipynb`. Try to make each check pass before you look at the solutions."""
     cells = [_inject.make_cell(f"{LAB.relative_to(REPO).as_posix()}/{'solutions' if solution else 'notebooks'}"), md(title + "\n\n" + intro), md("## Setup"), code(SETUP)]
     for text, sol, prac, check in EXERCISES:
         cells.append(md(text))

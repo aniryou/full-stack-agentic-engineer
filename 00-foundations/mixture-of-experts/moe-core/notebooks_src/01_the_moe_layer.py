@@ -1,23 +1,31 @@
 # %% [markdown]
 # # 01 · The MoE layer
 #
-# **Tier:** T0 — numpy on a laptop or Colab CPU, a few seconds, no network. To watch a real router pick experts
-# on a GPU, continue with `../moe-lab/notebooks/02_watch_the_router.ipynb` (T1; it falls back to bundled traces).
+# **Tier:** T0. It needs numpy on a laptop or Colab CPU, a few seconds and no network. To see a real router select
+# experts on a GPU, continue with `../moe-lab/notebooks/02_watch_the_router.ipynb` (T1, with a fallback to bundled
+# traces).
 #
 # ## The one-minute version
-# A mixture-of-experts layer replaces the transformer block's one MLP with **$E$ expert MLPs** and a **router**: a
-# linear map from the token's hidden state to $E$ scores. Each token keeps its **top-k** experts and its output is
-# the router-weighted sum of just those $k$ experts' outputs, plus a **shared expert** that every token uses, in
-# models that have one. Memory holds all $E$ experts; a token's FLOPs pay for $k$. So parameters grow about
-# $E/k$-fold while the compute per token barely moves — the transformer primer's §9 row, made concrete.
+# A mixture-of-experts layer replaces the one MLP of the transformer block with **$E$ expert MLPs** and a **router**.
+# The router is a linear map from the hidden state of the token to $E$ scores. Each token keeps its **top-k** experts.
+# Its output is the sum of the outputs of only those $k$ experts, with the router weights. Models that have a **shared
+# expert** also add the output of that expert, and every token uses it.
 #
-# The families differ in details that change numbers: softmax or sigmoid scores, whether the $k$ weights are
-# renormalised, a bias that chooses but never weights (DeepSeek-V3), coarse experts (Mixtral: 8, top-2) or
-# fine-grained ones (DeepSeek-V3: 256 + 1 shared, top-8).
+# Memory holds all $E$ experts, but the FLOPs of a token pay for $k$ only. Thus the parameters increase approximately
+# $E/k$ times, and the compute per token almost does not change. This notebook shows the §9 row of the transformer
+# primer in concrete numbers.
 #
-# After this notebook you can route a token by hand, run the layer the way fused kernels do (sort by expert, one
-# GEMM per expert, scatter back), and count total and active parameters from a config — and say which of three
-# "active" conventions a published number uses.
+# The families differ in details that change the numbers:
+# - softmax scores or sigmoid scores
+# - a router that renormalises the $k$ weights, or a router that does not
+# - a bias that selects experts but never weights them (DeepSeek-V3)
+# - coarse experts (Mixtral: 8, top-2) or fine-grained experts (DeepSeek-V3: 256 + 1 shared, top-8)
+#
+# After this notebook, you can do these things:
+# - Route a token by hand.
+# - Run the layer as fused kernels do: sort by expert, do one GEMM per expert, and scatter the rows back.
+# - Count the total and active parameters from a config.
+# - Tell which of three "active" conventions a published number uses.
 #
 # Primer: `../PRIMER.md` §1 *Why sparsity* and §2 *The MoE layer*.
 
@@ -34,8 +42,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Worked example 1 — route six tokens, then run the layer
-# Eight experts, top-2, Mixtral's router: softmax over all eight scores, keep the best two, renormalise the two
-# weights to sum to 1.
+# The layer has eight experts and uses the router of Mixtral with top-2 routing. This router does a softmax over
+# all eight scores and keeps the best two. Then it renormalises the two weights to a sum of 1.
 
 # %%
 layer = MoELayer.init(rng, d=16, ff=32, n_experts=8, k=2, **ROUTERS["mixtral"])
@@ -48,10 +56,12 @@ print("rows per expert:", np.bincount(r.idx.ravel(), minlength=8).tolist(), "- T
 print("sparse forward == dense reference:", np.allclose(layer.forward(x), layer.forward_dense(x)))
 
 # %% [markdown]
-# `forward()` is written the way a fused MoE kernel runs: flatten the $T \times k$ assignments, **sort them by
-# expert**, run each expert once over its contiguous slice (a *grouped GEMM*), then scatter the weighted rows back
-# and sum each token's $k$ copies. An expert nobody chose does no work. `forward_dense()` runs all eight experts on
-# every token and multiplies by a gate that is zero off the top-k — the same answer at $E/k$ times the FLOPs.
+# `forward()` operates as a fused MoE kernel does. It flattens the $T \times k$ assignments and **sorts them by
+# expert**. Then it runs each expert one time over its contiguous slice (a *grouped GEMM*). After that, it scatters the
+# weighted rows back and adds the $k$ copies of each token. An expert that no token selected does no work.
+#
+# `forward_dense()` runs all eight experts on every token and multiplies by a gate that is zero outside the top-k. It
+# gives the same answer at $E/k$ times the FLOPs.
 
 # %%
 flat = r.idx.ravel()
@@ -62,13 +72,15 @@ print("token of each slot (slot // k)   :", (order // 2).tolist())
 
 # %% [markdown]
 # ## Worked example 2 — the routers on the same scores
-# One token's router logits, pushed through each family's rules (`moe.ROUTERS`). Watch the weights: Mixtral
-# renormalises to 1; OLMoE (`norm_topk_prob=False`, also transformers' default for Qwen2/Qwen3-MoE) keeps the raw
-# softmax mass, while the released Qwen3 MoE configs are reported to set it true (verify: read the checkpoint's
-# config) and so weight like Mixtral; gpt-oss picks
-# on the logits and softmaxes just those $k$ — which is *exactly* Mixtral's renormalised softmax (the exponent ratios
-# are the same); DeepSeek-V3 uses sigmoid scores, renormalises them and multiplies by 2.5; Llama 4 keeps one expert
-# and its sigmoid score scales the expert's *input*.
+# The cell puts the router logits of one token through the rules of each family (`moe.ROUTERS`). Look at the weights:
+# - Mixtral renormalises them to 1.
+# - OLMoE (`norm_topk_prob=False`, also the default of transformers for Qwen2/Qwen3-MoE) keeps the raw softmax mass.
+#   But reports say that the released Qwen3 MoE configs set it true (verify: read the config of the checkpoint). Thus
+#   those configs give weights as Mixtral does.
+# - gpt-oss selects on the logits and does a softmax over only those $k$. This is *exactly* the renormalised softmax of
+#   Mixtral (the exponent ratios are the same).
+# - DeepSeek-V3 uses sigmoid scores, renormalises them and multiplies them by 2.5.
+# - Llama 4 keeps one expert, and its sigmoid score scales the *input* of the expert.
 
 # %%
 logits = np.array([[2.0, 1.2, 0.4, 0.3, -0.5, -1.0, -1.1, -2.0]])
@@ -83,11 +95,15 @@ print(f"deepseek + bias on expert 7: experts {rb.idx[0].tolist()} weights {np.ro
 
 # %% [markdown]
 # ## Worked example 3 — shared and fine-grained experts
-# A **shared expert** runs on every token with weight 1 (DeepSeek-V3: 1 shared + 256 routed; Llama 4: 1 shared;
-# Qwen1.5-MoE: one shared expert four routed experts wide, scaled by $\operatorname{sigmoid}(x \cdot g)$). It carries
-# what every token needs, so the routed experts can specialise. **Fine-grained** experts split the same parameters
-# into more, smaller experts and route to more of them: Mixtral has 8 experts of width 14,336 (top-2); DeepSeek-V3
-# has 256 of width 2,048 (top-8). Same idea, very different serving behaviour (notebook 03).
+# A **shared expert** runs on every token with weight 1. Examples:
+# - DeepSeek-V3: 1 shared + 256 routed.
+# - Llama 4: 1 shared.
+# - Qwen1.5-MoE: one shared expert four routed experts wide, scaled by $\operatorname{sigmoid}(x \cdot g)$.
+#
+# The shared expert holds what every token needs, so the routed experts can specialise. **Fine-grained** experts divide
+# the same parameters into more, smaller experts, and the router sends each token to more of them. Mixtral has 8
+# experts of width 14,336 (top-2). DeepSeek-V3 has 256 of width 2,048 (top-8). The idea is the same, but the serving
+# behaviour has large differences (notebook 03).
 
 # %%
 print(f"{'model':24s} {'E':>4s} {'k':>3s} {'shared':>6s} {'expert I':>8s} {'d':>5s} {'total':>9s} {'active':>8s} {'x':>5s}")
@@ -103,8 +119,9 @@ print(f"\nQwen1.5-MoE: shared width {q15.shared_ff} = {q15.shared_ff // q15.expe
 
 # %% [markdown]
 # ## Exercise 1.1 — the router
-# Write `topk_route(logits, k, renormalise)` → `(idx, weights)` for a softmax router: softmax over all $E$ scores,
-# take the $k$ largest (largest first), and renormalise the $k$ weights to sum to 1 only if `renormalise`.
+# Write `topk_route(logits, k, renormalise)` for a softmax router. It returns `(idx, weights)`. Do a softmax over all
+# $E$ scores. Take the $k$ largest (largest first). Renormalise the $k$ weights to a sum of 1 only if `renormalise` is
+# true.
 
 # %% exercise
 def topk_route(logits, k, renormalise=True):
@@ -128,9 +145,9 @@ print(f"✅ softmax -> top-k -> (renormalise): Mixtral's weights sum to 1; OLMoE
 
 # %% [markdown]
 # ## Exercise 1.2 — the sparse forward pass
-# Write `moe_forward(x, w_router, experts, k)` for the Mixtral router: route with your `topk_route`, then for each
-# expert gather the tokens routed to it, run the expert **once** on that slice, and add `weight × output` back into
-# each token's row. No expert may run on a token that did not choose it.
+# Write `moe_forward(x, w_router, experts, k)` for the Mixtral router. Route with your `topk_route`. Then, for each
+# expert, gather the tokens routed to it. Run the expert **one time** on that slice. Add `weight × output` back into
+# the row of each token. An expert must not run on a token that did not select it.
 
 # %% exercise
 def moe_forward(x, w_router, experts, k):
@@ -154,9 +171,15 @@ print("✅ gather -> expert -> weighted scatter-add equals every-expert-on-every
 
 # %% [markdown]
 # ## Exercise 1.3 — count Mixtral by hand
-# From its config: 32 layers, $d = 4{,}096$, 32 query heads and 8 KV heads of 128, SwiGLU experts of width 14,336,
-# $E = 8$, $k = 2$, vocabulary 32,000, untied embedding and LM head, a bias-free router ($d \times E$). Compute
-# `total` and `active` (both embedding tables counted, the convention `roofline.llm.active_params()` uses).
+# The config of Mixtral gives these values:
+# - 32 layers, $d = 4{,}096$.
+# - 32 query heads and 8 KV heads of 128.
+# - SwiGLU experts of width 14,336, $E = 8$, $k = 2$.
+# - vocabulary 32,000, an untied embedding and LM head.
+# - a bias-free router ($d \times E$).
+#
+# Calculate `total` and `active`. Count both embedding tables. This is the convention that
+# `roofline.llm.active_params()` uses.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -176,10 +199,10 @@ print(f"✅ Mixtral: {total / 1e9:.2f}B total, {active / 1e9:.2f}B active ({tota
 
 # %% [markdown]
 # ## Exercise 1.4 — which "active"?
-# OpenAI reports gpt-oss-120b as 5.1B active; DeepSeek reports 37B for V3; `roofline.llm` counts both embedding
-# tables. Using `MoEConfig.active(embeddings=...)` with `"both"`, `"head"` and `"none"`, set `oss` and `ds` to dicts of
-# the three counts (in billions, 2 decimals), then set `oss_convention` and `ds_convention` to the one that
-# reproduces each published number (5.13 and 37.55 in our arithmetic).
+# OpenAI reports 5.1B active parameters for gpt-oss-120b. DeepSeek reports 37B for V3. `roofline.llm` counts both
+# embedding tables. Use `MoEConfig.active(embeddings=...)` with `"both"`, `"head"` and `"none"`. Set `oss` and `ds` to
+# dicts of the three counts (in billions, 2 decimals). Then set `oss_convention` and `ds_convention` to the convention
+# that agrees with each published number (5.13 and 37.55 in our arithmetic).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -196,10 +219,11 @@ print(f"✅ gpt-oss-120b {oss}, DeepSeek-V3 {ds}: a 201K-token vocabulary at d =
 
 # %% [markdown]
 # ## Exercise 1.5 — fine-grained experts at equal cost
-# Keep Mixtral's expert parameters per layer fixed (8 experts × width 14,336) but split each expert into 8
-# narrower ones (64 experts of width 1,792) and route each token to 16 of them. Compute, per layer:
-# `flops_ratio` = FLOPs per token (fine ÷ coarse), `params_ratio` = expert params (fine ÷ coarse), and
-# `combos_coarse`, `combos_fine` = the number of distinct expert sets a token can pick (`math.comb`).
+# Keep the expert parameters per layer of Mixtral constant (8 experts × width 14,336). But divide each expert into 8
+# narrower experts (64 experts of width 1,792), and route each token to 16 of them. Calculate these values per layer:
+# - `flops_ratio` = FLOPs per token (fine ÷ coarse).
+# - `params_ratio` = expert params (fine ÷ coarse).
+# - `combos_coarse`, `combos_fine` = the number of different expert sets that a token can select (`math.comb`).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -217,20 +241,24 @@ print(f"✅ same FLOPs, same parameters; {combos_coarse} expert sets vs {combos_
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "An MoE layer swaps the block's MLP for $E$ expert MLPs and a linear router. Each
-# token scores all $E$ experts, keeps its top-k, and sums those $k$ outputs weighted by the router — plus a shared
-# expert in models that have one. All $E$ experts sit in memory; each token computes only $k$ of them, so a model
-# like Mixtral holds 46.7B parameters but runs 12.9B per token, and DeepSeek-V3 holds 671B and runs about 37B.
+# **The two-minute version.** "An MoE layer replaces the MLP of the block with $E$ expert MLPs and a linear router.
+# Each token gives a score to all $E$ experts and keeps its top-k. It adds the outputs of those $k$ experts with the
+# router weights. Models that have a shared expert also add that expert. All $E$ experts stay in memory, but each token
+# calculates only $k$ of them.
 #
-# "The routers differ — softmax or sigmoid, renormalised or not, DeepSeek's selection-only bias — and so do the
-# 'active' numbers: gpt-oss counts only the LM head, DeepSeek both embedding tables. Kernels run the layer by
-# sorting tokens by expert and doing one grouped GEMM, so an unchosen expert costs no FLOPs — but it still costs
+# "Thus a model like Mixtral holds 46.7B parameters but runs 12.9B per token, and
+# DeepSeek-V3 holds 671B and runs approximately 37B.
+#
+# "The routers differ: softmax or sigmoid, renormalised or not, and the selection-only bias of DeepSeek. The 'active'
+# numbers also differ: gpt-oss counts only the LM head, and DeepSeek counts both embedding tables. Kernels sort the
+# tokens by expert and do one grouped GEMM. Thus an expert that no token selected costs no FLOPs. But it still costs
 # HBM, and at inference that is the whole story of the next notebooks."
 #
 # **Drill questions**
-# 1. *Why is Mixtral 46.7B and not 8 × 7B = 56B?* — Only the MLPs are replicated; attention, norms and the
-#    embedding tables are shared by all experts.
-# 2. *Two routers pick the same experts; why can their outputs differ?* — The combine weights: renormalised or not
-#    (Qwen3's default is not), sigmoid × 2.5 (DeepSeek), or applied to the input (Llama 4).
-# 3. *What does a shared expert buy?* — Common knowledge lives in one always-on MLP, so the routed experts can
-#    specialise; it also adds a fixed chunk of active parameters every token pays for.
+# 1. *Why is Mixtral 46.7B and not 8 × 7B = 56B?* The model replicates only the MLPs. All experts share the attention,
+#    the norms and the embedding tables.
+# 2. *Two routers select the same experts. Why can their outputs be different?* The combine weights differ. A router
+#    renormalises them or does not (the default of Qwen3 is not). DeepSeek uses sigmoid × 2.5. Llama 4 applies them to the
+#    input.
+# 3. *What does a shared expert give you?* Common knowledge lives in one MLP that is always on, so the routed experts
+#    can specialise. It also adds a constant quantity of active parameters that every token pays for.

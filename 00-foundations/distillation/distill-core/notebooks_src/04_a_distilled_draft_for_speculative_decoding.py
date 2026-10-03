@@ -1,21 +1,24 @@
 # %% [markdown]
 # # 04 · A distilled draft for speculative decoding
 #
-# **Tier:** T0 — CPU only, numpy, no network, under a minute. The target and drafts are the tiny next-token
-# models of `distillcore.tinylm`; acceptance is computed exactly from their distributions on the target's own
-# text. Measuring a distilled draft under vLLM's `--speculative-config` is `distill-lab` notebook
-# `04_a_distilled_draft_in_vllm` (T1).
+# **Tier:** T0, with only a CPU and numpy, no network, and less than a minute of run time. The target and the drafts are
+# the small next-token models of `distillcore.tinylm`. The notebook calculates acceptance exactly from their
+# distributions on the target's own text. The measurement of a distilled draft under vLLM's `--speculative-config` is in
+# `distill-lab` notebook `04_a_distilled_draft_in_vllm` (T1).
 #
 # ## The one-minute version
-# Speculative decoding (serving-engine primer §7) accepts a drafted token with probability $\min(1, p/q)$, which makes
-# the per-token acceptance $\alpha = \sum_v \min(p(v), q(v)) = 1 - \mathrm{TV}(p, q)$, and one target pass yields
-# $(1 - \alpha^{k+1}) / (1 - \alpha)$ tokens. So a draft model is a **student whose only metric is acceptance** —
-# measured where it matters, on the target's own text.
+# Speculative decoding (serving-engine primer §7) accepts a drafted token with probability $\min(1, p/q)$. This makes the
+# per-token acceptance $\alpha = \sum_v \min(p(v), q(v)) = 1 - \mathrm{TV}(p, q)$. One target pass gives
+# $(1 - \alpha^{k+1}) / (1 - \alpha)$ tokens. Thus a draft model is a **student whose only metric is acceptance**. You
+# measure the acceptance where it is important: on the target's own text.
 #
-# Training it on the target's outputs or distributions (distillation from the target) beats an off-the-shelf small
-# model of the same family, whose distribution differs wherever the target was fine-tuned. Bigger drafts accept more
-# and cost more per step; the speedup $E / (k\,c + 1)$ picks the size. And vLLM drafts greedily by default, which caps
-# acceptance at the target's top-token probability when the target samples. Primer: `../../PRIMER.md` §7.
+# A draft that trains on the target's outputs or distributions (distillation from the target) is better than an
+# off-the-shelf small model of the same family. The distribution of that small model is different wherever fine-tuning
+# changed the target. Larger drafts have a higher acceptance and cost more per step. The speedup $E / (k\,c + 1)$
+# selects the size.
+#
+# Also, by default vLLM makes greedy drafts. When the target samples, this puts a cap on the acceptance at the target's
+# top-token probability. Primer: `../../PRIMER.md` §7.
 
 # %%
 import numpy as np
@@ -40,16 +43,18 @@ for k in (1, 3, 4, 5):
 print(f"best k at c = 0.1: {Dr.best_k(a, 0.1)}; greedy drafting accepts p(argmax q) = {Dr.greedy_acceptance(P, Q):.2f}")
 
 # %% [markdown]
-# Two reading traps. vLLM's "draft acceptance rate" is $\text{accepted} \div \text{drafted} = (E - 1)/k$, which falls
-# as $k$ grows even at constant $\alpha$; $\alpha$ itself is the position-0 rate. And vLLM's draft models propose
-# their argmax by default (`draft_sample_method="greedy"`, verify), so the acceptance is $p(\operatorname{argmax} q)$
-# — 0.05 here, not 0.6.
+# There are two traps when you read these numbers. vLLM's "draft acceptance rate" is
+# $\text{accepted} \div \text{drafted} = (E - 1)/k$. It decreases as $k$ increases, even at constant $\alpha$. The value
+# $\alpha$ itself is the position-0 rate. Also, vLLM's draft models propose their argmax by default
+# (`draft_sample_method="greedy"`, verify). Thus the acceptance is $p(\operatorname{argmax} q)$: 0.05 here, not 0.6.
 #
 # ## Worked example 2 — a fine-tuned target and three drafts
-# The target was fine-tuned into a dialect of `ModLang`: its noise all goes to the +1 neighbour. Three drafts of
-# the same width (16 hidden units): an **off-the-shelf** small model trained on the base language (the same
-# family, not the fine-tune), a draft distilled on the **target's distributions** (logit KD), and one trained
-# on **24,000 tokens of the target's samples** (SeqKD from the target).
+# Fine-tuning changed the target into a dialect of `ModLang`: all of its noise goes to the +1 neighbour. There are three
+# drafts of the same width (16 hidden units):
+#
+# - an **off-the-shelf** small model that trained on the base language (the same family, not the fine-tune),
+# - a draft distilled on the **target's distributions** (logit KD),
+# - a draft that trained on **24,000 tokens of the target's samples** (SeqKD from the target).
 
 # %%
 base, dialect = ModLang(11, 0.2), ModLang(11, 0.2, skew=1.0)
@@ -77,12 +82,16 @@ for name, d in drafts.items():
           f"speedup at k = 4, c = {c16:.3f}: {Dr.speedup(r['alpha'], 4, c16):.2f}×")
 
 # %% [markdown]
-# The off-the-shelf draft knows the language but not the dialect: $\alpha = 0.890$. Distilled on the target's
-# distributions it reaches 0.988; from samples alone, 0.933 — samples estimate the target's distribution, soft targets
-# hand it over. At $k$ = 4 that is 1.86× against 2.26× (one CPU's run: another machine's matrix kernel lands within a
-# few hundredths of these, and within ±0.14 of $\alpha$ for the 4- and 8-unit drafts of the next example). Note the
-# greedy column: when the target samples at $T$ = 1, a greedy draft is accepted with probability
-# $p(\operatorname{argmax} q) \le \max p = 0.8$, however good the draft is.
+# The off-the-shelf draft knows the language but not the dialect: $\alpha = 0.890$. The draft distilled on the target's
+# distributions gets to 0.988. The draft from samples alone gets to 0.933. Samples give an estimate of the target's
+# distribution. Soft targets give the distribution itself. At $k$ = 4, that is 1.86× against 2.26×.
+#
+# These numbers are the run of one CPU. With the matrix kernel of another machine, the numbers are within a few
+# hundredths of these values. For the 4- and 8-unit drafts of the next example, the $\alpha$ of another machine is
+# within ±0.14 of the $\alpha$ of this run.
+#
+# Look at the greedy column. When the target samples at $T$ = 1, the target accepts a greedy draft with probability
+# $p(\operatorname{argmax} q) \le \max p = 0.8$. It does not matter how good the draft is.
 #
 # ## Worked example 3 — acceptance against draft size
 
@@ -99,15 +108,18 @@ for H in (4, 8, 16, 32):
     print(f"{H:12d} {c:6.3f} {al:7.3f} {Dr.speedup(al, 4, c):12.2f} {kb:7d} {Dr.speedup(al, kb, c):10.2f} {off:16.3f}")
 
 # %% [markdown]
-# Acceptance rises with size and saturates once the draft can hold the target (16 units here); cost keeps rising, so
-# the speedup turns over (the best $k$ is capped at 16 here). Below that size the capacity gap, not the training data,
-# sets $\alpha$: at 8 units the off-the-shelf draft even edges out the distilled one — which errors a too-small draft
-# makes depends on its training run. $c$ here is the ratio of parameters, the memory-bound view of a decode step; a
-# real engine adds per-step overheads (serving-engine primer §7).
+# Acceptance increases with size, and it saturates when the draft can hold the target (16 units here). The cost
+# continues to increase. Thus the speedup gets to a maximum and then decreases (the best $k$ has a cap of 16 here).
+#
+# Below that size, the capacity gap sets $\alpha$, not the training data. At 8 units, the off-the-shelf draft even scores
+# slightly higher than the distilled draft. The errors that a draft makes when it is too small depend on its training
+# run. Here, $c$ is the ratio of parameters: the memory-bound view of a decode step. A real engine adds per-step
+# overheads (serving-engine primer §7).
 #
 # ## Worked example 4 — the same arithmetic for a real pair
-# Qwen3-0.6B drafting for Qwen3-4B (same vocabulary, 151,936 — vLLM's `draft_model` requires equal vocab sizes).
-# At batch 1, decode streams the weights, so $c \approx$ the ratio of weight bytes. A model, not a measurement.
+# Qwen3-0.6B makes the drafts for Qwen3-4B (the same vocabulary, 151,936). vLLM's `draft_model` needs equal vocabulary
+# sizes. At batch 1, decode streams the weights. Thus $c \approx$ the ratio of weight bytes. This is a model, not a
+# measurement.
 
 # %%
 s06, s4 = K.SHAPES["qwen3-0.6b"], K.SHAPES["qwen3-4b"]
@@ -119,8 +131,8 @@ for al in (0.5, 0.6, 0.7, 0.8, 0.9):
 
 # %% [markdown]
 # ## Exercise 4.1 — score a draft where it will be used
-# Return the mean per-position acceptance $\sum_v \min(p(v), q(v))$ of `draft` against `target` over every generated
-# position of `seqs` (the target's own samples). Use `target.positions(seqs)` and `.probs(ctx)`.
+# Return the mean per-position acceptance $\sum_v \min(p(v), q(v))$ of `draft` against `target`. Calculate it over each
+# generated position of `seqs` (the target's own samples). Use `target.positions(seqs)` and `.probs(ctx)`.
 
 # %% exercise
 def mean_alpha(target, draft, seqs):
@@ -136,8 +148,8 @@ print("✅ α is measured on the target's own text, position by position — not
 
 # %% [markdown]
 # ## Exercise 4.2 — tokens per pass and the best depth
-# Write `tokens_per_pass(alpha, k)` $= 1 + \alpha + \dots + \alpha^k$ and `best_depth(alpha, c, k_max=16)`, the $k$
-# that maximises `tokens_per_pass` / $(k\,c + 1)$ (the smallest $k$ on ties).
+# Write `tokens_per_pass(alpha, k)` $= 1 + \alpha + \dots + \alpha^k$. Also write `best_depth(alpha, c, k_max=16)`: the
+# $k$ that maximises `tokens_per_pass` / $(k\,c + 1)$. If there is a tie, select the smallest $k$.
 
 # %% exercise
 def tokens_per_pass(alpha, k):
@@ -162,9 +174,9 @@ print("✅ α = 0.8, k = 4 → 3.36 tokens per pass; at c = 0.1 the best depth i
 
 # %% [markdown]
 # ## Exercise 4.3 — greedy against probabilistic drafting
-# A *perfect* draft ($q$ = $p$ at every position). The target samples at $T$ = 1. Predict `greedy_alpha`, the mean
-# acceptance when the draft proposes its argmax, and `prob_alpha`, when it samples from $q$. (In this dialect the
-# target's top token has probability 0.8 at every context.)
+# Use a *perfect* draft ($q$ = $p$ at each position). The target samples at $T$ = 1. Predict `greedy_alpha`, the mean
+# acceptance when the draft proposes its argmax. Also predict `prob_alpha`, the mean acceptance when the draft samples
+# from $q$. (In this dialect, the target's top token has probability 0.8 at each context.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -179,10 +191,15 @@ print(f"✅ a perfect draft: {perfect['greedy']:.3f} greedy, {perfect['alpha']:.
 
 # %% [markdown]
 # ## Exercise 4.4 — read vLLM's counters
-# A run reports, over its window: `num_drafts` = 10,000, `num_draft_tokens` = 40,000, `num_accepted_tokens` =
-# 17,332 and per-position accepted counts [7,000, 4,900, 3,430, 2,002]. Compute `mean_len` (tokens per pass,
-# bonus included), `alpha` (the position-0 rate) and `draft_rate` (accepted ÷ drafted), and say with
-# `iid` (True/False) whether the per-position rates are consistent with one $\alpha$ (within 0.01 of $\alpha^{i+1}$).
+# A run reports these values over its window: `num_drafts` = 10,000, `num_draft_tokens` = 40,000,
+# `num_accepted_tokens` = 17,332, and per-position accepted counts [7,000, 4,900, 3,430, 2,002]. Calculate:
+#
+# - `mean_len` (tokens per pass, bonus included),
+# - `alpha` (the position-0 rate),
+# - `draft_rate` (accepted ÷ drafted).
+#
+# Then set `iid` (True/False) to show if the per-position rates agree with one $\alpha$ (within 0.01 of
+# $\alpha^{i+1}$).
 
 # %% exercise
 num_drafts, num_draft_tokens, num_accepted = 10_000, 40_000, 17_332
@@ -203,7 +220,7 @@ print(f"✅ α = {alpha:.2f}, {mean_len:.4f} tokens per pass, a 'draft acceptanc
 
 # %% [markdown]
 # ## Exercise 4.5 — pick the draft
-# From the size sweep (`sizes`: $H \to (c, \alpha)$), choose `best_H`, the width with the highest speedup at $k$ = 4.
+# From the size sweep (`sizes`: $H \to (c, \alpha)$), select `best_H`: the width with the highest speedup at $k$ = 4.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -217,22 +234,22 @@ print("✅ 16 units: the smallest draft that holds the target — more acceptanc
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "A draft model is a student whose metric is acceptance,
-# $\alpha = \sum \min(p, q) = 1 - \mathrm{TV}$, on the target's own traffic. One target pass then yields
-# $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens, and the speedup is that over $k\,c + 1$. So we train the draft on the
-# target — on its outputs (SeqKD), or better its distributions — rather than take the family's small model off the
-# shelf: a fine-tuned target differs from its base exactly where the off-the-shelf draft will be rejected.
+# $\alpha = \sum \min(p, q) = 1 - \mathrm{TV}$, on the target's own traffic. Then one target pass gives
+# $(1 - \alpha^{k+1})/(1 - \alpha)$ tokens, and the speedup is that number divided by $k\,c + 1$. Thus we train the draft
+# on the target: on its outputs (SeqKD), or better, on its distributions. We do not take the small model of the family
+# off the shelf. This is because a fine-tuned target is different from its base exactly where the target will reject
+# the off-the-shelf draft.
 #
-# "We size the draft where the speedup turns over, check the vocabulary matches (vLLM requires it), draft
-# probabilistically for sampled traffic because greedy drafting is capped by the target's top-token probability, and
-# read vLLM's counters correctly: $\alpha$ is the position-0 rate, and the 'draft acceptance rate' is
-# $\left(E - 1\right)/k$."
+# "We select the draft size where the speedup gets to its maximum. We make sure that the vocabularies are the same (vLLM
+# needs this). For sampled traffic, we make probabilistic drafts, because the target's top-token probability puts a cap
+# on greedy drafts. Also, we read vLLM's counters correctly: $\alpha$ is the position-0 rate, and the 'draft acceptance
+# rate' is $\left(E - 1\right)/k$."
 #
 # **Drill questions**
-# 1. *Our draft's acceptance is 0.55 on chat traffic although it matched the target on benchmarks. Why?* — $\alpha$ is
-#    a property of the pair *on this traffic*; if the target is a fine-tune, retrain the draft on the target's
-#    own outputs for this traffic (SpecForge's data-regeneration step does exactly this).
-# 2. *vLLM reports a 'draft acceptance rate' of 0.33 at $k$ = 4. Is that $\alpha$?* — No: it is
-#    $\left(E - 1\right)/k$. With $E$ = 2.31 that is $\alpha \approx 0.6$ (per-position[0]). Read
-#    `…_accepted_tokens_per_pos` for $\alpha$.
-# 3. *Why not the biggest draft that fits?* — $c$ grows with size and $\alpha$ saturates; the speedup $E/(k\,c + 1)$ peaks
-#    at the smallest draft that holds the target's behaviour.
+# 1. *Our draft's acceptance is 0.55 on chat traffic, although it matched the target on benchmarks. Why?* $\alpha$ is a
+#    property of the pair *on this traffic*. If the target is a fine-tune, train the draft again on the target's own
+#    outputs for this traffic. The data-regeneration step of SpecForge does exactly this.
+# 2. *vLLM reports a 'draft acceptance rate' of 0.33 at $k$ = 4. Is that $\alpha$?* No, it is $\left(E - 1\right)/k$.
+#    With $E$ = 2.31, that is $\alpha \approx 0.6$ (per-position[0]). Read `…_accepted_tokens_per_pos` for $\alpha$.
+# 3. *Why not the largest draft that fits?* $c$ increases with size, and $\alpha$ saturates. The speedup
+#    $E/(k\,c + 1)$ has its peak at the smallest draft that holds the target's behaviour.

@@ -1,32 +1,33 @@
 # %% [markdown]
 # # 03 · Batch versus weight stream: why an MoE decodes like a small model at batch 1 and a big one at 64
 #
-# **Tier:** T1 — one GPU running `vllm serve` for an MoE and for a dense model; a closed-loop client
-# measures the decode step time at each batch. T0 — the same curves from the roofline with stated
-# efficiencies (**simulated**), and every formula checked against layer 01's numbers.
+# **Tier:** T1: one GPU that runs `vllm serve` for an MoE and for a dense model. A closed-loop client measures
+# the decode step time at each batch. T0: the same curves from the roofline with stated efficiencies
+# (**simulated**). Every formula has a check against the numbers of layer 01.
 #
 # ## The one-minute version
 #
-# * A decode step streams the weights once for the whole batch. A dense model streams all of them at
-#   any batch, so its step time is flat until the batch makes it compute-bound.
-# * An MoE streams only the experts its tokens touch: $E(1 - (1 - k/E)^T)$ per layer for $T$ tokens
-#   with uniform routing. At batch 1 that is $k$ experts — the MoE decodes like its *active* size; by
-#   $T \approx 3E/k$ nearly every expert streams — it decodes like its *total* size. Skewed routing
-#   touches fewer.
-# * The step turns compute-bound only when each streamed expert sees enough tokens
-#   ($\text{batch} \cdot k/E$ of them), so the crossover batch scales with total/active: 207 for
-#   Llama-3.1-8B, 754 for Mixtral-8x7B and 2,055 for Qwen3-30B-A3B on an H200 (layer 01 PRIMER §3.6).
-#   MoE wants big batches.
-# * The fused MoE kernel sorts the token–expert pairs by expert and pads each expert's rows to a tile
-#   (`BLOCK_SIZE_M`): at batch 1 almost every row it multiplies is padding — harmless, because the step
-#   is memory-bound, and the reason tuned kernel configs are keyed by batch size.
+# * A decode step streams the weights one time for the whole batch. A dense model streams all of them at any
+#   batch. Thus its step time is flat until the batch makes it compute-bound.
+# * An MoE streams only the experts that its tokens touch: $E(1 - (1 - k/E)^T)$ per layer for $T$ tokens with
+#   uniform routing. At batch 1, that is $k$ experts, and the MoE decodes like its *active* size. By
+#   $T \approx 3E/k$, almost every expert streams, and the MoE decodes like its *total* size. Skewed routing
+#   touches fewer experts.
+# * The step becomes compute-bound only when each streamed expert sees sufficient tokens
+#   ($\text{batch} \cdot k/E$ of them). Thus the crossover batch scales with total/active: 207 for
+#   Llama-3.1-8B, 754 for Mixtral-8x7B and 2,055 for Qwen3-30B-A3B on an H200 (layer 01 PRIMER §3.6). MoE
+#   wants large batches.
+# * The fused MoE kernel sorts the token–expert pairs by expert. It pads the rows of each expert to a tile
+#   (`BLOCK_SIZE_M`). At batch 1, almost every row that it multiplies is padding. This causes no problem,
+#   because the step is memory-bound. It is also the reason that the tuned kernel configs use the batch size
+#   as their key.
 #
 # Concepts: PRIMER §5 "MoE at inference: which experts a step touches" and §6 "Running MoE on GPUs"
-# ([`PRIMER.md`](../../PRIMER.md)). The formulas are layer 01's
-# ([roofline PRIMER §3.6](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md),
-# `roofline.llm.experts_touched`, `streamed_weight_bytes`, `decode`, `decode_crossover_batch`),
-# re-implemented in `moelab.stream` and reproduced digit for digit below (this topic's `moe-core`
-# notebook 03 predicts the same curves; this notebook adds the measurement).
+# ([`PRIMER.md`](../../PRIMER.md)). The formulas are those of layer 01 ([roofline PRIMER
+# §3.6](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md), `roofline.llm.experts_touched`,
+# `streamed_weight_bytes`, `decode`, `decode_crossover_batch`). `moelab.stream` implements them again, and the
+# cells of this notebook reproduce them digit for digit. Notebook 03 of the `moe-core` of this topic predicts
+# the same curves. This notebook adds the measurement.
 
 # %%
 import os
@@ -56,9 +57,9 @@ print(f"GPU for predictions: {GPU.name} | MoE {MOE.name} (active {MOE.active_par
 # %% [markdown]
 # ## Worked example: layer 01's MoE table, reproduced
 #
-# Mixtral-8x7B on an H200 at 1K context (layer 01 PRIMER §3.6, pinned there by
-# `roofline-core/tests/test_primer_numbers.py`): 2.00 experts per layer and 25.6 GB (5.34 ms) at batch
-# 1; 7.92 experts and 94.4 GB (19.66 ms) at batch 16.
+# This is Mixtral-8x7B on an H200 at 1K context (layer 01 PRIMER §3.6, where
+# `roofline-core/tests/test_primer_numbers.py` pins the numbers). At batch 1, it reads 2.00 experts per layer
+# and 25.6 GB (5.34 ms). At batch 16, it reads 7.92 experts and 94.4 GB (19.66 ms).
 
 # %%
 print("batch  Mixtral experts/layer  step bytes  step time   Qwen3-30B-A3B experts/layer")
@@ -70,9 +71,9 @@ for b in (1, 4, 16, 64):
 # %% [markdown]
 # ## Exercise 3.1 — experts touched, closed form
 #
-# Each token picks $k$ *distinct* experts of $E$ uniformly, so a given expert escapes one token with
-# probability exactly $1 - k/E$, and $T$ independent tokens with $(1 - k/E)^T$. Write
-# `touched(E, k, T)`, the expected number of distinct experts a layer reads for $T$ tokens (1 for a
+# Each token selects $k$ *distinct* experts of $E$ uniformly. Thus the probability that one token does not
+# select a given expert is exactly $1 - k/E$. For $T$ independent tokens, this probability is $(1 - k/E)^T$.
+# Write `touched(E, k, T)`: the expected number of distinct experts that a layer reads for $T$ tokens (1 for a
 # dense model, $E = 0$).
 
 # %% exercise
@@ -95,10 +96,10 @@ print(f"✅ Mixtral 2.00 -> 7.92 experts by batch 16; OLMoE (64, top-8) at batch
 # %% [markdown]
 # ## Exercise 3.2 — skewed routing, by Monte Carlo
 #
-# Real routers are not uniform (notebook 02). Sample it: for popularity `p` over $E$ experts, draw each
-# token's $k$ distinct experts in proportion to `p` with the **Gumbel top-k** trick — the top-k of
-# `log p + Gumbel noise` is a sample without replacement. Write `touched_skewed(p, k, T, trials, seed)`
-# → mean distinct experts per layer.
+# Real routers are not uniform (notebook 02). Sample the routing. For popularity `p` over $E$ experts, sample
+# the $k$ distinct experts of each token in proportion to `p`. Use the **Gumbel top-k** trick: the top-k of
+# `log p + Gumbel noise` is a sample without replacement. Write `touched_skewed(p, k, T, trials, seed)`. It
+# returns the mean number of distinct experts per layer.
 
 # %% exercise
 def touched_skewed(p, k, T, trials=200, seed=0):
@@ -127,11 +128,16 @@ print("✅ skew touches fewer experts per step (good for one GPU's weight stream
 # %% [markdown]
 # ## Exercise 3.3 — bytes one decode step reads
 #
-# Write `step_bytes(model, batch, context, wb=2, kvb=2)`: per layer attention + router + shared
-# expert + `touched(E, k, batch)` routed experts, times layers; plus the LM head; plus the `batch`
-# rows gathered from the input embedding; all times `wb` bytes — then add the KV cache each sequence
-# reads, `batch · (context + 1) · kv_bytes_per_token`. `configs.Model` has `attn_params()`,
-# `expert_params()`, `shared_params()`, `router_params()`, `kv_bytes_per_token(kvb)`, `vocab`, `d_model`.
+# Write `step_bytes(model, batch, context, wb=2, kvb=2)`. Add these parameters:
+#
+# 1. For each layer: attention, router, shared expert and `touched(E, k, batch)` routed experts. Multiply this
+#    sum by the number of layers.
+# 2. The LM head.
+# 3. The `batch` rows that the step gathers from the input embedding.
+#
+# Multiply the total by `wb` bytes. Then add the KV cache that each sequence reads,
+# `batch · (context + 1) · kv_bytes_per_token`. `configs.Model` has `attn_params()`, `expert_params()`,
+# `shared_params()`, `router_params()`, `kv_bytes_per_token(kvb)`, `vocab` and `d_model`.
 
 # %% exercise
 def step_bytes(model, batch, context, wb=2, kvb=2):
@@ -154,9 +160,9 @@ print(f"✅ Mixtral on an H200: 25.6 GB at batch 1, 94.4 GB at 16; at batch 64 i
 # %% [markdown]
 # ## Exercise 3.4 — the batch where decode turns compute-bound
 #
-# With `stream.decode_step(model, gpu, batch, context)` (its `.bound` is "compute" or "memory"), write
-# `crossover(model, gpu, context=0)`: the smallest batch whose step is compute-bound. The step flips
-# once, so double until it does, then bisect.
+# Use `stream.decode_step(model, gpu, batch, context)`. Its `.bound` is "compute" or "memory". Write
+# `crossover(model, gpu, context=0)`: the smallest batch whose step is compute-bound. The step changes only
+# one time. Thus double the batch until the step changes. Then bisect.
 
 # %% exercise
 def crossover(model, gpu, context=0, max_batch=1 << 20):
@@ -187,9 +193,9 @@ print(f"✅ H200 crossovers {x}; each MoE's is Llama-3.1-8B's x (total / active 
 # %% [markdown]
 # ## Worked example: the simulated ITL curves on this GPU
 #
-# `stream.simulate_itl` = the roofline step divided by stated efficiencies plus a per-step overhead
-# (`SimParams`: 70% of bandwidth, 50% of FLOP/s, 2.5 ms — assumptions until Exercise 3.6 calibrates
-# them on your GPU). Context 512 tokens.
+# `stream.simulate_itl` = the roofline step divided by stated efficiencies, plus a per-step overhead
+# (`SimParams`: 70% of bandwidth, 50% of FLOP/s, 2.5 ms). These values are assumptions until Exercise 3.6
+# calibrates them on your GPU. The context is 512 tokens.
 
 # %%
 P = stream.SimParams()
@@ -202,21 +208,25 @@ for i, b in enumerate(BATCHES):
           f"  {stream.experts_touched(MOE.n_experts, MOE.top_k, b):8.1f} / {MOE.n_experts}  {s.kv_bytes / s.bytes:7.0%}")
 
 # %% [markdown]
-# The MoE starts near the dense model (similar active size) and climbs until its whole expert set
-# streams, then both flatten until KV reads and compute take over. Throughput still rises with batch
-# for both — the MoE's cost per token falls once every expert's stream is shared by many tokens. That
-# is why MoE serving is about big batches, and why expert parallelism (notebook 04) exists: to put
-# more tokens in front of each expert per step.
+# The MoE starts near the dense model (a similar active size). It increases until its full expert set streams.
+# Then both curves become flat until the KV reads and the compute become the most important costs.
+#
+# For both models, the throughput still increases with batch. The cost per token of the MoE decreases when
+# many tokens share the stream of every expert. That is why MoE serving is about large batches. It is also why
+# expert parallelism (notebook 04) exists: to put more tokens in front of each expert per step.
 #
 # ## Exercise 3.5 — how the fused MoE kernel lays tokens out
 #
-# vLLM's `moe_align_block_size(topk_ids, block_size, num_experts)` flattens the $T \times k$
-# assignments, groups them by expert (ascending id), pads each expert's group to a multiple of
-# `block_size` with a pad id equal to $T \cdot k$, and returns
-# `(sorted_token_ids, expert_ids per block, num_tokens_post_padded)`.
-# The Triton kernel then runs one `BLOCK_SIZE_M`-row tile per block against that block's expert.
-# Write `align(topk_ids, block_size, num_experts)` with the same semantics (experts with no tokens
-# get no blocks). The check replays the example in vLLM's docstring.
+# The vLLM `moe_align_block_size(topk_ids, block_size, num_experts)` does these steps:
+#
+# 1. It flattens the $T \times k$ assignments.
+# 2. It groups them by expert (from the lowest id to the highest).
+# 3. It pads the group of each expert to a multiple of `block_size`, with a pad id equal to $T \cdot k$.
+# 4. It returns `(sorted_token_ids, expert_ids per block, num_tokens_post_padded)`.
+#
+# Then the Triton kernel runs one `BLOCK_SIZE_M`-row tile per block against the expert of that block. Write
+# `align(topk_ids, block_size, num_experts)` with the same semantics (experts with no tokens get no blocks).
+# The check replays the example in the vLLM docstring.
 
 # %% exercise
 def align(topk_ids, block_size, num_experts):
@@ -248,18 +258,18 @@ print("✅ at batch 1 each of the 8 touched experts gets a 16-row tile for 1 rea
       "so it costs almost nothing — by batch 512 padding is about a tenth of the rows")
 
 # %% [markdown]
-# vLLM keys its tuned kernel configs by batch size $M$ (`E=64,N=1024,device_name=...json` maps $M$ to
-# `BLOCK_SIZE_M/N/K`, `GROUP_SIZE_M`, warps, stages) and uses the nearest $M$. There are no tuned files
-# for T4, L4 or A10 in the tree (main, Sep 2026), so on those GPUs vLLM logs *"Using default MoE
-# config. Performance might be sub-optimal!"* — notebook 05 finds that line in a start-up log.
-# `benchmarks/kernels/benchmark_moe.py` generates one for your GPU (T1).
+# vLLM uses the batch size $M$ as the key of its tuned kernel configs. `E=64,N=1024,device_name=...json` maps
+# $M$ to `BLOCK_SIZE_M/N/K`, `GROUP_SIZE_M`, warps and stages. vLLM uses the nearest $M$. The tree has no
+# tuned files for T4, L4 or A10 (main, Sep 2026). Thus on those GPUs, vLLM logs *"Using default MoE config.
+# Performance might be sub-optimal!"* (notebook 05 finds that line in a start-up log).
+# `benchmarks/kernels/benchmark_moe.py` generates a tuned file for your GPU (T1).
 #
 # ## Worked example: the grouped GEMM (torch, optional)
 #
-# Once the rows are sorted by expert, the experts' matmuls are one *grouped* GEMM: a list of
-# `[rows_e, d] @ [d, n]` problems in one launch. Torch 2.14 exposes it as
-# `torch.nn.functional.grouped_mm(a, b, offs=...)` (offsets = cumulative rows per expert); here it runs
-# in bf16 on the CPU and is compared with a per-expert loop.
+# When the rows are in order of expert, the matmuls of the experts are one *grouped* GEMM: a list of
+# `[rows_e, d] @ [d, n]` problems in one launch. Torch 2.14 supplies it as
+# `torch.nn.functional.grouped_mm(a, b, offs=...)` (offsets = cumulative rows per expert). In the next cell,
+# it runs in bf16 on the CPU, and the cell compares it with a per-expert loop.
 
 # %%
 if env.has_torch():
@@ -285,11 +295,13 @@ else:
 # %% [markdown]
 # ## Exercise 3.6 — calibrate the simulation from two measurements
 #
-# The simulation's efficiencies are guesses. On a real GPU, measure the ITL at two or more
-# memory-bound batches and fit `itl = overhead + t_mem / eff`, where `t_mem` is the step's memory time
-# at 100% bandwidth (`stream.decode_step(...).t_memory`). Write `calibrate(points)` for a list of
-# `(t_mem, itl)` pairs → `(eff, overhead)` by least squares (a straight line: slope 1/eff, intercept
-# overhead). The check recovers known parameters from simulated points.
+# The efficiencies of the simulation are guesses. On a real GPU, measure the ITL at two or more memory-bound
+# batches. Then fit `itl = overhead + t_mem / eff`. Here `t_mem` is the memory time of the step at 100%
+# bandwidth (`stream.decode_step(...).t_memory`).
+#
+# Write `calibrate(points)`. For a list of `(t_mem, itl)` pairs, it returns `(eff, overhead)` by least squares
+# (a straight line: slope 1/eff, intercept overhead). The check recovers known parameters from simulated
+# points.
 
 # %% exercise
 def calibrate(points):
@@ -311,10 +323,12 @@ print(f"✅ recovered eff {eff:.2f} and overhead {ovh * 1e3:.1f} ms; with measur
 # %% [markdown]
 # ## On a real GPU (T1): measure both curves
 #
-# Start the two servers (one at a time on a small GPU; ports 8000 and 8001 if both fit), then point
-# the notebook at them. `stream.measure_itl` runs a closed loop at each concurrency with fixed
-# output lengths (`ignore_eos`), so the engine decodes a batch of about that size; the median ITL is
-# the step time. With `MOELAB_START_VLLM=1` the cell starts and stops the servers itself.
+# Start the two servers. On a small GPU, start one at a time. If both fit, use ports 8000 and 8001. Then point
+# the notebook at them.
+#
+# `stream.measure_itl` runs a closed loop at each concurrency with constant output lengths (`ignore_eos`).
+# Thus the engine decodes a batch of about that size, and the median ITL is the step time. With
+# `MOELAB_START_VLLM=1`, the cell starts and stops the servers itself.
 #
 # ```bash
 # vllm serve allenai/OLMoE-1B-7B-0924-Instruct --max-model-len 4096 --port 8000       # L4 / 24 GB (bf16)
@@ -322,8 +336,8 @@ print(f"✅ recovered eff {eff:.2f} and overhead {ovh * 1e3:.1f} ms; with measur
 # MOELAB_URL=http://127.0.0.1:8000 MOELAB_DENSE_URL=http://127.0.0.1:8001 jupyter lab notebooks/
 # ```
 #
-# On a T4 add `--dtype half` and use `ibm-granite/granite-3.0-3b-a800m-instruct` as the MoE (OLMoE in
-# fp16 leaves no room for KV on 16 GB without offload — notebook 05).
+# On a T4, add `--dtype half`. Use `ibm-granite/granite-3.0-3b-a800m-instruct` as the MoE. Without offload,
+# OLMoE in fp16 leaves no space for KV on 16 GB (notebook 05).
 
 # %%
 MEASURE = [1, 2, 4, 8, 16, 32]
@@ -354,23 +368,26 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "A decode step's cost is the bytes it streams. A dense model streams all its
-# weights at any batch; an MoE streams only the experts its tokens touch — $k$ per layer at batch 1,
-# nearly all $E$ once the batch passes a few times $E/k$. So OLMoE decodes about like a 1.3B model for
-# one user and like a 7B model for thirty-two, and Mixtral on an H200 goes from 25.6 GB to 94.4 GB per
-# step between batch 1 and 16. The step stays memory-bound until each expert sees enough tokens, so the
-# compute-bound crossover moves out by total/active — 754 for Mixtral against 207 for Llama-3.1-8B.
+# **Two minutes:** "The cost of a decode step is the bytes that it streams. A dense model streams all its
+# weights at any batch. An MoE streams only the experts that its tokens touch. That is $k$ per layer at batch
+# 1, and almost all $E$ when the batch is more than a few times $E/k$. Thus OLMoE decodes approximately like a
+# 1.3B model for one user and like a 7B model for thirty-two. Mixtral on an H200 goes from 25.6 GB to 94.4 GB
+# per step between batch 1 and 16.
 #
-# "We therefore plan MoE capacity at high batch, where the cost per token is lowest, and treat
-# batch-1 latency as the easy case. The simulation gives the shape; two measured points calibrate it."
+# "The step stays memory-bound until each expert sees sufficient tokens. Thus the compute-bound crossover
+# moves out by total/active: 754 for Mixtral against 207 for Llama-3.1-8B.
 #
-# **Drill 1.** *Our MoE has 1/5 the active parameters of the dense model but only 1.3x its throughput
-# at batch 64. Why?* — At batch 64 it streams (nearly) all experts every step: bytes follow the total,
-# not the active count. The active count sets FLOPs, which only matter once compute-bound.
+# "Thus we plan MoE capacity at high batch, where the cost per token is lowest. We treat batch-1 latency as
+# the easy case. The simulation gives the shape, and two measured points calibrate it."
 #
-# **Drill 2.** *Does skewed routing help or hurt?* — On one GPU it helps a little (fewer distinct
-# experts streamed); under EP it hurts (the GPU holding the hot experts is the slowest).
+# **Drill 1.** *Our MoE has 1/5 the active parameters of the dense model, but only 1.3x its throughput at
+# batch 64. Why?* At batch 64, it streams (almost) all experts in every step. The bytes depend on the total
+# count, not on the active count. The active count sets the FLOPs, which are important only when the step is
+# compute-bound.
 #
-# **Drill 3.** *Is the padding in the fused MoE kernel wasted money at batch 1?* — Wasted FLOPs, not
-# time: the step is memory-bound, so the idle tensor cores cost nothing. It matters near the
-# compute-bound regime, where tuned `BLOCK_SIZE_M` per batch size recovers it.
+# **Drill 2.** *Does skewed routing help or hurt?* On one GPU, it helps slightly (it streams fewer distinct
+# experts). Under EP, it hurts (the GPU that holds the hot experts is the slowest).
+#
+# **Drill 3.** *Is the padding in the fused MoE kernel wasted money at batch 1?* It wastes FLOPs, not time.
+# The step is memory-bound, thus the idle tensor cores cost nothing. It is important near the compute-bound
+# regime, where a tuned `BLOCK_SIZE_M` for each batch size recovers it.

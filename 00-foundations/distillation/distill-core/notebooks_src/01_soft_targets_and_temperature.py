@@ -1,24 +1,27 @@
 # %% [markdown]
 # # 01 · Soft targets and temperature
 #
-# **Tier:** T0 — CPU only, numpy, no network, about a minute. The models are tiny next-token networks with
-# manual gradients (`distillcore.tinylm`), trained in seconds on `ModLang`, a toy language whose true
-# distribution is known exactly — so "how much did the student learn?" has an exact answer. The same losses on a
-# real transformer are `distill-lab` notebook `01_kd_on_a_tiny_transformer`.
+# **Tier:** T0. It uses only a CPU and numpy, it needs no network, and it takes about a minute. The models are small
+# next-token networks with manual gradients (`distillcore.tinylm`). They train in seconds on `ModLang`, a toy language,
+# and we know the true distribution of this language exactly. Thus the question "how much did the student learn?" has an
+# exact answer. The same losses on a real transformer are in `distill-lab` notebook `01_kd_on_a_tiny_transformer`.
 #
 # ## The one-minute version
-# A teacher's output is a whole distribution, not just its top token. Hinton's **soft targets**
-# $p_T = \operatorname{softmax}(z / T)$ expose how the teacher ranks the wrong answers — the **dark knowledge** — and
-# a temperature $T$ > 1 turns the small logits up.
+# The output of a teacher is a full distribution, not only its top token. Hinton's **soft targets**
+# $p_T = \operatorname{softmax}(z / T)$ show how the teacher ranks the incorrect answers. This ranking is the
+# **dark knowledge**. A temperature $T$ > 1 gives more weight to the small logits.
 #
-# The classic loss is $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}(y, q)$: its soft term's
-# gradient on the student's logits is $T\,(q_T - p_T)$, and the $T^2$ keeps it from fading as $T$ grows; as
-# $T \to \infty$ it becomes matching centred logits. A hard label is the same loss with a one-hot target, and sampling
-# it adds $1 - \sum p^2$ of noise per example that the teacher's distribution does not — which is why a student learns
-# more per example from soft targets than a same-size model trained from scratch on the same tokens.
+# The classic loss is $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}(y, q)$. The gradient of its
+# soft term on the student's logits is $T\,(q_T - p_T)$. The $T^2$ prevents a decrease of this gradient as $T$
+# increases. As $T \to \infty$, the soft term becomes a match of the centred logits.
 #
-# And there are three routes to a small model: train it small, prune a big one, or distil — pruning then distilling
-# gets there in fewer steps. After this notebook you can compute every one of those numbers by hand. Primer:
+# A hard label is the same loss with
+# a one-hot target. A sample of that label adds $1 - \sum p^2$ of noise per example, and the teacher's distribution does
+# not add this noise. That is why a student learns more per example from soft targets than a same-size model that
+# trains from scratch on the same tokens.
+#
+# There are three routes to a small model: train it small, prune a large one, or distil. If you prune and then distil,
+# you get there in fewer steps. After this notebook, you can calculate each of those numbers by hand. Primer:
 # `../../PRIMER.md` §1–§2 (and §6 for pruning).
 
 # %%
@@ -36,9 +39,9 @@ def show(name, p):
 
 # %% [markdown]
 # ## Worked example 1 — soft targets on five tokens
-# The teacher is sure token 0 is right, but it also says token 1 is a far better second choice than tokens 3
-# or 4. That ranking is invisible in a hard label (`[1, 0, 0, 0, 0]`). Raising $T$ flattens the distribution and
-# makes the ranking of the unlikely tokens carry weight.
+# The teacher is sure that token 0 is correct. But it also says that token 1 is a much better second choice than tokens
+# 3 or 4. A hard label (`[1, 0, 0, 0, 0]`) does not show that ranking. When you increase $T$, the distribution becomes
+# flatter. Thus the ranking of the unlikely tokens gets weight.
 
 # %%
 for T in (1, 2, 4):
@@ -48,9 +51,10 @@ print(f"KL(p ‖ q) at T = 1: {L.kl(L.softmax(Z), L.softmax(V))[0]:.5f} nats")
 
 # %% [markdown]
 # ## Worked example 2 — the loss, its gradient and the T² factor
-# $\mathrm{KL}(p_T \,\|\, q_T)$ shrinks roughly as $1/T^2$ when $T$ grows, and so does its gradient $(q_T - p_T)/T$ —
-# so without a correction, a soft term at $T$ = 4 is drowned by the hard-label term. Multiplying by $T^2$ restores the
-# scale; the limit is logit matching,
+# When $T$ increases, $\mathrm{KL}(p_T \,\|\, q_T)$ decreases approximately as $1/T^2$. Its gradient $(q_T - p_T)/T$
+# also decreases approximately as $1/T^2$. Thus, without a correction, the hard-label term is much larger than a soft
+# term at $T$ = 4, and the soft term has almost no effect. A multiplication by $T^2$ puts the scale back. The limit is
+# logit matching,
 #
 # $$
 # \frac{1}{2N}\,\lVert (v - \bar{v}) - (z - \bar{z}) \rVert^2.
@@ -65,9 +69,9 @@ print("gradient of KL at T = 2, (q − p)/T:", np.round(L.kd(V, Z, 2.0, scale=Fa
 
 # %% [markdown]
 # ## Worked example 3 — the toy language, a teacher, and the capacity gap
-# `ModLang`: after tokens ($a$, $b$) the next token is $(a + b) \bmod 11$ with probability 0.8 and each neighbour with
-# 0.1. The rule is a 121-entry lookup table with no smooth structure, so width is capacity. The teacher (64 hidden
-# units) learns it; narrower models cannot.
+# `ModLang`: after the tokens ($a$, $b$), the next token is $(a + b) \bmod 11$ with probability 0.8, and each neighbour
+# has the probability 0.1. The rule is a lookup table with 121 entries and no smooth structure. Thus width is capacity.
+# The teacher (64 hidden units) learns the rule. Narrower models cannot learn it.
 
 # %%
 lang = ModLang(11, 0.2)
@@ -81,13 +85,15 @@ for H in (64, 16, 8, 4):
 print(f"label noise of one hard example, 1 − Σp² = {L.label_noise(lang.true_probs(C[:1]))[0]:.2f}")
 
 # %% [markdown]
-# Everything below uses a 16-unit student: big enough to hold the language, so what it learns depends only on
-# the training signal. (Eight units is the capacity gap: 93.4% of contexts at best.)
+# All the worked examples after this cell use a 16-unit student. This student is sufficiently large to hold the
+# language. Thus what it learns depends only on the training signal. An 8-unit student shows the capacity gap: it
+# is correct on 93.4% of contexts at best.
 #
 # ## Worked example 4 — soft targets carry more per example
-# Same student, same contexts, same number of steps. One trains on the sampled next token (hard labels — a
-# same-size model trained from scratch on the same tokens); the other on the teacher's distribution at those
-# contexts (KD at $T$ = 1). $N$ = 242 is two examples per context on average; 605 is five.
+# The two runs use the same student, the same contexts and the same number of steps. One student trains on the sampled
+# next token. These are hard labels: the student is a same-size model that trains from scratch on the same tokens. The
+# other student trains on the teacher's distribution at those contexts (KD at $T$ = 1). $N$ = 242 is two examples per
+# context on average. $N$ = 605 is five examples per context.
 
 # %%
 results = {}
@@ -105,16 +111,21 @@ for N in (242, 605):
         print(f"N = {N:3d}  {name:12s}  KL(truth ‖ student) {r['kl']:6.3f}   rule accuracy {r['rule_acc']:.3f}")
 
 # %% [markdown]
-# With two examples per context, soft targets give 87.6% rule accuracy against 67.8%; with five, 99.2%
-# against 91.7%. The hard-label student is also badly calibrated: it never saw most neighbours, so it gives
-# them almost no probability, and its KL to the truth is large. A soft target tells it about all eleven tokens
-# at once. This is the whole case for distilling rather than training small from scratch on the same data.
+# With two examples per context, soft targets give 87.6% rule accuracy against 67.8%. With five, they give 99.2%
+# against 91.7%. The hard-label student also has a bad calibration. It never saw most neighbours, so it gives them
+# almost no probability, and its KL to the truth is large. A soft target tells it about all eleven tokens at the same
+# time. This is the full case for distillation, instead of a small model that trains from scratch on the same data.
 #
 # ## Worked example 5 — three routes to a small model
-# Train small from scratch (hard labels), distil into a fresh small model, or **prune** the teacher to 16 hidden
-# units by activation magnitude (Minitron's width pruning) and distil into what is left. One run proves little
-# here, so compare over five draws of the 242 training contexts (draw 1 is worked example 4's), with four
-# initialisations of the fresh student per draw.
+# Compare three routes to a small model:
+#
+# - train it small from scratch (hard labels),
+# - distil into a new small model,
+# - **prune** the teacher to 16 hidden units by activation magnitude (Minitron's width pruning), and distil into the
+#   model that stays.
+#
+# One run does not prove much here. Thus compare the routes over five draws of the 242 training contexts. Draw 1 is the draw
+# of worked example 4. Each draw has four initialisations of the new student.
 
 # %%
 def prune_vs_fresh(steps, draws=range(1, 6), inits=range(1, 5)):
@@ -138,17 +149,21 @@ for steps in (0, 20, 100):
           f"fresh {fr.mean():.3f} ({fr.min():.3f}–{fr.max():.3f})")
 
 # %% [markdown]
-# Pruning alone breaks the model (0.317 on average), but not back to nothing: a fresh student scores 0.097. KD
-# from the parent repairs it fast. After 20 steps the worst pruned student (0.612) beats the best fresh one
-# (0.331). By 100 steps the two are within seed noise, and a single draw could show either one ahead. (The
-# numbers here are one CPU's: numpy's matrix kernel differs by microarchitecture, and a few hundred Adam steps
-# turn last-bit differences into a slightly different model, so your run may differ in the last digits — the
-# core's tests hold each number to the spread measured across kernels, `tests/test_primer_numbers.py`.) Pruning
-# buys a head start in training steps, not a better student: Minitron's argument (prune by importance, then
-# distil from the parent, with far fewer training tokens per model) in miniature.
+# Pruning alone damages the model (0.317 on average), but the pruned model is better than nothing: a new student
+# scores 0.097. KD from the parent repairs the pruned model fast. After 20 steps, the worst pruned student (0.612) is
+# better than the best new student (0.331). At 100 steps, the difference between the two is within seed noise, and one
+# draw can show either one ahead.
+#
+# The numbers here come from one CPU. The matrix kernel of numpy changes with the microarchitecture. A few hundred
+# Adam steps change last-bit differences into a slightly different model. Thus your run can differ in the last digits.
+# The core's tests hold each number to the spread that we measured across kernels, `tests/test_primer_numbers.py`.
+#
+# Pruning gives a head start in training steps, not a better student. This is Minitron's argument at a small scale:
+# prune by importance, then distil from the parent, with many fewer training tokens per model.
 #
 # ## Exercise 1.1 — temperature
-# Write `softmax_T(z, T)`: the softmax of $z\,/\,T$ along the last axis, numerically stable (subtract the max).
+# Write `softmax_T(z, T)`. It returns the softmax of $z\,/\,T$ along the last axis. Make it numerically stable:
+# subtract the max.
 
 # %% exercise
 def softmax_T(z, T):
@@ -168,8 +183,8 @@ print("✅ p_T = softmax(z/T): T > 1 flattens, T < 1 sharpens, and a large logit
 
 # %% [markdown]
 # ## Exercise 1.2 — the gradient Hinton's loss hands the student
-# Return the gradient of $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ with respect to the student's logits `v` (one row), where
-# $p_T = \operatorname{softmax}(z/T)$ and $q_T = \operatorname{softmax}(v/T)$. Derive it; do not use finite
+# Return the gradient of $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ with respect to the student's logits `v` (one row). Here
+# $p_T = \operatorname{softmax}(z/T)$ and $q_T = \operatorname{softmax}(v/T)$. Derive the gradient. Do not use finite
 # differences.
 
 # %% exercise
@@ -188,13 +203,13 @@ print("✅ ∂(T²·KL)/∂v = T·(q_T − p_T): without the T² it would be (q_
 
 # %% [markdown]
 # ## Exercise 1.3 — predict the high-temperature limit
-# As $T \to \infty$, $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ tends to
+# As $T \to \infty$, $T^2\,\mathrm{KL}(p_T \,\|\, q_T)$ goes to
 #
 # $$
 # \frac{1}{2N} \sum_i \bigl((v_i - \bar{v}) - (z_i - \bar{z})\bigr)^2.
 # $$
 #
-# Compute `limit` for the five-token example by hand (numpy arithmetic on `Z` and `V`, not a library loss).
+# Calculate `limit` for the five-token example by hand. Use numpy arithmetic on `Z` and `V`, not a library loss.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -208,13 +223,13 @@ print(f"✅ the limit is {limit:.2f}: at very high T distillation is logit match
 
 # %% [markdown]
 # ## Exercise 1.4 — Hinton's full loss
-# Write `hinton_loss(v, z, y, T, alpha)` returning `(loss, grad)` averaged over rows:
+# Write `hinton_loss(v, z, y, T, alpha)`. It returns `(loss, grad)` as the mean over the rows:
 #
 # $$
 # \alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}(y, q_1).
 # $$
 #
-# You may call `L.kd` and `L.hard_ce`.
+# You can call `L.kd` and `L.hard_ce`.
 
 # %% exercise
 def hinton_loss(v, z, y, T, alpha):
@@ -234,9 +249,9 @@ print("✅ α mixes the teacher's soft targets with the hard labels; α = 0 is p
 
 # %% [markdown]
 # ## Exercise 1.5 — Minitron's importance score
-# Width pruning keeps the hidden units that matter on calibration data. Return the indices (sorted ascending) of the
-# `keep` hidden units with the largest mean $\lvert \text{activation} \rvert$ over the contexts `ctx`. Use
-# `model.forward(ctx)`, whose cache is `(contexts, x, h)`.
+# Width pruning keeps the hidden units that are important on calibration data. Return the indices of the `keep` hidden
+# units with the largest mean $\lvert \text{activation} \rvert$ over the contexts `ctx`. Sort the indices from the smallest to the largest. Use
+# `model.forward(ctx)`. Its cache is `(contexts, x, h)`.
 
 # %% exercise
 def keep_units(model, ctx, keep):
@@ -253,22 +268,26 @@ print("✅ keep the most active units, slice W1, b1 and W2 — a narrower model 
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We distil rather than train the small model from scratch because the teacher's full
-# distribution is worth far more per example than a sampled token: it ranks the wrong answers, and a sampled label
-# adds $1 - \sum p^2$ of noise per example that the distribution does not. The loss is
-# $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}$; the soft term's gradient on the student's
-# logits is $T\,(q_T - p_T)$, the $T^2$ keeps its scale as $T$ grows, and at very high $T$ it is logit matching.
+# **The two-minute version.** "We distil because the teacher's full distribution is worth much more per example
+# than a sampled token. We do not train the small model from scratch. The teacher's distribution ranks the
+# incorrect answers, and a sampled label adds $1 - \sum p^2$ of noise per example that the distribution does not
+# add.
 #
-# "$T$ and $\alpha$ are knobs to sweep, not constants; TRL applies no $T^2$ (its GKD trainer runs the divergence at
-# $T$ = 1). Width is capacity: below the size that can hold what the teacher does, no loss closes the gap. If we have
-# the teacher's weights, we prune it to the student's shape by activation importance and distil into that — it gets
-# there in fewer steps than a fresh network, not further."
+# "The loss is
+# $\alpha\,T^2\,\mathrm{KL}(p_T \,\|\, q_T) + (1 - \alpha)\,\mathrm{CE}$. The gradient of the soft term on the student's
+# logits is $T\,(q_T - p_T)$. The $T^2$ keeps the scale of the gradient as $T$ increases. At the limit of high $T$,
+# the soft term is logit matching.
+#
+# "$T$ and $\alpha$ are settings to sweep, not constants. TRL applies no $T^2$ (its GKD trainer calculates the
+# divergence at $T$ = 1). Width is capacity. If the student is smaller than the size that can hold what the teacher
+# does, no loss closes the gap. If we have the teacher's weights, we prune the teacher to the student's shape by
+# activation importance, and we distil into that model. It gets there in fewer steps than a new network, not further."
 #
 # **Drill questions**
-# 1. *Why multiply the soft term by $T^2$?* — Its gradient is $(q_T - p_T)/T$ and the difference itself shrinks
-#    $\sim 1/T$, so the soft gradient falls $\sim 1/T^2$; $T^2$ restores it, keeping $\alpha$ meaningful across
-#    temperatures.
-# 2. *Same data budget: fine-tune the small model on the labels, or distil?* — Distil if a teacher exists: at two
-#    examples per context the toy student reached 87.6% with soft targets and 67.8% with labels.
-# 3. *What cannot soft targets fix?* — Capacity: an 8-unit student tops out at 93.4% of contexts even with the
-#    exact distribution; and anything the teacher does not know.
+# 1. *Why multiply the soft term by $T^2$?* Its gradient is $(q_T - p_T)/T$, and the difference itself decreases as
+#    $\sim 1/T$. Thus the soft gradient decreases as $\sim 1/T^2$. The $T^2$ puts it back, and keeps $\alpha$
+#    meaningful across temperatures.
+# 2. *Same data budget: fine-tune the small model on the labels, or distil?* If a teacher exists, distil. At two
+#    examples per context, the toy student got to 87.6% with soft targets and 67.8% with labels.
+# 3. *What cannot soft targets repair?* Capacity: an 8-unit student gets no higher than 93.4% of contexts, even with the
+#    exact distribution. Also, soft targets cannot repair anything that the teacher does not know.

@@ -1,27 +1,30 @@
 # %% [markdown]
 # # 04 · Serving thinking models: long outputs, KV pressure, ITL, budgets and the prefix cache
 #
-# **Tier:** T0 (default) — the fake vLLM and the engine emulator; every latency, KV and preemption
-# number is **simulated** from a roofline step model of Qwen3-0.6B on a T4. T1 — set `THINKLAB_URL`
-# to a real `vllm serve Qwen/Qwen3-0.6B --reasoning-parser qwen3 --enable-prompt-tokens-details`, and
-# the live cells measure ITL, KV usage, preemptions and cached tokens on the real engine.
+# **Tier:** T0 (default): the fake vLLM and the engine emulator. A roofline step model of Qwen3-0.6B on a T4 gives
+# every latency, KV and preemption number, so each of these numbers is **simulated**. T1: set `THINKLAB_URL` to a
+# real `vllm serve Qwen/Qwen3-0.6B --reasoning-parser qwen3 --enable-prompt-tokens-details`. Then the live cells
+# measure ITL, KV usage, preemptions and cached tokens on the real engine.
 #
 # ## The one-minute version
 #
-# * Thinking makes serving **output-heavy**: ten times the output tokens per request, drawn from a
+# * Thinking makes serving **output-heavy**. Each request has ten times the output tokens. The lengths come from a
 #   heavy-tailed distribution (p99 several times p50).
-# * A request holds KV for its prompt plus everything generated so far, so its KV × time grows like
-#   `P·L + L²/2`, faster than $L$. Fewer requests fit the KV pool. Each decode step reads more KV
-#   bytes, so **ITL** rises with the batch's *context*, not just its size. Requests live ten times
-#   longer, so by Little's law a given rate needs ten times the concurrency. TTFT barely moves. ITL
-#   and KV capacity become the binding constraints (PRIMER §7 "What thinking does to serving"; the
-#   arithmetic is the capacity primer's, `00-foundations/gpu-capacity-planning/PRIMER.md`).
-# * Thinking is **dropped from history** by the chat template. Turn $N$ generated
-#   `<think>…</think>answer`, but turn ${N+1}$'s prompt holds only `answer`, so the prefix-cache hit
-#   ends at turn $N$'s assistant header (04 serving-engine PRIMER §5 "Prefix caching").
-# * The knobs: a thinking budget (caps the tail), `max_model_len` (must admit prompt + budget +
-#   answer, and sets the worst case the KV pool must hold), and routing by effort at the gateway
-#   (think only where it pays; 06 `scaling-admission-cost`).
+# * A request holds KV for its prompt and for all the tokens that it generated until now. Thus its KV × time grows
+#   like `P·L + L²/2`, which is faster than $L$. Fewer requests fit the KV pool. Each decode step reads more KV
+#   bytes. Thus **ITL** increases with the *context* of the batch, not only with its size.
+#
+#   Requests live ten times longer. Thus, by Little's law, a given rate needs ten times the concurrency. TTFT almost
+#   does not change. ITL and KV capacity become the constraints that set the limit (PRIMER §7 "What thinking does to
+#   serving"). The arithmetic is that of the capacity primer, `00-foundations/gpu-capacity-planning/PRIMER.md`.
+# * The chat template **drops the thinking from the history**. Turn $N$ generated `<think>…</think>answer`. But the
+#   prompt of turn ${N+1}$ holds only `answer`. Thus the prefix-cache hit ends at the assistant header of turn $N$
+#   (04 serving-engine PRIMER §5 "Prefix caching").
+# * The knobs are these:
+#   * A thinking budget. It limits the tail.
+#   * `max_model_len`. It must admit the prompt, the budget and the answer. It also sets the worst case that the KV
+#     pool must hold.
+#   * Routing by effort at the gateway. The model thinks only where thinking pays (06 `scaling-admission-cost`).
 
 # %%
 import math, statistics
@@ -45,8 +48,8 @@ print(target)
 # %% [markdown]
 # ## Worked example: the output-length distribution, measured from the server
 #
-# Forty problems with thinking off and on. Lengths come from `usage` (`completion_tokens`,
-# `completion_tokens_details.reasoning_tokens`), the same fields a real vLLM fills.
+# The example uses forty problems, with thinking off and with thinking on. The lengths come from `usage`
+# (`completion_tokens`, `completion_tokens_details.reasoning_tokens`). A real vLLM fills the same fields.
 
 # %%
 problems = make_evalset(40, seed=1)
@@ -64,14 +67,20 @@ print(histogram([c.completion_tokens for c in comps["on"]], bins=8, log=True, la
 # %% [markdown]
 # ## Exercise 4.1 — KV × time from the measured lengths: the tail pays
 #
-# A request with prompt $P$ that emits $L$ tokens holds ${P + t}$ tokens of KV at decode step $t$, so over its
-# life it costs `kv_token_steps(P, L) = P·L + L(L + 1)/2` token-steps (derived in rl-core notebook 05,
-# exercise 5.1; imported here). The formula is convex in $L$, so a heavy tail costs more than its mean
-# suggests. For a list of measured completions `cs` (each has `prompt_tokens` and
-# `completion_tokens`), return `(mean_kv, kv_at_means, top10_share)`: the mean over requests of
-# `kv_token_steps`, `kv_token_steps` at the mean prompt and mean completion length, and the share of
-# the total held by the 10% of requests with the largest KV × time (at least one request). Before
-# you run the check, guess the top-10% share with thinking on.
+# A request with prompt $P$ that emits $L$ tokens holds ${P + t}$ tokens of KV at decode step $t$. Thus, during its
+# life, it costs `kv_token_steps(P, L) = P·L + L(L + 1)/2` token-steps. The derivation is in rl-core notebook 05,
+# exercise 5.1, and this notebook imports the function. The formula is convex in $L$. Thus a heavy tail costs more
+# than you expect from its mean.
+#
+# The input `cs` is a list of measured completions. Each completion has `prompt_tokens` and `completion_tokens`.
+# Return `(mean_kv, kv_at_means, top10_share)`:
+#
+# * `mean_kv`: the mean of `kv_token_steps` over the requests.
+# * `kv_at_means`: `kv_token_steps` at the mean prompt length and the mean completion length.
+# * `top10_share`: the share of the total that the 10% of requests with the largest KV × time hold (at least one
+#   request).
+#
+# Before you run the check, guess the top-10% share with thinking on.
 
 # %% exercise
 def kv_time(cs: list) -> tuple:
@@ -96,10 +105,10 @@ print(f"✅ [{LABEL}] with thinking on, the mean output grows {statistics.fmean(
 # %% [markdown]
 # ## Worked example: the capacity primer's arithmetic, with long outputs
 #
-# The capacity primer's worked example serves Mistral Small 3 (24B) on H100s in fp8: 8.33 requests
-# per second, 1,500 tokens in and 300 out, 40 ms per output token. The same formulas with
-# 3,000-token outputs (thinking plus answer) follow. `capacity_primer_view` re-implements
-# `capacity.py`, and `tests/test_reuse.py` checks it against that file.
+# The worked example of the capacity primer serves Mistral Small 3 (24B) on H100s in fp8. It has 8.33 requests per
+# second, 1,500 tokens in and 300 out, and 40 ms per output token. The next cell uses the same formulas with
+# 3,000-token outputs (thinking plus answer). `capacity_primer_view` re-implements `capacity.py`.
+# `tests/test_reuse.py` compares it with that file.
 
 # %%
 rps = 10_000 * 0.10 * 0.5 / 60
@@ -111,22 +120,24 @@ print(table([{"": n, "request s": round(v["duration_s"], 2), "concurrency": roun
 print(f"memory: {views[1][1]['gpus_for_memory'] / views[0][1]['gpus_for_memory']:.0f}x the GPUs for 10x the output")
 
 # %% [markdown]
-# Ten times the output needs about 18 times the GPUs for KV. Duration grows 10×, so concurrency
-# grows 10×, and each session's average context nearly doubles (1,650 → 3,000 tokens). These
-# formulas price every token at the SLO's 40 ms, which overstates the GPU count (6 here) and makes
-# a looser SLO look dearer; PRIMER §7 "What thinking does to serving" closes Little's law on the
-# step the fleet actually runs at (`rlcore.workload.plan_steady`: 3 GPUs) and still finds 18× the
-# GPUs for KV (2.75 vs 0.15). `derive_shape` below works the same way: ITL at the batch. One
-# caveat carries over from the primer: its `decode_aggregate` has no memory cap. At 1,000
-# concurrent sessions × 0.246 GB the KV alone is 246 GB, over three H100s' worth, so the batch that
-# sets TPOT must be capped by the KV pool, as the next exercise does.
+# Ten times the output needs about 18 times the GPUs for KV. The duration increases 10×, so the concurrency
+# increases 10×. Also, the average context of each session almost doubles (from 1,650 to 3,000 tokens).
+#
+# These formulas charge every token at the 40 ms of the SLO. This gives a GPU count that is too high (6 here). It
+# also makes a looser SLO seem to cost more. PRIMER §7 "What thinking does to serving" closes Little's law on the
+# step at which the fleet really runs (`rlcore.workload.plan_steady`: 3 GPUs). It still finds 18× the GPUs for KV
+# (2.75 against 0.15). `derive_shape` (in the check of Exercise 4.2) works the same way: it uses the ITL at the batch.
+#
+# One warning from the primer also applies here: its `decode_aggregate` has no memory cap. At 1,000 concurrent
+# sessions × 0.246 GB, the KV alone is 246 GB. That is more than the memory of three H100s. Thus the KV pool must
+# put a cap on the batch that sets TPOT, as the next exercise does.
 #
 # ## Exercise 4.2 — the batch the KV pool allows, and the ITL it produces
 #
-# In steady state each running request sits, on average, at context `P + L/2`. Return
-# `(batch, itl_ms)`: `batch` is how many such requests fit `profile.kv_capacity_tokens` (integer
-# division, at least 1, at most `max_num_seqs`), and `itl_ms` is the decode step at that batch,
-# `profile.decode_step_s(batch, batch × (P + L/2))` in milliseconds.
+# In steady state, each request that runs has, on average, the context `P + L/2`. Return `(batch, itl_ms)`. `batch`
+# is the number of such requests that fit `profile.kv_capacity_tokens` (integer division, at least 1, at most
+# `max_num_seqs`). `itl_ms` is the decode step at that batch, `profile.decode_step_s(batch, batch × (P + L/2))`, in
+# milliseconds.
 
 # %% exercise
 def batch_and_itl(profile, P: float, L_mean: float, max_num_seqs: int = 256) -> tuple:
@@ -152,10 +163,10 @@ print(table([derive_shape(PROF, 60, [c.completion_tokens for c in comps[m]], f"t
 # %% [markdown]
 # ## Worked example: the same arrivals, three modes, in virtual time
 #
-# The engine emulator (FCFS continuous batching, KV blocks, recompute preemption, the roofline step
-# model) runs 300 requests arriving at 2/s and at 4/s, for thinking off, thinking on, and a
-# 512-token budget. All numbers are **simulated**; with the real engine they are what `vllm bench
-# serve` and `/metrics` would show.
+# The engine emulator has FCFS continuous batching, KV blocks, recompute preemption and the roofline step model. It
+# runs 300 requests that arrive at 2/s and at 4/s. It runs them with thinking off, with thinking on, and with a
+# 512-token budget. All the numbers are **simulated**. With the real engine, these are the numbers that
+# `vllm bench serve` and `/metrics` show.
 
 # %%
 qs = [p.prompt for p in make_evalset(300, seed=2)]
@@ -167,27 +178,26 @@ for rate in (2.0, 4.0):
                 title=f"[SIMULATED] 300 requests at {rate}/s, Qwen3-0.6B on a T4"), "\n")
 
 # %% [markdown]
-# Thinking multiplies ITL several times over, and the answer starts seconds rather than
-# milliseconds after the request. Unlimited thinking is already at saturation at 2/s: it asks for
-# about 2 × 1,184 ≈ 2,400 output tokens a second, close to the thinking shape's steady-state
-# throughput in the table above, so the KV pool peaks near 0.9 and the E2E p99 is minutes. At 4/s
-# the pool is full (peak 1.0): new requests wait for blocks, running ones are preempted and
-# recomputed, and the tail grows further.
+# Thinking multiplies ITL several times. Also, the answer starts seconds after the request, not milliseconds.
 #
-# The 512-token budget keeps the pool at 5–11% and ITL close to the no-thinking value, and among the
-# thinking modes it costs less than half the tokens per correct answer (784 vs 1,692). Thinking off is
-# cheapest per correct answer of all (364) but tops out at 0.28 accuracy. So the modes trade accuracy
-# for cost, which Exercise 4.5 turns into a routing choice; the budget's capacity argument (a pool
-# that never fills) comes on top of its cost argument.
+# With no limit, thinking is already at saturation at 2/s. It asks for about 2 × 1,184 ≈ 2,400 output tokens a second.
+# This is near the steady-state throughput of the thinking shape in the table of Exercise 4.2. Thus the peak of the
+# KV pool is near 0.9, and the E2E p99 is minutes. At 4/s, the pool is full (peak 1.0). New requests wait for
+# blocks, the engine preempts and recomputes the requests that run, and the tail grows more.
+#
+# The 512-token budget keeps the pool at 5–11% and ITL near the value with no thinking. Among the thinking modes, it
+# costs less than half the tokens per correct answer (784 against 1,692). Thinking off has the lowest cost per
+# correct answer of all (364), but its accuracy is at most 0.28. Thus the modes trade accuracy for cost. Exercise
+# 4.5 turns this trade into a routing choice. The budget also has a capacity argument (a pool that never fills), on
+# top of its cost argument.
 #
 # ## Worked example: a live run, read from the engine's `/metrics`
 #
-# An open-loop burst against the server: 24 thinking requests with a 512-token budget, at 20 per
-# second of *simulated* time. Against the fake server, `/metrics` reports simulated seconds on the
-# engine's own clock. The client-side wall-clock numbers are compressed 50× by the time scale, so we
-# read the engine side.
-# Nothing in vLLM v0.30.0's metrics separates reasoning from answer tokens; thinking shows up as
-# more of everything decode drives.
+# The example sends an open-loop burst to the server: 24 thinking requests with a 512-token budget, at 20 per second
+# of *simulated* time. With the fake server, `/metrics` reports simulated seconds on the clock of the engine. The
+# time scale compresses the client-side wall-clock numbers 50×. Thus we read the engine side.
+# Nothing in the metrics of vLLM v0.30.0 separates reasoning tokens from answer tokens. Thinking shows as more of
+# everything that decode drives.
 
 # %%
 reqs = [(p.messages(), {"thinking": True, "budget": 512, "max_tokens": 2000}, "think") for p in make_evalset(24, seed=4)]
@@ -207,11 +217,11 @@ print(f"{len(gauges)} gauge scrapes during the run; {run.summary()['completed']}
 # %% [markdown]
 # ## Exercise 4.3 — pick `max_model_len` for a thinking budget
 #
-# vLLM rejects a request whose prompt plus `max_tokens` exceeds `max_model_len`, and a request
-# without `max_tokens` may generate up to `max_model_len − prompt`. Given the p99 prompt, the thinking
-# budget, the tokens of the forced end phrase and the p99 answer, return the smallest
-# `max_model_len`, rounded up to a multiple of 1,024, that lets every request finish. Then return
-# how many requests *at that worst case* the KV pool of `PROF` holds at once.
+# vLLM rejects a request when its prompt plus `max_tokens` is more than `max_model_len`. A request without
+# `max_tokens` can generate up to `max_model_len − prompt`. The inputs are the p99 prompt, the thinking budget, the
+# tokens of the forced end phrase and the p99 answer. Return the smallest `max_model_len` that lets every request
+# finish. Round it up to a multiple of 1,024. Then return the number of requests *at that worst case* that the KV
+# pool of `PROF` holds at the same time.
 
 # %% exercise
 def plan_max_model_len(prompt_p99: int, budget: int, end_phrase: int, answer_p99: int) -> int:
@@ -235,10 +245,10 @@ print(f"✅ budget 512 -> max_model_len 2048 -> {worst_case_concurrency(PROF, 20
 # %% [markdown]
 # ## Worked example: why the prefix cache stops at the assistant header
 #
-# A two-turn conversation rendered with Qwen3's template logic (`thinklab.templates.render_qwen3`).
-# Turn 1 generated its thinking into the KV cache. Turn 2's prompt drops it, because assistant turns
-# before the last user message lose their reasoning. The cache can only serve the common prefix,
-# in whole 16-token blocks.
+# This example renders a two-turn conversation with the template logic of Qwen3
+# (`thinklab.templates.render_qwen3`). Turn 1 generated its thinking into the KV cache. The prompt of turn 2 drops
+# this thinking, because the assistant turns before the last user message lose their reasoning. The cache can serve
+# only the common prefix, in whole 16-token blocks.
 
 # %%
 system = {"role": "system", "content": "You are a careful assistant for a bank's operations team. " * 6}
@@ -263,10 +273,12 @@ print(f"[{LABEL}] turn 2: prompt {c2.prompt_tokens} tokens, cached {c2.cached_to
 # %% [markdown]
 # ## Exercise 4.4 — tokens a block-hash prefix cache can serve
 #
-# `prev` is the previous request's full context (its prompt and the tokens it generated), and `nxt`
-# is the new prompt. Return the number of prompt tokens served from cache: the length of their
-# common prefix, capped at `len(nxt) − 1` (the engine always computes at least the last prompt
-# token), rounded *down* to whole blocks.
+# `prev` is the full context of the previous request (its prompt and the tokens that it generated). `nxt` is the new
+# prompt. Return the number of prompt tokens that come from the cache. Calculate it in three steps:
+#
+# 1. Find the length of the common prefix of `prev` and `nxt`.
+# 2. Set its maximum to `len(nxt) − 1`. The engine always computes at least the last prompt token.
+# 3. Round it *down* to whole blocks.
 
 # %% exercise
 def my_cached_tokens(prev: list, nxt: list, block: int = 16) -> int:
@@ -291,13 +303,14 @@ print("✅ common prefix, minus the last prompt token, rounded down to 16-token 
 # %% [markdown]
 # ## Exercise 4.5 — route by effort at the gateway
 #
-# A gateway can decide per request whether the model thinks (06 `scaling-admission-cost` routes by
-# task and effort level). Using the records of notebook 03 (simulated unless you collected your
-# own), and assuming the gateway knows each problem's difficulty (1–4), write
-# `policy_stats(think_levels)`. It returns `(accuracy, output tokens per question)` over the whole
-# mix when the model thinks only on problems whose difficulty is in `think_levels`, and answers
-# directly otherwise. The check evaluates all 16 policies and picks the cheapest one that keeps 90%
-# of always-think accuracy.
+# A gateway can decide for each request if the model thinks (06 `scaling-admission-cost` routes by task and effort
+# level). Use the records of notebook 03. They come from the simulation, unless you collected your own records.
+# Assume that the gateway knows the difficulty of each problem (1–4).
+#
+# Write `policy_stats(think_levels)`. It returns `(accuracy, output tokens per question)` over the full mix. In
+# this policy, the model thinks only on the problems whose difficulty is in `think_levels`. On the other problems,
+# it answers directly. The check examines all 16 policies. Then it selects the policy with the lowest cost that
+# keeps 90% of the always-think accuracy.
 
 # %% exercise
 RECS = recorded.load()
@@ -333,11 +346,11 @@ print(f"✅ think on {'+'.join(map(str, choice)) or 'nothing'}: {ok[choice][0]:.
       f"(always think: {always[0]:.3f} for {always[1]:.0f}; never: {never[0]:.3f} for {never[1]:.0f})")
 
 # %% [markdown]
-# Where thinking pays per token is an empirical question. In these simulated records the hardest
-# problems cost the most thinking for the least accuracy per token: dropping thinking there alone
-# halves the tokens per question for about nine points of accuracy. Which policy wins depends on
-# the accuracy you must keep. A real model on your traffic may differ, so the router's table is
-# built from measurements (this notebook's T1 path), not from intuition.
+# It is an empirical question where thinking pays per token. In these simulated records, the hardest problems cost
+# the most thinking for the least accuracy per token. If you drop thinking on these problems only, the tokens per
+# question decrease by half, at a cost of about nine points of accuracy. Which policy wins depends on the accuracy
+# you must keep. It is possible that a real model on your traffic is different. Thus the table of the router comes
+# from measurements (the T1 path of this notebook), not from intuition.
 
 # %%
 target.stop()
@@ -351,39 +364,44 @@ target.stop()
 # export THINKLAB_URL=http://127.0.0.1:8000
 # ```
 #
-# Re-run the notebook: the length table, the live run and the two-turn `cached_tokens` become
-# measurements. Then change one knob at a time and watch `vllm:kv_cache_usage_perc`,
-# `vllm:num_preemptions` and `vllm:inter_token_latency_seconds`: `--max-model-len 2048` with a
-# 512-token budget against 8192 unbudgeted; `--max-num-seqs 32`; and the rate. Speculative decoding
-# (04 serving-engine PRIMER §7 "Speculative decoding") is worth testing on long outputs: n-gram
-# drafting finds repetition in reasoning traces, and the long decode is memory-bound, which is where
-# speculation pays. Measure it with the 04 lab's notebook 05.
+# Run the notebook again. Then the length table, the live run and the two-turn `cached_tokens` become measurements.
+# Then change one knob at a time. Monitor `vllm:kv_cache_usage_perc`, `vllm:num_preemptions` and
+# `vllm:inter_token_latency_seconds`. Change these knobs:
+#
+# * `--max-model-len 2048` with a 512-token budget, against 8192 with no budget.
+# * `--max-num-seqs 32`.
+# * The rate.
+#
+# Speculative decoding (04 serving-engine PRIMER §7 "Speculative decoding") is worth a test on long outputs. An
+# n-gram draft finds repetition in reasoning traces. Also, the long decode is memory-bound, and speculation pays in
+# that condition. Measure it with notebook 05 of the 04 lab.
 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Turning on thinking multiplies output tokens by roughly ten, with a heavy tail.
-# Serving is now decode-bound. KV × time per request grows faster than the output, so the batch the
-# KV pool holds shrinks and every step reads more KV, and ITL rises. Requests live ten times
-# longer, so the same request rate needs ten times the concurrency. With the capacity primer's
-# numbers that is about 18 times the GPUs for KV. TTFT hardly changes, but the *answer* starts
+# **Two minutes:** "When we turn on thinking, the output tokens increase approximately ten times, with a heavy tail.
+# Serving is now decode-bound. KV × time per request grows faster than the output. Thus the batch that the KV pool
+# holds decreases, every step reads more KV, and ITL increases.
+#
+# "Requests live ten times longer, so the same request rate needs ten times the concurrency. With the numbers of the
+# capacity primer, that is about 18 times the GPUs for KV. TTFT almost does not change, but the *answer* starts
 # seconds later.
 #
-# "We cap the tail with a thinking budget and size `max_model_len` from it, which also sets the worst
-# case the KV pool must hold. We route by effort at the gateway, thinking only where it pays, and
-# track cost per correct answer. Multi-turn chats don't reuse the thinking KV, because the template
-# drops it. The prefix cache stops at the last assistant header, and the answer is re-prefilled."
+# "We limit the tail with a thinking budget, and we set `max_model_len` from that budget. This also sets the worst
+# case that the KV pool must hold. We route by effort at the gateway, so the model thinks only where thinking pays.
+# We also record the cost per correct answer. Multi-turn chats do not reuse the thinking KV, because the template
+# drops it. The prefix cache stops at the last assistant header, and the engine prefills the answer again."
 #
-# **Drill 1.** *We enabled thinking and TTFT is unchanged, but users say it got slow. Which metric?*
-# The time to the first *content* token and ITL. TTFT is the first reasoning token. Report time to
-# first content, and ITL p99, which rises with the batch's context.
+# **Drill 1.** *We turned on thinking and TTFT is unchanged, but users say that it became slow. Which metric?*
+# The metrics are the time to the first *content* token and ITL. TTFT is the time to the first reasoning token.
+# Report the time to first content, and ITL p99, which increases with the context of the batch.
 #
-# **Drill 2.** *KV usage hits 100% and `vllm:num_preemptions` climbs only on the thinking route.
-# Fixes?* A thinking budget (shorter tail), a lower `max_model_len` to match it, fewer concurrent
-# sequences per replica (`--max-num-seqs`), or more replicas. The long tail, not the mean, fills the
-# pool.
+# **Drill 2.** *KV usage gets to 100%, and `vllm:num_preemptions` increases only on the thinking route. What are
+# the solutions?* The solutions are a thinking budget (a shorter tail), a lower `max_model_len` to match it, fewer
+# concurrent sequences per replica (`--max-num-seqs`), or more replicas. The long tail fills the pool,
+# not the mean.
 #
-# **Drill 3.** *Why is our multi-turn prefix hit rate lower with the thinking model?* The template
-# renders earlier assistant turns without their reasoning. Turn $N$'s generated tokens are not a
-# prefix of turn ${N+1}$'s prompt, so the cache match ends at turn $N$'s assistant header. Inside a single
-# tool-calling loop the thinking is kept, so the prefix keeps matching there.
+# **Drill 3.** *Why is our multi-turn prefix hit rate lower with the thinking model?* The template renders the
+# earlier assistant turns without their reasoning. The generated tokens of turn $N$ are not a prefix of the prompt of
+# turn ${N+1}$. Thus the cache match ends at the assistant header of turn $N$. Inside one loop of tool calls, the
+# template keeps the thinking, so the prefix continues to match there.

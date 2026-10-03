@@ -1,33 +1,39 @@
 # %% [markdown]
 # # 05 · MoE on a small GPU: 4-bit experts, CPU offload, and what each costs per token
 #
-# **Tier:** T1 — one 16 GB T4 (free on Colab/Kaggle) or a 24 GB L4/RTX 4090: `vllm serve` with
-# `--cpu-offload-gb` or a 4-bit checkpoint; the notebook reads the start-up log and measures the step.
-# T0 — the sizing arithmetic (**simulated**) and two start-up logs in vLLM's documented wording
-# (**illustrative**: generated from this notebook's own sizing, so they agree with it by construction).
+# **Tier:** T1: one 16 GB T4 (free on Colab/Kaggle) or a 24 GB L4/RTX 4090. You run `vllm serve` with
+# `--cpu-offload-gb` or a 4-bit checkpoint. The notebook reads the start-up log and measures the step.
+# T0: the sizing arithmetic (**simulated**) and two start-up logs with the documented words of vLLM
+# (**illustrative**). The two logs come from the sizing of this notebook, thus they agree with it by construction.
 #
 # ## The one-minute version
 #
-# * Memory is sized by the **total**: OLMoE-1B-7B runs 1.3 B parameters per token but needs all 6.9 B
-#   (13.8 GB in 16-bit) resident — which leaves no KV cache on a 16 GB T4.
-# * **4-bit experts** (GPTQ/AWQ INT4; MXFP4 in gpt-oss) cut the experts' bytes ~3.8x with no PCIe
-#   traffic — at an accuracy cost you measure, and only where kernels exist (vLLM's MXFP4 needs
-#   compute capability 8.0 and bf16: not a T4).
+# * The **total** number of parameters sets the memory size. OLMoE-1B-7B runs 1.3 B parameters per token. But all 6.9 B
+#   (13.8 GB in 16-bit) must stay resident. On a 16 GB T4, this leaves no KV cache.
+# * **4-bit experts** (GPTQ/AWQ INT4, or MXFP4 in gpt-oss) decrease the bytes of the experts by ~3.8x, with no
+#   PCIe traffic. They have an accuracy cost, and you measure it. They work only where kernels exist. The MXFP4
+#   path of vLLM needs compute capability 8.0 and bf16. A T4 does not have them.
 # * **vLLM UVA offload** (`--cpu-offload-gb N --cpu-offload-params experts`) keeps $N$ GiB in pinned CPU
-#   memory and reads it over PCIe **in every forward pass**, whichever experts are routed: a fixed
-#   cost per step, so it is amortised by batch.
-# * **llama.cpp `--n-cpu-moe`** keeps the experts in CPU RAM; in small-batch decode it *computes them
-#   on the CPU*, reading only the touched experts, so it is cheap for one user and bound by CPU FLOP/s
-#   as the batch grows. For large prompt batches it copies those weights to the GPU by default
-#   (`--op-offload`; `--no-op-offload` keeps the work on the CPU) — read from `common/arg.cpp`, verify.
-# * Whatever is left after weights is KV cache — MoE did not shrink it.
+#   memory. It reads these bytes over PCIe **in every forward pass**, and the experts that the router
+#   selects do not change this. Thus its cost per step is constant, and the batch amortises it.
+# * **llama.cpp `--n-cpu-moe`** keeps the experts in CPU RAM. In small-batch decode, it *computes them
+#   on the CPU* and reads only the touched experts. Thus it is low-cost for one user. As the batch
+#   increases, the CPU FLOP/s set the limit of this path. For large prompt batches, it copies those weights to the GPU by
+#   default (`--op-offload`). The flag `--no-op-offload` keeps the work on the CPU. We read this from
+#   `common/arg.cpp`, verify.
+# * The memory that stays after the weights is KV cache. MoE did not make it smaller.
 #
-# Concepts: PRIMER §6 "Running MoE on GPUs" (expert offloading, quantized experts), §7 "Sizing and
-# cost" and §8 "In a design review: failure modes" (MoE on one 24 GB GPU; quantizing experts)
-# ([`PRIMER.md`](../../PRIMER.md)). Quantization in depth: the
-# [quantization primer](../../../../04-inference-engine/quantization/PRIMER.md) — §2 "Number formats"
-# (INT4, MXFP4), §5 "Weight-and-activation quantization" (why routers stay 16-bit) and §8 "Measuring the
-# accuracy you pay" (calibrating rarely routed experts).
+# The concepts are in the primer ([`PRIMER.md`](../../PRIMER.md)):
+#
+# * §6 "Running MoE on GPUs" (expert offload, quantized experts).
+# * §7 "Sizing and cost".
+# * §8 "In a design review: failure modes" (MoE on one 24 GB GPU, quantization of experts).
+#
+# Quantization in depth is in the [quantization primer](../../../../04-inference-engine/quantization/PRIMER.md):
+#
+# * §2 "Number formats" (INT4, MXFP4).
+# * §5 "Weight-and-activation quantization" (why routers stay 16-bit).
+# * §8 "Measuring the accuracy you pay" (calibration of rarely routed experts).
 
 # %%
 import os
@@ -45,9 +51,10 @@ MOES = ["granite-1b-a400m", "granite-3b-a800m", "olmoe-1b-7b", "qwen1.5-moe-a2.7
 # %% [markdown]
 # ## Worked example: what fits, at vLLM's defaults
 #
-# `offload.fit`: KV room = `0.92 × memory − overhead − weights`, with a 1.5 GiB overhead for
-# activations and CUDA graphs (an estimate — the start-up log measures it, below). 4K-token
-# sequences; "fits" means at least one full-length sequence of KV.
+# `offload.fit` calculates KV room = `0.92 × memory − overhead − weights`. The overhead is 1.5 GiB, for
+# activations and CUDA graphs. This value is an estimate. The start-up log measures it (see "Worked example:
+# read the start-up log"). The sequences have 4K tokens. "Fits" means room for at least one full-length
+# sequence of KV.
 
 # %%
 for key in MOES:
@@ -60,11 +67,14 @@ for key in MOES:
 # %% [markdown]
 # ## Exercise 5.1 — the bytes of a quantized MoE checkpoint
 #
-# Write `weights_gb(model, rest_bits, expert_bits)` in GB ($10^9$ bytes): the routed experts' matmul
-# weights (`layers × n_experts × expert_matmul_params()`) at `expert_bits`, the embeddings (and LM
-# head, `embedding_params()`) always at 16 bits, everything else (attention, router, shared expert,
-# biases) at `rest_bits`. 4-bit formats carry scales: use 4.25 bits (INT4 with a 16-bit scale per 64
-# weights, or MXFP4's 8-bit scale per 32).
+# Write `weights_gb(model, rest_bits, expert_bits)`. It returns the weights in GB ($10^9$ bytes):
+#
+# * The matmul weights of the routed experts (`layers × n_experts × expert_matmul_params()`) at `expert_bits`.
+# * The embeddings (and the LM head, `embedding_params()`), always at 16 bits.
+# * All other weights (attention, router, shared expert, biases) at `rest_bits`.
+#
+# 4-bit formats carry scales. Use 4.25 bits. This is INT4 with a 16-bit scale per 64 weights, or MXFP4
+# with an 8-bit scale per 32.
 
 # %% exercise
 def weights_gb(model, rest_bits, expert_bits):
@@ -90,10 +100,14 @@ print(f"✅ gpt-oss-20b MXFP4 {weights_gb(g('gpt-oss-20b'), 16, 4.25):.1f} GB; O
 # %% [markdown]
 # ## Exercise 5.2 — KV room and sessions
 #
-# Write `kv_room(model, gpu, weights_gib, max_model_len, util=0.92, overhead_gib=1.5)` →
-# `(kv_gib, kv_tokens, sessions)`: KV GiB = util × `gpu.memory_gib` − overhead − weights; tokens =
-# floor(KV bytes / `model.kv_bytes_per_token()`); sessions = tokens / `max_model_len` (vLLM's "Maximum
-# concurrency"). Negative room means it does not start.
+# Write `kv_room(model, gpu, weights_gib, max_model_len, util=0.92, overhead_gib=1.5)`. It returns
+# `(kv_gib, kv_tokens, sessions)`:
+#
+# * KV GiB = util × `gpu.memory_gib` − overhead − weights.
+# * tokens = floor(KV bytes / `model.kv_bytes_per_token()`).
+# * sessions = tokens / `max_model_len` (the "Maximum concurrency" of vLLM).
+#
+# Negative room means that vLLM does not start.
 
 # %% exercise
 def kv_room(model, gpu, weights_gib, max_model_len, util=0.92, overhead_gib=1.5):
@@ -119,10 +133,10 @@ print(f"✅ OLMoE 16-bit on a T4: {kv:.1f} GiB of KV (does not start); Qwen3-30B
 # %% [markdown]
 # ## Exercise 5.3 — how much to offload
 #
-# vLLM's `--cpu-offload-gb N` moves $N$ GiB of weights per GPU to pinned CPU memory (with
-# `--cpu-offload-params experts`, only parameters whose name has an `experts` segment — the routed
-# experts). Write `min_offload(model, gpu, kv_tokens, util=0.92, overhead_gib=1.5)`: the smallest $N$,
-# in steps of 0.5 GiB, that leaves room for `kv_tokens` tokens of KV with 16-bit weights.
+# The vLLM flag `--cpu-offload-gb N` moves $N$ GiB of weights per GPU to pinned CPU memory. With
+# `--cpu-offload-params experts`, it moves only the parameters whose name has an `experts` segment. These are
+# the routed experts. Write `min_offload(model, gpu, kv_tokens, util=0.92, overhead_gib=1.5)`. It returns
+# the smallest $N$, in steps of 0.5 GiB, that leaves room for `kv_tokens` tokens of KV with 16-bit weights.
 
 # %% exercise
 def min_offload(model, gpu, kv_tokens, util=0.92, overhead_gib=1.5):
@@ -145,11 +159,13 @@ print(f"✅ OLMoE on a T4 with 16K tokens of KV: --cpu-offload-gb {min_offload(o
 # %% [markdown]
 # ## Worked example: read the start-up log
 #
-# vLLM prints what it actually did. `offload.parse_startup_log` pulls the capacity lines (the wording
-# of vLLM v0.30.0, as layer 04's `servelab.sizing` verified it) and the fused-MoE config line: on a
-# T4 or L4 there is no tuned kernel config, so expect *"Using default MoE config. Performance might be
-# sub-optimal!"*. The two logs here are illustrative (made from `offload.fit`, so they match it); on
-# a real GPU, `kv_error_gib` is your calibration.
+# vLLM prints what it actually did. `offload.parse_startup_log` gets the capacity lines and the fused-MoE
+# config line. The capacity lines use the words of vLLM v0.30.0. `servelab.sizing` in layer 04 examined
+# these words and found them correct.
+#
+# On a T4 or L4, there is no tuned kernel config. Thus, expect *"Using default MoE config.
+# Performance might be sub-optimal!"*. The two logs here are illustrative. We made them from `offload.fit`,
+# thus they agree with it. On a real GPU, `kv_error_gib` is your calibration.
 
 # %%
 FIX = Path(hooks.FIXTURES)
@@ -166,14 +182,18 @@ for fname, gname, off in (("vllm_startup_olmoe_t4_offload.log", "T4", 3.0), ("vl
 # %% [markdown]
 # ## Exercise 5.4 — the price of each way off the GPU
 #
-# Write `offload_ms(gib, pcie_gbs)`: UVA offload reads every offloaded byte over PCIe in every
-# forward pass (GiB = $2^{30}$ bytes, GB/s = $10^9$). And
-# `cpu_experts_ms(model, batch, cpu_bw_gbs=40, cpu_tflops=0.3)`: llama.cpp-style CPU experts, per
-# step, `max(read, compute)` where read = layers × `stream.experts_touched(E, k, batch)` × bytes of
-# one 4-bit expert (`configs.expert_bytes(model, "int4-experts") / (layers × E)`) over the DRAM
-# bandwidth, and compute = 2 × layers × batch × $k$ × `expert_params()` FLOPs over the CPU's FLOP/s.
-# The two CPU numbers describe *your* host (assumed here; measure with a STREAM-like copy and a
-# matmul).
+# Write `offload_ms(gib, pcie_gbs)`. It gives the cost of UVA offload per step. UVA offload reads every
+# offloaded byte over PCIe in every forward pass (GiB = $2^{30}$ bytes, GB/s = $10^9$).
+#
+# Then write `cpu_experts_ms(model, batch, cpu_bw_gbs=40, cpu_tflops=0.3)`. It gives the cost per step of
+# CPU experts in the style of llama.cpp, as `max(read, compute)`:
+#
+# * read = layers × `stream.experts_touched(E, k, batch)` × bytes of one 4-bit expert
+#   (`configs.expert_bytes(model, "int4-experts") / (layers × E)`), divided by the DRAM bandwidth.
+# * compute = 2 × layers × batch × $k$ × `expert_params()` FLOPs, divided by the FLOP/s of the CPU.
+#
+# The two CPU numbers describe *your* host. Here they are assumptions. Measure them with a STREAM-like copy
+# and a matmul.
 
 # %% exercise
 def offload_ms(gib, pcie_gbs):
@@ -204,10 +224,14 @@ print("✅ UVA offload is a fixed toll per step (amortised by batch); CPU expert
 # %% [markdown]
 # ## Exercise 5.5 — where the two cross
 #
-# Write `uva_wins_from(model, gpu, gib, max_batch=512)`: the smallest batch at which the UVA toll per
-# token (`offload_ms(gib, gpu.pcie_gbs) / batch`) is below the CPU experts' cost per token
-# (`cpu_experts_ms(model, batch) / batch`), or None. (Both paths also pay the GPU's own step; it is
-# the same order in both and left out.)
+# Write `uva_wins_from(model, gpu, gib, max_batch=512)`. It returns the smallest batch at which the UVA toll
+# per token is less than the cost per token of the CPU experts. If there is no such batch, it returns None.
+#
+# * The UVA toll per token is `offload_ms(gib, gpu.pcie_gbs) / batch`.
+# * The cost per token of the CPU experts is `cpu_experts_ms(model, batch) / batch`.
+#
+# Both paths also pay for the step of the GPU itself. This cost is of the same order in both, thus the
+# function leaves it out.
 
 # %% exercise
 def uva_wins_from(model, gpu, gib, max_batch=512):
@@ -231,8 +255,8 @@ print(f"✅ [simulated] one user: CPU experts; from batch {b_t4} on a T4 (Gen3) 
 # %% [markdown]
 # ## On a real GPU (T1)
 #
-# Free Colab/Kaggle T4 (16 GB, compute capability 7.5: `--dtype half`, no bf16, no FP8, no MXFP4).
-# Checkpoint ids and GGUF files are (verify) on the Hub:
+# The free Colab/Kaggle T4 has 16 GB and compute capability 7.5. It has no bf16, no FP8 and no
+# MXFP4. Thus use `--dtype half`. The checkpoint ids and GGUF files are on the Hub (verify):
 #
 # ```bash
 # pip install "vllm==0.30.0"
@@ -249,9 +273,9 @@ print(f"✅ [simulated] one user: CPU experts; from batch {b_t4} on a T4 (Gen3) 
 # llama-server -m <olmoe-1b-7b Q4 GGUF> -ngl 99 --n-cpu-moe 16 --port 8080
 # ```
 #
-# Then `MOELAB_URL=http://127.0.0.1:8000` and run the cell below: it parses the log you saved and
-# measures the step at batch 1 and 8. llama-server also serves `/v1/completions`; point `MOELAB_URL`
-# at its port to measure it the same way (whether it honours `ignore_eos` is (verify)).
+# Then set `MOELAB_URL=http://127.0.0.1:8000`. Run the next cell. It parses the log that you saved, and it
+# measures the step at batch 1 and 8. llama-server also serves `/v1/completions`. To measure it the same
+# way, set `MOELAB_URL` to its port. We do not know if llama-server obeys `ignore_eos` (verify).
 
 # %%
 url = env.server_url()
@@ -279,9 +303,9 @@ else:
 # %% [markdown]
 # ## Worked example: a report for the review
 #
-# `moelab.report` writes what you found with its provenance on every section, so a table pasted into
-# a design document says whether it was measured, simulated or illustrative (`.save()` writes
-# Markdown and JSON to `results/`; here it is only printed).
+# `moelab.report` writes what you found, with its provenance on each section. Thus, when you paste a table
+# into a design document, the table shows if its data is measured, simulated or illustrative. The method `.save()`
+# writes Markdown and JSON to `results/`. Here, the notebook only prints the report.
 
 # %%
 from moelab.report import Report
@@ -298,24 +322,28 @@ print(rep.to_markdown())
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "The MoE's memory bill is its total parameter count, so a 7B-total MoE is a 14 GB
-# problem on a 16 GB card even though it computes like a 1.3B model — there is no KV cache left. We
-# have three ways out.
+# **Two minutes:** "The memory bill of an MoE is its total parameter count. Thus a 7B-total MoE is a 14 GB
+# problem on a 16 GB card, but it computes like a 1.3B model. There is no KV cache left. We have three ways
+# out.
 #
-# "Four-bit experts cut the expert bytes about 3.8x and keep everything on the GPU; that is the
-# default where the kernels exist, after an accuracy check on our evals, keeping the router in 16-bit.
-# vLLM's CPU offload keeps some weights in pinned host memory and streams them over PCIe every step —
-# a fixed toll per step that only a large batch amortises. llama.cpp's CPU experts read only the
-# touched experts and compute them on the CPU — the right shape for a single user, but it does not
-# scale with batch. And whatever we choose, what is left is KV cache: MoE does not shrink it."
+# "Four-bit experts decrease the expert bytes by about 3.8x and keep everything on the GPU. That is the
+# default where the kernels exist. We use it after an accuracy check on our evals, and we keep the router in
+# 16-bit.
 #
-# **Drill 1.** *We offloaded 3 GiB with `--cpu-offload-gb`; routing is sparse, so only the touched
-# experts should cross PCIe, right?* — No: UVA offload reads the offloaded tensors in every forward
-# pass regardless of routing; at ~12 GB/s (T4, PCIe Gen3, verify) 3 GiB is ~0.27 s per step.
+# "The CPU offload of vLLM keeps some weights in pinned host memory. It streams them over PCIe at each step.
+# This is a constant toll per step, and only a large batch amortises it.
 #
-# **Drill 2.** *Can we serve gpt-oss-20b on a free T4?* — Not with vLLM: its MXFP4 path needs compute
-# capability 8.0 and bf16 activations; a T4 is 7.5 with no bf16. An L4 (24 GB, 8.9) runs it.
+# "The CPU experts of llama.cpp read only the touched experts and compute them on the CPU. That is the correct
+# shape for a single user, but it does not scale with batch. Whatever we select, the memory that stays is
+# KV cache. MoE does not make it smaller."
 #
-# **Drill 3.** *Which layers should stay 16-bit when we quantize an MoE?* — The router (gate) and the
-# shared-expert gate: routing is sensitive to quantization error (llm-compressor's MoE examples keep
-# `mlp.gate` in 16-bit), and they are tiny. The experts are where the bytes are.
+# **Drill 1.** *We offloaded 3 GiB with `--cpu-offload-gb`. Routing is sparse, thus only the touched experts
+# cross PCIe, correct?* No. UVA offload reads the offloaded tensors in every forward pass, and the routing
+# does not change this. At ~12 GB/s (T4, PCIe Gen3, verify), 3 GiB is ~0.27 s per step.
+#
+# **Drill 2.** *Can we serve gpt-oss-20b on a free T4?* Not with vLLM. Its MXFP4 path needs compute
+# capability 8.0 and bf16 activations. A T4 is 7.5 and has no bf16. An L4 (24 GB, 8.9) runs it.
+#
+# **Drill 3.** *Which layers do we keep in 16-bit when we quantize an MoE?* The router (gate) and the
+# shared-expert gate. Routing is sensitive to quantization error (the MoE examples of llm-compressor keep
+# `mlp.gate` in 16-bit). Also, these layers are small. The experts are where the bytes are.
