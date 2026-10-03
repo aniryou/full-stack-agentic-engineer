@@ -63,12 +63,12 @@ print(eng.trace())
 # Read the trace line by line:
 #
 # * **step 1**: `r0`'s 11-token prompt runs whole (`prefill`) and samples its first token. `r1` gets only the
-#   5 tokens that are left in the budget (`chunk`). The engine samples nothing for `r1` yet. `r2` waits.
+#   5 tokens that the budget still has (`chunk`). The engine samples nothing for `r1` yet. `r2` waits.
 # * **step 3**: two decodes (1 token each) and a 14-token chunk of `r2`. *Decode and prefill share a step*.
 #   A modern engine has no separate "prefill steps".
 # * **finished**: in the step where a request gets to `max_tokens`, the request frees its blocks. Thus the `kv` value
-#   on the next line is lower, because `kv` counts the blocks held while that step ran. The slot of the request is
-#   open to a request that waits immediately, at the next step.
+#   on the next line is lower, because `kv` counts the blocks held while that step ran. A request that waits can take
+#   the slot immediately, at the next step.
 #
 # ## Worked example 2 — one step, taken apart
 # `Engine.step` has about 30 lines. The next cell does its stages by hand, so that you can see the flat batch.
@@ -242,7 +242,7 @@ print("   the same arithmetic as 00-foundations/gpu-capacity-planning; Notebook 
 #
 # * Each rank holds **half the columns** of $W_{\text{gate}}$ and $W_{\text{up}}$. This is *column-parallel*. The
 #   rank calculates half of the hidden features with no communication, because the gate operation is elementwise.
-# * Each rank also holds the **matching half of the rows** of $W_{\text{down}}$. This is *row-parallel*. The rank
+# * Each rank also holds the **half of the rows** of $W_{\text{down}}$ that matches its columns. This is *row-parallel*. The rank
 #   produces a full-size **partial sum**.
 #
 # The addition of the partial sums of the ranks is the **all-reduce**. Write `tp_mlp_partials(L, h, world)`. It
@@ -305,7 +305,7 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # **Drill questions**
 # 1. *Why does the engine not have prefill steps and decode steps?* Because the scheduler only records computed
 #    tokens against total tokens. A step mixes decode tokens and prefill chunks under one token budget.
-# 2. *Why is batching nearly free during decode?* Decode is memory-bound. The step time is the weight read, and
-#    all requests in the batch share that read (Notebook 02 puts numbers on it).
+# 2. *Why is batching nearly free during decode?* Decode is memory-bound. The step time is the weight read. All
+#    requests in the batch share that read (Notebook 02 puts numbers on it).
 # 3. *A request's prompt is 8 tokens and it generates 1 token with block size 4. How many blocks?* Two. The
 #    only sampled token never goes back through the model, so it needs no slot.
