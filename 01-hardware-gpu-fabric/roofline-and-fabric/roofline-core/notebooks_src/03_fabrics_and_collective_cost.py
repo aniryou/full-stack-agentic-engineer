@@ -13,7 +13,7 @@
 # 2(p-1)\,\alpha + \frac{2(p-1)}{p} \cdot \frac{n}{\beta}.
 # $$
 #
-# Two regimes follow from this. The tensor-parallel all-reduces of a decode step are small (one token × $d_{\text{model}}$ ×
+# This cost model gives two regimes. The tensor-parallel all-reduces of a decode step are small (one token × $d_{\text{model}}$ ×
 # 2 bytes = 16 KiB for a 70B model). Thus they are **latency-bound**: what matters is the number of collectives that a
 # step makes and the $\alpha$-count of the algorithm. The all-reduces of a prefill step are tens of MB, thus they are
 # **bandwidth-bound**: what matters is $\beta$. The bandwidth term of the ring (~$2n/\beta$) does not decrease as
@@ -25,7 +25,7 @@
 # - Tensor parallelism stays inside the NVLink domain.
 # - Clusters give every GPU its own NIC (rails) and run collectives hierarchically.
 #
-# It is also what `nvidia-smi topo -m` tells you. Primer: `../PRIMER.md` §5.
+# This drop in $\beta$ is also what `nvidia-smi topo -m` tells you. Primer: `../PRIMER.md` §5.
 
 # %%
 from roofline import fabric, llm, specs
@@ -52,7 +52,7 @@ for key in ("nvlink4", "ib-ndr"):
 # ## algbw and busbw, as nccl-tests reports them
 # $\mathrm{algbw} = \text{size}/\text{time}$. For all-reduce, $\mathrm{busbw} = \mathrm{algbw} \times 2(p-1)/p$.
 # With this definition, a perfect ring shows the per-direction link bandwidth, independent of $p$. On this model, a large
-# all-reduce on NVLink 4 shows busbw ≈ 450 GB/s. Real systems are below it, and layer 02 measures it.
+# all-reduce on NVLink 4 shows busbw ≈ 450 GB/s. Real systems are below this value. Layer 02 measures the real busbw.
 
 # %%
 GIB = 1 << 30
@@ -144,8 +144,8 @@ print(f"1 GiB, GPUDirect RDMA pipelined in 1 MiB chunks:        {fabric.staged_t
 #   one chunk that is the sum over all ranks.
 # - Phase 2 (all-gather): the finished chunks go around the same ring, and the receiver *overwrites* its copy.
 #
-# Write `simulate_ring_allreduce(vectors)`. It returns `(result, steps)`. You must find yourself which chunk each
-# rank sends at each step. Then write `ring_allreduce(n, p, alpha, beta)` in seconds ($\alpha$ in s, $\beta$ in bytes/s).
+# Write `simulate_ring_allreduce(vectors)`. It returns `(result, steps)`. Find which chunk each rank sends at
+# each step. Do this yourself. Then write `ring_allreduce(n, p, alpha, beta)` in seconds ($\alpha$ in s, $\beta$ in bytes/s).
 # Use what the simulation tells you: the number of steps, and the number of bytes in each message.
 
 # %% exercise
@@ -330,7 +330,7 @@ print("✅ put a 2-GPU TP job on GPU0+GPU1 (NV12), never GPU1+GPU2 (SYS: across 
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "Every transfer is $\alpha + n/\beta$. Tensor parallelism makes two
-# all-reduces per layer per step, thus 160 for a 70B model. At decode, they are 16 KiB each, thus they are
+# all-reduces per layer per step (160 for a 70B model). At decode, they are 16 KiB each, thus they are
 # latency-bound. The cost is the count × the latency of the algorithm. This is why engines use
 # latency-optimal all-reduce kernels.
 #

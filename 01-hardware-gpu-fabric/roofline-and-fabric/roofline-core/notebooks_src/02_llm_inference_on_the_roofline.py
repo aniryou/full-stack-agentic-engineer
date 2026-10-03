@@ -39,7 +39,7 @@ print("weights streamed by one decode step:", f"{llm.streamed_weight_bytes(m8, 1
 # %% [markdown]
 # ## Prefill: intensity ≈ tokens in the step
 # The engine reads the weights one time for the whole prompt. The FLOPs are $2 \times \text{tokens} \times \text{params}$ plus causal
-# attention. Watch the bound change near the ridge (295 FLOP/B on an H100 in bf16). Here, you measure that point in
+# attention. Watch the bound change near the ridge (295 FLOP/B on an H100 in bf16). Here, the unit of that point is
 # *tokens*. That is the reason that engines give prefill chunks of a few hundred to a few thousand tokens.
 
 # %%
@@ -71,7 +71,7 @@ for b in (1, 8, 32, 64, 128, cap):
 # As $\text{batch} \to \infty$, the weight read amortizes away. The average intensity of the step then tends to
 # $\text{FLOPs per token} \div \text{KV bytes per token}$. For this GQA model, that is about 32 FLOP/B at 4K context.
 # If you treat the step as one kernel, it can never reach the 295 of an H100 at 4K. The crossover of the whole step
-# exists only at the shortest contexts, and the HBM capacity for KV runs out first anyway. (Per kernel, the
+# exists only when the context is very short, and the HBM capacity for KV runs out first anyway. (Per kernel, the
 # picture is sharper: see "Per kernel, not per step" after Exercise 2.2.)
 
 # %%
@@ -307,8 +307,8 @@ print(f"\n4096³ bf16 GEMM with 128x128 tiles and no reuse between tiles: {rl.ti
 # Make a prediction first: does the winner reach the HBM ridge of the H100 (295) by itself?
 #
 # **(b)** Write `chain_bytes(n, inputs_per_op, b, fused)`. It returns the HBM bytes for a chain of elementwise ops on `n`
-# elements. `inputs_per_op[i]` is the number of full-size tensors that op $i$ reads. These are the tensor that moves through the
-# chain, plus a second one for a residual add. Without fusion, every op reads its inputs from HBM and writes its output
+# elements. `inputs_per_op[i]` is the number of full-size tensors that op $i$ reads. They are the tensor that moves through the
+# chain and, for a residual add, a second tensor. Without fusion, every op reads its inputs from HBM and writes its output
 # back. With fusion, one kernel reads every distinct input one time and writes the result one time.
 
 # %% exercise
@@ -349,7 +349,7 @@ print(f"✅ best tile {best}: {rl.tile_intensity(*best):.0f} FLOP/B, below the 2
 # A prefill step does the same reads, but for thousands of tokens. Thus prefill is compute-bound, and TTFT is
 # FLOPs over peak. Decode is memory-bound, and the time per token is bytes over bandwidth."
 #
-# "Batching amortizes the weight read. This is why throughput increases with batch, and the weight GEMMs reach the
+# "Batching amortizes the weight read. This is why throughput increases with batch. The weight GEMMs reach the
 # ridge near $\text{batch} \approx \text{ridge}$. But attention reads the KV cache of each sequence at ~4 FLOP/B, whatever
 # the batch. Thus at realistic contexts, KV bytes dominate the step, and the HBM capacity for KV caps the batch first."
 #

@@ -140,7 +140,7 @@ pcie_box = topo.parse(pcie_text)
 # ## Exercise 3.3 — choose the group
 #
 # Write `my_best_group(t, k)`. From all the $k$-GPU subsets of `t.gpus`, return the subset whose worst pairwise path
-# (by `my_rank`) is best. If two subsets have the same score, compare the sorted lists of all their pair ranks. If they
+# (by `my_rank`) is best. If two subsets have the same worst-pair rank, compare the sorted lists of all their pair ranks. If they
 # are still equal, use the lowest GPU ids (the order that `itertools.combinations` produces). `t.link(a, b)` gives a
 # path code.
 
@@ -171,7 +171,7 @@ print("✅ TP=2 on the PCIe box: GPU0+GPU1 (same switch). On NVSwitch every grou
 #
 # Also, the correct place for the process that feeds a GPU is the NUMA node of that GPU. This process tokenizes the
 # input and stages the batches. On that node, its host buffers do not go across the socket link on each copy.
-# roofline-core's Ex 3.5 selected these from a matrix. The lab's `topo.nearest_nic` and `topo.cpu_list` do the same
+# Ex 3.5 of roofline-core selected the NIC and the CPU cores from a matrix. The lab's `topo.nearest_nic` and `topo.cpu_list` do the same
 # on real `nvidia-smi` output:
 
 # %%
@@ -192,11 +192,11 @@ print("→ on the PCIe box GPU2/GPU3 reach the only NIC across the sockets (SYS)
 # - For PCIe, when the two GPUs have **peer access**: the PCIe link rate
 #   $\text{GT/s} \times \text{lanes} \times 128/130 \div 8$.
 # - When the two GPUs do not have peer access: about half of that rate. The driver stages the copy through host
-#   memory, with two PCIe crossings and a host copy. A measured staged copy often gets an even lower rate.
+#   memory. The data goes across PCIe two times, and the host makes one more copy. A measured staged copy often gets an even lower rate.
 #
 # The platform, not the topology code, decides if peer access works. Through a switch (`PIX`/`PXB`), peer access
 # normally works. Across host bridges or sockets (`NODE`/`SYS`), it rarely works. Through the root complex (`PHB`), the
-# result changes with the platform, and many platforms and most VMs turn it off.
+# result changes with the platform. Many platforms and most VMs turn peer access off.
 #
 # Thus a `PHB` estimate from a saved topology is an **upper bound** if you do not ask the driver. This is a
 # **model**. The measurement in section 6 is the number that you trust.
@@ -224,8 +224,8 @@ print(f"kaggle-2xt4 if the driver reports no peer access: ≈ {off.gbs:.1f} GB/s
 #   near or below half the link. It is not a fault.
 # * `"direct"`: there is peer access, and the measurement is at least 60% of the direct-path model (`direct_gbs`).
 #   The direct-path model is the rate that the link gives with peer access. The link is healthy.
-# * `"degraded"`: there is peer access, but the measurement is below 60% of the model. Something between the GPUs is
-#   incorrect. Examples are ACS or an IOMMU that forces P2P through the root complex, a link that trained narrower,
+# * `"degraded"`: there is peer access, but the measurement is below 60% of the model. Something between the GPUs has a
+#   problem. Examples are ACS or an IOMMU that forces P2P through the root complex, a link that trained narrower,
 #   or a busy GPU.
 
 # %% exercise
@@ -289,7 +289,7 @@ else:
 # ## 7 · What the link is worth: the TP all-reduce per token
 #
 # Megatron-style tensor parallelism does an all-reduce of the $\text{batch} \times \text{hidden}$ activations two times
-# for each layer. A ring all-reduce of $S$ bytes over $p$ GPUs takes ${2(p-1)}$ steps. Each step pays a fixed cost
+# for each layer. A ring all-reduce of $S$ bytes over $p$ GPUs takes ${2(p-1)}$ steps. Each step pays a constant cost
 # $\alpha$ and moves $S/p$ bytes:
 #
 # $$
@@ -321,9 +321,11 @@ for name, alpha, bw in fabrics:
 
 # %% [markdown]
 # At decode, the $\alpha$ term is nearly all of the time. Thus the $\alpha$ that you put in the formula *is* the
-# answer, and section 6 measured two values of it. Each step of a ring waits for the data of the step before it to
-# arrive, and only then can it send that data on. This is a dependent chain, and it pays the full **latency** of a
-# copy. Back-to-back copies of independent buffers overlap their fixed costs. Thus the $\alpha$ of the **pipelined**
+# answer, and section 6 measured two values of it.
+#
+# Each step of a ring waits until the data from the step before
+# arrives. Only then can the step send that data on. This is a dependent chain, and it pays the full **latency** of a
+# copy. Back-to-back copies of independent buffers overlap their constant costs. Thus the $\alpha$ of the **pipelined**
 # fit is smaller, and it gives a cost for the all-reduce that is too low.
 #
 # For $\beta$, the opposite is true. $\beta$ is a large-copy property. The pipelined sweep gives the best value for
@@ -360,7 +362,7 @@ print("✅ a dependent chain pays the latency α; a bandwidth term takes the lar
 #
 # - TP stays inside the NVLink domain (lowest $\alpha$, highest $B$).
 # - Engines supply custom one-shot all-reduce kernels and capture the decode step in CUDA graphs.
-# - TP across nodes is the last choice. The
+# - TP across nodes is only for when no other choice is possible. The
 #   [parallelism menu](../../../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu)
 #   puts pipeline and data parallelism there instead.
 #
@@ -388,10 +390,12 @@ print("✅ a dependent chain pays the latency α; a bandwidth term takes the lar
 #    numbers). Is it broken?* It is not necessarily broken. The model gives 15.8 GB/s for PHB only for direct peer
 #    access through the root complex. Examine `torch.cuda.can_device_access_peer` (the lab records it).
 #
-#    Without peer access, the driver stages the copy through host memory. That is two PCIe crossings and a host
-#    copy, at best about half the link and often less. You can expect this result. It is not a fault. When the platform gives
-#    peer access, a third of the link *is* a result that you must examine (ACS/IOMMU settings, link width). In both cases, the link is good
-#    for pipeline or data parallelism and poor for TP.
+#    Without peer access, the driver stages the copy through host memory. The data goes across PCIe two times and
+#    the host makes one more copy. The result is at best about half the link and often less. You can expect this
+#    result. It is not a fault.
+#
+#    When the platform gives peer access, a third of the link *is* a result that you must examine (ACS/IOMMU
+#    settings, link width). In both cases, the link is good for pipeline or data parallelism and poor for TP.
 # 3. *Why pin the process that feeds GPU5 to cores 48–95 on the HGX box?* GPU5 connects to socket 1. Host buffers
 #    in the memory of socket 1 do not use the inter-socket link on each DMA. Also, the RDMA NIC of GPU5 (NIC5, PXB) is
 #    on the same socket.

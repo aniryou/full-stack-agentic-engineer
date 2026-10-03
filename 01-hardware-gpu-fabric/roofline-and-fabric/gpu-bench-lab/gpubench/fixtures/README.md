@@ -1,9 +1,9 @@
 # Fixtures: sample `nvidia-smi` output (illustrative)
 
 These files are **sample output in the documented format** of `nvidia-smi topo -m` and
-`nvidia-smi --query-gpu=... --format=csv`. They are for exercises that parse the output, and for tests. They are
-not measurements of any real machine. The file `inventory_hgx_h100_8gpu.csv` has planted anomalies for the exercises
-of notebook 03. They are a power-capped GPU, a link trained at x8 and memory that another process holds.
+`nvidia-smi --query-gpu=... --format=csv`. You parse them in the exercises, and the tests also use them.
+The files are not measurements of any real machine. The file `inventory_hgx_h100_8gpu.csv` has planted anomalies for the exercises
+of notebook 03. The anomalies are a power-capped GPU, a link trained at x8 and memory that another process holds.
 
 | File | Shape |
 |---|---|

@@ -8,9 +8,15 @@ After this core, you can calculate these values from a spec sheet and a model co
 - how often a large job fails,
 - what a token costs.
 
-The core has seven small standard-library modules and four fill-in notebooks. The modules cover a dated accelerator
-catalogue, the roofline and the FLOPs and bytes of an LLM step. They also cover the α-β cost of a collective, cold
-start, failure rates and the cost of a token.
+The core has seven small standard-library modules and four fill-in notebooks. The modules cover these topics:
+
+- a dated accelerator catalogue,
+- the roofline,
+- the FLOPs and bytes of an LLM step,
+- the α-β cost of a collective,
+- cold start,
+- failure rates,
+- the cost of a token.
 
 **Tier T0** (laptop, Colab CPU or CI). It needs no GPU and no network, and it is free. This is the *minimal* core of
 the topic. [`../PRIMER.md`](../PRIMER.md) explains the concepts. Each computed number that the primer quotes comes
@@ -74,18 +80,17 @@ teaches.
 ## The notebooks
 
 Each notebook starts with *The one-minute version* and shows worked examples. Then it has 5–6 exercises
-(`# YOUR CODE HERE`), each with a check cell after it that prints ✅. It ends with *In a design review* (a
+(`# YOUR CODE HERE`). After each exercise, a check cell prints ✅. It ends with *In a design review* (a
 two-minute explanation and drill questions). The solutions are in `solutions/`.
 
 1. **`01_spec_sheets_and_the_roofline`**: you read a datasheet (dense against sparse, per-direction links, bits
    against bytes). You build the roofline and find when a GEMM becomes compute-bound. You also see why a kernel
-   that saturates a T4 can starve an H100. Primer §1–2.
-2. **`02_llm_inference_on_the_roofline`**: it covers prefill against decode, the batch sweep and the KV ceiling on
-   decode intensity. It continues with the closed-form crossover batch and the step per kernel (GEMMs against
-   attention). Then you predict a quantization speedup from bytes and select a batch under an ITL SLO. It also
-   covers MoE expert streaming. Last, you select a GEMM tile that fits shared memory and fuse an elementwise chain.
-   Primer §3–4.
-3. **`03_fabrics_and_collective_cost`**: it covers α-β. You simulate a ring all-reduce and read a busbw sweep. You
+   that saturates a T4 can fail to keep an H100 busy. Primer §1–2.
+2. **`02_llm_inference_on_the_roofline`**: you examine prefill against decode, the batch sweep, the KV ceiling on
+   decode intensity and the closed-form crossover batch. You examine the step per kernel (GEMMs against attention)
+   and predict a quantization speedup from bytes. You select a batch under an ITL SLO and examine MoE expert streaming.
+   Last, you select a GEMM tile that fits shared memory and fuse an elementwise chain. Primer §3–4.
+3. **`03_fabrics_and_collective_cost`**: you examine α-β. You simulate a ring all-reduce and read a busbw sweep. You
    select a TP degree against an ITL SLO in a node or across nodes. Then you calculate the size of a two-tier
    fabric and read `nvidia-smi topo -m`. Primer §5.
 4. **`04_loading_reliability_and_cost`**: it covers streamed loading, a cold-start budget and the Young/Daly
@@ -95,8 +100,8 @@ two-minute explanation and drill questions). The solutions are in `solutions/`.
 
 The builder generates `notebooks/` and `solutions/` from `notebooks_src/*.py` (percent format with
 `### BEGIN SOLUTION` blocks). The build and run tools need the notebook requirements, not only the test
-requirements (`requirements.txt` is pytest only). Thus install the notebook requirements first. Edit the sources,
-then run:
+requirements (`requirements.txt` is pytest only). Thus install the notebook requirements first. Edit the sources.
+Then run these commands:
 
 ```bash
 python3 -m pip install -r requirements-notebooks.txt    # nbformat, nbclient, ipykernel, JupyterLab (or make setup-notebooks)
@@ -107,7 +112,7 @@ python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at th
 
 On Colab, the first cell of each notebook clones the repository and installs this package. Locally, the notebook
 walks up from its directory until it finds `roofline/`. Charts use `matplotlib` when the package is present
-(`pip install -e ".[plot]"`). Without it, the charts fall back to text.
+(`pip install -e ".[plot]"`). If the package is not present, the code draws the charts as text.
 
 ## Caveats: what the numbers are — and are not
 

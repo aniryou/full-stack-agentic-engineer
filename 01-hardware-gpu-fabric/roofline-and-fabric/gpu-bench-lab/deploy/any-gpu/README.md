@@ -1,7 +1,7 @@
 # Run gpubench on any GPU (T1/T2)
 
 **What it does.** It puts the measurement suite of the lab on a real GPU. The GPU can be on Colab, on Kaggle, in a
-rented container or VM, or in any Linux box with Docker. Then the GPU cells of the notebooks and `gpubench run`
+rented container or VM, or in any Linux box with Docker. Thus, the GPU cells of the notebooks and `gpubench run`
 measure real hardware.
 
 **Cost.** It is free on Colab and Kaggle. For a rented GPU, you pay by the hour while the machine exists (see the
@@ -11,7 +11,7 @@ table that follows). The default (quick) run of the suite takes a few minutes on
 volume that you attached.
 
 The lab needs Python ≥ 3.10 and numpy. For the GPU tiers, it also needs PyTorch with CUDA and an NVIDIA driver. The
-table gives four ways to get them, with the lowest cost first. The prices are approximate (September 2026, verify).
+table gives four ways to get to the GPU tiers, with the lowest cost first. The prices are approximate (September 2026, verify).
 [`COMPUTE.md`](../../../../../COMPUTE.md) keeps the current comparison.
 
 | Where | GPUs | Cost | Gets you |
@@ -55,14 +55,14 @@ python -m gpubench run --out results   # add --full for bigger sizes
 python -m jupyterlab notebooks
 ```
 
-These are the PyTorch builds that a driver can run (verify against the PyTorch install matrix):
+This list shows which PyTorch build each driver can run (verify against the PyTorch install matrix):
 
 - From 2.11 on, the default build on PyPI is for CUDA 13. It needs an **R580+** driver.
 - The `cu126` index serves CUDA 12.6 builds. They run on R525+, but they have no Blackwell kernels.
 - Blackwell GPUs (B200, RTX 50xx, RTX PRO 6000) need a CUDA 12.8+ build and an R570+ driver.
 
-Sometimes `gpubench info` uses the numpy fallback on a machine where `nvidia-smi` works. Then the message names your
-driver and the CUDA version of PyTorch. That mismatch is the cause.
+If `gpubench info` uses the numpy fallback on a machine where `nvidia-smi` works, the message names your driver and
+the CUDA version of PyTorch. A mismatch between these two versions is the cause.
 
 On RunPod or Vast, you are already in a container with a GPU. Select a PyTorch template. Then run the same commands.
 If the template has PyTorch, do not use `[gpu]`. You cannot change the driver there. Thus, select a template with a
@@ -88,7 +88,7 @@ What it does:
 3. It runs the suite with `--gpus all --ipc=host --ulimit memlock=-1` and writes the report to `./results` on the
    host.
 
-The CUDA of the base image must agree with the host driver *and* the GPU (verify). The default `cuda12.6` image runs
+The CUDA version of the base image must agree with the host driver *and* the GPU (verify). The default `cuda12.6` image runs
 on R525+ drivers, but it has no Blackwell kernels. On a B200 or an RTX 50xx / RTX PRO 6000, use
 `BASE=pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime` (R580+ driver, Turing and newer only).
 

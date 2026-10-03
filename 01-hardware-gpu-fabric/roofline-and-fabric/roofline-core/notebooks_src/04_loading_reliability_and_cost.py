@@ -203,8 +203,8 @@ print(f"✅ 4,096 GPUs (MTBF {m4096 / 3600:.1f} h), 30 s checkpoints: every {tau
 # %% [markdown]
 # ## Exercise 4.4 — spares, and the size of a failure domain
 # Write `p_at_least(k, n, a)` (binomial) and `replicas_needed(k, a, target)`. Then compare two ways to
-# serve the same capacity at 99.9%. The first way is 8 replicas of TP=8. The second way is (with FP8 weights so
-# that it fits) 16 replicas of TP=4.
+# serve the same capacity at 99.9%. The first way is 8 replicas of TP=8. The second way is 16 replicas of TP=4,
+# with FP8 weights so that the model fits.
 
 # %% exercise
 def p_at_least(k, n, a):
@@ -286,15 +286,15 @@ print("✅ owning beats on-demand above ~14% utilisation but Spot only above ~42
 # Then engine init dominates.
 #
 # "Reliability: failure rates add. Thus a 16K-GPU run has an interruption every ~3 hours. Write a checkpoint
-# every $\sqrt{2\delta M}$, about 19 minutes at a 60 s checkpoint, and make checkpoints asynchronous. For serving,
+# every $\sqrt{2\delta M}$, about 19 minutes at a 60 s checkpoint. Make the checkpoints asynchronous. For serving,
 # each TP=8 replica is an 8-GPU failure domain. When 8 are necessary, deploy 10 for 99.9%.
 #
 # "Cost is \$/GPU-hr over tokens/s × utilisation. Thus I quote \$/M tokens at a realistic utilisation, not at
 # the roofline."
 #
 # **Drill.**
-# 1. *Autoscaling takes 10 minutes. Where do you look first?* At the stage table. Usually it is the weight
-#    fetch (one slow stream). Use parallel/streamed loads, a local or regional cache, or a smaller precision.
+# 1. *Autoscaling takes 10 minutes. Where do you look first?* Look at the stage table first. Usually the
+#    weight fetch (one slow stream) is the slowest stage. Use parallel/streamed loads, a local or regional cache, or a smaller precision.
 # 2. *Checkpoint writes got 4× faster. How much less waste?* At the optimum, $\text{waste} \propto \sqrt{\delta}$.
 #    Thus the waste is half.
 # 3. *Is it correct to buy GPUs because we are 60% utilised?* Only if 60% is above the break-even against

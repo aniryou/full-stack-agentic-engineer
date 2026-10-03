@@ -37,21 +37,23 @@ bandwidth and PCIe Gen4 copies between host and device. For the boot disk, it me
 ## Cost (approximate, us-central1, September 2026 — verify)
 
 `g2-standard-4` costs about $0.70/hr on demand. Spot usually costs 60–91% less, thus approximately $0.07–0.28/hr.
-There is also a 100 GB pd-balanced boot disk (cents per day) and an ephemeral external IP. A short run takes much
-less than one hour, and then the VM powers itself off. The GPU billing stops at that time. But the **stopped VM and
-its boot disk stay until `terraform destroy`**. (`bench-on-gcp.sh` destroys them for you. If you work by hand, run
-the command yourself.)
+There is also a 100 GB pd-balanced boot disk (cents per day) and an ephemeral external IP.
+
+A short run takes much less than one hour, and then the VM powers itself off. The GPU billing stops at that time.
+But the **stopped VM and its boot disk stay until `terraform destroy`**. `bench-on-gcp.sh` destroys them for you. If
+you work by hand, run that command yourself.
 
 `max_run_duration` is the safety net for a *hung* run. It deletes a VM after one hour in the RUNNING state. It
 counts only the time in the RUNNING state. Thus it does not clean up a VM that already stopped itself (verify).
-`a2-highgpu-2g` (2× A100 40GB with NVLink, for the P2P notebook) costs about $7/hr on demand. Use Spot if the
-capacity permits it, and keep the duration short.
+
+`a2-highgpu-2g` (2× A100 40GB with NVLink, for the P2P notebook) costs about $7/hr on demand. If the capacity
+permits it, use Spot. Keep the duration short.
 
 ## Run it
 
 One command does the full cycle: apply, wait for the report, download to `results/gcp/`, destroy. If something
-fails after the apply, the script copies the files that reached the bucket. Then it destroys everything all the
-same. No report within `TIMEOUT_MIN` (default 45) is also a failure. `KEEP=1` keeps the resources instead:
+fails after the apply, the script copies the files that reached the bucket. Then it destroys all the resources, as
+it does after a successful run. No report within `TIMEOUT_MIN` (default 45) is also a failure. `KEEP=1` keeps the resources instead:
 
 ```bash
 PROJECT=my-gpu-lab deploy/gcp/bench-on-gcp.sh
@@ -104,8 +106,8 @@ disks. Layer 03 covers how to get that capacity.
   `gcloud compute images list --project deeplearning-platform-release --no-standard-images --format='value(family)' | sort -u`.
   A family with an `nvidia-580` driver (for example `common-cu129-ubuntu-2404-nvidia-580`, if it is in the list,
   verify) also runs CUDA 13 PyTorch wheels. These wheels need R580+.
-* The metadata `install-nvidia-driver = True` installs the driver at the first boot. It does this for DLVM images
-  that do not come with a preinstalled driver.
+* The metadata `install-nvidia-driver = True` installs the driver at the first boot on DLVM images that do
+  not have a preinstalled driver.
 * `boot_disk_type = pd-balanced` is correct for G2/A2/N1. Newer shapes (A3 Ultra, A4, ...) can need
   `hyperdisk-balanced`.
 * `torch_index_url` (default: CUDA 12.8 wheels) must agree with the driver of the image. CUDA 12.x needs R525+

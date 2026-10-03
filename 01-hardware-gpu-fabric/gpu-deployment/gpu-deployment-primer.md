@@ -10,7 +10,7 @@
 
 The term "scale-up" has two meanings. In this field, the two meanings come into conflict all the time.
 
-**Colloquially**, it means "make the deployment bigger": serve more users and run larger models.
+**In everyday use**, it means "make the deployment bigger": serve more users and run larger models.
 
 **Technically**, in GPU infrastructure, scale-up has an exact definition. It is the opposite of scale-out:
 
@@ -27,9 +27,9 @@ The standard pattern is: scale up first, then scale out. Build the largest tight
 
 Most of an LLM forward pass is a long sequence of large matrix multiplications. Each output element is independent of the other elements. Thus the work is embarrassingly parallel.
 
-A CPU has tens of powerful, general-purpose cores. A GPU has thousands of simple cores, and also dedicated matrix-multiply hardware (NVIDIA calls these units *Tensor Cores*). For this specific shape of work, a GPU is 10–100× faster.
+A CPU has tens of powerful, general-purpose cores. A GPU has thousands of simple cores, and also dedicated matrix-multiply hardware. NVIDIA calls these units *Tensor Cores*. For this specific shape of work, a GPU is 10–100× faster.
 
-But usually the raw arithmetic is not the bottleneck. The thing that actually limits how you serve an LLM is **memory**: both how much memory you have and how fast you can read it.
+But usually the raw arithmetic is not the bottleneck. When you serve an LLM, **memory** is the thing that actually limits the performance. Both how much memory you have and how fast you can read it are limits.
 
 Modern accelerators use **HBM** (High Bandwidth Memory). HBM is a set of DRAM stacks on the same package as the compute die. An extremely wide bus connects the stacks to the die. HBM is the reason for the cost of a data centre GPU. At this time, the HBM supply is also the binding constraint on the whole industry.
 
@@ -58,7 +58,7 @@ The model generates one token. Then it feeds that token back in and generates th
 
 ### Why this matters
 
-These two phases need different things from the hardware and different things from a scheduler. If they run on the same GPU, they interfere. A long prefill blocks decode steps, and the output stutters. This conflict is the cause of most of the architecture of interest in section 8.
+These two phases need different things from the hardware and different things from a scheduler. If they run on the same GPU, they interfere. A long prefill blocks decode steps, and the output stutters. This conflict is the reason for most of the important architecture in section 8.
 
 A useful shorthand here is **arithmetic intensity**: the ratio of the FLOPs done to the bytes moved. Prefill has a high arithmetic intensity. Decode has an extremely low arithmetic intensity. Almost every optimisation that you make to serve an LLM is an attempt to increase the arithmetic intensity of decode.
 
@@ -111,7 +111,7 @@ Activations, CUDA graphs, communication buffers, fragmentation and the framework
 
 ### 3.4 Putting it together
 
-Take a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 GB, minus overhead, for KV cache. That is approximately 20–25 concurrent 1K-token requests. This is satisfactory for a demo, but not for production. This is the reason that you find you need multiple GPUs, even when the model technically "fits".
+Think about a 70B model at FP8 on one 80 GB GPU. The 70 GB of weights leaves 10 GB, minus overhead, for KV cache. That is approximately 20–25 concurrent 1K-token requests. This is satisfactory for a demo, but not for production. This is the reason that you find that you need multiple GPUs, even when the model technically "fits".
 
 ---
 
@@ -122,25 +122,25 @@ There are five ways to divide work across GPUs. You can combine them. Actual dep
 ### Tensor parallelism (TP)
 Divide the matrices of each individual layer across GPUs. Each GPU holds a slice of each layer.
 
-- **Communication: very high.** The GPUs must synchronise (all-reduce) at each layer, many times per token.
-- **Therefore: only inside the scale-up domain.** TP across a slow network is catastrophic.
+- **Communication: extremely high.** The GPUs must synchronise (all-reduce) at each layer, many times per token.
+- **Thus: only inside the scale-up domain.** TP across a slow network is catastrophic.
 - Use TP when the model does not fit on one GPU, or to decrease latency.
 
 ### Pipeline parallelism (PP)
 Divide the model by layer. GPU 0 holds layers 1–20, GPU 1 holds layers 21–40, and so on.
 
 - **Communication: low.** The GPUs pass only the activations at each boundary.
-- **Therefore: fine across the scale-out network.**
+- **Thus: satisfactory across the scale-out network.**
 - The cost is "pipeline bubbles": GPUs are idle while they wait for the previous stage. To decrease this cost, divide the batches into micro-batches.
 
 ### Data parallelism (DP) / replication
-Put a full copy of the model on each GPU or group. Load-balance the requests across the replicas.
+Put a full copy of the model on each GPU or group. Use a load balancer to divide the requests across the replicas.
 
-- **Communication: near zero for inference.** (For training, the GPUs must all-reduce the gradients. That is the dominant traffic in a training cluster.)
+- **Communication: near zero for inference.** For training, the GPUs must do an all-reduce of the gradients. This all-reduce is the dominant traffic in a training cluster.
 - DP scales the throughput, not the model size. This is your horizontal autoscaling axis.
 
 ### Expert parallelism (EP)
-For Mixture-of-Experts models, put different experts on different GPUs and route the tokens to them. The communication is an all-to-all shuffle. This shuffle needs much bandwidth, and it is prone to load imbalance. MoE is now standard for frontier models. Thus EP is more important now than it was before.
+For Mixture-of-Experts models, put different experts on different GPUs and route the tokens to them. The communication is an all-to-all shuffle. This shuffle needs much bandwidth, and it often causes load imbalance. MoE is now standard for frontier models. Thus EP is more important now than it was before.
 
 ### Sequence / context parallelism
 Divide a single long sequence across GPUs. This is necessary for extremely long context windows, where the KV cache for one request is too large for one GPU.
@@ -167,7 +167,7 @@ This is the actual "architecture" in GPU deployment architecture. These are orde
 
 Note the cliff. Compare like with like. The vendor markets the NVLink figures as the sum of the two directions, but the NIC figures are per direction.
 
-Per direction and in one generation, the NVLink of a GPU carries about **9×** the bandwidth of its NIC. For H100 with a 400 Gb/s NIC, the figures are 450 against 50 GB/s. For Blackwell with an 800 Gb/s NIC, they are 900 against 100 GB/s (the [roofline primer's link ladder, §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), calculates this in `roofline.fabric.LINKS`).
+Per direction and in one generation, the NVLink of a GPU carries about **9×** the bandwidth of its NIC. For H100 with a 400 Gb/s NIC, the figures are 450 against 50 GB/s. For Blackwell with an 800 Gb/s NIC, they are 900 against 100 GB/s. The [roofline primer's link ladder, §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), calculates these figures in `roofline.fabric.LINKS`.
 
 If you divide a bidirectional NVLink total by a one-way NIC rate, you get 18×. That value counts NVLink two times. The latency is also different: a hop through NVSwitch costs less than a hop through a NIC and a network switch.
 
@@ -186,17 +186,17 @@ The NVIDIA NVL72 systems put 72 GPUs into a single NVLink domain in one liquid-c
 
 The current landscape as of mid-2026:
 
-- **Hopper (H100 80 GB, H200 141 GB)**: still in use almost everywhere. It is still the price/performance workhorse for most enterprise workloads.
+- **Hopper (H100 80 GB, H200 141 GB)**: still in use everywhere. It is still the price/performance workhorse for most enterprise workloads.
 - **Blackwell Ultra (B300 / GB300 NVL72)**: 288 GB HBM3e at 8 TB/s, ~1,400 W per GPU. It is the volume production part.
 - **Vera Rubin (R100 / VR200)**: it went into production in June 2026, and it is available from OEMs and clouds in H2 2026 (verify). It has 288 GB of HBM4 at 22 TB/s, and NVLink 6 at 3.6 TB/s per GPU. The TSMC 3nm supply and the HBM4 supply limit its availability.
-- **AMD**: MI300X/MI325X are mature in production. The production volume of MI400/MI450 increases now. AMD is credible, especially on memory capacity per GPU. ROCm is the software risk.
+- **AMD**: MI300X/MI325X are mature in production. At this time, the production volume of MI400/MI450 increases. AMD is credible, especially on memory capacity per GPU. ROCm is the software risk.
 - **Custom silicon**: Google TPU, AWS Trainium/Inferentia, Microsoft Maia, Meta MTIA. The volumes are large, and most of this silicon is captive to internal hyperscaler workloads.
 
 ### The facilities constraint nobody plans for
 
 Power density increased from ~10 kW/rack for conventional compute to 40 kW+ for Blackwell. Rubin-class racks need 100% direct-to-chip liquid cooling, with no air-cooled option. If you operate your own data centre, cooling and power delivery will be the item that controls your schedule, not GPU procurement. The lead times for allocation are 6–12 months.
 
-For most teams, this is a reason to use cloud or neocloud capacity, not owned infrastructure. It is different if you have a sustained utilisation above approximately 60–70%.
+For most teams, this is a reason to use cloud or neocloud capacity, not owned infrastructure. But this reason does not apply if you have a sustained utilisation above approximately 60–70%.
 
 ---
 
@@ -244,7 +244,7 @@ For a scheduler, GPUs are not like CPUs. GPUs are indivisible, high-cost and top
 - **Topology awareness matters.** A pod that requests 8 GPUs must get 8 GPUs on the same NVLink domain, not 8 GPUs spread across a cluster.
 - **Gang scheduling**: a distributed job needs all of its workers or none of them. A partial allocation causes a deadlock in the cluster.
 - **Node pools by GPU type**, with taints and tolerations: they keep batch jobs off latency-critical inference nodes.
-- **Model loading is a real bottleneck.** A 405B model checkpoint is hundreds of GB. If you do not plan for fast storage, caching or pre-warmed replicas, cold-start times of 10+ minutes will destroy your autoscaling story.
+- **The load of the model is a real bottleneck.** A 405B model checkpoint is hundreds of GB. If you do not plan for fast storage, caching or pre-warmed replicas, cold-start times of 10+ minutes will destroy your autoscaling story.
 
 ---
 
@@ -261,11 +261,11 @@ You do not run the two phases on the same GPUs. You run **separate pools**: pref
 - Long prefills never block the decode workers. Thus the token streams stay smooth.
 - You can even use different hardware for each phase.
 
-**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. Take approximately 1.3 GB per 4K-token request, and a TTFT budget under 500 ms. Then the transfer must complete in a couple hundred milliseconds. This needs RDMA and careful engineering.
+**Why it is hard:** you must move the KV cache sufficiently fast that the decode worker is not idle. A request of 4K tokens has approximately 1.3 GB of KV cache. If the TTFT budget is under 500 ms, the transfer must complete in a couple hundred milliseconds. This needs RDMA and careful design work.
 
-**Tooling:** NVIDIA **Dynamo** is an orchestration layer above the engines. It has a smart router, a planner, and NIXL for transfers. Its Kubernetes-native equivalent, built on vLLM, is **llm-d** (Red Hat/IBM/Google, donated to CNCF in March 2026). Both vLLM and SGLang support disaggregation directly.
+**Tools:** NVIDIA **Dynamo** is an orchestration layer above the engines. It has a smart router, a planner, and NIXL for transfers. Its Kubernetes-native equivalent, built on vLLM, is **llm-d** (Red Hat/IBM/Google, donated to CNCF in March 2026). Both vLLM and SGLang support disaggregation directly.
 
-**Sequencing advice:** first, make continuous batching, paged attention, prefix caching and FP8 KV cache work. These are the largest wins for most workloads. The sensible next step is same-node disaggregation across NVLink. Multi-node disaggregation is worth the effort at scale, and mostly not before.
+**The order of the work:** first, make continuous batching, paged attention, prefix caching and FP8 KV cache work. These are the largest wins for most workloads. The sensible next step is same-node disaggregation across NVLink. Multi-node disaggregation is worth the effort at scale, and mostly not before.
 
 ---
 
@@ -278,7 +278,7 @@ Training clusters and inference clusters have greatly different shapes. If you c
 | Coupling | One synchronous job across all GPUs | Many independent replicas |
 | Failure impact | One failed GPU stops everything | One failed replica sheds some traffic |
 | Network | All-reduce is the dominant traffic. It needs a full-bisection fabric. | Mostly north-south traffic, modest east-west traffic |
-| Storage | Extremely large checkpoints, high write bandwidth | Model loads, mostly reads |
+| Storage | Extremely large checkpoints, high write bandwidth | Mostly reads, when the replicas load the model |
 | Scaling unit | The whole cluster | The replica |
 | Key metric | MFU (Model FLOPs Utilisation) | Tokens/sec/GPU, $/M tokens, latency SLOs |
 | Elasticity | Poor. The allocation does not change for weeks. | Good. It autoscales on queue depth. |
@@ -321,7 +321,7 @@ This architecture has multiple nodes and GPU Operator, with TP in the nodes and 
 
 ### C. Rack-scale disaggregated (hundreds to thousands of GPUs)
 This architecture uses NVL72-class systems. It has disaggregated prefill and decode pools through Dynamo or llm-d. The workers share a distributed KV cache pool. It uses FP4 quantisation and topology-aware scheduling. It is multi-region for availability.
-*Right for: frontier-scale MoE models in production, or inference at genuine platform volume.*
+*Right for: frontier-scale MoE models that you serve, or inference at genuine platform volume.*
 
 For most organisations, the correct start is A. Most of them are incorrect when they think that they need C.
 
@@ -332,11 +332,11 @@ For most organisations, the correct start is A. Most of them are incorrect when 
 - **KV cache OOM under load.** The deployment works in a test at concurrency 10 and fails at 100. The cause: the capacity plan used only the weights. The solution: plan on KV cache, set an explicit cap on max concurrency, and turn on paged attention.
 - **Tensor parallelism across the scale-out fabric.** Someone sets TP=16 on 2×8-GPU nodes. The throughput collapses. The solution: TP in the NVLink domain, PP or DP across it.
 - **Cold-start latency.** If autoscaling takes 12 minutes to load a checkpoint, it is not autoscaling. The solution: pre-warmed replicas, fast local storage, tiered scaling.
-- **Long prefills stalling decode.** When someone submits a 100K-token document, users see output that stutters. The solution: chunked prefill, then disaggregation.
+- **Long prefills that block decode.** When someone submits a 100K-token document, users see output that stutters. The solution: chunked prefill, then disaggregation.
 - **Fragmentation.** Memory is "free", but allocations fail. The solution: paged KV cache.
 - **NCCL hangs.** A distributed job stops and gives no signal. The cause is usually topology, MTU, or driver mismatch. The solution: pin the driver/CUDA/NCCL/engine versions together. Do a test of the collective path before the model.
 - **Version drift.** The disaggregation and scheduling APIs still change fast. Pin everything. Upgrade deliberately.
-- **Planning around GPUs you cannot get.** The allocation lead times are 6–12 months for current-generation hardware. Design for the hardware that you can actually procure.
+- **A plan for GPUs that you cannot get.** The allocation lead times are 6–12 months for current-generation hardware. Design for the hardware that you can actually procure.
 
 ---
 
@@ -370,9 +370,9 @@ For most organisations, the correct start is A. Most of them are incorrect when 
 1. Run vLLM on a single GPU with a 7B model. Monitor `nvidia-smi`. Change the batch size and look at the throughput/latency curve yourself.
 2. Do the memory arithmetic by hand for a model that is important to you. Then compare it with what the engine actually allocates.
 3. Do a benchmark with a realistic request distribution, not a uniform distribution. Your prompt-length distribution controls everything.
-4. Only after these steps, use multi-node. Only after that, use disaggregation.
+4. Only after these steps, use a multi-node deployment. Only after that, use disaggregation.
 
-**Reading:**
+**Documents to read:**
 
 - vLLM docs and the PagedAttention paper (Kwon et al., 2023)
 - Sarathi-Serve on chunked prefill (Agrawal et al., 2024)
@@ -397,5 +397,5 @@ For most organisations, the correct start is A. Most of them are incorrect when 
 1. **Decode is memory-bandwidth-bound, prefill is compute-bound.** Almost every design decision comes from this.
 2. **KV cache, not weights, sets how many users you can serve.**
 3. **Tensor parallelism inside the NVLink domain, pipeline and data parallelism across the network.** The interconnect hierarchy sets the partition of the work.
-4. **Use an existing inference engine.** Continuous batching, paged attention and prefix caching are worth an order of magnitude. If you implement them again yourself, you will not do it well.
-5. **Pick your latency SLO before you tune throughput.** You cannot optimise both.
+4. **Use an inference engine that is already available.** Continuous batching, paged attention and prefix caching are worth an order of magnitude. If you implement them again yourself, you will not do it well.
+5. **Select your latency SLO before you adjust throughput.** You cannot optimise both.

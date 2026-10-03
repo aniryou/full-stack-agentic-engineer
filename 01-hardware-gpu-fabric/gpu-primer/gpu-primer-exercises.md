@@ -37,7 +37,7 @@ Give each answer in one or two sentences. You do not need arithmetic.
 
 **A5.** An H100 has ~67 TFLOP/s of FP32 and ~990 TFLOP/s of BF16. These two numbers do not come from the same units of hardware. Explain what changed between them.
 
-**A6.** BF16 and FP16 both have 16 bits. Why did BF16, and not FP16, become the format for training?
+**A6.** BF16 and FP16 both have 16 bits. Why did BF16, and not FP16, become the usual 16-bit format for training?
 
 **A7.** What does TMA do that a usual `memcpy_async` does not do? Which problem was the reason to add TMA?
 
@@ -75,7 +75,7 @@ A 30B model in BF16 does single-stream inference (batch size 1) on one H100.
 
 (c) What is the arithmetic intensity? Is this kernel memory-bound or compute-bound? By what factor is it away from the crossover?
 
-(d) What is the maximum token rate that it can get?
+(d) What is the maximum token rate that you can get on the H100?
 
 (e) What fraction of the peak BF16 throughput of the H100 do you use in practice?
 
@@ -107,7 +107,7 @@ A model applies four elementwise operations in sequence to a 1 GB activation ten
 
 ### B5 — KV cache
 
-The model has 80 layers, 8 KV heads and head dimension 128, in BF16.
+Use a model with 80 layers, 8 KV heads and head dimension 128, in BF16.
 
 (a) Calculate the KV cache size per token, per sequence.
 
@@ -121,7 +121,7 @@ The model has 80 layers, 8 KV heads and head dimension 128, in BF16.
 
 A warp reads 32 float32 values from a row-major 1024×1024 matrix. HBM transactions are 32 bytes.
 
-(a) The warp reads 32 consecutive elements of one row. How many bytes does the hardware fetch? How many does it use?
+(a) The warp reads 32 consecutive elements of one row. How many bytes does the hardware fetch? How many of these bytes does the warp use?
 
 (b) The warp reads 32 elements down one column. Give the same two numbers.
 
@@ -165,7 +165,7 @@ You quantise the 70B model from B1 to MXFP4 (4 bits per weight).
 
 (a) What is the new weight footprint? Does it fit on one H100 now?
 
-(b) Calculate the batch-1 decode token rate on an H100, before and after.
+(b) Calculate the token rate of batch-1 decode on an H100, before and after.
 
 (c) Where did the speedup come from: more FLOPs, or fewer bytes? Use the roofline to show why.
 
@@ -219,20 +219,20 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 
 **A3.** The hardware manages L1. You have an effect on it only indirectly, through your access patterns. Shared memory is a software-managed scratchpad that you explicitly allocate, load and synchronise on. CPUs have no equivalent. Most of kernel optimisation is the decision about what data to stage there.
 
-**A4.** Arithmetic intensity is the number of FLOPs done per byte moved from HBM, in FLOP/byte. It tells you if your ceiling is the ALUs or the memory bus. It tells you this before you write code. To find the answer, compare it with the crossover ratio of the machine (~295 FLOP/byte on an H100). If you are below the crossover, arithmetic optimisations cannot help you.
+**A4.** Arithmetic intensity is the number of FLOPs done per byte moved from HBM, in FLOP/byte. It tells you if your ceiling is the ALUs or the memory bus. It tells you this before you write code. To find the answer, compare the arithmetic intensity with the crossover ratio of the machine (~295 FLOP/byte on an H100). If you are below the crossover, arithmetic optimisations cannot help you.
 
 **A5.** The FP32 number is scalar fused-multiply-add on the CUDA cores, with one operation per lane. The BF16 number comes from Tensor Cores. These are dedicated units that consume small matrix tiles. They issue a whole matrix multiply-accumulate per instruction, and a warp or warpgroup feeds them cooperatively. A kernel that does not reach the Tensor Cores leaves approximately 95% of the chip idle.
 
 **A6.** BF16 keeps the 8-bit exponent of FP32 and gives up mantissa bits. FP16 does the opposite. Training is much more sensitive to dynamic range than to precision (gradients underflow). Thus, training in BF16 is stable without loss scaling.
 
-**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves an entire multidimensional tile. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that were before the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
+**A7.** TMA is a dedicated DMA engine. One thread issues a descriptor, and the hardware moves an entire multidimensional tile. The hardware also generates the addresses and handles the boundaries. TMA removes the index arithmetic and the register pressure that, before TMA, were the largest part of the inner loop. The warp is then free to do only one thing: issue Tensor Core work.
 
-**A8.** Scale-up makes the NVLink domain larger. In that domain, each GPU can use the memory of the other GPUs as almost local (1.8 TB/s). Scale-out adds nodes over InfiniBand or Ethernet, which is approximately an order of magnitude slower. Tensor parallelism needs an all-reduce *inside every layer*, so it needs scale-up. If you put it across a scale-out boundary, communication becomes the largest cost.
+**A8.** Scale-up makes the NVLink domain larger. In that domain, each GPU can use the memory of the other GPUs as almost local (1.8 TB/s). Scale-out adds nodes over links (InfiniBand or Ethernet) that are approximately an order of magnitude slower. Tensor parallelism needs an all-reduce *inside every layer*, so it needs scale-up. If you put it across a scale-out boundary, communication becomes the largest cost.
 
 **A9.** The four layers are:
 
 - `torch.compile`. It traces and fuses automatically, and its output is Triton.
-- Triton. You write kernels at the level of a block of elements. The compiler handles threads and coalescing.
+- Triton. It lets you write kernels at the level of a block of elements, and the compiler handles threads and coalescing.
 - CUTLASS/CuTe. It gives C++ templates and a layout algebra for matmul-shaped problems.
 - CUDA C++. It gives full control and warp-level intrinsics.
 
@@ -246,9 +246,9 @@ The GPU *accepts* the wait and hides it. It keeps thousands of other threads res
 
 (a) 70e9 × 2 bytes = **140 GB**.
 
-(b) On an H100 (80 GB), it does not fit. On an H200 (141 GB), it fits technically, with ~1 GB left. Thus, there is no space for the KV cache, and you cannot use it in practice. On a B300 (288 GB), it fits easily.
+(b) On an H100 (80 GB), it does not fit. On an H200 (141 GB), it fits technically, with ~1 GB left. Thus, there is no space for the KV cache, and in practice you cannot use one H200 for this model. On a B300 (288 GB), it fits easily.
 
-(c) 16 bytes/param × 70e9 = **1.12 TB** for weights, gradients and the two Adam moments. At 80 GB per H100, that is **14 GPUs minimum** for the states alone. In practice, you need more when you add the activations and fragmentation.
+(c) 16 bytes/param × 70e9 = **1.12 TB** for weights, gradients and the two Adam moments. At 80 GB per H100, that is **14 GPUs minimum** for the states alone. In practice, you need more GPUs when you also count the activations and fragmentation.
 
 (d) Inference needs only the weights. Training also holds gradients and two FP32 optimiser moments per parameter, for approximately 8× the footprint.
 
@@ -310,7 +310,7 @@ You use a third of one percent of the arithmetic hardware. Nothing that you do t
 
 (b) The sum of 1 to 32 = **528 lane-iterations** of useful work.
 
-(c) 528 / (32 × 32) = **51.6%**. Half of the machine is idle. The only cause is a loop bound that changes from lane to lane.
+(c) 528 / (32 × 32) = **51.6%**. Half of the machine is idle. The cause is only a loop bound that changes from lane to lane.
 
 **B8.**
 
@@ -348,7 +348,7 @@ You use a third of one percent of the arithmetic hardware. Nothing that you do t
 
 The next lever is precision. If accuracy permits, change from BF16 to FP8 or FP4. Each step down the ladder approximately doubles the throughput. After that, make sure that you use the current Tensor Core path (warpgroup MMA, TMA-fed pipelines), not an older instruction.
 
-**C3.** Most of the gain from `torch.compile` comes from the fusion of elementwise ops, which removes HBM round trips. Training has many such ops between large matmuls, so there is much to remove. In batch-1 decode, the largest cost is the read of every weight, and you cannot prevent that read. No quantity of fusion removes it. The real solutions are:
+**C3.** Most of the gain from `torch.compile` comes from the fusion of elementwise ops, which removes HBM round trips. Training has many such ops between large matmuls, so there is much to remove. In batch-1 decode, the largest cost is the read of every weight, and you cannot prevent that read. Fusion cannot remove this read. The real solutions are:
 
 - Increase the batch size (B3).
 - Quantise (B10).
@@ -373,11 +373,11 @@ Also, over A100, H100 gained approximately 3× the FLOPS but only ~1.7× the ban
 
 **D1.** Prefill processes the whole prompt at one time. Thus, thousands of tokens share the cost of each weight read. The intensity is high, prefill saturates the Tensor Cores, and it is compute-bound. Decode makes one token per step per sequence, and it reads every weight again each time. Its intensity is near 1, and it is bandwidth-bound (B2).
 
-If you run them on the same hardware, either the ALUs do not get sufficient work during decode, or you waste bandwidth during prefill. Also, long prefills block short decodes in the queue.
+If you run them on the same hardware, either the ALUs do not get sufficient work during decode, or you waste bandwidth during prefill. Also, on shared hardware, long prefills block short decodes in the queue.
 
 Disaggregation lets you set the size of each pool independently. Prefill wants maximum FLOPS and does not need much memory bandwidth per token. Decode wants maximum HBM bandwidth and capacity for KV cache. NVIDIA went so far with this that it built a separate SKU for the prefill half, Rubin CPX. The KV cache that prefill makes must then go to the decode pool. That is why these designs are inside a fast scale-up domain.
 
-**D2.** Simple attention materialises the full $N \times N$ score matrix in HBM. It writes the matrix, then reads it back for softmax. Then it writes again, and reads again for the value multiply. FlashAttention tiles the computation, and it makes, uses and discards each block of scores entirely in shared memory. It uses an online-softmax reformulation, so it never needs the full matrix.
+**D2.** Simple attention materialises the full $N \times N$ score matrix in HBM. It writes the matrix, then reads it back for softmax. Then it writes again, and reads again for the value multiply. FlashAttention tiles the computation so that it makes, uses and discards each block of scores entirely in shared memory. It uses an online-softmax reformulation, so it never needs the full matrix.
 
 It recomputes some quantities, so it does more arithmetic. But it moves an order of magnitude fewer bytes. The kernel was memory-bound. Thus, an exchange of FLOPs for bytes is an exchange of an abundant resource for the scarce one. The general principle is this: **on a memory-bound kernel, redundant computation is free and data movement is the only real cost.** Recomputation in gradient checkpointing is the same trade.
 
@@ -387,11 +387,13 @@ These things *do* help you:
 
 - The growth of HBM capacity and bandwidth, which helps every workload.
 - TMA and async pipelines, which help any tiled kernel.
-- The improved tools. Triton and cuTile decrease the cost to write the custom kernels that irregular workloads need anyway.
+- The improved tools, because Triton and cuTile decrease the cost to write the custom kernels that irregular workloads need anyway.
 
-The progress helps the GNN half even less. It is gather/scatter-bound, and its structure makes it unable to use Tensor Cores (C5).
+The progress helps the GNN half even less, because the GNN half is gather/scatter-bound and its structure makes it unable to use Tensor Cores (C5).
 
-AMD's split is the direct result. From MI400, AMD ships MI450X for AI, with the FP32/FP64 logic removed. It also ships MI430X for HPC, with FP4/FP8/BF16 removed. Each chip gets back that die area. The practical result is that "the best AI chip" and "the best chip for your workload" now move apart. Thus, measure FP64 throughput and achieved bandwidth on irregular access with benchmarks, and do not read TFLOPS off a slide.
+AMD's split is the direct result. From MI400, AMD ships MI450X for AI, with the FP32/FP64 logic removed. It also ships MI430X for HPC, with FP4/FP8/BF16 removed. Each chip gets back the die area of the logic that AMD removed.
+
+The practical result is that "the best AI chip" and "the best chip for your workload" now move apart. Thus, measure FP64 throughput and achieved bandwidth on irregular access with benchmarks. Do not read TFLOPS off a slide.
 
 **D4.** With an 8-GPU domain, tensor parallelism can go only 8-wide before it crosses onto the slow network. Thus, you must divide a large model more. You can use pipeline parallelism, which brings bubbles and complex schedules, or you can shard the optimiser state. With 72 GPUs in one domain, you can run much wider TP. Also, expert parallelism for MoE becomes practical, because the all-to-all routing stays on NVLink.
 

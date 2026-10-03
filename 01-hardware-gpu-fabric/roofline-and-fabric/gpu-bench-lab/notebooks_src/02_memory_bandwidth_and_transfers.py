@@ -22,8 +22,7 @@
 # because it removes whole passes over memory.
 #
 # Also, every copy costs $\alpha + n/\beta$. Small copies are latency-bound, and this is why engines batch them and
-# keep their host buffers pinned. The copies either waited for each other or did not, and *which* $\alpha$ you
-# measured depends on that.
+# keep their host buffers pinned. *Which* $\alpha$ you measured depends on if the copies waited for each other.
 
 # %%
 import math
@@ -50,17 +49,20 @@ print(info["name"], "|", "caches:", info.get("caches") or f"L2 {si(info.get('l2_
 # ## 1 · STREAM's four kernels, and how it counts
 #
 # John McCalpin's STREAM benchmark defines four loops over arrays `a`, `b`, `c`. It counts the bytes of every array
-# element that the loop names, read or written one time, and nothing else. It has two rules. First, each array is at
-# least 4× the last-level cache, so that you measure memory, not cache. That is the *sum* of every last-level cache
-# that the run can use: 4× the L3 of both sockets on a two-socket server (`inventory.llc_total_bytes`). Second,
-# report the **best** of several runs (the capability of the machine).
+# element that the loop names, read or written one time, and nothing else.
+#
+# STREAM has two rules. First, each array is at least 4× the last-level cache, so that you measure memory, not
+# cache. In this rule, the last-level cache is the *sum* of every last-level cache that the run can use. Thus on a
+# two-socket server, each array is at least 4× the L3 of both sockets (`inventory.llc_total_bytes`). Second, the
+# result is the **best** of several runs (the capability of the machine).
 #
 # This lab's numpy STREAM is different from the reference binary in two ways. Know them, so that you do not read too
 # much into its numbers. First, its worker threads are not pinned to cores. Second, one thread touches its arrays
 # first.
 #
-# On a multi-socket (NUMA) host, every page then lives in the memory of one socket. Thus the all-core number is lower
-# than the capability of the machine. (STREAM's OpenMP build touches each slice from its own pinned thread.)
+# Because one thread touches the arrays first, every page on a multi-socket (NUMA) host lives in the memory of one
+# socket. Thus the all-core number is lower than the capability of the machine. But STREAM's OpenMP build touches
+# each slice from its own pinned thread.
 
 # %%
 print(f"{'kernel':<7} {'loop':<12} {'reads':>6} {'writes':>7} {'FLOPs/elem':>11} {'bytes/elem (fp64)':>18}")
@@ -219,8 +221,8 @@ if not be.is_gpu:
 #
 # ## Exercise 2.4 — predict it first
 #
-# Write `chain_dram_bytes(n, b, k, fused)` and `speedup_bound(k)`. The second function gives the speedup that fusion
-# gives if both versions run at the same memory bandwidth.
+# Write `chain_dram_bytes(n, b, k, fused)` and `speedup_bound(k)`. `speedup_bound(k)` returns the speedup that
+# fusion gives if both versions run at the same memory bandwidth.
 
 # %% exercise
 def chain_dram_bytes(n, b, k, fused):
@@ -272,7 +274,7 @@ print(f"smallest working set: {si(lad[0].seconds(), 's')} per call — that is m
 # Compare the knees with the cache sizes. The rate decreases where the working set becomes larger than a level. An
 # in-place update touches the set one time per call, so a level holds a working set of approximately its own size.
 # **Back to the fusion gap**, with the numbers of the ladder. The fused chain made $k$ numpy calls per block, each on
-# a block that is in cache. Thus the model gives its time as approximately
+# a block that is in cache. Thus the expected time of the fused chain is approximately
 #
 # $$
 # \text{blocks} \times k \times (\text{time of one ladder call at the block size}).
@@ -361,18 +363,18 @@ for key, series in transfer.series(copies).items():
 # %% [markdown]
 # Read three things here.
 #
-# **Your fit vs the library's.** Plain least squares minimises the absolute error. Thus the largest copies, thousands
+# **Your fit against the library's.** Plain least squares minimises the absolute error. Thus the largest copies, thousands
 # of times longer than the smallest, decide everything, and $\alpha$ comes out as noise (sometimes negative). The
 # library gives each point a weight of $1/t$. Thus the small sizes that set $\alpha$ count as much as the large sizes
 # that set $\beta$.
 #
-# **$\beta$ vs STREAM copy.** A transfer counts each delivered byte one time. STREAM's copy counts the read and the
+# **$\beta$ against STREAM copy.** A transfer counts each delivered byte one time. STREAM's copy counts the read and the
 # write. Thus a memcpy $\beta$ of 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s. Compare the
 # "STREAM-convention equivalent" with the one-thread copy row of section 2, not $\beta$ itself.
 #
-# **Model vs measured.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the last-level
-# cache), as a real transfer does. The α-β model assumes **one** bottleneck, and a CPU copy has several regimes. The
-# `memcpy` of glibc changes to non-temporal stores when a copy is a large fraction of the last-level cache. This skips the
+# **Model against measurement.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the last-level
+# cache), as a real transfer does. The α-β model assumes **one** bottleneck, and a CPU copy has several regimes. For example,
+# the `memcpy` of glibc changes to non-temporal stores when a copy is a large fraction of the last-level cache. This skips the
 # write-allocate read of section 4, so large copies can run *faster* than the fit. Over PCIe, the link is the
 # bottleneck at every size above a few KB, and the fit is much tighter.
 #
@@ -451,7 +453,7 @@ else:
 # **Drills**
 #
 # 1. *Our 4 KB host-to-device copies of token IDs run at a few hundred MB/s on a 32 GB/s link. Bug?* No, they are
-#    $\alpha$-bound. With a wait for each copy, a latency of ~10 µs (illustrative) limits a 4 KB copy to
+#    $\alpha$-bound: with a wait for each copy, a latency of ~10 µs (illustrative) limits a 4 KB copy to
 #    ≤ 0.4 GB/s. Also, $n_{1/2}$ is hundreds of KB. Batch the copies. Keep the buffer pinned. Issue the copies
 #    asynchronously. Then consecutive copies overlap their fixed costs, and only the issue cost stays.
 # 2. *Why does the fusion of bias + GELU + residual make a memory-bound layer faster?* Each unfused op reads the activation

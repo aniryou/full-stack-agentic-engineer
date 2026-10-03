@@ -60,8 +60,8 @@ repository, changes into this directory and installs the lab.
 | Label | Meaning | Where |
 |---|---|---|
 | *measured* | This run made the number on this machine. Every table that the suite and the notebooks print has measured numbers. | `Measurement` records, reports |
-| *model* / *theoretical* | The lab calculates the number from a formula. The formulas give P2P from topology, the PCIe line rate and cold-start budgets. A P2P number has the label `direct`, `staged` or `upper-bound`, from what it assumes about peer access. | `p2p.predict`, `specs.pcie_gbs`, `loading.load_time` |
-| *assumed* | It is an input that the lab cannot measure here, and the lab names it as an assumption. Examples are a cold-start stage time, and a PCIe link when `nvidia-smi` is absent. | notebook 04, `transfer.host_link` |
+| *model* / *theoretical* | The lab calculates the number from a formula. The formulas give P2P from topology, the PCIe line rate and cold-start budgets. The label of a P2P number (`direct`, `staged` or `upper-bound`) shows what the prediction assumes about peer access. | `p2p.predict`, `specs.pcie_gbs`, `loading.load_time` |
+| *assumed* | It is an input that the lab cannot measure here, and the lab names it as an assumption. Examples are a cold-start stage time and a PCIe link when `nvidia-smi` is absent. | notebook 04, `transfer.host_link` |
 | *spec* | It is the **dense** peak from a vendor datasheet, with the date 2026-09. Make sure that it is correct before you depend on it. | `gpubench/specs.py` |
 | *sample output (illustrative)* | It is `nvidia-smi` output that comes with the lab, in the documented format, for practice with the parsers. It is not a measurement. | `gpubench/fixtures/` |
 
@@ -74,20 +74,20 @@ The byte counts obey one convention for each kind of operation, and tests pin ea
 * **Transfers** (between host and device, P2P, from disk to RAM) count the delivered bytes one time.
 
 Each measurement of time reports the **best** value (what the machine can do) and the **median** value (what you
-usually see). It takes them over several samples, after a warm-up. The lab times GPU work with CUDA events, or with
-all devices synchronised.
+usually see). The lab calculates both values from several samples, after a warm-up. The lab measures the time of GPU
+work with CUDA events, or with all devices synchronised.
 
-On a GPU, the lab times copies in two ways. The first way is back to back. Then the α of the α-β fit is a per-copy
-*issue* cost, because asynchronous copies overlap. The second way is one synchronised copy per sample. Then α is the
-*latency* that a dependent step pays.
+On a GPU, the lab measures the time of copies in two ways. The first way is back to back. In this case, the α of the
+α-β fit is a per-copy *issue* cost, because asynchronous copies overlap. The second way is one synchronised copy per
+sample. In this case, α is the *latency* that a dependent step pays.
 
 The run gives a warning in two cases. In the first case, the samples behind a roof scatter (coefficient of variation
 above 15%). In the second case, the float32 peak of a CPU comes out below its float64 peak. Then the run prints a
 **noisy measurement (shared CPU?)** warning (`roofline.noise_warnings`), and the report starts with it. That roofline
 describes the other load on the machine. Thus, run the suite again on an idle machine.
 
-The report shows "cold" disk reads only when the lab can really drop the page cache. This is not possible for a file
-on tmpfs. A `--tiny` report says in bold that it is a "plumbing check".
+The report shows "cold" disk reads only when the lab can really drop the page cache. The lab cannot drop the page
+cache for a file on tmpfs. A `--tiny` report says in bold that it is only a check of the infrastructure code.
 
 ## The library
 
@@ -112,19 +112,19 @@ on tmpfs. A `--tiny` report says in bold that it is a "plumbing check".
 ## The notebooks
 
 Each notebook starts with the name of the roofline-core notebook that *predicted* what it measures. It has worked
-examples, and exercises with `# YOUR CODE HERE` and a check that prints ✅. Most of the exercises read or predict the
+examples and exercises. Each exercise has `# YOUR CODE HERE` and a check that prints ✅. Most of the exercises read or predict the
 measurements of this machine. Each notebook ends with "In a design review" (a two-minute explanation and drill
 questions). The answers are in `solutions/`.
 
-1. **`01_measure_your_roofline`** (T0 to T1). Count a GEMM, time it honestly, and do a sweep of sizes and dtypes.
+1. **`01_measure_your_roofline`** (T0 to T1). Count a GEMM, measure its time correctly, and do a sweep of sizes and dtypes.
    Build your roofline from the measurements, and find what your peak tells you about the hardware. Then predict
    and measure a decode projection across batch sizes. The H100 crossover for d = 8192 comes out as 296 with
    activations on chip (primer §3.4). It is 319 for a standalone GEMM that also moves its activations, and the
    notebook shows why both are correct.
-2. **`02_memory_bandwidth_and_transfers`** (T0 to T1). The notebook covers the rules of STREAM and Little's law read
-   from your thread-scaling curve. It also covers write-allocate, and fusion with its measured gap. After that, it
-   covers the cache ladder and the α-β of a copy (and which α). Then you predict a copy from your fit and measure it. At the end, you
-   compare pinned and pageable copies over PCIe.
+2. **`02_memory_bandwidth_and_transfers`** (T0 to T1). The notebook covers the rules of STREAM, and Little's law read
+   from your thread-scaling curve. It also covers write-allocate and fusion with its measured gap. Other topics are
+   the cache ladder and the α-β of a copy (and which α). You predict a copy from your fit and then measure it. You also compare pinned and
+   pageable copies over PCIe.
 3. **`03_multi_gpu_topology_and_p2p`** (T0 to T2). Read the inventory and the topology. Select TP groups, NICs and
    cores. Predict P2P, and say what the prediction assumes about peer access. Explain a measured P2P number.
    Calculate the cost of the TP all-reduce with the correct measured α.
@@ -166,9 +166,11 @@ make check                                              # all of the above plus 
 The tests (`tests/`) run offline on the numpy backend and the bundled fixtures. They pin every FLOP and byte
 formula to hand-calculated values.
 
-The lab imports the torch backend lazily. You do not need it to install, test or run T0.
+The lab imports the torch backend lazily. You do not need the torch backend to install the lab, to run the tests or
+to run T0.
 `tests/test_torch_backend_fake.py` operates the backend with a stand-in `torch` module. Thus the tests pin three
-things without a GPU. The first is the accounting of the GPU ops (GEMM by dtype with FP8, STREAM, transfers, P2P).
+things without a GPU. The first is how the backend counts the FLOPs and bytes of the GPU ops (GEMM by dtype, FP8 included, STREAM,
+transfers, P2P).
 The others are the TF32 switch and the `torch._scaled_mm` call convention.
 
 Some behaviour still needs real hardware to confirm it: the time measurement with CUDA events, stream overlap and
@@ -176,20 +178,20 @@ driver behaviour. The "Verify list" at the end of this page has these items.
 
 ## Verify list (as of 2026-09)
 
-* The GPU spec figures in `gpubench/specs.py` (dense peaks, bandwidths, TDPs). The source is the vendor
+* The GPU spec figures in `gpubench/specs.py` (dense peaks, bandwidths, TDPs). Compare them with the vendor
   datasheets.
 * The PyTorch APIs that the lab uses on GPUs: `torch.set_float32_matmul_precision`, `torch._scaled_mm` and
   `torch.cuda.can_device_access_peer`. `torch._scaled_mm` is private, and its signature changed between releases.
-  Its use agrees with `native_functions.yaml` on main (examined 2026-09). PyPI's PyTorch is a CUDA 13 build from
+  The check of its call was against `native_functions.yaml` on main (2026-09). PyPI's PyTorch is a CUDA 13 build from
   2.11 on, and it needs an R580+ driver. `cu126` builds run on R525+, but they have no Blackwell kernels.
 * GCP: Deep Learning VM image family names, `install-nvidia-driver` metadata, disk types for each machine series and
   L4/A100 Spot availability for each zone. See [`deploy/gcp/README.md`](deploy/gcp/README.md).
 * The Docker base image tag `pytorch/pytorch:2.14.0-cuda12.6-cudnn9-runtime` (it exists on Docker Hub, 2026-09) and
   its driver requirement. Blackwell GPUs need the `cuda13.0` variant (R580+ driver).
 * Behaviour that only a GPU can confirm:
-  * The time measurement with CUDA events.
-  * The overlap of the bidirectional P2P streams.
-  * The overlap in the double-buffered pipeline from disk to GPU.
-  * That `max_run_duration` does not act on a stopped VM.
+    * The time measurement with CUDA events.
+    * The overlap of the bidirectional P2P streams.
+    * The overlap in the double-buffered pipeline from disk to GPU.
+    * That `max_run_duration` does not act on a stopped VM.
 
 The lab has the MIT licence.

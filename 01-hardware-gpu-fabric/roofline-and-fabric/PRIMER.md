@@ -56,7 +56,7 @@ A datasheet is a small set of numbers. Five of them carry almost every argument 
 |---|---|---|
 | Tensor TFLOPS by precision | the **dense** peak for the precision that you run | headline figures with the mark \* assume 2:4 sparsity: exactly 2× dense |
 | FP32 TFLOPS | the non-tensor (CUDA-core) rate | an H100 has 67 FP32 TFLOP/s against 989 bf16 tensor. Code that does not use the tensor cores loses 14.8× of the chip's throughput. |
-| Memory GB and TB/s | capacity (what fits) and bandwidth (how fast decode runs) | Capacity is binary. An "80 GB" H100 carries 80 GiB = 85.9 × 10⁹ bytes. The driver reports a small quantity less (with `nvidia-smi`, verify). The core uses 80 × 10⁹ for its plans, which is a safe value. |
+| Memory GB and TB/s | capacity (what fits) and bandwidth (how fast decode runs) | Capacity is binary. An "80 GB" H100 carries 80 GiB = 85.9 × 10⁹ bytes. The driver reports a small quantity less (verify with `nvidia-smi`). The core uses 80 × 10⁹ for its plans, which is a safe value. |
 | Interconnect GB/s | per-direction bandwidth | The datasheets give NVLink and PCIe as bidirectional totals. H100 "900 GB/s" is 450 each way. PCIe Gen5 x16 "128 GB/s" is 63 each way. |
 | Network | bytes, not bits | a 400 Gb/s NIC moves 50 GB/s |
 
@@ -209,8 +209,8 @@ For Llama-3.1-8B, the values are:
 - in bf16, 131,072 B (128 KiB) of KV per token.
 
 A decode step streams **15.0 GB**: every layer plus the LM head. The input embedding is a gather of one
-row per token, not a stream of the table. The model assumes that activations stay on chip (fused), and
-efficiencies default to 1. Thus every time that follows is an ideal lower bound (`roofline.llm.prefill()`,
+row per token, not a stream of the table. The calculator assumes that activations stay on chip (fused), and
+its efficiencies default to 1. Thus every time that follows is an ideal lower bound (`roofline.llm.prefill()`,
 `decode()`).
 
 ### 3.2 Prefill: intensity ≈ tokens in the step
@@ -302,8 +302,8 @@ After the GEMM crossover, throughput increases no more: 20,978 tokens/s here at 
 extra sequence only adds KV time. The KV-cache techniques in layer 04 work against this
 ([KV cache](../../04-inference-engine/kv-cache/kv-cache-primer.md),
 [PagedAttention](../../04-inference-engine/paged-attention/paged-attention-primer.md)). GQA/MQA/MLA and FP8
-KV decrease the bytes. Paging and prefix caching stop the waste of bytes. It is also the argument for
-attention–FFN disaggregation: the two kernels on separate GPU pools, each at its own batch.
+KV decrease the bytes. Paging and prefix caching stop the waste of bytes. This KV-time limit is also the
+argument for attention–FFN disaggregation: the two kernels on separate GPU pools, each at its own batch.
 
 ### 3.5 Quantization moves bytes
 
@@ -324,12 +324,12 @@ cache, which INT4 did not touch. INT4 also decreases the compute-bound crossover
 still runs at the bf16 peak.
 
 Quantization also gives **capacity**: FP8 weights and KV let 476 sequences of 2K tokens fit on the H100
-instead of 208. (INT4 group scales add ~2/`group_size` bytes per weight. The numbers here ignore them.)
+instead of 208. INT4 group scales add ~2/`group_size` bytes per weight. The numbers here ignore them.
 
 ### 3.6 MoE: which weights a step streams
 
-The *total* parameters set the memory size, because every expert lives in HBM. But the FLOPs of a token
-follow the *active* parameters. A decode step streams only the experts to which the router sends its
+The *total* parameters set the memory size, because every expert lives in HBM. But the *active* parameters set
+the FLOPs of a token. A decode step streams only the experts to which the router sends its
 tokens. With uniform routing, one layer touches $E\,(1 - (1 - k/E)^{T})$ distinct experts for $T$ tokens
 (`experts_touched()`):
 
@@ -344,7 +344,7 @@ Mixtral (46.7 B total, 12.9 B active) decodes like a 13 B model only at batch 1.
 nearly all 93 GB of its weights every step. Fine-grained MoE keeps this gain up to larger batches. At high
 batch, the cost per token still decreases, because the batch shares the full stream.
 
-The consequence for the roofline: FLOPs follow the *active* parameters, but the bytes approach the
+The consequence for the roofline: the FLOPs change with the *active* parameters, but the bytes approach the
 *total* parameters. Each expert sees only $B \cdot k/E$ of the batch. Thus the batch at which the weight
 stream reaches the ridge scales with total ÷ active. At c = 0 on an H200 (ridge 206;
 `decode_crossover_batch()`): 207 for Llama-3.1-8B, 754 for Mixtral-8x7B (total/active 3.6) and 2,055 for
@@ -505,8 +505,8 @@ algorithm. This is why engines ship latency-optimized all-reduce kernels. It is 
 efficiency decreases when $p$ grows (batch-1 tokens per GPU-second: 23.3 at TP=2, 12.9 at TP=8 with a
 ring).
 
-Second, at prefill, the cost is bandwidth, and it does not decrease with $p$ (the bandwidth term of a ring
-is $\sim 2n/\beta$, whatever the degree). But the compute of each GPU halves each time that $p$ doubles.
+Second, at prefill, the cost is bandwidth. It does not decrease with $p$, because the bandwidth term of a
+ring is $\sim 2n/\beta$, whatever the degree. But the compute of each GPU halves each time that $p$ doubles.
 TP=8 already spends 46 ms communicating per 74 ms of compute.
 
 Across nodes, NCCL spreads the traffic over every rail. Thus the NIC of each GPU carries approximately its
@@ -514,9 +514,9 @@ n/8 share. But TP=16 over two nodes still spends ~75 ms per 4K-token step in all
 compute per GPU. The total is 111 ms per step against TP=8's 120 ms (no overlap), for 1.9× the
 GPU-seconds.
 
-Without a NIC per GPU, it is much worse (263 ms with one NIC per node, 427 ms as a flat ring). Beyond the
-node, two things set the cost: its NIC aggregate (8 × 50 GB/s with rails) and a larger $\alpha$. These
-links also carry data-, pipeline- and expert-parallel traffic.
+Without a NIC per GPU, the all-reduce time is much worse (263 ms with one NIC per node, 427 ms as a flat ring). Beyond the
+node, two things set the cost: the NIC aggregate of the node (8 × 50 GB/s with rails) and a larger
+$\alpha$. The links between nodes also carry data-, pipeline- and expert-parallel traffic.
 
 Thus the rule from the
 [deployment primer §4](../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu):
@@ -540,8 +540,8 @@ node 31     NIC0        NIC1         ...        NIC7
 ```
 
 GPUs with the same index in the group are one switch hop apart. Cross-rail traffic goes up to a spine
-(three hops). This does not occur if NCCL's PXN first moves it over NVLink to the local GPU on the
-destination's rail (`switch_hops()`). Rails are the reason that every GPU can drive its own NIC at the
+(three hops). But if NCCL's PXN first moves the traffic over NVLink to the local GPU on the destination's
+rail, no spine hop occurs (`switch_hops()`). Rails are the reason that every GPU can drive its own NIC at the
 same time. A hierarchical 1 GiB all-reduce over 4 nodes × 8 GPUs takes **8.3 ms with 8 NICs per node and 36.4 ms
 with one** (`hierarchical_allreduce_time()`).
 
@@ -590,8 +590,8 @@ Its CPU and NUMA affinity columns tell which socket each GPU connects to. Three 
 3. Pin each GPU's process, its data loaders and its pinned host buffers to that GPU's NUMA node. If you do
    not, host-to-device copies cross the socket link.
 
-On HGX H100 servers, each GPU's NIC shows PIX or PXB. The code changes with how the tray lays out its PCIe
-switches (verify). `gpu-bench-lab` parses the matrix on your machine (`topo.py`) and measures P2P bandwidth
+On HGX H100 servers, each GPU's NIC shows PIX or PXB, and the PCIe switch layout of the tray sets which of
+the two (verify). `gpu-bench-lab` parses the matrix on your machine (`topo.py`) and measures P2P bandwidth
 per path.
 
 ---
@@ -647,8 +647,8 @@ The table assumes these stage times: provision 120 s, image 60 s, engine init 90
 | warm node, checkpoint in page cache | 97 s | engine init + warm-up, 93% |
 
 The lesson is the order of attack. First, work on the weights (parallelism, streaming, a local or
-regional cache, smaller precision). Then work on the node (warm pools, pre-pulled or streamed images,
-layer 03). Then work on the engine (layer 04).
+regional cache, smaller precision). Then work on the node (warm pools, pre-pulled or streamed images:
+see layer 03). Then work on the engine (layer 04).
 
 A budget sets the bandwidth that you need. Take a 70B replica that must be ready in 120 s on a warm node pool.
 Assume a 20 s image pull and 60 s of engine init. This leaves 40 s for streamed weights: 141.1 GB / 40 s =
@@ -679,7 +679,7 @@ $M_{\text{gpu}}$ = 16,384 × 1,296 h / 419 = 50,677 GPU-hours ≈ 5.8 years
 Each GPU lasts years, but the job does not last a shift. The figure combines GPUs, hosts, network and
 software. Real fleets add infant mortality and correlated failures (a switch, a power feed). Silent data
 corruption shows as incorrect numbers, not as crashes. Thus use the figure as a first-order rate for plans,
-and monitor the health signals (DCGM, XID errors, layer 02).
+and monitor the health signals (DCGM, XID errors: see layer 02).
 
 ### 7.2 How often to checkpoint: Young/Daly
 
@@ -758,11 +758,11 @@ largest batch that meets an **ITL of 10 ms** (100 tokens/s per user) and fits in
 | L4 on demand, bf16 — misses the SLO | 20 (HBM-bound) | 67.9 ms | 294 | 14.7 | $0.660 | $1.10 |
 
 The L4 cannot meet the SLO at any batch, because at batch 1 it needs 50.9 ms to stream the weights. Thus
-its row is at its HBM limit, which is a slower product. Even so, the H100 gives the lower-cost token. Its
+its row is at its HBM limit. The L4 row is a slower product. Even so, the H100 gives the lower-cost token. Its
 bandwidth and capacity together deliver 23× the L4's tokens/s for 15.7× the price.
 
 FP8 then decreases the H100's cost by another 2.8×: exactly 2.0× from halving every byte, and 1.4× more
-from the bigger batch (193 vs 68). The same ITL permits this larger batch.
+from the bigger batch (193 vs 68). The same ITL permits this batch.
 
 Prefill tokens have an even lower cost. The same H100 processes a 2K prompt at an ideal ~68,000 tokens/s,
 an order of magnitude above decode. This is the root of the difference between the input and output
@@ -822,7 +822,7 @@ The table gives these values:
 - scale-up bandwidth as the vendor gives it, with the size of the domain in parentheses. NVLink and xGMI
   are bidirectional totals per GPU. TPU ICI is per chip, as published.
 
-`roofline.specs.table()` generates the table. The tag applies to **every entry (verify)**.
+`roofline.specs.table()` generates the table. The verify tag applies to **every entry (verify)**.
 
 | Device | Mem GB | TB/s | bf16/fp16 TF | fp8 TF | fp4 TF | Ridge FLOP/B | Scale-up GB/s (domain) | TDP W |
 |---|---|---|---|---|---|---|---|---|
@@ -844,8 +844,8 @@ The table gives these values:
 
 Derived entries:
 
-- The table divides the 4 PFLOPS sparse-FP4 headline of the RTX PRO 6000 by two, step by step, to get its
-  tensor rates.
+- The table gets the RTX PRO 6000 tensor rates from its 4 PFLOPS sparse-FP4 headline. It halves that
+  value, then halves it again for each wider precision.
 - The table assumes that Ironwood's bf16 is half its 4,614 TFLOPS fp8.
 - B200 is the HGX board (192 GB physical, 180 GB usable).
 - FP4 on the MI355X is MXFP4.
@@ -859,7 +859,7 @@ How to read the table for inference:
 
 - **Bandwidth sets decode speed per replica** (§3.3): 0.3 TB/s (L4) to 8 TB/s, a 27× range. Compare parts
   on $/M tokens (§8), not on $/hour or TFLOPS.
-- **Capacity sets what fits and how big the batch can be** (§3.4–3.5): 16 GB (T4, TPU v5e) to 288 GB
+- **Capacity sets what fits and how large the batch can be** (§3.4–3.5): 16 GB (T4, TPU v5e) to 288 GB
   (GB300, MI355X). An H200 is an H100 plus capacity and bandwidth. For decode, that is most of what is
   important.
 - **The ridge sets how much batching the FLOPs need**: from 153 (A100 80GB) to 560 (TPU v6e). A high ridge
@@ -878,7 +878,7 @@ How to read the table for inference:
 You can learn every concept in this topic at T0. You use hardware to measure the concepts. The table shows
 what each tier gives you here:
 
-| Tier | Where | What you can see | Cost (verify) (see [`COMPUTE.md`](../../COMPUTE.md)) |
+| Tier | Where | What you can see | Cost (verify, see [`COMPUTE.md`](../../COMPUTE.md)) |
 |---|---|---|---|
 | T0 | laptop, Colab CPU, CI | the core notebooks, and your CPU's own roofline and disk throughput with `gpu-bench-lab` (numpy backend) | $0 |
 | T1 | Colab or Kaggle T4 (free, not guaranteed), a rented 24 GB GPU, GCP L4 Spot or Cloud Run L4 | a real GPU roofline (GEMM sweep by dtype), HBM bandwidth, pinned against pageable host copies, weight loads | free to ~$0.7/hr |
@@ -928,8 +928,8 @@ containers. They give no driver or kernel control, and no Kubernetes. **Lambda**
 **Modal** runs serverless Python on GPUs, with monthly free credits. A local kind cluster serves the
 Kubernetes layers (03, 05) without GPUs.
 
-Prices and quotas change monthly. The maintained list is [`COMPUTE.md`](../../COMPUTE.md). The learning
-order is [`CURRICULUM.md`](../../CURRICULUM.md).
+Prices and quotas change monthly. The maintained list is [`COMPUTE.md`](../../COMPUTE.md). The order of
+study is in [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ---
 
@@ -975,7 +975,7 @@ $/M tokens is $/GPU-hr over tokens/s × utilisation."
    its parts. One object-store stream at 0.1 GB/s is 23.5 of those minutes. First, use parallel range
    reads (NIC-bound at ~11 s), streaming into GPU memory, and a regional or local cache. Then use warm
    pools and pre-pulled images. Then change the engine init.
-5. *How often does a 16K-GPU job need a checkpoint, and what decreases that cost?* At the Llama 3 failure
+5. *How often does a 16K-GPU job need a checkpoint, and what decreases the cost of the checkpoints?* At the Llama 3 failure
    rate, the job is interrupted every ~3.1 h. With a 60 s checkpoint, write one every
    √(2 × 60 × 11,135) s ≈ 19 min. This means losing ~10% plus R/M for restarts (~16% with a 10-minute
    restart). Asynchronous checkpoints (10 s) decrease the interval to ~8 min and the checkpoint waste to
@@ -993,7 +993,7 @@ $/M tokens is $/GPU-hr over tokens/s × utilisation."
 | Arithmetic intensity | FLOPs done per byte moved to or from a memory level |
 | Roofline | attainable FLOP/s = min(peak, intensity × bandwidth) |
 | Ridge point | peak ÷ bandwidth: the intensity at which a kernel is no longer memory-bound |
-| Dense and sparse peak | headline tensor rates assume 2:4 structured sparsity and are 2× the dense rate |
+| Dense against sparse peak | headline tensor rates assume 2:4 structured sparsity and are 2× the dense rate |
 | Compulsory traffic | bytes that a kernel must move if it reads every operand one time and writes every result one time |
 | Tile / tiling | to compute an output block from operand panels held on chip, so that the kernel reuses each fetched byte |
 | Fusion | to run several operations in one kernel, so that intermediate results never touch HBM |
@@ -1030,8 +1030,8 @@ $/M tokens is $/GPU-hr over tokens/s × utilisation."
   A4X, G4), and Cloud Run GPU documentation.
 - R. Pope et al., "Efficiently Scaling Transformer Inference", MLSys 2023. It analyses inference cost and
   model partitions in the same spirit.
-- J. Kaplan et al., "Scaling Laws for Neural Language Models", 2020. It is the source of the count of 2N
-  FLOPs per token.
+- J. Kaplan et al., "Scaling Laws for Neural Language Models", 2020. It gives the count of 2N FLOPs per
+  token.
 - M. Shoeybi et al., "Megatron-LM", 2019. It describes tensor parallelism with two all-reduces per layer.
 - P. Patarasuk, X. Yuan, "Bandwidth optimal all-reduce algorithms for clusters of workstations", *JPDC*
   69(2), 2009. R. Thakur, R. Rabenseifner, W. Gropp, "Optimization of Collective Communication Operations in
@@ -1062,8 +1062,8 @@ Product facts in this primer and in `roofline-core/roofline/specs.py`, as of Sep
   values are: dense peaks per precision, memory capacity and bandwidth, scale-up bandwidth and domain size,
   TDP. The derived entries are especially important. These are the RTX PRO 6000 tensor rates (from its
   sparse FP4 headline) and TPU7x bf16 (assumed half of fp8). They are also B200 usable memory (180 of
-  192 GB), GB200 memory (186 GB), GB300 TDP and MI355X xGMI bandwidth. Also what the TPU ICI
-  figures mean.
+  192 GB), GB200 memory (186 GB), GB300 TDP and MI355X xGMI bandwidth. The list also
+  includes what the TPU ICI figures mean.
 - SM counts and boost clocks behind `peak_from_clock()`: T4 40 / 1.59 GHz, L4 58 / 2.04 GHz, A100 108 /
   1.41 GHz. For the H100 SXM, 132 / 1.83 GHz, which 989.4 TFLOP/s implies.
 - H100 PCIe differences (SMs, HBM2e ~2 TB/s, 350 W). The MiB figure that `nvidia-smi` reports for an

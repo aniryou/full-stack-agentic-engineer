@@ -8,7 +8,7 @@
 
 Start with the transistor budget. If you build a CPU core from gates, the arithmetic units are a small fraction of the die. Most of the area makes a *single* instruction stream finish fast. That area holds branch predictors, out-of-order scheduling, register renaming, and three levels of cache. That design optimises latency. It assumes that one thread is important and that you want its answer now.
 
-A GPU takes the opposite risk. It assumes that you have tens of thousands of independent pieces of work. It also assumes that only the total work per second is important to you. Thus it removes almost all of the control logic. It divides the cost of the logic that stays across many arithmetic lanes. It uses the area that it gets back for ALUs and memory bandwidth.
+A GPU takes the opposite risk. It assumes that you have tens of thousands of independent pieces of work. It also assumes that only the total work per second is important to you. Thus it removes almost all of the control logic. It shares the logic that stays among many arithmetic lanes, and thus decreases the cost for each lane. It uses the area that it gets back for ALUs and memory bandwidth.
 
 That one trade-off explains almost everything else:
 
@@ -78,7 +78,7 @@ Two things are important. First, each step down is approximately an order of mag
 
 ### Coalescing
 
-The hardware reads HBM in transactions of a set size (usually 32 bytes). If the 32 lanes of a warp read 32 consecutive floats, the hardware merges them into a few wide transactions. If the lanes read 32 scattered addresses, you issue 32 separate transactions. Then you waste most of the bytes that you paid for. The access pattern is more important than the instruction count.
+The hardware reads HBM in transactions of a set size (usually 32 bytes). If the 32 lanes of a warp read 32 consecutive floats, the hardware merges them into a few wide transactions. If the lanes read 32 scattered addresses, you issue 32 separate transactions. Thus you waste most of the bytes that you paid for. The access pattern is more important than the instruction count.
 
 ### The roofline model
 
@@ -94,7 +94,7 @@ For an H100, the peak BF16 tensor throughput is approximately 990 TFLOP/s, and t
 
 These are the positions of common operations:
 
-- **Elementwise ops** (ReLU, add, layernorm): the intensity is near 1. These ops are memory-bound, and nothing can change that. This is why kernel *fusion* is the one optimisation with the highest leverage in deep learning. Fusion removes round trips to HBM.
+- **Elementwise ops** (ReLU, add, layernorm): the intensity is near 1. These ops are memory-bound to an extreme degree. This is why kernel *fusion* is the one optimisation with the highest leverage in deep learning, because fusion removes round trips to HBM.
 - **Attention, naively written**: it creates a full $N \times N$ score matrix in HBM. It is memory-bound, and its memory use is quadratic. FlashAttention solves exactly this problem. It tiles the computation, so the score matrix never leaves shared memory.
 - **Large dense matmul**: the intensity increases with the tile size. This is the one operation that saturates the ALUs.
 - **LLM decoding, batch size 1**: you read every weight in the model to make one token. At 2 FLOPs per parameter and 2 bytes per parameter, the intensity is **1 FLOP per byte** at BF16 (2 at FP8, 4 at FP4). This operation is memory-bound to an extreme degree. It is the reason that a 70B model at batch 1 runs at a fraction of a percent of peak FLOPS.
@@ -107,7 +107,7 @@ Think about that last point carefully. **Most inference is bandwidth-bound, not 
 
 If you learned CUDA before approximately 2018, you learned a machine whose basic operation was the fused multiply-add on a scalar lane. That machine no longer shows where the performance is.
 
-From Volta onward, each SM contains **Tensor Cores**. These units do only one job. They take small matrix tiles as input, and they produce a matrix multiply-accumulate in a few cycles, $D = A \times B + C$. A whole warp supplies their input as a team (or, on Hopper and later, a warpgroup of four warps), not individual threads.
+From Volta onward, each SM contains **Tensor Cores**. These units do only one job. They take small matrix tiles as input, and they produce a matrix multiply-accumulate in a few cycles, $D = A \times B + C$. A whole warp (or, on Hopper and later, a warpgroup of four warps) supplies their input as a team. Individual threads do not.
 
 The size of the change:
 
@@ -133,9 +133,9 @@ The pattern is consistent. When the precision halves, the throughput approximate
 
 ### A caveat relevant to scientific ML
 
-This full trend aims at low-precision dense linear algebra. Some workloads need FP64 (traditional HPC, stiff PDE solvers). In other workloads, irregular gather/scatter is the largest part of the work (GNNs, sparse meshes, neighbour lists). These workloads get much less benefit. GNN message passing, in particular, is memory-latency-bound and does not map cleanly to Tensor Cores.
+All of this trend aims at low-precision dense linear algebra. Some workloads need FP64 (traditional HPC, stiff PDE solvers). In other workloads (GNNs, sparse meshes, neighbour lists), irregular gather/scatter is the largest part of the work. These workloads get much less benefit. GNN message passing, in particular, is memory-latency-bound and does not map cleanly to Tensor Cores.
 
-AMD made this split explicit. From the MI400 generation, AMD divides its line into an AI part (FP4/FP8/BF16) and an HPC part (FP32/FP64). It removes the logic of the other part from each die to get the area back. If you work on physics-informed models, monitor this divergence in the hardware roadmap. The reason is that the FP64 story becomes worse on the AI parts, and few people talk about it.
+AMD made this split explicit. From the MI400 generation, AMD divides its line into an AI part (FP4/FP8/BF16) and an HPC part (FP32/FP64). It removes the logic of the other part from each die to get the area back. If you work on physics-informed models, monitor this divergence in the hardware roadmap. The reason is that the FP64 story becomes worse on the AI parts, without much notice.
 
 ---
 
@@ -153,7 +153,7 @@ The other large change since the classic CUDA era is about the structure of a fa
 - It uses an online-softmax reformulation, so it never needs the full score matrix.
 - On Hopper, it overlaps TMA loads with warpgroup matmuls in a pipeline.
 
-FlashAttention made long-context transformers practical. It is the best single case study of how modern GPU thinking works.
+FlashAttention made long-context transformers practical. It is the best single case study of the modern way to think about a GPU.
 
 ---
 
@@ -182,7 +182,7 @@ You divide a model across GPUs along different axes. Each choice causes a differ
 | **Expert parallel** | MoE experts | all-to-all routing of tokens |
 | **Context parallel** | the sequence | for attention on a very long context |
 
-In practice, training runs use three or four of these strategies together. **NCCL** implements the collective operations themselves (all-reduce, all-gather, reduce-scatter, all-to-all). The adjustment of NCCL is a real part of the work in large-scale training.
+In practice, training runs use three or four of these strategies together. **NCCL** implements the collective operations themselves (all-reduce, all-gather, reduce-scatter, all-to-all). To adjust NCCL is a real part of the work in large-scale training.
 
 ---
 
@@ -191,10 +191,10 @@ In practice, training runs use three or four of these strategies together. **NCC
 The layers, from highest to lowest:
 
 1. **PyTorch eager.** Most work still starts here. Every operation dispatches to a pre-written kernel. The cost is a round trip to HBM between operations.
-2. **`torch.compile`.** It traces your model and generates fused kernels through the Inductor backend. The Inductor backend emits Triton. It is usually the first thing to try. It often gets a large fraction of the available gain for no effort.
-3. **Triton.** A Python DSL. In it, you write kernels at the level of *blocks of elements*, not individual threads. The compiler does the coalescing, the shared memory allocation, and the scheduling in a block. Most custom kernel work occurs here today. It is a much easier start than CUDA C++.
+2. **`torch.compile`.** It traces your model and generates fused kernels through the Inductor backend, which emits Triton. It is usually the first thing to try. It often gets a large fraction of the available gain for no effort.
+3. **Triton.** A Python DSL. In it, you write kernels at the level of *blocks of elements*, not individual threads. The compiler does the coalescing, the shared memory allocation, and the scheduling in a block. Most custom kernel work occurs here today. Triton is a much easier start than CUDA C++.
 4. **CUTLASS / CuTe.** The C++ template library of NVIDIA for matmul-shaped problems. The layout algebra of CuTe is the serious tool to express tiling and data movement. It is difficult to learn. But engineers build production matmul and attention kernels from it.
-5. **CUDA C++ with inline PTX.** This is still the lowest level when you need something that the higher layers cannot express.
+5. **CUDA C++ with inline PTX.** This is still the lowest level when you need something that the higher layers do not express.
 
 ### CUDA Tile, the notable new arrival
 
@@ -202,13 +202,13 @@ With CUDA 13.0 (August 2025), NVIDIA started to build a *second* programming mod
 
 NVIDIA ships it as **cuTile** for Python. Since CUDA 13.3, cuTile is also available for C++. A new Tile IR supports it, and other compilers can target this IR. CUDA 13.2 extended Tile support back to Ampere and Ada.
 
-This is important for you specifically. It is the first structural change to the CUDA programming model in twenty years. It targets exactly the gap between "PyTorch is too slow here" and "I do not want to hand-write warp-level PTX". In concept, it comes near to Triton. That is a reasonable sign that kernel code moves to block/tile-level abstraction, and stays there.
+This is important for you specifically. It is the first structural change to the CUDA programming model in twenty years. It targets exactly the gap between "PyTorch is too slow here" and "I do not want to hand-write warp-level PTX". In concept, it comes near to Triton. That is a reasonable sign that kernel programming moves toward block/tile-level abstraction as its stable level.
 
 ### Serving and inference
 
 - **vLLM** and **SGLang** are the standard serving engines. Their central innovation is PagedAttention. PagedAttention applies virtual-memory paging to the KV cache to remove fragmentation.
 - **TensorRT-LLM** is NVIDIA's own engine. It is faster on NVIDIA hardware and less flexible.
-- **Disaggregated serving** is the current architectural direction. It runs *prefill* (compute-bound, processes the whole prompt) and *decode* (memory-bound, one token at a time) on separate pools of hardware. The reason is that the two phases have opposite bottlenecks. NVIDIA went as far as a distinct SKU for this, Rubin CPX. Rubin CPX aims at prefill with extremely large contexts.
+- **Disaggregated serving** is the current architectural direction. It runs *prefill* (compute-bound, processes the whole prompt) and *decode* (memory-bound, one token at a time) on separate pools of hardware. The reason is that the two phases have opposite bottlenecks. NVIDIA even made a distinct SKU for this, Rubin CPX. Rubin CPX aims at prefill with extremely large contexts.
 
 ### Non-NVIDIA
 
@@ -231,7 +231,7 @@ Google's **TPUs** (compiled through XLA, programmed through JAX) and Amazon's **
 | Rubin CPX | long-context prefill SKU | — | expected end of 2026 |
 | Rubin Ultra, then Feynman | 2027+ | — | announced roadmap only |
 
-The usable figures are the figures that the [roofline primer's catalogue](../roofline-and-fabric/PRIMER.md#9-the-accelerator-landscape-september-2026-snapshot) (`roofline.specs`) uses in its plans. Calculate the memory size from them, not from the physical stack count.
+The usable figures are the figures that the [roofline primer's catalogue](../roofline-and-fabric/PRIMER.md#9-the-accelerator-landscape-september-2026-snapshot) (`roofline.specs`) uses in its plans. Use these figures when you calculate how much memory a deployment needs, not the physical stack count.
 
 Rubin entered full production at approximately the time of CES 2026. Volume shipments target the second half of this year. Thus Rubin arrives now, but HBM4 yields and TSMC N3 capacity limit the supply. Hyperscalers get most of the early allocation. NVIDIA claims gains over Blackwell of approximately 3.5× in training and 5× in inference per GPU, with a 10× decrease in cost per token. Treat vendor multipliers as sales claims until MLPerf results arrive, but the direction is real.
 
@@ -239,7 +239,7 @@ Rubin entered full production at approximately the time of CES 2026. Volume ship
 
 **Consumer and desk-side:** RTX 50-series stays the current GeForce generation, and there is no announced successor. The RTX PRO 6000 Blackwell (96 GB) is the top workstation card. DGX Spark is the small Arm-based desk-side box of NVIDIA. CUDA 13 unified the Arm toolkit, partly to support DGX Spark.
 
-**Practical note for a home cluster:** the limit that you will meet is not FLOPS. It is VRAM and interconnect. From the 40-series onward, consumer cards have no NVLink. Thus multi-GPU work goes back to PCIe. This makes tensor parallelism difficult, and it moves you toward pipeline parallelism, offloading, or smaller models. Quantisation gives you capacity and bandwidth at the same time, and thus it has an unusually large effect on hobbyist hardware.
+**Practical note for a home cluster:** the limit that you will meet is not FLOPS. It is VRAM and interconnect. From the 40-series onward, consumer cards have no NVLink. Thus multi-GPU work must use PCIe. This makes tensor parallelism difficult, and it moves you toward pipeline parallelism, offloading, or smaller models. Quantisation gives you capacity and bandwidth at the same time, and thus it has an unusually large effect on hobbyist hardware.
 
 ---
 
@@ -251,7 +251,7 @@ Rubin entered full production at approximately the time of CES 2026. Volume ship
 - Training: approximately 16 bytes per parameter with Adam (weights, gradients, and two optimiser moments in FP32), before activations. This is why training needs an order of magnitude more memory than inference.
 - KV cache: `2 × layers × kv_heads × head_dim × seq_len × batch × 2 bytes`. At long context and high batch, this is more than the weights. This fact caused the design of MQA, GQA, and MLA.
 
-**Rules of thumb:**
+**General rules:**
 
 - A forward pass costs approximately 2 FLOPs per parameter per token. A training step costs approximately 6.
 - If the arithmetic intensity is below ~300 FLOP/byte on modern hardware, you are memory-bound. Then stop the optimisation of arithmetic.
@@ -266,8 +266,8 @@ Approximately in order of leverage:
 1. Read the **FlashAttention** paper (v1 for the idea, v3 for the Hopper mechanics). It teaches the roofline model, tiling, and asynchrony in one document.
 2. Do the **Triton tutorials**. Then write a fused kernel for something in your own stack. Use this order: vector add, then softmax, then a fused layernorm, then attention.
 3. Learn to read a **Nsight Compute** profile. Find the fraction of peak memory bandwidth that you get, and the fraction of peak Tensor Core throughput. Then find which of those two is the ceiling. Most optimisation intuition comes from this loop, not from the text that you read.
-4. Do a fast read of the **CUTLASS/CuTe** layout algebra, even if you never write it. It is the vocabulary that people use to describe production kernels.
-5. Try **cuTile**. It is new, so early familiarity has a low cost. Also, it is possible that the programming model goes in its direction.
+4. Do a fast read of the **CUTLASS/CuTe** layout algebra, even if you never write it. The reason is that it is the vocabulary that people use to describe production kernels.
+5. Try **cuTile**. The reason is that it is new, so early familiarity has a low cost. Also, it is a reasonable possibility that the CUDA programming model moves in the direction of cuTile.
 6. For distributed work, read the **Megatron-LM** and **ZeRO** papers. Then run a multi-GPU job and examine the NCCL traces.
 
 The most important change in your view is this. Do not think of a GPU as a fast calculator. Think of it as a memory system with arithmetic attached.

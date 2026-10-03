@@ -164,7 +164,7 @@ Scale-out connects domains *across* the data centre with message-passing semanti
 
 Decode is memory-bandwidth-bound. It must read the full weight set from HBM to make a single token. Thus the math units are idle most of the time.
 
-**A3.** In decode, the high-cost operation is the load of the weights. That cost is the same if you make one token or sixty-four tokens. Batching amortises that cost. Prefill already saturates the compute units with a single long prompt. Thus only a small quantity of idle capacity stays available to fill.
+**A3.** In decode, the high-cost operation is the load of the weights. That cost is the same when you make one token and when you make sixty-four tokens. Batching amortises that cost. Prefill already saturates the compute units with a single long prompt. Thus only a small quantity of idle capacity stays available to fill.
 
 **A4.** The variable cost is the KV cache. It increases with concurrent requests × sequence length. It sets how many users you can actually serve. It also causes most OOM failures in production.
 
@@ -189,11 +189,11 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 - paged allocation
 - prefix caching
 - a shorter maximum context
-- a limit on concurrency.
+- a limit on concurrency
 
 **A13.** The size of the scale-up domain is the property that sets how large a model you can divide efficiently with tensor parallelism. An 8-GPU server gives an 8-GPU domain. An NVL72 rack gives 72 GPUs in a single NVLink domain. This domain makes it practical to serve frontier-scale MoE models with low latency.
 
-**A14.** It puts prefill and decode on different GPU pools. The difficult problem is the transfer of the KV cache from a prefill worker to a decode worker. The transfer must be sufficiently fast that the decode worker is not idle. This needs RDMA and careful design work, because the transfer must fit in a TTFT budget of a few hundred milliseconds.
+**A14.** It puts prefill and decode on different GPU pools. The difficult problem is the transfer of the KV cache from a prefill worker to a decode worker. The transfer must be sufficiently fast that the decode worker is not idle. A fast transfer needs RDMA and careful technical work, because the transfer must fit in a TTFT budget of a few hundred milliseconds.
 
 **A15.** The two constraints are power density and liquid cooling. Power density is more than 40 kW per rack for Blackwell. Liquid cooling is mandatory for Rubin-class systems, with no air-cooled option. Procurement lead times of 6–12 months are a third constraint.
 
@@ -217,7 +217,7 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 
 (b) 8,000 × 245,760 ≈ **1.97 GB (1.83 GiB)** for one request
 
-(c) The cost decreases by half to 120 KiB/token, thus approximately 0.98 GB. With the same memory, you can double your context length or your concurrency.
+(c) The cost decreases by half to 120 KiB/token. Thus the request uses approximately 0.98 GB. With the same memory, you can double your context length or your concurrency.
 
 **B3.**
 
@@ -237,7 +237,7 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 
 (c) The 20.9 ms step does not change, but it makes 64 tokens. The result is **≈ 3,060 tokens/sec aggregate**, and still **≈ 48 tokens/sec per user**.
 
-(d) In decode, batching gives throughput almost for free. This is because you pay the largest cost (the read of the weights) one time for any batch size.
+(d) In decode, batching gives throughput almost for free, because the largest cost (the read of the weights) occurs one time for any batch size.
 
 **B5.**
 
@@ -245,9 +245,9 @@ Decode is memory-bandwidth-bound. It must read the full weight set from HBM to m
 
 The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and the NIC has 400 Gb/s (50 GB/s). The ratio is **9×** ([roofline primer §1 and §5.1](../roofline-and-fabric/PRIMER.md#51-the-link-ladder), `roofline.fabric.LINKS`).
 
-(b) 1,800 GB/s per direction ÷ 100 = **18×**. Thus the cliff doubles in that case. This result occurs only if the NIC speed does not increase at the same rate as NVLink. The NICs of the Rubin generation have an announced speed of 1.6 Tb/s, 200 GB/s per direction. With that speed, the per-GPU ratio stays near 9× (verify, 2026-09).
+(b) 1,800 GB/s per direction ÷ 100 = **18×**. Thus the cliff doubles in that case. This result occurs only if the NIC speed does not increase at the same rate as NVLink. The NICs of the Rubin generation have an announced speed of 1.6 Tb/s, 200 GB/s per direction. If the NICs reach that speed, the per-GPU ratio stays near 9× (verify, 2026-09).
 
-(c) The per-GPU ratio stayed near 9× for two generations, because the NICs doubled together with NVLink. During the same time, the scale-up domain grew from 8 GPUs to 72 and more. Thus the penalty for a tightly coupled collective that crosses the domain boundary does not decrease. Also, more of the parallelism of a model can now stay inside the domain. Partition the model so that tensor parallelism stays inside the scale-up domain. When you select a platform, give the size of the NVLink domain at least as much weight as per-GPU FLOPs.
+(c) The per-GPU ratio stayed near 9× for two generations, because the NICs doubled together with NVLink. During the same time, the scale-up domain grew from 8 GPUs to 72 and more. Thus the penalty for a tightly coupled collective that crosses the domain boundary does not decrease. Also, more of the parallelism of a model can now stay inside the domain. Partition the model so that tensor parallelism stays inside the scale-up domain. When you select a platform, make the size of the NVLink domain at least as important as per-GPU FLOPs.
 
 **B6.**
 
@@ -262,7 +262,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 - much longer contexts (KV increases linearly, thus a 64K-token prompt is 16× this)
 - a tighter TTFT SLO
 - a contended fabric
-- a transfer path that falls back from RDMA and goes through the CPU.
+- a transfer path that goes through the CPU in place of RDMA
 
 **B7.**
 
@@ -280,7 +280,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 (b) 70% of that ≈ **29 trillion parameters**
 
-(c) 335 GB is approximately **1.6% of the rack's memory**. Do not think of the remainder as wasted spare capacity. It gives you very large KV cache pools, thus high concurrency and long context. The economics of frontier-model serving actually come from these pools.
+(c) 335 GB is approximately **1.6% of the rack's memory**. Do not think of the remainder as wasted spare capacity. It gives you very large KV cache pools. Thus you get high concurrency and long context. The economics of frontier-model serving actually come from these pools.
 
 ---
 
@@ -290,7 +290,7 @@ The Hopper pair gives the same answer. NVLink 4 has 450 GB/s per direction, and 
 
 - continuous batching and paged attention (the mandatory baseline)
 - FP8 KV cache (approximately doubles concurrency)
-- chunked prefill (without it, 4,000-token prompts at 200 concurrency will cause a large increase in p95 TTFT).
+- chunked prefill (without it, 4,000-token prompts at 200 concurrency will cause a large increase in p95 TTFT)
 
 Prefix caching is a strong fourth optimisation if there is a shared system prompt.
 
@@ -310,10 +310,10 @@ Goodput (requests/sec that meet the SLO) shows this problem. A report of p95/p99
 
 **C5.** The key ratio is sustained utilisation. To be better than rental, ownership usually needs more than approximately 60–70% sustained utilisation. The buy case usually omits two costs:
 
-- Facilities: power delivery and a liquid cooling retrofit. Current-generation racks are more than 40 kW, and Rubin-class systems have no air-cooled option.
-- The depreciation that comes from an annual architecture cadence. Hardware that you buy today competes with much better hardware within a year.
+- Facilities: power delivery and a liquid cooling retrofit. These costs occur because current-generation racks are more than 40 kW, and Rubin-class systems have no air-cooled option.
+- The depreciation that comes from an annual architecture cadence. This depreciation occurs because hardware that you buy today competes with much better hardware within a year.
 
-**C6.** Get the fundamentals first: continuous batching, paged attention, prefix caching, FP8 KV cache. These give the largest gains for almost every workload, and they need no topology changes. If you need more, the next step is same-node disaggregation across NVLink, because it has no KV transfer problem at all. Multi-node disaggregation adds a distributed KV transfer path, a control plane and a version-pinning burden. It gives a return only at genuine scale.
+**C6.** Get the fundamentals first: continuous batching, paged attention, prefix caching, FP8 KV cache. These give the largest gains for almost every workload, and they need no topology changes. If you need more, the next step is same-node disaggregation across NVLink, because it has no KV transfer problem at all. Multi-node disaggregation adds a distributed KV transfer path, a control plane and the burden of pinned versions. It gives a return only at genuine scale.
 
 **C7.** 405B at FP8 = 405 GB of weights. 8×80 GB = 640 GB total. If you keep ~15% for overhead, approximately 545 GB is usable. Thus after the weights, you have approximately 140 GB for KV cache, which is workable.
 
@@ -328,6 +328,6 @@ Configuration: **TP=8 within the single node**, fully inside the NVLink domain. 
 | Part A mostly correct | You have the vocabulary. Move to B. |
 | Part B correct within ~10% | You can size a deployment. This is the practical bar. |
 | B4 and B5 correct with reasoning | You understand *why* the architecture has its shape. |
-| Part C defensible | You can make deployment decisions. You do not only follow recipes. |
+| Part C defensible | You can make deployment decisions. You do not only do the steps of a recipe. |
 
 If B3 or B4 gave you problems, read §2 and §3 again. Everything else in the primer comes from those two sections.

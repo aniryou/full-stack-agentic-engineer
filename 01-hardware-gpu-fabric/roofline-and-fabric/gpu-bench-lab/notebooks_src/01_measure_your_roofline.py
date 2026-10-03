@@ -71,7 +71,7 @@ for m, n, k, b, what in cases:
 
 # %% [markdown]
 # Decode at batch 1 does about **one FLOP per byte** at bf16 (two FLOPs per weight, two bytes per weight). On all
-# hardware, the rate at which the weights stream in is its limit. Batching uses each weight again for every sequence
+# hardware, the rate at which the weights stream in is the limit of decode at batch 1. Batching uses each weight again for every sequence
 # in the batch, so the intensity increases approximately with the batch size.
 #
 # ## Exercise 1.1 — count a GEMM yourself
@@ -99,7 +99,7 @@ print("✅ my_gemm_cost matches the lab's accounting (and a square GEMM's intens
 # ## 3 · Timing honestly
 #
 # The first call of anything is slow. Fresh buffers page-fault, the BLAS thread pool (or cuBLAS) starts and selects
-# a kernel, and the clocks increase. Thus a benchmark does a warm-up first. Then it repeats the call until each
+# a kernel, and the clock frequencies increase. Thus a benchmark does a warm-up first. Then it repeats the call until each
 # sample is sufficiently long that the timer resolution is small in comparison. It takes several samples and reports
 # the **best** (what the machine can do) and the **median** (what you typically see). On a GPU, it must also wait
 # until the asynchronous work is complete, and the torch backend uses CUDA events for this.
@@ -120,8 +120,8 @@ print(f"→ {si(m.flops_per_s(), 'FLOP/s')} best, {si(m.flops_per_s('median'), '
 # ## 4 · The GEMM sweep: the flat roof
 #
 # The sweep runs square GEMMs over a range of sizes, in every dtype that this backend supports. Expect FLOP/s to
-# increase with size. Small GEMMs cannot keep every core/SM busy, and their fixed costs are large compared with their
-# work. Also expect a speedup each time that the element width decreases by half. The cause is two times the SIMD lanes
+# increase with size, because small GEMMs cannot keep every core/SM busy. Also, their fixed costs are large compared
+# with their work. Also expect a speedup each time that the element width decreases by half. The cause is two times the SIMD lanes
 # on a CPU, and the tensor-core rate on a GPU.
 #
 # The speedup of fp16/bf16 over IEEE fp32 **depends on the part**. It is about 15–16× on an A100 or H100, 8× on a
@@ -130,7 +130,7 @@ print(f"→ {si(m.flops_per_s(), 'FLOP/s')} best, {si(m.flops_per_s('median'), '
 # your GPU.
 #
 # On the CPU, numpy's float16 has **no BLAS path** at all. It is an emulated loop, and its row shows the cost of "no
-# hardware support for this dtype". (On a T4, bf16 is the same: it has no native support.)
+# hardware support for this dtype". On a T4, bf16 is the same: it has no native support.
 
 # %%
 print(f"{'GPU (spec, dense)':<26} {'fp32':>7} {'tf32':>7} {'fp16/bf16':>10} {'16-bit : fp32':>14}")
@@ -202,8 +202,8 @@ print("✅ your roofline:", ", ".join(f"{d} ridge {my_roofline(gemms, streams, d
 # ## 6 · Your roofline
 #
 # Flat roof: the fastest GEMM of a dtype. Slanted roof: the fastest byte-mover. The chart is log-log, and each `o` is
-# one of your GEMMs at its compulsory intensity. A small GEMM can be *above* the slanted roof. Its operands stay in
-# cache between calls, so it does not actually move the compulsory bytes from DRAM. The roofline counts only DRAM (or
+# one of your GEMMs at its compulsory intensity. A small GEMM can be *above* the slanted roof, because its operands
+# stay in cache between calls. Thus it does not actually move the compulsory bytes from DRAM. The roofline counts only DRAM (or
 # HBM) traffic.
 
 # %%
@@ -250,8 +250,8 @@ print(f"✅ classified on your {best_dtype} roofline (ridge {roof.ridge:.1f} FLO
 # of its roof, something that the roofline does not model limits it. That can be thread start-up, kernel launch, or
 # too few tiles to occupy every core or SM. That fixed cost per call is the $\alpha$ of notebook 02.
 #
-# (On a GPU run, the flat roof of each dtype is only your fastest GEMM of that dtype. Compare it with the spec in §7
-# before you trust it.)
+# On a GPU run, the flat roof of each dtype is only your fastest GEMM of that dtype. Compare that roof with the spec
+# in §7 before you trust it.
 
 # %% [markdown]
 # ## 7 · Measured vs spec
@@ -323,7 +323,7 @@ else:
 
 # %% [markdown]
 # A healthy GEMM gets 70–85% of the *dense* spec of a GPU. If you compare against a number with an asterisk (2:4
-# sparsity), you conclude that you get 40%. Then you look for a bug that does not exist. Under tensor load, a 70 W
+# sparsity), you conclude that you get 40%. In that case, you look for a bug that does not exist. Under tensor load, a 70 W
 # card (T4, L4) keeps lower clocks than its boost-clock spec.
 #
 # ## 8 · Your ridge next to datacenter GPUs
@@ -416,7 +416,7 @@ print(f"✅ H100 bf16, d = 8192: {standalone} counting activation bytes, {on_chi
 # effect on throughput. It is also why quantised weights (fewer bytes) make decode faster, but a faster tensor core
 # does not.
 #
-# A real decode step also reads the KV cache of each sequence. Batching does not share that read across sequences
+# A real decode step also reads the KV cache of each sequence. But batching does not share that read across sequences
 # ([KV cache primer](../../../../04-inference-engine/kv-cache/kv-cache-primer.md), primer §3.4).
 # [Capacity planning](../../../../00-foundations/gpu-capacity-planning/PRIMER.md) uses these numbers to size a fleet.
 #
@@ -445,8 +445,8 @@ print(f"✅ H100 bf16, d = 8192: {standalone} counting activation bytes, {on_chi
 #    which gives 2× the dense one. Then examine the power cap
 #    and the sustained clocks (`nvidia-smi`). Then examine the size, because small GEMMs cannot fill the SMs. A result
 #    of 70–85% of dense is healthy.
-# 3. *What batch size makes a $d = 8192$ projection compute-bound on an H100?* About 300. Inside a model, it is batch
-#    296. There, the activations stay on chip and the intensity is equal to the batch. Thus the crossover is the
+# 3. *What batch size makes a $d = 8192$ projection compute-bound on an H100?* About 300: it is batch 296 inside a
+#    model. There, the activations stay on chip and the intensity is equal to the batch. Thus the crossover is the
 #    ridge (~295 FLOP/B). For a standalone GEMM that also reads and writes its activations, it is 319
-#    ($R \cdot b \cdot d / (2(d - R \cdot b))$). A real decode step stays memory-bound for even longer.
-#    KV-cache reads add bytes per sequence, and batching does not share them.
+#    ($R \cdot b \cdot d / (2(d - R \cdot b))$). A real decode step stays memory-bound for even longer,
+#    because KV-cache reads add bytes per sequence that batching does not share.

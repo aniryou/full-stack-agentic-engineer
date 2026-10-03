@@ -21,7 +21,7 @@ You can defend these numbers in a design review.
    On a laptop, the notebook measures the roofline of your CPU. On any GPU, it measures the roofline of the GPU.
    A free Colab T4 is sufficient.
 
-This is the fastest result, and it needs nothing installed:
+The fastest result needs nothing installed:
 
 ```python
 from roofline import llm, specs    # run from roofline-core/
@@ -77,8 +77,8 @@ On Colab, the first cell of each notebook clones the repository and installs its
 
 | Tier | Where | What you do here | Cost |
 |---|---|---|---|
-| **T0** | laptop, Colab CPU, CI | Do all four core notebooks. The numpy backend of the lab measures the roofline and the disk throughput of your CPU. | $0 |
-| **T1** | Colab/Kaggle T4 (free), a rented 24 GB GPU, GCP L4 Spot | Measure a real GPU roofline by dtype, HBM bandwidth, pinned against pageable copies and how fast the weights load. | free to ~$0.7/hr |
+| **T0** | laptop, Colab CPU, CI | Do all four core notebooks. The numpy backend of the lab measures the roofline of your CPU and the throughput of your disk. | $0 |
+| **T1** | Colab/Kaggle T4 (free), a rented 24 GB GPU, GCP L4 Spot | Measure a real GPU roofline by dtype, the HBM bandwidth, pinned against pageable copies and the load speed of the weights. | free to ~$0.7/hr |
 | **T2** | Kaggle 2×T4 (free, PCIe only), 2–8× A100/H100 SXM on RunPod/Vast/Lambda, GCP `a2-highgpu-2g` | Measure P2P bandwidth over PCIe against NVLink. Run `nvidia-smi topo -m` on real machines. | ~$0–25 per session |
 | **T3** | GCP via the lab's Terraform | Run the suite on a Spot L4 VM with auto-stop. The VM uploads the results to a bucket. | pay per use |
 
@@ -98,7 +98,7 @@ learning path is in [`CURRICULUM.md`](../../CURRICULUM.md).
 
 ## Caveats
 
-- **Predicted vs measured.** Each time that the core prints is a roofline bound. Real kernels are slower than this
+- **Predicted against measured.** Each time value that the core prints is a roofline bound. Real kernels are slower than this
   bound. The lab measures the gap on your hardware.
 - **Dated facts.** The accelerator specs, prices and obtainability are a snapshot of September 2026, with the tag
   (verify).

@@ -1,13 +1,11 @@
 # %% [markdown]
 # # 04 · Weights loading and cold start
 #
-# **Tier:** T0. Write a synthetic safetensors checkpoint. Then measure the storage of *this machine*: cold and warm
+# **Tier:** T0: write a synthetic safetensors checkpoint. Then measure the storage of *this machine*: cold and warm
 # page cache, three read methods, parallel reads. **T1**: stream the file from the disk to a pinned host buffer and
-# then to the GPU. Compare the result with the model.
-#
-# **T3**: `deploy/gcp` runs the same suite on a new cloud VM. The
-# boot disk of that VM is a tier that is much different from the SSD of your laptop. Concepts: primer §6
-# "Storage and cold start" ([`../../PRIMER.md`](../../PRIMER.md)).
+# then to the GPU. Compare the result with the model. **T3**: `deploy/gcp` runs the same suite on a new cloud VM,
+# whose boot disk is a tier much different from the SSD of your laptop. Concepts: primer §6 "Storage and cold start"
+# ([`../../PRIMER.md`](../../PRIMER.md)).
 #
 # **Predicted first in** [roofline-core notebook 04](../../roofline-core/notebooks/04_loading_reliability_and_cost.ipynb)
 # (Ex 4.1 streamed loading, Ex 4.2 the cold-start budget) from datasheet tier rates. In this notebook, you measure the
@@ -17,7 +15,7 @@
 # ## The one-minute version
 #
 # A replica cannot serve requests until its weights are in GPU memory. Thus a cold start is a bandwidth problem with a
-# fixed-cost tail. The time is the bytes of the checkpoint divided by the **slowest tier** on the path, plus
+# constant-cost tail. The time is the bytes of the checkpoint divided by the **slowest tier** on the path, plus
 # provisioning, image pull and engine start-up. The path is object store, network, disk, page cache, host RAM, PCIe
 # and HBM, in that order.
 #
@@ -64,7 +62,7 @@ print(f"checkpoint will be written to {path} (filesystem: {loading.filesystem_ty
 # loader reads a byte of data. Thus a loader can `mmap` the file, read tensors in parallel, or stream them directly to
 # a GPU.
 #
-# The lab writes the format with its own code (`gpubench.loading.write_safetensors`, ~40 lines). The `safetensors`
+# The lab writes a safetensors file with its own code (`gpubench.loading.write_safetensors`, ~40 lines). The `safetensors`
 # library reads what the lab writes. Random bytes fill the tensors. Thus a filesystem that compresses or deduplicates
 # data cannot make the measurement look better than it is.
 
@@ -124,7 +122,7 @@ print(f"✅ header parsed: {len(tensors)} tensors whose sizes add up to every da
 #   The lab cannot evict a file on `tmpfs`, because that file *is* RAM. Thus the lab does not call any read of it
 #   cold, and it lists the cold rows as skipped instead.
 # * **First-touch page faults.** A read into a newly allocated buffer pays a page fault for each 4 KB of
-#   destination. The result gives that time to "the disk". The lab allocates the buffer and touches it one time,
+#   destination. The measurement then counts that time as time of "the disk". The lab allocates the buffer and touches it one time,
 #   before the measurement. On a GPU host, that buffer is the pinned staging area.
 # * **One request at a time.** SSDs and network disks get to their rated throughput only with many requests in
 #   flight. This is Little's law again. `pread` × threads keeps several requests in flight.
@@ -328,15 +326,15 @@ shutil.rmtree(workdir, ignore_errors=True)       # the synthetic checkpoint is n
 # %% [markdown]
 # ## In a design review
 #
-# **The two-minute version.** "Cold start is bytes over the slowest tier, plus fixed costs. For a 70B model in bf16,
+# **The two-minute version.** "Cold start is bytes over the slowest tier, plus constant costs. For a 70B model in bf16,
 # that is 140 GB. At the few hundred MB/s of a cloud boot disk, it is many minutes. At a local NVMe or a
 # well-parallelised object-store stream, it is a minute or less. I measure each tier cold, because a new node has an
 # empty page cache.
 #
 # "I measure with sufficient requests in flight (Little's law). I stream through the tiers, so that the slowest tier
-# sets the rate. safetensors makes that possible: offsets at the start, no unpickling, zero-copy views. FP8 weights
+# sets the rate. The safetensors format makes that possible: offsets at the start, no unpickle step, zero-copy views. FP8 weights
 # also cut the largest term in half. The other part of the time is provisioning, image pull and engine init. Warm pools and
-# image streaming are the solutions for that part (layers 03 and 05)."
+# image streaming decrease that part (layers 03 and 05)."
 #
 # **Drills**
 #
@@ -344,8 +342,8 @@ shutil.rmtree(workdir, ignore_errors=True)       # the synthetic checkpoint is n
 #    140 GB at ~260 MB/s is nine minutes alone, thus the weights path is the suspect. Measure the disk cold. Move the
 #    weights to a faster tier (local NVMe, a high-throughput volume, parallel range reads from the object store).
 #    Stream the weights, and do not stage them. Think about FP8.
-# 2. *Why does a safetensors checkpoint load faster than a pickled one?* There is no unpickling and no object
+# 2. *Why does a safetensors checkpoint load faster than a pickled one?* There is no unpickle step and no object
 #    construction. The header gives the offset of each tensor. Thus the loader can mmap, read in parallel and copy
-#    directly into pinned buffers. Also, the load runs no code, and this is also a security property.
+#    directly into pinned buffers. Also, the load runs no code. That fact is a security property too.
 # 3. *Our loader benchmark shows 12 GB/s from an NVMe rated at 7 GB/s.* It reads the page cache. Evict the file (or
 #    use O_DIRECT). Then measure again, because cold starts in production are cold.
