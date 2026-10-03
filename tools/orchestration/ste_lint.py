@@ -58,7 +58,7 @@ IRREGULAR_PARTICIPLES = (
     "flown", "blown", "frozen", "stolen", "struck", "swum", "sung", "rung", "sunk", "shrunk", "beaten", "bitten",
     "eaten", "fallen", "risen", "ridden", "shaken", "spoken", "stricken", "sworn", "woven",
 )
-MODALS = re.compile(r"\b(should|may|might|could|would|shall|ought)\b", re.I)
+MODALS = re.compile(r"\b(should|might|could|would|shall|ought|may(?!\s+\d))\b", re.I)   # "May 2026" is a month
 CONTRACTION = re.compile(
     r"\b(\w+n't|\w+'re|\w+'ve|\w+'ll|I'd|you'd|we'd|they'd|he'd|she'd|it'd|I'm|it's|let's|that's|there's|here's|"
     r"what's|who's|where's|how's|when's|why's)\b", re.I)
@@ -125,6 +125,7 @@ def clean_inline(text: str) -> str:
     text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
     text = HTML_TAG.sub(" ", text)
     text = text.replace("(verify)", "(VERIFYTAG)")
+    text = re.sub(r",\s*verify\)", ", VERIFYTAG)", text)   # "(checked 2026-09-26, verify)"
     text = re.sub(r"\*\*|__", "", text)
     text = re.sub(r"(?<![\w*])\*(?=\S)|(?<=\S)\*(?![\w*])", "", text)
     text = text.replace("\\$", "$")
@@ -232,7 +233,7 @@ def lint_markdown(text: str, line_offset: int = 0) -> tuple[list[Finding], dict]
             if TABLE_SEP.match(line):
                 continue
             for cell in re.split(r"(?<!\\)\|", line.strip().strip("|")):
-                if cell.strip():
+                if cell.strip() and cell.strip() not in ("—", "–", "-", "n/a"):   # an empty-cell marker is not prose
                     check_block("cell", i + line_offset, cell, findings, stats)
             continue
         stripped = line

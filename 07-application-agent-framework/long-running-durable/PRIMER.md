@@ -1,20 +1,20 @@
 # Long-Running Agentic Workflows on Google Cloud — A Primer
 
-*Written for explaining a design in a design review: the goal is to reason out loud about trade-offs, limits and failure modes, not to recite service names. Every pattern here has a runnable implementation in the topic's lab, [`lra-gcp`](lra-gcp/README.md) (package `lra`, under [`src/lra/`](lra-gcp/src/lra/)), and a notebook in its [`notebooks/`](lra-gcp/notebooks/); the engine's three invariants are built from scratch, in the standard library, in [`lra-core`](lra-core/README.md). Design drills with answer sketches close the primer (§11).*
+*This primer is for an engineer who explains a design in a design review. The goal is to think aloud about trade-offs, limits and failure modes, not to say a list of service names. Each pattern in this primer has an implementation that you can run in the lab of this topic, [`lra-gcp`](lra-gcp/README.md) (package `lra`, in [`src/lra/`](lra-gcp/src/lra/)). Each pattern also has a notebook in the [`notebooks/`](lra-gcp/notebooks/) folder of that lab. [`lra-core`](lra-core/README.md) builds the three invariants of the engine from nothing, with the standard library. Design drills with answer sketches are at the end of the primer (§11).*
 
 ---
 
 ## 0. The one-paragraph version
 
-A chat agent lives inside a request: seconds long, purely reactive, all state in RAM. A **long-running agent** has to wait — for a queue, a human, a batch job, a clock — for minutes to weeks, on infrastructure where any process can be killed at any line. The whole discipline reduces to five invariants:
+A chat agent lives in one request. The request is seconds long, the agent only reacts, and all of its state is in RAM. A **long-running agent** must wait for a queue, a person, a batch job or a clock. The wait can be from minutes to weeks. The infrastructure can stop any process at any line. The full discipline is only five invariants:
 
 - **durable state** (the store is the only memory),
-- **idempotent actions** (at-least-once delivery + idempotent handlers = effectively-once),
+- **idempotent actions** (at-least-once delivery and idempotent handlers give effectively-once),
 - **exclusive progress** (a lease, not a lock),
-- **bounded execution** (budgets in code, not prompts),
-- and **hygienic context** (put each fact where its lifetime belongs).
+- **bounded execution** (budgets in code, not in prompts),
+- and **hygienic context** (put each fact in a place that has the same lifetime as the fact).
 
-Everything else — sagas, fan-out, approvals, schedulers, ADK's `ResumabilityConfig` — is those five invariants applied to a specific kind of waiting.
+Everything else is these five invariants, applied to a specific kind of wait. Sagas, fan-out, approvals, schedulers and the `ResumabilityConfig` of ADK are examples.
 
 ---
 
@@ -22,22 +22,26 @@ Everything else — sagas, fan-out, approvals, schedulers, ADK's `ResumabilityCo
 
 ### 1.1 Four kinds of waiting
 
-| Waiting for… | Example | Duration | Wake-up source |
+| A wait for… | Example | Duration | Wake-up source |
 |---|---|---|---|
-| a **tool** | BigQuery export, a fine-tune job, a crawler | minutes–hours | callback/webhook, or a scheduled poll |
-| a **human** | approve a payment, confirm a budget, pick between options | hours–days | HTTP endpoint (IAP), Workflows callback |
-| the **world** | queue position, stock restock, a document to be filed | minutes–weeks | scheduler tick, event (Eventarc/Pub/Sub) |
-| **time** | "check every 5 minutes", "run nightly" | recurring | Cloud Scheduler |
+| a **tool** | a BigQuery export, a fine-tune job, a crawler | minutes–hours | a callback or a webhook, or a scheduled poll |
+| a **person** | approve a payment, confirm a budget, select one of the options | hours–days | an HTTP endpoint (IAP), a Workflows callback |
+| the **world** | a position in a queue, a stock restock, a document that someone files | minutes–weeks | a scheduler tick, an event (Eventarc or Pub/Sub) |
+| **time** | "check every 5 minutes", "run nightly" | it repeats | Cloud Scheduler |
 
-The agent must not *hold a process* across any of these. A Cloud Run instance can be scaled to zero, preempted, redeployed, or OOM-killed; a Cloud Run **service** request times out at 60 minutes; a **job** task at up to 7 days. Holding memory across a wait is not a design, it is a bet.
+The agent must not *hold a process* during any of these waits. The platform can scale a Cloud Run instance to zero, preempt it, deploy it again, or stop it when it has no more memory (OOM). A Cloud Run **service** request stops after 60 minutes. A **job** task stops after 7 days at the most. A design that holds memory during a wait is a bet, not a design.
 
 ### 1.2 Prompts can't start themselves
 
-The most common junior mistake: *"Monitor the presale and buy the moment it opens."* An instruction is text read by the model **when something invokes it**. Nothing reads it between turns; the model has no clock and no loop. Autonomy needs a *triggerer* (something with a clock or an event) and a *trigger* (an endpoint that can run the agent). Keep them separate: locally that is a script and a web server; on GCP it is Cloud Scheduler → (Pub/Sub) → Cloud Run.
+The most common junior mistake is this prompt: *"Monitor the presale and buy the moment it opens."*
+
+An instruction is text that the model reads **when something calls the model**. Nothing reads the instruction between turns. The model has no clock and no loop. An agent that acts by itself needs two parts. The *triggerer* is something with a clock or an event, and the *trigger* is an endpoint that can run the agent.
+
+Keep the two parts separate. On your own computer, they are a script and a web server. On GCP, they are Cloud Scheduler and Cloud Run, with Pub/Sub between them as an option.
 
 ### 1.3 The model is a non-deterministic side effect
 
-Ask Gemini the same question twice and you may get different tool arguments. That makes the LLM call the *most dangerous* line in a retry loop: if a worker crashes after acting on a decision but before recording it, a naive retry re-asks the model, gets a different decision, and produces a second, different side effect. The fix is structural: **journal the decision before acting on it** (§3.2).
+If you ask Gemini the same question two times, it is possible that you get different tool arguments. Thus the LLM call is the *most dangerous* line in a retry loop. A worker can crash after it acts on a decision but before it records the decision. Then a retry with no journal asks the model again and gets a different decision. That retry causes a second side effect, which is different from the first. The solution is in the structure: **write the decision to the journal before you act on it** (§3.2).
 
 ---
 
@@ -58,60 +62,77 @@ stateDiagram-v2
     RUNNING --> FAILED: budget / unrecoverable error
 ```
 
-A **run** is a document with:
+A **run** is a document with these fields:
 
-* `journal` — append-only list of steps (LLM decision, tool call, human decision, external event). Event-sourced: replaying it rebuilds the prompt.
-* `state` — small working state (the checkpoint proper).
-* `version` — optimistic-concurrency token; every save presents the version it read.
-* `lease` — `{owner, expires_at}`; who may advance the run right now.
-* `budget` / `usage` — steps, tokens, dollars, deadline.
-* `waiting_on` — what the run is parked on (approval token, ticket).
+* `journal`: an append-only list of steps (an LLM decision, a tool call, a decision of a person, an external event). The journal is event-sourced: a replay of the journal builds the prompt again.
+* `state`: a small state for the work in progress (the checkpoint itself).
+* `version`: an optimistic-concurrency token. Each save sends the version that it read.
+* `lease`: `{owner, expires_at}`. It tells who has permission to move the run forward now.
+* `budget` / `usage`: steps, tokens, dollars, deadline.
+* `waiting_on`: the thing that the run waits for (an approval token, a ticket).
 
-The rhythm of execution is **wake → do one step → checkpoint → sleep**. Each wake-up is one HTTP request from a queue; the store is the only memory. This is the same idea behind durable-execution engines (Temporal, Restate, Cloud Workflows) — here we build the minimal version by hand so the mechanics are visible, then show where the managed versions take over.
+The execution has a cycle: **wake, do one step, write a checkpoint, wait**. Each wake-up is one HTTP request from a queue. The store is the only memory. Durable-execution engines (Temporal, Restate, Cloud Workflows) use the same idea. This primer builds the minimum version by hand, so that you can see how its parts operate. Then it shows where the managed versions do the work instead.
 
 ---
 
 ## 3. The five invariants
 
 ### 3.1 Durability — the store is the only memory
-Checkpoint after every step. Two saves per tool step is the honest minimum: one *before* the side effect (intent) and one *after* (result). Anything not in the store after a crash never happened — including the model's reasoning.
+Write a checkpoint after each step. Two saves for each tool step is the real minimum: one save *before* the side effect (the intent) and one save *after* it (the result). After a crash, anything that is not in the store did not occur. This includes the reasoning of the model.
 
 ### 3.2 Idempotency — effectively-once, not exactly-once
-Every delivery mechanism on GCP is **at-least-once**: Cloud Tasks, Pub/Sub, Cloud Scheduler, Workflows retries, Cloud Run retries. Exactly-once *delivery* exists in one narrow place (Pub/Sub pull subscriptions in a region) and never covers *actions*. So the action must tolerate a replay:
+Each delivery mechanism on GCP is **at-least-once**: Cloud Tasks, Pub/Sub, Cloud Scheduler, the retries of Workflows and the retries of Cloud Run. Exactly-once *delivery* exists in one narrow place (Pub/Sub pull subscriptions in a region). It never applies to *actions*. Thus the action must be safe when a replay occurs:
 
-1. **Write-ahead intent.** Journal `TOOL(name, args, idempotency_key) STARTED`, save, *then* execute. A retry finds the STARTED record and re-executes *the same call with the same key* — it never re-asks the model.
-2. **Idempotency key = `run_id:step_index`** — stable across retries, unique across runs. Pass it downstream (`Idempotency-Key` header, Stripe-style) **and** memoise locally (`idempotency_keys/{key}` in Firestore). Defence in depth: a crash between "executed" and "memoised" is covered by the downstream key.
-3. **Named wake-ups.** Cloud Tasks rejects a task whose name was seen recently; name the next step `run-step-N` so a double enqueue collapses.
-4. **Duplicate-delivery guard.** If the journal already contains the step this delivery was for, re-enqueue the next (named) task and return 200.
+1. **Write-ahead intent.** Write `TOOL(name, args, idempotency_key) STARTED` to the journal. Save the run. *Then* execute the call. A retry finds the STARTED record and executes *the same call with the same key* again. The retry never asks the model again.
+2. **Idempotency key = `run_id:step_index`**. The key is the same for all retries of a step and different for each run. Send the key downstream (an `Idempotency-Key` header, in the Stripe style). **Also** record the result locally (`idempotency_keys/{key}` in Firestore). This gives defence in depth: the downstream key covers a crash after the execution and before the local record.
+3. **Named wake-ups.** Cloud Tasks rejects a task if Cloud Tasks saw the name of that task recently. Give the next step the name `run-step-N`. Then two enqueues of the same step become one task.
+4. **Duplicate-delivery guard.** If the journal already contains the step of this delivery, enqueue the next task (a named task) again. Then return 200.
 
-Test it the way the lab's [`tests/test_durability.py`](lra-gcp/tests/test_durability.py) and [`tests/test_tool_agent_and_patterns.py`](lra-gcp/tests/test_tool_agent_and_patterns.py) do: inject a crash *after* the side effect, let the lease expire, retry, assert one charge (and, for a model-chosen call, that the model was not asked again).
+Do a test of these four mechanisms in the same way as the lab's [`tests/test_durability.py`](lra-gcp/tests/test_durability.py) and [`tests/test_tool_agent_and_patterns.py`](lra-gcp/tests/test_tool_agent_and_patterns.py). Cause a crash *after* the side effect. Let the lease expire. Then retry the step. Make sure that there is one charge. For a call that the model selected, also make sure that the retry did not ask the model again.
 
 ### 3.3 Exclusivity — leases, not locks
-Two Cloud Run instances can receive the same task 50 ms apart. A **lease** (`acquire_lease` as a transactional compare-and-set with a TTL) makes the second one fail fast (lease held → HTTP 503 or 429 → the queue retries later). Leases *expire*, which is the difference from a lock: a dead worker cannot wedge a run forever. Long steps extend the lease (heartbeat). The `version` field is the second half: optimistic concurrency on every save catches the race the lease didn't.
+Two Cloud Run instances can receive the same task with 50 ms between them. A **lease** (`acquire_lease`, a transactional compare-and-set with a TTL) makes the second instance fail fast. The first instance holds the lease, thus the second instance returns HTTP 503 or 429. Then the queue retries the task later.
+
+A lease *expires*. This is the difference between a lease and a lock: a dead worker cannot block a run forever. A long step extends the lease (a heartbeat). The `version` field is the second half. Optimistic concurrency on each save finds the race that the lease did not find.
 
 ### 3.4 Boundedness — budgets are code
-An autonomous loop has no natural end; "stop when done" is decided by a probabilistic model. Deterministic limits — `max_steps`, `max_tokens`, `max_cost_usd`, a wall-clock deadline, `max_iters` for reflection loops, a poll deadline for async tools, an approval TTL — are checked in code before every model call. They are the circuit breaker, the cost cap and the blast-radius limit in one place. Never put them in the prompt.
+An autonomous loop has no natural end, and a probabilistic model decides "stop when done". The code examines deterministic limits before each model call:
+
+- `max_steps`,
+- `max_tokens`,
+- `max_cost_usd`,
+- a wall-clock deadline,
+- `max_iters` for reflection loops,
+- a poll deadline for async tools,
+- an approval TTL.
+
+These limits are the circuit breaker, the cost cap and the blast-radius limit in one place. Never put these limits in the prompt.
 
 ### 3.5 Context hygiene — every fact has a shelf life
-Long runs accumulate context. ADK makes the lifetimes explicit and it is a good taxonomy for any stack:
+A long run collects more and more context. ADK makes the lifetimes explicit. Its list of lifetimes is a good classification for any stack:
 
 | Where | Lifetime | Put here |
 |---|---|---|
-| conversation history (events) | the session; gets **compacted** into summaries | what was said |
-| `temp:` state | one invocation | scratch; **lost on resume** |
-| session state (unprefixed) | the session | this booking's decisions, the agreed budget |
-| `user:` state | every session of this user | preferences that must survive the conversation |
-| `app:` state | every user | app-wide config |
-| artifacts (`gs://`) | independent | large payloads — save the 6 KB seat map, return a filename |
-| long-term memory (Memory Bank / RAG) | indefinite, curated | explicit `remember()` calls |
+| conversation history (events) | the session. ADK **compacts** it into summaries. | the content of the conversation |
+| `temp:` state | one invocation | scratch data, **lost on resume** |
+| session state (no prefix) | the session | the decisions for this reservation, the agreed budget |
+| `user:` state | each session of this user | preferences that must stay after the conversation |
+| `app:` state | all users | the configuration for the full app |
+| artifacts (`gs://`) | independent | large payloads. Save the 6 KB seat map. Return a filename. |
+| long-term memory (Memory Bank or RAG) | no time limit, curated contents | explicit `remember()` calls |
 
-Two consequences: (a) **summaries paraphrase** — anything you cannot afford to lose goes in state, not the transcript; (b) **stale context is worse than missing context** — an agent with missing data asks; an agent with a stale seat map *acts*. Re-verify volatile facts in a code guard immediately before any mutating call (`before_tool_callback`), never rely on the prompt to do it.
+This has two consequences:
+
+1. **A summary puts the facts in different words.** Put anything that you must not lose in state, not in the transcript.
+2. **Stale context is worse than no context.** An agent that does not have the data asks. An agent with a stale seat map *acts*.
+
+In a code guard, examine again each fact that can change, immediately before each call that changes data (`before_tool_callback`). Never depend on the prompt to examine the facts again.
 
 ---
 
 ## 4. The pattern catalogue
 
-Each pattern: the problem, the shape, the GCP mapping, the failure modes, and where it lives in this repo (paths are in [`lra-gcp`](lra-gcp/README.md) unless they say otherwise).
+For each pattern, this section gives the problem, the shape, the mapping to GCP, the failure modes and the location in this repository. The paths are in [`lra-gcp`](lra-gcp/README.md), unless a path says otherwise.
 
 ### P1 · Durable agent loop (`core/engine.py`, `examples/tool_agent.py`; notebooks 01 and 05; `lra-core` notebook 01)
 
@@ -128,167 +149,291 @@ flowchart LR
   C --> N[enqueue run-step-N+1]
   M -- final --> D[SUCCEEDED]
 ```
-**Failure modes → mitigations:** crash after side effect (memo + key) · duplicate delivery (journal index guard + named tasks) · zombie worker (lease TTL) · runaway (budget) · unknown tool / declared tool error (`ToolError`: journal it as the call's result, let the model correct itself; any other exception is retried as infrastructure; `tests/test_tool_agent_and_patterns.py`) · hot document (one run = one writer; fine).
+**Failure modes and their mitigations:**
+
+- A crash after the side effect: the effect record and the idempotency key.
+- A duplicate delivery: the journal index guard and the named tasks.
+- A zombie worker: the lease TTL.
+- A runaway loop: the budget.
+- An unknown tool or a declared tool error: a `ToolError`. Write it to the journal as the result of the call. Then let the model correct itself. The engine retries any other exception as an infrastructure failure. See `tests/test_tool_agent_and_patterns.py`.
+- A hot document: one run has one writer, thus this is not a problem.
 
 ### P2 · Orchestrator / workers, fan-out–fan-in (`patterns/orchestrator_worker.py`, notebook 03)
-Planner LLM → N subtasks → Pub/Sub topic (or N Cloud Tasks) → idempotent workers → transactional counter on the run doc → *the write that reaches N* enqueues the named `aggregate` task → synthesis LLM. **Fan-in is the hard part**: side effects outside the transaction; late duplicates must also observe `all_done` (the enqueue is idempotent, so let them); N > ~50 writers on one Firestore doc contend (~1 write/s guidance) → one doc per subtask + count query, or hand the join to **Cloud Workflows `parallel`** (`workflows/research_approval.yaml`).
+The flow has these steps:
+
+1. A planner LLM makes N subtasks.
+2. The subtasks go to a Pub/Sub topic (or to N Cloud Tasks).
+3. Idempotent workers do the subtasks.
+4. Each worker updates a transactional counter on the run document.
+5. *The write that reaches N* enqueues the named `aggregate` task.
+6. A synthesis LLM combines the results.
+
+**Fan-in is the hard part**. The side effects must stay outside the transaction. A late duplicate must also see `all_done`. The enqueue of the `aggregate` task is idempotent, thus let the late duplicates enqueue it too.
+
+When N > ~50 writers use one Firestore document, the writes contend. The guidance for one document is ~1 write/s. In that case, write one document for each subtask and use a count query. Or give the join to **Cloud Workflows `parallel`** (`workflows/research_approval.yaml`).
 
 ### P3 · Human-in-the-loop gate (`patterns/hitl.py`, notebooks 02 and 05; `lra-core` notebook 02)
-Tool marked `requires_approval` → run parks `WAITING_HUMAN` with the *exact* proposed call and a single-use token → notify → `POST /runs/{id}/approve` (behind IAP) → journal `HUMAN` + the approved call as a `STARTED` intent → normal loop executes it. **Rules:** approve what you execute / execute what was approved (never re-plan after approval); every gate has a TTL (Scheduler-driven expiry → explicit FAILED + escalation); double-clicks are no-ops. Managed alternative: Cloud Workflows `events.create_callback_endpoint` + `await_callback` (`workflows/research_approval.yaml`) — the execution *is* the durable wait.
+The gate has these steps:
+
+1. A tool has the mark `requires_approval`.
+2. The run waits in `WAITING_HUMAN` with the *exact* proposed call and a single-use token.
+3. The system sends a notification.
+4. The approval arrives as `POST /runs/{id}/approve` (behind IAP).
+5. The handler writes a `HUMAN` record and the approved call, as a `STARTED` intent, to the journal.
+6. The usual loop executes the call.
+
+**Rules:**
+
+- Approve what you execute, and execute what the person approved. Never plan again after the approval.
+- Each gate has a TTL. Cloud Scheduler starts the expiry, and the result is an explicit FAILED status and an escalation.
+- A double-click has no effect.
+
+A managed alternative is Cloud Workflows `events.create_callback_endpoint` with `await_callback` (`workflows/research_approval.yaml`). In this alternative, the execution *is* the durable wait.
 
 ### P4 · Saga / compensating transactions (`patterns/saga.py`, `examples/procurement_saga.py`, notebook 03)
-Flight → hotel → card across systems with no shared transaction. Failure at step $k$ runs compensations $k-1 \ldots 0$ in reverse, one per wake-up, each journaled with its own key. A compensation that fails permanently is an **escalation** (`on_stuck`), never silence. The LLM may plan the saga; the runner owns the forward/compensate state machine.
+The example is a flight, then a hotel, then a card, across systems that have no shared transaction. If step $k$ fails, the runner runs the compensations $k-1 \ldots 0$ in reverse order. It runs one compensation for each wake-up and writes each one to the journal with its own key. A compensation that fails permanently is an **escalation** (`on_stuck`), never silence. The LLM can plan the saga. The runner owns the state machine that goes forward or compensates.
 
 ### P5 · Scheduled / heartbeat agent (`patterns/scheduled.py`)
-Cloud Scheduler → Pub/Sub → push → `/tick`. Three bugs and their fixes: overlap (a lease, or skip while the previous tick's run is active), duplicate ticks (`next_due`, or one run id per time window with an idempotent start), zombies (lease TTL + heartbeat, and the reaper). Keep the tick small; hand long work to P1.
+The path is Cloud Scheduler, then Pub/Sub, then a push to `/tick`. There are three bugs, and each has a solution:
+
+- Overlap: a lease. Or do not start a run while the run of the previous tick is active.
+- Duplicate ticks: `next_due`. Or one run id for each time window, with an idempotent start.
+- Zombies: the lease TTL and a heartbeat, and the reaper.
+
+Keep the tick small. Give long work to P1.
 
 ### P6 · Reflection / evaluator–optimizer (`patterns/reflection.py`, notebook 03)
-generate → critique (score + feedback, separate prompt with no shared context) → revise, until `score ≥ threshold` **or** `iter ≥ max_iters`. Stop conditions in code; every iteration a checkpoint; the history doubles as an eval dataset.
+The loop does three steps until `score ≥ threshold` **or** `iter ≥ max_iters`:
+
+1. The model generates an output.
+2. The critic gives a score and feedback. It uses a separate prompt with no shared context.
+3. The model revises the output.
+
+The stop conditions are in code. Each iteration writes a checkpoint. The history is also an eval dataset.
 
 ### P7 · Long-running tool: ticket + poll/callback (`patterns/async_tool.py`)
-The tool returns a ticket immediately; the run parks `WAITING_EVENT`. Either the external system calls `POST /internal/callbacks/{run}/{ticket}` (preferred) or a **timer** (a delayed Cloud Task with `schedule_time`, or the reaper on Cloud Scheduler) wakes a poll with exponential back-off capped at a max interval and a total deadline. No process waits. This is exactly ADK's `LongRunningFunctionTool` + `ResumabilityConfig`, and the reason ADK distinguishes `join_queue` (long-running: work continues after return) from `check_queue` (synchronous: never mark it long-running or the run would pause every time it checks).
+The tool returns a ticket immediately. The run waits in `WAITING_EVENT`. Then one of two things wakes the run:
+
+- The external system calls `POST /internal/callbacks/{run}/{ticket}`. This is the preferred method.
+- A **timer** wakes a poll. The timer is a delayed Cloud Task with `schedule_time`, or the reaper on Cloud Scheduler. The poll has an exponential back-off up to a maximum interval, and it has a total deadline.
+
+No process waits. This is exactly the `LongRunningFunctionTool` and the `ResumabilityConfig` of ADK. It is also the reason why ADK makes a distinction between `join_queue` and `check_queue`:
+
+- `join_queue` is long-running: the work continues after the return.
+- `check_queue` is synchronous. Never mark it as long-running. If you do, the run pauses each time that the run does a check.
 
 ### P8 · Workflow graph: rules as code, judgement as agents (`examples/adk_ticket_queue/nightly_workflow.py`, notebook 04; optional `adk` extra)
-Split the flow: steps with one right answer (take one queue ticket, check position, format the brief) are **function nodes**; steps needing judgement (which show, which section, take B or nothing) are **agent nodes**. Rigid sequences are exactly what probabilistic models eventually get wrong when nobody is watching. ADK 2's `Workflow` gives you this with `RequestInput` interrupts, `rerun_on_resume` for the node that interrupted (re-run it, or take the resume input as its output) and `ctx.route` for conditional edges.
+Divide the flow into two kinds of steps:
+
+- A step with one correct answer is a **function node**. Examples: take one queue ticket, examine the position, format the brief.
+- A step that needs judgement is an **agent node**. Examples: which show, which section, take B or nothing.
+
+Rigid sequences are exactly the work that probabilistic models do incorrectly after some time, when no person watches the models. The `Workflow` of ADK 2 gives you this division into function nodes and agent nodes, with these features:
+
+- `RequestInput` interrupts.
+- `rerun_on_resume` for the node that interrupted: run the node again, or use the resume input as its output.
+- `ctx.route` for conditional edges.
 
 ---
 
 ## 5. GCP building blocks — and the numbers that decide the design
 
-Numbers verified 5 Sep 2026; re-check before relying on them (see "Verify" list at the end).
+The numbers are from a check on 5 Sep 2026. Do a new check before you depend on them (see the "Verify" list at the end).
 
-| Service | Role in a long-running agent | Limits & semantics you should quote |
+| Service | Role in a long-running agent | Limits and semantics to quote |
 |---|---|---|
-| **Cloud Run services** | the trigger: HTTP handlers for steps, approvals, callbacks, Pub/Sub push | request timeout default 5 min, **max 60 min**; instances scale to zero and are not guaranteed to finish work after the response (use always-on CPU or Tasks for background work); concurrency per instance configurable; min instances kill cold starts |
-| **Cloud Run jobs** | one long step that can't be split (a 4-hour crawl) | task timeout default 10 min, **up to 168 h (7 days)** per attempt (GPU tasks 1 h); tasks/parallelism; retries per task; can be triggered by Scheduler or the Jobs API |
-| **Cloud Tasks** | "wake run X for step N, not before T" | at-least-once; **named tasks de-duplicated** (window roughly 1 h–24 h depending on how the queue was created — treat as best-effort); `schedule_time` up to **30 days** ahead; retention 31 days; 500 dispatches/s per queue; task ≤ 1 MiB; per-queue rate/concurrency limits and retry back-off; HTTP targets with OIDC/OAuth tokens; dispatch deadline for HTTP targets up to 30 min |
-| **Pub/Sub** | fan-out, decoupling schedulers from services, event ingress | at-least-once; retention configurable up to 31 days; ack deadline 10–600 s; exactly-once delivery only for **pull** subscriptions (regional); ordering keys; dead-letter topics with max delivery attempts; push endpoints must ack within the deadline (do the work fast or hand off to Tasks) |
-| **Cloud Scheduler** | the clock | cron with time zone; retries; at-least-once (can double-fire); targets: HTTP, Pub/Sub, App Engine |
-| **Cloud Workflows** | managed durable orchestration | an execution can run/wait **up to 1 year**; `await_callback` default 12 h (set it explicitly); `parallel` branches with shared variables; declarative retry/back-off; connectors that poll long-running GCP operations; quota of 10,000 concurrent executions per region (backlogged beyond that); priced per step, so tight polling loops cost money — prefer callbacks |
-| **Firestore** | run documents, idempotency keys, leases | transactions (optimistic, retried on contention); document ≤ 1 MiB; keep sustained writes to any one document to ~1/s; TTL policies for key expiry; native emulator for local tests |
-| **Cloud SQL / AlloyDB (Postgres)** | ADK session store (`postgresql+asyncpg://…?host=/cloudsql/…`); relational journals when you need SQL over runs | connection limits matter with many Cloud Run instances — use the Cloud SQL connector / pooling |
-| **Spanner** | very high write rates or global consistency across regions | strong consistency, horizontal scale; more ops overhead and cost — justify it |
-| **Memorystore (Redis/Valkey)** | leases and counters with TTL at high rates | sub-ms, but in-memory: never the only copy of a journal |
-| **Cloud Storage** | ADK artifacts (`gs://`), large tool outputs, memory files | keep big payloads out of the prompt; return a URI |
-| **Eventarc** | wake on GCS/Audit-log/Pub/Sub events | at-least-once; ADK's `trigger_sources=["eventarc"]` |
-| **Gemini on Vertex AI (Agent Platform)** | the model; `google-genai` SDK, ADC auth, no API keys | 1M-token context on Gemini 3.x; structured output; function calling; preview aliases change often — pin a model id per environment |
-| **Agent Runtime** (Gemini Enterprise Agent Platform; formerly Vertex AI Agent Engine Runtime) | managed hosting for ADK/LangGraph agents with **Sessions** and **Memory Bank** | no container to own, query API, managed scaling; wake-ups must come from outside via its query endpoint (ADK's trigger routes exist only when you host the FastAPI app yourself) |
-| **ADK 2 (Python)** | the framework: `App`, `ResumabilityConfig`, `EventsCompactionConfig`, `LongRunningFunctionTool`, `Workflow` + `@node(rerun_on_resume=…)`, `RequestInput`, `before_tool_callback`, session/artifact/memory services by URI, `runner.rewind_async` | resume is **at-least-once** and best-effort; `temp:` state is lost on resume; the built-in Pub/Sub trigger route creates a *new* session per message |
-| **Cloud Logging / Trace / Monitoring** | run_id/step_id correlation, OpenTelemetry spans per LLM/tool call | `trace_to_cloud=True` in ADK; log-based metrics for cost per run |
-| **Secret Manager / IAM** | tool credentials, OIDC between services | one service account per role; `--no-allow-unauthenticated`; IAP on human endpoints |
+| **Cloud Run services** | the trigger: HTTP handlers for steps, approvals, callbacks and Pub/Sub push | The request timeout is 5 min by default, **maximum 60 min**. Instances scale to zero. There is no guarantee that an instance finishes its work after the response. For background work, use always-on CPU or Tasks. You can set the concurrency for each instance. Minimum instances prevent cold starts. |
+| **Cloud Run jobs** | one long step that you cannot divide (a 4-hour crawl) | The task timeout is 10 min by default, **up to 168 h (7 days)** for each attempt (GPU tasks: 1 h). You can set the tasks and the parallelism. You can set the retries for each task. Scheduler or the Jobs API can start a job. |
+| **Cloud Tasks** | "wake run X for step N, not before T" | At-least-once. Cloud Tasks **de-duplicates named tasks**. The window is approximately 1 h–24 h, and it depends on how you created the queue. Think of the de-duplication as best-effort. `schedule_time` is up to **30 days** ahead. The retention is 31 days. 500 dispatches/s for each queue. A task is ≤ 1 MiB. Each queue has rate limits, concurrency limits and a retry back-off. HTTP targets with OIDC or OAuth tokens. The dispatch deadline for HTTP targets is up to 30 min. |
+| **Pub/Sub** | fan-out, a separation between schedulers and services, the entry point for events | At-least-once. You can set the retention up to 31 days. The ack deadline is 10–600 s. Exactly-once delivery is only for **pull** subscriptions (regional). Ordering keys. Dead-letter topics with a maximum number of delivery attempts. A push endpoint must ack within the deadline. Do the work fast, or give it to Tasks. |
+| **Cloud Scheduler** | the clock | Cron with a time zone. Retries. At-least-once. It can send a tick two times. Targets: HTTP, Pub/Sub, App Engine. |
+| **Cloud Workflows** | managed durable orchestration | An execution can run or wait **up to 1 year**. `await_callback` has a default timeout of 12 h. Set the timeout explicitly. `parallel` branches with shared variables. Declarative retry and back-off. Connectors that poll long-running GCP operations. A quota of 10,000 concurrent executions for each region. More executions go into a backlog. The price is for each step, thus tight poll loops cost money. Use callbacks when you can. |
+| **Firestore** | run documents, idempotency keys, leases | Transactions (optimistic, with a retry on contention). A document is ≤ 1 MiB. Keep the sustained writes to any one document at ~1/s at the most. TTL policies for the expiry of keys. A native emulator for local tests. |
+| **Cloud SQL / AlloyDB (Postgres)** | the ADK session store (`postgresql+asyncpg://…?host=/cloudsql/…`), relational journals when you need SQL across runs | Connection limits are important with many Cloud Run instances. Use the Cloud SQL connector or a connection pool. |
+| **Spanner** | the highest write rates, or global consistency across regions | Strong consistency, horizontal scale. More operations overhead and more cost. Give the reason for it. |
+| **Memorystore (Redis/Valkey)** | leases and counters with TTL at high rates | Sub-ms, but in memory. Never use it as the only copy of a journal. |
+| **Cloud Storage** | ADK artifacts (`gs://`), large tool outputs, memory files | Keep large payloads out of the prompt. Return a URI. |
+| **Eventarc** | wake-ups from GCS, Audit-log or Pub/Sub events | At-least-once. In ADK: `trigger_sources=["eventarc"]`. |
+| **Gemini on Vertex AI (Agent Platform)** | the model, the `google-genai` SDK, ADC auth, no API keys | A 1M-token context on Gemini 3.x. Structured output. Function calling. Preview aliases change frequently. Set one constant model id for each environment. |
+| **Agent Runtime** (Gemini Enterprise Agent Platform, old name Vertex AI Agent Engine Runtime) | a managed host for ADK and LangGraph agents with **Sessions** and **Memory Bank** | No container to own, a query API, and the platform manages the scale. Wake-ups must come from outside, through its query endpoint. ADK's trigger routes exist only when you host the FastAPI app yourself. |
+| **ADK 2 (Python)** | the framework: `App`, `ResumabilityConfig`, `EventsCompactionConfig`, `LongRunningFunctionTool`, `Workflow` with `@node(rerun_on_resume=…)`, `RequestInput`, `before_tool_callback`, session, artifact and memory services by URI, `runner.rewind_async` | Resume is **at-least-once** and best-effort. A resume loses the `temp:` state. The built-in Pub/Sub trigger route makes a *new* session for each message. |
+| **Cloud Logging / Trace / Monitoring** | run_id and step_id correlation, OpenTelemetry spans for each LLM call and each tool call | `trace_to_cloud=True` in ADK. Log-based metrics for the cost of each run. |
+| **Secret Manager / IAM** | tool credentials, OIDC between services | One service account for each role. `--no-allow-unauthenticated`. IAP on the endpoints for people. |
 
 ### 5.1 Choosing the runtime (the decision everything else hangs on)
 
-| Question | If yes → |
+| Question | If yes |
 |---|---|
-| Is the flow a fixed graph with known branches and mostly HTTP calls? | **Cloud Workflows** owns orchestration; Cloud Run does the LLM steps |
-| Does the flow need per-step LLM judgement about *what to do next*? | **Durable loop on Cloud Run + Cloud Tasks + Firestore** (P1) or **ADK `Workflow` on Cloud Run + Cloud SQL** |
-| Do you want managed sessions/memory and no container? | **Agent Runtime**; add an external triggerer for wake-ups |
-| One step > 60 min and not splittable? | **Cloud Run job** for that step; park the run around it (P7) |
-| Thousands of concurrent runs, many writes/s? | Firestore per-run docs are fine; move counters/leases to Memorystore or Spanner if a *single* doc gets hot |
-| Regulated side effects (money, PII writes)? | Add P3 gates in code, keys downstream, an audit journal you can replay |
+| Is the flow a static graph with known branches and mostly HTTP calls? | **Cloud Workflows** owns the orchestration. Cloud Run does the LLM steps. |
+| Does the flow need an LLM judgement at each step about *what to do next*? | **Durable loop on Cloud Run + Cloud Tasks + Firestore** (P1) or **ADK `Workflow` on Cloud Run + Cloud SQL** |
+| Do you want managed sessions and memory, and no container? | **Agent Runtime**. Add an external triggerer for wake-ups. |
+| Is one step > 60 min, and is it impossible to divide? | A **Cloud Run job** for that step. The run waits during the job (P7). |
+| Are there thousands of concurrent runs and many writes/s? | One Firestore document for each run is not a problem. If a *single* document becomes hot, move the counters and the leases to Memorystore or Spanner. |
+| Are there regulated side effects (money, PII writes)? | Add P3 gates in code, keys downstream and an audit journal that you can replay. |
 
-Rule of thumb: put durability in the platform (Workflows callbacks, Cloud Tasks scheduling, Firestore transactions) and keep the agent code thin; a hand-rolled durable loop is for when the *model* must decide the next node.
+The general rule has two parts. Put durability in the platform (Workflows callbacks, Cloud Tasks schedules, Firestore transactions). Keep the agent code thin. A durable loop written by hand is for the case when the *model* must decide the next node.
 
 ---
 
 ## 6. Three reference architectures
 
 ### A. Durable loop on Cloud Run (this repo's `lra-gcp/services/`)
-Cloud Run (FastAPI) ← Cloud Tasks (named tasks, OIDC) · Firestore (runs, keys) · Gemini · Cloud Scheduler → Pub/Sub → `/internal/scheduler/tick` (expire approvals, heartbeat agents) · external webhooks → `/internal/callbacks`. **Pros:** full control, cheapest at scale, every step is one small stateless request. **Cons:** you own the orchestration bugs; three services to secure.
+The architecture has these parts:
+
+- Cloud Run (FastAPI), which receives tasks from Cloud Tasks (named tasks, OIDC).
+- Firestore (runs, keys).
+- Gemini.
+- Cloud Scheduler, which sends to Pub/Sub, which sends to `/internal/scheduler/tick`. The tick expires approvals and runs the heartbeat agents.
+- External webhooks, which send to `/internal/callbacks`.
+
+**Pros:** full control, the lowest cost at scale. Each step is one small stateless request.
+
+**Cons:** you own the orchestration bugs. There are three services that you must make secure.
 
 ### B. Cloud Workflows as the durable orchestrator
-Workflows YAML holds the graph (`parallel` fan-out, `await_callback` for humans, `retry` blocks, `sys.sleep` for polls); Cloud Run exposes `/worker`, `/aggregate`, `/notify`, `/approve`. **Pros:** durability, waits and retries are declarative; executions can wait up to a year; execution history is the audit log. **Cons:** dynamic, model-chosen control flow is awkward (the graph is static YAML); per-step pricing punishes tight loops; expressions are limited.
+The Workflows YAML holds the graph: `parallel` fan-out, `await_callback` for people, `retry` blocks and `sys.sleep` for polls. Cloud Run supplies the endpoints `/worker`, `/aggregate`, `/notify` and `/approve`.
+
+**Pros:** durability, waits and retries are declarative. An execution can wait up to a year. The execution history is the audit log.
+
+**Cons:** a dynamic control flow that the model selects is not easy, because the graph is static YAML. The per-step pricing makes tight loops high-cost. The expressions have limits.
 
 ### C. ADK 2 on Cloud Run with Cloud SQL sessions (this repo's `lra-gcp/examples/adk_ticket_queue/`)
-`get_fast_api_app(session_service_uri="postgresql+asyncpg://…", artifact_service_uri="gs://…", trigger_sources=["pubsub"])` in one container; `Workflow` graph with `RequestInput` interrupts; Cloud Scheduler → Pub/Sub → `/wake` resumes the *existing* session. **Pros:** framework-native interrupts/resume/compaction; local dev with `adk web` and SQLite; same agent code from laptop to Cloud Run byte-for-byte. **Cons:** resume is best-effort/at-least-once (tools must be idempotent anyway); the framework is moving fast (pre-GA configs); you still own wake-up plumbing.
+The architecture has these parts:
 
-(D: the same ADK agent on **Agent Runtime** — swap the runner, keep the agent, drive wake-ups from outside. Best when the team wants a managed surface and Memory Bank out of the box; `lra-gcp/examples/adk_agent_engine/` deploys one.)
+- `get_fast_api_app(session_service_uri="postgresql+asyncpg://…", artifact_service_uri="gs://…", trigger_sources=["pubsub"])` in one container.
+- A `Workflow` graph with `RequestInput` interrupts.
+- Cloud Scheduler, which sends to Pub/Sub, which sends to `/wake`. The `/wake` endpoint resumes the session that *already exists*.
+
+**Pros:** interrupts, resume and compaction are native to the framework. You can develop on your computer with `adk web` and SQLite. The agent code is the same, byte for byte, on a laptop and on Cloud Run.
+
+**Cons:** resume is best-effort and at-least-once. Thus the tools must be idempotent in all cases. The framework changes fast (pre-GA configs). You still own the infrastructure code for wake-ups.
+
+D: the same ADK agent on **Agent Runtime**. Replace the runner. Keep the agent. Send the wake-ups from outside. This option is best when the team wants a managed surface and Memory Bank that are ready for use. `lra-gcp/examples/adk_agent_engine/` deploys one.
 
 ---
 
 ## 7. Resource estimation (say the numbers out loud)
 
-Scenario: 10,000 active runs/day; each run ≈ 12 LLM steps, 6 tool calls, one 30-minute wait, ~4k input / 300 output tokens per step.
+Scenario: 10,000 active runs/day. Each run has ≈ 12 LLM steps, 6 tool calls and one 30-minute wait. Each step uses ~4k input tokens and 300 output tokens.
 
-* **Wake-ups:** 10k × (12 + 6 + polls ≈ 4) ≈ 220k Cloud Tasks/day ≈ 2.5/s average, 25/s peak with 10× burst — one queue (500/s ceiling) is plenty; set `max_concurrent_dispatches` to protect Cloud Run.
-* **Firestore writes:** ≈ 2 saves per tool step + 1 per LLM step ≈ 24/run → 240k writes/day plus keys — trivial; per-document rate is ≤ 1/s because one run has one writer.
-* **Tokens:** 10k × 12 × 4.3k ≈ 520M tokens/day. At Flash-class pricing this is single-digit thousands of dollars/month; at Pro-class an order of magnitude more — say which steps need Pro (planner, critic) and route the rest to Flash/Flash-Lite. Track tokens/sec and cost/run as first-class metrics, not afterthoughts.
-* **Latency budget per step:** LLM p50 ~2–6 s + tool + 2 Firestore round-trips ≈ well under Cloud Run's 5-min default; raise the timeout only for known-long tools or move them behind P7.
-* **Parked runs cost nothing** except storage and one scheduled task each.
+* **Wake-ups:** 10k × (12 + 6 + polls ≈ 4) ≈ 220k Cloud Tasks/day. This is ≈ 2.5/s on average, and 25/s at the peak with a 10× burst. One queue (a ceiling of 500/s) is more than sufficient. Set `max_concurrent_dispatches` to protect Cloud Run.
+* **Firestore writes:** ≈ 2 saves per tool step + 1 per LLM step ≈ 24/run. This gives 240k writes/day, plus the keys. This quantity is small. The rate for each document is ≤ 1/s, because one run has one writer.
+* **Tokens:** 10k × 12 × 4.3k ≈ 520M tokens/day. At Flash-class pricing, this is single-digit thousands of dollars/month. At Pro-class pricing, it is an order of magnitude more. Say which steps need Pro (the planner, the critic). Send the other steps to Flash or Flash-Lite. Monitor tokens/sec and cost/run as first-class metrics, not as things that you add later.
+* **Latency budget per step:** LLM p50 ~2–6 s, plus the tool, plus 2 Firestore round-trips. The approximate total is much less than the 5-min default of Cloud Run. Increase the timeout only for tools that you know are long, or move these tools behind P7.
+* **A run that waits costs nothing** except its storage and one scheduled task.
 
 ---
 
 ## 8. Observability and evaluation for runs that last days
 
-* Propagate `run_id`, `step_index` and a `trace_id` on every log line and span; one OpenTelemetry span per LLM call (model, tokens, latency, cost) and per tool call — Cloud Trace shows a run as a single timeline even across days.
+* Put `run_id`, `step_index` and a `trace_id` on each log line and span. Make one OpenTelemetry span for each LLM call (model, tokens, latency, cost) and for each tool call. Then Cloud Trace shows a run as a single timeline, also when the run lasts for days.
 * Metrics: steps/run, tokens/run, cost/run, time-in-WAITING_*, approvals pending > TTL/2, recoveries/run (the crash counter), dead-letter depth, lease conflicts.
-* The journal *is* the eval dataset: replay a run's decisions against a new prompt/model offline (`FakeLLM` and `ScriptedDecider` in `lra-gcp` are the harness), diff the tool choices, and gate deployments on it.
-* ADK: `trace_to_cloud=True`; the event stream and `adk web`'s State/Events tabs for development only — never ship the dev UI.
+* The journal *is* the eval dataset. Replay the decisions of a run against a new prompt or a new model offline. `FakeLLM` and `ScriptedDecider` in `lra-gcp` are the harness. Compare the tool choices. Then use the result as a gate for deployments.
+* ADK: `trace_to_cloud=True`. Use the event stream and the State and Events tabs of `adk web` for development only. Never deploy the development UI.
 
 ---
 
 ## 9. Security in one breath
 
-Service-to-service calls use OIDC tokens minted for a dedicated service account (Cloud Tasks and Pub/Sub push both support this); Cloud Run internal routes verify audience *and* caller email; human endpoints sit behind IAP; approval tokens are single-use and compared with `hmac.compare_digest`; tools get least-privilege credentials from Secret Manager; every mutating tool passes an idempotency key downstream; the journal is the audit trail; MCP servers are treated as untrusted input (allowlist tools, validate arguments in code guards).
+These are the security controls of the design:
+
+- Service-to-service calls use OIDC tokens for a dedicated service account. Cloud Tasks and Pub/Sub push both support this.
+- Cloud Run internal routes make sure that the audience *and* the caller email are correct.
+- The endpoints for people are behind IAP.
+- Approval tokens are single-use. The code compares them with `hmac.compare_digest`.
+- Tools get least-privilege credentials from Secret Manager.
+- Each tool that changes data sends an idempotency key downstream.
+- The journal is the audit trail.
+- The design treats MCP servers as untrusted input. It has an allowlist of tools, and code guards make sure that the arguments are valid.
 
 ---
 
 ## 10. How to explain this design
 
-1. **Clarify** which kind of waiting dominates (tool / human / world / time) and the side-effect blast radius (read-only vs money).
-2. **Draw the state machine** first, then the wake-up path; name the store and the triggerer.
-3. **State the invariants** and where each lives (intent-before-act in the handler; keys downstream; leases in the store; budgets before the model call).
-4. **Pick the runtime with the decision table** and say the one limit that decided it (60-min request timeout; 1-year Workflows execution; at-least-once everywhere).
-5. **Walk one failure** end to end: crash after side effect → lease expiry → retry → memo hit → one charge.
-6. **Estimate**: wake-ups/s, writes/s, tokens/day, cost/run; name the first thing that would break at 10× (hot documents, per-step Workflows pricing, connection pools).
-7. **Close** with observability and the eval loop — a complete design says how you'd know it's working next month.
+1. **Clarify** the main kind of wait (a tool, a person, the world or time). Also clarify the blast radius of the side effects (from read-only to money).
+2. **Draw the state machine** first. Then draw the wake-up path. Name the store and the triggerer.
+3. **State the invariants** and the location of each one. The invariants live in these locations:
+   - intent-before-act in the handler,
+   - keys downstream,
+   - leases in the store,
+   - budgets before the model call.
+4. **Select the runtime with the decision table.** Say the one limit that decided it. Examples are the 60-min request timeout, the 1-year Workflows execution and at-least-once everywhere.
+5. **Walk one failure** from start to end. A crash occurs after the side effect. The lease expires. A retry occurs, and it finds the record. The result is one charge.
+6. **Estimate**: wake-ups/s, writes/s, tokens/day, cost/run. Name the first thing that will break at 10× (hot documents, per-step Workflows pricing, connection pools).
+7. **Close** with observability and the eval loop. A complete design says how you will know that it works next month.
 
-Design drills (system-design prompts, spot the bug in a loop, a fan-in, an approval handler) are in §11 below and in the lab's [`docs/code-evaluation-drills.md`](lra-gcp/docs/code-evaluation-drills.md); delivery semantics, limits, CLI/SDK snippets and an IAM sketch are in its [`docs/gcp-cheatsheet.md`](lra-gcp/docs/gcp-cheatsheet.md).
+Design drills are in §11 below and in the lab's [`docs/code-evaluation-drills.md`](lra-gcp/docs/code-evaluation-drills.md). The drills are system-design prompts, and bugs to find in a loop, a fan-in and an approval handler. Delivery semantics, limits, CLI and SDK snippets and an IAM sketch are in the lab's [`docs/gcp-cheatsheet.md`](lra-gcp/docs/gcp-cheatsheet.md).
 
 ---
 
 ## 11. Design drills
 
-Two kinds of drill: **system design** (a broad ask → clarifying questions → design → trade-offs → estimation) and **code evaluation** (read code, find the bug, name the fix). Cover the answers before reading. Six more find-the-bug snippets, each a defect found while building the engine, are in [`lra-gcp/docs/code-evaluation-drills.md`](lra-gcp/docs/code-evaluation-drills.md).
+There are two kinds of drill:
+
+- **system design**: a broad ask, then questions that clarify it, then a design, then trade-offs, then an estimate.
+- **code evaluation**: read the code, find the bug and name the correction.
+
+Cover the answers before you read. Six more find-the-bug snippets are in [`lra-gcp/docs/code-evaluation-drills.md`](lra-gcp/docs/code-evaluation-drills.md). Each snippet shows a defect found during the build of the engine.
 
 ### 11.1 System design prompts
 
 #### A1. "A bank wants an agent that processes supplier invoices end to end: read the PDF, match to a PO, get approval above a threshold, schedule payment. Design it."
-**Clarify:** volume/day; approval SLA (hours? days?); what "schedule payment" touches (a core-banking API with idempotency keys?); regulatory audit needs; human override paths.
+**Clarify:** the volume/day, the approval SLA (hours or days?) and what "schedule payment" touches (a core-banking API with idempotency keys?). Also clarify the regulatory audit needs and the override paths for a person.
 
-**Shape:** P1 durable loop per invoice (Cloud Run + Cloud Tasks + Firestore); P3 gate on `schedule_payment` above the threshold with a 3-business-day TTL and escalation; Document AI for extraction as a synchronous tool (< 60 s) or P7 if batch; journal = audit trail; Gemini Flash for matching, Pro only for exceptions.
+**Shape:** use a P1 durable loop for each invoice (Cloud Run, Cloud Tasks and Firestore). Put a P3 gate on `schedule_payment` above the threshold, with a 3-business-day TTL and an escalation. Use Document AI for extraction as a synchronous tool (< 60 s). If the extraction is a batch, use P7. The journal is the audit trail. Use Gemini Flash for the match, and use Pro only for exceptions.
 
-**Trade-offs to voice:** Workflows callback vs your own approval endpoint (declarative durability vs dynamic control flow); Firestore vs Cloud SQL for the journal (ops simplicity vs SQL reporting — you can also export the journal to BigQuery); re-verify PO status *immediately* before payment (staleness guard).
+**Trade-offs to say:** compare a Workflows callback with your own approval endpoint: declarative durability against a dynamic control flow. Compare Firestore with Cloud SQL for the journal: simple operations against SQL reports. You can also export the journal to BigQuery. Examine the PO status again *immediately* before the payment (a staleness guard).
 
-**Estimate:** 50k invoices/day → ~1M wake-ups/day (~12/s) → one Tasks queue; tokens ≈ 50k × 8 steps × 5k ≈ 2B/day → route by model tier and quote the resulting order-of-magnitude monthly cost.
+**Estimate:** 50k invoices/day give ~1M wake-ups/day (~12/s). That needs one Tasks queue. The tokens are ≈ 50k × 8 steps × 5k ≈ 2B/day. Thus select the model tier for each step. Say the order of magnitude of the monthly cost that results.
 
-**Failure walk:** payment API times out after charging → intent journaled with key → retry re-sends the same key → bank de-dups → one payment.
+**Failure walk:** the call to the payment API gets a timeout after the charge. The intent is already in the journal with its key. The retry sends the same key again. The bank de-duplicates the call. The result is one payment.
 
 #### A2. "Design a research agent that answers a question by reading 200 web pages in parallel."
-**Shape:** P2. Planner splits into ≤ 50 subtasks (cap!), Pub/Sub fan-out, idempotent workers write `runs/{id}/subtasks/{sid}` (not a single counter doc at this N), orchestrator polls a count query via a delayed task every 30 s, or Cloud Workflows `parallel` with `concurrency_limit`. Aggregator with a token budget; store fetched pages in GCS, pass URIs.
+**Shape:** P2. The planner divides the question into ≤ 50 subtasks. This cap is necessary. Pub/Sub does the fan-out.
 
-**Trade-offs:** Pub/Sub (fan-out, no per-message scheduling) vs Tasks (per-task scheduling/rate limiting, no fan-out semantics); why not one giant prompt (context limits, cost, no partial progress).
+At this N, idempotent workers write `runs/{id}/subtasks/{sid}`, not a single counter document. The orchestrator polls a count query through a delayed task every 30 s. Or use Cloud Workflows `parallel` with `concurrency_limit`.
 
-**Gotcha to name:** the 200th worker's crash after commit — late duplicates must also see `all_done`; the aggregate task is named so the enqueue is idempotent.
+The aggregator has a token budget. Store the fetched pages in GCS. Pass URIs.
+
+**Trade-offs:** compare Pub/Sub with Tasks. Pub/Sub has fan-out, but no schedule for each message. Tasks has a schedule and a rate limit for each task, but no fan-out semantics. Also say why you do not use one large prompt: context limits, cost, and no partial progress.
+
+**A trap to name:** the crash of the 200th worker after the commit. A late duplicate must also see `all_done`. The aggregate task has a name, thus the enqueue is idempotent.
 
 #### A3. "An agent must wait for a customer to upload a document — could take two weeks — then continue."
-**Shape:** park `WAITING_EVENT`; Eventarc on the GCS bucket (object finalized) → Pub/Sub → `/internal/callbacks` resumes the run; no polling. Backstop: a Cloud Task at +14 days to expire/escalate. In Workflows: `await_callback` with a 14-day timeout (execution limit is a year).
+**Shape:** the run waits in `WAITING_EVENT`. Eventarc on the GCS bucket (object finalized) sends to Pub/Sub, and Pub/Sub sends to `/internal/callbacks`, which resumes the run. There is no poll. As a backstop, a Cloud Task at +14 days makes the run expire or escalate. In Workflows, use `await_callback` with a 14-day timeout. The execution limit is a year.
 
-**Trade-offs:** callback vs poll (cost, latency, coupling); where the reminder lives (Tasks `schedule_time` max 30 days — chain tasks beyond that).
+**Trade-offs:** a callback against a poll (cost, latency, the dependency between the systems). Also say where the reminder lives. Tasks `schedule_time` is 30 days at the maximum. For a longer wait, make a chain of tasks.
 
 #### A4. "Nightly, an agent reconciles 3 systems and fixes discrepancies. Sometimes a fix has to be undone."
-**Shape:** Cloud Scheduler → Pub/Sub → tick (P5 lease + due-time) → for each discrepancy, a P4 saga with compensations; Cloud Run job if the scan itself takes hours; every fix idempotent by discrepancy id.
+**Shape:** Cloud Scheduler sends to Pub/Sub, and Pub/Sub sends a tick (a P5 lease and a due time). For each discrepancy, the tick starts a P4 saga with compensations. Use a Cloud Run job if the scan itself takes hours. Make each correction idempotent by the discrepancy id.
 
-**Voice:** compensation failure = escalation ticket, never silent; the LLM proposes the fix plan, code owns the saga state machine.
+**Say:** a compensation failure gives an escalation ticket, never silence. The LLM proposes the plan for the correction. Code owns the state machine of the saga.
 
 #### A5. "Migrate this LangGraph agent to Google's stack with minimal rewrite."
-**Shape:** ADK 2 `Workflow` on Cloud Run with Cloud SQL sessions (architecture C), or Agent Runtime for managed sessions/memory; interrupts → `RequestInput`; checkpointer → session service URI; scheduler → Cloud Scheduler → Pub/Sub → `/wake`.
+**Shape:** an ADK 2 `Workflow` on Cloud Run with Cloud SQL sessions (architecture C), or Agent Runtime for managed sessions and memory. The LangGraph parts change into these parts:
 
-**Gotchas:** ADK resume is at-least-once (tools must be idempotent); `temp:` state lost on resume; the built-in Pub/Sub trigger route makes a new session — add a resume endpoint; agent nodes cannot be first after START without an input.
+- Interrupts become `RequestInput`.
+- The checkpointer becomes the URI of the session service.
+- The scheduler becomes Cloud Scheduler, then Pub/Sub, then `/wake`.
+
+**Traps:** ADK resume is at-least-once, thus the tools must be idempotent. A resume loses the `temp:` state. The built-in Pub/Sub trigger route makes a new session. Add a resume endpoint. An agent node cannot be the first node after START without an input.
 
 #### A6. "What would you measure to know the agent fleet is healthy?"
-steps/run, tokens/run, cost/run (by model), time-in-WAITING_*, approvals older than TTL/2, recoveries/run, lease conflicts, dead-letter depth, poll attempts per async tool, Tasks queue depth vs dispatch rate, p95 step latency; plus offline replay evals from journals on every prompt/model change.
+Measure these values:
+
+- steps/run,
+- tokens/run,
+- cost/run (by model),
+- time-in-WAITING_*,
+- approvals older than TTL/2,
+- recoveries/run,
+- lease conflicts,
+- dead-letter depth,
+- poll attempts per async tool,
+- Tasks queue depth against dispatch rate,
+- p95 step latency.
+
+Also run offline replay evals from journals on each prompt change or model change.
 
 
 ### 11.2 Code evaluation — find the bug
@@ -304,7 +449,9 @@ def step(run_id):
         store.save(run)
     enqueue_next(run_id)
 ```
-**Bugs:** (1) no write-ahead intent — a crash after the tool call re-asks the model on retry and may charge again with different args; (2) no idempotency key passed downstream; (3) `store.save` has no version check — two concurrent deliveries both succeed; (4) `enqueue_next` after save is unnamed — duplicates fan out. **Fix:** journal `STARTED` + key → save → execute under key → save with `version` → named task.
+**Bugs:** (1) There is no write-ahead intent. If a crash occurs after the tool call, the retry asks the model again. Then the retry can charge again, with different arguments. (2) The code sends no idempotency key downstream. (3) `store.save` has no version check, thus two concurrent deliveries both succeed. (4) `enqueue_next` after the save has no name, thus the duplicates cause a fan-out.
+
+**Correction:** write `STARTED` and the key to the journal. Save. Execute the call under the key. Save with `version`. Enqueue a named task.
 
 #### B2. Fan-in counter (Python, Firestore)
 ```python
@@ -318,7 +465,9 @@ def on_subtask_done(run_id, sid, result):
     if fan["completed"] == fan["expected"]:
         publish("aggregate", run_id)
 ```
-**Bugs:** read-modify-write without a transaction → lost updates under concurrency; no duplicate guard (`sid` already present); `publish` is not idempotent, and if the process dies between `update` and `publish` nobody aggregates. **Fix:** transaction with the `sid in results` guard; return `all_done` from the transaction regardless of duplicate; enqueue a *named* task.
+**Bugs:** the read-modify-write has no transaction, thus concurrent writes lose updates. There is no duplicate guard (`sid` already present). `publish` is not idempotent. If the process stops between `update` and `publish`, nothing starts the aggregation.
+
+**Correction:** use a transaction with the `sid in results` guard. Return `all_done` from the transaction, also for a duplicate. Enqueue a *named* task.
 
 #### B3. Approval handler
 ```python
@@ -330,7 +479,9 @@ def approve(run_id, approved: bool):
         execute(decision)
     run.status = "RUNNING"; store.save(run)
 ```
-**Bugs:** no token / caller check; the model is re-asked after approval so what runs may differ from what was approved; not idempotent (double click executes twice); status set to RUNNING even on reject with no feedback to the model; no lease. **Fix:** verify token (constant-time), journal `HUMAN` + the stored call as a `STARTED` intent, let the loop execute it, no-op if not `WAITING_HUMAN`.
+**Bugs:** there is no check of the token or of the caller. The handler asks the model again after the approval, thus the call that runs can be different from the approved call. The handler is not idempotent: a double click executes two times. The handler sets the status to RUNNING also on a reject, and it gives no feedback to the model. There is no lease.
+
+**Correction:** make sure that the token is correct, with a constant-time comparison. Write `HUMAN` and the stored call to the journal as a `STARTED` intent. Let the loop execute the call. If the status is not `WAITING_HUMAN`, do nothing.
 
 #### B4. ADK node
 ```python
@@ -340,13 +491,13 @@ def check_front(ctx):
         time.sleep(5)
     return {"ready": True}
 ```
-**Bugs:** blocks the process (Cloud Run request timeout, no resume, pays for idle CPU); should return `RequestInput` and be `rerun_on_resume=True`; a synchronous check must not be marked long-running, but a wait must yield.
+**Bugs:** the node blocks the process. Then the Cloud Run request timeout applies, there is no resume, and you pay for idle CPU. The node must return `RequestInput` and have `rerun_on_resume=True`. Do not mark a synchronous check as long-running. But a wait must release the process.
 
 #### B5. Which tool is long-running?
 ```python
 tools=[LongRunningFunctionTool(func=check_queue), join_queue]
 ```
-**Bug:** backwards. `join_queue` returns a handle to work still in progress (long-running); `check_queue` returns a point-in-time answer — marking it long-running pauses the run on every status check, including the one that says "you're at the front, buy now".
+**Bug:** the code marks the incorrect tool as long-running, and not the correct one. `join_queue` returns a handle to work that is still in progress, thus it is long-running. `check_queue` returns an answer for one point in time. If you mark it as long-running, the run pauses on each status check. This includes the check that tells the agent that the agent is at the front of the queue and must buy now.
 
 #### B6. Scheduler tick
 ```python
@@ -357,7 +508,9 @@ def tick():
         do_work(run)
         run.state["last_tick"] = time.time(); store.save(run)
 ```
-**Bugs:** two instances receiving the same tick both pass the time check (no lease); Scheduler double-fire → double work; a crash inside `do_work` holds nothing so a retry re-runs it (fine only if `do_work` is idempotent — is it?). **Fix:** `acquire_lease` (TTL) + `next_due` + intent record.
+**Bugs:** two instances that receive the same tick both pass the time check, because there is no lease. When Cloud Scheduler sends the tick two times, the work occurs two times. A crash inside `do_work` holds nothing, thus a retry runs it again. This is acceptable only if `do_work` is idempotent. Is it?
+
+**Correction:** `acquire_lease` (TTL), `next_due` and an intent record.
 
 #### B7. Cloud Tasks handler status codes
 ```python
@@ -368,51 +521,63 @@ def handle(env):
     except Exception:
         return {"ok": False}          # HTTP 200
 ```
-**Bug:** swallowing errors with a 200 tells Cloud Tasks the work is done → the run silently stalls. **Fix:** let exceptions surface as 5xx (retry with back-off), return 429 on `LeaseHeld`, and only 200 after a durable commit; add a dead-letter/alert on max attempts.
+**Bug:** the handler hides errors with a 200. This tells Cloud Tasks that the work is complete, thus the run stops with no warning.
+
+**Correction:** let exceptions come out as 5xx (a retry with back-off). Return 429 on `LeaseHeld`. Return 200 only after a durable commit. Add a dead-letter or an alert at the maximum number of attempts.
 
 #### B8. Budget in the prompt
 ```python
 instruction = "Stop after at most 10 tool calls and never spend more than $2."
 ```
-**Bug:** prompts are not enforcement; the model has no counter and no cost meter. **Fix:** `check_budget(run)` before every model call with `usage` accumulated from `usage_metadata`; the run FAILS with a reason.
+**Bug:** a prompt cannot make the model obey a limit. The model has no counter and no cost meter.
+
+**Correction:** call `check_budget(run)` before each model call, with a `usage` that the code adds up from `usage_metadata`. The run FAILS with a reason.
 
 
 ### 11.3 Rapid-fire (one sentence each)
-* Why two saves per tool step? — intent before act, result after; the model is non-deterministic.
-* Lease vs lock? — a lease expires; a dead worker can't wedge the run.
-* Exactly-once? — only pull-subscription delivery; never actions → idempotent handlers.
-* Workflows vs hand-rolled loop? — static graph and declarative waits vs model-chosen next step.
-* Why cap subtasks? — cost, fan-in contention, aggregator context.
-* `rerun_on_resume` True/False? — for the node that interrupted: re-run it and re-check the world, or take the resume input as its output. Finished nodes are never replayed by a resume; a *new* invocation replays them.
-* Where does a 6 KB seat map go? — an artifact (GCS), return a filename.
-* Why not `time.sleep` in a node? — it holds a process; return an interrupt and let a clock wake you.
+* Why two saves per tool step? The intent goes before the act, and the result after it, because the model is non-deterministic.
+* A lease against a lock? A lease expires, thus a dead worker cannot block the run.
+* Exactly-once? Only pull-subscription delivery is exactly-once, and actions never are. Thus use idempotent handlers.
+* Workflows against a loop written by hand? Workflows has a static graph and declarative waits. But a loop written by hand lets the model select the next step.
+* Why cap subtasks? A cap limits the cost, the fan-in contention and the context of the aggregator.
+* `rerun_on_resume` True/False? For the node that interrupted, True runs the node again and examines the world again, and False uses the resume input as its output. A resume never replays finished nodes, but a *new* invocation replays them.
+* Where does a 6 KB seat map go? It goes in an artifact (GCS). Return a filename.
+* Why not `time.sleep` in a node? It holds a process. Return an interrupt, so that a clock can wake you.
 
 ### 11.4 Questions from the notebooks
 
-The labs' notebooks end with these; the sketches are one way to answer.
+The notebooks of the labs end with these questions. Each sketch is one possible answer.
 
-1. **Your loop saves twice per tool step. Which crash windows does each save close, which is still open, and what closes it?** The intent save closes "the model is re-asked after a crash" (the retry finds the pending call); the result save closes "the step runs again after it finished". Still open: between the tool returning and the result save. The effect record, written before the checkpoint, closes it inside your system; the idempotency key passed downstream closes it for the external one (and covers a crash between executing and memoising).
-2. **The same wake-up reaches two instances 50 ms apart. Trace both.** Both read the run; one takes the lease, the other gets "lease held" and returns 503/429 so the queue retries it later. If there were no lease, the version check on save would reject the slower writer's checkpoint. When the retry arrives, the `(run, step, attempt)` guard finds the task stale.
-3. **A tool call takes 45 minutes.** Do not hold a request: return a ticket, park the run on a timer or a callback (P7), and give the poll a back-off and a deadline; or run the step as a Cloud Run job and park around it.
-4. **500 subtasks: what breaks first on Firestore, and two fixes?** The single parent document (about one sustained write a second). Write one document per subtask and count with a query, or shard the counter; or hand the join to Cloud Workflows `parallel` with a concurrency limit. Also cap the fan-out and the aggregator's context.
-5. **A worker takes 20 minutes: Cloud Run service, job, or Workflows?** A Cloud Run job (or a service call with a long enough timeout, if it cannot be split), started by a step that then parks; Workflows can call it and wait on the operation.
-6. **The aggregator's model call returns 429. What retries it, and what guarantees one synthesis?** The step's retry policy (a new attempt, delayed task); the synthesis is written through an effect record keyed by intent and the aggregate task is named, so a duplicate finds the record.
-7. **Why must the approved call be journaled before the run is woken, not passed in the wake-up?** The wake-up is at-least-once and can be lost or duplicated; the journal is what a retry reads. "Approve what you execute" means the executed call is the stored one, never one rebuilt from the payload or a new model call.
-8. **The approval endpoint sits behind IAP: three checks before mutating the run?** The token matches in constant time and is single-use; the run is actually waiting on that gate (else a no-op, not an error); the caller may approve this kind of action (identity from IAP, not the body). Then take the lease and save with a version check.
-9. **A refund compensation fails five times.** The saga ends parked or failed with an alert and a ticket (`on_stuck`), the journal says exactly which compensations ran; what must not happen is a silent success, or a retry storm that re-runs compensations without their keys.
-10. **Which ADK nodes could be an `LlmAgent`, and which must never be?** Judgement (which event, take B or nothing) can; rules with one right answer and side effects (take a queue ticket, buy) must stay function nodes with idempotency keys.
-11. **Where does the queue ticket live so it survives a Cloud Run restart, and what if it were in a `temp:` key?** In session state persisted by the session service (Cloud SQL, or Agent Runtime Sessions); `temp:` state is dropped on resume, so the resumed node would find no ticket and join the queue again.
-12. **What identifies the paused run in the Scheduler → Pub/Sub → `/wake` payload?** User id, session id, invocation id and the interrupt id, plus the response; resuming by those ids continues the paused invocation instead of starting a new one.
-13. **On Mistral Workflows (Temporal underneath) the model call is an activity. The worker dies after the model answered, before the result was recorded: what happens, and why is it safe there but not in a naive loop?** The activity is retried and the model is asked again, but nothing acted on the lost answer: the workflow only acts on results recorded in history. A naive loop acts on the answer before recording it, so a retry can act twice on two different answers.
-14. **The orchestrator must run on your own infrastructure. What changes in `lra/adapters/mistral/workflow.py`, and what doesn't?** Only the connection (a self-hosted orchestrator instead of the hosted one) and the model client's endpoint (a self-hosted open-weight model); the workflow, activities, signals and idempotency keys stay the same.
+1. **Your loop saves two times for each tool step. Which crash window does each save close? Which window is still open, and what closes it?**
+
+   The intent save closes the window of a second model call after a crash: the retry finds the pending call. The result save closes the window where the step runs again after it finished. One window is still open: after the tool returns and before the result save. The effect record, which the code writes before the checkpoint, closes it inside your system. The idempotency key that you send downstream closes it for the external system. The key also covers a crash after the execution and before the record.
+2. **The same wake-up reaches two instances 50 ms apart. Describe what each instance does.** Both instances read the run. One instance takes the lease. The other gets "lease held" and returns 503/429, thus the queue retries the wake-up later. If there is no lease, the version check on the save rejects the checkpoint of the slower writer. When the retry arrives, the `(run, step, attempt)` guard finds that the task is stale.
+3. **A tool call takes 45 minutes.** Do not hold a request. Return a ticket. Let the run wait on a timer or a callback (P7). Give the poll a back-off and a deadline. Or run the step as a Cloud Run job, and let the run wait during the job.
+4. **500 subtasks: what breaks first on Firestore, and what are two solutions?** The single parent document breaks first (approximately one sustained write a second). The first solution: write one document for each subtask, and count them with a query. Or divide the counter into shards. The second solution: give the join to Cloud Workflows `parallel` with a concurrency limit. Also put a cap on the fan-out and on the context of the aggregator.
+5. **A worker takes 20 minutes. Do you use a Cloud Run service, a job, or Workflows?** Use a Cloud Run job (or a service call with a sufficiently long timeout, if you cannot divide the work). A step starts the job, and then the run waits. Workflows can call the job and wait on the operation.
+6. **The model call of the aggregator returns 429. What retries it, and what makes sure that there is only one synthesis?** The retry policy of the step retries it (a new attempt, a delayed task). The code writes the synthesis through an effect record that has the intent as its key. Also, the aggregate task has a name. Because of the key and the name, a duplicate finds the record.
+7. **Why must you write the approved call to the journal before you wake the run? Why not send it in the wake-up?** The wake-up is at-least-once. The queue can lose it or send it two times. A retry reads the journal. "Approve what you execute" means that the executed call is the stored call. It is never a call that the code builds again from the payload or from a new model call.
+8. **The approval endpoint is behind IAP. Which three checks do you do before you change the run?**
+
+   First, the token matches in a constant-time comparison, and it is single-use. Second, the run actually waits on that gate. If not, the request has no effect, and it is not an error. Third, the caller has permission to approve this kind of action. The identity comes from IAP, not from the body.
+
+   Then take the lease. Save with a version check.
+9. **A refund compensation fails five times.** The saga stops and waits, or it fails, with an alert and a ticket (`on_stuck`). The journal shows exactly which compensations ran. Two things must not occur: a silent success, or a retry storm that runs compensations again without their keys.
+10. **Which ADK nodes can be an `LlmAgent`, and which must never be one?** A judgement node can be one (which event, take B or nothing). Rules with one correct answer and side effects (take a queue ticket, buy) must stay function nodes with idempotency keys.
+11. **Where does the queue ticket live so that it stays after a Cloud Run restart? What occurs if it is in a `temp:` key?** It lives in session state, which the session service stores (Cloud SQL, or Agent Runtime Sessions). A resume removes the `temp:` state. Thus the resumed node finds no ticket and joins the queue again.
+12. **What identifies the paused run in the payload that goes from Scheduler through Pub/Sub to `/wake`?** The user id, the session id, the invocation id and the interrupt id, and also the response. A resume with these ids continues the paused invocation and does not start a new one.
+13. **On Mistral Workflows (with Temporal under it), the model call is an activity. The worker crashes after the model answered, but before the result was in the history. What occurs, and why is it safe there but not in a loop with no journal?**
+
+   The platform retries the activity and asks the model again. But nothing acted on the lost answer, because the workflow acts only on results that are in the history. A loop with no journal acts on the answer before it records the answer. Thus a retry can act two times, on two different answers.
+14. **The orchestrator must run on your own infrastructure. What changes in `lra/adapters/mistral/workflow.py`, and what does not change?** Only two things change. The connection changes to a self-hosted orchestrator instead of the hosted one. The endpoint of the model client changes to a self-hosted open-weight model. The workflow, the activities, the signals and the idempotency keys stay the same.
 
 ---
 
 ## Verify before relying on it
 
-* Cloud Run jobs max task timeout (7 days as of Sep 2026; was 24 h earlier) and services request timeout (60 min).
-* Cloud Tasks de-dup window wording on the quotas page; max schedule time (30 days).
-* Workflows `await_callback` default (12 h) and max execution duration (1 year); concurrent-execution quota.
-* Current Gemini model ids on Vertex (3.x line: 3.8 Flash / 3.1 Pro / 3.5 Flash-Lite as of Sep 2026) and pricing.
-* Product naming: Gemini Enterprise Agent Platform / Agent Runtime (ex-Agent Engine), ADK 2.x version and whether `ResumabilityConfig` / `EventsCompactionConfig` are still marked experimental.
-* Pub/Sub exactly-once scope (pull only), max retention (31 days), ack deadline (600 s).
+* The maximum task timeout of Cloud Run jobs (7 days as of Sep 2026, 24 h before that). Also the request timeout of services (60 min).
+* The text about the de-dup window of Cloud Tasks on the quotas page, and the maximum schedule time (30 days).
+* The default of Workflows `await_callback` (12 h), the maximum duration of an execution (1 year), and the quota for concurrent executions.
+* The current Gemini model ids on Vertex (3.x line: 3.8 Flash, 3.1 Pro, 3.5 Flash-Lite as of Sep 2026) and the pricing.
+* The product names: Gemini Enterprise Agent Platform / Agent Runtime (ex-Agent Engine). The ADK 2.x version, and if `ResumabilityConfig` / `EventsCompactionConfig` still have the experimental mark.
+* The scope of exactly-once delivery in Pub/Sub (pull only), the maximum retention (31 days) and the ack deadline (600 s).

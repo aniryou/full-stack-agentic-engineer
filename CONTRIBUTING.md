@@ -99,6 +99,11 @@ SPEC below is [`tools/orchestration/SPEC.md`](tools/orchestration/SPEC.md), the 
   per term. Callouts are blockquotes with a bold lead-in (`> **Pitfall.**`, `> **Verify.**`, `> **In a design
   review**`) or GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), which the site
   renders as admonitions.
+- One topic is an experiment in a controlled language: the prose of
+  `07-application-agent-framework/long-running-durable/` is in ASD-STE100 (Simplified Technical English), with
+  [`tools/orchestration/STE100-STYLE.md`](tools/orchestration/STE100-STYLE.md) as the brief and
+  `tools/orchestration/ste_lint.py` as the checker (2026-10-03). A change there keeps that style; the rest of the
+  repository keeps the rules above.
 
 ### Run tiers
 

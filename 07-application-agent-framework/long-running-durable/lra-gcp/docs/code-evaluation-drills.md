@@ -1,6 +1,6 @@
 # Code-evaluation drills
 
-Six snippets, each with one real defect that shows up only in long-running operation. Cover the answer, find the bug, then check. Every defect corresponds to an invariant in `docs/primer.md` §2 and is tested in `tests/`.
+There are six snippets. Each snippet has one real defect that occurs only in long-running operation. Cover the answer. Find the bug. Then compare your result with the answer. Each defect has a related invariant in `docs/primer.md` §2, and a test in `tests/` examines the defect.
 
 ---
 
@@ -16,7 +16,9 @@ def commit(run, outcome):
 
 <details><summary>Answer</summary>
 
-Enqueue happens **before** the checkpoint. If the process dies between the two lines, a worker receives a task for a step the run document doesn't yet expect — it is either rejected as stale forever (the checkpoint never lands) or, worse, executes against un-saved state if the guard is weak. Invariant I1: checkpoint, *then* enqueue; let the reaper cover the reverse window.
+The enqueue occurs **before** the checkpoint. If the process crashes between the two lines, a worker receives a task for a step that the run document does not yet expect. Then one of two things occurs. The first thing is that the guard rejects the task as stale forever, because the engine never writes the checkpoint. The second thing is worse: if the guard is weak, the task runs against state that the engine did not save.
+
+Invariant I1: write the checkpoint, *then* enqueue. Let the reaper cover the opposite window.
 </details>
 
 ### Drill 2 — idempotency key
@@ -28,7 +30,7 @@ def charge(ctx):
 
 <details><summary>Answer</summary>
 
-The effect key is derived from the *arguments*, not the *intent*. Two different steps (or a re-planned run) charging the same amount share a key and the second one silently reuses the first result; conversely a legitimate retry after the amount was corrected creates a new charge. Keys must be `run:intent` (`"charge"`), and the record must carry the external id used later by the compensation.
+The code makes the effect key from the *arguments*, not from the *intent*. If two different steps (or a run with a new plan) charge the same amount, they share a key. Then the second charge uses the first result again, and nothing gives a warning. But the opposite error also occurs: a valid retry after a correction of the amount creates a new charge. A key must be `run:intent` (`"charge"`). The record must also carry the external id that the compensation uses later.
 </details>
 
 ### Drill 3 — lease released too early
@@ -42,7 +44,7 @@ queue.enqueue(next_task)
 
 <details><summary>Answer</summary>
 
-Clearing the lease *inside* the checkpoint means a crash between `save` and `enqueue` leaves a `RUNNING` run with no lease and no task. The reaper's expired-lease scan can't see it. Hold the lease through commit **and** enqueue; release it afterwards (this exact bug was found by `test_crash_after_commit_before_enqueue_is_repaired_by_reaper`).
+The code clears the lease *inside* the checkpoint. Thus a crash between `save` and `enqueue` leaves a `RUNNING` run with no lease and no task. The reaper does a scan for expired leases, and this scan cannot see the run. Hold the lease through the commit **and** the enqueue. Release the lease after the enqueue. The test `test_crash_after_commit_before_enqueue_is_repaired_by_reaper` found this exact bug.
 </details>
 
 ### Drill 4 — relative timeout
@@ -58,7 +60,7 @@ if now - run.updated_at > timedelta(seconds=run.state["review_deadline_s"]): fai
 
 <details><summary>Answer</summary>
 
-The deadline is anchored to `updated_at`, which changes on *every* write (a duplicate webhook, a cancel flag, a reaper touch). The wait silently extends. Store an absolute `timeout_at` at suspension time and compare against that.
+The code measures the deadline from `updated_at`. `updated_at` changes on *every* write (a duplicate webhook, a cancel flag, a touch by the reaper). Thus the wait becomes longer, and nothing gives a warning. When the run starts to wait, store an absolute `timeout_at`. Compare the current time with `timeout_at`.
 </details>
 
 ### Drill 5 — the loop with two exits
@@ -73,7 +75,9 @@ def critique(ctx):
 
 <details><summary>Answer</summary>
 
-No iteration cap, no budget, and a malformed critique raises (`KeyError`/`ValueError`) which is treated as *retryable* — the step is retried three times, each costing a model call, and then the run fails for the wrong reason. Bound the loop by iteration and budget, record the exit reason in state, and treat a malformed critique as "score 0" rather than an exception.
+The loop has no iteration limit and no budget. Also, a critique with an incorrect format raises an exception (`KeyError`/`ValueError`), and the engine treats that exception as *retryable*. The engine retries the step three times, and each retry costs a model call. Then the run fails for the incorrect reason.
+
+Limit the loop by the iteration count and by the budget. Record the exit reason in the state. Treat a critique with an incorrect format as "score 0", not as an exception.
 </details>
 
 ### Drill 6 — cancellation vs compensation
@@ -88,15 +92,15 @@ def execute_task(task):
 
 <details><summary>Answer</summary>
 
-`fail_or_compensate` enqueues a *compensation* task for the same run; when that task arrives, the guard sees `cancel_requested` again and calls `fail_or_compensate` again → a fresh compensation attempt is enqueued every delivery. The run never finishes compensating. Cancellation and budget must gate **forward** steps only; compensation must always be allowed to complete (`test_cancel_while_running_is_cooperative`).
+`fail_or_compensate` enqueues a *compensation* task for the same run. When that task arrives, the guard sees `cancel_requested` again and calls `fail_or_compensate` again. Thus `fail_or_compensate` enqueues a new compensation attempt on each delivery. The run never completes its compensation. Cancellation and the budget must be a gate for **forward** steps only. The engine must always let the compensation complete (`test_cancel_while_running_is_cooperative`).
 </details>
 
 ---
 
 ### Design-review prompts (5-minute answers)
 
-1. A worker replica is OOM-killed after calling the payments API but before checkpointing. Walk through exactly what happens on the next delivery. (I3: effect record found → skipped → checkpoint proceeds.)
-2. Two Cloud Tasks deliveries for the same step arrive 50 ms apart on two replicas. What prevents double execution, and what does the loser return? (Lease → 503 → queue retries → stale.)
-3. The product team wants "auto-approve after 48 h if no one responds." What changes, and what would you refuse to auto-approve? (`on_timeout="resume"` + marker; refuse for money-moving effects.)
-4. Fan-out of 500 children per run at 1 k runs/day. Where does this design break first? (Fan-in writes to one document; shard/batch.)
-5. Explain why the primer says "checkpoint before enqueue" and what the reaper's job is in that ordering.
+1. A worker replica calls the payments API. Then, before the replica writes the checkpoint, the platform stops the replica because the replica has no more memory (OOM). Tell exactly what occurs on the next delivery, step by step. (I3: the worker finds the effect record and does not do the call again. Then the worker writes the checkpoint.)
+2. Two Cloud Tasks deliveries for the same step arrive 50 ms apart on two replicas. What prevents two executions of the step, and what does the replica that loses return? (The lease, then 503, then the queue retries, then the task is stale.)
+3. The product team wants "auto-approve after 48 h if no one responds." What changes? What do you refuse to auto-approve? (`on_timeout="resume"` and a marker. Refuse the auto-approval for effects that move money.)
+4. Each run has a fan-out of 500 children, and there are 1 k runs/day. Where does this design break first? (The fan-in writes go to one document. Use sharding or batching.)
+5. Explain why the primer says "checkpoint before enqueue". Also explain the job of the reaper in that order.
