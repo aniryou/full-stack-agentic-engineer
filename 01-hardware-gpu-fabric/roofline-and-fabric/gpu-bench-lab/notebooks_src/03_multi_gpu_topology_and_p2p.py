@@ -1,27 +1,31 @@
 # %% [markdown]
 # # 03 · Multi-GPU topology and P2P
 #
-# **Tier:** T0 — read `nvidia-smi` output (bundled **sample output in the documented format,
-# illustrative**, or your machine's if it has a GPU), make placement decisions from it, and predict
-# GPU-to-GPU bandwidth with a model. **T2** — with two or more GPUs, measure the P2P bandwidth matrix
-# and fit $\alpha$ and $\beta$ of the link: Kaggle's free 2×T4 (PCIe), a 2–8 GPU NVLink pod on RunPod/Vast/Lambda,
+# **Tier:** T0. Read `nvidia-smi` output, decide the placement from it, and predict GPU-to-GPU bandwidth with a
+# model. The output is the bundled **sample output in the documented format, illustrative**, or the output of your
+# machine if it has a GPU. **T2**: with two or more GPUs, measure the P2P bandwidth matrix and fit $\alpha$ and $\beta$
+# of the link. Use Kaggle's free 2×T4 (PCIe), a 2–8 GPU NVLink pod on RunPod/Vast/Lambda,
 # or GCP `a2-highgpu-2g` (see `deploy/`). Concepts: primer §5 "Fabrics quantitatively"
 # ([`../../PRIMER.md`](../../PRIMER.md)).
 #
 # **Predicted first in** [roofline-core notebook 03](../../roofline-core/notebooks/03_fabrics_and_collective_cost.ipynb):
-# there you derived the ring all-reduce by running one, priced TP against an ITL target and read a
-# topology matrix. Here you read real `nvidia-smi` output, explain a measured P2P number against the
-# topology model, and price TP with the $\alpha$ you *measured* — once you know which $\alpha$ that is.
+# in that notebook, you ran a ring all-reduce and derived the ring all-reduce from it. You also calculated the cost of
+# TP against an ITL target, and you read a topology matrix. In this notebook, you read real `nvidia-smi` output. You
+# explain a measured P2P number with the topology model. Then you calculate the cost of TP with the $\alpha$ that you
+# *measured*, when you know which $\alpha$ that is.
 #
 # ## The one-minute version
 #
-# Inside one server, "GPU to GPU" can mean 450 GB/s each way over NVLink or a few GB/s staged
-# through host memory across CPU sockets. `nvidia-smi topo -m` tells you which before you measure,
-# and a P2P bandwidth matrix confirms it. Three decisions follow directly: a tensor-parallel group
-# goes where every pair is on NVLink; each GPU uses the NIC on its own PCIe switch (GPUDirect RDMA,
-# rail alignment); and the process feeding a GPU runs on that GPU's NUMA node. Then the α-β model
-# prices the all-reduce that tensor parallelism performs twice per layer — and shows that at decode
-# batch sizes it is the latency $\alpha$, not the bandwidth, that you pay.
+# Inside one server, "GPU to GPU" can mean 450 GB/s each way over NVLink. It can also mean a few GB/s, staged
+# through host memory across CPU sockets. `nvidia-smi topo -m` tells you which before you measure, and a P2P bandwidth
+# matrix then shows the same result. Three decisions come directly from this:
+#
+# - A tensor-parallel group goes where every pair is on NVLink.
+# - Each GPU uses the NIC on its own PCIe switch (GPUDirect RDMA, rail alignment).
+# - The process that feeds a GPU runs on the NUMA node of that GPU.
+#
+# Then the α-β model calculates the cost of the all-reduce that tensor parallelism does two times for each layer. The
+# model also shows that at decode batch sizes, you pay the latency $\alpha$, not the bandwidth.
 
 # %%
 from IPython.display import Markdown, display
@@ -41,8 +45,8 @@ SAMPLE = "SAMPLE OUTPUT in the documented format (illustrative) — not a measur
 # %% [markdown]
 # ## 1 · What is in the box
 #
-# Start with the inventory: model, PCIe link, power limit, memory in use. Many "slow GPU" reports
-# end here — a link that trained at x8, a power cap, a stray process holding memory.
+# Start with the inventory: model, PCIe link, power limit, memory in use. Many "slow GPU" reports end at this
+# step. Examples are a link that trained at x8, a power cap, and an unexpected process that holds memory.
 
 # %%
 inv = inventory.parse_csv(inventory.load_fixture("hgx-h100-8gpu"))
@@ -59,9 +63,9 @@ if local_rows:
 # %% [markdown]
 # ## Exercise 3.1 — find the GPU with a degraded link
 #
-# Return the indices of GPUs whose PCIe link trained narrower than its maximum
-# (`pcie.link.width.current < pcie.link.width.max`). Width, not generation: an idle link drops to a
-# lower generation to save power and comes back under load; a missing lane never does.
+# Return the indices of the GPUs whose PCIe link trained narrower than its maximum
+# (`pcie.link.width.current < pcie.link.width.max`). Use the width, not the generation. An idle link goes down to a
+# lower generation to save power, and it comes back under load. A lane that is not there never comes back.
 
 # %% exercise
 def degraded_links(rows):
@@ -81,14 +85,14 @@ print("✅ GPU 5 runs at x8: half the host↔device bandwidth of its neighbours"
 # %% [markdown]
 # ## 2 · Reading nvidia-smi topo -m
 #
-# Every cell names the path between two devices, best to worst:
+# Each cell gives the name of the path between two devices. The table shows the paths from best to worst:
 #
-# | code | path | typical GPU↔GPU rate |
+# | code | path | typical GPU-to-GPU rate |
 # |---|---|---|
 # | `NV#` | a bonded set of # NVLinks (through NVSwitch on HGX boards) | 25–50 GB/s per link per direction |
-# | `PIX` | at most one PCIe bridge — the same PCIe switch | the PCIe link rate |
+# | `PIX` | at most one PCIe bridge, that is, the same PCIe switch | the PCIe link rate |
 # | `PXB` | several PCIe bridges, not the host bridge | the PCIe link rate |
-# | `PHB` | through the CPU's PCIe host bridge (root complex) | the PCIe link rate *if* peer access works there; many platforms and most VMs disable it, and then copies are staged (~half the link or less) |
+# | `PHB` | through the CPU's PCIe host bridge (root complex) | the PCIe link rate *if* peer access works there. Many platforms and most VMs disable it, and then the driver stages the copies (~half the link or less) |
 # | `NODE` | across host bridges inside one NUMA node | usually no direct P2P: staged |
 # | `SYS` | across the socket interconnect (UPI/Infinity Fabric) | no direct P2P: staged through host memory |
 
@@ -102,8 +106,8 @@ print("\n" + hgx.summary())
 # %% [markdown]
 # ## Exercise 3.2 — rank the paths
 #
-# Write `my_rank(code)`, a sortable key where a better path is larger: any `NV#` beats every PCIe
-# path, and more NVLinks beat fewer; then `PIX > PXB > PHB > NODE > SYS`.
+# Write `my_rank(code)`. It is a key for a sort, and a better path has a larger key. Any `NV#` is better than every
+# PCIe path, and more NVLinks are better than fewer. After these, the order is `PIX > PXB > PHB > NODE > SYS`.
 
 # %% exercise
 def my_rank(code):
@@ -122,9 +126,9 @@ print("✅ NV# > PIX > PXB > PHB > NODE > SYS")
 # %% [markdown]
 # ## 3 · Where does a tensor-parallel group go?
 #
-# Tensor parallelism all-reduces activations inside every layer, so a TP group is only as fast as its
-# **worst** pair. Here is a two-socket PCIe server (sample output): two GPUs under each socket's PCIe
-# switch, one NIC.
+# Tensor parallelism does an all-reduce of the activations inside each layer. Thus a TP group is only as fast as its
+# **worst** pair. The next cell shows a two-socket PCIe server (sample output). It has two GPUs under the PCIe switch
+# of each socket, and one NIC.
 
 # %%
 pcie_text = topo.load_fixture("pcie-4gpu-2socket")
@@ -135,9 +139,10 @@ pcie_box = topo.parse(pcie_text)
 # %% [markdown]
 # ## Exercise 3.3 — choose the group
 #
-# Write `my_best_group(t, k)`: among all $k$-GPU subsets of `t.gpus`, return the one whose worst
-# pairwise path (by `my_rank`) is best; break ties by the sorted list of all its pair ranks, then by
-# the lowest GPU ids (the order `itertools.combinations` produces). `t.link(a, b)` gives a path code.
+# Write `my_best_group(t, k)`. From all the $k$-GPU subsets of `t.gpus`, return the subset whose worst pairwise path
+# (by `my_rank`) is best. If two subsets have the same score, compare the sorted lists of all their pair ranks. If they
+# are still equal, use the lowest GPU ids (the order that `itertools.combinations` produces). `t.link(a, b)` gives a
+# path code.
 
 # %% exercise
 from itertools import combinations
@@ -160,12 +165,14 @@ print("✅ TP=2 on the PCIe box: GPU0+GPU1 (same switch). On NVSwitch every grou
 # %% [markdown]
 # ## 4 · Which NIC, which CPU cores?
 #
-# For multi-node traffic (GPUDirect RDMA), each GPU should use the NIC with the best path to it —
-# on its own PCIe switch tree (`PIX`/`PXB`, never through the host bridge) — so the NIC reads GPU
-# memory without crossing the CPU; one NIC per GPU is a **rail**. And the process that feeds a GPU
-# (tokenising, staging batches) belongs on that GPU's NUMA node, so its host buffers do not cross the
-# socket link on every copy. roofline-core's Ex 3.5 picked these from a matrix; the lab's
-# `topo.nearest_nic` and `topo.cpu_list` do it on real `nvidia-smi` output:
+# For multi-node traffic (GPUDirect RDMA), the correct NIC for a GPU is the NIC with the best path to it. That NIC is
+# on the PCIe switch tree of the GPU (`PIX`/`PXB`, never through the host bridge). Thus the NIC reads GPU memory and
+# does not go through the CPU. One NIC for each GPU is a **rail**.
+#
+# Also, the correct place for the process that feeds a GPU is the NUMA node of that GPU. This process tokenizes the
+# input and stages the batches. On that node, its host buffers do not go across the socket link on each copy.
+# roofline-core's Ex 3.5 selected these from a matrix. The lab's `topo.nearest_nic` and `topo.cpu_list` do the same
+# on real `nvidia-smi` output:
 
 # %%
 for g in ("GPU0", "GPU5"):
@@ -179,17 +186,20 @@ print("→ on the PCIe box GPU2/GPU3 reach the only NIC across the sockets (SYS)
 # %% [markdown]
 # ## 5 · From topology to predicted bandwidth
 #
-# A path code plus the link generation gives a theoretical per-direction rate (`p2p.predict`):
-# NVLink links × the per-link rate of the generation; the PCIe link rate
-# $\text{GT/s} \times \text{lanes} \times 128/130 \div 8$ when the two GPUs have **peer access**; and about half of it
-# when they do not and the driver stages the copy through host memory — two PCIe crossings plus a host
-# copy (measured staged copies often land lower still).
+# A path code and the link generation give a theoretical rate for each direction (`p2p.predict`):
 #
-# Whether peer access works is a property of the platform, not of the
-# topology code: through a switch (`PIX`/`PXB`) it normally does, across host bridges or sockets
-# (`NODE`/`SYS`) it rarely does, and through the root complex (`PHB`) it depends — many platforms
-# and most VMs turn it off. So a `PHB` estimate made from a saved topology, without asking the
-# driver, is an **upper bound**. This is a **model**; the measurement in section 6 is what you trust.
+# - For NVLink: the number of NVLink links × the per-link rate of the generation.
+# - For PCIe, when the two GPUs have **peer access**: the PCIe link rate
+#   $\text{GT/s} \times \text{lanes} \times 128/130 \div 8$.
+# - When the two GPUs do not have peer access: about half of that rate. The driver stages the copy through host
+#   memory, with two PCIe crossings and a host copy. A measured staged copy often gets an even lower rate.
+#
+# The platform, not the topology code, decides if peer access works. Through a switch (`PIX`/`PXB`), peer access
+# normally works. Across host bridges or sockets (`NODE`/`SYS`), it rarely works. Through the root complex (`PHB`), the
+# result changes with the platform, and many platforms and most VMs turn it off.
+#
+# Thus a `PHB` estimate from a saved topology is an **upper bound** if you do not ask the driver. This is a
+# **model**. The measurement in section 6 is the number that you trust.
 
 # %%
 for name, arch, gen in (("hgx-h100-8gpu", "hopper", 5), ("a2-highgpu-2g", "ampere", 4),
@@ -207,15 +217,16 @@ print(f"kaggle-2xt4 if the driver reports no peer access: ≈ {off.gbs:.1f} GB/s
 # %% [markdown]
 # ## Exercise 3.4 — explain a measured P2P number
 #
-# A measurement means little until you say what explains it. Write `p2p_verdict(measured_gbs,
-# direct_gbs, peer_access)` returning one of:
+# A measurement has almost no value until you say what explains it. Write `p2p_verdict(measured_gbs,
+# direct_gbs, peer_access)`. It returns one of these values:
 #
-# * `"staged"` — the driver reports no peer access, so the copy went through host memory; a number
-#   near or below half the link is expected, not a fault;
-# * `"direct"` — peer access and at least 60% of the direct-path model (`direct_gbs`, what the
-#   link would give with peer access): healthy;
-# * `"degraded"` — peer access, yet below 60% of the model: something between the GPUs is wrong
-#   (ACS or an IOMMU forcing P2P through the root complex, a link trained narrower, a busy GPU).
+# * `"staged"`: the driver reports no peer access, thus the copy went through host memory. You can expect a number
+#   near or below half the link. It is not a fault.
+# * `"direct"`: there is peer access, and the measurement is at least 60% of the direct-path model (`direct_gbs`).
+#   The direct-path model is the rate that the link gives with peer access. The link is healthy.
+# * `"degraded"`: there is peer access, but the measurement is below 60% of the model. Something between the GPUs is
+#   incorrect. Examples are ACS or an IOMMU that forces P2P through the root complex, a link that trained narrower,
+#   or a busy GPU.
 
 # %% exercise
 def p2p_verdict(measured_gbs, direct_gbs, peer_access):
@@ -237,9 +248,9 @@ print("✅ a P2P number is explained by the path *and* by whether the driver gra
 # %% [markdown]
 # ## 6 · Measure it (T2)
 #
-# With two or more GPUs, the lab copies a buffer between every ordered pair (and both directions at
-# once), then sweeps sizes on one pair to fit $\alpha$ and $\beta$ of the path — the same experiment as NVIDIA's
-# `p2pBandwidthLatencyTest` and `nvbandwidth`, which remain the reference tools.
+# With two or more GPUs, the lab copies a buffer between each ordered pair, and also in the two directions at the
+# same time. Then it does a sweep of sizes on one pair to fit $\alpha$ and $\beta$ of the path. This is the same
+# experiment as NVIDIA's `p2pBandwidthLatencyTest` and `nvbandwidth`. These two tools are still the reference tools.
 
 # %%
 pipelined_ab = latency_ab = None
@@ -277,20 +288,22 @@ else:
 # %% [markdown]
 # ## 7 · What the link is worth: the TP all-reduce per token
 #
-# Megatron-style tensor parallelism all-reduces the $\text{batch} \times \text{hidden}$ activations twice per layer.
-# A ring all-reduce of $S$ bytes over $p$ GPUs takes ${2(p-1)}$ steps, each paying a fixed cost $\alpha$ and
-# moving $S/p$ bytes:
+# Megatron-style tensor parallelism does an all-reduce of the $\text{batch} \times \text{hidden}$ activations two times
+# for each layer. A ring all-reduce of $S$ bytes over $p$ GPUs takes ${2(p-1)}$ steps. Each step pays a fixed cost
+# $\alpha$ and moves $S/p$ bytes:
 #
 # $$
 # t = 2(p-1)\,\alpha + \frac{2(p-1)}{p} \cdot \frac{S}{B}
 # $$
 #
-# (primer §5.2, `p2p.ring_allreduce_time`; roofline-core Ex 3.1 derives it by running a ring). The table prices a
-# 70B-class model's decode step with the primer's §5.1 link table — the $\alpha$ values there are illustrative
-# per-step latencies, for the model; measure yours with
+# The formula is in primer §5.2 and in `p2p.ring_allreduce_time`. roofline-core Ex 3.1 runs a ring and derives the
+# formula from it.
+#
+# The table calculates the cost of the decode step of a 70B-class model with the link table of primer §5.1. The
+# $\alpha$ values in that link table are illustrative per-step latencies for the model. Measure your values with
 # [nccl-tests](../../../../02-cuda-nccl-runtime/cuda-and-nccl/cuda-nccl-lab/deploy/any-gpu/README.md)
 # ([layer 02 §5](../../../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md)). The "2 nodes" row runs one *flat* ring
-# through the NICs; NCCL's hierarchical all-reduce over rails does better (primer §5.3).
+# through the NICs. NCCL's hierarchical all-reduce over rails does better (primer §5.3).
 
 # %%
 hidden, layers, p = 8192, 80, 8
@@ -307,18 +320,20 @@ for name, alpha, bw in fabrics:
         print(f"{name:<34} {batch:>5} {si(one, 's'):>15} {si(layers * 2 * one, 's'):>15} {2 * (p - 1) * alpha / one:>8.0%}")
 
 # %% [markdown]
-# At decode the $\alpha$ term is nearly everything, so the $\alpha$ you plug in *is* the answer — and section 6
-# measured two. Each step of a ring waits for the previous step's data to arrive before it can
-# forward it: a dependent chain, which pays the full **latency** of a copy. Back-to-back copies of
-# independent buffers overlap their fixed costs, so the **pipelined** fit's $\alpha$ is smaller and would
-# price the all-reduce too low. $\beta$ is the other way round: it is a large-copy property, pinned best by
-# the pipelined sweep, which reaches the large sizes (the latency sweep stops at a few MB).
+# At decode, the $\alpha$ term is nearly all of the time. Thus the $\alpha$ that you put in the formula *is* the
+# answer, and section 6 measured two values of it. Each step of a ring waits for the data of the step before it to
+# arrive, and only then can it send that data on. This is a dependent chain, and it pays the full **latency** of a
+# copy. Back-to-back copies of independent buffers overlap their fixed costs. Thus the $\alpha$ of the **pipelined**
+# fit is smaller, and it gives a cost for the all-reduce that is too low.
+#
+# For $\beta$, the opposite is true. $\beta$ is a large-copy property. The pipelined sweep gives the best value for
+# it, because that sweep gets to the large sizes. The latency sweep stops at a few MB.
 #
 # ## Exercise 3.5 — price TP with the right measured α
 #
-# Write `tp_allreduce_from_fits(nbytes, p, latency_fit, pipelined_fit)`: the time of one ring
-# all-reduce of `nbytes` over `p` GPUs, taking $\alpha$ and $\beta$ each from the fit that measures it. Use
-# `p2p.ring_allreduce_time(nbytes, p, alpha, bw)`; the fits are `AlphaBeta(alpha, beta)` records.
+# Write `tp_allreduce_from_fits(nbytes, p, latency_fit, pipelined_fit)`. It returns the time of one ring
+# all-reduce of `nbytes` over `p` GPUs. Take $\alpha$ and $\beta$ each from the fit that measures it. Use
+# `p2p.ring_allreduce_time(nbytes, p, alpha, bw)`. The fits are `AlphaBeta(alpha, beta)` records.
 
 # %% exercise
 def tp_allreduce_from_fits(nbytes, p, latency_fit, pipelined_fit):
@@ -340,39 +355,43 @@ if latency_ab is not None:
 print("✅ a dependent chain pays the latency α; a bandwidth term takes the large-copy β")
 
 # %% [markdown]
-# At decode batch sizes an all-reduce moves a few kilobytes, so the bandwidth term is microseconds
-# or less and the **$\alpha$ term is almost everything** — and it is paid 160 times per token. That is why
-# TP stays inside the NVLink domain (lowest $\alpha$, highest $B$), why engines ship custom one-shot
-# all-reduce kernels and capture decode in CUDA graphs, and why TP across nodes is a last resort
-# (the [parallelism menu](../../../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu)
-# puts pipeline and data parallelism there instead).
+# At decode batch sizes, an all-reduce moves a few kilobytes. Thus the bandwidth term is microseconds or less, and
+# the **$\alpha$ term is almost everything**. Each token pays it 160 times. This is the reason for three things:
+#
+# - TP stays inside the NVLink domain (lowest $\alpha$, highest $B$).
+# - Engines supply custom one-shot all-reduce kernels and capture the decode step in CUDA graphs.
+# - TP across nodes is the last choice. The
+#   [parallelism menu](../../../gpu-deployment/gpu-deployment-primer.md#4-when-one-gpu-isnt-enough-the-parallelism-menu)
+#   puts pipeline and data parallelism there instead.
 #
 # ## In a design review
 #
-# **The two-minute version.** "Before choosing a parallelism layout I read `nvidia-smi topo -m`.
-# NV# pairs get ~450 GB/s each way on H100; PIX/PXB pairs get the PCIe link rate; PHB gets it only
-# if the platform grants peer access through the root complex — many do not, VMs especially — and
-# NODE and SYS usually mean P2P is staged through host memory at half the link or less.
+# **The two-minute version.** "Before I select a parallelism layout, I read `nvidia-smi topo -m`. NV# pairs get
+# ~450 GB/s each way on H100, and PIX/PXB pairs get the PCIe link rate. PHB gets that rate only if the platform gives
+# peer access through the root complex. Many platforms do not give it, and VMs especially do not. NODE and SYS usually
+# mean that the driver stages P2P through host memory, at half the link or less.
 #
-# "Tensor parallelism goes where every pair is NV#, because its all-reduce runs twice per layer and at
-# decode it is latency-bound: at batch 1 the bandwidth term is nanoseconds and $\alpha$ is the cost — the
-# latency of a copy you wait for, not the issue cost of back-to-back copies. Each GPU uses the NIC on its
-# own PCIe switch tree for GPUDirect RDMA, and its host process runs on its NUMA node. Then I measure the
-# P2P matrix and check peer access: staged is expected without it; a pair with peer access far below the
-# model means something between the GPUs is misconfigured."
+# "Tensor parallelism goes where every pair is NV#. The reason is that its all-reduce runs two times for each layer,
+# and at decode it is latency-bound. At batch 1, the bandwidth term is nanoseconds and $\alpha$ is the cost. That
+# $\alpha$ is the latency of a copy that you wait for, not the issue cost of back-to-back copies. Each GPU uses the NIC
+# on its own PCIe switch tree for GPUDirect RDMA, and its host process runs on its NUMA node.
+#
+# "Then I measure the P2P matrix and examine peer access. Without peer access, I expect a staged copy. If a pair has
+# peer access and its rate is far below the model, something between the GPUs has an incorrect configuration."
 #
 # **Drills**
 #
-# 1. *Two nodes of 8×H100 — TP=16 for a 405B model?* — No: TP's per-layer all-reduces would cross
-#    the NICs (~50 GB/s per NIC and a higher $\alpha$ instead of 450 GB/s NVLink). TP=8 inside each node,
+# 1. *Two nodes of 8×H100: TP=16 for a 405B model?* The answer is no. With TP=16, the per-layer all-reduces of TP
+#    go through the NICs. Each NIC gives ~50 GB/s and has a higher $\alpha$, against 450 GB/s for NVLink. Use TP=8 inside each node, and
 #    pipeline or data parallelism across nodes (primer §5.3).
-# 2. *A 2×T4 VM (Kaggle-style, path PHB) measures a third of its Gen3 x16 link GPU-to-GPU —
-#    illustrative numbers. Broken?* — Not necessarily. The model's 15.8 GB/s for PHB assumes direct
-#    peer access through the root complex; check `torch.cuda.can_device_access_peer` (the lab records
-#    it). Without peer access the copy is staged through host memory — two PCIe crossings and a host
-#    copy, about half the link at best, often less — which is expected, not a fault. With peer access
-#    granted, a third of the link *is* a finding (ACS/IOMMU settings, link width). Either way: fine
-#    for pipeline or data parallelism, poor for TP.
-# 3. *Why pin GPU5's feeding process to cores 48–95 on the HGX box?* — GPU5 hangs off socket 1: host
-#    buffers on socket 1's memory avoid the inter-socket link on every DMA, and its RDMA NIC (NIC5,
-#    PXB) sits on the same socket.
+# 2. *A 2×T4 VM (Kaggle-style, path PHB) measures a third of its Gen3 x16 link GPU-to-GPU (illustrative
+#    numbers). Is it broken?* It is not necessarily broken. The model gives 15.8 GB/s for PHB only for direct peer
+#    access through the root complex. Examine `torch.cuda.can_device_access_peer` (the lab records it).
+#
+#    Without peer access, the driver stages the copy through host memory. That is two PCIe crossings and a host
+#    copy, at best about half the link and often less. You can expect this result. It is not a fault. When the platform gives
+#    peer access, a third of the link *is* a result that you must examine (ACS/IOMMU settings, link width). In both cases, the link is good
+#    for pipeline or data parallelism and poor for TP.
+# 3. *Why pin the process that feeds GPU5 to cores 48–95 on the HGX box?* GPU5 connects to socket 1. Host buffers
+#    in the memory of socket 1 do not use the inter-socket link on each DMA. Also, the RDMA NIC of GPU5 (NIC5, PXB) is
+#    on the same socket.

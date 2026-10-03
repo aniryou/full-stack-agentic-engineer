@@ -1,26 +1,29 @@
 # %% [markdown]
 # # 02 · Memory bandwidth and transfers
 #
-# **Tier:** T0 — STREAM, threads, fusion, the cache ladder and an α-β fit of `memcpy`, all measured
-# on this CPU. **T1** (a CUDA GPU with PyTorch) — the same STREAM on HBM/GDDR, the GPU's cache
-# ladder, and host↔device copies from pinned and pageable memory. Concepts: primer §2 "The roofline
-# model", §4 "The memory hierarchy and why tiling/fusion win", §5 "Fabrics quantitatively" (the α-β
-# model) — [`../../PRIMER.md`](../../PRIMER.md).
+# **Tier:** T0: the notebook measures STREAM, threads, fusion, the cache ladder and an α-β fit of `memcpy` on this
+# CPU. **T1** (a CUDA GPU with PyTorch): it measures the same STREAM on HBM/GDDR and the cache ladder of the GPU. It also
+# measures host-to-device and device-to-host copies from pinned and pageable memory. Concepts: primer §2 "The roofline model", §4 "The memory
+# hierarchy and why tiling/fusion win", §5 "Fabrics quantitatively" (the α-β model), in
+# [`../../PRIMER.md`](../../PRIMER.md).
 #
 # **Predicted first in** [roofline-core notebook 02](../../roofline-core/notebooks/02_llm_inference_on_the_roofline.ipynb)
-# (decode is a weight stream; fusion removes passes, Ex 2.6). Here you measure the bandwidth those
-# predictions divide by, and explain the numbers you get.
+# (decode is a weight stream, and fusion removes passes, Ex 2.6). In this notebook, you measure the bandwidth that
+# those predictions divide by, and you explain the numbers that you get.
 #
 # ## The one-minute version
 #
-# Most LLM inference time is spent moving bytes, so bandwidth is the number to get right, and it
-# is easy to get wrong. Count bytes by a stated convention (STREAM's), use arrays far bigger than
-# the caches, and report the best of several runs. One core cannot fill a memory bus — Little's law
-# says bandwidth = bytes in flight ÷ latency — so CPU bandwidth scales with threads, and a GPU keeps
-# tens of thousands of threads in flight. Fusion wins by deleting whole passes over memory. And
-# every copy costs $\alpha + n/\beta$: small copies are latency-bound, which is why engines batch them and
-# keep their host buffers pinned — and *which* $\alpha$ you measured depends on whether the copies waited
-# for each other.
+# Most of the time of LLM inference goes to the movement of bytes. Thus bandwidth is the number to get correct, and
+# it is easy to get incorrect. Count bytes by a stated convention (STREAM's). Use arrays much larger than the caches.
+# Report the best of several runs.
+#
+# One core cannot fill a memory bus. Little's law says that bandwidth = bytes in flight ÷ latency. Thus CPU
+# bandwidth increases with threads, and a GPU keeps tens of thousands of threads in flight. Fusion gives a speedup
+# because it removes whole passes over memory.
+#
+# Also, every copy costs $\alpha + n/\beta$. Small copies are latency-bound, and this is why engines batch them and
+# keep their host buffers pinned. The copies either waited for each other or did not, and *which* $\alpha$ you
+# measured depends on that.
 
 # %%
 import math
@@ -46,16 +49,18 @@ print(info["name"], "|", "caches:", info.get("caches") or f"L2 {si(info.get('l2_
 # %% [markdown]
 # ## 1 · STREAM's four kernels, and how it counts
 #
-# John McCalpin's STREAM benchmark defines four loops over arrays `a`, `b`, `c` and counts the bytes
-# of every array element the loop names — read or written once — and nothing else. Its rules: each
-# array at least 4× the last-level cache — the *sum* of every last-level cache the run can use, so
-# 4× both sockets' L3 on a two-socket server (`inventory.llc_total_bytes`) — so you measure memory,
-# not cache; and report the **best** of several runs (the machine's capability).
+# John McCalpin's STREAM benchmark defines four loops over arrays `a`, `b`, `c`. It counts the bytes of every array
+# element that the loop names, read or written one time, and nothing else. It has two rules. First, each array is at
+# least 4× the last-level cache, so that you measure memory, not cache. That is the *sum* of every last-level cache
+# that the run can use: 4× the L3 of both sockets on a two-socket server (`inventory.llc_total_bytes`). Second,
+# report the **best** of several runs (the capability of the machine).
 #
-# Two ways this lab's numpy STREAM differs from the reference binary, so you do not over-read it:
-# its worker threads are not pinned to cores, and its arrays are first touched by one thread — on a
-# multi-socket (NUMA) host every page then lives on one socket's memory, and the all-core number
-# undercounts the machine. (STREAM's OpenMP build touches each slice from its own pinned thread.)
+# This lab's numpy STREAM is different from the reference binary in two ways. Know them, so that you do not read too
+# much into its numbers. First, its worker threads are not pinned to cores. Second, one thread touches its arrays
+# first.
+#
+# On a multi-socket (NUMA) host, every page then lives in the memory of one socket. Thus the all-core number is lower
+# than the capability of the machine. (STREAM's OpenMP build touches each slice from its own pinned thread.)
 
 # %%
 print(f"{'kernel':<7} {'loop':<12} {'reads':>6} {'writes':>7} {'FLOPs/elem':>11} {'bytes/elem (fp64)':>18}")
@@ -65,9 +70,9 @@ for k, (reads, writes, f) in STREAM.items():
 # %% [markdown]
 # ## Exercise 2.1 — count like STREAM, then like numpy
 #
-# Write `my_stream_bytes(kernel, n, b)` with STREAM's convention. numpy has no single-pass
-# `b + q·c`, so the lab's numpy triad runs **two** passes, `a = q·c` then `a = a + b`; write
-# `numpy_triad_bytes(n, b)`: the bytes those two passes actually move.
+# Write `my_stream_bytes(kernel, n, b)` with STREAM's convention. The numpy library has no single-pass `b + q·c`.
+# Thus the lab's numpy triad runs **two** passes, `a = q·c` then `a = a + b`. Write `numpy_triad_bytes(n, b)`: the
+# bytes that those two passes actually move.
 
 # %% exercise
 def my_stream_bytes(kernel, n, b):
@@ -93,12 +98,13 @@ print("✅ STREAM counts 24 B per fp64 triad element; numpy's two-pass triad rea
 # %% [markdown]
 # ## 2 · STREAM on this machine
 #
-# One thread first, then every usable core (on a GPU, one kernel already uses every SM). The
-# **moved** columns divide the bytes the code actually moved by the time; **STREAM convention**
-# divides STREAM's count — they differ only for numpy's two-pass triad. That triad's *moved* rate is
-# not a clean memory rate either: its second pass re-reads what the first just wrote (partly from
-# cache) and updates it in place, which skips a write-allocate read (section 4). The roofline's
-# slanted roof is therefore built from the single-pass kernels only (`membw.peak`).
+# The cell measures one thread first, then every usable core (on a GPU, one kernel already uses every SM). The
+# **moved** columns divide the bytes that the code actually moved by the time. **STREAM convention** divides STREAM's
+# count by the time. The two are different only for numpy's two-pass triad.
+#
+# The *moved* rate of that triad is not a clean memory rate either. Its second pass reads again what the first pass
+# wrote immediately before (partly from cache), and updates it in place. This skips a write-allocate read
+# (section 4). Thus the roofline's slanted roof uses only the single-pass kernels (`membw.peak`).
 
 # %%
 n = membw.stream_elems(be)
@@ -112,11 +118,12 @@ print(f"slanted roof (fastest single-pass kernel): {si(membw.peak(one + full).by
 # %% [markdown]
 # ## 3 · One core cannot fill the bus: Little's law
 #
-# A memory system is a pipeline: **bandwidth = bytes in flight ÷ latency**. DRAM latency is ~100 ns
-# whatever you do, so the only way to more bandwidth is more requests outstanding. One CPU core can
-# track only ~10–20 cache-line misses at a time (plus what its prefetchers add), which caps a single
-# thread well below the memory channels. More threads, more misses in flight — until the channels
-# saturate. A GPU is this idea taken to its limit.
+# A memory system is a pipeline: **bandwidth = bytes in flight ÷ latency**. DRAM latency is ~100 ns whatever you do.
+# Thus the only way to get more bandwidth is to have more requests in flight. One CPU core can track only ~10–20
+# cache-line misses at a time (plus what its prefetchers add). This limits a single thread to well below the memory
+# channels.
+#
+# More threads put more misses in flight, until the channels saturate. A GPU takes this idea to its limit.
 
 # %%
 if be.is_gpu:
@@ -130,10 +137,10 @@ else:
 # %% [markdown]
 # ## Exercise 2.2 — read your scaling curve with Little's law
 #
-# Two functions that turn the curve above into an explanation. `lines_in_flight(bandwidth,
-# latency, line=64)`: how many cache lines must be outstanding to sustain `bandwidth` at `latency`.
-# `saturation_threads(curve, frac=0.9)`: given `[(threads, bytes_per_s), ...]`, the smallest thread
-# count that reaches `frac` of the best bandwidth in the curve — where adding cores stops paying.
+# Write two functions that turn the curve of §3 into an explanation. `lines_in_flight(bandwidth, latency, line=64)`
+# gives the number of cache lines that must be in flight to keep `bandwidth` at `latency`.
+# `saturation_threads(curve, frac=0.9)` takes `[(threads, bytes_per_s), ...]`. It returns the smallest thread count
+# that gets to `frac` of the best bandwidth in the curve. At that point, more cores give no more benefit.
 
 # %% exercise
 def lines_in_flight(bandwidth, latency, line=64):
@@ -165,15 +172,15 @@ print("✅ Little's law: bandwidth is bought with outstanding requests — cores
 # %% [markdown]
 # ## 4 · Write-allocate: the read nobody asked for
 #
-# On most CPUs a store to a cache line that is not in cache first **reads** the line
-# (read-for-ownership), then writes it back later. So `c = a` really moves three arrays, not two,
-# unless the code uses non-temporal (streaming) stores that bypass the cache — which glibc's
-# `memcpy` does for large copies, and a numpy ufunc loop does not. STREAM does not count this read.
+# On most CPUs, a store to a cache line that is not in cache first **reads** the line (read-for-ownership). Then it
+# writes the line back later. Thus `c = a` actually moves three arrays, not two. This is true unless the code uses
+# non-temporal (streaming) stores that go around the cache. The `memcpy` of glibc does this for large copies, and a numpy
+# ufunc loop does not. STREAM does not count this read.
 #
 # ## Exercise 2.3 — the real DRAM traffic
 #
-# Write `dram_bytes(kernel, n, b, write_allocate)`: STREAM's bytes plus, when `write_allocate`, one
-# extra read of every array the kernel writes.
+# Write `dram_bytes(kernel, n, b, write_allocate)`. It returns STREAM's bytes plus, when `write_allocate` is true,
+# one more read of every array that the kernel writes.
 
 # %% exercise
 def dram_bytes(kernel, n, b, write_allocate=True):
@@ -201,18 +208,19 @@ if not be.is_gpu:
 # %% [markdown]
 # ## 5 · Fusion: delete whole passes over memory
 #
-# Apply $k$ cheap elementwise ops to a large array. **Unfused**, each op is its own pass: read the
-# array, write it back, $k$ times. **Fused**, the array is processed in cache-sized blocks and all
-# $k$ ops run on a block while it sits in cache: one read and one write of DRAM. Same FLOPs, $k$×
-# fewer DRAM bytes. It is exactly what a fused GPU kernel does with registers and shared memory,
-# and what [FlashAttention](../../../../04-inference-engine/flash-attention/flash-attention-primer.md)
-# does to attention (primer §4). The experiment runs on the CPU even when a GPU is present — GPU
-# kernel fusion is layer 02's lab.
+# Apply $k$ low-cost elementwise ops to a large array. **Unfused**, each op is its own pass: it reads the array and
+# writes it back, $k$ times. **Fused**, the code processes the array in cache-sized blocks, and all $k$ ops run on a
+# block while it is in cache. That is one read and one write of DRAM. The FLOPs are the same, with $k$× fewer DRAM
+# bytes. A fused GPU kernel does exactly this with registers and shared memory, and
+# [FlashAttention](../../../../04-inference-engine/flash-attention/flash-attention-primer.md) does it to attention
+# (primer §4).
+#
+# The experiment runs on the CPU even when a GPU is present. GPU kernel fusion is the subject of layer 02's lab.
 #
 # ## Exercise 2.4 — predict it first
 #
-# Write `chain_dram_bytes(n, b, k, fused)` and `speedup_bound(k)`: the speedup fusion would give if
-# both versions ran at the same memory bandwidth.
+# Write `chain_dram_bytes(n, b, k, fused)` and `speedup_bound(k)`. The second function gives the speedup that fusion
+# gives if both versions run at the same memory bandwidth.
 
 # %% exercise
 def chain_dram_bytes(n, b, k, fused):
@@ -243,17 +251,16 @@ print(f"measured speedup {unfused.seconds() / fused.seconds():.2f}× (bound {spe
       f"unfused ran at {si(unfused.bytes_per_s(), 'B/s')} of DRAM traffic")
 
 # %% [markdown]
-# The measured speedup falls short of $k$ because the fused version is not free: each block pays
-# numpy's per-call overhead $k$ times, and its $k$ passes still stream the block through L1/L2 —
-# a faster memory, but a memory. A compiled fused kernel keeps the intermediate in *registers*
-# and pays neither cost, which is why it gets much closer to the bound. The next section measures
-# both costs, and then puts a number on the gap.
+# The measured speedup is less than $k$ because the fused version also has costs. Each block pays the per-call
+# overhead of numpy $k$ times. Also, its $k$ passes still stream the block through L1/L2, which is a faster memory,
+# but a memory. A compiled fused kernel keeps the intermediate in *registers* and pays neither cost. This is why it
+# gets much nearer to the bound. The next section measures both costs, and then gives a number for the gap.
 #
 # ## 6 · The cache ladder
 #
-# Bandwidth as a function of working-set size, with an in-place `x *= 1` (one read and one write
-# per element). Each plateau is a level of the hierarchy; the left end is not a cache at all but the
-# fixed cost of a call (numpy dispatch on a CPU, a kernel launch on a GPU).
+# This section measures bandwidth as a function of working-set size, with an in-place `x *= 1` (one read and one
+# write per element). Each plateau is a level of the hierarchy. The left end is not a cache at all. It is the fixed
+# cost of a call (numpy dispatch on a CPU, a kernel launch on a GPU).
 
 # %%
 lad = membw.cache_ladder(be, repeats=3)
@@ -262,10 +269,10 @@ print("\ncache sizes reported by the system:", info.get("caches") or f"L2 {si(in
 print(f"smallest working set: {si(lad[0].seconds(), 's')} per call — that is mostly fixed cost, not bytes")
 
 # %% [markdown]
-# Read the knees against the cache sizes: the rate drops where the working set outgrows a level
-# (an in-place update touches the set once per call, so a level holds a working set about its own
-# size). **Back to the fusion gap**, with the ladder's numbers: the fused chain made $k$ numpy calls
-# per block, each on a block that sits in cache, so its time should be about
+# Compare the knees with the cache sizes. The rate decreases where the working set becomes larger than a level. An
+# in-place update touches the set one time per call, so a level holds a working set of approximately its own size.
+# **Back to the fusion gap**, with the numbers of the ladder. The fused chain made $k$ numpy calls per block, each on
+# a block that is in cache. Thus the model gives its time as approximately
 #
 # $$
 # \text{blocks} \times k \times (\text{time of one ladder call at the block size}).
@@ -286,26 +293,29 @@ if not be.is_gpu:
 # %% [markdown]
 # ## 7 · Every copy costs α + n/β
 #
-# Time a copy over a range of sizes and fit $t(n) = \alpha + n/\beta$: $\alpha$ is the fixed cost of *any* copy
-# (a call, a descriptor, a launch), $\beta$ the bandwidth of the slowest link on the path, and
-# $n_{1/2} = \alpha \cdot \beta$ the size at which you get half of $\beta$ (primer §5). On T0 we time host `memcpy` of
-# cache-cold data; the method is the same one you would use on PCIe, NVLink or a network.
+# Time a copy over a range of sizes. Then fit $t(n) = \alpha + n/\beta$. $\alpha$ is the fixed cost of *any* copy
+# (a call, a descriptor, a launch). $\beta$ is the bandwidth of the slowest link on the path. $n_{1/2} = \alpha \cdot \beta$
+# is the size at which you get half of $\beta$ (primer §5).
 #
-# **Which $\alpha$?** It depends on how the copies were timed. The sweep issues copies back to back and
-# synchronises only at the ends. A synchronous copy (numpy's `memcpy`, a pageable host→device copy)
-# finishes before the next starts, so its $\alpha$ is the latency of one copy. An asynchronous one (a
-# *pinned* host→device copy, `non_blocking=True`) is queued while the previous one runs, so its
-# fixed cost overlaps the transfer and the fit's $\alpha$ is an **issue cost**, often several times smaller
-# than the time until one copy's bytes have arrived.
+# On T0, we time host `memcpy` of cache-cold data. The
+# method is the same one that you use on PCIe, NVLink or a network.
 #
-# On a GPU the lab therefore also runs a *latency* sweep — one synchronised copy per sample — and reports
-# both. Use the pipelined $\alpha$ for a stream of independent copies, the latency $\alpha$ when each copy waits
-# for the last (every step of a ring all-reduce, notebook 03).
+# **Which $\alpha$?** It depends on how you timed the copies. The sweep issues copies one after the other and
+# synchronises only at the ends. A synchronous copy (numpy's `memcpy`, a pageable host-to-device copy) is complete
+# before the next one starts. Thus its $\alpha$ is the latency of one copy.
+#
+# An asynchronous copy (a *pinned* host-to-device copy, `non_blocking=True`) goes into the queue while the previous
+# one runs. Thus its fixed cost overlaps the transfer, and the $\alpha$ of the fit is an **issue cost**. Often, that
+# cost is several times smaller than the time until the bytes of one copy have arrived.
+#
+# On a GPU, the lab thus also runs a *latency* sweep, with one synchronised copy per sample, and reports both. Use
+# the pipelined $\alpha$ for a stream of independent copies. Use the latency $\alpha$ when each copy waits for the
+# last one (every step of a ring all-reduce, notebook 03).
 #
 # ## Exercise 2.5 — fit α and β
 #
-# Write `my_fit(sizes, times)` returning `(alpha, beta)` by ordinary least squares on
-# $t = \alpha + s \cdot n$ (slope $s = 1/\beta$). No libraries needed:
+# Write `my_fit(sizes, times)`. It returns `(alpha, beta)` by ordinary least squares on $t = \alpha + s \cdot n$
+# (slope $s = 1/\beta$). You need no libraries:
 # $\text{slope} = \operatorname{cov}(n, t) / \operatorname{var}(n)$.
 
 # %% exercise
@@ -349,27 +359,29 @@ for key, series in transfer.series(copies).items():
               f"   model {si(ab.bandwidth(m.params['nbytes']), 'B/s'):>10}")
 
 # %% [markdown]
-# Three things to read here. **Your fit vs the library's.** Plain least squares minimises absolute
-# error, so the largest copies — thousands of times longer than the smallest — decide everything
-# and $\alpha$ comes out as noise (sometimes negative). The library weights each point by $1/t$, so the
-# small sizes that pin $\alpha$ count as much as the large ones that pin $\beta$.
+# Read three things here.
 #
-# **$\beta$ vs STREAM copy.** A transfer counts each delivered byte once; STREAM's copy counts the read and
-# the write. So a memcpy $\beta$ of 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s — compare
-# the "STREAM-convention equivalent" with the one-thread copy row of section 2, not $\beta$ itself.
+# **Your fit vs the library's.** Plain least squares minimises the absolute error. Thus the largest copies, thousands
+# of times longer than the smallest, decide everything, and $\alpha$ comes out as noise (sometimes negative). The
+# library gives each point a weight of $1/t$. Thus the small sizes that set $\alpha$ count as much as the large sizes
+# that set $\beta$.
 #
-# **Model vs measured.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the
-# last-level cache), like a real transfer. α-β assumes **one** bottleneck, and a CPU copy has several
-# regimes: glibc's `memcpy` switches to non-temporal stores once a copy is a sizeable fraction of the
-# last-level cache, which skips the write-allocate read of section 4 — so big copies can run *faster* than
-# the fit. Over PCIe the link is the bottleneck at every size above a few KB, and the fit is much tighter.
+# **$\beta$ vs STREAM copy.** A transfer counts each delivered byte one time. STREAM's copy counts the read and the
+# write. Thus a memcpy $\beta$ of 5 GB/s is the same memory traffic as a STREAM copy of 10 GB/s. Compare the
+# "STREAM-convention equivalent" with the one-thread copy row of section 2, not $\beta$ itself.
+#
+# **Model vs measured.** Each copy reads bytes that are not in cache (the op cycles through a pool 4× the last-level
+# cache), as a real transfer does. The α-β model assumes **one** bottleneck, and a CPU copy has several regimes. The
+# `memcpy` of glibc changes to non-temporal stores when a copy is a large fraction of the last-level cache. This skips the
+# write-allocate read of section 4, so large copies can run *faster* than the fit. Over PCIe, the link is the
+# bottleneck at every size above a few KB, and the fit is much tighter.
 #
 # ## Exercise 2.6 — predict a copy, then measure it
 #
-# How big must a copy be to get a fraction $f$ of the link? Solve $n/t(n) = f \cdot \beta$ for $n$ with
-# $t(n) = \alpha + n/\beta$ and write `size_for_fraction(alpha, beta, f)`. (At $f = \tfrac{1}{2}$ it is $n_{1/2}$.)
-# The check then predicts, from *your* fit, the size that reaches 80% of $\beta$, measures a copy of that
-# size, and compares.
+# How large must a copy be to get a fraction $f$ of the link? Solve $n/t(n) = f \cdot \beta$ for $n$ with
+# $t(n) = \alpha + n/\beta$. Write `size_for_fraction(alpha, beta, f)`. (At $f = \tfrac{1}{2}$, it is $n_{1/2}$.)
+# The check then uses *your* fit to predict the size that gets to 80% of $\beta$. It measures a copy of that size and
+# compares the two.
 
 # %% exercise
 def size_for_fraction(alpha, beta, f):
@@ -395,12 +407,12 @@ print("✅ the fit predicts a copy it never saw — within the noise of a shared
 # %% [markdown]
 # ## 8 · Host ↔ device: pinned vs pageable (T1)
 #
-# A GPU's copy engine DMAs from host memory it can address directly: **pinned** (page-locked)
-# memory. From ordinary **pageable** memory the driver first copies each chunk into a pinned
-# bounce buffer, so the copy is slower and blocks the host — it cannot overlap with compute. The
-# link's theoretical rate per direction is $\text{GT/s} \times \text{lanes} \times \text{encoding} \div 8$
-# (`specs.pcie_gbs`): Gen3 runs 8 GT/s per lane, Gen4 16, Gen5 32, all with 128b/130b encoding; packet
-# headers and flow control take another 10–20%, so a good pinned copy lands at 80–90% of it.
+# The copy engine of a GPU does DMA from host memory that it can address directly: **pinned** (page-locked) memory.
+# From ordinary **pageable** memory, the driver first copies each chunk into a pinned bounce buffer. Thus the copy is
+# slower and blocks the host, and it cannot overlap with compute. The theoretical rate of the link per direction is
+# $\text{GT/s} \times \text{lanes} \times \text{encoding} \div 8$ (`specs.pcie_gbs`). Gen3 runs 8 GT/s per lane,
+# Gen4 16 and Gen5 32, all with 128b/130b encoding. Packet headers and flow control take another 10–20%, so a good
+# pinned copy gets to 80–90% of the theoretical rate.
 
 # %%
 print("PCIe per direction (theoretical, not a measurement) and 16 GB of weights at 85% of it:")
@@ -423,27 +435,29 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **The two-minute version.** "Bandwidth is the number that decides decode speed, so we measure it
-# with STREAM's rules: arrays 4× the last-level cache, bytes counted by STREAM's convention, best
-# of N — and we say when an implementation moves more than STREAM counts. On a CPU one thread
-# cannot fill the bus (Little's law: bandwidth = bytes in flight ÷ latency), so bandwidth scales
-# with cores; a GPU keeps megabytes in flight across its SMs. Fusion is the biggest software lever
-# on a memory-bound block: it keeps the FLOPs and deletes passes.
+# **The two-minute version.** "Bandwidth is the number that decides decode speed. Thus we measure it with STREAM's
+# rules: arrays 4× the last-level cache, bytes counted by STREAM's convention, best of N. We also say when an
+# implementation moves more than STREAM counts.
 #
-# "For copies we fit $\alpha + n/\beta$ and design so transfers are large, batched, pinned and asynchronous;
-# below $n_{1/2}$ you are paying latency, not bandwidth — and we say which $\alpha$ we measured: back-to-back
-# async copies give an issue cost, a synchronised copy gives the latency a dependent step pays."
+# "On a CPU, one thread cannot fill the bus (Little's law: bandwidth =
+# bytes in flight ÷ latency), so bandwidth increases with cores. A GPU keeps megabytes in flight across its SMs.
+# Fusion is the software change with the largest effect on a memory-bound block: it keeps the FLOPs and removes
+# passes.
+#
+# "For copies, we fit $\alpha + n/\beta$. We design so that transfers are large, batched, pinned and asynchronous.
+# Below $n_{1/2}$, you pay for latency, not bandwidth. Also, we say which $\alpha$ we measured. Back-to-back
+# asynchronous copies give an issue cost. A synchronised copy gives the latency that a dependent step pays."
 #
 # **Drills**
 #
-# 1. *Our 4 KB host→device copies of token IDs run at a few hundred MB/s on a 32 GB/s link. Bug?* —
-#    No: they are $\alpha$-bound. If each copy is waited for, a latency of ~10 µs (illustrative) caps a 4 KB
-#    copy at ≤ 0.4 GB/s, and $n_{1/2}$ is hundreds of KB. Batch them, keep the buffer pinned, issue them
-#    asynchronously — then consecutive copies overlap their fixed costs and only the issue cost remains.
-# 2. *Why does fusing bias + GELU + residual speed up a memory-bound layer?* — Each unfused op
-#    reads and writes the activation from HBM; fused, it is read once and written once. Time
-#    follows bytes, so $k$ passes become one.
-# 3. *A vendor's STREAM number is 20% above ours on the same CPU. Who is wrong?* — Possibly
-#    nobody: check thread count and pinning (and NUMA placement on a two-socket box), array size vs
-#    the *total* last-level cache, and whether their build uses non-temporal stores (no
+# 1. *Our 4 KB host-to-device copies of token IDs run at a few hundred MB/s on a 32 GB/s link. Bug?* No, they are
+#    $\alpha$-bound. With a wait for each copy, a latency of ~10 µs (illustrative) limits a 4 KB copy to
+#    ≤ 0.4 GB/s. Also, $n_{1/2}$ is hundreds of KB. Batch the copies. Keep the buffer pinned. Issue the copies
+#    asynchronously. Then consecutive copies overlap their fixed costs, and only the issue cost stays.
+# 2. *Why does the fusion of bias + GELU + residual make a memory-bound layer faster?* Each unfused op reads the activation
+#    from HBM and writes it back. With fusion, the kernel reads it one time and writes it one time. The time changes
+#    with the bytes, so $k$ passes become one.
+# 3. *A vendor's STREAM number is 20% above ours on the same CPU. Who is incorrect?* It is possible that nobody is
+#    incorrect. Examine the thread count and the pinning (and the NUMA placement on a two-socket box). Examine the
+#    array size against the *total* last-level cache. Examine if their build uses non-temporal stores (no
 #    write-allocate read). State the convention with the number.

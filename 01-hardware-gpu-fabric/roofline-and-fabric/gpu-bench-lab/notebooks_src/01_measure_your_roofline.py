@@ -47,8 +47,9 @@ for key in ("name", "backend", "blas", "usable_cpus", "simd_bits", "isa", "cache
 #
 # Record the machine before you measure it, because a number without its hardware has no use. For a CPU, the flat
 # roof is the product **cores × clock × vector lanes × 2 × FMA units**. The 2 is there because an FMA is a multiply
-# and an add. numpy gets to it through its BLAS library (OpenBLAS or MKL, one thread per core). The slanted roof is the memory channels. For a
-# GPU, the flat roof is SMs × clock × tensor-core rate for the dtype. The slanted roof is HBM (or GDDR on an L4/T4).
+# and an add. In numpy, the BLAS library (OpenBLAS or MKL, one thread per core) gets to that roof. The slanted roof is the memory channels.
+#
+# For a GPU, the flat roof is SMs × clock × tensor-core rate for the dtype. The slanted roof is HBM (or GDDR on an L4/T4).
 #
 # ## 2 · Counting work: FLOPs and bytes
 #
@@ -269,8 +270,8 @@ print(f"✅ classified on your {best_dtype} roofline (ridge {roof.ridge:.1f} FLO
 # core that explains the rate at the nominal clock.
 #
 # A value of about 2 on most x86 server cores (1 on some) tells you
-# that BLAS gets to the vector peak. A value well below 1 tells you that it does not. The cause is sizes that are too
-# small (`QUICK`), or fewer physical cores than vCPUs. A value above 2 tells you that the clock or the core count
+# that BLAS gets to the vector peak. A value well below 1 tells you that it does not. Possible causes are sizes that
+# are too small (`QUICK`), or fewer physical cores than vCPUs. A value above 2 tells you that the clock or the core count
 # that you assumed is incorrect (turbo, or hyperthreads counted as cores).
 
 # %% exercise

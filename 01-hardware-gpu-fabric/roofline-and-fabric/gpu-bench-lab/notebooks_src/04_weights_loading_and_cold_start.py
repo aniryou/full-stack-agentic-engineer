@@ -1,25 +1,29 @@
 # %% [markdown]
 # # 04 · Weights loading and cold start
 #
-# **Tier:** T0 — write a synthetic safetensors checkpoint and measure *this machine's* storage: cold
-# and warm page cache, three read methods, parallel reads. **T1** — stream the file disk → pinned
-# host buffer → GPU and compare with the model. **T3** — `deploy/gcp` runs the same suite on a fresh
-# cloud VM, whose boot disk is a very different tier from your laptop's SSD. Concepts: primer §6
+# **Tier:** T0. Write a synthetic safetensors checkpoint. Then measure the storage of *this machine*: cold and warm
+# page cache, three read methods, parallel reads. **T1**: stream the file from the disk to a pinned host buffer and
+# then to the GPU. Compare the result with the model.
+#
+# **T3**: `deploy/gcp` runs the same suite on a new cloud VM. The
+# boot disk of that VM is a tier that is much different from the SSD of your laptop. Concepts: primer §6
 # "Storage and cold start" ([`../../PRIMER.md`](../../PRIMER.md)).
 #
 # **Predicted first in** [roofline-core notebook 04](../../roofline-core/notebooks/04_loading_reliability_and_cost.ipynb)
-# (Ex 4.1 streamed loading, Ex 4.2 the cold-start budget) from datasheet tier rates. Here you measure
-# the tier you actually have, decide which of your numbers is the one to plan with, and feed it to
-# the same model.
+# (Ex 4.1 streamed loading, Ex 4.2 the cold-start budget) from datasheet tier rates. In this notebook, you measure the
+# tier that you actually have. You decide which of your numbers is the correct one for a plan. Then you give that
+# number to the same model.
 #
 # ## The one-minute version
 #
-# A replica is not serving until its weights are in GPU memory, so a cold start is a bandwidth
-# problem with a fixed-cost tail: the checkpoint's bytes divided by the **slowest tier** on the
-# path (object store → network → disk → page cache → host RAM → PCIe → HBM), plus provisioning,
-# image pull and engine start-up. Measure each tier honestly — cold, not warm; with enough requests
-# in flight — stream the tiers so the slowest one sets the pace instead of their sum, and you can
-# predict, and shorten, how long a new replica takes to come up.
+# A replica cannot serve requests until its weights are in GPU memory. Thus a cold start is a bandwidth problem with a
+# fixed-cost tail. The time is the bytes of the checkpoint divided by the **slowest tier** on the path, plus
+# provisioning, image pull and engine start-up. The path is object store, network, disk, page cache, host RAM, PCIe
+# and HBM, in that order.
+#
+# Measure each tier honestly: cold, not warm, and with sufficient requests in flight. Stream the tiers, so that the
+# slowest tier sets the rate, not the sum of the tiers. Then you can predict, and decrease, the time that a new replica
+# takes to become ready.
 
 # %%
 import atexit
@@ -56,11 +60,13 @@ print(f"checkpoint will be written to {path} (filesystem: {loading.filesystem_ty
 # └────────┴──────────────────────────────────────────────┴──────────────────────────────────────┘
 # ```
 #
-# No pickle, so loading runs no code; and every tensor's position is known from the header before
-# a byte of data is read, so a loader can `mmap` the file, read tensors in parallel, or stream them
-# straight to a GPU. The lab writes it from scratch (`gpubench.loading.write_safetensors`, ~40
-# lines); the `safetensors` library reads what it writes. Random bytes fill the tensors so a
-# compressing or deduplicating filesystem cannot flatter the measurement.
+# The format uses no pickle, thus a load runs no code. Also, the header gives the position of each tensor before the
+# loader reads a byte of data. Thus a loader can `mmap` the file, read tensors in parallel, or stream them directly to
+# a GPU.
+#
+# The lab writes the format with its own code (`gpubench.loading.write_safetensors`, ~40 lines). The `safetensors`
+# library reads what the lab writes. Random bytes fill the tensors. Thus a filesystem that compresses or deduplicates
+# data cannot make the measurement look better than it is.
 
 # %%
 info = loading.synthetic_checkpoint(path, (256 << 20) if QUICK else (2 << 30))
@@ -73,8 +79,8 @@ for name in list(header)[:3]:
 # %% [markdown]
 # ## Exercise 4.1 — read the header yourself
 #
-# Write `my_read_header(path)` → `(header_dict, data_start)` (unpack the first 8 bytes as a
-# little-endian unsigned 64-bit integer, then parse that many bytes of JSON), and
+# Write `my_read_header(path)`. It returns `(header_dict, data_start)`. Unpack the first 8 bytes as a
+# little-endian unsigned 64-bit integer. Then parse that number of bytes of JSON. Also write
 # `my_nbytes(dtype, shape)` for the dtypes `F64 F32 F16 BF16 F8_E4M3 I64 I32 U8`.
 
 # %% exercise
@@ -111,20 +117,20 @@ print(f"✅ header parsed: {len(tensors)} tensors whose sizes add up to every da
 # %% [markdown]
 # ## 2 · Measuring load throughput honestly
 #
-# Three pitfalls make load benchmarks lie, and the lab avoids each:
+# Three traps make load benchmarks give incorrect results. The lab prevents each of them:
 #
-# * **The page cache.** Read a file twice and the second read comes from RAM. *Cold* runs evict the
-#   file first (`posix_fadvise(DONTNEED)`, Linux, no root needed); *warm* runs do not. A new node in
-#   production is cold. A file on `tmpfs` cannot be evicted — it *is* RAM — so the lab refuses to
-#   call any read of it cold and lists the cold rows as skipped instead.
-# * **First-touch page faults.** Reading into a freshly allocated buffer pays a page fault per 4 KB
-#   of destination — billed to "the disk". The lab allocates and touches the buffer once, up front
-#   (on a GPU host, that buffer is the pinned staging area).
-# * **One request at a time.** SSDs and network disks reach their rated throughput only with many
-#   requests in flight — Little's law again. `pread` × threads keeps several outstanding.
+# * **The page cache.** If you read a file two times, the second read comes from RAM. *Cold* runs evict the file
+#   first (`posix_fadvise(DONTNEED)`, Linux, no root needed). *Warm* runs do not. A new node in production is cold.
+#   The lab cannot evict a file on `tmpfs`, because that file *is* RAM. Thus the lab does not call any read of it
+#   cold, and it lists the cold rows as skipped instead.
+# * **First-touch page faults.** A read into a newly allocated buffer pays a page fault for each 4 KB of
+#   destination. The result gives that time to "the disk". The lab allocates the buffer and touches it one time,
+#   before the measurement. On a GPU host, that buffer is the pinned staging area.
+# * **One request at a time.** SSDs and network disks get to their rated throughput only with many requests in
+#   flight. This is Little's law again. `pread` × threads keeps several requests in flight.
 #
-# Methods: `read` (one thread, sequential `readinto`), `pread` (threads reading disjoint ranges),
-# `mmap` (map the file, then copy it out — the mapping is free, the page faults are not).
+# Methods: `read` (one thread, sequential `readinto`), `pread` (threads that read disjoint ranges), `mmap` (map the
+# file, then copy it out). For `mmap`, the mapping costs nothing, but the page faults have a cost.
 
 # %%
 skipped = []
@@ -138,14 +144,15 @@ warm = [m for m in loads if m.params["cache"] == "warm"]
 # %% [markdown]
 # ## Exercise 4.2 — is your "cold" number a disk number?
 #
-# Before planning with a measurement, decide what it measured. Write `cold_verdict(cold_bps,
-# warm_bps, filesystem)` returning:
+# Before you use a measurement in a plan, decide what it measured. Write `cold_verdict(cold_bps,
+# warm_bps, filesystem)`. It returns:
 #
-# * `"ram"` if the file lives on `tmpfs` or `ramfs` — every read is a memory copy;
-# * `"suspect"` if the cold read ran at 70% or more of the warm read — either the eviction was not
-#   honoured (some container and network filesystems ignore it) or the device is as fast as memory
-#   copies (rare); check with `O_DIRECT` or a file larger than RAM before trusting it;
-# * `"disk"` otherwise — the number to plan a cold start with.
+# * `"ram"` if the file is on `tmpfs` or `ramfs`. Each read is a memory copy.
+# * `"suspect"` if the cold read ran at 70% or more of the warm read. There are two possible causes. The first
+#   cause: the filesystem did not obey the eviction (some container and network filesystems ignore it). The second
+#   cause: the device is as fast as memory copies (rare). Before you trust the number, do a check with `O_DIRECT` or
+#   with a file larger than RAM.
+# * `"disk"` in all other cases. This is the number for the plan of a cold start.
 
 # %% exercise
 def cold_verdict(cold_bps, warm_bps, filesystem):
@@ -169,22 +176,25 @@ else:
 print("✅ a cold read is only a disk number if the bytes really came from the disk")
 
 # %% [markdown]
-# Warm reads measure memory copies, not the disk: if warm is several GB/s and cold is not, the page
-# cache was doing the work. On a local NVMe, parallel reads usually beat a single stream; on a
-# network disk (a cloud boot disk, a FUSE mount of an object store) they are essential — Little's
-# law again: an object store serving each range request after a first-byte latency needs
-# $\text{target} \times \text{latency} \div \text{request size}$ requests outstanding (`loading.streams_needed`;
-# roofline-core Ex 4.2 sizes it). For 5 GB/s at 50 ms per 16 MB range that is 5e9 × 0.05 ÷ 16e6 ≈ 16
-# requests in flight, not one.
+# Warm reads measure memory copies, not the disk. If warm is several GB/s and cold is not, the page cache did the
+# work.
+#
+# On a local NVMe, parallel reads are usually faster than a single stream. On a network disk (a cloud boot disk, a
+# FUSE mount of an object store), parallel reads are necessary. This is Little's law again. An object store serves
+# each range request after a first-byte latency. Thus it needs $\text{target} \times \text{latency} \div \text{request size}$
+# requests in flight (see `loading.streams_needed` and roofline-core Ex 4.2, which calculates this number). For
+# 5 GB/s at 50 ms per 16 MB range, that is 5e9 × 0.05 ÷ 16e6 ≈ 16 requests in flight, not one.
 #
 # ## Exercise 4.3 — which measured rate belongs in the model?
 #
-# The model is the one from primer §6 (`loading.load_time`): pipelined tiers run at the slowest
-# tier's rate. The judgement is which of your measurements *is* that tier. The lab's disk → GPU
-# loader (`make_file_to_device`, section 3) reads the file with **one** sequential stream, cold on a
-# new node — so its disk tier is the cold, one-thread `load.read` row, not the fastest row in the
-# table (a 4-thread `pread` or, worse, a warm read would flatter the prediction). Write
-# `loader_disk_rate(measurements)`: the best-sample bytes/s of that row, or `None` if there is none.
+# The model is the model from primer §6 (`loading.load_time`). Pipelined tiers run at the rate of the slowest tier.
+# The decision is which of your measurements *is* that tier. The lab's loader from disk to GPU
+# (`make_file_to_device`, section 3) reads the file with **one** sequential stream, cold on a new node. Thus its disk
+# tier is the cold, one-thread `load.read` row, not the fastest row in the table. A 4-thread `pread`, or a warm read,
+# which is worse, makes the prediction look better than it is.
+#
+# Write `loader_disk_rate(measurements)`. It returns the best-sample bytes/s of that row, or `None` if there is no
+# such row.
 
 # %% exercise
 def loader_disk_rate(measurements):
@@ -208,10 +218,10 @@ print(f"✅ the loader's disk tier on this machine: {si(disk_bw, 'B/s') if disk_
 # %% [markdown]
 # ## 3 · To the GPU (T1)
 #
-# On a GPU host the last hops are host RAM → PCIe → HBM, from a **pinned** buffer so the copy engine
-# can DMA it. The lab's loader double-buffers: while chunk $i$ is copied to the GPU, chunk $i+1$ is
-# read into the other pinned buffer — a two-stage pipeline, so the time should approach the slower
-# stage, not the sum.
+# On a GPU host, the last hops go from host RAM through PCIe to HBM. They start from a **pinned** buffer, so that the
+# copy engine can do a DMA from it. The lab's loader uses two buffers. While the loader copies chunk $i$ to the GPU,
+# it reads chunk $i+1$ into the other pinned buffer. This is a two-stage pipeline. Thus you can expect a time near the
+# time of the slower stage, not the sum.
 
 # %%
 link = transfer.host_link(be.describe().get("name") if be.is_gpu else None)
@@ -246,19 +256,20 @@ else:
               "pipeline, with the PCIe generation and width nvidia-smi reports.")
 
 # %% [markdown]
-# If the measured pipeline lands near the pipelined model, double-buffering works and the disk is the
-# bottleneck; near the store-and-forward sum, the two stages are not overlapping (the reader waits for
-# the copy engine, or the copy waits for the reader). A loader that reads with several threads (a
-# `pread`-style reader, or a streaming loader for object stores) would move the disk tier to the
-# faster rows of section 2 — which is the next exercise.
+# If the measured pipeline is near the pipelined model, the two-buffer design works and the disk is the bottleneck.
+# If it is near the store-and-forward sum, the two stages do not overlap. The reader waits for the copy engine, or the
+# copy waits for the reader. A loader that reads with several threads moves the disk tier to the faster rows of
+# section 2. Examples are a `pread`-style reader, or a streaming loader for object stores. The next exercise is about
+# this choice.
 #
 # ## Exercise 4.4 — pick the loader for this disk
 #
-# From your cold measurements, choose how a loader on this machine should read: write
-# `pick_loader(measurements)` → `(method, threads)`. Take the fastest **cold** row, but keep the
-# simple one-stream `("read", 1)` unless the winner beats it by more than 20% — extra threads and
-# memory maps are complexity you should only pay for when the disk rewards them. Return `None` if
-# there are no cold rows.
+# From your cold measurements, select how a loader on this machine reads. Write `pick_loader(measurements)`. It
+# returns `(method, threads)`. Take the fastest **cold** row. But keep the simple one-stream `("read", 1)` unless the
+# fastest row is more than 20% faster than it.
+#
+# More threads and memory maps add complexity. Pay for that complexity only when the disk gives a better rate for it.
+# If there are no cold rows, return `None`.
 
 # %% exercise
 def pick_loader(measurements):
@@ -284,11 +295,15 @@ print(f"✅ this machine: {pick_loader(loads) or 'no cold rows — measure on a 
 # %% [markdown]
 # ## 4 · The cold-start budget
 #
-# A new replica pays, in order: provisioning (a VM or node), pulling the container image, loading
-# weights, and engine start-up (allocating the KV cache, compiling or capturing CUDA graphs, warm-up)
-# — primer §6.2; roofline-core Ex 4.2 budgets it from datasheet rates. Here only the weights stage
-# uses a measurement (your loader's disk tier); the other stages are **assumed round numbers**, and
-# the table says so.
+# A new replica pays for these stages, in this order (primer §6.2):
+#
+# 1. Provisioning (a VM or node).
+# 2. The pull of the container image.
+# 3. The load of the weights.
+# 4. Engine start-up: the allocation of the KV cache, the compilation or capture of CUDA graphs, and warm-up.
+#
+# roofline-core Ex 4.2 calculates this budget from datasheet rates. In this notebook, only the weights stage uses a
+# measurement (the disk tier of your loader). The other stages are **assumed round numbers**, and the table says so.
 
 # %%
 ASSUMED = {"provision_s": 60, "image_bytes": 10e9, "image_bps": 0.5e9, "init_s": 30}   # illustrative, not measured
@@ -313,24 +328,24 @@ shutil.rmtree(workdir, ignore_errors=True)       # the synthetic checkpoint is n
 # %% [markdown]
 # ## In a design review
 #
-# **The two-minute version.** "Cold start is bytes over the slowest tier plus fixed costs. For a
-# 70B model in bf16 that is 140 GB: at a cloud boot disk's few hundred MB/s it is many minutes, at a
-# local NVMe or a well-parallelised object-store stream a minute or less. I measure each tier cold
-# (a new node has an empty page cache), with enough requests in flight (Little's law), and stream
-# through the tiers so the slowest sets the pace. safetensors makes that possible — offsets up
-# front, no unpickling, zero-copy views — and FP8 weights halve the dominant term. Anything left
-# over is provisioning, image pull and engine init, which is where warm pools and image streaming
-# come in (layers 03 and 05)."
+# **The two-minute version.** "Cold start is bytes over the slowest tier, plus fixed costs. For a 70B model in bf16,
+# that is 140 GB. At the few hundred MB/s of a cloud boot disk, it is many minutes. At a local NVMe or a
+# well-parallelised object-store stream, it is a minute or less. I measure each tier cold, because a new node has an
+# empty page cache.
+#
+# "I measure with sufficient requests in flight (Little's law). I stream through the tiers, so that the slowest tier
+# sets the rate. safetensors makes that possible: offsets at the start, no unpickling, zero-copy views. FP8 weights
+# also cut the largest term in half. The other part of the time is provisioning, image pull and engine init. Warm pools and
+# image streaming are the solutions for that part (layers 03 and 05)."
 #
 # **Drills**
 #
-# 1. *New replicas of our 70B model take nine minutes. Where do you look first?* — Break it into
-#    stages. 140 GB at ~260 MB/s is nine minutes on its own, so the weights path is the suspect:
-#    measure the disk cold; move weights to a faster tier (local NVMe, a high-throughput volume,
-#    parallel range reads from the object store); stream instead of staging; consider FP8.
-# 2. *Why does a safetensors checkpoint load faster than a pickled one?* — No unpickling or object
-#    construction; the header gives every tensor's offset, so the loader can mmap, read in parallel
-#    and copy straight into pinned buffers — and loading executes no code, which is also a security
-#    property.
-# 3. *Our loader benchmark shows 12 GB/s from an NVMe rated at 7 GB/s.* — It is reading the page
-#    cache. Evict the file (or use O_DIRECT) and measure again; production cold starts are cold.
+# 1. *New replicas of our 70B model take nine minutes. Where do you look first?* Divide the time into stages.
+#    140 GB at ~260 MB/s is nine minutes alone, thus the weights path is the suspect. Measure the disk cold. Move the
+#    weights to a faster tier (local NVMe, a high-throughput volume, parallel range reads from the object store).
+#    Stream the weights, and do not stage them. Think about FP8.
+# 2. *Why does a safetensors checkpoint load faster than a pickled one?* There is no unpickling and no object
+#    construction. The header gives the offset of each tensor. Thus the loader can mmap, read in parallel and copy
+#    directly into pinned buffers. Also, the load runs no code, and this is also a security property.
+# 3. *Our loader benchmark shows 12 GB/s from an NVMe rated at 7 GB/s.* It reads the page cache. Evict the file (or
+#    use O_DIRECT). Then measure again, because cold starts in production are cold.
