@@ -1,26 +1,29 @@
 # %% [markdown]
 # # 05 · Measuring a student, and whether it is worth it
 #
-# **Tier:** T0 — CPU only, numpy, no network, under a minute. Agreement and accuracy are measured on the toy
-# models; serving costs come from a roofline decode step (an ideal bound, `distillcore.cost`, the same
-# arithmetic as `roofline.llm` and `roofline.cost`), not from hardware. Measured throughput and a real
-# agreement report are `distill-lab` notebook `05_is_the_student_worth_it` (T1).
+# **Tier:** T0, with only a CPU and numpy, no network, and less than a minute of run time. The notebook measures
+# agreement and accuracy on the toy models. The serving costs come from a roofline decode step, not from hardware. This
+# step is an ideal bound (`distillcore.cost`, the same arithmetic as `roofline.llm` and `roofline.cost`). Measured
+# throughput and a real agreement report are in `distill-lab` notebook `05_is_the_student_worth_it` (T1).
 #
 # ## The one-minute version
-# Measure a student two ways.
+# Measure a student in two ways.
 #
-# - **Agreement** with the teacher — mean $\mathrm{KL}(p_{\text{teacher}} \,\|\, p_{\text{student}})$, top-1
-#   agreement, top-k overlap — needs no labels (the same definitions quantization §8 uses for a quantized model).
+# - **Agreement** with the teacher needs no labels. Its measures are the mean
+#   $\mathrm{KL}(p_{\text{teacher}} \,\|\, p_{\text{student}})$, the top-1 agreement and the top-k overlap. These are
+#   the same definitions that quantization §8 uses for a quantized model.
 # - **Task accuracy** is what users feel, and it needs an interval (Wilson).
-# - Report both **per slice**: a student's gap hides in rare inputs and long outputs; and a student can beat its
-#   teacher on the task while agreeing with it less.
+# - Report the two **per slice**. The gap of a student hides in rare inputs and long outputs. Also, a student can be
+#   better than its teacher on the task, but agree with it less.
 #
-# Then the economics: a 1.5B student of a 32B teacher streams a twentieth of the weights and a ninth of the KV per
-# token, so under the same ITL budget it runs 16× the batch per GPU of the teacher on two H100s, at ~16× lower cost
-# per token on the roofline (96× against a teacher squeezed onto one H100, which is not a fair baseline). Against that
-# saving stands a one-off bill dominated by the teacher's tokens; break-even is days at a large daily volume and
-# months at a small one; a **cascade** sits in between. Primer: `../../PRIMER.md` §8, §9 (and §1 for the roofline
-# argument).
+# Then the economics. A 1.5B student of a 32B teacher streams a twentieth of the weights and a ninth of the KV per
+# token. Thus, under the same ITL budget, it runs 16× the batch per GPU of the teacher on two H100s. On the roofline,
+# its cost per token is ~16× lower. Against a teacher squeezed onto one H100, the ratio is 96×, but that is not a fair
+# baseline.
+#
+# Against this decrease in cost stands a one-off bill, and the teacher's tokens are most of that bill. Break-even is
+# days at a large daily volume and months at a small one. A **cascade** is an option between the teacher alone and the
+# student alone. Primer: `../../PRIMER.md` §8, §9 (and §1 for the roofline argument).
 
 # %%
 import numpy as np
@@ -52,8 +55,9 @@ for name, s in students.items():
 
 # %% [markdown]
 # ## Worked example 2 — the gap by slice, with intervals
-# Items: continue a prompt greedily for $n$ tokens; correct if every token follows the rule. "Common" prompts are
-# the 20 the students were trained from; "rare" are the other 101. Short ($n$ = 2) and long ($n$ = 8) outputs.
+# Each item: continue a prompt for $n$ tokens with greedy decode. The item is correct if every token obeys the rule.
+# The "common" prompts are the 20 that the students trained from. The "rare" prompts are the other 101. The outputs
+# are short ($n$ = 2) and long ($n$ = 8).
 
 # %%
 common = set(map(tuple, prompts))
@@ -74,14 +78,17 @@ for name, s in students.items():
               f"(95% CI {lo:.3f}–{hi:.3f})  gap {r['gap']:.3f}")
 
 # %% [markdown]
-# Every student is perfect on the common prompts — the slice a quick eval would use. The gap is in the rare
-# ones, and it grows with output length: the 8-unit student solves 85.1% of rare short items and 52.5% of rare
-# long ones (it is wrong on 6.6% of contexts, and a long output visits many). Twenty items give an interval
-# 16 points wide even at 20/20; a slice needs more items than its share of traffic suggests.
+# Every student is perfect on the common prompts. This is the slice that a fast eval uses. The gap is in the rare
+# prompts, and it increases with the output length. The 8-unit student solves 85.1% of the rare short items and 52.5%
+# of the rare long items. It is incorrect on 6.6% of the contexts, and a long output goes through many contexts.
+#
+# Twenty items give an interval 16 points wide, even at 20/20. A slice needs more items than its share of traffic
+# suggests.
 #
 # ## Worked example 3 — a student that beats its teacher
-# A weak teacher (64 units, trained on only 605 sampled tokens) is right on 95.0% of contexts. Its samples,
-# filtered by the verifier, train one student; its unfiltered samples another.
+# A weak teacher (64 units, trained on only 605 sampled tokens) is correct on 95.0% of contexts. One student trains on
+# the samples of this teacher after the verifier filters them. Another student trains on the unfiltered samples of the
+# same teacher.
 
 # %%
 ctx = C[np.random.default_rng(7).integers(0, 121, 605)]
@@ -98,16 +105,18 @@ for name, m in (("weak teacher", weak), ("student, verified samples", filt), ("s
     print(f"{name:26s} rule accuracy {E.vs_truth(m, lang)['rule_acc']:.3f}{agree}")
 
 # %% [markdown]
-# The verifier kept the teacher's right answers and dropped its mistakes, so that student is right on 97.5% of
-# contexts — more than its teacher — while agreeing with it *less* (KL 1.59 against 0.16). If the release gate
-# had been "agree with the teacher", it would have shipped the worse student.
+# The verifier kept the correct answers of the teacher and removed its mistakes. Thus that student is correct on 97.5%
+# of the contexts, which is more than its teacher. But it agrees with the teacher *less* (KL 1.59 against 0.16). If the
+# release gate is "agree with the teacher", the worse student passes the gate.
 #
 # ## Worked example 4 — what the student saves in serving
-# Decode on H100s at 2K context under a 30 ms ITL budget: the largest batch that meets it and fits in HBM, its
-# step time and throughput, and \$/M output tokens at \$11/GPU-hour on demand (verify). The 32B is costed twice: on
-# one H100, where its 65.5 GB of weights leave 6.5 GB for KV, and split over two (`K.tp_group`: ideal tensor
-# parallelism, all-reduces not counted). A roofline bound — the costs are lower bounds; carry the like-for-like
-# ratio.
+# This example decodes on H100s at 2K context under a 30 ms ITL budget. For each model, it finds the largest batch that
+# meets the budget and fits in HBM. Then it gives the step time and the throughput of that batch, and the \$/M output
+# tokens at \$11/GPU-hour on demand (verify). The example calculates the cost of the 32B two times. The first time is on
+# one H100, where its 65.5 GB of weights leave 6.5 GB for KV. The second time, the example divides the 32B over two GPUs
+# (`K.tp_group`: ideal tensor parallelism, with the all-reduces not in the count).
+#
+# Each cost is a roofline bound, thus the costs are lower bounds. Carry the like-for-like ratio.
 
 # %%
 H100 = K.GPUS["h100"]
@@ -124,15 +133,16 @@ for key in ("qwen2.5-32b", "qwen2.5-32b-tp2"):
 print(f"at a 10 ms ITL the 32B cannot serve on one H100: batch 1 takes {K.decode_step(K.SHAPES['qwen2.5-32b'], H100, 1, 2048) * 1e3:.1f} ms")
 
 # %% [markdown]
-# On one GPU the teacher runs 12 sequences and the student looks 96× cheaper; that compares the student with a
-# deployment nobody would choose. On two GPUs the teacher runs 146 and the ratio is 16×: the number to carry.
-# Everything below prices the teacher on two H100s.
+# On one GPU the teacher runs 12 sequences, and the student looks 96× lower in cost. But that compares the student with
+# a deployment that nobody selects. On two GPUs the teacher runs 146, and the ratio is 16×. This is the number to carry.
+# All the cells after this one use the cost of the teacher on two H100s.
 
 # %% [markdown]
 # ## Worked example 5 — the fixed cost, and break-even
-# 100,000 prompts × one 2,000-token teacher completion = 2 × 10⁸ tokens. Buy them from an API at $9/M output
-# (the 06 scaling lab's Gemini 3.5 Flash price, dated there, verify) or generate them on the self-hosted 32B at
-# its roofline cost; then SFT the 1.5B student for one epoch at 6·N·D FLOPs on an H100 at 40% MFU.
+# 100,000 prompts × one 2,000-token teacher completion = 2 × 10⁸ tokens. Buy them from an API at $9/M output, or
+# generate them on the self-hosted 32B at its roofline cost. The API price is the Gemini 3.5 Flash price of the 06
+# scaling lab, dated there (verify). Then train the 1.5B student with SFT for one epoch, at 6·N·D FLOPs on an H100 at
+# 40% MFU.
 
 # %%
 for label, price in (("API teacher", 9.00), ("self-hosted 32B", T_PER_M)):
@@ -145,16 +155,22 @@ for label, price in (("API teacher", 9.00), ("self-hosted 32B", T_PER_M)):
 fixed = K.fixed_cost(100_000, 1, 2000, T_PER_M, K.SHAPES["qwen2.5-1.5b"].params(), H100, 11)["total_usd"]
 
 # %% [markdown]
-# The teacher's tokens are 93% of the bill self-hosted and 99% through the API; the student's training is an hour
-# of one GPU. That is why the data budget (§3) — prompts × samples × tokens, and how many the verifier discards —
-# is the number to argue about. With self-hosted data, break-even comes at roughly the volume the teacher wrote
-# for the student (2 × 10⁸ tokens here), whatever the teacher costs; API-bought data takes ten times longer. And
-# the break-even omits the engineering, the evals and the ongoing cost of a second model to maintain.
+# The teacher's tokens are 93% of the bill when self-hosted and 99% through the API. The training of the student is an
+# hour of one GPU. That is why the data budget (§3) is the number to argue about. The data budget is prompts × samples ×
+# tokens, and the number of samples that the verifier discards.
+#
+# With self-hosted data, break-even comes at roughly the volume that the teacher wrote for the student (2 × 10⁸ tokens
+# here). This is true at any cost of the teacher. API-bought data takes ten times longer. Also, the break-even omits the
+# work of the engineers, the evals and the continuous cost to maintain a second model.
 #
 # ## Worked example 6 — the cascade
-# Route by difficulty instead of replacing the teacher. Per request (500 output tokens at the costs above) and
-# with illustrative accuracies — easy requests (70%) student 0.95, teacher 0.97; hard ones (30%) student 0.30,
-# teacher 0.85, the split rl-and-thinking-models §7 uses — compare cost per correct answer.
+# Route by difficulty instead of a replacement of the teacher. Each request has 500 output tokens at the costs of worked
+# example 4. The accuracies are illustrative:
+#
+# - Easy requests (70%): student 0.95, teacher 0.97.
+# - Hard requests (30%): student 0.30, teacher 0.85.
+#
+# This is the split that rl-and-thinking-models §7 uses. Compare the cost per correct answer.
 
 # %%
 c_t, c_s = 500 * T_PER_M / 1e6, 500 * serve["qwen2.5-1.5b"]["usd_per_m"] / 1e6
@@ -176,7 +192,7 @@ for name, r in options.items():
 # \text{half-width } \frac{z\,\sqrt{p(1 - p)/n + z^2/4n^2}}{1 + z^2/n},
 # $$
 #
-# clipped to [0, 1]; return (0, 1) when $n$ = 0.
+# Clip the interval to [0, 1]. Return (0, 1) when $n$ = 0.
 
 # %% exercise
 def wilson(k, n, z=1.96):
@@ -196,8 +212,8 @@ print(f"✅ 20/20 proves only ≥ {wilson(20, 20)[0]:.3f}; 0/20 allows up to {wi
 
 # %% [markdown]
 # ## Exercise 5.2 — top-k overlap
-# Mean over positions of $\lvert \text{top-}k(\text{ref}) \cap \text{top-}k(\text{test}) \rvert / k$ — agreement on
-# the plausible set, not just the favourite.
+# Calculate the mean over positions of $\lvert \text{top-}k(\text{ref}) \cap \text{top-}k(\text{test}) \rvert / k$.
+# This is the agreement on the plausible set, not only on the most probable token.
 
 # %% exercise
 def topk(ref, test, k):
@@ -215,9 +231,13 @@ print("✅ top-1 can disagree while the top-3 sets agree — and vice versa; rep
 
 # %% [markdown]
 # ## Exercise 5.3 — a student's cost per token from the roofline
-# For `m = K.SHAPES["qwen2.5-0.5b"]` on the H100 at 2K context and a 30 ms ITL: find the largest batch whose
-# decode step (`K.decode_step`) is ≤ 30 ms and that fits in memory (`K.max_batch`), then its tokens/s and
-# \$/M at \$11/GPU-hour. Set `batch`, `tok_s`, `usd_per_m`.
+# Use `m = K.SHAPES["qwen2.5-0.5b"]` on the H100 at 2K context and a 30 ms ITL. Find the largest batch that meets these
+# two conditions:
+#
+# - Its decode step (`K.decode_step`) is ≤ 30 ms.
+# - It fits in memory (`K.max_batch`).
+#
+# Then calculate its tokens/s and \$/M at \$11/GPU-hour. Set `batch`, `tok_s`, `usd_per_m`.
 
 # %% exercise
 m = K.SHAPES["qwen2.5-0.5b"]
@@ -235,9 +255,9 @@ print(f"✅ batch {batch} (memory-bound, not ITL-bound), {tok_s:,.0f} tok/s, ${u
 
 # %% [markdown]
 # ## Exercise 5.4 — break-even
-# Distilling a 0.5B student from the 32B teacher costs the same one-off `fixed` as above. At 20M output tokens
-# a day, after how many `days` does it pay for itself against serving the 32B on two H100s? (Use `T_PER_M` and
-# your `usd_per_m`.)
+# The distillation of a 0.5B student from the 32B teacher costs the same one-off `fixed` as in worked example 5. The
+# volume is 20M output tokens a day. After how many `days` does the student pay for itself, against the cost to serve
+# the 32B on two H100s? (Use `T_PER_M` and your `usd_per_m`.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -250,9 +270,9 @@ print(f"✅ {days:.1f} days at 20M tokens/day — before the cost of evals, of a
 
 # %% [markdown]
 # ## Exercise 5.5 — choose the gate
-# A student-first cascade with the costs and accuracies of worked example 6. Among the gates `gates`
-# (catch rate on hard requests, false-alarm rate on easy ones), pick `best_gate`: the cheapest per correct
-# answer among those whose overall accuracy is at least 0.90.
+# Use a student-first cascade with the costs and accuracies of worked example 6. Each gate in `gates` is a pair: the
+# catch rate on hard requests and the false-alarm rate on easy requests. Set `best_gate` to the gate with the lowest
+# cost per correct answer. Select only from the gates whose overall accuracy is at least 0.90.
 
 # %% exercise
 gates = [(0.6, 0.05), (0.8, 0.1), (0.9, 0.2), (0.95, 0.4), (1.0, 1.0)]
@@ -270,25 +290,26 @@ print(f"✅ gate {best_gate}: accuracy {res[best_gate]['accuracy']:.3f} at ${res
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We gate the student on two measurements. Agreement with the teacher — KL, top-1, top-k
-# on the same positions — is cheap, needs no labels and catches regressions early; task accuracy with Wilson
-# intervals, per slice, is the release gate, because the gap hides in rare inputs and long outputs and a quick eval of
-# common cases will say 100%. We do not gate on agreement alone: a verifier-filtered student can beat its teacher
-# while agreeing less.
+# **The two-minute version.** "Our gate for the student has two measurements. The first, agreement with the teacher
+# (KL, top-1 and top-k on the same positions), is low-cost, needs no labels and finds regressions early. The second is
+# task accuracy with Wilson intervals, per slice, and it is the release gate. The reason is that the gap hides in rare
+# inputs and long outputs, and a fast eval of common cases will say 100%. Agreement alone is not our gate, because a
+# verifier-filtered student can be better than its teacher but agree with it less.
 #
-# "The case for the student is the roofline: at a 2K context and a 30 ms ITL a 1.5B serves 16× the batch per GPU of a
-# 32B on two H100s, ~16× cheaper per token on the bound (the 96× against a 32B squeezed onto one H100 is not a fair
-# baseline). The one-off cost is mostly teacher tokens; with self-hosted data, break-even is days at 50M tokens a day
-# and weeks at 5M.
+# "The case for the student is the roofline. At a 2K context and a 30 ms ITL, a 1.5B serves 16× the batch per GPU of a
+# 32B on two H100s. On the bound, its cost per token is ~16× lower. The 96× against a 32B squeezed onto one H100 is not
+# a fair baseline. The one-off cost is mostly teacher tokens. With self-hosted data, break-even is days at 50M tokens a
+# day and weeks at 5M.
 #
-# "If the student is only good enough on easy requests, we cascade: student first, a gate escalates the hard ones, and
-# we tune the gate's recall on cost per correct answer."
+# "If the student is only sufficiently good on easy requests, we use a cascade. The student goes first, and a gate sends
+# the hard requests on to the teacher. We adjust the recall of the gate to get the lowest cost per correct answer."
 #
 # **Drill questions**
-# 1. *The student agrees with the teacher on 99% of tokens. Ship it?* — Not on that alone: agreement is averaged
-#    over common positions. Check task accuracy with intervals on the rare and long slices; that is where it fails.
-# 2. *Where does a distillation budget go?* — The teacher's tokens (here \$178 of \$192 self-hosted, \$1,800 of \$1,814
-#    via an API); training the student was 1.3 GPU-hours. Cut samples the verifier will reject before generating more.
-# 3. *Distil, or route easy traffic to a cheaper off-the-shelf model?* — If an off-the-shelf model meets the easy
-#    slice, routing costs no training; distil when no such model exists for your task or the volume makes the
-#    per-token saving dominate (primer §9's decision table).
+# 1. *The student agrees with the teacher on 99% of tokens. Ship it?* Not on that alone. The agreement is an average
+#    over common positions. Examine the task accuracy with intervals on the rare and long slices. That is where it fails.
+# 2. *Where does a distillation budget go?* To the teacher's tokens (here \$178 of \$192 self-hosted, \$1,800 of
+#    \$1,814 through an API). The training of the student was 1.3 GPU-hours. Before you generate more samples, remove
+#    the samples that the verifier will reject.
+# 3. *Distil, or route easy traffic to a lower-cost off-the-shelf model?* If an off-the-shelf model meets the easy
+#    slice, the routing costs no training. Distil when no such model exists for your task. Also distil when the volume
+#    makes the decrease in cost per token dominate (primer §9's decision table).

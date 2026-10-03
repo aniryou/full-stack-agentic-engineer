@@ -310,6 +310,30 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   Not done: docstrings and code comments, and a check against the STE dictionary proper (the linter is heuristic; the
   verifiers read for meaning). **Baseline unchanged: 385 notebooks.**
 
+- **2026-10-03 — the other chapters in STE, layer by layer (in progress).** The same experiment, run over every
+  other layer with `tools/orchestration/ste_rewrite_workflow.js` (one Workflow per layer: a rewriter per file group,
+  an adversarial verifier against `git show HEAD:`, a fixer and a re-check, up to two rounds; the groups come from a
+  per-layer inventory of Markdown files, percent-format notebook sources, hand-written notebooks and the builders that
+  hold their prose in strings). The brief `STE100-STYLE.md` now covers all layers (pinned test fragments, percent
+  sources, generated sections, technical names by layer, document types) and `ste_lint.py` lints `notebooks_src/*.py`
+  and skips a layer README's generated Colab section and indented code blocks. Rules that held on every layer: a
+  fragment that a core's `tests/test_primer_numbers.py` (or `test_touched.py`, `test_workload.py`, `test_occupancy.py`,
+  `test_docs.py`, `test_scalelab.py`) pins stays verbatim inside its STE sentence, dashes and arrows included, and a
+  quotation (a log line, a paper title, a classic example sentence) keeps its contractions and modals; the linter
+  reports those, and they are the errors left. The percent-source builders' banner cell lost its dash ("Exercise cells
+  contain `# YOUR CODE HERE`. Replace it, then run the Check cell below it."), so every percent lab's notebooks were
+  rebuilt once. **Layer 00** (31 groups, about 117k words: the distillation, MoE, RL-and-thinking, transformer,
+  capacity-planning and model-landscape primers, every README and deploy note, 50 notebook sources, the two
+  hand-written notebook labs and the transformers builder): 154 agents in 5.7 hours; the verifiers compared 9,774
+  sentences in round 1 and raised 20 blocking, 103 major and 324 minor findings; the fixers applied 591 and rejected 7;
+  the eight findings still open after round 3 (a (verify) tag whose scope had shrunk, a lost tag in a deploy README, an
+  unclear "Its", a cause read as a time, a weakened "dominates", a seven-sentence paragraph, an unclear "It") were
+  applied by hand at integration, one of them re-shaped when the suggested merge broke the 25-word rule, and one
+  split was reverted because a test pinned the long sentence. All eight labs' tests pass (moe-core 74, moe-lab 113,
+  distill-core 85, distill-lab 190, rl-core 64, thinking-lab 92, transformers 13, capacity 10), the cross-topic number
+  tests pass, every builder and the injector are no-ops, `mkdocs.yml` is unchanged and the strict site build and the
+  link check pass. **Baseline unchanged: 385 notebooks.**
+
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and
   `long-running-durable/lra-gcp/docs/primer.md` the only lra primer (the byte-identical twins were removed).

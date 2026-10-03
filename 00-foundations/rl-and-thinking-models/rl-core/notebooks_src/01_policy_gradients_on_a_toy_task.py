@@ -1,25 +1,32 @@
 # %% [markdown]
 # # 01 · Policy gradients on a toy task
 #
-# **Tier:** T0 — CPU only, numpy, no network, well under a minute. A table of softmaxes stands in for the
-# network, so every expectation can also be computed *exactly* by enumerating all 256 possible outputs. The same
-# loop on a real (tiny) transformer is `thinking-lab` notebook `01_grpo_on_a_tiny_transformer`.
+# **Tier:** T0: CPU only, numpy, no network, well under a minute. A table of softmaxes replaces the network.
+# Thus you can also calculate each expectation *exactly*: enumerate all 256 possible outputs. The same loop on a
+# real (small) transformer is the `thinking-lab` notebook `01_grpo_on_a_tiny_transformer`.
 #
 # ## The one-minute version
-# A language model is a **policy**: at each position it picks a token from $\pi(a \mid s)$. A completion is a
-# trajectory, and its log-probability is the sum of its tokens'.
+# A language model is a **policy**. At each position, it selects a token from $\pi(a \mid s)$. A completion is a
+# trajectory. Its log-probability is the sum of the log-probabilities of its tokens.
 #
-# - RL for LLMs is **sample, score, reweight**: sample completions, score each one (here with a verifier), then
-#   push up the log-probability of completions that scored above a **baseline** and push down the rest —
+# - RL for LLMs is **sample, score, reweight**. It samples completions and scores each one (here with a
+#   verifier). Then it increases the log-probability of the completions that scored above a **baseline**, and
+#   decreases the log-probability of the other completions. The formula is
 #   $\nabla \mathbb{E}[R] = \mathbb{E}[(R - b)\,\nabla \log \pi(y)]$ (REINFORCE). The baseline changes the noise,
-#   never the direction.
+#   but never the direction.
 # - A **KL penalty** to the frozen reference, $R - \beta \log(\pi/\pi_{\text{ref}})$, gives the optimum a closed
-#   form, $\pi^* \propto \pi_{\text{ref}} \exp(R/\beta)$: RL reweights what the model already does.
-# - And RL optimises **exactly the reward you wrote** — a verifier with a loophole gets exploited, and whatever
-#   the reward does not charge for (thinking length) grows.
+#   form: $\pi^* \propto \pi_{\text{ref}} \exp(R/\beta)$. In other words, RL reweights what the model already does.
+# - Also, RL optimises **exactly the reward you wrote**. If the verifier has a loophole, RL uses it. Anything
+#   that the reward does not charge for (thinking length) grows.
 #
-# After this notebook you can derive the gradient, say why the baseline matters, compute the KL-regularised
-# optimum, and predict what RL does to a buggy verifier and to an uncharged length. Primer: `../PRIMER.md` §1–§2.
+# After this notebook, you can do these tasks:
+#
+# - Derive the gradient.
+# - Tell why the baseline is important.
+# - Calculate the KL-regularised optimum.
+# - Predict what RL does to a buggy verifier and to a length that the reward does not charge for.
+#
+# Primer: `../PRIMER.md` §1–§2.
 
 # %%
 import math
@@ -37,8 +44,8 @@ def bar(x, width=40):
 
 # %% [markdown]
 # ## Worked example 1 — a task with a verifier
-# The policy emits 8 tokens, `(` or `)`. A deterministic check says whether the string is balanced. There is no
-# reward model and nothing to learn about the reward: the verifier *is* the specification.
+# The policy writes 8 tokens. Each token is `(` or `)`. A deterministic check tells if the string is balanced.
+# There is no reward model, and there is nothing to learn about the reward. The verifier *is* the specification.
 
 # %%
 for s in ([0, 1, 0, 0, 1, 1, 0, 1], [0, 0, 1, 1, 1, 0, 0, 1], [1, 0, 0, 1, 0, 1, 1, 0]):
@@ -48,9 +55,10 @@ print(f"a uniformly random policy is right {task.random_success_rate():.1%} of t
 
 # %% [markdown]
 # ## Worked example 2 — the policy, a sample and its log-probability
-# The policy's state is (position, depth), plus one "broken" state for prefixes that already went below zero —
-# the policy only needs what the verifier will look at. `sample` draws tokens one at a time, as an engine does;
-# `token_logprobs` is what an engine returns as logprobs; the completion's log-probability is their sum.
+# The state of the policy is (position, depth). There is also one "broken" state for prefixes that already went
+# below zero. The policy needs only what the verifier will look at. `sample` draws tokens one at a time, as an
+# engine does. `token_logprobs` is what an engine returns as logprobs. The log-probability of the completion is
+# their sum.
 
 # %%
 rng = np.random.default_rng(0)
@@ -62,9 +70,9 @@ print(f"log π(y) = {base.token_logprobs(traj).sum():.3f} = 8·log(1/2) = {8 * m
 
 # %% [markdown]
 # ## Worked example 3 — pretrain → SFT → RL
-# Post-training in miniature. **SFT** is maximum likelihood on demonstrations: two gradient steps on the 14
-# balanced strings give a weak reference model, right 29.7% of the time. Then **RL**: sample 16 completions,
-# score them, reweight, repeat.
+# This is post-training on a small scale. **SFT** is maximum likelihood on demonstrations. Two gradient steps on
+# the 14 balanced strings give a weak reference model. This model is correct 29.7% of the time. Then the notebook
+# does **RL**: it samples 16 completions, scores them, reweights, and repeats.
 
 # %%
 demos = [task.as_trajectory(s) for s in seqs if task.verify(s)]
@@ -81,14 +89,16 @@ print(f"after RL: P(balanced) = {pg.expected(pol, task, task.verify):.3f} exactl
       f"KL(π‖π_ref) = {pg.kl_seq(pol, ref, task):.2f} nats")
 
 # %% [markdown]
-# Every step is the same three moves: sample (inference), score (the verifier), reweight (one gradient step).
-# In a real system the first move is an inference engine generating thousands of long completions — which is
-# where most of the compute goes (primer §1, notebook 03).
+# Each step has the same three moves: sample (inference), score (the verifier), reweight (one gradient step). In
+# a production system, the first move is an inference engine that samples thousands of long completions. Most of
+# the compute goes to this move (primer §1, notebook 03).
 #
 # ## Worked example 4 — why the baseline
-# REINFORCE's estimate is unbiased with any baseline $b$ that does not depend on the sample, because
-# $\mathbb{E}[\nabla \log \pi(y)] = 0$. What changes is the variance. Measure it at the start of a ThinkTask run,
-# then add a constant +5 to every reward: no information at all — but without a baseline it multiplies the noise.
+# The REINFORCE estimate is unbiased with any baseline $b$ that does not depend on the sample. The reason is
+# $\mathbb{E}[\nabla \log \pi(y)] = 0$. What changes is the variance.
+#
+# Measure the variance at the start of a ThinkTask run. Then add a constant +5 to each reward. This constant
+# gives no information at all. But without a baseline, it multiplies the noise.
 
 # %%
 think = ThinkTask(e0=0.8, q=0.15, max_think=16)
@@ -99,14 +109,16 @@ for off in (0.0, 5.0):
     print(f"reward offset {off:+.0f}:  variance without baseline {v['none']:.3f}   with the batch mean {v['mean']:.3f}")
 
 # %% [markdown]
-# The batch-mean baseline is what GRPO uses (its group *is* the batch for one prompt, notebook 03). PPO learns a
-# baseline instead — a value model as large as the policy (notebook 02). Leave-one-out (RLOO) uses the mean of
-# the *other* samples: exactly $\frac{n}{n-1}$ times the mean-baseline advantage, the same direction.
+# GRPO uses the batch-mean baseline (its group *is* the batch for one prompt, notebook 03). PPO learns a baseline
+# instead. That baseline is a value model as large as the policy (notebook 02). Leave-one-out (RLOO) uses the
+# mean of the *other* samples. Its advantage is exactly $\frac{n}{n-1}$ times the mean-baseline advantage, in the
+# same direction.
 #
 # ## Worked example 5 — the KL penalty and its closed form
-# Maximise $\mathbb{E}[R] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$. Over all distributions the answer is
-# $\pi^* = \pi_{\text{ref}} \exp(R/\beta)/Z$: multiply each completion's reference probability by $\exp(R/\beta)$
-# and renormalise. Small $\beta$ → chase reward; large $\beta$ → stay home.
+# Maximise $\mathbb{E}[R] - \beta\,\mathrm{KL}(\pi \,\|\, \pi_{\text{ref}})$. Over all distributions, the answer is
+# $\pi^* = \pi_{\text{ref}} \exp(R/\beta)/Z$. Multiply the reference probability of each completion by
+# $\exp(R/\beta)$, and then renormalise. With a small $\beta$, the policy goes after the reward. With a large
+# $\beta$, the policy stays home.
 
 # %%
 ref_p = ref.sequence_probs(task, seqs)
@@ -122,13 +134,14 @@ print(f"REINFORCE with β = 0.3 reaches P = {pg.expected(leashed, task, task.ver
       f"  (closed form: {er:.3f}, {kl:.2f})")
 
 # %% [markdown]
-# $\pi^*$ can only move mass among completions $\pi_{\text{ref}}$ already produces: a completion with
-# $\pi_{\text{ref}}(y) = 0$ stays at 0 for every $\beta$. That is the precise sense in which RL "sharpens" rather
-# than invents — and the formula DPO inverts in notebook 02.
+# $\pi^*$ can move mass only among the completions that $\pi_{\text{ref}}$ already produces. A completion with
+# $\pi_{\text{ref}}(y) = 0$ stays at 0 for every $\beta$. This is the precise sense in which RL "sharpens" and
+# does not invent. The closed form of $\pi^*$ is also the formula that DPO inverts in notebook 02.
 #
 # ## Worked example 6 — reward hacking: RL finds the verifier's bug
-# `buggy_verify` returns *pass* the moment depth goes negative (think of a test harness that counts an early
-# `sys.exit(0)` as success). The SFT reference passes it 72.7% of the time but is right only 29.7%.
+# `buggy_verify` returns *pass* as soon as the depth goes negative (think of a test harness that counts an early
+# `sys.exit(0)` as a success). The SFT reference passes this check 72.7% of the time. But it is correct only
+# 29.7% of the time.
 
 # %%
 buggy = SeqTask("brackets", 8, verifier="buggy")
@@ -146,19 +159,22 @@ pi_b, _, _ = pg.kl_optimal(ref_p, np.array([task.buggy_verify(s) for s in seqs])
 print(f"closed-form π* for the buggy reward at β = 0.3: truly balanced {pi_b @ R:.3f}")
 
 # %% [markdown]
-# The reward went *up* while correctness went *down*: at depth 0, `)` is an instant pass, so every state
-# learns it. With $\beta$ = 0 every policy that always passes is optimal, and gradient ascent reaches the one that
-# is easiest to reach — the loophole. The KL-regularised optimum multiplies *every* passing string by the same
-# $\exp(1/\beta)$, so it keeps the reference's share of honest strings among those that pass; RL with $\beta$ = 0.3
-# heads there. A leash, not a fix: the fix is the verifier (and evals that measure the true objective, not the
-# training reward).
-# R1's authors kept rewards rule-based for exactly this reason — a learned reward model is a bigger loophole
-# (notebook 02).
+# The reward went *up* while the correctness went *down*. At depth 0, `)` is an instant pass, thus every state
+# learns it. With $\beta$ = 0, every policy that always passes is optimal. Gradient ascent reaches the policy
+# that is easiest to reach: the loophole.
+#
+# The KL-regularised optimum multiplies *every* string that passes by the same $\exp(1/\beta)$. Thus it keeps the
+# share of honest strings that the reference has among the strings that pass. RL with $\beta$ = 0.3 goes toward
+# that optimum. The KL penalty is a leash, not a solution. The solution is the verifier (and evals that measure
+# the true objective, not the training reward).
+#
+# The authors of R1 kept the rewards rule-based for exactly this reason. A learned reward model is a larger
+# loophole (notebook 02).
 #
 # ## Worked example 7 — RL lengthens whatever it does not pay for
-# `ThinkTask`: the policy emits "think" tokens until it answers; $P(\text{correct} \mid L) = 1 - 0.8 \cdot 0.85^L$.
-# Start from a policy that answers at once half the time and reward correctness only — then charge 0.02 per
-# thinking token.
+# In `ThinkTask`, the policy writes "think" tokens until it answers.
+# $P(\text{correct} \mid L) = 1 - 0.8 \cdot 0.85^L$. Start from a policy that answers at once half of the time.
+# First, reward only the correctness. Then charge 0.02 per thinking token.
 
 # %%
 for cost in (0.0, 0.02):
@@ -170,10 +186,10 @@ for cost in (0.0, 0.02):
           f"accuracy {ex['accuracy']:.3f} (optimum L* = {t.optimal_length():.1f})")
 
 # %% [markdown]
-# With no cost, thinking grows toward the cap — the toy version of the response-length growth DeepSeek-R1-Zero
-# reported (primer §5). With a per-token cost it grows only while a token of thought buys more accuracy than it
-# costs. Lengths move slowly in this table-of-softmaxes policy (each position learns only once it is reached);
-# the direction is the lesson.
+# With no cost, the thinking length grows toward the cap. This is the toy version of the growth in response
+# length that DeepSeek-R1-Zero reported (primer §5). With a per-token cost, the length grows only while a token of
+# thought buys more accuracy than it costs. Lengths move slowly in this table-of-softmaxes policy (each position
+# learns only after the policy reaches it). The direction is the lesson.
 #
 # ## Exercise 1.1 — the softmax gradient
 # For one state with logits `theta_row`, return $\partial \log \pi(a)/\partial \theta$ as a vector:
@@ -201,7 +217,7 @@ print("✅ ∂log π(a)/∂θ = onehot(a) − π: it sums to zero, so raising on
 
 # %% [markdown]
 # ## Exercise 1.2 — the REINFORCE estimator
-# Given a batch of trajectories, return the batch-mean-baseline estimate
+# For a batch of trajectories, return the batch-mean-baseline estimate
 #
 # $$
 # \frac{1}{N} \sum_i (R_i - \operatorname{mean} R)\, \nabla \log \pi(y_i).
@@ -228,10 +244,13 @@ print("✅ REINFORCE with a baseline; a batch where every sample scores the same
 
 # %% [markdown]
 # ## Exercise 1.3 — predict the pass rates before sampling
-# A uniformly random policy. How many of the 256 strings are balanced (`n_balanced`)? How many pass the buggy
-# check (`n_buggy`)? Counting facts you may use: balanced strings of ${2n}$ brackets number the Catalan number
-# $\binom{2n}{n}/(n + 1)$; strings of length ${2n}$ that *never* go below zero number $\binom{2n}{n}$. The buggy check
-# passes every string that does go below zero, plus the balanced ones.
+# The policy is uniformly random. How many of the 256 strings are balanced (`n_balanced`)? How many pass the
+# buggy check (`n_buggy`)? You can use these facts about counts:
+#
+# - The number of balanced strings of ${2n}$ brackets is the Catalan number $\binom{2n}{n}/(n + 1)$.
+# - The number of strings of length ${2n}$ that *never* go below zero is $\binom{2n}{n}$.
+#
+# The buggy check passes every string that does go below zero, and also the balanced strings.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -245,9 +264,9 @@ print(f"✅ {n_balanced}/256 balanced; {n_buggy}/256 pass the buggy check — th
 
 # %% [markdown]
 # ## Exercise 1.4 — the KL-regularised optimum
-# Write `kl_opt(ref_p, R, beta)` returning `(pi, expected_R, kl)` with $\pi^* = \pi_{\text{ref}} \exp(R/\beta)/Z$
-# and $\mathrm{KL}(\pi^* \,\|\, \pi_{\text{ref}})$ computed directly. Then choose `beta_for_08`: the largest
-# $\beta$ in `grid` whose $\pi^*$ is balanced at least 80% of the time.
+# Write `kl_opt(ref_p, R, beta)`. It must return `(pi, expected_R, kl)`, with
+# $\pi^* = \pi_{\text{ref}} \exp(R/\beta)/Z$. Calculate $\mathrm{KL}(\pi^* \,\|\, \pi_{\text{ref}})$ directly. Then
+# select `beta_for_08`. This is the largest $\beta$ in `grid` whose $\pi^*$ is balanced at least 80% of the time.
 
 # %% exercise
 def kl_opt(ref_p, R, beta):
@@ -273,10 +292,10 @@ print(f"✅ β = {beta_for_08}: P(balanced) {kl_opt(ref_p, R, 0.3)[1]:.3f} at a 
 
 # %% [markdown]
 # ## Exercise 1.5 — predict the optimal thinking length
-# With $P(\text{correct} \mid L) = 1 - e_0 (1 - q)^L$ and a cost $c$ per thinking token,
-# $\text{reward} = P(\text{correct} \mid L) - c L$. Set the derivative to zero and solve for $L^*$ (a real
-# number). Then find the best *integer* $L$ by evaluating the reward at the integers around it. Use $e_0$ = 0.8,
-# $q$ = 0.1, $c$ = 0.01.
+# Let $P(\text{correct} \mid L) = 1 - e_0 (1 - q)^L$, and let the cost per thinking token be $c$. Then
+# $\text{reward} = P(\text{correct} \mid L) - c L$. Set the derivative to zero. Solve for $L^*$ (a real number).
+# Then find the best *integer* $L$: calculate the reward at the integers around $L^*$. Use $e_0$ =
+# 0.8, $q$ = 0.1, $c$ = 0.01.
 
 # %% exercise
 e0, q, c = 0.8, 0.1, 0.01
@@ -292,10 +311,11 @@ print(f"✅ L* = {L_star:.2f} → think 20 tokens: past that, a token of thought
 
 # %% [markdown]
 # ## Exercise 1.6 — what the leash preserves
-# Under the buggy reward `Rb`, $\pi^* = \pi_{\text{ref}} \exp(R_b/\beta)/Z$ multiplies every passing string by the
-# same factor. Predict `limit_true`, $\pi^*$'s probability of a truly balanced string as $\beta \to 0$, from the
-# reference alone. Compare it with the unregularised run of worked example 6 (4.9%). Then set `fix` to the change
-# that removes the problem rather than bounding it: `"raise beta"`, `"fix the verifier"` or `"train longer"`.
+# Under the buggy reward `Rb`, $\pi^* = \pi_{\text{ref}} \exp(R_b/\beta)/Z$ multiplies every string that passes by
+# the same factor. Predict `limit_true` from the reference alone. `limit_true` is the probability that $\pi^*$
+# gives to a truly balanced string as $\beta \to 0$. Compare it with the unregularised run of worked example 6
+# (4.9%). Then set `fix` to the change that removes the problem, not only bounds it. The options are
+# `"raise beta"`, `"fix the verifier"` or `"train longer"`.
 
 # %% exercise
 Rb = np.array([task.buggy_verify(s) for s in seqs])
@@ -311,25 +331,30 @@ print(f"✅ π* keeps {limit_true:.1%} of the passing mass honest as β → 0 �
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We treat the model as a policy over tokens and a completion as a trajectory.
-# Each RL step samples completions from the current model with an inference engine, scores them — with a
-# verifier where the task allows it — and takes a gradient step that raises the log-probability of completions
-# that beat the batch baseline and lowers the rest. The baseline is there for variance: a constant in the reward
-# is invisible with one and pure noise without.
+# **The two-minute version.** "We treat the model as a policy over tokens, and a completion as a trajectory.
+# Each RL step samples completions from the current model with an inference engine. Then it scores them, with a
+# verifier where the task permits it. Then it takes a gradient step. This step increases the log-probability of
+# completions that are better than the batch baseline, and decreases the log-probability of the others.
 #
-# "We keep a frozen reference and penalise KL to it; the optimum is the reference reweighted by
-# $\exp(\text{reward}/\beta)$, so RL sharpens behaviour the SFT model already has — it will not find what the
-# model never samples. Two failure modes we design against: the policy optimises exactly the reward we wrote, so
-# any loophole in the verifier becomes the behaviour, and anything the reward does not charge for — thinking
-# length — grows. We gate on evals of the true objective, not on the training reward."
+# "The baseline is there for the variance. With a baseline, a constant in the reward is invisible. Without a
+# baseline, the constant is only noise.
+#
+# "We keep a frozen reference and penalise the KL to it. The optimum is the reference, reweighted by
+# $\exp(\text{reward}/\beta)$. Thus RL sharpens behaviour that the SFT model already has. It will not find what
+# the model never samples.
+#
+# "We design against two failure modes. First, the policy optimises exactly the reward that we wrote. Thus any
+# loophole in the verifier becomes the behaviour. Second, anything that the reward does not charge for (thinking
+# length) grows. We use evals of the true objective as the gate, not the training reward."
 #
 # **Drill questions**
-# 1. *Why does subtracting a baseline not bias the gradient?* — Because
-#    $\mathbb{E}_\pi[\nabla \log \pi(y)] = \sum_y \nabla \pi(y) = \nabla 1 = 0$, so $\mathbb{E}[b\,\nabla \log \pi] = 0$
-#    for any $b$ that does not depend on $y$.
-# 2. *Training reward went to 99% and eval accuracy fell. First hypothesis?* — Reward hacking: the reward and
-#    the objective disagree somewhere and the policy found it. Inspect high-reward samples that fail evals;
-#    fix the verifier; a larger KL coefficient only slows it.
-# 3. *What does the KL penalty buy, exactly?* — A bound on how far the policy moves, with a closed-form optimum
-#    $\pi_{\text{ref}} \exp(R/\beta)/Z$: reward is bought with KL at a rate set by $\beta$, and nothing outside
-#    $\pi_{\text{ref}}$'s support appears.
+# 1. *Why does the subtraction of a baseline not bias the gradient?* Answer: because
+#    $\mathbb{E}_\pi[\nabla \log \pi(y)] = \sum_y \nabla \pi(y) = \nabla 1 = 0$. Thus
+#    $\mathbb{E}[b\,\nabla \log \pi] = 0$ for any $b$ that does not depend on $y$.
+# 2. *The training reward went to 99%, and the eval accuracy decreased. What is the first hypothesis?* Answer:
+#    reward hacking. The reward and the objective disagree at some point, and the policy found that point.
+#    Examine the high-reward samples that fail the evals. Repair the verifier. A larger KL coefficient only
+#    decreases the speed of the hack.
+# 3. *What does the KL penalty buy, exactly?* Answer: a bound on how far the policy moves, with a closed-form
+#    optimum $\pi_{\text{ref}} \exp(R/\beta)/Z$. The policy buys reward with KL, at a rate that $\beta$ sets.
+#    Nothing outside the support of $\pi_{\text{ref}}$ appears.
