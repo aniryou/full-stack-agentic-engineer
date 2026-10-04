@@ -1,27 +1,37 @@
 # %% [markdown]
 # # 01 · The threat model: what untrusted code does when nothing stops it
 #
-# **Tier:** T0 — laptop / Colab CPU / CI, free, about a minute. Everything runs against harmless
-# stand-ins (a fake credential in a temp file, a loopback listener the notebook owns), so you can watch
-# an attack *work* without any real harm. Docker, gVisor and Kubernetes come in the lab (`../sandbox-lab`).
+# **Tier:** T0: a laptop, a Colab CPU or CI, free, about a minute. Everything runs against harmless
+# stand-ins (a fake credential in a temp file, a loopback listener that the notebook owns). Thus you can watch
+# an attack *work* and cause no real harm. Docker, gVisor and Kubernetes come in the lab (`../sandbox-lab`).
 #
 # ## The one-minute version
-# An agent is *a workload that turns untrusted text into privileged actions* (the identity primer's one line).
-# A `run_code` tool is the sharpest version of that: the model, which cannot tell instructions from data,
-# emits a program, and something runs it. If it runs with the agent's environment, home directory and network,
-# then a prompt injection is a shell on your infrastructure.
+# An agent is *a workload that turns untrusted text into privileged actions* (the one line of the identity primer).
+# A `run_code` tool is the sharpest form of that. The model cannot tell instructions from data. It emits a program,
+# and something runs that program. If the program runs with the environment, the home directory and the network of
+# the agent, a prompt injection is a shell on your infrastructure.
 #
-# This notebook makes that concrete: a small set of **probes** stands in for what a hijacked model might emit
-# — read an environment secret, read a private key, phone home, fork forever, fill the disk, spin the CPU,
-# hang, print forever, outlive the call — and you run them through the **unsandboxed** executor and see what
-# leaks. The invariant a sandbox must restore is **no ambient authority**: no credentials, no network by
-# default, no persistent filesystem.
+# This notebook makes that concrete. A small set of **probes** stands in for the programs that a hijacked model can
+# emit:
 #
-# After this you can name the blast radius of a code tool and say which control bounds each risk. Primer:
-# `../PRIMER.md` §1 (why a sandbox, the threat model). The OWASP agentic risks and the "execute code is
-# DESTRUCTIVE-tier" rule are the identity primer's
-# (`../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md` §2, §6.2) — cited, not
-# restated.
+# - read an environment secret,
+# - read a private key,
+# - phone home,
+# - fork forever,
+# - fill the disk,
+# - spin the CPU,
+# - hang,
+# - print forever,
+# - outlive the call.
+#
+# You run the probes through the **unsandboxed** executor and see what leaks. The invariant that a sandbox must
+# restore is **no ambient authority**: no credentials, no network by default, no persistent filesystem.
+#
+# After this notebook, you can name the blast radius of a code tool. You can also say which control bounds each risk.
+# Primer: `../PRIMER.md` §1 (why a sandbox, the threat model). The OWASP agentic risks and the "execute code is
+# DESTRUCTIVE-tier" rule come from the identity primer
+# (`../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md` §2, §6.2). This notebook cites
+# them and does not state them again.
 
 # %%
 from sandboxcore import PROBES, ProcessSandbox, UnsafeExecutor, run_probe
@@ -33,9 +43,9 @@ for p in PROBES:
 
 # %% [markdown]
 # ## Worked example 1 — the ambient-authority leak, unsandboxed
-# The `read_env_secret` probe reads `CLOUD_API_TOKEN`. The harness plants a fake token in the executor's
-# environment. `UnsafeExecutor` runs the code in a child that **inherits this process's environment** — the
-# default if you just `subprocess.run` model output. Watch the token come straight back.
+# The `read_env_secret` probe reads `CLOUD_API_TOKEN`. The harness puts a fake token in the environment of the
+# executor. `UnsafeExecutor` runs the code in a child that **inherits this process's environment**. That is the
+# default when you only give the model output to `subprocess.run`. Watch the token come back directly.
 
 # %%
 ue = UnsafeExecutor()
@@ -47,8 +57,8 @@ print("  (a real deployment's child would inherit AWS_*, GOOGLE_*, the metadata 
 # %% [markdown]
 # ## Worked example 2 — reaching the network, unsandboxed
 # `egress_connect` opens a socket to a host and sends bytes. The harness starts a **loopback listener it
-# owns** and points the probe at it; if the probe connects, that is the exfiltration channel working. With
-# no isolation the connection succeeds.
+# owns** and points the probe at it. If the probe connects, the exfiltration channel works. With no isolation,
+# the connection succeeds.
 
 # %%
 egress = next(p for p in PROBES if p.name == "egress_connect")
@@ -57,19 +67,22 @@ print("unsandboxed:", v.detail, "| leaked:", v.leaked)
 
 # %% [markdown]
 # ## Worked example 3 — the same code, through a process sandbox
-# Now run the whole suite through `ProcessSandbox` (notebook 02 builds it). Read its isolation report first:
-# what it can enforce depends on this machine. The environment secret is gone (clean environment) and the
-# resource abuses are stopped by limits.
+# Now run the full suite through `ProcessSandbox` (notebook 02 builds it). First, read its isolation report: the
+# controls that it can enforce depend on this machine. The environment secret is gone (clean environment). The
+# limits stop the resource abuses.
 #
-# Three probes depend on **running as a different UID**, which the sandbox can only do when it runs as root
-# (Colab, most CI): the key read (a different UID cannot open your 0700 home — pointing `HOME` at the
-# workspace hides nothing from an absolute path), the fork bomb when the sandbox runs as root (`RLIMIT_NPROC`
-# counts tasks per UID and ignores root; as a user the parent counts the run's own process tree instead) and
-# the session escape (only a per-execution UID lets the sandbox find and kill a process that left its process
-# group).
+# Three probes depend on **a different UID for the code**. The sandbox can do this only when it runs as root
+# (Colab, most CI):
 #
-# And **egress is the one thing a process sandbox never stops**, which it reports honestly. That exception is
-# why the network is a separate control (notebook 04, and NetworkPolicy in the lab).
+# - The key read. A different UID cannot open your 0700 home. When you point `HOME` at the workspace, that hides
+#   nothing from an absolute path.
+# - The fork bomb, when the sandbox runs as root. `RLIMIT_NPROC` counts tasks per UID and ignores root. When the
+#   sandbox runs as a user, the parent counts the process tree of the run instead.
+# - The session escape. Only a per-execution UID lets the sandbox find and kill a process that left its process
+#   group.
+#
+# Also, **egress is the one thing a process sandbox never stops**, and the sandbox reports this honestly. That
+# exception is the reason that the network is a separate control (notebook 04, and NetworkPolicy in the lab).
 
 # %%
 sb = ProcessSandbox()
@@ -83,17 +96,20 @@ for p in PROBES:
     print(f"{p.name:16} {v.exit_reason:14} {str(v.leaked):7} {str(v.contained):9} {v.detail[:44]}")
 
 # %% [markdown]
-# Read the table: with a per-execution UID every probe but `egress_connect` is contained; without one (not
-# root, or `drop_to_uid=None`) the key read and the escape get through too, and so does the fork bomb as root.
-# Egress is never contained here, because resource limits do not touch sockets. That is not a bug in the
-# sandbox — it is the boundary between the *process* layer and the *network* layer. Hold that thought for
+# Read the table. With a per-execution UID, the sandbox contains every probe but `egress_connect`. Without one (not
+# root, or `drop_to_uid=None`), the key read and the escape also get through. As root, the fork bomb also gets
+# through.
+#
+# Here, the sandbox never contains egress, because resource limits do not touch sockets. That is not a bug in the
+# sandbox. It is the boundary between the *process* layer and the *network* layer. Keep that thought for
 # notebook 04.
 #
 # ## Exercise 1.1 — classify the blast radius
 # For each probe, say which control bounds it. Fill `control` with one of `"clean_env"`, `"separate_uid"`,
 # `"cpu_limit"`, `"wall_timeout"`, `"file_limit"`, `"pid_limit"`, `"output_truncation"`, `"uid_sweep"`,
-# `"network_layer"`. (This is the mental map you carry into a review. Two of them are not what they look
-# like: think about what actually stops an absolute-path read, and what finds a process that left the group.)
+# `"network_layer"`. This is the mental map that you take into a review. Two of the answers are not what they look
+# like. Think about what actually stops an absolute-path read. Also think about what finds a process that left the
+# group.
 
 # %% exercise
 control = {name: None for name in ("read_env_secret", "read_ssh_key", "egress_connect", "fork_bomb",
@@ -123,9 +139,9 @@ print("✅ each risk mapped to the control that bounds it — and egress is the 
 
 # %% [markdown]
 # ## Exercise 1.2 — predict the exit reasons, then measure them
-# The `cpu_spin` probe burns CPU; the `sleep_forever` probe uses none. Both run under the harness budget
-# `cpu_s=1, wall_s=2`. Predict the exit reason (one of `contract.EXIT_REASONS`) each will end with; the check
-# runs both and compares.
+# The `cpu_spin` probe uses CPU all the time. The `sleep_forever` probe uses no CPU. Both run under the harness
+# budget `cpu_s=1, wall_s=2`. Predict the exit reason (one of `contract.EXIT_REASONS`) for each probe. The check
+# runs both probes and compares.
 
 # %% exercise
 predicted = {"cpu_spin": None, "sleep_forever": None}
@@ -142,9 +158,10 @@ print("✅ RLIMIT_CPU measures CPU seconds; blocked or sleeping code needs a wal
 
 # %% [markdown]
 # ## Exercise 1.3 — predict what gets through without a separate UID
-# A laptop user runs the sandbox as themselves; that is `ProcessSandbox(SandboxConfig(drop_to_uid=None))`.
-# Write `uncontained(sandbox)` returning the **set of probe names you expect NOT to be contained**, using
-# only the sandbox's `isolation_report()` (not by running the probes). The check runs the suite and compares.
+# A laptop user runs the sandbox as themselves. That is `ProcessSandbox(SandboxConfig(drop_to_uid=None))`.
+#
+# Write `uncontained(sandbox)`. It returns the **set of probe names that you expect the sandbox NOT to contain**.
+# Use only the `isolation_report()` of the sandbox. Do not run the probes. The check runs the suite and compares.
 # Hint: which report fields decide the key read, the fork bomb, the escape and egress?
 
 # %% exercise
@@ -176,29 +193,30 @@ print("✅ the isolation report predicts the verdicts: HOME redirection hides no
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "A code-execution tool takes untrusted, model-written programs and runs them, so
-# I treat it as the highest-risk tool there is — DESTRUCTIVE tier, in the identity primer's language.
+# **The two-minute version.** "A code-execution tool takes untrusted programs that the model writes, and runs
+# them. Thus I treat it as the highest-risk tool there is: DESTRUCTIVE tier, in the language of the identity primer.
 #
-# "The question I ask is 'if the model is fully hijacked, what can this code reach?' The answer must be: no
-# ambient credentials, because the process starts from a clean environment; no private files, because the code
-# runs as its own UID (pointing HOME somewhere else is not a boundary); nothing left behind, because the
-# workspace is thrown away and leftovers of that UID are swept; no network, because egress is denied by
-# default and only an allowlisting proxy can reach out; and no runaway resource use, because CPU, memory,
-# processes, file size and output are all bounded.
+# "The question I ask is 'if the model is fully hijacked, what can this code reach?' The answer must be as follows.
+# There are no ambient credentials, because the process starts from a clean environment. There are no private
+# files, because the code runs as its own UID. (A HOME that points to a different directory is not a boundary.)
 #
-# "I demonstrate this with a suite of harmless probes: unsandboxed they leak the token, read a key, phone home
-# and outlive the call; sandboxed with a per-execution UID, all but one are contained, and that one — egress —
-# needs the network layer, not the process limits. That last distinction is the one people get wrong."
+# "Nothing stays behind, because the sandbox discards the workspace and sweeps the leftovers of that UID. There is no
+# network, because the policy denies egress by default and only a proxy with an allowlist can reach out. There is no
+# runaway resource use, because CPU, memory, processes, file size and output all have limits.
+#
+# "I show this with a suite of harmless probes. Without a sandbox, they leak the token, read a key, phone home and
+# outlive the call. In a sandbox with a per-execution UID, the sandbox contains all but one. That one is egress, and
+# it needs the network layer, not the process limits. That last distinction is the one where people make errors."
 #
 # **Drill questions**
-# 1. *Why is 'execute code' automatically the most dangerous tool?* — It turns arbitrary model output into
-#    arbitrary computation with whatever authority the process holds; a single injection becomes code
-#    execution. The identity primer calls it DESTRUCTIVE-tier by definition.
-# 2. *A sandbox enforces CPU, memory and PID limits. Is exfiltration contained?* — No. Resource limits never
-#    touch the network; egress needs a separate control (deny-by-default + an allowlisting proxy, or a
-#    network namespace / `--network none`).
-# 3. *What is 'no ambient authority' in one line?* — The code inherits nothing: no credentials, no network,
-#    no persistent filesystem — only what the caller deliberately hands it for this one execution.
-# 4. *We set `HOME` to a temp dir, so the SSH key is safe?* — No. `HOME` only changes where `~` points; the
-#    key still opens by its absolute path. Only a different UID (or a filesystem that does not contain it:
-#    a mount namespace, a container) protects it.
+# 1. *Why is 'execute code' automatically the most dangerous tool?* It turns arbitrary model output into
+#    arbitrary computation, with all the authority that the process holds. One injection becomes code execution.
+#    The identity primer calls it DESTRUCTIVE-tier by definition.
+# 2. *A sandbox enforces CPU, memory and PID limits. Is exfiltration contained?* No. Resource limits never
+#    touch the network. Egress needs a separate control: deny-by-default and a proxy with an allowlist, or a
+#    network namespace or `--network none`.
+# 3. *What is 'no ambient authority' in one line?* The code inherits nothing: no credentials, no network,
+#    no persistent filesystem. It gets only what the caller deliberately gives it for this one execution.
+# 4. *We set `HOME` to a temp dir, so the SSH key is safe?* No. `HOME` only changes where `~` points. The
+#    key still opens by its absolute path. Only a different UID protects it, or a filesystem that does not
+#    contain it (a mount namespace, a container).

@@ -1,20 +1,22 @@
 # %% [markdown]
 # # 06 · OAuth and identity propagation
 #
-# "Secure agentic workflows with MCP, tool calling and OAuth" is one question: **when the agent calls a tool,
-# who is it acting as, and how does the system of record know?** This notebook walks the identity chain
-# hop by hop, with a toy OAuth 2.1 authorization server (HS256 JWTs, in-process — a real IdP signs
-# with asymmetric keys and publishes JWKS) and the MCP server from Notebook 05. At every hop ask the four
-# questions a design review wants answered: *what token is on the wire, who issued it, what audience, what scope
-# — and where is it validated?*
+# "Secure agentic workflows with MCP, tool calling and OAuth" is one question.
+# The question is: **when the agent calls a tool, for whom does it act, and how does the system of record know?**
+# This notebook examines the identity chain, one hop at a time.
+# It uses a toy OAuth 2.1 authorization server (HS256 JWTs, in-process) and the MCP server from Notebook 05.
+# A real IdP signs with asymmetric keys and publishes JWKS.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5 (delegation mechanics) and §7.1 (the MCP server as an OAuth 2.1 resource server).
+# At every hop, ask the four questions that a design review wants answers to.
+# *What token is on the wire, who issued it, what audience, what scope?* *And where does the validation occur?*
 #
-# In this notebook you will:
-# 1. run the MCP authorization chain: 401 → protected-resource metadata → AS metadata → PKCE → an audience-bound token;
-# 2. watch that token fail at another server, step up a scope, and get exchanged (RFC 8693) for a downstream credential
-#    that still carries the user's `sub` — then see the system of record enforce per-user ACLs on it;
-# 3. reproduce the confused deputy with a shared service account, and map verified claims onto agentlab's `Identity`.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §3.5 (delegation mechanics) and §7.1 (the MCP server as an OAuth 2.1 resource server).
+#
+# In this notebook, you will:
+# 1. Run the MCP authorization chain in this sequence: 401, protected-resource metadata, AS metadata, PKCE, then an audience-bound token.
+# 2. See that token fail at a different server. Step up a scope. Exchange the token (RFC 8693) for a downstream credential.
+#    That credential still has the user's `sub`. Then see the system of record enforce per-user ACLs on it.
+# 3. Reproduce the confused deputy with a shared service account. Map verified claims onto agentlab's `Identity`.
 
 # %%
 from agentlab.agents import InMemorySessionStore, LlmAgent, Runner, SideEffect, ToolContext, ToolPermanentError, tool
@@ -27,13 +29,14 @@ from agentlab.mcp import Forbidden, InProcessTransport, McpClient, McpServer, Un
 # %% [markdown]
 # ## 0. The cast
 #
-# * **IdP** — `AuthorizationServer("https://idp.bank.example")`, the enterprise authorization server.
-# * **assistant-app** — the agent's OAuth client (a `client_id` plus a redirect URI).
-# * **orders-mcp** — the MCP server; a *resource server* for user tokens and an OAuth client of its own when it
-#   exchanges them for downstream credentials (registered with the downstream scopes it may delegate).
-# * **ledger** — the system of record behind the MCP server. It never sees the MCP token; it sees an exchanged one.
+# * **IdP**: `AuthorizationServer("https://idp.bank.example")`, the enterprise authorization server.
+# * **assistant-app**: the OAuth client of the agent (a `client_id` and a redirect URI).
+# * **orders-mcp**: the MCP server. It is a *resource server* for user tokens.
+#   It is also an OAuth client of its own when it exchanges the user tokens for downstream credentials.
+#   Its registration has the downstream scopes that it can delegate.
+# * **ledger**: the system of record behind the MCP server. It never sees the MCP token. It sees an exchanged token.
 #
-# URLs are canonical identities: they become token audiences.
+# URLs are canonical identities. They become token audiences.
 
 # %%
 AGENT_APP_URL = "https://assistant.bank.example"
@@ -59,8 +62,8 @@ def show(title: str, token: str) -> None:
 # %% [markdown]
 # ## 1. Hop 1 — the user signs in
 #
-# Alice signs in to the assistant through SSO (OIDC). What the app holds afterwards is a token **for the app**
-# — its audience is the assistant, not any tool. Let us mint that directly (the stand-in for the login).
+# Alice signs in to the assistant through SSO (OIDC). After that, the app holds a token **for the app**.
+# Its audience is the assistant, not a tool. Mint that token directly here. This is the stand-in for the login.
 
 # %%
 app_token = authz.issue_access_token("alice", audience=AGENT_APP_URL, scope="openid profile chat")
@@ -69,9 +72,9 @@ show("app token (what the assistant holds after SSO):", app_token)
 # %% [markdown]
 # ## 2. Hop 2 — the agent calls the MCP server
 #
-# The orders server verifies tokens (`token_verifier`), knows its authorization server, and enforces a scope
-# per tool (`required_scope`). Business entitlement — *is this Alice's order?* — is checked in the tool, from
-# verified claims, never from the prompt.
+# The orders server verifies tokens (`token_verifier`) and knows its authorization server.
+# It enforces a scope for each tool (`required_scope`).
+# The tool examines the business entitlement (*is this Alice's order?*) from verified claims, never from the prompt.
 
 # %%
 @tool(required_scope="orders:read")
@@ -102,14 +105,16 @@ print("HTTP", first_401.http_status, "|", first_401.message)
 print("WWW-Authenticate:", first_401.headers["www-authenticate"])
 
 # %% [markdown]
-# The app token is a valid token from the right issuer for the right user — and it is still rejected, because
-# its **audience** is the assistant. A token is not a universal key; it is a statement *to one audience*.
-# The 401 does not just say no: it says where the server's metadata lives.
+# The app token is a valid token from the correct issuer for the correct user.
+# But the server still rejects it, because its **audience** is the assistant.
+# A token is not a universal key. It is a statement *to one audience*.
+# The 401 does more than say no. It says where the metadata of the server is.
 #
 # ## 3. The discovery chain, hop by hop
 #
-# 401 → Protected Resource Metadata (RFC 9728) → AS metadata (RFC 8414) → authorization code + PKCE with a
-# resource indicator (RFC 8707) → check `iss` (RFC 9207) → redeem the code → an audience-bound token.
+# The chain starts with the 401. Then it goes to Protected Resource Metadata (RFC 9728) and AS metadata (RFC 8414).
+# Then the client does the authorization code flow with PKCE and a resource indicator (RFC 8707), and a check of `iss` (RFC 9207).
+# Then the client redeems the code and gets an audience-bound token.
 
 # %%
 challenge = parse_www_authenticate(first_401.headers["www-authenticate"])
@@ -129,8 +134,8 @@ print("5. token response:", {k: v for k, v in token_response.items() if k != "ac
 show("   access token:", token_response["access_token"])
 
 # %% [markdown]
-# `discover_and_authorize` does the same five steps in one call. From here on the client presents the new token
-# and the server's audience check passes:
+# `discover_and_authorize` does the same five steps in one call.
+# From here on, the client presents the new token, and the audience check of the server passes:
 
 # %%
 try:
@@ -142,8 +147,8 @@ print("alice's own order:", (await mcp.call_tool("get_order", {"order_id": "ORD-
 print("bob's order:      ", (await mcp.call_tool("get_order", {"order_id": "ORD-2"}))["structuredContent"])
 
 # %% [markdown]
-# The `iss` check matters: an attacker who can redirect the browser to a look-alike authorization server would
-# otherwise obtain a code the client redeems at the real one. `authorize_with_pkce` refuses:
+# The `iss` check is important. Without it, an attacker who can redirect the browser to a look-alike authorization
+# server gets a code. Then the client redeems that code at the real server. `authorize_with_pkce` refuses:
 
 # %%
 class Impostor(AuthorizationServer):
@@ -162,8 +167,8 @@ except MixUpDetected as mixup:
 # ## 4. The same token at a different server
 #
 # The payments server trusts the same IdP and the same user. The token still fails, because the audience is the
-# orders server. This is the property that makes a stolen or leaked token useless elsewhere — and the reason
-# MCP forbids servers from accepting or forwarding tokens issued for anything else.
+# orders server. This property makes a stolen or leaked token useless at other servers.
+# It is also the reason why MCP forbids servers to accept or forward tokens issued for anything else.
 
 # %%
 payments_server = McpServer("payments", [get_order], resource_url=PAYMENTS_URL, token_verifier=authz.verify, authorization_servers=[authz.issuer])
@@ -175,8 +180,8 @@ except Unauthorized as e:
 # %% [markdown]
 # ## 5. Insufficient scope → step-up
 #
-# `cancel_order` needs `orders:write`. The server answers 403 with the scope it requires; the client re-authorizes
-# for the **union** of scopes (the user consents again) and retries.
+# `cancel_order` needs `orders:write`. The server answers 403 with the necessary scope.
+# The client authorizes again for the **union** of the scopes (the user consents again). Then it retries.
 
 # %%
 try:
@@ -191,13 +196,17 @@ print("cancel →", (await mcp.call_tool("cancel_order", {"order_id": "ORD-1"}))
 # %% [markdown]
 # ## 6. At the MCP server: exchange, never forward
 #
-# The ledger is the system of record. It accepts only tokens minted **for it** (`aud = LEDGER_URL`) and enforces
-# per-user ACLs itself. So the MCP server cannot pass the user's token through (wrong audience, and forbidden by
-# MCP anyway); it performs an RFC 8693 **token exchange**: the IdP verifies the inbound token, checks that
-# `orders-mcp` is its audience (you can exchange what you *received*, not what you observed), and issues a
-# downstream token with the **same `sub`**, the ledger as audience, and an `act` claim naming the server.
+# The ledger is the system of record. It accepts only tokens minted **for it** (`aud = LEDGER_URL`).
+# It enforces per-user ACLs itself. Thus the MCP server cannot pass the user's token through.
+# The audience is incorrect, and MCP forbids token passthrough in any case.
+# Instead, the server does an RFC 8693 **token exchange**:
 #
-# The ledger below still has a legacy `ledger:admin` path for a shared service account. Keep an eye on it.
+# - The IdP verifies the inbound token.
+# - The IdP makes sure that `orders-mcp` is the audience of that token.
+#   You can exchange what you *received*, not what you observed.
+# - The IdP issues a downstream token with the **same `sub`**, the ledger as audience, and an `act` claim that names the server.
+#
+# The ledger in the next cell still has a legacy `ledger:admin` path for a shared service account. Monitor this path.
 
 # %%
 class Ledger:
@@ -246,12 +255,14 @@ print("issued_token_type:", exchanged["issued_token_type"] == ACCESS_TOKEN_TYPE,
 # %% [markdown]
 # ## 7. The confused deputy
 #
-# Bob signs in and asks for **Alice's** account. Through the delegated path the ledger sees `sub=bob` and
-# refuses. Through the shared service account the ledger sees `sub=orders-svc` with admin scope and answers —
-# the MCP server has just been used as a confused deputy: a privileged component tricked into spending its own
-# broad credentials on behalf of a less-privileged requester. The defence is structural: the agent and the
-# server never hold credentials broader than the user they serve, and every downstream call carries the
-# requester's identity.
+# Bob signs in and asks for **Alice's** account. Through the delegated path, the ledger sees `sub=bob` and refuses.
+# Through the shared service account, the ledger sees `sub=orders-svc` with admin scope, and it answers.
+# This request just used the MCP server as a confused deputy.
+# A confused deputy is a privileged component that someone tricks.
+# The trick causes it to use its own broad credentials for a less-privileged requester.
+#
+# The defence is structural. The agent and the server never hold credentials broader than the user that they serve.
+# Every downstream call has the identity of the requester.
 
 # %%
 bob = McpClient(InProcessTransport(orders_server))
@@ -271,9 +282,9 @@ for row in ledger.log[-2:]:
 # %% [markdown]
 # ## 8. Verified claims → `Identity` → local tools
 #
-# Inside the agent runtime the same claims become a agentlab `Identity`; local tools enforce `required_scope`
-# against it exactly as the MCP server did (Notebook 01). The token rides along so a tool layer can exchange it
-# downstream — never to forward it.
+# Inside the agent runtime, the same claims become an agentlab `Identity`.
+# Local tools enforce `required_scope` against it, exactly as the MCP server did (Notebook 01).
+# The token goes with the identity, so that a tool layer can exchange it downstream. The purpose is never to forward it.
 
 # %%
 read_only = identity_from_claims(authz.verify(bob_grant.access_token, ORDERS_URL), token=bob_grant.access_token)
@@ -299,13 +310,13 @@ print("alice →", (await run_as(read_write))["content"])
 # %% [markdown]
 # ### Exercise 8.1 — implement the audience check
 #
-# A downstream service that does not hold the signing key validates tokens by **introspection** (RFC 7662):
-# it asks the IdP, which answers `{"active": false}` for anything invalid or expired, else the claims. Implement
-# `verify_by_introspection(token, audience)`:
+# A downstream service that does not hold the signing key validates tokens by **introspection** (RFC 7662).
+# It asks the IdP. The IdP answers `{"active": false}` for anything that is invalid or expired.
+# For a valid token, it answers with the claims. Write `verify_by_introspection(token, audience)`:
 #
-# * call `authz.introspect(token)`; if not `active`, raise `InvalidToken("inactive token")`;
-# * if `aud` is not `audience`, raise `WrongAudience(...)`;
-# * return the claims without the `active` key.
+# * Call `authz.introspect(token)`. If the token is not `active`, raise `InvalidToken("inactive token")`.
+# * If `aud` is not `audience`, raise `WrongAudience(...)`.
+# * Return the claims without the `active` key.
 
 # %% exercise
 def verify_by_introspection(token: str, audience: str) -> dict:
@@ -333,16 +344,17 @@ print("✅ audience, expiry and garbage all rejected; a good token yields claims
 # %% [markdown]
 # ### Exercise 8.2 — implement token exchange
 #
-# Re-implement the IdP's exchange policy in a subclass. `MyIdP.token_exchange(subject_token, audience, scope=None, *, client_id)` must:
+# Write the exchange policy of the IdP again, in a subclass. `MyIdP.token_exchange(subject_token, audience, scope=None, *, client_id)` must do these steps:
 #
-# 1. look up the caller with `self.registered_client(client_id)` and verify the subject token with `self.verify(subject_token)`;
-# 2. raise `InvalidGrant` unless the caller's `resource_url` equals the subject token's `aud` (only the recipient may exchange);
-# 3. compute the requested scopes (`scope.split()`, or the subject token's scopes when `scope` is `None`) and raise
-#    `InvalidScope` unless they are all within the subject token's scopes **or** the caller's `delegated_scopes`;
-# 4. build `act = {"sub": client_id}`, nesting the subject token's existing `act` under it if there is one;
-# 5. mint with `self.issue_access_token(sub, audience, " ".join(sorted(requested)), ttl_s=..., extra={"act": act}, client_id=client_id)`
-#    where the lifetime is `min(self.token_ttl_s, exp - now)` so the delegated token never outlives the user's;
-# 6. return `{"access_token": ..., "issued_token_type": ACCESS_TOKEN_TYPE, "token_type": "Bearer"}`.
+# 1. Find the caller with `self.registered_client(client_id)`. Verify the subject token with `self.verify(subject_token)`.
+# 2. If the `resource_url` of the caller is not equal to the `aud` of the subject token, raise `InvalidGrant`.
+#    Only the recipient can exchange the token.
+# 3. Calculate the requested scopes: `scope.split()`, or the scopes of the subject token when `scope` is `None`.
+#    If they are not all within the scopes of the subject token **or** the `delegated_scopes` of the caller, raise `InvalidScope`.
+# 4. Make `act = {"sub": client_id}`. If the subject token already has an `act`, put that `act` under the new one.
+# 5. Mint the token with `self.issue_access_token(sub, audience, " ".join(sorted(requested)), ttl_s=..., extra={"act": act}, client_id=client_id)`.
+#    The lifetime is `min(self.token_ttl_s, exp - now)`, so that the delegated token never lives longer than the token of the user.
+# 6. Return `{"access_token": ..., "issued_token_type": ACCESS_TOKEN_TYPE, "token_type": "Bearer"}`.
 
 # %% exercise
 class MyIdP(AuthorizationServer):
@@ -388,9 +400,10 @@ print("✅ same sub, nested act, bounded lifetime, recipient-only, no widening")
 # ### Exercise 8.3 — implement the step-up
 #
 # `handle_insufficient_scope(client, error, grant, subject)` receives the `Forbidden` error from the MCP client.
-# Parse its `WWW-Authenticate` header with `parse_www_authenticate`; if `error` is not `insufficient_scope`,
-# re-raise the original error. Otherwise call `authorize_with_pkce(client, grant.issuer, grant.resource, subject,
-# <current scopes ∪ required scopes>)` and return the new grant.
+# Parse its `WWW-Authenticate` header with `parse_www_authenticate`.
+# If `error` is not `insufficient_scope`, raise the original error again.
+# Otherwise, call `authorize_with_pkce(client, grant.issuer, grant.resource, subject,
+# <current scopes ∪ required scopes>)`. Then return the new grant.
 
 # %% exercise
 def handle_insufficient_scope(client, error, grant, subject):
@@ -428,8 +441,8 @@ print("✅ step-up re-authorizes for", sorted(bob_rw.scopes))
 # ### Exercise 8.4 — the ACL check in the system of record
 #
 # Close the confused-deputy hole. `StrictLedger.authorize_read(claims, account_id)` must raise `PermissionError`
-# unless `claims["sub"]` owns the account — no admin bypass, no exceptions for service accounts. (Whoever needs to
-# act for a user must arrive with that user's `sub`, via exchange.)
+# unless `claims["sub"]` owns the account. There is no admin bypass, and there are no exceptions for service accounts.
+# A component that must act for a user must come with the `sub` of that user, through an exchange.
 
 # %% exercise
 class StrictLedger(Ledger):
@@ -465,8 +478,8 @@ print("✅ ownership enforced in the system of record; the service account can n
 # %% [markdown]
 # ### Exercise 8.5 — the rule, in one sentence
 #
-# Write `the_rule`: one sentence that states where authorisation decisions happen and what the agent may never
-# hold. It should mention the system of record, the prompt, and credentials.
+# Write `the_rule`: one sentence that states where authorisation decisions occur, and what the agent must never hold.
+# Mention the system of record, the prompt and credentials in that sentence.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -484,15 +497,25 @@ print("✅", the_rule)
 # %% [markdown]
 # ## The one-minute version
 #
-# Draw the chain — user → agent → gateway → MCP server → system of record — and narrate one token per hop:
-# the app token (aud: assistant) is useless at the tool; the agent runs the discovery chain and gets a token
-# whose `aud` is the MCP server's canonical URL, with PKCE and an `iss` check on the way; the server validates
-# audience and scope and answers 403 with the scope to step up to; it never forwards that token but exchanges it
-# (RFC 8693) for a downstream credential with the same `sub` and an `act` claim; the system of record validates
-# *its* audience and enforces the user's entitlements. Two identities travel with every call: the user's
-# (what may be done) and the agent's (which tools it may reach, what audit keys on).
+# Draw the chain: user, agent, gateway, MCP server, system of record. Then describe one token for each hop:
 #
-# Then name the anti-pattern before someone else does: one shared service account for all users, or the
-# user's token passed straight through. Say why it fails — per-user authorisation is lost, audit is blind, and
-# a confused deputy is one prompt injection away — and where a legacy system with no notion of the user forces
-# you to enforce entitlements in the MCP server and state it as a limitation.
+# - The app token (aud: assistant) is useless at the tool.
+# - The agent runs the discovery chain and gets a token whose `aud` is the canonical URL of the MCP server.
+#   PKCE and an `iss` check occur during the chain.
+# - The server validates the audience and the scope. It answers 403 with the scope for the step-up.
+# - The server never forwards that token. It exchanges the token (RFC 8693) for a downstream credential
+#   with the same `sub` and an `act` claim.
+# - The system of record validates *its* audience and enforces the entitlements of the user.
+#
+# Two identities go with every call. The identity of the user tells what the system permits for that user.
+# The identity of the agent tells which tools it can reach, and what the audit uses as its key.
+#
+# Then name the anti-pattern before someone else names it: one shared service account for all users,
+# or the user's token passed straight through. Say why it fails:
+#
+# - The system loses per-user authorisation.
+# - The audit is blind.
+# - A confused deputy is one prompt injection away.
+#
+# Also say where a legacy system with no notion of the user forces you to enforce entitlements in the MCP server.
+# State this as a limitation.

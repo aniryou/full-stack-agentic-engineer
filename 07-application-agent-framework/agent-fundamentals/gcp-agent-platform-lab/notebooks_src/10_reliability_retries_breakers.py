@@ -1,17 +1,17 @@
 # %% [markdown]
 # # 10 · Reliability: retries, breakers, bulkheads, deadlines, fallbacks
 #
-# Every dependency of an agent — the model, each tool, the session store — fails sometimes.
-# The difference between a demo and a product is what happens *next*. This notebook makes the
-# standard mechanisms concrete with fake clocks and injected sleeps, so nothing waits and every
-# state transition is visible.
+# Each dependency of an agent fails sometimes: the model, each tool, the session store. The difference
+# between a demo and a product is what occurs *next*. This notebook shows the standard mechanisms in a
+# concrete form, with fake clocks and injected sleeps. Thus nothing waits, and you can see each state
+# transition.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.2 (retries, jitter, breakers, fallbacks, hedging).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.2 (retries, jitter, breakers, fallbacks, hedging).
 #
-# In this notebook you will:
-# 1. watch a naive retry refund a customer twice, then fix it with an idempotency key;
-# 2. drive a circuit breaker through closed → open → half-open → closed with a fake clock;
-# 3. compose deadlines, bulkheads and a fallback chain so a dead dependency degrades the answer instead of the agent.
+# In this notebook, you do these steps:
+# 1. Watch a simple retry refund a customer two times. Then repair it with an idempotency key.
+# 2. Move a circuit breaker through the states closed, open, half-open and closed again, with a fake clock.
+# 3. Put deadlines, bulkheads and a fallback chain together. When you do this, a dead dependency gives a degraded answer, not a dead agent.
 
 # %%
 import asyncio
@@ -44,8 +44,8 @@ async def instant_sleep(seconds):
 # ## 1. The flaky payments stub — and why a retry needs a key
 #
 # The dangerous failure is not "the call failed". It is "the call *succeeded* and the response was lost".
-# From the client's side both look like a timeout. `LossyTransport` reproduces exactly that: the operation
-# is applied, then the reply disappears.
+# From the side of the client, both look like a timeout. `LossyTransport` makes exactly that failure: it
+# applies the operation, and then the reply disappears.
 
 # %%
 class PaymentsStub:
@@ -73,9 +73,9 @@ await retry(lambda: network.send(lambda: payments.refund("O-1", 20.0)), RetryPol
 print("naive retry → ledger:", payments.ledger)
 
 # %% [markdown]
-# Two refunds for one request. The retry did exactly what it was told; the *contract* was missing.
-# `IdempotentCall` is the server-side half of that contract: the same key returns the recorded outcome
-# instead of applying the write again.
+# There are two refunds for one request. The retry did exactly what the code told it to do. The *contract*
+# was not there. `IdempotentCall` is the server-side half of that contract. The same key returns the recorded
+# outcome, and it does not apply the write again.
 
 # %%
 payments, network = PaymentsStub(), LossyTransport(lose_first=1)
@@ -88,9 +88,12 @@ print("keyed retry  → ledger:", payments.ledger, "| result:", result, "| appli
 # %% [markdown]
 # ## 2. The backoff schedule
 #
-# Retries must spread out, not pile up: each wait doubles (so a struggling dependency gets air), is
-# capped (so nobody waits forever) and carries jitter (so a thousand clients do not retry in the same
-# millisecond). `backoff_schedule` is a pure function, which is what makes it testable and printable.
+# Retries must spread out in time. They must not collect at one time. Each wait:
+# * doubles, so a dependency with problems gets time to recover,
+# * has a cap, so nobody waits forever,
+# * has jitter, so a thousand clients do not retry in the same millisecond.
+#
+# `backoff_schedule` is a pure function. This is why you can test it and print it.
 
 # %%
 def show_schedule(policy, rng_seed=0):
@@ -109,14 +112,14 @@ show_schedule(RetryPolicy(max_attempts=6, cap_s=4.0, jitter_s=0.0))
 # %% [markdown]
 # ### Exercise 2.1 — implement the schedule
 #
-# Write `my_backoff_schedule(policy, rng)` returning the delay before each retry (so `max_attempts - 1` values):
+# Write `my_backoff_schedule(policy, rng)`. It returns the delay before each retry (thus `max_attempts - 1` values):
 #
 # $$
 # \min(\mathrm{cap\_s}, \mathrm{base\_s} \cdot 2^i) + \text{rng.uniform}(0, \mathrm{jitter\_s})
 # $$
 #
-# for attempt index $i = 0, 1, \ldots$.
-# Draw the jitter with `rng.uniform` once per delay, in order, so the result matches the library for the same seed.
+# for the attempt index $i = 0, 1, \ldots$.
+# Get the jitter from `rng.uniform` one time for each delay, in order. If you do this, the result agrees with the library for the same seed.
 
 # %% exercise
 def my_backoff_schedule(policy: RetryPolicy, rng: random.Random) -> list[float]:
@@ -139,7 +142,7 @@ print("✅ schedule matches: capped, exponential, jittered")
 # ## 3. Classify before you retry
 #
 # A retry is only useful when a later attempt can see a different answer. `is_retryable` decides by type
-# (`RetryableError`, timeouts, `ToolTransientError`) or by HTTP status; everything unknown is treated as a bug.
+# (`RetryableError`, timeouts, `ToolTransientError`) or by HTTP status. It treats all unknown errors as bugs.
 
 # %%
 for exc in (RetryableError("503", status=503), asyncio.TimeoutError(), ToolTransientError("rate limited"),
@@ -149,9 +152,9 @@ for exc in (RetryableError("503", status=503), asyncio.TimeoutError(), ToolTrans
 # %% [markdown]
 # ### Exercise 3.1 — implement `classify_http`
 #
-# Return `True` for statuses worth retrying: **408, 429, 502, 503, 504**. Every other 4xx is the caller's
-# fault and permanent. Treat 500 as permanent too (it is usually deterministic; retrying deterministic
-# failures at scale is how a blip becomes an outage).
+# Return `True` for the statuses that are worth a retry: **408, 429, 502, 503, 504**. Each other 4xx is the
+# fault of the caller, and it is permanent. Treat 500 as permanent too. It is usually deterministic, and a
+# retry of deterministic failures at scale is how a short problem becomes an outage.
 
 # %% exercise
 def my_classify_http(status: int) -> bool:
@@ -167,9 +170,9 @@ print("✅ classification agrees with the library")
 # %% [markdown]
 # ## 4. The circuit breaker
 #
-# Retrying against a dependency that is *down* makes it worse: every client adds load and every request
-# waits for a timeout. A breaker counts consecutive failures, **opens** (fails fast, no call made), and after
-# a cooling period lets **one probe** through to decide whether to close again.
+# A retry against a dependency that is *down* makes the problem worse. Each client adds load, and each
+# request waits for a timeout. A breaker counts consecutive failures. Then it **opens**: it fails fast and
+# makes no call. After a recovery period, it lets **one probe** through, to decide if it closes again.
 
 # %%
 clock = FakeClock()
@@ -202,16 +205,16 @@ await attempt("call 7")
 print("metrics:", breaker.metrics)
 
 # %% [markdown]
-# Notice what the breaker bought you: call 4 cost nothing and returned instantly with a *retry-after*, and
-# the dependency saw exactly one request per cooling period while it was sick.
+# Note what the breaker gave you. Call 4 cost nothing, and it returned immediately with a *retry-after*.
+# Also, the dependency got exactly one request in each recovery period while it was not healthy.
 #
 # ### Exercise 4.1 — implement the half-open transition
 #
-# `MiniBreaker` below has the bookkeeping written for you; implement `allow()`:
+# The next cell contains `MiniBreaker`. The code that keeps its state is already there. Implement `allow()`:
 #
-# * **closed** → allow;
-# * **open** → if `recovery_timeout_s` has not elapsed since `opened_at`, refuse; otherwise move to **half_open**;
-# * **half_open** → allow exactly one probe at a time (`probe_in_flight`); refuse while a probe is running.
+# * **closed**: permit the call.
+# * **open**: if `recovery_timeout_s` has not passed since `opened_at`, refuse the call. If it has passed, move to **half_open**.
+# * **half_open**: permit exactly one probe at a time (`probe_in_flight`). Refuse a call while a probe runs.
 
 # %% exercise
 class MiniBreaker:
@@ -259,9 +262,9 @@ print("✅ half-open transition behaves")
 # %% [markdown]
 # ## 5. A bulkhead in front of a slow legacy system
 #
-# A breaker reacts to *failures*; a bulkhead reacts to *load*. It caps concurrent calls (plus a short queue)
-# so one slow system cannot hold every worker hostage — the remaining callers are told "busy" immediately
-# instead of joining a queue that only grows.
+# A breaker reacts to *failures*. A bulkhead reacts to *load*. It puts a cap on concurrent calls (and on a
+# short queue). Thus one slow system cannot block every worker. The bulkhead tells the other callers
+# "busy" immediately. They do not go into a queue that only grows.
 
 # %%
 legacy = Bulkhead(max_concurrent=2, max_queue=2, name="legacy-core")
@@ -278,9 +281,9 @@ print(f"served {len(served)} (2 at a time + 2 queued), shed {len(shed)} immediat
 # %% [markdown]
 # ## 6. Deadlines compose into a turn budget
 #
-# A timeout is a duration; a **deadline** is a point in time. If the user was promised an answer within 8 s,
-# each hop gets a *child* deadline that can never outlive the parent, and time is reserved for producing
-# the answer itself — otherwise the turn spends everything on tools and times out silently.
+# A timeout is a duration. A **deadline** is a point in time. If you promised the user an answer within 8 s,
+# each hop gets a *child* deadline. A child deadline can never end after the parent. Also, you keep time for
+# the answer itself. If you do not, the turn uses all its time on tools and times out silently.
 
 # %%
 clock = FakeClock()
@@ -309,9 +312,10 @@ print(f"  at {clock.now:4.1f}s the answer still has {turn.remaining():.1f}s (the
 # %% [markdown]
 # ## 7. The fallback chain: degrade, don't disappear
 #
-# When nothing can serve the request *now*, the honest answer is "I've queued this and will follow up" —
-# backed by a durable task, not a promise. Each step in the chain is tried in order; the result is labelled
-# `degraded` whenever the primary did not serve it, so the UI can say so and a dashboard can count it.
+# When nothing can serve the request *now*, the honest answer is "I've queued this and will follow up". That
+# answer has a durable task behind it, not a promise. The chain tries each step in order. When the primary
+# did not serve the result, the chain puts the label `degraded` on it. Then the UI can say so, and a
+# dashboard can count it.
 
 # %%
 class DownLLM(FakeLLM):
@@ -330,12 +334,12 @@ print("degraded share so far:", f"{chain.degraded_share():.0%}", "| failures per
 # %% [markdown]
 # ### Exercise 7.1 — the fallback rule
 #
-# Not every error should fall through. A smaller model cannot fix a *malformed request*, and silently
-# answering a broken request with a cheaper model hides a bug. Implement `should_fall_through(exc)`:
+# Some errors must not fall through. A smaller model cannot repair a *malformed request*. Also, a silent
+# answer to a broken request from a lower-cost model hides a bug. Implement `should_fall_through(exc)`:
 #
-# * `CircuitOpen` and `BulkheadFull` → fall through (the step is unavailable, not wrong);
-# * anything `is_retryable` (transient, timeout) → fall through;
-# * everything else (e.g. `PermanentError`, a `ValueError` from bad input) → **do not** fall through.
+# * `CircuitOpen` and `BulkheadFull`: fall through (the step is unavailable, not incorrect).
+# * anything for which `is_retryable` is true (transient, timeout): fall through.
+# * everything else (for example `PermanentError`, or a `ValueError` from bad input): **do not** fall through.
 
 # %% exercise
 def should_fall_through(exc: BaseException) -> bool:
@@ -368,10 +372,10 @@ print("✅ transient and unavailable fall through; wrong requests surface")
 # %% [markdown]
 # ## 8. A GracefulTool inside an agent: the model is told the tool is down
 #
-# The final piece: everything above wrapped around an agentlab tool. `GracefulTool` retries transient
-# failures, runs every attempt through a breaker, and when the circuit opens returns a **structured**
-# `unavailable` result whose hint tells the model what to do — instead of a stack trace, a hang, or a
-# model that keeps calling a dead tool.
+# The last part puts the mechanisms of sections 1 to 7 around an agentlab tool. `GracefulTool` retries transient
+# failures and sends each attempt through a breaker. When the circuit opens, it returns a **structured**
+# `unavailable` result. The hint in that result tells the model what to do. Thus there is no stack trace, no
+# hang, and no model that continues to call a dead tool.
 
 # %%
 legacy_calls = 0
@@ -391,15 +395,19 @@ print("what the model receives:", res.to_content())
 print("attempts against the dependency:", legacy_calls, "| breaker:", graceful.breaker.state.value)
 
 # %% [markdown]
-# Two attempts, not four: the breaker opened after the second failure and `CircuitOpen` is not retryable,
-# so the retry loop stopped. Every later call this minute is answered from the breaker without touching the dependency.
+# There were two attempts, not four. The breaker opened after the second failure, and `CircuitOpen` is not
+# retryable. Thus the retry loop stopped. The breaker answers each later call in this minute, and it does not
+# touch the dependency.
 #
 # ### Exercise 8.1 — wire it into an `LlmAgent`
 #
-# Implement `build_resilient_agent(llm, legacy_tool, clock)` returning an `LlmAgent` named `"assistant"` whose only tool
-# is `legacy_tool` wrapped in a `GracefulTool` with: breaker `failure_threshold=2, recovery_timeout_s=60` on `clock`,
-# `RetryPolicy(max_attempts=3, jitter_s=0.0)`, and `sleep=instant_sleep`. The check asserts that the *model saw the
-# "unavailable" hint* — the whole point of the pattern.
+# Implement `build_resilient_agent(llm, legacy_tool, clock)`. It returns an `LlmAgent` with the name
+# `"assistant"`. Its only tool is `legacy_tool` in a `GracefulTool` with these settings:
+# * a breaker with `failure_threshold=2, recovery_timeout_s=60` on `clock`,
+# * `RetryPolicy(max_attempts=3, jitter_s=0.0)`,
+# * `sleep=instant_sleep`.
+#
+# The check makes sure that the *model saw the "unavailable" hint*. That is the whole point of the pattern.
 
 # %% exercise
 def build_resilient_agent(llm, legacy_tool, clock) -> LlmAgent:
@@ -430,15 +438,18 @@ print("✅ the model was told the tool is down and answered honestly")
 # %% [markdown]
 # ## The one-minute version
 #
-# When asked *"what happens when a tool is down?"*, walk the layers in order and name the number each one owns:
+# When someone asks *"what happens when a tool is down?"*, go through the layers in order. Name the number
+# that each layer owns:
 #
-# * **classify** — retry 429/5xx/timeouts, never 4xx; unknown errors are bugs;
-# * **retry with capped exponential backoff + jitter**, only under an idempotency key for writes
-#   (the timeout-after-success case is the one that costs money);
-# * **circuit breaker** per dependency — fail fast, one probe per cooling period, alert on every open;
-# * **bulkhead** per slow dependency — bounded concurrency *and* a bounded queue, shed the rest;
-# * **deadlines** passed down the call chain, with time reserved for the answer;
-# * **fallback chain** that labels degraded answers and ends in a durable task, never in silence;
-# * and at the tool boundary, a structured `unavailable` result with a hint, so the *model* can tell the user the truth.
+# * **classify**: retry 429/5xx/timeouts, never 4xx. Unknown errors are bugs.
+# * **retry with capped exponential backoff + jitter**. For writes, retry only with an idempotency key. The
+#   timeout-after-success case is the one that costs money.
+# * **circuit breaker** for each dependency: fail fast, send one probe in each recovery period, and alert on
+#   each open.
+# * **bulkhead** for each slow dependency: bounded concurrency *and* a bounded queue. Refuse the rest.
+# * **deadlines** that go down the call chain, with time kept for the answer.
+# * **fallback chain** that puts a label on degraded answers and ends in a durable task, never in silence.
+# * and, at the tool boundary, a structured `unavailable` result with a hint. Then the *model* can tell the
+#   user the truth.
 #
-# The sentence that lands: *"Reliability is a property of the harness, not the model — the model only sees structured results."*
+# The key sentence: *"Reliability is a property of the harness, not the model — the model only sees structured results."*

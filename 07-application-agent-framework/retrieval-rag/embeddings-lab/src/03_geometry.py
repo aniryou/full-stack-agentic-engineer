@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 03 · The geometry of embedding spaces
-# Four phenomena you will meet in production: **anisotropy**, **hubness**, the
-# **Johnson–Lindenstrauss** guarantee behind dimension cuts, and why **SVD was
+# You will meet four phenomena in production: **anisotropy**, **hubness**, the
+# **Johnson–Lindenstrauss** guarantee behind dimension cuts, and the reason that **SVD was
 # the original Matryoshka**. *Primer §3, §7–8.*
 
 # %%
@@ -44,9 +44,9 @@ def auc_related(W):
 # %% [markdown]
 # ## Anisotropy: "everything is similar to everything"
 # Compare the mean cosine of *random* word pairs. Raw count vectors share one
-# giant frequency direction; SGNS is better; centering + dropping the top
-# principal component (*All-but-the-Top*, Mu & Viswanath 2018) fixes the rest at
-# essentially no cost to the related-vs-unrelated signal.
+# large frequency direction. SGNS is better. The *All-but-the-Top* method (Mu and
+# Viswanath 2018) centers the vectors and removes the top principal component. It
+# repairs the rest, and it costs almost nothing in the related-vs-unrelated signal.
 
 # %%
 def mean_random_cos(W, m=4000):
@@ -70,14 +70,15 @@ for name, W in candidates.items():
     print(f"{name:>24} | {mean_random_cos(W):15.3f} | {auc_related(W):.3f}")
 
 # %% [markdown]
-# Anisotropy is why a similarity of 0.7 from one model means nothing in another:
-# the *baseline* cosine differs. Thresholds must be re-tuned per model (§7).
+# Anisotropy is the reason that a similarity of 0.7 from one model means nothing in
+# another model: the *baseline* cosine is different. You must adjust the thresholds
+# again for each model (§7).
 
 # %% [markdown]
 # ## Hubness: a few points are everyone's neighbour
-# Count how often each word appears in others' top-10 ($N_{10}$). A long right tail
-# = hubs. **CSLS** (Conneau et al. 2018) rescales similarity by each point's
-# local neighbourhood density and flattens the tail.
+# Count how frequently each word appears in the top-10 of other words ($N_{10}$). A long
+# right tail shows hubs. **CSLS** (Conneau et al. 2018) rescales similarity by the
+# local neighbourhood density of each point, and this makes the tail flat.
 
 # %%
 def knn_occurrences(S, k=10):
@@ -107,9 +108,9 @@ print("biggest hubs under cosine:", hubs)
 
 # %% [markdown]
 # ## Johnson–Lindenstrauss: why dimension cuts are cheap
-# A *random* projection to $k = O(\log n / \varepsilon^2)$ dims preserves all pairwise
-# distances within $(1 \pm \varepsilon)$. No training, no data-dependence — the floor that PCA
-# and Matryoshka improve on.
+# A *random* projection to $k = O(\log n / \varepsilon^2)$ dimensions keeps all pairwise
+# distances within $(1 \pm \varepsilon)$. It needs no training and does not depend on the data.
+# It is the floor that PCA and Matryoshka improve on.
 
 # %%
 N, D = 1500, 384
@@ -132,10 +133,10 @@ plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ## SVD is the original Matryoshka
-# SVD orders dimensions by singular value, so a *prefix* of the vector is the
-# best low-rank view. Compare neighbour-list overlap when truncating to the
-# first $k$ dims vs a random $k$-dim subset. (MRL trains modern models to have
-# exactly this property — §5.)
+# SVD sorts dimensions by singular value. Thus a *prefix* of the vector is the
+# best low-rank view. Truncate the vectors to the first $k$ dimensions. Compare the
+# neighbour-list overlap with that of a random $k$-dim subset. MRL trains modern
+# models to have exactly this property (§5).
 
 # %%
 Wf = art["W_svd"]
@@ -157,7 +158,13 @@ plt.xlabel("kept dimensions"); plt.ylabel("top-10 neighbour overlap")
 plt.legend(); plt.title("truncation quality"); plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Takeaways.** (1) Measure anisotropy before trusting cosines. (2) If the same
-# chunks surface for every query, suspect hubness — CSLS/centering help. (3) JL
-# explains why 256 dims is usually plenty. (4) Dimension order matters: trained
-# (MRL) or spectral (SVD) prefixes ≫ arbitrary subsets. → `ex03.ipynb`.
+# **Takeaways.**
+#
+# 1. Measure anisotropy before you trust cosines.
+# 2. If the same chunks come up for every query, hubness is a probable cause.
+#    CSLS and centering help.
+# 3. JL explains why 256 dimensions are usually sufficient.
+# 4. Dimension order is important: trained (MRL) or spectral (SVD) prefixes ≫
+#    arbitrary subsets.
+#
+# Next, do the exercises in `ex03.ipynb`.
