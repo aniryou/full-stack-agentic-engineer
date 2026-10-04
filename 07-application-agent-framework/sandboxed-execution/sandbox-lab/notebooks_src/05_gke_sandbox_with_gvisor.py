@@ -156,8 +156,8 @@ print("✅ no token, an unbound service account, and GKE_METADATA mode — not a
 # %% [markdown]
 # ## Exercise 5.4 — size the pool and the cost per execution
 #
-# Use a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start. The warm pool of the lab is
-# **replace-after-use**. The runner deletes each pod after one execution, and the Deployment starts a
+# The inputs are a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start. The warm pool
+# of the lab is **replace-after-use**. The runner deletes each pod after one execution, and the Deployment starts a
 # replacement and makes it warm. Thus every execution holds a slot for 2 s of work *and* 45 s of warm-up.
 #
 # Return these three values:

@@ -207,7 +207,7 @@ print("   not even DNS — so the pod cannot resolve, let alone reach, an attack
 # sandbox). It also simulates the times of the Kubernetes lifecycle. Run one execution. Then make sure of
 # these three things:
 #
-# - the result has the label simulated,
+# - the result has the label "simulated",
 # - the result has a cold-start cost,
 # - a second delivery of the request with the same idempotency key does **not** run the code two times.
 

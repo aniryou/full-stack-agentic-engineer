@@ -50,7 +50,7 @@ print("credential written to a file the proxy will read; the sandbox will never 
 #
 # - `/whoami` says if the expected bearer token arrived (and never echoes it),
 # - `/data` returns a document,
-# - `/echo` reflects every request header back. This is the reflection channel that an attacker can use to
+# - `/echo` reflects every request header back, and is the reflection channel that an attacker can use to
 #   read an injected credential.
 
 # %%
@@ -197,7 +197,7 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # the proxy. It strips whatever the caller sent, injects the real key and speaks HTTPS to the upstream. Thus
 # the API authenticates the code, and the code never holds the key.
 #
-# "It keeps an allowlist of destinations by route or host. It refuses `CONNECT`, because a TLS tunnel hides
+# "The proxy keeps an allowlist of destinations by route or host. It refuses `CONNECT`, because a TLS tunnel hides
 # the request from it. It guards against SSRF: it refuses hosts that resolve to private or link-local
 # addresses. It redacts the injected secret from responses, thus an endpoint that reflects headers cannot
 # give the secret back. Every decision is one audit line, thus a denied egress or a reflected credential
@@ -218,7 +218,8 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 #
 # **Drill 2.** *The upstream is HTTPS: can the sandbox not use `CONNECT` through the proxy?* Through a
 # `CONNECT` tunnel, the proxy sees only bytes. Thus it cannot inject a credential or control the request,
-# and it can only permit or deny a hostname. Thus the proxy refuses `CONNECT` and is itself the TLS client.
+# and it can only permit or deny a hostname. For this reason, the proxy refuses `CONNECT` and is itself the
+# TLS client.
 # The sandbox sends plain HTTP to the proxy, and the proxy sends HTTPS to the upstream.
 #
 # **Drill 3.** *A default-deny NetworkPolicy already blocks egress, so why is the proxy also necessary?* The

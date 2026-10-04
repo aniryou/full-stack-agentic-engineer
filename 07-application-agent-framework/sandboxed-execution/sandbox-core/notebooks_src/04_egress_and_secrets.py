@@ -7,7 +7,7 @@
 #
 # ## The one-minute version
 # The sandbox has no network of its own and no secrets. When code legitimately needs an outside host, it talks to an
-# **egress proxy** inside the trust boundary. The proxy checks the host against an **allowlist**. For the hosts on the
+# **egress proxy** inside the trust boundary. The proxy compares the host with an **allowlist**. For the hosts on the
 # allowlist, it **injects the credential** on the way out.
 #
 # The secret lives only in the proxy. This is the same "gateway path" that the identity primer describes (the agent
@@ -250,11 +250,12 @@ print("✅ the process sandbox leaks a raw socket; every rung that owns the netw
 # %% [markdown]
 # ## In a design review
 # **The two-minute version.** "The sandbox holds no secrets and has no network. When code needs a host on the
-# allowlist, it goes through an egress proxy inside the boundary. The proxy checks the host against an allowlist and
+# allowlist, it goes through an egress proxy inside the boundary. The proxy compares the host with an allowlist and
 # injects the credential outbound. Thus the secret lives in one hardened place, and the sandboxed code never sees it.
 #
-# "This is the gateway path of the identity primer, one layer down. The proxy does not follow redirects, removes each
-# credential that the caller sends, and redacts an upstream that echoes the key.
+# "This design, with the secret only in the proxy, is the gateway path of the identity primer, one layer down. The
+# proxy does not follow redirects, removes each credential that the caller sends, and redacts an upstream that echoes
+# the key.
 #
 # "The network is the enforcement, not an environment variable or the tool call. A default-deny egress NetworkPolicy
 # opens only the proxy. The reason is that `HTTP_PROXY` is advisory, and the hosts that a model declares are its own

@@ -88,7 +88,7 @@ print("  container securityContext:", pod["containers"][0]["securityContext"])
 # index + a hash of the arguments. A `ResultStore` claims the key *before* the run. It returns the stored result on a
 # later delivery. It refuses (`InFlight`) a delivery that arrives while the first is still in progress.
 #
-# Its docstring states its limits:
+# The docstring of `ResultStore` states its limits:
 #
 # - The store works in one process and keeps the claims in memory. A crash loses the claims, but a real store
 #   writes the claim durably.
@@ -114,7 +114,7 @@ print(f"first delivery ran: {not replayed1}; second delivery ran: {not replayed2
 # ## Exercise 3.1 — build the idempotency key
 # Implement `make_key(turn_id, step, call_index, args)` to the recipe of the scaling primer. Join the four parts with
 # `:`, and use a stable hash for the args (use `sandboxcore.digest`). Two calls with the same arguments must collide.
-# Different arguments must not.
+# Two calls with different arguments must not collide.
 
 # %%
 from sandboxcore import digest
@@ -219,15 +219,16 @@ print("✅ the linter catches retries, a deadline shorter than a cold start, clu
 # that reason, because a program can forge its own. The result also has what the run used, and a result hash.
 #
 # "The policy is data, not prose: tool tier, egress allowlist, filesystem rule, budget ceiling. I enforce it twice.
-# The executor clamps and checks at run time. The cluster enforces the same intent with these controls:
+# At run time, the executor clamps the budgets of the request and compares the request with the policy. The cluster
+# enforces the same intent with these controls:
 #
 # - Pod Security restricted,
 # - a default-deny NetworkPolicy with no DNS,
 # - a Job that does not retry, whose deadline permits a cold start,
 # - a ValidatingAdmissionPolicy that rejects each pod without the controls.
 #
-# "I render both from one object, so they cannot drift apart. The hosts that a request declares are only the claim of
-# the model. The network policy enforces egress.
+# "I render the executor policy and the cluster objects from one object, so they cannot drift apart. The hosts that a
+# request declares are only the claim of the model. The network policy enforces egress.
 #
 # "Delivery is at-least-once. Thus every execution carries an idempotency key of turn, step, call index and an
 # argument hash. The result store claims the key before the run. Thus a redelivered step returns the stored result and

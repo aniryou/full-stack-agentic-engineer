@@ -13,8 +13,8 @@
 # * **`run_code`** gives the code to a sandbox with constant budgets. It returns the exit reason as the
 #   error kind. By definition, it is a destructive-tier tool.
 # * **`fetch_url`** never opens a socket to the URL. It asks the egress proxy, which holds the allowlist and
-#   the credentials. But a hijacked model does not have to use it, because it can open a socket from inside
-#   `run_code`. Only the network of the sandbox closes that path: an empty network namespace here,
+#   the credentials. But a hijacked model does not have to use this tool, because the model can open a
+#   socket from inside `run_code`. Only the network of the sandbox closes that path: an empty network namespace here,
 #   `--network none` in Docker, or a default-deny NetworkPolicy in a cluster. This notebook examines, on
 #   your machine, if the path is closed.
 # * **Tiers, deny by default**: the loop runs only the tiers that the deployment permits.
@@ -150,8 +150,8 @@ print("   the poisoned instruction reached the model, but the harness — not th
 # - a Docker container under the default seccomp profile of Docker,
 # - Ubuntu with its AppArmor restriction on unprivileged user namespaces.
 #
-# On these hosts, `run_code` has the host network and this **leaks**. The cell says which case this machine
-# is. The "attacker" is a listener on loopback that this notebook owns.
+# On these hosts, `run_code` has the host network, and the exfiltration through the raw socket **leaks**.
+# The cell says which case this machine is. The "attacker" is a listener on loopback that this notebook owns.
 
 # %%
 import time
@@ -266,7 +266,7 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # can, and we recommend it. But you cannot trust it.
 #
 # Prompt injection is a property of the medium. A sufficiently good injection wins the argument with the
-# system prompt, and it wins sufficiently often to be important. The controls that count are outside the
+# system prompt sufficiently often to be important. The controls that count are outside the
 # model: tiers, budgets, the sandbox, the proxy. Thus a win of the argument gives the attacker nothing.
 #
 # **Drill 2.** *The model called `run_code` in a loop: what stopped it?* The per-turn `run_code` budget

@@ -101,10 +101,10 @@ for label, code, b in cases:
 # becomes its new parent. The sandbox starts the child in a new **session** and kills the full **process group**,
 # and that catches the grandchild.
 #
-# But the group is advisory: code can call `setsid()` itself and leave it. Only
-# its **UID** finds that escapee. With a per-execution UID, the sandbox kills every process of that UID after the
-# run and removes all the files that it left in `/tmp`. Without that UID, the sandbox cannot find the
-# difference between the escapee and your own processes.
+# But the group is advisory: code can call `setsid()` itself and leave it. Only its **UID** finds that escapee.
+# With a per-execution UID, the sandbox kills every process of that UID after the run. It also removes all the files
+# that the code left in `/tmp`. Without that UID, the sandbox cannot find the difference between the escapee and your
+# own processes.
 
 # %%
 grandchild = ("import subprocess, sys, time; "
@@ -259,13 +259,13 @@ print("✅ the process group is advisory; only the UID (or a cgroup / PID namesp
 # "I hold a wall-clock deadline and read the output of the child as it streams. I keep a budget's worth of output
 # and kill the run if the output floods. Thus neither a sleeper nor a print loop can hurt the caller.
 #
-# "On a host where I can, each execution also gets its own unprivileged UID. That UID makes the process limit operate.
+# "On a host where I can, each execution also gets its own unprivileged UID. That UID makes the process limit real.
 # It keeps my files unreadable, and a HOME that points to a different directory does not. It also lets me kill a
 # process that left the group with setsid().
 #
-# "I say directly what this does not do. It does not block the network, and it shares the kernel. Without the UID, my
-# files and escapees have no protection. For a stronger boundary I move up the ladder: a container, then gVisor, then a
-# microVM. But the contract and the limits have the same shape."
+# "I say directly what this does not do. It does not block the network, and it shares the kernel. Without the UID, the
+# sandbox does not protect my files and does not stop an escapee. For a stronger boundary I move up the ladder: a
+# container, then gVisor, then a microVM. But the contract and the limits have the same shape."
 #
 # **Drill questions**
 # 1. *Why a separate process, not a restricted interpreter?* In-process restrictions share the state of the

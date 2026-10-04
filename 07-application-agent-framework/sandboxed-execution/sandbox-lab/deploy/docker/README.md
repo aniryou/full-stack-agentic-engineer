@@ -19,7 +19,7 @@ network, one route out, and no key.
 
 **Clean up.** There is nothing to clean. Containers run with `--rm`. `run-with-proxy.sh` stops its proxy
 and stub on exit. It leaves only `/tmp/sandboxlab-egress/` (a token file that you can read). To remove
-it, run `rm -rf /tmp/sandboxlab-egress`.
+the directory, run `rm -rf /tmp/sandboxlab-egress`.
 
 **Needs.** You need Docker Engine or Docker Desktop. For gVisor (`install-gvisor.sh`), you need Linux 5.6+,
 x86_64 or arm64, and Debian/Ubuntu with systemd and sudo. The gVisor runtime does not operate
@@ -50,9 +50,9 @@ python3 -m sandboxlab probes --level docker:default                             
 ## Notes
 
 * **Why a socket, not a network.** `--network none` leaves only a loopback interface. A path-based Unix
-  socket is a file. Thus a bind mount gives the container exactly one peer. An alternative is an
-  `--internal` Docker network, with the proxy attached to it and to the bridge. That also works, but it
-  lets the sandbox reach every other container on that network.
+  socket is a file. Thus a bind mount gives the container exactly one peer. The alternative is an
+  `--internal` Docker network, with the proxy attached to it and to the bridge. This alternative also
+  works, but it lets the sandbox reach every other container on that network.
 * **`--pids-limit`, not `--ulimit nproc`.** `nproc` counts processes for each user across the full host.
   All the containers that run as 65534 share that count. The pids cgroup counts the tasks of this
   container. Under gVisor, the host cgroup sees the threads of the Sentry. Thus the wrapper also sets

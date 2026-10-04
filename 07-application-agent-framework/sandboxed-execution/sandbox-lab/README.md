@@ -95,8 +95,8 @@ predictor. Without these packages, the tests skip this check.
 ## How it fits
 
 Read the [identity primer](../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md)
-§6.2 (code execution) and §5 (the gateway path for credentials) first. This topic expands the
-"Sandboxed execution" control of that primer. It uses these parts of other topics again:
+§6.2 (code execution) and §5 (the gateway path for credentials) first. This topic gives the full design of
+the "Sandboxed execution" control of that primer. It uses these parts of other topics again:
 
 - the tool contract of the [07.1 agent](../../agent-fundamentals/agent-core/) (the `run_code` tool
   returns the same result shape),
@@ -120,7 +120,7 @@ nothing. This lab never imports it. For prices and for where to get compute, see
 | `proxy/` | ~530 | `server.py` is the egress proxy with an allowlist, credential injection, SSRF guards, reflection redaction and an audit line for each decision (TCP or Unix socket). `stub.py` is a stand-in upstream. `client.py` is the snippet for the sandbox side |
 | `agent/` | ~350 | `loop.py` is the 07.1 loop with tiers, turn budgets, idempotency keys and audit. `tools.py` has `run_code`/`fetch_url`, which go through the sandbox and the proxy |
 | `k8s/` | ~1,670 | `manifests.py` has typed builders. `admission.py` is the offline admission predictor (PSS + VAP + RuntimeClass), with CEL that agrees with the predictor. `policy.py` renders one policy into each enforcement point. `runner.py` has Job and warm-pool runners over a real or simulated cluster. `render.py` writes the deploy YAML |
-| `audit.py`, `bench.py`, `gke.py`, `report.py` | ~480 | The identity-lab audit event and abuse detection. Start-up latency and the calculation of pool size (Little's law, Erlang C). The GKE Terraform review. JSON/Markdown reports. |
+| `audit.py`, `bench.py`, `gke.py`, `report.py` | ~480 | `audit.py` has the identity-lab audit event and abuse detection. `bench.py` measures start-up latency and calculates the pool size (Little's law, Erlang C). `gke.py` does the GKE Terraform review. `report.py` writes JSON/Markdown reports |
 
 ## Deploy
 

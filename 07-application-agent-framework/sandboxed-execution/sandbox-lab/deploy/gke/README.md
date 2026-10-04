@@ -46,5 +46,5 @@ kubectl get runtimeclass gvisor -o yaml                 # what GKE created (comp
 | `optional/agent-sandbox.yaml` | SandboxTemplate + SandboxWarmPool + SandboxClaim (kubernetes-sigs/agent-sandbox `v1beta1`) |
 
 `kubectl apply -f deploy/gke/` (not recursive) applies only the numbered files. The image fields contain
-`LOCATION-docker.pkg.dev/PROJECT_ID/sandbox/python:3.12-slim`. `apply.sh` replaces this path with the
-path of your repository.
+`LOCATION-docker.pkg.dev/PROJECT_ID/sandbox/python:3.12-slim`. `apply.sh` replaces the repository part of this
+path with your repository.

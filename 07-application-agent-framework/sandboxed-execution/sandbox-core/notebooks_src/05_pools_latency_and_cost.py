@@ -14,7 +14,7 @@
 # - a full VM takes tens of seconds,
 # - a GKE pod on a busy cluster can take 40–50 s.
 #
-# Thus the number of sandboxes that you keep ready follows queueing arithmetic.
+# Thus you calculate the number of sandboxes that you keep ready with queueing arithmetic.
 #
 # In a **replace-after-use** warm pool, each sandbox runs one execution, and then the pool destroys it. A replacement
 # starts in the background and becomes warm. Thus every execution holds a slot for its run *and* for the cold start of
@@ -140,7 +140,7 @@ print(f"at 1.3 run_code calls/turn (scaling primer): ${pool.actions_cost(1.3, fl
 # $t_{\text{cold}} = 3$ s and a target of at most 20% of requests that wait for a warm sandbox. First, **predict**
 # the replace-after-use slot count (hint: it is not the Little's-law mean, 27.1). Then implement
 # `slots(lam, t_exec, t_cold, target)` with `pool.erlang_c`. It returns the smallest $c$ whose
-# $P(\text{wait}) \le \text{target}$, and it holds each slot for $t_{\text{exec}} + t_{\text{cold}}$.
+# $P(\text{wait}) \le \text{target}$, when each execution holds a slot for $t_{\text{exec}} + t_{\text{cold}}$.
 
 # %% exercise
 import math
@@ -175,8 +175,8 @@ print("✅ size a pool with Erlang C on (exec + cold); Little's law only tells y
 # %% [markdown]
 # ## Exercise 5.2 — Erlang C from scratch
 # Implement `p_wait(a, c)` for offered load `a` and `c` servers (the Erlang C formula). Return 1.0 when
-# `c <= a` (the queue never clears). Calculate each term from the term before it, in a loop. The value
-# $a^c / c!$ overflows a float long before the loads that a busy fleet sees (try $a = 160$).
+# `c <= a` (the queue never clears). Calculate each term from the term before it, in a loop. Do not calculate
+# $a^c / c!$ directly, because it overflows a float long before the loads that a busy fleet sees (try $a = 160$).
 
 # %% exercise
 def p_wait(a, c):
@@ -223,9 +223,9 @@ print("   a 45 s GKE cold start needs a warm pool or exec-into-a-running-pod, no
 # replacement. Take 5 executions a second, 2-second runs and a 3-second cold start. Little's law says that these keep
 # 25 slots busy or in warm-up on average. That is the floor, not the size.
 #
-# "Erlang C on that load says that 31 slots keep the fraction that waits under 20%, and a simulation agrees. The
-# arrival rate comes from the workload. The scaling primer has 27 tool calls a second at peak. A fifth of them
-# are code. That code rate is about 5.4 a second, and it needs 34 slots.
+# "Erlang C on that load of 25 slots says that 31 slots keep the fraction that waits under 20%, and a simulation
+# agrees. The arrival rate comes from the workload. The scaling primer has 27 tool calls a second at peak. A fifth of
+# them are code. That code rate is about 5.4 a second, and it needs 34 slots.
 #
 # "Cost per action is sandbox-seconds times the node price. A warm pool hides the cold start from latency, but it
 # still pays for it. That is five sandbox-seconds per execution plus the idle headroom, slightly more than six with

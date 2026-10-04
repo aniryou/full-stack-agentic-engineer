@@ -71,7 +71,8 @@ print("unsandboxed:", v.detail, "| leaked:", v.leaked)
 # controls that it can enforce depend on this machine. The environment secret is gone (clean environment). The
 # limits stop the resource abuses.
 #
-# Three probes depend on **a different UID for the code**. The sandbox can do this only when it runs as root
+# Three probes depend on **a different UID for the code**. The sandbox can give the code a different UID only when
+# it runs as root
 # (Colab, most CI):
 #
 # - The key read. A different UID cannot open your 0700 home. A `HOME` that points at the workspace hides

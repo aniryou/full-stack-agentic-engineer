@@ -10,8 +10,8 @@
 #
 # Model-generated code is untrusted input (PRIMER §1). The invariant is **no ambient authority**: no
 # credentials, no network by default and no persistent filesystem. The purpose is that a hijacked model can
-# do nothing outside the model, except the things that you told the sandbox to permit. You get to this invariant when
-# you climb the isolation ladder (PRIMER §2) and turn on one control at a time:
+# do nothing outside the model, except the things that you told the sandbox to permit. You get to this
+# invariant when you climb the isolation ladder (PRIMER §2) and turn on one control at a time:
 #
 # | Rung | What it adds | An attack it stops |
 # |---|---|---|
@@ -136,8 +136,9 @@ print("   catches the sleep at ~5 s. Keep both, with the wall limit well above t
 # ## Exercise 1.3 — the hardened `docker run`, flag by flag
 #
 # `DockerSandbox.hardened()` builds the command that notebook 01 explains. You get a set of flags that you
-# must not remove. Assert that all of them are present, and that the simple (naive) spec has none of them.
-# Then say which probe each flag stops (`sandboxlab.docker.FLAGS`).
+# must not remove. Assert that all of them are present, and that the simple spec
+# (`DockerSandbox.naive()`) has none of them. Then say which probe each flag stops
+# (`sandboxlab.docker.FLAGS`).
 
 # %% exercise
 def has_all_controls(argv: list) -> bool:
@@ -165,7 +166,7 @@ print("  ", DockerSandbox.hardened().shell("print('hello')")[:200], "...")
 # `sandboxlab.probes.load_sample_runs()`. They are sample output in the documented format, not measurements.
 # Assert these three things:
 #
-# - the Docker rungs have that label,
+# - the Docker rungs have the label of sample output,
 # - a **hardened** container leaks nothing,
 # - the **default** container still leaks the network and resources.
 #
