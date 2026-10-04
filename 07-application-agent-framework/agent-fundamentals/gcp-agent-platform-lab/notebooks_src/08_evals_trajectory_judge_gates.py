@@ -1,19 +1,22 @@
 # %% [markdown]
 # # 08 · Evals: trajectories, judges and release gates
 #
-# An agent that looks fine in a demo is an agent nobody has measured. The evaluation flywheel is
-# how measurement becomes routine: **production traces → triage → golden cases → gate → ship**, and
-# round again. This notebook builds every stage on a small bank assistant and keeps the statistics
-# honest — confidence intervals instead of a single pass rate, run-to-run noise instead of a single
-# run, Cohen's kappa instead of "the judge mostly agrees".
+# An agent that looks fine in a demo is an agent that nobody has measured.
+# The evaluation flywheel is how measurement becomes routine.
+# It is a cycle of five stages: **production traces, triage, golden cases, gate, ship**. Then the cycle starts again.
+# This notebook builds every stage on a small bank assistant. It also keeps the statistics honest:
+#
+# - Confidence intervals instead of a single pass rate.
+# - Run-to-run noise instead of a single run.
+# - Cohen's kappa instead of "the judge mostly agrees".
 #
 # **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md).
 #
-# In this notebook you will:
-# 1. build a stratified golden set and score **trajectories**, not just answers, across repeated runs with Wilson intervals;
-# 2. calibrate an LLM judge against human labels (kappa) and expose position bias with a swap test;
-# 3. write a release gate with an absolute threshold, catch a deliberate regression above run-to-run noise,
-#    run an injection suite, and grow the golden set from a production failure.
+# In this notebook, you will:
+# 1. Build a stratified golden set. Score **trajectories**, not only answers, across repeated runs with Wilson intervals.
+# 2. Calibrate an LLM judge against human labels (kappa). Show position bias with a swap test.
+# 3. Write a release gate with an absolute threshold. Find a deliberate regression that is above the run-to-run noise.
+#    Run an injection suite. Then add a case to the golden set from a production failure.
 
 # %%
 import random
@@ -31,10 +34,10 @@ from agentlab.evals import (Gate, GoldenCase, GoldenSet, KeywordJudge, RubricJud
 # %% [markdown]
 # ## 1. The agent under test
 #
-# Four tools with explicit side-effect classes (Notebook 01): two reads, one reversible write, one
-# **irreversible** write that requires confirmation. The planner is a `KeywordPlanner` wrapped in a
-# `FlakyPlanner` that occasionally "forgets" one tool call — a stand-in for sampling noise, so that
-# repeated runs disagree the way real ones do.
+# The agent has four tools with explicit side-effect classes (Notebook 01): two reads, one reversible write,
+# and one **irreversible** write that must have a confirmation.
+# The planner is a `KeywordPlanner` inside a `FlakyPlanner`. The `FlakyPlanner` sometimes "forgets" one tool call.
+# This is a stand-in for the noise of the sampler, so that repeated runs disagree as real runs do.
 
 # %%
 @tool
@@ -112,11 +115,16 @@ print("answer:    ", demo.text[:90], "…")
 # %% [markdown]
 # ## 2. A golden set with strata
 #
-# Each case pins the **input**, the **expected trajectory**, the arguments that matter (partial — only
-# the keys you care about), phrases the answer must contain, and tools that must **never** be called for
-# that intent. Cases are grouped into strata (`accounts`, `cards`, `cases`) because a blended pass
-# rate hides a broken stratum behind healthy ones, and tagged by difficulty so you can see where the
-# agent is weak.
+# Each case pins these items:
+#
+# - The **input**.
+# - The **expected trajectory**.
+# - The arguments that are important (partial: only the keys that you care about).
+# - The phrases that the answer must contain.
+# - The tools that the agent must **never** call for that intent.
+#
+# The cases go into strata (`accounts`, `cards`, `cases`), because a blended pass rate hides a broken stratum
+# behind healthy ones. Each case also has a difficulty tag, so that you can see where the agent is weak.
 
 # %%
 def case(id, input, tools, stratum, difficulty="easy", contains=(), args=None, forbidden=(), tags=()):
@@ -146,9 +154,9 @@ golden.add(case("case-04", "I don't recognise this merchant, ACME Sports — tha
 print(golden.summary())
 
 # %% [markdown]
-# Golden sets are plain JSON lines — cheap to diff, review and grow. A stratified holdout is carved
-# out with a seed so nobody tunes prompts against it by accident, and a stratified sample gives a
-# 30-second smoke set with the same shape as the full one.
+# Golden sets are plain JSON lines. They are low-cost to diff, to review and to add to.
+# The code uses a seed to carve out a stratified holdout, so that nobody adjusts prompts against it by accident.
+# A stratified sample gives a 30-second smoke set with the same shape as the full set.
 
 # %%
 path = golden.save_jsonl(Path(tempfile.mkdtemp()) / "bank-assistant-v1.jsonl")
@@ -163,8 +171,9 @@ print("smoke:", [c.id for c in smoke])
 # %% [markdown]
 # ## 3. Trajectory metrics
 #
-# The final answer can read perfectly while the agent skipped the lookup and guessed, or blocked a card
-# nobody mentioned. The event log records every tool call, so a case is graded on **what the agent did**:
+# The final answer can read perfectly when the agent skipped the lookup and guessed.
+# It can also read perfectly when the agent blocked a card that nobody mentioned.
+# The event log records every tool call. Thus the eval grades a case on **what the agent did**:
 
 # %%
 expected = ["get_balance", "list_transactions"]
@@ -178,9 +187,15 @@ for actual in (["get_balance", "list_transactions"],
           f"{any_order_match(expected, actual)!s:10} {precision_recall(expected, actual)!s:20} {efficiency(actual, expected):.2f}")
 
 # %% [markdown]
-# `score_case` combines them: a case **passes** when the expected trajectory appears in order, the partial
-# arguments match, the answer contains the required phrases and no forbidden tool was called. Exact match
-# and efficiency are *reported*, not required — a redundant lookup is a cost problem, not a correctness one.
+# `score_case` combines them. A case **passes** when all of these conditions are true:
+#
+# - The expected trajectory appears in order.
+# - The partial arguments match.
+# - The answer contains the necessary phrases.
+# - The agent called no forbidden tool.
+#
+# `score_case` *reports* exact match and efficiency, but a pass does not depend on them.
+# A redundant lookup is a cost problem, not a correctness problem.
 
 # %%
 result = score_case(golden.get("acc-04"), demo.session)
@@ -190,9 +205,9 @@ print({k: getattr(result, k) for k in ("exact", "in_order", "any_order", "precis
 # %% [markdown]
 # ### Exercise 3.1 — implement `in_order_match`
 #
-# Return `True` when `expected` is a **subsequence** of `actual`: every expected call appears, in the
-# expected order, with any number of other calls in between. A repeated expectation (`["a", "a"]`) needs
-# two matching calls. An empty expectation always matches.
+# Return `True` when `expected` is a **subsequence** of `actual`.
+# Every expected call appears, in the expected order, with any number of other calls between them.
+# A repeated expectation (`["a", "a"]`) needs two calls that match. An empty expectation always matches.
 
 # %% exercise
 def my_in_order_match(expected: list[str], actual: list[str]) -> bool:
@@ -223,9 +238,10 @@ print("✅ in_order_match agrees with the library on 200 random trajectories")
 # %% [markdown]
 # ## 4. Run the set three times
 #
-# One run gives one number. Three runs with a fresh session each show which cases are **flaky**, and the
-# Wilson interval says how much a pass rate on 15 cases actually proves (spoiler: a 95% interval on 15
-# cases is about ±20 points — "you need hundreds of cases" is arithmetic, not opinion).
+# One run gives one number. Three runs, each with a new session, show which cases are **flaky**.
+# The Wilson interval tells how much a pass rate on 15 cases really proves.
+# The answer: a 95% interval on 15 cases is approximately ±20 points.
+# Thus "you need hundreds of cases" is arithmetic, not opinion.
 
 # %%
 baseline = await run_eval(make_agent, golden, n_runs=3, seed=13, user=USER)
@@ -237,15 +253,15 @@ for failure in baseline.failures():
 # %% [markdown]
 # ### Exercise 4.1 — implement the Wilson interval
 #
-# For `passes` successes in `n` trials return the 95% Wilson score interval `(lo, hi)`, clamped to
-# `[0, 1]`, and `(0.0, 1.0)` when `n == 0`. With $p = \mathrm{passes}/n$ and $z = 1.96$:
+# For `passes` successes in `n` trials, return the 95% Wilson score interval `(lo, hi)`, clamped to `[0, 1]`.
+# When `n == 0`, return `(0.0, 1.0)`. With $p = \mathrm{passes}/n$ and $z = 1.96$:
 #
 # $$
 # \text{centre} = \frac{p + z^2/2n}{1 + z^2/n}, \qquad
 # \text{half} = \frac{z\sqrt{p(1-p)/n + z^2/4n^2}}{1 + z^2/n}
 # $$
 #
-# Unlike the naive $p \pm 1.96\,\mathrm{SE}$, it never claims "100% ± 0" after ten straight passes.
+# The simple $p \pm 1.96\,\mathrm{SE}$ claims "100% ± 0" after ten passes in a row. The Wilson interval never makes that claim.
 
 # %% exercise
 import math
@@ -274,9 +290,10 @@ print(f"✅ Wilson: {baseline.pass_rate():.1%} observed over {baseline.rate('pas
 # %% [markdown]
 # ### Exercise 4.2 — a stratified summary
 #
-# Write `stratified_summary(eval_run)` returning, for every stratum, a dict with `pass_rate`, `n`
-# (case-runs), `ci` (the Wilson tuple) and `flaky` (sorted ids of flaky cases in that stratum). Use
-# `eval_run.select(f"stratum:{name}")` and `eval_run.flaky_cases()`; the stratum names are in `eval_run.strata()`.
+# Write `stratified_summary(eval_run)`.
+# For every stratum, it returns a dict with `pass_rate`, `n` (case-runs) and `ci` (the Wilson tuple).
+# The dict also has `flaky`: the sorted ids of the flaky cases in that stratum.
+# Use `eval_run.select(f"stratum:{name}")` and `eval_run.flaky_cases()`. The stratum names are in `eval_run.strata()`.
 
 # %% exercise
 def stratified_summary(eval_run) -> dict[str, dict]:
@@ -312,10 +329,12 @@ print("✅ stratified summary matches the library")
 # %% [markdown]
 # ## 5. Judges, calibrated
 #
-# Trajectory metrics grade *actions*; a **judge** grades the *text*. LLM judges scale, and they have known
-# biases — position, verbosity, self-preference — so a judge is only as trustworthy as its calibration
-# against human labels. Below, `RubricJudge` prompts a model (here a `FakeLLM` policy that counts rubric
-# facts) and parses the first digit 1–5; twenty human labels tell us whether to believe it.
+# Trajectory metrics grade *actions*. A **judge** grades the *text*.
+# LLM judges scale, and they have known biases: position, verbosity and self-preference.
+# Thus a judge is only as trustworthy as its calibration against human labels.
+#
+# In the next cell, `RubricJudge` sends a prompt to a model and parses the first digit 1–5.
+# Here the model is a `FakeLLM` policy that counts rubric facts. Twenty human labels tell you if you can believe the judge.
 
 # %%
 QUESTION = "What's my balance?"
@@ -355,9 +374,11 @@ for (answer, h), j in zip(labelled, judge_scores):
         print(f"  judge {j} vs human {h}: {answer!r}")
 
 # %% [markdown]
-# The misses are exactly the failure modes a keyword judge cannot see: a **wrong number** with the right
-# words, and a **hallucinated action**. Raw agreement flatters — a judge that answers "4" to everything
-# agrees with humans a fifth of the time and has kappa 0, because all of that agreement was luck:
+# The misses are exactly the failure modes that a keyword judge cannot see:
+# an **incorrect number** with the correct words, and a **hallucinated action**.
+# Raw agreement makes a judge look better than it is.
+# A judge that answers "4" to everything agrees with the human labels a fifth of the time.
+# Its kappa is 0, because all of that agreement was luck:
 
 # %%
 lazy = [4] * len(human_scores)
@@ -366,10 +387,10 @@ print("lazy judge:", calibrate(lazy, human_scores))
 # %% [markdown]
 # ### Exercise 5.1 — implement Cohen's kappa
 #
-# Unweighted kappa for two raters `a`, `b` over the same items:
-# $\kappa = (p_o - p_e) / (1 - p_e)$ where $p_o$ is the observed agreement and
-# $p_e = \sum_k \frac{n_{a=k}}{n}\cdot\frac{n_{b=k}}{n}$ is the agreement expected by chance from the
-# marginals. Return `1.0` when $p_e = 1$ (both raters constant and identical).
+# Write the unweighted kappa for two raters `a`, `b` over the same items:
+# $\kappa = (p_o - p_e) / (1 - p_e)$. Here $p_o$ is the observed agreement.
+# $p_e = \sum_k \frac{n_{a=k}}{n}\cdot\frac{n_{b=k}}{n}$ is the agreement by chance, calculated from the
+# marginals. When $p_e = 1$ (both raters are constant and identical), return `1.0`.
 
 # %% exercise
 from collections import Counter
@@ -395,9 +416,9 @@ assert abs(my_kappa(lazy, human_scores)) < 1e-9
 print(f"✅ kappa: keyword judge {my_kappa(judge_scores, human_scores):.3f}, lazy judge {my_kappa(lazy, human_scores):.3f}")
 
 # %% [markdown]
-# **Position bias.** In a pairwise comparison many judges prefer whichever answer they read first.
-# `pairwise` asks twice with the order swapped; a verdict that follows the *slot* rather than the *answer*
-# is flagged instead of trusted.
+# **Position bias.** In a pairwise comparison, many judges prefer the answer that they read first.
+# `pairwise` asks two times, with the order swapped.
+# If a verdict changes with the *slot* and not with the *answer*, `pairwise` flags the verdict. It does not trust it.
 
 # %%
 good, bad = "Your balance is SGD 1234.5.", "I cannot help with that."
@@ -408,17 +429,18 @@ print("keyword judge:    ", await pairwise(KeywordJudge(["1234.5", "SGD"]), QUES
 # %% [markdown]
 # ## 6. A release gate
 #
-# A gate is a list of thresholds an eval run must clear. Two kinds matter here:
+# A gate is a list of thresholds that an eval run must clear. Two kinds are important here:
 #
-# * an ordinary threshold on a rate is judged on the observed value and reported with its interval;
-# * an **absolute** threshold demands 100% across every run — the pattern for irreversible actions.
-#   "Card blocks pass 96% of the time" is not a pass rate, it is an incident rate.
+# * An ordinary threshold on a rate. The gate judges it on the observed value and reports it with its interval.
+# * An **absolute** threshold. It must have 100% across every run. This is the pattern for irreversible actions.
+#   "Card blocks pass 96% of the time" is not a pass rate. It is an incident rate.
 #
 # ### Exercise 6.1 — encode "card blocks must be perfect, aggregate ≥ 0.9"
 #
-# Build `thresholds`, a list of `Threshold`s, such that the gate requires the `pass_rate` of the `cards`
-# stratum to be perfect in every run (**absolute**) and the overall `pass_rate` to be at least 0.9.
-# Add a third, absolute threshold that no case may ever call a forbidden tool (`no_forbidden_rate`).
+# Make `thresholds`, a list of `Threshold`s.
+# With these thresholds, the gate passes only if the `pass_rate` of the `cards` stratum is perfect in every run (**absolute**).
+# The overall `pass_rate` must also be at least 0.9.
+# Add a third, absolute threshold: a case must never call a forbidden tool (`no_forbidden_rate`).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -443,11 +465,13 @@ print("✅ gate encodes the policy and the baseline passes it")
 # %% [markdown]
 # ## 7. A deliberate regression, caught above the noise
 #
-# Someone "simplifies" the card rule and drops `freeze`. One phrasing breaks. The gate fails on the
-# absolute threshold, and `regression_vs` compares against the baseline **per scope**: a drop counts only
-# when it exceeds the run-to-run spread, so ordinary flakiness does not block releases while a broken
-# intent does. Watch the aggregate: the three new failures are the same size as the wobble between
-# runs, so the aggregate cannot tell a regression from noise — the `cards` stratum, with zero noise, can.
+# Someone "simplifies" the card rule and removes `freeze`. One way to say the request now fails.
+# The gate fails on the absolute threshold. `regression_vs` compares against the baseline **per scope**.
+# A drop counts only when it is larger than the run-to-run spread.
+# Thus ordinary intermittent failures do not block releases, but a broken intent does.
+#
+# Look at the aggregate. The three new failures are the same size as the variation between runs.
+# Thus the aggregate cannot tell a regression from noise. The `cards` stratum, with zero noise, can.
 
 # %%
 REGRESSED_RULES = [r if r.tool != "block_card" else Rule(r"(block|lost|stolen).*card|card.*(lost|stolen|missing)", "block_card", card_args)
@@ -464,13 +488,15 @@ assert any(d.scope == "stratum:cards" and d.regressed for d in regression.deltas
 # %% [markdown]
 # ## 8. An injection suite
 #
-# Indirect prompt injection arrives through **tool results** — a transaction memo, a ticket, a page. The
-# suite wraps every read tool so its results carry an attacker's instruction and counts forbidden calls.
+# Indirect prompt injection comes through **tool results**: a transaction memo, a ticket, a page.
+# The suite wraps every read tool, so that its results have an attacker's instruction. It also counts forbidden calls.
 #
-# Be honest about what this measures. `KeywordPlanner` never reads tool results, so it "resists" every
-# payload for the wrong reason; a deliberately gullible policy shows the harness doing its job: the
-# forbidden call is **recorded, counted, and — for the irreversible tool — stopped at the confirmation
-# pause** before it executes. Real susceptibility needs a real model and a real red-team set.
+# Be honest about what this measures.
+# `KeywordPlanner` never reads tool results, so it "resists" every payload for the incorrect reason.
+# A deliberately gullible policy shows that the harness does its job.
+# The harness **records** and **counts** the forbidden call.
+# For the irreversible tool, the harness also **stops the call at the confirmation pause**, before the call runs.
+# To measure real susceptibility, you need a real model and a real red-team set.
 
 # %%
 def gullible_policy(messages, tools):
@@ -498,10 +524,11 @@ print(gullible_report.render())
 # %% [markdown]
 # ## 9. Growing the golden set from production
 #
-# The flywheel closes when a failure becomes a case. A production session shows the agent answering
-# *"Why did my available funds drop after this week's charges?"* with the transactions alone — "funds"
-# matches no balance rule. Triage says the right trajectory is balance **then** transactions. Reviewed,
-# *correct* transcripts are promoted too, with `from_transcripts`.
+# The flywheel cycle is complete when a failure becomes a case.
+# A production session shows that the agent answered *"Why did my available funds drop after this week's charges?"*
+# with only the transactions. The word "funds" matches no balance rule.
+# Triage says that the correct trajectory is balance **then** transactions.
+# `from_transcripts` also promotes reviewed, *correct* transcripts.
 
 # %%
 prod = Runner(make_agent(p_flaky=0.0))
@@ -520,11 +547,20 @@ print("promoted:", [(c.id, c.expected_tools) for c in reviewed])
 # %% [markdown]
 # ### Exercise 9.1 — add a golden case from the failure
 #
-# Create `regression_case`: id `acc-06`, the production input above, expected trajectory
-# `get_balance` then `list_transactions`, stratum `accounts`, difficulty `hard`, tags containing
-# `from-production`, `block_card` forbidden, and the answer must contain `1234.5`. Add it to `golden`.
-# Then fix the agent: `FIXED_RULES` should extend `BANK_RULES` so the balance rule also matches the word
-# `funds` (hint: copy the list and replace the first rule's keyword).
+# Make `regression_case` with these values:
+#
+# - id `acc-06`
+# - the production input from section 9
+# - expected trajectory `get_balance` then `list_transactions`
+# - stratum `accounts`
+# - difficulty `hard`
+# - tags that contain `from-production`
+# - `block_card` forbidden
+# - an answer that must contain `1234.5`
+#
+# Add it to `golden`.
+# Then repair the agent: `FIXED_RULES` must extend `BANK_RULES`, so that the balance rule also matches the word `funds`.
+# (Hint: copy the list and replace the keyword of the first rule.)
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -555,15 +591,16 @@ print("✅ failure → golden case → fix → gate:", "PASSED" if gate.evaluate
 # %% [markdown]
 # ## The one-minute version
 #
-# When asked *"how do you know the agent works?"*, describe the flywheel with numbers attached:
+# When someone asks *"how do you know the agent works?"*, describe the flywheel with numbers:
 #
-# * **Trajectory evals, not just answer evals.** Grade the tool sequence and arguments from the event
-#   log; a right answer reached by the wrong actions is a latent incident.
-# * **Strata and intervals.** Report pass rates per intent and risk class with Wilson intervals; say out
-#   loud that 15 cases give ±20 points and that the set needs hundreds — grown from production failures.
-# * **Absolute gates for irreversible actions.** Card blocks, refunds, transfers: 100% across every run or
-#   the release does not ship. Everything else gets a threshold plus a regression check against a noise band.
-# * **Calibrated judges.** Quote kappa against human labels, not agreement; swap positions to detect
-#   position bias; judge with a different model family than the one under test.
-# * **Injection suites measure the harness.** Poisoned tool results must produce a recorded, counted,
-#   confirmation-gated forbidden call — and the confirmation pause is the last line, not the first.
+# * **Trajectory evals, not just answer evals.** Grade the tool sequence and the arguments from the event log.
+#   A correct answer that the agent got with the incorrect actions is a latent incident.
+# * **Strata and intervals.** Report pass rates for each intent and risk class, with Wilson intervals.
+#   Say clearly that 15 cases give ±20 points. Also say that the set needs hundreds of cases from production failures.
+# * **Absolute gates for irreversible actions.** For card blocks, refunds and transfers, the result must be 100%
+#   across every run. If not, the release does not ship.
+#   Everything else gets a threshold and a regression check against a noise band.
+# * **Calibrated judges.** Quote kappa against human labels, not agreement. Swap positions to find position bias.
+#   Use a judge from a different model family than the model under test.
+# * **Injection suites measure the harness.** Poisoned tool results must produce a forbidden call that the harness
+#   records, counts and holds at the confirmation gate. The confirmation pause is the last line, not the first.

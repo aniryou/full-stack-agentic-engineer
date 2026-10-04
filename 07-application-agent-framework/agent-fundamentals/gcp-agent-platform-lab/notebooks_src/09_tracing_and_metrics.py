@@ -1,18 +1,21 @@
 # %% [markdown]
 # # 09 · Tracing, cost and latency metrics
 #
-# You cannot manage what you cannot see — and with agents, what you cannot see is *which step* burned
-# the tokens, *which tool* took the time, and *which conversation* wrote a card number into a log. This
-# notebook attaches a tracer to the runner, reads the span tree, and turns spans into the numbers an
-# operator watches: dollars per conversation, p95 latency by span kind, time-to-first-token and tokens
-# per second — then alert rules that fire when a looping agent drifts.
+# You cannot manage what you cannot see. With agents, these are the things that you cannot see:
+# * *which step* used the tokens,
+# * *which tool* took the time,
+# * *which conversation* wrote a card number into a log.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.10 (observability and SLOs).
+# This notebook attaches a tracer to the runner and reads the span tree. Then it changes the spans into the numbers
+# that an operator monitors: dollars per conversation, p95 latency by span kind, time-to-first-token and tokens
+# per second. Last, it writes alert rules that fire when the cost of an agent in a loop drifts up.
 #
-# In this notebook you will:
-# 1. attach a `Tracer` to a `Runner`, run three conversations and read the span tree;
-# 2. compute cost per conversation, p95 latency by span kind, the most expensive step, and TTFT / tokens per second from a stream;
-# 3. redact customer data before export and write alert rules that catch a looping agent's cost drift.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.10 (observability and SLOs).
+#
+# In this notebook, you do these steps:
+# 1. Attach a `Tracer` to a `Runner`, run three conversations and read the span tree.
+# 2. Calculate the cost per conversation, the p95 latency by span kind and the step with the highest cost. Calculate TTFT / tokens per second from a stream.
+# 3. Redact customer data before export. Then write alert rules that find the cost drift of an agent in a loop.
 
 # %%
 from agentlab.agents import Budget, ContextBuilder, LlmAgent, Runner, SideEffect, ToolContext, tool
@@ -24,12 +27,13 @@ from agentlab.observability import (DEFAULT_PRICES, AlertRule, Price, RedactingE
 # %% [markdown]
 # ## 1. A traced runner
 #
-# The agent loop opens a span per agent turn, per model call and per tool call, and stamps them with
-# OpenTelemetry GenAI attribute names (`gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+# The agent loop opens one span for each agent turn, each model call and each tool call. It puts
+# OpenTelemetry GenAI attribute names on these spans (`gen_ai.request.model`, `gen_ai.usage.input_tokens`,
 # `gen_ai.usage.cache_read.input_tokens`, `gen_ai.response.finish_reasons`, `gen_ai.tool.name` …, as of
-# September 2026, verify — the conventions are at Development stability) so a backend on the same
-# convention version reads them without a mapping. Tools can enrich their own span through `ctx.span` —
-# `create_case` records the case details, which is exactly how personal data ends up in traces (section 5).
+# September 2026, verify). The conventions are at Development stability. Thus a backend on the same
+# convention version reads the attributes without a mapping. A tool can add data to its own span through
+# `ctx.span`. `create_case` records the case details in its span, and this is exactly how personal data
+# gets into traces (section 5).
 
 # %%
 @tool
@@ -83,9 +87,9 @@ for sid, message in conversations.items():
 tracer.print_tree()
 
 # %% [markdown]
-# Read one model span's attributes: model, tokens (with the cached share), finish reason, and the latency
-# the model reported. The second model call of `conv-2` shows `cached_tokens > 0` — the system prefix was
-# identical to the first call's, so the simulated context cache served it.
+# Read the attributes of one model span: the model, the tokens (with the cached share), the finish reason,
+# and the latency that the model reported. The second model call of `conv-2` shows `cached_tokens > 0`. The
+# system prefix was identical to the prefix of the first call. Thus the simulated context cache served it.
 
 # %%
 conv2 = tracer.traces()[1]
@@ -95,8 +99,9 @@ for s in conv2.by_kind("model"):
 # %% [markdown]
 # ## 2. Cost per conversation
 #
-# `TraceSummary` reduces a trace to the operator's numbers; the price table bills uncached input, cached
-# input and output separately. The default table is **illustrative — verify against the official pricing page**.
+# `TraceSummary` reduces a trace to the numbers of the operator. The price table puts a separate price on
+# uncached input, on cached input and on output. The default table is **illustrative**. **Compare it with the
+# official pricing page.**
 
 # %%
 summaries = TraceSummary.from_tracer(tracer, DEFAULT_PRICES, latency=reported_latency_ms)
@@ -105,10 +110,10 @@ for s in summaries:
 print("\nprice table note:", DEFAULT_PRICES.note)
 
 # %% [markdown]
-# The same arithmetic as scenarios A–D in Notebook 12, at small scale. Take a typical turn — 6,000 input tokens of which
-# 4,500 are a stable prefix, 300 output tokens — and price it four ways. Per turn the numbers look like
-# rounding errors; at a million turns a day they are budget lines, and the two levers are visible:
-# **model tier** (≈4×) and **caching** (≈2×).
+# This cell does the same arithmetic as scenarios A–D in Notebook 12, at small scale. Take a typical turn:
+# 6,000 input tokens, of which 4,500 are a stable prefix, and 300 output tokens. Calculate its price in four
+# ways. For one turn, the numbers look like rounding errors. At a million turns a day, they are budget lines,
+# and you can see the two levers: **model tier** (≈4×) and **caching** (≈2×).
 
 # %%
 turn = Usage(input_tokens=6000, output_tokens=300)
@@ -121,9 +126,9 @@ for label, usage, model in (("flash, nothing cached", turn, "gemini-3-flash"), (
 print("\nbreakdown of 'flash, 75% cached':", {k: round(v, 6) for k, v in DEFAULT_PRICES.breakdown(cached_turn, 'gemini-3-flash').items()})
 
 # %% [markdown]
-# And from real traces: the identical conversation on a pro-tier model (same prompts, same cache warm-up)
-# costs a multiple before any scale — the multiple is the ratio of the price rows, weighted by where the
-# tokens went.
+# Real traces show the same thing. The identical conversation on a pro-tier model (same prompts, same cache
+# warm-up) costs a multiple of its cost on flash, before any scale. The multiple is the ratio of the price
+# rows. The weight of each row is the share of the tokens that went to it.
 
 # %%
 pro_tracer = Tracer()
@@ -136,9 +141,10 @@ print(f"conv-2 on flash ${flash_cost:.6f} vs pro ${pro_cost:.6f}  (×{pro_cost /
 # %% [markdown]
 # ### Exercise 2.1 — implement the cost formula
 #
-# `cost_usd(usage, price)` returns dollars for one call, where `price` is a `Price` in **$ per million
-# tokens** with fields `input`, `cached_input`, `output`. Bill `input_tokens − cached_tokens` at the input
-# rate, `cached_tokens` at the cached rate, and `output_tokens + thinking_tokens` at the output rate.
+# `cost_usd(usage, price)` returns the dollars for one call. `price` is a `Price` in **$ per million
+# tokens**, with the fields `input`, `cached_input` and `output`. Use the input rate for
+# `input_tokens − cached_tokens`. Use the cached rate for `cached_tokens`. Use the output rate for
+# `output_tokens + thinking_tokens`.
 
 # %% exercise
 def cost_usd(usage: Usage, price: Price) -> float:
@@ -163,9 +169,10 @@ print("✅ cost formula matches the price table on every traced conversation")
 # %% [markdown]
 # ## 3. Latency by span kind, and the most expensive step
 #
-# Percentiles are computed per **span kind**, because "p95 latency" of a turn mixes model calls, tool
-# calls and orchestration into one number nobody can act on. `FakeLLM` does not actually sleep, so we
-# read the latency it *reports* (`model.latency_ms`); in production the span duration is the truth.
+# This section calculates the percentiles for each **span kind**. The "p95 latency" of a turn mixes model
+# calls, tool calls and orchestration into one number, and nobody can act on that number. `FakeLLM` does not
+# really sleep. Thus the notebook reads the latency that it *reports* (`model.latency_ms`). In production, the
+# span duration is the truth.
 
 # %%
 for kind, stats in summarize_latencies(tracer.spans, latency=reported_latency_ms).items():
@@ -179,9 +186,12 @@ print(f"longest span in it (wall time): {span_name} {span_ms:.1f} ms")
 # %% [markdown]
 # ### Exercise 3.1 — nearest-rank percentile
 #
-# `my_percentile(values, p)` returns the smallest observed value below which `p` percent of the sample
-# lies, with **no interpolation**: sort, take rank $\lceil p/100 \times n \rceil$ (at least 1), return the value at
-# that rank. An interpolated p95 can be a latency nobody experienced; nearest-rank never invents a number.
+# `my_percentile(values, p)` returns the smallest observed value below which `p` percent of the sample lies.
+# Use **no interpolation**. Sort the values. Take the rank $\lceil p/100 \times n \rceil$ (at least 1).
+# Return the value at that rank.
+#
+# An interpolated p95 can be a latency that nobody experienced. Nearest-rank
+# always returns a number that is in the sample.
 
 # %% exercise
 import math
@@ -205,9 +215,10 @@ print(f"✅ nearest-rank percentile; p95 model latency here = {my_percentile(mod
 # %% [markdown]
 # ## 4. Time-to-first-token and tokens per second
 #
-# Users feel two latencies: the wait before the first token (**TTFT**) and the typing speed after it
-# (**tokens/s**). Both come from stream chunk timestamps and the usage in the final chunk. `FakeLLM` with
-# `simulate_time=True, time_scale=0.01` sleeps for 1% of the simulated time, so the notebook stays fast.
+# Users feel two latencies: the wait before the first token (**TTFT**) and the speed of the text after it
+# (**tokens/s**). Both come from the timestamps of the stream chunks and from the usage in the final chunk.
+# `FakeLLM` with `simulate_time=True, time_scale=0.01` sleeps for 1% of the simulated time. Thus the notebook
+# stays fast.
 
 # %%
 stream_llm = FakeLLM(responses=["Your balance is SGD 1234.5 and your last charge was ACME Sports for 89.90. " * 6],
@@ -225,9 +236,9 @@ print(f"{stats.output_tokens} output tokens over {stats.generation_ms:.1f} ms re
 # ### Exercise 4.1 — implement `ttft_and_tps`
 #
 # `my_ttft_and_tps(chunks, start_ms)` returns `(ttft_ms, tokens_per_sec)`:
-# * TTFT = `t_ms` of the first chunk that carries content (`text` or `tool_call`) minus `start_ms`;
-# * tokens/s = `output_tokens` from the last chunk's `usage`, divided by the seconds between that first
-#   content chunk and the **last** chunk (`0.0` if the window is empty).
+# * TTFT is the `t_ms` of the first chunk that has content (`text` or `tool_call`), minus `start_ms`.
+# * tokens/s is the `output_tokens` from the `usage` of the last chunk, divided by the seconds between that
+#   first content chunk and the **last** chunk. If the window is empty, tokens/s is `0.0`.
 
 # %% exercise
 def my_ttft_and_tps(chunks: list[StreamChunk], start_ms: float) -> tuple[float, float]:
@@ -252,10 +263,10 @@ print(f"✅ TTFT {mine[0]:.1f} ms, {mine[1]:,.0f} tok/s — matches the library 
 # %% [markdown]
 # ## 5. Redaction before export
 #
-# Traces carry customer data: the case details above contain a card number and an email. Redaction
-# happens **at the export boundary**, field by field, so what leaves the process is clean while the
-# in-memory span keeps what the tool wrote. `drop_attrs` removes whole attributes (raw prompts,
-# retrieved passages) that should never leave at all.
+# Traces contain customer data. The case details in section 1 contain a card number and an email. Redaction
+# occurs **at the export boundary**, field by field. Thus the data that leaves the process is clean, but the
+# in-memory span keeps what the tool wrote. `drop_attrs` removes complete attributes (raw prompts, retrieved
+# passages) that must never leave the process.
 
 # %%
 exporter = RedactingExporter(drop_attrs=("gen_ai.input.messages",))
@@ -270,9 +281,10 @@ print("  ", exporter.scrub(runner.store.get("conv-3").to_dict())["events"][0]["p
 # %% [markdown]
 # ### Exercise 5.1 — a redaction rule for card numbers
 #
-# Build `card_rule = rule("card", pattern, "<card>")` whose regex matches a 16-digit card number written
-# as `4111111111111111`, `4111 1111 1111 1111` or `4111-1111-1111-1111` — and nothing shorter, longer,
-# or date-like. (`\b` word boundaries and a repeated group of four digits get you there.)
+# Make `card_rule = rule("card", pattern, "<card>")`. Its regex must match a 16-digit card number in the form
+# `4111111111111111`, `4111 1111 1111 1111` or `4111-1111-1111-1111`. It must not match a shorter number, a
+# longer number or something that looks like a date. Hint: `\b` word boundaries and a repeated group of
+# four digits are sufficient.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -290,11 +302,14 @@ print("✅ card numbers redacted, everything else untouched")
 # %% [markdown]
 # ## 6. Alert rules on a looping agent
 #
-# A model stuck in a loop re-issues the same call until the runtime's duplicate detector refuses it. Each
-# extra step costs a model call, so **cost per task** drifts up and the **wrong-tool rate** (unknown,
-# invalid or duplicate calls over all calls) rises — two numbers worth alerting on, alongside p95 model
-# latency. `agent_metrics` computes them from a tracer plus the session logs. Notice how caching softens
-# the cost drift (the repeated prompt prefix is cheap) while steps and wrong-tool rate double outright.
+# A model that is stuck in a loop sends the same call again and again. It stops when the duplicate detector
+# of the runtime refuses the call. Each extra step costs a model call. Thus the **cost per task** drifts up,
+# and the **wrong-tool rate** increases. The wrong-tool rate is the unknown, invalid or duplicate calls
+# divided by all calls.
+#
+# These two numbers are worth an alert, together with the p95 model latency. `agent_metrics` calculates them
+# from a tracer and the session logs. Note that caching makes the cost drift smaller, because the repeated
+# prompt prefix is low-cost. But the steps and the wrong-tool rate fully double.
 
 # %%
 def repeat_until_stopped(messages, tools):
@@ -329,9 +344,9 @@ for name, metrics in (("healthy", healthy_metrics), ("looping", looping_metrics)
 # %% [markdown]
 # ### Exercise 6.1 — an alert rule for the wrong-tool rate
 #
-# Define `wrong_tool_alert`, an `AlertRule` on the `wrong_tool_rate` metric that fires when more than 5%
-# of tool calls are wrong (unknown tool, invalid arguments, or a duplicate). Give it a clear name and
-# severity `"ticket"` — a rising wrong-tool rate is a prompt or schema problem, not a 3 a.m. page.
+# Define `wrong_tool_alert`, an `AlertRule` on the `wrong_tool_rate` metric. It must fire when more than 5% of
+# tool calls are incorrect (an unknown tool, invalid arguments, or a duplicate). Give it a clear name and the
+# severity `"ticket"`. A wrong-tool rate that increases is a prompt or schema problem, not a 3 a.m. page.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -349,9 +364,10 @@ print("✅", fired)
 # %% [markdown]
 # ### Exercise 6.2 — why traces need retention rules
 #
-# Write `retention_explanation`: two or three sentences a reviewer would accept, covering *what* is in a
-# trace that makes it sensitive, *why* keeping it forever is a liability rather than an asset, and *what*
-# the rule looks like (a time limit, and what survives it).
+# Write `retention_explanation`: two or three sentences that a reviewer can accept. They must tell:
+# * *what* is in a trace that makes it sensitive,
+# * *why* a trace that you keep forever is a liability and not an asset,
+# * *what* the rule is (a time limit, and what stays after it).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -374,19 +390,21 @@ print("✅ retention rule explained")
 # %% [markdown]
 # ## The one-minute version
 #
-# When asked *"how would you operate this?"*, answer with the span tree in your head:
+# When someone asks *"how would you operate this?"*, answer with the span tree in your head:
 #
-# * **One trace per turn, spans per agent / model / tool**, attributes named by the OpenTelemetry GenAI
-#   (`gen_ai.*`) conventions — at Development stability as of September 2026 (verify) — so a tracing backend
-#   on the same convention version (Cloud Trace, an OTel collector) reads them without a mapping. Tool spans
-#   carry `gen_ai.tool.name` plus the lab's own `tool.ok` and `tool.error`; model spans carry input, cached
-#   input and output tokens and the finish reasons.
-# * **Cost is arithmetic on those spans**: uncached input, cached input, output — priced per model. Say the
-#   two levers out loud: model tier is ≈4×, prompt caching is ≈2×, and both come from prompt layout and
-#   routing decisions, not from negotiation.
-# * **Latency per span kind**, nearest-rank percentiles, TTFT and tokens/s for streaming UX. A single
-#   "p95 of the turn" hides whether the model or a tool is slow.
-# * **Redaction at the export boundary, retention by rule.** Traces are customer data; scrub fields before
-#   they leave the process, keep raw traces days not years, keep aggregates and reviewed golden cases.
+# * **One trace per turn, spans per agent / model / tool**. The attribute names come from the OpenTelemetry
+#   GenAI (`gen_ai.*`) conventions. These conventions are at Development stability as of September 2026
+#   (verify). Thus a tracing backend on the same convention version (Cloud Trace, an OTel collector) reads
+#   them without a mapping. Tool spans hold `gen_ai.tool.name` and also the lab's own `tool.ok` and
+#   `tool.error`. Model spans hold the input, cached input and output tokens and the finish reasons.
+# * **Cost is arithmetic on those spans**: uncached input, cached input and output, with a price for each
+#   model. Say the two levers out loud: model tier is ≈4×, and prompt caching is ≈2×. Both come from prompt
+#   layout and routing decisions, not from negotiation.
+# * **Latency per span kind**, nearest-rank percentiles, and TTFT and tokens/s for streaming UX. One "p95 of
+#   the turn" does not show if the model or a tool is slow.
+# * **Redaction at the export boundary, retention by rule.** Traces are customer data. Redact the fields
+#   before they leave the process. Keep raw traces for days, not years. Keep the aggregates and the reviewed
+#   golden cases.
 # * **Alerts on the agent's economics**: cost per task, steps per task, wrong-tool rate, p95 model latency.
-#   A looping agent is a cost incident first and a quality incident second; both show up here before the invoice.
+#   An agent in a loop is a cost incident first and a quality incident second. Both show here before the
+#   invoice comes.

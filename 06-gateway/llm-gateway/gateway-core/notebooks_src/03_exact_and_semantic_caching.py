@@ -1,25 +1,34 @@
 # %% [markdown]
 # # 03 · Exact and semantic caching
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. The embedder is lexical (a hashing embedder, as in 07.4's
-# `ragkit`): it is the floor a real embedder must beat, and it is labelled so. The semantic cache next to vLLM's own
-# prefix cache, over HTTP (T0 emulated; T1 with `cached_tokens` measured), is `gateway-lab` notebook
-# `03_semantic_cache_vs_the_prefix_cache`.
+# **Tier:** T0. It uses only the CPU, no network and a few seconds. The embedder is lexical (a hashing embedder, as in
+# the `ragkit` of 07.4). It is the floor that a real embedder must beat, and the notebook labels it so. The semantic
+# cache next to the prefix cache of vLLM, over HTTP, is `gateway-lab` notebook `03_semantic_cache_vs_the_prefix_cache`
+# (T0 emulated, T1 with `cached_tokens` measured).
 #
 # ## The one-minute version
-# Four caches sit on an LLM request path and only two of them can be *wrong*. The provider's prompt cache and the
-# engine's prefix cache reuse computation — they save money or prefill time and never change an answer. The gateway's
-# **exact** and **semantic** caches reuse an *answer*, so they are only safe for classes the route declares cacheable,
-# in a namespace keyed by the **verified tenant**, and — for the semantic one — at a threshold chosen on labelled
-# traffic, with numbers, dates and codes guarded exactly, because an embedding cannot see that "Q3 2024" is not
-# "Q3 2025".
+# Four caches sit on the path of an LLM request, and only two of them can be *incorrect*. The prompt cache of the
+# provider and the prefix cache of the engine reuse computation. They save money or prefill time, and they never change
+# an answer. The **exact** cache and the **semantic** cache of the gateway reuse an *answer*. Thus they are safe only
+# under these conditions:
 #
-# By the end you can build a safe exact key, extract the entities a guard compares, choose a threshold under a false-hit
-# budget, put a price on a false hit, decide what a namespace must hold for shared and per-user classes, and say what
-# the provider's prompt cache saves instead.
+# - The route declares the class cacheable.
+# - The key of the namespace is the **verified tenant**.
+# - For the semantic cache, the threshold comes from labelled traffic, and a guard compares numbers, dates and codes
+#   exactly. The reason is that an embedding cannot see that "Q3 2024" is not "Q3 2025".
 #
-# Primer: §3 *Caching at the gateway* (`../PRIMER.md`); §6.4 for `cache_salt`; the engine's prefix cache is
-# serving-engine PRIMER §5 (module 04.3); semantic caching's false positives, the embeddings primer §15.
+# By the end, you can do these things:
+#
+# - make a safe exact key,
+# - extract the entities that a guard compares,
+# - select a threshold under a false-hit budget,
+# - put a price on a false hit,
+# - decide what a namespace must hold for shared classes and for per-user classes,
+# - tell what the prompt cache of the provider saves instead.
+#
+# Primer: §3 *Caching at the gateway* (`../PRIMER.md`). See §6.4 for `cache_salt`. The prefix cache of the engine is
+# in serving-engine PRIMER §5 (module 04.3). For the false positives of semantic caching, see §15 of the embeddings
+# primer.
 
 # %%
 import numpy as np
@@ -39,8 +48,8 @@ print("key(stream) ", cache.exact_key("acme", {**req, "stream": True})[:24], " <
 
 # %% [markdown]
 # ## Worked example 1 — the exact cache in the front door
-# Same question twice from one tenant: the second is replayed from the cache at $0 and no provider sees it. A second
-# tenant asking the same thing misses — its namespace is its own.
+# The same question comes two times from one tenant. The cache replays the second answer at $0, and no provider sees the
+# request. A second tenant asks the same thing and gets a miss, because its namespace is its own.
 
 # %%
 clock = Clock()
@@ -56,7 +65,8 @@ for who, k in (("acme", acme), ("acme", acme), ("globex", globex)):
 
 # %% [markdown]
 # ## Worked example 2 — what a lexical embedder sees
-# The bundled sample has 15 cached questions and labelled probes. Paraphrases should hit; near misses must not.
+# The bundled sample has 15 cached questions and labelled probes. We want the paraphrases to hit. The near misses must
+# not hit.
 
 # %%
 s, emb = cache.load_sample(), cache.HashingEmbedder()
@@ -74,16 +84,19 @@ for a, b in zip(rows[False], rows[True]):
     print(f" {a['threshold']:.2f} | {a['hit_rate']:5.1%} {a['false_hit_rate']:5.1%}         | {b['hit_rate']:5.1%} {b['false_hit_rate']:5.1%}")
 
 # %% [markdown]
-# On this embedder near misses sit *closer* to the cached question than paraphrases do, so no threshold gives many hits
-# without false ones; the entity guard halves false hits at low thresholds but cannot see "Business" vs "Team". That is
-# not an artefact to tune away: a real embedder raises paraphrase scores, but "the Team plan" and "the Business plan"
-# stay close in any embedding. Hence: narrow cacheable classes, a threshold chosen on *your* labelled traffic, and a
-# guard or verifier where a false hit is expensive.
+# On this embedder, the near misses are *nearer* to the cached question than the paraphrases. Thus no threshold gives
+# many hits without false ones. The entity guard halves the false hits at low thresholds, but it cannot see "Business"
+# against "Team".
+#
+# This is not an artefact that you can adjust away. A real embedder increases the paraphrase scores, but "the Team plan"
+# and "the Business plan" stay near in any embedding. Thus the answer has three parts. Use narrow cacheable
+# classes and a threshold that you select on *your* labelled traffic. Add a guard or a verifier where a false hit is
+# high-cost.
 #
 # ## Exercise 3.1 — an exact key that is safe
-# Write `my_exact_key(namespace, request)`: a SHA-256 hex digest over the namespace and **only** the fields that
-# change the answer — model, messages, tools, tool_choice, response_format, temperature, top_p,
-# max_completion_tokens, seed, reasoning_effort — serialised deterministically (sorted keys).
+# Write `my_exact_key(namespace, request)`. It returns a SHA-256 hex digest over the namespace and **only** the fields
+# that change the answer. These fields are model, messages, tools, tool_choice, response_format, temperature, top_p,
+# max_completion_tokens, seed, reasoning_effort. Serialise them deterministically (sorted keys).
 
 # %% exercise
 import hashlib
@@ -111,9 +124,9 @@ print("✅ stream, user and metadata leave the key alone; the answer-changing fi
 
 # %% [markdown]
 # ## Exercise 3.2 — what the guard compares
-# Write `my_entities(text)`: the set of tokens that are **numbers** (a digit followed by any of digits and `. , / : -`)
-# or **codes** (an uppercase letter followed by one or more uppercase letters or digits: `SSO`, `Q3`, `EUR`), as whole
-# words. Use `re`.
+# Write `my_entities(text)`. It returns the set of tokens that are **numbers** or **codes**, as whole words. A number is
+# a digit, then any of digits and `. , / : -`. A code is an uppercase letter, then one or more uppercase letters or
+# digits: `SSO`, `Q3`, `EUR`. Use `re`.
 
 # %% exercise
 import re
@@ -132,9 +145,9 @@ print(f"✅ the guard separates {len(blocked)} of 15 near misses:", blocked)
 
 # %% [markdown]
 # ## Exercise 3.3 — choose a threshold under a false-hit budget
-# The route's budget: at most **5 %** of cacheable lookups may be served a wrong answer. Over thresholds 0.50, 0.51, …,
-# 1.00, with and without the guard, choose `(tau, guard)` that maximises the hit rate within the budget (ties: the
-# higher threshold, then guard on). Use `cache.sweep_thresholds`.
+# The budget of the route: at most **5 %** of cacheable lookups can get an incorrect answer from the cache. Examine the
+# thresholds 0.50, 0.51, …, 1.00, with and without the guard. Select the `(tau, guard)` that maximises the hit rate in
+# the budget. If there is a tie, prefer the higher threshold, then the guard on. Use `cache.sweep_thresholds`.
 
 # %% exercise
 grid = [round(0.5 + i / 100, 2) for i in range(51)]
@@ -153,10 +166,10 @@ print(f"✅ tau={tau} guard={guard}: {table[(guard, tau)]['hit_rate']:.1%} of pa
 
 # %% [markdown]
 # ## Exercise 3.4 — price a false hit
-# At $\tau = 0.90$ with the guard, per 44 cacheable lookups the cache serves `right` correct and `wrong` wrong answers
-# (from `cache.sweep_thresholds`). A correct hit saves the §5.3 call on gemini-3.5-flash (`metering.price_call`,
-# 5,000 in of which 2,700 cached, 350 out). Set `break_even` to the cost of one wrong answer, in dollars, at which the
-# cache saves exactly nothing.
+# At $\tau = 0.90$ with the guard, for each 44 cacheable lookups, the cache serves `right` correct answers and `wrong`
+# incorrect answers (from `cache.sweep_thresholds`). A correct hit saves the §5.3 call on gemini-3.5-flash
+# (`metering.price_call`, 5,000 in of which 2,700 cached, 350 out). Set `break_even` to the cost of one incorrect
+# answer, in dollars, at which the cache saves exactly nothing.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -172,14 +185,18 @@ print(f"✅ break-even ${break_even:.5f} per wrong answer: any wrong answer that
 
 # %% [markdown]
 # ## Exercise 3.5 — which fields a namespace needs
-# `leaky` below is one semantic cache shared by every tenant and user, keyed on nothing but the text: one tenant's
-# answer reaches another. The fix is a namespace, and what goes in it depends on the class the route declared. A
-# shared class (`faq`: "How do I reset my password?") has one right answer per **tenant** — every user of that tenant
-# may share it, no other tenant may. A per-user class (`account`: "What is my plan limit?") has one right answer per
-# **user** — sharing it inside the tenant is the drill-1 incident. Write `namespace(tenant, user, cache_class)`
-# returning a string: the classes in `PER_USER` are namespaced by tenant *and* user, every other class by tenant only.
-# Tenant and user ids are arbitrary strings (they may contain `:` or `|`), so two different (tenant, user) pairs must
-# never produce the same namespace.
+# The `leaky` cache in the next cell is one semantic cache that every tenant and every user share. Its key is the text
+# and nothing else. Thus the answer of one tenant reaches another tenant. The solution is a namespace, and its contents
+# depend on the class that the route declared.
+#
+# A shared class (`faq`: "How do I reset my password?") has one correct answer for each **tenant**. Every user of that
+# tenant can share it, and no other tenant can. A per-user class (`account`: "What is my plan limit?") has one correct
+# answer for each **user**. If the users of the tenant share it, that is the incident of drill 1.
+#
+# Write `namespace(tenant, user, cache_class)`. It returns a string. For the classes in `PER_USER`, the namespace
+# contains the tenant *and* the user. For every other class, it contains only the tenant. Tenant ids and user ids are
+# arbitrary strings (they can contain `:` or `|`). Thus two different (tenant, user) pairs must never give the same
+# namespace.
 
 # %%
 leaky = cache.SemanticCache(0.8)
@@ -210,9 +227,9 @@ print("✅ faq: one namespace per tenant; account: one per (tenant, user); no tw
 
 # %% [markdown]
 # ## Exercise 3.6 — what the provider's prompt cache saves instead
-# The provider's prompt cache is never wrong: it bills cached input at ~10 % of the input price. For the §5.3 call on
-# **gpt-5.4-mini** (5,000 input tokens, 350 output), set `uncached`, `cached` (2,700 of the input cached) and
-# `saved_share` (the fraction of the uncached cost it saves) using `metering.price_call`.
+# The prompt cache of the provider is never incorrect. It bills cached input at ~10 % of the input price. Do this for
+# the §5.3 call on **gpt-5.4-mini** (5,000 input tokens, 350 output). Use `metering.price_call` to set `uncached`,
+# `cached` (2,700 of the input cached) and `saved_share` (the fraction of the uncached cost that the cache saves).
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -230,23 +247,28 @@ print(f"   for a vLLM pool the engine's prefix cache is isolated per tenant with
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "There are four caches on the path. The provider's prompt cache and the engine's prefix
-# cache reuse computation: they cut cost and TTFT and never change an answer, so we lay prompts out for them and isolate
-# the engine's with a per-tenant `cache_salt`. The gateway's exact and semantic caches reuse answers, so they only serve
-# classes a route declares cacheable — never personal, time-sensitive or tool-using requests — in a namespace keyed by
-# the verified tenant. The exact key hashes every field that changes the answer and nothing else.
+# **The two-minute version.** "There are four caches on the path. The prompt cache of the provider and the prefix cache
+# of the engine reuse computation. They decrease cost and TTFT, and they never change an answer. Thus we design the
+# layout of the prompts for them, and we isolate the cache of the engine with a per-tenant `cache_salt`.
 #
-# "The semantic cache needs a threshold chosen on labelled traffic: on our sample a lexical embedder ranks near misses
-# above paraphrases, the entity guard halves false hits but cannot see a changed word, and at a 5 % false-hit budget the
-# cache hits a fifth of paraphrases. A wrong answer that costs more than about a cent and a half makes that a loss, so
-# for anything that matters we cache narrowly, guard entities and add a verifier."
+# "The exact cache and the semantic cache of the gateway reuse answers. Thus they serve only the classes that a route
+# declares cacheable, in a namespace with the verified tenant as its key. They never serve personal or time-sensitive
+# requests, or requests that use tools. The exact key hashes every field that changes the answer, and nothing else.
+#
+# "The semantic cache needs a threshold that we select on labelled traffic. On our sample, a lexical embedder ranks near
+# misses above paraphrases. The entity guard halves the false hits, but it cannot see a changed word. At a 5 %
+# false-hit budget, the cache hits a fifth of the paraphrases. If an incorrect answer costs more than about a cent and a
+# half, that cache is a loss. Thus, for anything that matters, we cache narrowly, put a guard on entities and add a
+# verifier."
 #
 # **Drill questions**
-# 1. *The semantic cache answered one user with another user's order status. What went wrong?* — A personal class was
-#    cacheable, the namespace had no tenant or user, and a one-digit near miss cleared the threshold. Declare
-#    classes per route, namespace by verified tenant, guard numbers and IDs, measure false hits first.
-# 2. *Why is `stream` not part of the exact key?* — It changes the transport, not the answer; a cached answer can be
-#    re-streamed. `temperature`, tools and `reasoning_effort` change the answer and are in the key.
-# 3. *Is the engine's prefix cache a semantic cache?* — No: it is exact (chained block hashes over the token prefix),
-#    reuses K/V rather than answers, and cannot be wrong; its risk is a timing side channel between tenants, which
-#    `cache_salt` closes.
+# 1. *The semantic cache answered one user with another user's order status. What went wrong?* A personal class was
+#    cacheable, and the namespace had no tenant or user. Also, a near miss of one digit went above the threshold. Declare the
+#    classes for each route. Make the namespace from the verified tenant. Put a guard on numbers and IDs. Measure the
+#    false hits first.
+# 2. *Why is `stream` not part of the exact key?* It changes the transport, not the answer. The gateway can send a
+#    cached answer as a stream again. `temperature`, tools and `reasoning_effort` change the answer, and they are in
+#    the key.
+# 3. *Is the engine's prefix cache a semantic cache?* No. It is exact (chained block hashes over the token prefix). It
+#    reuses K/V, not answers, and it cannot be incorrect. Its risk is a timing side channel between tenants, and
+#    `cache_salt` closes that channel.

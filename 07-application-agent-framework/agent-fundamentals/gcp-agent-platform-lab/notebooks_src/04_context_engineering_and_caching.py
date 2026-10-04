@@ -1,17 +1,21 @@
 # %% [markdown]
 # # 04 · Context engineering and caching
 #
-# The context window is a budget, not a bucket. Every model call re-reads everything you put in front of it, so *what* you
-# include, *in which order*, and *how much of it is byte-identical across calls* decide latency, cost and — past a point —
-# accuracy. The lab's `ContextBuilder` makes those decisions explicit: a cache-friendly layout, tool-result truncation,
+# The context window is a budget, not a bucket. Every model call reads again everything that you put in front of it.
+# Thus three things decide latency, cost and, past a point, accuracy:
+# - *what* you include,
+# - *in which order*,
+# - *how much of it is byte-identical across calls*.
+#
+# The lab's `ContextBuilder` makes those decisions explicit. It has a cache-friendly layout, tool-result truncation,
 # compaction of old turns and a hard token cap. This notebook measures each of them.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 (context engineering for scale).
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.5 (context engineering for scale).
 #
-# In this notebook you will:
-# 1. read a `ContextBuilder` layout and account for every token in it by role;
-# 2. measure prefix caching across turns, and the cost difference a stable prefix makes at production volume;
-# 3. write a better summarizer, a token-budget enforcer, a memory provider and a tool-scoping rule — the four levers you own.
+# In this notebook, you will:
+# 1. Read a `ContextBuilder` layout. Account for every token in it, by role.
+# 2. Measure prefix caching across turns. Measure the cost difference that a stable prefix makes at production volume.
+# 3. Write a better summarizer, a token-budget enforcer, a memory provider and a tool-scope rule. These are the four levers that you own.
 
 # %%
 import json
@@ -26,14 +30,15 @@ POLICY = ("Returns policy. Items may be returned within 30 days with proof of pu
 # %% [markdown]
 # ## 1. The layout
 #
-# `ContextBuilder.build(session)` assembles the prompt in this order:
+# `ContextBuilder.build(session)` builds the prompt in this order:
 #
 #     [system: instruction + static reference material]   ← identical for every user and every turn
 #     [system: known facts about this user]                ← identical across this user's turns
 #     [system: summary of old turns]                       ← changes only when compaction moves
 #     [recent turns … current turn]                        ← changes every turn
 #
-# Stable material first, volatile last — because a context cache matches an exact **leading** prefix.
+# The stable material comes first, and the volatile material comes last.
+# The reason is that a context cache matches an exact **leading** prefix.
 
 # %%
 def memory_from_state(session: Session) -> list[str]:
@@ -53,8 +58,8 @@ for m in prompt:
     print(f"{m['role']:10s} {count_tokens(m['content']):5d} tokens  {m['content'][:66]!r}")
 
 # %% [markdown]
-# `context_report` is the first thing to look at when a prompt is expensive: tokens by role. Here the reference material
-# dominates — which is fine **if** it is cached.
+# When a prompt is high-cost, look at `context_report` first. It shows the tokens by role.
+# Here, the reference material has most of the tokens. This is fine **if** it is in the cache.
 
 # %%
 print(json.dumps(context_report(prompt), indent=1))
@@ -63,9 +68,10 @@ print("cacheable prefix (instruction + static material):", builder.cacheable_pre
 # %% [markdown]
 # ## 2. Caching, measured
 #
-# `FakeLLM` reports `cached_tokens` for the longest leading prefix it has seen before, the way a real context cache bills.
-# Run four turns through two builders: one with the layout above, one whose instruction starts with a per-turn timestamp —
-# the classic way to destroy a cache without noticing.
+# `FakeLLM` reports `cached_tokens` for the longest leading prefix that it saw before. A real context cache bills in the same way.
+# Run four turns through two builders. One builder has the layout in §1.
+# The instruction of the other builder starts with a per-turn timestamp.
+# This is the classic way to destroy a cache and not know it.
 
 # %%
 QUESTIONS = ["Can I return shoes?", "What about sale items?", "And gift cards?", "How long does a refund take?"]
@@ -95,8 +101,9 @@ for label, b, vol in (("stable prefix first", stable, False), ("timestamp first"
 # %% [markdown]
 # ### What that is worth
 #
-# Illustrative per-million-token prices — **verify against the current Vertex AI price list before quoting anyone** — with
-# a cached input token at a steep discount to a fresh one. Multiply by a realistic day.
+# The next cell uses illustrative per-million-token prices.
+# **Make sure that these prices agree with the current Vertex AI price list before you quote them to anyone.**
+# A cached input token has a large discount against a fresh one. Multiply by a realistic day.
 
 # %%
 PRICE_INPUT_PER_M = 0.30        # USD per 1M fresh input tokens  — illustrative, verify
@@ -118,9 +125,9 @@ print(f"{TURNS_PER_DAY:,} turns/day × {prompt_tokens:,} input tokens: ${no_cach
 # %% [markdown]
 # ## 3. Bounding what tools put in the window
 #
-# Tool output is the largest uncontrolled input. `max_tool_result_chars` truncates it **in the model's view only** — the
-# event log keeps the full result — and appends a marker that tells the model how to get more: *call again with a narrower
-# request*. The lesson for tool design: give the model paging and filters, not everything.
+# Tool output is the largest uncontrolled input. `max_tool_result_chars` truncates it **in the model's view only**.
+# The event log keeps the full result. The builder also appends a marker that tells the model how to get more:
+# *call again with a narrower request*. The lesson for tool design is: give the model paging and filters, not everything.
 
 # %%
 big = Session(id="big")
@@ -136,9 +143,10 @@ print("tail of what the model sees:", tool_msg["content"][-105:])
 # %% [markdown]
 # ## 4. Compaction: old turns become a summary
 #
-# `max_recent_turns` keeps that many user turns verbatim; everything older is folded into one system message by the
-# `summarizer`. The default `naive_summarizer` keeps the user's asks and the tool names — and loses everything the assistant
-# decided or looked up, which is exactly what a later turn tends to need (Exercise 6.1 fixes that).
+# `max_recent_turns` keeps that number of user turns verbatim. The `summarizer` folds all older turns into one system message.
+# The default `naive_summarizer` keeps the asks of the user and the tool names.
+# But it loses everything that the assistant decided or looked up.
+# A later turn usually needs exactly this information (Exercise 6.1 repairs that).
 
 # %%
 long = Session(id="long")
@@ -152,8 +160,8 @@ print(compacted[1]["content"][:200], "…")
 print("report:", context_report(compacted))
 
 # %% [markdown]
-# `max_input_tokens` is the hard cap behind that: if the prompt is still too large, the oldest *recent* turns are dropped —
-# never the current one, never the system prefix.
+# `max_input_tokens` is the hard cap behind that. If the prompt is still too large, the builder drops the oldest *recent* turns.
+# It never drops the current turn, and it never drops the system prefix.
 
 # %%
 for cap in (None, 110, 90):
@@ -163,9 +171,10 @@ for cap in (None, 110, 90):
 # %% [markdown]
 # ## 5. Tool-set scoping: schemas are tokens too
 #
-# Every tool schema is re-sent on every model call. A support agent with nine tools pays for nine schemas per step even
-# when the current stage can legitimately use three. Scoping the tool set by stage cuts tokens **and** removes temptation:
-# a refund tool cannot be misfired during triage if it is not offered.
+# The runtime sends every tool schema again on every model call. A support agent with nine tools pays for nine schemas per step.
+# It pays this even when the current stage has a valid use for only three.
+# A tool set scoped by stage decreases tokens **and** removes temptation.
+# If the agent does not offer a refund tool during triage, the model cannot call it in error.
 
 # %%
 @tool
@@ -243,10 +252,13 @@ print(f"triage tools picked by hand: {schema_tokens([find_customer, get_order_st
 #
 # ### Exercise 6.1 — a summarizer that keeps what matters
 #
-# Write `better_summarizer(messages) -> str` for the old turns. It must keep (1) every identifier matching
-# `[A-Z]{2,5}-\d{2,}` (order, card and claim numbers) from **any** role — tool results included — each mentioned once, and
-# (2) the content of the **last assistant message** verbatim, the most recent decision. It must still compress: under half
-# the tokens of the messages it replaces. Keep the user's asks too, briefly, if you like.
+# Write `better_summarizer(messages) -> str` for the old turns. It must keep two things:
+# 1. Every identifier that matches `[A-Z]{2,5}-\d{2,}` (order, card and claim numbers), from **any** role, tool results included.
+#    Mention each identifier once.
+# 2. The content of the **last assistant message**, verbatim. This is the most recent decision.
+#
+# It must still compress. The result must have fewer than half the tokens of the messages that it replaces.
+# You can also keep the asks of the user, in short form, if you want.
 
 # %% exercise
 def better_summarizer(messages: list[dict]) -> str:
@@ -305,10 +317,14 @@ print(f"✅ old turns: {messages_tokens(old_msgs)} tokens → summary: {summary_
 # %% [markdown]
 # ### Exercise 6.2 — reorder a prompt for caching
 #
-# `build_prompt_bad` puts the volatile parts first and gets no cache hits. Write `build_prompt_good(policy, facts, history, now)`
-# that returns the **same information** in a cache-friendly order: a system message with the policy; a system message with
-# the user facts; the history as-is; then a final message carrying `now` (a system message `"Current time: …"` at the end
-# is fine). The check runs four turns and requires a cached share of at least 60% from the second turn on.
+# `build_prompt_bad` puts the volatile parts first and gets no cache hits.
+# Write `build_prompt_good(policy, facts, history, now)`. It returns the **same information** in a cache-friendly order:
+# 1. A system message with the policy.
+# 2. A system message with the user facts.
+# 3. The history, with no change.
+# 4. A final message that has `now`. A system message `"Current time: …"` at the end is fine.
+#
+# The check runs four turns. From the second turn on, the cached share must be at least 60%.
 
 # %% exercise
 def build_prompt_bad(policy: str, facts: list[str], history: list[dict], now: str) -> list[dict]:
@@ -350,10 +366,11 @@ print("✅ cached share per turn — volatile first:", [f"{s:.0%}" for s in bad_
 # %% [markdown]
 # ### Exercise 6.3 — scope the tool set by stage
 #
-# Implement `scope_tools(tools, stage)` using `STAGE_OF`: return, in the original order, the tools whose stage set contains
-# `stage` **or** `"*"` (always-available tools such as `escalate_to_human`). The check asserts the triage and close sets, a
-# schema-token drop of at least 50% for triage, and that an agent built from the scoped list offers only those tools to the
-# model.
+# Write `scope_tools(tools, stage)` with `STAGE_OF`. Return the tools whose stage set contains `stage` **or** `"*"`, in the original order.
+# `"*"` marks tools that are always available, such as `escalate_to_human`. The check asserts three things:
+# - the triage and close sets,
+# - a schema-token decrease of at least 50% for triage,
+# - that an agent built from the scoped list offers only those tools to the model.
 
 # %% exercise
 def scope_tools(tools: list, stage: str) -> list:
@@ -376,10 +393,13 @@ print(f"✅ triage offers {len(triage)} of {len(ALL_TOOLS)} tools: {schema_token
 # %% [markdown]
 # ### Exercise 6.4 — a hard token budget that never drops the wrong thing
 #
-# Implement `enforce_budget(messages, max_tokens)` for a prompt shaped `[system, turn, turn, …, current turn]`, where a turn
-# starts at a user message. Drop the **oldest whole turns** first until `messages_tokens(result) <= max_tokens`; **never**
-# drop the first (system) message or the current turn — the last user message and anything after it — even if those alone
-# exceed the budget. Return a new list; do not mutate the input.
+# Write `enforce_budget(messages, max_tokens)` for a prompt with the shape `[system, turn, turn, …, current turn]`.
+# A turn starts at a user message.
+#
+# Drop the **oldest whole turns** first, until `messages_tokens(result) <= max_tokens`.
+# **Never** drop the first (system) message or the current turn.
+# The current turn is the last user message and anything after it.
+# Do not drop them, even if those messages alone exceed the budget. Return a new list. Do not change the input.
 
 # %% exercise
 def enforce_budget(messages: list[dict], max_tokens: int) -> list[dict]:
@@ -419,9 +439,11 @@ print(f"✅ {full_tokens} tokens → {messages_tokens(trimmed)} (budget {budget}
 # %% [markdown]
 # ### Exercise 6.5 — a memory provider
 #
-# Write `user_memory(session) -> list[str]` returning at most **three** facts of the form `"<key>: <value>"` from the
-# session's `user:`-prefixed state keys (key shown without the prefix), in a **stable order** (sorted by key) so the injected
-# message is byte-identical across turns and stays cacheable. Ignore `app:`, `temp:` and plain keys.
+# Write `user_memory(session) -> list[str]`. It returns at most **three** facts of the form `"<key>: <value>"`.
+# The facts come from the state keys of the session that have the `user:` prefix. Show each key without the prefix.
+#
+# Return the facts in a **stable order** (sorted by key). Then the injected message is byte-identical across turns,
+# and the cache can hold it. Ignore `app:`, `temp:` and plain keys.
 
 # %% exercise
 def user_memory(session: Session) -> list[str]:
@@ -450,8 +472,9 @@ print("✅ injected:", mem_prompt[1]["content"].replace("\n", " | "))
 # %% [markdown]
 # ### Exercise 6.6 — say it in one paragraph
 #
-# In `context_strategy`, state the cache-friendly ordering (what goes first, what goes last, and why) and explain why a long
-# context window is a **capability, not a strategy** — give at least one cost reason and one quality or latency reason.
+# In `context_strategy`, state the cache-friendly order: what goes first, what goes last, and why.
+# Then explain why a long context window is a **capability, not a strategy**.
+# Give at least one cost reason and one quality or latency reason.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -476,10 +499,14 @@ print("✅", context_strategy[:110], "…")
 # %% [markdown]
 # ## The one-minute version
 #
-# When context comes up, do not say "we use a long-context model". Say how the prompt is built: *"stable to volatile —
-# instruction and reference material first so the prefix caches across every user; per-user memory next; a summary of old
-# turns; then the recent turns and the current request. Tool results are truncated in the model's view with a pointer to
-# fetch more, old turns are compacted by a summarizer that keeps decisions and identifiers, there is a hard token cap, and
-# the tool set is scoped to the stage so we are not paying for nine schemas to use three."* Then quantify it: cached share
-# per turn, tokens by role, dollars per day at the customer's volume. That is what context *engineering* means — and why a
-# bigger window changes the ceiling, not the plan.
+# When the discussion is about context, do not say "we use a long-context model". Say how the builder makes the prompt:
+#
+# *"The order is stable to volatile. The instruction and the reference material come first, so that the prefix caches
+# across every user. Per-user memory comes next, then a summary of old turns. Then come the recent turns and the current request.*
+#
+# *"The builder truncates tool results in the model's view, with a pointer to fetch more.
+# A summarizer that keeps decisions and identifiers compacts the old turns. There is a hard token cap.
+# Each stage gets only its own tool set, thus we do not pay for nine schemas to use three."*
+#
+# Then give the numbers: cached share per turn, tokens by role, and dollars per day at the customer's volume.
+# That is what context *engineering* means. It is also why a larger window changes the ceiling, not the plan.
