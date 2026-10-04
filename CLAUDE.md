@@ -310,7 +310,7 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   Not done: docstrings and code comments, and a check against the STE dictionary proper (the linter is heuristic; the
   verifiers read for meaning). **Baseline unchanged: 385 notebooks.**
 
-- **2026-10-03 — the other chapters in STE, layer by layer (in progress).** The same experiment, run over every
+- **2026-10-03 to 2026-10-04 — the other chapters in STE, layer by layer.** The same experiment, run over every
   other layer with `tools/orchestration/ste_rewrite_workflow.js` (one Workflow per layer: a rewriter per file group,
   an adversarial verifier against `git show HEAD:`, a fixer and a re-check, up to two rounds; the groups come from a
   per-layer inventory of Markdown files, percent-format notebook sources, hand-written notebooks and the builders that
@@ -370,8 +370,26 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   an unclear "Its", "That" and "it") applied by hand; agentic-identity-core 31, agentic-identity-gcp-lab 41,
   agentic-scaling-lab 37, gateway-core 109 and gateway-lab 166 tests pass; the 30 linter errors left are quoted drill
   questions and turns, the RFC keywords SHOULD and MAY in the MCP authorization references, pinned fragments of the
-  LLM-gateway primer, the glossary label "Reserve → stream → reconcile" and the generated capacity plan.
-  **Baseline unchanged: 385 notebooks.**
+  LLM-gateway primer, the glossary label "Reserve → stream → reconcile" and the generated capacity plan. **Layer 07**
+  (29 groups, about 120k words: the agent-memory and sandboxed-execution primers, the embeddings and vector-database
+  primers, the agent-fundamentals docs, READMEs and deploy notes, 29 notebook sources of five labs, the embeddings
+  lab's executed sources under its pinned interpreter, the RAG lab's builder, the layer README; the long-running-durable
+  topic was already in STE, and the RAG lab's corpus documents are data and stay as they are): 146 agents in 5.6 hours;
+  11,633 sentences compared, 19 blocking, 141 major and 311 minor findings, 644 applied, 3 rejected; the six left open
+  (the tool, not the store, marks a cached result; the Runner, not the loop, saves a paused session; "records them in
+  the audit" read as the tokens themselves; a (verify) tag whose scope had shrunk; a seven-sentence paragraph with an
+  unclear "its"; a sentence that the memory primer quotes word for word) applied by hand; agent-core 31,
+  gcp-agent-platform-lab 156, memory-core 84, memory-lab 174, sandbox-core 99, sandbox-lab 120, rag-from-scratch 12 and
+  vector-stores 49 tests pass, and the embeddings lab rebuilds byte for byte; the 111 linter errors left are quoted
+  drill prompts and model answers in the platform lab's notebooks, the answer "I don't know", quoted section titles of
+  the durable primer, pinned fragments of the memory primer, the RFC keyword in the MCP revisions note, the Firth
+  quotation, Kubernetes documentation quotations, the RAG corpus and code-span ranges that the linter reads as dashes.
+  **Across the eight layers:** 736 agents, 56,827 sentences compared in round 1, 77 blocking, 652 major and 1,550 minor
+  findings, 3,008 applied, 26 rejected, 42 applied by hand; about 615k words of prose. Layers 00 to 06 merged first,
+  through PR #50 (cut at the layer-06 commit), and layer 07 through PR #49. `CONTRIBUTING.md`'s writing bullet and the
+  long-running-durable README's caveat now say that every layer is in STE and that the root documents keep their usual
+  style. Not done, as before: docstrings and code comments, the root documents, and a check against the STE dictionary
+  proper. **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
 - Deduped 2026-09-26: `07-.../long-running-durable/PRIMER.md` is the only copy of the durable-execution primer, and

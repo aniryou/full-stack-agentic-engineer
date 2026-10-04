@@ -282,7 +282,7 @@ except Forbidden as e:
 # %% [markdown]
 # **Token hygiene.** MCP forbids token passthrough.
 # The gateway forwards `Authorization` only when it can verify the token, *and* the token's audience is the destination server.
-# The gateway removes all other tokens and records them in the audit.
+# The gateway removes all other tokens and records each removal in the audit.
 # A token for the ledger server must never get to the orders server, whatever the intention of the agent was.
 
 # %%

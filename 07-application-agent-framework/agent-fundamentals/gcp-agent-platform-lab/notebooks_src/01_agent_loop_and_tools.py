@@ -134,7 +134,7 @@ for t, args in ((lookup_order, {"order_id": "ORD-404"}), (flaky_inventory, {"sku
 #
 # When the runtime retries a write, the write must not post two times. Give a non-read tool an `IdempotencyStore`.
 # When the caller supplies an `idempotency_key`, a second execution with the same key gets its result from the store.
-# The store marks that result `from_idempotency_cache`.
+# The tool marks that result `from_idempotency_cache`.
 # The agent loop is a caller that supplies a key, which it makes from the session, the agent, the step and the call signature.
 # The function body runs once.
 

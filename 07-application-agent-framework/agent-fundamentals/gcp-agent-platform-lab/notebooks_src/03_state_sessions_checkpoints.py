@@ -139,7 +139,7 @@ print("recovered:", back.state, "| events:", [e.kind for e in back.events], "| v
 # ## 3. Pause and resume for irreversible actions
 #
 # An irreversible tool (`SideEffect.IRREVERSIBLE`) must get a confirmation. Without a `confirm` hook, the loop **pauses**.
-# It saves the session with `status=awaiting_approval` and a `pending` payload that names the exact call. Then the run returns.
+# The Runner saves the session with `status=awaiting_approval` and a `pending` payload that names the exact call. Then the run returns.
 #
 # Approval is a state-machine transition, not a modal dialog. It can arrive minutes later, from another process, after a restart.
 # `approve(True)` executes the pending call **once** and lets the loop continue from the log.

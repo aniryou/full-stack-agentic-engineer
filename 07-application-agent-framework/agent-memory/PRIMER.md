@@ -410,11 +410,12 @@ $$
 \end{aligned}
 $$
 
-`memcore.budget.call_cost` calculates its price with a dated table. Take the "Cost per conversation" call of §3.4 of the [scaling
+`memcore.budget.call_cost` calculates the price of a call with a dated table. Take the "Cost per conversation" call of §3.4 of the [scaling
 primer](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md). It has 5,000 input tokens, of which 2,700
 hit the cache, and 350 output tokens. It runs on Gemini 3.5 Flash at $1.50 / $0.15 cached /
-$9.00 per M (5 Sep 2026, verify). Its cost is **$0.007005**. This reproduces `scalelab.capacity.cost_per_call`. The `token_cost` of the 07.2
-lab, at its illustrative Gemini 3 Flash prices, gives $0.002335 for the same shape.
+$9.00 per M (5 Sep 2026, verify). Its cost is **$0.007005**. This reproduces `scalelab.capacity.cost_per_call`.
+
+The `token_cost` of the 07.2 lab, at its illustrative Gemini 3 Flash prices, gives $0.002335 for the same shape.
 
 But a provider bills the cached rate only after a request clears its caching minimum. This minimum is **4,096 tokens** on Gemini 3.x (the
 scaling primer §5.5). The minimum applies to the request or to the shared prefix, and which one is `(verify)`. The §3.4 call of the scaling
@@ -523,12 +524,13 @@ in groups by slot and applies three rules (`memcore.consolidate.plan_key`):
    5) and Madrid (inferred, day 6). `plan_key` returns a plan to Lisbon valid day 1–4, Porto from day 4 with two pieces of evidence,
    and a flag on Madrid. If an Oslo from the source `human` is on file, the job puts a flag on each user statement instead.
 
-**Reflection, in brief.** Generative agents also write *insights*. They add the importance of the events since the last reflection. When the
-sum goes past a trigger, the agent makes focal questions from its recent records. The trigger is 150 in both the paper and the reference
-code (`importance_trigger_max`). For "recent", the paper says the 100 most recent records, and the code uses the events since the last
-reflection (`importance_ele_n`).
+**Reflection, in brief.** Generative agents also write *insights*. They add the importance of the events since the last reflection.
 
-Then the agent retrieves evidence for each question and stores up to five insights that cite evidence ids (`reflect.py`, verify).
+When the sum goes past a trigger, the agent makes focal questions from its recent records. The trigger is 150 in both the paper and the reference
+code (`importance_trigger_max`). For "recent", the paper says the 100 most recent records, and the code uses the events since the last
+reflection (`importance_ele_n`). Then the agent retrieves evidence for each question and stores up to five insights that cite
+evidence ids (`reflect.py`, verify).
+
 `memcore.consolidate.reflect()` keeps the shape: an importance-sum trigger, and insights that cite evidence. It also has the explicit exits
 of the lra-gcp primer's [§3.8 reflection
 loop](../long-running-durable/lra-gcp/docs/primer.md#38-reflection-evaluatoroptimizer-as-durable-steps): `below_trigger`, `done`,

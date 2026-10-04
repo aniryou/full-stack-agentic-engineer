@@ -185,7 +185,7 @@ An ANN library (Faiss, hnswlib, USearch) gives you an in-memory index and a sear
 
 ### 8. What the database layer adds
 
-**Mutability.** An insert into HNSW is natural, because the build makes the graph with inserts. **A delete is not:** when you remove a node, graph paths break. Thus engines mark deletions with tombstones, filter them out at query time, and periodically rebuild or compact the index. A collection with 30% tombstones has worse recall and latency than its size suggests. Monitor the ratio and vacuum the collection.
+**Mutability.** An insert into HNSW is natural, because the build makes the graph with inserts. **A delete is not:** when you remove a node, graph paths break. Thus engines mark deletions with tombstones, filter them out at query time, and periodically rebuild or compact the index. A collection carrying 30% tombstones has worse recall and latency than its size suggests. Monitor the ratio and vacuum the collection.
 
 An update is a delete plus an insert. IVF lists tolerate churn, but they drift away from their centroids.
 
