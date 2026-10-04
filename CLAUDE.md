@@ -350,7 +350,18 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   blocking, 59 major and 97 minor findings, 200 applied, 1 rejected; the three left open (the HTTP method GET used as a
   verb, a cold-start figure whose scope had moved, an unclear "This") applied by hand; orchestrator-core 65 and
   inference-gateway-lab 83 tests pass; the 3 linter errors left are one minus sign inside a formula that the linter reads
-  as a dash, in a source and its two notebooks.
+  as a dash, in a source and its two notebooks. **Layer 04** (29 groups, about 123k words: the serving-engine and
+  quantization primers, the FlashAttention deep dive and primer, the kv-cache, paged-attention and vLLM-internals
+  primers and the source map, READMEs and deploy notes, 23 notebook sources, five hand-written notebooks, the layer
+  README; the two largest documents, the deep dive and the vLLM primer, ran as sequential halves): 144 agents in 4.9
+  hours; 10,636 sentences compared, 13 blocking, 142 major and 269 minor findings, 567 applied, 6 rejected; the eleven
+  left open (one name for the IO saving, a seven-sentence list item, an unclear "it", "Its" and "they", a lost
+  "But" and a lost "because", a (verify) tag whose scope had shrunk, a table read by row instead of by column, "a
+  few cents", a wrong cause, "facts" for claims on the Verify list) applied by hand; flash-attention 49, kernel-core
+  51, paged-attention 3, quant-core 85, quant-lab 89, mini-engine-core 74 and vllm-serving-lab 73 tests pass; the 30
+  linter errors left are quoted source comments and messages, pinned fragments (the kv-cache primer's dashes, the
+  quantization primer's arrows and crest-factor sentence, the FlashAttention primer's "that's 32 GB") and the arrows in
+  two formula cells.
   **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping

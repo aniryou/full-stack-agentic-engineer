@@ -1,28 +1,30 @@
 # %% [markdown]
 # # 02 · Serve and compare schemes: what INT4, FP8 and FP4 buy on the GPU you have
 #
-# **Tier:** T0 — the scheme rules come from vLLM's source, the speeds from a roofline engine emulator
-# and a fake OpenAI-compatible server built on it: every speed here is **simulated**. T1 — set
-# `QUANTLAB_URL` to a real `vllm serve` (started with `deploy/any-gpu/serve.sh`: FP16 vs INT4 vs FP8
-# on a 24 GB card; on a T4 the INT4 path with `--dtype half`) and the same client measures it.
+# **Tier:** T0: the scheme rules come from the source of vLLM. Every speed here is **simulated**: it comes from a
+# roofline engine emulator and from a fake OpenAI-compatible server on top of it. T1: set
+# `QUANTLAB_URL` to a real `vllm serve`, and the same client measures it. Start the server with
+# `deploy/any-gpu/serve.sh`. With it, you can compare FP16, INT4 and FP8 on a 24 GB card. On a T4, use the INT4
+# path with `--dtype half`.
 #
 # ## The one-minute version
 #
-# A scheme changes two numbers: the **bytes** each step reads and the **FLOP/s** its GEMMs run at.
-# Decode reads every weight once per step, so it follows bytes; prefill multiplies thousands of
-# tokens against the same weights, so it follows FLOP/s.
+# A scheme changes two numbers: the **bytes** that each step reads and the **FLOP/s** of its GEMMs. Decode reads
+# every weight once per step. Thus the bytes set the speed of decode. Prefill multiplies thousands of tokens
+# against the same weights. Thus the FLOP/s set the speed of prefill.
 #
-# * **Weight-only INT4 (W4A16)** reads a quarter of the weight bytes and still multiplies in 16-bit:
-#   decode ~3x faster, prefill no faster (the dequantization is extra work). It runs on everything
-#   from a T4 (Marlin; Machete on Hopper).
-# * **FP8 W8A8** halves bytes *and* doubles tensor-core FLOP/s — but only where FP8 tensor cores exist
-#   (sm_89+: L4, RTX 4090, H100, B200). On a T4 or A100 vLLM runs the same checkpoint as weight-only
-#   FP8 through Marlin: a memory win, no FLOP win.
-# * **NVFP4 W4A4** quarters bytes and quadruples FLOP/s on Blackwell (sm_100+); elsewhere it is weight-only.
-# * **INT8 W8A8** runs on INT8 tensor cores from Turing to Hopper and is refused on Blackwell.
+# * **Weight-only INT4 (W4A16)** reads a quarter of the weight bytes, and it still multiplies in 16-bit. Decode
+#   is ~3x faster, and prefill is not faster (the dequantization is more work). It runs on everything from a T4
+#   (Marlin, and Machete on Hopper).
+# * **FP8 W8A8** halves the bytes *and* doubles the tensor-core FLOP/s. But it does this only where FP8 tensor
+#   cores exist (sm_89+: L4, RTX 4090, H100, B200). On a T4 or A100, vLLM runs the same checkpoint as
+#   weight-only FP8 through Marlin. This gives a memory win and no FLOP win.
+# * **NVFP4 W4A4** cuts the bytes to a quarter and gives four times the FLOP/s on Blackwell (sm_100+). On other
+#   GPUs, it is weight-only.
+# * **INT8 W8A8** runs on INT8 tensor cores from Turing to Hopper. vLLM refuses it on Blackwell.
 #
 # Concepts: PRIMER §1 "Why quantize, and what it can and cannot speed up", §4 (kernels) and §10
-# "Choosing a scheme" ([`PRIMER.md`](../../PRIMER.md)); the roofline itself is layer 01's
+# "Choosing a scheme" ([`PRIMER.md`](../../PRIMER.md)). The roofline itself is in the layer 01 primer
 # ([`../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md`](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §1-3).
 
 # %%
@@ -33,16 +35,16 @@ print(env.describe())
 print(serve.matrix(gpus=("T4", "L4", "H100-80GB", "B200"), schemes=("bf16", "fp8", "w4a16", "w8a8-int8", "nvfp4")))
 
 # %% [markdown]
-# Read one row per GPU generation. The **kernel** column is what vLLM should log at startup
-# (`Using MarlinLinearKernel for ...`, `Selected CutlassFP8ScaledMMLinearKernel for ...`): when your
-# log says otherwise, the plan is wrong for your version — check it (verify) before trusting a
-# benchmark.
+# Read one row for each GPU generation. The **kernel** column shows the kernel that you expect in the startup
+# log of vLLM (`Using MarlinLinearKernel for ...`, `Selected CutlassFP8ScaledMMLinearKernel for ...`). If your
+# log shows a different kernel, the plan is incorrect for your version. Do a check of it (verify) before you
+# trust a benchmark.
 #
 # ## Worked example: one GEMM on the roofline
 #
-# Llama-3.1-8B's `down_proj` is $[M, 14{,}336] \times [14{,}336, 4{,}096]$ for `M` tokens in the step. Its time
-# is $\max(2MKN/\text{peak}, (KN \cdot w + MK \cdot a + MN \cdot 2)/\text{bandwidth})$, with `w`, `a` the weight
-# and activation bytes (W4A16 counts its group scales and zero points: 4.16 bits).
+# The `down_proj` of Llama-3.1-8B is $[M, 14{,}336] \times [14{,}336, 4{,}096]$ for `M` tokens in the step. Its
+# time is $\max(2MKN/\text{peak}, (KN \cdot w + MK \cdot a + MN \cdot 2)/\text{bandwidth})$. Here `w` and `a` are
+# the weight and activation bytes (W4A16 counts its group scales and zero points: 4.16 bits).
 
 # %%
 for M in (1, 16, 64, 256, 2048):
@@ -52,9 +54,9 @@ for M in (1, 16, 64, 256, 2048):
 # %% [markdown]
 # ## Exercise 2.1 — the GEMM roofline
 #
-# Write `gemm_us(M, K, N, w_bytes, a_bytes, peak_tflops, bw_gbs)`: microseconds for the GEMM at 100%
-# of peak, output written in 16-bit. The check reproduces vllm-internals §8.1's table (L4: 121 BF16
-# and 242.5 FP8 dense TFLOP/s, 300 GB/s — datasheet numbers, verify).
+# Write `gemm_us(M, K, N, w_bytes, a_bytes, peak_tflops, bw_gbs)`. It returns the microseconds for the GEMM at
+# 100% of peak, with the output written in 16-bit. The check reproduces the table in vllm-internals §8.1 (L4: 121
+# BF16 and 242.5 FP8 dense TFLOP/s, 300 GB/s, from the datasheet, verify).
 
 # %% exercise
 def gemm_us(M, K, N, w_bytes, a_bytes, peak_tflops, bw_gbs):
@@ -75,9 +77,9 @@ print("✅ BF16 / W4A16 / FP8, microseconds:", table, "— vllm-internals §8.1,
 # ## Exercise 2.2 — where the INT4 advantage starts to fade
 #
 # W4A16 is memory-bound (fast) while its FLOP time is below its byte time. Write
-# `compute_bound_m(K, N, w_bytes, a_bytes, peak_tflops, bw_gbs)`: the smallest `M` at which the FLOP
-# time reaches the byte time. Predict first: an L4's BF16 ridge is 121e12 / 300e9 = 403 FLOP/byte,
-# and a W4A16 GEMM does about ${2M/0.52}$ FLOP per weight byte.
+# `compute_bound_m(K, N, w_bytes, a_bytes, peak_tflops, bw_gbs)`. It returns the smallest `M` at which the FLOP
+# time reaches the byte time. First, predict the result. The BF16 ridge of an L4 is 121e12 / 300e9 = 403
+# FLOP/byte. A W4A16 GEMM does about ${2M/0.52}$ FLOP per weight byte.
 
 # %% exercise
 def compute_bound_m(K, N, w_bytes, a_bytes, peak_tflops, bw_gbs):
@@ -100,10 +102,16 @@ print(f"✅ W4A16 turns compute-bound at M = {l4} on an L4 and {h100} on an H100
 # %% [markdown]
 # ## Worked example: the whole engine, simulated — one user versus sixteen
 #
-# `bench.profile` turns model + GPU + scheme into a step-time model (weights streamed per decode
-# step, KV bytes per token, the FLOP/s of the path the scheme takes on that GPU, 60% / 80% compute /
-# memory efficiency — assumptions). `closed_loop` runs a continuous-batching emulator on it: each
-# user sends a 1,024-token prompt and reads 128 tokens, then sends the next.
+# `bench.profile` makes a step-time model from three inputs: an LLM, a GPU and a scheme. The step-time model
+# contains:
+#
+# * the weights streamed in each decode step,
+# * the KV bytes per token,
+# * the FLOP/s of the path that the scheme takes on that GPU,
+# * 60% / 80% compute / memory efficiency (assumptions).
+#
+# `closed_loop` runs a continuous-batching emulator on the step-time model. Each user sends a 1,024-token prompt
+# and reads 128 tokens. Then the user sends the next prompt.
 
 # %%
 rows = []
@@ -118,16 +126,19 @@ print("\nQwen2.5-1.5B on a T4, 8 users [SIMULATED]")
 print(report.markdown([{k: r[k] for k in ("scheme", "ttft_ms_mean", "tpot_ms_mean", "output_tok_s")} for r in t4]))
 
 # %% [markdown]
-# On the L4, FP8 improves both TTFT and TPOT; INT4 improves only TPOT. On the T4 the FP8 checkpoint
-# is weight-only (no FP8 tensor cores): it reads half the bytes, so decode improves, but its TTFT
-# is the BF16 one.
+# On the L4, FP8 improves both TTFT and TPOT. INT4 improves only TPOT. On the T4, the FP8 checkpoint is
+# weight-only, because the T4 has no FP8 tensor cores. It reads half the bytes. Thus decode improves. But its
+# TTFT is the BF16 TTFT.
 #
 # ## Worked example: measuring over HTTP, the way you would measure a real server
 #
-# The fake server runs the same emulator in real time behind `/v1/completions` (SSE streaming). The
-# client times each chunk — TTFT is the first token-carrying chunk, ITL the gaps — exactly as it would
-# against `vllm serve`. Its `/version` says `"simulated": true`, so the label follows the server, not
-# the code path. Set `QUANTLAB_URL` and this cell measures your server instead.
+# The fake server runs the same emulator in real time behind `/v1/completions` (SSE streaming). The client
+# measures the time of each chunk. TTFT is the first chunk that carries a token, and ITL is the gaps between
+# chunks. The client does this exactly as it does against `vllm serve`.
+#
+# The `/version` of the server says
+# `"simulated": true`. Thus the server sets the label, not the code path. If you set `QUANTLAB_URL`, this cell
+# measures your server instead.
 
 # %%
 if env.server_url():
@@ -154,8 +165,8 @@ else:
 # \end{aligned}
 # $$
 #
-# — every decoded token goes through every linear layer and the LM head, and attends to `c` positions.
-# Write `step_ms(p, b, c)` from a `bench.Profile`'s fields (`params_per_token`, `attn_flops_per_pair`,
+# Every decoded token goes through every linear layer and the LM head, and it attends to `c` positions. Write
+# `step_ms(p, b, c)` from the fields of a `bench.Profile` (`params_per_token`, `attn_flops_per_pair`,
 # `streamed_bytes`, `kv_bytes_per_token`, `peak_flops`, `mem_bw`, `compute_eff`, `memory_eff`, `overhead_s`).
 
 # %% exercise
@@ -179,10 +190,10 @@ print(f"✅ batch 16 at 1,100 tokens: bf16 {step_ms(bf, 16, 1100):.1f} ms, w4a16
 # %% [markdown]
 # ## Exercise 2.4 — pick a scheme for three deployments, and say why
 #
-# Write `pick(gpu, prompt_len, output_len)`: among `bf16`, `fp8`, `w4a16`, `w8a8-int8` and `nvfp4`,
-# keep the schemes `serve.plan` says the GPU runs, simulate 8 users (`B.compare`), and return the one
-# with the lowest mean end-to-end latency $\mathrm{ttft} + (\mathrm{output\_len} - 1) \times \mathrm{tpot}$. Speed only — accuracy is
-# notebook 03's job.
+# Write `pick(gpu, prompt_len, output_len)`. From `bf16`, `fp8`, `w4a16`, `w8a8-int8` and `nvfp4`, keep the
+# schemes that `serve.plan` says the GPU runs. Simulate 8 users (`B.compare`). Return the scheme with the lowest
+# mean end-to-end latency $\mathrm{ttft} + (\mathrm{output\_len} - 1) \times \mathrm{tpot}$. This exercise is
+# about speed only. Accuracy is the job of notebook 03.
 
 # %% exercise
 def pick(gpu, prompt_len, output_len):
@@ -202,15 +213,15 @@ assert b200 == "nvfp4", b200                            # W4A4 on FP4 tensor cor
 print(f"✅ T4 chat: {chat_t4}; L4 long-prompt RAG: {rag_l4}; B200: {b200} [SIMULATED speeds — gate each on an eval]")
 
 # %% [markdown]
-# On a T4, `nvfp4` is in the running only as a weight-only format: 4.5 bits read through Marlin,
-# slightly more bytes than INT4 g128's 4.16, so INT4 wins — pick between INT4 checkpoints by their
-# evals. On a B200 the FP4 result holds only if the W4A4 accuracy does (notebook 05 shows how badly
-# FP4 *activations* can go without smoothing).
+# On a T4, `nvfp4` is a candidate only as a weight-only format. Marlin reads it at 4.5 bits, which is slightly
+# more bytes than the 4.16 of INT4 g128. Thus INT4 wins. Select between INT4 checkpoints by their evals. On a
+# B200, the FP4 result is valid only if W4A4 also passes the accuracy eval. Notebook 05 shows how bad FP4
+# *activations* can become without smoothing.
 #
 # ## On a real GPU (T1)
 #
-# `deploy/any-gpu/serve.sh` checks the scheme against the GPU and starts vLLM; then point this
-# notebook at it. The commands per scheme on a 24 GB L4, and on a free T4:
+# `deploy/any-gpu/serve.sh` does a check of the scheme against the GPU and starts vLLM. Then point this notebook
+# at the server. The next cell shows the commands for each scheme on a 24 GB L4 and on a free T4:
 
 # %%
 for s in ("bf16", "fp8-online", "w4a16"):
@@ -221,23 +232,27 @@ print("then: QUANTLAB_URL=http://127.0.0.1:8000 jupyter lab notebooks/   (or pyt
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Quantization buys bytes or FLOPs, and which one decides where it helps. On our
-# L4s, INT4 weight-only makes decode 2-3x faster per step for an 8B model but does nothing for
-# a long prompt's TTFT — its GEMMs still run in 16-bit: past ~120 tokens per step the dequantizing
-# kernel is compute-bound, and by ~460 it is no faster than BF16. FP8 W8A8 halves both on the L4's FP8 tensor cores. On T4s the same FP8
-# checkpoint would run weight-only through Marlin, so there INT4 is the speed lever. We confirm the
-# kernel in vLLM's startup log, benchmark with the same client against the real server, and only then
-# look at cost."
+# **Two minutes:** "Quantization gives fewer bytes or more FLOPs, and the one that it gives decides where it
+# helps. On our L4s, INT4 weight-only makes decode 2-3x faster per step for an 8B model. But it does nothing for
+# the TTFT of a long prompt, because its GEMMs still run in 16-bit. Past ~120 tokens per step, the
+# dequantization kernel is compute-bound. From ~460 tokens per step, it is no faster than BF16.
+#
+# "FP8 W8A8 halves both on the FP8 tensor cores of the L4. On T4s, the same FP8 checkpoint runs weight-only
+# through Marlin. Thus on T4s, INT4 is the speed lever. We make sure that the startup log of vLLM shows the
+# expected kernel. We do a benchmark with the same client against the real server. Only then do we look at cost."
 #
 # **Drill 1.** *We moved an FP8 checkpoint from an L4 fleet to A100s and prefill got slower relative to
-# BF16 expectations. Why?* — A100 has no FP8 tensor cores; vLLM falls back to W8A16 via Marlin (weight
-# memory halves, math stays 16-bit, plus dequantization).
+# BF16 expectations. Why?* A100 has no FP8 tensor cores. Thus vLLM uses W8A16 through Marlin instead. The weight
+# memory halves, the math stays 16-bit, and the dequantization is more work.
 #
-# **Drill 2.** *INT4 decode is 3x faster at batch 1 but only 1.5x at batch 64 — measurement error?* — No:
-# the step still reads the weights once, but it also reads 64 sequences' KV cache, which INT4 weights do
-# not shrink — at typical contexts about half the bytes (layer 01 PRIMER §3.5: 3.80x at batch 1, 1.54x at
-# batch 64 for Llama-3.1-8B on an H100). The GEMMs are not compute-bound yet (that starts at ~120 tokens
-# per step on an L4); past it W4A16's edge shrinks, and by ~460 it is gone.
+# **Drill 2.** *INT4 decode is 3x faster at batch 1 but only 1.5x at batch 64. Is this a measurement error?* No:
+# the step still reads the weights once. But it also reads the KV cache of 64 sequences, and INT4 weights do not
+# make the KV cache smaller.
 #
-# **Drill 3.** *Can we run INT8 W8A8 on B200s?* — vLLM refuses it on compute capability >= 10.0; use FP8
-# or NVFP4 there.
+# At typical contexts, the KV cache of the 64 sequences is about half the bytes that the step reads. For
+# Llama-3.1-8B on an H100, layer 01 PRIMER §3.5 gives 3.80x at batch 1 and 1.54x at batch 64. The GEMMs are not
+# compute-bound yet (that starts at ~120 tokens per step on an L4). Past that point, the advantage of W4A16
+# decreases, and from ~460 tokens per step it is gone.
+#
+# **Drill 3.** *Can we run INT8 W8A8 on B200s?* vLLM refuses it on compute capability >= 10.0. Use FP8 or NVFP4
+# there.

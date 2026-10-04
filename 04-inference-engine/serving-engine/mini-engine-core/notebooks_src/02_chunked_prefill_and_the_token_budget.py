@@ -1,24 +1,27 @@
 # %% [markdown]
 # # 02 · Chunked prefill and the token budget
 #
-# **Tier:** T0 — CPU only, no network, about twenty seconds. Every latency in this notebook is **SIMULATED**
-# by a roofline model (`minengine.perf`) driving the real scheduler; measure the real curve with vLLM in
-# `vllm-serving-lab` (notebook `03_knobs_and_tradeoffs`, T1).
+# **Tier:** T0. It needs a CPU only and no network, and it runs in about twenty seconds. Each latency in this
+# notebook is a **SIMULATED** value: a roofline model (`minengine.perf`) gives the time of each step of the real scheduler.
+# Measure the real curve with vLLM in `vllm-serving-lab` (notebook `03_knobs_and_tradeoffs`, T1).
 #
 # ## The one-minute version
-# A step's cost depends on how many tokens are in it. Up to a **knee** of a few hundred tokens a step is
-# **memory-bound** — it takes as long as reading the weights, so extra tokens are almost free. Past the knee it is
-# **compute-bound** and every token costs FLOPs. A long prompt processed in one step makes that step long, and
-# every request decoding alongside it sees one huge gap between two tokens — prefill **interferes** with decode.
+# The cost of a step depends on the number of tokens in it. Up to a **knee** of a few hundred tokens, a step is
+# **memory-bound**. It takes as long as the weight read, so more tokens are almost free. After the knee, the step is
+# **compute-bound**, and each token costs FLOPs. If the engine processes a long prompt in one step, that step is
+# long. Then each request that decodes in the same step sees one large gap between two tokens: prefill
+# **interferes** with decode.
 #
-# **Chunked prefill** caps the tokens per step (`max_num_batched_tokens`) and splits long prompts across steps, so
-# decodes keep flowing (Sarathi-Serve's "stall-free batching"). The budget is the knob: bigger means fewer steps per
-# prompt and lower TTFT, smaller means smoother inter-token latency (ITL); under saturation a budget a little past
-# the knee also gives the most throughput, because each step then mixes compute-bound prefill with memory-bound
-# decodes.
+# **Chunked prefill** caps the tokens per step (`max_num_batched_tokens`) and divides long prompts across steps.
+# Thus the decodes continue with no stop (Sarathi-Serve's "stall-free batching").
 #
-# The *other* budget is KV memory: when running requests outgrow the block pool, the newest is **preempted** and
-# later recomputed. You will be able to put numbers on all of that.
+# The budget is the knob. A larger budget gives fewer steps per prompt and a lower TTFT. A smaller budget gives a
+# smoother inter-token latency (ITL). Under saturation, a budget slightly past the knee also gives the most
+# throughput. The reason is that each step then mixes compute-bound prefill with memory-bound decodes.
+#
+# The *other* budget is KV memory. When the requests that run become larger than the block pool, the scheduler
+# **preempts** the newest request, and the engine recomputes it later. At the end of this notebook, you can put
+# numbers on all of that.
 #
 # Primer: §3 *Chunked prefill and prefill/decode interference*, §4 *KV cache management revisited*,
 # §11 *Measuring an engine* (`../../PRIMER.md`).
@@ -34,8 +37,8 @@ model = TinyLM()
 
 # %% [markdown]
 # ## Worked example 1 — a long prompt arrives while three requests decode
-# First with chunked prefill (budget 16 tokens per step), then without (the budget must then cover a whole
-# prompt, so it is raised to `max_model_len`).
+# The first run uses chunked prefill (a budget of 16 tokens per step). The second run does not. Without chunked
+# prefill, the budget must hold a whole prompt, so the cell sets it to `max_model_len`.
 
 # %%
 LATE = "The keys and values of every token stay in a cache of small blocks, one table each."
@@ -59,19 +62,20 @@ print("\nno chunking, budget 128:")
 print(arrive_late(max_num_batched_tokens=128, enable_chunked_prefill=False).trace(6))
 
 # %% [markdown]
-# With chunking, the 83-token prompt goes in as chunks of 13 (16 minus the three decodes) while `r0..r2` still
-# get one token every step. Without chunking it goes in whole: one step with 86 tokens. On this toy that is harmless; on a real
-# GPU that step is long, and the three decoding users feel it. Let's price steps on real hardware.
+# With chunked prefill, the 83-token prompt goes in as chunks of 13 (16 minus the three decodes). During that time,
+# `r0..r2` still get one token in each step. Without chunked prefill, the prompt goes in whole: one step with 86
+# tokens. On this toy model, that causes no problem. But on a real GPU that step is long, and the three users in
+# decode feel it. The next example calculates the cost of steps on real hardware.
 #
 # ## Worked example 2 — what a step costs (SIMULATED)
-# `perf.step_cost` charges a step
+# `perf.step_cost` gives a step this cost:
 #
 # $$
 # \max\left(\frac{\text{bytes}}{\text{bandwidth}}, \frac{\text{FLOPs}}{\text{peak}}\right) + \text{overhead}
 # $$
 #
-# with 80% of datasheet bandwidth, 60% of datasheet FLOP/s and 2 ms per step of overhead — assumptions to replace
-# with measurements.
+# It uses 80% of datasheet bandwidth, 60% of datasheet FLOP/s and 2 ms of overhead per step. These values are
+# assumptions. Replace them with measurements.
 
 # %%
 for gname, mname in [("L4", "qwen2.5-1.5b"), ("H100-SXM", "llama-3.1-8b")]:
@@ -84,14 +88,16 @@ for gname, mname in [("L4", "qwen2.5-1.5b"), ("H100-SXM", "llama-3.1-8b")]:
               f"{1e3 * c['t'] / n:7.3f} ms per token")
 
 # %% [markdown]
-# From 1 to 256 tokens the step time barely moves: this is why decode batching is nearly free, and why a
-# single decode token is so expensive per token. Past the knee, time grows linearly with tokens.
+# From 1 to 256 tokens, the step time almost does not change. This is why decode batching is nearly free. It is
+# also why a single decode token has a high cost per token. After the knee, the time increases linearly with the
+# tokens.
 #
 # ## Worked example 3 — the knob, swept (SIMULATED)
-# 200 requests, prompts 500–6,000 tokens, outputs 100–400, on an H100 with Llama-3.1-8B — first as an open-loop
-# Poisson stream at 6 requests/s, a load the engine keeps up with; then all 200 at once, which saturates it and so
-# measures **capacity**. `goodput` counts the requests per second that met a 1 s TTFT **and** a 50 ms TPOT SLO
-# (`SimResult.goodput`, primer §11).
+# The workload is 200 requests on an H100 with Llama-3.1-8B. The prompts are 500–6,000 tokens, and the outputs are
+# 100–400. The first run is an open-loop Poisson stream at 6 requests/s, a load that the engine can serve as fast as
+# it arrives. The second run sends all 200 at once. This saturates the engine, so the run measures **capacity**.
+# `goodput` counts the requests per second that met a 1 s TTFT **and** a 50 ms TPOT SLO (`SimResult.goodput`,
+# primer §11).
 
 # %%
 g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
@@ -105,30 +111,38 @@ for rate in [6, math.inf]:
         print(r.summary(), f"| goodput {r.goodput(ttft_slo=1.0, tpot_slo=0.05):4.2f} req/s")
 
 # %% [markdown]
-# Read the columns against each other:
+# Compare the columns with each other:
 #
-# * **ITL p99** collapses as the budget shrinks — a step can no longer contain a whole 6k-token prompt.
-# * **TTFT** rises as the budget shrinks — a prompt now needs several steps, each also carrying decodes.
-# * **Throughput at 6/s is the same in every row** — not because the knob is free, but because the engine keeps
-#   up: an open-loop run below capacity finishes exactly the offered load (6/s × 250 tokens on average). It cannot
-#   show a throughput effect; a saturating run can.
-# * **Saturated, the budget sets capacity.** 512 does best: each step mixes a prompt chunk (compute-bound) with
-#   the running decodes' KV reads (memory-bound), so the tensor cores and HBM are busy at once — Sarathi-Serve's
-#   case for hybrid batches. Whole prompts or 8,192-token steps alternate compute-heavy prefill steps with
-#   memory-bound decode steps. Part of the gain is memory, not overlap: read the `preempt` and `peak KV` columns —
-#   the three larger settings fill the KV pool and preempt a few requests, whose work is recomputed; 512 never
-#   fills it. At 256 a step sits just above the knee with these efficiencies (~221 tokens, next
-#   exercise): its time is mostly the weight read, the decodes' KV reads and the 2 ms overhead, the prompt gets
-#   small, poorly amortised chunks — TTFT doubles at 6/s and capacity drops by about a quarter.
-# * **Goodput** is the honest summary: saturated, every row streams ~1,700–2,300 tokens/s yet almost no request
-#   meets the SLO. vLLM's defaults (2,048 on an L4/A100-class GPU, 8,192 on H100-class for the API server, as of
-#   Sep 2026, verify) sit between the extremes.
+# * **ITL p99** decreases by a large factor as the budget decreases. A step can no longer hold a whole 6k-token
+#   prompt.
+# * **TTFT** increases as the budget decreases. A prompt now needs several steps, and each step also holds decodes.
+# * **Throughput at 6/s is the same in every row**. The reason is not that the knob is free. The reason is that the
+#   engine keeps up with the load. An open-loop run below capacity finishes exactly the offered load (6/s × 250
+#   tokens on average). Such a run cannot show an effect on throughput, but a run that saturates the engine can.
+# * **Saturated, the budget sets capacity.** 512 does best. Each step mixes a prompt chunk (compute-bound) with the
+#   KV reads of the decodes that run (memory-bound). Thus the tensor cores and the HBM are busy at the same time.
+#   That is Sarathi-Serve's case for hybrid batches. Whole prompts or 8,192-token steps alternate compute-heavy
+#   prefill steps with memory-bound decode steps.
+#
+#   Part of the gain comes from memory, not from overlap. Read the `preempt` and `peak KV` columns. The three larger
+#   settings fill the KV pool and preempt a few requests, and the engine recomputes the work of those requests. 512
+#   never fills the pool.
+#
+#   At 256, a step is just above the knee with these efficiencies (~221 tokens, next exercise). Its time is mostly
+#   the weight read, the KV reads of the decodes and the 2 ms overhead. The prompt gets small chunks, which spread
+#   the constant costs over few tokens. TTFT doubles at 6/s, and capacity decreases by about a quarter.
+# * **Goodput** is the honest summary. Saturated, each row produces ~1,700–2,300 tokens/s, but almost no request
+#   meets the SLO. The defaults of vLLM are between the extremes (2,048 on an L4/A100-class GPU, 8,192 on H100-class for
+#   the API server, as of Sep 2026, verify).
 #
 # ## Worked example 4 — when blocks run out: preemption by recompute
-# The budget limits tokens per step; the KV pool limits tokens in flight. Four requests that each grow to ~9
-# blocks share a 16-block pool. When a running request needs a block and none is free, the scheduler preempts the
-# **newest** running request: frees its blocks, resets it to zero computed tokens and puts it at the front of the
-# queue. Its generated tokens are kept; later it is re-prefilled ("recompute") and continues.
+# The budget limits the tokens per step. The KV pool limits the tokens in flight. Four requests, each of which grows
+# to ~9 blocks, share a 16-block pool.
+#
+# If a request that runs needs a block and no block is free, the scheduler preempts the **newest** request that runs.
+# The scheduler frees the blocks of that request and sets the request back to zero computed tokens. The scheduler also
+# puts the request at the front of the queue. The request keeps its generated tokens. Later, the engine does the
+# prefill of the request again ("recompute"), and the request continues.
 
 # %%
 prompts = ["The engine runs a loop", "Each step it picks the", "When memory runs out,", "A request that finishes"]
@@ -142,15 +156,19 @@ print("outputs identical to the dense reference:",
       all(o.token_ids == model.generate_dense(encode(p), 20) for p, o in zip(prompts, outs)))
 
 # %% [markdown]
-# Look at the `recompute` lines: `r1` restarts at position 20, not 0. Its freed blocks were still in the prefix cache
-# (Notebook 03), so only the tail had to be recomputed. Preemption is correct — the outputs match — but costly:
-# the victim's work is redone and every request waits while memory is short. vLLM V1 preempts by recompute only;
-# swapping blocks to CPU memory was a V0 mode (verify). Preemptions in production are a sizing signal: more KV
-# memory (`gpu_memory_utilization`, FP8 KV, a smaller model), fewer concurrent sequences, or more replicas.
+# Look at the `recompute` lines. `r1` starts again at position 20, not at 0. Its freed blocks were still in the
+# prefix cache (Notebook 03), so the engine recomputed only the tail. Preemption is correct: the outputs match. But
+# it has a high cost. The engine does the work of the preempted request again, and each request waits
+# while memory is short.
+#
+# vLLM V1 preempts by recompute only. A swap of blocks to CPU memory was a V0 mode (verify). In production,
+# preemptions are a signal to change the size of the deployment. The corrections are more KV memory
+# (`gpu_memory_utilization`, FP8 KV, a smaller model), fewer concurrent sequences, or more replicas.
 #
 # ## Exercise 2.1 — the chunk schedule
-# A `prompt_len`-token prompt is admitted while `num_decodes` requests decode (1 token each per step, scheduled
-# first). With budget `budget`, list the prompt's chunk sizes step by step.
+# The scheduler admits a `prompt_len`-token prompt while `num_decodes` requests decode. Each decode gets 1 token per
+# step, and the scheduler schedules the decodes first. With the budget `budget`, list the chunk sizes of the prompt,
+# step by step.
 
 # %% exercise
 def chunk_sizes(prompt_len, budget, num_decodes):
@@ -174,8 +192,8 @@ print("✅ chunks:", measured, "- the engine agrees")
 
 # %% [markdown]
 # ## Exercise 2.2 — the roofline step time
-# Ignoring KV reads, attention and overheads: a step must read every weight once and do $2 \times \mathtt{params}$
-# FLOPs per token. Write `roofline_step_ms(weight_bytes, params, tokens, peak_flops, hbm_bw)`.
+# Do not include KV reads, attention and overheads. Then a step must read each weight once and do
+# $2 \times \mathtt{params}$ FLOPs per token. Write `roofline_step_ms(weight_bytes, params, tokens, peak_flops, hbm_bw)`.
 
 # %% exercise
 def roofline_step_ms(weight_bytes, params, tokens, peak_flops, hbm_bw):
@@ -200,8 +218,8 @@ print(f"✅ L4 + Qwen2.5-1.5B: 1 token {roofline_step_ms(m.weight_bytes, m.param
 # \frac{\mathtt{weight\_bytes}}{\mathtt{hbm\_bw}} = \frac{2 \times \mathtt{params} \times n}{\mathtt{peak\_flops}}
 # $$
 #
-# for $n$, then predict whether each step below is memory- or compute-bound **with the default efficiencies** (60%
-# FLOPs, 80% bandwidth: the knee moves to 0.6 / 0.8 = 0.75 of the ideal one).
+# for $n$. Then predict if each step in the next cell is memory-bound or compute-bound **with the default
+# efficiencies**. These are 60% FLOPs and 80% bandwidth, so the knee moves to 0.6 / 0.8 = 0.75 of the ideal one.
 
 # %% exercise
 def knee(peak_flops, hbm_bw, bytes_per_param):
@@ -231,9 +249,9 @@ print("✅ knees: H100 bf16 295 tokens, L4 bf16 403 tokens (x 0.75 with the defa
 
 # %% [markdown]
 # ## Exercise 2.4 — pick `max_num_batched_tokens` for an ITL SLO
-# H100 + Llama-3.1-8B, up to 64 requests decoding at ~2,000 tokens of context, p99 ITL SLO 25 ms. The worst step
-# is 64 decodes plus a prefill chunk that fills the rest of the budget. Pick the **largest** budget from the list
-# whose worst step fits the SLO (use `perf.step_time`, chunk at context 0).
+# The setup is H100 + Llama-3.1-8B. Up to 64 requests decode at ~2,000 tokens of context, and the p99 ITL SLO is
+# 25 ms. The worst step is 64 decodes plus a prefill chunk that fills the rest of the budget. Select the **largest**
+# budget in the list whose worst step meets the SLO. Use `perf.step_time`, with the chunk at context 0.
 
 # %% exercise
 g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
@@ -250,10 +268,12 @@ print(f"✅ budget {budget}: worst step {1e3 * perf.step_time(g, m, [(2000, 1)] 
 
 # %% [markdown]
 # ## Exercise 2.5 — how long is the stall?
-# An L4 serves Qwen2.5-1.5B to 16 users decoding at ~1,000 tokens of context. An 8,000-token prompt arrives.
-# Compute (with `perf.step_time`): `stall_ms` — the gap the 16 users see if the prompt runs in one step (no
-# chunking); `chunked_steps` and `worst_chunked_ms` — with a 512-token budget (16 go to decodes, the prompt gets
-# the rest; chunk $i$ starts at context $i \times 496$).
+# An L4 serves Qwen2.5-1.5B to 16 users who decode at ~1,000 tokens of context. An 8,000-token prompt arrives.
+# Calculate these values with `perf.step_time`:
+#
+# * `stall_ms`: the gap that the 16 users see if the prompt runs in one step (no chunked prefill).
+# * `chunked_steps` and `worst_chunked_ms`: the same with a 512-token budget. 16 tokens go to the decodes, and the
+#   prompt gets the rest. Chunk $i$ starts at context $i \times 496$.
 
 # %% exercise
 g, m = perf.GPUS["L4"], perf.LLMS["qwen2.5-1.5b"]
@@ -274,12 +294,15 @@ print(f"✅ normal ITL {normal:.1f} ms; unchunked stall {stall_ms:.0f} ms; "
 
 # %% [markdown]
 # ## Exercise 2.6 — size the KV cache so nobody is preempted
-# H100 + Llama-3.1-8B, 200 requests at 6/s, prompts 500–3,000 tokens, outputs 100–400 (below). Find the smallest
-# `num_blocks` (16 tokens each) among `candidates` for which the simulated run has **zero** preemptions, and
-# `kv_gb`, the KV memory that takes in GB (`perf.LLMS["llama-3.1-8b"].kv_bytes_per_token` bytes per token).
-# Then, at 2,000 blocks, turn off the **whole-prompt admission check** (`admit_whole_prompt=False`: admit a request
-# as soon as its first chunk fits, as a scheduler without vLLM's `scheduler_reserve_full_isl` would). Predict
-# first — more or fewer preemptions? — then record the count in `without_check`.
+# The setup is H100 + Llama-3.1-8B, with 200 requests at 6/s. The prompts are 500–3,000 tokens, and the outputs are
+# 100–400 (next cell). Find these two values:
+#
+# * the smallest `num_blocks` (16 tokens each) in `candidates` for which the simulated run has **zero** preemptions,
+# * `kv_gb`, the KV memory of those blocks in GB (`perf.LLMS["llama-3.1-8b"].kv_bytes_per_token` bytes per token).
+#
+# Then, at 2,000 blocks, turn off the **whole-prompt admission check** (`admit_whole_prompt=False`). The scheduler
+# then admits a request when its first chunk fits, as a scheduler without vLLM's `scheduler_reserve_full_isl` does.
+# Predict first: more preemptions or fewer? Then record the count in `without_check`.
 
 # %%
 g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
@@ -308,26 +331,31 @@ print(f"   at 2,000 blocks: {with_check} preemptions with the whole-prompt check
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "A forward pass is memory-bound until a few hundred tokens — the weight read
-# dominates — and compute-bound after. So decode tokens batch almost for free, and a long prompt is expensive in
-# proportion to its length. If an 8k-token prompt runs in one step, every user decoding in that step waits for
-# it: on an L4 with a 1.5B model their 17 ms token gap becomes about 370 ms.
+# **The two-minute version.** "A forward pass is memory-bound until a few hundred tokens, because the weight read
+# takes most of the time. After that, it is compute-bound. Thus decode tokens go into a batch almost for free, and
+# the cost of a long prompt is proportional to its length. If an 8k-token prompt runs in one step, each user who
+# decodes in that step waits for it. On an L4 with a 1.5B model, their 17 ms token gap becomes about 370 ms.
 #
-# "Chunked prefill caps each step at `max_num_batched_tokens`; decodes are scheduled first and the prompt gets the
-# rest, so the worst gap stays near 30 ms at a 512 budget, at the price of a slightly later first token for the long
-# prompt. At moderate load the budget trades TTFT against ITL; saturated, it also sets capacity — a few hundred
-# tokens past the knee packs prefill FLOPs and decode KV reads into the same steps, while a budget at the knee wastes
-# steps on fixed costs. I pick the largest budget whose worst step meets the ITL SLO, and check capacity under a
-# saturating load.
+# "Chunked prefill caps each step at `max_num_batched_tokens`. The scheduler schedules the decodes first, and the
+# prompt gets the rest. Thus the worst gap stays near 30 ms at a 512 budget. The cost is a slightly later first
+# token for the long prompt.
 #
-# "The second budget is KV memory: if running requests outgrow the block pool, the newest is preempted and recomputed
-# — outputs stay correct, but TTFT explodes long before anything errors. So we size KV for the peak working set and
-# alert on `vllm:num_preemptions`; if prefill and decode SLOs still conflict at our scale, that is the argument for
-# disaggregating them (05)."
+# "At moderate load, the budget is a trade between TTFT and ITL. Saturated, the budget also sets capacity. A budget a
+# few hundred tokens past the knee packs prefill FLOPs and decode KV reads into the same steps. A budget at the knee
+# loses steps to constant costs. I select the largest budget whose worst step meets the ITL SLO, and I examine
+# capacity under a load that saturates the engine.
+#
+# "The second budget is KV memory. If the requests that run become larger than the block pool, the scheduler
+# preempts the newest one, and the engine recomputes it. The outputs stay correct, but TTFT increases by a large factor
+# long before an error occurs. Thus we give the KV cache sufficient blocks for the peak working set, and we alert on
+# `vllm:num_preemptions`. If the prefill and decode SLOs still conflict at our scale, that is the argument for
+# prefill/decode disaggregation (05)."
 #
 # **Drill questions**
-# 1. *Why doesn't a larger batch make decode slower?* — Below the knee a step is the weight read; tokens share it.
-# 2. *Chunked prefill is on, yet p99 ITL is bad. What do you check?* — The budget: if it is far past the knee,
-#    each step is still long; lower it until the worst step meets the SLO.
-# 3. *`vllm:num_preemptions` is climbing. What does it mean and what do you change?* — Running requests outgrow the
-#    KV pool; each preemption throws work away. Add KV memory (utilisation, FP8 KV), cap `max_num_seqs`, or scale out.
+# 1. *Why does a larger batch not make decode slower?* Below the knee, a step is the weight read, and the tokens
+#    share it.
+# 2. *Chunked prefill is on, yet p99 ITL is bad. What do you examine?* The budget. If it is far past the knee, each
+#    step is still long. Decrease it until the worst step meets the SLO.
+# 3. *`vllm:num_preemptions` increases. What does it mean and what do you change?* The requests that run become
+#    larger than the KV pool, and each preemption discards work. Add KV memory (utilisation, FP8 KV), cap
+#    `max_num_seqs`, or scale out.
