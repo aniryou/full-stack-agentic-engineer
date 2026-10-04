@@ -90,8 +90,8 @@ for r in store.records(ALICE, status=None):
 # `consolidate:acme:alice:day0-7`. This is the same way that lra-gcp primer §3.13 names a scheduled run
 # (`weekly-review-2026-W37`). Thus, when the schedule starts the job two times, the result is one run.
 #
-# Windows do not always run in order. Two examples are a backfill and a re-run after an outage. The fact that is
-# already on file joins the statements of the window at its own `valid_from`. Thus an older statement becomes closed
+# Windows do not always run in order. Two examples are a backfill and a re-run after an outage. The existing fact
+# on file joins the statements of the window at its own `valid_from`. Thus an older statement becomes closed
 # history in front of it:
 
 # %%
@@ -106,8 +106,9 @@ for r in store.records(ALICE, status=None, kind="semantic"):
     print(f"  {r.status:10} {r.render()}")
 
 # %% [markdown]
-# Porto stays current. The job keeps Lisbon, valid from day 1 until day 5. If the job applies the statements in the
-# order that they get to the job, Lisbon becomes current again. Also, the job closes Porto *before* Porto starts.
+# Porto stays current. The job keeps Lisbon, valid from day 1 until day 5. The job does not use the order in which
+# the statements get to the job. With that order, Lisbon becomes current again, and the job closes Porto *before*
+# Porto starts.
 #
 # ## Worked example 3 — a crash, a lease, a resume
 
@@ -138,7 +139,7 @@ print("the same crash with random fact ids:", len(random_ids.store.records(ALICE
 # %% [markdown]
 # w1 stopped in `home_city` **after it wrote its facts and before it wrote the checkpoint for the slot**. This is the
 # worst place for a crash. The stopped worker held the lease. Nobody else was able to run the job until the lease
-# expired (lra-gcp primer §3.3: leases, not locks, and the job of the reaper).
+# expired (lra-gcp primer §3.3: leases, not locks, and the work of the reaper).
 #
 # The resumed run skipped the one slot with a checkpoint, and it applied `home_city` again. The job derives the id of
 # each fact from (run id, slot, position). Thus the re-applied facts overwrote the half-applied facts. The result was
@@ -146,8 +147,8 @@ print("the same crash with random fact ids:", len(random_ids.store.records(ALICE
 # Cloud Scheduler starts (the lab's `deploy/gcp/`).
 #
 # A lease covers a worker that stopped. A **slow** worker is worse, for example a worker with a long GC pause or a
-# model call that hangs for minutes. It still runs when its lease expires and another worker takes over. Thus the job
-# renews its lease before every slot (a heartbeat). Before it writes, it makes sure that it still holds the lease (a
+# model call that hangs for minutes. It is worse because it still runs when its lease expires and another worker
+# takes over. Thus the job renews its lease before every slot (a heartbeat). Before it writes, it makes sure that it still holds the lease (a
 # fence). If it does not hold the lease, it stops:
 
 # %%
@@ -238,12 +239,12 @@ print(rep.checklist())
 # - the episode that the fact came from (the episode also says "Lisbon").
 # - an inferred insight that quotes the fact.
 #
-# The deletion does not delete the employer fact, extracted from the same episode, because that fact does not contain
-# the data. But the report lists it for **review**, because it derives from a deleted record. The deletion redacts the
+# The deletion keeps the employer fact, extracted from the same episode, because that fact does not contain the
+# data. But the report lists it for **review**, because it derives from a deleted record. The deletion redacts the
 # log line and drops the eval case.
 #
-# Two surfaces are *pending*, not done. The backup still holds three copies. The job does not write backups again.
-# Backups expire on their retention schedule, or the operator shreds their encryption key.
+# Two surfaces are *pending*, not done. The backup still holds three copies. The deletion does not write the backups
+# again. Backups expire on their retention schedule, or somebody shreds their encryption key.
 #
 # The prompt cache is the second pending surface. Nobody can edit a cached prefix. Also, vLLM cannot evict the blocks
 # of one tenant. Its only tool, the dev-mode `/reset_prefix_cache`, clears the blocks of every tenant. Thus the
@@ -275,8 +276,8 @@ print("deleted:", len(rep2.ids), "records | review:", [store.get(ALICE, i).text 
 #
 # 1. Keep only the statements from the source with the highest precedence that is present.
 # 2. Go through these statements in time order.
-# 3. A value that is equal to the previous value (case-insensitive) extends the previous fact.
-# 4. A different value closes the previous fact at its own time, and it opens a new fact.
+# 3. If a value is equal to the previous value (case-insensitive), extend the previous fact.
+# 4. If a value is different, close the previous fact at the time of the new value, and open a new fact.
 #
 # Return `[(value, valid_from, valid_to_or_None)]`. Also return the list of weaker statements whose value is different
 # from the value that was valid at their time.
@@ -321,9 +322,9 @@ print("✅ precedence first, then time; the old fact is closed, not dropped; wea
 # - The worker already holds the lease (a heartbeat renews it).
 # - The lease of the holder is expired.
 #
-# Then write `may_continue(holder, worker)`. This is the fence that a worker examines before the writes of each slot,
-# while it runs. The worker can continue only if the store still records the lease as its own. This is also true when
-# the lease is expired, if nobody took it. The worker must stop if nobody holds the lease, because another worker
+# Then write `may_continue(holder, worker)`. This is the fence that a worker examines during its run, before the
+# writes of each slot. The worker can continue only if the store still records the lease as its own. The worker can
+# also continue when its lease is expired, if nobody took the lease. The worker must stop if nobody holds the lease, because another worker
 # finished the run and released it. It must also stop if another worker holds the lease.
 
 # %% exercise
@@ -413,7 +414,7 @@ print("✅ provenance is what makes 'delete what was derived from it' computable
 # ## Exercise 4.5 — the naive deletion
 # Delete the home-city fact in the simple way, on a new `world()`. Use `store.delete` on the records whose `key` is
 # `home_city`, and do nothing else. Then fill `left` with the number of copies of "Lisbon" that each surface still
-# holds. Use the count that `residue` reports. Predict the numbers first. Then do a check with `residue`.
+# holds. Count them in the same way as `residue`. Predict the numbers first. Then do a check with `residue`.
 
 # %% exercise
 s = world()
@@ -452,10 +453,19 @@ print(f"✅ the naive delete left {sum(left.values())} copies on {sum(v > 0 for 
 #
 # **Drill questions**
 # 1. *A user asked the agent to forget their address. A week later, the agent quoted it. Where was it?* It was in a
-#    copy that the deletion did not reach. That copy was a consolidated fact or insight derived from it, or the raw
-#    episode. Or the copy was in a full-text index, a WAL file or a cached prompt prefix. Or it was in a log or an
-#    eval set. Or it was a paraphrase that no content search finds. Propagate the deletion by provenance and by
-#    content, and rotate the cache salt. Then do a test that searches the bytes.
+#    copy that the deletion did not reach. The possible copies are:
+#
+#     - a consolidated fact or insight derived from the address.
+#     - the raw episode.
+#     - a full-text index.
+#     - a WAL file.
+#     - a cached prompt prefix.
+#     - a log.
+#     - an eval set.
+#     - a paraphrase that no content search finds.
+#
+#    Propagate the deletion by provenance and by content, and rotate the cache salt. Then do a test that searches the
+#    bytes.
 # 2. *Why keep the superseded fact, and not delete it?* There are three reasons. The first is as-of questions ("where
 #    did they live in March?"). The second is audit ("what did the agent believe when it acted?"). The third is the
 #    undo of an incorrect update. Deletion is for data that the user asked you to remove, not for facts that changed.
