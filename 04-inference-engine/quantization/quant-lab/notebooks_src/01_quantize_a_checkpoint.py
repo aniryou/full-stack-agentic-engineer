@@ -1,31 +1,31 @@
 # %% [markdown]
 # # 01 · Quantize a checkpoint: recipes, the compressed-tensors layout, and a loader that checks it
 #
-# **Tier:** T0 — the bundled tiny Llama (299,648 parameters, two layers, trained on two tasks with
-# exact answers) is quantized with this lab's numpy recipes, written as a compressed-tensors
-# checkpoint and read back; nothing is downloaded. T1 — the same recipes run with llm-compressor on
-# `Qwen/Qwen2.5-0.5B-Instruct` (the script is printed here; it runs when llm-compressor is installed,
-# a GPU is present and `QUANTLAB_RUN_T1=1`).
+# **Tier:** T0: the numpy recipes of this lab quantize the bundled tiny Llama (299,648 parameters, two layers,
+# trained on two tasks with exact answers). The lab writes the result as a compressed-tensors checkpoint and reads
+# it back. The notebook downloads nothing. T1: the same recipes run with llm-compressor on
+# `Qwen/Qwen2.5-0.5B-Instruct`. The notebook prints the script. The script runs when llm-compressor is installed,
+# a GPU is present and `QUANTLAB_RUN_T1=1`.
 #
 # ## The one-minute version
 #
-# A quantized checkpoint is three things: **codes** (INT4 packed eight to an int32, FP8 bytes, FP4
-# nibbles), **scales** (and zero points) that say what the codes mean, and a
-# **`quantization_config`** in `config.json` that tells the loader which is which. llm-compressor
-# writes all three with `oneshot(model, recipe=...)`; vLLM reads them without a `--quantization` flag.
+# A quantized checkpoint has three parts. The first part is the **codes**: INT4 packed eight to an int32, FP8
+# bytes or FP4 nibbles. The second part is the **scales** (and zero points), which tell what the codes mean. The
+# third part is a **`quantization_config`** in `config.json`, which tells the loader which is which. With
+# `oneshot(model, recipe=...)`, llm-compressor writes all three. Then vLLM reads them without a `--quantization`
+# flag.
 #
-# * `FP8_DYNAMIC` needs no data: FP8 weights with a scale per output channel, activations quantized
-#   per token at run time. `W4A16` needs calibration data *if* you want GPTQ or AWQ instead of
-#   round-to-nearest (RTN) — and on a model with outlier activations you do.
-# * Not everything is quantized: `lm_head`, the embeddings and the norms stay 16-bit
-#   (`ignore=["lm_head"]` in every recipe), which is why a real INT4 checkpoint is bigger than
-#   params x 4 bits.
-# * Groups must divide the layer's input width (`in_features % 128 == 0` for W4A16), or the tools
-#   refuse the layer.
+# * `FP8_DYNAMIC` needs no data. It has FP8 weights with a scale for each output channel, and the engine
+#   quantizes the activations per token at run time. `W4A16` needs calibration data *if* you want GPTQ or AWQ
+#   instead of round-to-nearest (RTN). On a model with outlier activations, you want GPTQ or AWQ.
+# * The recipes do not quantize everything. `lm_head`, the embeddings and the norms stay 16-bit
+#   (`ignore=["lm_head"]` in every recipe). Thus a real INT4 checkpoint is larger than params x 4 bits.
+# * Groups must divide the input width of the layer (`in_features % 128 == 0` for W4A16). If they do not, the
+#   tools refuse the layer.
 #
 # Concepts: PRIMER §3 "Granularity and the bits-per-weight budget", §4 "Weight-only post-training
-# quantization" and §9 "Producing a checkpoint" ([`PRIMER.md`](../../PRIMER.md)); the formats and error
-# metrics this builds on are in the serving-engine primer's §8
+# quantization" and §9 "Producing a checkpoint" ([`PRIMER.md`](../../PRIMER.md)). The formats and error metrics
+# that this notebook uses are in §8 of the serving-engine primer
 # ([`../../../serving-engine/PRIMER.md`](../../../serving-engine/PRIMER.md)).
 
 # %%
@@ -46,8 +46,9 @@ for task in tm.TASKS:
 # %% [markdown]
 # ## Worked example: what a dense checkpoint is
 #
-# The safetensors header lists every tensor with its dtype and shape; the bytes follow. Fourteen
-# projections (q, k, v, o, gate, up, down in two layers) are what quantization will shrink.
+# The safetensors header lists every tensor with its dtype and shape. The bytes come after the header. The
+# fourteen projections (q, k, v, o, gate, up, down in two layers) are the tensors that quantization will make
+# smaller.
 
 # %%
 rows = stio.summary(tm.TINY_DIR / "model.safetensors")
@@ -61,9 +62,9 @@ print(f"linear-layer weights: {linear:,} of {model.num_params():,} ({linear / mo
 # ## Worked example: FP8_DYNAMIC, written the way llm-compressor writes it
 #
 # `Recipe("FP8_DYNAMIC")` is `QuantizationModifier(targets="Linear", scheme="FP8_DYNAMIC",
-# ignore=["lm_head"])`. Each projection becomes an `F8_E4M3` `weight` plus a bf16 `weight_scale` of
-# shape `[out, 1]` (one per output channel, $\mathrm{amax}/448$); activation scales are computed per token
-# at run time, so there is nothing to calibrate.
+# ignore=["lm_head"])`. Each projection becomes an `F8_E4M3` `weight` and a bf16 `weight_scale` of shape
+# `[out, 1]` (one for each output channel, $\mathrm{amax}/448$). The engine calculates the activation scales per
+# token at run time. Thus there is nothing to calibrate.
 
 # %%
 rep = C.quantize_checkpoint(tm.TINY_DIR, OUT / "tiny-FP8_DYNAMIC", C.Recipe("FP8_DYNAMIC"))
@@ -80,10 +81,10 @@ print(f"{rep['dense_bytes']:,} -> {rep['bytes']:,} bytes; validate: {C.validate_
 # %% [markdown]
 # ## Exercise 1.1 — pack INT4 codes the way compressed-tensors does
 #
-# `pack_to_int32` adds 8 to each signed code (-8..7 becomes 0..15) and puts eight of them in one
-# 32-bit word, **element 0 in the lowest four bits**. Write `pack_int4(q)` for an integer array whose
-# last dimension is a multiple of 8; return `int32` words (view the `uint32` result as `int32` — the
-# top nibble often sets the sign bit).
+# `pack_to_int32` adds 8 to each signed code (-8..7 becomes 0..15). It puts eight of these codes in one 32-bit
+# word, with **element 0 in the lowest four bits**. Write `pack_int4(q)` for an integer array whose last
+# dimension is a multiple of 8. Return `int32` words. View the `uint32` result as `int32`, because the top
+# nibble often sets the sign bit.
 
 # %% exercise
 def pack_int4(q):
@@ -104,10 +105,14 @@ print("✅ [-8, -7, 0, 1, 2, 3, 4, 7] -> 0xfcba9810: the same words compressed-t
 # %% [markdown]
 # ## Exercise 1.2 — predict the size of a W4A16 checkpoint before writing it
 #
-# W4A16 (groups of 128, symmetric) stores, per projection: packed codes (half a byte per weight), one
-# bf16 scale per group of 128 inputs per output row, and `weight_shape` (two int64). Everything that
-# is not a projection stays bf16. Write `predict_w4a16_bytes(model, group_size)` — tensor data only,
-# no header. Then compare the ratio with the naive "4 bits instead of 16".
+# W4A16 (groups of 128, symmetric) stores these tensors for each projection:
+#
+# * the packed codes (half a byte for each weight),
+# * one bf16 scale for each group of 128 inputs in each output row,
+# * `weight_shape` (two int64).
+#
+# Everything that is not a projection stays bf16. Write `predict_w4a16_bytes(model, group_size)`. Count the
+# tensor data only, with no header. Then compare the ratio with the simple "4 bits instead of 16".
 
 # %% exercise
 def predict_w4a16_bytes(model, group_size=128):
@@ -129,13 +134,16 @@ print(f"✅ predicted {predict_w4a16_bytes(model):,} B = written {actual:,} B; {
 # %% [markdown]
 # ## Worked example: round-to-nearest versus GPTQ on a model with outlier channels
 #
-# This model's projection inputs carry two massive-activation channels (planted after training:
-# the RMSNorm weight of those channels is 24x larger and the matching weight columns 24x smaller —
-# the function is unchanged). RTN rounds those small columns to almost nothing, and they multiply
-# the largest inputs. GPTQ quantizes one column at a time and pushes each column's rounding error
-# onto the columns not yet quantized, weighted by the inverse Hessian of the calibration inputs, so
-# the error that lands on the big-input channels is compensated elsewhere. Layer error below is
-# $\lVert X\hat{W}^\top - XW^\top \rVert / \lVert XW^\top \rVert$ on calibration inputs.
+# The projection inputs of this model carry two massive-activation channels. The lab planted them after
+# training. The RMSNorm weight of those channels is 24x larger, and the weight columns that match them are 24x smaller.
+# The function stays the same. RTN rounds those small columns to almost nothing, and these columns multiply the
+# largest inputs.
+#
+# GPTQ quantizes one column at a time. It moves the rounding error of each column onto the columns that it did
+# not quantize yet. The inverse Hessian of the calibration inputs sets how much error each column receives.
+# Thus GPTQ compensates elsewhere for the error that goes to the large-input channels. The layer error in the
+# table of the next cell is $\lVert X\hat{W}^\top - XW^\top \rVert / \lVert XW^\top \rVert$ on calibration
+# inputs.
 
 # %%
 print("outlier channels:", tm.outlier_channels(model))
@@ -149,17 +157,19 @@ for k, q in runs.items():
     print(f"{k:20s} add {q.model().accuracy('add', 500):.1%}   reverse {q.model().accuracy('reverse', 500):.1%}")
 
 # %% [markdown]
-# Two things to notice. Per layer, g32 barely changes RTN's error on the projections whose inputs carry
-# the outlier channels (q/k/v, gate/up: 8-12% at either group size): a group is a run of *inputs within
-# one output row*, and the two shrunken columns are 18-24x smaller than their neighbours in every group,
-# so they round to zero at any group size. End to end, g32 is even *worse* than g128 here — the opposite of the usual
-# rule (finer groups cost bits and buy accuracy; PRIMER §3). The next cell finds out why.
+# Look at two things. First, per layer: on the projections whose inputs carry the outlier channels (q/k/v,
+# gate/up), g32 almost does not change the error of RTN. That error is 8-12% at either group size. A group is a run of *inputs
+# within one output row*. In every group, the two columns that the lab made smaller are 18-24x smaller than their
+# neighbours. Thus they round to zero at any group size.
+#
+# Second, end to end: g32 does even *worse* than g128 here. This is the opposite of the usual rule (finer groups
+# cost bits and give accuracy, PRIMER §3). The next cell finds the cause.
 #
 # ## Worked example: why finer groups lost accuracy on this model
 #
-# Two experiments on the outlier-meeting columns of q/k/v/gate/up: put their bf16 weights back
-# ("restored"), or force every code there to zero ("forced to 0"). And a count: how many of those
-# codes are *not* zero.
+# The next cell does two experiments on the columns of q/k/v/gate/up that meet the outlier channels. The first experiment puts
+# their bf16 weights back ("restored"). The second experiment forces every code in those columns to zero ("forced
+# to 0"). The cell also counts how many of those codes are *not* zero.
 
 # %%
 out_ch = tm.outlier_channels(model)
@@ -184,26 +194,30 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
           f"\n    restored      {acc(outlier_columns(q, True))}")
 
 # %% [markdown]
-# Restoring two columns out of 128 makes RTN INT4 lossless at either group size: **all** of RTN's loss
-# on this model is those two columns being rounded to zero, i.e. two channels of the residual stream
-# deleted from every attention and MLP input. Finer groups do lower the error of the ordinary columns
-# (per layer, above), but that was never the problem. At g32 a handful of the small weights sit just
-# above half a step of their (smaller) group scale and round *up* to one step instead of down to zero.
-# Each is still ~90% wrong — now with the opposite sign to the deleted weights around it — and it
-# multiplies an input ~24x the typical one inside q/k, whose error goes through the softmax. Force
-# those few codes back to zero and g32 matches g128 exactly.
+# When you put back two columns out of 128, RTN INT4 becomes lossless at either group size. Thus **all** of the
+# loss of RTN on this model has one cause: RTN rounds those two columns to zero. That is, RTN deletes two
+# channels of the residual stream from every attention and MLP input. Finer groups do decrease the error of the
+# ordinary columns (per layer, in the table of the round-to-nearest versus GPTQ example). But that was never the problem.
 #
-# So the ranking is an artefact of the planted construction: a real model's massive-activation
-# columns are not 24x smaller than their neighbours (they are usually ordinary — PRIMER §3,
-# "Activation outliers are a different problem"). The lesson that transfers: when the damage sits in
-# a few input channels, group size is the wrong knob. The fix is per-*input-channel*: GPTQ (error
-# compensation onto the other columns) or AWQ (scale the salient columns up before rounding, fold the
-# inverse into the norm) — both recover nearly all of it at g128 (the table above).
+# At g32, a small number of the small weights are just above half a step of their (smaller) group scale. These
+# weights round *up* to one step instead of down to zero. Each of them is still ~90% incorrect, and now its sign
+# is opposite to the sign of the deleted weights around it. Each of them multiplies an input ~24x the typical one
+# inside q/k, and the error of q/k goes through the softmax. If you force those few codes back to zero, g32
+# matches g128 exactly.
+#
+# Thus the ranking comes from the planted construction only. The massive-activation columns of a real model are
+# not 24x smaller than their neighbours. They are usually ordinary (PRIMER §3, "Activation outliers are a
+# different problem").
+#
+# The lesson that transfers is this: when the damage is in a few input channels, group size is the incorrect
+# setting to adjust. The correction is per-*input-channel*. One correction is GPTQ (error compensation onto the
+# other columns). The other is AWQ (scale the salient columns up, round them, and fold the inverse into the norm).
+# Both get back nearly all of the loss at g128 (the table of the round-to-nearest versus GPTQ example).
 #
 # ## Exercise 1.3 — the symmetric INT4 group quantizer
 #
-# Implement compressed-tensors' symmetric INT4 grid for `w` shaped `[out, in]`: for each output row
-# and each run of `g` inputs, $\mathrm{scale} = \mathrm{amax}/7.5$,
+# Write the symmetric INT4 grid of compressed-tensors for a `w` of shape `[out, in]`. For each output row and
+# each run of `g` inputs, use $\mathrm{scale} = \mathrm{amax}/7.5$ and
 # $\mathrm{code} = \operatorname{clip}(\operatorname{round}(w/\mathrm{scale}), -8, 7)$. Return
 # `(codes [out, in], scales [out, in / g], w_hat)`.
 
@@ -229,9 +243,9 @@ print(f"✅ your quantizer = the lab's RTN; relative weight error {np.linalg.nor
 # %% [markdown]
 # ## Exercise 1.4 — the loader: from packed words back to weights
 #
-# A loader never sees `w_hat`. Given the tensors of one projection in a `pack-quantized` checkpoint
-# (`weight_packed` int32, `weight_scale` bf16 `[out, in/g]`, `weight_shape`), rebuild the float
-# weight. Use `N.unpack_int32(words, 4, cols)` for the unpacking and `.numpy()` to decode bf16.
+# A loader never sees `w_hat`. It gets the tensors of one projection in a `pack-quantized` checkpoint:
+# `weight_packed` int32, `weight_scale` bf16 `[out, in/g]` and `weight_shape`. From these tensors, make the
+# float weight again. Use `N.unpack_int32(words, 4, cols)` to unpack the codes. Use `.numpy()` to decode bf16.
 
 # %% exercise
 def dequant_w4a16(tensors, name):
@@ -256,10 +270,10 @@ print(f"✅ all {len(model.linear_names())} projections decode; add accuracy {be
 # %% [markdown]
 # ## Exercise 1.5 — will the tools accept group size 128 for this model?
 #
-# llm-compressor errors at initialize, and vLLM's Marlin refuses the layer, when a projection's
-# `in_features` is not a multiple of the group size. q/k/v and gate/up read `hidden_size` inputs,
-# o_proj reads $\mathrm{num\_heads} \times \mathrm{head\_dim}$, down_proj reads `intermediate_size`. Write
-# `bad_projections(config, g)` returning the sorted names (`"q_proj"`, ... `"down_proj"`) that fail.
+# If the `in_features` of a projection is not a multiple of the group size, llm-compressor stops with an error at
+# initialize. Marlin in vLLM also refuses the layer. q/k/v and gate/up read `hidden_size` inputs. o_proj reads
+# $\mathrm{num\_heads} \times \mathrm{head\_dim}$, and down_proj reads `intermediate_size`. Write
+# `bad_projections(config, g)`. It must return the sorted names (`"q_proj"`, ... `"down_proj"`) that fail.
 
 # %% exercise
 def bad_projections(config, g=128):
@@ -289,10 +303,10 @@ print("✅ 576-wide models need g64 or g32 for INT4 (576 = 4.5 x 128); the lab's
 # %% [markdown]
 # ## On a real model (T1): the same recipes with llm-compressor
 #
-# The lab renders the llm-compressor 0.14 script for each recipe (run it in its own environment: the
-# vLLM docs recommend separate environments for vLLM and llm-compressor). `deploy/any-gpu/compress.sh`
-# does exactly this on a GPU box. The result is a directory vLLM serves with no `--quantization` flag;
-# `serve.check_checkpoint` says what vLLM will do with it on each GPU.
+# The lab makes the llm-compressor 0.14 script for each recipe. Run the script in its own environment, because
+# the vLLM docs recommend separate environments for vLLM and llm-compressor. `deploy/any-gpu/compress.sh` does
+# exactly this on a GPU box. The result is a directory that vLLM serves with no `--quantization` flag.
+# `serve.check_checkpoint` tells what vLLM will do with the directory on each GPU.
 
 # %%
 for r in (C.Recipe("FP8_DYNAMIC"), C.Recipe("W4A16", ("gptq",))):
@@ -315,24 +329,24 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We ship quantized checkpoints in the compressed-tensors format because vLLM
-# auto-detects it: the `quantization_config` names the scheme, the tensors carry codes and scales,
-# and nobody has to remember a `--quantization` flag. For FP8 we use `FP8_DYNAMIC`: per-channel
-# weight scales and per-token activation scales at run time, no calibration data. For INT4 we use
-# GPTQ with calibration data drawn from our own traffic, because round-to-nearest loses the weight
-# columns that meet our largest activations — on the lab's model RTN leaves 11% error on the q
-# projection and GPTQ under 2%. The LM head and embeddings stay bf16, so the checkpoint is ~3x
-# smaller, not 4x, and we check that every projection's input width divides the group size before we
-# start."
+# **Two minutes:** "We ship quantized checkpoints in the compressed-tensors format, because vLLM finds the
+# format automatically. The `quantization_config` names the scheme, and the tensors carry the codes and the
+# scales. Thus nobody has to remember a `--quantization` flag. For FP8 we use `FP8_DYNAMIC`. It has per-channel
+# weight scales and per-token activation scales at run time, and it needs no calibration data.
 #
-# **Drill 1.** *Why does `FP8_DYNAMIC` need no calibration data but `W4A16` with GPTQ does?* — FP8
-# dynamic computes weight scales from the weights and activation scales per token at run time;
-# GPTQ's error compensation needs the Hessian $X^\top X$ of real inputs to each layer.
+# "For INT4 we use GPTQ with calibration data from our own traffic. The reason is that round-to-nearest loses
+# the weight columns that meet our largest activations. On the lab's model, RTN leaves 11% error on the q
+# projection, and GPTQ leaves under 2%. The LM head and the embeddings stay bf16. Thus the checkpoint is ~3x
+# smaller, not 4x. Before we start, we make sure that the input width of every projection divides the group
+# size."
 #
-# **Drill 2.** *The INT4 checkpoint of a 0.5B model is only 2.2x smaller. Is the tool broken?* — No:
-# Qwen2.5-0.5B ties a 136 M-parameter embedding that stays bf16 (27.6% of the model), plus 16/128 bits
-# of scale per weight. Big models approach 3.5-3.9x; small ones do not.
+# **Drill 1.** *Why does `FP8_DYNAMIC` need no calibration data but `W4A16` with GPTQ does?* FP8 dynamic
+# calculates the weight scales from the weights, and it calculates the activation scales per token at run time.
+# The error compensation of GPTQ needs the Hessian $X^\top X$ of real inputs to each layer.
 #
-# **Drill 3.** *llm-compressor refuses `W4A16` on one model and not another. Why?* — Group size must
-# divide `in_features`: 576-wide models fail g128 and need g64/g32 (and vLLM's Marlin only accepts
-# -1, 32, 64, 128).
+# **Drill 2.** *The INT4 checkpoint of a 0.5B model is only 2.2x smaller. Is the tool broken?* No. Qwen2.5-0.5B
+# ties a 136 M-parameter embedding that stays bf16 (27.6% of the model). Also, there are 16/128 bits of scale for
+# each weight. Large models come near 3.5-3.9x, but small models do not.
+#
+# **Drill 3.** *llm-compressor refuses `W4A16` on one model and not another. Why?* The group size must divide
+# `in_features`. 576-wide models fail g128 and need g64/g32. Also, Marlin in vLLM only accepts -1, 32, 64, 128.

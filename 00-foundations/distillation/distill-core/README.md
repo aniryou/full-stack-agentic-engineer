@@ -1,36 +1,44 @@
 # distill-core — distillation small enough to compute exactly
 
-After this you can derive and implement what distilling a model does — soft targets and the T² factor, forward and
-reverse KL and TRL's JSD, sequence-level distillation and its exposure bias, on-policy distillation as policy
-gradient, trace distillation against RL, a distilled draft's acceptance — and put a number on whether a student is
-worth it, all in `distillcore`, a standard-library-plus-numpy package of ~1,050 lines where a toy language with a
-known truth and tiny networks with manual gradients let every claim be checked exactly.
+After this, you can derive and implement what the distillation of a model does. The topics are these:
+
+- Soft targets and the T² factor.
+- Forward and reverse KL, and TRL's JSD.
+- Sequence-level distillation and its exposure bias.
+- On-policy distillation as policy gradient.
+- Trace distillation against RL.
+- The acceptance of a distilled draft.
+
+You can also calculate a number that shows if a student is worth it. All of this is in `distillcore`, a package of ~1,050 lines
+that uses only the standard library and numpy. In it, a toy language with a known truth and small networks with
+manual gradients let you check every claim exactly.
 
 ## Start here
 
-1. Read [`../PRIMER.md`](../PRIMER.md): "The one-minute version", then §1 Why distil and §2 Soft targets,
+1. Read "The one-minute version" in [`../PRIMER.md`](../PRIMER.md). Then read §1 Why distil and §2 Soft targets,
    temperature and the choice of divergence.
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 86 tests in about 30 s, including "the
-   REINFORCE estimator equals −∇KL by enumeration" and "the roofline primer's §8.1 table, number for number".
-3. Open [`notebooks/01_soft_targets_and_temperature.ipynb`](notebooks/01_soft_targets_and_temperature.ipynb) and
-   watch a student learn more from soft targets than from labels on the same examples.
+2. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. The 86 tests run in about 30 s. They
+   include "the REINFORCE estimator equals −∇KL by enumeration" and "the roofline primer's §8.1 table, number for
+   number".
+3. Open [`notebooks/01_soft_targets_and_temperature.ipynb`](notebooks/01_soft_targets_and_temperature.ipynb). See
+   how a student learns more from soft targets than from labels on the same examples.
 
 ## What you get
 
-*Tier T0 = laptop or Colab CPU, free: everything here runs with no GPU and no network.* Each notebook opens with
-"The one-minute version", works examples against the code, sets exercises with a check cell that prints ✅, and
-ends with "In a design review". Finished versions are in [`solutions/`](solutions/). About 11 hours in all with the
-primer.
+*Tier T0 is a laptop or a Colab CPU, at no cost. Everything here runs with no GPU and no network.* Each notebook
+opens with "The one-minute version" and works examples against the code. Then it sets exercises with a check cell
+that prints ✅, and it ends with "In a design review". The finished versions are in [`solutions/`](solutions/). With
+the primer, the work takes about 11 hours in all.
 
 | Notebook | You will be able to… | Primer | Time | Tier |
 |---|---|---|---|---|
-| [`01_soft_targets_and_temperature`](notebooks/01_soft_targets_and_temperature.ipynb) | compute soft targets at a temperature, derive the KD gradient T·(q_T − p_T) and why T² is there, find the logit-matching limit; show soft targets beating hard labels at two examples per context (0.876 against 0.678); see the capacity gap; prune a teacher by activation importance, repair it by distillation, and see over five seeds that pruning buys a head start in steps, not a better student | §1, §2, §6 | ~1.5 h | T0 |
-| [`02_forward_reverse_kl_and_on_policy_distillation`](notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) | fit a one-mode student to a two-mode teacher under forward KL, reverse KL and JSD(β); price a SeqKD pipeline in teacher tokens; measure exposure bias (1.000 on the teacher's prefixes, 0.788 on its own per position, and only 0.190 of its outputs right through position 12); remove it with GKD, and see reverse KL converge slowly from every start because it barely lifts a token the student gives little probability; check that on-policy distillation is REINFORCE with a dense reward, exactly, and what it costs per token against GRPO | §2, §3, §4 | ~2 h | T0 |
-| [`03_distilling_reasoning_traces`](notebooks/03_distilling_reasoning_traces.ipynb) | distil an RL-trained thinker from its traces by maximum likelihood in closed form; see the student inherit its thinking-length distribution; trade accuracy for tokens with trace filters; beat RL on the student at equal samples (0.892 against 0.445); show why knowledge does not transfer | §3, §5 | ~1.5 h | T0 |
-| [`04_a_distilled_draft_for_speculative_decoding`](notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) | compute acceptance, tokens per pass and speedup; show a draft distilled from a fine-tuned target beating an off-the-shelf one (α 0.988 against 0.890); see greedy drafting capped by the target's top-token probability; pick a draft size; read vLLM's counters | §7 | ~1.5 h | T0 |
-| [`05_measuring_a_student_and_the_economics`](notebooks/05_measuring_a_student_and_the_economics.ipynb) | measure agreement (KL, top-1, top-k) and accuracy with Wilson intervals per slice; find a student that beats its teacher while agreeing less; cost teacher and student on the roofline (~16× per token against the teacher on two H100s; 96× against one, a capacity-starved baseline); compute the fixed cost, break-even and a cascade's cost per correct answer | §1, §8, §9 | ~2 h | T0 |
+| [`01_soft_targets_and_temperature`](notebooks/01_soft_targets_and_temperature.ipynb) | Calculate soft targets at a temperature. Derive the KD gradient T·(q_T − p_T), and why T² is there. Find the logit-matching limit. Show that soft targets do better than hard labels at two examples per context (0.876 against 0.678). See the capacity gap. Prune a teacher by activation importance, and repair it by distillation. Over five seeds, see that pruning gives a head start in steps, not a better student. | §1, §2, §6 | ~1.5 h | T0 |
+| [`02_forward_reverse_kl_and_on_policy_distillation`](notebooks/02_forward_reverse_kl_and_on_policy_distillation.ipynb) | Fit a one-mode student to a two-mode teacher under forward KL, reverse KL and JSD(β). Calculate the cost of a SeqKD pipeline in teacher tokens. Measure exposure bias: 1.000 on the prefixes of the teacher, and 0.788 on the prefixes of the student per position. Only 0.190 of the outputs of the student are correct through position 12. Remove the exposure bias with GKD. See reverse KL converge slowly from every start. The cause is that reverse KL increases the probability of a token by only a small quantity when the student gives it a low probability. Show that on-policy distillation is exactly REINFORCE with a dense reward, and find what it costs per token against GRPO. | §2, §3, §4 | ~2 h | T0 |
+| [`03_distilling_reasoning_traces`](notebooks/03_distilling_reasoning_traces.ipynb) | Distil an RL-trained thinker from its traces by maximum likelihood in closed form. See the student take the thinking-length distribution of the thinker. Exchange accuracy for tokens with trace filters. On the student, get better results than RL at equal samples (0.892 against 0.445). Show why knowledge does not transfer. | §3, §5 | ~1.5 h | T0 |
+| [`04_a_distilled_draft_for_speculative_decoding`](notebooks/04_a_distilled_draft_for_speculative_decoding.ipynb) | Calculate acceptance, tokens per pass and speedup. Show that a draft distilled from a fine-tuned target does better than an off-the-shelf one (α 0.988 against 0.890). See how the top-token probability of the target sets a limit on greedy acceptance. Select a draft size. Read the counters of vLLM. | §7 | ~1.5 h | T0 |
+| [`05_measuring_a_student_and_the_economics`](notebooks/05_measuring_a_student_and_the_economics.ipynb) | Measure agreement (KL, top-1, top-k) and accuracy with Wilson intervals per slice. Find a student that does better than its teacher but agrees with it less. Calculate the cost of the teacher and the student on the roofline. The result is ~16× per token against the teacher on two H100s, and 96× against one. The teacher on one H100 is a baseline with insufficient capacity. Calculate the fixed cost, the break-even and the cost per correct answer of a cascade. | §1, §8, §9 | ~2 h | T0 |
 
-§10 (where to run it) has no notebook; the lab's notebooks are its T1 half.
+§10 (where to run it) has no notebook. The notebooks of the lab are its T1 half.
 
 ## Run it
 
@@ -59,81 +67,104 @@ print(eval.vs_truth(student, lang))                       # rule accuracy 0.876 
 
 ## The whole library
 
-Read the modules in this order; each opens with a docstring stating the one idea it teaches.
+Read the modules in this order. Each module opens with a docstring that states the one idea it teaches.
 
 | File | Lines | What it teaches |
 |------|------:|-----------------|
-| [`distillcore/tasks.py`](distillcore/tasks.py) | ~110 | `ModLang`, a next-token language with a known true distribution, a verifier, its rule's cycles and enumerable continuations (and a fine-tuned "dialect"); `ThinkToy`, rlcore's ThinkTask formula 1 − e0·(1 − q)^L |
-| [`distillcore/losses.py`](distillcore/losses.py) | ~100 | every loss as (loss, dlogits): hard CE, soft-target CE, T²·KL and its gradient T·(q_T − p_T), Hinton's α-mix, logit MSE (the T → ∞ limit), the label noise 1 − Σp², and TRL's generalised JSD(β) with its closed-form gradient |
-| [`distillcore/tinylm.py`](distillcore/tinylm.py) | ~145 | a context-embedding → tanh → logits model with manual backprop; Adam; sampling with temperature; per-token log-probs and ∇ of weighted log-probs; Minitron-style width pruning; `fit_language` for teachers |
-| [`distillcore/divergences.py`](distillcore/divergences.py) | ~70 | forward and reverse KL, JSD(β), TV; a one-bump student fitted to a two-bump teacher under each — mass between the modes against a dropped mode |
-| [`distillcore/seqkd.py`](distillcore/seqkd.py) | ~85 | generate → verify → deduplicate with the token bill; SFT on teacher text; exposure bias as accuracy on the teacher's prefixes against the student's own, per position and per output |
-| [`distillcore/onpolicy.py`](distillcore/onpolicy.py) | ~110 | TRL's GKD loop (λ, β); per-token rewards; the sequence and per-token REINFORCE forms with rlcore's advantage convention; the exact expectation by enumeration; compute per token and per prompt against GRPO |
-| [`distillcore/reasoning.py`](distillcore/reasoning.py) | ~100 | a stopping-rule policy; SFT on traces as a closed-form MLE; trace filters (correct only, length caps); the REINFORCE baseline that also makes the teacher |
-| [`distillcore/draft.py`](distillcore/draft.py) | ~65 | `minengine.spec`'s acceptance, tokens per pass, speedup and best k, restated; greedy acceptance; what vLLM's counters show; acceptance on the target's own text |
-| [`distillcore/eval.py`](distillcore/eval.py) | ~85 | KL, top-1 agreement and top-k overlap (quantcore's definitions); accuracy against the truth, and how sure a student is where it is wrong; Wilson intervals; paired flips; the capability gap by slice |
-| [`distillcore/cost.py`](distillcore/cost.py) | ~185 | model shapes; a roofline decode step, the batch an ITL allows and $/M tokens on one GPU or an ideal tensor-parallel group (`roofline.llm`, `roofline.cost`); capacity.py's memory view; API prices; 6·N·D → GPU-hours; the fixed cost, break-even and a cascade |
+| [`distillcore/tasks.py`](distillcore/tasks.py) | ~110 | `ModLang`: a next-token language with a known true distribution, a verifier, the cycles of its rule and enumerable continuations (and a fine-tuned "dialect"). `ThinkToy`: the ThinkTask formula of rlcore, 1 − e0·(1 − q)^L. |
+| [`distillcore/losses.py`](distillcore/losses.py) | ~100 | Every loss as (loss, dlogits): hard CE, soft-target CE, T²·KL and its gradient T·(q_T − p_T), and Hinton's α-mix. Also logit MSE (the limit when T goes to ∞), the label noise 1 − Σp², and TRL's generalised JSD(β) with its closed-form gradient. |
+| [`distillcore/tinylm.py`](distillcore/tinylm.py) | ~145 | A model with manual backprop: a context embedding, then tanh, then logits. Also Adam, sampling with temperature, per-token log-probs and ∇ of weighted log-probs, Minitron-style width pruning, and `fit_language` for teachers. |
+| [`distillcore/divergences.py`](distillcore/divergences.py) | ~70 | Forward and reverse KL, JSD(β) and TV. A one-bump student fitted to a two-bump teacher under each divergence: mass between the modes against a dropped mode. |
+| [`distillcore/seqkd.py`](distillcore/seqkd.py) | ~85 | Generate, then verify, then deduplicate, with the token bill. SFT on teacher text. Exposure bias as accuracy on the prefixes of the teacher against the prefixes of the student, per position and per output. |
+| [`distillcore/onpolicy.py`](distillcore/onpolicy.py) | ~110 | The GKD loop of TRL (λ, β). Per-token rewards. The sequence and per-token REINFORCE forms, with the advantage convention of rlcore. The exact expectation by enumeration. The compute cost per token and per prompt, against GRPO. |
+| [`distillcore/reasoning.py`](distillcore/reasoning.py) | ~100 | A stopping-rule policy, SFT on traces as a closed-form MLE, and trace filters (correct only, length caps). The REINFORCE baseline, which also makes the teacher. |
+| [`distillcore/draft.py`](distillcore/draft.py) | ~65 | The acceptance, tokens per pass, speedup and best k of `minengine.spec`, stated again. Greedy acceptance. What the counters of vLLM show. Acceptance on the text of the target itself. |
+| [`distillcore/eval.py`](distillcore/eval.py) | ~85 | KL, top-1 agreement and top-k overlap (the definitions of quantcore). Accuracy against the truth, and how sure a student is where it is incorrect. Wilson intervals, paired flips and the capability gap by slice. |
+| [`distillcore/cost.py`](distillcore/cost.py) | ~185 | Model shapes. A roofline decode step, the batch that an ITL permits, and $/M tokens on one GPU or an ideal tensor-parallel group (`roofline.llm`, `roofline.cost`). The memory view of capacity.py. API prices. The conversion from 6·N·D to GPU-hours. The fixed cost, break-even and a cascade. |
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (78, plus 8 notebook-tooling checks; offline, ~30 s in all). The ones that
-carry the correctness claims:
+`tests/` has one focused test per concept (78 tests plus 8 notebook-tooling checks, all offline, ~30 s in total). The tests
+that carry the correctness claims are these:
 
-- **The gradients are right.** Every loss's gradient — soft CE, T²·KL, Hinton's mix, logit MSE and TRL's JSD at five
-  values of β — matches finite differences; so do the network's backward pass and ∇ of weighted log-probabilities
-  (`test_losses.py`, `test_tinylm.py`).
-- **The formulas hold, pinned to hand-computed values.** The five-token example's soft targets, KL 0.25650, the T²
-  table and its limit 0.23; the gradient (q − p)/T at T = 2; label noise 0.34; the JSD at β = 0.01…0.99 including
-  TRL's exact endpoints; the bimodal fits (forward μ = 5, s = 8.6; reverse μ = 2, s = 0.7, KL = ln 2) and the flip
-  between β = 0.6 and 0.7; the empirical-hazard MLE; Wilson intervals (`test_losses.py`, `test_divergences.py`,
+- **The gradients are correct.** The gradient of each loss matches finite differences. The losses are soft CE, T²·KL,
+  Hinton's mix, logit MSE and TRL's JSD at five values of β. The backward pass of the network and ∇ of weighted
+  log-probabilities also match finite differences (`test_losses.py`, `test_tinylm.py`).
+- **The formulas hold, pinned to hand-computed values.** These values are the soft targets of the five-token
+  example, KL 0.25650, and the T² table and its limit 0.23. They also include the gradient (q − p)/T at T = 2 and
+  the label noise 0.34. They include the JSD at β = 0.01…0.99, with the exact endpoints of TRL. They include the
+  forward bimodal fit (μ = 5, s = 8.6) and the reverse bimodal fit (μ = 2, s = 0.7, KL = ln 2). They also include the flip between
+  β = 0.6 and 0.7, the empirical-hazard MLE and Wilson intervals (`test_losses.py`, `test_divergences.py`,
   `test_reasoning.py`, `test_eval.py`).
-- **On-policy distillation is policy gradient, exactly.** The per-token score-function estimate equals the
-  analytic reverse-KL gradient; over all 125 continuations of a small language, the REINFORCE expectation equals
-  −∇KL by finite differences; the sampled estimator is unbiased; the per-token form is biased (31% of the norm)
-  and quieter (`test_onpolicy.py`).
-- **The effects are real, not staged.** Soft targets beat hard labels; exposure bias appears under supervised KD,
-  flat per position and compounding per output, and on-policy training removes it; reverse KL is slower than
-  forward from every start tried; a pruned student's head start holds at every seed at 20 steps and is gone by 100;
-  a like-for-like teacher (two H100s) is 16× the student's cost, not 96×; on-policy distillation costs twice GRPO
-  per token with a 32B teacher; a distilled draft accepts more than an off-the-shelf one; traces beat RL at equal
-  samples; a verifier-filtered student beats its weak teacher while agreeing less (`test_seqkd.py`,
-  `test_primer_numbers.py`, `test_cost.py`, `test_onpolicy.py`, `test_draft.py`, `test_reasoning.py`,
-  `test_eval.py`).
-- **Existing repo numbers reproduced** (`test_repo_numbers.py`, each test named for whose numbers): the serving
-  primer's §7 (`minengine.spec`: α = 0.6 from its p and q; at α = 0.8, k = 4 gives 3.36 tokens per pass, and at
-  draft cost c = 0.1 the best k is 6, at 2.47×), the roofline primer's §3.3 and §8.1 tables and `max_batch_by_memory` over 2 and 4 devices (Llama-3.1-8B: batch 68, 9.93 ms, 6,847 tokens/s, $0.446; FP8 193; 4.52 and 50.5 ms), the capacity
-  primer's bank example (88.8 and 355.1 sessions per GPU), quantization §8 (±0.0268, z = −2.9), rlcore's ThinkTask
-  (L* = 20.23; 0.304 at a mean of 1.0 tokens) and `reinforce_grad`'s convention with the teacher as reference, the
-  memory primer's and the platform lab's Wilson intervals, and the 06 lab's `cost_per_call` ($0.007005) — as
-  constants, and function by function against the originals when they are in the checkout (loaded by path, no
-  cache left behind).
-- **The primer says what the code computes.** Every computed number in `../PRIMER.md` is recomputed
-  (`test_primer_numbers.py`). Exact ones — closed forms on fixed logits, enumerations, parameter counts, roofline
-  costs, Wilson intervals of fixed counts — must appear verbatim. Numbers from a trained or sampled toy model are one
-  seeded run on one CPU: OpenBLAS's matmul kernels and numpy's SIMD loops round differently in the last bit on each
-  CPU family, training amplifies that, and most such numbers move in the third digit (an AVX2-only AMD runner gets
-  α = 0.889 where the primer says 0.890), a few chaotic ones by 0.1–0.2 (the on-policy student on rare inputs, the
-  4- and 8-unit drafts). Those — here and in the other test files — are compared with a tolerance of about three
-  times the largest deviation measured across 15 x86 kernel and SIMD variants; the qualitative claims stay exact.
+- **On-policy distillation is policy gradient, exactly.** The per-token score-function estimate equals the analytic
+  reverse-KL gradient. Over all 125 continuations of a small language, the REINFORCE expectation equals −∇KL by
+  finite differences. The sampled estimator is unbiased. The per-token form is biased (31% of the norm) and has less
+  noise (`test_onpolicy.py`).
+- **The effects are real, not staged.** The tests show these effects:
+  - Soft targets do better than hard labels.
+  - Exposure bias appears under supervised KD. It is flat per position and compounds per output, and on-policy
+    training removes it.
+  - Reverse KL is slower than forward KL from every start that the tests tried.
+  - The head start of a pruned student holds at every seed at 20 steps, and it is gone by 100 steps.
+  - A like-for-like teacher (two H100s) has 16× the cost of the student, not 96×.
+  - With a 32B teacher, on-policy distillation costs two times as much as GRPO per token.
+  - A distilled draft accepts more than an off-the-shelf one.
+  - Traces do better than RL at equal samples.
+  - A verifier-filtered student does better than its weak teacher but agrees with it less.
+
+  The tests are `test_seqkd.py`, `test_primer_numbers.py`, `test_cost.py`, `test_onpolicy.py`, `test_draft.py`,
+  `test_reasoning.py` and `test_eval.py`.
+- **Numbers from other parts of the repo, reproduced** (`test_repo_numbers.py`). The name of each test says whose
+  numbers it reproduces. The numbers are these:
+  - §7 of the serving primer (`minengine.spec`): α = 0.6 from its p and q. At α = 0.8, k = 4 gives 3.36 tokens per
+    pass. At draft cost c = 0.1, the best k is 6, at 2.47×.
+  - The §3.3 and §8.1 tables of the roofline primer, and `max_batch_by_memory` over 2 and 4 devices. The values
+    for Llama-3.1-8B are batch 68, 9.93 ms, 6,847 tokens/s, $0.446 · FP8 193 · 4.52 and 50.5 ms.
+  - The bank example of the capacity primer (88.8 and 355.1 sessions per GPU).
+  - Quantization §8 (±0.0268, z = −2.9).
+  - The ThinkTask of rlcore (L* = 20.23, and 0.304 at a mean of 1.0 tokens), and the convention of `reinforce_grad`
+    with the teacher as reference.
+  - The Wilson intervals of the memory primer and of the platform lab.
+  - The `cost_per_call` of the 06 lab ($0.007005).
+
+  The tests hold these numbers as constants. When the originals are in the checkout, the tests also compare
+  function by function against them. They load the originals by path and leave no cache behind.
+- **The primer says what the code computes.** The tests recompute every computed number in `../PRIMER.md`
+  (`test_primer_numbers.py`). The exact numbers must appear verbatim. They include closed forms on given logits,
+  enumerations, parameter counts, roofline costs and Wilson intervals of given counts.
+
+  A number from a trained or sampled toy model is one seeded run on one CPU. This is important because the matmul
+  kernels of OpenBLAS and the SIMD loops of numpy round differently in the last bit on each CPU family. Training
+  makes that difference larger. Most such numbers move in the third digit (an AVX2-only AMD runner gets α = 0.889
+  where the primer says 0.890). A few chaotic ones move by 0.1–0.2 (the on-policy student on rare inputs, the 4- and
+  8-unit drafts).
+
+  The tests compare those numbers, here and in the other test files, with a tolerance. The tolerance is about three
+  times the largest deviation measured across 15 x86 kernel and SIMD variants. The qualitative claims stay exact.
   `OPENBLAS_CORETYPE=Haswell NPY_DISABLE_CPU_FEATURES="X86_V4 AVX512_ICL AVX512_SPR" python3 -m pytest -q`
-  reproduces that AMD runner's numbers on an AVX-512 Intel machine.
+  reproduces the numbers of that AMD runner on an AVX-512 Intel machine.
 
 ## Caveats: what the toys are and are not
 
-`ModLang` is a lookup table dressed as a language: its rule has no smooth structure, which makes width a clean
-capacity knob and the truth exactly known, but it is not text. Its greedy continuations stay on the rule's cycles,
-which is what makes exposure bias visible here; in real text the same mechanism is spread over far more states.
-Reverse KL is slow here from every start tried (KD, SFT, fresh): it lifts a token only in proportion to the
-student's own probability of it, and on a lookup table students are often confidently wrong. The recipes start
-on-policy distillation from an SFT checkpoint because on a real model it already writes in the teacher's format;
-the toy neither shows nor refutes that. The reasoning toy's teacher is narrow (it was made by RL on one task), not heavy-tailed like a real thinking
-model. Every serving cost is an ideal roofline bound with list prices marked (verify), not a measurement; the lab
+`ModLang` is a lookup table in the form of a language. Its rule has no smooth structure. Thus width is a clean
+capacity knob, and you know the truth exactly. But `ModLang` is not text. Its greedy continuations stay on the
+cycles of the rule, and this makes exposure bias visible here. In real text, the same mechanism spreads over far
+more states.
+
+Reverse KL is slow here from every start that the tests tried (KD, SFT, fresh). The cause is that reverse KL increases
+the probability of a token only in proportion to the probability that the student gives that token. Also, on a lookup
+table, students are often confidently incorrect. The recipes start on-policy distillation from an SFT checkpoint,
+because on a real model that checkpoint already writes in the format of the teacher. The toy does not show if this
+reason is true or false.
+
+The teacher of the reasoning toy is narrow (RL made it on one task). It is not heavy-tailed like a real thinking
+model. Every serving cost is an ideal roofline bound with list prices marked (verify), not a measurement. The lab
 measures real engines.
 
 ## Regenerating notebooks
 
-`notebooks/` and `solutions/` are generated from `notebooks_src/*.py` (percent format with `### BEGIN SOLUTION`
-blocks). Edit the sources, then:
+The builder generates `notebooks/` and `solutions/` from `notebooks_src/*.py` (percent format with
+`### BEGIN SOLUTION` blocks). Edit the sources. Then run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # rebuild both variants
@@ -141,15 +172,17 @@ python3 tools/run_notebooks.py solutions                # solutions must run cle
 python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at the first exercise
 ```
 
-`make check` runs all three plus the tests. On Colab, each notebook's first cell clones the repo and installs this
-package (see [`../../../COLAB.md`](../../../COLAB.md)).
+`make check` runs all three and the tests. On Colab, the first cell of each notebook clones the repo and installs
+this package (see [`../../../COLAB.md`](../../../COLAB.md)).
 
 ## When you outgrow this
 
-Go to [`../distill-lab/`](../distill-lab/) to distil a tiny transformer four ways in torch, generate teacher data
-from a served model and train a 0.5–0.6B student with TRL on a free T4, distil reasoning traces from a thinking
-model, and measure a distilled draft under vLLM's speculative decoding. The theory underneath is
-[`rl-and-thinking-models`](../../rl-and-thinking-models/README.md) (post-training, REINFORCE, thinking workloads)
-and [`04-inference-engine/serving-engine`](../../../04-inference-engine/serving-engine/README.md) (speculative
-decoding); the cost model is layer 01's [roofline](../../../01-hardware-gpu-fabric/roofline-and-fabric/README.md).
-Where each tier runs and what it costs: [`COMPUTE.md`](../../../COMPUTE.md). MIT licensed.
+Go to [`../distill-lab/`](../distill-lab/). There, you distil a small transformer four ways in torch. You generate
+teacher data from a served model, and train a 0.5–0.6B student with TRL on a free T4. You also distil reasoning
+traces from a thinking model, and measure a distilled draft under the speculative decoding of vLLM.
+
+The theory that the core and the lab use is in [`rl-and-thinking-models`](../../rl-and-thinking-models/README.md) (post-training,
+REINFORCE, thinking workloads) and [`04-inference-engine/serving-engine`](../../../04-inference-engine/serving-engine/README.md)
+(speculative decoding). The cost model is the [roofline](../../../01-hardware-gpu-fabric/roofline-and-fabric/README.md)
+of layer 01. For where each tier runs and what it costs, see [`COMPUTE.md`](../../../COMPUTE.md). The licence is
+MIT.

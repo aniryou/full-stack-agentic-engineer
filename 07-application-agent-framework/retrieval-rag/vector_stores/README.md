@@ -1,25 +1,30 @@
 # vector_stores — vector search and GraphRAG, rebuilt from scratch in numpy
 
-After this lab you can explain how FAISS's index families (flat, IVF, PQ, IVFPQ, LSH, HNSW) trade memory, speed and
-recall, measure that trade-off yourself, and trace a GraphRAG pipeline from chunks to a community-summary answer.
+After this lab, you can do these three things:
+
+- Explain the trade-off between memory, speed and recall in each index family of FAISS (flat, IVF, PQ, IVFPQ,
+  LSH, HNSW).
+- Measure that trade-off yourself.
+- Trace a GraphRAG pipeline from the chunks to an answer from the community summaries.
 
 ## Start here
 
-1. Install and run the tests (below): 50 tests, about 25 s on a laptop CPU.
-2. `python demo.py` — a recall@10 table for every index on seeded synthetic data (~20 s).
-3. Read [`minifaiss/hnsw.py`](minifaiss/hnsw.py) or [`minifaiss/pq.py`](minifaiss/pq.py) next to the matching section
-   of the [vector databases primer](../vector-databases-primer.md); then [`minigraphrag/`](minigraphrag/README.md).
+1. Install the lab and run the tests ("Run it"). There are 50 tests. They take about 25 s on a laptop CPU.
+2. Run `python demo.py`. It prints a recall@10 table for each index on seeded synthetic data (~20 s).
+3. Read [`minifaiss/hnsw.py`](minifaiss/hnsw.py) or [`minifaiss/pq.py`](minifaiss/pq.py) together with the
+   applicable section of the [vector databases primer](../vector-databases-primer.md). Then read
+   [`minigraphrag/`](minigraphrag/README.md).
 
 ## What you get
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`minifaiss/`](minifaiss/) + `demo.py` | build and tune each FAISS index family and read the recall/memory table | 2–3 h | T0 |
-| `demo_gutenberg.py` | run the same indexes on real text (TF-IDF over Project Gutenberg) | 30 min | T0 (downloads the corpus once) |
-| [`minigraphrag/`](minigraphrag/README.md) + `demo_graphrag.py` | trace GraphRAG: extraction, graph, communities, local and global search | 2 h | T0 (offline mock model) |
-| `tests/` | check every index against exact search | — | T0 |
+| [`minifaiss/`](minifaiss/) + `demo.py` | Build each FAISS index family, adjust its parameters, and read the recall/memory table. | 2–3 h | T0 |
+| `demo_gutenberg.py` | Run the same indexes on real text (TF-IDF over Project Gutenberg). | 30 min | T0 (downloads the corpus one time) |
+| [`minigraphrag/`](minigraphrag/README.md) + `demo_graphrag.py` | Trace GraphRAG: extraction, graph, communities, local search and global search. | 2 h | T0 (offline mock model) |
+| `tests/` | Compare each index with exact search. | — | T0 |
 
-T0 = a laptop or Colab CPU, free: no GPU, no API key.
+T0 is a laptop or a Colab CPU, at no cost. It needs no GPU and no API key.
 
 ## Run it
 
@@ -32,54 +37,52 @@ python gutenberg_corpus.py            # one-time corpus fetch; non-interactive (
 python demo_gutenberg.py              # semantic-ish search + recall/memory/time per index on real passages
 ```
 
-Do not use `python -m nltk.downloader gutenberg`: when a download fails it prompts "Retry? [n/y/e]" and dies in a
-non-interactive shell. Recent NLTK releases also refuse to download through an HTTP(S) proxy; if yours is trusted, set
-`NLTK_ALLOW_PROXIED_URLOPEN=1` for the fetch (checked with NLTK 3.10.3 on 2026-09-26, verify).
+Do not use `python -m nltk.downloader gutenberg`. When a download fails, this command shows the prompt "Retry?
+[n/y/e]". In a non-interactive shell, the command then crashes. Recent NLTK releases also do not permit a download
+through an HTTP(S) proxy. If you trust your proxy, set `NLTK_ALLOW_PROXIED_URLOPEN=1` for the download (examined
+with NLTK 3.10.3 on 2026-09-26, verify).
 
 ---
 
 ## minifaiss
 
-An **educational** reimplementation of the core ideas of
-[FAISS](https://github.com/facebookresearch/faiss) (Facebook AI Similarity
-Search) in pure Python + numpy. It exists to be *read*, not to be fast: every
-algorithm is written plainly, and every place where real FAISS reaches for a
-performance technique is flagged with a `# PERF:` comment in the source.
+minifaiss is an **educational** reimplementation of the core ideas of
+[FAISS](https://github.com/facebookresearch/faiss) (Facebook AI Similarity Search) in pure Python and numpy. Its
+purpose is that you *read* it, not that it is fast. The code shows each algorithm in a plain form. At each location
+where the real FAISS uses a performance technique, a `# PERF:` comment in the source marks it.
 
-> **The library** (`minifaiss/`) is standard library + numpy only — no `faiss`,
-> `scipy`, `sklearn`, or `torch`. The optional real-data demo additionally uses
-> `nltk` (only to fetch the public-domain Project Gutenberg corpus) and a tiny
-> homemade TF-IDF vectorizer; neither is part of the library.
+> **The library** (`minifaiss/`) uses only the standard library and numpy. It does not use `faiss`, `scipy`,
+> `sklearn` or `torch`. The optional demo on real data also uses `nltk`, only to download the public-domain Project
+> Gutenberg corpus. It also uses a small TF-IDF vectorizer that we wrote by hand. These two are not part of the
+> library.
 
 ---
 
 ## What is FAISS, and what does minifaiss cover?
 
-FAISS is a C++/CUDA library for similarity search over dense vectors: given a
-query vector, find its nearest neighbours among millions or billions of stored
-vectors, either exactly or approximately. It gets its speed from BLAS, SIMD,
-multithreading, GPUs, and compact vector encodings.
+FAISS is a C++/CUDA library for similarity search over dense vectors. For a query vector, it finds the nearest
+neighbours among millions or billions of stored vectors. The search is exact or approximate. Its speed comes from
+BLAS, SIMD, multiple threads, GPUs and compact codes for the vectors.
 
-minifaiss keeps the *concepts* and drops the speed. Each class mirrors a real
-FAISS class:
+minifaiss keeps the *concepts*, but not the speed. Each class matches a real FAISS class:
 
 | minifaiss class    | faiss class          | Core idea |
 |--------------------|----------------------|-----------|
-| `IndexFlat`        | `faiss.IndexFlat`    | Store every vector; exact brute-force scan. |
+| `IndexFlat`        | `faiss.IndexFlat`    | Stores each vector and does an exact brute-force scan. |
 | `IndexFlatL2`      | `faiss.IndexFlatL2`  | Flat index, squared-L2 metric. |
 | `IndexFlatIP`      | `faiss.IndexFlatIP`  | Flat index, inner-product metric. |
-| `IndexIVFFlat`     | `faiss.IndexIVFFlat` | Partition space into cells (k-means); scan only nearby cells. |
-| `ProductQuantizer` | `faiss.ProductQuantizer` | Split vectors into sub-vectors; quantize each to a small codebook. |
-| `IndexPQ`          | `faiss.IndexPQ`      | Store PQ codes only; search by asymmetric distance computation (ADC). |
-| `IndexIVFPQ`       | `faiss.IndexIVFPQ`   | IVF cells + PQ codes on residuals; FAISS's workhorse index. |
-| `IndexLSH`         | `faiss.IndexLSH`     | Random-hyperplane binary codes; Hamming-distance search. |
-| `IndexHNSWFlat`    | `faiss.IndexHNSWFlat`| Multi-layer navigable-small-world graph; greedy + beam search. |
-| `Kmeans`           | `faiss.Kmeans`       | Lloyd's algorithm; trains IVF/PQ quantizers. |
-| `index_factory`    | `faiss.index_factory`| Build an index from a description string like `"IVF64,PQ8"`. |
+| `IndexIVFFlat`     | `faiss.IndexIVFFlat` | Divides the space into cells (k-means) and scans only the near cells. |
+| `ProductQuantizer` | `faiss.ProductQuantizer` | Divides each vector into sub-vectors and quantizes each sub-vector to a small codebook. |
+| `IndexPQ`          | `faiss.IndexPQ`      | Stores only the PQ codes and searches with asymmetric distance computation (ADC). |
+| `IndexIVFPQ`       | `faiss.IndexIVFPQ`   | IVF cells and PQ codes on the residuals. This is the main general-purpose index of FAISS. |
+| `IndexLSH`         | `faiss.IndexLSH`     | Binary codes from random hyperplanes, Hamming-distance search. |
+| `IndexHNSWFlat`    | `faiss.IndexHNSWFlat`| A multi-layer navigable-small-world graph, with a greedy search and then a beam search. |
+| `Kmeans`           | `faiss.Kmeans`       | Uses Lloyd's algorithm to train the IVF/PQ quantizers. |
+| `index_factory`    | `faiss.index_factory`| Builds an index from a description string, for example `"IVF64,PQ8"`. |
 
 **Distance conventions (identical to FAISS):**
-- `METRIC_L2`: distances are **squared** L2; smaller is better (ascending).
-- `METRIC_INNER_PRODUCT`: larger is better (descending).
+- `METRIC_L2`: each distance is a **squared** L2 distance. A smaller distance is better (order: smallest first).
+- `METRIC_INNER_PRODUCT`: a larger value is better (order: largest first).
 
 ---
 
@@ -101,7 +104,7 @@ D, I = index.search(queries, k=10)
 # I: (5, 10) int64 neighbour ids (-1 pads empty slots)
 ```
 
-Build the same thing from a factory string:
+Build the same index from a factory string:
 
 ```python
 from minifaiss import index_factory
@@ -110,8 +113,8 @@ ivfpq = index_factory(d, "IVF64,PQ8")      # -> IndexIVFPQ
 ivfpq.train(database); ivfpq.add(database); ivfpq.nprobe = 8
 ```
 
-Indexes that learn structure (`IVF*`, `PQ*`) must be `train`-ed before `add`;
-`Flat`, `LSH`, and `HNSW` need no training.
+You must call `train` on an index that learns a structure (`IVF*`, `PQ*`) before you call `add`. `Flat`, `LSH` and
+`HNSW` need no training.
 
 ---
 
@@ -120,51 +123,55 @@ Indexes that learn structure (`IVF*`, `PQ*`) must be `train`-ed before `add`;
 Each index is a different point on the **space / speed / recall** trade-off.
 
 ### Flat (`flat.py`)
-Stores every vector uncompressed and compares the query against all of them.
-Exact and simple, but O(n·d) per query and 4·d bytes/vector. It is the ground
-truth other indexes are measured against. **Space:** high. **Speed:** slow.
-**Recall:** perfect.
+This index stores each vector without compression and compares the query with all of them. It is exact and simple.
+But it costs O(n·d) per query and 4·d bytes/vector. It is the ground truth. We measure the other indexes against it.
+
+**Space:** high. **Speed:** slow. **Recall:** perfect.
 
 ### IVF — inverted file (`ivf.py`)
-k-means carves the space into `nlist` Voronoi cells. Each vector lives in its
-nearest cell; a query only scans the `nprobe` closest cells. Larger `nprobe`
-→ higher recall, slower search. Still stores full vectors. **Space:** high.
-**Speed:** fast (scans `nprobe/nlist` of the data). **Recall:** tunable, near
-perfect at `nprobe = nlist`.
+k-means divides the space into `nlist` Voronoi cells. Each vector goes into its nearest cell. A query scans only the
+`nprobe` nearest cells. A larger `nprobe` gives a higher recall and a slower search. The index still stores the full
+vectors.
+
+**Space:** high. **Speed:** fast (it scans `nprobe/nlist` of the data). **Recall:** adjustable, near perfect at
+`nprobe = nlist`.
 
 ### PQ — product quantization (`pq.py`)
-Splits each vector into `m` sub-vectors and quantizes each against its own
-256-entry codebook, so a vector becomes just `m` bytes. Search uses *asymmetric
-distance computation* (ADC): build a small per-query lookup table, then score
-each stored code by summing `m` table look-ups. **Space:** tiny (`m` bytes).
-**Speed:** fast. **Recall:** lossy (depends on `m`).
+This index divides each vector into `m` sub-vectors. It quantizes each sub-vector against its own 256-entry
+codebook. Thus a vector becomes only `m` bytes. The search uses *asymmetric distance computation* (ADC). First, it
+builds a small lookup table for each query. Then it gives each stored code a score: the sum of `m` table look-ups.
+
+**Space:** small (`m` bytes). **Speed:** fast. **Recall:** lossy (it depends on `m`).
 
 ### IVFPQ (`pq.py`)
-FAISS's most-used index: IVF cells for pruning + PQ codes for compactness.
-Crucially, PQ encodes the *residual* `x - centroid`, which has smaller variance
-and quantizes more accurately. **Space:** tiny. **Speed:** fast. **Recall:**
-good for the byte budget — the sweet spot for billion-scale search.
+This is the most-used index of FAISS. It uses IVF cells to prune the search and PQ codes to make the storage
+compact. The important point is that PQ encodes the *residual* `x - centroid`. The residual has a smaller variance,
+thus PQ quantizes it more accurately.
+
+**Space:** small. **Speed:** fast. **Recall:** good for the byte budget. This is the best balance for billion-scale
+search.
 
 ### LSH — locality-sensitive hashing (`lsh.py`)
-Projects each vector onto `nbits` random hyperplanes and keeps only the sign
-bits. Search is a Hamming-distance scan over packed bit codes. Single-table LSH
-(as here) is the weakest recall of the bunch; real systems use many bits and
-multiple tables. **Space:** tiny (`nbits/8` bytes). **Speed:** fast. **Recall:**
-low unless heavily tuned.
+This index projects each vector onto `nbits` random hyperplanes and keeps only the sign bits. The search is a
+Hamming-distance scan over packed bit codes. Single-table LSH (as in this lab) has the lowest recall of all these
+indexes. Systems in production use many bits and many tables.
+
+**Space:** small (`nbits/8` bytes). **Speed:** fast. **Recall:** low if you do not adjust its parameters a lot.
 
 ### HNSW — hierarchical navigable small world (`hnsw.py`)
-Builds a layered proximity graph: sparse upper layers act as express lanes, and
-layer 0 holds everyone. Each node keeps up to `M` neighbours per upper layer and
-`M0 = 2M` on layer 0, as in the HNSW paper and `faiss.IndexHNSWFlat`. Search
-greedy-descends the upper layers, then beam-searches layer 0. Stores full vectors plus the graph. **Space:** high (vectors +
-edges). **Speed:** very fast. **Recall:** high, tuned by `efSearch`.
+This index builds a layered proximity graph. The sparse upper layers are express lanes, and layer 0 holds all the
+nodes. Each node keeps up to `M` neighbours in each upper layer and `M0 = 2M` on layer 0, as in the HNSW paper and
+`faiss.IndexHNSWFlat`. The search goes down the upper layers with a greedy search. Then it does
+a beam search on layer 0. The index stores the full vectors and the graph.
+
+**Space:** high (vectors and edges). **Speed:** very fast. **Recall:** high, adjusted with `efSearch`.
 
 ---
 
 ## Where performance lives
 
-The whole point of minifaiss is to show *where the speed would come from* in
-real FAISS. Every such spot is marked with a comment beginning `# PERF:`.
+The main purpose of minifaiss is to show *where the speed comes from* in the real FAISS. A comment that starts with
+`# PERF:` marks each of these locations.
 
 **Find them all:**
 
@@ -174,33 +181,33 @@ grep -rn "# PERF:" minifaiss/
 
 | Real-FAISS optimization | What it does | minifaiss file · `# PERF:` location |
 |-------------------------|--------------|-------------------------------------|
-| **BLAS / GEMM matmul**  | Batched distance math as one big matrix multiply — the dominant cost. | `metrics.py` (`l2_sqr_distances`, `inner_products`); also flagged in `flat.py`, `ivf.py`, `lsh.py`, `kmeans.py`. We rely on numpy's BLAS. |
-| **SIMD vectorization**  | Distance/popcount kernels use vector CPU instructions. | Called out alongside the GEMM notes in `metrics.py`, and in `lsh.py` (`_hamming`). |
-| **OpenMP threads**      | Parallel scan across queries / inverted lists / k-means iterations. | `metrics.py`, `ivf.py` (`search`), `kmeans.py` (`train`). |
-| **GPU kernels** (faiss-gpu) | CUDA GEMM and index kernels. | Noted with the GEMM `# PERF:` comments in `metrics.py`, `flat.py`. |
-| **PQ fast-scan / SIMD LUT** | Pack codes so ADC look-ups run in SIMD shuffle registers over many codes at once. | `pq.py` (`distance_table`, `_adc_scan`). |
+| **BLAS / GEMM matmul**  | It does the batched distance math as one large matrix multiply. This is the largest cost. | `metrics.py` (`l2_sqr_distances`, `inner_products`). `flat.py`, `ivf.py`, `lsh.py` and `kmeans.py` also have this mark. We use the BLAS of numpy. |
+| **SIMD vectorization**  | Distance/popcount kernels use vector CPU instructions. | Next to the GEMM notes in `metrics.py`, and in `lsh.py` (`_hamming`). |
+| **OpenMP threads**      | A parallel scan across queries, inverted lists or k-means iterations. | `metrics.py`, `ivf.py` (`search`), `kmeans.py` (`train`). |
+| **GPU kernels** (faiss-gpu) | CUDA GEMM and index kernels. | In the GEMM `# PERF:` comments in `metrics.py`, `flat.py`. |
+| **PQ fast-scan / SIMD LUT** | It packs the codes, so the ADC look-ups run in SIMD shuffle registers over many codes at the same time. | `pq.py` (`distance_table`, `_adc_scan`). |
 | **SIMD popcount**       | Hardware `POPCNT` / byte-shuffle popcount for Hamming distance. | `lsh.py` (`_POPCOUNT_TABLE`, `_hamming`). |
-| **Contiguous memory layout** | Cache-friendly contiguous buffers per list. | `flat.py` (`add`), `ivf.py` (`search`), `hnsw.py` (`search`). |
-| **float16 / int8 storage** | Store vectors at reduced precision to cut bandwidth. | `flat.py` (`add`). |
-| **PQ code layout (m bytes/vec)** | uint8 codes, one byte per subspace. | `pq.py` (`compute_codes`). |
-| **IVF pruning (nprobe/nlist)** | Skip cells whose centroid is far from the query. | `ivf.py` (`search`), `pq.py` (`IndexIVFPQ.search`). |
-| **Result heap (size-k)**| Per-thread max-heap instead of a full sort. | `metrics.py` (`topk`), `lsh.py` (`search`). |
-| **mmap / on-disk indexes** | Memory-map huge indexes instead of loading them. | Conceptually replaces our in-RAM Python lists (see `ivf.py` / `pq.py` inverted lists); not implemented. |
-| **Factory transforms / SIMD variants** | OPQ, PCA, `PQxxfs` fast-scan variants, GPU clones. | `index_factory.py` — omitted here. |
+| **Contiguous memory layout** | Cache-friendly contiguous buffers for each list. | `flat.py` (`add`), `ivf.py` (`search`), `hnsw.py` (`search`). |
+| **float16 / int8 storage** | It stores the vectors at a lower precision to decrease the bandwidth. | `flat.py` (`add`). |
+| **PQ code layout (m bytes/vec)** | uint8 codes, one byte for each subspace. | `pq.py` (`compute_codes`). |
+| **IVF pruning (nprobe/nlist)** | It does not scan the cells whose centroid is far from the query. | `ivf.py` (`search`), `pq.py` (`IndexIVFPQ.search`). |
+| **Result heap (size-k)**| A max-heap for each thread, not a full sort. | `metrics.py` (`topk`), `lsh.py` (`search`). |
+| **mmap / on-disk indexes** | It maps large indexes into memory and does not load them. | In concept, it replaces our in-RAM Python lists (see the inverted lists in `ivf.py` / `pq.py`). minifaiss does not implement it. |
+| **Factory transforms / SIMD variants** | OPQ, PCA, `PQxxfs` fast-scan variants, GPU clones. | `index_factory.py`. minifaiss does not include them. |
 
 ---
 
 ## Real-data demo: semantic search over Project Gutenberg
 
-`demo_gutenberg.py` runs vector search over real public-domain books. It:
+`demo_gutenberg.py` does a vector search over real public-domain books. It does these steps:
 
-1. loads passages from the [NLTK Gutenberg corpus](https://www.nltk.org/nltk_data/)
-   (`gutenberg_corpus.py`),
-2. turns each passage into a vector with a small homemade **TF-IDF** vectorizer
-   (`tfidf.py`), L2-normalized so **inner product = cosine similarity**,
-3. does natural-language **semantic search** (exact, `IndexFlatIP`), then
-4. measures each approximate index's **recall@10, memory, and build/search
-   time** against that exact baseline.
+1. It loads passages from the [NLTK Gutenberg corpus](https://www.nltk.org/nltk_data/)
+   (`gutenberg_corpus.py`).
+2. It changes each passage into a vector with a small **TF-IDF** vectorizer that we wrote by hand (`tfidf.py`). It
+   L2-normalizes the vectors, so **inner product = cosine similarity**.
+3. It does a natural-language **semantic search** (exact, `IndexFlatIP`).
+4. Then it measures the **recall@10, memory, and build/search time** of each approximate index against that exact
+   baseline.
 
 ```bash
 # one-time: fetch the corpus (non-interactive; see "Run it" if you are behind a proxy)
@@ -210,8 +217,8 @@ python gutenberg_corpus.py
 python demo_gutenberg.py
 ```
 
-Example (1500 passages, d=256, cosine; recall is deterministic, the timings are from a
-shared 4-vCPU machine on 2026-09-26 and will differ on yours):
+Example output (1500 passages, d=256, cosine). The recall is deterministic. The times come from a shared 4-vCPU
+machine on 2026-09-26, and on your machine they will be different:
 
 ```
 Query: "murder of the king and the bloody crown"
@@ -229,18 +236,19 @@ IndexLSH(nbits=256)                           32      0.407     0.01    0.173
 IndexHNSWFlat(M=16)                         1024      0.985     1.69    0.212
 ```
 
-The trade-off reads straight off the table: `IndexFlatIP` and `HNSW` keep the
-most recall but store 1024 bytes/vector; `IndexIVFPQ` holds ~0.57 recall at just
-**8 bytes/vector** (128× smaller); single-table `IndexLSH` is cheapest but
-weakest.
+The table shows the trade-off directly:
 
-> **Why TF-IDF, not real embeddings?** To keep the repo dependency-light and
-> offline. TF-IDF is *lexical*, so a query for "white rabbit" can match Moby
-> Dick's "white … hurried" passages — the words overlap even though the meaning
-> doesn't. A neural embedding model (sentence-transformers, OpenAI/Cohere, a
-> local model) would capture meaning; **you would feed its vectors into exactly
-> these same minifaiss indexes.** FAISS itself never embeds text — it only
-> indexes vectors you already have.
+- `IndexFlatIP` and `HNSW` keep the most recall, but they store 1024 bytes/vector.
+- `IndexIVFPQ` keeps ~0.57 recall at only **8 bytes/vector** (128× smaller).
+- The single-table `IndexLSH` has the lowest cost, but also the lowest recall.
+
+> **Why TF-IDF, not real embeddings?** The reason is to keep the repo dependency-light and offline. TF-IDF is
+> *lexical*. Thus a query for "white rabbit" can match the "white … hurried" passages of Moby Dick. The texts have
+> words in common, but not the meaning.
+>
+> If you use a neural embedding model (sentence-transformers, OpenAI/Cohere, a local model), it captures the
+> meaning. **Then you put its vectors into exactly these same minifaiss indexes.** FAISS itself never embeds text. It
+> only indexes the vectors that you already have.
 
 ## Running the synthetic demo and the tests
 

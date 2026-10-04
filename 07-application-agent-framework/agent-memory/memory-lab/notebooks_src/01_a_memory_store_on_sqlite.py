@@ -1,26 +1,27 @@
 # %% [markdown]
 # # 01 · A memory store on SQLite: records, vectors, full text — and a delete that removes the bytes
 #
-# **Tier:** T0 — SQLite with FTS5 ships with Python, vectors are numpy arrays in BLOB columns, the embedder
-# is a hashing embedder; nothing is downloaded. **T0 + Docker:** the last section runs the same store on
-# Postgres + pgvector when `MEMLAB_PG_DSN` points at one (`deploy/local/up.sh --pgvector`); without it the
-# section prints the commands and shows sample output in the documented format (illustrative).
+# **Tier:** T0. SQLite with FTS5 is part of Python, the vectors are numpy arrays in BLOB columns, and the
+# embedder is a hashing embedder. The notebook downloads nothing. **T0 + Docker:** the last section runs the
+# same store on Postgres + pgvector when `MEMLAB_PG_DSN` points at one (`deploy/local/up.sh --pgvector`).
+# Without it, the section prints the commands and shows sample output in the documented format (illustrative).
 #
 # ## The one-minute version
 #
 # A long-term memory store needs four things, and one SQLite file has all of them:
 #
 # * **the typed record** (PRIMER §1 "What an agent remembers"): kind, scope, source, trust, provenance,
-#   confidence, importance, validity, TTL and a deletion key — one row;
-# * **a vector per record**, scored exactly with numpy (a flat index: per-user partitions are small, and a
-#   flat index can *delete*, which 07.4's `minifaiss` HNSW cannot);
-# * **a full-text index** (FTS5, ranked by `bm25()`), fused with the vector ranking by reciprocal rank
-#   fusion — 07.4's hybrid search, reused (`ragkit.reference.reciprocal_rank_fusion`, $k = 60$);
-# * **the partition** `(tenant, user_id)` in *every* query's WHERE clause, so scope is enforced by the store
-#   rather than remembered by the caller (vector-databases primer §9, §11).
+#   confidence, importance, validity, TTL and a deletion key, in one row.
+# * **a vector per record**, scored exactly with numpy (a flat index). Per-user partitions are small, and a
+#   flat index can *delete*. The `minifaiss` HNSW of 07.4 cannot delete.
+# * **a full-text index** (FTS5, ranked by `bm25()`). The store fuses its ranking with the vector ranking by
+#   reciprocal rank fusion. This is the hybrid search of 07.4, used again
+#   (`ragkit.reference.reciprocal_rank_fusion`, $k = 60$).
+# * **the partition** `(tenant, user_id)` in the WHERE clause of *every* query. Thus the store enforces the
+#   scope, and the caller does not have to remember it (vector-databases primer §9, §11).
 #
-# What SQLite does not do by default is **forget**. `DELETE` leaves the text in the FTS5 index, in the
-# write-ahead log and in freed pages; you will count the copies on disk and then remove them (PRIMER §7
+# By default, SQLite does not **forget**. `DELETE` leaves the text in the FTS5 index, in the write-ahead log
+# and in freed pages. You will count the copies on disk, and then you will remove them (PRIMER §7
 # "Consolidation, forgetting and deletion"). Primer: [`../../PRIMER.md`](../../PRIMER.md).
 
 # %%
@@ -43,9 +44,9 @@ print("SQLite features here:", sqlite_features())
 # %% [markdown]
 # ## Worked example: the schema, and three users' memories in one file
 #
-# One table holds the record and its vector; one FTS5 table indexes the text (porter-stemmed, so "trips"
-# finds "trip"). Two users of tenant `acme` and one of tenant `globex` share the file: isolation is the
-# partition predicate, not a separate database.
+# One table holds the record and its vector. One FTS5 table indexes the text (porter-stemmed, thus "trips"
+# finds "trip"). Two users of tenant `acme` and one user of tenant `globex` share the file. The isolation
+# comes from the partition predicate, not from a separate database.
 
 # %%
 print(SCHEMA.strip().splitlines()[0], "...", FTS_SCHEMA, sep="\n")
@@ -68,10 +69,10 @@ print(store.stats())
 # %% [markdown]
 # ## Worked example: three rankings for one question
 #
-# The vector leg is a dot product over the partition's unit vectors (the hashing embedder is lexical: only
-# shared words count). The full-text leg is FTS5's `bm25()` — **negative, lower is better** — over the
-# question's words minus stopwords. Hybrid fuses the two *rankings* by RRF, so their different scales
-# never meet.
+# The vector leg is a dot product over the unit vectors of the partition (the hashing embedder is lexical:
+# only shared words count). The full-text leg is the `bm25()` of FTS5 over the words of the question, minus
+# the stopwords. Its value is **negative, and lower is better**. Hybrid fuses the two *rankings* by RRF, thus
+# their different scales never meet.
 
 # %%
 Q = "Which city is my home city, and where did my trip go?"
@@ -83,9 +84,10 @@ print("acme/u2 asks the same:", [h.record.text for h in store.search("acme", "u2
 # %% [markdown]
 # ## Exercise 1.1 — reciprocal rank fusion
 #
-# Write `rrf(rankings, k=60)`: each ranking is a list of ids, best first; an id at 0-based position $r$
-# earns $1/(k + r + 1)$ from that list; return `(id, score)` pairs sorted by score, highest first. This is
-# `ragkit.reference.reciprocal_rank_fusion` (07.4 notebook 03) — the store's hybrid mode uses the same rule.
+# Write `rrf(rankings, k=60)`. Each ranking is a list of ids, best first. An id at 0-based position $r$ gets
+# $1/(k + r + 1)$ from that list. Return `(id, score)` pairs, sorted by score, highest first. This function
+# is `ragkit.reference.reciprocal_rank_fusion` (07.4 notebook 03). The hybrid mode of the store uses the same
+# rule.
 
 # %% exercise
 def rrf(rankings, k=60):
@@ -110,22 +112,24 @@ print("✅ rrf reproduces the store's hybrid scores; the best id scores", round(
 # %% [markdown]
 # ## Exercise 1.2 — `bm25()` by hand, sign and all
 #
-# Reproduce FTS5's `bm25()` for a query of one or more terms on a small table: for each query term,
+# Reproduce the `bm25()` of FTS5 for a query of one or more terms on a small table. For each query term, the
+# IDF is:
 #
 # $$
 # \mathrm{idf} = \ln\frac{N - n + 0.5}{n + 0.5}
 # $$
 #
-# ($N$ rows, $n$ rows containing the term), **floored at 1e-6 when it is not positive**; each row scores
+# Here $N$ is the number of rows, and $n$ is the number of rows that contain the term. **When the IDF is not
+# positive, use the floor value 1e-6.** Each row gets this score:
 #
 # $$
 # \sum \mathrm{idf} \cdot
 # \frac{\mathrm{tf} \cdot (k_1 + 1)}{\mathrm{tf} + k_1 \cdot (1 - b + b \cdot \lvert d \rvert / \mathrm{avgdl})}
 # $$
 #
-# with $k_1 = 1.2$, $b = 0.75$, $\lvert d \rvert$ the row's token count and $\mathrm{avgdl}$ the mean; `bm25()`
-# returns **minus** that. (ragkit's BM25 uses $k_1 = 1.5$ — same idea, different constant.) Return one value per
-# document.
+# Here $k_1 = 1.2$, $b = 0.75$, $\lvert d \rvert$ is the token count of the row, and $\mathrm{avgdl}$ is the
+# mean. `bm25()` returns **minus** that score. (The BM25 of ragkit uses $k_1 = 1.5$. The idea is the same,
+# but the constant is different.) Return one value per document.
 
 # %%
 DOCS = ["the user lives in lisbon", "the user works at globex in lisbon", "a dog named rex",
@@ -162,16 +166,18 @@ print("✅ bm25 matches SQLite:", {i: round(v, 4) for i, v in sqlite_bm25(["dog"
       "| 'lisbon' is in half the rows, so its IDF is floored:", sqlite_bm25(["lisbon"]))
 
 # %% [markdown]
-# The floor matters for memory: a word in half a user's memories ("user", "the") carries no ranking signal,
-# and FTS5 statistics are **table-wide** — another tenant's rows move your IDF (your ranking, not your
-# result set). A per-tenant FTS table removes that coupling at the cost of more tables.
+# The floor is important for memory. A word in half of the memories of a user ("user", "the") gives no signal
+# to the ranking. Also, the FTS5 statistics are **table-wide**. Thus the rows of another tenant move your IDF.
+# They change your ranking, not your result set. An FTS table per tenant removes that dependency, but the cost
+# is more tables.
 #
 # ## Exercise 1.3 — how big is a memory?
 #
-# Write `vector_bytes(dim, backend)`: the bytes of one stored vector for `"sqlite"` (float32 BLOB, 4 bytes per
-# dimension), `"pgvector"` (`vector`: $4 \cdot \text{dim} + 8$) and `"halfvec"` ($2 \cdot \text{dim} + 8$) —
-# pgvector's README sizes. Then `memory_bytes(n, dim, avg_text_chars, backend)`: $n$ records × (vector + text
-# bytes), ignoring indexes.
+# Write `vector_bytes(dim, backend)`. It returns the bytes of one stored vector for `"sqlite"` (float32 BLOB,
+# 4 bytes per dimension), `"pgvector"` (`vector`: $4 \cdot \text{dim} + 8$) and `"halfvec"`
+# ($2 \cdot \text{dim} + 8$). These are the sizes from the pgvector README. Then write
+# `memory_bytes(n, dim, avg_text_chars, backend)`. It returns $n$ records × (vector + text bytes). Do not
+# count the indexes.
 
 # %% exercise
 def vector_bytes(dim, backend="sqlite"):
@@ -195,8 +201,8 @@ print(f"✅ 100k memories x 1024-d: {per_tenant / 1e6:.0f} MB of vectors and tex
 # %% [markdown]
 # ## Worked example: a forget that is only a DELETE
 #
-# A user asks us to forget their home address. The naive forget deletes the row and its FTS row. Count the
-# address on disk before and after — in the database file *and* its `-wal` file.
+# A user asks us to forget their home address. The simple forget deletes the row and its FTS row. Count the
+# address on disk before and after the forget. Count it in the database file *and* in its `-wal` file.
 
 # %%
 naive = SQLiteMemoryStore(os.path.join(WORK, "naive.db"), fts_secure_delete=False)
@@ -209,15 +215,16 @@ print(rep.table())
 print("search after the forget:", [h.record.text for h in naive.search("acme", "u1", "Rua das Flores", touch=False)])
 
 # %% [markdown]
-# The search finds nothing — and the bytes are still there: the old page images in the WAL and the terms in
-# FTS5's index segments. A forget that only stops *retrieval* has not forgotten.
+# The search finds nothing. But the bytes are still there: the old page images in the WAL, and the terms in
+# the index segments of FTS5. A forget that only stops *retrieval* has not forgotten.
 #
 # ## Exercise 1.4 — the purge
 #
-# Write `purge_steps(fts_secure_delete, wal)`: the SQL to run **after** the DELETE so no copy is left, in
-# order. Without FTS5 `secure-delete`, merge the index (`INSERT INTO memories_fts(memories_fts)
-# VALUES('optimize')`); in WAL mode checkpoint and truncate the log (`PRAGMA wal_checkpoint(TRUNCATE)`)
-# before *and* after rewriting the file with `VACUUM` (a VACUUM in WAL mode writes through the log too).
+# Write `purge_steps(fts_secure_delete, wal)`. It returns, in order, the SQL to run **after** the DELETE, so
+# that no copy stays. Without FTS5 `secure-delete`, merge the index
+# (`INSERT INTO memories_fts(memories_fts) VALUES('optimize')`). In WAL mode, do a checkpoint and truncate
+# the log (`PRAGMA wal_checkpoint(TRUNCATE)`). Do this before *and* after `VACUUM` writes the file again. (In
+# WAL mode, a VACUUM also writes through the log.)
 
 # %% exercise
 def purge_steps(fts_secure_delete, wal):
@@ -238,17 +245,18 @@ print("✅ after", len(purge_steps(False, True)), "steps the address is gone fro
 print("   the store's own forget(mode='purge') runs the same steps:", naive.forget("acme", "x/y/z").steps[1:])
 
 # %% [markdown]
-# `SQLiteMemoryStore` turns FTS5 `secure-delete` on at creation when this SQLite has it (3.42 or newer,
-# verify; Colab's may be older — the store feature-detects on a throwaway table, never by version string),
-# which removes a deleted row's terms from the index at DELETE time; `PRAGMA secure_delete=ON` zeroes freed
-# page content. Neither reaches a copy of the file somebody else took: backups are PRIMER §7's last line.
+# When this SQLite has FTS5 `secure-delete` (3.42 or newer, verify), `SQLiteMemoryStore` turns it on at
+# creation. It is possible that the SQLite of Colab is older. The store detects the feature on a
+# temporary table, never from the version string. With `secure-delete`, a DELETE also removes the terms of
+# the deleted row from the index. `PRAGMA secure_delete=ON` writes zeros over the content of freed pages.
+# Neither reaches a copy of the file that another person took: backups are the last line of PRIMER §7.
 #
 # ## T0 + Docker: the same store on Postgres + pgvector
 #
-# `memlab.store.pgvector` has the same schema and the same three queries in SQL (RRF with $k = 60$ written as
-# two ranked CTEs), plus the consolidation job's lease and checkpoint tables. With `MEMLAB_PG_DSN` set and
-# psycopg installed this cell runs them; otherwise it prints how to start Postgres and checks every
-# statement with Postgres's own parser (`pglast`) offline.
+# `memlab.store.pgvector` has the same schema and the same three queries in SQL. The SQL writes RRF with
+# $k = 60$ as two ranked CTEs. The module also has the lease and checkpoint tables of the consolidation job.
+# If `MEMLAB_PG_DSN` has a value and psycopg is available, this cell runs the queries. If not, the cell prints how
+# to start Postgres. It also examines every statement offline with the parser of Postgres itself (`pglast`).
 
 # %%
 from memlab.store import pgvector as pgv
@@ -284,24 +292,27 @@ print("removed", WORK)
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "Each memory is one typed row — kind, scope, source, trust, provenance, validity, TTL and a
-# deletion key — with its embedding in the same row and its text in a full-text index. Every query carries
-# `tenant` and `user_id` in the WHERE clause; a per-user partition is small, so vector search is an exact
-# scan and we fuse it with BM25 by reciprocal rank fusion. The flat index can delete, which matters more
-# than ANN speed at this size. Forgetting is a purge, not a DELETE: we turn on FTS5 secure-delete, checkpoint
-# the WAL, VACUUM, and prove it by searching the file for the deleted bytes. On Postgres the same design
-# holds, but a purge can only reach the heap and indexes — WAL archives and backups age out on their own
-# schedule, and that window goes into the deletion policy."
+# **Two minutes.** "Each memory is one typed row with kind, scope, source, trust, provenance, validity, TTL
+# and a deletion key. Its embedding is in the same row, and its text is in a full-text index. Every query has
+# `tenant` and `user_id` in the WHERE clause. A per-user partition is small. Thus vector search is an exact
+# scan, and we fuse it with BM25 by reciprocal rank fusion.
 #
-# **Drill 1.** *Why not HNSW for memory?* — A user's partition holds hundreds to thousands of records: an
-# exact scan is milliseconds and never misses. HNSW pays at tenant scale, and pgvector filters *after* the
-# index scan (ef_search 40 → about 4 rows at 10% selectivity), so filtered ANN needs partitions or
-# `hnsw.iterative_scan`.
+# "The flat index can delete, and at this size that is more important than ANN speed. A forget is a purge,
+# not a DELETE. We turn on FTS5 secure-delete, do a checkpoint of the WAL and run VACUUM. Then we prove it:
+# we search the file for the deleted bytes. On Postgres the same design is correct, but a purge can only reach
+# the heap and the indexes. WAL archives and backups expire on their own schedule, and that window goes into
+# the deletion policy."
 #
-# **Drill 2.** *A test shows search no longer returns the deleted memory. Are we compliant?* — No: retrieval
-# is one surface. The text is still in the FTS index segments and the WAL until a merge/secure-delete and a
-# checkpoint, in freed pages until VACUUM, and in derived facts, caches, logs and backups (notebook 05).
+# **Drill 1.** *Why not HNSW for memory?* The partition of a user holds hundreds to thousands of records. An
+# exact scan takes milliseconds and never misses a record. HNSW is worth its cost at tenant scale. Also,
+# pgvector filters *after* the index scan (ef_search 40 gives about 4 rows at 10% selectivity), thus filtered
+# ANN needs partitions or `hnsw.iterative_scan`.
 #
-# **Drill 3.** *Why is `bm25()` negative, and why did "lisbon" score −1e-6?* — FTS5 returns minus the score so
-# ascending ORDER BY ranks best first; a term in at least half the rows has a non-positive IDF, floored at
-# 1e-6 — it cannot rank anything.
+# **Drill 2.** *A test shows that search no longer returns the deleted memory. Are we compliant?* No,
+# retrieval is one surface. The text stays in the FTS index segments and in the WAL until a merge/secure-delete
+# and a checkpoint occur. It stays in freed pages until VACUUM, and also in derived facts, caches, logs
+# and backups (notebook 05).
+#
+# **Drill 3.** *Why is `bm25()` negative, and why did "lisbon" score −1e-6?* FTS5 returns minus the score, so
+# that an ORDER BY from low to high puts the best row first. A term in at least half of the rows has an IDF
+# that is not positive. The floor sets that IDF to 1e-6, thus the term cannot rank anything.

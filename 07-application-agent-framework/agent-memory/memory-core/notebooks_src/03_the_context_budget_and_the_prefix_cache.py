@@ -1,27 +1,31 @@
 # %% [markdown]
 # # 03 · The context budget and the prefix cache
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. Times are **SIMULATED** (a roofline step model) and prices
-# are dated list prices `(verify)`. The same layouts measured on a real vLLM server's `cached_tokens` are
-# `memory-lab` notebook `03_memory_layouts_and_the_prefix_cache` (T0 simulated; T1 measured).
+# **Tier:** T0. It uses only a CPU, it needs no network, and it takes a few seconds. The times are **SIMULATED** (a
+# roofline step model), and the prices are dated list prices `(verify)`. The same layouts, measured on the
+# `cached_tokens` of a real vLLM server, are in `memory-lab` notebook `03_memory_layouts_and_the_prefix_cache` (T0
+# simulated, T1 measured).
 #
 # ## The one-minute version
-# Memory costs tokens twice: the tokens you inject, and the prefix-cache hits you destroy. An engine reuses KV only
-# for an **exact prefix, in full blocks** (vLLM: 16 tokens, each block named by a hash chained to its parent; the last
-# token of a prompt is always recomputed).
+# Memory costs tokens two times: the tokens that you inject, and the prefix-cache hits that you destroy. An engine uses
+# KV again only for an **exact prefix, in full blocks**. In vLLM, a block is 16 tokens, and a chained hash names each block: the
+# hash of a block includes the hash of its parent. The engine always computes the last token of a prompt again.
 #
-# If memory is re-retrieved every turn and placed **before the history**, the prefix changes right after the system
-# prompt and every history block behind it misses: the whole conversation re-prefills on every turn. Two layouts keep
-# the history a stable prefix: a **profile pinned once per session**, or per-turn memory at the **tail**, just before
-# the new user message (ADK's `PreloadMemoryTool` inserts there).
+# If the agent retrieves memory again at each turn and puts it **before the history**, the prefix changes immediately
+# after the system prompt. Then every history block after that point misses, and the engine prefills the whole
+# conversation again at each turn. Two layouts keep the history a stable prefix:
 #
-# You can predict the hit rate of each layout from the block rules and turn the lost hits into TTFT with a roofline
-# model — the self-hosted cost. A hosted API is different: it bills the cached rate only once a request clears its
-# caching minimum (4,096 tokens on Gemini 3.x), so below it the layout does not change the bill at all. And extraction
-# has a price too.
+# - a **profile pinned once per session**.
+# - per-turn memory at the **tail**, immediately before the new user message (ADK's `PreloadMemoryTool` inserts
+#   there).
 #
-# Primer: §5 *The context budget: tokens, the prefix cache and cost per turn*; the block rules are
-# serving-engine PRIMER §5 and mini-engine-core notebook 03 exercise 3.4.
+# You can predict the hit rate of each layout from the block rules. A roofline model then changes the lost hits into
+# TTFT, which is the self-hosted cost. A hosted API is different. It bills the cached rate only when a request gets to
+# its caching minimum (4,096 tokens on Gemini 3.x). Below the minimum, the layout does not change the bill at all.
+# Also, extraction has a price.
+#
+# Primer: §5 *The context budget: tokens, the prefix cache and cost per turn*. The block rules are in serving-engine
+# PRIMER §5 and mini-engine-core notebook 03 exercise 3.4.
 
 # %%
 from memcore import (CACHE_MIN_TOKENS, GPUS, LAYOUTS, LLMS, PrefixCache, Salts, billed_cached, cache_salt, call_cost,
@@ -29,8 +33,9 @@ from memcore import (CACHE_MIN_TOKENS, GPUS, LAYOUTS, LLMS, PrefixCache, Salts, 
 
 # %% [markdown]
 # ## Worked example 1 — three rules decide every hit
-# vllm-serving-lab notebook 04 (exercise 4.1) states them; memcore restates them as `expected_cached_tokens(prev,
-# new)` and as a block-hash `PrefixCache` (tested to agree with each other and with `minengine.kv`).
+# vllm-serving-lab notebook 04 (exercise 4.1) gives the rules. memcore gives them again as
+# `expected_cached_tokens(prev, new)` and as a block-hash `PrefixCache`. Tests make sure that these two agree with each
+# other and with `minengine.kv`.
 
 # %%
 print(expected_cached_tokens(list(range(64)), list(range(64))), "- identical 64-token prompts: the last block is recomputed")
@@ -42,9 +47,11 @@ print(cache.lookup(list(range(100)) + [7] * 20 + [1, 2, 3]), "- the next turn re
 
 # %% [markdown]
 # ## Worked example 2 — the three layouts, on text
-# One session, six turns. The system prompt is stable; each turn retrieves two memories that depend on the question
-# (so they change); the history is append-only. Tokens are 4-character chunks (`token_ids`), so a shared text
-# prefix is a shared token prefix. Watch the **uncached** tokens per turn — what the engine must prefill.
+# This is one session with six turns. The system prompt is stable. Each turn retrieves two memories that depend on the
+# question, thus these memories change. The history is append-only.
+#
+# Tokens are 4-character chunks (`token_ids`), thus a shared text prefix is a shared token prefix. Look at the
+# **uncached** tokens for each turn. These are the tokens that the engine must prefill.
 
 # %%
 SYSTEM = ("You are a travel assistant. Tools: search_flights(origin, dest, date), book(flight_id), "
@@ -79,9 +86,9 @@ for layout, render in LAYOUT_TEXT.items():
     print(f"{layout:15} uncached tokens per turn: {uncached_per_turn(render)}")
 
 # %% [markdown]
-# Before the history, the uncached part **grows every turn** — it is the whole history. Pinned, it is the new
-# message and the rounding of one block. At the tail it is the last exchange plus the new memory: bounded, not
-# growing. (Turn 1 is cold for everyone.)
+# With memory before the history, the uncached part **grows every turn**, because it is the whole history. With a
+# pinned profile, it is the new message and the rounding of one block. At the tail, it is the last exchange and the new
+# memory. That part has a limit, and it does not grow. (Turn 1 is cold for all layouts.)
 #
 # ## Worked example 3 — the default session: 2,000-token system prompt, 400 tokens of memory
 
@@ -92,13 +99,13 @@ for layout in LAYOUTS:
 print("\nover 20 turns:", {l: f"{hit_rate(hits_per_turn(l, turns=20)):.1%}" for l in LAYOUTS})
 
 # %% [markdown]
-# `none` is the no-memory baseline. Memory before the history drops the hit rate from 88% to 58% in 8 turns and
-# to 48% in 20 — it gets **worse** as the conversation grows, because the uncached part is the whole history.
-# Pinned costs almost nothing in hits; the tail loses one exchange and the memory itself per turn.
+# `none` is the no-memory baseline. Memory before the history decreases the hit rate from 88% to 58% in 8 turns, and
+# to 48% in 20. It becomes **worse** as the conversation grows, because the uncached part is the whole history. A
+# pinned profile costs almost nothing in hits. The tail loses one exchange and the memory itself at each turn.
 #
 # ## Worked example 4 — what the lost hits cost: time on your GPUs (SIMULATED), dollars on a hosted API
-# Turn 8 of the default session. Time, for a self-hosted engine: memcore's restatement of `minengine.perf.step_cost`
-# for one prefill chunk (`prefill_seconds`, roofline:
+# This is turn 8 of the default session. For a self-hosted engine, the cost is time. memcore gives
+# `minengine.perf.step_cost` again for one prefill chunk (`prefill_seconds`, roofline:
 # $\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$).
 
 # %%
@@ -110,13 +117,16 @@ for layout in LAYOUTS:
           f"{prefill_seconds(h100, l8, t.prompt, t.cached) * 1e3:7.1f}ms")
 
 # %% [markdown]
-# Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 vs 15.3 ms, SIMULATED). The engine did
-# the same work the whole time — the layout decided how much of it was repeated.
+# Memory before the history makes turn 8's prefill 4.5× slower on an L4 (68.4 against 15.3 ms, SIMULATED). The engine
+# did the same work all the time. The layout decided how much of that work the engine did again.
 #
-# Money is a different system. A hosted API has its own cache, and bills the cached rate (\$0.15 instead of \$1.50 per
-# M on Gemini 3.5 Flash, 5 Sep 2026, verify) only once a request clears its **caching minimum** — 4,096 tokens on
-# Gemini 3.x (scaling primer §5.5; whether it applies to the request or the shared prefix is verify). `turn_cost`
-# applies it through `billed_cached`, assuming the provider caches the prefix vLLM would.
+# Money is a different system. A hosted API has its own cache. It bills the cached rate only when a request gets to
+# its **caching minimum**. On Gemini 3.5 Flash, the cached rate is \$0.15 instead of \$1.50 per M (5 Sep 2026,
+# verify).
+#
+# The minimum is 4,096 tokens on Gemini 3.x (scaling primer §5.5). We do not know if the minimum applies to the
+# request or to the shared prefix (verify). `turn_cost` applies the minimum through `billed_cached`. It assumes that
+# the provider caches the same prefix as vLLM.
 
 # %%
 print("caching minimum:", CACHE_MIN_TOKENS["gemini-3.5-flash"], "tokens | turn-8 prompts:",
@@ -128,14 +138,17 @@ for system in (2000, 4000):
           f"| before_history vs pinned: {cost['before_history'] / cost['pinned'] - 1:+.0%}")
 
 # %% [markdown]
-# With the 2,000-token system prompt every prompt stays under 4,096 tokens, nothing is billed cached, and all three
-# memory layouts cost the same — 12% more than no memory, for the 400 tokens injected. With a 4,000-token system
-# prompt (tools and policies; the scaling primer's support turn sends 4–6 k) every turn from the second clears the
-# minimum, and memory before the history costs 46% more than a pinned profile. The bigger prompt is also the
-# *cheaper* session: it is the one that gets cached. A threshold, not a slope — know your provider's.
+# With the 2,000-token system prompt, every prompt stays below 4,096 tokens. The provider bills no tokens at the cached
+# rate, and all three memory layouts cost the same. They cost 12% more than no memory, for the 400 tokens injected.
+# With a 4,000-token system prompt (tools and policies), every turn from the second gets to the minimum. (The support
+# turn of the scaling primer sends 4–6 k.) Then memory before the history costs 46% more than a pinned profile.
+#
+# The larger prompt also gives the *lower-cost* session, because it is the prompt that the provider caches. The
+# minimum is a threshold, not a slope. Know the threshold of your provider.
 #
 # ## Worked example 5 — extraction has a price too
-# Extracting after every turn is a model call per turn. Consolidating once per session reads the whole session.
+# Extraction after every turn is one model call for each turn. Consolidation one time per session reads the whole
+# session.
 
 # %%
 per_turn = turn_cost(0, 0, 0, extraction_in=600, extraction_out=60)["extraction"]
@@ -146,15 +159,17 @@ print(f"answering turn 8 (pinned, 4,000-token system prompt, billed cached): ${a
       f"${per_turn:.5f} | one consolidation per 8-turn session, per turn: ${per_session:.5f}")
 
 # %% [markdown]
-# Hot-path extraction on every turn adds 72% to the cost of a cached turn. Batch it: extract in the background
-# after the session (or on a schedule, notebook 04) unless the next turn needs the fact immediately.
+# Hot-path extraction at each turn adds 72% to the cost of a cached turn. Batch it. Extract in the background after
+# the session (or on a schedule, notebook 04), unless the next turn needs the fact immediately.
 #
 # ## Worked example 6 — one prefix cache, many tenants
-# vLLM lets a request carry a `cache_salt`, which enters the first block's hash only; the chain carries it to
-# every later block (vllm-internals §4.3). Different salts never share blocks, so one tenant cannot learn from
-# timing that another sent the same prefix. The salt must be secret and per tenant: `cache_salt(secret, tenant)` is
-# an HMAC of the tenant under a server-side secret. vLLM v0.30.0 accepts at most 128 characters and refuses `@`, `/`,
-# `\` and NUL (verify) — so a salt like `acme/alice` is not even valid, and a salt like `acme` is guessable.
+# vLLM lets a request carry a `cache_salt`. The salt goes only into the hash of the first block, and the chain carries
+# it to every later block (vllm-internals §4.3). Different salts never share blocks. Thus one tenant cannot learn from
+# response times that another tenant sent the same prefix. The salt must be secret and per tenant: `cache_salt(secret,
+# tenant)` is an HMAC of the tenant under a server-side secret.
+#
+# vLLM v0.30.0 accepts at most 128 characters, and it refuses `@`, `/`, `\` and NUL (verify). Thus a salt like
+# `acme/alice` is not even valid, and a salt like `acme` is easy to guess.
 
 # %%
 prompt = token_ids(SYSTEM + "User: hello\n")
@@ -170,9 +185,10 @@ print("after rotating acme's salt:", cache.lookup(prompt, salt=salts.salt("acme"
 
 # %% [markdown]
 # ## Exercise 3.1 — the three rules
-# Implement `cached_tokens(prev, new, block_size=16)`: full blocks of the common prefix; no more than
-# `(len(prev) - 1) // B` blocks (the last token of `prev` never had its KV computed); no more than
-# `(len(new) - 1) // B` blocks (the last token of `new` is recomputed for its logits).
+# Write `cached_tokens(prev, new, block_size=16)`. It returns the full blocks of the common prefix, with these limits:
+#
+# - No more than `(len(prev) - 1) // B` blocks. The engine never computed the KV of the last token of `prev`.
+# - No more than `(len(new) - 1) // B` blocks. The engine computes the last token of `new` again for its logits.
 
 # %% exercise
 def cached_tokens(prev, new, block_size=16):
@@ -197,9 +213,9 @@ print("✅ the three rules, on 500 random pairs")
 
 # %% [markdown]
 # ## Exercise 3.2 — predict the hits without simulating
-# For the default session (system $S = 2{,}000$, memory $M = 400$, user 40, reply 120, $B = 16$), write the cached
-# tokens of turn $t \ge 2$ for each layout as a closed form. Hint: work out the common prefix with the previous
-# request's prompt + reply, then round down to a block — and remember the previous request's last token.
+# The default session has system $S = 2{,}000$, memory $M = 400$, user 40, reply 120 and $B = 16$. For each layout,
+# write the cached tokens of turn $t \ge 2$ as a closed form. Hint: find the common prefix with the prompt + reply of
+# the previous request. Then round down to a block. Also, remember the last token of the previous request.
 
 # %% exercise
 def predicted_cached(layout, t):
@@ -221,8 +237,9 @@ print("✅ the block rules predict every turn of every layout")
 
 # %% [markdown]
 # ## Exercise 3.3 — what memory before the history costs per turn
-# Write `ttft_lost_ms(t)`: at turn `t` of the default session, the SIMULATED prefill time of `before_history` minus
-# that of `pinned`, on an L4 with Qwen2.5-1.5B (`prefill_seconds`), in milliseconds.
+# Write `ttft_lost_ms(t)`. It returns a value for turn `t` of the default session, in milliseconds. The value is the
+# SIMULATED prefill time of `before_history` minus the prefill time of `pinned`. Use an L4 with Qwen2.5-1.5B
+# (`prefill_seconds`).
 
 # %% exercise
 def ttft_lost_ms(t, turns=8):
@@ -238,11 +255,14 @@ print(f"✅ SIMULATED TTFT lost to memory before the history: turn 2 {lost[0]:.1
 
 # %% [markdown]
 # ## Exercise 3.4 — dollars per session, on a hosted API
-# Write `session_cost(layout, system_tokens, model)`: the sum over the session's turns
-# (`hits_per_turn(layout, system_tokens=system_tokens)`) of `call_cost(prompt, 120, billed, model)`, where `billed` is
-# the turn's cached tokens if its prompt is at least `CACHE_MIN_TOKENS[model]` tokens, else 0 — the provider's
-# caching minimum. Then set `premium_2k` and `premium_4k`: how much dearer `before_history` is than `pinned`, as a
-# fraction (0.5 = 50%), with a 2,000- and a 4,000-token system prompt.
+# Write `session_cost(layout, system_tokens, model)`. It returns the sum of `call_cost(prompt, 120, billed, model)`
+# over the turns of the session (`hits_per_turn(layout, system_tokens=system_tokens)`). If the prompt of the turn is
+# at least `CACHE_MIN_TOKENS[model]` tokens, `billed` is the cached tokens of the turn. If not, `billed` is 0. This
+# limit is the caching minimum of the provider.
+#
+# Then set `premium_2k` and `premium_4k`. Each one is how much more `before_history` costs than `pinned`, as a
+# fraction (0.5 = 50%). `premium_2k` is for a 2,000-token system prompt, and `premium_4k` is for a 4,000-token system
+# prompt.
 
 # %% exercise
 def session_cost(layout, system_tokens=2000, model="gemini-3.5-flash"):
@@ -270,8 +290,8 @@ print(f"✅ before_history vs pinned: {premium_2k:+.0%} under the caching minimu
 # %% [markdown]
 # ## Exercise 3.5 — fix the layout
 # `bad_render` puts a timestamp first and per-turn memory before the history. Write `good_render` with the same
-# arguments so that the uncached tokens per turn stop growing with the history (the check compares turn 6 with
-# turn 2). The memory and the clock must both stay in the prompt.
+# arguments. In `good_render`, the uncached tokens per turn must not grow with the history (the check compares turn 6
+# with turn 2). The memory and the clock must both stay in the prompt.
 
 # %%
 def bad_render(system, memory, history, question, clock):
@@ -293,28 +313,33 @@ print(f"✅ uncached tokens per turn {bad} -> {good}: stable first, history appe
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Memory costs tokens twice — what we inject and the prefix-cache hits we break. The
-# engine reuses KV only for an exact prefix in full 16-token blocks, so where memory goes decides the hit rate. If we
-# re-retrieve memory every turn and put it before the history, the prefix changes right after the system prompt and
-# the whole history re-prefills every turn: in our 8-turn model the hit rate falls from 88% to 58% and turn-8 TTFT on
-# an L4 goes from 15 to 68 ms (simulated) on our own engine; on a hosted API the bill moves only once prompts clear
-# the provider's caching minimum (4,096 tokens on Gemini 3.x), and then the session costs 46% more than with a pinned
-# profile (a 4,000-token system prompt).
+# **The two-minute version.** "Memory costs tokens two times: the tokens that we inject and the prefix-cache hits that
+# we break. The engine uses KV again only for an exact prefix in full 16-token blocks. Thus the position of memory
+# decides the hit rate. If we retrieve memory again at each turn and put it before the history, the prefix changes
+# immediately after the system prompt. Then the engine prefills the whole history again at each turn.
 #
-# "So the layout is: system prompt and tools, then a profile retrieved once per session, then the append-only history,
-# then per-turn memory and anything volatile at the tail — which is where ADK's preload puts it too. We cap injected
-# memory at the recall knee, extract in the background rather than on every turn, salt the prefix cache per tenant,
-# and watch `cached_tokens` per turn to catch a layout regression."
+# "In our 8-turn model, the hit rate decreases from 88% to 58%. On our own engine, turn-8 TTFT on an L4 goes from 15
+# to 68 ms (simulated). On a hosted API, the bill changes only when prompts get to the provider's caching minimum
+# (4,096 tokens on Gemini 3.x). Then the session costs 46% more than with a pinned profile (a 4,000-token system
+# prompt).
+#
+# "Thus the layout starts with the system prompt and tools. Then comes a profile, retrieved one time per session, and
+# then the append-only history. Per-turn memory and anything volatile go at the tail. ADK's preload also puts memory
+# there.
+#
+# "We limit injected memory to the recall knee. We extract in the background, not at each turn. We give the prefix
+# cache a salt for each tenant. We monitor `cached_tokens` per turn to find a layout regression."
 #
 # **Drill questions**
-# 1. *TTFT tripled after we added long-term memory, for a small recall gain. Why?* — Memory is re-retrieved per
-#    turn and injected above the history, so every history block misses the prefix cache and the conversation
-#    re-prefills on every turn. Pin a profile per session or move per-turn memory to the tail; cap it at the knee.
-# 2. *Why does the damage grow with the conversation?* — The uncached part is everything after the memory block,
-#    i.e. the whole history; the pinned and tail layouts lose a constant amount per turn instead.
-# 3. *Two tenants share a system prompt on one vLLM. Any risk?* — Without a per-tenant `cache_salt`, one tenant's
-#    TTFT reveals whether the other sent the same prefix. Salt per tenant (an HMAC under a server secret, never the
-#    tenant's name), and budget for the shared-prefix hits you give up.
-# 4. *We moved memory to the tail and the hosted-API bill did not move. Why?* — Every prompt is below the provider's
-#    caching minimum, so nothing was billed cached before or after; the saving shows up as TTFT on a self-hosted
-#    engine, and on the bill only once the prompt clears the minimum.
+# 1. *TTFT became three times larger after we added long-term memory, for a small recall gain. Why?* The agent
+#    retrieves memory again at each turn and injects it above the history. Thus every history block misses the prefix
+#    cache, and the engine prefills the conversation again at each turn. Pin a profile per session, or move per-turn
+#    memory to the tail. Limit it to the knee.
+# 2. *Why does the damage grow with the conversation?* The uncached part is everything after the memory block, that
+#    is, the whole history. But the pinned and tail layouts lose a constant quantity per turn.
+# 3. *Two tenants share a system prompt on one vLLM. Is there a risk?* Without a per-tenant `cache_salt`, the TTFT of
+#    one tenant shows if the other tenant sent the same prefix. Use a salt for each tenant (an HMAC under a server
+#    secret, never the tenant's name). Also, include in the budget the shared-prefix hits that you give up.
+# 4. *We moved memory to the tail and the hosted-API bill did not change. Why?* Every prompt is below the caching
+#    minimum of the provider. Thus the provider billed nothing at the cached rate, before or after the change. The
+#    gain shows as TTFT on a self-hosted engine. It shows on the bill only when the prompt gets to the minimum.

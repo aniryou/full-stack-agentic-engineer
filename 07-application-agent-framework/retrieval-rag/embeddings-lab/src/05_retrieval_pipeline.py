@@ -1,9 +1,9 @@
 # %% [markdown]
 # # 05 · A hybrid retrieval pipeline, evaluated properly
-# **One idea:** lexical and dense retrieval fail differently, so production
-# systems fuse them and *measure on their own judged queries*. BM25 from
-# scratch + an SVD dense retriever + Reciprocal Rank Fusion, evaluated with
-# Recall@k and nDCG on a corpus with planted failure modes. *Primer §5, §6, §15.*
+# **One idea:** lexical and dense retrieval fail in different ways. Thus production
+# systems fuse them and *measure on their own judged queries*. This notebook builds
+# BM25 from scratch, an SVD dense retriever and Reciprocal Rank Fusion. It evaluates
+# them with Recall@k and nDCG on a corpus with planted failure modes. *Primer §5, §6, §15.*
 
 # %%
 import json, re
@@ -52,11 +52,14 @@ def bm25_scores(q, k1=1.5, b=0.75):
 
 # %% [markdown]
 # ## A dense retriever: TF-IDF → SVD (LSA)
-# A stand-in for a trained embedding model with identical pipeline mechanics:
-# docs become vectors offline, queries are *folded in* at query time
-# ($u_q = q \cdot V \cdot S^{-1}$), similarity is cosine. Because SVD links words that
-# co-occur, "limescale" and "descale" end up near each other even when a doc
-# uses only one of them.
+# This retriever is a stand-in for a trained embedding model, with identical pipeline mechanics:
+#
+# - The docs become vectors offline.
+# - At query time, we *fold in* the queries ($u_q = q \cdot V \cdot S^{-1}$).
+# - The similarity is cosine.
+#
+# SVD links words that co-occur. Thus "limescale" and "descale" come near each other,
+# even when a doc uses only one of them.
 
 # %%
 vocab = sorted(df)
@@ -108,8 +111,8 @@ def evaluate(score_fn):
 
 # %% [markdown]
 # ## Fusion: Reciprocal Rank Fusion (RRF)
-# Rank-based, so no score-calibration across systems is needed — the reason it
-# is everyone's default ($k = 60$).
+# RRF uses ranks, thus it needs no score calibration across systems. This is the reason
+# that it is the default for everyone ($k = 60$).
 
 # %%
 def rrf(rankings, k=60):
@@ -156,17 +159,23 @@ show("q02")   # exact id: e-4417 vs e-4471 — BM25 nails it, dense confuses cod
 show("q03")   # negation: 'not steep' retrieves the steep doc — both fail
 
 # %% [markdown]
-# **What just happened.** The paraphrase query rewards the dense retriever: c03
-# shares *zero* content words with the query, yet LSA parked it next to the
-# descaling doc that does. The identifier query rewards BM25: the two error docs
-# differ in one rare token, so their dense vectors nearly coincide and LSA ranks
-# the *wrong* code first. The negation query fools both — "not steep" and
-# "steep" are nearly identical bags of words *and* nearly identical vectors (the
-# NevIR failure from §15) — which is why rerankers and metadata filters exist.
+# **What just happened.** The paraphrase query rewards the dense retriever. The doc
+# c03 shares *zero* content words with the query, but LSA put it next to the descaling
+# doc that does share them. The identifier query rewards BM25. The two error docs
+# differ in one rare token, thus their dense vectors are almost the same, and LSA
+# ranks the *incorrect* code first.
 #
-# **Takeaways.** (1) Hybrid by default; RRF is 8 lines — but it is a compromise,
-# not a free lunch: on the paraphrase slice it sits *between* BM25 and dense.
-# Fusion buys robustness across query types, not dominance on each. (2) Metrics
-# on *your* judged queries beat any leaderboard — this whole harness is ~40 lines.
-# (3) Keep per-query-type slices; averages hide exactly the failures that hurt.
-# → `ex05.ipynb`.
+# The negation query fools both retrievers. "not steep" and "steep" are almost
+# identical bags of words *and* almost identical vectors (the NevIR failure from §15).
+# This is why rerankers and metadata filters exist.
+#
+# **Takeaways.**
+#
+# 1. Use hybrid retrieval by default. RRF is 8 lines. But it is a compromise, and it
+#    has a cost. On the paraphrase slice, its score is *between* the scores of BM25 and dense.
+#    Fusion gives robustness across query types, not the best result on each type.
+# 2. Metrics on *your* judged queries are better than any leaderboard. This full
+#    harness is ~40 lines.
+# 3. Keep slices for each query type. Averages hide the failures that cause the most harm.
+#
+# Next, do the exercises in `ex05.ipynb`.

@@ -1,22 +1,22 @@
 # %% [markdown]
 # # 01 · CUDA kernels in the simulator: threads, blocks, shared memory and barriers
 #
-# **Tier:** T0 — runs on any CPU. Numba's CUDA simulator (`NUMBA_ENABLE_CUDASIM=1`) executes every CUDA
-# thread as a Python thread, so the kernels below are *real CUDA kernels* that you can run, break and
-# inspect on a laptop. Notebook 02 runs the same source on a GPU.
+# **Tier:** T0. It runs on any CPU. Numba's CUDA simulator (`NUMBA_ENABLE_CUDASIM=1`) runs each CUDA
+# thread as a Python thread. Thus the kernels in this notebook are *real CUDA kernels*. You can run them,
+# break them and examine them on a laptop. Notebook 02 runs the same source on a GPU.
 #
 # ## The one-minute version
 #
-# * A kernel is **the body of a loop**. `kernel[blocks, threads](args)` runs one copy per thread; each copy
+# * A kernel is **the body of a loop**. `kernel[blocks, threads](args)` runs one copy per thread. Each copy
 #   finds its index as `cuda.grid(1) = blockIdx.x * blockDim.x + threadIdx.x`.
-# * The grid is rounded up to whole blocks, so the last block has idle threads: **the bounds check is
-#   part of the algorithm**.
+# * The launch configuration rounds the grid up to whole blocks. Thus the last block has idle threads: **the
+#   bounds check is part of the algorithm**.
 # * Threads of one block share fast on-chip **shared memory** and meet at `cuda.syncthreads()`. Blocks
-#   cannot wait for each other inside a kernel — combine their results with a second launch or atomics.
-# * Memory speed is decided per **warp request**: 32 lanes asking for 32 consecutive floats touch four
-#   32-byte sectors (coalesced); 32 lanes striding across rows touch 32 sectors for the same useful bytes.
-# * **Tiling** stages data in shared memory so each byte fetched from DRAM is used many times: a tiled
-#   GEMM issues `tile`× fewer global loads than the naive one.
+#   cannot wait for each other in a kernel. Combine their results with a second launch or with atomics.
+# * The **warp request** decides the memory speed. When 32 lanes ask for 32 consecutive floats, they touch four
+#   32-byte sectors (coalesced). When 32 lanes stride across rows, they touch 32 sectors for the same useful bytes.
+# * **Tiling** puts data in shared memory first. Thus the kernel uses each byte that it fetches from DRAM many
+#   times. A tiled GEMM issues `tile`× fewer global loads than the naive GEMM.
 #
 # Concepts: [the primer](../../PRIMER.md) §2 *The execution model* and §3 *Memory access patterns*.
 
@@ -41,7 +41,7 @@ sys.setswitchinterval(1e-4)
 # %% [markdown]
 # ## Who am I? Indexing a grid
 #
-# Launch 3 blocks of 4 threads over 10 elements and let every thread write down its coordinates.
+# Launch 3 blocks of 4 threads over 10 elements. Let each thread write its coordinates.
 
 # %%
 @cuda.jit
@@ -63,9 +63,10 @@ print("block   :", b_ids)
 print("thread  :", t_ids)
 
 # %% [markdown]
-# Two threads of the last block had nothing to do. Remove the `if` and they index past the end. On a GPU
-# that is silent memory corruption or *"an illegal memory access was encountered"* (and an XID in the
-# node's logs — notebook 06). The simulator turns it into an `IndexError` you can read:
+# Two threads of the last block had nothing to do. If you remove the `if`, these threads index past the end.
+# On a GPU, the result is silent memory corruption or *"an illegal memory access was encountered"*. The
+# node's logs also show an XID (notebook 06). The simulator changes the error into an `IndexError` that you
+# can read:
 
 # %%
 @cuda.jit
@@ -83,9 +84,9 @@ except IndexError as e:
 # %% [markdown]
 # ## Exercise 1.1 — the launch configuration
 #
-# Write `launch_config(n, threads)` returning `(blocks, idle_threads)`: the number of blocks needed to
-# cover `n` elements with `threads` per block (at least one block), and how many launched threads get
-# no element.
+# Write `launch_config(n, threads)`. It returns `(blocks, idle_threads)`. The first value is the number of
+# blocks that are necessary to cover `n` elements with `threads` per block (at least one block). The second
+# value is the number of launched threads that get no element.
 
 # %% exercise
 def launch_config(n: int, threads: int) -> tuple[int, int]:
@@ -103,11 +104,11 @@ print("✅ launch_config: ceil(n / threads) blocks, the remainder idles")
 # %% [markdown]
 # ## Exercise 1.2 — a grid-stride loop
 #
-# A launch does not have to match the data. With a **grid-stride loop** each thread starts at
-# `cuda.grid(1)` and jumps by `cuda.gridsize(1)` (the total number of threads) until it runs off the
-# end. That lets you size the grid to the *GPU* (a few waves of blocks per SM) instead of to the data.
+# A launch does not need to match the data. In a **grid-stride loop**, each thread starts at
+# `cuda.grid(1)`. It then jumps by `cuda.gridsize(1)` (the total number of threads) until it goes past the
+# end. Thus you can set the size of the grid for the *GPU* (a few waves of blocks per SM), not for the data.
 #
-# Write the kernel `scale_add(alpha, x, y, out)` computing `out = alpha * x + y` with a grid-stride loop.
+# Write the kernel `scale_add(alpha, x, y, out)`. It calculates `out = alpha * x + y` with a grid-stride loop.
 # The check launches only 2 blocks of 32 threads for 1,000 elements.
 
 # %% exercise
@@ -132,11 +133,11 @@ print("✅ 64 threads covered 1,000 elements")
 # %% [markdown]
 # ## Shared memory and barriers: a block reduction
 #
-# `gpurt.kernels.reduction` sums a vector. Each block loads its slice into **shared memory**, then halves
-# the number of active threads at every step: `buf[tid] += buf[tid + stride]`. Between steps,
-# `cuda.syncthreads()` guarantees every write of step $k$ is visible before any read of step $k+1$.
-# Blocks cannot synchronise with each other, so the per-block partial sums are combined by a second
-# launch (deterministic) or by `cuda.atomic.add` (one launch, order-dependent rounding).
+# `gpurt.kernels.reduction` calculates the sum of a vector. Each block loads its slice into **shared memory**.
+# Then, at each step, the block divides the number of active threads by two: `buf[tid] += buf[tid + stride]`.
+# Between steps, `cuda.syncthreads()` makes sure that each write of step $k$ is visible before any read of
+# step $k+1$. Blocks cannot sync with each other. Thus a second launch (deterministic) or `cuda.atomic.add`
+# (one launch, order-dependent rounding) combines the partial sums of the blocks.
 
 # %%
 import inspect  # noqa: E402
@@ -151,15 +152,16 @@ print("atomic   :", red.run_sum(v, threads=64, atomic=True))
 print("float64  :", float(v.astype(np.float64).sum()))
 
 # %% [markdown]
-# The two answers can differ in the last bits: floating-point addition is not associative, and the two
-# schemes add in different orders. On a GPU the atomic order even changes from run to run.
+# The two answers can be different in the last bits. Floating-point addition is not associative, and the two
+# methods add in different orders. On a GPU, the atomic order even changes from one run to the next.
 #
 # ## Exercise 1.3 — your own block reduction
 #
-# Write `block_max(x, out)`: every block of `T = 32` threads finds the maximum of its 32 elements with a
-# shared-memory tree and writes it to `out[blockIdx.x]`; the host takes the max of the partials.
-# Threads past the end of `x` must contribute something that cannot win (use `NEG_INF`). Keep
-# `cuda.syncthreads()` **outside** any `if` — every thread of the block must reach every barrier.
+# Write `block_max(x, out)`. Each block of `T = 32` threads finds the maximum of its 32 elements with a
+# shared-memory tree. The block writes the maximum to `out[blockIdx.x]`. The host then takes the max of the
+# partials. Threads past the end of `x` must supply a value that cannot win (use `NEG_INF`).
+#
+# Keep `cuda.syncthreads()` **outside** any `if`. Each thread of the block must get to each barrier.
 
 # %% exercise
 from numba import float32  # noqa: E402
@@ -197,10 +199,10 @@ print(f"✅ {partials.size} blocks, each reduced its slice in log2({T}) = {int(n
 # %% [markdown]
 # ## Watching the memory system: coalescing, measured from the kernel itself
 #
-# `gpurt.kernels.trace` hands a kernel arrays that record every access with the simulated thread that
-# made it, then groups accesses into **warp requests** (same block, same warp of 32 lanes, same $k$-th
-# access) and counts the distinct 32-byte **sectors** each request touches. The transpose is the classic
-# case: the naive kernel reads rows (coalesced) and writes columns (strided).
+# `gpurt.kernels.trace` gives a kernel arrays that record each access and the simulated thread that made it.
+# It then puts the accesses into **warp requests** (same block, same warp of 32 lanes, same $k$-th access).
+# It also counts the different 32-byte **sectors** that each request touches. The transpose is the standard
+# example. The naive kernel reads rows (coalesced) and writes columns (strided).
 
 # %%
 from gpurt.kernels import transpose as tr  # noqa: E402
@@ -219,16 +221,18 @@ for name, t in traces.items():
     print(f"{name}: lanes 0-3 of the first store request write elements {t.warp_request('out', 'W')[:4]}")
 
 # %% [markdown]
-# Naive: 32 sectors per store request, 12.5 % of the moved bytes useful. Tiled: the block reads a
-# 32×32 tile with row loads into shared memory, synchronises, and writes the transposed tile back with
-# row stores — 4 sectors per request on both sides. (The simulator counts requests to the memory system;
-# on a GPU, L2 absorbs part of the naive kernel's waste — notebook 02 measures what is left.)
+# Naive: 32 sectors per store request, and 12.5 % of the moved bytes are useful. Tiled: the block reads a
+# 32×32 tile into shared memory with row loads. It then syncs its threads and writes the transposed tile
+# back with row stores. The result is 4 sectors per request on the two sides.
+#
+# The simulator counts the requests to the memory system. On a GPU, L2 removes a part of the waste of the
+# naive kernel. Notebook 02 measures the remainder.
 #
 # ## Exercise 1.4 — predict sectors per request
 #
-# Write `sectors_per_request(stride_bytes, lanes=32, sector=32)`: lane `l` accesses byte address
-# `l * stride_bytes` (4-byte elements, base aligned); return how many distinct sectors one warp request
-# touches. Then predict the naive transpose's stores (the stride is one output row of `N` floats).
+# Write `sectors_per_request(stride_bytes, lanes=32, sector=32)`. Lane `l` accesses byte address
+# `l * stride_bytes` (4-byte elements, base aligned). Return the number of different sectors that one warp
+# request touches. Then predict the stores of the naive transpose (the stride is one output row of `N` floats).
 
 # %% exercise
 def sectors_per_request(stride_bytes: int, lanes: int = 32, sector: int = 32) -> int:
@@ -247,11 +251,13 @@ print("✅ stride 4 B -> 4 sectors, stride 8 B -> 8, stride of a row -> 32 (what
 # %% [markdown]
 # ## Exercise 1.5 — padding away bank conflicts
 #
-# Shared memory has 32 banks of 4-byte words; word `w` lives in bank `w % 32`. The tiled transpose
-# reads a tile *column*: lane `l` reads word `l * width + c` of a tile `width` words wide. If two lanes hit
-# different words of one bank, the accesses serialise (an $n$-way conflict). `bank_conflict_ways` computes
-# that degree. Return the list of widths in `range(32, 41)` that are conflict-free for a column read —
-# and notice the pattern.
+# Shared memory has 32 banks of 4-byte words. Word `w` is in bank `w % 32`. The tiled transpose reads a tile
+# *column*: lane `l` reads word `l * width + c` of a tile that is `width` words wide. If two lanes hit
+# different words of one bank, the hardware serialises the accesses (an $n$-way conflict).
+# `bank_conflict_ways` calculates that degree.
+#
+# Return the list of widths in `range(32, 41)` that are conflict-free for a column read. Then look at the
+# pattern.
 
 # %% exercise
 def conflict_free_widths(widths=range(32, 41)) -> list[int]:
@@ -267,9 +273,10 @@ print("✅ any odd width works: it is coprime with 32 banks. TILE + 1 is the che
 # %% [markdown]
 # ## Reuse: tiling a matrix multiply
 #
-# The naive GEMM thread for `C[row, col]` loads a full row of $A$ and column of $B$ from global memory. The
-# tiled kernel loads one element of $A$ and one of $B$ per `tile`-wide step into shared memory, then every
-# thread of the block reads them `tile` times on-chip. Count it from the kernels:
+# In the naive GEMM, the thread for `C[row, col]` loads a full row of $A$ and a full column of $B$ from
+# global memory. The tiled kernel loads one element of $A$ and one element of $B$ into shared memory per
+# `tile`-wide step. Then each thread of the block reads them `tile` times on-chip. Count the loads from the
+# kernels:
 
 # %%
 from gpurt.kernels import matmul as mm  # noqa: E402
@@ -289,10 +296,11 @@ for name, kernel, tile in (("naive", mm.matmul_naive, 1), ("tiled 8", mm.make_ma
 # %% [markdown]
 # ## Exercise 1.6 — what tiling buys at scale
 #
-# Write `loads_and_intensity(M, N, K, tile)` returning `(global_loads, flops_per_byte)`: the element
-# loads the tiled kernel issues (the formula the tracer just confirmed) and the arithmetic intensity
-# $2 \cdot M \cdot N \cdot K / (\text{loads} \times 4\ \text{bytes})$, as if no cache helped. Compare with a
-# T4's balance point (`traffic.machine_balance`): ~25 FLOP/byte.
+# Write `loads_and_intensity(M, N, K, tile)`. It returns `(global_loads, flops_per_byte)`. The first value is
+# the number of element loads that the tiled kernel issues (the formula that the tracer confirmed in the
+# last cell). The second value is the arithmetic intensity
+# $2 \cdot M \cdot N \cdot K / (\text{loads} \times 4\ \text{bytes})$, with the assumption that no cache helps.
+# Compare it with the balance point of a T4 (`traffic.machine_balance`): ~25 FLOP/byte.
 
 # %% exercise
 def loads_and_intensity(M: int, N: int, K: int, tile: int) -> tuple[int, float]:
@@ -311,22 +319,27 @@ print(f"✅ tile 16: 16x fewer loads, 4 FLOP/B — still below a T4's {balance:.
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** A CUDA kernel is the body of a parallel loop: the launch picks how many blocks of
-# how many threads, each thread computes its index and must check it against the data size. Threads in
-# a block cooperate through shared memory and barriers; blocks are independent, so anything global needs
-# a second launch or atomics — and atomics make float results order-dependent. Performance is decided by
-# memory requests per warp: coalesced accesses fetch 4 sectors for 32 floats, strided ones 32. Tiling
-# fixes both problems at once — it turns strided global accesses into row accesses (transpose) and turns
-# repeated global loads into shared-memory reuse (GEMM: `tile`× fewer loads). Everything above ran in a
-# simulator; the same source runs on a GPU in notebook 02.
+# **Two minutes.** A CUDA kernel is the body of a parallel loop. The launch sets the number of blocks and
+# the number of threads in each block. Each thread calculates its index and must compare it with the data
+# size.
+#
+# Threads in a block work together through shared memory and barriers. Blocks are independent. Thus
+# a global result needs a second launch or atomics, and atomics make float results order-dependent.
+#
+# The memory requests per warp decide the performance. Coalesced accesses fetch 4 sectors for 32 floats,
+# and strided accesses fetch 32. Tiling repairs the two problems at the same time. It changes strided global
+# accesses into row accesses (transpose). It also changes repeated global loads into shared-memory reuse
+# (GEMM: `tile`× fewer loads). Everything in this notebook ran in a simulator, and the same source runs on
+# a GPU in notebook 02.
 #
 # **Drill questions**
 #
-# 1. *A naive transpose runs at a fifth of copy bandwidth. Why, and what is the fix?* — Its stores are
-#    strided: each warp store touches 32 sectors instead of 4. Stage a tile in shared memory so both the
-#    loads and the stores are row-contiguous; pad the tile to `TILE + 1` to avoid 32-way bank conflicts.
-# 2. *Why does a tiled GEMM need two barriers per tile?* — One after loading (nobody reads a half-written
-#    tile) and one after computing (nobody overwrites a tile another thread is still reading).
-# 3. *Why can't blocks synchronise inside a kernel?* — Blocks run in waves as SMs free up; a barrier
-#    across blocks that are not resident would deadlock. Split the work into two launches (or use
-#    atomics / cooperative launches, with their limits).
+# 1. *A naive transpose runs at a fifth of copy bandwidth. Why, and what is the solution?* Its stores are
+#    strided: each warp store touches 32 sectors, not 4. Put a tile in shared memory first, so that the
+#    loads and the stores are row-contiguous. Pad the tile to `TILE + 1` to prevent 32-way bank conflicts.
+# 2. *Why does a tiled GEMM need two barriers per tile?* One barrier comes after the load, so that no
+#    thread reads a half-written tile. The other barrier comes after the computation, so that no thread
+#    overwrites a tile that another thread still reads.
+# 3. *Why can blocks not sync in a kernel?* Blocks run in waves when SMs become free. A barrier across
+#    blocks that are not resident causes a deadlock. Divide the work into two launches (or use atomics or
+#    cooperative launches, with their limits).

@@ -1,24 +1,31 @@
 # %% [markdown]
 # # 05 · How a container sees a GPU: device nodes, injected drivers and the compatibility contract
 #
-# **Tier:** T0 — inspects *this* machine live (a machine without a GPU is a perfectly good first case) and
-# two bundled probe logs (**illustrative**: written in the exact format of `deploy/any-gpu/probe.sh`,
-# not captured from real machines). **T1/T3** — run `probe.sh` in your own GPU container, or
-# `deploy/gke/run.sh smoke` on GKE, and feed the log to the same cells.
+# **Tier:** T0. It examines *this* machine live (a machine without a GPU is a completely acceptable first
+# case). It also reads two bundled probe logs (**illustrative**: they have the exact format of
+# `deploy/any-gpu/probe.sh`, but they do not come from real machines). **T1/T3**: run `probe.sh` in your own
+# GPU container, or `deploy/gke/run.sh smoke` on GKE. Then give the log to the same cells.
 #
 # ## The one-minute version
 #
-# * A containerised CUDA program is assembled from two sources. **From the host**, injected when the
-#   container starts: the device nodes (`/dev/nvidia0`, `/dev/nvidiactl`, `/dev/nvidia-uvm`) and the
-#   user-mode driver (`libcuda.so`, `libnvidia-ml.so`, `nvidia-smi`), which must match the host's kernel
-#   module exactly. **From the image**: the CUDA runtime, cuBLAS/cuDNN/NCCL and the framework.
+# * A containerised CUDA program gets its parts from two sources. **From the host**: the device nodes
+#   (`/dev/nvidia0`, `/dev/nvidiactl`, `/dev/nvidia-uvm`) and the user-mode driver (`libcuda.so`,
+#   `libnvidia-ml.so`, `nvidia-smi`). The container runtime injects them when the container starts. The
+#   user-mode driver must match the kernel module of the host exactly. **From the image**: the CUDA
+#   runtime, cuBLAS/cuDNN/NCCL and the framework.
 # * Docker/containerd use the **NVIDIA Container Toolkit** (an OCI hook, or a CDI spec) to bind-mount the
-#   driver files one by one; **GKE's device plugin** mounts the node's driver directory at `/usr/local/nvidia`.
-# * Two gates decide whether a kernel runs: **driver vs runtime** (the driver's CUDA version must be ≥ the
-#   runtime's, or the same major under minor-version compatibility) and **kernel image vs GPU** (SASS for
-#   the GPU's major with minor ≤, or PTX the driver can JIT).
-# * The errors, by number: 35 driver too old, 209 no kernel image, 222 PTX too new for the driver,
-#   803 a mismatched `libcuda`, 100 no device at all.
+#   driver files one by one. **GKE's device plugin** mounts the driver directory of the node at
+#   `/usr/local/nvidia`.
+# * Two gates decide if a kernel runs:
+#   * **driver versus runtime**: the CUDA version of the driver must be ≥ the version of the runtime, or
+#     have the same major under minor-version compatibility.
+#   * **kernel image versus GPU**: SASS for the major of the GPU with minor ≤, or PTX that the driver can JIT.
+# * The errors, by number:
+#   * 35: driver too old.
+#   * 209: no kernel image.
+#   * 222: PTX too new for the driver.
+#   * 803: a mismatched `libcuda`.
+#   * 100: no device at all.
 #
 # Concepts: [the primer](../../PRIMER.md) §1 *The stack from driver to framework* and §6 *How a
 # container gets a GPU*.
@@ -34,13 +41,13 @@ live = c.probe()  # the driver-API probe runs in a child process: this kernel ne
 print(c.explain(live))
 
 # %% [markdown]
-# On a machine without a GPU every layer is missing — and that is the first lesson: **an image cannot
+# On a machine without a GPU, all layers are absent. That is the first lesson: **an image cannot
 # bring a GPU with it.** The container runtime (`docker run --gpus all`, a CDI device, a Kubernetes
-# `nvidia.com/gpu` request) has to hand in the device nodes and the host's driver files.
+# `nvidia.com/gpu` request) must supply the device nodes and the host's driver files.
 #
 # ## A container started with `--gpus all`
 #
-# The Docker sample: the NVIDIA Container Toolkit has bind-mounted each driver file from the host.
+# The Docker sample: the NVIDIA Container Toolkit bind-mounted each driver file from the host.
 
 # %%
 FIX = Path(c.__file__).parent / "fixtures"
@@ -52,13 +59,15 @@ print("\n".join(sections["mountinfo"].splitlines()[5:9]))
 
 # %% [markdown]
 # Each line of `/proc/self/mountinfo` is `id parent major:minor root mount-point options ... - fstype
-# source super-options`. The toolkit's entries are read-only bind mounts whose mount point is the path the
-# program sees (`/usr/lib/x86_64-linux-gnu/libcuda.so.570.172.08`) — the driver version is in the file name.
+# source super-options`. Each entry of the toolkit is a read-only bind mount. The mount point of each
+# entry is the path that the program sees (`/usr/lib/x86_64-linux-gnu/libcuda.so.570.172.08`). The driver
+# version is in the file name.
 #
 # ## Exercise 5.1 — read a mount line
 #
-# Write `mount_point(line)` (the fifth whitespace-separated field) and `driver_version(path)`: the
-# version in `libcuda.so.<version>` (return `None` if the path is not a versioned libcuda).
+# Write `mount_point(line)`. It returns the fifth whitespace-separated field. Also write
+# `driver_version(path)`. It returns the version in `libcuda.so.<version>`. If the path is not a versioned
+# libcuda, return `None`.
 
 # %% exercise
 import re  # noqa: E402
@@ -91,9 +100,9 @@ print(c.explain(docker))
 # %% [markdown]
 # ## The same GPU, the GKE way
 #
-# On GKE the device plugin mounts the node's driver directory at `/usr/local/nvidia` (and `nvidia/cuda`
-# images already put `/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`), while the device nodes are added
-# to the pod's cgroup.
+# On GKE, the device plugin mounts the driver directory of the node at `/usr/local/nvidia`. The
+# `nvidia/cuda` images already put `/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`. The device nodes also go
+# into the cgroup of the pod.
 
 # %%
 gke = c.from_probe_log((FIX / "probe_gke_l4_sample.log").read_text())
@@ -102,10 +111,14 @@ print(c.explain(gke))
 # %% [markdown]
 # ## Exercise 5.2 — gate 1: driver versus runtime
 #
-# Write `driver_runtime(driver_cuda, runtime_cuda)` returning `"ok"` (the driver supports that CUDA or a
-# newer one), `"minor-compat"` (same major, the runtime's minor is newer: runs, with the PTX-JIT and
-# new-API caveats) or `"fail"` (a newer major: error 35 unless the forward-compatibility package applies).
-# Versions are strings like `"12.8"`.
+# Write `driver_runtime(driver_cuda, runtime_cuda)`. It returns one of these values:
+#
+# * `"ok"`: the driver supports that CUDA or a newer one.
+# * `"minor-compat"`: same major, and the minor of the runtime is newer. The program runs, with the
+#   PTX-JIT and new-API caveats.
+# * `"fail"`: a newer major. The result is error 35, unless the forward-compatibility package applies.
+#
+# Versions are strings such as `"12.8"`.
 
 # %% exercise
 def driver_runtime(driver_cuda: str, runtime_cuda: str) -> str:
@@ -128,11 +141,15 @@ print("✅ newer drivers run older runtimes; a newer minor runs with caveats; a 
 # %% [markdown]
 # ## Exercise 5.3 — gate 2: kernel image versus GPU
 #
-# A binary carries SASS (`sm_XY`, machine code) and/or PTX (`compute_XY`, JIT-able). Write
-# `kernel_image(cc, archs)` returning `"sass"` if some SASS runs on compute capability `cc` (same major,
-# minor ≤; an `a` suffix runs only on exactly that version), else `"ptx-jit"` if some PTX can be JIT-compiled
-# (any version ≤ cc; `a` only exact), else `"no-kernel-image"` (error 209). Use `c.parse_arch` to split
-# `"sm_90a"` into `('sass', 9, 0, 'a')`.
+# A binary contains SASS (`sm_XY`, machine code), PTX (`compute_XY`, JIT-able), or the two. Write
+# `kernel_image(cc, archs)`. It returns one of these values:
+#
+# * `"sass"`: some SASS runs on compute capability `cc` (same major, minor ≤). An `a` suffix runs only on
+#   exactly that version.
+# * `"ptx-jit"`: no SASS runs, but the driver can JIT-compile some PTX (any version ≤ cc, `a` only exact).
+# * `"no-kernel-image"` (error 209): no SASS runs, and no PTX applies.
+#
+# Use `c.parse_arch` to divide `"sm_90a"` into `('sass', 9, 0, 'a')`.
 
 # %% exercise
 def kernel_image(cc: tuple[int, int], archs: list[str]) -> str:
@@ -186,10 +203,10 @@ print(f"✅ {len(c.ARCH) * len(pairs)} (GPU, build) cases: SASS within a major f
 # %% [markdown]
 # ## Exercise 5.4 — a whole scenario
 #
-# An image built on `nvidia/cuda:12.8.1-runtime` with a PyTorch wheel whose arch list is
-# `["sm_75", "sm_80", "sm_86", "sm_90"]` lands on three nodes. Write `verdicts(driver_version, cc)` that
-# returns the pair `(driver_runtime(...), kernel_image(...))` for this image, using `c.cuda_of_driver` to
-# turn a driver version into the CUDA version it supports.
+# An image has `nvidia/cuda:12.8.1-runtime` as its base. It also contains a PyTorch wheel whose arch list
+# is `["sm_75", "sm_80", "sm_86", "sm_90"]`. The image goes to three nodes. Write
+# `verdicts(driver_version, cc)`. It returns the pair `(driver_runtime(...), kernel_image(...))` for this
+# image. Use `c.cuda_of_driver` to change a driver version into the CUDA version that it supports.
 
 # %% exercise
 IMAGE_CUDA, IMAGE_ARCHS = "12.8", ["sm_75", "sm_80", "sm_86", "sm_90"]
@@ -209,17 +226,17 @@ print("✅ the same image: fine on an L4, fine-with-caveats on an older driver, 
 # %% [markdown]
 # ## Failure modes, as they show up in a probe
 #
-# | What went wrong | What the probe shows | Error |
+# | What is incorrect | What the probe shows | Error |
 # |---|---|---|
 # | container started without `--gpus` / no `nvidia.com/gpu` request | no `/dev/nvidia*`, no driver mounts | 100 (no device) |
 # | image copied a `libcuda.so` from a build machine | a `libcuda.so.<other version>` that is not a mount | 803 |
 # | image CUDA a newer major than the host driver | driver CUDA < runtime CUDA | 35 |
 # | wheel without this GPU's SASS or usable PTX | verdict "no kernel image" | 209 |
-# | NCCL slow or hanging in a container | tiny `/dev/shm` (64 MB Docker default) | — (use `--shm-size`, `--ipc=host`) |
+# | NCCL is slow or hangs in a container | small `/dev/shm` (64 MB Docker default) | no error number (use `--shm-size`, `--ipc=host`) |
 #
-# `c.stray_libcuda()` looks for the 803 case on a live system: a versioned `libcuda` that was not
-# injected. On a GPU box, pass the arch list of the framework you use (`torch.cuda.get_arch_list()`) to
-# `c.probe(archs=...)` to get the gate-2 verdict for the real binary.
+# `c.stray_libcuda()` looks for the 803 case on a live system: a versioned `libcuda` that the runtime did
+# not inject. On a GPU box, pass the arch list of your framework (`torch.cuda.get_arch_list()`) to
+# `c.probe(archs=...)`. This gives the gate-2 verdict for the real binary.
 
 # %%
 if live.devices:
@@ -231,23 +248,30 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** A GPU container has two halves. The host half — device nodes and the user-mode driver,
-# which must match the kernel module to the build — is injected when the container starts: the NVIDIA
-# Container Toolkit bind-mounts it on Docker and containerd, GKE's device plugin mounts it at
-# `/usr/local/nvidia`. The image half is the CUDA userland and the framework. Two gates follow: the
-# driver must support the image's CUDA version (backward compatible always, minor-version compatible with
-# caveats, a newer major only with the forward-compatibility package on data-center GPUs), and the binary
-# must contain SASS for the GPU's architecture or PTX the driver can JIT. When something fails, I read the
-# error number — 35, 209, 222, 803, 100 — and it tells me which half and which gate.
+# **Two minutes.** A GPU container has two halves. The host half is the device nodes and the user-mode
+# driver, which must match the kernel module to the build. The container runtime injects the host half
+# when the container starts.
+#
+# On Docker and containerd, the NVIDIA Container Toolkit bind-mounts the host half. On GKE, the device
+# plugin mounts it at `/usr/local/nvidia`. The image half is the CUDA userland and the framework.
+#
+# Two gates follow. First, the driver must support the CUDA version of the image. Backward compatibility
+# always applies. Minor-version compatibility applies with caveats. A newer major works only with the
+# forward-compatibility package on data-center GPUs. Second, the binary must contain SASS for the
+# architecture of the GPU, or PTX that the driver can JIT.
+#
+# When something fails, I read the error number (35, 209, 222, 803, 100). It tells me which half and which
+# gate.
 #
 # **Drill questions**
 #
-# 1. *`nvidia-smi` works in the container, but `torch.cuda.is_available()` is False. Why?* — `nvidia-smi`
-#    needs only NVML; torch needs a CUDA build of the wheel (a CPU-only wheel returns False), a driver that
-#    supports the wheel's CUDA version, and no `CUDA_VISIBLE_DEVICES` masking every GPU.
-# 2. *Why can't the image ship its own `libcuda.so`?* — The user-mode driver talks to the kernel module
-#    through a private interface that changes with every driver build; a mismatch fails with 803. Only the
-#    host knows which build it runs, so the runtime injects it.
-# 3. *A new GPU generation arrives and last year's image fails with "no kernel image". Fix?* — Rebuild or
-#    reinstall the framework for the new compute capability (or ship PTX so the driver can JIT); upgrading
-#    the driver alone does not help, because the binary has nothing for that GPU.
+# 1. *`nvidia-smi` works in the container, but `torch.cuda.is_available()` is False. Why?* `nvidia-smi`
+#    needs only NVML. torch needs a CUDA build of the wheel (a CPU-only wheel returns False). It also needs a
+#    driver that supports the CUDA version of the wheel. Also, `CUDA_VISIBLE_DEVICES` must not mask every GPU.
+# 2. *Why can the image not include its own `libcuda.so`?* The user-mode driver talks to the kernel module
+#    through a private interface. That interface changes with each driver build. A mismatch fails with 803.
+#    Only the host knows which build it runs. Thus the runtime injects the driver.
+# 3. *A new GPU generation arrives, and the image from last year fails with "no kernel image". What is the
+#    solution?* Build or install the framework again for the new compute capability (or include PTX, so that
+#    the driver can JIT). An upgrade of the driver alone does not help, because the binary has
+#    nothing for that GPU.

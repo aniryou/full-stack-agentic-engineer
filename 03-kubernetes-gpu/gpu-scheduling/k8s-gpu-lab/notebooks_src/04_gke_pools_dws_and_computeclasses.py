@@ -1,28 +1,32 @@
 # %% [markdown]
 # # 04 · GKE: node pools, DWS flex-start and ComputeClasses — capacity is something you ask for
 #
-# **Tier:** T3 walkthrough (GKE via `deploy/gcp/terraform`; a Spot L4 node costs roughly $0.25/h
-# while a pod needs it — verify). Offline everything here is **plan and inspect**: read the
-# Terraform, price it, model the capacity choices, and render the manifests; with a GKE
-# `kubectl` context the last section looks at the live objects.
+# **Tier:** T3 walkthrough. The cluster is GKE, from `deploy/gcp/terraform`. A Spot L4 node costs
+# approximately $0.25/h while a pod needs it (verify). Offline, everything here is **plan and inspect**.
+# Read the Terraform, calculate its price, model the capacity choices, and render the manifests. With a
+# GKE `kubectl` context, the last section examines the live objects.
 #
 # ## The one-minute version
-# On a laptop the GPUs are simply there. In a cloud they are **obtained**, and there are four
-# ways, each trading price against the chance of getting the capacity when you need it:
+# On a laptop, the GPUs are there. In a cloud, you must **get** them. There are four ways, and each
+# way balances the price against the chance that you get the capacity when you need it:
 #
 # | how | price | you get | good for |
 # |---|---|---|---|
-# | on-demand | list | whatever is in stock (scarce shapes stock out) | serving, short jobs |
-# | Spot | 60-91 % off | reclaimable with ~30 s notice | checkpointed batch, extra replicas |
+# | on-demand | list | what is in stock (scarce shapes stock out) | serving, short jobs |
+# | Spot | 60-91 % off | the cloud can reclaim it with ~30 s notice | batch jobs with checkpoints, more replicas |
 # | DWS flex-start (queued) | discounted (verify) | *all N nodes at once* after a queue, ≤ 7 days | gangs of scarce GPUs |
 # | reservation / calendar | list or committed | guaranteed, billed when idle | deadlines, steady load |
 #
-# A node pool that scales from zero, a **ComputeClass** that falls back Spot → on-demand →
-# flex-start, and **Kueue + ProvisioningRequest** (all-or-nothing provisioning *before*
-# admission) are how GKE turns that table into objects. Startup latency — node boot, driver,
-# image, weights — is the other cost of "from zero", and time-sharing is how one GPU serves
-# several small pods. Primer §7 *Getting capacity*, §8 *Startup latency*, §9 *Sharing GPUs at the
-# cluster level*, §2 *GPU Operator vs managed drivers*.
+# GKE turns that table into objects with these three mechanisms:
+#
+# - a node pool that scales from zero,
+# - a **ComputeClass** that falls back from Spot to on-demand, then to flex-start,
+# - **Kueue + ProvisioningRequest** (all-or-nothing provisioning *before* admission).
+#
+# Startup latency is the other cost of "from zero". It contains the node boot, the driver, the image
+# and the weights. With time-sharing, one GPU serves several small pods. The primer sections are
+# §7 *Getting capacity*, §8 *Startup latency*, §9 *Sharing GPUs at the cluster level* and
+# §2 *GPU Operator vs managed drivers*.
 
 # %%
 from k8sgpu import capacity, gke
@@ -33,17 +37,20 @@ print(gke.plan_summary(v))
 
 # %% [markdown]
 # ## What the Terraform builds
-# One zonal GKE Standard cluster: a system pool, the Spot L4 pool, and two optional pools (DWS
-# flex-start; time-sharing). The GPU pools carry the `nvidia.com/gpu=present:NoSchedule` taint and
-# let GKE install the driver (`gpu_driver_installation_config`) — no GPU Operator needed (primer
-# §2). The driver is `LATEST`, not `DEFAULT`, for a reason you can check: the serving image,
+# The Terraform builds one zonal GKE Standard cluster. It has a system pool, the Spot L4 pool, and two
+# optional pools (DWS flex-start, time-sharing). The GPU pools carry the
+# `nvidia.com/gpu=present:NoSchedule` taint. They let GKE install the driver
+# (`gpu_driver_installation_config`). Thus, no GPU Operator is necessary (primer §2).
+#
+# The driver is `LATEST`, not `DEFAULT`, for a reason that you can examine. The serving image,
 # `vllm/vllm-openai:v0.30.0`, is a **CUDA 13.0.2** build (its image config says
-# `CUDA_VERSION=13.0.2`), and CUDA 13.0 needs an **R580+** driver (>= 580.65.06 on Linux; the
-# compatibility rules are layer 02's primer §1.2, `02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`).
-# An older branch fails at start-up with *"CUDA driver version is insufficient"*; the image leaves
-# CUDA forward compatibility off (`VLLM_ENABLE_CUDA_COMPATIBILITY=0`). Which branch GKE's `DEFAULT`
-# installs depends on the GKE version (verify). The same cluster in `gcloud`, which is how most GKE
-# documentation shows it:
+# `CUDA_VERSION=13.0.2`). CUDA 13.0 needs an **R580+** driver (>= 580.65.06 on Linux). The
+# compatibility rules are in layer 02's primer §1.2, `02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md`.
+# An older branch fails at start-up with *"CUDA driver version is insufficient"*. The image leaves
+# CUDA forward compatibility off (`VLLM_ENABLE_CUDA_COMPATIBILITY=0`).
+#
+# The branch that GKE's `DEFAULT` installs depends on the GKE version (verify). The next cell also shows the same cluster in `gcloud`.
+# Most GKE documentation shows a cluster in this form:
 
 # %%
 for f, rtype, name in gke.tf_resources():
@@ -54,19 +61,20 @@ for cmd in gke.gcloud_equivalents({**v, "enable_flex_start_pool": True, "enable_
 
 # %% [markdown]
 # ## Spot, in numbers
-# A gang is interrupted when **any** of its nodes is reclaimed, so the rates add:
-# 8 nodes at 0.02 reclaims per node-hour = 0.16 per hour. (Both this rate and the 0.005 per
-# node-hour of primer §7.2 are illustrative; real reclaim rates vary by zone, shape and hour.)
-# Each interruption loses the work since the last checkpoint plus a restart. With Poisson
-# interruptions at rate $\lambda$, checkpoints every $\tau$ hours and restart cost $R$, one $\tau$-hour segment takes
-# on average $(1/\lambda + R)(e^{\lambda\tau} - 1)$ hours, and a job of $W$ hours has $W/\tau$ segments — primer §7.2's
-# gang formula with checkpoints added.
+# A gang has an interruption when the cloud reclaims **any** of its nodes. Thus, the rates add:
+# 8 nodes at 0.02 reclaims per node-hour = 0.16 per hour. This rate and the 0.005 per node-hour of
+# primer §7.2 are both illustrative. Real reclaim rates change with the zone, the shape and the hour.
+# Each interruption costs the work since the last checkpoint, plus a restart.
+#
+# Let the interruptions be Poisson at rate $\lambda$, with checkpoints every $\tau$ hours and a restart
+# cost $R$. Then one $\tau$-hour segment takes $(1/\lambda + R)(e^{\lambda\tau} - 1)$ hours on average.
+# A job of $W$ hours has $W/\tau$ segments. This model is the gang formula of primer §7.2, with checkpoints added.
 #
 # ## Exercise 4.1 — expected runtime on Spot
-# Implement `runtime_h(work_h, rate_per_h, checkpoint_every_h, restart_h)` (no checkpoints =
-# `checkpoint_every_h=None`, i.e. one segment of `work_h`). Then compute `slowdown`: how many
-# times longer a 10 h, 8-node job takes on Spot **without** checkpoints than with hourly ones
-# ($\lambda$ = 0.16/h, $R$ = 0.25 h).
+# Write `runtime_h(work_h, rate_per_h, checkpoint_every_h, restart_h)`. For no checkpoints, use
+# `checkpoint_every_h=None`. In that case, the job is one segment of `work_h`. Then calculate `slowdown`. A 10 h,
+# 8-node job runs on Spot ($\lambda$ = 0.16/h, $R$ = 0.25 h). `slowdown` is how many times longer
+# the job takes **without** checkpoints than with hourly checkpoints.
 
 # %% exercise
 import math
@@ -91,13 +99,16 @@ print(f"✅ hourly checkpoints: {runtime_h(10, 0.16, 1.0):.2f} h; none: {runtime
       f"({slowdown:.2f}x). Spot is cheap only if the job can resume.")
 
 # %% [markdown]
-# Checkpoints are not free, which is why "checkpoint more often" has an optimum. If writing one
-# takes $C$ hours, each segment needs $\tau + C$ uninterrupted hours: $(1/\lambda + R)(e^{\lambda(\tau + C)} - 1)$
-# (`capacity.expected_runtime_h(..., checkpoint_cost_h=C)`). Frequent checkpoints waste time
-# writing; rare ones waste work on every reclaim. The minimum sits near Young's interval
-# $\sqrt{2C/\lambda}$ — derived for large jobs in layer 01's
+# A checkpoint is not free. Thus, the rule "checkpoint more often" has an optimum. If one checkpoint
+# takes $C$ hours to write, each segment needs $\tau + C$ hours with no interruption. The formula
+# becomes $(1/\lambda + R)(e^{\lambda(\tau + C)} - 1)$
+# (`capacity.expected_runtime_h(..., checkpoint_cost_h=C)`). Frequent checkpoints lose time to the
+# writes. Rare checkpoints lose work at each reclaim.
+#
+# The minimum is near Young's interval, $\sqrt{2C/\lambda}$. Layer 01's
 # [primer §7.2 *How often to checkpoint: Young/Daly*](../../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)
-# (`roofline.reliability.young_daly_interval`). With $C$ = 3 min and $\lambda$ = 0.16/h:
+# derives it for large jobs (`roofline.reliability.young_daly_interval`). The next cell uses
+# $C$ = 3 min and $\lambda$ = 0.16/h:
 
 # %%
 C = 0.05
@@ -107,15 +118,28 @@ print(f"Young's interval sqrt(2C/λ) = {capacity.young_interval_h(C, 0.16):.2f} 
 
 # %% [markdown]
 # ## Choosing a capacity type
-# `capacity.evaluate()` puts the options side by side for one need: expected wait (queues and
-# retries), expected runtime (interruptions), cost, what breaks — and, with a deadline, the
-# **probability the capacity arrives in time** (`on time`). A queue's wait is not a number but a
-# distribution; the model treats DWS's as exponential with the option's mean (1 h by default,
-# illustrative — for 64 H100s it can be far longer). Ranking: feasible, on time with at least
-# 95 % probability, not an interruptible server, then cheapest; equal costs are broken by the
-# surer start and then the shorter wait, and `capacity.defensible()` lists every option the model
-# cannot tell apart from the best. All prices and rates are assumptions marked *verify* — change
-# them and watch the ranking move.
+# `capacity.evaluate()` shows the options next to each other for one need. For each option, it gives:
+#
+# - the expected wait (queues and retries),
+# - the expected runtime (interruptions),
+# - the cost,
+# - what breaks,
+# - with a deadline, the **probability that the capacity arrives in time** (`on time`).
+#
+# The wait in a queue is not a number but a distribution. The model uses an exponential distribution
+# for the DWS wait, with the mean of the option. The default mean is 1 h, an illustrative value. For
+# 64 H100s, the mean can be much longer.
+#
+# The model ranks the options with these criteria, in this order:
+#
+# 1. feasible,
+# 2. on time with at least 95 % probability,
+# 3. not an interruptible server,
+# 4. the lowest cost.
+#
+# If two options have equal costs, the more certain start wins, and then the shorter wait.
+# `capacity.defensible()` lists every option that the model cannot tell apart from the best option.
+# All prices and rates are assumptions, marked *verify*. Change them and look at how the ranking moves.
 
 # %%
 needs = {
@@ -129,10 +153,10 @@ for label, need in needs.items():
 
 # %% [markdown]
 # ## Exercise 4.2 — will the queue deliver in time?
-# The 3-day pretraining needs 72 h of work and must finish within 96 h: 24 h of slack for the
-# capacity to arrive. Write `p_start_within(slack_h, mean_wait_h)`: the probability an
-# exponential wait with that mean is at most `slack_h`. Then compute `max_mean_wait`: the largest
-# mean queue wait for which the start is still 95 % likely within 24 h.
+# The 3-day pretraining needs 72 h of work and must finish within 96 h. Thus, the capacity has 24 h of
+# slack to arrive. Write `p_start_within(slack_h, mean_wait_h)`. It returns the probability that an
+# exponential wait with that mean is at most `slack_h`. Then calculate `max_mean_wait`. It is the
+# largest mean queue wait that still gives a start within 24 h with 95 % probability.
 
 # %% exercise
 def p_start_within(slack_h: float, mean_wait_h: float) -> float:
@@ -151,9 +175,9 @@ assert math.isclose(max_mean_wait, 8.0114, rel_tol=1e-4) and math.isclose(p_star
 print(f"✅ a DWS queue averaging more than {max_mean_wait:.1f} h makes a 24 h-slack deadline a coin you should not flip")
 
 # %% [markdown]
-# The same need, if the flex-start queue for 64 H100s averaged 12 h instead of 1 h: the cheapest
-# option is no longer good enough, and the answer becomes capacity you hold (a reservation, or
-# DWS calendar mode booked ahead — verify its terms).
+# Look at the same need if the flex-start queue for 64 H100s has a mean wait of 12 h, not 1 h. Then
+# the lowest-cost option is no longer sufficient. The answer becomes capacity that you hold: a
+# reservation, or DWS calendar mode that you book in advance (verify its terms).
 
 # %%
 import dataclasses
@@ -163,10 +187,13 @@ print("defensible:", capacity.defensible(needs["pretrain-3d"], options=slow_queu
 
 # %% [markdown]
 # ## Exercise 4.3 — pick one per workload, and say why
-# Using the tables above (default assumptions), set `choice` to one of `"on-demand"`, `"spot"`,
-# `"flex-start"`, `"reservation"` for each workload, and give the reason in `why`. The 3-day
-# pretraining cannot checkpoint (an unusual, deliberately hard constraint) and must finish within
-# 96 hours. Where the model ties, either answer passes — the reason is the part that matters.
+# Use the tables of the section *Choosing a capacity type* (default assumptions). For each workload,
+# set `choice` to one of `"on-demand"`, `"spot"`, `"flex-start"`, `"reservation"`. Give the reason in
+# `why`.
+#
+# The 3-day pretraining cannot write checkpoints. This is an unusual constraint, and it is hard
+# on purpose. The job must also finish within 96 hours. If the model gives a tie, both answers pass.
+# The reason is the important part.
 
 # %% exercise
 choice = {"serve-24x7": None, "finetune-10h": None, "pretrain-3d": None}
@@ -196,14 +223,16 @@ print(f"✅ defensible picks: {choice}. 8-node no-checkpoint Spot would need ~{s
 
 # %% [markdown]
 # ## ComputeClass: the fallback ladder as an object
-# Instead of one node pool per capacity type, a custom **ComputeClass** lists ways to get a
-# node, in order; GKE's node-pool auto-creation tries them top to bottom and (with
-# `activeMigration`) moves pods back up the ladder when the preferred capacity returns. Pods
-# opt in with `nodeSelector: {cloud.google.com/compute-class: <name>}`. Field names follow
-# GKE's CRD (verify with `kubectl explain computeclass.spec`). Each rung's `gpu.driverVersion:
-# latest` matters here: pools the class *creates* do not inherit the Terraform pools' `LATEST`,
-# and without it they would get GKE's default branch — too old, possibly, for the CUDA 13 vLLM
-# image that runs on them (field name as in Google's own ComputeClass examples; verify).
+# A custom **ComputeClass** replaces one node pool per capacity type. It lists the ways to get a node,
+# in order. GKE's node-pool auto-creation tries them from top to bottom. With `activeMigration`, it
+# also moves pods back up the ladder when the preferred capacity comes back. A pod selects the class
+# with `nodeSelector: {cloud.google.com/compute-class: <name>}`. The field names come from GKE's CRD
+# (verify with `kubectl explain computeclass.spec`).
+#
+# On each rung, `gpu.driverVersion: latest` is important. The pools that the class *creates* do not
+# get the `LATEST` setting of the Terraform pools. Without `gpu.driverVersion: latest`, these pools get GKE's default branch.
+# It is possible that this branch is too old for the CUDA 13 vLLM image that runs on them. The field
+# name is as in Google's own ComputeClass examples (verify).
 
 # %%
 files = gke.gke_manifests()
@@ -212,10 +241,15 @@ print(m.to_yaml(cc))
 
 # %% [markdown]
 # ## Exercise 4.4 — which rung provisions?
-# Write `pick_rung(priorities, available)`: the index of the first priority whose capacity type
-# (`"reservation"` if it has `reservations`, `"flex-start"` if `flexStart.enabled`, else `"spot"`
-# or `"on-demand"` from `spot`) is available, or `None` (with `whenUnsatisfiable: DoNotScaleUp`
-# the pod then stays Pending).
+# Write `pick_rung(priorities, available)`. It returns the index of the first priority whose capacity
+# type is available. The capacity type of a priority is:
+#
+# - `"reservation"` if it has `reservations`,
+# - `"flex-start"` if `flexStart.enabled`,
+# - if not, `"spot"` or `"on-demand"`, from `spot`.
+#
+# If no capacity type is available, it returns `None`. With `whenUnsatisfiable: DoNotScaleUp`, the
+# pod then stays Pending.
 
 # %% exercise
 def pick_rung(priorities: list[dict], available: dict[str, bool]) -> int | None:
@@ -240,21 +274,25 @@ print("✅ Spot first, on-demand when Spot is gone, flex-start when both are")
 
 # %% [markdown]
 # ## DWS flex-start through Kueue: admission waits for *all* the nodes
-# `deploy/gke/10-kueue-gke.yaml` gives the ClusterQueue two flavors. `l4-spot` is plain quota:
-# admission means the quota is yours, and the autoscaler brings nodes one at a time — Kueue's
-# `waitForPodsReady` (on by default in v0.19, 30 min) evicts and requeues a gang caught
-# half-started (notebook 02). `l4-flex` has the `dws-prov` AdmissionCheck: after reserving quota,
-# Kueue files **one ProvisioningRequest** (`queued-provisioning.gke.io`) covering every pod of the
-# Workload (one PodTemplate per pod set), and admits only when DWS has created all the nodes
-# together — no half-started gang holding GPUs hostage.
+# `deploy/gke/10-kueue-gke.yaml` gives the ClusterQueue two flavors. `l4-spot` is plain quota.
+# Admission means that the quota is yours, and the autoscaler adds nodes one at a time. Kueue's
+# `waitForPodsReady` (on by default in v0.19, 30 min) evicts a half-started gang and puts it back in
+# the queue (notebook 02).
 #
-# Neither flavor sets `topologyName`. GCE publishes the placement labels Kueue TAS reads
-# (`cloud.google.com/gce-topology-{block,subblock,host}`) for the accelerator-optimized families:
-# Google's own TAS examples use them on A3, A4 and A4X node pools (GoogleCloudPlatform/cluster-toolkit
-# `examples/gke-a3-*`, `gke-a4`, `gke-a4x`), none on G2/L4. So the lab's L4 flavors are plain quota,
-# and the kind lab's topology labels on fake L4 nodes are there only to teach TAS. Check your nodes
-# with `kubectl get nodes -L cloud.google.com/gce-topology-host` (verify); on A3/A4 pools the kind
-# lab's TAS flavor carries over with the real labels.
+# `l4-flex` has the `dws-prov` AdmissionCheck. After Kueue reserves the quota, it creates
+# **one ProvisioningRequest** (`queued-provisioning.gke.io`). This request covers every pod of the
+# Workload (one PodTemplate per pod set). Kueue admits the Workload only when DWS has created all the
+# nodes together. Thus, no half-started gang holds GPUs that it cannot use.
+#
+# Neither flavor sets `topologyName`. Kueue TAS reads placement labels
+# (`cloud.google.com/gce-topology-{block,subblock,host}`). GCE publishes these labels for the
+# accelerator-optimized families. Google's own TAS examples use them on A3, A4 and A4X node pools
+# (GoogleCloudPlatform/cluster-toolkit `examples/gke-a3-*`, `gke-a4`, `gke-a4x`), and none on G2/L4.
+# Thus, the L4 flavors of the lab are plain quota. The topology labels on the fake L4 nodes of the
+# kind lab are there only to teach TAS.
+#
+# Examine your nodes with `kubectl get nodes -L cloud.google.com/gce-topology-host` (verify). On
+# A3/A4 pools, the TAS flavor of the kind lab carries over with the real labels.
 
 # %%
 print(m.to_yaml(*files["10-kueue-gke.yaml"][1][3:6]))
@@ -263,26 +301,29 @@ for t, event in capacity.queued_provisioning_timeline(nodes=2, wait_h=0.5, run_h
 
 # %% [markdown]
 # ## Sharing one GPU between pods (primer §9)
-# A 1.5B model on an L4 uses a fraction of the GPU; a dev notebook less. With
-# `enable_time_sharing_pool = true` the Terraform adds `l4-shared`, a Spot L4 pool whose nodes
+# A 1.5B model on an L4 uses a fraction of the GPU. A dev notebook uses less. With
+# `enable_time_sharing_pool = true`, the Terraform adds `l4-shared`, a Spot L4 pool. Its nodes
 # advertise **each physical GPU as `max_shared_clients_per_gpu` units** of `nvidia.com/gpu`
-# (`gpu_sharing_config`, strategy `TIME_SHARING`). Pods still ask for an integer `nvidia.com/gpu: 1`
-# and select the pool through GKE's node labels `cloud.google.com/gke-gpu-sharing-strategy` and
-# `cloud.google.com/gke-max-shared-clients-per-gpu` (verify). What they share: SM time, by
-# context switching. What they do not get: memory limits or fault isolation — one pod can take
-# all 24 GB. On a VM you run yourself, the NVIDIA device plugin's time-slicing config does the same
-# (`deploy/gpu-vm/`, T1).
+# (`gpu_sharing_config`, strategy `TIME_SHARING`). Pods still ask for an integer `nvidia.com/gpu: 1`.
+# They select the pool through GKE's node labels `cloud.google.com/gke-gpu-sharing-strategy` and
+# `cloud.google.com/gke-max-shared-clients-per-gpu` (verify).
+#
+# The pods share the SM time, through context switches. The pods do not get memory limits or fault
+# isolation. One pod can take all 24 GB. On a VM that you run yourself, the time-slicing config of the
+# NVIDIA device plugin does the same (`deploy/gpu-vm/`, T1).
 
 # %%
 print(m.to_yaml(files["50-time-sharing-l4.yaml"][1][0])[:900], "...")
 
 # %% [markdown]
 # ## Exercise 4.5 — what does a time-shared node advertise?
-# Compute `alloc_1` (allocatable `nvidia.com/gpu` on one `g2-standard-4` in the `l4-shared` pool with
-# 4 clients per GPU) and `alloc_2` (the same on a `g2-standard-24`, which has 2 L4s). Then decide
-# `pods_on_one_node`: how many pods of `50-time-sharing-l4.yaml` (each 1 GPU, 500m CPU, 512Mi) run
-# at once on one `g2-standard-4`, and `max_per_container`: the most shared GPUs one container may
-# request there.
+# Calculate `alloc_1`. It is the allocatable `nvidia.com/gpu` on one `g2-standard-4` in the
+# `l4-shared` pool, with 4 clients per GPU. Then calculate `alloc_2`, the same value on a
+# `g2-standard-24`. This machine has 2 L4s.
+#
+# Then find `pods_on_one_node`. It is the number of pods of `50-time-sharing-l4.yaml` that run at the
+# same time on one `g2-standard-4`. Each pod asks for 1 GPU, 500m CPU and 512Mi. Also find
+# `max_per_container`. It is the largest number of shared GPUs that one container can request there.
 
 # %% exercise
 from k8sgpu import machines
@@ -302,14 +343,20 @@ print(f"✅ one L4 = {alloc_1} schedulable GPUs; all {pods_on_one_node} pods of 
 
 # %% [markdown]
 # ## Startup latency: where the minutes go when you scale from zero
-# A Pending serving pod on a pool at zero waits for: a VM (minutes for GPU shapes), the GPU
-# driver, the image (`vllm/vllm-openai:v0.30.0` is 8.7 GB compressed for amd64, read from its
-# registry manifest on 2026-09-26), the weights, and engine start-up (what an engine does before
-# it serves: serving-engine primer §1, `04-inference-engine/serving-engine/PRIMER.md`). The
-# defaults below are illustrative and differ from primer §8's example on purpose. Image
-# streaming starts the container after fetching metadata; GCS FUSE with parallel downloads (or
-# Hyperdisk ML, or a model streamer) moves weights at hundreds of MB/s. Only the last two
-# stages happen *after* the container starts — that is what the startup probe must cover.
+# A serving pod that is Pending on a pool at zero waits for these items:
+#
+# - a VM (minutes for GPU shapes),
+# - the GPU driver,
+# - the image (`vllm/vllm-openai:v0.30.0` is 8.7 GB compressed for amd64, from its registry manifest
+#   on 2026-09-26),
+# - the weights,
+# - the engine start-up (what an engine does before it serves: serving-engine primer §1,
+#   `04-inference-engine/serving-engine/PRIMER.md`).
+#
+# The defaults in the next cell are illustrative. They are different from the example of primer §8 on
+# purpose. Image streaming gets the metadata, then starts the container. GCS FUSE with parallel
+# downloads (or Hyperdisk ML, or a model streamer) moves weights at hundreds of MB/s. Only the last two
+# stages occur *after* the container starts. The startup probe must cover these two stages.
 
 # %%
 for streaming in (False, True):
@@ -317,11 +364,13 @@ for streaming in (False, True):
 
 # %% [markdown]
 # ## Exercise 4.6 — size the serving pod's startup probe
-# The serving example (`deploy/gke/40-serving-vllm-gcsfuse.yaml`) loads a 1.5B model: 3 GB of
-# weights over GCS FUSE at 0.5 GB/s, then ~60 s of engine start-up. Its startup probe checks
-# `/health` every 10 s. Compute `needed_s` (what the probe must cover) and `threshold`, the
-# smallest `failureThreshold` that covers it **twice over** (weights on a cold bucket are
-# slower). Is the committed manifest's threshold enough? Set `manifest_ok`.
+# The serving example (`deploy/gke/40-serving-vllm-gcsfuse.yaml`) loads a 1.5B model. It loads 3 GB of
+# weights over GCS FUSE at 0.5 GB/s. After that, the engine start-up takes ~60 s. The startup probe
+# of the serving pod does a check of `/health` every 10 s.
+#
+# Calculate `needed_s`, the time that the probe must cover. Then
+# calculate `threshold`, the smallest `failureThreshold` that covers it **twice over**. The factor of two is
+# necessary because weights on a cold bucket are slower. Is the threshold of the committed manifest sufficient? Set `manifest_ok`.
 
 # %% exercise
 parts = capacity.cold_start_s(weights_gb=3, weights_gbps=0.5, engine_init_s=60)
@@ -340,9 +389,9 @@ print(f"✅ the probe must cover {needed_s:.0f} s; 14 x 10 s would do, the manif
 
 # %% [markdown]
 # ## Live (T3): look at the real objects
-# After `terraform apply` and `gcloud container clusters get-credentials`, these read-only
-# commands show the pools, the accelerator labels and taints, the ComputeClass and Kueue state.
-# Offline they are printed, not run.
+# After `terraform apply` and `gcloud container clusters get-credentials`, the read-only commands in
+# the next cell show the pools, the accelerator labels and taints, the ComputeClass and the Kueue
+# state. Offline, the cell prints the commands and does not run them.
 
 # %%
 import shutil
@@ -368,31 +417,38 @@ if not ctx.startswith("gke_"):
 # %% [markdown]
 # ## In a design review
 # *"We need 16 H100s for three days next week, and a small L4 serving fleet — how do we get the
-# capacity?"* — in two minutes: serving runs on on-demand (or a reservation) with Spot only for
-# surplus replicas, expressed as a ComputeClass so a stockout falls back instead of paging
-# someone.
+# capacity?"*
 #
-# The training gang must start whole, so queue it: Kueue reserves quota, files a
-# ProvisioningRequest, and DWS flex-start delivers all nodes at once for up to 7 days — *if* the
-# queue for that shape is short relative to the slack. A deadline turns the queue's wait into a
-# probability; when it is not good enough (24 h slack needs a mean wait under ~8 h for 95 %),
-# a reservation or calendar mode is the only guarantee.
+# The answer in two minutes: the serving fleet runs on on-demand capacity (or a
+# reservation), with Spot only for surplus replicas. Put this policy in a ComputeClass. Then a
+# stockout causes a fallback, not a page to a person.
 #
-# Spot is right for checkpointed work, and its real price is the interruption rate times nodes
-# times lost work, with the checkpoint interval near $\sqrt{2C/\lambda}$. Small models share a GPU
-# through time-sharing, with no isolation. Budget cold start explicitly: image streaming, a
-# weights path at hundreds of MB/s, a driver new enough for the image's CUDA, and a startup probe
-# that covers the load.
+# The training gang must start whole, so put it in a queue. Kueue reserves quota and creates a
+# ProvisioningRequest. Then DWS flex-start supplies all nodes at once, for up to 7 days. This works
+# *if* the queue for that shape is short relative to the slack.
+#
+# A deadline changes the wait in the
+# queue into a probability. When the probability is not sufficient, a reservation or calendar mode is
+# the only guarantee. For 95 %, a 24 h slack needs a mean wait under ~8 h.
+#
+# Spot is correct for work that writes checkpoints. Its real price is the interruption rate times the
+# nodes times the lost work, with the checkpoint interval near $\sqrt{2C/\lambda}$. Small models share
+# a GPU through time-sharing, with no isolation. Make an explicit budget for the cold start:
+#
+# - image streaming,
+# - a weights path at hundreds of MB/s,
+# - a driver that is sufficiently new for the CUDA of the image,
+# - a startup probe that covers the load.
 #
 # **Drill 1.** *Why not run the 8-node training job on Spot to save 65 %?* Without frequent
-# checkpoints the gang restarts from zero on every reclaim; at 0.16 interruptions/hour a 72-hour
-# job essentially never finishes.
+# checkpoints, the gang starts again from zero at each reclaim. At 0.16 interruptions/hour, a 72-hour
+# job almost never finishes.
 #
-# **Drill 2.** *What does Kueue add on top of a flex-start node pool?* All-or-nothing admission:
-# the ProvisioningRequest asks for every node of the gang, and the job is admitted only when all
-# exist — no partial gang holding GPUs.
+# **Drill 2.** *What does Kueue add on top of a flex-start node pool?* All-or-nothing admission. The
+# ProvisioningRequest asks for every node of the gang. Kueue admits the job only when all the nodes
+# exist. Thus, no partial gang holds GPUs.
 #
-# **Drill 3.** *A serving pod restarts every few minutes on a fresh node.* The liveness probe
-# kills it during the weight load: add or size a startup probe. (If instead it exits at once with
-# *"CUDA driver version is insufficient"*, the node's driver is older than the image's CUDA:
-# CUDA 13 needs R580+.)
+# **Drill 3.** *A serving pod restarts every few minutes on a fresh node.* The liveness probe stops
+# the pod during the weight load. Add a startup probe, or set the correct size for it. If the pod
+# instead exits at once with *"CUDA driver version is insufficient"*, the cause is the driver of the
+# node. This driver is older than the CUDA of the image: CUDA 13 needs R580+.

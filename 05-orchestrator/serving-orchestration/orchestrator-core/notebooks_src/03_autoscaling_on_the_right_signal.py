@@ -1,31 +1,38 @@
 # %% [markdown]
 # # 03 · Autoscaling on the right signal
 #
-# **Tier:** T0 — CPU only, about 25 seconds, no network. Every number below is **simulated** by `fleetsim`; the HPA
-# logic is the Kubernetes controller's (`fleetsim/autoscale.py` mirrors `pkg/controller/podautoscaler`).
+# **Tier:** T0. CPU only, about 25 seconds, no network. `fleetsim` **simulates** every number in this notebook. The
+# HPA logic is the logic of the Kubernetes controller (`fleetsim/autoscale.py` mirrors
+# `pkg/controller/podautoscaler`).
 #
 # ## The one-minute version
-# The Horizontal Pod Autoscaler is a proportional controller: every 15 s it sets
-# $\text{desired} = \lceil \text{current} \times \text{metric} / \text{target} \rceil$ (more exactly: the sum of the
-# samples the pods reported, divided by the target), ignores changes within a 10 % tolerance band, remembers its
-# recommendations for 5 minutes before scaling down, and rate-limits scale-up (+100 % or +4 pods per 15 s). That rule
-# only works if the metric **grows in proportion to load per replica**, **rises before latency does**, and **is not
-# capped**. For an LLM engine:
+# The Horizontal Pod Autoscaler is a proportional controller. It does these four things:
 #
-# * **GPU utilisation** fails all three: continuous batching keeps a kernel running whenever *any* request is in
-#   flight, so "utilisation" reads 100 % at a fraction of capacity. The HPA either pins the fleet at max or never moves.
-# * **Queue depth alone** is zero until the cliff, then explodes; once capacity catches up it reads zero again and the
-#   HPA scales back down into the next cliff — a sawtooth.
-# * **KV-cache usage** and **running requests** are proportional but capped (100 %, `max_num_seqs`). The controller
-#   multiplies the reporting pods' average by their number, so a capped metric grows the fleet at most
-#   $\text{cap}/\text{target}$-fold per round: it climbs out of a big step one cold start at a time.
-# * **In-flight requests** (running + waiting, including requests held at the gateway) are proportional and uncapped
-#   — what llm-d's queue-based KEDA path scales on — but they count *requests*. A target taken from a chat load test
-#   is wrong for RAG, whose requests carry five times the prefill. llm-d's token-aware path counts *work*: seconds
-#   of prefill backlog (in-flight uncached tokens ÷ prefill rate), paired with KV occupancy for decode.
+# - Every 15 s, it sets $\text{desired} = \lceil \text{current} \times \text{metric} / \text{target} \rceil$ (more
+#   exactly: the sum of the samples that the pods reported, divided by the target).
+# - It ignores changes in a 10 % tolerance band.
+# - It remembers its recommendations for 5 minutes before it scales down.
+# - It rate-limits scale-up (+100 % or +4 pods per 15 s).
 #
-# And whatever the signal, the **cold start** (node, image, weights, warm-up) decides how much traffic queues while
-# capacity arrives — and scale-to-zero moves the whole of it, node included, onto every burst. Primer §4.
+# The rule of the HPA works only if the metric **grows in proportion to load per replica**, **rises before latency
+# does**, and **has no cap**. For an LLM engine:
+#
+# * **GPU utilisation** fails all three. Continuous batching keeps a kernel in operation whenever *any* request is
+#   in flight. Thus "utilisation" reads 100 % at a fraction of capacity. The HPA either holds the fleet at max or
+#   never moves.
+# * **Queue depth alone** is zero until the cliff, and then it jumps to a large value. When capacity catches up, the
+#   queue depth reads zero again. Then the HPA scales back down into the next cliff. The result is a sawtooth.
+# * **KV-cache usage** and **running requests** are proportional, but they have a cap (100 %, `max_num_seqs`). The
+#   controller multiplies the average of the pods that report by their number. Thus a capped metric grows the fleet
+#   at most $\text{cap}/\text{target}$-fold per round. The fleet climbs out of a large step one cold start at a time.
+# * **In-flight requests** (running + waiting, and also the requests that the gateway holds) are proportional and
+#   have no cap. The queue-based KEDA path of llm-d scales on this signal. But this signal counts *requests*. A
+#   target from a chat load test is incorrect for RAG, because a RAG request carries five times the prefill. The
+#   token-aware path of llm-d counts *work*: seconds of prefill backlog (in-flight uncached tokens ÷ prefill rate),
+#   together with KV occupancy for decode.
+#
+# And for any signal, the **cold start** (node, image, weights, warm-up) decides how much traffic waits in a queue
+# while the capacity arrives. Scale-to-zero puts all of the cold start, node included, on every burst. Primer §4.
 
 # %%
 from fleetsim import (HPA, L4_8B, Autoscaler, ColdStart, Fleet, PowerOfTwo, burst, chat, mix, pods_metric_replicas,
@@ -52,14 +59,14 @@ sweep = rows
 print(table(rows, title="simulated: one L4 replica, chat 1,300 in / 150 out"))
 
 # %% [markdown]
-# "GPU utilisation" here is what `nvidia-smi` reports: the fraction of time *a* kernel is running. It is pinned at
-# 1.0 from the second row on, while p95 TTFT stays inside a 1 s SLO up to seven times that load. Running requests and
-# KV usage grow with load; the waiting queue stays near zero until the engine runs out of room — then it jumps, and
-# that jump *is* the latency cliff.
+# "GPU utilisation" in this table is the value that `nvidia-smi` reports: the fraction of time in which *a* kernel
+# runs. It stays at 1.0 from the second row on. But p95 TTFT stays inside a 1 s SLO up to seven times that load.
+# Running requests and KV usage grow with load. The waiting queue stays near zero until the engine runs out of room.
+# Then the queue jumps, and that jump *is* the latency cliff.
 #
 # ## Exercise 3.1 — the HPA's core rule
-# Write `hpa_desired(current, metric, target, tolerance=0.1)`: return `current` if $\text{metric} / \text{target}$ is
-# within $[1 - \text{tolerance}, 1 + \text{tolerance}]$, else
+# Write `hpa_desired(current, metric, target, tolerance=0.1)`. If $\text{metric} / \text{target}$ is in
+# $[1 - \text{tolerance}, 1 + \text{tolerance}]$, return `current`. Else, return
 # $\lceil \text{current} \times \text{metric} / \text{target} \rceil$. (`metric` is the average over ready pods.)
 
 # %% exercise
@@ -81,10 +88,11 @@ print("✅ hpa_desired works")
 
 # %% [markdown]
 # ## Exercise 3.2 — the scale-down stabilization window
-# Before scaling **down**, the controller takes the **maximum** of every recommendation it made in the last
-# `window` seconds (default 300) — a rolling max that stops it removing pods it will need again a minute later.
-# Write `stabilized_down(history, now, window, desired)`: `history` is a list of `(time, recommendation)`;
-# include only samples strictly newer than $\text{now} - \text{window}$, plus the new `desired`.
+# Before the controller scales **down**, it takes the **maximum** of all the recommendations that it made in the
+# last `window` seconds (default 300). This max moves with time. It prevents the removal of pods that the controller
+# will need again a minute later. Write `stabilized_down(history, now, window, desired)`. `history` is a list of
+# `(time, recommendation)`. Include only the samples that are strictly newer than $\text{now} - \text{window}$, and
+# also the new `desired`.
 
 # %% exercise
 def stabilized_down(history, now, window, desired):
@@ -102,8 +110,8 @@ print("✅ stabilized_down works — scale-down follows the max of the last 5 mi
 
 # %% [markdown]
 # ## Exercise 3.3 — how fast can it scale up?
-# The default scale-up behaviour allows, per 15 s period, **the larger of +100 % and +4 pods** (`selectPolicy: Max`),
-# with no stabilization window. Starting from 3 replicas with a desired count of 40 (and max 50), predict the replica
+# The default scale-up behaviour permits **the larger of +100 % and +4 pods** per 15 s period (`selectPolicy: Max`),
+# with no stabilization window. Start from 3 replicas with a desired count of 40 (and max 50). Predict the replica
 # count after each of the first four 15-second syncs.
 
 # %% exercise
@@ -122,14 +130,17 @@ print("✅", seen, "— doubling per sync, so a 1 -> 40 jump takes about a minut
 
 # %% [markdown]
 # ## Exercise 3.4 — pods that have not reported yet
-# Two ready replicas report 10 queued requests each against a target of 2 per pod, so the HPA asked for
-# $\lceil 20 / 2 \rceil = 10$ replicas; eight of them are still Pending (pulling the image). At the next sync the
-# controller averages the two samples **and eight zeros** — Pending pods count as 0 on a scale-up — and keeps the
-# current count if that new ratio is inside the 10 % band or no longer above 1; otherwise it asks for
-# $\lceil \text{new ratio} \times \text{pods counted} \rceil$. **Predict** the recommendation (current = 10) when the
-# two ready pods report **(a)** 10 each, **(b)** 10.5 each, **(c)** 30 each — and **(d)** what
-# $\lceil \text{sum of the samples} / \text{target} \rceil$, ignoring the Pending pods altogether, gives for (b). Then
-# write `with_pending(values, target, current, pending)` for this scale-up path.
+# Two ready replicas each report 10 queued requests against a target of 2 per pod. Thus the HPA asked for
+# $\lceil 20 / 2 \rceil = 10$ replicas. Eight of them are still Pending, because they pull the image.
+#
+# At the next sync, the controller calculates the average of the two samples **and eight zeros**. On a scale-up,
+# Pending pods count as 0. If that new ratio is inside the 10 % band, or no longer above 1, the controller keeps the
+# current count. Else, it asks for $\lceil \text{new ratio} \times \text{pods counted} \rceil$.
+#
+# **Predict** the recommendation (current = 10) when the two ready pods report **(a)** 10 each, **(b)** 10.5 each
+# and **(c)** 30 each. Also predict **(d)**: what does $\lceil \text{sum of the samples} / \text{target} \rceil$
+# give for (b), if you ignore the Pending pods fully? Then write `with_pending(values, target, current, pending)`
+# for this scale-up path.
 
 # %% exercise
 predicted = {"a": None, "b": None, "c": None, "d": None}
@@ -163,8 +174,9 @@ print("✅ the zeros never raise the count — desired is ceil(sum / target) eit
 
 # %% [markdown]
 # ## Worked example — take the target from the load test
-# A target is the per-replica value of the signal at the highest load that still meets the SLO (TTFT <= 1 s in the
-# sweep above), minus a margin that buys time for the cold start — here one third.
+# The reference load is the highest load that still meets the SLO (TTFT $\le$ 1 s in the earlier sweep). A target is
+# the per-replica value of the signal at that load, minus a margin. The margin gives time for the cold start. Here
+# the margin is one third.
 
 # %%
 def pick_target(sweep, signal, slo_ttft_s, margin):
@@ -178,8 +190,8 @@ print(f"in-flight target {inflight_target} per replica, KV target {kv_target} "
 
 # %% [markdown]
 # ## Worked example — the same traffic step, five signals
-# One replica serves 1.5 req/s; at $t = 60$ s traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
-# (min 1, max 8, default behaviour) on a different signal; new replicas take 30 s to become ready (a warm node and
+# One replica serves 1.5 req/s. At $t = 60$ s, the traffic jumps to 7.5 req/s for nine minutes. Each run is an HPA
+# (min 1, max 8, default behaviour) on a different signal. New replicas take 30 s to become ready (a warm node and
 # cached weights). The sparkline is the replica count every 15 s.
 
 # %%
@@ -210,19 +222,20 @@ print(table(five_rows, title="simulated: 1.5 -> 7.5 req/s step, 30 s cold start"
 print("\n".join(lines))
 
 # %% [markdown]
-# * **GPU utilisation** at a 0.7 target scales to the maximum and never comes down (utilisation stays above target
-#   even at 8 replicas); at 0.95 it never scales at all. Neither is a policy; both are accidents.
-# * **Waiting per pod** scales up hard, then sees an empty queue, scales down after the 5-minute window — and walks
-#   into the cliff again: the sawtooth in the middle of the peak.
-# * **KV usage** is proportional but capped at 1.0: each round multiplies the *ready* pods by at most $1/\text{target}$,
-#   and the pods it asked for count only once they are ready and reporting — it climbs one cold start at a time.
-# * **In-flight total** (running + waiting + held at the gateway, averaged per replica) tracks demand directly: the
-#   best SLO attainment of the signals that also scale back down, at half the GPU-hours of the utilisation policy.
-#   What is left of its tail is the 30 s cold start, which the next table isolates.
+# * **GPU utilisation** at a 0.7 target scales to the maximum and never comes down. The utilisation stays above the
+#   target even at 8 replicas. At 0.95, it never scales at all. Neither is a policy. Both are accidents.
+# * **Waiting per pod** scales up strongly, and then it sees an empty queue. It scales down after the 5-minute
+#   window and goes into the cliff again. This is the sawtooth in the middle of the peak.
+# * **KV usage** is proportional, but it has a cap of 1.0. Each round multiplies the *ready* pods by at most
+#   $1/\text{target}$. The pods that the HPA asked for count only when they are ready and report values. Thus the
+#   fleet climbs one cold start at a time.
+# * **In-flight total** (running + waiting + held at the gateway, averaged per replica) moves directly with demand.
+#   Of the signals that also scale back down, it has the best SLO attainment, at half the GPU-hours of the
+#   utilisation policy. The rest of its tail comes from the 30 s cold start, which the next table isolates.
 #
 # ## Worked example — the cold start decides the tail
-# Same traffic, the in-flight signal, and a longer cold start; the last row keeps three replicas warm instead. While
-# capacity starts, the excess arrival rate piles up:
+# This example uses the same traffic and the in-flight signal, with a longer cold start. The last row keeps three
+# replicas warm instead. While the new capacity starts, the excess arrival rate builds a backlog:
 #
 # $$
 # \text{backlog} = \max(0, \text{peak} - \text{capacity now}) \times \text{cold start}.
@@ -251,13 +264,14 @@ print(f"one replica holds the SLO up to {cap} req/s; a {start.total:.0f} s cold 
       f"with measurements) queues {cold_start_backlog(7.5, cap, start.total):.0f} requests at 7.5 req/s")
 
 # %% [markdown]
-# Warm headroom (`minReplicas: 3`) beat the reactive fleet on latency *and* on GPU-hours: the reactive fleet had to
-# over-scale to drain the backlog its cold start built. The fixes differ per term: image streaming, faster weight
-# reads, cached compilation, warm headroom.
+# Warm headroom (`minReplicas: 3`) beat the reactive fleet on latency *and* on GPU-hours. The reactive fleet had to
+# over-scale to drain the backlog that its cold start built. Each term has a different solution: image streaming,
+# faster weight reads, cached compilation, warm headroom.
 #
 # ## Worked example — a request count does not transfer across traffic
-# The in-flight target came from a chat load test. Now the same step arrives as a mix: half the rate as chat,
-# plus RAG requests carrying ~6,000-token prompts (about 15 % of the requests but three quarters of the prefill the prefix cache does not cover).
+# The in-flight target came from a chat load test. Now the same step arrives as a mix: half the rate as chat, plus
+# RAG requests with ~6,000-token prompts. The RAG requests are about 15 % of the requests, but they carry three
+# quarters of the prefill that the prefix cache does not cover.
 
 # %%
 def mixed_step():
@@ -279,21 +293,27 @@ mixed_rows = [{"traffic": "chat step (SLO 1 s)", **scorecard(in_flight(), step_t
 print(table(mixed_rows, title=f"simulated: in-flight target {inflight_target} per pod on two traffic mixes"))
 
 # %% [markdown]
-# On the mix the same target scales too late and too little: a RAG request counts as one request but brings five
-# times the prefill, so the fleet looks lightly loaded while the prefill queue grows. Re-deriving the target on the
-# new mix fixes it — until the mix shifts again. **Request counts are a safe signal only when requests are alike.**
-# llm-d's token-aware path measures work in its own units instead: the prefill backlog in seconds (EPP in-flight
-# uncached tokens ÷ `peakPrefillThroughput`), compared with a share of the TTFT SLO, plus KV occupancy for the decode
-# side; the HPA takes the larger of the two recommendations. In `fleetsim`: metric `"backlog_s"`, and a second
-# metric through `Autoscaler(..., also=[(metric, target, kind)])`.
+# On the mix, the same target scales too late and by too small a quantity. A RAG request counts as one request, but
+# it brings five times the prefill. Thus the fleet looks lightly loaded while the prefill queue grows. A new target
+# from the new mix repairs this, until the mix changes again. **Request counts are a safe signal only when requests
+# are alike.**
+#
+# The token-aware path of llm-d measures work in its own units instead. The first signal is the prefill backlog in
+# seconds (EPP in-flight uncached tokens ÷ `peakPrefillThroughput`), compared with a share of the TTFT SLO. The
+# second signal is KV occupancy for the decode side. The HPA takes the larger of the two recommendations. In
+# `fleetsim`, the prefill backlog is the metric `"backlog_s"`, and a second metric goes through
+# `Autoscaler(..., also=[(metric, target, kind)])`.
 #
 # ## Exercise 3.5 — one autoscaler for both mixes
-# Write `make_autoscaler()` returning a fresh `Autoscaler` (min 1, max 8; any metric or metrics from
-# `Autoscaler.METRICS`) that meets both budgets without re-tuning: on the chat step, SLO attainment
-# **>= 0.94 within 1.3 GPU-hours**; on the chat + RAG step, attainment **>= 0.90**. Every target must come from the
-# load test, not from trial and error: for a signal the sweep measured, its per-replica value at the 1 s TTFT SLO
-# minus a margin of 20-50 % (`pick_target`); for `backlog_s`, a share (10-50 %) of the tightest TTFT SLO. Be ready to
-# say where each target comes from.
+# Write `make_autoscaler()`. It returns a new `Autoscaler` (min 1, max 8, any metric or metrics from
+# `Autoscaler.METRICS`). It must meet both budgets, with no new adjustment between the two mixes:
+#
+# - On the chat step: SLO attainment **>= 0.94 within 1.3 GPU-hours**.
+# - On the chat + RAG step: attainment **>= 0.90**.
+#
+# Every target must come from the load test, not from trial and error. For a signal that the sweep measured, use its
+# per-replica value at the 1 s TTFT SLO, minus a margin of 20-50 % (`pick_target`). For `backlog_s`, use a share
+# (10-50 %) of the tightest TTFT SLO. Be ready to say where each target comes from.
 
 # %% exercise
 def make_autoscaler():
@@ -326,17 +346,21 @@ print("✅ one configuration, two traffic mixes: scale on work (prefill seconds,
 
 # %% [markdown]
 # ## Exercise 3.6 — is scale-to-zero worth it?
-# An internal tool gets 6 bursts a day, each 20 minutes long at 1 req/s, and nothing in between. With
-# `minReplicas: 1` one L4 node — a `g2-standard-4` VM, whose price includes the GPU — is billed all day. With
-# `minReplicas: 0` (KEDA, or the HPA's `HPAScaleToZero` gate) the pod goes 5 minutes (the stabilization window) after
-# a burst, and that saves nothing while the node stays: the money is saved only once the cluster autoscaler removes
-# the empty GPU node, after 10 minutes unneeded (`--scale-down-unneeded-time`, layer 03 §7.1). So the next burst
-# waits for a new node as well as the pod: ~300 s to allocatable GPUs (layer 03's assumption) plus the 102 s above.
+# An internal tool gets 6 bursts a day. Each burst is 20 minutes long at 1 req/s, and nothing comes between the
+# bursts. With `minReplicas: 1`, you pay for one L4 node all day. This node is a `g2-standard-4` VM, and its price
+# includes the GPU. With `minReplicas: 0` (KEDA, or the `HPAScaleToZero` gate of the HPA), the pod goes 5 minutes
+# after a burst (the stabilization window). That saves nothing while the node stays.
 #
-# Write `scale_to_zero(bursts, burst_min, rps, cold_start_s, usd_per_hour, idle_min=15)` returning
-# `(usd_saved_per_day, requests_delayed_per_day, mean_added_wait_s)`. The node is billed from a burst's first
-# request until `idle_min` after the burst ends; the requests that arrive during the cold start are the delayed ones,
-# each waiting for whatever is left of the cold start when it arrives (ignore the backlog drain afterwards).
+# You save the money only when the cluster autoscaler removes the empty GPU node. It does this after 10 minutes with
+# no need for the node (`--scale-down-unneeded-time`, layer 03 §7.1). Thus the next burst waits for a new node and
+# also for the pod. That is ~300 s to allocatable GPUs (the assumption of layer 03), plus the 102 s cold start. The
+# worked example "the cold start decides the tail" calculates that 102 s.
+#
+# Write `scale_to_zero(bursts, burst_min, rps, cold_start_s, usd_per_hour, idle_min=15)`. It returns
+# `(usd_saved_per_day, requests_delayed_per_day, mean_added_wait_s)`. You pay for the node from the first request of
+# a burst until `idle_min` after the burst ends. The delayed requests are the requests that arrive during the cold
+# start. Each of them waits for the rest of the cold start at the time of its arrival. Ignore the backlog drain
+# after that.
 
 # %% exercise
 def scale_to_zero(bursts, burst_min, rps, cold_start_s, usd_per_hour, idle_min=15):
@@ -354,35 +378,39 @@ print(f"✅ saves ${usd:.2f}/day per L4 node; {delayed:,.0f} requests/day wait f
       f"start — {wait:.0f} s on average, up to {with_node.total:.0f} s, plus the backlog drain")
 
 # %% [markdown]
-# For an internal batch-ish tool that is a good trade; for a customer-facing chat it is not — keep one replica warm
-# (or use a sleep/wake mechanism that keeps the weights resident) and scale *from one*. Scaling only the pod to zero
-# while the GPU node stays saves nothing unless something else uses that GPU; a platform that bills per second and
-# owns the node pool (Cloud Run with GPUs) moves the node term off your bill but not the model load off the first
-# request.
+# For an internal tool with batch-like traffic, that is a good trade. For a chat that customers use, it is not a
+# good trade. Keep one replica warm (or use a sleep/wake mechanism that keeps the weights resident), and scale *from
+# one*. If you scale only the pod to zero and the GPU node stays, you save nothing, unless something else uses that
+# GPU. A platform that bills per second and owns the node pool (Cloud Run with GPUs) removes the node term from your
+# bill. But it does not remove the model load from the first request.
 #
 # ## In a design review
-# **Two-minute version.** "I'd scale the model servers with an HPA — via KEDA so it can go to zero where that makes
-# sense — on the work in flight: running plus waiting requests, including what the router is holding, if our traffic
-# is uniform; seconds of prefill backlog plus KV occupancy if prompt sizes vary, because a request count calibrated on
-# chat under-scales RAG. The target comes from a load test at the SLO minus a margin. Not GPU utilisation: continuous
-# batching pegs it at a fraction of capacity. Not the queue alone: it reads zero whenever we have enough capacity and
-# the fleet saws up and down. Scale-down keeps the 5-minute stabilization window; scale-up stays fast. Then I'd attack
-# the cold start term by term — node, image, weights, compilation — because on a traffic step the cold start, not
-# the signal, decides the tail."
+# **Two-minute version.** "I scale the model servers with an HPA, through KEDA, so that it can go to zero where that
+# makes sense. The HPA scales on the work in flight. If our traffic is uniform, that is running plus waiting
+# requests, and also the requests that the router holds. If prompt sizes are not uniform, that is seconds of prefill
+# backlog plus KV occupancy, because a request count calibrated on chat under-scales RAG. The target comes from a
+# load test at the SLO, minus a margin.
+#
+# "Not GPU utilisation: continuous batching puts it at its maximum at a fraction of capacity. Not the queue alone:
+# it reads zero whenever we have sufficient capacity, and the fleet goes up and down in a sawtooth. Scale-down keeps
+# the 5-minute stabilization window. Scale-up stays fast. Then I attack the cold start term by term: node, image,
+# weights, compilation. The reason is that on a traffic step, the cold start, not the signal, decides the tail."
 #
 # **Drills**
-# 1. *Why does the HPA scale a fleet to max when targeting 70 % GPU utilisation?* The engine is "busy" whenever any
-#    request is in flight, so utilisation sits near 100 % at every replica count; the ratio never drops below 1.1.
-# 2. *Our HPA on `num_requests_waiting` oscillates during peaks. Why, and the fix?* Waiting is ~0 whenever capacity
-#    suffices, so the HPA sees "no load" and scales down into the next cliff; add running requests (or KV usage) as a
-#    second metric — the HPA takes the max over metrics.
-# 3. *2 ready pods at 10 queued each (target 2) and 8 Pending: what does the HPA do?* Holds at 10:
-#    $(20 + 0 \times 8) / 10 / 2 = 1.0$ is inside the band. It would have asked for $\lceil 20 / 2 \rceil = 10$
-#    anyway — the zeros only stop a small change (at 10.5 each it still holds, where ignoring the Pending pods would
-#    say 11).
-# 4. *Our in-flight target was tuned on chat and RAG traffic doubled. What breaks?* The count underweights RAG: here
-#    SLO attainment fell from 0.94 to about 0.7. Scale on seconds of prefill backlog plus KV, or re-derive the
-#    target for every mix.
-# 5. *What does `minReplicas: 0` cost?* Every burst's first requests wait for the whole cold start — node included
-#    once the cluster autoscaler has removed the idle GPU node (~400 s here) — and it needs an Object or External
-#    metric (a pod metric cannot be read from zero pods), which is why KEDA is the usual route.
+# 1. *Why does the HPA scale a fleet to max when its target is 70 % GPU utilisation?* The engine is "busy" whenever
+#    any request is in flight. Thus utilisation stays near 100 % at every replica count, and the ratio never goes
+#    below 1.1.
+# 2. *Our HPA on `num_requests_waiting` oscillates during peaks. Why, and what is the solution?* Waiting is ~0
+#    whenever capacity is sufficient. Thus the HPA sees "no load" and scales down into the next cliff. Add running
+#    requests (or KV usage) as a second metric. The HPA takes the max over the metrics.
+# 3. *2 ready pods at 10 queued each (target 2) and 8 Pending: what does the HPA do?* It holds at 10:
+#    $(20 + 0 \times 8) / 10 / 2 = 1.0$ is inside the band. Without the zeros, it also asks for
+#    $\lceil 20 / 2 \rceil = 10$. The zeros only stop a small change. At 10.5 each, it still holds, but a
+#    calculation that ignores the Pending pods gives 11.
+# 4. *We adjusted our in-flight target on chat, and then the RAG traffic doubled. What breaks?* The count gives too
+#    small a weight to RAG. Here, SLO attainment decreased from 0.94 to about 0.7. Scale on seconds of prefill backlog
+#    plus KV, or calculate the target again for every mix.
+# 5. *What does `minReplicas: 0` cost?* The first requests of every burst wait for the full cold start. After
+#    the cluster autoscaler removes the idle GPU node, the cold start also includes a new node. Then the full cold
+#    start is ~400 s here.
+#    `minReplicas: 0` also needs an Object or External metric, because zero pods give no pod metric. This is why KEDA is the usual route.

@@ -1,51 +1,60 @@
 # %% [markdown]
 # # 13 · Code review exercises — read, spot, rank, fix
 #
-# A code review hands you 30–60 lines and asks three things: *what is wrong*, *how bad is each
-# thing*, and *what is the optimal solution*. Fluent reviewers do not hunt for bugs at random: they run the same
-# passes every time and narrate as they go. This notebook makes you practise that on the two systems a platform
-# engineer actually ships — a tool-calling agent loop and a retrieval pipeline — and then drills six patterns reviewers
-# keep reusing.
+# A code review gives you 30–60 lines and asks three things: *what is incorrect*, *how bad is each
+# thing*, and *what is the optimal solution*. Experienced reviewers do not look for bugs at random. They do the same
+# passes each time, and they say aloud what they do as they go. This notebook lets you practise this on two systems.
+# A platform engineer actually puts these two systems into production: a tool-calling agent loop and a retrieval
+# pipeline. Then the notebook gives you drills on six patterns that reviewers use again and again.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [vector databases primer](../../../retrieval-rag/vector-databases-primer.md) §12 (the retrieval pipeline end to
-# end). It pulls together Notebooks 01, 04, 10 and 11 in the form a code review uses: someone else's code.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [vector databases primer](../../../retrieval-rag/vector-databases-primer.md) §12 (the retrieval pipeline from end
+# to end). This notebook puts together Notebooks 01, 04, 10 and 11 in the form that a code review uses: the code of another person.
 #
 # In this notebook you will:
-# 1. run a six-pass review protocol on a buggy agent loop and a buggy retriever, writing the review *before* touching the code;
-# 2. fix both until a test suite that encodes every bug passes — idempotency keys, bounded concurrency, timeouts, ACL-aware caching;
-# 3. rehearse six short "spot the bug" drills and a four-minute narration you can deliver in a code review.
+# 1. Use a six-pass review protocol on an agent loop with bugs and on a retriever with bugs. Write the review *before* you touch the code.
+# 2. Repair both until a test suite that encodes every bug passes. The bugs are about idempotency keys, bounded concurrency, timeouts and ACL-aware caching.
+# 3. Practise six short "spot the bug" drills and a four-minute spoken review that you can give in a code review.
 #
 # ## The six-pass protocol
 #
-# Read the code once for **intent** and say it back in one sentence ("an async agent loop: model → tools → model,
-# retried by the handler"). Then make six deliberate passes. Each has one question and a handful of triggers:
+# Read the code one time for **intent**. Say the intent back in one sentence ("an async agent loop: model → tools → model,
+# retried by the handler"). Then do six careful passes. Each pass has one question and a few triggers:
 #
 # | Pass | Question | Triggers to look for |
 # |---|---|---|
-# | 1 · Intent | What is this supposed to do, and for whom? | names, docstrings, who calls it, what it returns |
-# | 2 · Correctness | Does it do that on the happy path *and* the sad path? | mutable defaults, sort direction, `None` returns, swallowed exceptions, off-by-one |
-# | 3 · Robustness | What happens when a dependency is slow, down, or lying? | no timeouts, unbounded loops, retries that repeat side effects, partial failures |
-# | 4 · Security | Who can make this do something it should not? | string-built SQL / URLs / shell, missing authorisation on data paths, PII or secrets in logs, untrusted text treated as instructions |
-# | 5 · Performance | Where are the wall-clock and the money going? | sequential I/O, blocking calls inside `async`, N+1 queries, per-item model calls, caches that never hit |
-# | 6 · Maintainability & operability | Could someone else run and change this at 3 a.m.? | globals and hidden state, unstructured errors, no metrics, magic numbers |
+# | 1 · Intent | What must this code do, and for whom? | names, docstrings, who calls it, what it returns |
+# | 2 · Correctness | Does it do that on the path with no failure *and* on the path with a failure? | mutable defaults, sort direction, `None` returns, exceptions that the code hides, off-by-one |
+# | 3 · Robustness | What occurs when a dependency is slow, is down, or gives false data? | no timeouts, unbounded loops, retries that repeat side effects, partial failures |
+# | 4 · Security | Who can make this code do something that it must not do? | SQL, URLs or shell commands built from strings, no authorisation on data paths, PII or secrets in logs, untrusted text used as instructions |
+# | 5 · Performance | Where do the wall-clock time and the money go? | sequential I/O, calls that block the thread inside `async`, N+1 queries, one model call for each item, caches that never hit |
+# | 6 · Maintainability and operability | Can another person operate and change this code at 3 a.m.? | globals and hidden state, unstructured errors, no metrics, magic numbers |
 #
-# Narrate the pass you are in ("moving to security — the first thing I look for is anything that builds a query
-# from model output"). A good reviewer judges the *process* as much as the list.
+# Say aloud which pass you are in ("moving to security — the first thing I look for is anything that builds a query
+# from model output"). A good reviewer looks at the *process* as much as at the list.
 #
 # ## Rank by severity before you speak
 #
-# Order findings by blast radius: **money** (double charges, runaway spend) → **data leakage** (cross-user, PII in
-# logs, injection) → **availability** (hangs, unbounded loops, a blocked event loop) → **everything else**
-# (edge-case correctness, structure, style). Lead with the worst one. A review that opens with "this variable name is
+# Put the findings in the order of their blast radius:
+#
+# 1. **money** (double charges, spend with no limit),
+# 2. **data leakage** (cross-user leakage, PII in logs, injection),
+# 3. **availability** (hangs, unbounded loops, a blocked event loop),
+# 4. **everything else** (correctness in edge cases, structure, style).
+#
+# Start with the worst finding. A review that starts with "this variable name is
 # unclear" and ends with "also, refunds can be applied twice" loses the audience.
 #
 # ## "What is the optimal solution?"
 #
-# Answer in three moves: the **current cost** ("three sequential 200 ms calls = 600 ms; one model call per document
-# = k calls"), the **lower bound** the contract allows ("the slowest single call = 200 ms; one batched call"), and
-# **the change that reaches it** (`gather` under a semaphore; `score_batch`). If the lower bound needs a different
-# contract — an idempotency key, a batch endpoint, an ACL filter inside the index — say so: that is the design half
-# of the answer, and it is where senior candidates separate from the rest.
+# Give the answer in three steps:
+#
+# 1. the **current cost** ("three sequential 200 ms calls = 600 ms; one model call per document
+#    = k calls"),
+# 2. the **lower bound** that the contract permits ("the slowest single call = 200 ms; one batched call"),
+# 3. **the change that reaches it** (`gather` under a semaphore, `score_batch`).
+#
+# If the lower bound needs a different contract (an idempotency key, a batch endpoint, an ACL filter inside the index),
+# say so. That is the design half of the answer. It is also the part where senior candidates are different from the rest.
 
 # %%
 import asyncio
@@ -66,16 +75,16 @@ from typing import Any
 # > customers, search orders and issue refunds. Take a few minutes, tell me what you see — worst first — and then
 # > tell me what you would change and why."*
 #
-# Run the fakes first. They stand in for `requests`, the database, the payments gateway and the model, and they are
-# instrumented so the checks can *prove* each bug instead of arguing about it:
+# Run the fakes first. They replace `requests`, the database, the payments gateway and the model. They also have
+# instrumentation, so that the checks can *prove* each bug and do not argue about it:
 #
-# * `FakeRequests.get` **blocks the thread** for 0.2 s, exactly like `requests`; `FakeAsyncHTTP.get` awaits instead.
-# * `FakeDB.execute` records every query and refuses a `WHERE` predicate that was string-interpolated.
-# * `FakePayments.refund` applies the refund and *then* times out on the first call for an order — the real-world
-#   shape that makes naive retries double-charge. With an idempotency key it replays the stored outcome.
-# * `FakeModel` is a scripted function-calling model: `script[i]` is its reply once $i$ tool results have arrived since
-#   the last user message, so it behaves deterministically however the runtime drives it. `fail_on_calls` injects 503s.
-# * `Heartbeat` ticks every 10 ms on the event loop and remembers the longest gap — a blocked loop shows up as a stall.
+# * `FakeRequests.get` **blocks the thread** for 0.2 s, exactly like `requests`. `FakeAsyncHTTP.get` awaits instead.
+# * `FakeDB.execute` records every query. It refuses a `WHERE` predicate that the code made with string interpolation.
+# * `FakePayments.refund` applies the refund and *then* times out on the first call for an order. This is the shape
+#   of the failure in production, and with simple retries it causes a double charge. With an idempotency key, it replays the stored outcome.
+# * `FakeModel` is a scripted function-calling model. `script[i]` is its reply when $i$ tool results have arrived since
+#   the last user message. Thus its behaviour is deterministic for each way that the runtime drives it. `fail_on_calls` injects 503s.
+# * `Heartbeat` ticks every 10 ms on the event loop and records the longest gap. A blocked loop shows as a stall.
 
 # %%
 log = logging.getLogger("agent")
@@ -288,8 +297,13 @@ print("fakes ready")
 # %% [markdown]
 # ### The code under review
 #
-# Adapted to the fakes (`requests` → `http`, the payments client → `payments`, the model is passed in instead of
-# read from a global so a demo can inject it). **Every bug of the original is preserved.** Read it with the six
+# This version of the code uses the fakes:
+#
+# * `http` replaces `requests`.
+# * `payments` replaces the payments client.
+# * The code receives the model as an argument and does not read it from a global. Thus a demo can inject it.
+#
+# **This version keeps every bug of the original.** Read it with the six
 # passes before you run the next cell.
 
 # %%
@@ -350,7 +364,7 @@ async def handle(request, model):
             time.sleep(0.15 * 2 ** attempt)         # the original slept 2 ** attempt; scaled so the demo stays fast
 
 # %% [markdown]
-# Watch it fail. One refund turn; the model's second call gets a 503, which the handler "handles":
+# Watch it fail. This is one refund turn. The second call to the model gets a 503, and the handler "handles" it:
 
 # %%
 payments.reset()
@@ -372,12 +386,13 @@ print("customer email in the logs:  ", any("jane.doe@example.com" in line for li
 # %% [markdown]
 # ### Your turn
 #
-# 1. **Write the review first.** Put one finding per string in `review_a`, worst first, each naming the bug *and*
-#    its consequence. The check looks for at least **six distinct categories** by keyword: idempotency / double
-#    refund, SQL injection, blocking the event loop, shared mutable default, unbounded loop, swallowed errors,
-#    PII in logs, missing timeouts, sequential tools, `None` return, retry re-running tools, URL validation.
-# 2. **Then fix the code** by redefining the tools, `Agent` and `handle`. Keep this contract so the checks can drive
-#    your implementation:
+# 1. **Write the review first.** Put one finding in each string in `review_a`, with the worst first.
+#    Each finding must name the bug *and* its consequence. The check looks for at least **six distinct categories**
+#    by keyword. The categories are idempotency / double refund, SQL injection, blocking the event loop and shared
+#    mutable default. The list continues with unbounded loop, swallowed errors, PII in logs and missing timeouts. It
+#    ends with sequential tools, `None` return, retry re-running tools and URL validation.
+# 2. **Then fix the code**: define the tools, `Agent` and `handle` again. Keep this contract, so that the checks can
+#    drive your implementation:
 #
 # ```
 # Agent(model, system_prompt, tools=None, history=None, *, max_steps=8, tool_timeout_s=0.25, max_concurrency=4, ...)
@@ -394,10 +409,14 @@ print("customer email in the logs:  ", any("jane.doe@example.com" in line for li
 # logging: one INFO line per completed turn with step count, tool names and latency — never message content
 # ```
 #
-# Production shape to aim for: sync tools run in the default executor, async tools are awaited; every tool call is
-# wrapped in `asyncio.wait_for`; calls in one model turn run with `gather` under a semaphore; transient failures
-# (`TransientModelError`, `TimeoutError` raised *by* a tool) are retried with `await asyncio.sleep` backoff and the
-# same idempotency key; everything else is a structured, non-retryable error the model can reason about.
+# The production shape to aim for:
+#
+# * Sync tools run in the default executor, and the code awaits async tools.
+# * Every tool call runs inside `asyncio.wait_for`.
+# * The calls in one model turn run with `gather` under a semaphore.
+# * The code retries transient failures (`TransientModelError`, and a `TimeoutError` that the *tool* raises) with an
+#   `await asyncio.sleep` backoff and the same idempotency key.
+# * Every other failure is a structured error that is not retryable and that the model can think about.
 
 # %% exercise
 # Redefine the fixed versions here: review_a, then the tools, Agent and handle (contract above).
@@ -773,48 +792,53 @@ print("✅ Exercise A: every bug the tests encode is fixed")
 
 # %% [markdown]
 # <details>
-# <summary><b>Answer key — open after you have written your review</b></summary>
+# <summary><b>Answer key: open it after you write your review</b></summary>
 #
-# Ranked by blast radius. Line references are to the code-under-review cell.
+# The findings are in the order of their blast radius. The line references are to the cell with the code under review.
 #
-# 1. **Money — double refund.** `issue_refund` (l. 21–22) sends no idempotency key, and `handle` (l. 48–55) retries
-#    `agent.run` — the *whole turn* — on any exception. A gateway that applies the refund and then times out (the
-#    normal failure mode of a payments API) gets the same refund again on the next attempt. Fix: the runtime derives a
-#    key per (session, step, call signature) and passes it on every retry; retry only the model call, never a completed
-#    tool call.
-# 2. **Data leakage — shared mutable default.** `history=[]` (l. 26) is created once at definition time; every
-#    `Agent(model, prompt)` appends to the same list, so user B's context contains user A's conversation. Also
-#    unbounded growth. Fix: `history=None` → `list(history or [])`.
-# 3. **Security — SQL injection.** `search_orders(where)` (l. 16–17) executes a model-composed predicate. The model is
-#    an untrusted author (prompt injection reaches it through tool results and documents). Fix: a narrow, typed tool
-#    (`customer_id`, `status`) and parameterised queries.
+# 1. **Money — double refund.** `issue_refund` (l. 21–22) sends no idempotency key. `handle` (l. 48–55) retries
+#    `agent.run`, that is the *whole turn*, on any exception. Take a gateway that applies the refund and then times
+#    out (the normal failure mode of a payments API). It gets the same refund again on the next attempt. Solution: the runtime
+#    calculates a key for each (session, step, call signature) and sends it on every retry. Retry only the model call.
+#    Never retry a completed tool call.
+# 2. **Data leakage — shared mutable default.** Python creates `history=[]` (l. 26) one time, when it runs the
+#    definition. Every `Agent(model, prompt)` appends to the same list. Thus the context of user B contains the
+#    conversation of user A. The list also grows with no limit. Solution: the default `history=None`, and
+#    `list(history or [])` in the body.
+# 3. **Security — SQL injection.** `search_orders(where)` (l. 16–17) runs a predicate that the model writes. The model
+#    is an untrusted author (prompt injection gets to it through tool results and documents). Solution: a narrow, typed
+#    tool (`customer_id`, `status`) and parameterised queries.
 # 4. **Security — PII in logs.** `log.info("turn complete: %s", self.history)` (l. 44) writes messages and CRM records
-#    to whatever log sink you have. Fix: log metadata (steps, tool names, latency, token counts) and redact content.
-# 5. **Security — unvalidated URL segment.** `customer_id` (l. 11) is interpolated into an internal URL: `../admin`
-#    style traversal or SSRF-shaped requests. Fix: validate the id format before it touches the URL.
-# 6. **Availability — unbounded loop.** `while True` (l. 33) with no step, token or time budget. Fix: `for step in
-#    range(max_steps)` and raise `StepBudgetExceeded`.
-# 7. **Availability — blocking calls in a coroutine.** `http.get` (l. 11) and `time.sleep` (l. 55) freeze the
-#    event loop for every request in the process; the heartbeat measured it. Fix: an async client (or
+#    to the log sink that you have, whatever it is. Solution: log the metadata (steps, tool names, latency, token
+#    counts) and redact the content.
+# 5. **Security — unvalidated URL segment.** The code interpolates `customer_id` (l. 11) into an internal URL. This
+#    permits `../admin` style traversal or requests with the shape of SSRF. Solution: validate the format of the id
+#    before it touches the URL.
+# 6. **Availability — unbounded loop.** `while True` (l. 33) has no step budget, no token budget and no time budget.
+#    Solution: `for step in range(max_steps)`, and raise `StepBudgetExceeded`.
+# 7. **Availability — blocking calls in a coroutine.** `http.get` (l. 11) and `time.sleep` (l. 55) stop the
+#    event loop for every request in the process. The heartbeat measured it. Solution: an async client (or
 #    `run_in_executor` for sync SDKs) and `await asyncio.sleep`.
-# 8. **Availability — no timeouts.** Neither the model call nor tool calls have a deadline; one hanging dependency
-#    pins the turn. Fix: `asyncio.wait_for` around both, with a structured `timeout` result.
-# 9. **Performance — sequential tool calls.** The `for call in resp.tool_calls` loop (l. 36) serialises independent
-#    calls: three 200 ms lookups cost 600 ms; the lower bound is 200 ms. Fix: `gather` under a semaphore.
-# 10. **Correctness — swallowed errors.** `except Exception: result = "error"` (l. 39–40) makes `KeyError` (unknown
-#     tool), `TypeError` (bad args), timeouts and real failures indistinguishable, so the model cannot recover. Fix:
-#     structured `{"ok": false, "error": type, "retryable": bool, "message": ...}`.
-# 11. **Correctness — `handle` returns `None`.** After five failures the `for attempt` loop (l. 50) falls off the end. It also
-#     retries permanent errors and uses no jitter. Fix: classify, retry only transient failures, return a structured
-#     failure or raise.
-# 12. **Maintainability — malformed transcript and hidden state.** The assistant's tool-call turn is never appended
-#     and tool messages carry no `tool_call_id`; a real function-calling API rejects that. Global `TOOLS`/`model`
-#     make the class impossible to test in isolation.
+# 8. **Availability — no timeouts.** The model call has no deadline, and the tool calls have no deadline. One
+#    dependency that hangs blocks the turn. Solution: `asyncio.wait_for` around both, with a structured `timeout` result.
+# 9. **Performance — sequential tool calls.** The `for call in resp.tool_calls` loop (l. 36) runs independent calls
+#    one after the other. Three 200 ms lookups cost 600 ms. The lower bound is 200 ms. Solution: `gather` under a
+#    semaphore.
+# 10. **Correctness — swallowed errors.** `except Exception: result = "error"` (l. 39–40) gives the same result for
+#     `KeyError` (unknown tool), `TypeError` (incorrect arguments), timeouts and real failures. Thus the model cannot
+#     tell them apart, and it cannot recover. Solution: a structured
+#     `{"ok": false, "error": type, "retryable": bool, "message": ...}`.
+# 11. **Correctness — `handle` returns `None`.** After five failures, the `for attempt` loop (l. 50) gets to its end
+#     with no `return`. It also retries permanent errors, and it uses no jitter. Solution: classify the errors, retry
+#     only transient failures, and return a structured failure or raise an exception.
+# 12. **Maintainability — malformed transcript and hidden state.** The code never appends the tool-call turn of the
+#     assistant, and the tool messages have no `tool_call_id`. A real function-calling API rejects that. The globals
+#     `TOOLS` and `model` make it impossible to test the class in isolation.
 #
-# **Optimal-solution framing.** *Current cost:* a turn with three lookups blocks the process for 600 ms and a retry
-# storm can apply five refunds. *Lower bound:* 200 ms (the slowest single call) and exactly one applied refund.
-# *The change:* concurrent, time-boxed tool execution under a semaphore; an idempotency key derived from the call;
-# retries scoped to the model call with async backoff.
+# **Optimal-solution framing.** *Current cost:* a turn with three lookups blocks the process for 600 ms, and a
+# storm of retries can apply five refunds. *Lower bound:* 200 ms (the slowest single call) and exactly one applied
+# refund. *The change:* run the tools concurrently under a semaphore, each with a time limit. Calculate the
+# idempotency key from the call. Put the retries around the model call only, and use async backoff.
 #
 # </details>
 
@@ -825,11 +849,16 @@ print("✅ Exercise A: every bug the tests encode is fixed")
 # > search the index, rerank with a small model, build the prompt. It has been in production for a month and
 # > support engineers keep saying answers are 'a bit random'. Review it, worst first."*
 #
-# The fakes: a deterministic **embedder** (hashed character trigrams), a **chunk-level index** with per-chunk ACL
-# metadata and an optional server-side `filter={"acl_any": [...]}`, a **document store** that counts `fetch` and
-# `fetch_many` calls and returns a *fresh row object* per fetch (like an ORM), and an LLM **reranker** that counts
-# `score` and `score_batch` calls. Two documents carry identical text under different ids (a legacy copy of the FAQ),
-# one document is finance-only, one is staff-only, and one public "community post" contains an injection attempt.
+# The fakes:
+#
+# * a deterministic **embedder** (hashed character trigrams),
+# * a **chunk-level index** with ACL metadata for each chunk and an optional server-side `filter={"acl_any": [...]}`,
+# * a **document store** that counts the `fetch` and `fetch_many` calls and returns a *new row object* for each fetch
+#   (like an ORM),
+# * an LLM **reranker** that counts the `score` and `score_batch` calls.
+#
+# Two documents have identical text under different ids (an old copy of the FAQ). One document is for finance only,
+# and one is for staff only. One public "community post" contains an injection attempt.
 
 # %%
 import math
@@ -1005,7 +1034,8 @@ print("fakes ready:", len(CORPUS), "docs,", len(CHUNKS), "chunks")
 # %% [markdown]
 # ### The code under review
 #
-# Adapted to the fakes: `db` → `db_docs`, `index`, `embedder`, `llm` as defined above. Every bug is preserved.
+# This version uses the fakes: `db_docs` replaces `db`, and `index`, `embedder` and `llm` are the fakes from the
+# cells before this one. This version keeps every bug.
 
 # %%
 CACHE: dict[str, list] = {}
@@ -1044,7 +1074,7 @@ def build_prompt(query, docs):
     return f"You are a support assistant. Answer using the context.\nContext:\n{context}\nQuestion: {query}"
 
 # %% [markdown]
-# Watch it fail — three symptoms in four lines:
+# Watch it fail. Four lines show three symptoms:
 
 # %%
 CACHE.clear()
@@ -1067,11 +1097,12 @@ print("prompt tail     :", repr(build_prompt("q", [CORPUS[7]])[-110:]))
 # %% [markdown]
 # ### Your turn
 #
-# 1. **Write the review first** in `review_b` — one finding per string, worst first. The check looks for at least
-#    **six distinct categories**: cache-key collision, cross-user leakage / ACL, sort direction and ties, candidate
-#    pool before reranking, N+1 fetches, per-document rerank calls, dedupe by id, prompt injection through context,
-#    missing token budget, cache without TTL or bound, no sources / citations.
-# 2. **Then fix it** as a class, with every dependency injected so it can be tested — keep this contract:
+# 1. **Write the review first** in `review_b`. Put one finding in each string, with the worst first. The check looks
+#    for at least **six distinct categories**. The categories are cache-key collision, cross-user leakage / ACL, sort
+#    direction and ties, and candidate pool before reranking. The list continues with N+1 fetches, per-document rerank
+#    calls, dedupe by id and prompt injection through context. It ends with missing token budget, cache without TTL or
+#    bound, and no sources / citations.
+# 2. **Then fix it** as a class. Inject every dependency, so that you can test the class. Keep this contract:
 #
 # ```
 # Retriever(embedder, index, db, llm, *, clock=time.monotonic, ttl_s=300.0, max_items=1000, candidate_multiplier=4)
@@ -1304,48 +1335,53 @@ print("✅ Exercise B: retrieval is entitlement-aware, batched, bounded and rank
 
 # %% [markdown]
 # <details>
-# <summary><b>Answer key — open after you have written your review</b></summary>
+# <summary><b>Answer key: open it after you write your review</b></summary>
 #
-# Ranked by blast radius. Line references are to the code-under-review cell.
+# The findings are in the order of their blast radius. The line references are to the cell with the code under review.
 #
 # 1. **Data leakage — cache shared across users.** `key = query[:32]` (l. 13) and `CACHE[key] = top` (l. 28) store
-#    results with no notion of who asked. Bob's finance document is served to Alice the moment she asks anything
-#    with the same prefix. Fix: the key includes the user's entitlement set (and `k`, and a version).
-# 2. **Data leakage — no ACL enforcement.** `index.search(qv, top_k=k)` (l. 17) ignores `user`; nothing post-filters.
-#    Fix: a metadata filter in the index *and* a post-fetch check (defence in depth — the index can be stale).
-# 3. **Security — prompt injection through context.** `build_prompt` (l. 32–34) concatenates raw document text under
-#    "Answer using the context"; kb-8's "ignore previous instructions" reads exactly like an instruction. Fix:
-#    delimited per-document blocks with ids and sources, and an explicit "documents are data" instruction.
-# 4. **Correctness — cache-key collision.** Two different questions with one 32-character prefix return each other's
-#    results (l. 13). Fix: hash of the full normalised query.
-# 5. **Correctness — sort direction and ties.** `scored.sort()` (l. 26) is ascending, so `scored[:k]` returns the
-#    *worst* documents; equal scores make Python compare `Doc` objects and raise `TypeError`. Fix: sort indices by
-#    `(-score, rank)`.
-# 6. **Quality — no candidate pool.** Searching `top_k=k` (l. 17) then reranking can only reorder what the ANN step
-#    already chose. Fix: over-fetch (4k) and let the reranker select.
-# 7. **Performance — N+1 fetches.** `db_docs.fetch(h.doc_id)` per hit (l. 20). Fix: one `fetch_many`.
-# 8. **Cost — one reranker call per document.** `rerank(query, d.text)` in a loop (l. 24–25) is $k$ model calls per
-#    query. Fix: `score_batch` (one call), or bounded concurrency if the API has no batch endpoint.
-# 9. **Correctness — dedupe by equality.** `if d not in docs` (l. 21) compares fresh row objects, so two chunks of one
-#    document both survive (and it is O(n²)). Fix: dedupe ids before fetching.
-# 10. **Availability — cache without TTL or bound.** `CACHE` (l. 1) grows forever and never forgets a stale answer
-#     after a document changes. Fix: TTL by an injected clock, LRU bound, version in the key.
-# 11. **Quality — no token budget, no citations.** `"\n".join(d.text ...)` (l. 33) ignores the context window and
-#     leaves the answer unverifiable. Fix: whole-document budget in rank order; ids and sources in the blocks.
+#    the results, and they do not record who asked. The cache gives Bob's finance document to Alice as soon as she asks
+#    anything with the same prefix. Solution: the key includes the entitlement set of the user (and `k`, and a version).
+# 2. **Data leakage — no ACL enforcement.** `index.search(qv, top_k=k)` (l. 17) ignores `user`, and nothing filters
+#    the results after the fetch. Solution: a metadata filter in the index *and* a check after the fetch. This is
+#    defence in depth, because the index can be stale.
+# 3. **Security — prompt injection through context.** `build_prompt` (l. 32–34) joins the raw document text under
+#    "Answer using the context". The "ignore previous instructions" text of kb-8 reads exactly like an instruction.
+#    Solution: a delimited block for each document, with ids and sources, and an explicit "documents are data"
+#    instruction.
+# 4. **Correctness — cache-key collision.** Two different questions with the same 32-character prefix get the
+#    results of the other question (l. 13). Solution: a hash of the full normalised query.
+# 5. **Correctness — sort direction and ties.** `scored.sort()` (l. 26) sorts in ascending order, so `scored[:k]`
+#    returns the *worst* documents. When two scores are equal, Python compares the `Doc` objects and raises
+#    `TypeError`. Solution: sort the indices by `(-score, rank)`.
+# 6. **Quality — no candidate pool.** The code searches with `top_k=k` (l. 17) and then reranks. Thus the reranker
+#    can only change the order of what the ANN step already selected. Solution: over-fetch (4k), and let the reranker
+#    select.
+# 7. **Performance — N+1 fetches.** `db_docs.fetch(h.doc_id)` runs for each hit (l. 20). Solution: one `fetch_many`.
+# 8. **Cost — one reranker call per document.** `rerank(query, d.text)` in a loop (l. 24–25) is $k$ model calls for
+#    each query. Solution: `score_batch` (one call), or bounded concurrency if the API has no batch endpoint.
+# 9. **Correctness — dedupe by equality.** `if d not in docs` (l. 21) compares new row objects. Thus two chunks of one
+#    document both stay in the list (and the operation is O(n²)). Solution: remove the duplicate ids before the fetch.
+# 10. **Availability — cache without TTL or bound.** `CACHE` (l. 1) grows forever. It never removes a stale answer
+#     after a document changes. Solution: a TTL from an injected clock, an LRU bound, and a version in the key.
+# 11. **Quality — no token budget, no citations.** `"\n".join(d.text ...)` (l. 33) ignores the context window. Also,
+#     nobody can examine the sources of the answer. Solution: a budget of whole documents in rank order, and ids and
+#     sources in the blocks.
 #
-# **Optimal-solution framing.** *Current cost per uncached query:* 1 embed + 1 search + k fetches + k reranker calls,
-# and the cache hit rate is inflated by collisions that serve wrong answers. *Lower bound:* 1 embed + 1 filtered
-# search + 1 batched fetch + 1 batched rerank. *The change:* over-fetch → dedupe ids → `fetch_many` → `score_batch`
-# → sort descending → cache under `(version, k, entitlements, normalised query)` with TTL and bound.
+# **Optimal-solution framing.** *Current cost per uncached query:* 1 embed + 1 search + k fetches + k reranker calls.
+# Also, the cache hit rate looks higher than it is, because collisions serve incorrect answers. *Lower bound:* 1
+# embed + 1 filtered search + 1 batched fetch + 1 batched rerank. *The change:* do these steps in sequence:
+# over-fetch, remove the duplicate ids, `fetch_many`, `score_batch`, sort in descending order. Then cache the result
+# under `(version, k, entitlements, normalised query)` with a TTL and a bound.
 #
 # </details>
 
 # %% [markdown]
 # ## Six "spot the bug" drills
 #
-# Each drill is a snippet someone might paste with *"anything wrong here?"*. Name the bug out loud in one
-# sentence, name its consequence, then redefine the fixed version in the exercise cell. Thirty seconds of reading
-# each — these are the reflexes the long exercises are built from.
+# Each drill is a snippet that someone can paste with *"anything wrong here?"*. Say the bug aloud in one
+# sentence, and say its consequence. Then define the corrected version again in the exercise cell. Read each drill for
+# thirty seconds. The long exercises use these reflexes.
 #
 # ### Drill 1 — the mutable default
 
@@ -1364,9 +1400,9 @@ c1.add("user", "hello from tenant A")
 print("tenant B's conversation already contains:", c2.messages)
 
 # %% [markdown]
-# **Fix it:** the default list is created once, at `def` time, and shared by every instance built without an
-# explicit `messages`. Redefine `Conversation` so instances never share state — and so a caller's list is not
-# silently aliased either.
+# **Fix it:** Python creates the default list one time, at `def` time. Every instance that you make without an
+# explicit `messages` shares that list. Define `Conversation` again, so that instances never share state. Also make
+# sure that an instance does not silently alias the list of a caller.
 
 # %% exercise
 # Redefine Conversation here.
@@ -1394,7 +1430,8 @@ print("✅ drill 1")
 # %% [markdown]
 # ### Drill 2 — read-modify-write across an `await`
 #
-# A per-user request counter on a remote store. Ten concurrent requests, ten increments… or so the author thought.
+# This is a counter of requests for each user, on a remote store. The author expected ten increments from ten
+# concurrent requests.
 
 # %%
 class FakeStore:
@@ -1429,9 +1466,10 @@ await asyncio.gather(*(increment(store, "requests:u-1") for _ in range(10)))
 print("after 10 concurrent increments:", store.data)
 
 # %% [markdown]
-# **Fix it:** the read and the write are separated by an `await`, so ten coroutines interleave and nine updates are
-# lost. Two production-shaped fixes — pick one: a **per-key `asyncio.Lock`** (serialise updates to *one* key, not to
-# the whole store) or **compare-and-set** with a retry loop. Redefine `increment`.
+# **Fix it:** an `await` separates the read and the write. Thus ten coroutines interleave, and the store loses nine
+# updates. Select one of two production-shaped solutions. The first is a **per-key `asyncio.Lock`**: it puts the
+# updates to *one* key in sequence, not the updates to the whole store. The second is **compare-and-set** with a
+# retry loop. Define `increment` again.
 
 # %% exercise
 # Redefine increment here (per-key lock or compare-and-set).
@@ -1473,7 +1511,7 @@ print(f"✅ drill 2 (20 keys in {dt * 1000:.0f} ms)")
 # %% [markdown]
 # ### Drill 3 — `except Exception: pass`
 #
-# A retry helper around a tool call.
+# This is a retry helper around a tool call.
 
 # %%
 class TransientError(Exception):
@@ -1505,9 +1543,9 @@ forbidden = Flaky([PermissionError("scope cards:write missing")] * 5)
 print("permanent error →", await call_with_retry(forbidden), "after", forbidden.calls, "calls (and nobody was told why)")
 
 # %% [markdown]
-# **Fix it:** a permission error will not heal on the third try, and `None` tells the caller nothing. Classify:
-# retry **only** `TransientError` with exponential backoff, surface everything else immediately, and when retries
-# are exhausted raise a typed error chained to the last cause. Redefine `call_with_retry`.
+# **Fix it:** a permission error will not go away on the third try, and `None` tells the caller nothing. Classify
+# the errors. Retry **only** `TransientError`, with exponential backoff. Raise every other error immediately. After
+# the last retry fails, raise a typed error, chained to the last cause. Define `call_with_retry` again.
 
 # %% exercise
 # Redefine call_with_retry here (a typed RetryExhausted error is a good addition).
@@ -1556,7 +1594,7 @@ print("✅ drill 3")
 # %% [markdown]
 # ### Drill 4 — a cache keyed on part of the input, with no version
 #
-# A summary cache in front of a model call.
+# This is a summary cache in front of a model call.
 
 # %%
 SUMMARY_CALLS = 0
@@ -1585,9 +1623,9 @@ print(cached_summary(ticket_a))
 print(cached_summary(ticket_b), "← same first 64 characters, so ticket B gets ticket A's summary")
 
 # %% [markdown]
-# **Fix it:** the key must identify the *whole* input and everything that changes the output. Redefine
-# `cached_summary` (keep `CACHE_S` as the store) so the key is a hash of the normalised full text, the model **and**
-# `PROMPT_VERSION` — and so that whitespace-only differences still hit.
+# **Fix it:** the key must identify the *whole* input and everything that changes the output. Define
+# `cached_summary` again (keep `CACHE_S` as the store). The key must be a hash of the normalised full text, the model
+# **and** `PROMPT_VERSION`. Two texts that are different only in whitespace must still hit.
 
 # %% exercise
 # Redefine cached_summary here (keep CACHE_S as the store).
@@ -1628,7 +1666,7 @@ print("✅ drill 4")
 # %% [markdown]
 # ### Drill 5 — O(n²) dedupe
 #
-# Rows coming back from several shards, deduplicated by "is it already in the list?".
+# Rows come back from several shards. The code removes the duplicates with the question "is it already in the list?".
 
 # %%
 EQ_CALLS = 0
@@ -1659,8 +1697,8 @@ dedupe(sample)
 print(f"600 rows → {EQ_CALLS:,} comparisons in {(time.perf_counter() - t0) * 1000:.0f} ms; 60,000 rows would take ~10,000× longer")
 
 # %% [markdown]
-# **Fix it:** `r not in out` is a linear scan, so the loop is quadratic. Redefine `dedupe` to run in O(n) with a
-# dict keyed by `id`, keeping the **first** occurrence and the original order.
+# **Fix it:** `r not in out` is a linear scan, so the loop is quadratic. Define `dedupe` again, so that it runs in
+# O(n) with a dict keyed by `id`. Keep the **first** occurrence and the original order.
 
 # %% exercise
 # Redefine dedupe here.
@@ -1688,7 +1726,8 @@ print(f"✅ drill 5 ({EQ_CALLS} comparisons, {dt * 1000:.0f} ms)")
 # %% [markdown]
 # ### Drill 6 — parsing a stream chunk by chunk
 #
-# Newline-delimited JSON events from a streaming endpoint; the network hands you bytes in arbitrary pieces.
+# Newline-delimited JSON events come from a streaming endpoint. The network gives you bytes in pieces of
+# arbitrary size.
 
 # %%
 EVENTS = [
@@ -1723,9 +1762,11 @@ except Exception as e:
     print(type(e).__name__ + ":", str(e)[:80], "← the first chunk is 7 bytes of a JSON object")
 
 # %% [markdown]
-# **Fix it:** chunks are not messages. Accumulate bytes, split on the delimiter, parse only complete lines, decode
-# each line as UTF-8 *after* splitting (a multi-byte character can straddle two chunks), and flush what is left when
-# the stream ends. Redefine `read_events`.
+# **Fix it:** chunks are not messages. Collect the bytes in a buffer. Split them on the delimiter. Parse only
+# complete lines.
+#
+# Decode each line as UTF-8 *after* the split, because a multi-byte character can start in one chunk
+# and end in the next. When the stream ends, flush the bytes that stay in the buffer. Define `read_events` again.
 
 # %% exercise
 # Redefine read_events here.
@@ -1757,27 +1798,30 @@ print("✅ drill 6")
 #
 # **Four minutes, four beats.**
 #
-# 1. *Intent (30 s).* Say what the code is for and who calls it: "an async support agent; the handler retries whole
-#    turns; tools are plain functions in a global registry." If you misread the intent, everything after is wasted, so
-#    check it: "Am I right that `handle` is per request?"
-# 2. *Findings, worst first (90 s).* Announce the ranking rule — **money, data leakage, availability, then the rest** —
-#    and walk down it. One sentence per finding: *where*, *what breaks*, *how you would prove it*. "Line 22: refunds
+# 1. *Intent (30 s).* Say what the code is for and who calls it. For example: "an async support agent; the handler retries whole
+#    turns; tools are plain functions in a global registry." If you read the intent incorrectly, everything after it
+#    is of no use. Thus ask a question to make sure of it: "Am I right that `handle` is per request?"
+# 2. *Findings, worst first (90 s).* Say the ranking rule (**money, data leakage, availability, then the rest**),
+#    and go through the findings in that order. Give one sentence for each finding: *where*, *what breaks*, *how you
+#    can prove it*. "Line 22: refunds
 #    carry no idempotency key and the handler re-runs the turn, so a gateway timeout double-refunds; I would test it
 #    with a fake that times out after applying."
-# 3. *The optimal solution (60 s).* Current cost → lower bound → the change that reaches it. "Three sequential 200 ms
+# 3. *The optimal solution (60 s).* Give the current cost, then the lower bound, then the change that reaches it. "Three sequential 200 ms
 #    lookups cost 600 ms; the floor is 200 ms; `gather` under a semaphore with a per-call `wait_for` gets there.
 #    The retry belongs around the model call, with `await asyncio.sleep`, not around the turn."
-# 4. *What you would add before shipping (30 s).* The tests that encode each bug (you just wrote them), structured
-#    tool errors, redacted logs with step/tool/latency metadata, a step budget, and — for irreversible tools — a
-#    confirmation gate (Notebook 01).
+# 4. *What you would add before shipping (30 s).* Name the tests that encode each bug (you just wrote them). Also
+#    name structured tool errors, redacted logs with metadata for steps, tools and latency, and a step budget. For
+#    irreversible tools, also name a confirmation gate (Notebook 01).
 #
-# **Ranking, in one breath.** Anything that moves money or sends messages twice is first. Anything that shows one
-# user another user's data — shared state, caches without entitlements, PII in logs, injection paths — is second.
-# Anything that can take the service down — blocked event loops, unbounded loops, missing timeouts — is third.
-# Then correctness edge cases, then structure and style. Say the rule *before* the list; it shows you
-# have done this in production.
+# **Ranking, in one breath.** Anything that moves money or sends messages two times is first. Anything that shows
+# the data of one user to another user is second: shared state, caches without entitlements, PII in logs, injection
+# paths. Anything that can stop the service is third: blocked event loops, unbounded loops, no timeouts. Then come
+# the correctness edge cases, and then structure and style. Say the rule *before* the list, because it shows that
+# you have done this in production.
 #
-# **Phrases that land.** "The model is an untrusted author, so nothing it writes can become SQL or a URL segment."
-# "Retries are only safe behind an idempotency key; otherwise they are a duplication machine." "A cache key is the
-# identity of a result: input, version *and* who may see it." "Blocking inside a coroutine does not slow this request
-# — it stops every request in the process."
+# **Phrases that land.**
+#
+# * "The model is an untrusted author, so nothing it writes can become SQL or a URL segment."
+# * "Retries are only safe behind an idempotency key; otherwise they are a duplication machine."
+# * "A cache key is the identity of a result: input, version *and* who may see it."
+# * "Blocking inside a coroutine does not slow this request — it stops every request in the process."

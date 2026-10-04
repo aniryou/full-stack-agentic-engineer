@@ -1,25 +1,31 @@
 # %% [markdown]
 # # 02 · Routing and fallback chains
 #
-# **Tier:** T0 — CPU only, no network, a few seconds; every latency is simulated on a virtual clock. The same outages
-# over HTTP, and a real vLLM stopped mid-run (T1), are `gateway-lab` notebook `02_outages_fallbacks_and_breakers`.
+# **Tier:** T0. It uses only the CPU, no network and a few seconds. A virtual clock simulates every latency. The same
+# outages over HTTP, and a real vLLM that we stop in the middle of a run (T1), are `gateway-lab` notebook
+# `02_outages_fallbacks_and_breakers`.
 #
 # ## The one-minute version
-# Clients ask for an **alias**; the gateway resolves it to an ordered **chain** of (provider, model, region) targets,
-# filters the chain by what the request needs (tools, reasoning effort, context length, residency), orders it by a
-# policy, and walks it.
+# Clients ask for an **alias**. The gateway resolves the alias to an ordered **chain** of (provider, model, region)
+# targets. Then it filters the chain by what the request needs (tools, reasoning effort, context length, residency). It puts
+# the chain in order by a policy, and it walks the chain.
 #
-# A request **falls through** only on a failure another target could fix — 429, 5xx, a timeout, a context too long —
-# never on a bad request, bad credentials or a policy refusal, and **never after the first byte** reached the client. A
-# **breaker per target** turns a dead provider into an instant skip instead of a timeout per request. A chain's
-# availability is capped by what its targets share, and a slow failure (a timeout) costs every request behind it.
+# A request **falls through** only on a failure that another target can solve: 429, 5xx, a timeout, a context that is
+# too long. It never falls through on a bad request, bad credentials or a policy refusal, and **never after the first
+# byte** reached the client. A **breaker per target** changes a dead provider into an instant skip, not into one
+# timeout for each request. What its targets share puts a cap on the availability of a chain. A slow failure (a
+# timeout) costs time for every request behind it.
 #
-# By the end you can classify failures, compute a chain's availability and expected latency and cost, predict how many
-# requests a breaker lets reach a dead target when requests overlap, apply the first-byte rule, and pick a first-byte
-# deadline from a latency budget.
+# By the end, you can do these things:
 #
-# Primer: §2 *Model routing and fallback chains* (`../PRIMER.md`); retries and full jitter are the scaling primer's
-# §5.2; the breaker's full state machine is the 07.2 lab's notebook 10.
+# - classify failures,
+# - calculate the availability, the expected latency and the expected cost of a chain,
+# - predict how many requests a breaker lets reach a dead target when the requests overlap,
+# - apply the first-byte rule,
+# - select a first-byte deadline from a latency budget.
+#
+# Primer: §2 *Model routing and fallback chains* (`../PRIMER.md`). Retries and full jitter are in §5.2 of the scaling
+# primer. The full state machine of the breaker is in notebook 10 of the 07.2 lab.
 
 # %%
 import random
@@ -44,17 +50,24 @@ print("policy cheapest (800 in/500) :", show(router.candidates("chat", {"max_com
                                                                prompt_tokens=800, policy="cheapest")))
 
 # %% [markdown]
-# Read the filters: the self-hosted `lab/llm` has no tool calling configured and a 4,096-token window, so tools and
-# long prompts drop it; only thinking-capable targets take high effort (the 00.5 primer's §7 "routing by effort");
-# at 280,000 tokens (plus the default 1,024-token output reservation) only the million-token model is left:
-# claude-haiku-4-5 holds 200,000 and gpt-5.4-mini 272,000 (context windows dated, verify). `cheapest` puts the self-hosted pool first because its marginal price per token is
-# zero while it has headroom — its real cost is the GPU bill, charged back in notebook 04.
+# Read the filters:
+#
+# - The self-hosted `lab/llm` has no tool calling configured and a 4,096-token window. Thus tools and long prompts
+#   drop it.
+# - Only thinking-capable targets take high effort (§7 "routing by effort" of the 00.5 primer).
+# - At 280,000 tokens (plus the default 1,024-token output reservation), only the million-token model stays.
+#   claude-haiku-4-5 holds 200,000 and gpt-5.4-mini holds 272,000 (context windows dated, verify).
+#
+# `cheapest` puts the self-hosted pool first, because its marginal price per token is zero while it has headroom. Its
+# real cost is the GPU bill. Notebook 04 shows the chargeback of that bill.
 #
 # ## Worked example 1 — an outage, with and without a breaker
-# The primary hangs for five minutes (no answer at all), the gateway's timeout is 10 s. One request every 12 s for
-# eight minutes. The in-process gateway handles one request at a time on the virtual clock, so the gap is longer than
-# a timeout on purpose: no request waits behind another, and each time to first token is measured from its arrival
-# (the loop checks it). Overlapping requests — the production case — are Exercise 2.4.
+# The primary hangs for five minutes (it gives no answer at all). The timeout of the gateway is 10 s. One request
+# arrives every 12 s for eight minutes.
+#
+# The in-process gateway handles one request at a time on the virtual clock. Thus the gap is longer than a timeout on
+# purpose: no request waits behind another. Also, the measurement of each time to first token starts at the arrival of
+# its request (the loop checks it). Exercise 2.4 has requests that overlap, which is the production case.
 
 # %%
 def outage_run(threshold, n=40, gap=12.0):
@@ -81,12 +94,14 @@ for label, th in (("no breaker", 10 ** 9), ("breaker: 3 consecutive, 30 s cooldo
           f"worst TTFT {worst:5.2f} s | mean TTFT {mean:4.2f} s (simulated)")
 
 # %% [markdown]
-# Without a breaker every one of the 25 requests that arrive during the outage pays the 10 s timeout before falling
-# through. With one, three pay it, the breaker opens, and after that only the one probe per cooldown does — 8 of 25;
-# the rest skip the primary at once. The worst case is the same 10.3 s: the breaker cuts how *often* requests pay a
-# timeout, not what one costs — that is the first-byte deadline's job (Exercise 2.6). And here the breaker had it
-# easy: each failure completed before the next request arrived. In production requests overlap, and the breaker
-# learns only as fast as failures complete (Exercise 2.4).
+# Without a breaker, every one of the 25 requests that arrive during the outage pays the 10 s timeout before it falls
+# through. With a breaker, three requests pay it, and then the breaker opens. After that, only the one probe per
+# cooldown pays it. In total, 8 of 25 pay it. The other requests skip the primary at once.
+#
+# The worst case is the same 10.3 s. The breaker decreases how *often* requests pay a timeout, not what one timeout
+# costs. That is the job of the first-byte deadline (Exercise 2.6). Also, here the task of the breaker was easy: each
+# failure completed before the next request arrived. In production, requests overlap, and the breaker learns only as
+# fast as failures complete (Exercise 2.4).
 #
 # ## Worked example 2 — availability, latency and cost of a chain
 
@@ -105,9 +120,10 @@ for t_fail in (0.15, 10.0):
 
 # %% [markdown]
 # ## Exercise 2.1 — what falls through
-# Write `should_fall_through(status, code)`: `status` is an HTTP status or `None` (no answer before the timeout),
-# `code` the error body's `code`. Return True only when another target could plausibly succeed. Two statuses are
-# easy to miss: 408 (the provider timed the request out) and Anthropic's 529 `overloaded_error`.
+# Write `should_fall_through(status, code)`. `status` is an HTTP status or `None` (no answer before the timeout).
+# `code` is the `code` of the error body. Return True only when another target has a real chance to succeed. Two
+# statuses are easy to forget: 408 (the request timed out at the provider) and the 529 `overloaded_error` of
+# Anthropic.
 
 # %% exercise
 def should_fall_through(status, code=None):
@@ -126,8 +142,9 @@ print("   stops:        ", [c for c in cases if not should_fall_through(*c)])
 
 # %% [markdown]
 # ## Exercise 2.2 — chain availability
-# Write `chain_avail(avails, common_mode)`: the probability that some target answers, when each fails independently with
-# probability $1 - a_i$ and, separately, a common-mode failure with probability `common_mode` takes them all down.
+# Write `chain_avail(avails, common_mode)`: the probability that at least one target answers. Each target fails
+# independently with probability $1 - a_i$. Separately, a common-mode failure with probability `common_mode` makes all
+# of them fail.
 
 # %% exercise
 def chain_avail(avails, common_mode=0.0):
@@ -148,9 +165,9 @@ print(f"✅ {chain_avail([0.995, 0.99], 0.001):.3%}: the common-mode term, not t
 
 # %% [markdown]
 # ## Exercise 2.3 — expected latency of walking a chain
-# Each step: `p_ok`, `t_ok` (time to first token on success), `t_fail` (time to detect failure). Write
-# `expected_latency(steps)`: the mean time to the first token *or* to the final failure. (Hint: a failure's time is
-# paid by every outcome after it.)
+# Each step has `p_ok`, `t_ok` (the time to first token on success) and `t_fail` (the time to detect a failure). Write
+# `expected_latency(steps)`: the mean time to the first token *or* to the final failure. (Hint: every outcome after a
+# failure pays the time of that failure.)
 
 # %% exercise
 def expected_latency(steps):
@@ -171,15 +188,18 @@ print("✅ expected latency matches routing.chain_cost on 200 random chains")
 
 # %% [markdown]
 # ## Exercise 2.4 — a breaker learns only as fast as failures complete
-# The breaker itself — closed, open, one probe after the cooldown — is the 07.2 lab's (gcp-agent-platform-lab notebook
-# 10 builds it, half-open included); here it is `routing.Breaker`, as given. What the gateway adds is *concurrency*.
-# Requests arrive every $1/\text{rate}$ seconds, each attempt at the dead primary takes `t_fail` seconds to fail (the
-# full timeout, a first-byte deadline, or a fast 503), and the breaker opens when `threshold` failures have
-# **completed** — while every request that arrived in the meantime is already waiting on the dead target.
+# The breaker itself (closed, open, one probe after the cooldown) belongs to the 07.2 lab. Notebook 10 of
+# gcp-agent-platform-lab builds it, half-open included. Here it is `routing.Breaker`, as given. The gateway adds
+# *concurrency*. Requests arrive every $1/\text{rate}$ seconds. Each attempt at the dead primary takes `t_fail` seconds
+# to fail (the full timeout, a first-byte deadline, or a fast 503).
 #
-# Write `reach_before_open(rate, t_fail, threshold)`: how many requests reach the dead target before its breaker
-# opens (a whole number: round up). Then set `at_50_rps`: that number at 50 requests a second with threshold 3, for a
-# 10 s timeout, a 1 s first-byte deadline and a 0.15 s 503, as a tuple in that order.
+# The breaker opens when `threshold` failures have **completed**. But at that time, every request that arrived in the
+# meantime already waits on the dead target.
+#
+# Write `reach_before_open(rate, t_fail, threshold)`. It returns how many requests reach the dead target before its
+# breaker opens. The value is a whole number: round up. Then set `at_50_rps` to a tuple of that number at 50 requests a
+# second with threshold 3. The tuple holds the values for a 10 s timeout, a 1 s first-byte deadline and a 0.15 s 503,
+# in that order.
 
 # %% exercise
 import math
@@ -220,9 +240,12 @@ print(f"✅ at 50 requests a second, {at_50_rps[0]} requests wait on a 10 s time
 
 # %% [markdown]
 # ## Exercise 2.5 — fall back only before the first byte
-# Write `relay(events)`: walk a provider's stream events. If an event with an `"error"` key arrives before any content
-# chunk has been relayed, return `"fall through"`. Otherwise return `(relayed, outcome)`: how many chunks with choices
-# were relayed to the client, and `"error"` if the stream ended in an error, else `"ok"`. (Ignore the usage chunk.)
+# Write `relay(events)`: walk the stream events of a provider. If an event with an `"error"` key arrives before the
+# gateway relayed any content chunk, return `"fall through"`.
+#
+# If not, return `(relayed, outcome)`.
+# The first value is how many chunks with choices the gateway relayed to the client. The second value is `"error"` if
+# the stream ended in an error, and `"ok"` if not. (Ignore the usage chunk.)
 
 # %% exercise
 def relay(events):
@@ -254,12 +277,14 @@ print("✅ before the first byte: fall through; after it: surface the error and 
 
 # %% [markdown]
 # ## Exercise 2.6 — pick a first-byte deadline from a latency budget
-# The primary fails 5 % of requests by hanging; the gateway gives up after `t_fail` seconds and falls through (steps
-# as in worked example 2). The route's budget is a **mean** time to first token of 0.70 s. Set `deadline` to the
-# largest `t_fail`, to 0.01 s, that meets the budget — compute it, do not search blindly. Then show why a
-# whole-response timeout cannot do the job: a healthy answer on this route is 350 tokens at 20 ms each after a
-# 0.6 s first token, so set `full_response_s` to the shortest whole-response timeout that never kills a healthy
-# stream, and `mean_with_it` to the route's mean time to first token if failures were detected only that late.
+# The primary fails 5 % of requests because it hangs. The gateway stops the wait after `t_fail` seconds and falls
+# through (the steps are as in worked example 2). The budget of the route is a **mean** time to first token of 0.70 s.
+# Set `deadline` to the largest `t_fail`, to 0.01 s, that meets the budget. Calculate it. Do not search blindly.
+#
+# Then show why a whole-response timeout cannot do the job. A healthy answer on this route is 350 tokens at 20 ms each,
+# after a 0.6 s first token. Thus set `full_response_s` to the shortest whole-response timeout that never stops a
+# healthy stream. Set `mean_with_it` to the mean time to first token of the route if the gateway detects failures only
+# that late.
 
 # %% exercise
 def steps_for(t_fail):
@@ -283,27 +308,30 @@ print(f"✅ a {deadline:.2f} s first-byte deadline keeps the mean at {routing.ch
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Clients ask for aliases; each alias is an ordered chain of provider, model and region,
-# filtered by what the request needs — tools, reasoning effort, context, residency — and ordered by a policy: as
-# written, cheapest capable, lowest moving-average TTFT, a canary share, or a separate chain per tier. We fall through
-# on 429, 5xx, timeouts and context-too-long, never on a bad request, credentials or a policy refusal, and never after
-# the first byte — after it we surface an error chunk.
+# **The two-minute version.** "Clients ask for aliases. Each alias is an ordered chain of provider, model and region.
+# The gateway filters the chain by what the request needs: tools, reasoning effort, context, residency. Then a policy puts
+# the chain in order. The policies are: as written, cheapest capable, lowest moving-average TTFT, a canary share, or a
+# separate chain for each tier.
 #
-# "Each target has a breaker: three consecutive failures open it
-# for 30 s and one probe decides, so an outage costs a few timeouts instead of one per request; and we time out on the
-# first byte, not the whole response, because the breaker only learns as fast as failures complete. The chain's
-# availability is capped by what the targets share — 99.5 % and 99 % give 99.995 % independently but 99.895 % with a
-# 0.1 % common-mode failure — so fallbacks go in different failure domains, with quota sized for the traffic they will
-# take."
+# "We fall through on 429, 5xx, timeouts and context-too-long. We never fall through on a bad request, credentials or a
+# policy refusal, and never after the first byte. After the first byte, we send an error chunk to the client.
+#
+# "Each target has a breaker. Three consecutive failures open it for 30 s, and one probe decides. Thus an outage costs
+# a few timeouts, not one for each request. Also, we apply the timeout to the first byte, not to the whole response,
+# because the breaker learns only as fast as failures complete.
+#
+# "What the targets share puts a cap on the availability of the chain. The targets 99.5 % and 99 % give 99.995 %
+# independently, but 99.895 % with a 0.1 % common-mode failure. Thus the fallbacks go in different failure domains,
+# with a quota that matches the traffic that they will take."
 #
 # **Drill questions**
-# 1. *Why not fall back on a 400?* — The next target gets the same bad request; falling through multiplies cost and
-#    latency and hides a client bug. The exception is `context_length_exceeded`, which a longer-context target can
-#    serve.
-# 2. *We added a third provider and availability did not move. Why?* — The chain was already capped by a common-mode
-#    failure (the gateway, a region, one provider behind two aliases); independent targets only shrink the part that
-#    was already tiny.
-# 3. *The breaker is configured, yet the first ten seconds of an outage were terrible. Why?* — Requests overlap: the
-#    breaker opens only after failures *complete*, so every request in flight during the first timeout pays it — about
-#    500 at 50 requests a second (Exercise 2.4). A first-byte deadline and fast failure signals (connect errors, 503s)
-#    shorten that window.
+# 1. *Why not fall back on a 400?* The next target gets the same bad request. A fall-through multiplies the cost and
+#    the latency, and it hides a bug in the client. The exception is `context_length_exceeded`, because a target with a
+#    longer context can serve it.
+# 2. *We added a third provider and availability did not move. Why?* A common-mode failure (the gateway, a region, one
+#    provider behind two aliases) already put a cap on the chain. Independent targets only decrease the part that was
+#    already small.
+# 3. *The breaker is configured, yet the first ten seconds of an outage were terrible. Why?* The requests overlap. The
+#    breaker opens only after failures *complete*. Thus every request in flight during the first timeout pays it:
+#    about 500 at 50 requests a second (Exercise 2.4). A first-byte deadline and fast failure signals (connect errors,
+#    503s) make that window shorter.

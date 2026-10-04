@@ -6,11 +6,13 @@ technical verbs of the domain are permitted in addition. The current issue is Is
 property of ASD and is not reproduced here; this file paraphrases the rules from the standard and records the
 choices made for one topic.
 
-**The experiment (2026-10-03):** the prose of `07-application-agent-framework/long-running-durable/` (the topic
-primer and README, the two lab READMEs, the lab's docs and the Markdown cells of its nine notebook pairs) is
-rewritten in STE. Code, notebooks' code cells, tests and deploy files are unchanged. This file is the brief the
-rewrite followed; `tools/orchestration/ste_lint.py` checks the rules a program can check. The rest of the repository
-keeps the writing rules in `CONTRIBUTING.md`.
+**The experiment (2026-10-03):** the prose of the repository's chapters, the layers `00-foundations` to
+`07-application-agent-framework` (each topic's primer, READMEs, docs, deep dives and source maps, the layer READMEs,
+and the Markdown cells of the notebooks, through their percent-format sources where a lab has them), is rewritten in
+STE. The first topic was `07-application-agent-framework/long-running-durable/`; the other chapters followed in the
+same shape. Code, notebooks' code cells, tests, deploy files and the root documents (`README.md`, `CURRICULUM.md`,
+`COMPUTE.md`, `COLAB.md`, `CONTRIBUTING.md`, `CLAUDE.md`) are unchanged. This file is the brief the rewrite
+followed; `tools/orchestration/ste_lint.py` checks the rules a program can check.
 
 ---
 
@@ -39,6 +41,21 @@ These are the hard constraints of the rewrite. A rewrite that breaks one of them
     stay under about 150 words, callouts are bold-lead blockquotes or GitHub alerts, no emojis, no marketing
     adjectives, `(verify)` on dated product facts. The "In a design review" and "The one-minute version" callouts
     keep their lead-ins.
+11. **Pinned fragments.** A core's `tests/test_primer_numbers.py` (and a few other tests: `test_touched.py`,
+    `test_workload.py`, `test_occupancy.py`, `test_docs.py`, `test_scalelab.py`, the `test_deploy.py` files) reads a
+    primer or a README and asserts that computed fragments appear in it verbatim, whitespace aside: `"80 GiB = 85.9 ×
+    10⁹ bytes"`, `"three hundred times the H100's L2"`, a table row with numbers. Those fragments stay verbatim inside
+    the STE sentence that carries them. Run the tests after the rewrite; a fragment a test reports as missing goes
+    back word for word. Never change a test to make it pass.
+12. **Percent-format notebook sources** (`notebooks_src/*.py`, `embeddings-lab/src/*.py`): a Markdown cell is a
+    `# %% [markdown]` block, one `# ` comment per line; keep that prefix on every line. The `# %%`, `# %% exercise`
+    and `# %% check` cells are code and stay verbatim, with their comments. A heading stays inside a Markdown cell
+    (`tools/ci/nb_sources.py --check`). The first Markdown cell's H1 is the notebook's title. Rebuild the notebooks
+    with the lab's builder after an edit; the committed blanks and solutions are the builder's output.
+13. **Generated sections.** The text between `<!-- colab-links -->` markers in a layer README belongs to
+    `tools/gen_colab_index.py`; never edit it. The Colab setup cell of a notebook belongs to the injector.
+14. **Tier lines and check lines.** The `**Tier:**` line of a notebook keeps its facts (which tier, what it needs,
+    what the measured counterpart is). A check cell's `✅` output text is code.
 
 ## 2. The writing rules
 
@@ -124,7 +141,7 @@ These are the hard constraints of the rewrite. A rewrite that breaks one of them
   becomes short sentences or a comma list.
 - **L3.** Numbers, units, ranges (10–600 s), dates and the `(verify)` tag stay as in the original.
 
-## 3. Vocabulary for this topic
+## 3. Vocabulary
 
 ### 3.1 The usual replacements
 
@@ -186,7 +203,39 @@ divide, add, compare, connect, open, close, install, operate, prevent, protect.
 
 ### 3.2 Technical names (nouns and adjectives)
 
-Use these as they are, always with the same meaning:
+A technical name is a noun or an adjective that names a thing of the domain: a part, a product, a service, a
+protocol, an API or a field, a status, a unit, a mathematical or statistical term, a named algorithm or format. It
+can be a word the STE dictionary does not approve as a general word ("kernel", "warp", "tensor", "token", "lease").
+It keeps the form the topic's primer gives it, and one meaning. A technical name is never a verb (W3). Each layer
+has its own; the primer of a topic is the authority for its names, and the READMEs, docs and notebooks of the topic
+use the same names. Examples by layer (not a complete list):
+
+- 00 foundations: transformer, attention head, embedding, logit, softmax, residual stream, parameter, token, context
+  window, KV cache, TTFT, TPOT, throughput, batch, expert, router, load balance, policy, reward, advantage, DPO,
+  GRPO, thinking model, test-time compute, teacher, student, soft target, temperature, divergence, KL, draft model.
+- 01 hardware: GPU, SM, tensor core, HBM, L2, FLOP/s, bandwidth, roofline, ridge point, arithmetic intensity,
+  NVLink, NVSwitch, InfiniBand, RoCE, RDMA, NIC, rail-optimized topology, PCIe, TDP, TCO, MTBF, Spot, on-demand.
+- 02 CUDA: driver, CUDA, kernel, grid, block, warp, thread, occupancy, register, shared memory, coalescing, bank
+  conflict, stream, CUDA Graph, cuDNN, NCCL, all-reduce, all-gather, reduce-scatter, all-to-all, ring, tree, busbw,
+  algbw, MIG, MPS, time-slicing, DCGM, XID, container toolkit.
+- 03 Kubernetes: pod, node, node pool, device plugin, extended resource, DRA, GPU Operator, taint, toleration,
+  label, scheduler, scheduling cycle, gang, Kueue, ClusterQueue, LocalQueue, ResourceFlavor, quota, cohort,
+  reclaim, preemption, ProvisioningRequest, DWS flex-start, topology-aware scheduling, kind, k3s.
+- 04 engine: vLLM, SGLang, TensorRT-LLM, prefill, decode, continuous batching, chunked prefill, paged attention,
+  block, block table, prefix cache, sampler, logits processor, speculative decoding, draft, acceptance rate,
+  quantization, GPTQ, AWQ, FP8, NVFP4, scale, group size, SmoothQuant, tensor parallel, LoRA adapter, FlashAttention,
+  tile, online softmax, kernel launch, Triton.
+- 05 orchestrator: replica, router, endpoint picker, filter, scorer, picker, KV-aware routing, flow control,
+  priority, queue depth, HPA, autoscaling, scale-to-zero, prefill/decode disaggregation, KV transfer, SLO, p95,
+  llm-d, Dynamo, Ray Serve, Gateway API Inference Extension, InferencePool, InferenceObjective.
+- 06 gateway: OAuth, OIDC, token exchange, SPIFFE, SVID, DPoP, audience, scope, policy, guardrail, rate limit, token
+  bucket, admission, circuit breaker, virtual key, tenant, chargeback, metering, semantic cache, fallback chain,
+  MCP server, MCP client, authorization server, resource server.
+- 07 agents: agent loop, tool, tool call, function calling, MCP, sandbox, gVisor, microVM, seccomp, memory
+  (episodic, semantic), consolidation, retrieval, RAG, chunk, embedding, vector index, HNSW, reranker, eval, checkpoint,
+  durable execution, run, step, lease, saga, human-in-the-loop.
+
+The names of the first topic, kept here as the worked example:
 
 - The engine: agent, long-running agent, run, child run, parent run, step, task, named task, stale task, attempt,
   worker, replica, instance, store, document, run document, queue, lease, lease TTL, heartbeat, checkpoint,
@@ -209,15 +258,45 @@ Use these as they are, always with the same meaning:
 
 ### 3.3 Technical verbs (computer processes, permitted as verbs)
 
+A technical verb names a computer, manufacturing or mathematical process of the domain, and no approved general word
+says the same thing: compile, launch (a kernel), allocate, free, copy, cache, batch, pad, mask, tile, fuse, quantize,
+dequantize, round, overflow, prefill, decode, sample, tokenize, embed, train, fine-tune, distil, prune, route,
+schedule, preempt, evict, scale, autoscale, replicate, shard, partition, reduce, broadcast, gather, scatter, sync,
+deploy, roll back, log, trace, monitor, alert, authenticate, authorize, sign, verify (a signature, as a technical
+verb; "make sure" elsewhere), encrypt, hash, rate-limit, throttle, retrieve, index, rerank, chunk, parse, serialize,
+retry, resume, replay, enqueue, dequeue, poll, crash, fail, time out (a request times out). Use a technical verb
+only in its technical sense, with the same name everywhere in the topic. The verbs of the first topic:
+
 enqueue, dequeue, deploy, log, ack (acknowledge), retry, resume, replay, record, poll (also "do a poll"), schedule,
 scale, crash, fail, approve, reject, cancel, release (a lease), expire, commit, roll back, call, return, raise (an
 exception), run (a program, a test, a notebook), start, stop, spawn (a child run), re-drive (the reaper starts a
 stuck step again), compensate, wake (a run; the `/wake` endpoint).
 
-### 3.4 Choices for this topic
+### 3.4 Choices for every topic
 
 | Instead of | Write |
 |---|---|
+| a human (the actor) | a person; a technical name that contains "human" stays (human-in-the-loop, RLHF) |
+| dies, is killed, gets OOM-killed (a process, a pod, a worker) | stops, crashes; the platform stops it (out of memory) |
+| kick off, spin up, fire | start |
+| blow up, explode (a cost, a count) | increase very fast; give the factor |
+| cheap, expensive, pricey | low-cost, high-cost; or give the cost |
+| trivial, tiny, huge, massive (a quantity) | small, large; or give the number |
+| naive, hand-rolled, home-grown | simple, written by hand |
+| gotcha, pitfall (in prose) | a trap; `> **Pitfall.**` stays as a callout lead-in |
+| rule of thumb | the general rule |
+| the happy path | the path with no failure |
+| under the hood | inside |
+| a bet, a gamble | a risk |
+| bump, tweak, tune | increase, adjust, adjust |
+| sanity check | a check |
+| real-world | in production, in practice |
+| fast-forward (a clock) | advance |
+| warm, cold (a cache, a start) | a technical adjective: keep "warm cache", "cold start" |
+| above, below (a cross-reference to text) | §N, "the table in §N", the heading's name |
+
+The choices of the first topic, kept as the worked example:
+
 | a human (the actor) | a person; keep "human-in-the-loop", "human gate" and `HUMAN` as names |
 | park the run, the run sleeps, the run dozes | the run waits (status `WAITING`); a wait costs nothing |
 | the worker dies | the worker stops, the worker crashes |
@@ -238,6 +317,21 @@ stuck step again), compensate, wake (a run; the `/wake` endpoint).
 | re-ask the model | ask the model again |
 | trivial (a quantity) | small |
 | cheap, expensive (a cost) | low-cost, high-cost; or give the cost |
+
+### 3.5 Document types
+
+- **A primer** (`PRIMER.md`, a deep dive, a source map): numbered sections, "The one-minute version", callouts,
+  tables of limits, worked numbers, design drills and a dated Verify list. The worked numbers and the fragments the
+  core's tests pin stay verbatim (section 1, item 11). A source map's file paths, line numbers and reading times are
+  facts.
+- **A README** (layer, topic, core, lab): the shape in `tools/orchestration/README-STYLE.md`, the H1 "name — promise"
+  verbatim, "Start here" as a procedure (imperative, at most 20 words per sentence), "What you get" cells as short
+  sentences, "Run it" blocks as code, a layer README's generated section untouched.
+- **A cheat sheet, a runbook, a deploy README**: procedures and facts; commands, flags and URLs are code.
+- **A notebook** (a percent source or a hand-written `.ipynb`): the H1 and the Tier line keep their facts; an
+  exercise statement says what to fill in, in the imperative; a "Takeaways" list keeps its count and order; the
+  questions at the end keep their numbers and meaning; check cells are code.
+- **A lesson or a drill file**: the questions stay questions; an answer sketch is rewritten.
 
 ## 4. Examples
 
@@ -288,10 +382,13 @@ delivery (journal index guard + named tasks) · zombie worker (lease TTL) · run
 ## 5. How to check
 
 ```bash
-python3 tools/orchestration/ste_lint.py <file.md|notebook.ipynb|dir> ...   # findings, then a summary
+python3 tools/orchestration/ste_lint.py <file.md|notebook.ipynb|notebooks_src/NN.py|dir> ...   # findings, then a summary
 python3 tools/orchestration/ste_lint.py --summary <paths>                  # the summary only
 python3 tools/orchestration/ste_lint.py --json <paths>                     # machine-readable
 ```
+
+A directory argument covers its `.md` files, its `.ipynb` files and the `.py` files under a `notebooks_src/` folder
+(the `# %% [markdown]` cells).
 
 Errors: a sentence over 25 words, a paragraph over six sentences, a modal verb from W5, a contraction, a dash or an
 arrow in prose (S4). Warnings: an -ing word outside the exceptions of V2, a probable passive, a semicolon, an

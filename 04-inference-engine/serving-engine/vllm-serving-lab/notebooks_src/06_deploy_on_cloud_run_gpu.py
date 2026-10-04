@@ -1,27 +1,30 @@
 # %% [markdown]
 # # 06 · Deploy on Cloud Run GPU: cold starts, concurrency and cost, planned before you apply
 #
-# **Tier:** T3 walkthrough (GCP), fully plannable at T0: the Terraform and the `gcloud` script are
-# read and dry-run here, the engine is the fake vLLM with an **L4 profile** (results **simulated**),
-# and every price or bandwidth is an explicit *assumption* you replace. With `gcloud`, a project and
-# `SERVELAB_DEPLOY=1`, the last cell deploys for real; then set `SERVELAB_URL` and re-run notebook 02.
+# **Tier:** T3 walkthrough (GCP), and you can do all of the plan at T0. This notebook reads the Terraform and
+# the `gcloud` script and does a dry run of them. The engine is the fake vLLM with an **L4 profile** (the
+# results are **simulated**). Each price or bandwidth is an explicit *assumption* that you replace. With
+# `gcloud`, a project and `SERVELAB_DEPLOY=1`, the last cell deploys for real. Then set `SERVELAB_URL` and
+# run notebook 02 again.
 #
 # ## The one-minute version
 #
-# A Cloud Run GPU service is a pool of identical instances, each one engine on one L4 (24 GB). Three
-# settings decide latency and cost:
+# A Cloud Run GPU service is a pool of identical instances. Each instance is one engine on one L4 (24 GB).
+# Three settings decide the latency and the cost:
 #
-# * **`concurrency`** — how many requests Cloud Run sends to one instance. It should equal the batch
-#   the engine can serve *within the SLO*; more queues inside the engine (TPOT and TTFT suffer),
-#   less scales out earlier than necessary (cost).
-# * **`min_instances`** — 0 means scale to zero: no cost while idle, a **cold start** (image pull +
-#   weights + engine init) for the first request after idle. 1 means always warm, always billing.
-# * **`max_instances`** — a cap on GPUs, on the bill, and on the load you can absorb.
+# * **`concurrency`**: the number of requests that Cloud Run sends to one instance. Set it equal to the
+#   batch that the engine can serve *within the SLO*. With a larger value, requests wait in a queue inside
+#   the engine, and TPOT and TTFT become worse. With a smaller value, Cloud Run scales out earlier than
+#   necessary, and the cost increases.
+# * **`min_instances`**: 0 means scale to zero. There is no cost while the service is idle. But the first
+#   request after an idle period gets a **cold start** (image pull, weights and engine init). 1 means that
+#   the instance is always warm and always billed.
+# * **`max_instances`**: a limit on the GPUs, on the bill, and on the load that you can absorb.
 #
-# Concepts: PRIMER §12 "Engines and where to run them" ([`PRIMER.md`](../../PRIMER.md)); the deploy
-# assets are in [`deploy/gcp/cloud-run/`](../deploy/gcp/cloud-run/) (Terraform and `gcloud`). Prices:
-# `COMPUTE.md` at the repo root. Admission control, rate limits and cost per conversation in
-# front of a fleet like this one are layer 06:
+# Concepts: PRIMER §12 "Engines and where to run them" ([`PRIMER.md`](../../PRIMER.md)). The deploy
+# assets are in [`deploy/gcp/cloud-run/`](../deploy/gcp/cloud-run/) (Terraform and `gcloud`). For the
+# prices, see `COMPUTE.md` at the repo root. Admission control, rate limits and cost per conversation in
+# front of a fleet like this one are the subjects of layer 06:
 # [`agentic-scaling-lab`](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/).
 
 # %%
@@ -65,19 +68,24 @@ print(plan.summary())
 # %% [markdown]
 # ## Exercise 6.1 — anatomy of a cold start
 #
-# After scale-to-zero the first request waits for: pulling the image, reading the weights, and the
-# engine's init (profiling run, KV allocation, CUDA-graph capture). Write
-# `cold_start_s(image_gb, pull_gb_s, weights_gb, weights_gb_s, init_s)`, then compare two sources for
-# the weights. The inputs below are **assumptions**, not measurements — replace them with your own
-# (image size from the registry, bandwidths from a test, init time from the log line
-# `init engine (profile, create kv cache, warmup model) took ...`).
+# After a scale to zero, the first request waits for three things:
 #
-# Then the part that breaks deployments: the **startup probe** must outlast the part of the cold start
-# that happens *inside* the container. The image pull comes before the container starts, so only
-# weights + engine init count against the probe (as in Kubernetes; verify for Cloud Run). Write
-# `min_failure_threshold(weights_gb, weights_gb_s, init_s, period_s, margin)`: the smallest
+# - the image pull,
+# - the read of the weights,
+# - the init of the engine (the profile run, the KV allocation, the CUDA-graph capture).
+#
+# Write `cold_start_s(image_gb, pull_gb_s, weights_gb, weights_gb_s, init_s)`. Then compare two sources for
+# the weights. The inputs in the next cell are **assumptions**, not measurements. Replace them with your own
+# values. Get the image size from the registry and the bandwidths from a test. Get the init time from the log
+# line `init engine (profile, create kv cache, warmup model) took ...`.
+#
+# Then comes the part that breaks deployments. The **startup probe** must last longer than the part of the
+# cold start that occurs *inside* the container. The image pull comes before the container starts. Thus
+# only the weights and the engine init count against the probe (as in Kubernetes, verify for Cloud Run).
+#
+# Write `min_failure_threshold(weights_gb, weights_gb_s, init_s, period_s, margin)`. It returns the smallest
 # `failure_threshold` whose $\mathtt{failure\_threshold} \times \mathtt{period\_s}$ covers
-# $\mathtt{margin} \times{}$ that time. The check reads the probe settings from this lab's Terraform.
+# $\mathtt{margin} \times{}$ the time of the weight read and the engine init. The check reads the probe settings from the Terraform of this lab.
 
 # %%
 ASSUME = {"image_gb": 8.0,         # vllm/vllm-openai compressed size (assumption; verify in the registry)
@@ -120,9 +128,9 @@ print(f"✅ cold start under these assumptions: {hf:.0f} s with Hugging Face, {g
 # %% [markdown]
 # ## Exercise 6.2 — choose Cloud Run `concurrency` from a measurement
 #
-# One instance = one engine. Sweep the number of simultaneous requests it holds (closed loop,
-# users staggered over one second) on the L4 profile and keep the largest level at which at least
-# 90% of requests meet the SLO. Write `pick_concurrency(summaries, min_attainment)` over a dict
+# One instance is one engine. On the L4 profile, do a sweep of the number of simultaneous requests in the
+# instance (closed loop, with the users spread over one second). Keep the largest level at which at
+# least 90% of the requests meet the SLO. Write `pick_concurrency(summaries, min_attainment)` over a dict
 # `{concurrency: Summary}`.
 
 # %%
@@ -158,10 +166,10 @@ print(f"✅ set concurrency = {chosen} (Terraform var.concurrency / gcloud --con
 # %% [markdown]
 # ## Exercise 6.3 — cost per million output tokens
 #
-# Cost per token is the instance's price divided by the tokens it produces. Write
-# `cost_per_million(price_per_hour, tokens_per_s)`. The price is an **assumption** (an L4 instance
-# with 8 vCPU and 32 GiB on Cloud Run; check the pricing page — verify); the throughput is the one
-# measured (here: simulated) at the concurrency you chose.
+# The cost per token is the price of the instance divided by the tokens that it makes. Write
+# `cost_per_million(price_per_hour, tokens_per_s)`. The price is an **assumption** for an L4 instance with
+# 8 vCPU and 32 GiB on Cloud Run. Look at the pricing page (verify). The throughput is the measured
+# throughput (here: simulated) at the concurrency that you selected.
 
 # %%
 PRICE_PER_HOUR = 1.00      # USD per L4 instance-hour on Cloud Run, incl. vCPU and memory (assumption; verify)
@@ -182,12 +190,13 @@ print(f"✅ at {tps:.0f} output tok/s: ${cost_per_million(PRICE_PER_HOUR, tps):.
 # %% [markdown]
 # ## Exercise 6.4 — scale to zero or stay warm?
 #
-# Traffic arrives in bursts: `busy_hours_per_day` of load in `bursts_per_day` separate bursts. With
-# `min_instances = 0` you pay for busy hours plus an idle tail after each burst before the instance
-# is shut down (`idle_tail_h`; verify Cloud Run's current behaviour) — and every burst starts with a
-# cold start. With `min_instances = 1` you pay for 24 hours a day and never wait. Write
-# `monthly_costs(price_per_hour, busy_hours_per_day, bursts_per_day, idle_tail_h=0.25, days=30)`
-# returning `(scale_to_zero_cost, always_warm_cost)` for one instance.
+# Traffic comes in bursts: `busy_hours_per_day` of load in `bursts_per_day` separate bursts. With
+# `min_instances = 0`, you pay for the busy hours. You also pay for an idle tail after each burst, before
+# Cloud Run stops the instance (`idle_tail_h`, verify the current behaviour of Cloud Run). Each burst also
+# starts with a cold start. With `min_instances = 1`, you pay for 24 hours a day, and you never wait.
+#
+# Write `monthly_costs(price_per_hour, busy_hours_per_day, bursts_per_day, idle_tail_h=0.25, days=30)`. It
+# returns `(scale_to_zero_cost, always_warm_cost)` for one instance.
 
 # %% exercise
 def monthly_costs(price_per_hour: float, busy_hours_per_day: float, bursts_per_day: int,
@@ -207,20 +216,22 @@ print(f"✅ 3 busy hours/day in 6 bursts: ${s0:,.0f}/month scaling to zero (6 co
 # %% [markdown]
 # ## Exercise 6.5 — Cloud Run concurrency above the engine's batch cap
 #
-# Cloud Run's `concurrency` and vLLM's `--max-num-seqs` are two different limits. If Cloud Run lets 64
-# requests into an instance whose engine runs at most 16 at a time, 48 wait *inside vLLM*: Cloud Run
-# sees a busy instance, not a queue. Predict the wait. In a closed loop of `concurrency` users against
-# a batch cap `max_num_seqs`, each admitted request takes `service_s` (its E2E at a full batch), so
-# the engine completes $\mathtt{max\_num\_seqs} / \mathtt{service\_s}$ requests per second, and by
-# Little's law each request spends
+# The `concurrency` of Cloud Run and the `--max-num-seqs` of vLLM are two different limits. If Cloud Run
+# lets 64 requests into an instance whose engine runs at most 16 at a time, 48 requests wait *inside vLLM*.
+# Cloud Run sees a busy instance, not a queue. Predict the wait.
+#
+# The model is a closed loop of `concurrency` users against a batch limit `max_num_seqs`. Each admitted request
+# takes `service_s` (its E2E at a full batch). Thus the engine completes
+# $\mathtt{max\_num\_seqs} / \mathtt{service\_s}$ requests per second. By Little's law, each request spends
 #
 # $$
 # \frac{\mathtt{concurrency} \times \mathtt{service\_s}}{\mathtt{max\_num\_seqs}}
 # $$
 #
-# in the instance: the part beyond its own `service_s` is queueing. Write
-# `queued_wait_s(concurrency, max_num_seqs, service_s)`. The check measures `service_s` with 16 users,
-# then runs 64 users and compares TTFT.
+# in the instance. The part after its own `service_s` is time in the queue.
+#
+# Write `queued_wait_s(concurrency, max_num_seqs, service_s)`. The check measures `service_s` with 16 users.
+# Then it runs 64 users and compares the TTFT.
 
 # %% exercise
 def queued_wait_s(concurrency: int, max_num_seqs: int, service_s: float) -> float:
@@ -246,11 +257,11 @@ print("✅ concurrency above max_num_seqs becomes a queue inside the engine: set
 # %% [markdown]
 # ## Deploy for real (T3, opt-in)
 #
-# Needs `gcloud` authenticated, `PROJECT_ID` set, a paid billing account and L4 quota for Cloud Run
-# in the region. Terraform path: `cd deploy/gcp/cloud-run/terraform && terraform apply`. Script path:
-# the cell below, with `SERVELAB_DEPLOY=1`. Afterwards measure it with the same code as locally:
-# `gcloud run services proxy vllm-l4 --port 8080`, then `SERVELAB_URL=http://127.0.0.1:8080` and
-# notebooks 02-05. Delete it when you are done: `./deploy.sh delete` or `terraform destroy`.
+# You must have an authenticated `gcloud`, `PROJECT_ID` set, a paid billing account and L4 quota for Cloud
+# Run in the region. The Terraform path: `cd deploy/gcp/cloud-run/terraform && terraform apply`. The script
+# path: the next cell, with `SERVELAB_DEPLOY=1`. After that, measure the service with the same code as on
+# your computer: `gcloud run services proxy vllm-l4 --port 8080`, then `SERVELAB_URL=http://127.0.0.1:8080`
+# and notebooks 02-05. When you finish, delete the service: `./deploy.sh delete` or `terraform destroy`.
 
 # %%
 if os.environ.get("SERVELAB_DEPLOY") == "1" and env.has_gcloud() and os.environ.get("PROJECT_ID"):
@@ -261,26 +272,28 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Each Cloud Run instance is one vLLM on one L4. We sized the model first (a 1.5B
-# model in bf16 leaves ~17 GiB of KV on the L4), then measured one instance (in this notebook, the
-# simulated L4 profile; on GCP, the real service): 32 requests in flight still met our SLO and 64 did
-# not, so `concurrency` is 32 — Cloud Run adds an instance rather than letting one engine slow
-# everyone down.
+# **Two minutes:** "Each Cloud Run instance is one vLLM on one L4. First, we calculated the size of the
+# model (a 1.5B model in bf16 leaves ~17 GiB of KV on the L4). Then we measured one instance: in this
+# notebook, the simulated L4 profile, and on GCP, the real service. With 32 requests in flight, we still met
+# our SLO, and with 64 we did not. Thus `concurrency` is 32. Cloud Run adds an instance and does not let
+# one engine make all requests slower.
 #
-# "We scale to zero because traffic is bursty and the bill is per instance-second; the price is a cold
-# start of a minute or two, dominated by the image and engine init once the weights come from Cloud
-# Storage. If the first request of a burst cannot wait, we keep `min_instances = 1` and pay for 24
-# hours. Cost per million tokens is the instance price over measured throughput, so batching well is
-# also what makes it cheap."
+# "We scale to zero because the traffic comes in bursts and the bill is per instance-second. The price is a
+# cold start of a minute or two. When the weights come from Cloud Storage, the image and the engine init
+# are the largest parts of that time. If the first request of a burst cannot wait, we keep
+# `min_instances = 1` and pay for 24 hours. The cost per million tokens is the instance price divided by
+# the measured throughput. Thus good batching is also what makes the cost low."
 #
-# **Drill 1.** *Why not set Cloud Run concurrency to 1,000 and let vLLM batch?* — vLLM will batch,
-# but past the engine's SLO-limited batch every request slows down or queues inside the instance,
-# and Cloud Run never scales out because the instance never looks full.
+# **Drill 1.** *Why not set Cloud Run concurrency to 1,000 and let vLLM batch?* vLLM will batch the
+# requests. But when the batch is larger than the SLO-limited batch of the engine, each request becomes
+# slower or waits in a queue inside the instance. Cloud Run never scales out, because the instance never looks full.
 #
-# **Drill 2.** *The first request after lunch takes 90 seconds. Three fixes?* — `min_instances = 1`
-# (pay to stay warm), weights from Cloud Storage instead of the Hub, and a faster engine start
-# (smaller image; `--enforce-eager` skips CUDA-graph capture at some cost in decode speed).
+# **Drill 2.** *The first request after lunch takes 90 seconds. Three corrections?* Set `min_instances = 1`
+# (pay to stay warm). Get the weights from Cloud Storage instead of the Hub. Make the engine start faster
+# with a smaller image and with `--enforce-eager`, which skips CUDA-graph capture at some cost in decode
+# speed.
 #
-# **Drill 3.** *Cloud Run or GKE for this?* — Cloud Run for bursty, scale-to-zero serving with one
-# GPU per instance and no cluster to run; GKE when you need multi-GPU nodes, engine-aware routing
-# and autoscaling on queue depth or KV usage (layer 05), Spot capacity or reservations.
+# **Drill 3.** *Cloud Run or GKE for this?* Use Cloud Run for a service that scales to zero and has traffic
+# in bursts, with one GPU per instance and no cluster to operate. Use GKE when you must have multi-GPU nodes,
+# engine-aware routing and autoscaling on queue depth or KV usage (layer 05), Spot capacity or
+# reservations.

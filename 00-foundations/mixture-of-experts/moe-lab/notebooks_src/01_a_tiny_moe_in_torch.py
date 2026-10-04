@@ -1,32 +1,34 @@
 # %% [markdown]
 # # 01 · A tiny MoE in torch: the router, the experts, collapse and balance
 #
-# **Tier:** T0 — torch on a laptop or Colab CPU, a few seconds per training run. Without torch the
-# same cells read curves this code recorded on a CPU (`fixtures/tinymoe_curves.json`, labelled);
-# every exercise is numpy and runs either way.
+# **Tier:** T0: torch on a laptop or Colab CPU, a few seconds for each training run. Without torch, the same
+# cells read curves that this code recorded on a CPU (`fixtures/tinymoe_curves.json`, labelled). Every
+# exercise is numpy and runs with or without torch.
 #
 # ## The one-minute version
 #
-# * An **MoE layer** replaces one MLP with $E$ expert MLPs and a **router**: a linear layer scores the
-#   experts, a softmax (or sigmoid) turns scores into probabilities, the top-k experts run, and their
-#   outputs are summed with the probabilities as weights. Parameters grow ~$E$ times; FLOPs per token
-#   grow ~$k$ times.
-# * Nothing in next-token loss asks the router to spread the tokens. With top-1 routing the experts
-#   chosen early get the gradient, get better, get chosen more — **router collapse**: a few experts
-#   carry the traffic, others starve. What starts it is that the router sees nearly the same input for
-#   every token (real hidden states share a large common direction), so the same few experts win from
-#   step 0. Dead experts still cost memory, the model loses the capacity they were meant to add, and in
-#   serving the GPU that holds a hot expert does the most work.
-# * Two fixes: the **Switch auxiliary loss** $\alpha \cdot E \cdot \sum f_e P_e$ (pushes the router's
-#   probabilities toward uniform), and **DeepSeek-V3's auxiliary-loss-free bias** (a per-expert bias
-#   that only *chooses* experts, nudged each step by the sign of its load error — the gate weights
-#   never see it).
-# * Experts do specialise, but along the lines the data make cheap: in this toy the token in front
-#   of the router explains most of the choice and the domain almost none. Measure; do not assume.
+# * An **MoE layer** replaces one MLP with $E$ expert MLPs and a **router**. A linear layer gives a score to
+#   each expert. A softmax (or a sigmoid) changes the scores into probabilities. The top-k experts run, and
+#   the layer adds their outputs with the probabilities as weights. The parameters increase approximately $E$
+#   times. The FLOPs per token increase approximately $k$ times.
+# * Nothing in the next-token loss asks the router to spread the tokens. With top-1 routing, the experts that
+#   the router selects early get the gradient, become better and get more selections. This is **router
+#   collapse**: a few experts carry the traffic, and the other experts get almost no tokens. The collapse
+#   starts because real hidden states share a large common direction. Thus the router sees almost the same
+#   input for every token, and the same few experts win from step 0.
+#
+#   Dead experts still cost memory, and the model loses the capacity that these experts were there to add. In
+#   serving, the GPU that holds a hot expert does the most work.
+# * There are two solutions. The first is the **Switch auxiliary loss** $\alpha \cdot E \cdot \sum f_e P_e$,
+#   which pushes the probabilities of the router toward uniform. The second is the **auxiliary-loss-free bias
+#   of DeepSeek-V3**. It is a per-expert bias that only *selects* experts. Each step moves it by a small
+#   constant quantity, in the direction of the sign of its load error. The gate weights never see it.
+# * Experts do specialise, but along the lines that the data make low-cost. In this toy, the token in front of
+#   the router explains most of the selection, and the domain explains almost none. Measure. Do not assume.
 #
 # Concepts: PRIMER §2 "The MoE layer", §3 "Routing and load balance" and §4 "Training MoE in brief"
-# ([`PRIMER.md`](../../PRIMER.md)). The numpy layer and trainer of this topic's `moe-core` teach the
-# same ideas with manual gradients; this notebook is the torch version, shaped like the real models.
+# ([`PRIMER.md`](../../PRIMER.md)). This topic has a `moe-core`. Its numpy layer and its trainer teach the same
+# ideas with manual gradients. This notebook is the torch version, with the shape of the real models.
 
 # %%
 import numpy as np
@@ -43,15 +45,15 @@ for row, d in zip(x, dom):
     print(f"domain {d}:", " ".join(map(str, row)))
 
 # %% [markdown]
-# Each sequence starts with its domain tag (0–7), then follows that domain's own rule for the next
-# content token (a permutation), with 10% noise. The rule depends on the tag at position 0, so the
-# model needs attention to carry the tag forward — after attention the router's input *could* say
-# which domain it is in.
+# Each sequence starts with its domain tag (0–7). Then it obeys the rule of that domain for the next content
+# token (a permutation), with 10% noise. The rule depends on the tag at position 0. Thus the model needs
+# attention to carry the tag forward. After attention, the input of the router *can* tell which domain the
+# sequence is in.
 #
 # ## Worked example: total versus active parameters of one MoE layer
 #
-# The layer below has $E = 8$ SwiGLU experts of width 16 on a 32-wide residual stream and routes each
-# token to $k = 1$ of them (Switch-style). Every expert sits in memory; one runs per token.
+# The layer in the next cell has $E = 8$ SwiGLU experts of width 16 on a 32-wide residual stream. It routes
+# each token to $k = 1$ of them (Switch-style). Every expert is in memory. One expert runs per token.
 
 # %%
 D, E, K, FF = 32, 8, 1, 16
@@ -70,11 +72,16 @@ if HAS_TORCH:
 # %% [markdown]
 # ## Exercise 1.1 — the router
 #
-# Write `route(logits, k, score="softmax", renormalize=True)` for logits `[N, E]`: turn scores into
-# probabilities (softmax over experts, or an element-wise sigmoid as DeepSeek-V3 does), pick the $k$
-# highest per token, and return `(indices [N, k], weights [N, k])` — the chosen probabilities,
-# divided by their sum when `renormalize` is on (Mixtral always does; Qwen3 and OLMoE only with
-# `norm_topk_prob`). Order the $k$ picks from highest to lowest.
+# Write `route(logits, k, score="softmax", renormalize=True)` for logits `[N, E]`. Do these steps:
+#
+# 1. Change the scores into probabilities. Use a softmax over the experts, or an element-wise sigmoid as
+#    DeepSeek-V3 does.
+# 2. Select the $k$ highest probabilities for each token.
+# 3. Return `(indices [N, k], weights [N, k])`.
+#
+# The weights are the selected probabilities. When `renormalize` is on, divide them by their sum. Mixtral
+# always does this. Qwen3 and OLMoE do it only with `norm_topk_prob`. Put the $k$ selections in order from
+# highest to lowest.
 
 # %% exercise
 def route(logits, k, score="softmax", renormalize=True):
@@ -111,12 +118,16 @@ print("✅ softmax -> top-k -> (re)normalise; the sigmoid router scores each exp
 # %% [markdown]
 # ## Exercise 1.2 — the layer: gather, one matmul per expert, scatter
 #
-# Write `moe_forward(x, router_w, gate_up, down, k)`: route `x @ router_w.T` with your `route`
-# (softmax, renormalised when $k > 1$, raw probability when $k = 1$), then for each expert take the rows
-# of the tokens routed to it, run its SwiGLU `(silu(g) * u) @ down[e].T` where
-# `g, u = split(x @ gate_up[e].T)`, multiply by the gate weight and add into the output. Shapes are
-# those of transformers v5 (and `TinyMoE`): `gate_up [E, 2I, d]`, `down [E, d, I]`. This
-# gather → per-expert GEMM → scatter is what fused MoE kernels do in one launch.
+# Write `moe_forward(x, router_w, gate_up, down, k)`. Do these steps:
+#
+# 1. Route `x @ router_w.T` with your `route`. Use the softmax. Renormalise when $k > 1$, and use the raw
+#    probability when $k = 1$.
+# 2. For each expert, take the rows of the tokens that the router sends to it.
+# 3. Run the SwiGLU of the expert, `(silu(g) * u) @ down[e].T`, where `g, u = split(x @ gate_up[e].T)`.
+# 4. Multiply the result by the gate weight. Then add it into the output.
+#
+# The shapes are those of transformers v5 (and `TinyMoE`): `gate_up [E, 2I, d]`, `down [E, d, I]`. Fused MoE
+# kernels do this sequence in one launch: a gather, then one GEMM for each expert, then a scatter.
 
 # %% exercise
 def silu(v):
@@ -163,12 +174,15 @@ print("✅ E = 1 is the dense MLP; sparse dispatch gives what computing every ex
 # %% [markdown]
 # ## Exercise 1.3 — the Switch auxiliary loss
 #
-# For router probabilities `probs [N, E]` and chosen `idx [N, k]`, write
-# `switch_aux_loss(probs, idx)` = $E \cdot \sum_e f_e \cdot P_e$, where
-# $f_e = (\text{assignments to } e) / N$ — so $\sum f_e = k$ — and $P_e$ = mean probability of $e$ over
-# the tokens. This is transformers' `load_balancing_loss_func` normalisation: perfectly uniform
-# routing gives **$k$**, not 1 (Megatron and MegaBlocks divide by $k$, so theirs is 1 at balance —
-# say which one you mean). Only $P$ carries a gradient; $f$ comes out of a top-k.
+# For router probabilities `probs [N, E]` and the selected `idx [N, k]`, write `switch_aux_loss(probs, idx)` =
+# $E \cdot \sum_e f_e \cdot P_e$. Here $f_e = (\text{assignments to } e) / N$. Thus $\sum f_e = k$. $P_e$ is
+# the mean probability of $e$ over the tokens.
+#
+# This is the normalisation of the transformers `load_balancing_loss_func`. Fully uniform routing gives
+# **$k$**, not 1. Megatron and MegaBlocks divide by $k$. Thus their loss is 1 at balance. Say which one you
+# mean.
+#
+# Only $P$ carries a gradient. $f$ comes out of a top-k.
 
 # %% exercise
 def switch_aux_loss(probs, idx):
@@ -195,12 +209,17 @@ print("✅ uniform -> k (HF normalisation), full collapse -> E; Megatron's versi
 # %% [markdown]
 # ## Worked example: train it three ways
 #
-# Same model, same data, same seed; only the balancing differs: `none`, `aux` (the loss above with
-# $\alpha = 0.1$ — larger than the usual 0.01 because a 400-step run has little time) and `bias` (the
-# auxiliary-loss-free rule of Exercise 1.4, step 0.01 per update). Like a real transformer's hidden
-# states, every token embedding shares one large direction (`TrainConfig.common = 12`), so at step 0
-# the router scores nearly every token alike. With torch this trains here (~5 s a run on one CPU
-# thread); without, it reads the runs this code recorded.
+# The three runs have the same model, the same data and the same seed. Only the balance method is different:
+#
+# * `none`: no balance method.
+# * `aux`: the loss of Exercise 1.3 with $\alpha = 0.1$. This is larger than the usual 0.01, because a
+#   400-step run has only a short time.
+# * `bias`: the auxiliary-loss-free rule of Exercise 1.4, with a step of 0.01 for each update.
+#
+# Every token embedding shares one large direction (`TrainConfig.common = 12`), as the hidden states of a real
+# transformer do. Thus, at step 0, the router gives almost the same scores to every token. With torch, this
+# cell trains the model here (approximately 5 s for each run on one CPU thread). Without torch, it reads the
+# runs that this code recorded.
 
 # %%
 if HAS_TORCH:
@@ -231,13 +250,14 @@ for b in ("none", "bias"):
         print(f"  step {step:4d}  {spark(load)}  max/mean {max(load) * len(load):.2f}")
 
 # %% [markdown]
-# Read the table: without balancing the router collapses — the busiest expert carries 6–7× its fair
-# share and five or six of the eight experts die (under 2% of the tokens each), so the model is
-# effectively a two- or three-expert MoE carrying eight experts' memory, and its loss is 0.1–0.3 nats
-# worse than either balanced run. Both fixes keep every expert alive, max/mean 1.04–1.17.
-# Take the shared direction away (`python -m moelab.tinymoe --common 0`) and the same toy only drifts
-# to about 2× on the busiest expert, at most one expert dead: collapse needs the router's inputs to look
-# alike, which real hidden states do. The three seeds bundled for the numpy path tell the same story:
+# Read the table. Without a balance method, the router collapses. The busiest expert carries 6–7× its fair
+# share, and five or six of the eight experts are dead (each gets under 2% of the tokens). Thus the model is
+# in effect a two- or three-expert MoE that carries the memory of eight experts. Its loss is 0.1–0.3 nats
+# worse than the loss of each balanced run. Both solutions keep every expert alive, at max/mean 1.04–1.17.
+#
+# Remove the shared direction (`python -m moelab.tinymoe --common 0`). Then the same toy only moves slowly to
+# about 2× on the busiest expert, with one dead expert at the most. Collapse needs router inputs that look
+# alike, and real hidden states do look alike. The three bundled seeds for the numpy path tell the same story:
 
 # %%
 print(table(load_bundled()["runs"]))
@@ -245,12 +265,13 @@ print(table(load_bundled()["runs"]))
 # %% [markdown]
 # ## Exercise 1.4 — balancing without a loss: the bias rule
 #
-# DeepSeek-V3 (and Megatron's `moe_router_enable_expert_bias`) keep a bias per expert that is added
-# to the scores **only to choose** the top-k; the gate weights still come from the unbiased scores.
-# After each step: `bias += rate · sign(mean load − load)` — under-loaded experts rise, over-loaded
-# ones fall, by a fixed step (the sign, not the size of the error). Write
-# `bias_update(bias, counts, rate)`. The check runs your rule against a stubborn router whose
-# scores never change.
+# DeepSeek-V3 (and the Megatron `moe_router_enable_expert_bias`) keep a bias for each expert. They add this
+# bias to the scores **only to select** the top-k. The gate weights still come from the unbiased scores.
+#
+# After each step, the rule is `bias += rate · sign(mean load − load)`. The bias of an under-loaded expert
+# increases, and the bias of an over-loaded expert decreases. Each change is a constant step, because the rule
+# uses the sign of the error, not its size. Write `bias_update(bias, counts, rate)`. The check runs your rule
+# against a router with scores that never change.
 
 # %% exercise
 def bias_update(bias, counts, rate):
@@ -283,10 +304,10 @@ print(f"✅ max/mean load {before['max_over_mean']:.2f} -> {after['max_over_mean
 # %% [markdown]
 # ## Exercise 1.5 — what imbalance costs at serving time
 #
-# Serve the model with expert parallelism over `ep` GPUs and vLLM's default "linear" placement
-# (GPU $r$ holds experts `[r·E/ep, (r+1)·E/ep)`). Every GPU must finish its experts before the layer
-# ends, so the step waits for the busiest one. Write `ep_slowdown(load, ep)`: the busiest GPU's
-# share of the assignments divided by the balanced share `1/ep` (1.0 = no waste).
+# Serve the model with expert parallelism over `ep` GPUs and the default "linear" placement of vLLM. In this
+# placement, GPU $r$ holds experts `[r·E/ep, (r+1)·E/ep)`. Every GPU must complete its experts before the
+# layer ends. Thus the step waits for the busiest GPU. Write `ep_slowdown(load, ep)`. It returns the share of the
+# assignments on the busiest GPU, divided by the balanced share `1/ep` (1.0 = no waste).
 
 # %% exercise
 def ep_slowdown(load, ep):
@@ -311,10 +332,10 @@ print("✅ the collapsed router's hottest expert sets the pace of every EP step;
 # %% [markdown]
 # ## Exercise 1.6 — do experts specialise, and on what?
 #
-# From co-occurrence counts `[values of X, experts]` write `specialisation(counts)` =
-# $I(X; \text{expert}) / H(\text{expert})$: the share of the router's choice that property $X$ explains
-# (0 = unrelated, 1 = $X$ decides). Then ask it twice: $X$ = the sequence's domain, and $X$ = the
-# current token.
+# From co-occurrence counts `[values of X, experts]`, write `specialisation(counts)` =
+# $I(X; \text{expert}) / H(\text{expert})$. This is the share of the selection of the router that the property
+# $X$ explains (0 = unrelated, 1 = $X$ decides). Then ask it two times: once with $X$ = the domain of the
+# sequence, and once with $X$ = the current token.
 
 # %% exercise
 def my_specialisation(counts):
@@ -340,13 +361,14 @@ assert all(my_specialisation(r["token_expert"]) > 5 * my_specialisation(r["domai
 print("✅ a healthy router keys on the token in front of it far more than on the domain a person would name")
 
 # %% [markdown]
-# That is the practical lesson for serving: which experts are hot depends on *the tokens* your
-# traffic contains, so hot sets shift with the workload mix (notebook 02 measures a real router).
+# This is the practical lesson for serving. Which experts are hot depends on *the tokens* that your traffic
+# contains. Thus the hot sets change with the workload mix (notebook 02 measures a real router).
 #
 # ## Worked example: record the router with hooks (a preview of notebook 02)
 #
-# `TinyTopKRouter` returns `(logits, weights, indices)` like the Hugging Face v5 routers, so
-# `moelab.hooks.RouterRecorder` — written for OLMoE, Mixtral, Qwen-MoE — records it unchanged.
+# `TinyTopKRouter` returns `(logits, weights, indices)`, as the Hugging Face v5 routers do.
+# `moelab.hooks.RouterRecorder` is for OLMoE, Mixtral and Qwen-MoE. Because `TinyTopKRouter` returns the same
+# tuple, the recorder records it with no change.
 
 # %%
 if HAS_TORCH:
@@ -366,26 +388,28 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "An MoE layer is a router plus $E$ ordinary MLPs; each token runs $k$ of them, so
-# we pay memory for all $E$ and compute for $k$. The router needs help to spread the load: left alone,
-# top-1 routing collapses — in our toy the busiest expert carried 6-7x its share within 400 steps,
-# most experts died, and the loss was worse.
+# **Two minutes:** "An MoE layer is a router plus $E$ ordinary MLPs. Each token runs $k$ of them. Thus we
+# pay memory for all $E$ and compute for $k$. The router needs help to spread the load. With no help, top-1
+# routing collapses. In our toy, the busiest expert carried 6-7x its share within 400 steps, most experts were
+# dead, and the loss was worse.
 #
-# "Training adds either the Switch loss, which nudges the router's probabilities toward uniform at
-# some cost to the language-model objective, or DeepSeek-V3's bias, which only changes which experts
-# are chosen and so leaves the gate weights alone. The same imbalance matters at inference: with
-# expert parallelism the GPU holding the hottest expert sets the step time, and the fewer experts per
-# GPU, the less it averages out. Experts specialise, but by token far more than by topic — so the hot
-# set follows the traffic mix, and we measure it rather than guess."
+# "Training adds one of two things. The first is the Switch loss, which pushes the probabilities of the router
+# a small step toward uniform, at some cost to the language-model objective. The second is the DeepSeek-V3
+# bias, which only changes which experts the router selects. Thus it does not change the gate weights.
 #
-# **Drill 1.** *Your aux loss reads 2.0. Is the router collapsing?* — Depends on the normalisation:
-# transformers' `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2 is ideal); Megatron's
-# and MegaBlocks' are 1. Look at max/mean load and dead experts, not the raw loss.
+# "The same imbalance is important at inference. With expert parallelism, the GPU that holds the hottest
+# expert sets the step time. The fewer experts there are on each GPU, the less the load averages out. Experts
+# specialise, but by token much more than by topic. Thus the hot set changes with the traffic mix, and we
+# measure it. We do not guess it."
 #
-# **Drill 2.** *Why does DeepSeek-V3's bias not distort outputs the way the aux loss can?* — It is
-# added to the scores only for the top-k choice; the gate weights come from the unbiased scores, and
-# there is no gradient term competing with the language-model loss.
+# **Drill 1.** *Your aux loss reads 2.0. Is the router in collapse now?* It depends on the normalisation. The
+# transformers `load_balancing_loss_func` is $k$ at perfect balance (2.0 for top-2 is ideal), and the loss of
+# Megatron and of MegaBlocks is 1. Look at the max/mean load and the dead experts, not at the raw loss.
 #
-# **Drill 3.** *Can we assign experts to "the code GPU" and "the prose GPU"?* — Not on the evidence:
-# routers key mostly on local token features (here, in the balanced runs, the current token explains
-# ~0.8 of the choice and the domain ~0.04). Balance by measured load (EPLB, redundant experts), not by topic.
+# **Drill 2.** *Why does the DeepSeek-V3 bias not make the outputs worse in the way that the aux loss can?* The
+# rule adds the bias to the scores only for the top-k selection. The gate weights come from the unbiased
+# scores. Also, no gradient term competes with the language-model loss.
+#
+# **Drill 3.** *Can we assign experts to "the code GPU" and "the prose GPU"?* Not on the evidence. Routers select
+# experts mostly by local token features. Here, in the balanced runs, the current token explains ~0.8 of the
+# selection, and the domain explains ~0.04. Balance by measured load (EPLB, redundant experts), not by topic.

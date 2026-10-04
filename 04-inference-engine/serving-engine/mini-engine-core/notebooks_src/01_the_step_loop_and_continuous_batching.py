@@ -1,23 +1,31 @@
 # %% [markdown]
 # # 01 · The step loop and continuous batching
 #
-# **Tier:** T0 — CPU only, no network, about ten seconds. The same ideas on a real GPU with vLLM are in
-# `vllm-serving-lab` (notebook `02_serve_and_measure`, T1).
+# **Tier:** T0. It needs a CPU only and no network, and it runs in about ten seconds. The same ideas on a real GPU
+# with vLLM are in `vllm-serving-lab` (notebook `02_serve_and_measure`, T1).
 #
 # ## The one-minute version
-# An inference engine is a loop. Each iteration — a **step** — it:
+# An inference engine is a loop. Each iteration of the loop is a **step**. In each step, the engine does these
+# things:
 #
-# 1. asks the **scheduler** which requests run and how many tokens each gets this step;
-# 2. packs all of those tokens into **one flat batch** (a prompt chunk here, a single decode token there),
-#    with each token's position, where to write its K/V (the *slot mapping*) and each request's *block table*;
-# 3. runs **one forward pass** over that batch;
-# 4. **samples** a token for every request whose prompt is now fully processed;
-# 5. **updates** state: finished requests leave and free their KV blocks, waiting ones can join next step.
+# 1. It asks the **scheduler** which requests run and how many tokens each request gets in this step.
+# 2. It packs all of those tokens into **one flat batch**. The batch can hold a prompt chunk for one request and a
+#    single decode token for another. For each token, the batch holds its position and the place to write its K/V
+#    (the *slot mapping*). For each request, the batch holds its *block table*.
+# 3. It runs **one forward pass** over that batch.
+# 4. It **samples** a token for each request whose prompt is now fully processed.
+# 5. It **updates** the state. Finished requests leave and free their KV blocks. Requests that wait can join in the
+#    next step.
 #
-# Membership changes every step, not every batch — that is **continuous (iteration-level) batching**, and it
-# is why a short request never waits for a long one. By the end you can explain what one step is, why the batch
-# is flat, how much continuous batching buys over static batching, how KV blocks cap concurrency, and how one
-# step is split across two GPUs (tensor parallelism).
+# The membership changes in each step, not in each batch. That is **continuous (iteration-level) batching**. It is
+# the reason that a short request never waits for a long one. At the end of this notebook, you can explain these
+# things:
+#
+# * what one step is,
+# * why the batch is flat,
+# * how much continuous batching gains over static batching,
+# * how KV blocks cap concurrency,
+# * how the engine divides one step across two GPUs (tensor parallelism).
 #
 # Primer: §1 *Anatomy of an engine*, §2 *Continuous batching*, §9 *Parallelism inside the engine*
 # (`../../PRIMER.md`).
@@ -33,12 +41,14 @@ print("parameters:", model.num_params(), "| KV bytes per token (bf16):", model.c
 print("greedy continuation of 'The engine ':", repr(decode(model.generate_dense(encode("The engine "), 24))))
 
 # %% [markdown]
-# The model's weights are random except its embedding, which encodes English letter-pair statistics, so it
-# babbles English-looking text — and greedy decoding falls into a loop (`tofofof`), which Notebook 04 fixes with
-# penalties. **The engine does not care what the model says.** Everything below is about the machinery.
+# The weights of the model are random, except its embedding. The embedding encodes English letter-pair statistics.
+# Thus the model produces meaningless text that looks like English. Greedy decoding falls into a loop (`tofofof`),
+# and Notebook 04 repairs that with penalties. **The engine does not care what the model says.** All of the rest of
+# this notebook is about the machinery.
 #
 # ## Worked example 1 — three requests through the engine
-# Small numbers so every step fits on a line: blocks of 4 tokens, a budget of 16 tokens per step.
+# The numbers are small, so that each step fits on one line. A block holds 4 tokens, and the budget is 16 tokens per
+# step.
 
 # %%
 eng = Engine(model, num_blocks=32, block_size=4, max_num_batched_tokens=16, max_num_seqs=4)
@@ -50,17 +60,18 @@ while eng.scheduler.has_unfinished():
 print(eng.trace())
 
 # %% [markdown]
-# Read it line by line:
+# Read the trace line by line:
 #
-# * **step 1** — `r0`'s 11-token prompt runs whole (`prefill`) and samples its first token; `r1` gets only the
-#   5 tokens left in the budget (`chunk`: nothing is sampled for it yet); `r2` waits.
-# * **step 3** — two decodes (1 token each) and a 14-token chunk of `r2`: *decode and prefill share a step*.
-#   There are no separate "prefill steps" in a modern engine.
-# * **finished** — the step a request hits `max_tokens` it frees its blocks (the next line's `kv`, which counts
-#   the blocks held while that step ran, is lower) and its slot is open to a waiting request at the very next step.
+# * **step 1**: `r0`'s 11-token prompt runs whole (`prefill`) and samples its first token. `r1` gets only the
+#   5 tokens that the budget still has (`chunk`). The engine samples nothing for `r1` yet. `r2` waits.
+# * **step 3**: two decodes (1 token each) and a 14-token chunk of `r2`. *Decode and prefill share a step*.
+#   A modern engine has no separate "prefill steps".
+# * **finished**: in the step where a request gets to `max_tokens`, the request frees its blocks. Thus the `kv` value
+#   on the next line is lower, because `kv` counts the blocks held while that step ran. A request that waits can take
+#   the slot immediately, at the next step.
 #
 # ## Worked example 2 — one step, taken apart
-# `Engine.step` is about 30 lines. Here are its stages by hand, so you can see the flat batch.
+# `Engine.step` has about 30 lines. The next cell does its stages by hand, so that you can see the flat batch.
 
 # %%
 eng = Engine(model, num_blocks=32, block_size=4, max_num_batched_tokens=16)
@@ -82,13 +93,14 @@ eng.scheduler.update(out, sampled)                    # 5. update
 print("sampled:", {k: decode([v]) for k, v in sampled.items()})
 
 # %% [markdown]
-# One batch mixes a decode token and a prompt chunk. The weights are read **once** for the whole batch; every
-# request's tokens ride along. Attention is the only per-request part — each request reads *its own* K/V
-# through *its own* block table, and only each request's last token is turned into logits.
+# One batch mixes a decode token and a prompt chunk. The engine reads the weights **once** for the whole batch, and
+# the tokens of each request share that one read. Attention is the only per-request part. Each request reads *its
+# own* K/V through *its own* block table. The engine turns only the last token of each request into logits.
 #
 # ## Worked example 3 — the paged, batched engine computes exactly the reference
-# `TinyLM.generate_dense` recomputes the whole sequence every token with textbook attention and no cache.
-# The engine chunks, batches and pages — and must produce the same tokens.
+# `TinyLM.generate_dense` recomputes the whole sequence for each token. It uses textbook attention and no cache. The
+# engine divides prompts into chunks, puts requests into batches and keeps the KV cache in pages. It must also produce
+# the same tokens.
 
 # %%
 eng = Engine(model, num_blocks=32, block_size=4, max_num_batched_tokens=8, max_num_seqs=2)
@@ -99,8 +111,9 @@ for p, o in zip(prompts, outs):
 
 # %% [markdown]
 # ## Worked example 4 — static vs continuous batching
-# Static batching fills a batch, runs it until the **longest** request finishes, then starts the next batch.
-# Continuous batching refills a slot the step it frees. Same requests, same slot count:
+# Static batching fills a batch and runs it until the **longest** request finishes. Then it starts the next batch.
+# Continuous batching fills a slot again in the step that frees the slot. The requests are the same, and the slot
+# count is the same:
 
 # %%
 lens = [2, 9, 3, 4]                                   # output lengths of four requests, 2 slots
@@ -110,9 +123,10 @@ print("continuous: ", 9, "steps, slot utilisation", f"{sum(lens) / (2 * 9):.0%} 
 
 # %% [markdown]
 # ## Exercise 1.1 — how many tokens does a request get this step?
-# In vLLM V1's unified scheduler a request is just `num_tokens` (prompt + generated so far) and
-# `num_computed_tokens` (tokens whose K/V are already cached). Write `num_new_tokens(num_tokens, num_computed,
-# budget_left)`: the tokens it would be scheduled this step (chunked prefill on).
+# In vLLM V1's unified scheduler, a request is only two numbers. `num_tokens` is the prompt tokens plus the tokens
+# generated until now. `num_computed_tokens` is the tokens whose K/V are already in the cache. Write
+# `num_new_tokens(num_tokens, num_computed, budget_left)`. It returns the tokens that the scheduler gives to the
+# request in this step, with chunked prefill on.
 
 # %% exercise
 def num_new_tokens(num_tokens, num_computed, budget_left):
@@ -129,8 +143,9 @@ print("✅ one rule covers prefill, chunked prefill and decode")
 
 # %% [markdown]
 # ## Exercise 1.2 — the slot mapping
-# Every new token's K/V is written to a *slot*: `block_table[pos // block_size] * block_size + pos % block_size`.
-# Write `slot_mapping(block_table, start, n, block_size)` for the `n` tokens at positions `start .. start+n-1`.
+# The engine writes the K/V of each new token to a *slot*:
+# `block_table[pos // block_size] * block_size + pos % block_size`. Write
+# `slot_mapping(block_table, start, n, block_size)` for the `n` tokens at positions `start .. start+n-1`.
 
 # %% exercise
 def slot_mapping(block_table, start, n, block_size):
@@ -149,9 +164,9 @@ print("✅ slot mapping matches the engine's:", slot_mapping(eng.kv.tables[req.r
 
 # %% [markdown]
 # ## Exercise 1.3 — predict a request's peak KV blocks
-# A request with a $P$-token prompt that generates $O$ tokens: how many blocks does it hold at its peak?
-# Careful — the **last** sampled token is returned to the user but never fed back through the model, so it
-# never gets a K/V slot. Write `peak_blocks(P, O, block_size)`.
+# A request has a $P$-token prompt and generates $O$ tokens. How many blocks does it hold at its peak? Be careful.
+# The engine returns the **last** sampled token to the user, but it never sends that token back through the model.
+# Thus that token never gets a K/V slot. Write `peak_blocks(P, O, block_size)`.
 
 # %% exercise
 def peak_blocks(P, O, block_size):
@@ -170,10 +185,12 @@ print("✅ peak blocks = ceil((P + O - 1) / B), e.g. P=8, O=1 ->", peak_blocks(8
 
 # %% [markdown]
 # ## Exercise 1.4 — static vs continuous batching, in general
-# Write both step counters for decode-only requests with the given output lengths (FCFS order):
+# Write the two step counters for decode-only requests with the given output lengths (FCFS order):
 #
-# * `static_steps(lens, slots)` — batches of `slots` requests in order; each batch takes as long as its longest;
-# * `continuous_steps(lens, slots)` — each slot takes the next waiting request the moment it frees.
+# * `static_steps(lens, slots)`: batches of `slots` requests, in order. Each batch takes as long as its longest
+#   request.
+# * `continuous_steps(lens, slots)`: each slot takes the next request in the queue at the moment that the slot
+#   becomes free.
 
 # %% exercise
 def static_steps(lens, slots):
@@ -202,9 +219,10 @@ print("✅ continuous batching never waits for the longest request in a batch")
 
 # %% [markdown]
 # ## Exercise 1.5 — blocks cap concurrency (a real model)
-# Llama-3.1-8B in bf16 on one 24 GB L4 with `gpu_memory_utilization=0.9` leaves `perf.kv_cache_blocks(...)`
-# blocks of 16 tokens for the KV cache. Chat requests average 1,000 prompt + 200 output tokens. How many can be
-# resident at once? Set `concurrent` (use your `peak_blocks`).
+# If Llama-3.1-8B in bf16 runs on one 24 GB L4 with `gpu_memory_utilization=0.9`, it leaves
+# `perf.kv_cache_blocks(...)` blocks of 16 tokens for the KV cache. On average, a chat request has 1,000 prompt tokens
+# and 200 output tokens. How many requests can be in memory at the same time? Set `concurrent` (use your
+# `peak_blocks`).
 
 # %% exercise
 gpu, llm = perf.GPUS["L4"], perf.LLMS["llama-3.1-8b"]
@@ -220,14 +238,17 @@ print("   the same arithmetic as 00-foundations/gpu-capacity-planning; Notebook 
 
 # %% [markdown]
 # ## Exercise 1.6 — one step on two GPUs (tensor parallelism)
-# When one GPU is too small or too slow, the engine splits every layer across GPUs (the Megatron pattern). The
-# MLP $(\operatorname{silu}(h W_{\text{gate}}) \odot (h W_{\text{up}}))\,W_{\text{down}}$ splits cleanly: each rank
-# holds **half the columns** of $W_{\text{gate}}$ and $W_{\text{up}}$ — *column-parallel*: it computes half of the
-# hidden features with no communication, because the gating is elementwise — and the **matching half of the rows**
-# of $W_{\text{down}}$ — *row-parallel*: it produces a full-size **partial sum**. Adding the ranks' partial sums is
-# the **all-reduce**. Write `tp_mlp_partials(L, h, world)`: the `world` partial outputs, rank $r$ using only its
-# shard of the three weights ($h$ is the normalised input, `L` one layer's weights, e.g. `L["w_gate"]` of shape
-# `(d_model, d_ff)`).
+# When one GPU is too small or too slow, the engine divides each layer across GPUs (the Megatron pattern). The
+# MLP $(\operatorname{silu}(h W_{\text{gate}}) \odot (h W_{\text{up}}))\,W_{\text{down}}$ divides cleanly:
+#
+# * Each rank holds **half the columns** of $W_{\text{gate}}$ and $W_{\text{up}}$. This is *column-parallel*. The
+#   rank calculates half of the hidden features with no communication, because the gate operation is elementwise.
+# * Each rank also holds the **half of the rows** of $W_{\text{down}}$ that matches its columns. This is *row-parallel*. The rank
+#   produces a full-size **partial sum**.
+#
+# The addition of the partial sums of the ranks is the **all-reduce**. Write `tp_mlp_partials(L, h, world)`. It
+# returns the `world` partial outputs, and rank $r$ uses only its shard of the three weights. $h$ is the normalised
+# input. `L` is the weights of one layer, for example `L["w_gate"]` of shape `(d_model, d_ff)`.
 
 # %% exercise
 def tp_mlp_partials(L, h, world):
@@ -259,28 +280,33 @@ print(f"   with attention split by heads the same way: {n_ar} all-reduces per fo
 print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all-reduces, bytes each), primer §9")
 
 # %% [markdown]
-# Attention splits the same way: the Q/K/V projections are column-parallel **by head** (each rank owns whole
-# heads, and therefore their slice of the KV cache), the output projection is row-parallel, and its partial sums
-# need the layer's second all-reduce. Two all-reduces per layer on the critical path of every step is why tensor
-# parallelism stays inside one NVLink domain. Running it for real needs two GPUs (tier T2; `vllm-serving-lab`).
+# Attention divides in the same way. The Q/K/V projections are column-parallel **by head**: each rank owns whole
+# heads, and thus also their slice of the KV cache. The output projection is row-parallel, and its partial sums need
+# the second all-reduce of the layer. Each step has two all-reduces per layer on its critical path. That is why
+# tensor parallelism stays inside one NVLink domain. To run it for real, you need two GPUs (tier T2,
+# `vllm-serving-lab`).
 #
 # ## In a design review
-# **The two-minute version.** "An engine is a loop around one forward pass. Each step the scheduler hands out a
-# token budget: running requests first — one token each if they are decoding, a chunk if they are still
-# prefilling — then new requests while budget, sequence slots and KV blocks last. All scheduled tokens are
-# flattened into one batch, so the weights are read once for everyone; attention reads each request's history
-# through its block table.
+# **The two-minute version.** "An engine is a loop around one forward pass. In each step, the scheduler gives out a
+# token budget. The requests that run get tokens first. A request in decode gets one token, and a request that is
+# still in prefill gets a chunk. Then new requests get tokens while the budget, the sequence slots and the KV blocks
+# last.
 #
-# "After the pass we sample for requests whose prompt is done, and finished requests free their blocks immediately,
-# so a waiting request joins at the next step — that is continuous batching, about 1.6× the throughput of static
-# batching from scheduling alone on a mix of 10–400-token outputs (more with longer tails or more slots). Concurrency
-# is capped by KV blocks, not by compute: for an 8B model on an L4 it is about 28 chat requests. When a model needs
-# more than one GPU, tensor parallelism splits each layer and pays two all-reduces per layer per step."
+# "The engine puts all scheduled tokens into one flat batch, so it reads the weights one time for all requests.
+# Attention reads the history of each request through its block table.
+#
+# "After the pass, we sample for the requests whose prompt is complete. Finished requests free their blocks
+# immediately, so a request that waits joins at the next step. That is continuous batching. The scheduler alone
+# gives about 1.6× the throughput of static batching on a mix of 10–400-token outputs (more with longer tails or
+# more slots).
+#
+# "KV blocks cap concurrency, not compute. For an 8B model on an L4, the cap is about 28 chat requests. When a model
+# needs more than one GPU, tensor parallelism divides each layer and pays two all-reduces per layer per step."
 #
 # **Drill questions**
-# 1. *Why does the engine not have prefill steps and decode steps?* — Because the scheduler only tracks
-#    computed vs total tokens; a step mixes decode tokens and prefill chunks under one token budget.
-# 2. *Why is batching nearly free during decode?* — Decode is memory-bound: the step time is the weight read,
-#    which is shared by every request in the batch (Notebook 02 puts numbers on it).
-# 3. *A request's prompt is 8 tokens and it generates 1 token with block size 4. How many blocks?* — Two: the
-#    only sampled token is never fed back, so it needs no slot.
+# 1. *Why does the engine not have prefill steps and decode steps?* Because the scheduler records only two counts: the
+#    computed tokens and the total tokens. A step mixes decode tokens and prefill chunks under one token budget.
+# 2. *Why is batching nearly free during decode?* Decode is memory-bound. The step time is the weight read. All
+#    requests in the batch share that read (Notebook 02 puts numbers on it).
+# 3. *A request's prompt is 8 tokens and it generates 1 token with block size 4. How many blocks?* Two. The
+#    only sampled token never goes back through the model, so it needs no slot.

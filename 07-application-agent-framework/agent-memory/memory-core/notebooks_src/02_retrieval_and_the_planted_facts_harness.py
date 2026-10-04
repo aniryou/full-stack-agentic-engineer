@@ -1,22 +1,30 @@
 # %% [markdown]
 # # 02 · Retrieval and the planted-facts harness
 #
-# **Tier:** T0 — CPU only, no model, no network, under ten seconds. A real embedder on the paraphrase subset is
-# `memory-lab` notebook `05_evaluate_forget_and_audit` (T1, optional).
+# **Tier:** T0. It uses only a CPU, it needs no model and no network, and it takes less than ten seconds. A real
+# embedder on the paraphrase subset is in `memory-lab` notebook `05_evaluate_forget_and_audit` (T1, optional).
 #
 # ## The one-minute version
-# Retrieval decides which memories reach the prompt, so it decides what the agent "remembers". Similarity alone
-# returns the most *on-topic* memory; the generative-agents score (Park et al. 2023) adds **recency** and
-# **importance**, each normalised to [0, 1] over the candidates. It exists in two forms that disagree — the paper's
-# (all weights 1, recency 0.995 per hour since last access; verify) and the reference code's (weights 0.5 / 3 / 2, and
-# a rank-based recency that gives the **oldest** memory the largest term). Whatever the score, the result is packed
-# into a **token budget** per turn.
+# Retrieval decides which memories get to the prompt. Thus it decides what the agent "remembers". Similarity alone
+# returns the memory that is most *on-topic*. The generative-agents score (Park et al. 2023) adds **recency** and
+# **importance**, each normalised to [0, 1] over the candidates. The score has two forms that disagree:
 #
-# You cannot tune any of this without a benchmark, so the harness plants facts about a user across sessions, changes
-# one, slips a false claim in through a tool, and asks questions in LongMemEval's and LoCoMo's task shapes:
-# extraction, preference, multi-session, temporal, knowledge update, abstention, adversarial. It reports accuracy with
-# a Wilson interval, recall within the budget, stale answers and abstention — and a paraphrase subset that a lexical
-# embedder misses by design.
+# - The paper's form: all weights 1, and recency 0.995 per hour since last access (verify).
+# - The reference code's form: weights 0.5 / 3 / 2, and a rank-based recency that gives the **oldest** memory the
+#   largest term.
+#
+# Whatever the score is, the result goes into a **token budget** for each turn.
+#
+# You cannot adjust any of this without a benchmark. Thus the harness does these steps:
+#
+# - It plants facts about a user across sessions.
+# - It changes one fact.
+# - It puts a false claim in through a tool.
+# - It asks questions in LongMemEval's and LoCoMo's task shapes: extraction, preference, multi-session, temporal,
+#   knowledge update, abstention, adversarial.
+#
+# It reports accuracy with a Wilson interval, recall within the budget, stale answers and abstention. It also reports a
+# paraphrase subset that a lexical embedder misses by design.
 #
 # Primer: §3 *Retrieval: similarity, recency and importance*, §4 *Measuring memory* (`../PRIMER.md`).
 
@@ -33,9 +41,9 @@ emb = HashingEmbedder()
 
 # %% [markdown]
 # ## Worked example 1 — the embedder is lexical, on purpose
-# memcore re-implements `ragkit`'s crc32 hashing embedder (07.4): each `[a-z0-9]+` token adds 1 to bucket
-# `crc32(token) % 1024`, then the vector is L2-normalised, so a dot product is a cosine. Two texts are similar
-# exactly when they share tokens.
+# memcore implements `ragkit`'s crc32 hashing embedder (07.4) again. Each `[a-z0-9]+` token adds 1 to bucket
+# `crc32(token) % 1024`. Then the embedder L2-normalises the vector, thus a dot product is a cosine. Two texts are
+# similar if, and only if, they share tokens.
 
 # %%
 q = emb.encode("user lives in lisbon")
@@ -44,11 +52,12 @@ for other in ["the user moved to porto", "Where does the user live?", "user live
 
 # %% [markdown]
 # $0.2236 = 1/\sqrt{4 \cdot 5}$: one shared token (`user`) out of four and five. "Where does the user live?" is the same
-# question a person would ask about the first text, and scores no better than the unrelated move: `live` is not
-# `lives`. That is the **paraphrase miss** the harness measures below; a real embedder closes most of it (T1).
+# question that a person asks about the first text. But its score is not better than the score of the unrelated move,
+# because `live` is not `lives`. That is the **paraphrase miss** that the harness measures in worked example 5. A real
+# embedder closes most of it (T1).
 #
 # ## Worked example 2 — three memories, two scoring forms
-# A (last used 1 h ago, importance 2, cosine 0.80), B (24 h, 9, 0.50), C (72 h, 5, 0.20).
+# The three memories are A (last used 1 h ago, importance 2, cosine 0.80), B (24 h, 9, 0.50) and C (72 h, 5, 0.20).
 
 # %%
 now = 100 * HOUR
@@ -61,13 +70,15 @@ for form in ("paper", "code"):
     print(f"       score A, B, C = {np.round(score(last, imp, rel, now, form), 4)}")
 
 # %% [markdown]
-# Both forms rank B, A, C here, for different reasons. In the paper form, recency and relevance cancel between A
-# and B and B's importance decides. In the code form, relevance is weighted 3 and importance 2, and the recency
-# term — $0.99^{\text{rank}}$ over the memories sorted by last access, oldest first — gives **C, the stalest**, the
-# full recency point. That inversion does not matter on this example; it matters on a knowledge update, where the
-# stale fact is exactly the one it favours (the harness shows it below). The paper's form comes from the paper
-# alone (arXiv is unreachable here: verify); the code form was read from `joonspk-research/generative_agents`
-# (`retrieve.py`, 2026-09-26).
+# Both forms rank B, A, C here, but for different reasons. In the paper form, recency and relevance cancel between A
+# and B, and the importance of B decides. In the code form, relevance has the weight 3 and importance has the weight 2.
+# The recency term is $0.99^{\text{rank}}$ over the memories, sorted by last access, oldest first. This term gives
+# **C, the stalest**, the full recency point.
+#
+# That inversion is not important on this example. It is important on a knowledge update. There, the stale fact is
+# exactly the one that the term favours (the harness shows it after exercise 2.3). The paper's form comes from the
+# paper alone (arXiv is not available from here: verify). The code form comes from
+# `joonspk-research/generative_agents` (`retrieve.py`, read on 2026-09-26).
 #
 # ## Worked example 3 — pack into a budget, filter as of a date
 
@@ -88,10 +99,10 @@ past = retrieve(store, ALICE, "What was the user's home city?", now=6 * DAY, as_
 print("as of day 2:", [r.render() for r in past.records][:2])
 
 # %% [markdown]
-# The superseded Lisbon fact is invisible to a normal query and returns for an as-of query: that is why an update
-# closes a fact instead of deleting it. Hybrid search (BM25 + vectors + RRF) is 07.4's topic (`ragkit.reference`)
-# and applies unchanged; an ANN index such as `minifaiss`'s HNSW (M0 = 2M) only pays at tenant scale — one user's
-# memory is tens to thousands of records, and a flat scan of one partition is exact and fast.
+# A normal query does not see the superseded Lisbon fact, but an as-of query returns it. That is why an update closes a
+# fact and does not delete it. Hybrid search (BM25 + vectors + RRF) is the topic of 07.4 (`ragkit.reference`), and it
+# applies with no change. An ANN index such as `minifaiss`'s HNSW (M0 = 2M) gives a benefit only at tenant scale. The
+# memory of one user is tens to thousands of records, and a flat scan of one partition is exact and fast.
 #
 # ## Worked example 4 — a planted-facts scenario
 
@@ -104,17 +115,21 @@ for q in sc.questions:
     print(f"{q.qtype:16} {'(paraphrase) ' if q.paraphrase else ''}{q.text!r:48} -> {q.answer}")
 
 # %% [markdown]
-# Shapes, not data: LongMemEval's question types (single-session user/assistant/preference, multi-session,
-# temporal reasoning, knowledge update, with abstention marked by an `_abs` id suffix) and LoCoMo's adversarial
-# category (unanswerable questions). LoCoMo's data is CC BY-NC 4.0 and none of it is bundled; nothing is downloaded.
-# Here the adversarial question asks about a fact that only a **tool result** asserted — quarantined on write, so the
-# right answer is "I don't know".
+# The harness uses the shapes, not the data. The shapes are LongMemEval's question types and LoCoMo's adversarial
+# category (unanswerable questions). The LongMemEval types are single-session user/assistant/preference,
+# multi-session, temporal reasoning and knowledge update. An `_abs` id suffix marks abstention.
 #
-# **A fixture artefact, disclosed.** Look at the planted statements: "I live in Prague. (about my home city)". No
-# real user adds that hint. It exists so that the template extractor and the lexical embedder have something to work
-# with on raw episodes — it hands the embedder the question's own words ("home", "city"). So the raw-episode numbers
-# below flatter raw episodes; `generate(hint=False)` drops the hints, and the cell after worked example 6 shows the
-# difference. Consolidated facts are unaffected: their text is the template "The user's home city is …" either way.
+# LoCoMo's data is CC BY-NC 4.0, and the harness bundles none of it. The harness downloads nothing. Here the adversarial
+# question asks about a fact that only a **tool result** asserted. The write path quarantined that fact, thus the
+# correct answer is "I don't know".
+#
+# **A fixture artefact, disclosed.** Look at the planted statements: "I live in Prague. (about my home city)". No real
+# user adds that hint. The hint is there to give the template extractor and the lexical embedder something to use on
+# raw episodes. It gives the embedder the words of the question ("home", "city").
+#
+# Thus the raw-episode numbers in this notebook make raw episodes look better than they are. `generate(hint=False)`
+# removes the hints, and the cell after worked example 6 shows the difference. The hints do not change consolidated
+# facts: their text is the template "The user's home city is …" in both cases.
 #
 # ## Worked example 5 — evaluate, with an interval
 
@@ -130,16 +145,17 @@ c_lo, c_hi = res["cluster"]
 print(f"resampling users instead of questions (a cluster bootstrap): {c_lo:.1%}-{c_hi:.1%}")
 
 # %% [markdown]
-# Everything is right except the preference paraphrase: "Where does the user like to sit on a plane?" shares no
-# token with "The user's seat preference is aisle.", every fact ties on relevance, and the lowest-importance fact
-# loses the budget. The reader is a strict template reader, so each miss is a retrieval or write-path miss — which
-# is the point of a memory benchmark.
+# All answers are correct except the preference paraphrase. "Where does the user like to sit on a plane?" shares no
+# token with "The user's seat preference is aisle.". Every fact ties on relevance, and the fact with the lowest
+# importance loses its place in the budget. The reader is a strict template reader, thus each miss is a retrieval miss
+# or a write-path miss. That is the purpose of a memory benchmark.
 #
-# The Wilson interval treats the 390 questions as 390 independent trials. They are not: thirteen per user share one
-# store and one write path, and here every one of the 30 users misses the *same* question. Resampling users (the
-# `cluster` interval) collapses to a point — this harness's uncertainty is in which question types it asks, not in
-# which users. Compare designs per question type (`by_type`), and read an interval as a statement about this
-# generator, not about your users.
+# The Wilson interval treats the 390 questions as 390 independent trials. They are not independent. The thirteen
+# questions of each user share one store and one write path. Here, each of the 30 users misses the *same* question.
+#
+# If you resample users (the `cluster` interval), the interval becomes a point. The uncertainty of this harness is in
+# which question types it asks, not in which users. Compare designs for each question type (`by_type`). Read an
+# interval as a statement about this generator, not about your users.
 #
 # ## Worked example 6 — recall against the budget, raw episodes against facts
 
@@ -152,8 +168,8 @@ for mode in ("consolidated", "episodes"):
               f"tokens used {r['tokens']:5.1f}")
 
 # %% [markdown]
-# Facts reach full recall at 90 tokens — the whole profile fits — while raw episodes (long, in the user's words,
-# filler included) are at 40% with 120, and that with the slot hints' help:
+# At 90 tokens, the whole profile fits, and facts get to full recall. But raw episodes (long, in the user's words,
+# filler included) are at 40% with 120, and that is with the help of the slot hints:
 
 # %%
 for hint in (True, False):
@@ -162,13 +178,13 @@ for hint in (True, False):
     print(f"raw episodes at 60 tokens, slot hints {'on ' if hint else 'off'}: recall {r['recall']:.1%}")
 
 # %% [markdown]
-# The episodes' curve is the fixture's best case. Note the episodes' accuracy at 15 tokens: 15.4% with **zero** recall — the
-# two unanswerable questions per user are "right" for a reader that knows nothing. Report recall and abstention
-# separately, or a memory that stores nothing looks like it works.
+# The curve of the episodes is the best case of the fixture. Look at the accuracy of the episodes at 15 tokens: 15.4%
+# with **zero** recall. The two unanswerable questions of each user are "correct" for a reader that knows nothing.
+# Report recall and abstention separately. If you do not, a memory that stores nothing looks like it works.
 #
 # ## Exercise 2.1 — the paper's score
-# Implement `paper_score(hours_since_access, importance, relevance)`: min-max normalise each term over the
-# candidates (all equal → 0.5), $\text{recency} = 0.995^{\text{hours}}$, weights 1, 1, 1.
+# Write `paper_score(hours_since_access, importance, relevance)`. Min-max normalise each term over the candidates. If
+# all values are equal, the term is 0.5. Use $\text{recency} = 0.995^{\text{hours}}$ and the weights 1, 1, 1.
 
 # %% exercise
 def paper_score(hours, importance, relevance):
@@ -191,8 +207,8 @@ print("✅ the paper form: A 2.0000, B 2.1364, C 0.4286")
 
 # %% [markdown]
 # ## Exercise 2.2 — the code's recency
-# Implement `code_recency(last_accessed)` as the reference code does: sort by last access **ascending** (oldest
-# first) and give the $i$-th (from 1) the value $0.99^i$, returned in the input's order.
+# Write `code_recency(last_accessed)` the same way as the reference code. Sort by last access, **ascending** (oldest
+# first). Give the $i$-th memory (from 1) the value $0.99^i$. Return the values in the order of the input.
 
 # %% exercise
 def code_recency(last_accessed):
@@ -214,9 +230,9 @@ print("✅ the code form hands the stalest memory the largest recency term")
 
 # %% [markdown]
 # ## Exercise 2.3 — which one wins?
-# Two memories about the same slot: **old** (last used 30 days ago, importance 6, cosine 0.6) and **new** (last
-# used 2 hours ago, importance 6, cosine 0.6). With only these two candidates, which ranks first in each form? Set
-# `first_paper` and `first_code` to `"old"`, `"new"` or `"tie"`.
+# There are two memories about the same slot. The **old** memory was last used 30 days ago, with importance 6 and
+# cosine 0.6. The **new** memory was last used 2 hours ago, with importance 6 and cosine 0.6. With only these two candidates, which memory
+# ranks first in each form? Set `first_paper` and `first_code` to `"old"`, `"new"` or `"tie"`.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -231,9 +247,9 @@ assert (first_paper, first_code) == (name(s_p), name(s_c))
 print(f"✅ paper {np.round(s_p, 3)}, code {np.round(s_c, 3)}: on a knowledge update the code form serves the stale fact")
 
 # %% [markdown]
-# The harness shows the damage at scale: on raw episodes at a 60-token budget, the code form answers 70% of the
-# knowledge-update questions with the old value; the paper form 0%. With the slot hints removed the gap shrinks but
-# keeps its direction.
+# The harness shows the damage at scale. On raw episodes at a 60-token budget, the code form answers 70% of the
+# knowledge-update questions with the old value. The paper form answers 0% of them with the old value. When you remove
+# the slot hints, the gap decreases, but it keeps its direction.
 
 # %%
 for hint in (True, False):
@@ -243,13 +259,13 @@ for hint in (True, False):
         print(f"hints {'on ' if hint else 'off'} {form:5}: recall {r['recall']:.1%}  stale answers {r['stale']:.1%}")
 
 # %% [markdown]
-# Read both columns. The code form's *recall* is higher — its relevance weight of 3 suits long episodes — and 70%
-# of its knowledge-update answers are stale (27% without the hints). A single aggregate would have picked the wrong
-# form; per-type metrics (stale answers, abstention) are what catch it.
+# Read both columns. The *recall* of the code form is higher, because its relevance weight of 3 suits long episodes.
+# But 70% of its knowledge-update answers are stale (27% without the hints). A single aggregate selects the incorrect
+# form. The metrics for each type (stale answers, abstention) find the problem.
 #
 # ## Exercise 2.4 — pack into the budget
-# Implement `pack_budget(records, budget)`: walk the records in the order given (best first), take each one whose
-# `tokens` still fits, **skip** one that does not and keep looking.
+# Write `pack_budget(records, budget)`. Go through the records in the given order (best first). Take each record whose
+# `tokens` still fits. **Skip** a record that does not fit, and continue to look.
 
 # %% exercise
 def pack_budget(records, budget):
@@ -270,14 +286,14 @@ print("✅ greedy with skip — a long record never blocks shorter ones behind i
 
 # %% [markdown]
 # ## Exercise 2.5 — the Wilson interval
-# Implement `wilson(passes, n, z=1.96)` (07.2 notebook 08 §4). With $p = \text{passes}/n$:
+# Write `wilson(passes, n, z=1.96)` (07.2 notebook 08 §4). With $p = \text{passes}/n$:
 #
 # $$
 # \text{centre} = \frac{p + z^2/2n}{1 + z^2/n}, \qquad
 # \text{half-width} = \frac{z\sqrt{p(1-p)/n + z^2/4n^2}}{1 + z^2/n},
 # $$
 #
-# clipped to [0, 1]; `(0.0, 1.0)` when $n = 0$.
+# Clip the result to [0, 1]. When $n = 0$, return `(0.0, 1.0)`.
 
 # %% exercise
 def wilson(passes, n, z=1.96):
@@ -299,8 +315,8 @@ print(f"✅ 360/390 correct is {wilson(360, 390)[0]:.1%}-{wilson(360, 390)[1]:.1
 
 # %% [markdown]
 # ## Exercise 2.6 — find the knee
-# Implement `find_knee(rows, tol=0.02)`: the smallest budget whose recall is within `tol` of the best recall any
-# budget reached. Then choose `my_budget` for this harness's consolidated store, and say why in a comment.
+# Write `find_knee(rows, tol=0.02)`. It returns the smallest budget whose recall is within `tol` of the best recall of
+# all budgets. Then select `my_budget` for the consolidated store of this harness. Give the reason in a comment.
 
 # %% exercise
 def find_knee(rows, tol=0.02):
@@ -321,23 +337,27 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Retrieval is where memory quality is decided, so we score and we measure. Each
-# candidate in the user's partition gets the generative-agents score — recency, importance and relevance, each min-max
-# normalised — and we use the paper's form: recency decays with hours since last use. The reference code's form ranks
-# by access order oldest-first and served stale facts on 70% of knowledge updates over raw episodes in our harness
-# (27% once we removed the harness's slot hints), so we do not copy it. The ranked list is packed into a per-turn
-# token budget, greedily with skip, and as-of queries can reach closed facts.
+# **The two-minute version.** "Retrieval decides the quality of memory, thus we score and we measure. Each candidate
+# in the user's partition gets the generative-agents score: recency, importance and relevance, each min-max
+# normalised. We use the paper's form: recency decreases with the hours since last use.
 #
-# "We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes — shapes, not their data — and
-# report accuracy with a Wilson interval, recall within the budget, stale answers and abstention separately, because a
-# memory that stores nothing still gets the abstention questions right. The knee of recall against budget sets the
-# budget: 90 tokens here. A paraphrase subset tells us what a real embedder must buy over a lexical one."
+# "The form of the reference code ranks by access order, oldest first. In our harness, it served stale facts on 70% of knowledge updates over raw
+# episodes (27% when we removed the slot hints of the harness). Thus we do not copy it.
+#
+# "We pack the ranked list into a token budget for each turn, greedily with skip. As-of queries can get to closed
+# facts.
+#
+# "We measure on a planted-facts harness in LongMemEval's and LoCoMo's task shapes. We use their shapes, not their
+# data. We report accuracy with a Wilson interval, recall within the budget, stale answers and abstention separately.
+# This is because a memory that stores nothing still gets the abstention questions correct. The knee of recall against
+# budget sets the budget: 90 tokens here. A paraphrase subset tells us the gain that a real embedder must give over a
+# lexical embedder."
 #
 # **Drill questions**
-# 1. *Why add recency and importance to similarity?* — Similarity finds the most on-topic memory; the most useful
-#    one is often more recent (a knowledge update) or more important (an allergy) than the closest match.
-# 2. *Accuracy is 92% on 13 questions. Ship?* — 12/13 is a 67–99% Wilson interval: too wide. Run hundreds of
-#    questions (390 here: 89–95%), remember they are not independent (resample users, compare per question type),
-#    and read recall, stale answers and abstention separately.
-# 3. *When do you need an ANN index for memory?* — When one partition is large; a user's memory is small, so a
-#    flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) pays at tenant or corpus scale.
+# 1. *Why add recency and importance to similarity?* Similarity finds the memory that is most on-topic. But often the
+#    most useful memory is not the nearest match. It is more recent (a knowledge update) or more important (an allergy).
+# 2. *Accuracy is 92% on 13 questions. Ship?* 12/13 is a 67–99% Wilson interval, and that is too wide. Run hundreds of
+#    questions (390 here: 89–95%). Remember that they are not independent (resample users, compare per question type).
+#    Read recall, stale answers and abstention separately.
+# 3. *When do you need an ANN index for memory?* When one partition is large. The memory of one user is small, thus a
+#    flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) gives a benefit at tenant or corpus scale.

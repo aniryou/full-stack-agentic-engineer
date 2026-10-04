@@ -1,16 +1,20 @@
 # %% [markdown]
 # # 12 · Resource estimation: cost, throughput, latency
 #
-# A design review does not want a spreadsheet; it wants to see that you know **what drives** cost and latency,
-# can put an order of magnitude on it in a minute, and know which levers move it. Every number in this
-# notebook is arithmetic you can redo by hand in a design review — the library only gives the arithmetic names.
+# A design review does not want a spreadsheet. It wants to see that you:
+# * know **what drives** cost and latency,
+# * can put an order of magnitude on it in a minute,
+# * know which levers move it.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 (the arithmetic, worked).
+# Each number in this notebook is arithmetic that you can do again by hand in a design review. The library
+# only gives names to the arithmetic.
 #
-# In this notebook you will:
-# 1. reproduce cost scenarios A–D and the capacity numbers (peak TPM, concurrency) from first principles;
-# 2. build a latency budget with parallel tool calls and read it as an ASCII waterfall;
-# 3. apply the optimisation playbook lever by lever: **\$0.80 → \$0.15 per conversation and 14 s → 4 s per turn**.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §3 (the arithmetic, worked).
+#
+# In this notebook, you do these steps:
+# 1. Calculate cost scenarios A–D and the capacity numbers (peak TPM, concurrency) again from first principles.
+# 2. Build a latency budget with parallel tool calls. Read it as an ASCII waterfall.
+# 3. Apply the optimisation playbook lever by lever. The result is **from \$0.80 to \$0.15 per conversation, and from 14 s to 4 s per turn**.
 
 # %%
 from dataclasses import dataclass, replace
@@ -23,8 +27,8 @@ from agentlab.estimation import (PRICE_DISCLAIMER, PRICES, Scenario, Segment, ci
 # %% [markdown]
 # ## 1. Prices and the cost of one call
 #
-# Three prices per model — fresh input, *cached* input, output — per million tokens. Output is 6× input;
-# cached input is 10× cheaper than fresh. Those two ratios explain most cost decisions.
+# Each model has three prices per million tokens: fresh input, *cached* input and output. Output is 6×
+# input. Cached input costs 10× less than fresh input. Those two ratios explain most cost decisions.
 
 # %%
 print(PRICE_DISCLAIMER)
@@ -39,9 +43,13 @@ print(f"same turn with 4,000 of the 6,000 input cached: ${token_cost(6_000, 400,
 # %% [markdown]
 # ### Exercise 1.1 — implement `token_cost` with a cached share
 #
-# `my_token_cost(in_tokens, out_tokens, price, cached_share=0.0, batch=False)` in USD:
-# fresh input at `price.input`, the cached share of input at `price.cached_input`, output at `price.output`,
-# all per million tokens; halve the result when `batch` is true. (Ignore the long-context tier here.)
+# `my_token_cost(in_tokens, out_tokens, price, cached_share=0.0, batch=False)` returns USD. Use these prices,
+# all per million tokens:
+# * fresh input at `price.input`,
+# * the cached share of input at `price.cached_input`,
+# * output at `price.output`.
+#
+# When `batch` is true, divide the result by two. (Ignore the long-context tier here.)
 
 # %% exercise
 def my_token_cost(in_tokens: float, out_tokens: float, price, cached_share: float = 0.0, batch: bool = False) -> float:
@@ -62,7 +70,8 @@ print("✅ token_cost reproduces the per-call numbers")
 # %% [markdown]
 # ## 2. Scenarios A to D
 #
-# 50,000 conversations a day, 8 model calls each, 6,000 tokens in and 400 out per call. Same traffic, four designs.
+# The traffic is 50,000 conversations a day, with 8 model calls each, and 6,000 tokens in and 400 out per
+# call. The four designs have the same traffic.
 
 # %%
 base = dict(units_per_day=50_000, calls_per_unit=8, in_tokens=6_000, out_tokens=400)
@@ -77,11 +86,12 @@ for sc in scenarios:
     print(f"{sc.name:28s}{sc.daily_cost():>12,.0f}{sc.cost_per_unit():>10.4f}{sc.annual_cost():>14,.0f}")
 
 # %% [markdown]
-# Two things to say out loud: routing 70% of calls to Flash halves the bill *without touching the prompt*, and caching
-# the stable 4k prefix on Pro (**$3,840**) beats the mixed fleet on quality-per-dollar — which is why prompt layout is a
-# cost lever, not a style choice (Notebook 00).
+# Say two things out loud. First, when you route 70% of calls to Flash, the bill decreases by half *without a
+# change to the prompt*. Second, when you cache the stable 4k prefix on Pro (**$3,840**), the result is better
+# than the mixed fleet on quality-per-dollar. This is why prompt layout is a cost lever, not a style choice
+# (Notebook 00).
 #
-# The full report for scenario A carries the capacity numbers as well:
+# The full report for scenario A also gives the capacity numbers:
 
 # %%
 print(scenarios[0].report())
@@ -89,11 +99,12 @@ print(scenarios[0].report())
 # %% [markdown]
 # ### Exercise 2.1 — peak input TPM and concurrency from first principles
 #
-# * `peak_input_tpm(sc)`: calls/day ÷ 86,400 × `peak_factor` × `in_tokens` × 60 — the number you compare with the model's quota.
-# * `concurrency(sc)`: Little's law, $L = \lambda W$ — peak calls per second × `seconds_per_call` — the number of requests in flight,
-#   which sizes worker pools and connection limits.
+# * `peak_input_tpm(sc)`: calls/day ÷ 86,400 × `peak_factor` × `in_tokens` × 60. You compare this number with
+#   the quota of the model.
+# * `concurrency(sc)`: Little's law, $L = \lambda W$, that is, peak calls per second × `seconds_per_call`.
+#   This is the number of requests in flight. It sets the size of worker pools and connection limits.
 #
-# Use only the scenario's fields; do not call the library methods.
+# Use only the fields of the scenario. Do not call the library methods.
 
 # %% exercise
 def peak_input_tpm(sc: Scenario) -> float:
@@ -119,8 +130,9 @@ print(f"✅ peak {round(a.peak_calls_per_sec())} calls/s → {peak_input_tpm(a) 
 # %% [markdown]
 # ## 3. A document backlog: online vs batch, and the throughput it needs
 #
-# 20 M documents, 3 calls per document at 1,000 input tokens, 300 output tokens per document (100 per call), on Flash-Lite.
-# Backlogs are the case for **batch** pricing: nobody is waiting, so pay half.
+# The backlog has 20 M documents on Flash-Lite: 3 calls per document at 1,000 input tokens, and 300 output
+# tokens per document (100 per call). Backlogs are the case for **batch** pricing. Nobody waits for the
+# result, thus pay half.
 
 # %%
 backlog = Scenario("backlog · Flash-Lite online", 20_000_000, 3, 1_000, 100, model_mix={"gemini-3.5-flash-lite": 1.0})
@@ -132,9 +144,10 @@ print(f"to finish in 30 days: {rate.tokens_per_s:,.0f} input tokens/s ≈ {rate.
 # %% [markdown]
 # ## 4. Three small formulas that change conversations
 #
-# * **Little's law** sizes anything with a queue: in flight = arrival rate × time in system.
-# * **Confidence half-width** tells you whether an eval delta is real: with 100 cases, ±9.8 points at 95%.
-# * **Compounded reliability**: ten 99%-reliable steps make a 90%-reliable agent — the argument for fewer hops and for retries.
+# * **Little's law** gives the size of anything with a queue: in flight = arrival rate × time in system.
+# * **Confidence half-width** tells you if an eval delta is real. With 100 cases, it is ±9.8 points at 95%.
+# * **Compounded reliability**: ten 99%-reliable steps make a 90%-reliable agent. This is the argument for
+#   fewer hops and for retries.
 
 # %%
 print(f"Little: 14 calls/s × 4 s        → {littles_law(14, 4):.0f} in flight")
@@ -146,8 +159,9 @@ for p, hops in ((0.99, 10), (0.999, 10), (0.99, 25)):
 # %% [markdown]
 # ## 5. The latency budget and its waterfall
 #
-# A typical turn: plan **1.1 s**, two tool calls of **0.4 s** and **0.5 s**, an answer of **2.7 s** whose first token
-# arrives 0.7 s in. Sequential tools give 4.7 s; running the two lookups in parallel gives 4.3 s and a first token at 2.3 s.
+# A typical turn has a plan of **1.1 s**, two tool calls of **0.4 s** and **0.5 s**, and an answer of
+# **2.7 s**. The first token of the answer arrives 0.7 s after the answer starts. Sequential tools give
+# 4.7 s. When the two lookups run in parallel, the turn takes 4.3 s and the first token comes at 2.3 s.
 
 # %%
 sequential = [Segment("plan", 1.1), Segment("lookup_a", 0.4), Segment("lookup_b", 0.5), Segment("answer", 2.7)]
@@ -159,8 +173,8 @@ for label, segs in (("SEQUENTIAL", sequential), ("PARALLEL", parallel)):
 # %% [markdown]
 # ### Exercise 5.1 — total time with parallel groups
 #
-# Implement `turn_total_seconds(segments)`: sequential segments add up; *adjacent* segments that share a
-# `parallel_group` overlap, so the group contributes only its longest member.
+# Implement `turn_total_seconds(segments)`. Sequential segments add up. *Adjacent* segments that share a
+# `parallel_group` overlap. Thus the group adds only its longest member.
 
 # %% exercise
 def turn_total_seconds(segments: list[Segment]) -> float:
@@ -185,13 +199,15 @@ print("✅ parallel groups overlap; the turn is 4.7 s sequential, 4.3 s parallel
 # %% [markdown]
 # ## 6. Sizing a vector store
 #
-# 5 M chunks × 768 dimensions × 4 bytes = **15.36 GB** of raw vectors; an HNSW index and metadata add roughly 50%.
-# Say the raw number first, then the overhead — it shows you know where the bytes come from.
+# 5 M chunks × 768 dimensions × 4 bytes = **15.36 GB** of raw vectors. An HNSW index and metadata add
+# approximately 50%. Say the raw number first, then the overhead. This shows that you know where the bytes
+# come from.
 
 # %% [markdown]
 # ### Exercise 6.1 — implement `vector_store_bytes`
 #
-# `my_vector_store_bytes(chunks, dims, bytes_per_dim=4, index_overhead=1.5)` → bytes including the index overhead.
+# `my_vector_store_bytes(chunks, dims, bytes_per_dim=4, index_overhead=1.5)` returns the bytes, together with
+# the index overhead.
 
 # %% exercise
 def my_vector_store_bytes(chunks: int, dims: int, bytes_per_dim: int = 4, index_overhead: float = 1.5) -> float:
@@ -208,9 +224,9 @@ print(f"✅ raw {human_bytes(my_vector_store_bytes(5_000_000, 768, index_overhea
 # %% [markdown]
 # ## 7. The playbook: &#36;0.80 → &#36;0.15 per conversation, 14 s → 4 s per turn
 #
-# The starting point is a real-looking first version: 20 model calls per conversation with a 17k-token prompt
-# (system prompt, policies, tool schemas, the whole transcript) and 500-token answers on Pro; a turn is a
-# plan call, three sequential lookups and the answer.
+# The start point is a first version that looks real. It makes 20 model calls per conversation, with a
+# 17k-token prompt (system prompt, policies, tool schemas, the whole transcript) and 500-token answers on
+# Pro. A turn is a plan call, three sequential lookups and the answer.
 
 # %%
 v0 = Scenario("assistant v0", units_per_day=50_000, calls_per_unit=20, in_tokens=17_000, out_tokens=500, seconds_per_call=4.0)
@@ -218,8 +234,8 @@ turn_v0 = [Segment("plan", 4.0), Segment("crm", 1.5), Segment("orders", 1.5), Se
 print(f"v0: ${v0.cost_per_unit():.2f} per conversation, {latency_budget(turn_v0).total_s:.1f} s per turn")
 
 # %% [markdown]
-# Each lever is a small transformation of the scenario and of the turn. They are listed here **out of order** on purpose;
-# the exercise is to apply them in the right one.
+# Each lever is a small transformation of the scenario and of the turn. The next cell lists them **out of
+# order** on purpose. The exercise is to apply them in the correct order.
 
 # %%
 def retime(segments, **seconds):
@@ -252,10 +268,11 @@ LEVERS = [
 # %% [markdown]
 # ### Exercise 7.1 — order the levers and compute the cumulative effect
 #
-# Implement `apply_playbook(scenario, turn, levers)` returning a list of rows `(name, cost_per_conv, turn_seconds)`,
-# starting with a `"baseline"` row, then one row per lever **applied cumulatively in increasing `risk_rank`**
-# (the playbook rule: change nothing about model behaviour before you have changed everything else).
-# Use `Scenario.cost_per_unit()` and `latency_budget(turn).total_s`.
+# Implement `apply_playbook(scenario, turn, levers)`. It returns a list of rows
+# `(name, cost_per_conv, turn_seconds)`. The first row is a `"baseline"` row. Then there is one row per
+# lever, **applied cumulatively, from the lowest `risk_rank` to the highest**. (The playbook rule: change
+# nothing about model behaviour before you have changed everything else.) Use `Scenario.cost_per_unit()` and
+# `latency_budget(turn).total_s`.
 
 # %% exercise
 def apply_playbook(scenario: Scenario, turn: list[Segment], levers: list[Lever]) -> list[tuple[str, float, float]]:
@@ -283,9 +300,9 @@ print(f"\n✅ cumulative: ${rows[0][1]:.2f} → ${rows[-1][1]:.2f} per conversat
       f"{rows[0][2]:.0f} s → {rows[-1][2]:.0f} s per turn")
 
 # %% [markdown]
-# Read the table the way you would present it: the two **zero-risk** levers (caching, parallel lookups) already
-# remove 27% of cost and 32% of latency without an eval run; the model-touching levers come after, each gated
-# by the golden set (see the evals notebook). The final turn waterfall:
+# Read the table in the way that you present it. The two **zero-risk** levers (caching, parallel lookups)
+# already remove 27% of cost and 32% of latency without an eval run. The levers that touch the model come
+# after. The golden set is the gate for each of them (see the evals notebook). The final turn waterfall:
 
 # %%
 turn_final = turn_v0
@@ -296,13 +313,13 @@ print(waterfall_text(turn_final, first_token_segment="answer", first_token_offse
 # %% [markdown]
 # ## The one-minute version
 #
-# Estimate out loud, in this order, and round aggressively:
+# Estimate out loud, in this order. Round each number a lot:
 #
-# 1. **Volume** → calls/day → calls/s (÷ 86,400) → peak (× 3). *"400k calls a day is 4.6/s, call it 14/s at peak."*
-# 2. **Tokens per call** → peak input TPM against the quota; concurrency by Little's law. *"14 × 6k × 60 ≈ 5M TPM; 14 × 4 s ≈ 56 in flight."*
+# 1. **Volume**: from calls/day to calls/s (÷ 86,400), then to peak (× 3). *"400k calls a day is 4.6/s, call it 14/s at peak."*
+# 2. **Tokens per call**: compare the peak input TPM with the quota. Calculate the concurrency with Little's law. *"14 × 6k × 60 ≈ 5M TPM; 14 × 4 s ≈ 56 in flight."*
 # 3. **Cost** = $\text{calls} \times (\text{in} \times p_{\text{in}} +{}$ $\text{cached} \times p_{\text{cached}} + \text{out} \times p_{\text{out}})$. Say the driver: *"input tokens on Pro are 70% of this bill."*
-# 4. **Levers, ordered by risk**: cache the prefix, parallelise, trim context, route by difficulty, constrain output, batch the offline work.
-# 5. **Latency** as a waterfall with a first-token marker; parallel tools and streaming change what the user *feels*.
-# 6. **Uncertainty**: quote the eval set's confidence interval, and remind everyone that reliability compounds per hop.
+# 4. **Levers, ordered by risk**: cache the prefix, parallelise, trim context, route by difficulty, limit the output, batch the offline work.
+# 5. **Latency** as a waterfall with a first-token marker. Parallel tools and streaming change what the user *feels*.
+# 6. **Uncertainty**: give the confidence interval of the eval set. Tell everyone again that reliability compounds per hop.
 #
-# Then flag it: *"these are list prices I would verify before a proposal"* — the disclaimer is part of the answer.
+# Then flag it: *"these are list prices I would verify before a proposal"*. The disclaimer is part of the answer.

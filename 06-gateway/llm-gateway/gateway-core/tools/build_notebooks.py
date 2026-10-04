@@ -42,7 +42,7 @@ while _r != _r.parent and not (_r / "gwcore").exists():
 if str(_r) not in sys.path:
     sys.path.insert(0, str(_r))
 del _r'''
-BANNER = ("> **Exercise cells** contain `# YOUR CODE HERE` — replace it, then run the **Check** cell below it. "
+BANNER = ("> **Exercise cells** contain `# YOUR CODE HERE`. Replace it, then run the **Check** cell below it. "
           "A check prints ✅ when it passes. The finished version is in `solutions/`.")
 
 

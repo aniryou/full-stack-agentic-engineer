@@ -1,35 +1,37 @@
 # agent-core — build the agent loop yourself, then swap in a real model
 
-The smallest honest agent — **a fake model, a tool, and the loop**: after it you can explain termination, tool
-dispatch, a step budget, an approval gate and structured tool errors from code you wrote, and show that the loop does
-not care which provider answers.
+This is the smallest honest agent. It has **a fake model, a tool, and the loop**. After this lab, you can explain
+these things from your own code: termination, tool dispatch, a step budget, an approval gate and structured tool
+errors. You can also show that the loop does not care which provider answers.
 
 ## Start here
 
 1. Read [`agentcore/fake_llm.py`](agentcore/fake_llm.py), [`tools.py`](agentcore/tools.py) and
-   [`agent.py`](agentcore/agent.py), in that order (about 30 min; ~330 lines, standard library only).
-2. `python3 -m pip install -r requirements.txt && python3 -m pytest -q` — 32 tests, ~20 s.
-3. Open [`notebooks/01_the_agent_loop.ipynb`](notebooks/01_the_agent_loop.ipynb) and fill in the exercises.
+   [`agent.py`](agentcore/agent.py), in that sequence. This takes about 30 min. The files have ~330 lines and use
+   only the standard library.
+2. Run `python3 -m pip install -r requirements.txt && python3 -m pytest -q`. There are 32 tests. They take ~20 s.
+3. Open [`notebooks/01_the_agent_loop.ipynb`](notebooks/01_the_agent_loop.ipynb). Fill in the exercises.
 
 ## What you get
 
-*T0 = a laptop or Colab CPU, free.* Nothing here needs a GPU, a cloud account or a key.
+*T0 is a laptop or a Colab CPU, at no cost.* Nothing here needs a GPU, a cloud account or a key.
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| `notebooks/01_the_agent_loop` | build the loop — termination, tool dispatch, the budget — then meet the packaged `Agent` | 50 min | T0 |
-| `notebooks/02_tools` | write tool contracts: schema, validation, structured errors, an idempotent write; watch the loop recover from a not-found error | 50 min | T0 |
-| `notebooks/03_state_and_control` | keep multi-turn memory, react to results, detect duplicate calls, reason about the step budget | 50 min | T0 |
-| `notebooks/04_mini_support_agent` | build a small bank support agent: every fact from a tool, a card block gated by human approval, out-of-scope work escalated as a case (the bank agent of `gcp-agent-platform-lab`'s notebook 14, shrunk) | 60 min | T0 |
-| `notebooks/05_going_live_on_mistral` | swap `FakeLLM` for a provider adapter: what it translates, a routing rule for the cheapest model that clears the bar, a guarded live call | 45 min | T0 (a key adds the live call) |
-| [`docs/MISTRAL.md`](docs/MISTRAL.md) | the adapter's reference: shapes, the client, models and prices (dated), deployment posture | 15 min | — |
+| `notebooks/01_the_agent_loop` | Build the loop: termination, tool dispatch and the budget. Then use the packaged `Agent`. | 50 min | T0 |
+| `notebooks/02_tools` | Write tool contracts: a schema, validation, structured errors and an idempotent write. Look at how the loop recovers from a not-found error. | 50 min | T0 |
+| `notebooks/03_state_and_control` | Keep multi-turn memory, react to results and find duplicate calls. Think about the step budget. | 50 min | T0 |
+| `notebooks/04_mini_support_agent` | Build a small bank support agent. Every fact comes from a tool. A card block must have a person's approval. Out-of-scope work goes to a case (escalation). This is the bank agent of `gcp-agent-platform-lab`'s notebook 14, in a smaller form. | 60 min | T0 |
+| `notebooks/05_going_live_on_mistral` | Replace `FakeLLM` with a provider adapter. Learn what the adapter translates. Write a routing rule that selects the lowest-cost model that gets to the bar. Make a guarded live call. | 45 min | T0 (a key adds the live call) |
+| [`docs/MISTRAL.md`](docs/MISTRAL.md) | The reference of the adapter: shapes, the client, models and prices (dated) and the deployment posture. | 15 min | — |
 
-Solutions are in `solutions/`. Each exercise has a check cell that prints ✅ when you get it right.
+The solutions are in `solutions/`. Each exercise has a check cell. The check cell prints ✅ when your answer is
+correct.
 
-**The provider path.** The optional `mistral` extra (`pip install -e ".[mistral]"`) adds only the `mistralai` client
-that [`agentcore/mistral_llm.py`](agentcore/mistral_llm.py) uses for a live call; the adapter's tests and all of
-notebook 05 except its last cell run without the extra, a key or a network, and without them that cell prints a
-labelled stop instead of failing.
+**The provider path.** The optional `mistral` extra (`pip install -e ".[mistral]"`) adds only the `mistralai` client.
+[`agentcore/mistral_llm.py`](agentcore/mistral_llm.py) uses this client for a live call. The tests of the adapter run
+without the extra, a key or a network. All of notebook 05 also runs without them, except its last cell. Without
+them, that cell prints a labelled stop and does not fail.
 
 ## Run it
 
@@ -40,7 +42,7 @@ python3 -m pytest -q                                     # 32 tests, ~20 s (one 
 python3 -m jupyterlab notebooks                          # do the exercises
 ```
 
-The library is standard library only:
+The library uses only the standard library:
 
 ```python
 from agentcore import Agent, FakeLLM, tool, call
@@ -56,7 +58,7 @@ print(result.text)          # It's 4pm in Singapore.
 print(result.transcript())  # see every step the loop took
 ```
 
-Going live is one line — the same `Agent`, another model object:
+To go live, change one line. Use the same `Agent` with a different model object:
 
 ```bash
 python3 -m pip install -e ".[mistral]"
@@ -68,8 +70,8 @@ from agentcore.mistral_llm import MistralLLM
 agent = Agent(MistralLLM(model="mistral-large-latest"), tools=[get_time])
 ```
 
-`notebooks/` and `solutions/` are generated from `notebooks_src/*.py` (percent format with `### BEGIN SOLUTION`
-blocks). Edit the sources, then:
+The builder makes `notebooks/` and `solutions/` from `notebooks_src/*.py`. The sources are in percent format with
+`### BEGIN SOLUTION` blocks. Edit the sources, then run these commands:
 
 ```bash
 python3 tools/build_notebooks.py                        # rebuild both variants (a no-op when nothing changed)
@@ -81,26 +83,25 @@ python3 tools/run_notebooks.py notebooks --expect-fail  # blanks must stop at th
 
 | File | Lines | What it teaches |
 |------|-------|-----------------|
-| `agentcore/fake_llm.py` | ~115 | a tool-calling model returns *text* or *tool calls*; drive it with a script or a policy |
-| `agentcore/tools.py` | ~130 | a tool is a contract: schema from the signature, arguments validated, results structured |
-| `agentcore/agent.py` | ~90 | the loop: call the model → run tools → append results → repeat, with a step budget and a human-approval gate |
-| `agentcore/mistral_llm.py` | ~150 | *optional* provider adapter: the same loop against Mistral's API; pure converters plus a thin client wrapper |
+| `agentcore/fake_llm.py` | ~115 | A tool-calling model returns *text* or *tool calls*. A script or a policy controls it. |
+| `agentcore/tools.py` | ~130 | A tool is a contract. The schema comes from the signature, the tool validates the arguments, and the tool gives structured results. |
+| `agentcore/agent.py` | ~90 | The loop calls the model, runs the tools, appends the results and does it again. It has a step budget and a human-approval gate. |
+| `agentcore/mistral_llm.py` | ~150 | An *optional* provider adapter. It runs the same loop against Mistral's API. It has pure converters and a thin wrapper around the client. |
 
-There is no async, no pydantic, no framework — just the shape.
+There is no async, no pydantic and no framework. There is only the shape.
 
 ## When you outgrow this
 
-Reach for [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md) when you want async and parallel tool
-execution, MCP servers with a policy gateway, OAuth identity propagation, evaluation gates and OpenTelemetry-style
-tracing — the same concepts, much more machinery, all built on this loop. Running a `run_code` tool safely — no
-credentials, no network by default, a budget for every resource — is the
-[sandboxed-execution](../../sandboxed-execution/README.md) topic, which reuses this loop's tool contract. Module 07.1
-in [`CURRICULUM.md`](../../../CURRICULUM.md).
+Use [`gcp-agent-platform-lab`](../gcp-agent-platform-lab/README.md) for async and parallel tool execution, MCP
+servers with a policy gateway, OAuth identity propagation, evaluation gates and OpenTelemetry-style tracing. It has the same concepts and much more machinery, and all of it uses this loop. The
+[sandboxed-execution](../../sandboxed-execution/README.md) topic shows how to run a `run_code` tool safely. It gives
+no credentials and, by default, no network, and it has a budget for every resource. That topic uses the tool contract
+of this loop again. This lab is module 07.1 in [`CURRICULUM.md`](../../../CURRICULUM.md).
 
 ## Caveats
 
-- `FakeLLM` is scripted: it shows the loop's mechanics, not a model's judgement. Notebook 05's live call is the only
-  place a real model answers, and its output varies run to run.
-- Mistral model aliases, prices and the `mistralai` client's import path move; they are dated 2026-09-19 to 2026-09-26
-  in [`docs/MISTRAL.md`](docs/MISTRAL.md) `(verify)`.
+- `FakeLLM` uses a script. It shows the mechanics of the loop, not the judgement of a model. Notebook 05's live call is
+  the only place where a real model answers, and its output is different from run to run.
+- The Mistral model aliases, the prices and the import path of the `mistralai` client change. Their dates in
+  [`docs/MISTRAL.md`](docs/MISTRAL.md) are 2026-09-19 to 2026-09-26 `(verify)`.
 - MIT licensed.

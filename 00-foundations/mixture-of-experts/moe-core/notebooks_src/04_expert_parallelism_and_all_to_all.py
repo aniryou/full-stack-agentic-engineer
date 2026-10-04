@@ -1,31 +1,35 @@
 # %% [markdown]
 # # 04 · Expert parallelism and all-to-all
 #
-# **Tier:** T0 — numpy, a few seconds; every time printed is an α-β or roofline model (simulated), with layer 01's
-# illustrative link numbers. To run EP = 2 for real, use `../moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb`
-# (T2: Kaggle's free 2×T4; it falls back to this notebook's model without two GPUs).
+# **Tier:** T0. It needs numpy and a few seconds. Every printed time is an α-β or roofline model (simulated), with the
+# illustrative link numbers of layer 01. To run EP = 2 on real GPUs, use
+# `../moe-lab/notebooks/04_expert_parallelism_on_two_gpus.ipynb` (T2: the free 2×T4 of Kaggle). Without two GPUs, that
+# notebook falls back to the model of this notebook.
 #
 # ## The one-minute version
-# **Expert parallelism** (EP) puts $E/p$ whole experts on each of $p$ GPUs. Every MoE layer then moves *tokens*,
-# not weights: a **dispatch** all-to-all sends each token's hidden state to the GPUs holding its $k$ experts, and a
-# **combine** all-to-all brings the $k$ weighted results back — each at most
-# $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ per GPU per direction, $(p - 1)/p$ of it off the
-# GPU under uniform routing (layer 02 PRIMER §5.6: 4 MiB, 22 µs pairwise or 10 µs direct for a Mixtral-like layer at
-# 256 tokens per GPU) — with dedicated all-to-all kernels (DeepEP-class); vLLM's default exchange moves tensor
-# parallelism's volume instead.
+# **Expert parallelism** (EP) puts $E/p$ whole experts on each of $p$ GPUs. Every MoE layer then moves *tokens*, not
+# weights. A **dispatch** all-to-all sends the hidden state of each token to the GPUs that hold its $k$ experts. A
+# **combine** all-to-all brings the $k$ weighted results back.
 #
-# Then everyone waits for the **slowest rank**, whose expert work is a roofline of its own: in prefill the rank
-# holding the hot experts computes the most rows and sets the step; in memory-bound decode every rank streams its
-# touched experts regardless and the skew lands on the hot rank's link. That is why engines rebalance and replicate
-# hot experts (vLLM's EPLB).
+# With dedicated all-to-all kernels (DeepEP-class), each all-to-all is at most
+# $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ per GPU per direction. Under uniform routing,
+# $(p - 1)/p$ of it goes off the GPU. The layer 02 PRIMER §5.6 gives 4 MiB, 22 µs pairwise or 10 µs direct for a
+# Mixtral-like layer at 256 tokens per GPU. The default exchange of vLLM moves the volume of tensor parallelism
+# instead.
 #
-# Large MoE deployments pair EP with **data-parallel attention** (wide-EP): attention and its KV are per rank,
-# experts are spread thin — which frees HBM for KV and pools every rank's tokens at each expert.
+# Then all ranks wait for the **slowest rank**. The expert work of the slowest rank is a roofline of its own. In
+# prefill, the rank that holds the hot experts computes the most rows and sets the step. In memory-bound decode,
+# every rank streams its touched experts, whatever the skew, and the skew goes to the link of the hot rank. That is why
+# engines rebalance and replicate hot experts (the EPLB of vLLM).
 #
-# After this notebook you can price the all-to-alls on NVLink, PCIe and InfiniBand, find the slowest rank, and
-# choose an EP degree.
+# Large MoE deployments use EP together with **data-parallel attention** (wide-EP). The attention and its KV are per
+# rank, and the experts are spread thin. This layout frees HBM for KV, and it collects the tokens of every rank at
+# each expert.
 #
-# Primer: `../PRIMER.md` §6 *Running MoE on GPUs*; the collective itself: layer 02 PRIMER §5; wide-EP in a fleet:
+# After this notebook, you can calculate the cost of the all-to-alls on NVLink, PCIe and InfiniBand. You can also find
+# the slowest rank and select an EP degree.
+#
+# Primer: `../PRIMER.md` §6 *Running MoE on GPUs*. The collective itself: layer 02 PRIMER §5. Wide-EP in a fleet:
 # layer 05 PRIMER §8.
 
 # %%
@@ -42,10 +46,10 @@ for name, link in L.items():
 
 # %% [markdown]
 # ## Worked example 1 — what one all-to-all costs
-# Per GPU and direction, every assignment remote (the upper bound):
+# Per GPU and direction, with every assignment remote (the upper bound), the volume is
 # $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$. DeepSeek-V3 dispatches in FP8 (1 byte, plus a
-# 4-byte scale per 128 channels) and combines in BF16. Eight GPUs, direct
-# all-to-all (every link at once), per MoE layer; a model has 32 (Mixtral) or 58 (DeepSeek-V3) of them per step.
+# 4-byte scale per 128 channels) and combines in BF16. The table is for eight GPUs and a direct all-to-all (every link
+# at the same time), per MoE layer. A model has 32 (Mixtral) or 58 (DeepSeek-V3) of these layers per step.
 
 # %%
 print(f"{'tokens/GPU':>10s} {'link':>9s} | {'Mixtral dispatch':>20s} | {'DeepSeek dispatch':>20s} | {'DeepSeek combine':>20s}")
@@ -57,18 +61,23 @@ for tok in (8, 64, 4096):
         print(f"{tok:10d} {lk:>9s} | {cell(d)} | {cell(dd)} | {cell(dc)}")
 
 # %% [markdown]
-# Decode moves little data per layer (latency-bound: $\alpha$ dominates), prefill moves a lot (bandwidth-bound: 231 MiB
-# per dispatch for DeepSeek at 4,096 tokens per GPU is ~0.5 ms on NVLink and ~4 ms over one 400 Gb/s NIC per GPU).
-# That is why DeepEP ships two kernel families: low-latency (decode, CUDA-graph friendly) and high-throughput
-# (prefill, NVLink-then-RDMA forwarding). The formula explains DeepEP's published EP8 low-latency figures: 128
+# Decode moves a small quantity of data per layer (latency-bound: $\alpha$ is the largest term). Prefill moves a large
+# quantity (bandwidth-bound). For DeepSeek at 4,096 tokens per GPU, one dispatch is 231 MiB. That dispatch takes ~0.5 ms
+# on NVLink and ~4 ms over one 400 Gb/s NIC per GPU. That is why DeepEP supplies two kernel families: low-latency
+# (decode, CUDA-graph friendly) and high-throughput (prefill). The high-throughput kernels forward the data over NVLink
+# and then over RDMA.
+#
+# The formula explains the published EP8 low-latency figures of DeepEP. The dispatch is 128
 # tokens × 8 × (7,168 + 7,168/128 × 4) B = 7,569,408 B in 77 µs = 98.3 GB/s (reported 98).
 #
 # ## Worked example 2 — the slowest rank sets the layer
-# Qwen3-30B-A3B's 128 experts on 8 H100s (16 per GPU), uniform routing, then a skewed workload (Zipf $s = 1.0$ over
-# a random order of experts — a model of hot experts, simulated), at a decode size (128 tokens per GPU) and a
-# prefill chunk (4,096 tokens per GPU). Each rank's expert work is a roofline of its own: its rows × 2 × expert
-# params ÷ peak against its touched experts × expert bytes ÷ bandwidth. The layer waits for the slowest rank, and
-# each all-to-all for the busiest port (a port sends and receives at once; the combine is the dispatch reversed).
+# The setup puts the 128 experts of Qwen3-30B-A3B on 8 H100s (16 per GPU). It runs uniform routing, then a skewed
+# workload. The skew is Zipf $s = 1.0$ over a random order of experts: a model of hot experts, simulated. Both run at a
+# decode size (128 tokens per GPU) and at a prefill chunk (4,096 tokens per GPU). The expert work of each rank is a
+# roofline of its own: its rows × 2 × expert params ÷ peak, against its touched experts × expert bytes ÷ bandwidth.
+# The layer waits for the slowest rank, and each all-to-all waits for the busiest port.
+#
+# A port sends and receives at the same time. The combine is the dispatch in reverse.
 
 # %%
 rng = np.random.default_rng(0)
@@ -92,16 +101,22 @@ print(f"\ndecode, skewed: expert time per rank {np.round(d.rank * 1e6, 1).tolist
       f"(weight reads {d.memory.max() * 1e6:.1f} us; the hot rank's FLOPs {d.compute.max() * 1e6:.1f} us)")
 
 # %% [markdown]
-# At decode size each expert sees ~64 rows, far below the H100's ridge (~295 FLOP/B): every rank spends ~45 µs
-# streaming its 16 experts' weights whatever the skew, and the hot rank's extra rows hide under that read. What skew
-# costs in decode is the exchange: the hot rank's port receives the dispatch and sends the combine for ~1.5× the
-# mean traffic. At prefill size the GEMMs are compute-bound, and the busiest rank's 1.65× rows set the layer.
+# At decode size, each expert sees ~64 rows, far below the ridge of the H100 (~295 FLOP/B). Every rank uses ~45 µs to
+# stream the weights of its 16 experts, whatever the skew. The extra rows of the hot rank hide under that read. In
+# decode, the cost of the skew is in the exchange. The port of the hot rank receives the dispatch and sends the
+# combine for ~1.5× the mean traffic. At prefill size, the GEMMs are compute-bound, and the 1.65× rows of the busiest
+# rank set the layer.
 #
-# Placement alone (vLLM's `--expert-placement-strategy round_robin`: expert $e$ on rank $e \bmod p$) moves the hot spot
-# but does not remove it — and vLLM v0.30.0 honours round-robin only for models with more than one expert group
-# (DeepSeek-V3's 8), no redundant experts and EPLB off (with all-to-all kernels, only on the DeepEP low-latency or
-# NIXL-EP backend); for Qwen3, which has no groups, it logs a warning and falls back to linear (verify for your
-# version). EPLB measures the load over a window and re-places experts, replicating the hottest ones
+# Placement alone, for example `--expert-placement-strategy round_robin` of vLLM (expert $e$ on rank $e \bmod p$),
+# moves the hot spot but does not remove it. Also, vLLM v0.30.0 applies round-robin only under these conditions
+# (verify for your version):
+# - the model has more than one expert group (DeepSeek-V3 has 8)
+# - there are no redundant experts
+# - EPLB is off
+# - if the deployment uses all-to-all kernels, the backend is DeepEP low-latency or NIXL-EP
+#
+# For Qwen3, which has no groups, vLLM logs a warning and falls back to linear (verify for your version). EPLB
+# measures the load over a window and moves the experts to new ranks. It replicates the hottest experts
 # (`num_redundant_experts`):
 
 # %%
@@ -115,12 +130,14 @@ print(f"the price: one redundant DeepSeek-V3 expert per rank = 58 layers x {DS.e
 
 # %% [markdown]
 # ## Worked example 3 — TP or EP for the experts, and the wide-EP layout
-# Without `--enable-expert-parallel`, vLLM shards every expert across the GPUs like any other MLP (tensor
-# parallel): every GPU holds the same tokens and a ring all-reduce restores the output. With the flag and DP = 1
-# (TP × EP) nothing changes on the wire: every GPU already holds every token, runs its own experts, and the same
-# all-reduce sums them. With DP > 1, vLLM's default `allgather_reducescatter` gathers every rank's tokens and
-# reduce-scatters the outputs — TP's volume again. Only all-to-all kernels (DeepEP-class, Hopper with NVLink/RDMA)
-# ship just the assignments.
+# Without `--enable-expert-parallel`, vLLM shards every expert across the GPUs like any other MLP (tensor parallel).
+# Every GPU holds the same tokens, and a ring all-reduce gives the full output again. With the flag and DP = 1
+# (TP × EP), nothing changes on the wire. Every GPU already holds every token and runs its own experts, and the same
+# all-reduce adds their outputs.
+#
+# With DP > 1, the default `allgather_reducescatter` of vLLM gathers the tokens of every rank and reduce-scatters the
+# outputs. That is the volume of TP again. Only all-to-all kernels (DeepEP-class, Hopper with NVLink/RDMA) send only
+# the assignments.
 
 # %%
 for p in (2, 8):
@@ -137,12 +154,14 @@ for n in (8, 16, 32, 64):
           f"4K-token sequences that fit: {S.sessions(DS, D['h200'], n, 4096, 8, layout='ep'):6,}")
 
 # %% [markdown]
-# 17.1 B parameters (MLA, three dense layers, the shared experts, routers, embeddings) are replicated on every rank;
-# only the routed experts shrink with EP. Past EP 32 the replicated part dominates each GPU's weights.
+# Every rank holds a replica of 17.1 B parameters (MLA, three dense layers, the shared experts, routers, embeddings).
+# Only the routed experts become smaller with EP. Above EP 32, the replicated part is the larger part of the weights
+# of each GPU.
 #
 # ## Exercise 4.1 — dispatch bytes
-# Write `dispatch(tokens, k, hidden, elem_bytes, scale_block=0)`: bytes one GPU sends per direction when every
-# assignment is remote, adding a 4-byte scale per `scale_block` channels when `scale_block` is set (FP8).
+# Write `dispatch(tokens, k, hidden, elem_bytes, scale_block=0)`. It returns the bytes that one GPU sends per
+# direction when every assignment is remote. When `scale_block` is not 0 (FP8), add a 4-byte scale per `scale_block`
+# channels.
 
 # %% exercise
 def dispatch(tokens, k, hidden, elem_bytes, scale_block=0):
@@ -159,9 +178,11 @@ print(f"✅ DeepEP EP8 low-latency: dispatch {dispatch(128, 8, 7168, 1, 128) / 7
 
 # %% [markdown]
 # ## Exercise 4.2 — the α-β all-to-all
-# Write `a2a(size, p, gbs, alpha_us, algo)`: pairwise = ${p - 1}$ steps each of $\alpha + \text{size}/p \div B$;
-# direct = one step of $\alpha + (p - 1)/p \cdot \text{size} \div B$. Reproduce layer 02's 22 µs and 10 µs for 4 MiB
-# on 8 GPUs (450 GB/s, $\alpha$ = 2 µs).
+# Write `a2a(size, p, gbs, alpha_us, algo)`. Use these two algorithms:
+# - pairwise = ${p - 1}$ steps, each of $\alpha + \text{size}/p \div B$.
+# - direct = one step of $\alpha + (p - 1)/p \cdot \text{size} \div B$.
+#
+# Calculate the 22 µs and 10 µs of layer 02 again for 4 MiB on 8 GPUs (450 GB/s, $\alpha$ = 2 µs).
 
 # %% exercise
 def a2a(size, p, gbs, alpha_us, algo="direct"):
@@ -178,8 +199,8 @@ print("✅ 22 us pairwise, 10 us direct: at decode sizes the alpha term is most 
 
 # %% [markdown]
 # ## Exercise 4.3 — the exchange matrix
-# Write `exchange_matrix(idx, origin, where, p)`: a $p \times p$ array whose [src, dst] entry counts the assignments of
-# tokens that live on rank `origin[t]` to experts that live on rank `where[e]`.
+# Write `exchange_matrix(idx, origin, where, p)`. It returns a $p \times p$ array. Its [src, dst] entry counts the
+# assignments of tokens that live on rank `origin[t]` to experts that live on rank `where[e]`.
 
 # %% exercise
 def exchange_matrix(idx, origin, where, p):
@@ -200,11 +221,14 @@ print(f"✅ each rank sends {mine.sum(1)[0]} rows; {1 - np.trace(mine) / mine.su
 
 # %% [markdown]
 # ## Exercise 4.4 — each rank is its own roofline
-# Write `rank_time(rows, touched, expert_params, device, weight_bytes=2)`: per rank, the larger of its FLOP time
-# (rows × 2 × `expert_params` ÷ `device.peak()`) and its weight-read time (touched experts × `expert_params` ×
-# `weight_bytes` ÷ `device.bandwidth()`). Then, for the skewed routing with linear placement at 128 and at 4,096
-# tokens per GPU, set `penalty[tpg]` = the slowest rank's time ÷ the time of a rank with the mean rows and the mean
-# touched experts (expert work only; `E.exchange(...).sum(0)` gives the rows, `E.touched_per_rank` the experts).
+# Write `rank_time(rows, touched, expert_params, device, weight_bytes=2)`. Per rank, it returns the larger of two
+# times:
+# - its FLOP time (rows × 2 × `expert_params` ÷ `device.peak()`)
+# - its weight-read time (touched experts × `expert_params` × `weight_bytes` ÷ `device.bandwidth()`)
+#
+# Then use the skewed routing with linear placement at 128 and at 4,096 tokens per GPU. Set `penalty[tpg]` = the time
+# of the slowest rank ÷ the time of a mean rank. A mean rank has the mean rows and the mean touched experts. Count the
+# expert work only. `E.exchange(...).sum(0)` gives the rows, and `E.touched_per_rank` gives the experts.
 
 # %% exercise
 def rank_time(rows, touched, expert_params, device, weight_bytes=2):
@@ -239,8 +263,9 @@ print(f"✅ same skew, two regimes: in decode the hot rank's expert work is {pen
 
 # %% [markdown]
 # ## Exercise 4.5 — choose the EP degree
-# DeepSeek-V3 in FP8 on H200s (141 GB), wide-EP. Pick `ep_degree` from (8, 16, 32, 64): the smallest whose
-# per-GPU weights (`E.wide_ep_weights(DS, n, 1)`) use at most half of HBM, leaving the rest for KV and activations.
+# The setup is DeepSeek-V3 in FP8 on H200s (141 GB), wide-EP. Select `ep_degree` from (8, 16, 32, 64). Select the
+# smallest degree whose per-GPU weights (`E.wide_ep_weights(DS, n, 1)`) use at most half of HBM. The HBM that the
+# weights do not use stays for KV and activations.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -254,12 +279,16 @@ print(f"✅ EP {ep_degree}: {E.wide_ep_weights(DS, 16, 1) / 1e9:.1f} GB per GPU 
 
 # %% [markdown]
 # ## Exercise 4.6 — EP across the network
-# Two 8-GPU H200 nodes, DeepSeek-V3 FP8, batch 512 at 4K context, EP 16 with DP attention and all-to-all kernels,
-# FP8 dispatch (`fp8 = dict(dispatch_elem=1, scale_block=128)`). Set `one_domain` to
-# `E.decode_on(DS, D["h200"], 512, 4096, 16, "ep", L["nvlink4"], 1, **fp8)` (as if all 16 shared one NVLink
-# domain, an NVL72-class rack), `two_nodes` to the same over `L["ib-ndr"]` with `per_node=8, intra=L["nvlink4"]`
-# (each GPU's 7 node peers on NVLink, the other 8 behind its 400 Gb/s NIC), and `comm_share` to the fraction of the
-# two-node step spent in all-to-alls.
+# The setup has these values:
+# - two 8-GPU H200 nodes
+# - DeepSeek-V3 FP8, batch 512 at 4K context
+# - EP 16 with DP attention and all-to-all kernels
+# - FP8 dispatch (`fp8 = dict(dispatch_elem=1, scale_block=128)`)
+#
+# Set `one_domain` to `E.decode_on(DS, D["h200"], 512, 4096, 16, "ep", L["nvlink4"], 1, **fp8)`. This is as if all 16
+# GPUs share one NVLink domain, an NVL72-class rack. Set `two_nodes` to the same over `L["ib-ndr"]` with
+# `per_node=8, intra=L["nvlink4"]`. In this layout, each GPU has its 7 node peers on NVLink and the other 8 behind
+# its 400 Gb/s NIC. Set `comm_share` to the fraction of the two-node step that goes to the all-to-alls.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -280,27 +309,29 @@ print(f"✅ same roofline ({two_nodes['roofline'] * 1e3:.1f} ms), all-to-alls {o
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "With expert parallelism each GPU owns $E/p$ whole experts, and each MoE layer does
-# two all-to-alls — dispatch the tokens to their experts, combine the results — each at most
-# $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ per GPU — with DeepEP-class kernels; vLLM's
-# default exchange moves TP's volume, and TP × EP with DP = 1 just all-reduces. At decode sizes the all-to-all is
-# latency-bound, tens of microseconds per layer on NVLink; at prefill sizes it is bandwidth-bound, hundreds of
-# microseconds on NVLink and milliseconds across 400 Gb/s NICs.
+# **The two-minute version.** "With expert parallelism, each GPU owns $E/p$ whole experts. Each MoE layer does two
+# all-to-alls: it dispatches the tokens to their experts, and it combines the results. With DeepEP-class kernels, each
+# is at most $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ per GPU. The default exchange of vLLM
+# moves the volume of TP, and TP × EP with DP = 1 only does an all-reduce.
 #
-# "The step then waits for the busiest GPU: in prefill the one computing the hot experts' rows, in memory-bound
-# decode the one whose link carries the hot experts' traffic. Placement moves the hot spot; EPLB-style rebalancing
-# with a few redundant experts removes most of it for a couple of GiB per GPU.
+# "At decode sizes, the all-to-all is latency-bound: tens of microseconds per layer on NVLink. At prefill sizes, it is
+# bandwidth-bound: hundreds of microseconds on NVLink and milliseconds across 400 Gb/s NICs.
 #
-# "We pair EP with data-parallel attention (wide-EP): attention weights are replicated but the KV is per rank and the
-# experts are spread thin, so each GPU has room for a big batch and every expert sees all ranks' tokens. We keep EP
-# inside the NVLink domain when we can; across nodes we budget for the all-to-all or overlap it."
+# "Then the step waits for the busiest GPU. In prefill, this is the GPU that computes the rows of the hot experts. In
+# memory-bound decode, it is the GPU whose link carries the traffic of the hot experts. Placement moves the hot spot.
+# An EPLB-style rebalance with a few redundant experts removes most of it, for a couple of GiB per GPU.
+#
+# "We use EP together with data-parallel attention (wide-EP). Each rank holds a replica of the attention weights, but
+# the KV is per rank and the experts are spread thin. Thus each GPU has space for a large batch, and every expert sees
+# the tokens of all ranks. When we can, we keep EP inside the NVLink domain. Across nodes, we put the all-to-all in the
+# budget, or we overlap it."
 #
 # **Drill questions**
-# 1. *TP or EP for Mixtral on 8 GPUs at decode?* — EP with DP attention and all-to-all kernels: two small
-#    all-to-alls of each GPU's own tokens vs a ring all-reduce of the whole batch (and TP's all-reduces in attention
-#    too). With vLLM's default `allgather_reducescatter` the bytes match TP's, and EP's gain is memory layout and
-#    fatter expert GEMMs. TP is simpler and fine at small scale; EP scales.
-# 2. *Your EP=16 deployment is slower per token than EP=8. Name two causes.* — The all-to-all now crosses the
-#    network ($\alpha$ and $\beta$ both worse), and the replicated attention weights are a larger share of each
-#    GPU's bytes; also fewer tokens per expert per GPU.
-# 3. *What does one redundant expert per rank cost for DeepSeek-V3 in FP8?* — 58 × 44 MB ≈ 2.4 GiB of HBM per GPU.
+# 1. *TP or EP for Mixtral on 8 GPUs at decode?* EP with DP attention and all-to-all kernels. EP does two small
+#    all-to-alls of the tokens that each GPU holds. TP does a ring all-reduce of the whole batch, and it also does
+#    all-reduces in attention. With the default `allgather_reducescatter` of vLLM, the bytes are the same as for TP. Then the gain
+#    of EP is the memory layout and larger expert GEMMs. TP is simpler and satisfactory at small scale. EP scales.
+# 2. *Your EP=16 deployment is slower per token than EP=8. Name two causes.* The all-to-all now crosses the network
+#    ($\alpha$ and $\beta$ are both worse). The replicated attention weights are a larger share of the bytes of each
+#    GPU. There are also fewer tokens per expert per GPU.
+# 3. *What does one redundant expert per rank cost for DeepSeek-V3 in FP8?* 58 × 44 MB ≈ 2.4 GiB of HBM per GPU.

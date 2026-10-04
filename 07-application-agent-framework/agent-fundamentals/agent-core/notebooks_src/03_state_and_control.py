@@ -1,11 +1,13 @@
 # %% [markdown]
 # # 03 · State and control
 #
-# Two things separate a demo loop from something you would run: it remembers the
-# conversation across turns, and it protects itself — a step budget, and not calling
-# the same tool over and over. This notebook adds both, and shows a `policy` model that
-# actually reacts to tool results (so you can drive multi-step behaviour without a rigid
-# script).
+# Two things make a loop that you can operate different from a demo loop. First, it
+# remembers the conversation across turns. Second, it protects itself. It has a step
+# budget, and it does not call the same tool again and again.
+#
+# This notebook adds both. It also shows a `policy` model that reacts to the tool
+# results that it gets. With it, you can drive multi-step behaviour without a rigid
+# script.
 
 # %%
 from agentcore import Agent, FakeLLM, call, calls, text, tool
@@ -18,7 +20,7 @@ def get_balance(account_id: str) -> dict:
 # %% [markdown]
 # ## Multi-turn memory
 # `Agent.run` returns the full transcript in `result.messages`. Pass it back as
-# `history` on the next turn and the model sees the earlier exchange.
+# `history` on the next turn. Then the model sees the earlier exchange.
 
 # %%
 agent = Agent(FakeLLM([call("get_balance", account_id="a1"), "It's 1234.5.",
@@ -32,10 +34,13 @@ print("history carried", len(second.messages), "messages")
 # ## Exercise 3.1 — a policy that reacts to results
 #
 # A **policy** decides each turn from the messages: `(messages, tools) -> Response`.
-# Write `balance_policy` that: if the messages after the last user turn contain a tool
-# result, answer with `text("Your balance is on file.")`; else if the last user message
-# mentions `"balance"`, return `call("get_balance", account_id="a1")`; else
-# `text("How can I help?")`.
+# Write `balance_policy`, with these rules:
+#
+# * If the messages after the last user turn contain a tool result, answer with
+#   `text("Your balance is on file.")`.
+# * If not, and the last user message contains `"balance"`, return
+#   `call("get_balance", account_id="a1")`.
+# * In all other cases, return `text("How can I help?")`.
 
 # %% exercise
 def balance_policy(messages, tools):
@@ -59,11 +64,13 @@ print("✅ policy drives the loop without a fixed script")
 # %% [markdown]
 # ## Exercise 3.2 — stop a repeated tool call
 #
-# A confused model can call the same tool with the same arguments forever, burning
-# tokens. Write `dedupe(tool_calls, seen)`: `seen` is a set of signatures already run
-# (use `tc.signature()`). Return only the calls whose signature is **new**, and add
-# them to `seen`. (In a real loop you would feed the model a "you already have this"
-# note for the dropped ones; here we just filter.)
+# A confused model can call the same tool with the same arguments forever, and use
+# tokens each time. Write `dedupe(tool_calls, seen)`. The argument `seen` is a set of
+# the signatures that already ran (use `tc.signature()`). Return only the calls whose
+# signature is **new**. Add them to `seen`.
+#
+# (In a loop in production, you also give the model a "you already have this" note for
+# the dropped calls. Here, you only filter them.)
 
 # %% exercise
 def dedupe(tool_calls, seen: set) -> list:
@@ -89,10 +96,10 @@ print("✅ dedupe drops repeated calls")
 # %% [markdown]
 # ## Exercise 3.3 — reason about the budget
 #
-# `Agent(max_steps=N)` caps model calls per turn. For a model that **never** answers
-# (always returns a tool call), how many `assistant` messages appear in the transcript
-# when `max_steps=4`, and is `result.done` True or False? Set the two variables, then
-# the check confirms them against a real run.
+# `Agent(max_steps=N)` sets the maximum number of model calls in each turn. Think about
+# a model that **never** answers (it always returns a tool call), with `max_steps=4`.
+# How many `assistant` messages are in the transcript? Is `result.done` True or False?
+# Set the two variables. Then the check compares them with a real run.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -109,7 +116,11 @@ print(f"✅ {expected_assistant_messages} model calls, done={expected_done} — 
 
 # %% [markdown]
 # ## The one-minute version
-# Every design review asks about state. Name the kinds: the **conversation** (the
-# transcript), small **working state** (what stage a task is at), and **budgets**
-# (steps, and in production tokens and time). Say a loop without a step budget is a cost
-# incident waiting to happen — and that you cap it in code, not in the prompt.
+# Each design review asks about state. Name the kinds of state:
+#
+# * the **conversation** (the transcript),
+# * a small **working state** (the stage of a task),
+# * the **budgets** (steps, and in production also tokens and time).
+#
+# Say that a loop without a step budget is a cost incident that has not occurred yet.
+# Also say that you set the limit in code, not in the prompt.

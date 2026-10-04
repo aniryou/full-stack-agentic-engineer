@@ -1,21 +1,25 @@
 # %% [markdown]
 # # 03 · Prefix caching
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. The same effect measured on a real vLLM server (and on
-# its `vllm:prefix_cache_queries` / `vllm:prefix_cache_hits` counters) is `vllm-serving-lab` notebook
-# `04_prefix_caching_for_agents` (T1).
+# **Tier:** T0. It needs a CPU only and no network, and it runs in a few seconds. `vllm-serving-lab` notebook
+# `04_prefix_caching_for_agents` (T1) measures the same effect on a real vLLM server. It also reads the
+# `vllm:prefix_cache_queries` / `vllm:prefix_cache_hits` counters of that server.
 #
 # ## The one-minute version
-# Two requests whose prompts start with the same tokens compute the same K/V for that prefix — so compute it once.
-# The engine names every **full** KV block by `hash(parent block's name, the block's tokens, extra keys)`. Because
-# the parent is part of the name, a name commits to the *entire* prefix, not just the 16 tokens inside. A new
-# request walks its prompt's chain of names and adopts every block already cached (refcount + 1) instead of
-# recomputing it: its TTFT drops and no new memory is used. When a request finishes, its blocks go to an LRU free
-# queue **still named**, so they keep producing hits until memory is actually needed. For agents — long stable
-# system prompts, tool schemas, append-only histories — this is often the single largest saving in the engine,
-# and prompt layout decides whether you get it.
+# Two requests whose prompts start with the same tokens compute the same K/V for that prefix. Thus compute it one
+# time. The engine gives each **full** KV block a name: `hash(parent block's name, the block's tokens, extra keys)`.
+# The parent is part of the name. Thus a name identifies the *entire* prefix, not only the 16 tokens inside the
+# block.
 #
-# Primer: §5 *Prefix caching*; §4 *KV cache management revisited* (`../../PRIMER.md`). Background:
+# A new request goes along the chain of names of its prompt. It adopts each block that is already in the cache
+# (refcount + 1), and it does not recompute that block. Thus its TTFT decreases, and it uses no new memory. When a
+# request finishes, its blocks go, **still named**, to an LRU free queue. Thus they continue to give hits until the
+# engine actually needs the memory.
+#
+# Agents have long stable system prompts, tool schemas and append-only histories. For agents, prefix caching often
+# gives the single largest gain in the engine. The prompt layout decides if you get it.
+#
+# Primer: §5 *Prefix caching*, §4 *KV cache management revisited* (`../../PRIMER.md`). Background:
 # `04-inference-engine/paged-attention/` (block tables, copy-on-write).
 
 # %%
@@ -38,10 +42,11 @@ for name, toks in [("a", a), ("b", b), ("c", c)]:
     print(name, [h.hex()[:6] for h in block_hashes(toks, 4)])
 
 # %% [markdown]
-# `a` and `b` share their first four names (the first 16 tokens are identical), and diverge at the block holding
-# `Q1` / `Q2`. `c` has the same tokens as `b` in blocks 2 and 3 — `" be "`, `"brie"` — yet **different names**:
-# its first block differs, and the name of every later block depends on it. A block's K/V depends on every token
-# before it (attention), so the name must too. The partial last block has no name: only full blocks are cached.
+# `a` and `b` share their first four names (the first 16 tokens are identical). They become different at the block
+# that holds `Q1` / `Q2`. `c` has the same tokens as `b` in blocks 2 and 3 (`" be "`, `"brie"`), but it has
+# **different names**. Its first block is different, and the name of each later block depends on it. The K/V of a
+# block depend on each token before it (attention), so the name must depend on those tokens too. The partial last
+# block has no name, because the engine caches only full blocks.
 #
 # ## Worked example 2 — a shared system prompt
 
@@ -59,14 +64,15 @@ for rid in ["r0", "r1", "r2"]:
 print("\nstats:", eng.kv.stats)
 
 # %% [markdown]
-# `r1` and `r2` adopt `r0`'s system-prompt blocks: the same physical block ids appear in all three tables with a
-# refcount of 3. They only prefill their own question. Hits are counted in tokens, which is exactly what vLLM
-# reports as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
+# `r1` and `r2` adopt `r0`'s system-prompt blocks. The same physical block ids are in all three tables
+# with a refcount of 3. `r1` and `r2` prefill only their own question. The engine counts hits in tokens. vLLM reports
+# the same token counts as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
 #
 # ## Worked example 3 — a burst: three requests in the same step
-# An agent fans out three tool calls at once, all behind the same system prompt, so all three are admitted in
-# **one** step. A block is published when the scheduler **schedules** the tokens that fill it (vLLM does it in
-# `allocate_slots`), so the second and third requests adopt `r0`'s blocks while `r0` is still computing them.
+# An agent sends out three tool calls at once, all behind the same system prompt. Thus the scheduler
+# admits all three in **one** step. The engine publishes a block when the scheduler **schedules** the tokens that
+# fill it (vLLM does it in `allocate_slots`). Thus the second and third requests adopt `r0`'s blocks while `r0` still
+# computes them.
 
 # %%
 eng = Engine(model, num_blocks=128, block_size=16, max_num_batched_tokens=1024)
@@ -78,12 +84,14 @@ print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r
       eng.kv.num_blocks - eng.kv.num_free_blocks)
 
 # %% [markdown]
-# One step: `r0` prefills its whole prompt, `r1` and `r2` only what follows token 176. That is safe because the
-# forward pass writes each layer's K/V for the *whole* step before any request attends at that layer — the model
-# code does `cache.write(...)` for all tokens, then the per-request attention. It is also why the scheduler
-# publishes a running request's blocks only once no request can be preempted in that step any more: a request
-# removed from the batch must not publish blocks it will never compute. An engine that published blocks only
-# after the step would make a burst compute the shared prefix once per request, and hold one copy per request.
+# In one step, `r0` prefills its whole prompt, and `r1` and `r2` prefill only the tokens after token 176. That is
+# safe, because the forward pass writes the K/V of each layer for the *whole* step before any request attends at that
+# layer. The model code does `cache.write(...)` for all tokens, then the per-request attention.
+#
+# The same write order also explains a rule of the scheduler. The scheduler publishes the blocks of a request that
+# runs only when it can no longer preempt a request in that step. A request that the scheduler removes from the batch
+# must not publish blocks that it will never compute. If an engine publishes blocks only after the step, a burst
+# computes the shared prefix one time per request. That engine also holds one copy per request.
 #
 # ## Worked example 4 — freed blocks keep producing hits, until memory is needed
 
@@ -100,17 +108,19 @@ o = eng.generate([SYSTEM + "User: back again."], greedy)[0]
 print(f"   {o.num_cached_tokens} tokens from cache now")
 
 # %% [markdown]
-# A finished request's blocks sit in the free queue with their names. They count as **free** (the allocator may
-# take them: `vllm:kv_cache_usage_perc` does not count them) yet they are still hits — until a new allocation
-# pops them from the front of the queue and **evicts** the name. Prefix caching costs no memory; it only uses
-# memory nobody else needs yet. Note *which* 32 tokens survived the big request: the **head** of the system
-# prompt. Requests free their blocks tail first, so the most widely shared blocks are the last to go.
+# The blocks of a finished request stay in the free queue with their names. They count as **free**: the allocator
+# can take them, and `vllm:kv_cache_usage_perc` does not count them. But they still give hits until a new allocation
+# takes them from the front of the queue and **evicts** the name. Prefix caching costs no memory. It uses only
+# memory that no other request needs yet.
+#
+# Note *which* 32 tokens stayed in the cache after the large request: the **head** of the system prompt. Requests
+# free their blocks tail first, so the most widely shared blocks are the last to go.
 #
 # ## Worked example 5 — why the parent must be in the name
-# Replace the hash with one that ignores the parent. Two prompts with the same tokens in their second block —
-# after different first blocks — now share a name, and the engine serves K/V computed under the wrong prefix.
-# This tiny model's greedy tokens barely depend on context, so compare what the engine *computed*: the logprob of
-# every generated token, against the dense reference.
+# Replace the hash with a hash that ignores the parent. Two prompts can have the same tokens in their second block
+# after different first blocks. Now they share a name, and the engine serves K/V computed under the incorrect
+# prefix. The greedy tokens of this small model almost do not depend on context. Thus compare what the engine
+# *computed*: the logprob of each generated token, against the dense reference.
 
 # %%
 from minengine.sampler import log_softmax
@@ -133,16 +143,19 @@ for label, fn in [("chained   ", hash_block), ("parentless", parentless)]:
           f"logprob error vs reference {logprob_error(outs[2], prompts[2]):.1e}")
 
 # %% [markdown]
-# The chained cache reuses only the block whose whole prefix matches and agrees with the reference to rounding
-# error. The parentless one reuses more — and computes different probabilities. No error, no crash: just subtly
-# wrong outputs (with a real model, visibly wrong text). That is why engines use a chained, collision-resistant hash
-# (vLLM defaults to SHA-256 as of Sep 2026, verify) and why tenant isolation adds a salt to the chain's root
-# (`cache_salt` in vLLM): without it, a timing side channel could reveal whether someone else sent a prefix.
+# The chained cache uses again only the block whose whole prefix is the same. Its result agrees with the reference
+# to rounding error. The parentless cache uses more blocks again, and it computes different probabilities. There is
+# no error and no crash, only outputs that are subtly incorrect (with a real model, text that is clearly incorrect).
+#
+# That is why engines use a chained, collision-resistant hash (vLLM defaults to SHA-256 as of Sep 2026, verify). It
+# is also why tenant isolation adds a salt to the root of the chain (`cache_salt` in vLLM). Without the salt, a
+# timing side channel can show if someone else sent a prefix.
 #
 # ## Worked example 6 — what it buys on a real GPU (SIMULATED)
-# 60 requests whose 2,000–2,200-token prompts share their first 1,800 tokens (a long system prompt with tool
-# schemas), H100 + Llama-3.1-8B, through `perf.simulate` — this package's scheduler and KV manager on a roofline
-# clock. First arriving at 6/s, then all at once.
+# The workload is 60 requests on H100 + Llama-3.1-8B. Their 2,000–2,200-token prompts share their first 1,800
+# tokens (a long system prompt with tool schemas). They go through `perf.simulate`: the scheduler and the KV manager
+# of this package on a roofline clock. In the first run, they arrive at 6/s. In the second run, they arrive all at
+# once.
 
 # %%
 g, m = perf.GPUS["H100-SXM"], perf.LLMS["llama-3.1-8b"]
@@ -153,15 +166,17 @@ for rate in [6, math.inf]:
         print(perf.simulate(g, m, w, enable_prefix_caching=caching, label=label).summary())
 
 # %% [markdown]
-# At 6/s every request after the first skips 1,792 of its ~2,100 prompt tokens: TTFT p50 drops about 6×, and
-# because the shared blocks are held once, not 60 times, peak KV use falls too. In the burst the saving is larger
-# still: without caching, 60 copies of the same prefill queue behind one another. The hit rate (84%) is what
-# `vllm:prefix_cache_hits / vllm:prefix_cache_queries` would show. Assumptions in, estimates out — the lab
-# measures the real thing (`vllm-serving-lab`, notebook `04_prefix_caching_for_agents`).
+# At 6/s, each request after the first skips 1,792 of its ~2,100 prompt tokens. TTFT p50 decreases by about 6×. The
+# engine holds the shared blocks one time, not 60 times, so the peak KV use decreases too.
+#
+# The burst shows an even larger gain. Without caching, 60 copies of the same prefill wait in the queue behind
+# one another. The hit rate (84%) is the value that `vllm:prefix_cache_hits / vllm:prefix_cache_queries` gives. The
+# inputs are assumptions, so the outputs are estimates. The lab measures the real thing (`vllm-serving-lab`,
+# notebook `04_prefix_caching_for_agents`).
 #
 # ## Exercise 3.1 — build the chain
-# Write `chain_names(tokens, block_size)`: the names of the **full** blocks, each `hash_block(parent, block_tokens)`
-# with `parent=None` for the first block.
+# Write `chain_names(tokens, block_size)`. It returns the names of the **full** blocks. Each name is
+# `hash_block(parent, block_tokens)`, with `parent=None` for the first block.
 
 # %% exercise
 def chain_names(tokens, block_size):
@@ -181,10 +196,12 @@ print("✅ chain_names == block_hashes")
 
 # %% [markdown]
 # ## Exercise 3.2 — predict the hit
-# A previous request with prompt `cached` finished and all its full blocks are still cached. A new prompt `new`
-# arrives. How many of its tokens come from the cache? Remember two rules: only **full** blocks of the common
-# prefix can hit, and the last token of `new` is always recomputed (its logits are needed), so at most
-# `(len(new) - 1) // block_size` blocks hit.
+# A previous request with the prompt `cached` finished, and all its full blocks are still in the cache. A new prompt
+# `new` arrives. How many of its tokens come from the cache? Remember two rules:
+#
+# * Only **full** blocks of the common prefix can hit.
+# * The engine always recomputes the last token of `new`, because it needs the logits of that token. Thus at most
+#   `(len(new) - 1) // block_size` blocks hit.
 
 # %% exercise
 def predicted_hit_tokens(cached, new, block_size):
@@ -208,10 +225,11 @@ print("✅ identical 20-token prompts hit", predicted_hit_tokens(a, a, 4), "toke
 
 # %% [markdown]
 # ## Exercise 3.3 — which block is evicted first?
-# The free queue is LRU: blocks are appended when their refcount drops to zero and evicted from the front. A
-# finishing request frees its blocks **tail first**. Request `a` (blocks `a0 a1 a2`, head to tail) finishes, then
-# `b` (`b0 b1`). Five new blocks are then allocated from an otherwise empty free queue. Fill `eviction_order` with
-# the order in which those five blocks are reused.
+# The free queue is LRU. The engine adds a block at the end of the queue when its refcount decreases to zero, and it
+# evicts blocks from the front. A request that finishes frees its blocks **tail first**. Request `a` (blocks
+# `a0 a1 a2`, head to tail) finishes, then `b` (`b0 b1`) finishes. Then the engine allocates five new blocks from a
+# free queue that has no other blocks. Fill `eviction_order` with the order in which the engine uses those five
+# blocks again.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -234,9 +252,10 @@ print("✅ least recently freed first; within a request, the tail first - the sh
 # %% [markdown]
 # ## Exercise 3.4 — lay out an agent prompt for the cache
 # An agent session has four turns. The prompt for each turn must include the current time. Write
-# `append_only(transcript, user_msg, clock)` so that each turn's prompt **extends** the previous turn's prompt
-# plus the agent's reply — keep every message, with its own timestamp, exactly as it was sent. `transcript` is a
-# list of `(user_msg, clock, reply)`. Compare with `clock_first`, which puts the time at the very top.
+# `append_only(transcript, user_msg, clock)` so that the prompt of each turn **extends** the prompt of the previous
+# turn plus the reply of the agent. Keep each message, with its own timestamp, exactly as the user sent it.
+# `transcript` is a list of `(user_msg, clock, reply)`. Compare with `clock_first`, which puts the time at the start
+# of the prompt.
 
 # %%
 TURNS = ["Where is my order?", "It was order 4411.", "Can I get a refund?", "Thanks, that is all."]
@@ -273,9 +292,10 @@ print("✅ stable content first, volatile content last, history append-only")
 
 # %% [markdown]
 # ## Exercise 3.5 — block hashing vs a radix tree
-# SGLang's RadixAttention keeps cached prefixes in a radix tree at **token** granularity; a block-hash cache
-# reuses only whole blocks. Write `radix_reuse(cached, new)`: the tokens a token-granular cache reuses — the whole
-# common prefix, but still at most `len(new) - 1`. The check compares it with block reuse at 16 tokens per block.
+# SGLang's RadixAttention keeps cached prefixes in a radix tree at **token** granularity. A block-hash cache uses
+# only whole blocks again. Write `radix_reuse(cached, new)`. It returns the tokens that a token-granular cache uses
+# again: the whole common prefix, but still at most `len(new) - 1`. The check compares it with block reuse at 16
+# tokens per block.
 
 # %% exercise
 def radix_reuse(cached, new):
@@ -295,25 +315,32 @@ assert [radix_reuse(x, y) for x, y in pairs] == [190, 183, 78] and extra == [14,
 print(f"✅ the radix tree reuses {extra} extra tokens per pair: always less than one block per request")
 
 # %% [markdown]
-# Less than a block per request — so the choice between the two structures is rarely about hit rate. It is about
-# eviction policy and scheduling: a radix tree makes "which cached prefix does this request extend?" cheap to
-# ask, which SGLang uses to order requests for cache locality; block hashes make the cache a flat dictionary that
-# is trivial to share, offload and publish as events (what a cache-aware router consumes, 05).
+# The difference is less than a block per request. Thus the choice between the two structures is rarely about hit
+# rate. It is about the eviction policy and the order in which the scheduler runs requests. A radix tree makes the
+# question "which cached prefix does this request extend?" low-cost to ask. SGLang uses that low-cost question to put
+# requests in an order for cache locality.
+#
+# Block hashes make the cache a flat dictionary that is simple to share, offload and publish as events. A cache-aware
+# router uses these events (05).
 #
 # ## In a design review
-# **The two-minute version.** "The engine names each full KV block by a hash of its parent's name plus its tokens,
-# so a name identifies the whole prefix. A new request walks its prompt's chain and adopts every cached block —
-# refcount up, no compute, no new memory; only its suffix is prefilled. Finished requests leave their blocks in an
-# LRU free queue, still named, so hits continue until the memory is needed; tails are evicted first so shared
-# heads survive. For our agents that means a stable system prompt and tool list at the top, an append-only
-# transcript, and anything volatile — timestamps, per-request IDs — at the end: that layout took our hit rate
-# from near 0% to over 80%. We watch `prefix_cache_hits / prefix_cache_queries`, and across replicas the router
-# must send a session back to the replica that holds its prefix (05)."
+# **The two-minute version.** "The engine gives each full KV block a name: a hash of the name of its parent plus its
+# tokens. Thus a name identifies the whole prefix. A new request goes along the chain of its prompt and adopts each
+# cached block. The refcount increases, and there is no compute and no new memory. The engine prefills only the
+# suffix of the request.
+#
+# "Finished requests leave their blocks in an LRU free queue, still named, so hits continue until the engine needs
+# the memory. The engine evicts tails first, so shared heads stay in the cache.
+#
+# "For our agents, that means a stable system prompt and tool list at the top and an append-only transcript.
+# Anything volatile goes at the end: timestamps and per-request IDs. That layout took our hit rate from near 0% to
+# over 80%. We monitor `prefix_cache_hits / prefix_cache_queries`. Across replicas, the router must send a session
+# back to the replica that holds its prefix (05)."
 #
 # **Drill questions**
-# 1. *Why include the parent in the block hash?* — K/V depend on all earlier tokens; without the parent, equal
-#    blocks after different prefixes collide and the engine silently serves wrong K/V.
-# 2. *Two identical 20-token prompts, block size 4 — how many tokens hit?* — 16: the last block is recomputed
-#    because the last token's logits are needed.
-# 3. *Does prefix caching reduce the memory available to other requests?* — No: cached blocks with no users are
-#    free (evictable); they are reused only when nobody needs the memory.
+# 1. *Why include the parent in the block hash?* K/V depend on all earlier tokens. Without the parent, equal blocks
+#    after different prefixes collide. Then the engine serves incorrect K/V and gives no warning.
+# 2. *Two identical 20-token prompts, block size 4: how many tokens hit?* 16. The engine recomputes the last block,
+#    because it needs the logits of the last token.
+# 3. *Does prefix caching reduce the memory available to other requests?* No. Cached blocks with no users are free
+#    (evictable). The engine uses them again only when nobody needs the memory.

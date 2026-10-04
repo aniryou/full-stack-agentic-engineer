@@ -1,10 +1,13 @@
 # 00 · Foundations
 
-Understand the model the whole stack serves: after this layer you can build a transformer from nothing, size a
-model's memory, bandwidth and latency before paying for a GPU, place a model family in the open-weight landscape,
-say what a mixture-of-experts router does to memory, batching and serving cost, explain how RL post-training
-produces thinking models and what their long outputs do to a serving fleet, and decide with numbers whether
-distilling a small student from a large teacher pays for itself.
+Understand the model that the whole stack serves. After this layer, you can do these things:
+
+- Build a transformer from nothing.
+- Calculate the memory, bandwidth and latency of a model before you pay for a GPU.
+- Put a model family in its place in the open-weight landscape.
+- Say what a mixture-of-experts router does to memory, batching and serving cost.
+- Explain how RL post-training makes thinking models, and what their long outputs do to a serving fleet.
+- Decide with numbers if a small student that you distil from a large teacher pays for itself.
 
 ## Where this layer sits
 
@@ -19,34 +22,37 @@ distilling a small student from a large teacher pays for itself.
    00 Foundations                     the model itself, beneath the stack: shapes, capacity, MoE, RL, distillation
 ```
 
-This layer sits beneath the stack: it is the model every layer above stores, moves and serves.
+This layer is below the stack. It is the model that every layer above it stores, moves and serves.
 
-*Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box
-(Kaggle's free 2×T4, or rented for an hour); T3 = the Google Cloud deployment, optional.* Times are rough, include
-the exercises, and match the repo's curriculum ([`CURRICULUM.md`](../CURRICULUM.md), modules 00.1–00.6).
+*Tiers: T0 = laptop or Colab CPU, free. T1 = one small GPU (Colab/Kaggle T4 or a rented card). T2 = a multi-GPU box
+(Kaggle's free 2×T4, or rented for an hour). T3 = the Google Cloud deployment, optional.* The times are approximate.
+They include the exercises, and they agree with the curriculum of the repo ([`CURRICULUM.md`](../CURRICULUM.md),
+modules 00.1–00.6).
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`transformers/`](transformers/README.md) | build attention, a transformer block and a tiny GPT from nothing; count parameters from a config; say what the KV cache stores and why decoding is sequential — a [primer](transformers/docs/transformer-primer.md), three runnable lessons, practice and walkthrough notebooks | ~5 h | T0 (lesson 3 uses CPU PyTorch) |
-| [`gpu-capacity-planning/`](gpu-capacity-planning/README.md) | size weights and KV cache against HBM, estimate TTFT from prefill FLOPs and TPOT from bandwidth, and take a GPU count from the binding constraint plus headroom — a [primer](gpu-capacity-planning/PRIMER.md), `capacity.py` and a practice notebook | ~2 h | T0 |
-| [`model-landscape/`](model-landscape/open-weight-llms-primer.md) | say what "open weight" grants, check a licence, and place a model family by size, architecture and deployment tier — the [open-weight primer](model-landscape/open-weight-llms-primer.md) and the [Mistral exercises](model-landscape/mistral-primer-exercises.md) | ~1 h | read |
-| [`mixture-of-experts/`](mixture-of-experts/README.md) | explain how an MoE layer routes tokens and why routers must be balanced; count total and active parameters from a config; predict which experts a decode batch reads and when it turns compute-bound; price expert parallelism's all-to-alls; size an MoE deployment against a dense one — a [PRIMER](mixture-of-experts/PRIMER.md), [`moe-core`](mixture-of-experts/moe-core/README.md) (numpy, 5 notebooks) and [`moe-lab`](mixture-of-experts/moe-lab/README.md) (a tiny MoE in torch, router hooks, decode step time vs batch in vLLM, expert parallelism on two GPUs, offload and 4-bit experts; 5 notebooks) | ~7 h primer + core; ~8.5 h lab | T0 → T2 (T3 optional) |
-| [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) | explain what an RL post-training step does — REINFORCE, the KL penalty, reward models, DPO, GRPO and its fixes; predict reward hacking, length bias and over-optimisation; choose between thinking longer and sampling more; size and operate a serving fleet for a thinking model — a [PRIMER](rl-and-thinking-models/PRIMER.md), [`rl-core`](rl-and-thinking-models/rl-core/README.md) (numpy, 5 notebooks) and [`thinking-lab`](rl-and-thinking-models/thinking-lab/README.md) (GRPO on a tiny transformer in torch, Qwen3 in vLLM with a reasoning parser, best-of-n and voting, one GRPO step with vLLM rollouts; 5 notebooks) | ~12 h primer + core; ~10 h lab | T0 → T1 (T3 optional) |
-| [`distillation/`](distillation/README.md) | explain why a student learns more from a teacher's distribution than from labels; choose between logit, sequence-level and on-policy distillation and the divergence each minimises; predict exposure bias and what a distilled thinking model inherits; train a draft model for speculative decoding; measure a student honestly and decide whether it pays for itself — a [PRIMER](distillation/PRIMER.md), [`distill-core`](distillation/distill-core/README.md) (numpy, 5 notebooks) and [`distill-lab`](distillation/distill-lab/README.md) (a tiny transformer distilled four ways in torch, teacher data from a served model and a 0.5–0.6B student with TRL, reasoning traces, a distilled draft under vLLM's speculative decoding, whether a student pays for itself; 5 notebooks) | ~11 h primer + core; ~10 h lab | T0 → T1 (T3 optional) |
+| [`transformers/`](transformers/README.md) | Build attention, a transformer block and a tiny GPT from nothing. Count the parameters from a config. Say what the KV cache stores and why decode is sequential. The topic has a [primer](transformers/docs/transformer-primer.md), three lessons that you can run, and practice and walkthrough notebooks. | ~5 h | T0 (lesson 3 uses CPU PyTorch) |
+| [`gpu-capacity-planning/`](gpu-capacity-planning/README.md) | Compare the size of the weights and the KV cache with HBM. Calculate an approximate TTFT from the prefill FLOPs, and an approximate TPOT from the bandwidth. Get a GPU count from the binding constraint plus headroom. The topic has a [primer](gpu-capacity-planning/PRIMER.md), `capacity.py` and a practice notebook. | ~2 h | T0 |
+| [`model-landscape/`](model-landscape/open-weight-llms-primer.md) | Say what "open weight" gives you. Examine a licence. Put a model family in its place by size, architecture and deployment tier. The topic has the [open-weight primer](model-landscape/open-weight-llms-primer.md) and the [Mistral exercises](model-landscape/mistral-primer-exercises.md). | ~1 h | read |
+| [`mixture-of-experts/`](mixture-of-experts/README.md) | Explain how an MoE layer routes tokens, and why the routers must stay balanced. Count the total and active parameters from a config. Predict which experts a decode batch reads, and when the batch becomes compute-bound. Calculate the cost of the all-to-alls of expert parallelism. Compare the size of an MoE deployment with a dense one. The topic has a [PRIMER](mixture-of-experts/PRIMER.md), [`moe-core`](mixture-of-experts/moe-core/README.md) (numpy, 5 notebooks) and [`moe-lab`](mixture-of-experts/moe-lab/README.md). The lab has a small MoE in torch, router hooks and decode step time against batch in vLLM. It also has expert parallelism on two GPUs, and offload and 4-bit experts. It has 5 notebooks. | ~7 h primer + core, ~8.5 h lab | T0 to T2 (T3 optional) |
+| [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) | Explain what an RL post-training step does: REINFORCE, the KL penalty, reward models, DPO, GRPO and the corrections to GRPO. Predict reward hacking, length bias and over-optimisation. Decide if a model must think longer or sample more. Calculate the size of a serving fleet for a thinking model, and operate the fleet. The topic has a [PRIMER](rl-and-thinking-models/PRIMER.md), [`rl-core`](rl-and-thinking-models/rl-core/README.md) (numpy, 5 notebooks) and [`thinking-lab`](rl-and-thinking-models/thinking-lab/README.md). The lab has GRPO on a small transformer in torch, Qwen3 in vLLM with a reasoning parser, and best-of-n and voting. It also has one GRPO step with vLLM rollouts. It has 5 notebooks. | ~12 h primer + core, ~10 h lab | T0 to T1 (T3 optional) |
+| [`distillation/`](distillation/README.md) | Explain why a student learns more from the distribution of a teacher than from labels. Select between logit, sequence-level and on-policy distillation, with the divergence that each one minimises. Predict exposure bias, and what a distilled thinking model takes from its teacher. Train a draft model for speculative decoding. Measure a student honestly, and decide if it pays for itself. The topic has a [PRIMER](distillation/PRIMER.md), [`distill-core`](distillation/distill-core/README.md) (numpy, 5 notebooks) and [`distill-lab`](distillation/distill-lab/README.md). The lab has a small transformer distilled four ways in torch, and teacher data from a served model and a 0.5–0.6B student with TRL. It also has reasoning traces, and a distilled draft under the speculative decoding of vLLM. It shows if a student pays for itself. It has 5 notebooks. | ~11 h primer + core, ~10 h lab | T0 to T1 (T3 optional) |
 
 ## Start here
 
-1. Read the [transformer primer](transformers/docs/transformer-primer.md) §2–8 and run the three
-   [lessons](transformers/lessons/) — skip to step 2 if attention and the KV cache are already familiar.
-2. `cd gpu-capacity-planning && python3 worked_example.py` — under a second, standard library only: it prints every
-   number in the capacity primer, from a 24B dense model on one H100 to Mistral Large 3's 675B MoE.
-3. Work the three primer + core + lab topics by their module tables:
-   [`mixture-of-experts/`](mixture-of-experts/README.md) once you have layer 01's
-   [roofline](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (§3),
-   [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) once you have read the
-   [serving-engine primer](../04-inference-engine/serving-engine/PRIMER.md), and
-   [`distillation/`](distillation/README.md) right after it (it builds on the RL primer and on the serving-engine
-   primer's [§7](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding)).
+1. Read the [transformer primer](transformers/docs/transformer-primer.md) §2–8. Then run the three
+   [lessons](transformers/lessons/). If you already know attention and the KV cache, go to step 2.
+2. Run `cd gpu-capacity-planning && python3 worked_example.py`. It takes less than a second and uses only the
+   standard library. It prints every number in the capacity primer. The numbers go from a 24B dense model on one H100 to
+   Mistral Large 3's 675B MoE.
+3. Do the three primer + core + lab topics. Use their module tables as the guide:
+   - Do [`mixture-of-experts/`](mixture-of-experts/README.md) when you know the
+     [roofline](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) of layer 01 (§3).
+   - Do [`rl-and-thinking-models/`](rl-and-thinking-models/README.md) after you read the
+     [serving-engine primer](../04-inference-engine/serving-engine/PRIMER.md).
+   - Do [`distillation/`](distillation/README.md) immediately after `rl-and-thinking-models/`. It builds on the RL
+     primer and on [§7](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding) of the serving-engine
+     primer.
 
 ## Run it
 
@@ -64,41 +70,54 @@ python3 -m pip install -r requirements.txt && python3 -m pytest -q     # 86 test
 cd ../distill-lab && python3 -m pip install -e ".[dev]" && python3 -m pytest -q   # 201 tests, offline; ~2 min with torch, ~15 s without
 ```
 
-Then `python3 -m jupyterlab notebooks` in any core or lab directory, or the Colab links below. The three labs run
-every notebook at T0 (torch on a CPU, a fake vLLM, bundled outputs labelled illustrative) and measure on a GPU when
-you point them at one.
+Then run `python3 -m jupyterlab notebooks` in any core or lab directory, or use the Colab links in "Run in Colab".
+The three labs run every notebook at T0, with torch on a CPU, a fake vLLM and bundled outputs labelled illustrative.
+When you point the labs at a GPU, they measure on it.
 
 ## How it fits
 
-**Builds on** Python and numpy (CPU PyTorch for the tiny GPT) and nothing else: this is the first stop in the
-[curriculum's spiral](../CURRICULUM.md#31-why-this-order) (00 → 04 → 01 → 02 → 04 → 03 → 05 → 06 → 07). Its three
-newer topics come later in that spiral, where their prerequisites are: mixture-of-experts after layer 01's roofline,
-RL and thinking models after the serving-engine primer, and distillation right after RL and thinking models (step 3
-above).
+**Builds on** Python and numpy, and nothing else (CPU PyTorch for the tiny GPT). This layer is the first stop in the
+[spiral of the curriculum](../CURRICULUM.md#31-why-this-order), in this sequence: 00, 04, 01, 02, 04, 03, 05,
+06, 07. Its three newer topics come later in that spiral, at the point where their prerequisites are:
 
-Everything above builds on this layer's numbers: parameters and KV bytes per token (transformers, capacity
-planning), total vs active parameters (mixture-of-experts) and output length (rl-and-thinking-models). Layer 01's
-[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) turns them into step times; layer
-04's [`serving-engine`](../04-inference-engine/serving-engine/README.md) runs them, and its
-[`quantization`](../04-inference-engine/quantization/README.md) topic changes the bytes per parameter. The MoE topic
-leans on layer 02's [all-to-all](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives) and feeds layer 05's
-[wide-EP](../05-orchestrator/serving-orchestration/PRIMER.md#8-large-moe-topologies-wide-ep-in-brief) fleets; the
-thinking-model workload reshapes the engine's KV budget, the router and the gateway's cost per conversation
-([`06-gateway`](../06-gateway/README.md)). Distillation (00.6) feeds two layers above: a draft for layer 04's
-[speculative decoding](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding) is a student measured
-by acceptance, and a student behind a cascade is the gateway's routing by cost.
+- mixture-of-experts after the roofline of layer 01,
+- RL and thinking models after the serving-engine primer,
+- distillation immediately after RL and thinking models (step 3 in "Start here").
+
+Everything above this layer builds on its numbers:
+
+- parameters and KV bytes per token (transformers, capacity planning),
+- total parameters against active parameters (mixture-of-experts),
+- output length (rl-and-thinking-models).
+
+The [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md)
+topic of layer 01 calculates step times from these numbers. The
+[`serving-engine`](../04-inference-engine/serving-engine/README.md) topic of layer 04 runs them. The
+[`quantization`](../04-inference-engine/quantization/README.md) topic of layer 04 changes the bytes per parameter.
+
+The MoE topic depends on the layer 02
+[all-to-all](../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md#5-collectives). It supplies the layer 05
+[wide-EP](../05-orchestrator/serving-orchestration/PRIMER.md#8-large-moe-topologies-wide-ep-in-brief) fleets. The
+workload of a thinking model changes the KV budget of the engine, the router and the cost per conversation of the
+gateway ([`06-gateway`](../06-gateway/README.md)). Distillation (00.6) supplies two layers above it. A draft for the
+layer 04 [speculative decoding](../04-inference-engine/serving-engine/PRIMER.md#7-speculative-decoding) is a student
+that you measure by acceptance. A student behind a cascade is the gateway's routing by cost.
 
 ## Caveats
 
-- The transformer lessons and the capacity formulas are exact on their own terms; step times, all-to-alls, costs and
-  serving numbers in the MoE and RL cores are models (a roofline, an α-β link, the capacity primer's formulas) and
-  labelled simulated, and the distillation core's serving costs are an ideal roofline bound. The labs measure only
-  on real GPUs, or on the tiny torch models they train on a CPU.
-- The toy trainers (a tiny MoE, a table-of-softmaxes policy, a tiny transformer under GRPO, tiny numpy students of a
-  toy language whose truth is known, a tiny transformer distilled four ways) show a mechanism's direction across
-  seeds, not a real model's magnitude.
-- Model configs, vLLM v0.30.0 flags, TRL defaults and prices are a September 2026 snapshot marked `(verify)`; each
-  primer ends with a dated Verify list.
+- The transformer lessons and the capacity formulas are exact on their own terms. In the MoE and RL cores, the step
+  times, all-to-alls, costs and serving numbers are the results of models. These models
+  are a roofline, an α-β link and the formulas of the capacity primer. These numbers have the label "simulated". The serving costs of the distillation core are
+  an ideal roofline bound. The labs measure only on real GPUs, or on the small torch models that they train on a CPU.
+- The toy trainers show the direction of a mechanism across seeds, not the magnitude of a real model. These are the
+  toy trainers:
+  - a small MoE,
+  - a table-of-softmaxes policy,
+  - a small transformer under GRPO,
+  - small numpy students of a toy language with a known truth,
+  - a small transformer distilled four ways.
+- The model configs, the vLLM v0.30.0 flags, the TRL defaults and the prices are a September 2026 snapshot, marked
+  `(verify)`. Each primer ends with a dated Verify list.
 
 <!-- colab-links:start -->
 ## Run in Colab

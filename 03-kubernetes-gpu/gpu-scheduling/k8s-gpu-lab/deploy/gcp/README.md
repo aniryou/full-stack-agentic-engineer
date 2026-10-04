@@ -1,45 +1,53 @@
 # deploy/gcp — a GKE cluster shaped for GPU scheduling (Terraform)
 
-**What it does.** `terraform/` creates one **zonal GKE Standard** cluster in its own VPC with
-node pools for each way of getting GPU capacity (primer §7), plus an optional shared one (§9):
+**What it does.** `terraform/` creates one **zonal GKE Standard** cluster in its own VPC. The cluster has
+a node pool for each method to get GPU capacity (primer §7). It also has an optional shared node pool (§9):
 
 | Pool | Shape | Capacity type | Scales |
 |---|---|---|---|
-| `system` | 1 x `e2-standard-4` | on-demand | fixed; runs kube-system, Kueue, JobSet |
-| `l4-spot` | `g2-standard-4` + 1 x L4 | **Spot**, GKE-installed driver (`LATEST`) | **0 → 2**, autoscaler adds a node only for a Pending GPU pod |
-| `l4-flex` (off by default) | `g2-standard-4` + 1 x L4 | **DWS flex-start, queued provisioning** | 0 → 2, all nodes of a request at once, via Kueue's ProvisioningRequest check |
-| `l4-shared` (off by default) | `g2-standard-4` + 1 x L4 | Spot, **GPU time-sharing**: each L4 advertised as `max_shared_clients_per_gpu` (4) `nvidia.com/gpu` | 0 → 1 |
+| `system` | 1 x `e2-standard-4` | on-demand | Does not scale. It runs kube-system, Kueue and JobSet |
+| `l4-spot` | `g2-standard-4` + 1 x L4 | **Spot**, GKE-installed driver (`LATEST`) | **0 to 2**. The autoscaler adds a node only for a Pending GPU pod |
+| `l4-flex` (off by default) | `g2-standard-4` + 1 x L4 | **DWS flex-start, queued provisioning** | 0 to 2. All nodes of a request come at the same time, through Kueue's ProvisioningRequest check |
+| `l4-shared` (off by default) | `g2-standard-4` + 1 x L4 | Spot, **GPU time-sharing**. The node advertises each L4 as `max_shared_clients_per_gpu` (4) `nvidia.com/gpu` | 0 to 1 |
 
-plus: Workload Identity, the Cloud Storage FUSE CSI driver, image streaming (GCFS), managed
-Prometheus, a weights bucket readable by exactly one Kubernetes ServiceAccount (`serving/model-reader`,
-through a Workload Identity Federation `principal://` binding — no keys). Both GPU pools carry
-the `nvidia.com/gpu=present:NoSchedule` taint. The driver is `LATEST` because the lab's vLLM
-v0.30.0 image is a CUDA 13.0 build that needs an R580+ driver; `DEFAULT` may be older (verify).
+The cluster also has these parts:
 
-**Cost.** About a dollar for a session of a few hours: ~$0.23/h with the GPU pools at zero, plus ~$0.25/h per busy
-Spot L4 node (us-central1, Sep 2026 - verify; the table is under [Cost](#cost-us-central1-sep-2026---verify)).
+- Workload Identity.
+- The Cloud Storage FUSE CSI driver.
+- Image streaming (GCFS).
+- Managed Prometheus.
+- A weights bucket that exactly one Kubernetes ServiceAccount (`serving/model-reader`) can read. The access
+  goes through a Workload Identity Federation `principal://` binding, with no keys.
 
-**Clean up.** `deploy/gke/apply-examples.sh delete`, then `terraform destroy` in `deploy/gcp/terraform` — one pass,
-nothing left behind but the enabled APIs (see [Clean up](#clean-up)).
+Both GPU pools have the `nvidia.com/gpu=present:NoSchedule` taint. The driver is `LATEST` because the
+lab's vLLM v0.30.0 image is a CUDA 13.0 build. That build needs an R580+ driver. It is possible that
+`DEFAULT` is older (verify).
+
+**Cost.** A session of a few hours costs about a dollar. With the GPU pools at zero, the cluster costs ~$0.23/h,
+and each busy Spot L4 node adds ~$0.25/h (us-central1, Sep 2026, verify). The table is in
+[Cost](#cost-us-central1-sep-2026---verify).
+
+**Clean up.** Run `deploy/gke/apply-examples.sh delete`. Then run `terraform destroy` in `deploy/gcp/terraform`.
+One pass removes everything, except the enabled APIs. They stay on (see [Clean up](#clean-up)).
 
 | File | Contents |
 |---|---|
 | `versions.tf` | Terraform >= 1.9, google provider >= 8.0 (validated with 8.4.0), default labels |
-| `variables.tf` | every knob, with the cheapest defaults |
-| `apis.tf`, `network.tf` | services; a VPC + subnet with pod/service secondary ranges |
-| `cluster.tf` | the zonal cluster: release channel, Workload Identity, GCS FUSE, managed Prometheus, image streaming |
-| `node_pools.tf` | the pools: system, l4-spot, and the optional l4-flex and l4-shared |
-| `storage.tf` | weights bucket + `roles/storage.objectViewer` for the serving KSA |
+| `variables.tf` | Every setting, with the lowest-cost defaults |
+| `apis.tf`, `network.tf` | The services. A VPC and a subnet with secondary ranges for pods and services |
+| `cluster.tf` | The zonal cluster: release channel, Workload Identity, GCS FUSE, managed Prometheus, image streaming |
+| `node_pools.tf` | The pools: system, l4-spot, and the optional l4-flex and l4-shared |
+| `storage.tf` | The weights bucket and `roles/storage.objectViewer` for the serving KSA |
 | `outputs.tf` | `get_credentials`, pool names, bucket, next steps |
 
 ## Before you start
 
-* A project with **billing** (GPUs are not available on a Free Trial account; upgrading keeps
-  the credits) and `gcloud auth application-default login`.
-* **GPU quota**: `GPUS_ALL_REGIONS` and the regional L4 quotas (on-demand and preemptible) often
-  start at 0 — request 1-2 in IAM & Admin > Quotas. L4 requests are usually approved quickly (verify).
-* Flex-start and queued provisioning: check the current GKE docs for supported GPU types, regions
-  and whether your project needs anything enabled first (verify).
+* A project with **billing**, and `gcloud auth application-default login`. GPUs are not available on a Free
+  Trial account. When you upgrade the account, you keep the credits.
+* **GPU quota**: `GPUS_ALL_REGIONS` and the regional L4 quotas (on-demand and preemptible) often start at 0.
+  Request 1-2 in IAM & Admin > Quotas. Google usually approves L4 requests fast (verify).
+* Flex-start and queued provisioning: read the current GKE docs. Find the supported GPU types and regions, and
+  find out if your project must turn on something first (verify).
 
 ## Run it
 
@@ -52,8 +60,8 @@ $(terraform output -raw get_credentials)
 cd ../../.. && deploy/gke/apply-examples.sh smoke  # scale l4-spot from zero, run nvidia-smi
 ```
 
-Then `deploy/gke/README.md` (Kueue + DWS, ComputeClass, vLLM with GCS FUSE weights), or notebook
-04 for the offline walkthrough (`python3 -m k8sgpu gke plan` prints the same summary).
+Then go to `deploy/gke/README.md` (Kueue and DWS, ComputeClass, vLLM with GCS FUSE weights). Or, for the offline
+walkthrough, open notebook 04. `python3 -m k8sgpu gke plan` prints the same summary.
 
 ## Cost (us-central1, Sep 2026 - verify)
 
@@ -62,10 +70,10 @@ Then `deploy/gke/README.md` (Kueue + DWS, ComputeClass, vLLM with GCS FUSE weigh
 | cluster management fee | ~$0.10/h (the GKE free-tier credit covers one zonal cluster) | same |
 | system pool, 1 x e2-standard-4 | ~$0.13/h | same |
 | l4-spot, g2-standard-4 Spot (0 nodes idle) | $0 | ~$0.25/h per node (on-demand ~$0.70/h) |
-| weights bucket | cents per GB-month | + reads within the region are free |
+| weights bucket | cents per GB-month | Same. Reads in the region are free |
 
-A session of a few hours costs about a dollar. Nothing scales on its own except the GPU pools,
-and they return to zero ~10 minutes after the last GPU pod ends.
+A session of a few hours costs about a dollar. Only the GPU pools scale automatically. They go back to zero
+~10 minutes after the last GPU pod ends.
 
 ## Clean up
 
@@ -74,12 +82,17 @@ deploy/gke/apply-examples.sh delete     # optional: workloads first, so no node 
 cd deploy/gcp/terraform && terraform destroy
 ```
 
-`deletion_protection = false` and `force_destroy = true` (bucket) make `destroy` complete in one
-go; the enabled APIs are left on (`disable_on_destroy = false`).
+With `deletion_protection = false` and `force_destroy = true` (bucket), `destroy` completes in one pass. The enabled
+APIs stay on (`disable_on_destroy = false`).
 
 ## Verify list
 
-Items marked `verify` in the `.tf` comments: L4 availability per zone; flex-start + queued
-provisioning requirements (min 0 nodes, `NO_RESERVATION`, auto-repair off) and supported GPU
-types; whether GKE also applies the GPU taint automatically; the default driver auto-install
-version threshold; the free-tier credit; all prices.
+The `.tf` comments mark these items `verify`:
+
+- L4 availability per zone.
+- The requirements of flex-start and queued provisioning (min 0 nodes, `NO_RESERVATION`, auto-repair off), and
+  the supported GPU types.
+- If GKE also applies the GPU taint automatically.
+- The version threshold of the default driver auto-install.
+- The free-tier credit.
+- All prices.

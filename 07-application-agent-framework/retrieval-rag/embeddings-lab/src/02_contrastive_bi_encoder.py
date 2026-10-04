@@ -1,9 +1,9 @@
 # %% [markdown]
 # # 02 · A contrastive bi-encoder from scratch
-# **One idea:** InfoNCE with in-batch negatives is what turns "a representation"
+# **One idea:** InfoNCE with in-batch negatives is what changes "a representation"
 # into "an embedding model". We train a linear encoder on Contriever-style crop
-# pairs (two halves of the same paragraph = a positive pair), with manual
-# gradients, and watch **alignment & uniformity** do their thing. *Primer §4.*
+# pairs, with manual gradients. Two halves of the same paragraph are a positive pair.
+# Then we look at what **alignment and uniformity** do. *Primer §4.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt
@@ -44,10 +44,10 @@ print(f"train pairs {len(A_tr)}, test pairs {len(A_te)}, feature dim {V}")
 
 # %% [markdown]
 # ## Encoder + symmetric InfoNCE, gradients by hand
-# $E(x) = \operatorname{l2norm}(xW)$, similarity matrix $S = Z_a Z_b^\top / \tau$. The loss is
-# cross-entropy toward the diagonal, in both directions. The gradient of
-# softmax-CE w.r.t. $S$ is just $(\mathrm{softmax} - I)/B$, then chain through the
-# l2-normalization: for $z = u/\lVert u \rVert$, $du = (dz - z\,(z \cdot dz))/\lVert u \rVert$.
+# The encoder is $E(x) = \operatorname{l2norm}(xW)$, and the similarity matrix is $S = Z_a Z_b^\top / \tau$.
+# The loss is cross-entropy toward the diagonal, in both directions. The gradient of
+# softmax-CE with respect to $S$ is $(\mathrm{softmax} - I)/B$. Then apply the chain rule
+# through the l2-normalization: for $z = u/\lVert u \rVert$, $du = (dz - z\,(z \cdot dz))/\lVert u \rVert$.
 
 # %%
 def encode(X, W):
@@ -121,11 +121,12 @@ print("trained 32-d encoder:", recall_at(Za_te, Zb_te))
 
 # %% [markdown]
 # ## What training did to the geometry: alignment ↓, uniformity held
-# Wang & Isola (2020): contrastive loss = pull positives together (*alignment*,
-# lower is better) while spreading everything on the sphere (*uniformity*, lower
-# is better). Training buys a ~10× alignment gain at almost no uniformity cost.
-# The failure mode to watch in your own fine-tunes is collapse: alignment AND
-# uniformity both near 0 means everything mapped to one point.
+# Wang and Isola (2020) describe contrastive loss as two actions at the same time.
+# It pulls positives together (*alignment*, lower is better). It also spreads
+# everything on the sphere (*uniformity*, lower is better). Training gives a ~10×
+# alignment gain at almost no uniformity cost. The failure mode to monitor in your
+# own fine-tuning runs is collapse. If alignment AND uniformity are both near 0,
+# the model mapped everything to one point.
 
 # %%
 def alignment(Za, Zb):
@@ -161,8 +162,9 @@ plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ## Temperature: the sharpness knob
-# Small $\tau$ focuses the softmax on the hardest negatives; too small is unstable,
-# too large under-trains. This is why every model card lists $\tau \approx 0.02\text{–}0.05$.
+# A small $\tau$ focuses the softmax on the hardest negatives. A $\tau$ that is too
+# small is unstable. A $\tau$ that is too large does not train the model sufficiently.
+# This is why every model card lists $\tau \approx 0.02\text{–}0.05$.
 
 # %%
 taus, recs = [1.0, 0.3, 0.05, 0.01], []
@@ -177,8 +179,8 @@ plt.tight_layout(); plt.show()
 print(dict(zip(taus, [round(r, 3) for r in recs])))
 
 # %% [markdown]
-# **Takeaways.** (1) The entire modern recipe — E5, BGE, CLIP — is this loop with
-# bigger encoders and more pairs. (2) In-batch negatives make batch size a quality
-# knob. (3) Alignment/uniformity are cheap diagnostics for your own fine-tunes.
-# → Exercises: `ex02.ipynb` (implement the loss+grad, mine hard
-# negatives, and a Matryoshka variant).
+# **Takeaways.** (1) The full modern recipe (E5, BGE, CLIP) is this loop with
+# larger encoders and more pairs. (2) In-batch negatives make batch size a control
+# for quality. (3) Alignment and uniformity are low-cost diagnostics for your own
+# fine-tuning runs. Next, do the exercises in `ex02.ipynb`: implement the loss and
+# its gradient, mine hard negatives, and write a Matryoshka variant.

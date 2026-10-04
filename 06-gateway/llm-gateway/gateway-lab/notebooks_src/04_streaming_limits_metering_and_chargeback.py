@@ -1,27 +1,33 @@
 # %% [markdown]
 # # 04 · Streaming limits, metering and chargeback: count tokens, not requests
 #
-# **Tier:** T0 — tenants driven over localhost HTTP against fake providers with their own tokens-per-minute
-# limits; the rate-limit "minute" is **compressed to 2 seconds** so each run takes seconds, and all timings and
-# token counts are **simulated**. T1: the ledger reconciled with a real vLLM's `usage` and `/metrics`.
+# **Tier:** T0. Tenants send requests over localhost HTTP to fake providers, and each fake provider has its own
+# tokens-per-minute limit. The rate-limit "minute" is **compressed to 2 seconds**, so each run takes seconds. All
+# timings and token counts are **simulated**. T1: the lab reconciles the ledger with the `usage` and the `/metrics`
+# of a real vLLM.
 #
 # ## The one-minute version
 #
-# The scaling primer's token bucket (§5.1) and admission control (§5.3) decide whether a request may start. For LLM
-# calls the cost of a request is unknown when it starts — the output length is decided while it streams, and it is
-# heavy-tailed (00.5 PRIMER §7: a thinking model's outputs are an order of magnitude longer). A bucket that charges
-# each request a fixed guess up front **over-admits** by $(\text{prompt} + \text{actual output}) \:/$
-# $(\text{prompt} + \text{guess})$, and the provider's own TPM limit then does the refusing, with 429s the tenant
-# cannot explain (PRIMER §4). The fix is to meter tokens where they flow:
+# The token bucket (§5.1) and the admission control (§5.3) of the scaling primer decide if a request can start. For
+# LLM calls, the cost of a request is unknown when the request starts. The model sets the output length during the
+# stream. The output length is heavy-tailed (00.5 PRIMER §7: the outputs of a thinking model are an order of
+# magnitude longer).
+#
+# A bucket that charges each request a constant guess at the start **over-admits** by
+# $(\text{prompt} + \text{actual output}) \:/$ $(\text{prompt} + \text{guess})$. Then the provider refuses the
+# excess with its own TPM limit, and the tenant cannot explain these 429s (PRIMER §4). The solution is to meter the
+# tokens where they flow:
 #
 #     admit      reserve prompt estimate + min(requested cap or a default, a hard cap) from the tenant's TPM
 #     stream     debit anything beyond the reservation as chunks arrive
 #     reconcile  refund (reservation − actual) from the provider's `usage` at the end
 #
-# with RPM beside TPM, per tenant (so a noisy neighbour exhausts only its own bucket) under a gateway-wide share.
-# The same `usage` then prices the request in the **ledger** — `usage` is authoritative; an estimate covers only
-# admission and streams cut before the usage chunk (PRIMER §5) — and the ledger answers chargeback, including
-# for a shared self-hosted GPU (01 PRIMER §8.1).
+# The gateway keeps RPM beside TPM, for each tenant, under a gateway-wide share. Thus a noisy neighbour empties only
+# its own bucket.
+#
+# Then the same `usage` sets the price of the request in the **ledger**. The `usage` is the authoritative count. An
+# estimate covers only the admission and the streams that stop before the usage chunk (PRIMER §5). The ledger
+# answers chargeback, also for a shared self-hosted GPU (01 PRIMER §8.1).
 
 # %%
 import statistics, time
@@ -63,18 +69,20 @@ print(f"a rate-limit minute here lasts {MINUTE} s; acme allows 3,000 tokens per 
 # %% [markdown]
 # ## Worked example: a per-request bucket vs reserve -> stream -> reconcile, against the same provider
 #
-# One tenant sends 30 requests a second for 6 seconds through the alias `solo` (acme only, so the provider's refusals
-# are visible). The provider counts tokens over a sliding window of one "minute" (2 s); the gateway's bucket holds a
-# burst (its capacity) and refills continuously, so over any window it admits up to
-# $\text{capacity} + \text{rate} \times \text{window}$. Sizing the tenant's bucket at 1,500 tokens per minute keeps
-# that inside the provider's limit: $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. (A bucket sized at the
-# provider's full 3,000 would admit up to 6,000 in the first window: the burst is part of the budget.)
+# One tenant sends 30 requests a second for 6 seconds through the alias `solo`. This alias goes to acme only, so you
+# can see the refusals of the provider. The provider counts tokens over a sliding window of one "minute" (2 s). The
+# bucket of the gateway holds a burst (its capacity) and refills continuously. Thus, over any window, the bucket
+# admits up to $\text{capacity} + \text{rate} \times \text{window}$.
 #
-# The core's `ReserveLimiter` counts a sliding window instead — admit only if
-# $\text{used} + \text{reserved} + \text{reserve} \le \text{limit}$ (PRIMER §4.2) — which lines up with a provider's
-# window by construction; this lab keeps the scaling lab's token bucket (06.3) and needs the sizing rule above. The
-# per-request bucket charges $\text{prompt} + 20$ per request; the reserving bucket charges $\text{prompt} + 200$ up
-# front and settles to the real count at the end.
+# A bucket of 1,500 tokens per minute for the tenant keeps that inside the limit of the provider:
+# $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. (A bucket set to the full 3,000 of the provider can admit
+# up to 6,000 in the first window. The burst is part of the budget.)
+#
+# The `ReserveLimiter` of the core counts a sliding window instead. It admits a request only if
+# $\text{used} + \text{reserved} + \text{reserve} \le \text{limit}$ (PRIMER §4.2). By construction, this window
+# aligns with the window of a provider. This lab keeps the token bucket of the scaling lab (06.3), and thus it needs
+# the size rule of the previous paragraph. The per-request bucket charges $\text{prompt} + 20$ for each request. The
+# bucket in `reserve` mode charges $\text{prompt} + 200$ at the start, and at the end it settles to the real count.
 
 # %%
 runs = {}
@@ -87,20 +95,22 @@ for mode in ("per_request", "reserve"):
           f"in {res.duration_s:.1f} s")
 
 # %% [markdown]
-# Same demand, same provider. The per-request bucket admits almost everything and the provider refuses what its
-# TPM cannot carry: those 429s arrive after a round trip, three in a row open acme's breaker, and then *every*
-# request is refused with a 503 until a probe gets through — including requests well inside the tenant's budget.
-# With a fallback chain they would instead spill onto a pricier provider at full traffic. The reserving bucket
-# refuses at the gateway's door, with a `Retry-After` and `x-ratelimit-*` headers that say which limit and when,
-# and the provider sees a load it can carry.
+# The demand is the same, and the provider is the same. The per-request bucket admits almost everything. Then the
+# provider refuses the load that its TPM cannot carry. These 429s arrive after a round trip, and three of them in a
+# row open the breaker of acme. After that, the gateway refuses *every* request with a 503 until a probe gets
+# through. This includes requests well inside the budget of the tenant.
+#
+# With a fallback chain, these requests go instead to a higher-cost provider at full traffic. The bucket in
+# `reserve` mode refuses at the door of the gateway. It sends a `Retry-After` header and `x-ratelimit-*` headers,
+# which tell which limit applies and when. The provider gets a load that it can carry.
 
 # %% [markdown]
 # ## Exercise 4.1 — the reservation
 #
-# Write `reservation(prompt_estimate, requested_output, default_estimate, hard_cap)`: the tokens `reserve` mode
-# takes from the tenant's TPM at admission — the prompt estimate plus the output cap the caller asked for (or the
-# default estimate when it asked for none), never more than the hard cap for the output part. The check compares
-# with the gateway's limiter over a grid.
+# Write `reservation(prompt_estimate, requested_output, default_estimate, hard_cap)`. It returns the tokens that
+# `reserve` mode takes from the TPM of the tenant at admission. This value is the prompt estimate plus the output
+# cap that the caller asked for. If the caller asked for no cap, use the default estimate. The output part is never
+# more than the hard cap. The check compares your function with the limiter of the gateway over a grid.
 
 # %% exercise
 def reservation(prompt_estimate: int, requested_output, default_estimate: int, hard_cap: int) -> int:
@@ -121,11 +131,13 @@ print("✅ a caller that sets max_completion_tokens gets exactly that reserved; 
 # %% [markdown]
 # ## Exercise 4.2 — how far a per-request bucket over-admits
 #
-# Write `over_admission(prompt, mean_output, charged_output)`: the ratio of tokens really consumed to tokens the
-# bucket charged, when each request is charged $\text{prompt} + \mathrm{charged\_output}$ but costs
-# $\text{prompt} + \mathrm{mean\_output}$. The check takes the per-request run above: the mean prompt the gateway
-# estimated, the mean output from the ledger, the 20-token guess — and compares with the measured ratio of all tokens
-# served to all tokens charged.
+# Write `over_admission(prompt, mean_output, charged_output)`. It returns the ratio of the tokens that the requests
+# really use to the tokens that the bucket charged. The bucket charges each request
+# $\text{prompt} + \mathrm{charged\_output}$, but each request costs $\text{prompt} + \mathrm{mean\_output}$.
+#
+# The check uses the per-request run of the first worked example. It takes the mean prompt that the gateway
+# estimated, the mean output from the ledger and the 20-token guess. Then it compares your ratio with the measured
+# ratio of all tokens served to all tokens charged.
 
 # %% exercise
 def over_admission(prompt: float, mean_output: float, charged_output: float) -> float:
@@ -149,10 +161,12 @@ print("✅ the bucket admits", f"{pred:.1f}x", "the tokens it thinks it admits -
 # %% [markdown]
 # ## Worked example: the noisy neighbour
 #
-# Two tenants share a provider allowing 6,000 tokens per minute; the gateway's global bucket is sized to it
-# (3,000 per minute: burst plus refill over one window is 6,000). `team-a` floods at several times its share;
-# `team-b` sends a steady trickle. With the global bucket only, team-a drains it and team-b's requests are
-# refused too. With a bucket per tenant (1,500 each) under the same global one, team-a is refused alone.
+# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size to
+# match it: 3,000 per minute. Then the burst plus the refill over one window equals 6,000.
+#
+# `team-a` sends a flood at several times its share. `team-b` sends a small, steady flow. With only the global
+# bucket, team-a empties it, and the gateway refuses the requests of team-b too. With a bucket for each tenant
+# (1,500 each) under the same global bucket, the gateway refuses only team-a.
 
 # %%
 for label, tenant_tpm in (("one shared bucket", 10**9), ("a bucket per tenant", 1500)):
@@ -167,9 +181,9 @@ for label, tenant_tpm in (("one shared bucket", 10**9), ("a bucket per tenant", 
 # %% [markdown]
 # ## Worked example: a stream cut short is still billed
 #
-# A client that walks away mid-stream never receives the usage chunk (OpenAI's spec says so). The gateway
-# stops the upstream and writes the row from what it relayed — one token per content chunk, marked as an
-# estimate. Billing it as 0 would make "disconnect just before the end" a free lunch.
+# A client that walks away during the stream never receives the usage chunk (the spec of OpenAI says so). The
+# gateway stops the upstream and writes the row from what it relayed. It counts one token for each content chunk,
+# and it marks the row as an estimate. A bill of 0 for this row makes "disconnect just before the end" a free lunch.
 
 # %%
 s_r = runs["reserve"][0]
@@ -184,11 +198,16 @@ print("rows billed from an estimate:", sum(r["usage_source"] == "estimate" for r
 # ## Exercise 4.3 — price a request from its usage
 #
 # Write `price(row, p)` for a ledger row (a dict with `prompt_tokens`, `cached_tokens`, `completion_tokens`) and a
-# price row `p` (`p.input`, `p.cached`, `p.output`, dollars per 1M tokens): uncached prompt tokens at the input
-# rate, cached ones at the cached rate, completion tokens — reasoning included — at the output rate. The check
-# prices every row of the runs above with the model that served it and compares with the ledger, then the
-# scaling primer's §3.4 call (5,000 in, 2,700 cached, 350 out on `gemini-3.5-flash`: $0.007005) and the primer's
-# §1.5 call — the same plus 1,200 thinking tokens — reported in Anthropic's shape (normalise it first).
+# price row `p` (`p.input`, `p.cached`, `p.output`, dollars per 1M tokens). Use these rates:
+#
+# - the uncached prompt tokens at the input rate,
+# - the cached prompt tokens at the cached rate,
+# - the completion tokens, reasoning tokens included, at the output rate.
+#
+# The check calculates the price of every row of the earlier runs with the model that served the row. It compares
+# each price with the ledger. Then it prices the §3.4 call of the scaling primer (5,000 in, 2,700 cached, 350 out on
+# `gemini-3.5-flash`: $0.007005). After that, it prices the §1.5 call of the primer. This is the same call plus
+# 1,200 thinking tokens, reported in the shape of Anthropic (normalise it first).
 
 # %% exercise
 def price(row: dict, p) -> float:
@@ -217,9 +236,10 @@ print(f"✅ {n} ledger rows re-priced exactly; the §3.4 call is $0.007005 on ge
 # %% [markdown]
 # ## Worked example: $ per 1M tokens, hosted and self-hosted
 #
-# The same call shape blended over its 5,350 tokens, per hosted row (verify, 2026-09-26), and self-hosted rows
-# from a GPU's hourly price and a throughput — 01 PRIMER §8.1's Llama-3.1-8B numbers (H100 Spot at \$3.7/h and
-# 6,846.5 tokens/s; an L4 at \$0.70/h and 294.39 tokens/s), at 100 % and 60 % utilisation.
+# The cell gives the same call shape, blended over its 5,350 tokens, for each hosted row (verify, 2026-09-26). It
+# also gives self-hosted rows from the hourly price of a GPU and a throughput. These are the Llama-3.1-8B numbers of
+# 01 PRIMER §8.1: an H100 Spot at \$3.7/h and 6,846.5 tokens/s, and an L4 at \$0.70/h and 294.39 tokens/s. The cell
+# shows each self-hosted row at 100 % and 60 % utilisation.
 
 # %%
 for name, p in metering.PRICES.items():
@@ -231,13 +251,15 @@ for name, gpu_h, tps in (("H100 Spot, self-hosted", 3.7, 6846.5), ("L4, self-hos
 # %% [markdown]
 # ## Exercise 4.4 — chargeback for a shared GPU
 #
-# A self-hosted pool costs the same per hour whoever uses it; the question is how to split the bill. By tokens, every
-# token weighs the same. By GPU-seconds, a prompt token (prefill: batched, compute-bound) weighs far less than an
-# output token (decode: one step per token). Write `chargeback(rows, total_usd, by, prefill_s, decode_s)` returning
-# `{tenant: dollars}`; `by` is `"tokens"` or `"gpu_seconds"`
-# ($\text{weight} = \text{prompt} \times \mathrm{prefill\_s} \:+$ $\text{completion} \times \mathrm{decode\_s}$). The
-# check runs a RAG tenant (long prompts, short answers) and a chat tenant (short prompts, long answers) through the
-# gateway and compares with the lab's `metering.chargeback`.
+# A self-hosted pool costs the same per hour, whoever uses it. The question is how to divide the bill. By tokens,
+# every token has the same weight. By GPU-seconds, a prompt token (prefill: batched, compute-bound) has a much
+# smaller weight than an output token (decode: one step per token).
+#
+# Write `chargeback(rows, total_usd, by, prefill_s, decode_s)`. It returns `{tenant: dollars}`. The argument `by` is
+# `"tokens"` or `"gpu_seconds"` ($\text{weight} = \text{prompt} \times \mathrm{prefill\_s} \:+$
+# $\text{completion} \times \mathrm{decode\_s}$). The check sends a RAG tenant (long prompts, short answers) and a
+# chat tenant (short prompts, long answers) through the gateway. Then it compares your result with
+# `metering.chargeback` of the lab.
 
 # %% exercise
 def chargeback(rows: list, total_usd: float, by: str, prefill_s: float = 0.0, decode_s: float = 1.0) -> dict:
@@ -272,12 +294,14 @@ s.stop()
 # %% [markdown]
 # ## Worked example: reconcile the ledger with the provider
 #
-# The provider keeps its own counters (the fakes expose vLLM's names). Compare them with the ledger. On the
-# per-request run every served row carries the provider's `usage`, and the two agree to the token. On the reserve
-# run, after the walk-away tenant, the gaps come only from the rows billed from an estimate: their prompt count is
-# the gateway's chars/4 estimate (no usage chunk ever arrived) and their completion count is the chunks relayed,
-# while the provider counted what it tokenized and generated before it noticed the disconnect. That is the
-# reconciliation item you chase each month, not a rounding error.
+# The provider keeps its own counters (the fakes use the names of vLLM). Compare them with the ledger. On the
+# per-request run, every served row carries the `usage` of the provider, and the two agree to the token.
+#
+# On the reserve run, after the walk-away tenant, the gaps come only from the rows billed from an estimate. The
+# prompt count of these rows is the chars/4 estimate of the gateway, because no usage chunk arrived. Their
+# completion count is the number of relayed chunks. But the provider counted what it tokenized and generated before
+# it saw the disconnect. That gap is the reconciliation item that you examine each month. It is not a rounding
+# error.
 
 # %%
 for label, st in (("per_request run", runs["per_request"][0]), ("reserve run + walk-aways", s_r)):
@@ -290,9 +314,15 @@ for label, st in (("per_request run", runs["per_request"][0]), ("reserve run + w
 # %% [markdown]
 # ## T1: reconcile with a real vLLM
 #
-# With `GWLAB_VLLM_URL` set (and vLLM answering `/health`): scrape vLLM's `/metrics`, send twenty requests through a
-# gateway whose first target is vLLM, scrape again, and compare the ledger's vLLM rows with the counters' differences
-# (`gwlab.t1.reconcile`; if `/metrics` stops answering the cell skips instead of failing).
+# This cell runs when you set `GWLAB_VLLM_URL` and vLLM answers `/health`. It does these steps
+# (`gwlab.t1.reconcile`):
+#
+# 1. Scrape the `/metrics` of vLLM.
+# 2. Send twenty requests through a gateway whose first target is vLLM.
+# 3. Scrape again.
+# 4. Compare the vLLM rows of the ledger with the differences of the counters.
+#
+# If `/metrics` does not answer any more, the cell skips. It does not fail.
 
 # %%
 for st, _, _ in runs.values():
@@ -311,29 +341,40 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We limit tokens, not only requests, because a request's cost is decided while it streams.
-# At admission we reserve the prompt estimate plus the caller's output cap — or a default — from the tenant's
-# tokens-per-minute bucket, next to its requests-per-minute bucket, under a gateway-wide share of the provider's
-# quota; we debit anything that streams past the reservation and reconcile to the provider's `usage` at the
-# end, and a hard cap bounds any one response. Refusals happen at our door with a Retry-After, not at the
-# provider's after a round trip. Every request writes a ledger row priced from `usage` — thinking tokens bill as
-# output — or from the relayed chunks when the stream was cut, flagged as an estimate; we reconcile the ledger
-# against the provider's counters, and we split shared GPUs by GPU-seconds, not raw tokens."
+# **Two minutes:** "We limit tokens, not only requests, because we know the cost of a request only during its
+# stream. At admission, we reserve the prompt estimate plus the output cap of the caller, or a default, from the
+# tokens-per-minute bucket of the tenant. This bucket is next to its requests-per-minute bucket, under a
+# gateway-wide share of the quota of the provider. We debit anything that the stream sends past the reservation. At
+# the end, we reconcile to the `usage` of the provider, and a hard cap sets the limit for any one response.
 #
-# **Drill 1.** *After a thinking-model rollout the provider started returning 429s but our request limit never
-# tripped. Why?* — The bucket charged per request while outputs grew ten-fold with a heavy tail, so the same
-# request rate carried many times the tokens. Reserve, stream, reconcile; TPM beside RPM per tenant; budget
-# thinking rather than truncating it with `max_tokens` (CURRICULUM cross-layer drill 20).
+# "Refusals occur at our door with a Retry-After, not at the door of the provider after a round trip. Every request
+# writes a ledger row. We price the row from `usage`, and thinking tokens bill as output. When the stream stopped
+# before its end, we price the row from the relayed chunks and mark it as an estimate. We reconcile the ledger
+# against the counters of the provider. We divide shared GPUs by GPU-seconds, not by raw tokens."
 #
-# **Drill 2.** *Two gateway replicas each allow the tenant 3,000 tokens per minute. What does the tenant get?* —
-# Up to 6,000. Buckets shared between replicas live in Redis behind a Lua script (one round trip per check) or
-# are split per replica and re-balanced; the scaling primer §5.1 says the same about request buckets.
+# **Drill 1.** *After the rollout of a thinking model, the provider started to return 429s, but our request limit
+# never refused a request. Why?* The bucket charged per request, but the outputs grew ten-fold with a heavy tail.
+# Thus the same request rate carried many times the tokens.
 #
-# **Drill 3.** *Why not reserve the caller's `max_completion_tokens` for every request?* — The cap bounds the
-# reservation from above; reserving it for every stream holds budget for the stream's whole life (at a 16K cap the
-# core's experiment served 26.5 % of the limit, PRIMER §4.3). The default reservation is an estimate sized by
-# simulation on your own output distribution (gateway-core notebook 04, exercise 4.3) — `default_output_estimate`
-# here — with debits for what streams past it and reconciliation at the end; honest callers who set a tight cap get
-# it reserved as given, and more throughput. Reserve the full cap only where a provider 429 is unacceptable, or
-# where the provider itself charges `max_tokens` at admission (PRIMER §4.2): then reserve what you send upstream —
-# as this gateway does by forwarding the reserved bound as `max_completion_tokens` — or send what you reserved.
+# Reserve, stream and reconcile. Put TPM beside RPM for each tenant.
+#
+# Give the thinking a budget, and do not cut it with `max_tokens` (CURRICULUM cross-layer drill 20).
+#
+# **Drill 2.** *Two gateway replicas each permit the tenant 3,000 tokens per minute. What does the tenant get?* The
+# tenant gets up to 6,000.
+#
+# Buckets shared between replicas live in Redis behind a Lua script (one round trip per check). Or the gateway
+# divides them per replica and balances them again. The scaling primer §5.1 says the same about request buckets.
+#
+# **Drill 3.** *Why not reserve the caller's `max_completion_tokens` for every request?* The cap is the upper bound
+# of the reservation. If you reserve the cap for every stream, you hold budget for the full life of the stream. At a
+# 16K cap, the experiment of the core served 26.5 % of the limit (PRIMER §4.3).
+#
+# The default reservation is an estimate. You find its size by simulation on your own output distribution
+# (gateway-core notebook 04, exercise 4.3), and here it is `default_output_estimate`. The gateway debits what the
+# stream sends past it, and it reconciles at the end. Honest callers who set a tight cap get that cap reserved as
+# they gave it, and they get more throughput.
+#
+# Reserve the full cap only where a provider 429 is unacceptable, or where the provider itself charges `max_tokens`
+# at admission (PRIMER §4.2). Then reserve what you send upstream. This gateway does that: it forwards the reserved
+# bound as `max_completion_tokens`. Or send what you reserved.
