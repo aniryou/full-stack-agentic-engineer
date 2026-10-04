@@ -3,9 +3,9 @@
 #
 # **Tier:** T0. The planted-facts harness runs the agent against a scripted model and the hashing embedder.
 # The notebook computes every number, and each number is deterministic and reproducible. No number is a model
-# measurement. To make sure of the deletion, the notebook searches the database files for the bytes. **T1:** when `MEMLAB_EMBED_URL` points
-# at a real embedder (vLLM `--runner pooling`, `deploy/any-gpu/`), the last section uses it to measure the
-# paraphrase subset.
+# measurement. To make sure of the deletion, the notebook searches the database files for the bytes.
+# **T1:** when `MEMLAB_EMBED_URL` points at a real embedder (vLLM `--runner pooling`, `deploy/any-gpu/`), the
+# last section uses it to measure the paraphrase subset.
 #
 # ## The one-minute version
 #
@@ -101,9 +101,9 @@ print(results["implicit"].table())
 # 1. If the question has no answer (`q.answer is None`), the correct move is to abstain. Return `"correct"`
 #    for an abstention and `"hallucinated"` for any other answer.
 # 2. If the expected answer appears in the answer, return `"correct"`.
-# 3. If the pre-update value (`q.stale`) appears in it, return `"stale"`.
+# 3. If the pre-update value (`q.stale`) appears in the answer, return `"stale"`.
 # 4. If the answer abstained, return `"abstained"`.
-# 5. Else, return `"wrong"`.
+# 5. If no other rule applies, return `"wrong"`.
 
 # %% exercise
 def my_grade(q, answer):
@@ -223,18 +223,21 @@ print("on disk:", residue(DB, [ADDRESS, "Flores"]), "| cached blocks in the engi
 # 1. Send `DELETE /v1/memories?subject=address` through the service (`client.forget("address")`). Its report
 #    has the records, vectors, FTS rows, derived records (by provenance) and idempotency rows that it removed.
 #    Start from `report["counts"]`.
-# 2. Clear the prefix cache of the engine. vLLM v0.30.0 cannot evict the blocks of one tenant or of one user. Its
-#    only tool is the dev-mode `POST {llm_url}/reset_prefix_cache`. The server must run with
-#    `VLLM_SERVER_DEV_MODE=1` (verify). The endpoint clears the cache of **every** tenant and answers only
-#    `{"success": bool}`. The value is false while active requests hold blocks. Thus examine it.
+# 2. Clear the prefix cache of the engine. vLLM v0.30.0 cannot evict the blocks of one tenant or of one
+#    user. Its only tool is the dev-mode `POST {llm_url}/reset_prefix_cache`. The server must run with
+#    `VLLM_SERVER_DEV_MODE=1` (verify).
 #
-#    Call the endpoint. Make sure that `success` is true. Then record `prompt_cache` as `cached_blocks`, the count that
-#    the caller passes in. The fake server knows its own blocks (SIMULATED). A real vLLM does not report them.
+#    The endpoint clears the cache of **every** tenant and answers only `{"success": bool}`. The value is
+#    false while active requests hold blocks. Thus examine the value.
+#
+#    Call the endpoint. Make sure that `success` is true. Then record `prompt_cache` as `cached_blocks`, the
+#    count that the caller passes in. The fake server knows its own blocks (SIMULATED). A real vLLM does not
+#    report them.
 #
 #    In production, it is better to rotate the `cache_salt` of the tenant (notebook 03, exercise 3.5, with an
 #    epoch in the HMAC input). The rotation makes the blocks of that tenant unreachable at once, and LRU evicts
-#    them over time. The
-#    caches of all other tenants stay warm. The reset is the runbook step of the operator for the residue.
+#    them over time. The caches of all other tenants stay warm. The reset is the runbook step of the operator
+#    for the residue.
 # 3. Remove every eval-set case that contains the needle. Change the list in place. Record the count as
 #    `eval_sets`.
 # 4. Count the audit lines that contain the needle, as `audit_log`. The expected count is 0, because the log
@@ -278,9 +281,9 @@ print("✅ every copy counted and removed; the address occurs 0 times in the dat
 # %% [markdown]
 # ## Exercise 5.4 — read the audit trail
 #
-# Write `audit_counts(events)`. From the audit JSON lines, it returns a dict `{(tenant, user, event_type):
-# count}` and the number of events whose `decision` is `deny`. A forget request appears as exactly one
-# `memory.forget`.
+# Write `audit_counts(events)`. From the audit JSON lines, it returns a dict
+# `{(tenant, user, event_type): count}` and the number of events whose `decision` is `deny`. A forget request
+# appears as exactly one `memory.forget`.
 
 # %% exercise
 def audit_counts(events):
@@ -348,9 +351,9 @@ print(harness_markdown({"implicit (hashing)": base}, "computed: scripted model, 
 # Audit logs carry hashes, not memory. Backups expire, and the policy says after how long."
 #
 # **Drill 1.** *A user asked us to forget their address, and a week later the assistant quoted it. Where was
-# it?* It was in a copy that the delete did not reach. The copy can be a consolidated summary derived from the
-# address (no provenance link), or the FTS index or WAL (no purge). It can also be the prefix cache of the engine, a
-# log or an eval set.
+# it?* It was in a copy that the delete did not reach. The copy can be a consolidated summary derived from
+# the address (no provenance link), or the FTS index or WAL (no purge). It can also be the prefix cache of the
+# engine, a log or an eval set.
 #
 # Deletion keys, provenance and a byte-level check are the solution.
 #

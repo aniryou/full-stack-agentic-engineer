@@ -1,8 +1,8 @@
 # deploy/gcp — consolidation as a Cloud Run job on Cloud Scheduler, and where the model and the store live (T3)
 
 **Tier:** T3 (Google Cloud, optional). **The lab prints everything here and runs none of it**: notebook 04 and
-`python -m memlab gcp-commands --project <id>` print the commands, and you run them. This lab has no Terraform.
-The GPU and Cloud Run infrastructure already has Terraform in the 04 serving lab.
+`python -m memlab gcp-commands --project <id>` print the commands, and you run them. This lab has no Terraform,
+because the GPU and Cloud Run infrastructure already has Terraform in the 04 serving lab.
 
 ```
 Cloud Scheduler "memlab-consolidate-weekly"  (cron 17 3 * * 1, UTC: Mondays)
@@ -48,9 +48,9 @@ The disk of a Cloud Run instance is temporary, and SQLite has no network protoco
 Postgres with the `vector` extension. Cloud SQL for PostgreSQL and AlloyDB both give pgvector (verify the versions
 against 0.8.6, the version that the SQL of this lab is for).
 
-`memlab.store.pgvector` holds every statement. The tests examine each statement offline with the parser of
-Postgres. This module also holds the statements for the lease and checkpoint tables of the job. The consolidation
-job runs on `memlab.store.pgvector` (`python -m memlab consolidate --pg-dsn` or `MEMLAB_PG_DSN`).
+`memlab.store.pgvector` holds every statement, the statements for the lease and checkpoint tables of the job
+included. The tests examine each statement offline with the parser of Postgres. The consolidation job runs on
+`memlab.store.pgvector` (`python -m memlab consolidate --pg-dsn` or `MEMLAB_PG_DSN`).
 
 **The memory service (`memlab serve`) is SQLite-only**, because its idempotency table uses SQLite SQL. Thus on GCP,
 this lab deploys only the job. The service needs a Postgres port of its own before it can share these tables.
@@ -87,8 +87,8 @@ context of the image.
    the command.
 4. **the trigger**: the commands make a service account `memlab-scheduler` and give it `roles/run.invoker` on the
    job. Then they run `gcloud scheduler
-   jobs create http memlab-consolidate-weekly` with `--oauth-service-account-email`. Last, a manual
-   `gcloud run jobs execute --wait` tries the job one time.
+   jobs create http memlab-consolidate-weekly` with `--oauth-service-account-email`. Last, they run a manual
+   `gcloud run jobs execute --wait` to try the job one time.
 
 Why **OAuth, not OIDC**: the scheduler calls the Cloud Run Admin API (`run.googleapis.com`), and this API accepts
 OAuth access tokens. OIDC identity tokens are for calls to the URL of your own service. The lra-gcp reaper makes
@@ -121,8 +121,7 @@ Ask each of these services the questions of this lab:
 
 - Does it take the scope from a verified principal?
 - Does it examine each write before it keeps the write, and does it keep provenance?
-- Can a forget reach derived facts, indexes and backups?
-- Can you prove it?
+- Can a forget reach derived facts, indexes and backups, and can you prove that it reaches them?
 
 ## Cost
 

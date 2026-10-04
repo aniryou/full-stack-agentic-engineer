@@ -3,7 +3,7 @@
 #
 # **Tier:** T0. It uses only a CPU, it needs no network, and it takes a few seconds. The same job is in `memory-lab`
 # notebook `04_consolidation_as_a_scheduled_job`. That notebook keeps a lease row and checkpoints on SQLite. It shows
-# a crash and a resume, and it prints the GCP schedule (Cloud Run job on Cloud Scheduler). Its notebook
+# a crash and a resume, and it prints the GCP schedule (Cloud Run job on Cloud Scheduler). The `memory-lab` notebook
 # `05_evaluate_forget_and_audit` does a check of a deletion on the bytes of the database file.
 #
 # ## The one-minute version
@@ -19,7 +19,7 @@
 #
 # Here, "newer" means valid time, not arrival order. Thus a backfilled window never lets an old value win.
 #
-# The job runs as a durable job, with these parts:
+# Consolidation runs as a durable job, with these parts:
 #
 # - a deterministic run id.
 # - a lease that the job renews before every slot and examines before every write.
@@ -27,9 +27,18 @@
 # - ids that make a re-applied slot overwrite the facts, not duplicate them.
 #
 # **Forgetting** is four mechanisms: decay, TTL, the per-turn budget and a cap for each scope. None of them is
-# **deletion**. To delete a fact, you must find every copy of it. The copies are the record, its vector and full-text
-# postings, and the facts derived from it. They are also anything that quotes it, cached prompt prefixes, logs, eval
-# sets and backups. The proof of a deletion is a search for the data after the deletion.
+# **deletion**. To delete a fact, you must find every copy of it. The copies are:
+#
+# - the record.
+# - the vector and the full-text postings of the record.
+# - the facts derived from the record.
+# - anything that quotes the fact.
+# - cached prompt prefixes.
+# - logs.
+# - eval sets.
+# - backups.
+#
+# The proof of a deletion is a search for the data after the deletion.
 #
 # Primer: §7 *Consolidation, forgetting and deletion* (`../PRIMER.md`).
 
@@ -106,9 +115,9 @@ for r in store.records(ALICE, status=None, kind="semantic"):
     print(f"  {r.status:10} {r.render()}")
 
 # %% [markdown]
-# Porto stays current. The job keeps Lisbon, valid from day 1 until day 5. The job does not use the order in which
-# the statements get to the job. With that order, Lisbon becomes current again, and the job closes Porto *before*
-# Porto starts.
+# Porto stays current. The job keeps Lisbon, valid from day 1 until day 5. If the job applies the statements in their
+# order of arrival, Lisbon becomes current again, and the job closes Porto *before* Porto starts. The job does not use
+# that order.
 #
 # ## Worked example 3 — a crash, a lease, a resume
 
@@ -254,7 +263,7 @@ print(rep.checklist())
 # When you answer a deletion request, say how long each pending surface takes, with a date.
 #
 # The deletion matches values on word boundaries (`memcore.forget.mentions`). Thus, when you forget a pet "cat", the
-# deletion never deletes a record about "education" or "Catalyst". Also, a content match finds only verbatim copies. A
+# deletion never deletes a record about "education" or "Catalyst". But a content match finds only verbatim copies. A
 # paraphrase goes past it. The review list is for that case.
 
 # %%
@@ -323,8 +332,8 @@ print("✅ precedence first, then time; the old fact is closed, not dropped; wea
 # - The lease of the holder is expired.
 #
 # Then write `may_continue(holder, worker)`. This is the fence that a worker examines during its run, before the
-# writes of each slot. The worker can continue only if the store still records the lease as its own. The worker can
-# also continue when its lease is expired, if nobody took the lease. The worker must stop if nobody holds the lease,
+# writes of each slot. The worker can continue only if the store still records the lease as its own. An expired
+# lease still counts as its own, if nobody took the lease. The worker must stop if nobody holds the lease,
 # because another worker finished the run and released it. It must also stop if another worker holds the lease.
 
 # %% exercise
@@ -389,7 +398,8 @@ print(f"✅ {retention(m8, 45 * DAY):.3f}; an importance-4 memory drops below 0.
 # %% [markdown]
 # ## Exercise 4.4 — what is derived from what
 # Implement `derived(records, targets)`. It returns the ids of `targets` and every record whose `provenance` cites an
-# id already in the set. Do this again until nothing changes (facts derived from facts derived from the target).
+# id already in the set. Add those records to the set again and again, until the set does not change (facts derived
+# from facts derived from the target).
 
 # %% exercise
 def derived(records, targets):
@@ -464,7 +474,7 @@ print(f"✅ the naive delete left {sum(left.values())} copies on {sum(v > 0 for 
 #     - an eval set.
 #     - a paraphrase that no content search finds.
 #
-#    Propagate the deletion by provenance and by content, and rotate the cache salt. Then do a test that searches the
+#    Propagate the deletion by provenance and by content. Rotate the cache salt. Then do a test that searches the
 #    bytes.
 # 2. *Why keep the superseded fact, and not delete it?* There are three reasons. The first is as-of questions ("where
 #    did they live in March?"). The second is audit ("what did the agent believe when it acted?"). The third is the

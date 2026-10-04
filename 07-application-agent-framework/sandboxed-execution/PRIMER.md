@@ -4,7 +4,7 @@
 
 *For some product facts, a check against the live docs of a vendor was not possible. These facts have the mark `(verify)`, and the dated Verify list is at the end. Each formula gives the name of the function in [`sandbox-core`](sandbox-core) (package `sandboxcore`) that calculates it. Latencies are inputs, with the label "measured on the build host" or `(verify)`, and this primer never invents one. The detailed lab is [`sandbox-lab`](sandbox-lab).*
 
-This primer is about one tool: the tool that runs code that the model wrote. The identity primer defines an agent in one line: a thing that turns untrusted text into a privileged action. Each action of that kind is most dangerous in this tool. The tool can be a `run_code` tool, a code interpreter or an "execute this shell command" action. It can also be a tool that evaluates a query that the model wrote.
+This primer is about one tool: the tool that runs code that the model wrote. The identity primer defines an agent in one line: a workload that turns untrusted text into a privileged action. Each action of that kind is most dangerous in this tool. The tool can be a `run_code` tool, a code interpreter or an "execute this shell command" action. It can also be a tool that evaluates a query that the model wrote.
 
 This primer uses material that is already in the repository. It refers to that material and does not repeat it:
 
@@ -128,7 +128,7 @@ With a per-execution UID, it contains every probe except egress. As a non-root u
 
 In that case, the process budget holds only approximately. The parent counts the run's own process tree every 50 ms. A burst of forks can occur between two counts. Such a burst continues until the shared `RLIMIT_NPROC` stops it; that limit is set 32 tasks past the budget for the whole UID. Thus the burst also gets each task that your other processes free during that time.
 
-It runs anywhere, also on Colab and in CI. There are two things that it never does. It never separates the code from the host kernel, so a kernel exploit escapes it. It never touches the network. The sharp edges are in the box at the end of §2, and in §3.
+`ProcessSandbox` runs anywhere, also on Colab and in CI. There are two things that it never does. It never separates the code from the host kernel, so a kernel exploit escapes it. It never touches the network. The sharp edges are in the box at the end of §2, and in §3.
 
 **Rung 1b: the same process, plus namespaces and a syscall filter (no container).** Linux can give a plain process most of what a container has, one part at a time:
 
@@ -159,7 +159,7 @@ The `env.netns_mode()` of the lab detects each case and says so.
 - a non-root `--user`,
 - `--pids-limit`, `--memory` and `--cpus`.
 
-This is the `docker.py` of the lab. It still shares the host kernel, so a kernel bug is still an escape. Also, Docker itself is the largest part of the start time.
+This is the `docker.py` of the lab. It still shares the host kernel, so a kernel bug is still an escape. Also, Docker itself takes most of the start time.
 
 **Rung 3: a user-space kernel (gVisor).** The **Sentry** of gVisor is "an application kernel … written in a memory-safe language (Go)". It intercepts the syscalls of the workload. It re-implements Linux (syscalls, memory management, filesystems, a userspace network stack) in userspace. The gVisor docs say: "**gVisor never passes through any system call to the host**". Also, gVisor has its own seccomp filter, which blocks dangerous host calls from the Sentry.
 
@@ -183,7 +183,7 @@ It does **not** defend against Spectre-style side channels, attacks in higher la
 
 gVisor has the same idea at the sandbox level (`runsc checkpoint` / `runsc restore`). The part of a cold start that a restore saves depends on the image and the warm-up. Measure it. This primer gives no number for it `(verify)`.
 
-The rule: **a restore of the same snapshot more than one time is insecure**. Firecracker itself says so. Each clone starts with the same RNG state, the same identifiers and any tokens that the snapshot held. This is true unless the guest re-seeds (VMGenID, Linux ≥ 5.18) and makes new secrets after the restore. Never take a snapshot of a sandbox after it held the data of a tenant. Never restore one snapshot into two tenants.
+The rule: **a restore of the same snapshot more than one time is insecure**. Firecracker itself says so. Each clone starts with the same RNG state, the same identifiers and any tokens that the snapshot held. A restore of this kind stays insecure unless the guest re-seeds (VMGenID, Linux ≥ 5.18) and makes new secrets after the restore. Never take a snapshot of a sandbox after it held the data of a tenant. Never restore one snapshot into two tenants.
 
 **Rung 5: a full VM or a separate machine.** This rung is the strongest and the slowest. A boot takes seconds, and you must manage a whole OS. It is for the highest-risk or noisiest workloads, or for a place where a compliance boundary makes it necessary.
 
@@ -312,7 +312,7 @@ Second, **HTTPS**. A proxy cannot inject a credential into an opaque `CONNECT` T
 
 **Package installation and secrets in prompts.** A package installation inside a sandbox is egress with a different name. Point `pip` at an internal mirror through the same proxy. Or build the dependencies into the image, and run with no egress. Also, the rule of §5 of the identity primer still applies: **no secrets in prompts, tool descriptions or session state**. The model can read the context window, and thus an injection can read it too.
 
-Secrets belong in the proxy (or a broker). The proxy or the broker mints each secret per call, and each secret is short-lived and audience-bound. For the delegated case, this is the token exchange of §3.5 of the identity primer.
+Secrets belong in the proxy (or a broker). The proxy or the broker mints each secret per call, and each secret is short-lived and audience-bound. For the delegated case, the mechanism that mints these secrets is the token exchange of §3.5 of the identity primer.
 
 ---
 
@@ -349,7 +349,7 @@ The startup-latency chain in §8 of the GPU scheduling primer is the same idea f
 - `activeDeadlineSeconds`, which limits the whole Job. It **has priority over `backoffLimit`**.
 - `ttlSecondsAfterFinished: 300`, for the cleanup. Remember that the TTL deletes the Pod **and its logs**. Thus collect the results before the TTL expires.
 
-It sets `automountServiceAccountToken: false`, so no cloud credential comes in on the service-account token.
+The rendered Job also sets `automountServiceAccountToken: false`, so no cloud credential comes in on the service-account token.
 
 **Deadlines count the cold start.** The `activeDeadlineSeconds` of the Job runs from the start of the Job, and this time includes scheduling, node scale-up and the image pull. The `activeDeadlineSeconds` of a Pod itself runs from the time when the kubelet admits it, before the pull. Suppose that you set either one to the 5-second wall budget of the code. Then each cold execution on a busy cluster (§6: ~42–50 s p50) ends `DeadlineExceeded` before its code starts.
 
@@ -372,7 +372,7 @@ At the container level, these fields are:
 
 The Namespace has the `pod-security.kubernetes.io/enforce: restricted` (and audit/warn) labels at version `v1.34`. The lab takes care of one trap here. PSA `enforce` applies to **Pods, not workload objects**. Thus the API server *accepts* a Job that does not conform, but rejects its Pods. Monitor the Job conditions, not only `kubectl apply`.
 
-**RuntimeClass: the real isolation.** The pod sets `runtimeClassName: gvisor`. For a self-managed gVisor node, `render_k8s()` renders that `node.k8s.io/v1` RuntimeClass with handler `runsc` (`SandboxPolicy.runtime_class_obj()`). On GKE, the platform makes a `gvisor` RuntimeClass with the first GKE Sandbox node pool. Its handler name is `gvisor`, not `runsc` `(verify)`. Thus the renderer leaves it out (`render_runtime_class=False`).
+**RuntimeClass: the real isolation.** The pod sets `runtimeClassName: gvisor`. For a self-managed gVisor node, `render_k8s()` renders that `node.k8s.io/v1` RuntimeClass with handler `runsc` (`SandboxPolicy.runtime_class_obj()`). On GKE, the platform makes a `gvisor` RuntimeClass with the first GKE Sandbox node pool. Thus the renderer leaves that RuntimeClass out (`render_runtime_class=False`). The handler name of the GKE RuntimeClass is `gvisor`, not `runsc` `(verify)`.
 
 An unknown RuntimeClass or a handler that cannot run sends the pod to phase `Failed`. The RuntimeClasses of Kata have `overhead.podFixed`, so the scheduler and ResourceQuota include the VMM in their count. **A kind cluster cannot run gVisor** (in the "learning locally" spirit of §10 of the scheduling primer). A kind cluster is a tool to learn with, not a security boundary. The lab says so clearly and uses GKE Sandbox for the gVisor path.
 
@@ -382,7 +382,7 @@ An unknown RuntimeClass or a handler that cannot run sends the pod to phase `Fai
 
 The traps are these:
 
-- A NetworkPolicy needs a plugin that enforces it (GKE Dataplane V2, Calico, Cilium). The kindnetd of kind enforces standard policy through kube-network-policies. The source of kindnetd at the lab's pinned kind v0.33.0 builds that controller, and the source of v0.23.0 did not. But kindnetd enforces the policy with **`FailOpen: true`**. If the controller cannot start, it writes a log entry and continues without policies. Thus the `run-examples.sh` of the lab has a must-fail step that examines the enforcement on your cluster.
+- A NetworkPolicy needs a plugin that enforces it (GKE Dataplane V2, Calico, Cilium). The kindnetd of kind enforces standard policy through kube-network-policies. The source of kindnetd at the lab's pinned kind v0.33.0 builds that controller, and the source of v0.23.0 did not. But kindnetd enforces the policy with **`FailOpen: true`**. If the controller cannot start, kindnetd writes a log entry and continues without policies. Thus the `run-examples.sh` of the lab has a must-fail step that examines the enforcement on your cluster.
 - A NetworkPolicy never blocks traffic to the **node** of the pod itself. Thus deny cloud metadata with `automountServiceAccountToken: false` and a Workload-Identity KSA that has no IAM, not with NetworkPolicy.
 - A pod that you create before the controller handles the policy "may be started unprotected". Apply the policies first. Do not start the first runner until a readiness check passes.
 
@@ -411,7 +411,7 @@ A sandbox per execution has a **cold start**. Thus the number of sandboxes that 
 | fork/exec (`/bin/true`) | ~1.5 ms | measured on the build host |
 | Python interpreter per execution | ~35 ms (p50, under shared load) | measured on the build host |
 | `ProcessSandbox` round trip (Python, limits, per-execution UID, sweep) | ~50 ms (p50, under shared load) | measured on the build host, and notebook 05 measures yours |
-| container (runc) | 100–500 ms | `(verify)`, Docker itself is the largest part |
+| container (runc) | 100–500 ms | `(verify)`, Docker itself takes most of the time |
 | gVisor (`runsc`) | runc + tens–hundreds ms | `(verify)` |
 | Firecracker microVM | VMM ~12 ms + ≤125 ms to `/sbin/init` | Firecracker `SPECIFICATION.md` |
 | Kata pod | ~0.5–2 s | `(unverified)` |
@@ -497,7 +497,7 @@ It adds the fields that a sandbox needs: **`budgets_used`** (CPU, wall, peak mem
 - sustained `memory`/`cpu_time` is a miner or a runaway loop,
 - a spike in `pids` is a fork bomb.
 
-Count only the reasons that the sandbox observed. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to fake it.
+Count only the reasons that the sandbox observed. `counts(trusted_only=True)` removes the reasons that the sandbox read from the stderr of the program itself. A hostile program can forge those reasons to hide abuse or to put the blame on a different cause.
 
 Egress attempts need care. A spike of `denied` *declared* egress is an injection that announced itself. But a competent injection does not declare anything. Its attempts show only at the points that enforce the network, as proxy 403s and NetworkPolicy drops. Thus collect those logs too.
 
@@ -557,7 +557,7 @@ For prices and availability, see [`COMPUTE.md`](../../COMPUTE.md).
 
 "On Kubernetes, I render the same policy to Pod Security restricted and to a default-deny NetworkPolicy that opens only the proxy (no DNS). I also render a Job that does not retry, with a deadline that has room for the cold start. Then I render a ValidatingAdmissionPolicy that refuses any pod without the controls. These are deterministic backstops for when the runtime code is incorrect.
 
-"Sandboxes have a cold start. Thus I calculate the size of a replace-after-use warm pool with Erlang C. The input is the arrival rate of the workload times the time of the run plus the warm-up. Little's law gives only the floor. Cost per action is sandbox-seconds, cold start included, times the node price.
+"Sandboxes have a cold start. Thus I calculate the size of a replace-after-use warm pool with Erlang C. The input is the arrival rate of the workload times the sum of the run time and the warm-up time. Little's law gives only the floor. Cost per action is sandbox-seconds, cold start included, times the node price.
 
 "Each execution leaves one audit event with the principal, the policy decision, the budgets used and the exit reason. I detect abuse from the exit-reason histogram. Under load, I shed code execution first."
 

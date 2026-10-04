@@ -22,7 +22,7 @@ Notation: $d$ is the embedding dimension, and $N$ is the corpus size. $q$/$d$ is
 
 ## 1. What an embedding is (and isn't)
 
-An **embedding** is a learned map $f\colon X \to \mathbb{R}^d$ from a space of objects $X$ into a vector space. The objects can be tokens, sentences, images, users, graph nodes, molecules or audio clips. Its construction has one goal. The geometric relations in $\mathbb{R}^d$ (inner products, distances, directions) must encode the relations among the objects that are important for some task.
+An **embedding** is a learned map $f\colon X \to \mathbb{R}^d$ from a space of objects $X$ into a vector space. The objects can be tokens, sentences, images, users, graph nodes, molecules or audio clips. The construction of an embedding has one goal. The geometric relations in $\mathbb{R}^d$ (inner products, distances, directions) must encode the relations among the objects that are important for some task.
 
 That definition contains three ideas:
 
@@ -84,7 +84,7 @@ There are caveats. The standard 3CosAdd evaluation removes the input words from 
 
 **ELMo (2018)** made a token representation as a learned weighted sum of biLSTM layer states. This representation is different in every context. **BERT (2018)** did the same with a bidirectional transformer, trained with masked language modeling. The final hidden state of each token is a contextual embedding. By construction, this design solves polysemy.
 
-**What lives where.** Studies with probes (Tenney et al., 2019, and Jawahar et al., 2019) found that lower layers hold surface and lexical information. Middle layers hold syntax and upper layers hold semantics, while the final layer specializes toward the pretraining objective. For similarity tasks, the last layer of a *raw* model is frequently not the best. An average of the last few layers, or a middle-upper layer, frequently helps. Modern embedding models make this question unimportant, because they fine-tune the pooled output directly.
+**What lives where.** Studies with probes (Tenney et al., 2019, and Jawahar et al., 2019) found that lower layers hold surface and lexical information. They also found that middle layers hold syntax and upper layers hold semantics, while the final layer specializes toward the pretraining objective. For similarity tasks, the last layer of a *raw* model is frequently not the best. An average of the last few layers, or a middle-upper layer, frequently helps. Modern embedding models make this question unimportant, because they fine-tune the pooled output directly.
 
 **Anisotropy: the narrow cone.** Ethayarajh (2019) showed that contextual embeddings from BERT and GPT-2 occupy a narrow cone. In upper layers, two random words can have a cosine > 0.6. The causes include:
 
@@ -190,7 +190,7 @@ $$
 \operatorname{score}(q, d) = \sum_{i \in q} \max_{j \in d} q_i \cdot d_j
 $$
 
-ColBERT keeps the match at the token level: rare terms, entities and out-of-domain robustness. Also, you can still calculate the document vectors in advance. The cost is storage: tokens × 128 dims per document. The residual compression of ColBERTv2 decreases this to ~20–36 bytes per token. PLAID makes the search fast with centroid pruning.
+ColBERT keeps the match at the token level. This helps with rare terms and entities, and it gives out-of-domain robustness. Also, you can still calculate the document vectors in advance. The cost is storage: tokens × 128 dims per document. The residual compression of ColBERTv2 decreases this to ~20–36 bytes per token. PLAID makes the search fast with centroid pruning.
 
 **ColPali (2024)** applied late interaction to *document page images*, with a vision-language model. Each patch becomes a vector. ColPali beat OCR-then-embed pipelines on visually rich documents: tables, figures, slides and scanned forms (the ViDoRe benchmark). **MUVERA (Google, 2024)** maps multi-vector sets to fixed-dimensional encodings, so that standard MIPS indexes can serve them. The jina-embeddings-v4 model and several 2025–26 models give single- and multi-vector outputs from one backbone.
 
@@ -238,7 +238,7 @@ Your own eval set is the investment with the highest leverage in a retrieval sys
 
 **The identity that ties the metrics together.** For any vectors, $\lVert a - b \rVert^2 = \lVert a \rVert^2 + \lVert b \rVert^2 - 2\,a \cdot b$. For unit vectors, this is $2 - 2\cos(a, b)$. Thus, on normalized vectors, nearest by Euclidean = nearest by cosine = nearest by dot product. Use the metric that the model trained with. Most modern text embedders use cosine and give unit vectors.
 
-**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, the item norm correlates with popularity, and this is a useful prior. Some dense retrievers (DPR) trained with the dot product. In these retrievers, the document norm then encodes "how many queries this could answer". Normalization removes that information, and you want that in some cases but not in others.
+**When magnitude matters.** Unnormalized dot products let the norm carry information. In recommenders, the item norm correlates with popularity, and this is a useful prior. Some dense retrievers (DPR) use the dot product in training. In these retrievers, the document norm then encodes "how many queries this could answer". Normalization removes that information, and you want that in some cases but not in others.
 
 Maximum inner product search becomes a nearest-neighbor search if you add one coordinate ($\sqrt{M^2 - \lVert x \rVert^2}$, Bachrach et al., 2014, and Shrivastava and Li, 2014). This is how graph indexes support the dot product.
 
@@ -264,11 +264,11 @@ The remedies are subtraction of the mean, **CSLS**, mutual nearest neighbors and
 
 **The linear representation hypothesis** (Park, Choe and Veitch, 2023) has its roots in word analogies and probes. It states three things. A model represents high-level concepts as *directions* in activation space. The presence of a concept is a projection onto its direction. An intervention is an addition along that direction (activation steering: add a "refusal" or "honesty" direction). The evidence: linear probes work, steering works, and analogies work.
 
-**Categorical and hierarchical concepts** (Park et al., 2024): the result holds under an applicable "causal inner product" (a whitening of the unembedding space). Under it, categorical concepts such as {mammal, bird, fish} form simplices. Hierarchical relations (mammal ⊂ animal) become *orthogonal* directions. The model encodes the geometry of an ontology as orthogonality, in the literal sense. This is a useful mental model for anyone who thinks about domain models and embeddings together.
+**Categorical and hierarchical concepts** (Park et al., 2024): the paper uses an applicable "causal inner product" (a whitening of the unembedding space). Under this inner product, categorical concepts such as {mammal, bird, fish} form simplices, and hierarchical relations (mammal ⊂ animal) become *orthogonal* directions. The model encodes the geometry of an ontology as orthogonality, in the literal sense. This is a useful mental model for anyone who thinks about domain models and embeddings together.
 
 **Superposition** (Elhage et al., 2022, *Toy Models of Superposition*): a network with $d$ dimensions can represent $m \gg d$ sparse features. It gives them directions that are almost orthogonal (not exactly orthogonal), and it accepts a small interference. JL guarantees that exponentially many such directions exist. This explains polysemantic neurons. It also predicts that sparse dictionary learning can recover the "true" features.
 
-**Sparse autoencoders** come from three papers: Bricken et al., 2023, Templeton et al., 2024 (*Scaling Monosemanticity*), and Gao et al., 2024. They decompose residual-stream activations into tens of thousands of interpretable features. The result is an over-complete, sparse *re-embedding of the dense embedding*. Beyond interpretability, researchers used SAE features for retrieval and for controllable embeddings. SAE features also let you audit what an embedding model keys on: topic, style, format, or the thing that is important to you.
+**Sparse autoencoders** decompose residual-stream activations into tens of thousands of interpretable features. Three papers describe this use: Bricken et al., 2023, Templeton et al., 2024 (*Scaling Monosemanticity*), and Gao et al., 2024. The result is an over-complete, sparse *re-embedding of the dense embedding*. Beyond interpretability, researchers used SAE features for retrieval and for controllable embeddings. SAE features also let you audit the signal that an embedding model uses: topic, style, format, or the thing that is important to you.
 
 **Universal geometry.** The **Platonic Representation Hypothesis** (Huh et al., 2024): as models scale, the representations of different models become more and more similar, even across modalities. Mutual kNN alignment measures this similarity. The representations converge toward a shared statistical model of the world.
 
@@ -312,15 +312,15 @@ In learned physics simulators (MeshGraphNets and successors), the latent of each
 
 The consequences: image–image and text–text similarities are on different scales from cross-modal similarities. Thresholds do not transfer between modes. You can move one modality toward the other to trade off tasks. Natively multimodal models that train on interleaved inputs make the gap smaller, but they do not remove it. Examine cross-modal thresholds separately.
 
-**Self-supervised vision** (DINOv2 from 2023, DINOv3 from 2025, MAE): these features train without text, with self-distillation or masked reconstruction. They are stronger than CLIP for dense and geometric tasks (segmentation, depth, visual-similarity retrieval). The reason is that CLIP has a bias toward whatever the captions describe.
+**Self-supervised vision** (DINOv2 from 2023, DINOv3 from 2025, MAE): these models train their features without text, with self-distillation or masked reconstruction. They are stronger than CLIP for dense and geometric tasks (segmentation, depth, visual-similarity retrieval). The reason is that CLIP has a bias toward whatever the captions describe.
 
 **Document images.** ColPali (2024, section 5) uses per-patch vectors from a vision-language model plus late interaction, directly on page images. It beats a pipeline that does OCR, then chunks the text, then embeds the chunks, on tables, figures, slides and scans. The cost is ~1000 vectors per page. Use a multi-vector index or pooled/compressed variants.
 
 **Natively multimodal, single-space embedders (2025–2026).** These embedders are:
 
-- Cohere embed-v4 (text + images, 128k context, int8/binary output),
-- Voyage multimodal-3,
-- jina-embeddings-v4 (text + images, single- and multi-vector),
+- Cohere embed-v4 (text + images, 128k context, int8/binary output).
+- Voyage multimodal-3.
+- jina-embeddings-v4 (text + images, single- and multi-vector).
 - **Gemini Embedding 2** (Google, March 2026). One model maps text, images, video, audio and PDFs into one 3072-d Matryoshka space (truncatable to 1536/768). This includes *interleaved* combinations. It has an 8k-token text window and task instructions. It understands audio natively, and does not transcribe it first.
 
 The single space of Gemini Embedding 2 collapses the old CLIP-for-images + BERT-for-text + ASR-for-audio pipelines into a single index. The fine print is still important. It includes per-request limits on video length and PDF pages, and the per-call cost. It also includes the incompatibility with any text-only index that you already have.
@@ -337,7 +337,7 @@ The single space of Gemini Embedding 2 collapses the old CLIP-for-images + BERT-
 
 **High-cardinality ids and the hashing trick.** With 10⁸–10⁹ ids (users, ads, URLs), the embedding tables become the largest part of the model. In industrial recommenders, they are terabytes. The hashing trick (Weinberger et al., 2009): hash the id into a smaller table, and accept the collision noise. **Quotient–remainder / compositional embeddings** (Shi et al., 2020): represent an id as a combination of rows from two small tables ($\text{id} \bmod m$, $\text{id} \operatorname{div} m$).
 
-Mixed-dimension embeddings give popular ids more capacity. Tensor-train compression (TT-Rec) makes the tables smaller. The infrastructure (DLRM, TorchRec) shards tables across GPUs, row-wise or table-wise. Then all-to-all lookups are the dominant communication cost.
+Mixed-dimension embeddings give popular ids more capacity. Tensor-train compression (TT-Rec) makes the tables smaller. The infrastructure (DLRM, TorchRec) shards tables across GPUs, row-wise or table-wise. In this design, all-to-all lookups are the dominant communication cost.
 
 **Recommender systems are embedding systems.** Matrix factorization (Koren et al., 2009) *is* user and item embeddings with a dot-product score. **Two-tower retrieval** (Covington et al., 2016, and Yi et al., 2019) trains user and item towers with sampled softmax. It adds a log-Q correction for the sampling bias of popular items. The item2vec/prod2vec methods apply word2vec to sessions and baskets. Sequential models (GRU4Rec, SASRec, BERT4Rec) make a user embedding from a behavior sequence.
 
@@ -413,7 +413,7 @@ The cost of a re-embed is the main reason why model upgrades are rare and painfu
 3. Hosted providers deprecate models. Design for this: an abstraction layer, an eval set and a budget line for re-embeds.
 4. *Backward-compatible training* (Shen et al., 2020) is standard in face recognition. It trains a new model whose embeddings are compatible with the old gallery. This prevents a re-index. It is an option for in-house models, and vendors rarely offer it. The vec2vec-style translation (section 9) is a research path, not yet a production path.
 
-**Operations.** Padding dominates the throughput of batch embedding, so sort the inputs by length. Cache embeddings with the key `hash(model_version + template + text)`. Remove duplicates before embedding. Use ONNX/TensorRT and int8 weights for CPU serving of small models.
+**Operations.** Padding dominates the throughput of batch embedding, so sort the inputs by length. Cache embeddings with the key `hash(model_version + template + text)`. Remove duplicates before embedding. Use ONNX/TensorRT and int8 weights to serve small models on a CPU.
 
 Monitor the query-score distribution and Recall@k on a canary set that does not change. This finds drift: a model change, a chunker change, or index degradation after deletes. Track the latency of filtered queries separately from the latency of unfiltered queries.
 
@@ -479,7 +479,7 @@ In most pipelines, rerankers give a large gain in quality at the lowest cost. La
 
 - **Inversion** (section 9): vectors are the data. Apply the same controls as for the source text.
 - **Access control at retrieval time.** Filter by ACL before or during the search (pre-filter or filter-aware index). Never trust the LLM to hold back a retrieved chunk. Use per-tenant indexes for hard isolation.
-- **Poisoning** (PoisonedRAG, Zou et al., 2024): an attacker who can write to the corpus crafts passages optimized for retrieval on target queries. The corpus can be the public web, shared drives or ticket systems. These passages steer the answer. The defenses are provenance-weighted ranking, outlier and duplicate detection on new content, and isolation of untrusted sources. Another defense is to treat retrieved text as untrusted input (prompt-injection hardening).
+- **Poisoning** (PoisonedRAG, Zou et al., 2024): an attacker who can write to the corpus crafts passages optimized for retrieval on target queries. The corpus can be the public web, shared drives or ticket systems. The attacker also optimizes these passages to steer the answer. The defenses are provenance-weighted ranking, outlier and duplicate detection on new content, and isolation of untrusted sources. Another defense is to treat retrieved text as untrusted input (prompt-injection hardening).
 - **Extraction via similarity APIs.** Repeated queries permit membership inference and corpus extraction. Rate-limit and log the queries.
 
 ---
@@ -496,7 +496,7 @@ In most pipelines, rerankers give a large gain in quality at the lowest cost. La
 6. **Scaling laws for retrieval.** Fang et al. (2024) find that contrastive entropy obeys power laws in model size and annotation volume. Annotation *quality* trades off against model size. The practical conclusion: money for hard-negative quality and synthetic data frequently gives more than a larger encoder.
 7. **Efficiency.** MRL + binary + int8 give 64–100× smaller indexes. Static-embedding distillation makes the encoder 100–500× faster. Distilled models of 100–600M are within a few points of 7B+ teachers. Retrieval on the device is another trend.
 8. **Interpretable and controllable embeddings.** The directions are SAEs over embedding models and feature-level retrieval and steering ("match on this feature, ignore style"). Another direction is concept-geometry results (Park et al.), as a bridge between embedding spaces and explicit ontologies.
-9. **Long-context LLMs versus retrieval.** Million-token contexts decrease the need for fine chunking, but not the need for retrieval. Cost, latency, freshness, permissions and the lost-in-the-middle effect keep retrieval central. The role moves toward coarse selection of larger units plus **agentic search**. In agentic search, the model does multiple searches, reads, and refines. There, embeddings are one tool among lexical search, structured queries and graph traversal.
+9. **Long-context LLMs versus retrieval.** Million-token contexts decrease the need for fine chunking, but not the need for retrieval. Cost, latency, freshness, permissions and the lost-in-the-middle effect keep retrieval central. The role moves toward coarse selection of larger units plus **agentic search**. In agentic search, the model does multiple searches, reads, and refines. In agentic search, embeddings are one tool among lexical search, structured queries and graph traversal.
 10. **Dynamic and continual settings.** The topics are temporal embeddings, drift detection, and backward-compatible training so that indexes survive model updates. Another topic is streaming ANN with low-cost deletes.
 
 ## 17. Model landscape snapshot (mid-2026) — verify before choosing

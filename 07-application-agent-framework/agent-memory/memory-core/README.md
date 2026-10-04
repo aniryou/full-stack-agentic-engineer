@@ -35,7 +35,7 @@ check cell that prints ✅, and it ends with "In a design review". The finished 
 | [`01_records_and_the_write_path`](notebooks/01_records_and_the_write_path.ipynb) | Calculate the cost of the transcript-as-memory baseline. Write episodic, semantic and procedural records. Extract after a turn. Write a policy check and a merge rule. Predict a sequence of writes. Make an idempotency key. | §1, §2 | 1 h | T0 |
 | [`02_retrieval_and_the_planted_facts_harness`](notebooks/02_retrieval_and_the_planted_facts_harness.ipynb) | See the paraphrase miss of the lexical embedder. Implement both generative-agents scores, and see the code form serve stale facts. Pack a budget. Run the planted-facts harness with Wilson intervals. Find the knee. | §3, §4 | 1.5 h | T0 |
 | [`03_the_context_budget_and_the_prefix_cache`](notebooks/03_the_context_budget_and_the_prefix_cache.ipynb) | Implement the three hit rules of vLLM. Derive the hits of each layout in closed form. Change them into TTFT (simulated) and dollars per session. Calculate the price of extraction. Repair a layout. Salt the cache for each tenant. | §5 | 1 h | T0 |
-| [`04_consolidation_forgetting_and_deletion`](notebooks/04_consolidation_forgetting_and_deletion.ipynb) | Implement the consolidation rules and the lease rule. Run a job through a crash and a resume. Compare facts with raw episodes. Predict decay. Follow a deletion through provenance, caches, logs and backups. | §7 | 1.5 h | T0 |
+| [`04_consolidation_forgetting_and_deletion`](notebooks/04_consolidation_forgetting_and_deletion.ipynb) | Implement the consolidation rules and the lease rule. Run a job through a crash and a resume. Compare facts with raw episodes. Predict decay. Send a deletion through provenance, caches, logs and backups. | §7 | 1.5 h | T0 |
 | [`05_memory_tools_and_memory_poisoning`](notebooks/05_memory_tools_and_memory_poisoning.ipynb) | Compare tools, implicit retrieval and a pinned profile on the harness. Contain a poisoned page with taint. Fence memory. Select a profile. Write the injection golden case. Divide the controls between 06 and 07. | §6, §8 | 1 h | T0 |
 
 ## Run it
@@ -72,7 +72,7 @@ Read the modules in this order. Each module starts with a docstring that gives t
 | [`memcore/retrieve.py`](memcore/retrieve.py) | ~100 | The generative-agents score in the form of the paper and in the form of the code. Greedy packing into a token budget. As-of filters. Reads are writes. |
 | [`memcore/budget.py`](memcore/budget.py) | ~270 | The prefix-cache rules of vLLM and a salted block-hash cache. Secret salts for each tenant, and their rotation. Three memory layouts. Prefill time on the roofline (SIMULATED). Dollars per turn at dated prices, with the caching minimum of the provider. `Budget`. |
 | [`memcore/consolidate.py`](memcore/consolidate.py) | ~195 | Episodes to facts with precedence, supersession in valid time, and flags. A run id, a lease with a heartbeat and a fence, checkpoints and a crash hook. Reflection with explicit exits. |
-| [`memcore/forget.py`](memcore/forget.py) | ~150 | Decay, TTL and caps. `propagate()` to every surface on word boundaries, with a review list for what provenance finds and content cannot find. `residue()` to prove it. |
+| [`memcore/forget.py`](memcore/forget.py) | ~150 | Decay, TTL and caps. `propagate()` to every surface on word boundaries, with a review list for what provenance finds and content cannot find. `residue()` to prove the deletion. |
 | [`memcore/agent.py`](memcore/agent.py) | ~250 | The loop of agent-core with `remember` / `recall` / `forget`. Tools, implicit and pinned modes (the agent pins the profile again when a pinned slot changes). Taint. Fencing. Audit events with the field names of the identity lab. |
 | [`memcore/harness.py`](memcore/harness.py) | ~270 | The planted-facts generator in the task shapes of LongMemEval and LoCoMo (and its two artefacts, which you can switch on and off). Evaluation, Wilson and per-user intervals, recall against budget, the knee, the three modes compared. |
 
@@ -90,8 +90,8 @@ Read the modules in this order. Each module starts with a docstring that gives t
   - The cached tokens per turn of every layout, in closed form.
   - Retention decay (0.225).
   - The Wilson interval (45/50 gives 0.7864–0.9565).
-  - These tests are in `test_write_retrieve.py`, `test_budget.py`, `test_consolidate_forget.py` and
-    `test_agent_harness.py`.
+  - The tests of all the items before this one are in `test_write_retrieve.py`, `test_budget.py`,
+    `test_consolidate_forget.py` and `test_agent_harness.py`.
   - The bill of a hosted API ignores the layout below its 4,096-token caching minimum.
 - **Behaviour that must hold:**
   - A search never crosses a partition.
@@ -110,10 +110,10 @@ Read the modules in this order. Each module starts with a docstring that gives t
   - The policy quarantines and rejects a poisoned page. A permissive policy lets the page answer the adversarial
     question.
   - `forget` is confirm-gated.
-  - The memory budget shapes packing and writes. Model calls fail closed.
+  - The memory budget shapes packing. Writes and model calls fail closed.
   - A write to a pinned slot pins the profile again.
 - **The limits of the fixture, pinned:**
-  - The slot hints flatter raw episodes.
+  - The slot hints give raw episodes an advantage.
   - With thirty more facts per user, the lead of the pinned profile disappears.
   - Every user misses the same question. Thus a per-user interval collapses to a point.
 - **Reproduced repo numbers** (`test_repo_numbers.py`). The tests pin each number by hand. When the other lab is in
@@ -143,9 +143,9 @@ and token ids are 4-character chunks. Thus text prefixes are token prefixes (a r
 boundary).
 
 The roofline model of `minengine.perf` (datasheet GPU numbers, 0.6/0.8 efficiencies, verify) gives the prefill
-times, which are **SIMULATED**. The prices are dated list prices `(verify)`. The price calculation treats the caching minimum of the
-provider as a threshold on the request. It assumes that the cache of the provider hits the same prefix as the cache
-of vLLM.
+times, which are **SIMULATED**. The prices are dated list prices `(verify)`. The price calculation treats the
+caching minimum of the provider as a threshold on the request. It assumes that the cache of the provider hits the
+same prefix as the cache of vLLM.
 
 The prefix cache has no LRU pressure. Like vLLM v0.30.0, it gives only a full reset, and no eviction by salt. The
 store and the idempotency journal are in memory. SQLite, pgvector and on-disk deletion are the job of the lab.

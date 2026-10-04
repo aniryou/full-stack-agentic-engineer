@@ -49,9 +49,9 @@ print(cache.lookup(list(range(100)) + [7] * 20 + [1, 2, 3]), "- the next turn re
 # %% [markdown]
 # ## Worked example 2 — the three layouts, on text
 # This is one session with six turns. The system prompt is stable. Each turn retrieves two memories that depend on the
-# question, thus these memories change. The history is append-only.
+# question. Thus these memories change. The history is append-only.
 #
-# Tokens are 4-character chunks (`token_ids`), thus a shared text prefix is a shared token prefix. Look at the
+# Tokens are 4-character chunks (`token_ids`). Thus a shared text prefix is a shared token prefix. Look at the
 # **uncached** tokens for each turn. These are the tokens that the engine must prefill.
 
 # %%
@@ -89,7 +89,7 @@ for layout, render in LAYOUT_TEXT.items():
 # %% [markdown]
 # With memory before the history, the uncached part **grows every turn**, because it is the whole history. With a
 # pinned profile, it is the new message and the rounding of one block. At the tail, it is the last exchange and the new
-# memory. That part has a limit, and it does not grow. (Turn 1 is cold for all layouts.)
+# memory. That part has a limit, and it does not grow. Turn 1 is cold for all layouts.
 #
 # ## Worked example 3 — the default session: 2,000-token system prompt, 400 tokens of memory
 
@@ -105,7 +105,7 @@ print("\nover 20 turns:", {l: f"{hit_rate(hits_per_turn(l, turns=20)):.1%}" for 
 # pinned profile costs almost nothing in hits. The tail loses one exchange and the memory itself at each turn.
 #
 # ## Worked example 4 — what the lost hits cost: time on your GPUs (SIMULATED), dollars on a hosted API
-# This is turn 8 of the default session. For a self-hosted engine, the cost is time. memcore gives
+# This is turn 8 of the default session. For a self-hosted engine, the cost is time. memcore implements
 # `minengine.perf.step_cost` again for one prefill chunk (`prefill_seconds`, roofline:
 # $\max\bigl(\tfrac{\text{bytes}}{0.8 \cdot \text{BW}}, \tfrac{\text{FLOPs}}{0.6 \cdot \text{peak}}\bigr) + 2\ \text{ms}$).
 
@@ -141,16 +141,16 @@ for system in (2000, 4000):
 # %% [markdown]
 # With the 2,000-token system prompt, every prompt stays below 4,096 tokens. The provider bills no tokens at the cached
 # rate, and all three memory layouts cost the same. They cost 12% more than no memory, for the 400 tokens injected.
-# With a 4,000-token system prompt (tools and policies), every turn from the second gets to the minimum.
-# Then memory before the history costs 46% more than a pinned profile. The support turn of the scaling primer sends
-# 4–6 k.
+# With a 4,000-token system prompt (tools and policies), every turn from the second gets to the minimum. For
+# comparison, the support turn of the scaling primer sends 4–6 k. With the 4,000-token prompt, memory before the
+# history costs 46% more than a pinned profile.
 #
 # The larger prompt also gives the *lower-cost* session, because it is the prompt that the provider caches. The
 # minimum is a threshold, not a slope. Know the threshold of your provider.
 #
 # ## Worked example 5 — extraction has a price too
-# Extraction after every turn is one model call for each turn. Consolidation one time per session reads the whole
-# session.
+# Extraction after every turn is one model call for each turn. A consolidation that runs one time per session reads
+# the whole session.
 
 # %%
 per_turn = turn_cost(0, 0, 0, extraction_in=600, extraction_out=60)["extraction"]
@@ -167,8 +167,8 @@ print(f"answering turn 8 (pinned, 4,000-token system prompt, billed cached): ${a
 # ## Worked example 6 — one prefix cache, many tenants
 # vLLM lets a request carry a `cache_salt`. The salt goes only into the hash of the first block, and the chain carries
 # it to every later block (vllm-internals §4.3). Different salts never share blocks. Thus one tenant cannot learn from
-# response times that another tenant sent the same prefix. The salt must be secret and per tenant: `cache_salt(secret,
-# tenant)` is an HMAC of the tenant under a server-side secret.
+# response times that another tenant sent the same prefix. The salt must be secret and per tenant:
+# `cache_salt(secret, tenant)` is an HMAC of the tenant under a server-side secret.
 #
 # vLLM v0.30.0 accepts at most 128 characters, and it refuses `@`, `/`, `\` and NUL (verify). Thus a salt like
 # `acme/alice` is not even valid, and a salt like `acme` is easy to guess.

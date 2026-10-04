@@ -102,7 +102,8 @@ print("as of day 2:", [r.render() for r in past.records][:2])
 # A normal query does not see the superseded Lisbon fact, but an as-of query returns it. That is why an update closes a
 # fact and does not delete it. Hybrid search (BM25 + vectors + RRF) is the topic of 07.4 (`ragkit.reference`), and it
 # applies with no change. An ANN index such as `minifaiss`'s HNSW (M0 = 2M) gives a benefit only at tenant scale. The
-# memory of one user is tens to thousands of records, and a flat scan of one partition is exact and fast.
+# reason is that one user has tens to thousands of records in memory, and a flat scan of one partition is exact and
+# fast.
 #
 # ## Worked example 4 — a planted-facts scenario
 
@@ -120,8 +121,8 @@ for q in sc.questions:
 # multi-session, temporal reasoning and knowledge update. An `_abs` id suffix marks abstention.
 #
 # LoCoMo's data is CC BY-NC 4.0, and the harness bundles none of it. The harness downloads nothing. Here the adversarial
-# question asks about a fact that only a **tool result** asserted. The write path quarantined that fact. Thus the
-# correct answer is "I don't know".
+# question asks about a fact that only a **tool result** asserted. The write path put that fact in quarantine. Thus
+# the correct answer is "I don't know".
 #
 # **A fixture artefact, disclosed.** Look at the planted statements: "I live in Prague. (about my home city)". No real
 # user adds that hint. The hint is there to give the template extractor and the lexical embedder something to use on
@@ -153,8 +154,8 @@ print(f"resampling users instead of questions (a cluster bootstrap): {c_lo:.1%}-
 # The Wilson interval treats the 390 questions as 390 independent trials. They are not independent. The thirteen
 # questions of each user share one store and one write path. Here, each of the 30 users misses the *same* question.
 #
-# If you resample users (the `cluster` interval), the interval becomes a point. The uncertainty of this harness is in
-# which question types it asks, not in which users. Compare designs for each question type (`by_type`). Read an
+# If you resample users (the `cluster` interval), the interval becomes a point. Thus the uncertainty of this harness is
+# in which question types it asks, not in which users. Compare designs for each question type (`by_type`). Read an
 # interval as a statement about this generator, not about your users.
 #
 # ## Worked example 6 — recall against the budget, raw episodes against facts
@@ -354,10 +355,11 @@ print(f"✅ knee at {find_knee(rows)} tokens; you chose {my_budget}")
 # lexical embedder."
 #
 # **Drill questions**
-# 1. *Why add recency and importance to similarity?* Similarity finds the memory that is most on-topic. But often the
-#    most useful memory is not the nearest match. It is more recent (a knowledge update) or more important (an allergy).
+# 1. *Why add recency and importance to similarity?* Similarity finds the memory that is most on-topic. But the most
+#    useful memory is often more recent (a knowledge update) or more important (an allergy) than the nearest match.
 # 2. *Accuracy is 92% on 13 questions. Ship?* 12/13 is a 67–99% Wilson interval, and that is too wide. Run hundreds of
 #    questions (390 here: 89–95%). Remember that they are not independent (resample users, compare per question type).
 #    Read recall, stale answers and abstention separately.
-# 3. *When do you need an ANN index for memory?* When one partition is large. The memory of one user is small. Thus a
-#    flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) gives a benefit at tenant or corpus scale.
+# 3. *When do you need an ANN index for memory?* You need one when one partition is large. But the memory of one user
+#    is small. Thus a flat scan of the partition is exact. HNSW (M0 = 2M in minifaiss) gives a benefit at tenant or
+#    corpus scale.

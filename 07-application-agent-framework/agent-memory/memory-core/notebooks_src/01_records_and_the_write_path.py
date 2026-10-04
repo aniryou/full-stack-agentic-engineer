@@ -129,8 +129,8 @@ for r in store.records(ALICE, status=None):
 # - Madrid is in the store, but it is **quarantined**. Retrieval never returns it until a person promotes it.
 # - The secret and the tool's rule never got to the store.
 #
-# This is the sequence extract, compare, then ADD / UPDATE / NOOP. Before 2.0.0, mem0 used this shape (its events were
-# ADD / UPDATE / DELETE / NONE, and mem0 2.x is ADD-only, verify).
+# This is the sequence extract, compare, then ADD / UPDATE / NOOP. Before 2.0.0, mem0 used this shape, and its events
+# were ADD / UPDATE / DELETE / NONE. mem0 2.x is ADD-only (verify).
 #
 # There is one more branch, because background extraction delivers statements **out of order**. The user said "I live
 # in Lisbon" on day 0 and "I moved to Porto" on day 3. But the day-0 extraction arrives second.
@@ -196,8 +196,8 @@ print("✅ what happened (with a time) / what is true / how to act for this user
 #
 # 1. If a record from a tool source is procedural, the result is REJECT.
 # 2. If the confidence is below 0.6, the result is REJECT.
-# 3. If a string looks like a password or an API key, the result is REJECT. Use `"password" in text.lower()` or
-#    `"sk-" in text`. memcore.screen uses stricter regexes.
+# 3. If the text of the record looks like a password or an API key, the result is REJECT. Use
+#    `"password" in text.lower()` or `"sk-" in text`. memcore.screen uses stricter regexes.
 # 4. If any other record comes from a tool source, the result is QUARANTINE.
 # 5. For all other records, the result is `None`.
 
@@ -266,7 +266,7 @@ print("✅ same value: merge; weaker source: quarantine; older: history; newer f
 
 # %% [markdown]
 # ## Exercise 1.4 — predict the actions
-# There is a new `Writer` and five writes to the same slot. Predict the action of each write. Then run the check.
+# A new `Writer` gets five writes to the same slot. Predict the action of each write. Then run the check.
 
 # %% exercise
 SEQUENCE = [fact_rec("Oslo", "user", 0), fact_rec("Oslo", "human", 1), fact_rec("Bergen", "user", 2),
@@ -295,8 +295,8 @@ print("✅", actual, "| sources on file:", [(r.value, r.source, r.status) for r 
 # Write `write_key(session, turn, index, text)`. It returns the key of the write at position `index` of turn `turn`.
 # The key must be the same for every retry of that step. **This includes a retry whose extraction came back in
 # different words** (`text` is what the extractor returned this time). The key must be different for a different
-# turn, a different call in the same turn, or another session. (memcore's `idempotency_key` is one answer. Any stable
-# construction passes.)
+# turn, a different call in the same turn, or another session. memcore's `idempotency_key` is one answer. Any stable
+# construction passes.
 
 # %% exercise
 def write_key(session, turn, index, text):

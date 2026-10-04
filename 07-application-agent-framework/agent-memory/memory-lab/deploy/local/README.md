@@ -24,9 +24,9 @@ export MEMLAB_LLM_URL=http://127.0.0.1:8000                     # notebooks 02/0
 export MEMLAB_PG_DSN=postgresql://memlab:memlab-local-only@127.0.0.1:5432/memlab   # notebook 01, with psycopg
 ```
 
-If there is no Docker daemon, `up.sh` prints the commands and exits 0, and the notebooks run their T0 paths.
-Where a container gives the answer on a machine with Docker, the notebooks show sample output in the documented
-format (illustrative).
+If there is no Docker daemon, `up.sh` prints the commands and exits 0. Then the notebooks run their T0 paths.
+At each step where a container gives the answer, they show sample output in the documented format (illustrative)
+instead.
 
 ## What is simulated and what is real
 
@@ -35,8 +35,7 @@ hits obey the block rules of vLLM, and its TTFTs come from a roofline model. Whe
 "simulated". For measurements, run a real vLLM ([`../any-gpu/`](../any-gpu/)). Then point `MEMLAB_LLM_URL` at it.
 
 The passwords and the token key in `compose.yaml` are local-only defaults (the ports are bound to 127.0.0.1).
-For anything that you share with other people, set your own `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your
-shell.
+For anything shared, set your own `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your shell.
 
 ## Cost
 
