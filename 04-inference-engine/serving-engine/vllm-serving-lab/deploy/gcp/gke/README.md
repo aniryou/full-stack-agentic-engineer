@@ -10,14 +10,14 @@ This directory is the minimal **gcloud** path. It has one script and two manifes
 engine stays the subject.
 
 The same kind of cluster is also available as **Terraform**. It is a zonal GKE Standard cluster with
-managed Prometheus. Its L4 Spot pool scales from zero and has a GKE-installed driver. This Terraform
-is in layer 03's lab,
+managed Prometheus. Its L4 Spot pool scales from zero and has a GKE-installed driver. Layer 03's
+lab has Terraform for this kind of cluster in
 [`k8s-gpu-lab/deploy/gcp/terraform/`](../../../../../../03-kubernetes-gpu/gpu-scheduling/k8s-gpu-lab/deploy/gcp/terraform/) (plus DWS flex-start and GCS FUSE).
-It is also in layer 05's lab, [`inference-gateway-lab/deploy/gcp/terraform/`](../../../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/) (plus
+Layer 05's lab also has Terraform for it in [`inference-gateway-lab/deploy/gcp/terraform/`](../../../../../../05-orchestrator/serving-orchestration/inference-gateway-lab/deploy/gcp/terraform/) (plus
 the Gateway API and a proxy-only subnet).
 
 The Terraform of this lab is the Cloud Run service in
-[`../cloud-run/terraform/`](../cloud-run/terraform/). The manifests here apply to either cluster.
+[`../cloud-run/terraform/`](../cloud-run/terraform/). The manifests here apply to the cluster of either lab.
 
 | File | What it is |
 |---|---|
@@ -46,7 +46,7 @@ in Metrics Explorer or Grafana. The queries (`servelab.metrics.PROMQL`) are:
 
 Two cautions from notebook 02 apply without change. First, a percentile from these histograms is
 an interpolation inside vLLM's bucket edges. The first queue-time bucket is 0-0.3 s. Thus a "p50
-queue time" of 150 ms can mean "no queue at all". Second, `rate()` over a window is the only honest
+queue time" of 150 ms can mean "no queue at all". Second, `rate()` over a window is the only correct
 way to read counters.
 
 The correct signals for an autoscaler are `vllm:num_requests_waiting` and
@@ -55,8 +55,8 @@ The correct signals for an autoscaler are `vllm:num_requests_waiting` and
 ## Cost and cleanup
 
 A `g2-standard-8` (1 × L4, 8 vCPU, 32 GB) on Spot costs a fraction of the ~$0.7-1/hr on-demand
-L4 VM price. Spot is 60-91% off. Find the current prices in
-[`COMPUTE.md`](../../../../../../COMPUTE.md) (verify). You also pay for the cluster: one
+L4 VM price. Spot is 60-91% off (verify: the current prices are in
+[`COMPUTE.md`](../../../../../../COMPUTE.md)). You also pay for the cluster: one
 `e2-standard-4` system node and the GKE cluster fee. The free tier covers one zonal cluster per
 billing account (verify).
 

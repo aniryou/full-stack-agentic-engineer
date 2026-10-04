@@ -44,7 +44,7 @@ rng = np.random.default_rng(0)
 # `_calculate_range`) uses all 16 codes. Thus its step is 7/7.5 of the restricted step.
 #
 # **Asymmetric** (AWQ, KIVI) moves an unsigned 0…15 grid by a zero point. Thus the grid covers
-# $[\mathrm{min}, \mathrm{max}]$ instead of $[-\mathrm{amax}, \mathrm{amax}]$. For one-sided data, this is worth the cost.
+# $[\mathrm{min}, \mathrm{max}]$ instead of $[-\mathrm{amax}, \mathrm{amax}]$. For one-sided data, the zero point is worth its cost.
 
 # %%
 for bits in (8, 4):
@@ -82,7 +82,7 @@ for f in (F.E4M3, F.E5M2):
 # weights, activations and the KV cache (the FP8 linear methods of vLLM accept only `float8_e4m3fn`). E5M2 is
 # mostly a training format for gradients.
 #
-# **Check it against torch (optional).** torch 2.1+ has both dtypes. A cast must land on the same grid.
+# **Compare it with torch (optional).** torch 2.1+ has both dtypes. A cast must land on the same grid.
 
 # %%
 try:
@@ -129,7 +129,7 @@ for name, fn in schemes.items():
 # - On heavy tails, the float grid wins. Most values are small, and E2M1 spends its codes near zero.
 # - The power-of-two scale of MXFP4 is coarse. The block max lands anywhere in [4, 8) on the E2M1 grid. The grid
 #   clips a block max above 6, and near 4 the top codes stay unused. The E4M3 scale per 16 of NVFP4 corrects
-#   this, for 0.25 more bits.
+#   this problem of the coarse scale, for 0.25 more bits.
 #
 # ## Worked example 4 — about 6 dB per bit, and what outliers cost
 # The model of a uniform quantizer: rounding noise has power $\mathrm{step}^2/12$, and with
@@ -155,7 +155,8 @@ for b in (2, 3, 4, 5, 6, 8):
 # %% [markdown]
 # The rule holds from 4 bits up. At 2–3 bits, the noise is no longer "busy" (most values round to one of a few
 # codes). There, the model predicts too high a value. The slope, ~6 dB per bit, is why INT8 is near-lossless and
-# INT4 needs care. In serving-engine PRIMER §8, the same weight gets 43.0 against 17.9 dB.
+# INT4 needs care. In serving-engine PRIMER §8, the same weight gets 43.0 dB with INT8 against 17.9 dB
+# with INT4.
 #
 # ## Worked example 5 — the bits a checkpoint really stores
 
@@ -178,9 +179,9 @@ for name in ("qwen2.5-0.5b", "llama-3.1-8b"):
 # %% [markdown]
 # This repo has two INT4 conventions, and both are correct:
 #
-# - `minengine.quant` counts 4.125 bits. This is symmetric, with a 16-bit scale per 128, as the symmetric W4A16 of
+# - `minengine.quant` counts 4.125 bits. Its convention is symmetric, with a 16-bit scale per 128, as the symmetric W4A16 of
 #   compressed-tensors stores it.
-# - `servelab.sizing` counts 4.156 bits. This adds a 4-bit zero point, as AWQ and every GPTQ-format checkpoint
+# - `servelab.sizing` counts 4.156 bits. Its convention adds a 4-bit zero point, as AWQ and every GPTQ-format checkpoint
 #   store it (the packed `qzeros` of AutoGPTQ/GPTQModel).
 #
 # Also, the ratio for the whole model is far from 4×, because recipes keep the embedding and LM head in 16-bit. For
@@ -322,8 +323,8 @@ print("✅ E8M0 codes match; under the OCP rule a block whose amax is 7.5 keeps 
 # %% [markdown]
 # That is the rule of the OCP spec. llm-compressor writes MXFP4 checkpoints with the variant of compressed-tensors
 # (`round_to_power_2`). This variant first rounds amax to a power of two. It rounds up when the mantissa is ≥ 1.75.
-# Thus 7.5 = 1.875 × 2² gets exponent 1 and becomes 3.75, which goes to 4 on the grid. The checkpoint stores 8,
-# not the clipped value 6.
+# Thus 7.5 = 1.875 × 2² gets exponent 1 and becomes 3.75, which goes to 4 on the grid. In the checkpoint,
+# the value 7.5 becomes 8, not the clipped value 6.
 #
 # The block max lands in [3.5, 7) instead of [4, 8). Thus the grid clips less. The price is one step of scale for
 # blocks just under a power of two. `F.mxfp4(x, rule="compressed-tensors")` implements this variant. The lab's

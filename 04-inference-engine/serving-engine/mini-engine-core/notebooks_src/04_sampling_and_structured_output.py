@@ -8,12 +8,12 @@
 # The forward pass produces **logits**: one score per vocabulary entry. The sampler turns them into one token
 # through a pipeline of steps in a set order:
 #
-# 1. Mask the tokens that the grammar does not permit (structured output).
-# 2. Apply the repetition, presence and frequency **penalties**.
-# 3. If `temperature == 0`, take the argmax.
-# 4. Divide by the **temperature**.
-# 5. Cut the tail with **min-p**, **top-k** and **top-p**.
-# 6. Draw a token with the request's **own seeded generator**.
+# 1. It masks the tokens that the grammar does not permit (structured output).
+# 2. It applies the repetition, presence and frequency **penalties**.
+# 3. If `temperature == 0`, it takes the argmax.
+# 4. It divides by the **temperature**.
+# 5. It cuts the tail with **min-p**, **top-k** and **top-p**.
+# 6. It draws a token with the request's **own seeded generator**.
 #
 # None of this changes the model. It changes the shape of one distribution per step. **Structured output** is the
 # same mechanism with a grammar behind it. A finite-state machine says which tokens are legal next, and the other
@@ -121,13 +121,13 @@ for o in outs:
     print(f"{o.text!r:22} {o.finish_reason:22} model's own log-probability of this text: {forced:7.1f}")
 
 # %% [markdown]
-# Each output is valid. But the model's own log-probability of each output is extremely low. Without the mask, the
-# model never produces `{`. The mask **forces** syntax. It cannot supply meaning. If the model does not know the
-# answer, the grammar makes it say `"yes"` or `"no"` all the same.
+# Each output is valid. But the model's own log-probability of each output is far below zero: the probability is many
+# orders of magnitude below 1. Without the mask, the model never produces `{`. The mask **forces** syntax. It cannot
+# supply meaning. If the model does not know the answer, the grammar makes it say `"yes"` or `"no"` all the same.
 #
-# Real engines compile JSON schemas or regexes into token-level automata (xgrammar, llguidance, outlines: verify the
-# current vLLM backends). With a BPE vocabulary, each token contains several characters. Thus the calculation of the
-# mask for each step over ~100k tokens is the problem that an engineer must solve.
+# Real engines compile JSON schemas or regexes into token-level automata (xgrammar, llguidance, outlines). Make sure
+# that these are the current vLLM backends (verify). With a BPE vocabulary, each token contains several characters.
+# Thus the calculation of the mask for each step over ~100k tokens is the problem that an engineer must solve.
 #
 # ## Worked example 6 — a grammar over characters, a vocabulary of multi-character tokens
 # Take the JSON schema `{"type": "object", "properties": {"n": {"type": "integer", "minimum": 0}},
@@ -373,7 +373,7 @@ print(f"   {top!r} came out as {len(spellings[top])} different token sequences, 
 #   needs the state of the automaton for each request, in each step.
 # * **One text, many token sequences**: the grammar permits all of them. Thus the mask can push a constrained model
 #   into tokenizations that it rarely saw in training. Also, a client that tokenizes the returned text again gets
-#   different ids. These are different block names in the prefix cache (primer §5).
+#   different ids. Different ids give different block names in the prefix cache (primer §5).
 # * **A length cap cuts a legal prefix**: the grammar mask guarantees that the output *so far* is legal, not that it
 #   finishes. Examine `finish_reason` (vLLM: `length`) before you parse the output.
 #
@@ -392,9 +392,9 @@ print(f"   {top!r} came out as {len(spellings[top])} different token sequences, 
 # the other tokens. Thus an output that finishes always parses. An output that max_tokens cuts does not parse, so we
 # examine finish_reason.
 #
-# "That guarantees syntax, not correctness. A model that does not know the answer still produces a well-formed
-# answer. Thus we make sure downstream that the semantics are correct, and we monitor the logprobs of constrained
-# fields."
+# "Structured output guarantees syntax, not correctness. A model that does not know the answer still produces a
+# well-formed answer. Thus we make sure downstream that the semantics are correct, and we monitor the logprobs of
+# constrained fields."
 #
 # **Drill questions**
 # 1. *Why prefer top-p or min-p over top-k?* They adapt to the distribution. They keep few tokens when the model is

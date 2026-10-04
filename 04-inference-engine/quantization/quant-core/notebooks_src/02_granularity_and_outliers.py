@@ -12,7 +12,7 @@
 # stays isolated. But an outlier *input column* is in every row, thus per-channel scales cannot isolate it.
 # **Groups** of 32–128 along the input dimension confine it to one group per row, for ${16/g}$ extra bits.
 #
-# The engine quantizes activations at run time. **Dynamic per-token** scales follow each token. **Static
+# The engine quantizes activations at run time. **Dynamic per-token** scales change with each token. **Static
 # per-tensor** scales come from calibration, and they saturate any value larger than the values that calibration
 # saw. LLM activations have a few channels that are 20–40× larger than the rest, in every token. Thus these
 # channels set a per-token INT8 scale, and the other channels keep only a few levels. SmoothQuant (notebook 03) and
@@ -54,9 +54,9 @@ for fmt, gran, g, bits in [("int8", "tensor", None, 8), ("int8", "channel", None
 #
 # ## Worked example 2 — an outlier row, and an outlier column
 # First, the case of serving-engine §8: one output channel is 100× larger. Then, the harder case for INT4 weights:
-# one weight **input column** is 20× larger than the rest. This is a *weight* outlier. (Its cousin, an
+# one weight **input column** is 20× larger than the rest. This is a *weight* outlier. Its cousin, an
 # *activation* outlier channel, is worked example 3. There, the weight column is ordinary, and the problem is a
-# different one.)
+# different one.
 
 # %%
 rng = np.random.default_rng(1)
@@ -233,7 +233,7 @@ print("✅ g32 (4.5 bits): only groups this small keep one outlier weight column
 # A token has 63 ordinary channels of rms 1 and one channel at ±60. Under per-token INT8 (restricted, ±127), the
 # step is `60 / 127` for the whole token. Use the rounding-noise model
 # ($\text{noise rms} = \mathrm{step}/\sqrt{12}$). Predict the relative error of the ordinary channels, and put it
-# in `predicted`. Then do a check by measurement.
+# in `predicted`. Then measure the error to make sure that the prediction is correct.
 
 # %% exercise
 rng3 = np.random.default_rng(3)
@@ -300,9 +300,9 @@ print(f"✅ 16 scales for a 512x512 weight; the hot tile's scale is {s[0, 0] / n
 #
 # "Activation outliers are a different problem: LLMs have a few channels that are 20–40× larger in every token.
 # The weight columns that they meet are ordinary. But those inputs multiply the rounding error of these columns
-# (98% of the error of our toy up-projection), and AWQ corrects this. Also, these channels set a per-token INT8
-# activation scale that leaves the other channels ~4 bits. Dynamic per-token FP8 keeps them at 3 mantissa bits.
-# This is why FP8 W8A8 usually needs no SmoothQuant, and INT8 W8A8 does.
+# (98% of the error of our toy up-projection), and AWQ corrects that multiplied error. Also, these channels set a
+# per-token INT8 activation scale that leaves the other channels ~4 bits. Dynamic per-token FP8 keeps them at 3 mantissa bits.
+# This is why FP8 W8A8 usually needs no smoothing, and INT8 W8A8 does.
 #
 # "We prefer dynamic activation scales, because a static scale saturates any value that calibration did not see.
 # Also, we never trust an aggregate error number. We look per channel."

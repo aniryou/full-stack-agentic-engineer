@@ -24,10 +24,9 @@ GPU, Cloud Run or GKE.
 *Tiers: T0 is a laptop or a Colab CPU, free. T1 is one small GPU (a Colab/Kaggle T4 or a rented card). T2 is a
 multi-GPU box, rented for an hour. T3 is the Google Cloud deployment, optional.*
 
-Each notebook starts with *the
-one-minute version*. Then it runs worked examples against the library. Then it gives 3–6 exercises: implement the key
-function, predict a number, select a setting. After each exercise, a check prints ✅. The notebook ends with *in a
-design review*.
+Each notebook starts with *the one-minute version*. Then it runs worked examples against the library. Then it gives
+3–6 exercises: implement the key function, predict a number, select a setting. After each exercise, a check prints
+✅. The notebook ends with *in a design review*.
 
 The answers are in [`solutions/`](solutions/). The times are approximate (about 12 h in all, from the curriculum of
 the repository).
@@ -74,7 +73,7 @@ To measure a real engine instead (T1/T3), start one. [`deploy/any-gpu/`](deploy/
 recipe. Then run `export SERVELAB_URL=http://127.0.0.1:8000`. Also set `SERVELAB_API_KEY`, or set
 `SERVELAB_BEARER=$(gcloud auth print-identity-token)` for a private Cloud Run service.
 
-The notebooks detect the engine and measure it. They recognise a `servelab fake` server in `SERVELAB_URL` by its
+The notebooks detect the engine and measure it. They identify a `servelab fake` server in `SERVELAB_URL` by its
 `/version`, and its numbers keep the label simulated. If you have a GPU, vLLM installed and `SERVELAB_START_VLLM=1`,
 the sweeps of notebook 03 restart a real `vllm serve` for each configuration.
 
@@ -83,11 +82,11 @@ the sweeps of notebook 03 restart a real `vllm serve` for each configuration.
 
 | Module | Lines | The idea |
 |---|---:|---|
-| `sizing.py` | ~410 | It goes from `config.json`, a GPU and flags to the weights, KV bytes/token, blocks, max concurrency, the fit check and the error text of vLLM. It parses the startup log and calibrates against it. Ten bundled configs (Qwen2.5/3, Llama 3.x, Mistral, Mixtral) have parameter counts that agree with the published counts. |
+| `sizing.py` | ~410 | From `config.json`, a GPU and flags, it calculates the weights, KV bytes/token, blocks, max concurrency, the fit check and the error text of vLLM. It parses the startup log and calibrates against it. Ten bundled configs (Qwen2.5/3, Llama 3.x, Mistral, Mixtral) have parameter counts that agree with the published counts. |
 | `bench/` | ~590 | An async OpenAI-compatible load generator. It measures the times of SSE events (`client.py`). It has an open loop with the gamma/Poisson arrivals of vLLM, a closed loop and agent sessions (`runner.py`). It has length distributions and shared-prefix agent workloads (`workload.py`). It has the `vllm bench serve` definitions, goodput included (`summary.py`). It has tables and text curves (`report.py`). |
 | `metrics.py` | ~340 | It parses the Prometheus text format. It has a `histogram_quantile` that agrees exactly with PromQL, windows between scrapes, and an engine snapshot (queue, batch, KV, hit rate, preemptions, spec acceptance). It also gives the PromQL for each. |
 | `tune.py` | ~250 | It writes the CLI flags for vLLM. It runs sweeps of configs on a pluggable backend (`FakeBackend`, `VLLMBackend`, `URLBackend`). It finds the best config under an SLO and the highest rate under an SLO. |
-| `fake_engine.py` | ~540 | The emulator. It has FCFS continuous batching with a token budget and chunked prefill, a block pool with refcounts, and chained block hashes with LRU reuse. It also has recompute preemption, roofline step time and Bernoulli speculative acceptance. It has named hardware profiles. |
+| `fake_engine.py` | ~540 | The emulator. It has FCFS continuous batching with a token budget and chunked prefill, a block pool with refcounts, chained block hashes and LRU reuse. It also has recompute preemption, roofline step time and Bernoulli speculative acceptance. It has named hardware profiles. |
 | `fakeserver.py` | ~360 | The fake vLLM over HTTP (aiohttp). Its endpoints are `/v1/completions`, `/v1/chat/completions` (streaming, usage, cached tokens), `/v1/models`, `/health`, and `/metrics` with the names and bucket edges of vLLM. |
 | `env.py`, `textgen.py`, `__main__.py` | ~360 | Tier detection (`SERVELAB_URL`, GPU, vLLM), a toy tokenizer that the client and the server share, and the CLI. |
 
@@ -103,8 +102,8 @@ vLLM v0.30.0 and main (Sep 2026). They are `vllm:num_requests_running`, `vllm:nu
 
 ## Measurement hygiene (what the code does for you, and why)
 
-* **Definitions match `vllm bench serve`**. TTFT is the time to the first token-carrying chunk. ITL is the time
-  between token-carrying chunks. TPOT = (E2E − TTFT)/(n − 1), with n from `usage`. Throughput is over the wall time
+* **Definitions match `vllm bench serve`**. TTFT is the time to the first chunk that has a token. ITL is the time
+  between chunks that have tokens. TPOT = (E2E − TTFT)/(n − 1), with n from `usage`. Throughput is over the wall time
   of the run. Goodput is the number of requests per second that meet every SLO.
 
   There is one deliberate difference. Just before the first token, vLLM sends a chat chunk with only the role, and
@@ -115,13 +114,13 @@ vLLM v0.30.0 and main (Sep 2026). They are `vllm:num_requests_running`, `vllm:nu
   times (`ramp_s`), so that they do not start as one synchronized burst.
 * **Warm-up with different prompts** than the measured ones, and **before** the "before" scrape. If you do not, the
   warm-up adds its prefix-cache hits and its requests to the window.
-* **Same seeded workload** for every configuration you compare. Make the lengths constant with `ignore_eos`. Use new prompts for
+* **Same seeded workload** for every configuration you compare. Use fixed lengths with `ignore_eos`. Use new prompts for
   each run, because a replayed prompt hits the prefix cache. Also, tell which arrival process (Poisson or
   `burstiness`) and which length distribution (fixed, lognormal) a capacity number assumes.
 * **Histogram percentiles are interpolations** inside the bucket edges of vLLM. The means from `_sum/_count` are
   exact. A counter gives information only as the difference between two scrapes.
 * **Label the source**: every report says SIMULATED (fake server) or measured-on-URL. The fake server also
-  identifies itself on `/version`, even when you reach it through `SERVELAB_URL`.
+  identifies itself as a fake on `/version`, even when you reach it through `SERVELAB_URL`.
 
 The upstream counterpart of the fake server is [`llm-d-inference-sim`](https://github.com/llm-d/llm-d-inference-sim).
 It is in Go and OpenAI-compatible, with vLLM metrics and fixed or per-token latency parameters. llm-d uses it for routing experiments
@@ -158,7 +157,7 @@ make check                                              # all of the above + tes
 
 ## Caveats
 
-- **Simulated vs measured.** The numbers of the fake server are simulated, and every report says so. The fake server
+- **Simulated against measured.** The numbers of the fake server are simulated, and every report says so. The fake server
   also identifies itself as a fake on `/version`, even behind `SERVELAB_URL`. Only a real `vllm serve` gives
   measurements.
 - **Sizing is an estimate.** `sizing.size()` uses a model of the defaults of vLLM v0.30.0. It takes 0.92 of the
@@ -197,7 +196,7 @@ These items still need a check that the source here cannot give:
 
 * The minimum driver of CUDA 13 (580 series), and the drivers that Colab and Kaggle supply. The last vLLM release
   built for CUDA 12.
-* On each GPU, the difference between the total memory that CUDA reports and the total that nvidia-smi reports. On an
+* On each GPU, how far the total memory that CUDA reports is below the total that nvidia-smi reports. On an
   L4, this difference changes the sizing by ~1 session.
 * Cloud Run GPU: L4 (24 GB, min 4 vCPU / 16 GiB), GA since June 2025. The flag names `--gpu`, `--gpu-type` and
   `--no-gpu-zonal-redundancy`. The regions, quota names, prices, CPU-always-allocated for GPU services, startup-probe

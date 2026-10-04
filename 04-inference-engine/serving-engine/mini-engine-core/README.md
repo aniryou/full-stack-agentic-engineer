@@ -3,7 +3,7 @@
 After this, you can explain every decision that an engine like vLLM makes in one step:
 
 - Which request runs.
-- How many tokens it runs.
+- How many tokens the engine schedules for it.
 - Which KV blocks it gets.
 - Which request the engine preempts.
 - Which cached prefix the engine uses again.
@@ -34,7 +34,7 @@ repository, modules 04.1–04.6).
 | [`02_chunked_prefill_and_the_token_budget`](notebooks/02_chunked_prefill_and_the_token_budget.ipynb) | Find the knee of the step-time curve. Show prefill/decode interference and what chunked prefill does. Do a sweep of the token budget at moderate load and at saturation, with goodput (simulated). Select a budget for an ITL SLO. Size KV to prevent preemption. Show what the whole-prompt admission check gives. | §3, §4, §11 | ~2 h | T0 |
 | [`03_prefix_caching`](notebooks/03_prefix_caching.ipynb) | Name blocks by a chained hash, and say why the parent is in the name. Share a system prompt with refcounts, within one step. Evict by LRU. Predict a hit rate. Lay out an agent prompt for 80%+ hits. Compare a radix tree with block hashing. | §5 | ~2 h | T0 |
 | [`04_sampling_and_structured_output`](notebooks/04_sampling_and_structured_output.ipynb) | Write the code for temperature, top-k/p, min-p, penalties, seeds and raw logprobs. Force valid JSON with an FSM mask (syntax, not sense). Compile a JSON-schema automaton into per-state masks over multi-character tokens. | §6 | ~1.5 h | T0 |
-| [`05_speculative_decoding`](notebooks/05_speculative_decoding.ipynb) | Prove that the rejection rule is exact. Measure α and tokens per pass on a draft/target pair, and explain why the formula over-predicts deep k. Use prompt lookup for copy-heavy outputs. Say when speculation gives no more gain (simulated). | §7 | ~2 h | T0 |
+| [`05_speculative_decoding`](notebooks/05_speculative_decoding.ipynb) | Prove that the rejection rule is exact. Measure α and tokens per pass on a draft/target pair, and explain why the formula over-predicts deep k. Use prompt lookup for copy-heavy outputs. Say when speculation costs more time than it saves (simulated). | §7 | ~2 h | T0 |
 | [`06_quantization`](notebooks/06_quantization.ipynb) | Quantize to INT8/INT4/FP8 at each scale granularity. Handle outliers with SmoothQuant. Measure model-level damage. Say what each scheme and FP8 KV give for decode, prefill and concurrency on an L4 (simulated). | §8 | ~1.5 h | T0 |
 
 Multi-LoRA (primer §10) has no notebook. Its numbers come from `perf.lora_params()` and the adapter-salted block
@@ -79,13 +79,13 @@ Read the modules in this order. Each module starts with a docstring that states 
 
 ## What the tests prove
 
-`tests/` has one focused test per concept (67, plus 8 checks of the notebook tools). They run offline, in ~50 s in all. These tests carry the correctness claims:
+`tests/` has one focused test per concept (67, plus 8 checks of the notebook tools). They run offline, in ~50 s in all. The tests in the list that follows carry the correctness claims:
 
 - **Paged == dense.** `forward` over scattered block tables, random chunk sizes and several sequences per batch
   equals `forward_dense` to 1e-10. The greedy tokens of the engine equal `generate_dense`, also under preemption
   and with prefix-cache hits. Seeded sampled outputs also do not change under preemption. A burst of three requests
-  with a shared prefix hits within one step (`[0, 64, 64]`). Every logprob still equals the dense reference to 1e-9
-  (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
+  with a shared prefix hits within one step (`[0, 64, 64]`). In that burst, every logprob still equals the dense
+  reference to 1e-9 (`test_model.py`, `test_engine.py`, `test_scheduler.py`).
 - **The prefix cache never serves a block computed under a different prefix.** An oracle records the full token
   prefix behind every block. It examines every hit over hundreds of random prompts. The same harness shows that a
   block name *without* the parent does serve incorrect K/V (`test_kv.py`).
@@ -130,7 +130,7 @@ A check against the V1 source of vLLM (Sep 2026, see the Verify list of the prim
 - Blocks published at scheduling time. Thus requests that the engine admits in the same step share a prefix. The
   core publishes the blocks of a running request when the running pass is final. Thus a request that the engine
   preempts later in that pass never names blocks that it will not compute.
-- Tail-first release of blocks into an LRU free queue, with lazy eviction.
+- Blocks freed tail first into an LRU free queue, with lazy eviction.
 - Hits counted in tokens. The exported counters do not include preempted re-lookups.
 - The order of the sampler.
 - Raw logprobs.

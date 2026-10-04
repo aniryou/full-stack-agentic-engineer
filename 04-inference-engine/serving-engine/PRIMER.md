@@ -80,8 +80,8 @@ wait. SGLang and TensorRT-LLM have a similar shape. The diagram shows the proces
    the KV cache manager has blocks for them. It publishes to the prefix cache the blocks that those tokens will fill
    (`Scheduler.schedule()`, §2 and §5).
 2. **Flatten.** Each scheduled token of each request goes into one array, with no padding. Each token carries its
-   position and its **slot**. The slot is where the engine writes its K and V:
-   `block_table[pos // B] × B + pos % B`. Each request also carries its block table and context length
+   position and its **slot**. The slot is the place where the engine writes the K and V of the
+   token: `block_table[pos // B] × B + pos % B`. Each request also carries its block table and context length
    (`Engine.build_batch()`, the vLLM "attention metadata").
 3. **Forward.** Projections and MLPs run on the full flat batch (one weight read for all). Attention runs per
    request over its own K/V, and it gathers that K/V through the block table of the request. The model computes
@@ -92,9 +92,9 @@ wait. SGLang and TensorRT-LLM have a similar shape. The diagram shows the proces
 5. **Update.** Advance `num_computed_tokens` and append the tokens. Finish each request that gets to EOS, a stop
    token or `max_tokens`, and free its blocks.
 
-**What a step costs.** Llama-3.1-8B in bf16 on an H100 streams 15.0 GB of weights per step. (The untied input
-embedding is a gather, not a stream.) This takes 4.5 ms at 3.35 TB/s. It is the floor for *any* step, and the number
-of tokens in the step does not change it. The [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md),
+**What a step costs.** Llama-3.1-8B in bf16 on an H100 streams 15.0 GB of weights per step, and this takes
+4.5 ms at 3.35 TB/s. The untied input embedding is a gather, not a stream. The 4.5 ms is the floor for *any* step,
+and the number of tokens in the step does not change it. The [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md),
 §3, explains why HBM bandwidth, not FLOPs, sets this floor. Sixty-four requests that decode at 2,048 tokens of
 context add 17.2 GB of KV reads (5.1 ms), for a 9.6 ms step.
 
@@ -105,8 +105,8 @@ about how to pack work into those steps well.
 
 **Request states.** A request goes from `WAITING` to `RUNNING` to `FINISHED_{STOPPED, LENGTH_CAPPED, ABORTED}`. When
 memory runs out, a request takes the path `RUNNING → PREEMPTED → WAITING` (§4). These are the names of vLLM's
-`RequestStatus`. It has a few more, for example for requests that wait for a grammar or for a remote KV transfer.
-The core's `scheduler.Status` has the same six states.
+`RequestStatus`. The `RequestStatus` of vLLM has a few more states, for example for requests that wait for a grammar
+or for a remote KV transfer. The core's `scheduler.Status` has the same six states.
 
 Stop strings are the job of the detokenizer: they need text, and the engine core sees only token ids. Aborts (client
 disconnects) must free blocks. The core's tests make sure that no block leaks.
@@ -191,8 +191,8 @@ $$
 - H100 bf16: 989e12 × 2 / (2 × 3.35e12) = 295 tokens
 - L4 bf16: 121e12 × 2 / (2 × 300e9) = 403 tokens
 
-(For Llama-3.1-8B, the exact change occurs between 310 and 320 tokens. The engine streams its LM head in each step,
-but multiplies it only for the rows that it samples.)
+For Llama-3.1-8B, the exact change occurs between 310 and 320 tokens. The engine streams the LM head of the model in
+each step, but multiplies the LM head only for the rows that it samples.
 
 Take 80% of datasheet bandwidth, 60% of datasheet FLOP/s and 2 ms of per-step overhead. These are assumptions, and
 you must replace them with measurements. With these assumptions, an H100 step for Llama-3.1-8B costs this time
@@ -254,7 +254,7 @@ At 256, a step is just above the knee (~221 tokens with these efficiencies). Mos
 the KV reads of the decodes and the 2 ms overhead. After the decodes take their share, the prompt gets small, poorly
 amortised chunks. Thus TTFT doubles at 6/s, goodput decreases by ~10%, and capacity decreases by a quarter.
 
-**Choosing it:** take the largest budget whose worst step meets the ITL SLO. The worst step holds all decodes that
+**To select the budget:** take the largest budget whose worst step meets the ITL SLO. The worst step holds all decodes that
 run and a full prefill chunk. Then examine the capacity under a load that saturates the engine. Take 64 requests
 that decode at 2,000 tokens of context, and a 25 ms p99 ITL target. 512 tokens gives a 14.4 ms step, and 1,024 gives
 26.7 ms. Thus select 512 (notebook 02, exercise 2.4).
@@ -263,7 +263,7 @@ vLLM adds finer knobs. `long_prefill_token_threshold` sets a limit on the chunk 
 prompts progress together (0 = off by default). It has an `_adaptive` variant. `max_num_active_seqs` sets a limit on
 RUNNING below `max_num_seqs`. The last two are on `main` after 0.30.0, not in the 0.30.0 wheel (verify).
 
-**When chunking is not enough.** Each chunk still shares its step with decodes. Thus a prefill-heavy mix (RAG,
+**When chunking is not sufficient.** Each chunk still shares its step with decodes. Thus a prefill-heavy mix (RAG,
 agents that read long contexts again) makes ITL and TTFT compete for the same GPUs. Disaggregation runs prefill and
 decode on separate pools and sends the KV between them. It is the topic of layer 05
 ([`05-orchestrator`](../../05-orchestrator/)).
@@ -367,7 +367,7 @@ vLLM V1 preempts by recompute only. Swap was a V0 mode. V1's CPU offloading (`kv
 not a preemption mode (verify). In both cases, preemption is a symptom. The solutions are more KV memory (§8's FP8
 KV, a smaller model, higher utilisation), fewer concurrent sequences, or more replicas (05).
 
-**Invariants worth testing** in any block manager are in this list. In the core's tests,
+**The invariants to examine** in any block manager are in this list. In the core's tests,
 `KVCacheManager.check()` examines them after each step:
 
 - The refcount of a block equals the number of block tables that hold it.
@@ -381,7 +381,7 @@ KV, a smaller model, higher utilisation), fewer concurrent sequences, or more re
 Two requests whose prompts start with the same tokens compute identical K/V for that prefix. The cause is that the
 K/V of a token depend only on the tokens before it. Prefix caching computes that K/V only once.
 
-**Naming blocks.** The engine caches only **full** blocks. The name of a full block is
+**Block names.** The engine caches only **full** blocks. The name of a full block is
 
 $$
 \operatorname{name}(\text{block } i) = H\bigl(\operatorname{name}(\text{block } i-1), \text{tokens in block } i, \text{extra keys}\bigr)
@@ -406,8 +406,8 @@ channel between tenants. These are the reasons for collision resistance and salt
 
 **Lookup, adopt, publish.** A new request goes along the chain of its prompt until the first miss, and it
 **adopts** each hit. An adopted hit adds 1 to the refcount, with no compute and no new memory
-(`KVCacheManager.lookup()`, `allocate_slots(..., hits)`). The hit has a limit of `(len(prompt) − 1) // B` blocks.
-The engine must compute the last token to get logits. Thus two identical 20-token prompts with $B$ = 4 share 16
+(`KVCacheManager.lookup()`, `allocate_slots(..., hits)`). The hit has a limit of `(len(prompt) − 1) // B` blocks,
+because the engine must compute the last token to get logits. Thus two identical 20-token prompts with $B$ = 4 share 16
 tokens, not 20 (vLLM: `max_cache_hit_length = num_tokens − 1`).
 
 The scheduler **publishes** a block as soon as it schedules the tokens that fill the block, not after the step. In
@@ -418,8 +418,9 @@ matters for agents. Requests that the scheduler admits in the same step share a 
 Thus a burst of N parallel calls behind one system prompt prefills that prompt once and holds one copy. Notebook 03,
 worked example 3, shows this: three requests, one step, `[0, 176, 176]` tokens from cache.
 
-The core publishes the blocks of a request that runs only when it can no longer preempt a request in that step. Thus
-a request that the scheduler takes out of the batch never names blocks that it will not compute.
+The core does not publish the blocks of a request in the `RUNNING` state at once. The core publishes them only when
+the scheduler can preempt no more requests in that step. Thus a request that the scheduler takes out of the batch
+never names blocks that it will not compute.
 
 **No copy-on-write.** Requests share only full, immutable blocks. The hit stops before the last prompt token. A
 request always writes its new tokens into its own blocks. Thus block-hash prefix caching never copies a shared block.
@@ -437,12 +438,12 @@ head. In notebook 03, an unrelated request evicted 13 blocks, and after that the
 were still in the cache. Thus prefix caching costs no memory. It uses memory that no other request needs yet.
 
 **Hit accounting** is in tokens. `vllm:prefix_cache_queries` counts the prompt tokens that new requests look up.
-`vllm:prefix_cache_hits` counts the tokens that they find. The engine counts the second lookup of a preempted request
+`vllm:prefix_cache_hits` counts the tokens that they find. The engine counts each new lookup of a preempted request
 separately (`preempted_queries` / `preempted_hits`, not exported). Thus a victim that hits its own blocks again does
 not make the hit rate too high (`CacheStats`).
 
 Take three requests that share a 183-token system prompt. The second and third requests hit 176 tokens (the 11 full
-blocks of the prompt) of their 205–210 prompt tokens.
+blocks of the system prompt) of their 205–210 prompt tokens.
 
 The gain is in TTFT and prefill compute. Notebook 03, worked example 6, shows it with
 `perf.Workload(n_requests=60, rate=6, prompt_len=(2000, 2200), output_len=(40, 80), shared_prefix=1800)`
@@ -462,7 +463,7 @@ routers use those events (05).
 
 ### Prompt layout for agents
 
-**Designing agent prompts for hits.** The cache matches prefixes exactly, token for token. Thus, use this layout:
+**Agent prompts that get hits.** The cache matches prefixes exactly, token for token. Thus, use this layout:
 
 - Put stable content first: the system prompt, tool schemas in an order that does not change, few-shot examples
   and long documents.
@@ -549,8 +550,8 @@ Validate the values downstream. Monitor the logprobs of constrained fields.
 
 ## 7. Speculative decoding
 
-Decode is memory-bound (§3). The score of $k$ + 1 positions costs approximately the same as the score of one
-position. Thus let a low-cost **proposer** make $k$ draft tokens, and let the target examine them all in one pass.
+Because decode is memory-bound (§3), the score of $k$ + 1 positions costs approximately the same as the score of
+one position. Thus let a low-cost **proposer** make $k$ draft tokens, and let the target examine them all in one pass.
 
 ### Exact rejection sampling
 
@@ -626,7 +627,7 @@ pair on the target's own text. Thus, for a fine-tuned target, a draft trained on
 better than an off-the-shelf small model of the same family. See
 [distillation primer §7](../../00-foundations/distillation/PRIMER.md#7-a-distilled-draft-for-speculative-decoding).
 
-**When it stops paying** (SIMULATED, `perf.spec_speedup()`, notebook 05: Llama-3.1-8B target, Llama-3.2-1B draft,
+**When speculation gives no more gain** (SIMULATED, `perf.spec_speedup()`, notebook 05: Llama-3.1-8B target, Llama-3.2-1B draft,
 H100, $\alpha$ = 0.7, $k$ = 4). A round is one engine step. It pays these costs:
 
 - the fixed overhead of the step, one time (2 ms, as everywhere in this primer),
@@ -702,7 +703,7 @@ aggregate error, but the 31 normal channels are at 62%. Thus **aggregate metrics
 
 ### Kernels, speed and accuracy
 
-**Weight-only vs W8A8.** *Weight-only* formats (W4A16/W8A16) dequantize to bf16 inside the GEMM. GPTQ uses
+**Weight-only against W8A8.** *Weight-only* formats (W4A16/W8A16) dequantize to bf16 inside the GEMM. GPTQ uses
 second-order error compensation. AWQ uses scales that protect the channels with large activations. Both run with
 Marlin-style kernels. Weight-only formats decrease the **bytes**, not the FLOPs.
 
@@ -739,7 +740,7 @@ emulation costs 2e-5 nats of KL and 1% of top-1 agreement on its small model. On
 concurrency lever before it is a speed lever**
 ([capacity primer, formula 2](../../00-foundations/gpu-capacity-planning/PRIMER.md)).
 
-**Checking accuracy.** Compare distributions, not strings. Use the mean KL and top-1 agreement over many positions
+**How to examine accuracy.** Compare distributions, not strings. Use the mean KL and top-1 agreement over many positions
 (`quant.compare_logits()`), perplexity, and most of all task-level evals on your own data. Greedy text is a brittle
 metric. In notebook 06, an INT8 model with 99.8% top-1 agreement diverges from the full-precision greedy text after
 13 tokens. The cause is one flipped near-tie, which changes everything after it.
@@ -798,7 +799,7 @@ through dispatch and combine, the slowest rank, and TP against EP for experts.
 linearly. The important part is to route requests to the replica that holds their prefix and has the least load
 (layer 05).
 
-**Choosing.** Use the smallest TP that holds the weights and the KV cache that you need. Add replicas for throughput.
+**How to select.** Use the smallest TP that holds the weights and the KV cache that you need. Add replicas for throughput.
 An 8B model fits one 24 GB GPU (§4). A 70B model needs 141 GB in bf16. For this model, these are the options:
 
 - TP = 2 on 80 GB GPUs leaves almost nothing for KV.
@@ -833,8 +834,8 @@ The engine manages these things:
 - **Cost.** Each adapted step pays for the extra shrink/expand matmuls. Cold adapters pay a load. Many distinct
   adapters per step make batching less effective. `vllm:lora_requests_info` reports the adapters that run and the
   adapters that wait.
-- **Routing.** With several replicas, to send an adapter's traffic to replicas that already have it loaded is an
-  affinity problem. It is like prefix caching (layer 05).
+- **Routing.** With several replicas, the task to send the traffic of an adapter to the replicas that already
+  have it loaded is an affinity problem. Prefix caching is the same type of affinity problem (layer 05).
 
 ## 11. Measuring an engine
 
@@ -897,8 +898,8 @@ notebook 02 (SIMULATED), a saturated engine streams 1,700–2,300 tok/s. But it 
 | scheduling `policy` | per-request priority | fairness, starvation of low priority |
 
 **Simulate before you measure.** `perf.simulate()` runs the scheduler and KV manager of this package under Poisson
-load, with the step-time model of §3. It reproduces the *shape* of every trade-off before this paragraph in
-seconds on a laptop. Thus the measurements of the lab become predictions that you examine.
+load, with the step-time model of §3. It reproduces the *shape* of every trade-off in the knob table of this
+section in seconds on a laptop. Thus the measurements of the lab become predictions that you examine.
 
 Its output has the label SIMULATED. Its assumptions (efficiencies, overhead, spec-sheet numbers) are parameters.
 Calibrate them against one real measurement before you trust absolute values.
@@ -907,7 +908,7 @@ Calibrate them against one real measurement before you trust absolute values.
 
 **The engines** (Sep 2026). Each claim is a summary. Compare each claim with the current docs (verify):
 
-| Engine | What it is | Choose it when |
+| Engine | What it is | Select it when |
 |---|---|---|
 | **vLLM** | the default open-source server. It has the V1 architecture, PagedAttention, continuous batching, and prefix caching and chunked prefill on by default. It has broad model and quantization coverage, an OpenAI-compatible API and Prometheus metrics. It has NVIDIA, AMD, TPU and CPU backends | most deployments, the base of llm-d and many managed services |
 | **SGLang** | RadixAttention prefix cache, a fast structured-output path, strong multi-turn and large-MoE (data-parallel attention + expert parallel) support | prefix-heavy, agentic and structured workloads, large MoE |
@@ -947,11 +948,12 @@ are not complete. Then the scheduler admits the requests that wait, while there 
 reads the history of each request through its block table.
 
 "A step is memory-bound up to ~300 tokens on an H100. Thus decodes batch at almost no cost, and a long prompt is the
-high-cost item. Chunked prefill caps the step, so an 8K-token prompt cannot stop the stream of all other requests. I
+high-cost item. Chunked prefill caps the step, so an 8K-token prompt cannot make the streams of all other requests wait. I
 set the budget as large as the ITL SLO permits.
 
-"KV memory caps concurrency, at about 30 chat sessions for an 8B model on an L4. When it runs out, the scheduler
-preempts the newest request, and the engine computes it again. That shows up as TTFT, so we alert on preemptions.
+"KV memory caps concurrency, at about 30 chat sessions for an 8B model on an L4. When the KV memory runs out, the
+scheduler preempts the newest request, and the engine computes that request again. The preemption shows up as TTFT,
+so we alert on preemptions.
 
 "Prefix caching gives each full block a name: a hash chained through its parent. Thus the engine computes the shared
 system prompt and the append-only histories of our agents only once. That decides our prompt layout. Sampling and
@@ -973,8 +975,9 @@ We measure with open-loop load at realistic lengths, and we report goodput again
    gives 367 ms against 17 ms on an L4 for an 8K prompt (SIMULATED). Make sure that chunked prefill is on. Decrease
    `max_num_batched_tokens` until the worst step (all decodes + one full chunk) meets the SLO. If prefill-heavy
    traffic still hurts decode, disaggregate prefill and decode (05).
-3. *`vllm:num_preemptions` increases at peak and TTFT p99 is 5×. What occurs?* The requests that run become larger
-   than the KV pool. Each preemption frees the blocks of the newest request, and the engine computes it again later.
+3. *`vllm:num_preemptions` increases at peak and TTFT p99 is 5×. What occurs?* The KV of the requests that run becomes
+   larger than the KV pool. Each preemption frees the blocks of the newest request, and the engine computes that
+   request again later.
    The scheduler admits no new requests in that step. Add KV capacity (FP8 KV, utilisation, a smaller or quantized
    model), set a lower `max_num_seqs`, or add replicas. The whole-prompt admission check prevents over-admission with
    chunked prefill.
@@ -1017,7 +1020,7 @@ We measure with open-loop load at realistic lengths, and we report goodput again
 | Free queue (LRU) | reusable blocks, least recently freed first. Cached blocks keep their names until eviction |
 | RadixAttention | SGLang's token-granular prefix cache kept as a radix tree |
 | Top-p / min-p | keep the smallest set that reaches mass $p$ / keep tokens with prob ≥ min_p × the top token's |
-| Structured output | masking logits with a grammar automaton so every output parses |
+| Structured output | a mask on the logits from a grammar automaton, so that every output parses |
 | Speculative decoding | a low-cost draft of $k$ tokens, which one target pass verifies with exact rejection sampling |
 | Acceptance rate $\alpha$ | $\sum \min(p, q) = 1 - \operatorname{TV}(p, q)$ for a sampled draft (${p(x)}$ for a greedy one): the probability that a draft token survives |
 | EAGLE / MTP | draft heads on the target's hidden states / multi-token prediction heads trained with the model |

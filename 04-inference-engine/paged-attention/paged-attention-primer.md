@@ -2,7 +2,7 @@
 
 ## Why the KV cache is the problem
 
-To first order, the throughput of an engine that serves autoregressive LLMs is a batching problem. Decode is memory-bandwidth-bound. Each step reads all the weights and every cached K and V to make one token per sequence. Thus the tensor cores are idle most of the time, unless many sequences share each forward pass. The constraint that sets the limit on batch size is memory.
+To first order, the throughput of an engine that serves autoregressive LLMs is a batching problem. Decode is memory-bandwidth-bound, because each step reads all the weights and every cached K and V to make one token per sequence. Thus the tensor cores are idle most of the time, unless many sequences share each forward pass. The constraint that sets the limit on batch size is memory.
 
 The weights are static and the activations are small. Thus the KV cache is the dynamic user of memory. During decode, each new token attends over the keys and values of every token before it. If the engine calculates those projections again at each step, generation becomes quadratic in sequence length. Thus the engines that serve LLMs cache them.
 
@@ -18,7 +18,7 @@ Before vLLM, production systems (FasterTransformer, Orca) kept the KV cache of e
 - Reservation waste: slots that the request will use later, but that are empty now. During that time, no other request can use them.
 - External fragmentation: gaps between contiguous allocations of variable size. Each gap is too small for a new request.
 
-The PagedAttention paper measured that only about 20–40% of KV cache memory in these systems held actual token state. Most of the most limited resource on the GPU held only reservations and no data.
+The PagedAttention paper measured that only about 20–40% of KV cache memory in these systems held actual token state. This memory is the most limited resource on the GPU, and most of it held only reservations and no data.
 
 ## The core idea: virtual memory, applied to attention
 
@@ -44,11 +44,11 @@ Without contiguity, there is a cost: the attention kernel cannot read K and V as
 
 - It takes the block table as an input.
 - It goes through the logical blocks of each sequence.
-- It gathers the related physical blocks.
+- It gathers the physical blocks that the block table maps them to.
 - It calculates the attention scores block by block.
 - It combines the partial results with an online-softmax accumulation.
 
-This accumulation is the same numerically stable method that FlashAttention uses for tiling: it keeps the maximum so far and rescales. Here, the kernel applies it to an access pattern that gathers from blocks. In the paper's microbenchmarks, this costs approximately 20–26% more latency on the attention kernel alone, relative to a contiguous layout. But attention is only a fraction of the end-to-end step time. The batching gains that paged attention makes possible are larger than this cost by a wide margin.
+This accumulation is the same numerically stable method that FlashAttention uses for tiling: it keeps the maximum so far and rescales. Here, the kernel applies it to an access pattern that gathers from blocks. In the paper's microbenchmarks, the paged kernel costs approximately 20–26% more latency on the attention kernel alone, relative to a contiguous layout. But attention is only a fraction of the end-to-end step time. The batching gains that paged attention makes possible are larger than this cost by a wide margin.
 
 It is useful to be precise about the relation to FlashAttention, because people often confuse the two. FlashAttention is about how to *calculate* attention with efficient IO: it never puts the full score matrix in HBM. PagedAttention is about how to *store* the KV cache flexibly. The two are orthogonal, and you can use them together. Modern kernels (FlashAttention-2/3, FlashInfer) accept paged KV layouts natively. "Paged KV" is now the standard interface contract for attention kernels in the software stacks that serve LLMs.
 
@@ -64,26 +64,25 @@ Three workloads get a benefit.
 
 ## Scheduling: continuous batching and preemption
 
-The engine allocates memory block by block as sequences grow. Thus the scheduler does not need to know the output lengths to admit requests. It admits requests until few free blocks stay in the physical pool. Paged attention combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor.
+The engine allocates memory block by block as sequences grow. Thus the scheduler does not need to know the output lengths to admit requests. It admits requests until few free blocks stay in the physical pool.
 
-vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
+Paged attention combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
 
-The design question of most interest is this: what occurs when the pool becomes empty while requests are in progress? The engine promised the blocks optimistically, so this can occur. vLLM preempts victim sequences with one of two mechanisms.
+A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this can occur. vLLM preempts victim sequences with one of two mechanisms.
 
-- A swap copies the blocks of a sequence out to CPU RAM, and later back. PCIe bandwidth sets the limit on its speed.
-- Recomputation frees the blocks. When the scheduler schedules the sequence again, the engine replays its full prompt-plus-generated-so-far as a single prefill. Recomputation often takes less time than a swap. The reason is that prefill is one large parallel pass, but a swap moves many small blocks over a slow bus.
+Swapping copies the blocks of a sequence out to CPU RAM, and later back. PCIe bandwidth sets the limit on its speed. Recomputation frees the blocks. When the scheduler schedules the sequence again, the engine replays its full prompt-plus-generated-so-far as a single prefill. Recomputation often takes less time than swapping. The reason is that prefill is one large parallel pass, but swapping moves many small blocks over a slow bus.
 
-Eviction is all-or-nothing per sequence. Each step uses every block of a sequence. Thus partial residency is of no use. Which mechanism is better depends on block size and hardware. Small blocks favor recomputation, and large blocks favor a swap.
+Eviction is all-or-nothing per sequence. Each step uses every block of a sequence. Thus partial residency is of no use. Which mechanism is better depends on block size and hardware. Small blocks favor recomputation, and large blocks favor swapping.
 
 ## Design trade-offs worth knowing
 
-Block size is the central parameter to adjust. With smaller blocks, sequences can share memory at a finer granularity, and each sequence has less internal waste. But they also give larger block tables, more gather overhead and worse memory coalescing in the kernel. Larger blocks give the opposite of all of these. Sixteen tokens is the empirical middle point. It has stayed in use as the default to a remarkable degree.
+Block size is the central parameter to adjust. With smaller blocks, sequences can share memory at a finer granularity, and each sequence has less internal waste. But smaller blocks also give larger block tables, more gather overhead and worse memory coalescing in the kernel. Larger blocks give the opposite of all of these. Sixteen tokens is the empirical middle point. It is still the default, and it has stayed the default for a remarkably long time.
 
 Paged attention is also orthogonal to all the methods that make the cache itself smaller, and the effects multiply. GQA and MQA decrease `n_kv_heads`. DeepSeek-style MLA compresses K and V into a low-rank latent. FP8/INT8 KV quantization divides the bytes per element by two or by four. All of these methods decrease the size of the contents of each block. Paged attention controls how the engine places, shares and evicts the blocks.
 
-The strongest critique came from vAttention (2024). vAttention says that PagedAttention implements virtual memory again in user space, with software block tables and rewritten kernels. It points out that CUDA's virtual memory management APIs can keep the cache virtually contiguous, with physical pages under it. With those APIs, unmodified kernels can run.
+The strongest critique came from vAttention (2024). vAttention says that PagedAttention implements virtual memory again in user space, with software block tables and rewritten kernels. But CUDA's virtual memory management APIs can keep the cache virtually contiguous, with physical pages under it. With those APIs, unmodified kernels can run.
 
-It is a fair architectural point, but in practice the paged model won. TensorRT-LLM, HF TGI, SGLang, and LMDeploy all started to use paged KV caches. Newer KV-centric architectures also build directly on block-managed caches as the unit of transfer. Disaggregated prefill/decode systems like Mooncake and DistServe are examples. These systems send KV blocks between prefill and decode workers.
+The critique of vAttention is a fair architectural point, but in practice the paged model won. TensorRT-LLM, HF TGI, SGLang, and LMDeploy all started to use paged KV caches. Newer KV-centric architectures also build directly on block-managed caches as the unit of transfer. Disaggregated prefill/decode systems like Mooncake and DistServe are examples. These systems send KV blocks between prefill and decode workers.
 
 ## Numbers to keep in your pocket
 
@@ -99,7 +98,7 @@ Remember these numbers:
 
 The primary source is Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023 (arXiv:2309.06180). It is unusually easy to read. For continuous batching, read Yu et al., "Orca," OSDI 2022. For RadixAttention, read Zheng et al., "SGLang" (arXiv:2312.07104). For the counter-argument, read Prabhu et al., "vAttention" (arXiv:2405.04437). For the complement on the compute side, read Dao et al., FlashAttention 1/2.
 
-**Code and tests.** [`kernel-core`](../kernel-core/README.md) puts [`paged_attention_minimal.py`](paged_attention_minimal.py) in a package as `kerncore.paged` (a pool object with refcounts, copy-on-write and the blockwise online softmax). The test file `kernel-core/tests/test_paged.py` makes sure that the two agree. The test file `kernel-core/tests/test_primer_numbers.py` calculates again the per-token and per-sequence sizes of this page. Both run in about a second on any CPU.
+**Code and tests.** [`kernel-core`](../kernel-core/README.md) puts [`paged_attention_minimal.py`](paged_attention_minimal.py) in a package as `kerncore.paged` (a pool object with refcounts, copy-on-write and the blockwise online softmax). The test file `kernel-core/tests/test_paged.py` makes sure that the two agree. The test file `kernel-core/tests/test_primer_numbers.py` calculates the per-token and per-sequence sizes of this page again. Both run in about a second on any CPU.
 
 ## Verify list (dated 2026-09-26)
 
@@ -111,6 +110,6 @@ This table lists the paper and product facts that this primer states. This prime
 | KV utilization before and after paging | 20–40% of KV memory held token state before. Waste was 60–80% before and under 4% with paging. | PagedAttention paper (Kwon et al., SOSP 2023) |
 | Kernel overhead | 20–26% extra attention-kernel latency, relative to a contiguous layout | paper microbenchmark, on the paper's GPUs and kernel |
 | Sharing savings | ~6–10% for parallel sampling, up to ~55% for wide beam search | paper figures |
-| Throughput | 2–4× over FasterTransformer and Orca at matched latency | paper figure. Engines have changed a lot since then. |
-| Default block size | 16 tokens in vLLM | engine default. Attention backends can select another size. |
+| Throughput | 2–4× over FasterTransformer and Orca at matched latency | paper figure, and engines have changed a lot since then |
+| Default block size | 16 tokens in vLLM | engine default, and attention backends can select another size |
 | Adoption | TensorRT-LLM, HF TGI, SGLang and LMDeploy use paged KV caches. FlashAttention-2/3 and FlashInfer accept paged layouts. | project docs at the release in use |

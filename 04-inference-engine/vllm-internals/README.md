@@ -17,7 +17,7 @@ For each mechanism, the topic gives a citation to a file and a function in vLLM 
 2. Open [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb).
    Write your own code for the parts that vLLM does differently from the mini engine.
 3. Clone vLLM at `5840d95`. Then read the code in the order of the plan in [`source-map.md`](source-map.md).
-   Do one sitting at a time.
+   Read one sitting of the plan at a time.
 
 ## What you get
 
@@ -26,9 +26,9 @@ box, rented for an hour.* The times are approximate.
 
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`vllm-internals-primer.md`](vllm-internals-primer.md) | explain the API-server / EngineCore split, the token-budget scheduler, and admission and preemption. Explain block-hash prefix caching and its eviction order, and how vLLM calculates the size of the pool from `gpu_memory_utilization`. Explain the model runner and CUDA graphs, the selection of the attention backend, sampling and speculation, and quantization and weight loading. Explain KV connectors, and the flags, metrics and log lines that show all of it | §1–4 first, then the other sections when you need them | T0 |
-| [`source-map.md`](source-map.md) | find each of those mechanisms in the code. The file has an index from concept to file to symbol, with line numbers at `5840d95`. It also has a plan to read the code in four sittings of about two hours. Each time slot gives named line ranges, the branches to step over and a line count | four ~2 h sittings (about 8.5 h) | T0 |
-| [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb) | implement the capped longest hit and predict the free queue. Write `free_blocks` (uncached blocks to the head, LRU refresh) and the full-sequence admission gate with evictable hits. A check comes after each exercise. The last check replays the preemption case of the primer (§3.7) at small scale. A final section calculates again each worked number in the primer. For the KV budgets, it uses `servelab.sizing` from the serving lab | ~1.5 h | T0 |
+| [`vllm-internals-primer.md`](vllm-internals-primer.md) | explain the API-server / EngineCore split, the token-budget scheduler, and admission and preemption. You can also explain block-hash prefix caching and its eviction order, and how vLLM calculates the size of the pool from `gpu_memory_utilization`. You can also explain the model runner and CUDA graphs, the selection of the attention backend, sampling and speculation, and quantization and weight loading. You can also explain KV connectors, and the flags, metrics and log lines that show all of it | §1–4 first, then the other sections when you need them | T0 |
+| [`source-map.md`](source-map.md) | find each of those mechanisms in the code. The file has an index from concept to file to symbol, with line numbers at `5840d95`. It also has a plan to read the code in four sittings of about two hours. Each slot gives named line ranges, the branches to step over and a line count | four ~2 h sittings (about 8.5 h) | T0 |
+| [`notebooks/01_block_hashes_and_eviction.ipynb`](notebooks/01_block_hashes_and_eviction.ipynb) | implement the capped longest hit and predict the free queue. You can also write `free_blocks` (uncached blocks to the head, LRU refresh) and the full-sequence admission gate with evictable hits. A check comes after each exercise. The last check replays the preemption case of the primer (§3.7) at small scale. A final section calculates each worked number in the primer again. For the KV budgets, it uses `servelab.sizing` from the serving lab | ~1.5 h | T0 |
 
 ## Run it
 
@@ -41,7 +41,7 @@ git clone https://github.com/vllm-project/vllm && git -C vllm checkout 5840d95  
 | Part | Tier | Needs |
 |---|---|---|
 | `vllm-internals-primer.md`, `source-map.md` | T0 | a browser or a clone of vLLM at `5840d95` |
-| `notebooks/01_block_hashes_and_eviction.ipynb` | T0 | Python 3 standard library. It runs on a laptop or a Colab CPU |
+| `notebooks/01_block_hashes_and_eviction.ipynb` | T0 | Python 3 standard library. The notebook runs on a laptop or a Colab CPU |
 | Primer §13.2, the one-process recipe to debug vLLM | T1 | one GPU. A free Colab or Kaggle T4 is sufficient with a 0.6B model. Primer §13.1 lists the options |
 | To monitor metrics, preemption and spec-decode acceptance | T1 | the serving lab on any single GPU |
 | Tensor/pipeline parallelism, P/D disaggregation (§5.6, §10) | T2 | a multi-GPU box, and RDMA for a realistic KV transfer |
@@ -55,7 +55,7 @@ batching, chunked prefill, prefix caching, speculation, quantization). They are 
 
 The mini engine [`../serving-engine/mini-engine-core/`](../serving-engine/mini-engine-core/) builds the same
 scheduler and block cache from nothing (`minengine/kv.py`, `minengine/scheduler.py`, notebooks `01` to `03`). Primer
-§4.1 gives the vLLM name for each of its names. To see the engine run, use
+§4.1 gives the vLLM name for each of its names. To see vLLM run, use
 [`../serving-engine/vllm-serving-lab/`](../serving-engine/vllm-serving-lab/). It serves a real model, scrapes
 `/metrics` and sweeps the flags of primer §11.
 
@@ -72,10 +72,10 @@ For kernels, the FlashAttention [deep dive](../flash-attention/flash-attention-d
 ## What you should be able to explain afterwards
 
 - Why the scheduler has no prefill or decode phase, and what one step of `Scheduler.schedule` does.
-- How many KV blocks a given model gets on a given GPU. Why the default context length can prevent the start of
+- How many KV blocks a given model gets on a given GPU. Also, why the default context length can prevent the start of
   vLLM on a 24 GB card.
 - Why a fully cached prompt still computes one block, and in which order the pool evicts cached blocks.
-- Why a preempted request usually cannot return until the request that displaced it finishes. What that does to
-  all the requests in the queue behind it.
+- Why a preempted request usually cannot return until the request that displaced it finishes. Also, what that does
+  to all the requests in the queue behind it.
 - Which flag trades time-to-first-token against inter-token latency, and which flag only changes memory.
 - Where stop strings, EOS, grammar masks and speculative verification occur, and in which process.

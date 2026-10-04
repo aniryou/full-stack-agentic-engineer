@@ -25,7 +25,7 @@
 # request gets one more gap of ~0 ms.
 #
 # This lab ignores the role-only chunk. Thus, TTFT is the same, and the chat ITL has one fewer entry, which is near
-# zero. (The mean is higher by ~$1/n$ for $n$ tokens.) For completions, the two methods give identical results.
+# zero. Because of this, the mean ITL is higher by ~$1/n$ for $n$ tokens. For completions, the two methods give identical results.
 #
 # The `/metrics` endpoint of the engine gives the view of the server: queue depth, batch size, KV usage and
 # latency *histograms*. The percentiles of a histogram are interpolations inside buckets. How you send the
@@ -231,7 +231,7 @@ print("✅ histogram_quantile matches PromQL's algorithm; server TTFT p99 =",
 # ## Open loop versus closed loop, on a server you can overload
 #
 # To see overload at low cost, we start a second fake server. Its batch has a limit of 4 sequences
-# (`max_num_seqs=4`). This server gives *simulated* numbers at every tier. On a GPU, do it again with
+# (`max_num_seqs=4`). This server gives *simulated* numbers at every tier. On a GPU, do this experiment again with
 # `vllm serve ... --max-num-seqs 4`. First, a closed loop: 4 users, and each user sends the next request
 # when the previous answer is complete.
 
@@ -340,7 +340,7 @@ print(f"✅ Little's law: predicted {predicted:.2f} in flight, engine gauges ave
 # %% [markdown]
 # ## Exercise 2.6 — the workload's shape: burstiness and long tails
 #
-# Two runs at the same mean rate can put loads on an engine that have large differences.
+# Two runs at the same mean rate can put different loads on an engine, and the difference can be large.
 # `vllm bench serve --burstiness b` (and `arrival_times` here) samples the gaps between requests from a
 # Gamma distribution with shape $b$ and mean $1 / \mathtt{rate}$. The coefficient of variation (std
 # / mean) of this distribution is $1 / \sqrt{b}$: 1 for Poisson, 2 at $b = 0.25$. Write `gap_cv(burstiness)`.
@@ -403,7 +403,7 @@ target.stop()
 # numbers in a histogram are the means."
 #
 # **Drill 1.** *Throughput went up 20% and p99 TTFT doubled. Is that better?* Only if goodput
-# increased. At a fixed SLO, more requests that miss the TTFT target can mean less capacity that you can sell.
+# increased. At the same SLO, more requests that miss the TTFT target can mean less capacity that you can sell.
 #
 # **Drill 2.** *The Grafana panel says p50 queue time 150 ms, but users see no delay. Who is right?*
 # Probably the users, because the first queue-time bucket of vLLM is 0-0.3 s. Thus, the interpolation for a queue

@@ -10,7 +10,7 @@ The code, the capacity model and the practice notebooks for this primer are in t
 
 ## 0. The thesis, and how the round tests it
 
-The way to scale an agent system is to put a limit on tokens, not to add servers. Some things look like a classic capacity problem: instances, connections, queue depth and database throughput. All of them are small and low-cost when you compare them with one number. That number is the tokens per minute at the model. You share this resource with all of your organisation, and you cannot buy it by the instance.
+The way to scale an agent system is to put a limit on tokens, not to add servers. The things that look like a classic capacity problem are instances, connections, queue depth and database throughput. All of them are small and low-cost when you compare them with one number. That number is the tokens per minute at the model. You share this resource with all of your organisation, and you cannot buy it by the instance.
 
 The design work has three goals:
 
@@ -108,7 +108,7 @@ The loop has these steps:
 5. More turns in flight cause more memory, more queued model calls and more retries.
 6. These cause more 429s.
 
-Without a circuit breaker on the loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users stop. When the users stop, the system has already used their tokens.
+Without a circuit breaker on the loop, an agent system under overload does not fail fast. It slows down for everyone until the turn deadlines expire and the users go away. By then, the users have already used the tokens.
 
 The load generator in the lab shows this in a few seconds (notebook 04). It puts 120 virtual users against a simulated 3 M TPM pool:
 
@@ -242,7 +242,7 @@ $$
 \text{uncached input} \times 1 + \text{cached input} \times 0.1 + \text{output} \times 6.
 $$
 
-The anchor call has a burndown of 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens. Thus one GSU serves about 0.14 calls per second. All of the standard-model share (65 % of calls) on PT needs 69 GSUs at average, 207 at peak and 688 during an incident.
+The anchor call has a burndown of 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens. Thus one GSU serves about 0.14 calls per second. The standard-model share (65 % of calls), all on PT, needs 69 GSUs at average, 207 at peak and 688 during an incident.
 
 | Term | $ per GSU-hour | $ per M burndown tokens at 100 % utilisation | Break-even utilisation against PayGo ($1.50/M burndown) |
 |---|---:|---:|---:|
@@ -253,7 +253,7 @@ The anchor call has a burndown of 2,000 + 300 + 2,100 ≈ 4,400–4,700 tokens. 
 
 Thus PT is not a discount unless you commit for a year *and* keep the units three-quarters busy. If you buy PT for the peak (207 GSUs), it is 33 % utilised on average and costs more than pay-as-you-go. The usual answer is to buy it for the base (69 GSUs, $138 k a month on a 1-year term). Then you let the peaks spill over to Priority or Standard PayGo. PT buys an SLA and immunity from the contention of the shared pool, for the traffic that is most important. That is why the request headers let you say, per call, "dedicated only", "spill over to Priority" or "bypass PT".
 
-> **In a design review.** "PT for the base load on a long term, spill-over for the peak, and for the incident, I *shape* the demand. Before anyone buys a monthly term, I examine the break-even utilisation. A monthly term never costs less than pay-as-you-go."
+> **In a design review.** "PT for the base load on a long term, spill-over for the peak, and for the incident, I *shape* the demand. Before anyone buys a monthly term, I examine the break-even utilisation, because a monthly term never costs less than pay-as-you-go."
 
 ### 3.6 The rest of the estate
 
@@ -317,7 +317,7 @@ Then the orchestrator writes the transcript, publishes the terminal event, decre
 
 *Gateway and orchestrator are separate services* because they scale on different signals and fail in different ways. To hold a streaming connection costs a coroutine and a few kilobytes. The gateway runs at high concurrency on request-based billing, and its instances are low-cost. To run the loop costs model tokens, tool calls and the memory of a full context. The orchestrator runs at moderate concurrency on instance-based billing, so that Cloud Run does not throttle the CPU of background work after the response.
 
-The per-instance limits of Cloud Run also apply in different ways to the two services. The 1,000-connection and 800 requests-per-second caps set the limit of a gateway instance. The memory per in-flight turn sets the limit of an orchestrator instance.
+Also, a different per-instance limit of Cloud Run is relevant to each service. The 1,000-connection and 800 requests-per-second caps set the limit of a gateway instance. The memory per in-flight turn sets the limit of an orchestrator instance.
 
 *A queue sits between them even though the user waits*, for three reasons:
 
@@ -488,7 +488,7 @@ SSE over HTTP/1.1 chunked transfer is the correct transport for a chat agent on 
 
 Cloud Run caps a response without chunked transfer at 32 MiB. It does not cap streams. WebSockets also work, but they need session affinity, which is best-effort. In both cases, you need a cross-instance fan-out through Redis pub/sub.
 
-The time-to-first-token that a user sees comes after the plan, the tools and the answer. That is about four seconds in the load tests. A TTFT SLO of two seconds is attainable only with *progress* events ("checking your invoice…") from the tool steps. The event stream already carries these events.
+The time-to-first-token that a user sees comes after the plan, the tools and the answer. That is about four seconds in the load tests. A TTFT SLO of two seconds is attainable only if the stream sends *progress* events ("checking your invoice…") from the tool steps. The event stream already carries these events.
 
 ### 5.8 Cloud Run settings that matter
 
@@ -658,17 +658,17 @@ Do the arithmetic first. 500 k/day is 5× the anchor. That gives ~70 M input TPM
 - a custom tier negotiated for spill-over,
 - a hard programme to cut tokens per call (explicit caches, compaction, lite routing to 50 %+).
 
-Then do the concurrency. There are 625 in-flight turns at peak and 2,000 in an incident. Thus the orchestrator needs 12–40 instances, which is still small. Redis and Firestore are satisfactory. In an incident, the billing mainframe at 87 QPS is *over* its 40 QPS limit. Thus the invoice cache and level-2 degradation become necessary, not optional.
+Then calculate the concurrency. There are 625 in-flight turns at peak and 2,000 in an incident. Thus the orchestrator needs 12–40 instances, which is still small. Redis and Firestore are satisfactory. In an incident, the billing mainframe at 87 QPS is *over* its 40 QPS limit. Thus the invoice cache and level-2 degradation become necessary, not optional.
 
-Then do the operational layer: per-tenant quotas if there are brands, multi-region if there is a residency or availability requirement, and cost allocation. At the end, say what you will confirm: a load test that reproduces the incident mix.
+Then describe the operational layer: per-tenant quotas if there are brands, multi-region if there is a residency or availability requirement, and cost allocation. At the end, say what you will confirm: a load test that reproduces the incident mix.
 
 **"The agent costs $0.30 per turn and p95 is 20 s in the morning peak — fix it."**
 
 Look at the trace first: where do the tokens and the seconds go, step by step? The typical findings and their corrections, in order:
 
 1. No caching, because the prefix is not stable or is below the minimum. Reorder and enlarge the prefix. Use an explicit cache.
-2. Pro on every call. Route to Flash, and use Flash-Lite for routing.
-3. A context that grows without compaction. Compact it, truncate tool results, and remove old tool traffic.
+2. Pro on every call. Route to Flash. Use Flash-Lite for routing.
+3. A context that grows without compaction. Compact the context. Truncate tool results. Remove old tool traffic.
 4. Sequential tools. Use parallel calls and prefetch.
 5. Retries without jitter, and a long deadline. Use jitter, a breaker and a fallback.
 6. No admission control, so the peak becomes a slow-motion collapse. Use an in-flight cap from the token budget, and degrade levels.
@@ -737,13 +737,13 @@ Official documentation read on 5 September 2026 (Google's product docs are now a
 
 The third-party latency measurements are from Artificial Analysis.
 
-Examine these items again before you rely on any of it:
+Examine these items again before you rely on any of this information:
 
 - model ids and retirement dates: a new Flash release starts a 45-day clock for 3.6/3.7/3.8, and the 2.5 line retires 20 October 2026. 3.1 Pro can leave preview.
-- Flash introductory pricing ends 31 December 2026,
-- PayGo tier baselines, and if cached tokens count against them,
-- Flex PayGo status,
-- the `google-genai` 3.0 release, which is not backward compatible,
-- Cloud Run defaults (max instances, gen2) and the Preview status of instances, controls for scale and spend caps,
-- Agent Runtime quotas and concurrency formula,
+- Flash introductory pricing ends 31 December 2026.
+- PayGo tier baselines, and if cached tokens count against them.
+- Flex PayGo status.
+- the `google-genai` 3.0 release, which is not backward compatible.
+- Cloud Run defaults (max instances, gen2) and the Preview status of instances, controls for scale and spend caps.
+- Agent Runtime quotas and concurrency formula.
 - the OTel GenAI attribute names.

@@ -58,8 +58,8 @@ show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 # %% [markdown]
 # Read the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
 # 22 ms. The decrease is not 3.9×, because the 16-bit LM head, the KV read and the step overhead do not decrease.
-# Prefill is compute: only FP8 W8A8 halves it. Sessions follow the bytes that stay for KV: FP8 KV doubles them at
-# any weight format.
+# Prefill is compute: only FP8 W8A8 halves it. The number of sessions depends on the bytes that stay for KV: FP8 KV
+# doubles it at any weight format.
 #
 # ## Worked example 2 — one GEMM on the roofline: where W4A16 stops paying
 # vllm-internals §8.1 calculates the time of Llama-3.1-8B's `down_proj` ($K = 14{,}336$, $N = 4{,}096$) on an L4 for
@@ -99,9 +99,10 @@ for g in C.GPUS.values():
 # weight-only model (Marlin FP8) with BF16 math. This gives a gain in memory only. NVFP4 is W4A4 only on Blackwell
 # (SM100/SM120, CUDA ≥ 12.8). On other GPUs, it runs as weight-only 4-bit.
 #
-# INT8 W8A8 is the Turing/Ampere way to make prefill faster. From compute capability 10.0, it has no support. A T4
-# has no FP8 KV cache in any vLLM backend. (These rules are for vLLM 0.30.0 and main, from the capability checks of
-# the kernels. Verify on your version: the log line `Selected <kernel> for <module>` is the truth.)
+# INT8 W8A8 is the Turing/Ampere way to make prefill faster. From compute capability 10.0, vLLM does not support INT8
+# W8A8. A T4 has no FP8 KV cache in any vLLM backend. These rules are for vLLM 0.30.0 and main, from the capability
+# checks of the kernels. Make sure of them on your version: the log line `Selected <kernel> for <module>` is the
+# truth.
 #
 # ## Worked example 4 — three deployments
 
@@ -116,13 +117,14 @@ show(C.table(C.GPUS["B200"], m8, kv=(8,), schemes=["bf16", "w8a8-fp8", "w8a8-int
 # %% [markdown]
 # On a T4, a 1.5B model is so small that quantization is about speed: INT4 for decode, INT8 W8A8 for prefill.
 #
-# On an H100, a 70B model in 16-bit does not fit at all. In FP8 it fits. But with the round memory inputs of this
-# model (0.9 × 80 GB − 1 GB), there is no room left for a 4K session. Take the defaults of vLLM on the 79.65 GiB that
-# an H100 reports (the lab's `quantlab.kv.size`). With them, there is room for 2 such sessions, or 4 with FP8 KV. In
-# both cases, there is no useful concurrency.
+# On an H100, a 70B model in 16-bit does not fit at all. In FP8 it fits. But the cost model of this notebook uses
+# round memory inputs (0.9 × 80 GB − 1 GB). With these inputs, there is no room left for a 4K session.
 #
-# On one GPU, only a 4-bit format serves it. With FP8, you need two GPUs with tensor parallelism, or the 141 GB of an
-# H200. On a B200, NVFP4 W4A4 is the 4-bit format that also cuts prefill FLOPs. This is true if the model survives
+# Take the defaults of vLLM on the 79.65 GiB that an H100 reports (the lab's `quantlab.kv.size`). With them, there is
+# room for 2 such sessions, or 4 with FP8 KV. In both cases, there is no useful concurrency.
+#
+# On one GPU, only a 4-bit format serves the 70B model. With FP8, you need two GPUs with tensor parallelism, or the
+# 141 GB of an H200. On a B200, NVFP4 W4A4 is the 4-bit format that also cuts prefill FLOPs. This is true if the model survives
 # 4-bit activations (notebook 04, worked example 4).
 #
 # ## Worked example 5 — what it costs per million tokens
@@ -147,9 +149,10 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 # to approximately half.
 #
 # ## Worked example 6 — the accuracy gate
-# The eval decides which rows it permits at all. Here, the model is the small model of notebook 03. The budget is
-# $\mathrm{KL} \le 0.05$ nats, and an accuracy drop within two standard errors of the difference (`E.diff_stderr`,
-# unpaired). The paired McNemar z on the flips, `E.paired_z`, is the sharper test (primer §8):
+# The eval decides which rows it permits at all. Here, the model is the tiny model of notebook 03. The budget has two
+# limits: $\mathrm{KL} \le 0.05$ nats, and an accuracy drop within two standard errors of the difference
+# (`E.diff_stderr`, unpaired). The paired McNemar z on the flips, `E.paired_z`, is the sharper test (primer §8). The
+# next cell applies the budget:
 
 # %%
 tm = TinyModel()
@@ -165,7 +168,8 @@ for label, q in (("INT8 RTN", quantize_model(tm, "rtn", 8, None)), ("INT4 RTN g3
 # %% [markdown]
 # Here, the budget permits INT4 only with GPTQ: the recipe is part of the scheme. The 0.6-point drop of GPTQ is
 # inside the unpaired noise bar. But the paired flips (85 lost, 61 gained, ${z = -2.0}$) show a small but probably
-# real loss. Thus make sure that a budget says which test it means. `choose(rows, allowed=...)` takes that set.
+# real loss. Thus make sure that a budget says which test it means. `choose(rows, allowed=...)` takes the set of
+# schemes that the budget permits.
 #
 # ## Exercise 5.1 — the W4A16 crossover by hand
 # Take a linear with $K$ inputs, $N$ outputs and $M$ tokens. The FLOPs are ${2MKN}$. The bytes are
@@ -192,8 +196,8 @@ print(f"✅ {m_l4:.0f} tokens on an L4, {m_h100:.0f} on an H100: past that W4A16
 # %% [markdown]
 # ## Exercise 5.2 — what does an FP8 W8A8 checkpoint run as?
 # Do not call `cost.supported`. Fill `runs_as` for an FP8 W8A8 checkpoint (`"w8a8-fp8"`) on each GPU. Give the
-# scheme that it actually executes: `"w8a8-fp8"` or `"w8a16-fp8"` (weight-only). Use the compute capabilities
-# (T4 7.5, A100 8.0, L4 8.9, H100 9.0, B200 10.0).
+# scheme that the checkpoint actually executes on that GPU: `"w8a8-fp8"` or `"w8a16-fp8"` (weight-only). Use the
+# compute capabilities (T4 7.5, A100 8.0, L4 8.9, H100 9.0, B200 10.0).
 
 # %% exercise
 runs_as = {"T4": None, "A100-80GB": None, "L4": None, "H100-SXM": None, "B200": None}

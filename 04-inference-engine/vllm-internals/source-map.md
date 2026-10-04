@@ -11,7 +11,7 @@ The line numbers in this file are for that commit. On `main`, they change each d
 for the name of the symbol. To browse the same tree, use this command:
 `git clone --filter=blob:none https://github.com/vllm-project/vllm && git -C vllm checkout 5840d95`.
 
-**Tier:** T0 (read only).
+**Tier:** T0 (you only read the code).
 
 ---
 
@@ -53,7 +53,7 @@ for the name of the symbol. To browse the same tree, use this command:
 | | `vllm/v1/executor/ray_executor_v2.py` (Ray default), `ray_executor.py` (legacy) | `RayWorkerProc` (79), `RayExecutorV2` (239), `_init_executor` (284), `start_worker_monitor` (487). In `ray_executor.py`: `RayDistributedExecutor` (66), `_compiled_ray_dag` (543) |
 | | `vllm/envs.py`, `vllm/config/parallel.py` | `VLLM_USE_RAY_V2_EXECUTOR_BACKEND` (935, default `"1"`). `ParallelConfig.__post_init__` backend default (989–1034) |
 | | `vllm/distributed/device_communicators/shm_broadcast.py` | `MessageQueue`, `ShmRingBuffer` |
-| Model runner V2, the default (5.3) | `vllm/v1/worker/gpu/model_runner.py` | `GPUModelRunner` (183), `profile_run` (934), `capture_model` (989), `finish_requests` (1082), `add_requests` (1111), `update_requests` (1166), `gather_batch_req_state` (1206), `prepare_inputs` (1259). `prepare_attn` (1460), `sample` (1496), `postprocess_sampled` (1576), `execute_model` (1616), `sample_tokens` (1982), `sort_batch_req_ids` (2317) |
+| Model runner V2, the default (5.3) | `vllm/v1/worker/gpu/model_runner.py` | `GPUModelRunner` (183), `profile_run` (934), `capture_model` (989), `finish_requests` (1082), `add_requests` (1111), `update_requests` (1166), `gather_batch_req_state` (1206), `prepare_inputs` (1259). Also `prepare_attn` (1460), `sample` (1496), `postprocess_sampled` (1576), `execute_model` (1616), `sample_tokens` (1982), `sort_batch_req_ids` (2317) |
 | | `vllm/v1/worker/gpu/states.py` | `RequestState` (9, `last_sampled_tokens` 65) |
 | | `vllm/v1/worker/gpu/input_batch.py` | `InputBatch` (39), `prepare_prefill_inputs` (307), `prepare_pos_seq_lens` (371), `combine_sampled_and_draft_tokens` (453), `get_num_sampled_and_rejected` (523), `post_update` (604) |
 | | `vllm/v1/worker/gpu/block_table.py` | `BlockTables` (17), `append_block_ids` (112), `gather_block_tables` (148), `compute_slot_mappings` (190), `_compute_slot_mappings_kernel` (276) |
@@ -105,8 +105,8 @@ for the name of the symbol. To browse the same tree, use this command:
 
 ## Every file read for the primer
 
-The list has 132 files of the vLLM repository and two external READMEs. The primer author read each file completely
-or in the sections that the primer cites.
+The list has 132 files of the vLLM repository and two external READMEs. The primer author read each of the 132 vLLM
+files completely or in the sections that the primer cites.
 
 - **Engine and API (18):** `vllm/v1/engine/{__init__,core,core_client,async_llm,llm_engine,input_processor,output_processor,detokenizer,parallel_sampling}.py`,
   `vllm/entrypoints/openai/api_server.py`, `vllm/entrypoints/openai/chat_completion/{api_router,serving,protocol}.py`,
@@ -150,7 +150,7 @@ in mind, not from top to bottom.
 
 The pace: you read dense engine code at approximately 8–12 lines a minute when you trace it with the primer open.
 Thus each slot in the tables of the four sittings names line ranges (at `5840d95`) and the branches to step over on
-a first read. It also gives the number of lines that stay after you step over those branches. No slot asks for more
+a first read. Each slot also gives the number of lines that stay after you step over those branches. No slot asks for more
 than 12 lines a minute. Most of the 960 lines of `Scheduler.schedule` are conditional blocks for connectors,
 encoders, Mamba and data parallelism.
 
@@ -196,7 +196,7 @@ These parts stay after the four sittings. Read them at the same pace:
 
 - The request-state updates of MRV2 (`finish_requests`/`add_requests`/`update_requests`, 1082–1204), and the
   `gpu/input_batch.py` kernels that apply them on the GPU (307–545). Together, they are approximately 360 lines,
-  about 35 minutes.
+  and they take about 35 minutes.
 - The `_rejection_kernel` of the rejection sampler (`gpu/spec_decode/rejection_sampler_utils.py`, 485–693, about 20
   minutes, §7.4).
 - `kv_cache_utils.py: get_kv_cache_configs` (2650–2800, about 15 minutes, §4.7).

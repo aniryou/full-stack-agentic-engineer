@@ -1,7 +1,7 @@
 # deploy — produce a quantized checkpoint, serve it on the GPU you have, or on the serving lab's cloud targets
 
-Start at T0, with no deploy at all. There, `python -m quantlab fake --scheme w4a16` is a fake vLLM that
-runs at INT4 speed, with the label simulated. Then move up. Every target runs the same `vllm serve` flags
+Start at T0, with no deploy at all. At T0, `python -m quantlab fake --scheme w4a16` is a fake vLLM that
+runs at INT4 speed. Its output has the label simulated. Then move up. Every target runs the same `vllm serve` flags
 that `python -m quantlab plan --gpu <GPU> --scheme <scheme>` prints. The same client measures every
 target.
 
@@ -9,7 +9,7 @@ target.
 |---|---|---|---|---|
 | `python -m quantlab fake` | T0 | the emulator behind an OpenAI-style API | $0 | Ctrl-C |
 | [`any-gpu/compress.sh`](any-gpu/) | T1 | llm-compressor in its own virtualenv: FP8_DYNAMIC (no data), W4A16 GPTQ, W8A8, NVFP4 | free (Colab/Kaggle T4) to ~$0.3–0.7/hr for minutes | `rm -rf .venv-llmcompressor` and the checkpoint dir |
-| [`any-gpu/serve.sh`](any-gpu/) | T1 | `vllm serve` / `docker run` per scheme, after it examines the scheme against the GPU | same | Ctrl-C. Terminate rented machines. |
+| [`any-gpu/serve.sh`](any-gpu/) | T1 | `vllm serve` / `docker run` per scheme, after it compares the scheme with the GPU | same | Ctrl-C. Terminate rented machines. |
 | [`gcp/`](gcp/) | T3 | the serving lab's Cloud Run service (one L4, scale to zero) or GKE Deployment with a quantized model | per second while an instance exists | `terraform destroy` / `./deploy-quantized.sh delete` |
 
 This lab adds **no Terraform**. The Cloud Run service and the GKE manifests are in

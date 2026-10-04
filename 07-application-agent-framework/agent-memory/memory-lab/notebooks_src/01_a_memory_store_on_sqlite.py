@@ -246,7 +246,7 @@ print("   the store's own forget(mode='purge') runs the same steps:", naive.forg
 
 # %% [markdown]
 # When this SQLite has FTS5 `secure-delete` (3.42 or newer, verify), `SQLiteMemoryStore` turns it on at
-# creation. It is possible that the SQLite of Colab is older. Thus the store detects the feature on a
+# creation. It is possible that the SQLite of Colab is older. The store detects the feature on a
 # temporary table, never from the version string. With `secure-delete`, a DELETE also removes the terms of
 # the deleted row from the index. `PRAGMA secure_delete=ON` writes zeros over the content of freed pages.
 # Neither reaches a copy of the file that another person took: backups are the last line of PRIMER §7.

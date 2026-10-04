@@ -140,7 +140,7 @@ print(f"✅ predicted {predict_w4a16_bytes(model):,} B = written {actual:,} B; {
 # largest inputs.
 #
 # GPTQ quantizes one column at a time. It moves the rounding error of each column onto the columns that it did
-# not quantize yet. The inverse Hessian of the calibration inputs sets the weight of each column in this move.
+# not quantize yet. The inverse Hessian of the calibration inputs sets how much error each column receives.
 # Thus GPTQ compensates elsewhere for the error that goes to the large-input channels. The layer error in the
 # table of the next cell is $\lVert X\hat{W}^\top - XW^\top \rVert / \lVert XW^\top \rVert$ on calibration
 # inputs.
@@ -157,8 +157,8 @@ for k, q in runs.items():
     print(f"{k:20s} add {q.model().accuracy('add', 500):.1%}   reverse {q.model().accuracy('reverse', 500):.1%}")
 
 # %% [markdown]
-# Look at two things. First, per layer, look at the projections whose inputs carry the outlier channels (q/k/v,
-# gate/up). On these projections, g32 almost does not change the error of RTN: 8-12% at either group size. A group is a run of *inputs
+# Look at two things. First, per layer: on the projections whose inputs carry the outlier channels (q/k/v,
+# gate/up), g32 almost does not change the error of RTN. That error is 8-12% at either group size. A group is a run of *inputs
 # within one output row*. In every group, the two columns that the lab made smaller are 18-24x smaller than their
 # neighbours. Thus they round to zero at any group size.
 #
@@ -197,7 +197,7 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # When you put back two columns out of 128, RTN INT4 becomes lossless at either group size. Thus **all** of the
 # loss of RTN on this model has one cause: RTN rounds those two columns to zero. That is, RTN deletes two
 # channels of the residual stream from every attention and MLP input. Finer groups do decrease the error of the
-# ordinary columns (per layer, in the table of the earlier cell). But that was never the problem.
+# ordinary columns (per layer, in the table of the round-to-nearest versus GPTQ example). But that was never the problem.
 #
 # At g32, a small number of the small weights are just above half a step of their (smaller) group scale. These
 # weights round *up* to one step instead of down to zero. Each of them is still ~90% incorrect, and now its sign
@@ -212,7 +212,7 @@ for key in ("W4A16 (rtn)", "W4A16-g32 (rtn)"):
 # The lesson that transfers is this: when the damage is in a few input channels, group size is the incorrect
 # setting to adjust. The correction is per-*input-channel*. One correction is GPTQ (error compensation onto the
 # other columns). The other is AWQ (scale the salient columns up, round them, and fold the inverse into the norm).
-# Both get back nearly all of the loss at g128 (the table of the earlier cell).
+# Both get back nearly all of the loss at g128 (the table of the round-to-nearest versus GPTQ example).
 #
 # ## Exercise 1.3 — the symmetric INT4 group quantizer
 #

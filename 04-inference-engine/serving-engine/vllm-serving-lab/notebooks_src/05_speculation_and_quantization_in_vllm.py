@@ -23,7 +23,7 @@
 #   KV cache to half its size. You must measure the accuracy on your own evals.
 #
 # Concepts: PRIMER §7 "Speculative decoding" and §8 "Quantization" ([`PRIMER.md`](../../PRIMER.md)). The
-# `mini-engine-core` of this topic implements the exact rejection sampler fully by hand.
+# `mini-engine-core` of this topic implements the exact rejection sampler by hand.
 
 # %%
 import math
@@ -40,9 +40,9 @@ for a in (0.5, 0.7, 0.9):
 
 # %% [markdown]
 # Each increase in $k$ gives less than the increase before it. At $\alpha = 0.7$, the 5th to 8th draft
-# tokens add only 0.4 tokens per step, but the verifier must process all of them. These are the vLLM flags
-# for the three families. The method names are as in the `SpeculativeConfig` of vLLM v0.30.0, and they
-# change between releases:
+# tokens add only 0.4 tokens per step, but the verifier must process all of them. The method names are as
+# in the `SpeculativeConfig` of vLLM v0.30.0, and they change between releases. These are the vLLM flags
+# for the three families:
 
 # %%
 for spec in ({"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max": 4},
@@ -54,7 +54,7 @@ for spec in ({"method": "ngram", "num_speculative_tokens": 4, "prompt_lookup_max
 # ## Exercise 5.1 — expected tokens per verification step
 #
 # Write `expected_tokens(alpha, k)`. It returns the mean number of tokens that one verify step emits. The
-# model: the verify step accepts each draft token independently with the probability `alpha`, and the first
+# assumption: the verify step accepts each draft token independently with the probability `alpha`, and the first
 # rejection stops the run. Add the one token that the target always gives. Make sure that the function
 # also handles `alpha = 1`.
 
@@ -87,8 +87,9 @@ print(f"✅ formula {expected_tokens(0.7, 4):.3f} vs simulated {observed:.3f} to
 #
 # To do a load test of a real engine at a *selected* acceptance, vLLM v0.30.0 has a synthetic mode:
 # `"rejection_sample_method": "synthetic"` with `"synthetic_acceptance_length"`. In this mode, the outputs
-# are not the outputs of the target model. Use the mode for benchmarks only. The fake engine has no
-# one-time start-up costs, thus these sweeps do not do a warm-up.
+# are not the outputs of the target model. Use the mode for benchmarks only.
+#
+# The fake engine has no one-time start-up costs. Thus these sweeps do not do a warm-up.
 
 # %%
 work = lambda: random_requests(12, Lengths.fixed(256), Lengths.fixed(96), seed=9)  # noqa: E731
@@ -118,7 +119,7 @@ print(spec_trial.snapshot.table())
 # \text{mean acceptance length} = 1 + \frac{\operatorname{rate}(\text{accepted})}{\operatorname{rate}(\text{drafts})}
 # $$
 #
-# (The 1 counts the token that the target itself gives.) Write `acceptance(before, after)`. It returns
+# The 1 counts the token that the target itself gives. Write `acceptance(before, after)`. It returns
 # `(rate, mean_length)` from two scrapes.
 
 # %%
@@ -148,8 +149,8 @@ print(f"✅ [SIMULATED] acceptance rate {rate:.1%}, mean acceptance length {leng
 
 # %% [markdown]
 # Note the difference between the two numbers. The **acceptance rate** is per draft token. Here it is 0.44,
-# but $\alpha = 0.7$, because the verify step gets to the later positions less frequently. The **mean
-# acceptance length** is the number that sets the speedup.
+# but $\alpha = 0.7$. The rate is less than $\alpha$ because the verify step gets to the later positions
+# less frequently. The **mean acceptance length** is the number that sets the speedup.
 #
 # ## Exercise 5.3 — where speculation pays: batch size
 #
@@ -170,8 +171,8 @@ print(f"✅ [SIMULATED] acceptance rate {rate:.1%}, mean acceptance length {leng
 # $$
 #
 # Predict first. At which batch sizes does speculation no longer pay? Why is the context length important?
-# (Each operating point in the check must fit in the KV cache of the profile. A batch that the engine cannot
-# hold tells you nothing about a real engine.)
+# Each operating point in the check must fit in the KV cache of the profile. A batch that the engine cannot
+# hold tells you nothing about a real engine.
 
 # %% exercise
 def spec_speedup(p, batch: int, context: int, alpha: float, k: int, draft_cost: float = 0.0) -> float:
@@ -214,7 +215,7 @@ print("✅ speculation is a latency tool while decode is memory-bound; once the 
 # The check builds the three cases from `sizing.weight_bytes` and the L4 datasheet (50% of peak FLOP/s,
 # 80% of bandwidth). AWQ computes in 16-bit, thus it gets the bf16 FLOP/s. The dequantization of the
 # weights adds a cost on top, and this cost depends on the kernel. Marlin-style kernels hide most of it at a
-# large batch. The check leaves this cost out. It is an assumption to examine on your GPU (verify), not a
+# large batch. The check leaves this cost out, as an assumption to examine on your GPU (verify), not as a
 # result.
 
 # %% exercise
@@ -291,8 +292,8 @@ else:
 #
 # "Speculation is a latency tool for small batches. At batch 256 with short contexts, the verify step is
 # compute-bound, and speculation makes us slower. Long contexts keep the step memory-bound for a longer
-# time. Thus we turn speculation on for interactive traffic, and we monitor the mean acceptance length on
-# the vLLM counters.
+# time. Because speculation helps at small batches, we turn speculation on for interactive traffic, and we
+# monitor the mean acceptance length on the vLLM counters.
 #
 # "Quantization decreases the bytes. For an 8B model on an L4, AWQ INT4 makes batch-1 decode ~2.8x faster,
 # but it does not make prefill faster. FP8 W8A8 decreases the decode time to almost half, decreases the

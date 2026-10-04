@@ -3,7 +3,7 @@
 #
 # **Tier:** T0. It needs numpy and runs in a few seconds. The lab's notebook 04 (T1, Ada or newer) serves an FP8 KV
 # cache in vLLM (`--kv-cache-dtype fp8`). The size calculation here is the same arithmetic. Where it prints times,
-# they are SIMULATED.
+# it labels them SIMULATED.
 #
 # ## The one-minute version
 # When you quantize the **activations**, a GEMM can run on INT8 or FP8 tensor cores. Both operands become 8-bit
@@ -19,11 +19,13 @@
 #
 # The **KV cache** is an activation that the engine stores for later. The engine quantizes it once and reads it at
 # every decode step. FP8 halves its bytes (twice the sessions), with 3 mantissa bits of error. This is true *if* its
-# scale fits the data. vLLM's default scale is 1.0. Keys have outlier channels and values do not, thus 2–4-bit
+# scale fits the data. But vLLM's default scale is 1.0. Keys have outlier channels and values do not, thus 2–4-bit
 # schemes (KIVI) quantize keys per channel and values per token.
 #
-# After this notebook, you can implement a W8A8 GEMM epilogue. You can also say which layers to leave alone. You can
-# also calculate the size of a quantized KV cache, and judge it.
+# After this notebook, you can:
+# - implement a W8A8 GEMM epilogue,
+# - say which layers to leave alone,
+# - calculate the size of a quantized KV cache, and judge it.
 #
 # Primer: `../PRIMER.md` §5 *Weight-and-activation quantization* and §6 *KV-cache quantization*. The FlashAttention
 # deep dive §9.4 gives the FP8 error sources on the kernel side. vllm-internals §6.3 gives the backend conditions.
@@ -82,8 +84,8 @@ for fmt in ("int8", "fp8"):
 # %% [markdown]
 # Dynamic per-token scales win for both formats. For INT8, they give 4× less KL. For FP8, the decrease is small,
 # because the float grid of FP8 already absorbs most of the range. The cost is one max-reduction per token, and
-# kernels fuse it into the quantization step. This is the default for `FP8_DYNAMIC` and INT8 `W8A8` recipes. Static
-# activation scales (the `FP8` preset) save that reduction, and they need calibration data.
+# kernels fuse it into the quantization step. Dynamic per-token scales are the default for `FP8_DYNAMIC` and INT8
+# `W8A8` recipes. Static activation scales (the `FP8` preset) save that reduction, and they need calibration data.
 #
 # ## Worked example 3 — block-scaled FP8, as DeepSeek-V3 stores it
 # Weights have one scale per 128×128 tile. Activations have one scale per token per 128 channels, which the kernel
@@ -103,7 +105,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
     print(f"{label:38} relative output error {np.linalg.norm(Yb - refb) / np.linalg.norm(refb):.4f}")
 
 # %% [markdown]
-# For FP8, the granularity is almost not important at these ranges (a 30× tile is far inside E4M3's $2^{14.8}$).
+# For FP8, the granularity has almost no effect at these ranges (a 30× tile is far inside E4M3's $2^{14.8}$).
 # Per-token INT8 is more precise than any FP8 (7 bits against 3).
 #
 # Block scales are worth their cost in two cases.
@@ -118,7 +120,7 @@ for label, Yb in (("block FP8 (1x128 act, 128x128 weight)", w8a8.block_fp8_matmu
 #
 # Consider an outlier that is 30× the typical value. A typical neighbour then goes to 6/30 = 0.2 on the E2M1 grid.
 # This is below 0.25, the value that rounds up to the smallest step of E2M1, 0.5. Thus most of the 15 neighbours
-# become **zero**. The input of the first up-projection of the small model has its four outlier channels in three of
+# become **zero**. The input of the first up-projection of the tiny model has its four outlier channels in three of
 # its four 16-channel blocks:
 
 # %%
@@ -173,7 +175,7 @@ for label, logits in (("NVFP4 weight-only (W4A16)", nvfp4_model(m, acts=False)),
 # The lab's notebook 05 does this again on its bundled model. There, the gap is even larger.
 #
 # ## Worked example 5 — which layers stay in high precision
-# Recipes quantize the linears of the transformer blocks, and set `ignore=["lm_head"]`. Quantize the head of the small
+# Recipes quantize the linears of the transformer blocks, and set `ignore=["lm_head"]`. Quantize the head of the tiny
 # model too:
 
 # %%
@@ -212,11 +214,12 @@ for f in (1e-3, 1e-2, 1.0, 1e2, 1e3):
 
 # %% [markdown]
 # Here, a well-scaled FP8 KV cache costs much less than 1% of attention-output error. Key errors are more important
-# than value errors. Key errors go through the exponential of the softmax, but the attention averages the value
+# than value errors, because key errors go through the exponential of the softmax. The attention averages the value
 # errors. The scale is important only at the edges. With vLLM's uncalibrated default of 1.0, values far below 1 go
 # into the subnormals of E4M3 (below 2⁻⁶). Values above 448 saturate.
 #
-# The `kv_cache_scheme` calibration of llm-compressor writes this scale into the checkpoint as `k_scale`/`v_scale`.
+# The `kv_cache_scheme` calibration of llm-compressor writes a scale that fits the data into the checkpoint, as
+# `k_scale`/`v_scale`.
 # This is also why the FlashAttention deep dive's §9.4 lists "scale choice" as an error source.
 #
 # ## Worked example 7 — below 8 bits: KIVI
@@ -243,7 +246,7 @@ for label, b in (("bf16 KV", 16), ("FP8 KV", 8), ("4-bit KIVI (5 bits/elem)", 5)
 # reason to find out which of the two a system implements.
 #
 # **Prefix caching with a quantized cache.** The engine uses a cached block again, in its stored form. The engine hashes
-# its tokens as usual (serving-engine §5), and the block holds FP8 values. This works because the scales are static
+# the tokens of the block as usual (serving-engine §5), and the block holds FP8 values. This works because the scales are static
 # per layer (or, for per-token scales, the engine stores them with the block). Thus a later request that reads the
 # block dequantizes it exactly as the request that wrote it. If the scales of a scheme depend on the request that
 # *reads* the block, two requests cannot share the block.
@@ -366,8 +369,8 @@ print(f"✅ v_scale {v_scale:.2e}: error {err_calibrated:.4f} vs {err_default:.4
 #
 # "The KV cache is a separate decision. FP8 halves it, which gives twice the sessions. It costs less than 1% of
 # attention-output error when its scales fit the data. Because vLLM's default scale is 1.0, we calibrate k_scale and
-# v_scale for any model whose K or V are far from order one. If we go below 8 bits, we will quantize keys per
-# channel, KIVI-style, because keys carry outlier channels. We will also make sure that prefix-cached blocks keep
+# v_scale for any model whose K or V are far from order one. If we go below 8 bits, we want to quantize keys per
+# channel, KIVI-style, because keys carry outlier channels. We also want to make sure that prefix-cached blocks keep
 # their scales."
 #
 # **Drills**

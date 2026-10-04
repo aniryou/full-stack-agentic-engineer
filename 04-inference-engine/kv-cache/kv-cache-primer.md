@@ -1,6 +1,6 @@
 # KV Cache on GPUs — A Primer
 
-*This primer does not assume that you know how attention operates inside. It shows, step by step, why the KV cache is the largest single constraint in LLM serving.*
+*This primer does not assume that you know the internal operation of attention. It shows, step by step, why the KV cache is the largest single constraint in LLM serving.*
 
 **Tier and notebooks.** All of this primer is T0. The two notebooks, [`notebooks/01_kv_cache_worked.ipynb`](notebooks/01_kv_cache_worked.ipynb) and [`notebooks/02_kv_cache_practice.ipynb`](notebooks/02_kv_cache_practice.ipynb), run on numpy and matplotlib through [`kernel-core`](../kernel-core/README.md) (`kerncore.kv`). They run on a laptop or on a Colab CPU runtime, with no GPU and no PyTorch. Torch is optional: only one comparison cell at the end of 01 uses it. That cell has a clear label, and it does not run when the runtime has no torch.
 
@@ -18,7 +18,7 @@ Each transformer layer contains an **attention** block. For each token, attentio
 - **K (key)**: "what do I offer, as a thing to be looked at?"
 - **V (value)**: "what information do I actually contribute?"
 
-To calculate the output of a token, attention compares its **Q** with the **K** of each token before it. It changes those comparison scores into weights. Then it calculates a weighted sum of the **V** vectors of the same tokens.
+To calculate the output of a token, attention compares the **Q** of that token with the **K** of each token before it. It changes those comparison scores into weights. Then it calculates a weighted sum of the **V** vectors of the same tokens.
 
 Two properties are of primary importance:
 
@@ -29,7 +29,7 @@ Two properties are of primary importance:
 
 ## 2. The problem, and the fix
 
-**Naive approach:** for each new token, this approach runs the whole sequence through the model again. It calculates K and V again for all the previous tokens. For a 1,000-token response, it calculates the K and V of token 1 a thousand times, and the result is the same each time. The cost increases quadratically with the output length.
+**Simple approach:** for each new token, this approach runs the whole sequence through the model again. It calculates K and V again for all the previous tokens. For a 1,000-token response, it calculates the K and V of token 1 a thousand times, and the result is the same each time. The cost increases quadratically with the output length.
 
 **KV cache:** keep the K and V vectors of each token in GPU memory after the model calculates them one time. Then each step of the generation must do only three things:
 
@@ -50,7 +50,7 @@ Step N:                    Step N+1:
    to attend                 read all of it again
 ```
 
-Note that **the engine does not cache Q**. The query of a past token had one use: the calculation of the output of that token. The model never needs it again. The model reads only K and V again.
+Note that **the engine does not cache Q**. The query of a past token had one use: the calculation of the output of that token. The engine never needs that query again. The engine reads only K and V again.
 
 In practice, you cannot turn off this optimization. Every inference engine in production does it. The question of interest is not *if* you cache, but *what it costs*.
 
@@ -66,9 +66,9 @@ This distinction is the core of GPU inference.
 
 Why is decode bandwidth-bound? An H100 does roughly 1,000 TFLOP/s in fp16, but it moves only about 3.35 TB/s from HBM. To keep the arithmetic units busy, you need ~300 floating-point operations per byte loaded.
 
-Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention. The kernel loads each cached K or V element (2 bytes) one time. It uses that element in one multiply-add (2 FLOPs) for its one query head. In general, the value is ${2g/b}$ FLOP per byte, where $g$ query heads share each KV head and each cached value has $b$ bytes. Thus GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B.
+Attention over a cache does about **1 FLOP per byte** in fp16 with full multi-head attention. The kernel loads each cached K or V element (2 bytes) one time. It uses that element in one multiply-add (2 FLOPs) for its one query head. In general, the intensity is ${2g/b}$ FLOP per byte, where $g$ query heads share each KV head and each cached value has $b$ bytes. Thus GQA with `g = 4` (Llama 3 8B) gets to 4 FLOP/B.
 
-In both cases, the value is about two orders of magnitude too low (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck in a traffic jam, not an engine without sufficient horsepower.
+In both cases, the intensity is about two orders of magnitude too low (the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) derives it). The GPU is a delivery truck in a traffic jam, not an engine without sufficient horsepower.
 
 A useful approximation for decode speed:
 
@@ -87,7 +87,7 @@ $$
 \end{aligned}
 $$
 
-**Worked example — Llama 3 8B** (32 layers, 8 KV heads, head_dim 128, fp16 = 2 bytes):
+**Worked example: Llama 3 8B** (32 layers, 8 KV heads, head_dim 128, fp16 = 2 bytes):
 
 ```
 per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
@@ -101,7 +101,7 @@ per token = 2 × 32 × 8 × 128 × 2 = 131,072 bytes = 128 KiB
 
 The *weights* of the model are a fixed ~16 GB (15 GiB) in fp16. On an 80 GB H100, that batch of 32 users already uses more memory than the model itself. The cache is the part that scales with your traffic and your context lengths. The weights do not change in size.
 
-Look at it from the other direction. After the weights, an 80 GB H100 has ~64 GB left. That memory holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). That is an upper bound: an engine also reserves memory for activations and for its allocator.
+Now do the calculation in the other direction. After the weights, an 80 GB H100 has ~64 GB left. That memory holds at most **59** sessions of 8K tokens with an fp16 cache, or **119** with an fp8 cache (`kerncore.kv.sessions_per_gpu`). That is an upper bound: an engine also reserves memory for activations and for its allocator.
 
 **Now remove the architectural trick.** Llama 2 13B uses full multi-head attention, with 40 layers and 40 KV heads:
 
@@ -129,15 +129,15 @@ The general form of these shared blocks is **prefix caching**: the engine reuses
 
 ## 6. The techniques for shrinking it
 
-This list is in the approximate order of how universal their use is:
+The techniques are in the approximate order of how universally models use them:
 
 **Grouped-query attention (GQA) / multi-query attention (MQA).** The model keeps all the query heads, but each group of query heads shares one K/V head. Llama 3 8B has 32 query heads and 8 KV heads — a 4× cache reduction. MQA goes further, to a single shared KV head. The loss of quality is small. This technique is now standard.
 
 **KV quantization.** Store the cache in fp8 or int8 instead of fp16 — 2× smaller and 2× less bandwidth per token. int4 is possible with more care. Keys are usually more sensitive to quantization than values.
 
-**Multi-head latent attention (MLA).** This is the method of DeepSeek. The model compresses K and V into a small, shared, low-rank latent vector, and reconstructs them when it needs them. It compresses much more than GQA. It uses a small quantity of extra compute to save a large quantity of memory.
+**Multi-head latent attention (MLA).** This is the method of DeepSeek. The model compresses K and V into a small, shared, low-rank latent vector, and reconstructs them when it needs them. MLA compresses much more than GQA. MLA uses a small quantity of extra compute to save a large quantity of memory.
 
-**Sliding-window / local attention.** Each token attends only to the last $W$ tokens, so the cache does not grow past $W$. Models usually combine it with a few "attention sink" tokens at the start of the sequence. These tokens prove to be necessary for stability.
+**Sliding-window / local attention.** Each token attends only to the last $W$ tokens, so the cache does not grow past $W$. Models usually combine sliding-window attention with a few "attention sink" tokens at the start of the sequence. These tokens prove to be necessary for stability.
 
 **Eviction policies** (H2O, SnapKV and related methods). These policies use an observation: attention goes mostly to a minority of tokens. They evict the other tokens from the cache. They are lossy and their result depends on the workload, but they are effective.
 
@@ -153,8 +153,8 @@ This list is in the approximate order of how universal their use is:
 
 Three consequences to keep in mind:
 
-1. **Context length is a serving cost, not just a training capability.** A 1M-token context window is an architecture claim. The KV cache tells you if you can afford to *serve* it.
-2. **Batch size is capped by cache memory, not compute.** Throughput per GPU is mostly the answer to "how many concurrent sequences fit in leftover HBM."
+1. **Context length is a serving cost, not just a training capability.** A 1M-token context window is an architecture claim. The question "can you afford to *serve* that context window?" is a question about the KV cache.
+2. **Cache memory, not compute, caps the batch size.** Throughput per GPU is mostly the answer to "how many concurrent sequences fit in leftover HBM."
 3. **Decode speed is a bandwidth division problem.** If you want faster tokens, decrease the number of bytes that decode reads per token. Or buy more bandwidth.
 
 ---
@@ -170,7 +170,7 @@ Three consequences to keep in mind:
 | **GQA / MQA** | Query heads share K/V heads, so the cache is smaller. |
 | **PagedAttention** | Block-based, non-contiguous cache allocation. The core idea in vLLM. |
 | **Prefix caching** | The reuse of cached K/V for shared prompt prefixes across requests. |
-| **Continuous batching** | The engine adds requests to the batch and removes them from it when sequences finish. It does not wait for the slowest sequence. |
+| **Continuous batching** | While the batch runs, the engine adds requests to it and removes requests from it when sequences finish. It does not wait for the slowest sequence. |
 | **Arithmetic intensity** | FLOPs per byte loaded. If the intensity is low, the work is bandwidth-bound. |
 
 ---

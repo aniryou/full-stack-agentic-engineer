@@ -71,8 +71,8 @@ for task in tm.TASKS:
 # That is why INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
 #
 # On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant within a fraction of a point. Expect INT4
-# GPTQ/AWQ behind them, and INT4 RTN last. This is the order from which `cost.choose()` in PRIMER §10 starts. Measure it
-# on your model. The things that transfer from this table are the mechanisms, not the order of the schemes that
+# GPTQ/AWQ behind them, and INT4 RTN last. This is the order from which `cost.choose()` in PRIMER §10 starts.
+# Measure the order on your model. The things that transfer from this table are the mechanisms, not the order of the schemes that
 # pass. These mechanisms are the outlier loss of RTN, what calibration gets back, and the collapse of FP4
 # activations.
 #
@@ -210,12 +210,12 @@ print(f"✅ cheapest scheme within 0.5 points and 1e-3 nats on every task: {pick
 # %% [markdown]
 # ## Worked example: one decision, four kinds of numbers — and a label on each
 #
-# A recommendation mixes numbers with large differences in status:
+# A recommendation mixes four kinds of numbers, each with a different status:
 #
-# * bytes counted from files (exact),
-# * step times from the emulator (simulated),
-# * task accuracy on the tiny model (a T0 measurement, not your model),
-# * lm-eval figures copied from a documented format (sample).
+# * bytes counted from files (exact)
+# * step times from the emulator (simulated)
+# * task accuracy on the tiny model (a T0 measurement, not your model)
+# * lm-eval figures copied from a documented format (sample)
 #
 # `report.Report` refuses a section without a source, and it prints the label next to every table.
 
@@ -251,8 +251,8 @@ for e in (1 - e_rtn, 1e-3, 1e-4):
 # %% [markdown]
 # Divergence is not failure, because a paraphrase can still be correct. But divergence is the reason to evaluate
 # quantized *reasoning* models on long-generation tasks (math, code). These evals use the chat template and the
-# thinking tokens of the model. It is also the reason that a KL budget is more important for them than for short
-# classification.
+# thinking tokens of the model. Divergence is also the reason that a KL budget is more important for them than
+# for short classification.
 #
 # ## lm-evaluation-harness (T1)
 #
@@ -306,5 +306,5 @@ else:
 # on inputs that the eval did not contain.
 #
 # **Drill 3.** *lm-eval says 27.2 against 30.0 on gsm8k with ±2.9 stderr each. Regression?* Unpaired, it is within
-# the noise ($z \approx -0.7$). Run it again with `--log_samples` and count the paired flips. Or run the full
+# the noise ($z \approx -0.7$). Run the eval again with `--log_samples`. Then count the paired flips. Or run the full
 # split.

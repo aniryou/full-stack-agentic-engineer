@@ -1,7 +1,7 @@
 # tiny-adder — the bundled checkpoint quant-lab quantizes
 
 This is a 2-layer Llama-architecture model. It is sufficiently small to ship in the repo (599 KB of bf16
-safetensors). Its training is sufficiently good that quantization damage shows as incorrect answers.
+safetensors). Its accuracy after training is sufficiently high that quantization damage shows as incorrect answers.
 
 | | |
 |---|---|
@@ -15,5 +15,5 @@ safetensors). Its training is sufficiently good that quantization damage shows a
 
 The model is a tool for lessons, not a benchmark. It shows the mechanisms with real numbers: outlier
 channels, the error compensation of GPTQ, the collapse of FP4 activations, KV scale saturation. But the
-size of any accuracy drop on it says nothing about a production model. It has the MIT licence, with the
-lab.
+size of any accuracy drop on it says nothing about a production model. It has the same MIT licence as
+the lab.

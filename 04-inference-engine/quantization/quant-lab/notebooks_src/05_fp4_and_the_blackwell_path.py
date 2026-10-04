@@ -7,9 +7,9 @@
 # from datasheets, verify). It also shows the accuracy of FP4 weights and activations on the bundled
 # tiny model.
 #
-# T1 needs one Blackwell GPU with CUDA 12.8+. It is a rented GPU, and not a small one (B200 or
-# RTX PRO 6000). Cloud Run offers the RTX PRO 6000 (verify). Everything product-specific here is
-# `(verify)`.
+# **Tier T1:** T1 needs one Blackwell GPU with CUDA 12.8+. Rent the GPU, and do not use a small one
+# (for example, use a B200 or an RTX PRO 6000). Cloud Run offers the RTX PRO 6000 (verify). Everything
+# product-specific here is `(verify)`.
 #
 # ## The one-minute version
 #
@@ -19,7 +19,7 @@
 # | Format | Block | Scale | Bits per weight | Where it multiplies natively |
 # |---|---|---|---|---|
 # | **MXFP4** (OCP) | 32 | E8M0 (a power of two) | 4.25 | Blackwell, sm_100+ (weight-only in vLLM from sm_80) |
-# | **NVFP4** | 16 | FP8 E4M3 + one FP32 per tensor | 4.5 | Blackwell, sm_100+ (W4A4, weight-only from sm_75) |
+# | **NVFP4** | 16 | FP8 E4M3 + one FP32 per tensor | 4.5 | Blackwell, sm_100+ (W4A4, and weight-only from sm_75) |
 # | INT4 g128 (for contrast) | 128 | bf16 | 4.125 | nowhere as 4-bit math: always W4A16 |
 #
 # On Blackwell, NVFP4 **W4A4** runs FP4 tensor cores at 2x the FP8 rate. The weights *and* the
@@ -50,8 +50,8 @@ for fmt in ("bf16", "fp8", "int4-g128", "mxfp4", "nvfp4"):
 # ## Exercise 5.1 — round to E2M1
 #
 # The step of the E2M1 grid is 0.5 below 2, 1 between 2 and 4, and 2 between 4 and 6. Values above 6
-# saturate. Write `e2m1(x)`. Round to the nearest grid value, with **ties to the even mantissa**, and
-# keep the sign. vLLM's `cast_to_fp4` uses the same rule. It rounds 0.25 to 0, 0.75 to 1, 1.25 to 1
+# saturate. Write `e2m1(x)`. The function rounds to the nearest grid value, with **ties to the even
+# mantissa**, and keeps the sign. vLLM's `cast_to_fp4` uses the same rule. It rounds 0.25 to 0, 0.75 to 1, 1.25 to 1
 # and 1.75 to 2. It rounds 2.5 to 2, 3.5 to 4 and 5 to 4.
 
 # %% exercise
@@ -79,8 +79,8 @@ print("✅ E2M1 rounding matches vLLM's reference thresholds")
 # of block maxima.
 #
 # An llm-compressor MXFP4 checkpoint stores this code. The reference rule of the OCP MX spec is only
-# $\lfloor \log_2(\mathrm{amax}) \rfloor - 2$. This rule puts the block max in [4, 8). Thus a block with a max of 7.5 clips to 6,
-# and the rounding of compressed-tensors gives that block the next exponent (PRIMER §2).
+# $\lfloor \log_2(\mathrm{amax}) \rfloor - 2$. This rule puts the block max in [4, 8). Under this rule, a block with a max of 7.5
+# clips to 6. But the rounding of compressed-tensors gives that block the next exponent (PRIMER §2).
 # `quantcore.formats.mxfp4` implements both rules, `rule="ocp"` and `rule="compressed-tensors"`.
 
 # %% exercise
@@ -146,9 +146,9 @@ print("✅ your NVFP4 = the library's; small blocks with fine scales hold up bes
 #
 # Weight-only FP4 (NVFP4A16, MXFP4) is near INT4 g128. FP4 *activations* (NVFP4 W4A4) hit the planted
 # massive-activation channels. In a token, each 16-value block that contains such a channel gets a scale
-# that is 24x too coarse for its other 15 values. SmoothQuant moves the outlier into the weights first,
-# and this recovers most of the accuracy. For the same reason, Blackwell W4A4 recipes depend on
-# smoothing, rotations or quantization-aware training.
+# that is 24x too coarse for its other 15 values. If SmoothQuant moves the outlier into the weights
+# first, SmoothQuant recovers most of the lost accuracy. For the same reason, Blackwell W4A4 recipes
+# depend on smoothing, rotations or quantization-aware training.
 
 # %%
 ref = tm.load()
@@ -204,15 +204,16 @@ print(f"B200 BF16 ridge: {serve.gpu('B200').peak('bf16') / 8e12:.0f} FLOP/byte; 
 # At 100% efficiency, every kernel is at least as fast as BF16. Real kernels that dequantize are not.
 # The Model Optimizer team of NVIDIA reported NVFP4 weight-only (W4A16) as *slower* than BF16 in 10 of
 # 12 GEMM shapes on Blackwell. The same team reported W4A4 as faster in 9 of 12 (announcement dated
-# 2026-09-16, verify). The term that the 100% model does not have is the efficiency of the mixed-input kernel relative to the
-# BF16 GEMM.
+# 2026-09-16, verify). One term is not in the calculation at 100% efficiency: the efficiency of the
+# mixed-input kernel relative to the BF16 GEMM.
 #
 # ## Exercise 5.5 — from which step size is weight-only FP4 slower than BF16?
 #
-# Model the W4A16-NVFP4 kernel with a fraction `eff` of the compute rate of the BF16 GEMM. Keep its
-# memory side unchanged. Model the BF16 GEMM at 100%. Write `slower_from(K, N, gpu, eff)`. It returns
-# the smallest token count `M` at which the W4A16 time is more than the BF16 time. Use `B.GEMM_PATH`
-# for the bytes, and use `serve.gpu(gpu).peak("bf16")` and `mem_bw_gbs`.
+# In your calculation, the W4A16-NVFP4 kernel runs at a fraction `eff` of the compute rate of the BF16
+# GEMM. The memory side of this kernel does not change. The BF16 GEMM runs at 100%. Write
+# `slower_from(K, N, gpu, eff)`. It returns the smallest token count `M` at which the W4A16 time is
+# more than the BF16 time. Use `B.GEMM_PATH` for the bytes, and use `serve.gpu(gpu).peak("bf16")` and
+# `mem_bw_gbs`.
 
 # %% exercise
 def slower_from(K, N, gpu, eff):
@@ -258,9 +259,10 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 # an FP8 scale per 16 and one FP32 scale per tensor. That is 4.5 bits per weight, slightly more than
 # INT4 g128. On B200s, it runs W4A4 on FP4 tensor cores at twice the FP8 rate.
 #
-# "On our H100s and L4s, the same checkpoint runs weight-only through Marlin. That gives a memory win
-# only. Also, a kernel that dequantizes below the efficiency of the BF16 GEMM is slower than BF16 from a
-# couple of hundred tokens per step. That is every prefill.
+# "On our H100s and L4s, the same checkpoint runs weight-only through Marlin. The weight-only path gives
+# a memory win only. Also, a kernel that dequantizes can run below the efficiency of the BF16 GEMM.
+# Then it is slower than BF16 from a couple of hundred tokens per step. Every prefill is in that range
+# of step sizes.
 #
 # "The accuracy risk is the activations. In the lab's model, FP4 activations decrease task accuracy
 # from 100% to approximately half, until SmoothQuant moves the outlier channels into the weights. Thus,

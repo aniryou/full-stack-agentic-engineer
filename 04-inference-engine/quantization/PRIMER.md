@@ -9,7 +9,7 @@ model, not measurements.*
 This primer is the deep dive behind one section of the serving-engine primer. That section is
 [serving-engine PRIMER §8](../serving-engine/PRIMER.md#8-quantization). It gives a survey of the formats, scale granularity,
 weight-only against W8A8, FP8 KV, and the gain of each for Llama-3.1-8B on an L4.
-`minengine.quant` calculates it.
+`minengine.quant` calculates those gains.
 
 This primer starts where that survey stops. It examines the number formats down to their bit patterns, and it
 includes the Blackwell block formats. It also covers these subjects:
@@ -93,7 +93,7 @@ smaller and keeps the BF16 peak. Thus it becomes compute-bound early, at ~120 to
 byte-bound until ~460.
 
 Up to ~120 tokens, W4A16 keeps the full byte ratio. The table in vllm-internals §8.1 shows this, and
-`cost.gemm_time()` in `tests/test_repo_numbers.py` calculates that table again. It shows W4A16 at 102 µs against
+`cost.gemm_time()` in `tests/test_repo_numbers.py` calculates that table again. The table shows W4A16 at 102 µs against
 BF16's 392 µs for one token. Between ~120 and ~460 tokens, the speedup of W4A16 decreases. In that range, W4A16
 pays for BF16 math, but BF16 still pays for bytes. The speedup is 1.7× at 256 tokens, and nothing at 462 and
 beyond (the two are equal at 2,048).
@@ -160,7 +160,7 @@ Below the smallest normal exponent, the distance between values stays constant (
 |---|---|---|---|---|---|---|
 | FP8 **E4M3** (`fn`) | 1-4-3, 7 | **448** | 2⁻⁶ | 2⁻⁹ | 6.25% | 2^14.8 |
 | FP8 **E5M2** | 1-5-2, 15 | **57,344** | 2⁻¹⁴ | 2⁻¹⁶ | 12.5% | 2^29.8 |
-| FP4 **E2M1** | 1-2-1, 1 | 6 | 1 | 0.5 | not applicable (8 magnitudes) | 2^2.6 |
+| FP4 **E2M1** | 1-2-1, 1 | 6 | 1 | 0.5 | no single figure (8 magnitudes) | 2^2.6 |
 | BF16 | 1-8-7 | ~3.4 × 10³⁸ | 2⁻¹²⁶ | 2⁻¹³³ | 0.39% | fp32's |
 | FP16 | 1-5-10 | 65,504 | 2⁻¹⁴ | 2⁻²⁴ | 0.05% | 2^30 |
 
@@ -196,8 +196,8 @@ attention, see FlashAttention deep dive §9.1: bf16 has range, and fp16 has prec
     max is in [3.5, 7) (`formats.mxfp4(rule="compressed-tensors")`, and the lab's `fp4.mxfp4_scale_exponent()`).
 
     A block whose amax is 7.5 gets exponent 0 under the OCP rule, and it clips to 6. Under the compressed-tensors
-    rule, it gets exponent 1 and goes to 8. That clips 28% of Gaussian blocks' maxima instead of 43%. It also
-    wastes a small part of the range just under each power of two. gpt-oss ships its MoE weights in MXFP4.
+    rule, it gets exponent 1 and goes to 8. That clips 28% of Gaussian blocks' maxima instead of 43%. The
+    compressed-tensors rule also wastes a small part of the range just under each power of two. gpt-oss ships its MoE weights in MXFP4.
 
 - **NVFP4**. It has E2M1 elements, one **FP8 E4M3** scale per **16**, and one FP32 scale per tensor. The tensor
   scale is a multiplier $g = 448 \times 6 / \operatorname{amax}(\text{tensor})$. The scale of each block is
@@ -240,8 +240,8 @@ than three bits. A 4,096-value row of rms 0.02 has a crest factor of 3.9. Add on
 Then INT8 per-channel SQNR falls from 41.1 dB to 22.2 dB (the rule predicts 22.3). One value costs **3.1 bits**
 (notebook 01, exercise 1.3).
 
-LLM weights have such values, always in the same channels. LLM activations have many more of them. §3–§5 solve that
-problem.
+LLM weights and LLM activations both have such values, always in the same channels. The activations have them to a
+much larger degree. §3–§5 solve that problem.
 
 ## 3. Granularity and the bits-per-weight budget
 
@@ -404,7 +404,7 @@ RTN's loss. With too small a scale, the salient channels stay coarse. With too l
 scale for the whole group. AWQ decreases the output error of the up-projections by ~25% (0.0939 → 0.0715). It does
 not do much for the down-projections, which have no dominant channels.
 
-On the up-projections alone at INT3, it beats GPTQ: 85.9% against 84.7%. The two methods compose: the AWQ scales go
+When AWQ quantizes the up-projections alone at INT3, it beats GPTQ: 85.9% against 84.7%. The two methods compose: the AWQ scales go
 first, then the GPTQ rounding (llm-compressor: an `AWQModifier`, then a `GPTQModifier`). They combine for the lowest
 KL of all: 0.0307 at INT4 g32. The llm-awq code also searches for a per-group **clipping** threshold (amax × 1.00 down to
 0.55), and it skips the q/k projections (verify). The "duo" variant of llm-compressor divides by
@@ -456,7 +456,7 @@ $$
 y[t, j] = s_x[t] \cdot s_w[j] \cdot \sum_k \mathit{qx}[t, k] \cdot \mathit{qw}[j, k]
 $$
 
-INT8 uses an INT32 accumulator. FP8 uses FP32 (but see the last item of the list that comes next).
+INT8 uses an INT32 accumulator. FP8 uses FP32 (but see the last item of the list in this section, about the FP8 tensor core).
 
 An emulation with integer codes and integer accumulation gives the fake-quantized product to within 10⁻¹⁴
 (notebook 04). This has three consequences:
@@ -611,7 +611,7 @@ At this snapshot, vLLM has these sub-8-bit KV types:
 None of them is the per-channel-key scheme of KIVI (verify). Before you trust the keys of a system at 4 bits, find
 out which scheme it implements.
 
-**Kernel conditions** decide if you can use it at all. They are in
+**Kernel conditions** decide if you can use a quantized KV cache at all. They are in
 [vllm-internals §6.3](../vllm-internals/vllm-internals-primer.md#63-how-a-backend-is-chosen) and in the checks of
 each attention backend (`vllm/v1/attention/backends/`):
 
@@ -643,8 +643,8 @@ verify). This has the same economics as the post-training stages in
 [rl-and-thinking-models §1](../../00-foundations/rl-and-thinking-models/PRIMER.md#1-from-pretraining-to-post-training):
 a low-cost post-training step on top of a large model.
 
-**QLoRA is a training recipe, not a serving format.** It freezes the base model in **NF4**: 4 bits, 16 levels that
-are normal-distribution quantiles, and a scale per block of 64 (QLoRA paper, verify). QLoRA trains LoRA
+**QLoRA is a training recipe, not a serving format.** It freezes the base model in **NF4**. NF4 is a 4-bit
+format whose 16 levels are normal-distribution quantiles, with a scale per block of 64 (QLoRA paper, verify). QLoRA trains LoRA
 adapters in BF16 on top. NF4 with an FP32 scale per 64 costs 4.5 bits per weight. With "double quantization"
 (8-bit block scales with one FP32 per 256 blocks), it costs 4.127 (`formats.bits_per_weight(4, 64, scale_bits=…)`).
 
@@ -703,7 +703,7 @@ When you compare quantized models, pass `add_bos_token=True`. The vLLM docs note
 `--limit` is "for testing only". The default for GSM8K is 5-shot `exact_match`. MMLU is 57 subtasks with the
 score `acc`.
 
-**Failure modes to test for explicitly:**
+**Failure modes that need an explicit test:**
 
 - **Small models.** Fewer parameters share the error. The tiny model loses 6.6 points at INT4 RTN.
 - **MoE experts.** Rarely routed experts see only a small quantity of calibration data. The
@@ -780,7 +780,7 @@ FP4:  4-bit code = index in {0, .5, 1, 1.5, 2, 3, 4, 6} | sign << 3, two per byt
 Pre-quantized checkpoints are on the Hub, under the names of the model vendors and RedHatAI/nm-testing (verify
 each id before you rely on it).
 
-**Loading in vLLM** ([vllm-internals §8.1–8.3](../vllm-internals/vllm-internals-primer.md#8-quantization-and-weight-loading)):
+**How vLLM loads a checkpoint** ([vllm-internals §8.1–8.3](../vllm-internals/vllm-internals-primer.md#8-quantization-and-weight-loading)):
 
 - **Detection.** vLLM reads `quantization_config.quant_method` and selects the method. A `--quantization` that
   does not agree with the checkpoint raises an error. Thus, for pre-quantized models, do not use the flag.
@@ -885,7 +885,7 @@ chunks gain nothing.
 
 "Prefill becomes faster only with formats that the tensor cores multiply natively. These are FP8 W8A8 on Ada and
 Hopper, INT8 W8A8 on older parts, and NVFP4 on Blackwell. The KV cache is the third lever: FP8 KV halves it, and on
-a 24 GB card that doubles the sessions. For the cost per token, this does more than speed does. The cost is 6× lower
+a 24 GB card that doubles the sessions. For the cost per token, the doubled number of sessions does more than speed does. The cost is 6× lower
 for an 8B model on an L4 with FP8 weights and KV, simulated. We examined what each checkpoint runs as on our GPUs:
 an FP8 checkpoint on an A100 is weight-only, and NVFP4 is W4A4 only on Blackwell.
 

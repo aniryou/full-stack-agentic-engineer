@@ -64,9 +64,9 @@ for rid in ["r0", "r1", "r2"]:
 print("\nstats:", eng.kv.stats)
 
 # %% [markdown]
-# `r1` and `r2` adopt `r0`'s system-prompt blocks. The same physical block ids are in all three tables with a
-# refcount of 3. `r1` and `r2` prefill only their own question. The engine counts hits in tokens. That is exactly
-# what vLLM reports as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
+# `r1` and `r2` adopt `r0`'s system-prompt blocks. The same physical block ids are in all three tables
+# with a refcount of 3. `r1` and `r2` prefill only their own question. The engine counts hits in tokens. vLLM reports
+# the same token counts as `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries`.
 #
 # ## Worked example 3 — a burst: three requests in the same step
 # An agent sends out three tool calls at once, all behind the same system prompt. Thus the scheduler
@@ -85,13 +85,13 @@ print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r
 
 # %% [markdown]
 # In one step, `r0` prefills its whole prompt, and `r1` and `r2` prefill only the tokens after token 176. That is
-# safe, because the forward pass writes the K/V of each layer for the *whole* step before a request attends at that
+# safe, because the forward pass writes the K/V of each layer for the *whole* step before any request attends at that
 # layer. The model code does `cache.write(...)` for all tokens, then the per-request attention.
 #
-# It also explains a rule of the scheduler. The scheduler publishes the blocks of a request that runs only when it
-# can no longer preempt a request in that step. A request that the scheduler removes from the batch must not publish blocks that it will
-# never compute. If an engine publishes blocks only after the step, a burst computes the shared prefix one time per
-# request. That engine also holds one copy per request.
+# The same write order also explains a rule of the scheduler. The scheduler publishes the blocks of a request that
+# runs only when it can no longer preempt a request in that step. A request that the scheduler removes from the batch
+# must not publish blocks that it will never compute. If an engine publishes blocks only after the step, a burst
+# computes the shared prefix one time per request. That engine also holds one copy per request.
 #
 # ## Worked example 4 — freed blocks keep producing hits, until memory is needed
 
@@ -316,10 +316,12 @@ print(f"✅ the radix tree reuses {extra} extra tokens per pair: always less tha
 
 # %% [markdown]
 # The difference is less than a block per request. Thus the choice between the two structures is rarely about hit
-# rate. It is about eviction policy and the scheduler. A radix tree makes the question "which cached prefix does
-# this request extend?" low-cost to ask. SGLang uses this to put requests in an order for cache locality. Block
-# hashes make the cache a flat dictionary that is simple to share, offload and publish as events (a cache-aware
-# router uses these events, 05).
+# rate. It is about the eviction policy and the order in which the scheduler runs requests. A radix tree makes the
+# question "which cached prefix does this request extend?" low-cost to ask. SGLang uses that low-cost question to put
+# requests in an order for cache locality.
+#
+# Block hashes make the cache a flat dictionary that is simple to share, offload and publish as events. A cache-aware
+# router uses these events (05).
 #
 # ## In a design review
 # **The two-minute version.** "The engine gives each full KV block a name: a hash of the name of its parent plus its

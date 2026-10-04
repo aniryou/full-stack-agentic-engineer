@@ -129,8 +129,8 @@ for method in ("rtn", "awq", "gptq"):
 # %% [markdown]
 # On the layers with outlier channels, AWQ beats GPTQ. On the model as a whole, the gains of GPTQ on the
 # down-projections dominate. Also, the two compose: first the scales of AWQ, then the rounding of GPTQ
-# (llm-compressor's `AWQModifier`, then a `GPTQModifier`). This gives the lowest KL of all. Accuracy moves within
-# its error bars at INT4 and gains a point at INT3.
+# (llm-compressor's `AWQModifier`, then a `GPTQModifier`). This gives the lowest KL of all. With the two methods
+# together, accuracy moves within its error bars at INT4 and gains a point at INT3.
 #
 # ## Worked example 4 — SmoothQuant for W8A8
 # W8A8 quantizes the input of the up-projection per token. Its four outlier channels set the scale of every token.
@@ -303,9 +303,9 @@ print("✅ AWQ helps exactly the layers whose inputs have outlier channels: it r
 # %% [markdown]
 # ## Exercise 3.5 — how much calibration data?
 # "Enough" means this: more samples make no difference that this eval can see. Find the smallest calibration size
-# among 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) that meets one condition. Its GPTQ INT3 g32
-# accuracy is below the 1,024-sample result by less than two standard errors of the *difference* between two such
-# runs. That bar is `2 * E.diff_stderr(p, p, n)`, with `p` the 1,024-sample accuracy and `n` the number of test
+# among 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) that meets one condition. The condition is about
+# the accuracy of GPTQ at INT3 g32. That accuracy must be below the 1,024-sample result by less than two standard
+# errors of the *difference* between two such runs. That bar is `2 * E.diff_stderr(p, p, n)`, with `p` the 1,024-sample accuracy and `n` the number of test
 # points. Set `n_enough`.
 
 # %% exercise
@@ -338,8 +338,8 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 # the inverse into the previous norm. It is strongest where a few channels dominate. The two methods compose: the
 # AWQ scales first, then the GPTQ rounding. On our toy, that gives the lowest KL.
 #
-# "For W8A8 INT8, we add SmoothQuant, which moves activation outliers into the weights at no run-time cost. We
-# calibrate on data that looks like traffic, but calibration data does not teach the model anything. If a format
+# "For W8A8 INT8, we add SmoothQuant, which moves activation outliers into the weights at no run-time cost. Calibration
+# data must look like traffic, but it does not teach the model anything. If a format
 # is too coarse, no calibration saves it."
 #
 # **Drills**

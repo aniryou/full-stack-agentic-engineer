@@ -1,13 +1,11 @@
 # %% [markdown]
 # # 04 · KV-cache quantization in vLLM: twice the sessions, a cheaper long-context step, and its conditions
 #
-# **Tier:** T0: the sizing reproduces the memory model of the serving lab exactly. The per-step times come from
-# the roofline emulator (**simulated**). The notebook measures the accuracy side on the bundled tiny model, with
-# an emulation of each KV dtype.
-#
-# T1 (Ada or newer: L4, RTX 4090, H100): `vllm serve ... --kv-cache-dtype fp8`. When you set
-# `QUANTLAB_VLLM_LOG` and `QUANTLAB_URL`, the last code cell reads the capacity and backend back from
-# the startup log of vLLM and from `/metrics`. It also measures decode at two context lengths. Without them, it
+# **Tier:** T0: the sizing reproduces the memory model of the serving lab exactly, and the per-step times come
+# from the roofline emulator (**simulated**). The notebook measures the accuracy side on the bundled tiny model,
+# with an emulation of each KV dtype. T1 (Ada or newer: L4, RTX 4090, H100):
+# `vllm serve ... --kv-cache-dtype fp8`. When you set `QUANTLAB_VLLM_LOG` and `QUANTLAB_URL`, the last code cell
+# reads the capacity and backend back from the startup log of vLLM and from `/metrics`. It also measures decode at two context lengths. Without them, it
 # parses a bundled log: **sample output in the documented format (illustrative)**.
 #
 # ## The one-minute version
@@ -41,10 +39,10 @@ print("\nQwen2.5-1.5B-Instruct on a T4")
 print(kv.table("qwen2.5-1.5b-instruct", "T4"))
 
 # %% [markdown]
-# The L4 rows are the `sizing.size()` numbers of the serving lab, to the block. The tests of this lab pin them,
-# and they compare against the code of the serving lab when it is in the checkout. FP8 weights free 7 GB for KV.
-# FP8 KV halves every token. Together, they take an 8B model from 19 to 91 two-thousand-token sessions on one 24
-# GB card. On a T4, the FP8 KV rows are arithmetic only, because no attention backend there reads FP8 KV.
+# The L4 rows are the `sizing.size()` numbers of the serving lab, to the block. The tests of this lab pin them.
+# When the code of the serving lab is in the checkout, the tests also compare them with that code. FP8 weights
+# free 7 GB for KV, and FP8 KV halves every token. Together, they take an 8B model from 19 to 91
+# two-thousand-token sessions on one 24 GB card. On a T4, the FP8 KV rows are arithmetic only, because no attention backend there reads FP8 KV.
 #
 # ## Exercise 4.1 — KV bytes per token from `config.json`
 #
@@ -210,10 +208,10 @@ print("measured on the bundled tiny model (T0); K/V amax per layer:",
 print(E.table(rows))
 
 # %% [markdown]
-# With $|K|, |V| \le 14$, the default scale of 1.0 is as good as a calibrated scale. The relative precision of
-# E4M3 is the same in every binade. Thus the scale is important only at the ends of the range. A scale 100x too
-# small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0). A scale of 1,000 pushes typical values
-# into the subnormals, where the precision runs out.
+# With $|K|, |V| \le 14$, the default scale of 1.0 is as good as a calibrated scale. This is because the
+# relative precision of E4M3 is the same in every binade. Thus the scale is important only at the ends of the
+# range. A scale 100x too small saturates everything at $448 \times \mathrm{scale}$ (accuracy 0). A scale of
+# 1,000 pushes typical values into the subnormals, where the precision runs out.
 #
 # Integer KV formats are the opposite. Their error depends on the scale everywhere. That is why they use dynamic
 # per-token-head scales.
@@ -252,13 +250,13 @@ print(f"✅ layer-0 K: amax {amax:.1f}, rms {rms:.2f} ->", {f"{s:g}": v for s, v
 #
 # Use an L4 or H100 (not a T4). Start `vllm serve` with `--kv-cache-dtype fp8` (the command in the next cell).
 # Keep its log (`... 2>&1 | tee vllm.log`). Then set `QUANTLAB_VLLM_LOG=vllm.log` and
-# `QUANTLAB_URL=http://127.0.0.1:8000`. Then run this cell. It checks three things against the prediction:
+# `QUANTLAB_URL=http://127.0.0.1:8000`. Then run this cell. The cell compares three things with the prediction:
 #
 # * the KV dtype and capacity (from the log, and from `vllm:cache_config_info` in `/metrics`),
 # * the attention backend,
 # * the decode speed at a short and a long context.
 #
-# Run it one time with the flag and one time without the flag. The pair is the measurement. If you set neither
+# Do this procedure one time with the flag and one time without the flag. The pair is the measurement. If you set neither
 # variable, the cell parses a bundled sample log.
 
 # %%
@@ -299,7 +297,7 @@ else:
 # 11,383 with FP8 weights. That is 19 to 91 two-thousand-token sessions.
 #
 # "FP8 KV also makes long-context decode lower-cost. At batch 32, the KV read passes the weight read at about
-# 1,900 tokens of context with BF16 KV. It needs an attention backend that reads FP8. T4s have none. On L4s, the
+# 1,900 tokens of context with BF16 KV. FP8 KV needs an attention backend that reads FP8. T4s have none. On L4s, the
 # flag moves us from FlashAttention to FlashInfer. Thus we measure the pair, not only the dtype.
 #
 # "We keep the default scale of 1.0 only after we examine the K/V ranges. If the model has large K values, we ship

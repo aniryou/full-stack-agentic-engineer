@@ -5,8 +5,8 @@ will know the grid of each format and which outliers each granularity survives. 
 and SmoothQuant do to the codes. You will know what an FP8 or 4-bit KV cache costs in accuracy and gives in
 sessions. You will also know what a checkpoint runs as on each GPU generation.
 
-To get there, you fill in the code yourself in `quantcore`. This numpy package is sufficiently small to read in one
-session (~640 lines of code, ~1,130 with docstrings).
+To get there, you fill in the code yourself in `quantcore`. This numpy package is small, and you can read all of it at
+one time (~640 lines of code, ~1,130 with docstrings).
 
 ## Start here
 
@@ -35,7 +35,7 @@ curriculum of the repo).
 | [`02_granularity_and_outliers`](notebooks/02_granularity_and_outliers.ipynb) | Reproduce serving-engine §8's six-scheme table. Show why per-channel scales repair the error of an outlier row, but not of an outlier input column. Measure what per-token INT8 does to activations with outlier channels (and what FP8 does instead). Select a static activation scale on calibration data. Use 128×128 block scales. | §2, §3 | ~1.5 h | T0 |
 | [`03_gptq_awq_and_smoothquant_from_scratch`](notebooks/03_gptq_awq_and_smoothquant_from_scratch.ipynb) | Implement GPTQ's column loop and AWQ's scale search. Fold SmoothQuant and AWQ scales into a model with no change to the model. Say which layers each method helps, and why. Measure how much calibration data is sufficient. | §4, §5 | ~2 h | T0 |
 | [`04_activation_and_kv_cache_quantization`](notebooks/04_activation_and_kv_cache_quantization.ipynb) | Implement a W8A8 GEMM epilogue. Compare static and dynamic activation scales. Show why the LM head stays 16-bit. Find how good FP8 KV is with and without calibrated scales. Implement KIVI's per-channel keys. Calculate the size of the cache. | §5, §6 | ~1.5 h | T0 |
-| [`05_choosing_a_scheme`](notebooks/05_choosing_a_scheme.ipynb) | Reproduce serving-engine §8's L4 table and vllm-internals §8.1's GEMM table. Find where W4A16 no longer pays for itself. Say what a checkpoint runs as on T4 to B200. Select schemes for a T4, an L4 and an H100 that serve a 70B. Calculate the price of a million tokens (simulated). | §1, §10 | ~1.5 h | T0 |
+| [`05_choosing_a_scheme`](notebooks/05_choosing_a_scheme.ipynb) | Reproduce serving-engine §8's L4 table and vllm-internals §8.1's GEMM table. Find where W4A16 no longer pays for itself. Say what a checkpoint runs as on T4 to B200. Select schemes for a T4, for an L4, and for an H100 that serves a 70B. Calculate the price of a million tokens (simulated). | §1, §10 | ~1.5 h | T0 |
 
 ## Run it
 
@@ -88,7 +88,7 @@ about 30 s. The tests that carry the correctness claims are these:
 
 - **It reproduces the repo's published numbers with its own code** (`test_repo_numbers.py`). The numbers
   include serving-engine PRIMER §8's six-scheme error table and FP8 grid statistics. They also include
-  outlier-channel and SmoothQuant numbers (from the seed of `mini-engine-core` notebook 06), and the SIMULATED
+  outlier-channel and SmoothQuant numbers (with the same seed as `mini-engine-core` notebook 06), and the SIMULATED
   Llama-3.1-8B-on-L4 table to the digit. They include vllm-internals §8.1's `down_proj` table (392/102/196 µs …),
   with the W4A16 crossover at 120 tokens on an L4 and 85 on an H100. They also include servelab's Qwen2.5-0.5B
   weight bytes. If `mini-engine-core` is on disk, the test also compares `fake_quant` directly with
@@ -98,7 +98,7 @@ about 30 s. The tests that carry the correctness claims are these:
   exactly. When the package packs INT4 codes, the result matches compressed-tensors' `0xfcba9810`, and a round trip
   returns the same values (`test_formats.py`).
 - **GPTQ is GPTQ.** It matches a line-by-line transcription of the reference's blocked "lazy batch" loop to
-  1e-9. It matches per channel, and it matches whenever groups start on block boundaries. A group that starts
+  1e-9 per channel and whenever groups start on block boundaries. A group that starts
   mid-block takes its scale from weights that the reference has not updated yet, and the test shows that difference
   too. When the inputs have no correlation, GPTQ reduces to RTN exactly. On correlated inputs, it beats RTN out of
   sample (`test_gptq.py`).
@@ -114,8 +114,8 @@ about 30 s. The tests that carry the correctness claims are these:
 
 ## Caveats: what is faithful, and what is simplified
 
-These parts are faithful to the sources, read at the commits that the primer's Sources list (see also its Verify
-list):
+These parts are faithful to the sources, read at the commits that the Sources section of the primer gives (see
+also its Verify list):
 
 - GPTQ's update, damping and act-order (group scales: see `gptq.py`'s docstring).
 - AWQ's statistic, normalisation and 20-point grid, and SmoothQuant's scale formula.
@@ -132,7 +132,7 @@ These parts are simpler than the sources:
 - The primer describes AWQ's clipping search, but the code does not implement it.
 - `cost.supported` is a table of rules, not a probe of your GPU.
 
-Every latency and throughput that `quantcore.cost` prints is a **simulated** value, and it has that label. The model is a
+Every latency and throughput that `quantcore.cost` prints is a **simulated** value, and it has that label. The simulation is a
 roofline model with 80% of bandwidth, 60% of peak FLOP/s and 2 ms per step, as in `minengine.perf`. The GPU figures
 are dense datasheet values `(verify)`.
 
@@ -157,7 +157,7 @@ FP16, INT4 and FP8 side by side in vLLM. You measure accuracy with lm-eval, and 
 GPU. The lab has a T0 fake server for every notebook.
 
 To learn how vLLM selects a quantization method and kernel in its source, read
-[`../../vllm-internals/`](../../vllm-internals/README.md) §8. For the roofline and cost-per-token arithmetic under
-this, see layer 01's
+[`../../vllm-internals/`](../../vllm-internals/README.md) §8. For the roofline and the cost-per-token arithmetic that
+this package uses, see layer 01's
 [`roofline-and-fabric`](../../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md). For where each tier runs and
 what it costs, see [`COMPUTE.md`](../../../COMPUTE.md). This package has the MIT license.

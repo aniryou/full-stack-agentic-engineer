@@ -15,8 +15,8 @@ serve and evaluate a real quantized checkpoint.
    about 30 s. Then open [`01_number_formats_and_error`](quant-core/notebooks/01_number_formats_and_error.ipynb).
 3. For the fastest result, run this command. It takes less than a second on a laptop:
    `cd quant-core && python3 -c "from quantcore import cost; print(cost.supported(cost.GPUS['A100-80GB'], 'w8a8-fp8'))"`.
-   It prints what an FP8 checkpoint really runs as on an A100. The answer is weight-only. This saves memory, but it
-   does no FP8 math.
+   It prints what an FP8 checkpoint really runs as on an A100. The answer is weight-only. A weight-only checkpoint saves
+   memory, but it does no FP8 math.
 
 ## What you get
 
@@ -66,7 +66,7 @@ On Colab, the first cell of every notebook clones the repo and installs its pack
 | Tier | What you run in this topic | Hardware and cost |
 |---|---|---|
 | **T0** | Every core notebook. The T0 path of every lab notebook: a bundled small model written as a compressed-tensors-style checkpoint, a fake server and the offline mini-eval. All latencies are **simulated** values. | laptop, Colab CPU or CI, $0 |
-| **T1** | llm-compressor on a 0.5B model. vLLM with FP16, INT4 and FP8 checkpoints. lm-eval subsets. An FP8 KV cache (Ada or newer). NVFP4 W4A4 (Blackwell). | Colab/Kaggle T4 (free: INT4 with fp16 and INT8 W8A8, no FP8 math, no FP8 KV). An RTX 4090 or L4 for FP8 (~$0.3–0.7/hr, verify). One rented B200 or RTX PRO 6000 for NVFP4 (verify). |
+| **T1** | llm-compressor on a 0.5B model. vLLM that serves FP16, INT4 and FP8 checkpoints. lm-eval subsets. An FP8 KV cache (Ada or newer). NVFP4 W4A4 (Blackwell). | Colab/Kaggle T4 (free: INT4 with fp16 and INT8 W8A8, no FP8 math, no FP8 KV). An RTX 4090 or L4 for FP8 (~$0.3–0.7/hr, verify). One rented B200 or RTX PRO 6000 for NVFP4 (verify). |
 | **T3** | the serving lab's Cloud Run GPU or GKE deploy with a quantized model (no new Terraform here) | GCP, pay per use. See [`vllm-serving-lab/deploy/`](../serving-engine/vllm-serving-lab/deploy/) for cleanup. |
 
 For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.md`](../../COMPUTE.md).
@@ -76,21 +76,21 @@ For prices, free tiers and how to get GPUs on GCP and elsewhere, see [`COMPUTE.m
 | | Read | For |
 |---|---|---|
 | before | [serving-engine PRIMER §8](../serving-engine/PRIMER.md#8-quantization) and `mini-engine-core` notebook [`06_quantization`](../serving-engine/mini-engine-core/notebooks/06_quantization.ipynb) | the survey that this topic goes deeper into: formats, granularity, weight-only against W8A8, and what each gives on an L4 (`quantcore` reproduces its numbers) |
-| before | layer 01 [`roofline-and-fabric`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §1–3 and §8, and [gpu-primer §4](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) | peak FLOP/s by precision, why decode is a weight read, and cost per token. Also tensor cores and the precision ladder. |
+| before | layer 01 [`roofline-and-fabric`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §1–3 and §8, and [gpu-primer §4](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) | peak FLOP/s by precision, why decode is a weight read, cost per token, tensor cores and the precision ladder |
 | before | [capacity planning](../../00-foundations/gpu-capacity-planning/PRIMER.md) | bytes per parameter, KV bytes, sessions |
-| beside | [`vllm-internals`](../vllm-internals/README.md) §6.3 and §8, and the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) §9 | how vLLM selects a quantization method, a kernel and an attention backend. Also the error sources of FP8 attention. |
+| beside | [`vllm-internals`](../vllm-internals/README.md) §6.3 and §8, and the [FlashAttention deep dive](../flash-attention/flash-attention-deep-dive.md) §9 | how vLLM selects a quantization method, a kernel and an attention backend, and the error sources of FP8 attention |
 | beside | [`vllm-serving-lab`](../serving-engine/vllm-serving-lab/) (`servelab.sizing`, notebook 05, `deploy/`) | the sizing, the benchmarks and the deploys that the lab uses again |
 | after | [mixture-of-experts §6.7 *Quantized experts*](../../00-foundations/mixture-of-experts/PRIMER.md#67-quantized-experts) | quantized experts (MXFP4 in gpt-oss), and routers that stay 16-bit |
 | after | [`05-orchestrator`](../../05-orchestrator/README.md) and [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) | fleets of quantized replicas, and cost per conversation |
 
 ## Caveats
 
-- **Simulated vs measured.** The latencies of the core and the lab's fake server come from a roofline model with
+- **Simulated against measured.** The latencies of the core and the lab's fake server come from a roofline model with
   assumed efficiencies. They have the label SIMULATED. Only the lab's T1 paths measure. The accuracy numbers in the
   core come from a small synthetic model. They show the mechanisms and their direction, not the losses of a real
   model.
 - **Kernel rules move fast.** What a scheme runs as on each GPU generation follows vLLM 0.30.0 and `main` as of
-  September 2026. This includes FP8 below Ada, NVFP4 below Blackwell, INT8 W8A8 on Blackwell and FP8 KV on a T4.
+  September 2026. These rules cover FP8 below Ada, NVFP4 below Blackwell, INT8 W8A8 on Blackwell and FP8 KV on a T4.
   `--quantization fp8` on a BF16 checkpoint works at 0.30.0 and raises an exception at `main` (use
   `fp8_per_tensor`). Examine the `Selected <kernel>` log line on your version. The primer's
   [Verify list](PRIMER.md#verify-list) collects the dated facts.

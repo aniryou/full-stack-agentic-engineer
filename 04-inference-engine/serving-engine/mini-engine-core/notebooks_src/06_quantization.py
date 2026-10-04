@@ -14,15 +14,17 @@
 # * Per tensor is the lowest-cost option. But one outlier makes the scale larger and destroys the resolution of all
 #   the other weights.
 # * Per output channel isolates the outlier rows.
-# * Groups of 32–128 inputs (the usual INT4 recipe, GPTQ/AWQ) isolate them more, for a few extra bits per group.
+# * Groups of 32–128 inputs (the usual INT4 recipe, GPTQ/AWQ) isolate the outliers more, for a few extra bits per group.
 #
-# The gain depends on the bottleneck. First, **decode is memory-bound**, thus fewer weight bytes give faster tokens.
+# The gain depends on the bottleneck. First, **decode is memory-bound**. Thus fewer weight bytes give faster tokens.
 # Weight-only INT4 gives ≈ 3× on one request for an 8B model. It does not give 3.9×, because the embedding and LM head
-# stay in 16-bit, and the KV read does not become smaller. Second, **prefill is compute-bound**. Thus only the
-# formats that the tensor cores compute in natively (FP8 W8A8 on Ada/Hopper/Blackwell, INT8 W8A8) make it faster.
+# stay in 16-bit, and the KV read does not become smaller.
+#
+# Second, **prefill is compute-bound**. Thus only the formats that the tensor cores compute in natively (FP8 W8A8 on
+# Ada/Hopper/Blackwell, INT8 W8A8) make it faster.
 #
 # Quantization of the **KV cache** (FP8) halves its bytes, and thus doubles the number of sessions that fit. Also,
-# quantization always costs some accuracy. Measure it on your own evals.
+# quantization always costs some accuracy. Measure the loss on your own evals.
 #
 # Primer: §8 *Quantization* (`../../PRIMER.md`). For the memory size calculation, see
 # `00-foundations/gpu-capacity-planning/PRIMER.md`.
@@ -51,12 +53,12 @@ for fmt, gran, g, bits in schemes:
     print(f"{fmt + ' ' + gran + (str(g) if g else ''):18} {bpw:11.3f} {e['rel']:10.4f} {e['sqnr_db']:8.1f}")
 
 # %% [markdown]
-# Each bit gives about 6 dB of signal-to-noise. INT4 loses ~24 dB against INT8. Groups get back a small part of that,
-# at a small storage cost (a 16-bit scale per 128 weights adds 0.125 bits). On well-behaved weights, INT8 per channel
+# Each bit gives about 6 dB of signal-to-noise. INT4 loses ~24 dB against INT8. Groups get back a small quantity of
+# precision, at a small storage cost (a 16-bit scale per 128 weights adds 0.125 bits). On well-behaved weights, INT8 per channel
 # is in fact more precise than FP8 (43 against 32 dB), because FP8-E4M3 has only 3 mantissa bits.
 #
-# The strength of FP8 is *range*: a floating-point grid keeps the same relative precision from 2⁻⁶ to 448. This is
-# important for activations, whose scale changes from token to token. Also, FP8 is the format that the tensor cores
+# The strength of FP8 is *range*: a floating-point grid keeps the same relative precision from 2⁻⁶ to 448. The range
+# is important for activations, whose scale changes from token to token. Also, FP8 is the format that the tensor cores
 # compute in.
 #
 # ## Worked example 2 — the FP8-E4M3 grid
@@ -72,7 +74,7 @@ print(f"relative rounding error on N(0,1) values: median {np.median(rel):.3%}, m
 # %% [markdown]
 # The grid has eight values per power of two. Thus the relative step is 1/8, and the worst rounding error is
 # 1/16 = 6.25%, for all magnitudes. This is true until values are less than 2⁻⁶ (subnormals) or more than 448
-# (saturation). That is why engines use FP8 with a per-tensor or per-channel scale that maps the range of the data
+# (saturation). That is why FP8 comes with a per-tensor or per-channel scale. The scale maps the range of the data
 # onto the grid.
 #
 # ## Worked example 3 — one outlier channel
@@ -184,7 +186,7 @@ print("(SIMULATED: roofline model, 80% bandwidth / 60% FLOPs, 2 ms per step over
 #
 # ## Exercise 6.1 — symmetric per-channel INT8
 # For `w` of shape `(d_in, d_out)`, use one scale per output column: $\mathrm{scale} = \max \lvert w_{:,j} \rvert / 127$.
-# The codes are $\mathrm{codes} = \operatorname{round}(w/\mathrm{scale})$, clipped to ±127. Return `(codes, scale)`, with
+# Use $\mathrm{codes} = \operatorname{round}(w/\mathrm{scale})$, clipped to ±127. Return `(codes, scale)`, with
 # `scale` of shape `(d_out,)`.
 
 # %% exercise
@@ -302,13 +304,13 @@ print("✅", choice, "- INT4 wins memory and decode but not prefill; FP8 W8A8 ne
 # ## In a design review
 # **The two-minute version.** "Quantization is a trade between bits and accuracy, and its gain depends on the
 # bottleneck. Decode is memory-bound. Weight-only INT4 with group-wise scales cuts the bytes of the linear layers by
-# almost 4×. For an 8B model, it cuts single-stream latency by ~3× (its 16-bit LM head stays).
+# almost 4×. Thus, for an 8B model, it cuts single-stream latency by ~3× (its 16-bit LM head stays).
 #
 # "But prefill is compute-bound. Thus only W8A8 formats that run natively on the tensor cores make prefill faster.
 # These formats are FP8 on Ada, Hopper and Blackwell.
 #
-# "Independently of that, an FP8 KV cache halves the KV bytes and doubles the sessions per GPU. On a 24 GB card, this
-# is more important than speed.
+# "Independently of that, an FP8 KV cache halves the KV bytes and doubles the sessions per GPU. On a 24 GB card, the
+# extra sessions are more important than speed.
 #
 # "Granularity is where you win accuracy: per-channel for INT8, groups of 32–128 for INT4, and outlier methods like
 # SmoothQuant or AWQ for activations. We quantize, and then we use task-level evals against the bf16 baseline as the

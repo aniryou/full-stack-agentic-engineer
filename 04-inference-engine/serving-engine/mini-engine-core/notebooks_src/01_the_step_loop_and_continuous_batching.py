@@ -99,7 +99,7 @@ print("sampled:", {k: decode([v]) for k, v in sampled.items()})
 #
 # ## Worked example 3 — the paged, batched engine computes exactly the reference
 # `TinyLM.generate_dense` recomputes the whole sequence for each token. It uses textbook attention and no cache. The
-# engine divides prompts into chunks, puts requests into batches and keeps the KV cache in pages. But it must produce
+# engine divides prompts into chunks, puts requests into batches and keeps the KV cache in pages. It must also produce
 # the same tokens.
 
 # %%
@@ -219,9 +219,10 @@ print("✅ continuous batching never waits for the longest request in a batch")
 
 # %% [markdown]
 # ## Exercise 1.5 — blocks cap concurrency (a real model)
-# Put Llama-3.1-8B in bf16 on one 24 GB L4 with `gpu_memory_utilization=0.9`. This leaves `perf.kv_cache_blocks(...)`
-# blocks of 16 tokens for the KV cache. On average, a chat request has 1,000 prompt tokens and 200 output tokens. How
-# many requests can be in memory at the same time? Set `concurrent` (use your `peak_blocks`).
+# If Llama-3.1-8B in bf16 runs on one 24 GB L4 with `gpu_memory_utilization=0.9`, it leaves
+# `perf.kv_cache_blocks(...)` blocks of 16 tokens for the KV cache. On average, a chat request has 1,000 prompt tokens
+# and 200 output tokens. How many requests can be in memory at the same time? Set `concurrent` (use your
+# `peak_blocks`).
 
 # %% exercise
 gpu, llm = perf.GPUS["L4"], perf.LLMS["llama-3.1-8b"]
@@ -303,8 +304,8 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # needs more than one GPU, tensor parallelism divides each layer and pays two all-reduces per layer per step."
 #
 # **Drill questions**
-# 1. *Why does the engine not have prefill steps and decode steps?* Because the scheduler only records computed
-#    tokens against total tokens. A step mixes decode tokens and prefill chunks under one token budget.
+# 1. *Why does the engine not have prefill steps and decode steps?* Because the scheduler records only two counts: the
+#    computed tokens and the total tokens. A step mixes decode tokens and prefill chunks under one token budget.
 # 2. *Why is batching nearly free during decode?* Decode is memory-bound. The step time is the weight read. All
 #    requests in the batch share that read (Notebook 02 puts numbers on it).
 # 3. *A request's prompt is 8 tokens and it generates 1 token with block size 4. How many blocks?* Two. The

@@ -25,13 +25,13 @@ SERVELAB_URL=http://127.0.0.1:8000 jupyter lab ../../notebooks
 
 | Flag | This lab's default | Why |
 |---|---|---|
-| `--dtype half` | below compute capability 8.0 | Turing (T4, 7.5) has no bfloat16. float16 has the same 2 bytes. With `auto`, vLLM v0.30.0 uses float16 instead and gives a warning. vLLM refuses an explicit `bfloat16`. |
+| `--dtype half` | below compute capability 8.0 | Turing (T4, 7.5) has no bfloat16. float16 also uses 2 bytes for each value. With `auto`, vLLM v0.30.0 uses float16 instead and gives a warning. vLLM refuses an explicit `bfloat16`. |
 | `--max-model-len 4096` | 4096 | It sets the limit for the longest request. It sets the start-up fit check and the worst-case "Maximum concurrency" line. It does not change the number of KV blocks (notebook 01). |
 | `--gpu-memory-utilization 0.92` | 0.92 | The fraction of GPU memory that vLLM can use (weights + activations + CUDA graphs + KV blocks). 0.92 is the default of v0.30.0 (older releases used 0.9). When you compare, give the same value to `servelab size`. |
 | `--max-num-seqs`, `--max-num-batched-tokens` | vLLM defaults | The batch size and the per-step token budget (notebook 03). `vllm serve` selects 256 / 2048 below 70 GiB and on A100. It selects 1024 / 8192 on other 70 GiB+ GPUs, for example H100, and 1024 / 16384 at 160 GiB+. |
 | `--tensor-parallel-size 2` | 1 (`TP=2`) | Two GPUs. Each GPU holds half of the weights and half of the KV heads (notebook 03, exercise 3.6). |
 | `--api-key` | unset | **Set it** on any machine with a public port. The bench sends `SERVELAB_API_KEY`. |
-| `--enable-prompt-tokens-details` | unset | It adds `usage.prompt_tokens_details.cached_tokens`. Then the bench can report the prefix-cache hits of each request (notebook 04). |
+| `--enable-prompt-tokens-details` | unset | It adds `usage.prompt_tokens_details.cached_tokens`. Thus the bench can report the prefix-cache hits of each request (notebook 04). |
 | `--attention-backend` | unset | vLLM selects one for each GPU (see the next section). Set it to one backend only to compare backends. It replaces the `VLLM_ATTENTION_BACKEND` environment variable. v0.30.0 no longer has that variable, and it no longer has `VLLM_USE_V1`. |
 
 Prefix caching and chunked prefill are on by default in v0.30.0.
@@ -39,8 +39,8 @@ Prefix caching and chunked prefill are on by default in v0.30.0.
 ## Which GPUs work, and what runs on a T4
 
 * **Minimum compute capability 7.5.** The wheels and the image of vLLM v0.30.0 are CUDA 13 builds. The PyPI wheel
-  depends on `[cu13]` packages, and the base of the image is CUDA 13.0.3. They compile kernels for sm_75 and newer
-  only. A T4 (7.5) works. A V100 (7.0) and Kaggle's **P100 (6.0) do not**.
+  depends on `[cu13]` packages, and the base of the image is CUDA 13.0.3. These builds compile kernels for sm_75 and
+  newer only. A T4 (7.5) works. A V100 (7.0) and Kaggle's **P100 (6.0) do not**.
 * **Driver.** CUDA 13 needs an NVIDIA driver from the 580 series or newer (verify against NVIDIA's
   CUDA compatibility table). Examine the driver before you install. If the driver is older, use an older vLLM
   release built for CUDA 12 instead (verify which on its release notes).
@@ -56,7 +56,7 @@ Prefix caching and chunked prefill are on by default in v0.30.0.
 ## Colab or Kaggle (free T4)
 
 On Colab, select Runtime, then "change runtime type", then "T4 GPU". On Kaggle, select Settings, then Accelerator,
-then **GPU T4 x2**. Do not select "GPU P100", because vLLM cannot run its compute capability 6.0. One of the two T4s
+then **GPU T4 x2**. Do not select "GPU P100", because vLLM cannot run on a GPU with compute capability 6.0. One of the two T4s
 is sufficient here. The T2 recipe in "Two GPUs: tensor parallelism on Kaggle's T4 x2 (T2)" uses both. Then, in a
 notebook cell, examine the GPU and the driver first:
 
@@ -101,11 +101,11 @@ The bandwidth and the latency of the collectives themselves are the subject of l
 * **RunPod / Vast.ai** give you a *container*. Select the `vllm/vllm-openai` image as the template image. Put the
   model and the flags in the container arguments. Expose port 8000, and set `--api-key`, because the endpoint is
   public. An RTX 4090 (24 GB) costs approximately $0.3-0.4/hr (verify in
-  [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a 30-minute session costs some cents.
+  [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a 30-minute session costs a few cents.
 * **Lambda** (and GCP Compute Engine) give you a *VM*. Install Docker and the NVIDIA Container Toolkit (layer 02), or
   run `pip install vllm`. Then run `./serve.sh`.
-* Run the benchmark **from the same machine** (`--url http://127.0.0.1:8000`), unless you want the network in your
-  TTFT. The TTFT of the bench always includes everything between the bench and the engine.
+* If you do not want the network in your TTFT, run the benchmark **from the same machine**
+  (`--url http://127.0.0.1:8000`). The TTFT of the bench always includes everything between the bench and the engine.
 
 ## Cleanup
 

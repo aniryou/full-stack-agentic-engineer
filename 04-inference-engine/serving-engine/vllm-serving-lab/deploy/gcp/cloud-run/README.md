@@ -2,7 +2,7 @@
 
 **Tier:** T3 (GCP, pay per use). You can *read and plan* everything here offline. Notebook
 [`06_deploy_on_cloud_run_gpu`](../../../notebooks_src/06_deploy_on_cloud_run_gpu.py) goes through
-it step by step. It also calculates the cold-start and cost arithmetic at T0.
+it. It also does the cold-start and cost arithmetic at T0.
 
 ```
 client ──HTTPS + identity token──▶ Cloud Run service "vllm-l4"
@@ -24,7 +24,7 @@ There are two equivalent paths:
 ## Before you start
 
 * Get a **paid** billing account. GPUs are not available on the Free Trial. Also get **Cloud Run L4
-  quota** in your region. Quota for GPUs often starts at 0, thus request it first. Find the quota
+  quota** in your region. Because quota for GPUs often starts at 0, request it first. Find the quota
   name for "L4 without zonal redundancy" in the Cloud Run GPU docs (verify).
 * Calculate the engine size for 24 GB before you pay for it:
   `python -m servelab size --model qwen2.5-1.5b-instruct --gpu L4 --max-model-len 8192`.
@@ -65,7 +65,7 @@ Notebook 06 calculates each term in seconds from bytes and bandwidth. The startu
 | `min_instances` | Cloud Run | At 0, you pay nothing while idle, but you pay for cold starts. At 1, the instance is warm, and you pay for every second. |
 | `max_instances` | Cloud Run | The upper limit on L4s (and on your bill). The quota also limits it. |
 | `max_model_len`, `gpu_memory_utilization`, `extra_args` | vLLM | KV blocks and concurrency (notebook 01), batching (notebook 03). |
-| `model_source = "gcs"` | both | Faster cold starts that you can repeat. Nothing goes into the in-memory filesystem. |
+| `model_source = "gcs"` | both | Faster cold starts, with the same duration each time. Nothing goes into the in-memory filesystem. |
 
 ## Cost and cleanup
 
@@ -83,5 +83,5 @@ gcloud secrets delete hf-token                     # if you created it
 ```
 
 The items with the mark `# VERIFY:` in the Terraform are product details (GPU regions, quota type,
-startup-probe limits, CPU allocation for GPU services). Compare them again with the current Cloud
-Run GPU docs.
+startup-probe limits, CPU allocation for GPU services). Make sure that they agree with the
+current Cloud Run GPU docs.

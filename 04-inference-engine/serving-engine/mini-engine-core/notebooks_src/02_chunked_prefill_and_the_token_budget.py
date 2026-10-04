@@ -139,10 +139,10 @@ for rate in [6, math.inf]:
 # The budget limits the tokens per step. The KV pool limits the tokens in flight. Four requests, each of which grows
 # to ~9 blocks, share a 16-block pool.
 #
-# If a request that runs needs a block and no block is free, the scheduler preempts the **newest** request that
-# runs. It frees the blocks of that request, sets it back to zero computed tokens and puts it at the front of the
-# queue. The request keeps its generated tokens. Later, the engine does the prefill of the request again
-# ("recompute"), and the request continues.
+# If a request that runs needs a block and no block is free, the scheduler preempts the **newest** request that runs.
+# The scheduler frees the blocks of that request and sets the request back to zero computed tokens. The scheduler also
+# puts the request at the front of the queue. The request keeps its generated tokens. Later, the engine does the
+# prefill of the request again ("recompute"), and the request continues.
 
 # %%
 prompts = ["The engine runs a loop", "Each step it picks the", "When memory runs out,", "A request that finishes"]
@@ -157,13 +157,13 @@ print("outputs identical to the dense reference:",
 
 # %% [markdown]
 # Look at the `recompute` lines. `r1` starts again at position 20, not at 0. Its freed blocks were still in the
-# prefix cache (Notebook 03), so the engine recomputed only the tail. Preemption is correct, because the outputs
-# match. But it has a high cost. The engine does the work of the preempted request again, and each request waits
+# prefix cache (Notebook 03), so the engine recomputed only the tail. Preemption is correct: the outputs match. But
+# it has a high cost. The engine does the work of the preempted request again, and each request waits
 # while memory is short.
 #
 # vLLM V1 preempts by recompute only. A swap of blocks to CPU memory was a V0 mode (verify). In production,
-# preemptions are a capacity signal. The corrections are more KV memory (`gpu_memory_utilization`, FP8 KV, a
-# smaller model), fewer concurrent sequences, or more replicas.
+# preemptions are a signal to change the size of the deployment. The corrections are more KV memory
+# (`gpu_memory_utilization`, FP8 KV, a smaller model), fewer concurrent sequences, or more replicas.
 #
 # ## Exercise 2.1 — the chunk schedule
 # The scheduler admits a `prompt_len`-token prompt while `num_decodes` requests decode. Each decode gets 1 token per
@@ -340,10 +340,10 @@ print(f"   at 2,000 blocks: {with_check} preemptions with the whole-prompt check
 # prompt gets the rest. Thus the worst gap stays near 30 ms at a 512 budget. The cost is a slightly later first
 # token for the long prompt.
 #
-# "At moderate load, the budget is a trade between TTFT and ITL. Saturated, the budget also sets capacity. A budget
-# a few hundred tokens past the knee packs prefill FLOPs and decode KV reads into the same steps. A budget at the
-# knee uses its steps mostly on constant costs. I select the largest budget whose worst step meets the ITL SLO, and I
-# examine capacity under a load that saturates the engine.
+# "At moderate load, the budget is a trade between TTFT and ITL. Saturated, the budget also sets capacity. A budget a
+# few hundred tokens past the knee packs prefill FLOPs and decode KV reads into the same steps. A budget at the knee
+# loses steps to constant costs. I select the largest budget whose worst step meets the ITL SLO, and I examine
+# capacity under a load that saturates the engine.
 #
 # "The second budget is KV memory. If the requests that run become larger than the block pool, the scheduler
 # preempts the newest one, and the engine recomputes it. The outputs stay correct, but TTFT increases by a large factor
@@ -354,7 +354,7 @@ print(f"   at 2,000 blocks: {with_check} preemptions with the whole-prompt check
 # **Drill questions**
 # 1. *Why does a larger batch not make decode slower?* Below the knee, a step is the weight read, and the tokens
 #    share it.
-# 2. *Chunked prefill is on, yet p99 ITL is bad. What do you check?* The budget. If it is far past the knee, each
+# 2. *Chunked prefill is on, yet p99 ITL is bad. What do you examine?* The budget. If it is far past the knee, each
 #    step is still long. Decrease it until the worst step meets the SLO.
 # 3. *`vllm:num_preemptions` increases. What does it mean and what do you change?* The requests that run become
 #    larger than the KV pool, and each preemption discards work. Add KV memory (utilisation, FP8 KV), cap

@@ -85,7 +85,7 @@ print(plan.summary())
 #
 # Write `min_failure_threshold(weights_gb, weights_gb_s, init_s, period_s, margin)`. It returns the smallest
 # `failure_threshold` whose $\mathtt{failure\_threshold} \times \mathtt{period\_s}$ covers
-# $\mathtt{margin} \times{}$ that time. The check reads the probe settings from the Terraform of this lab.
+# $\mathtt{margin} \times{}$ the time of the weight read and the engine init. The check reads the probe settings from the Terraform of this lab.
 
 # %%
 ASSUME = {"image_gb": 8.0,         # vllm/vllm-openai compressed size (assumption; verify in the registry)
@@ -167,7 +167,7 @@ print(f"✅ set concurrency = {chosen} (Terraform var.concurrency / gcloud --con
 # ## Exercise 6.3 — cost per million output tokens
 #
 # The cost per token is the price of the instance divided by the tokens that it makes. Write
-# `cost_per_million(price_per_hour, tokens_per_s)`. The price is an **assumption**: an L4 instance with
+# `cost_per_million(price_per_hour, tokens_per_s)`. The price is an **assumption** for an L4 instance with
 # 8 vCPU and 32 GiB on Cloud Run. Look at the pricing page (verify). The throughput is the measured
 # throughput (here: simulated) at the concurrency that you selected.
 
@@ -192,7 +192,7 @@ print(f"✅ at {tps:.0f} output tok/s: ${cost_per_million(PRICE_PER_HOUR, tps):.
 #
 # Traffic comes in bursts: `busy_hours_per_day` of load in `bursts_per_day` separate bursts. With
 # `min_instances = 0`, you pay for the busy hours. You also pay for an idle tail after each burst, before
-# Cloud Run stops the instance (`idle_tail_h`, verify the current behaviour of Cloud Run). Also, each burst
+# Cloud Run stops the instance (`idle_tail_h`, verify the current behaviour of Cloud Run). Each burst also
 # starts with a cold start. With `min_instances = 1`, you pay for 24 hours a day, and you never wait.
 #
 # Write `monthly_costs(price_per_hour, busy_hours_per_day, bursts_per_day, idle_tail_h=0.25, days=30)`. It
@@ -220,7 +220,7 @@ print(f"✅ 3 busy hours/day in 6 bursts: ${s0:,.0f}/month scaling to zero (6 co
 # lets 64 requests into an instance whose engine runs at most 16 at a time, 48 requests wait *inside vLLM*.
 # Cloud Run sees a busy instance, not a queue. Predict the wait.
 #
-# Use a closed loop of `concurrency` users against a batch limit `max_num_seqs`. Each admitted request
+# The model is a closed loop of `concurrency` users against a batch limit `max_num_seqs`. Each admitted request
 # takes `service_s` (its E2E at a full batch). Thus the engine completes
 # $\mathtt{max\_num\_seqs} / \mathtt{service\_s}$ requests per second. By Little's law, each request spends
 #
@@ -285,14 +285,15 @@ else:
 # the measured throughput. Thus good batching is also what makes the cost low."
 #
 # **Drill 1.** *Why not set Cloud Run concurrency to 1,000 and let vLLM batch?* vLLM will batch the
-# requests. But after the SLO-limited batch of the engine, each request becomes slower or waits in a queue
-# inside the instance. Cloud Run never scales out, because the instance never looks full.
+# requests. But when the batch is larger than the SLO-limited batch of the engine, each request becomes
+# slower or waits in a queue inside the instance. Cloud Run never scales out, because the instance never looks full.
 #
-# **Drill 2.** *The first request after lunch takes 90 seconds. Three fixes?* Set `min_instances = 1`
+# **Drill 2.** *The first request after lunch takes 90 seconds. Three corrections?* Set `min_instances = 1`
 # (pay to stay warm). Get the weights from Cloud Storage instead of the Hub. Make the engine start faster
-# (a smaller image, and `--enforce-eager` skips CUDA-graph capture at some cost in decode speed).
+# with a smaller image and with `--enforce-eager`, which skips CUDA-graph capture at some cost in decode
+# speed.
 #
-# **Drill 3.** *Cloud Run or GKE for this?* Use Cloud Run for a service with traffic in bursts that scales
-# to zero, with one GPU per instance and no cluster to operate. Use GKE when you must have multi-GPU nodes,
+# **Drill 3.** *Cloud Run or GKE for this?* Use Cloud Run for a service that scales to zero and has traffic
+# in bursts, with one GPU per instance and no cluster to operate. Use GKE when you must have multi-GPU nodes,
 # engine-aware routing and autoscaling on queue depth or KV usage (layer 05), Spot capacity or
 # reservations.

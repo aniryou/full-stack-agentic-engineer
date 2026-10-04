@@ -22,7 +22,7 @@ multi-GPU box that you rent for an hour. T3 is the Google Cloud deployment, and 
 |---|---|---|---|
 | [`PRIMER.md`](PRIMER.md) | Explain the engine in twelve sections. The first six are §1 anatomy, §2 continuous batching, §3 chunked prefill, §4 KV cache management, §5 prefix caching and §6 sampling and structured output. The other six are §7 speculative decoding, §8 quantization, §9 parallelism, §10 multi-LoRA, §11 measuring an engine and §12 engines and where to run them. Each formula has a worked number and the core function that computes it. After the sections come "In a design review", a glossary, sources and a dated Verify list. | read alongside the core | — |
 | [`mini-engine-core/`](mini-engine-core/) | Build the engine yourself in `minengine`, a numpy "nano-vLLM" (~1,400 lines). It has a small model that reads K/V through block tables, the KV cache manager with prefix caching, the scheduler and the sampler. It also has speculative decoding, quantization and a roofline simulator. The core has six fill-in notebooks. | ~11 h with the primer | T0 |
-| [`vllm-serving-lab/`](vllm-serving-lab/) | Size a model from its `config.json`. Drive vLLM with an open- or closed-loop load generator and read its `/metrics`. Do sweeps of its flags against an SLO. Deploy it on any GPU box, Cloud Run GPU or GKE (`servelab`). A fake vLLM lets every notebook run at T0. The lab has six notebooks. | ~12 h | T0 to T1 (T2, T3 optional) |
+| [`vllm-serving-lab/`](vllm-serving-lab/) | Size a model from its `config.json`. Drive vLLM with an open- or closed-loop load generator and read its `/metrics`. Do sweeps of its flags against an SLO. Deploy it on any GPU box, Cloud Run GPU or GKE. The package of the lab is `servelab`. A fake vLLM lets every notebook run at T0. The lab has six notebooks. | ~12 h | T0 to T1 (T2, T3 optional) |
 
 ### Work it in this order
 
@@ -63,9 +63,9 @@ On Colab, the first cell of every notebook clones the repo and installs its lab.
 | Tier | What you run in this topic | Hardware and cost |
 |---|---|---|
 | **T0** | Every core notebook, the sizing notebook of the lab, and the measurement notebooks of the lab against its bundled fake server (with a clear label). Every latency from `minengine.perf` is **simulated**. | laptop, Colab CPU or CI, $0 |
-| **T1** | The lab against a real vLLM server with a 0.5–2B model: TTFT/ITL, knob sweeps, prefix caching, n-gram speculation, quantized checkpoints | Colab/Kaggle T4 (free, fp16 only), any 24 GB GPU (~$0.3–0.7/hr, verify), GCP L4 Spot |
-| **T2** | Optional: tensor parallelism across two GPUs (§9, exercise 3.6 of the lab) | Kaggle 2×T4 (PCIe) or a rented NVLink pair |
-| **T3** | The Cloud Run GPU deployment of the lab (scale to zero) and its GKE Deployment | GCP, pay per use. For cleanup, see the `deploy/` READMEs of the lab. |
+| **T1** | The lab against a real vLLM server with a 0.5–2B model: TTFT/ITL, knob sweeps, prefix caching, n-gram speculation and quantized checkpoints. | Colab/Kaggle T4 (free, fp16 only), any 24 GB GPU (~$0.3–0.7/hr, verify), GCP L4 Spot |
+| **T2** | Optional: tensor parallelism across two GPUs (§9, exercise 3.6 of the lab). | Kaggle 2×T4 (PCIe) or a rented NVLink pair |
+| **T3** | The Cloud Run GPU deployment of the lab (scale to zero) and its GKE Deployment. | GCP, pay per use. For cleanup, see the `deploy/` READMEs of the lab. |
 
 Prices, free tiers and how to get GPUs on GCP and in other places: [`COMPUTE.md`](../../COMPUTE.md).
 
@@ -75,7 +75,7 @@ Prices, free tiers and how to get GPUs on GCP and in other places: [`COMPUTE.md`
 |---|---|---|
 | before | [`00-foundations/transformers`](../../00-foundations/transformers/) (primer §7) and [`gpu-capacity-planning`](../../00-foundations/gpu-capacity-planning/PRIMER.md) | Attention, the KV cache and decoding. Weights, KV bytes, TTFT and TPOT on one page. |
 | before | [`01 gpu-primer`](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md) §3 and [`roofline-and-fabric`](../../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) §2–3 | HBM, bandwidth, why a decode step is a memory read and where the step-time knee comes from |
-| before | the kernel topics beside this one: [`kv-cache`](../kv-cache/kv-cache-primer.md), [`paged-attention`](../paged-attention/paged-attention-primer.md), [`flash-attention`](../flash-attention/flash-attention-primer.md) | Block tables and copy-on-write (block-hash prefix caching never needs copy-on-write, primer §5). Tiling and online softmax. |
+| before | the kernel topics beside this one: [`kv-cache`](../kv-cache/kv-cache-primer.md), [`paged-attention`](../paged-attention/paged-attention-primer.md), [`flash-attention`](../flash-attention/flash-attention-primer.md) | Block tables and copy-on-write. Block-hash prefix caching never needs copy-on-write (primer §5). Tiling and online softmax. |
 | beside | layer 02's [cuda-and-nccl primer](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §4–5 and layer 03's [gpu-scheduling](../../03-kubernetes-gpu/gpu-scheduling/README.md) topic | CUDA Graphs and the all-reduces that tensor parallelism runs on. How the pod of the engine gets its GPUs. |
 | after | [`vllm-internals`](../vllm-internals/README.md) | The same mechanisms, read in the source of vLLM, with line numbers |
 | after | [`quantization`](../quantization/README.md) | The deep dive behind primer §8. It covers formats to the bit, GPTQ/AWQ/SmoothQuant, what each scheme runs as per GPU and FP8 KV. It also serves a real quantized checkpoint and runs an eval on it. |
@@ -85,7 +85,7 @@ Prices, free tiers and how to get GPUs on GCP and in other places: [`COMPUTE.md`
 
 ## Caveats
 
-- **Simulated vs measured.** The latencies of the core come from a roofline model that drives its real scheduler.
+- **Simulated against measured.** The latencies of the core come from a roofline model that drives its real scheduler.
   The fake server of the lab uses the same kind of model. Both have the label SIMULATED. The lab measures only
   against a real `vllm serve`.
 - **Two sets of sizing inputs.** The core sizes KV with round inputs (0.9 of 24 GB minus a flat 1 GB). The lab
