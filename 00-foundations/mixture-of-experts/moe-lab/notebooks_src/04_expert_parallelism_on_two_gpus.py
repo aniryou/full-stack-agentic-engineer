@@ -1,36 +1,36 @@
 # %% [markdown]
 # # 04 · Expert parallelism on two GPUs: what each GPU holds, what crosses the link, who waits
 #
-# **Tier:** T2 — two GPUs: Kaggle's free "GPU T4 x2" (PCIe, no NVLink), a rented pair, or the
-# `l4x2` pool of layer 02's GKE cluster (see [`deploy/gke/`](../deploy/gke/)). T0 — the same
-# comparison from a per-GPU roofline and an alpha-beta link (**simulated**), and `vllm bench serve`
-# results bundled in the documented format (**illustrative**, generated from that simulation — they
-# exercise the parser, they prove nothing about GPUs).
+# **Tier:** T2: two GPUs. These can be the free "GPU T4 x2" of Kaggle (PCIe, no NVLink) or a rented pair.
+# Another option is the `l4x2` pool of the GKE cluster of layer 02 (see [`deploy/gke/`](../deploy/gke/)). T0:
+# the same comparison from a per-GPU roofline and an alpha-beta link (**simulated**). T0 also has bundled
+# `vllm bench serve` results in the documented format (**illustrative**, generated from that simulation).
+# These results let you do a test of the parser, but they prove nothing about GPUs.
 #
 # ## The one-minute version
 #
-# * vLLM has three ways to put an MoE on two GPUs. `--tensor-parallel-size 2` splits **every** expert
-#   in half; `--tensor-parallel-size 2 --enable-expert-parallel` gives each GPU **half of the experts**,
-#   whole; `--data-parallel-size 2 --enable-expert-parallel` also runs **attention data-parallel** —
-#   each GPU its own requests and KV cache. EP size is not a flag: it is TP × DP.
-# * What crosses the link: with DP = 1 the tokens are already on both GPUs after attention, so vLLM
-#   runs **no all-to-all** — each GPU applies its experts and one all-reduce combines (as in TP). With
-#   DP = 2 the default `--all2all-backend allgather_reducescatter` gathers the tokens and scatters the
-#   results. The $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ dispatch/combine of
-#   layer 02 §5.6 is what dedicated all-to-all kernels (DeepEP: SM90+, NVLink + RDMA) move at scale —
-#   not on T4s.
-# * Decode messages are small (32 tokens × 2,048 × 2 B = 128 KiB), so on PCIe they are
-#   **latency-bound**: the count of collectives per layer matters more than their bytes.
-# * Under EP the step ends when the **slowest GPU** finishes. In memory-bound decode a GPU waits for
-#   the bytes of its *touched* experts; in compute-bound steps (prefill, huge batches) for the
-#   *tokens* its experts got — that is where hot experts hurt, more so as EP grows. TP is balanced by
-#   construction but multiplies half-size expert GEMMs.
+# * vLLM has three ways to put an MoE on two GPUs. `--tensor-parallel-size 2` divides **every** expert in
+#   half. `--tensor-parallel-size 2 --enable-expert-parallel` gives each GPU **half of the experts**, whole.
+#   `--data-parallel-size 2 --enable-expert-parallel` also runs **attention data-parallel**: each GPU has its
+#   own requests and KV cache. EP size is not a flag. It is TP × DP.
+# * What crosses the link: with DP = 1, the tokens are already on both GPUs after attention. Thus vLLM runs
+#   **no all-to-all**. Each GPU applies its experts, and one all-reduce combines the results (as in TP). With
+#   DP = 2, the default `--all2all-backend allgather_reducescatter` gathers the tokens and scatters the
+#   results. Dedicated all-to-all kernels (DeepEP: SM90+, NVLink + RDMA) move the
+#   $\text{tokens} \times k \times \text{hidden} \times \text{bytes}$ dispatch/combine of layer 02 §5.6 at
+#   scale. They do not do this on T4s.
+# * Decode messages are small (32 tokens × 2,048 × 2 B = 128 KiB). Thus on PCIe they are **latency-bound**:
+#   the count of collectives per layer is more important than their bytes.
+# * Under EP, the step ends when the **slowest GPU** finishes. In memory-bound decode, a GPU waits for the
+#   bytes of its *touched* experts. In compute-bound steps (prefill, very large batches), it waits for the
+#   *tokens* that its experts got. That is where hot experts hurt, and they hurt more as EP increases. TP is
+#   balanced by its design, but it multiplies half-size expert GEMMs.
 #
-# Concepts: PRIMER §6 "Running MoE on GPUs" (TP vs EP for experts, the hybrid, DP attention + EP) and
-# §8 "In a design review: failure modes" (EP across a slow fabric) ([`PRIMER.md`](../../PRIMER.md)).
-# Collective costs: [layer 02 PRIMER §5](../../../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md);
-# EP in the engine: [layer 04 PRIMER §9](../../../../04-inference-engine/serving-engine/PRIMER.md);
-# wide-EP across nodes: [layer 05 PRIMER §8](../../../../05-orchestrator/serving-orchestration/PRIMER.md).
+# Concepts: PRIMER §6 "Running MoE on GPUs" (TP against EP for experts, the hybrid, DP attention + EP). See
+# also §8 "In a design review: failure modes" (EP across a slow fabric) ([`PRIMER.md`](../../PRIMER.md)). For
+# collective costs, see [layer 02 PRIMER §5](../../../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md). For EP
+# in the engine, see [layer 04 PRIMER §9](../../../../04-inference-engine/serving-engine/PRIMER.md). For
+# wide-EP across nodes, see [layer 05 PRIMER §8](../../../../05-orchestrator/serving-orchestration/PRIMER.md).
 
 # %%
 import subprocess
@@ -51,12 +51,15 @@ for lay in ep.LAYOUTS:
 # %% [markdown]
 # ## Exercise 4.1 — bytes an all-to-all moves
 #
-# Write `a2a_bytes(tokens, k, hidden, elem_bytes=2, scale_block=0, scale_bytes=4)`: one direction
-# (dispatch or combine), per GPU, when every assignment is remote: tokens × $k$ × (hidden ×
-# `elem_bytes` + one scale per `scale_block` channels when the activations are FP8). Check it against
-# layer 02's worked number and against DeepEP's published low-latency benchmark (128 tokens, hidden
-# 7,168, top-8, FP8 dispatch with 4-byte scales per 128 channels, BF16 combine; EP8 on H800: 77 µs
-# dispatch, 114 µs combine — `deepep/docs/legacy.md`).
+# Write `a2a_bytes(tokens, k, hidden, elem_bytes=2, scale_block=0, scale_bytes=4)`. It gives the bytes for one
+# direction (dispatch or combine), per GPU, when every assignment is remote. The formula is tokens × $k$ ×
+# (hidden × `elem_bytes` + one scale per `scale_block` channels when the activations are FP8). Compare the
+# result with the worked number of layer 02. Also compare it with the published low-latency benchmark of
+# DeepEP:
+#
+# * 128 tokens, hidden 7,168, top-8.
+# * FP8 dispatch with 4-byte scales per 128 channels, BF16 combine.
+# * EP8 on H800: 77 µs dispatch, 114 µs combine (`deepep/docs/legacy.md`).
 
 # %% exercise
 def a2a_bytes(tokens, k, hidden, elem_bytes=2, scale_block=0, scale_bytes=4):
@@ -78,10 +81,14 @@ print(f"✅ DeepEP EP8 dispatch {disp:,} B / 77 us = {disp / 77e-6 / 1e9:.1f} GB
 # %% [markdown]
 # ## Exercise 4.2 — latency-bound or bandwidth-bound?
 #
-# The alpha-beta model of layer 02: a collective over $p$ ranks and an $S$-byte buffer costs
-# $a \cdot \alpha + c \cdot S / B$ with (ring all-reduce) $a = 2(p - 1)$, $c = 2(p - 1)/p$; (ring
-# all-gather, ring reduce-scatter, pairwise all-to-all) $a = p - 1$, $c = (p - 1)/p$; (direct
-# all-to-all) $a = 1$, $c = (p - 1)/p$. Write `ab_time(op, size, p, alpha, bw_gbs, algo="ring")`.
+# In the alpha-beta model of layer 02, a collective over $p$ ranks and an $S$-byte buffer costs
+# $a \cdot \alpha + c \cdot S / B$. The values of $a$ and $c$ are:
+#
+# * Ring all-reduce: $a = 2(p - 1)$, $c = 2(p - 1)/p$.
+# * Ring all-gather, ring reduce-scatter, pairwise all-to-all: $a = p - 1$, $c = (p - 1)/p$.
+# * Direct all-to-all: $a = 1$, $c = (p - 1)/p$.
+#
+# Write `ab_time(op, size, p, alpha, bw_gbs, algo="ring")`.
 
 # %% exercise
 def ab_time(op, size, p, alpha, bw_gbs, algo="ring"):
@@ -107,9 +114,11 @@ print(f"✅ decode, 32 tokens: one all-reduce of {S // 1024} KiB on 2 x T4 = {t 
 # %% [markdown]
 # ## Worked example: what each GPU holds and what it sends, per layout
 #
-# Per MoE layer: TP and TP+EP all-reduce after attention and after the MoE (2 collectives); DP+EP
-# all-gathers the tokens before the experts and reduce-scatters after (2 collectives, no attention
-# collective, but each GPU streams the full attention weights for its own requests).
+# For each MoE layer:
+#
+# * TP and TP+EP do an all-reduce after attention and after the MoE (2 collectives).
+# * DP+EP does an all-gather of the tokens before the experts and a reduce-scatter after them (2 collectives).
+#   It has no attention collective, but each GPU streams the full attention weights for its own requests.
 
 # %%
 print(f"{'layout':7s} {'weights/GPU':>12s}   collectives per layer (decode, 32 tokens)     comm per step [simulated]")
@@ -122,11 +131,11 @@ for lay in ep.LAYOUTS:
 # %% [markdown]
 # ## Exercise 4.3 — does it fit two T4s, and with how much KV?
 #
-# Write `per_gpu_gib(model, layout, wb=2)`: TP and TP+EP shard attention, shared expert, the experts
-# and the vocabulary (embedding and LM head) over the 2 GPUs and replicate the router; DP+EP
-# replicates everything but the experts, which it splits. Use `model.attn_params()`,
-# `shared_params()`, `router_params()` (per layer), `expert_param_total()`, `embedding_params()`.
-# Then check which models fit two T4s with a 4K-token KV cache left over.
+# Write `per_gpu_gib(model, layout, wb=2)`. TP and TP+EP shard the attention, the shared expert, the experts
+# and the vocabulary (embedding and LM head) over the 2 GPUs. They replicate the router. DP+EP replicates
+# everything except the experts, which it divides. Use `model.attn_params()`, `shared_params()`,
+# `router_params()` (per layer), `expert_param_total()` and `embedding_params()`. Then find which models fit
+# two T4s and leave space for a 4K-token KV cache.
 
 # %% exercise
 def per_gpu_gib(model, layout, wb=2):
@@ -159,9 +168,10 @@ print(f"✅ OLMoE fp16: ~{per_gpu_gib(MOE, 'tp'):.1f} GiB per T4 under TP, leavi
 # %% [markdown]
 # ## Worked example: the three layouts, simulated
 #
-# `ep.ep_decode_step` prices each GPU's step on the roofline with `SimParams` efficiencies (the same
-# assumptions as notebook 03), takes the slowest GPU, and adds the link time. Uniform routing first,
-# then the routing of the illustrative traces from notebook 02, where some experts are hot.
+# `ep.ep_decode_step` calculates the cost of the step of each GPU on the roofline, with `SimParams`
+# efficiencies (the same assumptions as notebook 03). It takes the slowest GPU and adds the link time. The
+# cell shows uniform routing first. Then it shows the routing of the illustrative traces from notebook 02,
+# where some experts are hot.
 
 # %%
 rows = ep.compare_layouts(MOE, T4, LINK, batches=(1, 8, 32, 128), context=512)
@@ -176,26 +186,31 @@ for b in (8, 32, 128):
           f"GPU imbalance {st.imbalance:.2f} (uniform {un.imbalance:.2f})")
 
 # %% [markdown]
-# Two GPUs over PCIe, a small MoE: from batch 8 up the three layouts land within ~10% of each other
-# in this model, because each GPU mostly waits on its own HBM. Batch 1 separates them: TP splits each
-# of the $k$ touched experts over both GPUs, while under EP the $k$ experts of a layer rarely split
-# evenly (the per-layer imbalance of 1.25), and DP+EP also streams the full attention weights on both
-# GPUs for one request. What this roofline leaves out may matter more: TP halves each expert's GEMM
-# ($N = I/2$ per GPU), and small GEMMs run below the roofline — one reason EP wins at scale.
+# This case is two GPUs over PCIe and a small MoE. From batch 8 up, the three layouts are within ~10% of each
+# other in this model, because each GPU mostly waits on its own HBM. Batch 1 makes them different. TP divides
+# each of the $k$ touched experts over both GPUs. But under EP, the $k$ experts of a layer rarely divide
+# evenly (the per-layer imbalance of 1.25). DP+EP also streams the full attention weights on both GPUs for one
+# request.
 #
-# Note what the skewed routing did: decode got slightly *faster* (fewer distinct experts touched,
-# fewer bytes — notebook 03's Exercise 3.2) and the GPUs stayed nearly balanced. A measurement
-# decides; Exercise 4.4 shows where skew does hurt.
+# It is possible that what this roofline leaves out is more important. TP divides the GEMM of each expert in
+# half ($N = I/2$ per GPU), and small GEMMs run below the roofline. This is one reason that EP wins at scale.
+#
+# Look at what the skewed routing did. Decode became slightly *faster* (fewer distinct experts touched, fewer
+# bytes, as in Exercise 3.2 of notebook 03). The GPUs stayed almost balanced. A measurement decides. Exercise
+# 4.4 shows where skew does hurt.
 #
 # ## Exercise 4.4 — when do hot experts slow a GPU?
 #
-# A GPU's share of a layer depends on its experts in two ways: the **bytes** of its experts that are
-# touched (what a memory-bound decode step waits for) and the **tokens** routed to them (the FLOPs a
-# compute-bound step — prefill, or a very large decode batch — waits for). Every layer ends in a
-# collective, so the GPUs meet once per layer and the step pays the busiest GPU *of each layer*.
-# For routing `ids [tokens, layers, k]` and linear placement (GPU $r$ holds experts
-# `[r·E/ep, (r+1)·E/ep)`), write `ep_loads(ids, n_experts, ep)` → `(touched, tokens)`, two
-# `[layers, ep]` arrays, and `imbalance(v)` = Σ over layers of the busiest GPU / Σ of the mean GPU.
+# The share of a layer on a GPU depends on its experts in two ways:
+#
+# * The **bytes** of its experts that the tokens touch. A memory-bound decode step waits for these bytes.
+# * The **tokens** that the router sends to them. A compute-bound step (prefill, or a very large decode batch)
+#   waits for the FLOPs of these tokens.
+#
+# Every layer ends in a collective. Thus the GPUs meet one time per layer, and the step pays for the busiest
+# GPU *of each layer*. For routing `ids [tokens, layers, k]` and linear placement (GPU $r$ holds experts
+# `[r·E/ep, (r+1)·E/ep)`), write `ep_loads(ids, n_experts, ep)`. It returns `(touched, tokens)`, two
+# `[layers, ep]` arrays. Then write `imbalance(v)` = Σ over layers of the busiest GPU / Σ of the mean GPU.
 
 # %% exercise
 def ep_loads(ids, n_experts, ep_size):
@@ -241,18 +256,22 @@ print(f"✅ a compute-bound 2,048-token chunk at EP=8 spends {sk.max(1).sum() * 
       f"balanced one would spend {sk.mean(1).sum() * 1e3:.1f} ms [simulated]; decode bytes stay balanced")
 
 # %% [markdown]
-# So EPLB and redundant experts pay where tokens per expert are large — prefill and big decode
-# batches at wide EP — and matter little for a two-GPU decode server. At EP=2 even the tokens
-# average out over 32 experts per GPU.
+# Thus EPLB and redundant experts give a return where the tokens per expert are large: prefill and large
+# decode batches at wide EP. They have only a small effect on a two-GPU decode server. At EP=2, even the
+# tokens average out over 32 experts per GPU.
 #
 # %% [markdown]
 # ## Exercise 4.5 — read what `vllm bench serve` prints
 #
-# The benchmark ends with a `Serving Benchmark Result` block of `"{label:<40} {value}"` lines.
-# Write `parse(text)` → `{key: number}` with keys like `mean_itl_ms` and
-# `output_token_throughput_tok_s` (lower-case the label, drop the trailing colon, turn every run of
-# non-alphanumerics into `_`). Then tabulate the bundled runs (TP, TP+EP, DP+EP at concurrency 1
-# and 16).
+# The benchmark ends with a `Serving Benchmark Result` block of `"{label:<40} {value}"` lines. Write
+# `parse(text)`. It returns `{key: number}` with keys like `mean_itl_ms` and `output_token_throughput_tok_s`.
+# To make a key, do these steps:
+#
+# 1. Change the label to lower case.
+# 2. Remove the colon at the end.
+# 3. Replace every sequence of non-alphanumeric characters with `_`.
+#
+# Then put the bundled runs in a table (TP, TP+EP, DP+EP at concurrency 1 and 16).
 
 # %% exercise
 import re
@@ -288,12 +307,12 @@ print("✅ parsed; with a real run this table is the measurement that decides be
 # %% [markdown]
 # ## On two GPUs (T2): run the three layouts and benchmark each
 #
-# Kaggle: Settings → Accelerator → **GPU T4 x2** (not P100). Kaggle has no Colab bootstrap, so make the
-# first cell of an imported copy of this notebook the checkout from
-# [`deploy/any-gpu/`](../deploy/any-gpu/README.md#colab-or-kaggle-free-t4)
-# (`git clone`, `%cd .../moe-lab`, `pip install -e .`). One server at a time (each takes both
-# GPUs); OLMoE in fp16 fits two T4s in every layout (Exercise 4.3). The same flags work on the
-# `l4x2` GKE pool ([`deploy/gke/`](../deploy/gke/)) and on a rented pair.
+# On Kaggle, open Settings, then Accelerator, then select **GPU T4 x2** (not P100). Kaggle has no Colab
+# bootstrap. Thus make the checkout from
+# [`deploy/any-gpu/`](../deploy/any-gpu/README.md#colab-or-kaggle-free-t4) the first cell of an imported copy
+# of this notebook (`git clone`, `%cd .../moe-lab`, `pip install -e .`). Run one server at a time, because
+# each server takes both GPUs. OLMoE in fp16 fits two T4s in every layout (Exercise 4.3). The same flags work
+# on the `l4x2` GKE pool ([`deploy/gke/`](../deploy/gke/)) and on a rented pair.
 #
 # ```bash
 # pip install "vllm==0.30.0"
@@ -304,10 +323,10 @@ print("✅ parsed; with a real run this table is the measurement that decides be
 # # then --tensor-parallel-size 2 --enable-expert-parallel, and --data-parallel-size 2 --enable-expert-parallel
 # ```
 #
-# Or let the cell below do it (`MOELAB_START_VLLM=1` on a machine with two GPUs); it saves each
-# result next to the notebook and parses it with your `parse`. With DP=2, vLLM keeps the two ranks in
-# lockstep (an idle rank runs dummy forward passes), and DeepEP-style backends need SM90 — the
-# default `allgather_reducescatter` is what runs here.
+# As an alternative, let the next cell do it (`MOELAB_START_VLLM=1` on a machine with two GPUs). It saves each
+# result next to the notebook and parses it with your `parse`. With DP=2, vLLM keeps the two ranks in lockstep
+# (an idle rank runs dummy forward passes). DeepEP-style backends need SM90. Thus the default
+# `allgather_reducescatter` is what runs here.
 
 # %%
 if env.gpu_count() >= 2 and env.may_start_vllm():
@@ -329,27 +348,31 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "On two GPUs vLLM gives us three layouts. TP splits every expert in half; EP gives
-# each GPU half the experts whole; DP+EP also makes attention data-parallel. With DP = 1 there is no
-# all-to-all at all — tokens are already on both GPUs, and an all-reduce combines the experts'
-# outputs — so on a PCIe pair the choice is less about bytes than about the number of latency-bound
-# collectives per layer and about balance: under EP the slowest GPU sets the step — in decode the one
-# with the most touched experts, in prefill the one whose experts got the most tokens, which is where
-# hot experts hurt and where it worsens as experts per GPU shrink.
+# **Two minutes:** "On two GPUs, vLLM gives us three layouts. TP divides every expert in half. EP gives each
+# GPU half the experts, whole. DP+EP also makes attention data-parallel.
 #
-# "For a small MoE on two T4s the layouts are close in our model; we would run all three with
-# `vllm bench serve` and keep the fastest at our concurrency. EP earns its keep at scale — many GPUs,
-# DP attention, DeepEP over NVLink and RDMA — where it lets each expert see the tokens of the whole
+# "With DP = 1, there is no all-to-all at all. The tokens are already on both GPUs, and an all-reduce combines
+# the outputs of the experts. Thus, on a PCIe pair, the selection is less about bytes. It is more about the
+# number of latency-bound collectives per layer, and about balance.
+#
+# "Under EP, the slowest GPU sets the step. In decode, this is the GPU with the most touched experts. In
+# prefill, it is the GPU whose experts got the most tokens. That is where hot experts hurt, and the effect
+# becomes worse as the number of experts per GPU decreases.
+#
+# "For a small MoE on two T4s, the layouts are close in our model. Our recommendation is to run all three
+# with `vllm bench serve` and keep the fastest at our concurrency. EP is worth its cost at scale: many GPUs, DP
+# attention, DeepEP over NVLink and RDMA. At that scale, it lets each expert see the tokens of the whole
 # cluster."
 #
 # **Drill 1.** *Where are the all-to-alls when we run `--tensor-parallel-size 2 --enable-expert-parallel`?*
-# — There are none: with DP = 1 every GPU already has every token; each applies its local experts and
-# an all-reduce sums the outputs. All-to-all kernels are used when DP > 1 (vLLM `use_all2all_kernels`).
+# There are none. With DP = 1, every GPU already has every token. Each GPU applies its local experts, and an
+# all-reduce adds the outputs. vLLM uses all-to-all kernels when DP > 1 (vLLM `use_all2all_kernels`).
 #
-# **Drill 2.** *Should we run EP across two nodes over 100 Gb/s Ethernet?* — Each layer adds collectives
-# whose latency and bytes now cross the slow link, twice per layer, per step; keep EP (and TP) inside
-# the NVLink domain and replicate across nodes, unless the model does not fit one node (layer 02 §5.6).
+# **Drill 2.** *Is EP across two nodes over 100 Gb/s Ethernet a good idea?* Each layer adds collectives, and
+# their latency and bytes now cross the slow link, two times per layer, per step. Keep EP (and TP) inside the
+# NVLink domain and replicate across nodes. The exception is a model that does not fit one node (layer 02
+# §5.6).
 #
-# **Drill 3.** *EP=2 decode is slower than TP=2 for a single user. Is EP broken?* — At batch 1 only $k$
-# experts per layer are touched and they may sit mostly on one GPU; TP splits each of them over both.
-# EP pays off with batch (every expert busy) and balance, not at batch 1.
+# **Drill 3.** *EP=2 decode is slower than TP=2 for a single user. Is EP broken?* At batch 1, the tokens touch
+# only $k$ experts per layer, and it is possible that most of them are on one GPU. TP divides each of them
+# over both GPUs. EP gives a return with batch (every expert busy) and balance, not at batch 1.

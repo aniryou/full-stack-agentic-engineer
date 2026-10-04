@@ -1,19 +1,22 @@
 # %% [markdown]
 # # 01 · How Kubernetes sees a GPU
 #
-# **Tier:** T0 — pure Python on a laptop, Colab CPU or CI. No cluster, no GPU. The same objects on a
-# real cluster are in the lab (`k8s-gpu-lab`): notebook `02_kind_with_fake_gpus_and_kueue` (kind with fake
-# GPUs, T0 + Docker) and `04_gke_pools_dws_and_computeclasses` (GKE, T3).
+# **Tier:** T0. It is pure Python on a laptop, Colab CPU or CI, with no cluster and no GPU. The lab
+# (`k8s-gpu-lab`) has the same objects on a real cluster: notebook `02_kind_with_fake_gpus_and_kueue`
+# (kind with fake GPUs, T0 + Docker) and `04_gke_pools_dws_and_computeclasses` (GKE, T3).
 #
 # ## The one-minute version
 #
-# Kubernetes has no idea what a GPU is. A **device plugin** on each node tells the kubelet "I manage
+# Kubernetes does not know what a GPU is. A **device plugin** on each node tells the kubelet "I manage
 # `nvidia.com/gpu`; here are 8 device IDs and their health". The kubelet publishes **capacity** (all
-# devices) and **allocatable** (healthy devices) in the Node status, and the scheduler treats that
-# number as an opaque integer. So a GPU request must be a whole number, must equal its limit, and is
-# never overcommitted. *Which* GPU (L4 or H100) and *whether* a pod may land on a GPU node at all are
-# ordinary **labels** and **taints**. After this notebook you can explain every GPU line of
-# `kubectl describe node`, and why a pod the scheduler placed can still be rejected by the kubelet.
+# devices) and **allocatable** (healthy devices) in the Node status. The scheduler treats that number as
+# an opaque integer. Thus a GPU request must be a whole number. It must equal its limit, and the
+# scheduler never overcommits it.
+#
+# Ordinary **labels** and **taints** answer two other questions. They tell *which* GPU a node has (L4
+# or H100), and *if* a pod can land on a GPU node at all. After this notebook, you can explain every
+# GPU line of `kubectl describe node`. You can also explain why the kubelet can still reject a pod that
+# the scheduler placed.
 #
 # Primer: §1 *What Kubernetes sees* and §2 *GPU Operator vs managed drivers* in `../../PRIMER.md`.
 
@@ -31,14 +34,15 @@ print("2. ListAndWatch() first message:", plugin.list_and_watch()[:2], "... (8 d
 print("3. node status the kubelet publishes:", kubelet.node_status())
 
 # %% [markdown]
-# The `options` in the Register request are the plugin's `DevicePluginOptions`: this plugin answers
-# `GetPreferredAllocation` and needs no `PreStartContainer` call.
+# The `options` in the Register request are the `DevicePluginOptions` of the plugin. This plugin answers
+# `GetPreferredAllocation`, and it needs no `PreStartContainer` call.
 #
-# That last line is all the scheduler will ever know: `nvidia.com/gpu: 8`. When a pod that asks for
-# GPUs lands on the node, the kubelet picks free healthy device IDs (asking the plugin for a
-# *preferred* set first) and calls `Allocate`. With the NVIDIA plugin's default `envvar` strategy
-# the answer is one environment variable; the NVIDIA Container Toolkit reads it when the container
-# is created and injects the device nodes and driver libraries (layer 02 explains that half).
+# The scheduler never knows more than the last line: `nvidia.com/gpu: 8`. When a pod that asks for GPUs
+# lands on the node, the kubelet selects free healthy device IDs and calls `Allocate`. Before it selects
+# them, it asks the plugin for a *preferred* set. The NVIDIA plugin has a default `envvar` strategy, and
+# with it the answer is one environment variable. At the creation of the container, the NVIDIA Container
+# Toolkit reads this variable. Then it injects the device nodes and driver libraries (layer 02 explains
+# that half).
 
 # %%
 print(kubelet.admit("trainer-0", 4))
@@ -48,13 +52,14 @@ print("devices pinned per container:", kubelet.assigned)
 # %% [markdown]
 # ## Exercise 1.1 — taints and tolerations
 #
-# GPU nodes are tainted (GKE uses `nvidia.com/gpu=present:NoSchedule` — verify) so that ordinary pods stay
-# off expensive nodes. A pod may land on a tainted node only if one of its tolerations *tolerates*
-# the taint. Implement the upstream rule `tolerates(tol, taint)`:
+# GPU nodes have a taint, so that ordinary pods stay off high-cost nodes. GKE uses
+# `nvidia.com/gpu=present:NoSchedule` (verify). A pod can land on a tainted node only if one of its
+# tolerations *tolerates* the taint. Write the upstream rule as `tolerates(tol, taint)`:
 #
-# 1. if the toleration names an effect, it must equal the taint's effect;
-# 2. if the toleration names a key, it must equal the taint's key (an empty key matches every key);
-# 3. operator `Exists` then matches any value; operator `Equal` (or empty) needs equal values.
+# 1. If the toleration names an effect, it must equal the effect of the taint.
+# 2. If the toleration names a key, it must equal the key of the taint. An empty key matches every key.
+# 3. Then the operator `Exists` matches any value. The operator `Equal` (or an empty operator) needs
+#    equal values.
 
 # %% exercise
 def tolerates(tol: Toleration, taint: Taint) -> bool:
@@ -78,13 +83,14 @@ assert all(tolerates(t, gpu_taint) == t.tolerates(gpu_taint) for t in cases)
 print("✅ tolerates() matches the core/v1 rule")
 
 # %% [markdown]
-# Where the **ExtendedResourceToleration** admission plugin is enabled, nobody writes that toleration by
-# hand: the plugin adds `{key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}` to every pod that
-# *requests* `nvidia.com/gpu`, and `gpu_pod()` in this package does the same. The plugin is **off by
-# default** in kube-apiserver: GKE turns it on (verify); on kubeadm or kind you enable it
-# (`--enable-admission-plugins=...,ExtendedResourceToleration`) or add the toleration to every GPU pod
-# yourself — otherwise GPU pods stay Pending with `untolerated taint(s)`. With it, the taint does exactly
-# one job: it keeps pods that do **not** ask for GPUs off GPU nodes.
+# When the **ExtendedResourceToleration** admission plugin is on, nobody writes that toleration by hand.
+# The plugin adds `{key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}` to every pod that
+# *requests* `nvidia.com/gpu`. The function `gpu_pod()` in this package does the same.
+#
+# The plugin is **off by default** in kube-apiserver. GKE turns it on (verify). On kubeadm or kind, you
+# turn it on (`--enable-admission-plugins=...,ExtendedResourceToleration`), or you add the toleration to
+# every GPU pod yourself. If you do neither, GPU pods stay Pending with `untolerated taint(s)`. With the
+# plugin on, the taint does exactly one job. It keeps pods that do **not** ask for GPUs off GPU nodes.
 
 # %%
 cluster = Cluster([gpu_node("gpu-0", 8), Node("cpu-0", {"cpu": 32000, "memory": 131072})])
@@ -97,16 +103,19 @@ for pod in (web, trainer):
 # %% [markdown]
 # ## Exercise 1.2 — the API server's rules for a GPU request
 #
-# `nvidia.com/gpu` is an *extended resource*: a name with a domain prefix outside `kubernetes.io`.
-# For such resources the API server enforces three rules and one default:
+# `nvidia.com/gpu` is an *extended resource*, that is, a name with a domain prefix outside
+# `kubernetes.io`. For these resources, the API server applies three rules and one default:
 #
-# * the quantity must be an integer — message `must be an integer`;
-# * if both request and limit are set they must be equal — `must be equal to nvidia.com/gpu limit of N`;
-# * a request without a limit is rejected — `Limit must be set for non overcommitable resources`;
-# * a limit without a request defaults the request to the limit.
+# * The quantity must be an integer. The message is `must be an integer`.
+# * If a container sets both a request and a limit, they must be equal. The message is
+#   `must be equal to nvidia.com/gpu limit of N`.
+# * The API server rejects a request without a limit. The message is
+#   `Limit must be set for non overcommitable resources`.
+# * If a container sets a limit and no request, the request gets the value of the limit by default.
 #
-# Write `gpu_request(requests, limits)` that returns the effective integer GPU request (0 if the
-# container asks for none) or raises `ValueError` whose message contains the upstream text.
+# Write `gpu_request(requests, limits)`. It returns the effective GPU request as an integer, or 0 if the
+# container asks for none. When a rule rejects the request, the function raises `ValueError`, and the
+# message contains the upstream text.
 
 # %% exercise
 def gpu_request(requests: dict, limits: dict) -> int:
@@ -139,11 +148,13 @@ for bad, text in [(({}, {GPU: 0.5}), "must be an integer"),
 print("✅ integers only, requests == limits: no fractional GPUs and no overcommit at this layer")
 
 # %% [markdown]
-# **Why no fractions?** The scheduler and kubelet only count. A GPU shared by several pods must
-# therefore be *advertised as several units* by the device plugin (time-slicing, MPS) or *split
-# into real partitions* (MIG, each partition its own device) — primer §9, with the mechanics in layer
-# 02. Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a structured
-# claim; here is the claim you would write instead of `limits: {nvidia.com/gpu: 1}`:
+# **Why no fractions?** The scheduler and the kubelet only count. Thus, to share a GPU between several
+# pods, the device plugin must *advertise it as several units* (time-slicing, MPS). Another possibility
+# is to *divide it into real partitions* (MIG, where each partition is its own device). See primer §9,
+# and layer 02 for the mechanics.
+#
+# Dynamic Resource Allocation (DRA, GA in Kubernetes 1.34) replaces the counter with a structured claim.
+# With DRA, you write this claim instead of `limits: {nvidia.com/gpu: 1}`:
 
 # %%
 claim_template = {
@@ -160,9 +171,9 @@ print(claim_template)
 # ## Labels: which GPU is this?
 #
 # The scheduler matches pods to GPU *types* with node labels. GKE sets
-# `cloud.google.com/gke-accelerator` itself; on other clusters NVIDIA's GPU Feature Discovery (part
-# of the GPU Operator) writes labels such as `nvidia.com/gpu.product` and `nvidia.com/gpu.memory`.
-# Topology labels (block / sub-block / host) feed notebook 03.
+# `cloud.google.com/gke-accelerator` itself. On other clusters, NVIDIA's GPU Feature Discovery (part of
+# the GPU Operator) writes labels such as `nvidia.com/gpu.product` and `nvidia.com/gpu.memory`. Notebook
+# 03 uses the topology labels (block / sub-block / host).
 
 # %%
 fleet = Cluster([gpu_node("l4-0", 1, accelerator="nvidia-l4"), gpu_node("l4-1", 1, accelerator="nvidia-l4"),
@@ -174,10 +185,14 @@ fleet.bind(gpu_pod("busy", 1), "l4-0")
 # %% [markdown]
 # ## Exercise 1.3 — where can this pod run?
 #
-# Write `where_can_it_run(pod, cluster)`: the names of nodes where the pod passes all three checks
-# the scheduler's filters make — every `node_selector` label matches, every `NoSchedule`/`NoExecute`
-# taint is tolerated, and every requested resource fits in `node.free(resource)`. Use your
-# `tolerates()`.
+# Write `where_can_it_run(pod, cluster)`. It returns the names of the nodes where the pod passes all
+# three checks that the filters of the scheduler make:
+#
+# * Every `node_selector` label matches.
+# * The pod tolerates every `NoSchedule`/`NoExecute` taint.
+# * Every requested resource fits in `node.free(resource)`.
+#
+# Use your `tolerates()`.
 
 # %% exercise
 def where_can_it_run(pod: Pod, cluster: Cluster) -> list:
@@ -208,13 +223,15 @@ print("✅ selector, taints and integer resources decide feasibility; nothing el
 # %% [markdown]
 # ## Exercise 1.4 — predict the node after a GPU fails
 #
-# Back to the first node: `trainer-0` holds 4 GPUs and `server-0` holds 2 (6 requested). Now the
-# plugin's health check marks device `GPU-fake-0006` (one of the two free ones) **Unhealthy** — say
-# an XID 79, "GPU has fallen off the bus". Predict, *before* running anything:
+# Go back to the first node. `trainer-0` holds 4 GPUs and `server-0` holds 2 (6 requested). Now the
+# health check of the plugin marks device `GPU-fake-0006` (one of the two free devices) **Unhealthy**.
+# For example, the cause is an XID 79, "GPU has fallen off the bus". Predict these values *before* you
+# run anything:
 #
-# * `capacity` and `allocatable` in the node status;
-# * how many GPUs the scheduler now considers free on this node ($\mathit{allocatable} - \mathit{requested}$);
-# * whether the kubelet can admit a new 2-GPU pod.
+# * `capacity` and `allocatable` in the node status.
+# * How many GPUs the scheduler now counts as free on this node
+#   ($\mathit{allocatable} - \mathit{requested}$).
+# * If the kubelet can admit a new 2-GPU pod.
 
 # %% exercise
 # predicted_capacity = ...              an int
@@ -243,18 +260,20 @@ assert predicted_two_gpu_pod_admitted == admitted
 print("✅", status, "- running pods keep their GPUs; new work sees one fewer")
 
 # %% [markdown]
-# The scheduler would not *send* a 2-GPU pod here once the status updates. The rejection above
-# happens in the window between the scheduler's decision and the kubelet's admission — the two are
-# separate accountants, and the kubelet wins. The pod fails with reason `UnexpectedAdmissionError`
-# and its controller must recreate it.
+# After the status update, the scheduler does not *send* a 2-GPU pod here. The rejection in the previous
+# cell occurs in the window between the decision of the scheduler and the admission of the kubelet. The
+# two keep separate accounts, and the decision of the kubelet is final. The pod fails with the reason
+# `UnexpectedAdmissionError`, and its controller must create it again.
 #
 # ## Exercise 1.5 — keep a container's GPUs on one NVLink island
 #
-# Within a node, not all GPU pairs are equal: GPUs on the same NVLink island (or at least the same
-# NUMA node) talk much faster. That is why the device-plugin API has `GetPreferredAllocation`.
-# Implement the plugin side: given the free device IDs, a map `island_of[id]`, and a size, return
-# `size` IDs from the **tightest** island that can hold them all (fewest free devices, ties by
-# island number); if no single island can, return the first `size` free IDs.
+# In a node, not all GPU pairs are equal. GPUs on the same NVLink island (or at least on the same NUMA
+# node) exchange data much faster. This is why the device-plugin API has `GetPreferredAllocation`. Write
+# the plugin side. The inputs are the free device IDs, a map `island_of[id]`, and a size. Return `size`
+# IDs from the **tightest** island that can hold them all.
+#
+# The tightest island has the fewest free devices, and the island number breaks a tie. If no single
+# island can hold them, return the first `size` free IDs.
 
 # %% exercise
 def preferred(free: list, island_of: dict, size: int) -> list:
@@ -281,12 +300,14 @@ print("✅ topology-aware allocation inside one node - notebook 03 does the same
 # %% [markdown]
 # ## Sharing: time-slicing advertises more integers, not more GPUs
 #
-# Because the scheduler only counts, sharing a GPU means advertising *more units*. With time-slicing
-# the NVIDIA device plugin is configured with `replicas: N`: every physical GPU is listed $N$ times in
-# `ListAndWatch` (IDs `<uuid>::0 ... ::N-1`), and allocatable grows $N$-fold. The plugin's preferred
-# allocation takes replicas one at a time from the physical GPU with the fewest replicas already
-# allocated (its default *distributed* policy), and a replica carries no memory limit and no
-# guaranteed share of compute — every process on the GPU is time-sliced equally.
+# The scheduler only counts. Thus, to share a GPU, the device plugin must advertise *more units*. For
+# time-slicing, you configure the NVIDIA device plugin with `replicas: N`. Then `ListAndWatch` lists
+# every physical GPU $N$ times (IDs `<uuid>::0 ... ::N-1`), and allocatable increases $N$-fold.
+#
+# The preferred allocation of the plugin takes replicas one at a time from the physical GPU with the
+# fewest replicas already allocated. This is the default *distributed* policy of the plugin. A replica
+# has no memory limit and no guaranteed share of compute. The GPU divides its time equally between all the processes
+# on it.
 
 # %%
 shared_plugin = DevicePlugin(make_gpus(8), replicas=10)
@@ -298,14 +319,16 @@ print("node status:", shared_kubelet.node_status())
 # %% [markdown]
 # ## Exercise 1.6 — what does a time-sliced request really get?
 #
-# A node with 8 GPUs and `replicas: 10`. Predict:
+# A node has 8 GPUs and `replicas: 10`. Predict these values:
 #
-# * `allocatable` for `nvidia.com/gpu`;
-# * on the **fresh** node, how many **physical** GPUs back a container that requests `nvidia.com/gpu: 2`;
-# * the same after sixteen 1-replica pods have been admitted (the plugin spreads them, two per GPU)
-#   and the two on `GPU-fake-0003` have finished;
-# * whether a 2-"GPU" container is admitted when the plugin sets `failRequestsGreaterThanOne: true`
-#   (NVIDIA's option that treats a shared request as "access to a GPU", so more than one is an error).
+# * `allocatable` for `nvidia.com/gpu`.
+# * On the **fresh** node, how many **physical** GPUs supply a container that requests
+#   `nvidia.com/gpu: 2`.
+# * The same number after the kubelet admits sixteen 1-replica pods (the plugin spreads them, two per
+#   GPU) and the two pods on `GPU-fake-0003` finish.
+# * If the kubelet admits a 2-"GPU" container when the plugin sets `failRequestsGreaterThanOne: true`.
+#   This NVIDIA option treats a shared request as "access to a GPU", so a request for more than one is
+#   an error.
 
 # %% exercise
 # predicted_shared_allocatable = ...     an int
@@ -348,10 +371,11 @@ assert predicted_admitted_with_limit == admitted_with_limit
 print("✅ time-slicing multiplies the integer, not the hardware")
 
 # %% [markdown]
-# That was the plugin's default `distributed` policy. The NVIDIA plugin's
-# `--shared-devices-allocation-policy` also offers `packed` (v0.20.0 and later) and, on its main branch,
-# `spread` (verify; primer §9); the model takes the same names as `DevicePlugin(allocation_policy=...)`.
-# The same 2-"GPU" request on a fresh node, under each:
+# That was the default `distributed` policy of the plugin. The `--shared-devices-allocation-policy` flag
+# of the NVIDIA plugin also offers `packed` (v0.20.0 and later). On the main branch of the plugin, the
+# flag also offers `spread` (verify, and see primer §9). The model takes the same names as
+# `DevicePlugin(allocation_policy=...)`. The next cell sends the same 2-"GPU" request to a fresh node
+# under each policy:
 
 # %%
 for policy in ("distributed", "packed", "spread"):
@@ -360,35 +384,40 @@ for policy in ("distributed", "packed", "spread"):
     print(f"{policy:12} -> {k.admit('two', 2)['envs']['NVIDIA_VISIBLE_DEVICES']}")
 
 # %% [markdown]
-# GKE's own device plugin enforces the same rule on time-sharing nodes: a container may request at most
-# one `nvidia.com/gpu` there. MIG is the other way to share — real partitions, each its own device, with
-# memory and fault isolation (primer §9, and layer 02 for the mechanics).
+# GKE has its own device plugin, and it applies the same rule on time-sharing nodes. There, a container
+# can request at most one `nvidia.com/gpu`. MIG is the other way to share a GPU. It makes real
+# partitions, each its own device, with memory and fault isolation (primer §9, and layer 02 for the
+# mechanics).
 #
 # ## In a design review
 #
-# **Two-minute version.** "A GPU becomes schedulable through three hops. The NVIDIA device plugin —
-# installed by the GPU Operator, or by GKE itself — registers `nvidia.com/gpu` with the kubelet and
-# streams device health; the kubelet turns that into capacity and allocatable on the Node; the
-# scheduler sees an integer and never overcommits it. Requests are whole GPUs with requests equal
-# to limits.
+# **Two-minute version.** "A GPU becomes schedulable through three hops. First, the NVIDIA device plugin
+# registers `nvidia.com/gpu` with the kubelet and sends the device health as a stream. The GPU Operator
+# installs the plugin, or GKE itself installs it. Then the kubelet turns the registration and the
+# device health into capacity and allocatable on the Node. Last, the scheduler sees an integer and
+# never overcommits it.
 #
-# "We taint GPU nodes so only GPU pods land there — the ExtendedResourceToleration
-# admission plugin (on in GKE; we enable it on self-built clusters) adds the toleration to GPU pods —
-# and select GPU types with node labels. If we need fractions we choose MIG for isolation or
-# time-slicing for density, knowing time-slicing gives no memory or fault isolation and that two
-# slices may be one GPU. A GPU that goes unhealthy drops allocatable but does not evict running
-# pods, so health alerts and node drains are part of the design."
+# "Requests are whole GPUs, and requests are equal to limits. We put a taint on GPU nodes, so only GPU
+# pods land there. The ExtendedResourceToleration admission plugin adds the toleration to GPU pods. It
+# is on in GKE, and we turn it on in self-built clusters. We select GPU types with node labels.
+#
+# "If we need fractions, we select MIG for isolation or time-slicing for density. We know that
+# time-slicing gives no memory or fault isolation. We also know that two slices can be one GPU. A GPU
+# that becomes unhealthy decreases allocatable, but it does not evict the pods that run. Thus health
+# alerts and node drains are part of the design."
 #
 # **Drill questions.**
 #
-# 1. *A pod asks for `nvidia.com/gpu: 0.5`. What happens?* — The API server rejects it: extended
-#    resources must be integers. Share a GPU by advertising replicas (time-slicing/MPS) or MIG devices.
-# 2. *`kubectl describe node` shows capacity 8, allocatable 7. What does that mean?* — The plugin
-#    reports one device Unhealthy (e.g. an XID). Pods using it keep running; new pods see 7.
-# 3. *On GKE, why do CPU-only pods never land on our GPU nodes, although nobody wrote tolerations?*
-#    — GPU nodes carry a `nvidia.com/gpu` NoSchedule taint and only pods that *request* the
-#    resource get the matching toleration, from the ExtendedResourceToleration admission plugin. That
-#    plugin is off by default upstream, so on a self-built cluster enable it or write the toleration.
-# 4. *A team asks for two time-sliced GPUs to "get twice the compute". What do they get?* — Two
+# 1. *A pod asks for `nvidia.com/gpu: 0.5`. What happens?* The API server rejects it, because extended
+#    resources must be integers. To share a GPU, advertise replicas (time-slicing/MPS) or MIG devices.
+# 2. *`kubectl describe node` shows capacity 8, allocatable 7. What does that mean?* The plugin reports
+#    one device Unhealthy (for example, after an XID). The pods that use it continue to run. New pods
+#    see 7.
+# 3. *On GKE, why do CPU-only pods never land on our GPU nodes, although nobody wrote tolerations?* GPU
+#    nodes have a `nvidia.com/gpu` NoSchedule taint. Only pods that *request* the resource get the
+#    toleration that matches, from the ExtendedResourceToleration admission plugin. That plugin is off
+#    by default upstream. Thus, on a self-built cluster, turn it on or write the toleration.
+# 4. *A team asks for two time-sliced GPUs to "get twice the compute". What do they get?* They get two
 #    replicas that can be slices of the same physical GPU, with no guaranteed share of it. Set
-#    `failRequestsGreaterThanOne` (or use GKE time-sharing, which allows one) so the request fails loudly.
+#    `failRequestsGreaterThanOne` (or use GKE time-sharing, which permits one), so that the request
+#    fails with a visible error.

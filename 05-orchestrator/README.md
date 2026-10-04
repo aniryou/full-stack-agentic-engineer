@@ -1,8 +1,12 @@
 # 05 · Orchestrator
 
-Turn many inference-engine replicas into one serving system: after this layer you can decide which replica each
-request goes to, how many replicas run and on which signal, and whether prefill and decode share a GPU — and defend
-each choice with numbers in a design review.
+Turn many inference-engine replicas into one serving system. After this layer, you can decide these things:
+
+- Which replica each request goes to.
+- How many replicas run, and on which signal.
+- If prefill and decode share a GPU or not.
+
+You can also defend each choice with numbers in a design review.
 
 ## Where this layer sits
 
@@ -17,32 +21,32 @@ each choice with numbers in a design review.
    00 Foundations                     the model itself, beneath the stack: shapes, capacity math, MoE, RL
 ```
 
-This layer is the fleet: it turns many engine replicas (04) on the cluster (03) into one service, below the
-gateway (06) that decides whether a request runs at all.
+This layer is the fleet. It changes many engine replicas (04) on the cluster (03) into one service. It is below the
+gateway (06), which decides if a request runs at all.
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`serving-orchestration/`](serving-orchestration/README.md) | route on prefix affinity and load (the llm-d endpoint picker), hold bursts with flow control and priorities, autoscale on work in flight instead of GPU utilisation, size prefill/decode disaggregation, and keep agent sessions' KV cache in tiers beyond HBM — with a primer, a pure-Python fleet simulator and a real router you can deploy on kind and GKE | ~9 h primer + core; ~8 h lab | T0 → T3 |
+| [`serving-orchestration/`](serving-orchestration/README.md) | route on prefix affinity and load (the llm-d endpoint picker). Hold bursts with flow control and priorities. Autoscale on work in flight, not on GPU utilisation. Calculate the size of a prefill/decode disaggregation. Keep the KV cache of agent sessions in tiers beyond HBM. The topic has a primer, a pure-Python fleet simulator and a real router that you can deploy on kind and GKE. | ~9 h primer + core, ~8 h lab | T0 to T3 |
 
-*Tiers: T0 = laptop or Colab CPU, free; T1 = one small GPU (Colab/Kaggle T4 or a rented card); T2 = a multi-GPU box,
-rented for an hour; T3 = the Google Cloud deployment, optional.*
+*Tiers: T0 is a laptop or a Colab CPU, at no cost. T1 is one small GPU (a Colab or Kaggle T4, or a rented card). T2
+is a multi-GPU box that you rent for an hour. T3 is the Google Cloud deployment, and it is optional.*
 
 ## Start here
 
-1. Read [`serving-orchestration/PRIMER.md`](serving-orchestration/PRIMER.md): "The one-minute version" and §1.
-2. `cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`
-   — 66 tests in about 30 s; then open
+1. Read "The one-minute version" and §1 of [`serving-orchestration/PRIMER.md`](serving-orchestration/PRIMER.md).
+2. Run `cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`.
+   It runs 66 tests in about 30 s. Then open
    [`01_why_llm_load_balancing_is_different`](serving-orchestration/orchestrator-core/notebooks/01_why_llm_load_balancing_is_different.ipynb).
-3. Follow the step table in the topic [`README.md`](serving-orchestration/README.md): each primer section pairs
-   with a core notebook and, where there is one, a lab notebook.
+3. Do the steps in the step table of the topic [`README.md`](serving-orchestration/README.md). Each primer section
+   goes with a core notebook, and with a lab notebook if one exists for that section.
 
 ## What is inside `serving-orchestration/`
 
 | Path | What it is | Tier |
 |---|---|---|
-| [`PRIMER.md`](serving-orchestration/PRIMER.md) | ten sections: why a layer above the engine, routing signals and algorithms (power of two choices, bounded-load hashing, the endpoint picker's filters → scorers → picker), flow control and priorities, autoscaling (the HPA algorithm exactly, which signal, cold start, scale to zero), prefill/decode disaggregation, KV cache beyond HBM, multi-model and LoRA routing, wide-EP, the Kubernetes-native stack (InferencePool, llm-d Router, GKE Inference Gateway, Dynamo), where to run it; a design-review walkthrough, drills, glossary, sources and a dated verify list | read |
-| [`orchestrator-core/`](serving-orchestration/orchestrator-core/) | the minimal implementation, package `fleetsim`: a discrete-event simulator of workloads, replicas with prefix caches, routers, flow control, the HPA, P/D and KV tiers, standard library only; five fill-in notebooks that **predict** | T0 |
-| [`inference-gateway-lab/`](serving-orchestration/inference-gateway-lab/) | the detailed lab, package `igwlab`: an async router that re-implements the endpoint picker's decision logic in front of emulated or real vLLM backends, the HPA recommender ported from kube-controller-manager, a shared-prefix agent benchmark; deploys for docker compose, kind with the llm-d Router, any GPU box and GKE Inference Gateway (Terraform); five notebooks that **run** it | T0 → T3 |
+| [`PRIMER.md`](serving-orchestration/PRIMER.md) | The ten sections of the primer tell why a layer above the engine is necessary. They give routing signals and algorithms (power of two choices, bounded-load hashing, and the filters, then the scorers, then the picker of the endpoint picker). They explain flow control and priorities, and autoscaling (the exact HPA algorithm, which signal, cold start, scale to zero). They also explain prefill/decode disaggregation, KV cache beyond HBM, multi-model and LoRA routing, and wide-EP. Then they give the Kubernetes-native stack (InferencePool, llm-d Router, GKE Inference Gateway, Dynamo) and where to run it. The primer also has a design-review walkthrough, drills, a glossary, sources and a dated verify list. | read |
+| [`orchestrator-core/`](serving-orchestration/orchestrator-core/) | This is the minimal implementation, package `fleetsim`. It is a discrete-event simulator of workloads, replicas with prefix caches, routers, flow control, the HPA, P/D and KV tiers. It uses the standard library only. It has five fill-in notebooks that **predict**. | T0 |
+| [`inference-gateway-lab/`](serving-orchestration/inference-gateway-lab/) | The detailed lab, package `igwlab`, has an async router in front of emulated or real vLLM backends. The router re-implements the decision logic of the endpoint picker. The lab also has the HPA recommender, ported from kube-controller-manager, and a shared-prefix agent benchmark. It has deploy paths for docker compose, kind with the llm-d Router, any GPU box and GKE Inference Gateway (Terraform). It has five notebooks that **run** these parts. | T0 to T3 |
 
 ## Run it
 
@@ -51,31 +55,41 @@ cd serving-orchestration/orchestrator-core && python3 -m pip install -r requirem
 cd ../inference-gateway-lab && python3 -m pip install -r requirements.txt && python3 -m pip install -e . && python3 -m pytest -q
 ```
 
-Then `python3 -m jupyterlab notebooks` in either directory, or the Colab links below. Tiers and costs are in the
-topic README's [Run it](serving-orchestration/README.md#run-it); the deploy paths (compose, kind, any GPU box, GKE)
-are in the lab's [Deploy paths](serving-orchestration/inference-gateway-lab/README.md#deploy-paths).
+Then run `python3 -m jupyterlab notebooks` in either directory, or use the Colab links in "Run in Colab". The
+[Run it](serving-orchestration/README.md#run-it) section of the topic README gives the tiers and the costs. The
+[Deploy paths](serving-orchestration/inference-gateway-lab/README.md#deploy-paths) section of the lab README gives
+the deploy paths (compose, kind, any GPU box, GKE).
 
 ## How it fits
 
-**Needed first:** [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (prefill vs
-decode, TTFT and TPOT), layer 04's [KV cache](../04-inference-engine/kv-cache/kv-cache-primer.md) and
-[paged attention](../04-inference-engine/paged-attention/paged-attention-primer.md) primers, and layer 01's
-[`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) (fabrics, cold start); layer
-04's [prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching) makes §2's routing
-signals concrete. In the [curriculum's spiral](../CURRICULUM.md#31-why-this-order) this layer follows 03, so the
-HPA and LeaderWorkerSet already mean something. **Leads to** layer 06, where [admission control, rate limits and cost](../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
-decide whether a request runs before the router decides where, and to the agent workloads in
-[`07-application-agent-framework`](../07-application-agent-framework/README.md), whose multi-turn sessions shape
-every routing and caching decision here.
+**Needed first:**
+
+- [`00-foundations/gpu-capacity-planning`](../00-foundations/gpu-capacity-planning/PRIMER.md) (prefill compared
+  with decode, TTFT and TPOT).
+- The [KV cache](../04-inference-engine/kv-cache/kv-cache-primer.md) and
+  [paged attention](../04-inference-engine/paged-attention/paged-attention-primer.md) primers of layer 04.
+- [`roofline-and-fabric`](../01-hardware-gpu-fabric/roofline-and-fabric/PRIMER.md) of layer 01 (fabrics, cold
+  start).
+
+The [prefix caching](../04-inference-engine/serving-engine/PRIMER.md#5-prefix-caching) section of layer 04 makes the
+routing signals of §2 concrete. In the [curriculum's spiral](../CURRICULUM.md#31-why-this-order), this layer comes
+after 03. Thus the HPA and LeaderWorkerSet already mean something to you.
+
+**Leads to** layer 06. There, [admission control, rate limits and cost](../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md)
+decide if a request runs, before the router decides where it runs. This layer also leads to the agent workloads in
+[`07-application-agent-framework`](../07-application-agent-framework/README.md). Their multi-turn sessions shape
+every routing and caching decision in this layer.
 
 ## Caveats
 
-- Every number the simulator prints is **simulated** (an engine model from spec-sheet arithmetic), and the lab's T0
-  latencies are real HTTP against emulated engine timing: both compare designs, neither is a GPU measurement.
-- Product versions, GKE details and prices are as of September 2026 and marked `(verify)`; the primer's
-  [Verify list](serving-orchestration/PRIMER.md#verify-list) collects them.
-- Not covered yet: SLO planners (thin), fleet observability, multi-cluster and multi-region serving, request
-  cancellation and migration, cost-aware routing across GPU types — see
+- Every number that the simulator prints is **simulated** (an engine model from spec-sheet arithmetic). The T0
+  latencies of the lab come from real HTTP requests to engines with emulated timing. Both compare designs. Neither
+  is a GPU measurement.
+- Product versions, GKE details and prices are as of September 2026, and they have the tag `(verify)`. The
+  [Verify list](serving-orchestration/PRIMER.md#verify-list) of the primer collects them.
+- This layer does not cover these subjects yet: SLO planners (thin), fleet observability, and multi-cluster and
+  multi-region serving. It also does not cover request cancellation and migration, or cost-aware routing across GPU
+  types. See
   [`CURRICULUM.md` §2](../CURRICULUM.md#2-what-each-layer-has-and-what-it-does-not-cover-yet).
 
 <!-- colab-links:start -->

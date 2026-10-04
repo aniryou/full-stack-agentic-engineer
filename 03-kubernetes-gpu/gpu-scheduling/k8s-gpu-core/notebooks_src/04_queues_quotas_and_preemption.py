@@ -1,26 +1,35 @@
 # %% [markdown]
 # # 04 · Queues, quotas and preemption
 #
-# **Tier:** T0 — a Kueue-style quota simulator using Kueue's field names and admission rules. Real
-# Kueue v0.19 objects (ResourceFlavor, ClusterQueue, LocalQueue, WorkloadPriorityClass) are applied
-# to a kind cluster in lab notebook `02_kind_with_fake_gpus_and_kueue`. What the simulator leaves out:
-# one resource group per ClusterQueue, flat cohorts (no Cohort objects), classic preemption only (no
-# Fair Sharing), no admission checks, and a preemptor admitted in the same step its victims are
-# evicted — real Kueue marks the victims Evicted and admits the preemptor in a later cycle, once their
-# quota is released.
+# **Tier:** T0. It is a Kueue-style quota simulator that uses the field names and admission rules of
+# Kueue. Lab notebook `02_kind_with_fake_gpus_and_kueue` applies real Kueue v0.19 objects
+# (ResourceFlavor, ClusterQueue, LocalQueue, WorkloadPriorityClass) to a kind cluster. The simulator
+# leaves out some parts of Kueue:
+#
+# * It has one resource group per ClusterQueue.
+# * It has flat cohorts (no Cohort objects).
+# * It has classic preemption only (no Fair Sharing).
+# * It has no admission checks.
+# * It admits a preemptor in the same step that it evicts the victims. Real Kueue marks the victims
+#   Evicted and admits the preemptor in a later cycle, when their quota is free again.
 #
 # ## The one-minute version
 #
-# The scheduler decides **where** a pod runs; a quota system decides **whether a job may start at
-# all**. Kueue keeps a job *suspended* until its whole request fits the quota of its
-# **ClusterQueue** (reached through a namespaced **LocalQueue**), then lets all its pods be created.
-# Quotas are per **ResourceFlavor** (e.g. H100 on-demand vs H100 Spot) and resource. ClusterQueues
-# in a **cohort** lend each other their *unused* quota: `borrowingLimit` caps how much one may take,
-# `lendingLimit` caps how much one gives away. Borrowed GPUs are loans: with
-# `reclaimWithinCohort` the owner **preempts** borrowers when it needs its quota back, and
-# `withinClusterQueue` lets high-priority jobs preempt low-priority ones in the same queue. After
-# this notebook you can compute what a team can use right now, predict who gets preempted, and
-# write the ClusterQueue for a serving/batch split.
+# The scheduler decides **where** a pod runs. A quota system decides **if a job can start at all**.
+# Kueue keeps a job *suspended* until its whole request fits the quota of its **ClusterQueue**. The job
+# gets to its ClusterQueue through a namespaced **LocalQueue**. Then Kueue permits the creation of all
+# of its pods.
+#
+# Quotas are per **ResourceFlavor** (for example, H100 on-demand or H100 Spot) and per resource.
+# ClusterQueues in a **cohort** lend their *unused* quota to each other. `borrowingLimit` sets the
+# maximum that one queue can take. `lendingLimit` sets the maximum that one queue gives away.
+#
+# Borrowed GPUs are loans. With `reclaimWithinCohort`, the owner **preempts** borrowers when it needs
+# its quota back. `withinClusterQueue` lets high-priority jobs preempt low-priority jobs in the same
+# queue.
+#
+# After this notebook, you can calculate what a team can use at this time and predict which workloads
+# Kueue preempts. You can also write the ClusterQueue for a serving/batch split.
 #
 # Primer: §6 *Queues, quotas and multi-tenancy with Kueue* in `../../PRIMER.md`.
 
@@ -39,21 +48,23 @@ for event in kueue.schedule():
 print(kueue.table())
 
 # %% [markdown]
-# Team B's third job **borrowed** 8 of team A's idle GPUs: it fits because the cohort has 32 GPUs of
-# nominal quota and only 16 of B's own plus 8 more are in use. The quota arithmetic behind
-# `available` (Kueue's `resource_node.go`, for a flat cohort) is:
+# The third job of team B **borrowed** 8 of the idle GPUs of team A. It fits because the cohort has 32
+# GPUs of nominal quota, and only 16 of B's own GPUs plus 8 more are in use. This is the quota
+# arithmetic behind `available` (Kueue's `resource_node.go`, for a flat cohort):
 #
-# * $\text{guaranteed} =$ $\text{nominal} - \texttt{lendingLimit}$ (0 when there is no lending limit) — never lent;
-# * the cohort pool = sum over members of $\text{nominal} - \text{guaranteed}$; pool usage = sum of
-#   $\max(0, \text{usage} - \text{guaranteed})$;
-# * $\text{available} =$ $\max(0, \text{guaranteed} - \text{usage}) +{}$ $(\text{pool} - \text{pool usage})$, and if a
-#   `borrowingLimit` is set the cohort part is capped at $(\text{nominal} - \text{guaranteed}) -{}$
-#   $\max(0, \text{usage} - \text{guaranteed}) +{}$ $\texttt{borrowingLimit}$.
+# * $\text{guaranteed} =$ $\text{nominal} - \texttt{lendingLimit}$ (0 when there is no lending limit).
+#   The queue never lends this part.
+# * The cohort pool = the sum over the members of $\text{nominal} - \text{guaranteed}$. The pool usage =
+#   the sum of $\max(0, \text{usage} - \text{guaranteed})$.
+# * $\text{available} =$ $\max(0, \text{guaranteed} - \text{usage}) +{}$
+#   $(\text{pool} - \text{pool usage})$. If the queue sets a `borrowingLimit`, the cohort part has a
+#   maximum of $(\text{nominal} - \text{guaranteed}) -{}$ $\max(0, \text{usage} - \text{guaranteed}) +{}$
+#   $\texttt{borrowingLimit}$.
 #
 # ## Exercise 4.1 — how many GPUs can this ClusterQueue use right now?
 #
-# Implement it. `me` and each entry of `others` are dicts with keys `nominal`, `usage`,
-# `borrowing_limit` and `lending_limit` (the limits may be `None`).
+# Write this function. `me` and each entry of `others` are dicts with the keys `nominal`, `usage`,
+# `borrowing_limit` and `lending_limit`. The limits can be `None`.
 
 # %% exercise
 def available(me: dict, others: list) -> int:
@@ -85,7 +96,8 @@ print("✅ available() matches Kueue's arithmetic and its documented examples")
 # %% [markdown]
 # ## When the owner comes back
 #
-# Team A now submits a 16-GPU job. It is entitled to 16 — but 8 of its GPUs are on loan.
+# Now team A submits a 16-GPU job. The nominal quota of team A is 16 GPUs, but 8 of its GPUs are on
+# loan.
 
 # %%
 a1 = Workload("a1", "team-a/gpus", {GPU: 16})
@@ -94,15 +106,15 @@ print("events:", kueue.schedule())
 print(kueue.explain(a1))
 
 # %% [markdown]
-# Nothing happens: with the default `reclaimWithinCohort: Never`, **nominal quota is not a
-# guarantee** — team A waits until B's borrowing job finishes on its own, however long that takes:
+# Nothing occurs. With the default `reclaimWithinCohort: Never`, **nominal quota is not a guarantee**.
+# Team A waits until the job of team B that borrowed GPUs finishes by itself, for as long as that takes:
 
 # %%
 kueue.finish("b3")
 print("after b3 finishes:", kueue.schedule())
 
 # %% [markdown]
-# Now turn reclaim on and replay the same arrivals:
+# Now turn on reclaim. Then replay the same arrivals:
 
 # %%
 kueue = research_cohort(reclaim_within_cohort="Any")
@@ -116,12 +128,13 @@ print(kueue.table())
 # %% [markdown]
 # ## Exercise 4.2 — who is preempted first?
 #
-# Kueue's classic preemption lists candidates (workloads in the preemptor's own ClusterQueue that
-# its `withinClusterQueue` policy allows, and workloads of *borrowing* ClusterQueues in the cohort
-# that `reclaimWithinCohort` allows), then removes them in this order until the preemptor fits:
-# **other ClusterQueues first**, then **lowest priority**, then **most recently admitted**. Write
-# the sort. Each candidate is a dict with `cq`, `priority` and `admitted` (admission order; larger
-# is more recent).
+# The classic preemption of Kueue first makes a list of candidates. These are the workloads in the
+# preemptor's own ClusterQueue that its `withinClusterQueue` policy permits. They are also the workloads
+# of the ClusterQueues in the cohort that *borrow*, if `reclaimWithinCohort` permits their
+# preemption. Then Kueue removes the candidates in this order until the preemptor fits:
+# **other ClusterQueues first**, then **lowest priority**, then **most recently admitted**. Write the
+# sort. Each candidate is a dict with `cq`, `priority` and `admitted` (the admission order, where a
+# larger value is more recent).
 
 # %% exercise
 def preemption_order(candidates: list, my_cq: str) -> list:
@@ -136,14 +149,16 @@ assert [c["name"] for c in preemption_order(cands, "a")] == ["b-new", "b-old", "
 print("✅ reclaim from borrowers first, cheapest first, newest first (it has done the least work)")
 
 # %% [markdown]
-# Kueue then *minimises*: it walks the chosen targets in reverse and gives back any whose removal
-# was not needed. A candidate from another ClusterQueue is only taken while that queue is still
-# borrowing — once team B is back at its nominal quota, its remaining jobs are safe.
+# Then Kueue *minimises* the list. It goes through the selected targets in reverse order and gives back
+# each target that it did not need to remove. Kueue takes a candidate from another ClusterQueue only
+# while that queue still borrows. When team B is back at its nominal quota, the jobs that team B still
+# has are safe.
 #
 # ## Exercise 4.3 — StrictFIFO or BestEffortFIFO?
 #
-# One ClusterQueue with 16 GPUs of quota, empty. Three workloads arrive in this order: `small-1`
-# (8 GPUs), `big` (16), `small-2` (8). Predict which are admitted under each queueing strategy.
+# There is one empty ClusterQueue with 16 GPUs of quota. Three workloads arrive in this order: `small-1`
+# (8 GPUs), `big` (16), `small-2` (8). Predict which workloads Kueue admits under each queueing
+# strategy.
 
 # %% exercise
 # admitted_strict = [...]        workload names, in admission order
@@ -163,14 +178,14 @@ print("✅ StrictFIFO keeps order at the cost of idle quota; BestEffortFIFO fill
 # %% [markdown]
 # ## Exercise 4.4 — write the ClusterQueues for a serving/batch split
 #
-# One cohort `shared`, one flavor `h100`. The policy:
+# There is one cohort `shared` and one flavor `h100`. This is the policy:
 #
-# * `serving-cq` owns 16 GPUs. It may lend at most 8 of them, and must get lent GPUs back by
-#   preempting borrowers, whatever their priority. It never preempts its own workloads.
-# * `batch-cq` owns 16 GPUs, may borrow at most 8, and inside the queue a higher-priority job may
-#   preempt lower-priority ones.
+# * `serving-cq` owns 16 GPUs. It can lend at most 8 of them. It must preempt borrowers to get lent GPUs
+#   back, whatever their priority. It never preempts its own workloads.
+# * `batch-cq` owns 16 GPUs and can borrow at most 8. Inside the queue, a higher-priority job can
+#   preempt lower-priority jobs.
 #
-# Build `serving_cq` and `batch_cq` with `ClusterQueue(...)` and `Quota(...)`.
+# Make `serving_cq` and `batch_cq` with `ClusterQueue(...)` and `Quota(...)`.
 
 # %% exercise
 # serving_cq = ClusterQueue("serving-cq", {"h100": {GPU: Quota(...)}}, cohort="shared", ...)
@@ -197,7 +212,7 @@ print(k.table())
 print("✅ serving keeps 8 GPUs at home, recalls its loan at once, and batch sorts itself out by priority")
 
 # %% [markdown]
-# The same policy as Kueue objects (`kueue.x-k8s.io/v1beta2`; applied on kind in the lab):
+# This is the same policy as Kueue objects (`kueue.x-k8s.io/v1beta2`). The lab applies them on kind:
 #
 # ```yaml
 # apiVersion: kueue.x-k8s.io/v1beta2
@@ -214,23 +229,26 @@ print("✅ serving keeps 8 GPUs at home, recalls its loan at once, and batch sor
 #       resources: [{name: "nvidia.com/gpu", nominalQuota: 16, lendingLimit: 8}]
 # ```
 #
-# A `ResourceFlavor` named `h100` carries the node labels (and tolerations) Kueue injects into the
-# admitted pods so they land on H100 nodes; a `LocalQueue` in each team namespace points at its
-# ClusterQueue; jobs opt in with the label `kueue.x-k8s.io/queue-name` and get a priority from
-# `kueue.x-k8s.io/priority-class` (a `WorkloadPriorityClass`), which orders and preempts queued
-# workloads without changing the pods' own scheduling priority.
+# A `ResourceFlavor` with the name `h100` holds the node labels (and tolerations) that Kueue injects
+# into the admitted pods. Thus the pods land on H100 nodes. A `LocalQueue` in each team namespace points
+# at its ClusterQueue. A job joins Kueue with the label `kueue.x-k8s.io/queue-name`, and gets a priority
+# from `kueue.x-k8s.io/priority-class` (a `WorkloadPriorityClass`). This priority puts the workloads in
+# the queue in order and decides their preemption. It does not change the pods' own scheduling priority.
 
 # %% [markdown]
 # ## Exercise 4.5 — predict a reclaim
 #
-# Two ClusterQueues in one cohort, one flavor `f`. Team A: nominal **12** GPUs,
-# `reclaimWithinCohort: Any`, idle. Team B: nominal **4**, running `b-big` (8 GPUs, priority 5,
-# admitted first) and `b-small` (2 GPUs, priority 0) — it borrows 6 of A's GPUs. Team A submits a
-# **10**-GPU job. Use the rules from exercise 4.2 and the note after it: which candidates, in which
-# order, does the greedy pass remove until A's job fits, and which does the reverse pass give back?
-# Then a second cohort: queues `a`, `b`, `c` with nominal 8 each; `a` reclaims with `Any`; `b` runs
-# `b1` (8) and `b2` (4, borrowing); `c` runs `c1` (8), admitted last. `a` submits 8. Which workload
-# is preempted?
+# There are two ClusterQueues in one cohort, and one flavor `f`. Team A has a nominal quota of **12**
+# GPUs and `reclaimWithinCohort: Any`, and it is idle. Team B has a nominal quota of **4**. It runs
+# `b-big` (8 GPUs, priority 5, admitted first) and `b-small` (2 GPUs, priority 0). It borrows 6 of A's
+# GPUs. Team A submits a **10**-GPU job.
+#
+# Use the rules from exercise 4.2 and the note after it. Which candidates does the greedy pass remove,
+# and in which order, until the job of team A fits? Which candidates does the reverse pass give back?
+#
+# Then look at a second cohort, with the queues `a`, `b` and `c` and a nominal quota of 8 each. `a` sets
+# reclaim to `Any`. `b` runs `b1` (8) and `b2` (4, which borrows). `c` runs `c1` (8), admitted last. `a`
+# submits 8. Which workload does Kueue preempt?
 
 # %% exercise
 # preempted_first = [...]    names preempted for team A's 10-GPU job
@@ -272,21 +290,25 @@ print("✅ reclaim takes only from borrowers, cheapest first, then gives back wh
 # %% [markdown]
 # ## In a design review
 #
-# **Two-minute version.** "Every team gets a LocalQueue pointing at its ClusterQueue, with nominal
-# GPU quota per flavor — on-demand H100, Spot H100, L4. ClusterQueues share a cohort, so idle quota
-# is borrowed instead of wasted; borrowing limits stop one team from taking everything and lending
-# limits keep a floor at home for latency-sensitive work. Borrowed quota is recalled with
-# reclaimWithinCohort, so nominal quota really is a guarantee — without it, it is only a hope.
-# Inside a queue, WorkloadPriorityClasses let urgent jobs preempt the newest, lowest-priority
-# ones. Admission is all-or-nothing per job, which also makes Kueue our gang admitter; BestEffortFIFO
-# keeps GPUs busy, and we watch for big jobs starving behind small ones."
+# **Two-minute version.** "Every team gets a LocalQueue that points at its ClusterQueue, with nominal
+# GPU quota per flavor: on-demand H100, Spot H100, L4. ClusterQueues share a cohort, so other queues
+# borrow idle quota, and none of it goes to waste. With borrowing limits, one team cannot take
+# everything. Lending limits keep a minimum at home for latency-sensitive work.
+#
+# "The reclaimWithinCohort setting recalls borrowed quota, so nominal quota really is a guarantee.
+# Without it, nominal quota is only a hope. Inside a queue, WorkloadPriorityClasses let urgent jobs
+# preempt the newest, lowest-priority jobs.
+#
+# "Admission is all-or-nothing per job, and this also makes Kueue our gang admitter. BestEffortFIFO
+# keeps GPUs busy, and we monitor the queues for large jobs that starve behind small jobs."
 #
 # **Drill questions.**
 #
-# 1. *Team A has 16 GPUs of nominal quota, uses none, and its 16-GPU job is Pending. Why?* — Its idle
-#    quota was lent to the cohort and `reclaimWithinCohort` is `Never`; enable reclaim or set a
-#    `lendingLimit`.
-# 2. *What is the difference between `borrowingLimit` and `lendingLimit`?* — Borrowing caps what a
-#    queue may take above its nominal quota; lending caps what it gives away (the rest is reserved).
-# 3. *Does Kueue place pods on nodes?* — No; it admits whole workloads against quota (and, with TAS,
+# 1. *Team A has 16 GPUs of nominal quota, uses none, and its 16-GPU job is Pending. Why?* Other queues
+#    in the cohort borrowed its idle quota, and `reclaimWithinCohort` is `Never`. Turn on reclaim or set
+#    a `lendingLimit`.
+# 2. *What is the difference between `borrowingLimit` and `lendingLimit`?* The borrowing limit sets the
+#    maximum that a queue can take above its nominal quota. The lending limit sets the maximum that it
+#    gives away (the rest is reserved).
+# 3. *Does Kueue place pods on nodes?* No. It admits whole workloads against quota (and, with TAS, it
 #    assigns topology domains). kube-scheduler still binds each pod.

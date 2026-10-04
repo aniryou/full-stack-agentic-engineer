@@ -1,21 +1,21 @@
 # %% [markdown]
 # # 03 · Why is my pod Pending? Reading the control plane's evidence
 #
-# **Tier:** T0 — seventeen fixtures in the formats `kubectl get -o json` returns (pods, events,
-# nodes, Kueue Workloads), labelled *illustrative*. If the kind cluster from notebook 02 is up,
-# the last section creates the s6 "zoo" and diagnoses the real pods.
+# **Tier:** T0. The notebook uses seventeen fixtures in the formats that `kubectl get -o json` returns
+# (pods, events, nodes, Kueue Workloads), labelled *illustrative*. If the kind cluster from notebook 02 is
+# up, the last section creates the s6 "zoo" and diagnoses the real pods.
 #
 # ## The one-minute version
-# A GPU pod passes up to four gates, and each leaves a different trace:
+# A GPU pod goes through up to four gates. Each gate leaves a different trace:
 #
 # | gate | where the reason lives | typical GPU causes |
 # |---|---|---|
-# | **Kueue** | the *Workload*'s `QuotaReserved` / admission checks; the Job is suspended (no pods) or its pods carry a `kueue.x-k8s.io/admission` gate | quota, topology, DWS capacity, preemption |
-# | **kube-scheduler** | pod condition `PodScheduled=False, Unschedulable`: `0/N nodes are available: …` | GPU taint, wrong accelerator, too big, fragmented, busy |
+# | **Kueue** | the *Workload*'s `QuotaReserved` / admission checks. The Job is suspended (no pods), or its pods have a `kueue.x-k8s.io/admission` gate | quota, topology, DWS capacity, preemption |
+# | **kube-scheduler** | pod condition `PodScheduled=False, Unschedulable`: `0/N nodes are available: …` | GPU taint, incorrect accelerator, too large, fragmented, busy |
 # | **cluster autoscaler** | pod events `TriggeredScaleUp` / `NotTriggerScaleUp` / (GKE) `FailedScaleUp` | pool at max size, stockout, cloud quota |
-# | **kubelet** | the pod is bound but not running: events and container states | volume mount (GCS FUSE), device allocation, probes killing a slow load |
+# | **kubelet** | the pod is bound but does not run: events and container states | volume mount (GCS FUSE), device allocation, probes that stop a slow load |
 #
-# Read the gates in that order and you never debug the scheduler for a Kueue problem again.
+# Read the gates in that order. Then you never again debug the scheduler for a Kueue problem.
 # Primer §3 *The scheduling cycle*, §6 *Queues, quotas and multi-tenancy with Kueue*, §7
 # *Getting capacity*, §8 *Startup latency*.
 
@@ -27,11 +27,12 @@ for name in pending.fixture_names():
 
 # %% [markdown]
 # ## The scheduler's message is a histogram
-# The kube-scheduler runs its filters in a fixed order (NodeUnschedulable, NodeName,
-# TaintToleration, NodeAffinity, NodePorts, NodeResourcesFit, … DynamicResources) and records,
-# for each node, the **first** filter that rejected it. The message counts nodes per reason,
-# sorted as strings; then it reports what preemption could do: *not helpful* (the failure is
-# not about resources other pods hold) or *no victims* (nothing of lower priority to evict).
+# The kube-scheduler always runs its filters in the same order (NodeUnschedulable, NodeName, TaintToleration,
+# NodeAffinity, NodePorts, NodeResourcesFit, … DynamicResources). For each node, it records the **first**
+# filter that rejected the node. The message counts nodes per reason, sorted as strings.
+#
+# Then the message tells what preemption can do. One result is *not helpful*: the failure is not about
+# resources that other pods hold. The other result is *no victims*: there is nothing of lower priority to evict.
 
 # %%
 fx = pending.load_fixture("gpu-taint-not-tolerated")
@@ -45,9 +46,9 @@ print("\npreemption:", fe.preemption)
 
 # %% [markdown]
 # ## Exercise 3.1 — parse the histogram
-# Write `histogram(message)` returning `{reason: node_count}` for the **filter** part only (before
-# `" preemption: "`). Careful: reasons contain dots (`Insufficient nvidia.com/gpu`), so you cannot
-# split on `"."`; the items are separated by `", "` and the part ends with a single `"."`.
+# Write `histogram(message)`. It returns `{reason: node_count}` for the **filter** part only (before
+# `" preemption: "`). Be careful: reasons contain dots (`Insufficient nvidia.com/gpu`). Thus you cannot
+# split on `"."`. A `", "` separates the items, and the part ends with a single `"."`.
 
 # %% exercise
 def histogram(message: str) -> dict[str, int]:
@@ -73,10 +74,11 @@ print("✅ histogram parses the kube-scheduler's FitError format")
 
 # %% [markdown]
 # ## Same message, different problems
-# `too-big-for-any-node` and `fragmented-gpus` print the *same* filter histogram — `4
-# Insufficient nvidia.com/gpu` — yet one can never be fixed by waiting and the other is a packing
-# problem. Two tells: the preemption part (`Preemption is not helpful` means the request exceeds
-# the node's **allocatable**, not just what is free) and the node inventory.
+# `too-big-for-any-node` and `fragmented-gpus` print the *same* filter histogram:
+# `4 Insufficient nvidia.com/gpu`. But a wait can never repair the first one, and the second one is a
+# packing problem. Two signs tell them apart. The first sign is the preemption part. `Preemption is not helpful`
+# means that the request is more than the **allocatable** of the node, not only more than the free GPUs.
+# The second sign is the node inventory.
 
 # %%
 for name in ("too-big-for-any-node", "fragmented-gpus"):
@@ -87,10 +89,10 @@ for name in ("too-big-for-any-node", "fragmented-gpus"):
 
 # %% [markdown]
 # ## Exercise 3.2 — too big, fragmented, or just busy?
-# Write `gpu_shortage(free_per_node, allocatable_per_node, request)` returning:
-# * `"too-big"` if no node could ever hold `request` GPUs (compare with allocatable);
-# * `"fragmented"` if the free GPUs add up to `request` or more but no single node has that many;
-# * `"busy"` otherwise (the GPUs exist on some node shape but are in use).
+# Write `gpu_shortage(free_per_node, allocatable_per_node, request)`. It returns:
+# * `"too-big"` if no node can ever hold `request` GPUs. Compare with allocatable.
+# * `"fragmented"` if the free GPUs add up to `request` or more, but no single node has that many.
+# * `"busy"` in all other cases. The GPUs exist on some node shape, but they are in use.
 
 # %% exercise
 def gpu_shortage(free_per_node: dict[str, int], allocatable_per_node: dict[str, int], request: int) -> str:
@@ -113,9 +115,9 @@ print("✅ the same '4 Insufficient nvidia.com/gpu' can mean three different fix
 
 # %% [markdown]
 # ## Gate 1: Kueue speaks through the Workload
-# A queued Job has **no pods** until Kueue admits it, so `kubectl describe pod` shows nothing.
-# `kubectl get workloads -n <ns>` and the `QuotaReserved` condition do. In Kueue v0.19 the
-# condition's reason is `Pending` and the message comes from the flavor assigner or TAS:
+# A queued Job has **no pods** until Kueue admits it. Thus `kubectl describe pod` shows nothing.
+# `kubectl get workloads -n <ns>` and the `QuotaReserved` condition show the reason. In Kueue v0.19, the
+# reason of the condition is `Pending`. The message comes from the flavor assigner or from TAS:
 
 # %%
 for name in ("kueue-exceeds-max-quota", "kueue-waiting-for-quota", "kueue-topology-no-fit", "kueue-preempted",
@@ -126,11 +128,13 @@ for name in ("kueue-exceeds-max-quota", "kueue-waiting-for-quota", "kueue-topolo
 
 # %% [markdown]
 # ## Exercise 3.3 — what is Kueue waiting for?
-# Write `kueue_blocker(workload)` returning one of `"preempted"`, `"admission-check"`,
-# `"exceeds-max-quota"`, `"waiting-for-quota"`, `"topology"` from the Workload's conditions:
-# a `Preempted=True` condition wins; `QuotaReserved=True` without `Admitted=True` means admission
-# checks; otherwise read the `QuotaReserved` message (`maximum capacity` / `insufficient unused
-# quota` / `topology … fit`).
+# Write `kueue_blocker(workload)`. From the conditions of the Workload, it returns one of `"preempted"`,
+# `"admission-check"`, `"exceeds-max-quota"`, `"waiting-for-quota"`, `"topology"`. Use these rules:
+#
+# * A `Preempted=True` condition wins.
+# * `QuotaReserved=True` without `Admitted=True` means admission checks.
+# * In all other cases, read the `QuotaReserved` message (`maximum capacity` /
+#   `insufficient unused quota` / `topology … fit`).
 
 # %% exercise
 def kueue_blocker(workload: dict) -> str:
@@ -157,10 +161,11 @@ print("✅ five Kueue blockers, five different conversations with the queue owne
 
 # %% [markdown]
 # ## The whole diagnosis, every fixture
-# `pending.diagnose()` walks the four gates in order and names the fix. The autoscaler's events
-# override the scheduler's verdict when they explain it (a pool at max size, a stockout). Each
-# diagnosis is printed under its fixture's provenance: simulated by the predictor, or written by
-# hand in the documented format — none of it is output recorded from a cluster.
+# `pending.diagnose()` goes through the four gates in order and gives the repair. The events of the
+# autoscaler override the result of the scheduler when they explain it (a pool at max size, a stockout). The
+# next cell prints each diagnosis under the provenance of its fixture. Each fixture has one of two
+# provenances: the predictor simulated it, or a person wrote it by hand in the documented format. None of
+# the fixtures is output recorded from a cluster.
 
 # %%
 for name in pending.fixture_names():
@@ -170,15 +175,15 @@ for name in pending.fixture_names():
 
 # %% [markdown]
 # ## Exercise 3.4 — pick the fix
-# For each fixture, choose the fix that actually unblocks it:
+# For each fixture, select the repair that really unblocks it:
 #
 # * **a** add `tolerations: [{key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}]`
-# * **b** split the pod across nodes (TP/PP over an LWS or JobSet) or add a bigger GPU shape
-# * **c** raise the node pool's maximum size
+# * **b** divide the pod across nodes (TP/PP over an LWS or JobSet), or add a larger GPU shape
+# * **c** increase the maximum size of the node pool
 # * **d** add fallbacks: other zones or shapes, on-demand, DWS flex-start, or a reservation
 # * **e** add a startupProbe sized to the weight load
 # * **f** grant the pod's ServiceAccount `roles/storage.objectViewer` on the bucket (Workload Identity)
-# * **g** nothing is broken: wait for quota, or raise the job's priority / the queue's borrowingLimit
+# * **g** nothing is broken. Wait for quota, or increase the priority of the job / the borrowingLimit of the queue
 #
 # Fill `fixes` with one letter per fixture.
 
@@ -207,10 +212,10 @@ print("✅ seven Pending pods, seven different fixes")
 
 # %% [markdown]
 # ## Live: the s6 zoo on your kind cluster
-# With the cluster from notebook 02 up, this creates the zoo (fillers leave one free GPU per
-# node, then six workloads that cannot start) and diagnoses every Pending pod with
-# `pending.diagnose_live`, which gathers the same JSON documents with `kubectl`. Offline it
-# prints the commands.
+# If the cluster from notebook 02 is up, the next cell creates the zoo. The zoo starts with fillers that
+# leave one free GPU per node. After the fillers, the zoo adds six workloads that cannot start. Then the
+# cell diagnoses every Pending pod with `pending.diagnose_live`. This function gets the same JSON documents
+# with `kubectl`. Offline, the cell prints the commands.
 
 # %%
 READY, why = kindlab.cluster_status()
@@ -235,22 +240,23 @@ else:
 
 # %% [markdown]
 # ## In a design review
-# *"A training job has been Pending for an hour — how do you find out why?"* — in two minutes:
-# first ask whether it is queued. If Kueue manages it, the Job is suspended and the answer is on
-# the Workload: quota (wait, priority, borrowing limit), topology (no domain big enough), an
-# admission check (DWS still looking for capacity) or a preemption. If the pods exist, read
-# `PodScheduled`: the histogram says which filter rejected each node — taint, selector,
-# resources — and the preemption line says whether waiting could ever help. Then the
-# autoscaler's events: is a node coming, is the pool at its maximum, did the zone stock out?
-# Only a *bound* pod that is not Running is a kubelet problem: images, volumes, device
-# allocation, probes.
+# *"A training job has been Pending for an hour — how do you find out why?"* The answer, in two minutes:
 #
-# **Drill 1.** *`0/6 nodes are available: 4 Insufficient nvidia.com/gpu` — scale up?* Not yet:
-# check whether the request exceeds any node's allocatable (then no scale-up helps) or whether
-# free GPUs are fragmented across nodes (then pack, don't buy).
+# * First, ask if the job is queued. If Kueue manages it, the Job is suspended, and the answer is on the
+#   Workload. The cause is quota (wait, priority, borrowing limit), topology (no domain is sufficiently
+#   large), an admission check (DWS still looks for capacity) or a preemption.
+# * If the pods exist, read `PodScheduled`. The histogram tells which filter rejected each node: taint,
+#   selector or resources. The preemption line tells if a wait can ever help.
+# * Then read the events of the autoscaler. Is a node on its way? Is the pool at its maximum? Did the zone
+#   have a stockout?
+# * Only a *bound* pod that is not Running is a kubelet problem: images, volumes, device allocation, probes.
 #
-# **Drill 2.** *The pod has a `kueue.x-k8s.io/admission` scheduling gate.* It belongs to a group
-# (LWS, pod group) that Kueue has not admitted; look at that group's Workload.
+# **Drill 1.** *`0/6 nodes are available: 4 Insufficient nvidia.com/gpu`: do you scale up?* Not yet.
+# First, find out if the request is more than the allocatable of any node (then no scale-up helps).
+# Also find out if the free GPUs are fragmented across nodes (then pack, do not buy).
 #
-# **Drill 3.** *`NotTriggerScaleUp: 1 max node group size reached`.* The only pool that can run
-# the pod is full; raise its maximum or queue the work.
+# **Drill 2.** *The pod has a `kueue.x-k8s.io/admission` scheduling gate.* The pod is part of a group
+# (LWS, pod group) that Kueue did not admit yet. Look at the Workload of that group.
+#
+# **Drill 3.** *`NotTriggerScaleUp: 1 max node group size reached`.* The only pool that can run the pod is
+# full. Increase its maximum, or put the work in a queue.

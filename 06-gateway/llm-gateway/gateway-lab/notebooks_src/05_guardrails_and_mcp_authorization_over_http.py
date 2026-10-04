@@ -1,31 +1,45 @@
 # %% [markdown]
 # # 05 · Guardrails, keys and MCP authorization over HTTP
 #
-# **Tier:** T0 — the gateway, fake providers, a fake OAuth authorization server and a fake MCP server, all over
-# localhost HTTP. The guardrail is a **regex stand-in** with a **simulated** check time (50 ms, the order of a
-# small classifier call); DPoP proofs are ES256 when `cryptography` is installed, otherwise signed by a labelled
-# HMAC stand-in that is *not* RFC 9449-conformant.
+# **Tier:** T0. The gateway, fake providers, a fake OAuth authorization server and a fake MCP server all run over
+# localhost HTTP. The guardrail is a **regex stand-in** with a **simulated** check time (50 ms, the order of a small
+# classifier call). DPoP proofs are ES256 when the environment has `cryptography`. Without `cryptography`, a
+# labelled HMAC stand-in signs them, and this stand-in is *not* RFC 9449-conformant.
 #
 # ## The one-minute version
 #
-# **Guardrails** (PRIMER §7). Where a check sits decides what it costs and what it can stop. An input check adds
-# latency before the first token (inline), or only when it is slower than the model's TTFT (parallel, with the first
-# byte held until it passes). An output check on a stream trades latency against leakage: hold the whole answer
-# (`full`), hold windows of $W$ tokens (`window`: adds about $(W - 1) \times \text{ITL} + \text{check}$ to TTFT),
-# stream at once and cut when a check flags (`parallel`: no added latency, but tokens leak before the cut), or only
-# log (`shadow`). Guardrails reduce risk; authorization bounds it (identity primer §0, §4.1, §6).
+# **Guardrails** (PRIMER §7). The position of a check decides its cost and what it can stop. An input check adds
+# latency before the first token (inline). Or it adds latency only when it is slower than the TTFT of the model
+# (parallel, with the first byte held until the check passes). An output check on a stream trades latency against
+# leakage. It has four placements:
 #
-# **Keys** (PRIMER §6). Provider keys live only in the gateway and rotate with an overlap; virtual keys are
-# revoked in one call. (The gateway's own workload identity — a SPIFFE SVID from the Workload API, rotated at
-# half its lifetime, ±10 % of the half-life: 27–33 minutes left on a 1-hour SVID, about 32 in practice because the
-# jitter is re-drawn on every check — is PRIMER §6.5 and the identity
-# primer §3.3–3.5; its fake Workload API lives in the core.)
+# - Hold the whole answer (`full`).
+# - Hold windows of $W$ tokens (`window`: adds about $(W - 1) \times \text{ITL} + \text{check}$ to TTFT).
+# - Send the tokens at once, and cut the stream when a check finds a problem (`parallel`: no added latency, but
+#   tokens leak before the cut).
+# - Only log (`shadow`).
 #
-# **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client: it
-# discovers the authorization server from the server's 401, registers with a Client ID Metadata Document, runs
-# PKCE S256 with `resource` in both requests, keeps a token per (principal, resource, scopes), steps up on a 403
-# `insufficient_scope`, rotates refresh tokens (a replayed one revokes the whole grant), and answers DPoP nonce
-# challenges (RFC 9449 §8 at the authorization server, §9 at the resource server — not part of the MCP spec).
+# Guardrails decrease risk. Authorization puts a limit on it (identity primer §0, §4.1, §6).
+#
+# **Keys** (PRIMER §6). Provider keys live only in the gateway, and they rotate with an overlap. One call revokes a
+# virtual key.
+#
+# PRIMER §6.5 and the identity primer §3.3–3.5 cover the workload identity of the gateway itself. This identity is
+# a SPIFFE SVID from the Workload API. The SVID rotates at half its lifetime, ±10 % of the half-life. That is 27–33
+# minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again. The fake
+# Workload API for this identity lives in the core.
+#
+# **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client. The
+# gateway does these things:
+#
+# - It discovers the authorization server from the 401 of the MCP server.
+# - It registers with a Client ID Metadata Document.
+# - It runs PKCE S256 with `resource` in both requests.
+# - It keeps a token per (principal, resource, scopes).
+# - It does a step-up on a 403 `insufficient_scope`.
+# - It rotates refresh tokens (a replayed refresh token revokes the whole grant).
+# - It answers DPoP nonce challenges (RFC 9449 §8 at the authorization server, §9 at the resource server). These
+#   challenges are not part of the MCP spec.
 
 # %%
 import secrets, statistics, time
@@ -59,8 +73,9 @@ def measure(inp, out, prompt="Tell me about gateways.", n=5):
 # %% [markdown]
 # ## Worked example: every placement, measured
 #
-# The same forty-token answer under each placement. The last columns show what happened to a prompt that makes
-# the (scripted) model print a stand-in secret, and to a prompt injection sent to an inline input check.
+# The cell measures the same forty-token answer under each placement. The last columns show the result for two
+# prompts. The first prompt makes the (scripted) model print a stand-in secret. The second prompt is a prompt
+# injection, sent to an inline input check.
 
 # %%
 base = measure("off", "off")
@@ -75,12 +90,16 @@ for (inp, out), r in results.items():
 # %% [markdown]
 # ## Exercise 5.1 — when does each window reach the client?
 #
-# Tokens are generated at $\text{ttft} + (i - 1) \cdot \text{itl}$ for $i = 1 \ldots n$. With windowed output checks,
-# window $k$ (its last token is token $\min(k \cdot W, n)$) is checked when it is complete **and** the previous check
-# has finished, and each check takes `check_s`; the window is released when its check ends. Write
-# `window_release(ttft, itl, n, window, check_s)` returning the list of release times. The client's TTFT is the first,
-# its E2E the last. The check compares with `gwlab.gateway.guardrails` on a grid (including checks slower than
-# generation, which queue) and with the measured `window` and `full` rows above.
+# The model generates the tokens at $\text{ttft} + (i - 1) \cdot \text{itl}$ for $i = 1 \ldots n$. With windowed
+# output checks, the last token of window $k$ is token $\min(k \cdot W, n)$. The gateway examines window $k$ when
+# two conditions are true: the window is complete, **and** the previous check is complete. Each check takes
+# `check_s`. The gateway releases the window when its check ends.
+#
+# Write `window_release(ttft, itl, n, window, check_s)`. It returns the list of release times. The TTFT of the
+# client is the first time, and its E2E is the last time. The check compares your list with
+# `gwlab.gateway.guardrails` on a grid. The grid includes checks that are slower than the generation of tokens, and
+# these checks wait in a queue. Then the check compares your list with the measured `window` and `full` rows of the
+# worked example.
 
 # %% exercise
 def window_release(ttft: float, itl: float, n: int, window: int, check_s: float) -> list:
@@ -106,12 +125,13 @@ for out, w in (("window", W), ("full", N)):
 print("✅ a held-back window costs about (W − 1)·ITL + one check before the first token; holding everything costs the whole answer")
 
 # %% [markdown]
-# (The largest window a TTFT budget allows, $(\text{budget} - \text{check})/\text{ITL} + 1$, is the core's exercise
-# 5.2; the drill at the end uses it.)
+# Exercise 5.2 of the core finds the largest window that a TTFT budget permits,
+# $(\text{budget} - \text{check})/\text{ITL} + 1$. The drill at the end uses this formula.
 #
 # ## Worked example: revoke a virtual key
 #
-# A leaked virtual key is one tenant's budget until it is revoked — one admin call, effective on the next request.
+# A leaked virtual key is the budget of one tenant until you revoke it. The revocation is one admin call, and it
+# applies from the next request.
 
 # %%
 with LocalStack(fakes=fakes) as s:
@@ -125,14 +145,20 @@ with LocalStack(fakes=fakes) as s:
 # %% [markdown]
 # ## Exercise 5.2 — rotate a provider key under load, and fail nothing
 #
-# A provider key is every tenant's at once, so its rotation must not fail a request. Three operator actions exist:
-# `"provider: add new"` (acme starts accepting `acme-key-2` beside `acme-key-1`), `"gateway: switch"` (the gateway
-# starts sending `acme-key-2`) and `"provider: remove old"` (acme stops accepting `acme-key-1`). Write
-# `rotation_plan()` returning the three in the order that fails no request — the add → overlap → retire of PRIMER
-# §6.2, `keys.ProviderKeys.rotate()` in the core. The check runs 20 requests a second through the gateway while it
-# executes your plan, one action every 0.4 s, and counts what failed; then it runs every other order to show what
-# each would have cost. (A request that reaches acme with a key it no longer accepts is the gateway's credential
-# problem: a 502, never a fall-through.)
+# A provider key belongs to every tenant at the same time. Thus its rotation must not cause a failed request. There
+# are three operator actions:
+#
+# - `"provider: add new"`: acme starts to accept `acme-key-2` beside `acme-key-1`.
+# - `"gateway: switch"`: the gateway starts to send `acme-key-2`.
+# - `"provider: remove old"`: acme no longer accepts `acme-key-1`.
+#
+# Write `rotation_plan()`. It returns the three actions in the order that causes no failed request. This order is
+# the add, overlap and retire sequence of PRIMER §6.2, and `keys.ProviderKeys.rotate()` in the core.
+#
+# The check sends 20 requests a second through the gateway while it does your plan, one action every 0.4 s. It
+# counts the requests that failed. Then it runs every other order to show the cost of each order. A request that
+# reaches acme with a key that acme no longer accepts is a credential problem of the gateway. This request gets a
+# 502, never a fall-through.
 
 # %% exercise
 def rotation_plan() -> list:
@@ -175,11 +201,14 @@ print("✅ add, switch, then retire: zero of 50 requests failed while the key ch
 # %% [markdown]
 # ## Worked example: an agent calls an MCP server through the gateway
 #
-# `alice` of `team-a` calls two tools on the `notes` MCP server through `POST /mcp/notes`, with her team's virtual
-# key and `x-gwlab-user: alice` (the tenant comes from the verified key; the user is asserted by the calling agent
-# here — a lab simplification: a real deployment takes it from a verified token, identity primer §3.5). The gateway holds no token yet: the server answers 401, and the gateway runs the
-# whole flow on her behalf. The authorization server publishes its metadata only at the third well-known location
-# and requires DPoP, so every branch shows up in the log.
+# `alice` of `team-a` calls two tools on the `notes` MCP server through `POST /mcp/notes`. She uses the virtual key
+# of her team and `x-gwlab-user: alice`. The tenant comes from the verified key. Here, the agent that makes the call
+# asserts the user. This is a simplification of the lab: a real deployment takes the user from a verified token
+# (identity primer §3.5).
+#
+# The gateway holds no token yet. Thus the server answers 401, and the gateway runs the full flow for her. The
+# authorization server publishes its metadata only at the third well-known location, and it accepts only requests
+# with DPoP. Thus every branch shows in the log.
 
 # %%
 mcp = LocalStack(fakes=fakes, mcp=AsOptions(dpop=True, metadata="oidc_suffix")).start()
@@ -197,8 +226,9 @@ print("the gateway's CIMD (its client_id is this URL):", client.get_json(mcp.url
 print("DPoP signer:", mcp.call(lambda: mcp.gateway.mcp.signer.label))
 
 # %% [markdown]
-# The discovery order is the spec's (MCP 2026-07-28, verify) and the core's exercise 5.4; here it is, as the gateway
-# actually walked it — two misses, then the OIDC path-appended document:
+# The discovery order comes from the spec (MCP 2026-07-28, verify), and exercise 5.4 of the core calculates it.
+# The next cell shows the order that the gateway actually walked. It found two misses, then the OIDC path-appended
+# document.
 
 # %%
 tried = [x[1] for x in log if x[0] == "as_metadata_try"]
@@ -208,14 +238,18 @@ assert tried == ref_as_urls(mcp.mcp.issuer)
 # %% [markdown]
 # ## Exercise 5.3 — one token, one resource
 #
-# `resource` goes in both the authorization and the token request (RFC 8707) so that a token names the one MCP
-# server it is for — its `aud` claim — and a token stolen from one server is refused at another. The fake
-# authorization server issues JWT access tokens (`header.claims.signature`, base64url without padding). Write
-# `accepts(token, resource, now)`: the audience and expiry half of what the resource server checks — decode the
-# claims (no signature check: the server does that) and return `True` only if `aud` equals `resource` exactly and
-# `exp` is later than `now`. The check fetches, over HTTP from a bearer-token deployment, alice's token for `notes`
-# and a token the same authorization server minted for another resource, and compares your verdict with what the
-# `notes` server answers to each.
+# `resource` goes in both the authorization request and the token request (RFC 8707). Thus a token names the one MCP
+# server that it is for, in its `aud` claim. Because of this claim, another server refuses a token stolen from
+# the first server. The fake authorization server issues JWT access tokens (`header.claims.signature`, base64url
+# without padding).
+#
+# Write `accepts(token, resource, now)`. It is the audience and expiry half of the checks of the resource server.
+# Decode the claims, but do not examine the signature, because the server does that. Return `True` only if `aud`
+# equals `resource` exactly and `exp` is later than `now`.
+#
+# The check gets two tokens over HTTP from a bearer-token deployment. The first is the token of alice for `notes`.
+# The second is a token that the same authorization server minted for another resource. Then it compares your
+# verdict with the answer of the `notes` server to each token.
 
 # %% exercise
 import base64, json
@@ -272,12 +306,19 @@ print("✅ same issuer, same signature key, same user: a token for billing-mcp i
 # %% [markdown]
 # ## Exercise 5.4 — a stolen refresh token comes back
 #
-# The authorization server rotates refresh tokens: every refresh returns a new one and invalidates the old. An
-# attacker who copied an old refresh token replays it *after* the legitimate client has rotated. OAuth 2.1 §4.3.1:
-# the server "will revoke the active refresh token as well as the access authorization grant associated with it".
-# Predict which of the three still work afterwards — the replayed old refresh token, the client's current refresh
-# token, the client's current access token — by returning a dict of booleans from `after_replay()`. The check does
-# it against the fake authorization server and MCP server.
+# The authorization server rotates refresh tokens. Every refresh returns a new refresh token and makes the old one
+# invalid. An attacker who copied an old refresh token replays it *after* the legitimate client did its rotation.
+# OAuth 2.1 §4.3.1 says that the server "will revoke the active refresh token as well as the access authorization
+# grant associated with it".
+#
+# Predict which of these three still work after the replay:
+#
+# - the replayed old refresh token,
+# - the current refresh token of the client,
+# - the current access token of the client.
+#
+# Return your prediction as a dict of booleans from `after_replay()`. The check does the replay against the fake
+# authorization server and the fake MCP server.
 
 # %% exercise
 def after_replay() -> dict:
@@ -316,11 +357,12 @@ print("✅ one replay revokes the grant, for the attacker and the client alike; 
 # %% [markdown]
 # ## Exercise 5.5 — answer a DPoP nonce challenge
 #
-# Write `nonce_to_retry(status, headers, body)`: the nonce to retry with, or `None` if this response is not a nonce
-# challenge. The authorization server (RFC 9449 §8) answers **400** with `{"error": "use_dpop_nonce"}` and a
-# `DPoP-Nonce` header; a resource server (§9) answers **401** with `WWW-Authenticate: DPoP error="use_dpop_nonce"`
-# and a `DPoP-Nonce` header. Anything else — another error, a missing header — is not a nonce challenge. The check
-# uses hand-made responses and real ones from the fake servers.
+# Write `nonce_to_retry(status, headers, body)`. It returns the nonce for the retry, or `None` if this response is
+# not a nonce challenge. The authorization server (RFC 9449 §8) answers **400** with `{"error": "use_dpop_nonce"}`
+# and a `DPoP-Nonce` header. A resource server (§9) answers **401** with
+# `WWW-Authenticate: DPoP error="use_dpop_nonce"` and a `DPoP-Nonce` header. Anything else is not a nonce challenge,
+# for example another error or an absent header. The check uses hand-made responses and real responses from the fake
+# servers.
 
 # %% exercise
 def nonce_to_retry(status: int, headers: dict, body) -> str | None:
@@ -356,28 +398,33 @@ mcp.stop()
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "Guardrails sit at four hooks — input, tool call, tool result, output — and their placement is a
-# latency-versus-leakage decision we make per policy: an input screen inline costs its check time before the first
-# token; for secrets in output we hold back windows sized from our TTFT budget,
-# $(W - 1) \times \text{ITL} + \text{check}$; for lower-stakes categories we stream and cut in parallel, accepting a
-# window of leakage; new rules start in shadow. They lower how often something bad gets through; authorization is what
-# bounds it.
+# **Two minutes:** "Guardrails sit at four hooks: input, tool call, tool result and output. Their placement is a
+# latency-versus-leakage decision that we make for each policy. An inline input screen costs its check time before
+# the first token. For secrets in the output, we hold back windows. We find their size from our TTFT
+# budget, $(W - 1) \times \text{ITL} + \text{check}$.
 #
-# "Provider keys never leave the gateway and rotate with an overlap; virtual keys revoke in one call. For MCP, the
-# gateway is the OAuth client: discovery from the 401, a Client ID Metadata Document instead of dynamic registration,
-# PKCE S256 with `resource` in both requests, a token per principal and resource, step-up on insufficient scope,
-# rotating refresh tokens — a replay revokes the grant — and DPoP nonces when the servers bind tokens to our key."
+# "For lower-stakes categories, we send the stream and cut it in parallel, and we accept a window of leakage. New
+# rules start in shadow. Guardrails decrease how often something bad gets through. Authorization is what puts a
+# limit on the risk.
 #
-# **Drill 1.** *Where would you put a 12B guard model on a streamed answer with a 300 ms TTFT budget?* — Not inline on
-# every window if its check takes most of the budget: largest window $(\text{budget} - \text{check})/\text{ITL} + 1$
-# may be a few tokens. Run it in parallel with a cut, or on the input only, and keep a fast screen (a small classifier
-# or rules) holding back the short windows where leakage is unacceptable.
+# "Provider keys never leave the gateway, and they rotate with an overlap. One call revokes a virtual key.
 #
-# **Drill 2.** *Why should the gateway keep MCP tokens per user rather than one per server, as the Python SDK
-# does?* — A multi-tenant gateway acts for many principals; one token per server would let every user act with
-# whoever authorized first. The cache key is (principal, resource, scopes), and the principal comes from the
+# "For MCP, the gateway is the OAuth client. It uses discovery from the 401, and a Client ID Metadata Document
+# instead of dynamic registration. It uses PKCE S256 with `resource` in both requests, and a token per principal and
+# resource. It does a step-up on insufficient scope. Its refresh tokens rotate, and a replay revokes the grant. It
+# uses DPoP nonces when the servers bind tokens to our key."
+#
+# **Drill 1.** *Where do you put a 12B guard model on a streamed answer with a 300 ms TTFT budget?* If its check
+# takes most of the budget, do not put it inline on every window. The largest window,
+# $(\text{budget} - \text{check})/\text{ITL} + 1$, can be only a few tokens. Run it in parallel with a cut, or on
+# the input only. Keep a fast screen (a small classifier or rules) to hold back the short windows where leakage is
+# unacceptable.
+#
+# **Drill 2.** *Why must the gateway keep MCP tokens per user, and not one per server as the Python SDK does?* A
+# multi-tenant gateway acts for many principals. With one token per server, every user can act with the identity of
+# the first user who authorized. The cache key is (principal, resource, scopes), and the principal comes from the
 # verified key and user, never from the request body.
 #
-# **Drill 3.** *The authorization server does not list `code_challenge_methods_supported`. Proceed without PKCE?*
-# — No: the MCP spec requires the client to refuse. Without S256 an intercepted authorization code can be
-# redeemed by whoever intercepted it.
+# **Drill 3.** *The authorization server does not list `code_challenge_methods_supported`. Continue without PKCE?*
+# No. The MCP spec says that the client must refuse. Without S256, whoever intercepted an authorization code can
+# redeem it.

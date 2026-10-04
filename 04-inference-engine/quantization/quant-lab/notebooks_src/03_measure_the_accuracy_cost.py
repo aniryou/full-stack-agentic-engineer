@@ -1,25 +1,25 @@
 # %% [markdown]
 # # 03 · Measure the accuracy cost: distribution distance, task accuracy, and whether a drop is real
 #
-# **Tier:** T0 — an offline mini-eval on the bundled tiny model (1,000 held-out problems, exact
-# answers) for nine schemes, plus lm-evaluation-harness commands and **sample output in the documented
-# format (illustrative)** parsed and compared. T1 — the same commands run `lm_eval` against a real
-# checkpoint on a GPU, or against a running `vllm serve` (`QUANTLAB_URL`, `local-completions`).
+# **Tier:** T0: the notebook runs an offline mini-eval on the bundled tiny model (1,000 held-out problems, exact
+# answers) for nine schemes. It also has lm-evaluation-harness commands and **sample output in the documented
+# format (illustrative)**, which it parses and compares. T1: the same commands run `lm_eval` against a real
+# checkpoint on a GPU, or against a `vllm serve` that runs (`QUANTLAB_URL`, `local-completions`).
 #
 # ## The one-minute version
 #
-# "Did quantization hurt?" is three measurements that can disagree:
+# The question "Did quantization hurt?" has three measurements, and they can disagree:
 #
 # | Measurement | Cost | Sees | Misses |
 # |---|---|---|---|
-# | **Logit KL / argmax agreement** vs the unquantized model | one forward pass per example, no labels | every shift in the distribution, even ones that do not change an answer yet | whether a shift matters to the task |
-# | **Perplexity** | cheap, no generation | average confidence | rare, answer-changing errors |
-# | **Task accuracy** (exact match) | generation + labels | what users feel | small effects: ±2.7 points of noise on 250 gsm8k questions |
+# | **Logit KL / argmax agreement** against the unquantized model | one forward pass per example, no labels | every shift in the distribution, even shifts that do not change an answer yet | if a shift is important to the task |
+# | **Perplexity** | low-cost, no generation | average confidence | rare errors that change the answer |
+# | **Task accuracy** (exact match) | generation and labels | what users feel | small effects: ±2.7 points of noise on 250 gsm8k questions |
 #
-# Compare on the **same questions** (paired flips, McNemar) rather than two accuracies with error bars;
-# look at *where* the errors land; and remember long generations compound per-token damage — a
-# thinking model that writes 5,000 tokens turns a 1-in-10,000 per-token flip into a 39% chance of at
-# least one divergence. Concepts: PRIMER §8 "Measuring the accuracy you pay" ([`PRIMER.md`](../../PRIMER.md)).
+# Compare on the **same questions** (paired flips, McNemar), not two accuracies with error bars. Look at *where*
+# the errors occur. Also, remember that long generations compound the per-token damage. A thinking model that
+# writes 5,000 tokens turns a 1-in-10,000 per-token flip into a 39% chance of at least one divergence. Concepts:
+# PRIMER §8 "Measuring the accuracy you pay" ([`PRIMER.md`](../../PRIMER.md)).
 
 # %%
 import math
@@ -43,13 +43,15 @@ print("measured on the bundled tiny model (T0), 1,000 held-out problems per task
 print(E.table(results))
 
 # %% [markdown]
-# Read the table three ways. The distance metric sees what accuracy does not: the two W8A8 rows tie on
-# accuracy (100%), but SmoothQuant cuts KL by orders of magnitude. RTN INT4 loses points, and GPTQ and
-# AWQ get them back at the same 4.125 bits; RTN at g32 is *worse* than at g128, which notebook 01 traced
-# to the two outlier-meeting columns, not to group size. And W4A4 with FP4 *activations* collapses: the
-# two massive-activation channels set every block scale of their token (notebook 05).
+# Read the table in three ways. First, the distance metric sees what accuracy does not see. The two W8A8 rows have
+# the same accuracy (100%), but SmoothQuant decreases KL by orders of magnitude. Second, RTN INT4 loses points,
+# and GPTQ and AWQ get them back at the same 4.125 bits. RTN at g32 is *worse* than at g128. Notebook 01 found the
+# cause: the two columns that meet the outlier channels, not the group size.
 #
-# One warning before reading a *ranking* off it. How sure is the reference of its answers?
+# Third, W4A4 with FP4 *activations* collapses. The two massive-activation channels set every block scale of
+# their token (notebook 05).
+#
+# Read one warning before you take a *ranking* from the table. How sure is the reference of its answers?
 
 # %%
 for task in tm.TASKS:
@@ -61,20 +63,23 @@ for task in tm.TASKS:
           f"{np.mean(top > 0.999):.1%} of answer positions")
 
 # %% [markdown]
-# Saturated: the reference is all but certain at every position, so a small logit error barely moves
-# the softmax, and KL values of 1e-8 against 1e-9 mean nothing. The model is also easy to compensate:
-# its inputs come from a 16-token vocabulary through 128-wide layers, so they are low-rank and GPTQ can
-# move nearly all of each column's rounding error onto the others. That is why INT4 GPTQ looks as close
-# to BF16 as FP8 or W8A8 here. On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant within a
-# fraction of a point, INT4 GPTQ/AWQ behind them and INT4 RTN last — the starting order of PRIMER §10's
-# `cost.choose()` — and measure it on your model. What transfers from this table is the mechanisms
-# (RTN's outlier loss, what calibration recovers, FP4 activations collapsing), not the order of the
-# schemes that pass.
+# The reference is saturated. It is almost certain at every position. Thus a small logit error almost does not
+# move the softmax, and KL values of 1e-8 against 1e-9 mean nothing.
+#
+# The model is also easy to compensate. Its inputs come from a 16-token vocabulary through 128-wide layers. Thus
+# they are low-rank, and GPTQ can move nearly all of the rounding error of each column onto the other columns.
+# That is why INT4 GPTQ looks as near to BF16 as FP8 or W8A8 here.
+#
+# On a real LLM, expect FP8 W8A8 and INT8 W8A8 with SmoothQuant within a fraction of a point. Expect INT4
+# GPTQ/AWQ behind them, and INT4 RTN last. This is the order from which `cost.choose()` in PRIMER §10 starts.
+# Measure the order on your model. The things that transfer from this table are the mechanisms, not the order of the schemes that
+# pass. These mechanisms are the outlier loss of RTN, what calibration gets back, and the collapse of FP4
+# activations.
 #
 # ## Exercise 3.1 — the mean KL between two models
 #
-# Write `mean_kl(ref_logits, test_logits)`: the mean over positions of $\mathrm{KL}(p_{\mathrm{ref}} \,\|\, p_{\mathrm{test}})$ in nats,
-# with a numerically safe log-softmax (subtract the max first).
+# Write `mean_kl(ref_logits, test_logits)`. It returns the mean over positions of $\mathrm{KL}(p_{\mathrm{ref}} \,\|\, p_{\mathrm{test}})$ in nats.
+# Use a numerically safe log-softmax (subtract the max first).
 
 # %% exercise
 def mean_kl(ref_logits, test_logits):
@@ -99,9 +104,9 @@ print(f"✅ KL(bf16 || W4A16 RTN) = {mean_kl(r_logits, t_logits):.3e} nats per a
 # %% [markdown]
 # ## Worked example: where the errors land
 #
-# An aggregate hides *which* skill broke. Per answer position, how often does RTN INT4 pick a
-# different token than the reference (teacher-forced), and at which position does a wrong greedy
-# answer first go wrong?
+# An aggregate hides *which* skill failed. The next cell asks two questions. For each answer position, how often
+# does RTN INT4 select a different token than the reference (teacher-forced)? At which position does an incorrect
+# greedy answer first become incorrect?
 
 # %%
 for task in tm.TASKS:
@@ -112,16 +117,16 @@ for task in tm.TASKS:
     print(f"{task:8s} disagreement by position {np.round(dis, 3)}   first wrong position counts {first}")
 
 # %% [markdown]
-# For `add` the damage sits almost entirely on the tens digit — the first digit that depends on a
-# carry. The same pattern at scale: quantization damage concentrates on specific capabilities
-# (arithmetic, rare languages, tool-call formats, long-range retrieval), which is why a task-level eval
-# on *your* workload is the gate, not perplexity.
+# For `add`, the damage is almost entirely on the tens digit. This is the first digit that depends on a carry. The
+# same pattern occurs at scale: quantization damage goes mostly to specific capabilities (arithmetic, rare
+# languages, tool-call formats, long-range retrieval). Thus a task-level eval on *your* workload is the gate, not
+# perplexity.
 #
 # ## Exercise 3.2 — how many questions does it take to see a drop?
 #
-# An unpaired comparison of two accuracies near `p` has a standard error of about
-# $\sqrt{2p(1-p)/n}$. Write `n_needed(p, delta, z=2)`: the number of questions per model at
-# which a drop of `delta` is `z` standard errors. Then use it on the lm-eval sample below.
+# An unpaired comparison of two accuracies near `p` has a standard error of about $\sqrt{2p(1-p)/n}$. Write
+# `n_needed(p, delta, z=2)`. It returns the number of questions per model at which a drop of `delta` is `z`
+# standard errors. Then use it on the lm-eval sample after this exercise.
 
 # %% exercise
 def n_needed(p, delta, z=2.0):
@@ -144,10 +149,12 @@ print(f"✅ a 2.8-point drop at 30% needs ~{need:,} questions per model to see u
 # %% [markdown]
 # ## Exercise 3.3 — paired flips: McNemar's exact test
 #
-# Run both models on the same questions and count only the questions they disagree on: `b` = the
-# reference got it right and the quantized model wrong, `c` = the reverse. Under "no difference" each
-# disagreement is a fair coin, so the two-sided p-value is $2 \times P(\operatorname{Binomial}(b + c, 1/2) \le \min(b, c))$,
-# capped at 1. Write `mcnemar(b, c)`.
+# Run both models on the same questions. Count only the questions on which they disagree. `b` is the count where
+# the reference was correct and the quantized model was incorrect. `c` is the reverse.
+#
+# Under "no difference",
+# each disagreement is a fair coin. Thus the two-sided p-value is
+# $2 \times P(\operatorname{Binomial}(b + c, 1/2) \le \min(b, c))$, with a maximum of 1. Write `mcnemar(b, c)`.
 
 # %% exercise
 def mcnemar(b, c):
@@ -171,10 +178,13 @@ print(f"✅ RTN INT4 on add: {rtn['right_to_wrong']} right->wrong, {rtn['wrong_t
 # %% [markdown]
 # ## Exercise 3.4 — set a budget, then pick the cheapest scheme that meets it
 #
-# A budget has two parts: a task part (accuracy may drop at most `max_drop` on every task) and a
-# distribution part (mean KL at most `max_kl` on every task — headroom for inputs your eval did not
-# cover). Write `passes(row, ref_row, max_drop, max_kl)` for one scheme's `mini_eval` result, then
-# `cheapest(results, bits, ...)`: the passing scheme with the fewest bits per weight (ties: any).
+# A budget has two parts. In the task part, accuracy can decrease by at most `max_drop` on every task. In the
+# distribution part, mean KL is at most `max_kl` on every task. This part gives headroom for inputs that your eval
+# did not cover.
+#
+# Write `passes(row, ref_row, max_drop, max_kl)` for the `mini_eval` result of one scheme. Then write
+# `cheapest(results, bits, ...)`. It returns the scheme that passes with the fewest bits per weight. If there is a
+# tie, return any of them.
 
 # %% exercise
 def passes(row, ref_row, max_drop=0.005, max_kl=1e-3):
@@ -200,10 +210,14 @@ print(f"✅ cheapest scheme within 0.5 points and 1e-3 nats on every task: {pick
 # %% [markdown]
 # ## Worked example: one decision, four kinds of numbers — and a label on each
 #
-# A recommendation mixes numbers of very different standing: bytes counted from files (exact), step
-# times from the emulator (simulated), task accuracy on the tiny model (a T0 measurement, not your
-# model) and lm-eval figures copied from a documented format (sample). `report.Report` refuses a
-# section without a source and prints the label next to every table.
+# A recommendation mixes four kinds of numbers, each with a different status:
+#
+# * bytes counted from files (exact)
+# * step times from the emulator (simulated)
+# * task accuracy on the tiny model (a T0 measurement, not your model)
+# * lm-eval figures copied from a documented format (sample)
+#
+# `report.Report` refuses a section without a source, and it prints the label next to every table.
 
 # %%
 import pathlib, tempfile
@@ -225,9 +239,9 @@ C.clean(tmp)
 # %% [markdown]
 # ## Worked example: long generations compound small damage
 #
-# If each generated token independently diverges with probability `e`, a generation of `L` tokens
-# stays identical with probability $(1 - e)^L$. The tiny model's answers are 4-6 tokens; a reasoning
-# trace is thousands. Per-token argmax disagreement measured above is the `e` to plug in.
+# If each generated token diverges independently with probability `e`, a generation of `L` tokens stays identical
+# with probability $(1 - e)^L$. The answers of the tiny model are 4-6 tokens. A reasoning trace is thousands of
+# tokens. The per-token argmax disagreement that the earlier cell measured is the `e` to use.
 
 # %%
 e_rtn = float(np.mean([results["W4A16 g128 (rtn)"][t]["argmax_agree"] for t in tm.TASKS]))
@@ -235,16 +249,22 @@ for e in (1 - e_rtn, 1e-3, 1e-4):
     print(f"per-token divergence {e:.1e}: " + "  ".join(f"L={L:>6,}: {1 - (1 - e) ** L:6.1%}" for L in (6, 500, 5000, 20000)))
 
 # %% [markdown]
-# Divergence is not failure — a paraphrase can still be right — but it is why quantized *reasoning*
-# models are evaluated on long-generation tasks (math, code) with the chat template and the model's
-# thinking tokens, and why a KL budget matters more for them than for short classification.
+# Divergence is not failure, because a paraphrase can still be correct. But divergence is the reason to evaluate
+# quantized *reasoning* models on long-generation tasks (math, code). These evals use the chat template and the
+# thinking tokens of the model. Divergence is also the reason that a KL budget is more important for them than
+# for short classification.
 #
 # ## lm-evaluation-harness (T1)
 #
-# The command lines for the three backends (lm-eval 0.4.13, verify): `vllm` runs the engine in
-# process; `local-completions` evaluates a server you already started (the same one you benchmark);
-# `hf` uses transformers. `add_bos_token=True` because quantized models can be sensitive to it (vLLM's
-# docs); `--limit` is for smoke tests and makes results "for testing only".
+# The next cell gives the command lines for the three backends (lm-eval 0.4.13, verify):
+#
+# * `vllm` runs the engine in process.
+# * `local-completions` evaluates a server that you already started (the same server that you use for the
+#   benchmark).
+# * `hf` uses transformers.
+#
+# The commands set `add_bos_token=True`, because quantized models can be sensitive to it (the vLLM docs).
+# `--limit` is for smoke tests, and it makes the results "for testing only".
 
 # %%
 MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -263,27 +283,28 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We gate every quantized checkpoint on two numbers against the unquantized model:
-# task accuracy on our own eval set, compared question by question, and mean KL of the next-token
-# distributions on held-out traffic. Accuracy is what users see, but it is noisy — a 3-point drop on
-# 250 gsm8k questions is inside the noise, and seeing it unpaired would take more questions than
-# gsm8k has — so we compare paired flips. KL is sensitive long before accuracy moves; it tells us how
-# much headroom we have for inputs our eval does not cover, and it matters most for long generations,
+# **Two minutes:** "We use two numbers against the unquantized model as the gate for every quantized
+# checkpoint. The first is task accuracy on our own eval set, compared question by question. The second is the
+# mean KL of the next-token distributions on held-out traffic. Accuracy is what users see, but it is noisy.
+#
+# "A 3-point drop on 250 gsm8k questions is inside the noise. An unpaired comparison needs more questions than
+# gsm8k has to see it. Thus we compare paired flips. KL is sensitive long before accuracy moves. It tells us how
+# much headroom we have for inputs that our eval does not cover. It is most important for long generations,
 # where small per-token divergences compound.
 #
-# "On the lab's model, round-to-nearest INT4 fails that
-# budget, GPTQ at the same 4.125 bits passes it, and FP4 activations fail badly — though that toy is
-# saturated and easy to compensate, so on our model we expect INT4 GPTQ to cost more than FP8, and we
-# measure it."
+# "On the lab's model, round-to-nearest INT4 fails that budget, and GPTQ at the same 4.125 bits passes it. FP4
+# activations fail badly. But that toy is saturated and easy to compensate. Thus on our model we expect INT4 GPTQ
+# to cost more than FP8, and we measure it."
 #
 # **Drill 1.** *Perplexity went from 6.14 to 6.26 after W8A8 (the SmoothQuant README's Llama-3-8B numbers).
-# Ship?* — Not on perplexity alone: run the
-# task evals that matter (and the long-generation ones for a reasoning model), compare paired, check
-# the capabilities quantization tends to break first (math, code, rare languages, tool-call formats).
+# Ship?* Not on perplexity alone. Run the task evals that are important (and the long-generation evals for a
+# reasoning model), and compare them paired. Examine the capabilities that quantization usually breaks first
+# (math, code, rare languages, tool-call formats).
 #
-# **Drill 2.** *Accuracy is identical; why do you still care about KL?* — Identical accuracy on $N$ questions
-# bounds the damage only on that distribution; KL measures the shift everywhere, and large KL predicts
-# failures on inputs the eval did not contain.
+# **Drill 2.** *Accuracy is identical. Why do you still care about KL?* Identical accuracy on $N$ questions puts a
+# limit on the damage only on that distribution. KL measures the shift everywhere, and a large KL predicts failures
+# on inputs that the eval did not contain.
 #
-# **Drill 3.** *lm-eval says 27.2 vs 30.0 on gsm8k with ±2.9 stderr each. Regression?* — Unpaired, it is
-# within noise ($z \approx -0.7$). Re-run with `--log_samples` and count paired flips; or run the full split.
+# **Drill 3.** *lm-eval says 27.2 against 30.0 on gsm8k with ±2.9 stderr each. Regression?* Unpaired, it is within
+# the noise ($z \approx -0.7$). Run the eval again with `--log_samples`. Then count the paired flips. Or run the full
+# split.

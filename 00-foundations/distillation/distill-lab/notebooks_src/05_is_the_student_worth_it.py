@@ -1,25 +1,29 @@
 # %% [markdown]
 # # 05 · Is the student worth it? — agreement, the capability gap, cost per correct answer and break-even
 #
-# **Tier:** T0 (default): serving costs from a roofline model (**predicted**: bounds at ideal bandwidth, 01 PRIMER
-# §3 and §8), accuracy from this lab's fake teacher and fake student (**simulated**), agreement from notebook 01's
-# recorded tiny run (illustrative). T1: set `DISTILLAB_URL` to a vLLM server and the throughput cell measures
-# output tokens per second from its `/metrics`; lm-eval gives real accuracies (commands below).
+# **Tier:** T0 (default). The serving costs come from a roofline model (**predicted**: bounds at ideal bandwidth, 01
+# PRIMER §3 and §8). The accuracy comes from this lab's fake teacher and fake student (**simulated**). The agreement
+# comes from the recorded tiny run of notebook 01 (illustrative).
+#
+# T1: set `DISTILLAB_URL` to a vLLM server. Then the throughput cell measures output tokens per second from its
+# `/metrics`. The lm-eval tool gives real accuracies (the commands are in the section "Worked example: measured
+# throughput at T1").
 #
 # ## The one-minute version
 #
 # * **Two kinds of number, two questions** (PRIMER §8 "Measuring a student"). *Agreement* (KL, top-1 agreement)
-#   asks whether the student copies the teacher. *Task accuracy with an interval* asks whether it solves the task.
-#   They can disagree, and a student can beat its teacher while agreeing less.
-# * **The capability gap hides in the tail.** An average over easy and hard problems can look close while the
-#   hardest slice is far apart. Report accuracy per difficulty with Wilson intervals, and use paired comparisons.
-# * **The economics** (PRIMER §9 "The economics of a student"). The student is cheaper per token because each GPU
-#   holds far more of its sequences: its weights and its KV per sequence are both smaller. Price the teacher on the
-#   GPUs you would really give it (two H100s for a 32B), not on one card it barely fits. Distilling costs a fixed
-#   amount, the teacher's tokens plus $6 \cdot N \cdot D$ of training. Break-even is that fixed cost over the saving
-#   per token.
-# * **The cascade:** send easy queries to the student and hard ones to the teacher. Judge it by cost per *correct*
-#   answer, not cost per token.
+#   asks if the student copies the teacher. *Task accuracy with an interval* asks if the student solves the task.
+#   The two numbers can disagree. A student can beat its teacher and agree less with it.
+# * **The capability gap hides in the tail.** The teacher and the student can look near on an average over easy and
+#   hard problems, while they are far apart on the hardest slice. Report the accuracy per difficulty with Wilson
+#   intervals. Use paired comparisons.
+# * **The economics** (PRIMER §9 "The economics of a student"). The student costs less per token, because each GPU
+#   holds many more of its sequences. This is because its weights and its KV per sequence are both smaller. Calculate
+#   the cost of the teacher on the GPUs that you really give it (two H100s for a 32B). Do not use one card that it
+#   barely fits on. Distillation has a fixed cost: the teacher's tokens plus $6 \cdot N \cdot D$ of training. Break-even is that fixed
+#   cost divided by the decrease in cost per token.
+# * **The cascade:** send easy queries to the student and hard queries to the teacher. Measure the cascade by the
+#   cost per *correct* answer, not by the cost per token.
 
 # %%
 import math, statistics
@@ -34,18 +38,18 @@ REC = load_recorded()
 print(table(summary_rows(REC), ["model", "accuracy", "agree", "kl", "rkl"], f"[{REC['source']}] notebook 01's students"))
 
 # %% [markdown]
-# The most accurate tiny student (`seqkd`) is not the one that agrees most with the teacher (`gkd`). It was
-# trained on the teacher's *verified* outputs, so it learned a better-than-teacher habit and diverges where the
-# teacher is wrong. Agreement is the right metric for a speculative draft (notebook 04) and for a compressed
-# replacement that must behave identically, as with quantization's accuracy checks (quantization PRIMER §8). It
-# is the wrong metric when the goal is the task.
+# The most accurate tiny student (`seqkd`) is not the one that agrees most with the teacher (`gkd`). Its training
+# used the teacher's *verified* outputs. Thus it learned a better-than-teacher habit, and it diverges where the
+# teacher is incorrect. Agreement is the correct metric for a speculative draft (notebook 04). It is also the correct
+# metric for a compressed replacement that must behave identically, as with quantization's accuracy checks
+# (quantization PRIMER §8). It is the incorrect metric when the goal is the task.
 #
 # ## Worked example: teacher and student on the same eval problems
 #
-# The fake teacher (standing in for `Qwen/Qwen2.5-1.5B-Instruct`) and the fake student (standing in for
-# `Qwen/Qwen2.5-0.5B-Instruct`) answer the same 200 held-out problems greedily. Both are **simulated**: the student
-# slips more often on harder problems by construction. The method is what matters here. At T1, run lm-eval or this
-# cell against the real models.
+# The fake teacher is a substitute for `Qwen/Qwen2.5-1.5B-Instruct`. The fake student is a substitute for
+# `Qwen/Qwen2.5-0.5B-Instruct`. Both answer the same 200 held-out problems with greedy decoding. Both are
+# **simulated**: by construction, the student makes more errors on harder problems. Here, the method is the important
+# part. At T1, run lm-eval or this cell against the real models.
 
 # %%
 EVAL = D.make_set(200, seed=11)
@@ -63,10 +67,11 @@ print(table([{k: round(v, 3) if isinstance(v, float) else v for k, v in PAIRED.i
 # %% [markdown]
 # ## Exercise 5.1 — a Wilson interval
 #
-# Write `wilson(passes, n, z=1.96)`: the centre is $(p + z^2/2n) / (1 + z^2/n)$ and the half-width
-# $z\,\sqrt{p(1 - p)/n + z^2/4n^2} / (1 + z^2/n)$, clipped to [0, 1], with `(0, 1)` for $n$ = 0. It stays sensible at
-# 0/$n$ and $n$/$n$, where $p \pm 1.96\,\mathrm{SE}$ collapses to a point. It is the interval the 07 agent lab's eval
-# gates and `memory-core` use.
+# Write `wilson(passes, n, z=1.96)`. The centre is $(p + z^2/2n) / (1 + z^2/n)$. The half-width is
+# $z\,\sqrt{p(1 - p)/n + z^2/4n^2} / (1 + z^2/n)$. Clip the interval to [0, 1]. Return `(0, 1)` for $n$ = 0.
+#
+# The interval stays useful at 0/$n$ and $n$/$n$, where $p \pm 1.96\,\mathrm{SE}$ becomes a single point. `memory-core`
+# and the eval gates of the 07 agent lab use this interval.
 
 # %% exercise
 def wilson(passes: int, n: int, z: float = 1.96) -> tuple:
@@ -90,7 +95,7 @@ print(f"✅ student accuracy {PAIRED['student']:.3f}, 95% interval {lo:.3f}-{hi:
 # %% [markdown]
 # ## Exercise 5.2 — where the gap hides
 #
-# Write `gap_by(records, key)`: a dict from each value of `key` (such as `"difficulty"`) to the gap
+# Write `gap_by(records, key)`. It returns a dict from each value of `key` (such as `"difficulty"`) to the gap
 # $\text{teacher accuracy} - \text{student accuracy}$ on those records. Then compare the overall gap with the gap on
 # the hardest slice.
 
@@ -114,17 +119,17 @@ print(f"✅ overall gap {overall:.3f}; at difficulty 4 it is {g[4]:.3f}: " +
       ("the average understates the tail" if g[4] > overall else "in this sample the tail is not worse than the average"))
 
 # %% [markdown]
-# That is where a distilled student fails in production: the hard, rare requests. An offline agreement or average
-# accuracy check passes, and the complaints come from the tail. Gate on the hard slice with its own interval, and
-# expect wide intervals there: 50 problems at 60% is ±13 points.
+# That is where a distilled student fails in production: the hard, rare requests. An offline check of agreement or
+# of average accuracy passes, and the complaints come from the tail. Put a gate on the hard slice, with its own
+# interval. Expect wide intervals there: 50 problems at 60% is ±13 points.
 #
 # ## Worked example: what each model costs to serve
 #
-# The roofline bound for the fact sheet's pair, a 32B teacher and a 1.5B student at 2K context under a 30 ms
-# inter-token latency, and for the T4-sized pair. `C.serving` picks the largest batch whose decode step fits the
-# latency budget and the memory, then prices it with `roofline.cost`'s formula (the tests check both against layer
-# 01's core). The 32B is costed on one H100 and on two (`n_gpus=2`: ideal tensor parallelism, all-reduces not
-# counted).
+# This example calculates the roofline bound for two pairs. The first is the fact sheet's pair: a 32B teacher and a
+# 1.5B student at 2K context, under a 30 ms inter-token latency. The second is the T4-sized pair. `C.serving` selects
+# the largest batch whose decode step fits the latency budget and the memory. Then it calculates the price with
+# `roofline.cost`'s formula (the tests compare both against layer 01's core). The cell calculates the cost of the 32B
+# on one H100 and on two (`n_gpus=2`: ideal tensor parallelism, with no count for the all-reduces).
 
 # %%
 H100, T4 = C.GPUS["H100"], C.GPUS["T4"]
@@ -141,20 +146,24 @@ print(f"32B -> 1.5B: {TEACHER['$/M'] / STUDENT['$/M']:.0f}x cheaper per output t
       f"KV per token {T32.kv_bytes_per_token() / S15.kv_bytes_per_token():.0f}x smaller)")
 
 # %% [markdown]
-# On one H100 the 32B's weights leave room for only 12 sequences of 2K context, so it cannot batch, and the student
-# looks 96× cheaper. Nobody would serve a 32B that way. On two H100s it runs 146 sequences and the student is 16×
-# cheaper, the number to carry. Both runs fill HBM, so cost per token follows how many sequences each GPU holds:
-# the student's KV per sequence is 9× smaller, and its weights leave more of each card free. Everything below
-# prices the teacher on two H100s.
+# On one H100, the 32B's weights leave space for only 12 sequences of 2K context. Thus it cannot batch, and the cost
+# of the student looks 96× lower. In practice, nobody serves a 32B that way. On two H100s, it runs 146 sequences, and
+# the cost of the student is 16× lower. This is the number to use.
+#
+# Both runs fill HBM. Thus the cost per token depends on how many sequences each GPU holds. The student's KV per
+# sequence is 9× smaller, and its weights leave more of each card free. The rest of this notebook calculates the
+# price of the teacher on two H100s.
 #
 # ## Exercise 5.3 — the fixed cost and break-even
 #
-# The fact sheet's worked case: 100k prompts × 2,000 teacher tokens at \$9.00 per million output tokens, then SFT
-# of the 1.5B student (its exact parameter count from the bundled config) on those 2e8 tokens (6·N·D FLOPs) on an
-# H100 at 40% MFU and \$11/GPU-h. Write `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`: the
-# days of serving after which the student has paid for itself. Every million tokens served by the student instead
-# of the teacher saves `teacher_per_m − student_per_m` dollars. The table also shows the same data generated on
-# the self-hosted teacher.
+# The fact sheet's worked case starts with 100k prompts × 2,000 teacher tokens at \$9.00 per million output tokens.
+# Then, SFT of the 1.5B student on those 2e8 tokens (6·N·D FLOPs) runs on an H100 at 40% MFU and \$11/GPU-h. The
+# bundled config gives the exact parameter count of the student.
+#
+# Write `break_even_days(fixed, teacher_per_m, student_per_m, tokens_per_day)`. It returns the days of serving after
+# which the student has paid for itself. Each million tokens that the student serves instead of the teacher saves
+# `teacher_per_m − student_per_m` dollars. The table also shows the result when the self-hosted teacher generates the
+# same data.
 
 # %% exercise
 def break_even_days(fixed: float, teacher_per_m: float, student_per_m: float, tokens_per_day: float) -> float:
@@ -186,11 +195,13 @@ print(f"✅ the teacher's tokens, not the student's training, dominate the fixed
 # %% [markdown]
 # ## Exercise 5.4 — a cascade by difficulty
 #
-# A router sends every query of difficulty `>= route_from` to the teacher and the rest to the student (a router
-# decides before either runs). With the per-query costs below (the simulated output lengths priced at the T4
-# rows' $/M) and each model's accuracy per difficulty from `RECORDS`, write `cascade(records, route_from)`
-# returning `(cost_per_query, accuracy)`. Then pick `BEST`: among the `route_from` values in 1…5 (5 = student
-# only) whose accuracy is at least `FLOOR`, the one with the lowest cost per correct answer.
+# A router sends each query of difficulty `>= route_from` to the teacher, and the other queries to the student. The
+# router decides before either model runs. Use the per-query costs in the next cell (the simulated output lengths,
+# priced at the T4 rows' $/M). Also use the accuracy per difficulty of each model from `RECORDS`. Write
+# `cascade(records, route_from)`. It returns `(cost_per_query, accuracy)`.
+#
+# Then select `BEST`. Examine the `route_from` values in 1…5 (5 = student only) whose accuracy is at least `FLOOR`.
+# `BEST` is the value among them with the lowest cost per correct answer.
 
 # %%
 PRICE = {"teacher": T4_TEACHER["$/M"] / 1e6, "student": T4_STUDENT["$/M"] / 1e6}  # $ per output token (T4 rows)
@@ -232,17 +243,26 @@ print(f"✅ with an accuracy floor of {FLOOR}: teacher from difficulty {BEST if 
       "nothing extra, cost per correct answer alone favours the cheap model, so state the accuracy the product needs first")
 
 # %% [markdown]
-# The router needs a difficulty or confidence signal it can compute before answering (06 scaling-admission-cost:
-# routing by cost). In real traffic the router does not know the difficulty. It has a proxy: prompt length, a classifier, the
-# student's own confidence (escalate after it answers, which pays for both answers on the routed share,
-# `C.cascade(..., student_first=True)`), or the user's tier. A 90%-accurate difficulty classifier changes this
-# table, so measure the router, not the oracle.
+# The router needs a difficulty signal or a confidence signal that it can calculate before a model answers (06
+# scaling-admission-cost: routing by cost). In real traffic, the router does not know the difficulty. It has one of
+# these proxies:
+#
+# * the prompt length
+# * a classifier
+# * the student's own confidence (`C.cascade(..., student_first=True)`)
+# * the user's tier
+#
+# With the student's confidence, the router sends the query to the teacher after the student answers. This pays for
+# both answers on the routed share.
+#
+# A difficulty classifier that is 90% accurate changes this table. Thus, measure the router, not the oracle.
 #
 # ## Worked example: measured throughput at T1
 #
-# With `DISTILLAB_URL` pointing at a real vLLM, the next cell sends a burst of the eval problems and prices the
-# output tokens the engine counted (`vllm:generation_tokens_total`) between two scrapes, at a GPU price you pass.
-# The fake teacher answers instantly, so its throughput means nothing and the cell skips it.
+# When `DISTILLAB_URL` points at a real vLLM, the next cell sends a burst of the eval problems. Then it calculates the
+# price of the output tokens that the engine counted (`vllm:generation_tokens_total`) between two scrapes. It uses a
+# GPU price that you give. The fake teacher answers immediately. Thus its throughput tells you nothing, and the
+# cell skips it.
 
 # %%
 if env.server_url() and not env.is_simulated(env.server_url(), env.auth_headers()):
@@ -263,9 +283,9 @@ else:
 # %% [markdown]
 # ## The decision, in one table
 #
-# Distillation is one of five ways to get a cheaper model that does your task. It is the right one when you have
-# volume, a verifiable or judgeable task, and a teacher you may train on (licences and terms of service are
-# PRIMER §1's dated, verify-marked paragraph, and not legal advice).
+# Distillation is one of five ways to get a lower-cost model that does your task. It is the correct way when you have
+# volume, a verifiable or judgeable task, and a teacher that you have permission to train on. PRIMER §1 has a dated
+# paragraph about licences and terms of service, with a verify mark. That paragraph is not legal advice.
 
 # %%
 print(table([
@@ -279,31 +299,39 @@ print(table([
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We measured the student two ways. Agreement tells us how closely it copies the teacher. Task
-# accuracy with Wilson intervals, per difficulty, tells us whether it solves our problems. The averages were close,
-# and the gap was on the hardest slice, so we gate on that slice.
+# **Two minutes:** "We measured the student in two ways. Agreement tells us how much it copies the teacher.
+# Task accuracy with Wilson intervals, per difficulty, tells us if it solves our problems. The averages were near, and
+# the gap was on the hardest slice. Thus we put a gate on that slice.
 #
-# "Against the 32B on two H100s, the smallest deployment that leaves it room to batch, the 1.5B student costs about a
-# sixteenth as much per output token by the roofline bound. On one H100 it would look like a ninety-sixth, but only
-# because the teacher's KV fills that card at a dozen sequences. The fixed cost is dominated by the teacher's
-# generated tokens (\$1,800 for 2e8 at \$9 per million) rather than training (\$14), so with bought data the break-even
-# is about two days at a billion tokens a day, three weeks at a hundred million and years at a million; generating the
-# data on our own teacher cuts that about ninefold.
+# "Two H100s are the smallest deployment that leaves the 32B space to batch. Against the 32B on two H100s, the 1.5B
+# student costs approximately a sixteenth as much per output token, by the roofline bound. On one H100, the cost of
+# the student looks like a ninety-sixth. But this is only because the teacher's KV fills that card at a dozen
+# sequences.
 #
-# "We serve a cascade: the student by default, the teacher for requests the router flags as hard, judged by cost per
-# correct answer."
+# "The teacher's generated tokens (\$1,800 for 2e8 at \$9 per million) are most of the fixed cost, not the training
+# (\$14). Thus, with bought data, the break-even is approximately two days at a billion tokens a day. It is
+# approximately three weeks at a hundred million, and years at a million. When our own teacher generates the data, the
+# break-even decreases approximately ninefold.
 #
-# **Drill 1.** *Offline agreement with the teacher is 97%, but users say the student got worse on hard tickets.
-# What do you check?* Task accuracy on a hard slice with its own interval, paired against the teacher on the same
-# items. Agreement averages over easy positions. Then decide whether to route that slice to the teacher.
+# "We serve a cascade. The student answers by default, and the teacher answers the requests that the router marks as
+# hard. We measure the cascade by the cost per correct answer."
 #
-# **Drill 2.** *The student is 21× smaller. On one H100 it is 96× cheaper per token, against the teacher on two
-# H100s 16×. Which do you quote, and where does the gap come from?* Quote 16×. Decode streams weights *and* KV, and
-# both runs fill HBM, so cost per token follows the sequences each GPU holds. One H100 leaves the 32B 6.5 GB for
-# KV, 12 sequences; two give it 146. The student's KV per sequence is 9× smaller and its weights leave more of the
-# card free, so it holds 1,173 per GPU against the teacher's 73.
+# **Drill 1.** *Offline agreement with the teacher is 97%, but users say that the student became worse on hard
+# tickets. What do you examine?* Examine the task accuracy on a hard slice with its own interval, paired against the
+# teacher on the same items. Agreement is an average over easy positions. Then decide if you route that
+# slice to the teacher.
 #
-# **Drill 3.** *When does distillation not pay?* At low volume, since break-even is fixed cost over saving per token:
-# with bought data, years at a million tokens a day.
-# Also when the task needs knowledge the student lacks, which shows as a tail the cascade must cover, and when a
-# quantized teacher or a smaller off-the-shelf model already meets the accuracy bar.
+# **Drill 2.** *The student is 21× smaller. Against the teacher on one H100, its cost per token is 96× lower. Against
+# the teacher on two H100s, it is 16× lower. Which number do you quote, and where does the gap come from?* Quote 16×.
+#
+# Decode streams the weights *and* the KV, and both runs fill HBM. Thus the cost per token depends on the number of
+# sequences that each GPU holds. One H100 leaves the 32B 6.5 GB for KV, that is 12 sequences. Two H100s give it 146.
+# The student's KV per sequence is 9× smaller, and its weights leave more of the card free. Thus it holds 1,173
+# sequences per GPU against the teacher's 73.
+#
+# **Drill 3.** *When does distillation not pay?* It does not pay at low volume, because break-even is the fixed cost
+# divided by the decrease in cost per token. With bought data, break-even is years at a million tokens a day.
+#
+# It also does not pay when the task needs knowledge that the student does not have. That gap in knowledge shows as a
+# tail that the cascade must cover.
+# It also does not pay when a quantized teacher or a smaller off-the-shelf model already meets the accuracy bar.

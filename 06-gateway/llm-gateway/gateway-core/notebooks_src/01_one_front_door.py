@@ -1,20 +1,31 @@
 # %% [markdown]
 # # 01 · One front door
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. Everything runs in process on a virtual clock. The same gateway
-# over real HTTP, in front of fake providers or one vLLM (T1), is `gateway-lab` notebook `01_a_gateway_over_http`.
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. Everything runs in process on a virtual clock. The
+# same gateway over real HTTP, in front of fake providers or one vLLM (T1), is `gateway-lab` notebook
+# `01_a_gateway_over_http`.
 #
 # ## The one-minute version
-# A gateway is the one service every app calls instead of calling providers. It speaks one API — OpenAI-style chat
-# completions, streamed as server-sent events — and pushes each provider's differences into **adapters that are mostly
-# data**: which usage fields add up to prompt and completion tokens, how finish reasons map, which header carries the
-# key. A streamed answer is not a response but a sequence of chunks you must **accumulate** (content by concatenation,
-# tool calls by `index`, usage from one extra chunk that only comes if you asked), and a failure can arrive *inside* an
-# HTTP 200. By the end you can normalise four providers' usage, accumulate a stream with parallel tool calls, relay a
-# stream so it is always metered, bill a cut stream, say what the hop costs in availability, and read a request's
-# GenAI spans back from a file.
+# A gateway is the one service that every app calls. The apps do not call the providers. The gateway speaks one API:
+# OpenAI-style chat completions, sent as a stream of server-sent events. It puts the differences of each provider into
+# **adapters that are mostly data**:
 #
-# Primer: §1 *One front door, one API* (`../PRIMER.md`); §5.6 for the spans, §6.1 for the keys.
+# - which usage fields add up to the prompt tokens and the completion tokens,
+# - how the finish reasons map,
+# - which header carries the key.
+#
+# A streamed answer is not one response. It is a sequence of chunks, and you must **accumulate** them. Accumulate the
+# content by concatenation, the tool calls by `index`, and the usage from one extra chunk. That chunk comes only if you asked for
+# it. Also, a failure can arrive *inside* an HTTP 200. At the end of this notebook, you can do these things:
+#
+# - normalise the usage of four providers,
+# - accumulate a stream with parallel tool calls,
+# - relay a stream so that the gateway always meters it,
+# - bill a cut stream,
+# - tell what the hop costs in availability,
+# - read the GenAI spans of a request back from a file.
+#
+# Primer: §1 *One front door, one API* (`../PRIMER.md`). See §5.6 for the spans and §6.1 for the keys.
 
 # %%
 import json
@@ -34,10 +45,12 @@ for dialect in ("openai", "anthropic", "gemini", "vllm"):
     print(f"{'':9s} canonical {normalize_usage(dialect, raw)}")
 
 # %% [markdown]
-# Same call, four spellings, one canonical answer: 5,000 prompt tokens (2,700 of them cached) and 1,550 completion
-# tokens (1,200 of them reasoning). Look at the two traps in the raw rows: Anthropic's `input_tokens` is 2,300 — it
-# **excludes** the cached tokens — and Gemini's `candidatesTokenCount` is 350 — thinking is reported **outside** it.
-# The adapter table is where that knowledge lives:
+# The call is the same, with four spellings and one canonical answer. The answer is 5,000 prompt tokens (2,700 of them
+# cached) and 1,550 completion tokens (1,200 of them reasoning).
+#
+# Look at the two traps in the raw rows. Anthropic's
+# `input_tokens` is 2,300. It **excludes** the cached tokens. Gemini's `candidatesTokenCount` is 350. Gemini reports
+# the thinking tokens **outside** it. The adapter table holds that knowledge:
 
 # %%
 for dialect, a in ADAPTERS.items():
@@ -45,8 +58,8 @@ for dialect, a in ADAPTERS.items():
 
 # %% [markdown]
 # ## Worked example 1 — a stream, frame by frame
-# A fake provider on a virtual clock (TTFT 0.3 s, ITL 20 ms) streams a short answer. We ask for usage, so one extra
-# chunk with `choices: []` arrives before `data: [DONE]`.
+# A fake provider on a virtual clock (TTFT 0.3 s, ITL 20 ms) sends a short answer as a stream. We ask for usage. Thus
+# one extra chunk with `choices: []` arrives before `data: [DONE]`.
 
 # %%
 clock = Clock()
@@ -62,12 +75,14 @@ print("text:", repr(acc.text()), "| finish:", acc.finish_reason, "| usage:", acc
 
 # %% [markdown]
 # ## Worked example 2 — other dialects stream differently
-# Anthropic sends named events; Gemini sends whole function calls and flags thought parts. `normalize_stream` turns
-# both into canonical chunks. The *usage* survives — Anthropic's final `message_delta` carries the cumulative count,
-# thinking tokens included in `output_tokens_details` (anthropic-sdk-python 1.8.0 `MessageDeltaUsage`) — but only
-# if the stream ends. Cut it before `message_delta` and all you hold is `message_start`'s usage, whose
-# `output_tokens` is 1: not a bill. The normaliser then emits no usage chunk at all, and the gateway estimates from
-# the deltas it relayed, marked as an estimate — it never invents the missing count.
+# Anthropic sends named events. Gemini sends whole function calls and puts a flag on the thought parts.
+# `normalize_stream` changes both into canonical chunks. The *usage* survives: the final `message_delta` of Anthropic
+# carries the cumulative count, and that count includes the thinking tokens in `output_tokens_details`
+# (anthropic-sdk-python 1.8.0 `MessageDeltaUsage`). But this is true only if the stream ends.
+#
+# If you cut the stream before `message_delta`, you hold only the usage of `message_start`. Its `output_tokens` is 1,
+# and that is not a bill. Then the normaliser emits no usage chunk at all. The gateway estimates from the deltas that it
+# relayed, and it marks the value as an estimate. It never invents the count that it does not have.
 
 # %%
 for dialect in ("anthropic", "gemini"):
@@ -85,9 +100,19 @@ print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from 
 
 # %% [markdown]
 # ## Worked example 3 — the whole front door
-# `Gateway.handle()` runs the §1.3 path: authenticate a **virtual key** (the tenant comes from it), screen, cache,
-# reserve tokens, walk the chain, relay and meter, reconcile, record. The primary provider is in a scripted outage,
-# so the request falls through to the next target — before the first byte, so the client never notices.
+# `Gateway.handle()` runs the path of §1.3:
+#
+# 1. authenticate a **virtual key** (the tenant comes from the key),
+# 2. screen,
+# 3. cache,
+# 4. reserve tokens,
+# 5. walk the chain,
+# 6. relay and meter,
+# 7. reconcile,
+# 8. record.
+#
+# The primary provider has a scripted outage. Thus the request falls through to the next target. This occurs before
+# the first byte, so the client never sees the outage.
 
 # %%
 clock = Clock()
@@ -105,15 +130,21 @@ print("last frames:", [f.strip() for f in r.frames[-2:]])
 print("ledger row:", r.row)
 
 # %% [markdown]
-# The client did not ask for usage, and no frame carries it — yet the ledger row has exact token counts. The gateway
-# asked upstream for `include_usage` on its own behalf and stripped the chunk on the way back. That is the pattern of
-# Exercise 1.3.
+# The client did not ask for usage, and no frame carries it. But the ledger row has exact token counts. The gateway
+# asked upstream for `include_usage` for its own use, and it removed the chunk on the way back. Exercise 1.3 uses this
+# pattern.
 #
 # ## Exercise 1.1 — write two adapters by hand
-# Write `anthropic_usage(raw)` and `gemini_usage(raw)`: each returns the canonical dict with keys `prompt_tokens`
-# (cached and cache-written included), `completion_tokens` (reasoning included), `cached_tokens`, `cache_write_tokens`
-# (prompt tokens written to the provider's cache, which bill at their own price), `reasoning_tokens` and
-# `total_tokens`. Field names are in the primer's §1.5 table. Missing fields count as 0; Gemini reports no cache writes.
+# Write `anthropic_usage(raw)` and `gemini_usage(raw)`. Each returns the canonical dict with these keys:
+#
+# - `prompt_tokens` (with the cached tokens and the cache-written tokens),
+# - `completion_tokens` (with the reasoning tokens),
+# - `cached_tokens`,
+# - `cache_write_tokens` (the prompt tokens that the provider writes to its cache and bills at their own price),
+# - `reasoning_tokens`,
+# - `total_tokens`.
+#
+# The field names are in the table in §1.5 of the primer. If a field is not there, it counts as 0. Gemini reports no cache writes.
 
 # %% exercise
 def anthropic_usage(raw):
@@ -151,9 +182,10 @@ print("✅ two adapters written by hand match the table-driven ones on 200 rando
 
 # %% [markdown]
 # ## Exercise 1.2 — accumulate parallel tool calls
-# Tool-call deltas are keyed by `index`. Only the first delta for a call carries `id` and `function.name`; later ones
-# carry fragments of `function.arguments`. Write `accumulate_tool_calls(chunks)` returning a list, ordered by index, of
-# `(id, name, arguments_string)`. Ignore chunks that have no choices (the usage chunk) and the `DONE` marker.
+# The key of each tool-call delta is its `index`. Only the first delta of a call carries `id` and `function.name`. The
+# later deltas carry fragments of `function.arguments`. Write `accumulate_tool_calls(chunks)`. It returns a list of
+# `(id, name, arguments_string)` in the order of the index. Ignore the chunks with no choices (the usage chunk) and the
+# `DONE` marker.
 
 # %% exercise
 def accumulate_tool_calls(chunks):
@@ -181,10 +213,10 @@ print("✅ two interleaved calls reassembled by index:", got)
 # ## Exercise 1.3 — relay so that every stream is metered
 # Write the two halves of the relay rule:
 #
-# * `upstream_body(request)` — what the gateway sends upstream: a copy of the request, plus
-#   `stream_options = {"include_usage": True}` **only** when `stream` is true (vLLM answers 400 otherwise);
-# * `client_events(events, client_asked)` — the events the client receives: every event, except the usage chunk
-#   (`choices == []` and a `usage`) when the client did not ask for it.
+# * `upstream_body(request)`: what the gateway sends upstream. This is a copy of the request, plus
+#   `stream_options = {"include_usage": True}` **only** when `stream` is true (if not, vLLM answers 400).
+# * `client_events(events, client_asked)`: the events that the client receives. These are all the events, except the
+#   usage chunk (`choices == []` and a `usage`) when the client did not ask for it.
 
 # %% exercise
 def upstream_body(request):
@@ -214,9 +246,9 @@ print("✅ usage injected upstream only on streams, and stripped from clients th
 
 # %% [markdown]
 # ## Exercise 1.4 — bill a stream that was cut
-# The provider dies after the 7th chunk: no usage chunk ever arrives. The ledger must not bill 0. Compute
-# `cut_estimate` — the completion tokens to bill, estimated the way `api.estimate_tokens` does (four characters a
-# token) over all the content the client received. Use only `cut_events`.
+# The provider stops after the 7th chunk, and no usage chunk arrives. The ledger must not bill 0. Calculate
+# `cut_estimate`: the completion tokens to bill. Estimate them over all the content that the client received, with the
+# method of `api.estimate_tokens` (four characters a token). Use only `cut_events`.
 
 # %%
 dying = FakeProvider("y", Clock(), output_tokens=40, fail_after=7)
@@ -239,10 +271,10 @@ print(f"✅ cut after 7 chunks: bill {cut_estimate} completion tokens, marked es
 
 # %% [markdown]
 # ## Exercise 1.5 — what the hop costs in availability
-# The gateway is in series with every provider. Your chain answers when either target does: 99.5 % and 99.0 %,
-# independent. The gateway itself is 99.95 %. Set `with_gateway` to the availability a client sees (use
-# `routing.chain_availability`, and think of the gateway as the common-mode term), and `nines_lost` to how much of
-# the chain's availability the gateway costs, in percentage points.
+# The gateway is in series with every provider. Your chain answers when at least one of its two targets answers:
+# 99.5 % and 99.0 %, independent. The gateway itself has 99.95 %. Set `with_gateway` to the availability that a client sees. Use
+# `routing.chain_availability`, and think of the gateway as the common-mode term. Set `nines_lost` to how much of the
+# availability of the chain the gateway costs, in percentage points.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -259,9 +291,10 @@ print(f"✅ chain {routing.chain_availability([0.995, 0.99]):.3%} -> with the ga
 
 # %% [markdown]
 # ## Exercise 1.6 — read the request back from its spans
-# The gateway wrote one SERVER span per request and one CLIENT span per upstream target it tried, as OTLP/JSON lines.
-# From the file alone, build `attempts`: a list of `(gen_ai.request.model, outcome)` for the CLIENT spans (kind 3) of
-# the one trace, in the order they started, where outcome is the span's `error.type` or `"ok"`.
+# The gateway wrote one SERVER span for each request and one CLIENT span for each upstream target that it tried, as
+# OTLP/JSON lines. Use only the file to make `attempts`. This is a list of `(gen_ai.request.model, outcome)` for the
+# CLIENT spans (kind 3) of the one trace, in the order in which they started. The outcome is the `error.type` of the
+# span, or `"ok"`.
 
 # %%
 path = Path(tempfile.mkdtemp()) / "spans.jsonl"
@@ -282,24 +315,32 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "Every app calls one gateway with a virtual key; the key — never a header — says which
-# tenant it is. The gateway speaks OpenAI chat completions over SSE to everyone and normalises each provider through an
-# adapter table: Anthropic's input tokens exclude the cache, Gemini's thinking sits outside its candidates count, vLLM
-# reports a mid-stream failure inside an HTTP 200 with an integer error code.
+# **The two-minute version.** "Every app calls one gateway with a virtual key. The key, never a header, tells which
+# tenant it is. The gateway speaks OpenAI chat completions over SSE to all callers. It normalises each provider through
+# an adapter table.
 #
-# "We always ask upstream for usage on streams and strip it for clients that did not ask, so every stream is metered,
-# and a stream cut before its usage chunk is billed on the tokens it relayed, marked as an estimate. Every request
-# leaves a server span and one client span per target tried, with pinned GenAI names. The price is a hop in series with
-# every provider — here it cost 0.05 points of availability — so the gateway runs as the most critical service we have."
+# "Anthropic's input tokens exclude the cache. The thinking of Gemini is outside its candidates count. Also, vLLM reports a
+# failure in the middle of a stream inside an HTTP 200, with an integer error code.
+#
+# "On streams, we always ask upstream for usage, and we remove it for clients that did not ask. Thus the gateway meters
+# every stream. If a stream is cut before its usage chunk, we bill it on the tokens that the gateway relayed. We mark the row as an
+# estimate.
+#
+# "Every request leaves a server span and one client span for each target that the gateway tried, with pinned GenAI
+# names. The price is a hop in series with every provider. Here it cost 0.05 points of availability. Thus the gateway
+# runs as the most critical service that we have."
 #
 # **Drill questions**
-# 1. *Why does the gateway inject `stream_options.include_usage` itself?* — Because the usage chunk is the bill and it
-#    only arrives if asked; the client may not ask. Inject it only on streamed requests (vLLM rejects it otherwise)
-#    and strip the chunk from clients that did not ask for it.
-# 2. *A stream dies after 200 tokens and no usage arrives. What does the ledger say?* — An estimated row for the tokens
-#    counted from the relayed deltas, status `cut`, reconciled later against the provider's export — never zero,
-#    never the output cap.
-# 3. *What does not normalise across providers?* — Stream shapes (named events vs chunks, whole function calls vs
-#    argument fragments, no `[DONE]` from Anthropic), where reasoning text lives, and when the counts arrive: Anthropic's
-#    thinking tokens come only in the final `message_delta`, so a stream cut before it has no usage to trust. The
-#    adapter reports what is missing, and the ledger estimates it and says so, rather than inventing it.
+# 1. *Why does the gateway inject `stream_options.include_usage` itself?* Because the usage chunk is the bill, and it
+#    arrives only if the request asks for it. It is possible that the client does not ask. Inject it only on streamed
+#    requests (if not, vLLM rejects it). Remove the chunk from the clients that did not ask for it.
+# 2. *A stream is cut after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
+#    with status `cut`, for the tokens that the gateway counted from the relayed deltas. Later, the gateway reconciles
+#    the row against the export of the provider. The row is never zero and never the output cap.
+# 3. *What does not normalise across providers?* Three things do not normalise. The first is the stream shapes (named
+#    events against chunks, whole function calls against argument fragments, no `[DONE]` from Anthropic). The second is
+#    the location of the reasoning text. The third is the time when the counts arrive.
+#
+#    The thinking tokens of Anthropic come only in the final `message_delta`. Thus, if the stream is cut before
+#    that `message_delta`, the gateway has no usage that it can trust. The adapter reports the count that is not there.
+#    The ledger estimates that count and says so. The ledger does not invent the count.
