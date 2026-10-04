@@ -53,7 +53,7 @@ from agentlab.security import STANDING_INSTRUCTION, ActionPolicy, guard_all, scr
 #
 # | question | default |
 # |---|---|
-# | Which channel first? | the authenticated app chat (identity comes from the app's login). Voice and IVR come later. |
+# | Which channel first? | The authenticated app chat (identity comes from the app's login). Voice and IVR come later. |
 # | Which intents in v1? | balance, transactions, policy Q&A, card block, escalation to a person |
 # | Any writes? | One: block a card. It is irreversible, the customer confirms it, and a scope must permit it. No payments, limits or product changes. |
 # | Volume and peak? | 50k conversations/day, 3× peak, about 8 model calls per conversation |
@@ -803,8 +803,8 @@ for sa in probe_agent.sub_agents:
 #
 # The next cell wraps the same cards specialist as an `AgentTool` under a router that delegates. The `AgentTool` hides the pause
 # inside the child as a tool failure. The router's model says "Done" with confidence, and the cards system blocked nothing. This
-# result is the worst of both worlds. This is the one place where the capstone is different from the default composition of
-# the library. The reason is on the screen.
+# result is the worst of both worlds. The hand-off is the one place where the capstone is different from the default
+# composition of the library. The reason is on the screen.
 
 # %%
 delegating = LlmAgent("delegating-router", scripted(call("cards", request="block my card ending 4242"), "Done — your card is blocked."),
@@ -971,7 +971,7 @@ tracer.print_tree(trace_b.trace_id)
 # ## 6. The evaluation gate
 #
 # A **stratified golden set** answers the release question. It runs through the same runtime (Notebook 08 teaches the
-# statistics). Each case pins these items:
+# statistics). The cases pin these items:
 #
 # * the trajectory,
 # * the arguments that are important,
@@ -1044,7 +1044,7 @@ assert cards_only_run.pass_rate() == 1.0, "the cards stratum must be perfect"
 print("✅ cards stratum:", cards_only_run.render().splitlines()[1].strip())
 
 # %% [markdown]
-# Run the whole set two times. Then apply the gate to it, with three thresholds:
+# Run the whole set two times. Then apply the gate to it, with three conditions:
 #
 # * **absolute** on the cards stratum (one miss in any run fails the release),
 # * aggregate pass rate ≥ 0.9,
@@ -1258,7 +1258,7 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 #
 # **The L7 layer** is what makes this more than one bot. The next three agents (collections, onboarding, the branch assistant)
 # and non-agent apps can also use the accounts MCP façade. Every `create_case` is product feedback. It is a labelled example
-# of a task that v1 was not able to do. The cases get a rank by volume, and they go into the next intent.
+# of a task that v1 was not able to do. The cases have a rank by volume, and they supply the input for the next intent.
 #
 # Also, enablement: the bank's own team owns the golden set, the policy text and the rule tables. Thus the next intent ships
 # without the vendor involved.
@@ -1283,8 +1283,8 @@ print(f"\nlab conversations averaged {metrics['tokens_per_task']:,.0f} tokens; t
 #   absolute gate on the irreversible stratum, and an injection suite that measures the harness. Other points are traces with
 #   `gen_ai.*` attributes, cost per conversation, and the production estimate. The estimate is about $0.04 per conversation,
 #   14 calls/s, ~5M input TPM, ~56 in flight.
-# * **38–45 min · §8.** The points are rollout by intent with a kill switch, what breaks first, the limitations that you know
-#   about, and the L7 layer. Then offer the deep dives in Exercise 9.1. Let the audience make the selection.
+# * **38–45 min · §8.** Last, explain the rollout by intent with a kill switch, what breaks first, the limitations that you
+#   know about, and the L7 layer. Then offer the deep dives in Exercise 9.1. Let the audience make the selection.
 #
 # ### Exercise 9.1 — the three deep dives you would offer
 #
@@ -1334,5 +1334,5 @@ print("✅ deep dives:", DEEP_DIVES[:140] + "…")
 # * The gate passed with an absolute bar on the irreversible stratum.
 # * The cost per conversation came from the trace.
 #
-# Measure your own design against this standard. The standard is not "the model will handle it". It is *here is the mechanism, and here
-# is how I would know*.
+# Measure your own design against this standard. The standard is not "the model will handle it". The standard is this: *here is
+# the mechanism, and here is how I would know*.
