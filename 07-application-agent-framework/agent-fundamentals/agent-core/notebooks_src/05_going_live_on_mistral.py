@@ -7,15 +7,15 @@
 # replace one with the other, you change one line.** That is the full reason to keep the
 # loop provider-agnostic.
 #
-# This notebook shows the swap. It also shows the small quantity of translation that the
-# adapter does between our shapes and the shapes of Mistral. The adapter is
+# This notebook shows the swap. It also shows the small translation that the adapter
+# does between our shapes and the shapes of Mistral. The adapter is
 # `agentcore/mistral_llm.py`, the only provider-specific code of the lab, and
 # `docs/MISTRAL.md` is the reference. The notebook runs **offline** at T0. It runs the
 # pure conversion functions, and it drives the loop with a fake Mistral-shaped client.
 #
 # The last cell calls the real API only when the optional `mistral` extra is installed
-# and `MISTRAL_API_KEY` is set. If not, the cell stops with a labelled message. This
-# stop is not a failure.
+# and `MISTRAL_API_KEY` is set. If one of the two conditions is false, the cell stops
+# with a labelled message. This stop is not a failure.
 
 # %%
 import json
@@ -139,13 +139,13 @@ print("✅ parsed the tool call:", name, args)
 #
 # Write
 # `pick_model(catalogue, need, self_host=False, input_tokens=5_000, output_tokens=300)`.
-# It returns the **name** of the model that obeys these rules:
+# It returns the **name** of the model that agrees with these conditions:
 #
 # * The `can` set of the model contains `need`.
 # * If `self_host` is true, the `open_weight` of the model is true.
-# * Of these models, it has the lowest cost for one call of that size:
+# * The model has the lowest cost of these models for one call of that size:
 #   `(input_tokens × input + output_tokens × output) / 1e6`.
-# * If two models have the same cost, the name breaks the tie.
+# * If two models have the same cost, the function compares their names to break the tie.
 #
 # If no model qualifies, the function returns `None`. The check runs your rule against
 # the snapshot and against a few hundred random catalogues.
@@ -207,8 +207,8 @@ print("   tools, managed API:", pick_model(CATALOGUE, "tools"), "| tools, self-h
 # ## 5. Run it for real (only if you have a key)
 # This cell calls the live API when two conditions are true. First, the `mistral` extra
 # is installed (`pip install -e ".[mistral]"` in this lab, or `pip install mistralai`).
-# Second, `MISTRAL_API_KEY` is set. If not, the cell prints a labelled stop and ends
-# with no error. Thus the notebook still runs in CI and offline. Mistral bills a live
+# Second, `MISTRAL_API_KEY` is set. If one of the two conditions is false, the cell
+# prints a labelled stop and ends with no error. Thus the notebook still runs in CI and offline. Mistral bills a live
 # call per token.
 
 # %%

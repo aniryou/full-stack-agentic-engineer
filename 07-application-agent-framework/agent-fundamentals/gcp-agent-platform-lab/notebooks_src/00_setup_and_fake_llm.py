@@ -11,7 +11,7 @@
 # In this notebook, you will:
 # 1. Operate a `FakeLLM` in three ways: a scripted queue, a policy function and a `KeywordPlanner`.
 # 2. See how the model reports token usage and *context caching*.
-# 3. Write your own planner policy. It has the same shape as the output of a real tool-calling model.
+# 3. Write your own planner policy. Its output has the same shape as the output of a real tool-calling model.
 
 # %%
 from agentlab.llm import FakeLLM, KeywordPlanner, Rule, call, calls, scripted, text, count_tokens

@@ -112,7 +112,7 @@ print("WWW-Authenticate:", first_401.headers["www-authenticate"])
 #
 # ## 3. The discovery chain, hop by hop
 #
-# The chain starts with the 401. Then it goes to Protected Resource Metadata (RFC 9728) and AS metadata (RFC 8414).
+# The chain starts with the 401. Then it goes to Protected Resource Metadata (RFC 9728), and after that to AS metadata (RFC 8414).
 # Then the client does the authorization code flow with PKCE and a resource indicator (RFC 8707), and a check of `iss` (RFC 9207).
 # Then the client redeems the code and gets an audience-bound token.
 

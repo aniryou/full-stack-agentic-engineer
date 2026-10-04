@@ -4,8 +4,8 @@
 # Put the three ideas together. Make a small but honest support agent for a bank:
 #
 # * It answers **only** from tool results. It never invents a balance.
-# * Reads are free. A **card block** is irreversible, thus it needs the approval of a
-#   person.
+# * Reads are free. Because a **card block** is irreversible, it needs the approval of
+#   a person.
 # * Anything that it cannot do becomes a **case** for a person.
 #
 # This agent has the same shape as the bank agent in the capstone of
@@ -119,7 +119,7 @@ print("✅ irreversible action gated on human approval")
 # %% [markdown]
 # ## Exercise 4.3 — never act without a tool
 #
-# Only one property makes this agent trustworthy. Every factual claim comes from a tool
+# This property makes this agent trustworthy: every factual claim comes from a tool
 # result, and every state change comes from a tool call.
 #
 # Write `used_a_tool(result)`. It returns True if the transcript contains one or more

@@ -2,8 +2,9 @@
 # # 03 · State and control
 #
 # Two things make the difference between a demo loop and a loop that you can operate.
-# First, it remembers the conversation across turns. Second, it protects itself. It has
-# a step budget, and it does not call the same tool again and again.
+# First, the loop that you can operate remembers the conversation across turns. Second,
+# it protects itself. It has a step budget, and it does not call the same tool again
+# and again.
 #
 # This notebook adds both. It also shows a `policy` model that reacts to the tool
 # results that it gets. With this policy model, you can drive multi-step behaviour
@@ -122,5 +123,5 @@ print(f"✅ {expected_assistant_messages} model calls, done={expected_done} — 
 # * a small **working state** (the stage of a task),
 # * the **budgets** (steps, and in production also tokens and time).
 #
-# Say that a loop without a step budget is a cost incident that has not occurred yet.
+# Say that a loop without a step budget will cause a cost incident at some time.
 # Also say that you set the limit in code, not in the prompt.

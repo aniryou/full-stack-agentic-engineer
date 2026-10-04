@@ -32,9 +32,9 @@ from agentlab.agents import (Event, InMemorySessionStore, InvocationContext, Jso
 # A `Session` holds these items:
 # - `events`: everything that occurred, in order.
 # - `state`: a small dict of current values.
-# - a `status`.
-# - an optional `pending` payload.
-# - a `version` for optimistic concurrency.
+# - `status`: the status of the session.
+# - `pending`: an optional payload.
+# - `version`: the version for optimistic concurrency.
 #
 # The agent loop **appends** events. It edits nothing in place. Let one turn run. Then look at what it wrote.
 
@@ -187,7 +187,7 @@ print("model's reply:", declined.text, "| refunds executed in total:", len(refun
 #
 # A multi-step job that talks to external systems must survive when its worker stops at any line.
 # The pattern is a `TaskRecord` in a `TaskStore`. The record has `completed_steps` (the steps already applied)
-# and a `checkpoint` (the data that the next step needs). The worker saves it **after every step**.
+# and a `checkpoint` (the data that the next step needs). The worker saves the record **after every step**.
 #
 # On resume, the worker skips the completed steps. The next cell has a four-step claims workflow.
 # The worker crashes immediately after step 2, and a new worker takes the record.
@@ -285,7 +285,7 @@ for stable_key in (False, True):
 # ## 5. Two workers, one session
 #
 # Two turns on the same session race to `put`. Examples are a retry, a duplicate webhook and a double-click.
-# The loser must not overwrite. It gets `VersionConflict`, reads the new copy again and applies its change again on top.
+# The loser must not overwrite. It gets `VersionConflict`, reads the new copy and applies its change again on top.
 # Here, the code does the retry by hand, one time. Exercise 6.2 asks you for the general, bounded version.
 
 # %%
@@ -383,7 +383,7 @@ print("✅ crashed before step 3, resumed from the record; every side effect hap
 # Try at most `attempts` times in total, then raise `RuntimeError`. Return the saved session.
 #
 # The check runs ten concurrent increments. Their `mutate` awaits between the read and the write.
-# This is the shape of "read state, call the model, write state". The check expects all ten increments to land.
+# An await between the read and the write is the shape of "read state, call the model, write state". The check expects all ten increments to land.
 
 # %% exercise
 async def update_with_retry(store, session_id: str, mutate, attempts: int = 5) -> Session:

@@ -52,7 +52,7 @@ print("draft's system prompt was:", repr(draft.llm.calls[0]["messages"][0]["cont
 #
 # A `ParallelAgent` gives each child a **branch copy** of the session (`session.branch(name)`). It runs the children at the same time.
 # Then it copies the changed state keys back to the parent and records a `note` with `merged_state_keys`.
-# The children never touch the same session object, thus the agent loses no update.
+# Because the children never touch the same session object, no lost update can occur.
 # Because all branches share one `InvocationContext`, they share **one budget**. Three branches cannot spend three budgets.
 
 # %%
@@ -201,7 +201,7 @@ for n in (1, 2, 3, 5, 8):
 # return:
 #
 # - [ ] **The control flow is already known.** Then it is a workflow (`Sequential`, `Parallel` or `Loop`), not a second agent.
-# - [ ] **It is really a tool.** A deterministic function with a schema costs less and you can test it. It cannot hallucinate.
+# - [ ] **It is really a tool.** A deterministic function with a schema costs less, and you can test it. It cannot invent an answer.
 # - [ ] **The sub-task fits in the parent's context.** A split of the context is worth its cost only when the window of the parent is the constraint.
 # - [ ] **Same tools, same permissions.** A specialist that shares the tool set and the identity of the parent isolates nothing.
 # - [ ] **Latency budget is tight.** Each hop adds a model call. Hand-offs occur one after the other, unless the work is truly parallel.
@@ -264,7 +264,7 @@ print("✅ stage 3's system prompt:", repr(respond_prompt[:95]))
 # %% [markdown]
 # ### Exercise 6.2 — the exit criterion lives in code
 #
-# Write `approved(session) -> bool`. It is true when the `output_key` of the critic (`verdict`) equals `"APPROVED"`.
+# Write `approved(session) -> bool`. It must return true when the `output_key` of the critic (`verdict`) equals `"APPROVED"`.
 #
 # Then write `build_review_loop(writer_llm, critic_llm, max_iterations=5)`.
 # It returns a `LoopAgent` over a `writer` (output_key `draft`) and a `critic` (output_key `verdict`).
@@ -356,7 +356,7 @@ print("✅ delegations:", [(e.payload["child_session"], e.payload["answer"]) for
 #
 # Then write `hops_allowed(p, target, max_hops=100)`.
 # It gives the largest number of hops for which the end-to-end success rate is still **at least** `target`.
-# If one hop alone is less than `target`, it gives 0. Its maximum is `max_hops`.
+# If the success rate of one hop is already less than `target`, it gives 0. The function never gives more than `max_hops`.
 #
 # Use a loop, not a `log` division, because the floating-point boundary cases cause errors.
 
@@ -393,7 +393,7 @@ print(f"✅ for a 95% end-to-end target you can afford {hops_allowed(0.99, 0.95)
 #
 # `run_claims_multi()` in the next cell answers a claims question with a coordinator and two specialists.
 # `policy` owns `get_policy`, and `payout` owns `estimate_payout`.
-# Write it again as **one** agent with both tools. Write `build_claims_single()`, which returns an `LlmAgent`.
+# Write the design of `run_claims_multi()` again as **one** agent with both tools. Write `build_claims_single()`, which returns an `LlmAgent`.
 # Its scripted model calls both tools in one turn. Then the model answers with `CLAIM_ANSWER`.
 #
 # The check runs both designs on the same task.

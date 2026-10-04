@@ -657,9 +657,9 @@ print("✅", why)
 # - The stream has **events**, not tokens. Thus the client can show tool progress and approval prompts.
 # - Long-running work returns a **task handle** that has the MCP Tasks shape
 #   (working, then input_required, then completed, failed or cancelled). Approvals are a state in that machine.
-# - **Idempotency on every POST**, because clients retry, and a retried turn is a second refund.
-# - **`429` with `Retry-After`** for each tenant, because backpressure costs less than an incident.
-# - The **prompt+model version in the headers**, because the behaviour changes when they change.
+# - Put **idempotency on every POST**, because clients retry, and a retried turn is a second refund.
+# - Return **`429` with `Retry-After`** for each tenant, because backpressure costs less than an incident.
+# - Put the **prompt+model version in the headers**, because the behaviour changes when they change.
 #
 # Then tell what is behind it: the session store with optimistic concurrency, the durable task record,
 # and the event log that you can query. Support and audit will need that log.

@@ -133,8 +133,9 @@ for t, args in ((lookup_order, {"order_id": "ORD-404"}), (flaky_inventory, {"sku
 # ### Idempotent writes
 #
 # When the runtime retries a write, the write must not post two times. Give a non-read tool an `IdempotencyStore`.
-# The caller can supply an `idempotency_key`. The loop makes one from the session, the agent, the step and the call signature.
-# When a second execution has the same key, the store serves the result and marks it `from_idempotency_cache`.
+# When the caller supplies an `idempotency_key`, a second execution with the same key gets its result from the store.
+# The store marks that result `from_idempotency_cache`.
+# The agent loop is a caller that supplies a key, which it makes from the session, the agent, the step and the call signature.
 # The function body runs once.
 
 # %%
@@ -208,7 +209,7 @@ assert elapsed < 0.15, "tool calls ran sequentially?"
 # %% [markdown]
 # ### Unknown and repeated calls are answered, not crashed
 #
-# When the model calls a tool name that does not exist, the result is `unknown_tool`, with the real names in the hint.
+# When the model calls a tool that does not exist, the result is `unknown_tool`, with the real names in the hint.
 # If the model repeats the same call more than `max_repeated_calls` times, the result is `duplicate_call`.
 # This is the lowest-cost possible brake on a "call, ignore the result, call again" spiral.
 
@@ -442,7 +443,7 @@ print(f"✅ stopped after {model_calls} model calls with reason {reason!r}; a no
 # Tool output is the largest uncontrolled input to your context window. Write `with_result_limit(tool, max_chars)`.
 # It returns an object that satisfies the `Tool` protocol (a `spec` attribute and `async run(args, ctx)`):
 #
-# * `spec` is the **same** `ToolSpec` object as the spec of the wrapped tool. The contract of the model does not change.
+# * `spec` is the **same** `ToolSpec` object as the spec of the wrapped tool. The contract that the model sees does not change.
 # * `run` delegates to the wrapped tool. If the result is `ok` and its compact JSON (`json.dumps(result.data, default=str)`)
 #   is longer than `max_chars`, replace `data`. The new `data` is the first `max_chars` characters, followed by the marker
 #   `…[truncated N chars; call again with a narrower request]`. `N` is the number of characters that you cut.
@@ -533,7 +534,7 @@ print("✅", why_structured_errors[:100], "…")
 # 1. The model returns a typed call.
 # 2. The runtime **validates it against the schema**. A bad call becomes an `invalid_arguments` result, not an exception.
 # 3. The runtime examines the **scope** and the **side-effect class**. An irreversible tool causes a pause for approval.
-# 4. The runtime executes the call **in parallel, with a timeout and an idempotency key**.
+# 4. The runtime executes the calls **in parallel, with a timeout and an idempotency key**.
 # 5. It appends a **structured result** that the model can act on.
 # 6. It repeats under a **budget of steps, tokens and seconds**.
 #

@@ -431,7 +431,7 @@ print("keyword judge:    ", await pairwise(KeywordJudge(["1234.5", "SGD"]), QUES
 #
 # A gate is a list of thresholds that an eval run must clear. Two kinds are important here:
 #
-# * An ordinary threshold on a rate. The gate judges it on the observed value and reports it with its interval.
+# * An ordinary threshold on a rate. The gate judges this threshold on the observed value. The gate reports the observed value with its interval.
 # * An **absolute** threshold. It accepts only 100% across every run. This is the pattern for irreversible actions.
 #   "Card blocks pass 96% of the time" is not a pass rate. It is an incident rate.
 #

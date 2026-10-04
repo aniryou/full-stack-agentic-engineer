@@ -103,7 +103,7 @@ for label, b, vol in (("stable prefix first", stable, False), ("timestamp first"
 #
 # The next cell uses illustrative per-million-token prices.
 # **Make sure that these prices agree with the current Vertex AI price list before you quote them to anyone.**
-# A cached input token has a large discount against a fresh one. Multiply by a realistic day.
+# The price of a cached input token is much lower than the price of a fresh one. Multiply by a realistic day.
 
 # %%
 PRICE_INPUT_PER_M = 0.30        # USD per 1M fresh input tokens  — illustrative, verify
@@ -399,7 +399,7 @@ print(f"✅ triage offers {len(triage)} of {len(ALL_TOOLS)} tools: {schema_token
 # Drop the **oldest whole turns** first, until `messages_tokens(result) <= max_tokens`.
 # **Never** drop the first (system) message or the current turn.
 # The current turn is the last user message and anything after it.
-# Do not drop them, even if those messages alone exceed the budget. Return a new list. Do not change the input.
+# Do not drop the system message or the current turn, even if these messages alone exceed the budget. Return a new list. Do not change the input.
 
 # %% exercise
 def enforce_budget(messages: list[dict], max_tokens: int) -> list[dict]:

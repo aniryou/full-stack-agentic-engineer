@@ -24,7 +24,7 @@
 # 1. Serve three tools: a read, a write that asks the user to confirm (MRTR elicitation), and a long-running tool.
 #    The long-running tool returns a Task.
 # 2. See the bytes: the JSON-RPC bodies, `_meta`, the mirrored `Mcp-*` headers and a rejected mismatch.
-# 3. Put a `Gateway` in front of the server: a deny-by-default policy, CEL-like conditions, screens, token hygiene and audit.
+# 3. Put a `Gateway` in front of the server. The gateway has a deny-by-default policy, CEL-like conditions, screens, token hygiene and audit.
 
 # %%
 import asyncio
@@ -127,7 +127,7 @@ print("\nresult:", await client.send(headers, body))
 # %% [markdown]
 # The `Mcp-Method` and `Mcp-Name` headers exist for **intermediaries**.
 # A gateway can rate-limit or authorise `cancel_order`, and it is not necessary for the gateway to parse the JSON.
-# This works only if the header and the body cannot disagree.
+# This method works only if the header and the body cannot disagree.
 # Thus the server MUST reject a mismatch (`-32020 HeaderMismatch`, HTTP 400).
 # Look at what occurs when the header names one tool and the body names a different tool:
 
@@ -142,7 +142,7 @@ print(status, json.loads(raw)["error"])
 # The first `tools/call` for `cancel_order` does not run the tool.
 # It returns `resultType: input_required` with the question. The client asks the user.
 # Then the client sends the **same call again** with `inputResponses`.
-# `McpClient.call_tool` does the loop for you. `on_input_required` is the location where your UI connects.
+# `McpClient.call_tool` does the loop for you. Your UI connects to the client through `on_input_required`.
 
 # %%
 first = await client.request("tools/call", {"name": "cancel_order", "arguments": {"order_id": "ORD-1002"}})
@@ -490,7 +490,7 @@ print("✅", why_strip)
 # ## The one-minute version
 #
 # When the discussion is about MCP, say what changed in the 2026-07-28 revision.
-# Also say why each change is important for the design. There are four changes:
+# Also say why each change is important for the design. Talk about these four changes:
 #
 # - **Stateless per-request calls.** There is no session affinity, and it is easy to load-balance the calls.
 # - **Embedded server-to-client interactions.** A server never needs a channel back to the client.
