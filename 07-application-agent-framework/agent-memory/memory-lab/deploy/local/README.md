@@ -2,13 +2,13 @@
 
 **Tier:** T0 + Docker. **Cost:** free. **Time:** about 5 minutes the first time (image build and a Postgres pull).
 
-What it starts, all bound to 127.0.0.1:
+The `up.sh` script of this folder starts the services in the table. All of them are bound to 127.0.0.1:
 
 | Service | Port | What it is |
 |---|---|---|
 | `memory` | 8080 | `python -m memlab serve`: the memory service (scope from a bearer token, Idempotency-Key, forget, audit JSON lines) on a SQLite file in the `memlab-data` volume |
-| `fake-llm` | 8000 | `python -m memlab fake --prompt-tokens-details`: chat with tool calls, `/v1/embeddings`, vLLM-named `/metrics`; **simulated** |
-| `postgres` (profile `pgvector`) | 5432 | `pgvector/pgvector:0.8.6-pg17` for notebook 01's pgvector section |
+| `fake-llm` | 8000 | `python -m memlab fake --prompt-tokens-details`: chat with tool calls, `/v1/embeddings` and vLLM-named `/metrics`. It is **simulated**. |
+| `postgres` (profile `pgvector`) | 5432 | `pgvector/pgvector:0.8.6-pg17` for the pgvector section of notebook 01 |
 
 ```bash
 ./up.sh                     # memory + fake-llm;  DRY_RUN=1 ./up.sh prints the commands only
@@ -24,21 +24,22 @@ export MEMLAB_LLM_URL=http://127.0.0.1:8000                     # notebooks 02/0
 export MEMLAB_PG_DSN=postgresql://memlab:memlab-local-only@127.0.0.1:5432/memlab   # notebook 01, with psycopg
 ```
 
-Without a Docker daemon `up.sh` prints the commands and exits 0; the notebooks run their T0 paths and show
-sample output in the documented format (illustrative) where a container would have answered.
+If there is no Docker daemon, `up.sh` prints the commands and exits 0. Then the notebooks run their T0 paths.
+At each step where a container gives the answer, they show sample output in the documented format (illustrative)
+instead.
 
 ## What is simulated and what is real
 
-The service, the SQLite store and Postgres are real. The model server is the lab's fake: its prefix-cache
-hits follow vLLM's block rules and its TTFTs come from a roofline model — say "simulated" when you quote
-them. For measurements, run a real vLLM ([`../any-gpu/`](../any-gpu/)) and point `MEMLAB_LLM_URL` at it.
+The service, the SQLite store and Postgres are real. The model server is the fake of the lab. Its prefix-cache
+hits obey the block rules of vLLM, and its TTFTs come from a roofline model. When you quote these numbers, say
+"simulated". For measurements, run a real vLLM ([`../any-gpu/`](../any-gpu/)). Then point `MEMLAB_LLM_URL` at it.
 
-The passwords and the token key in `compose.yaml` are local-only defaults (the ports are bound to
-127.0.0.1): override `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your shell for anything shared.
+The passwords and the token key in `compose.yaml` are local-only defaults (the ports are bound to 127.0.0.1).
+For anything shared, set your own `MEMLAB_TOKEN_KEY` and `MEMLAB_PG_PASSWORD` in your shell.
 
 ## Cost
 
-Nothing beyond your laptop's CPU and about 1 GB of disk for the images.
+It costs nothing more than the CPU of your laptop and about 1 GB of disk for the images.
 
 ## Cleanup
 
@@ -47,5 +48,5 @@ Nothing beyond your laptop's CPU and about 1 GB of disk for the images.
 docker image rm memlab:0.1.0 pgvector/pgvector:0.8.6-pg17   # optional: the images
 ```
 
-Deleting the volumes is the local "forget everything"; on a server the same request is notebook 05's
-checklist, because backups, logs and caches do not live in the volume.
+When you delete the volumes, you do the local "forget everything". On a server, the same request is the
+checklist of notebook 05, because backups, logs and caches are not in the volume.

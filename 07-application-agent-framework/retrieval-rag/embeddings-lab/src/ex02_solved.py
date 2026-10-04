@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 02 · Contrastive training
-# Implement the InfoNCE machinery you used in notebook 02, then look at what
-# in-batch "hard negatives" actually are. Solutions: `../solutions/ex02.ipynb`.
+# Implement the InfoNCE machinery that you used in notebook 02. Then look at what
+# in-batch "hard negatives" really are. The solutions are in `../solutions/ex02.ipynb`.
 
 # %%
 import numpy as np
@@ -13,8 +13,8 @@ def softmax(S, axis):
 
 # %% [markdown]
 # ## Task 1 — symmetric InfoNCE from the similarity matrix
-# Given $S = Z_a Z_b^\top / \tau$ ($B \times B$, positives on the diagonal), return
-# `(loss, dL/dS)` where the loss averages row-wise and column-wise
+# You get $S = Z_a Z_b^\top / \tau$ ($B \times B$, positives on the diagonal). Return
+# `(loss, dL/dS)`. The loss is the average of the row-wise and column-wise
 # cross-entropy toward the diagonal. Hint: for softmax-CE,
 # $dL/dS = (\operatorname{softmax}(S) - I)/B$, averaged over the two directions.
 
@@ -45,8 +45,8 @@ print("info_nce_from_S ✓")
 
 # %% [markdown]
 # ## Task 2 — alignment & uniformity (Wang & Isola 2020)
-# `alignment(Za, Zb)` = mean squared distance between positive pairs (unit
-# vectors). `uniformity(Z)` = $\log \mathbb{E} \exp(-2\lVert z_i - z_j \rVert^2)$ over random pairs
+# `alignment(Za, Zb)` is the mean squared distance between positive pairs (unit
+# vectors). `uniformity(Z)` is $\log \mathbb{E} \exp(-2\lVert z_i - z_j \rVert^2)$ over random pairs
 # $i \ne j$. Lower is better for both.
 
 # %%
@@ -73,9 +73,10 @@ print("alignment/uniformity ✓")
 
 # %% [markdown]
 # ## Task 3 — who are the in-batch hard negatives?
-# `hardest_negative(S)`: for each row, the index of the highest-scoring
-# *off-diagonal* entry. Then inspect: with topic-structured data, hard negatives
-# are same-topic paragraphs — which is exactly why they carry the most gradient.
+# `hardest_negative(S)` returns, for each row, the index of the *off-diagonal* entry
+# with the highest score. Then examine the result. With topic-structured data, hard
+# negatives are same-topic paragraphs. Their shared topic is exactly the reason that
+# they carry the most gradient.
 
 # %%
 def hardest_negative(S):
@@ -91,9 +92,9 @@ print("hardest_negative ✓")
 
 # %% [markdown]
 # ## Task 4 (stretch) — a Matryoshka loss
-# `matryoshka_loss(Ua, Ub, dims, ...)`: sum InfoNCE over *prefixes* of the
-# unnormalized embeddings (normalize each prefix before the similarity). With
-# `dims=[full]` it must equal the plain loss on normalized vectors.
+# `matryoshka_loss(Ua, Ub, dims, ...)` returns the sum of InfoNCE over the *prefixes*
+# of the unnormalized embeddings. Normalize each prefix before you calculate the
+# similarity. With `dims=[full]`, it must be equal to the plain loss on normalized vectors.
 
 # %%
 def matryoshka_loss(Ua, Ub, dims, tau=0.05):

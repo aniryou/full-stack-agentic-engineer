@@ -1,19 +1,25 @@
 # %% [markdown]
 # # 07 · The agent's own API: streaming, tasks, idempotency, limits
 #
-# "API discussions" here mean the interface the agent presents to the channel or to other
-# systems. This notebook builds that API **in-process on `agentlab.agents.Runner`** — no web
-# framework, just the shapes: a `request(method, path, headers, body)` entry point that returns a status,
-# headers and either JSON or a stream of SSE-style events. Every design point of that API is here:
-# events (not tokens) on the stream, a task handle for long-running work, `Idempotency-Key` on POSTs because
-# clients retry, `429` with `Retry-After`, and `X-Agent-Version` because behaviour is part of the contract.
+# "API discussions" here mean the interface that the agent presents to the channel or to other systems.
+# This notebook builds that API **in-process on `agentlab.agents.Runner`**. It uses no web framework, only the shapes.
+# The entry point is `request(method, path, headers, body)`.
+# It returns a status, headers, and either JSON or a stream of SSE-style events.
+# Every design point of that API is here:
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3 (admission control) and §5.7 (streaming and connections).
+# - Events (not tokens) on the stream.
+# - A task handle for long-running work.
+# - `Idempotency-Key` on POSTs, because clients retry.
+# - `429` with `Retry-After`.
+# - `X-Agent-Version`, because the behaviour is part of the contract.
 #
-# In this notebook you will:
-# 1. drive the API end to end: create a session, stream a turn, pause for approval, answer it, run a turn as a background task;
-# 2. see a retry double-execute a turn, then make the API idempotent;
-# 3. write the four mechanisms yourself: event→SSE, idempotency dedupe, the job-polling handler, a token bucket.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [scaling primer](../../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) §5.3 (admission control) and §5.7 (streaming and connections).
+#
+# In this notebook, you will:
+# 1. Operate the API from end to end. Make a session. Run a streamed turn.
+#    Pause for approval. Then answer the approval request. Run a turn as a background task.
+# 2. See a retry run a turn two times. Then make the API idempotent.
+# 3. Write the four mechanisms yourself: event to SSE, idempotency dedupe, the handler for job polls and a token bucket.
 
 # %%
 import asyncio
@@ -34,9 +40,13 @@ from agentlab.llm import FakeLLM, KeywordPlanner, Rule
 # %% [markdown]
 # ## 1. An agent worth an API
 #
-# Three tools with three latency/risk profiles: a quick read, an **irreversible** write (the Runner pauses for
-# approval), and a slow report (the reason a `202` path exists). The model is a `KeywordPlanner`, so the whole
-# notebook runs offline in a couple of seconds.
+# The agent has three tools with three latency/risk profiles:
+#
+# - A fast read.
+# - An **irreversible** write. The Runner pauses for approval.
+# - A slow report. It is the reason for a `202` path.
+#
+# The model is a `KeywordPlanner`. Thus the whole notebook runs offline in a few seconds.
 
 # %%
 CALLS = {"get_balance": 0, "issue_refund": 0, "generate_statement": 0}
@@ -79,8 +89,9 @@ AGENT_VERSION = f"{agent.name}@{hashlib.sha1(INSTRUCTION.encode()).hexdigest()[:
 print("X-Agent-Version:", AGENT_VERSION)
 
 # %% [markdown]
-# Callers authenticate with a bearer token for the agent service; tenant and user come from the verified claims,
-# never from a header the client could set. The IdP is the one from Notebook 06.
+# Callers authenticate with a bearer token for the agent service.
+# The tenant and the user come from the verified claims, never from a header that the client can set.
+# The IdP is the IdP from Notebook 06.
 
 # %%
 AGENT_URL = "https://assistant.bank.example"
@@ -92,10 +103,15 @@ BOB = {"Authorization": "Bearer " + authz.issue_access_token("bob", AGENT_URL, "
 # %% [markdown]
 # ## 2. The API, in one class
 #
-# `Response.body` is a dict for JSON or an async iterator of SSE strings for a stream. Four mechanisms are
-# **injected** so that the exercises can replace them one at a time: `serialize` (event → SSE), `idempotency`
-# (dedupe), `task_view` (what `GET /tasks/{id}` returns) and `bucket` (rate limiting). The defaults are the
-# naive versions; you will notice what each one lacks.
+# `Response.body` is a dict for JSON, or an async iterator of SSE strings for a stream.
+# The class receives four mechanisms by **injection**, so that the exercises can replace them one at a time:
+#
+# - `serialize` (event to SSE)
+# - `idempotency` (dedupe)
+# - `task_view` (what `GET /tasks/{id}` returns)
+# - `bucket` (the rate limit)
+#
+# The defaults are the simple versions. You will see what each one does not have.
 
 # %%
 @dataclass
@@ -337,8 +353,9 @@ api = AgentApi(runner, verify_agent_token, version=AGENT_VERSION)
 # %% [markdown]
 # ## 3. Driving it
 #
-# A session bound to Alice's tenant and user; then a streamed turn. The stream carries **events** — model
-# turns, tool calls, tool results, the final answer — so a client can render progress, not just text.
+# The next cell makes a session bound to Alice's tenant and user. The cell after it runs a streamed turn.
+# The stream has **events**: model turns, tool calls, tool results and the final answer.
+# Thus a client can show progress, not only text.
 
 # %%
 created = await api.request("POST", "/v1/sessions", ALICE, {"session_id": "case-4711"})
@@ -353,9 +370,10 @@ for chunk in await collect(resp):
     print(chunk, end="")
 
 # %% [markdown]
-# **Approvals are a task state, not a modal dialog.** A refund pauses the Runner (Notebook 02); on the API that
-# is a task in `input_required`. The client answers with `POST /v1/tasks/{id}/input`, which resumes the same
-# step. A second message in the meantime is a `409`.
+# **Approvals are a task state, not a modal dialog.** A refund pauses the Runner (Notebook 02).
+# On the API, that pause is a task in `input_required`.
+# The client answers with `POST /v1/tasks/{id}/input`, which resumes the same step.
+# A second message during the pause gets a `409`.
 
 # %%
 resp = await api.request("POST", "/v1/sessions/case-4711/messages", {**ALICE, "Idempotency-Key": "k-2"}, {"message": "refund my order"})
@@ -369,9 +387,9 @@ print("after approval →", answered.status, answered.body, "| refunds executed:
 print("final text:", runner.store.get("case-4711").last_final_text())
 
 # %% [markdown]
-# **Long-running work gets a handle.** `Prefer: respond-async` returns `202` and a task id immediately; the turn
-# runs in the background on a durable `TaskRecord` (the MCP Tasks shape) and the client polls. Notice how little
-# the naive `GET /tasks/{id}` tells you — Exercise 2.3 fixes that.
+# **Long-running work gets a handle.** `Prefer: respond-async` returns `202` and a task id immediately.
+# The turn runs in the background on a durable `TaskRecord` (the MCP Tasks shape), and the client polls.
+# Look at how few facts the simple `GET /tasks/{id}` tells you. Exercise 2.3 repairs this handler.
 
 # %%
 accepted = await api.request("POST", "/v1/sessions/case-4711/messages", {**ALICE, "Idempotency-Key": "k-5", "Prefer": "respond-async"}, {"message": "send me a statement"})
@@ -382,16 +400,16 @@ print("polled →", polled.body)
 print("the event log is queryable:", (await api.request("GET", "/v1/sessions/case-4711/events?after=0&limit=3", ALICE)).body["total"], "events")
 
 # %% [markdown]
-# **The version is part of the contract.** Every response says which prompt+model release served it; a client
-# pinning a different one gets a `409` instead of silently different behaviour.
+# **The version is part of the contract.** Every response says which prompt+model release served it.
+# A client that pins a different release gets a `409`, instead of a silent change in behaviour.
 
 # %%
 print("served by:", resp.headers["x-agent-version"])
 print("pinned to an old release:", (await api.request("GET", "/v1/tasks/x", {**ALICE, "X-Agent-Version": "bank-assistant@deadbeef+fake-flash"})).body)
 
 # %% [markdown]
-# **Clients retry — and without idempotency the agent runs twice.** The same request with the same key executes
-# a second time: the model is called again and the tool runs again. On a refund that is money moved twice.
+# **Clients retry. Without idempotency, the agent runs two times.** The same request with the same key runs a second time.
+# The agent calls the model again, and the tool runs again. On a refund, that is money that moves two times.
 
 # %%
 before = (llm.call_count, CALLS["get_balance"])
@@ -402,7 +420,7 @@ print(f"model calls +{llm.call_count - before[0]} (two per turn), get_balance ra
 # %% [markdown]
 # ### Exercise 2.1 — event → SSE
 #
-# Implement `event_to_sse(ev)` producing these typed event names:
+# Write `event_to_sse(ev)`. It must produce these typed event names:
 #
 # | `Event.kind` | SSE `event:` |
 # |---|---|
@@ -414,8 +432,9 @@ print(f"model calls +{llm.call_count - before[0]} (two per turn), get_balance ra
 # | `error` | `error` |
 # | anything else | the kind itself |
 #
-# Format: `id: <ev.id>\nevent: <name>\ndata: <json>\n\n` where the JSON object is the payload plus `"agent"` and
-# `"step"`. The `id:` line is what lets a client resume with `Last-Event-ID` after a dropped connection.
+# The format is `id: <ev.id>\nevent: <name>\ndata: <json>\n\n`.
+# The JSON object is the payload, with `"agent"` and `"step"` added.
+# The `id:` line lets a client resume with `Last-Event-ID` after a dropped connection.
 
 # %% exercise
 SSE_EVENT_NAMES = {"model": "message.delta", "tool_call": "tool.call", "tool_result": "tool.result",
@@ -448,15 +467,16 @@ print("✅ typed events on the stream:", typed)
 # %% [markdown]
 # ### Exercise 2.2 — idempotency dedupe
 #
-# Implement `IdempotencyCache` so that `AgentApi._deduplicated` works:
+# Write `IdempotencyCache` so that `AgentApi._deduplicated` works:
 #
-# * `begin(key, fingerprint)` reserves the key and returns `None` the first time; returns the stored `Response`
-#   for a replay with the same fingerprint; raises `ApiError(409, "idempotency_conflict", …)` if the key was used
-#   with a **different** fingerprint, and `ApiError(409, "idempotency_in_progress", …)` if the first request has
-#   not completed yet;
-# * `complete(key, response)` stores the response; `abort(key)` drops the reservation.
+# * `begin(key, fingerprint)` reserves the key and returns `None` the first time.
+#   For a replay with the same fingerprint, it returns the stored `Response`.
+#   If a request used the key with a **different** fingerprint, it raises `ApiError(409, "idempotency_conflict", …)`.
+#   If the first request has not completed yet, it raises `ApiError(409, "idempotency_in_progress", …)`.
+# * `complete(key, response)` stores the response. `abort(key)` removes the reservation.
 #
-# (A production store puts a TTL on entries and keys them per tenant; keep the in-memory dict here.)
+# A production store puts a TTL on the entries and makes their keys specific to each tenant.
+# Keep the in-memory dict here.
 
 # %% exercise
 class IdempotencyCache:
@@ -506,14 +526,14 @@ print("✅ replay returns the recorded response; conflicts and in-flight duplica
 # %% [markdown]
 # ### Exercise 2.3 — the job polling handler
 #
-# Implement `task_view(rec)` — what `GET /v1/tasks/{id}` returns — with proper HTTP semantics for polling:
+# Write `task_view(rec)`. It is what `GET /v1/tasks/{id}` returns. Use correct HTTP semantics for a poll:
 #
-# * `working` → **202** with a `Retry-After` header of `ceil(poll_interval_ms / 1000)` seconds and body
-#   `{"task_id", "status", "status_message"}`;
-# * `input_required` → 200, body adds `"input_requests": rec.input_requests`;
-# * `completed` → 200, body adds `"result": rec.result`;
-# * `failed` → 200, body adds `"error": rec.error`;
-# * `cancelled` → 200, the base body.
+# * `working`: **202**, with a `Retry-After` header of `ceil(poll_interval_ms / 1000)` seconds, and the body
+#   `{"task_id", "status", "status_message"}`.
+# * `input_required`: 200. The body adds `"input_requests": rec.input_requests`.
+# * `completed`: 200. The body adds `"result": rec.result`.
+# * `failed`: 200. The body adds `"error": rec.error`.
+# * `cancelled`: 200, with the base body.
 
 # %% exercise
 def task_view(rec: TaskRecord) -> Response:
@@ -553,10 +573,13 @@ print("✅ 202 + Retry-After while working, 200 with result / input_requests whe
 # %% [markdown]
 # ### Exercise 2.4 — a token bucket
 #
-# Implement `TokenBucket.try_take(key)` → `(allowed, retry_after_s)`. Each key (tenant) has its own bucket that
-# holds at most `capacity` tokens and refills continuously at `refill_per_s`. Taking succeeds when at least one
-# token is available; otherwise report how long until one is. Use `self.clock()` for time so the check can
-# drive it without sleeping.
+# Write `TokenBucket.try_take(key)`. It returns `(allowed, retry_after_s)`.
+# Each key (tenant) has its own bucket. The bucket holds at most `capacity` tokens.
+# It refills continuously at `refill_per_s`.
+#
+# A take succeeds when at least one token is available.
+# If no token is available, report how long it is until one is available.
+# Use `self.clock()` for time, so that the check can advance it without a sleep.
 
 # %% exercise
 class TokenBucket:
@@ -597,9 +620,9 @@ print("✅ 429 with Retry-After once the tenant's bucket is empty")
 # %% [markdown]
 # ### Exercise 2.5 — which endpoints must be idempotent, and why
 #
-# Fill `IDEMPOTENCY` with one of `"required"`, `"recommended"`, `"inherent"` or `"safe"` for each endpoint, and
-# write `why` — one or two sentences on the rule behind your choices. Think about what a **retried** request
-# would do to the world.
+# Fill `IDEMPOTENCY` with one of `"required"`, `"recommended"`, `"inherent"` or `"safe"` for each endpoint.
+# Then write `why`: one or two sentences about the rule behind your choices.
+# Think about what a **retried** request does to the world.
 
 # %% exercise
 ENDPOINTS = ["POST /v1/sessions", "POST /v1/sessions/{id}/messages", "POST /v1/tasks/{id}/input",
@@ -629,10 +652,14 @@ print("✅", why)
 # %% [markdown]
 # ## The one-minute version
 #
-# Sketch the API in five lines and make five points: the stream carries **events**, not tokens, so the client can
-# show tool progress and approval prompts; long-running work returns a **task handle** that mirrors the MCP Tasks
-# shape (working → input_required → completed | failed | cancelled), and approvals are a state in that machine;
-# **idempotency on every POST** because clients retry and a retried turn is a second refund; **`429` with
-# `Retry-After`** per tenant because backpressure is cheaper than an incident; and the **prompt+model version in
-# the headers** because behaviour changes when they do. Then mention what is behind it: the session store with
-# optimistic concurrency, the durable task record, and the queryable event log that support and audit will need.
+# Draw the API in five lines. Then make five points:
+#
+# - The stream has **events**, not tokens. Thus the client can show tool progress and approval prompts.
+# - Long-running work returns a **task handle** that has the MCP Tasks shape
+#   (working, then input_required, then completed, failed or cancelled). Approvals are a state in that machine.
+# - Put **idempotency on every POST**, because clients retry, and a retried turn is a second refund.
+# - Return **`429` with `Retry-After`** for each tenant, because backpressure costs less than an incident.
+# - Put the **prompt+model version in the headers**, because the behaviour changes when they change.
+#
+# Then tell what is behind it: the session store with optimistic concurrency, the durable task record,
+# and the event log that you can query. Support and audit will need that log.

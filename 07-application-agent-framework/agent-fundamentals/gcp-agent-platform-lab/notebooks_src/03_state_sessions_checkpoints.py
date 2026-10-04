@@ -1,17 +1,19 @@
 # %% [markdown]
 # # 03 · State, sessions and checkpoints
 #
-# An agent that forgets between turns is a chatbot; an agent that cannot survive a restart is a demo. This notebook is
-# about the two data structures under a production agent: the **session** — an append-only event log with a small typed
-# state dict beside it — and the **durable task record** that lets a multi-step job crash and resume without doing
-# anything twice. The mechanics are small; the design questions about them are not.
+# An agent that forgets between turns is a chatbot. An agent that cannot survive a restart is a demo.
+# This notebook is about the two data structures under a production agent:
+# - The **session**: an append-only event log, with a small typed state dict next to it.
+# - The **durable task record**: it lets a multi-step job crash and resume, and do nothing two times.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [durable-workflows primer](../../../long-running-durable/PRIMER.md) §2–§3 (the run as a durable state machine, the five invariants).
+# The mechanics are small. The design questions about them are not small.
 #
-# In this notebook you will:
-# 1. read a session's event log and the model-facing view *derived* from it, and see what the model never sees;
-# 2. use compare-and-set stores, a file-backed store that survives a restart, and the Runner's pause/resume for irreversible tools;
-# 3. build a checkpointed workflow that crashes mid-way and resumes exactly-once — plus bounded retries, a saga and per-session locks.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [durable-workflows primer](../../../long-running-durable/PRIMER.md) §2–§3 (the run as a durable state machine, the five invariants).
+#
+# In this notebook, you will:
+# 1. Read the event log of a session and the view for the model that the runtime *derives* from it. See what the model never sees.
+# 2. Use compare-and-set stores and a file-backed store that survives a restart. Use the pause and resume of the Runner for irreversible tools.
+# 3. Build a workflow that writes checkpoints, crashes in the middle and resumes exactly-once. Also build bounded retries, a saga and per-session locks.
 
 # %%
 import asyncio
@@ -27,9 +29,14 @@ from agentlab.agents import (Event, InMemorySessionStore, InvocationContext, Jso
 # %% [markdown]
 # ## 1. The event log is the source of truth
 #
-# A `Session` holds `events` (everything that happened, in order), `state` (a small dict of working values), a `status`,
-# an optional `pending` payload and a `version` for optimistic concurrency. The agent loop **appends** events; nothing is
-# edited in place. Let one turn run and look at what it wrote.
+# A `Session` holds these items:
+# - `events`: everything that occurred, in order.
+# - `state`: a small dict of current values.
+# - `status`: the status of the session.
+# - `pending`: an optional payload.
+# - `version`: the version for optimistic concurrency.
+#
+# The agent loop **appends** events. It edits nothing in place. Let one turn run. Then look at what it wrote.
 
 # %%
 @tool
@@ -52,9 +59,9 @@ print("state:", session.state, "| status:", session.status.value)
 # %% [markdown]
 # ### What the model sees is derived, not stored
 #
-# `session.messages()` walks the log and turns only `user`, `model` and `tool_result` events into messages. `state`,
-# `approval`, `delegation`, `note` and `error` events never reach the model unless a context builder chooses to inject
-# them. That is deliberate: the log is for operators and audits; the model's view is a projection you control.
+# `session.messages()` goes through the log. It changes only `user`, `model` and `tool_result` events into messages.
+# `state`, `approval`, `delegation`, `note` and `error` events never reach the model, unless a context builder decides to inject
+# them. This is intentional. The log is for operators and audits. The view of the model is a projection that you control.
 
 # %%
 messages = session.messages()
@@ -68,12 +75,16 @@ assert not any("gold" in str(m.get("content")) for m in messages)     # the tier
 # %% [markdown]
 # ### Scoped state keys
 #
-# State keys carry a scope prefix by convention: `app:` (shared configuration), `user:` (facts that outlive this session),
-# `temp:` (scratch for the current turn — the Runner calls `clear_temp_state()` after every turn) or no prefix (this
-# conversation's working values, such as an `output_key`). The scope is a *promise about lifetime*; the persistence layer
-# has to keep it (write `user:` facts to a profile store, never into the transcript). One practical note: a scoped key
-# cannot be a `{placeholder}` in an instruction — the colon is format-spec syntax — so copy it to a plain key or inject it
-# through a memory provider (Notebook 04).
+# By convention, a state key has a scope prefix:
+# - `app:`: shared configuration.
+# - `user:`: facts that live longer than this session.
+# - `temp:`: scratch values for the current turn. The Runner calls `clear_temp_state()` after every turn.
+# - no prefix: the current values of this conversation, such as an `output_key`.
+#
+# The scope is a *promise about lifetime*. The persistence layer must keep this promise.
+# Write `user:` facts to a profile store, never into the transcript. Also note this practical point.
+# A scoped key cannot be a `{placeholder}` in an instruction, because the colon is format-spec syntax.
+# Thus copy it to a plain key, or inject it through a memory provider (Notebook 04).
 
 # %%
 session.set_state("app:region", "sg")
@@ -86,9 +97,12 @@ print("after clear_temp_state():", sorted(session.state))
 # %% [markdown]
 # ## 2. Stores: compare-and-set, and surviving a restart
 #
-# A store hands out **copies** of a session and refuses a `put` whose `version` is stale. Two workers that both load
-# version 1 cannot both write: the first `put` bumps the store to version 2, the second raises `VersionConflict`. A lost
-# update becomes an explicit error you can handle — re-read and reapply — instead of silent corruption.
+# A store gives out **copies** of a session. It refuses a `put` whose `version` is stale.
+# Two workers that both load version 1 cannot both write. The first `put` increases the store to version 2.
+# The second `put` raises `VersionConflict`.
+#
+# A lost update becomes an explicit error that you can handle: read again and apply again.
+# It does not become silent corruption.
 
 # %%
 store = InMemorySessionStore()
@@ -105,8 +119,8 @@ except VersionConflict as e:
 print("stored:", store.get("shared").state, "| version", store.get("shared").version)
 
 # %% [markdown]
-# `JsonFileSessionStore` has the same semantics and writes one JSON file per session. "Restarting" — a new store over the
-# same directory — reads them back: status, pending approval, state and every event.
+# `JsonFileSessionStore` has the same semantics. It writes one JSON file for each session.
+# A "restart" is a new store over the same directory. It reads the files back: status, pending approval, state and every event.
 
 # %%
 root = pathlib.Path(tempfile.mkdtemp(prefix="agentlab-sessions-"))
@@ -124,11 +138,12 @@ print("recovered:", back.state, "| events:", [e.kind for e in back.events], "| v
 # %% [markdown]
 # ## 3. Pause and resume for irreversible actions
 #
-# An irreversible tool (`SideEffect.IRREVERSIBLE`) requires confirmation. Without a `confirm` hook the loop **pauses**: the
-# session is saved with `status=awaiting_approval` and a `pending` payload naming the exact call, and the run returns.
-# Approval is a state-machine transition, not a modal dialog — it can arrive minutes later, from another process, after a
-# restart. `approve(True)` executes the pending call **once** and lets the loop continue from the log; `approve(False)`
-# records a `declined` tool result so the model can respond gracefully.
+# An irreversible tool (`SideEffect.IRREVERSIBLE`) must get a confirmation. Without a `confirm` hook, the loop **pauses**.
+# The Runner saves the session with `status=awaiting_approval` and a `pending` payload that names the exact call. Then the run returns.
+#
+# Approval is a state-machine transition, not a modal dialog. It can arrive minutes later, from another process, after a restart.
+# `approve(True)` executes the pending call **once** and lets the loop continue from the log.
+# `approve(False)` records a `declined` tool result, so that the model can respond gracefully.
 
 # %%
 refunds_issued: list[tuple[str, float]] = []
@@ -170,10 +185,12 @@ print("model's reply:", declined.text, "| refunds executed in total:", len(refun
 # %% [markdown]
 # ## 4. Long-running work: a durable state machine
 #
-# A multi-step job that talks to external systems must survive its worker dying at any line. The pattern: a `TaskRecord`
-# in a `TaskStore` with `completed_steps` (what is already applied) and a `checkpoint` (what the next step needs), saved
-# **after every step**. On resume, completed steps are skipped. Below, a four-step claims workflow: the worker crashes right
-# after step 2 and a new worker picks the record up.
+# A multi-step job that talks to external systems must survive when its worker stops at any line.
+# The pattern is a `TaskRecord` in a `TaskStore`. The record has `completed_steps` (the steps already applied)
+# and a `checkpoint` (the data that the next step needs). The worker saves the record **after every step**.
+#
+# On resume, the worker skips the completed steps. The next cell has a four-step claims workflow.
+# The worker crashes immediately after step 2, and a new worker takes the record.
 
 # %%
 STEPS = ["validate", "fetch_policy", "reserve_payout", "notify"]
@@ -219,9 +236,10 @@ print("status:", done.status.value, "| side effects per step:", side_effects)
 # %% [markdown]
 # ### The gap between the call and the checkpoint
 #
-# Checkpointing after each step does **not** make a step exactly-once: if the worker dies after the payout call returns but
-# before the record is saved, the retry repeats the call. The fix is not a smaller gap — it is an **idempotency key** on the
-# external call, derived from the task and the step, so the second attempt is a no-op at the receiver.
+# A checkpoint after each step does **not** make a step exactly-once.
+# The worker can stop after the payout call returns but before it saves the record. Then the retry repeats the call.
+# The solution is not a smaller gap. The solution is an **idempotency key** on the external call, made from the task and the step.
+# Then the second attempt is a no-op at the receiver.
 
 # %%
 class PayoutService:
@@ -266,9 +284,9 @@ for stable_key in (False, True):
 # %% [markdown]
 # ## 5. Two workers, one session
 #
-# Two turns on the same session — a retry, a duplicate webhook, a double-click — race to `put`. The loser must not
-# overwrite: it gets `VersionConflict`, re-reads the fresh copy and reapplies its change on top. Here the retry is written
-# out by hand, once; Exercise 6.2 asks you for the general, bounded version.
+# Two turns on the same session race to `put`. Examples are a retry, a duplicate webhook and a double-click.
+# The loser must not overwrite. It gets `VersionConflict`, reads the new copy and applies its change again on top.
+# Here, the code does the retry by hand, one time. Exercise 6.2 asks you for the general, bounded version.
 
 # %%
 race_store = InMemorySessionStore()
@@ -297,10 +315,14 @@ print("final state:", race_store.get("race").state["replies"], "— nothing lost
 #
 # ### Exercise 6.1 — a generic resume
 #
-# Implement `resume(task_id, steps, store)` where `steps` is a list of `(name, fn)` and each `fn(task)` performs one step's
-# side effect. It must: load the record from the store; skip any step already in `completed_steps`; after each applied step
-# append the name, set `task.stage`, and `store.put(task)` **before** moving on; when all steps are done mark the task
-# `COMPLETED` and save it; and let exceptions propagate — a crash is a crash, the record is what survives.
+# Write `resume(task_id, steps, store)`. `steps` is a list of `(name, fn)`, and each `fn(task)` does the side effect of one step.
+# The function must do these things:
+#
+# * Load the record from the store.
+# * Skip each step that is already in `completed_steps`.
+# * After each applied step, append the name, set `task.stage`, and do `store.put(task)` **before** you go on.
+# * When all steps are complete, mark the task `COMPLETED` and save it.
+# * Let exceptions propagate. A crash is a crash, and the record is the thing that survives.
 
 # %% exercise
 def resume(task_id: str, steps: list, store: TaskStore) -> TaskRecord:
@@ -356,10 +378,12 @@ print("✅ crashed before step 3, resumed from the record; every side effect hap
 # %% [markdown]
 # ### Exercise 6.2 — bounded retry on conflict
 #
-# Implement `async update_with_retry(store, session_id, mutate, attempts=5)`: load the session, `await mutate(session)`,
-# `put` it; on `VersionConflict` re-read and try again, at most `attempts` times in total, then raise `RuntimeError`.
-# Return the saved session. The check runs ten concurrent increments whose `mutate` awaits between read and write — the
-# shape of "read state, call the model, write state" — and expects all ten to land.
+# Write `async update_with_retry(store, session_id, mutate, attempts=5)`.
+# Load the session, call `await mutate(session)`, and `put` it. On `VersionConflict`, read the session again and try again.
+# Try at most `attempts` times in total, then raise `RuntimeError`. Return the saved session.
+#
+# The check runs ten concurrent increments. Their `mutate` awaits between the read and the write.
+# An await between the read and the write is the shape of "read state, call the model, write state". The check expects all ten increments to land.
 
 # %% exercise
 async def update_with_retry(store, session_id: str, mutate, attempts: int = 5) -> Session:
@@ -421,14 +445,14 @@ print(f"✅ 10 concurrent increments → counter=10 with {counting.conflicts} co
 # %% [markdown]
 # ### Exercise 6.3 — compensation when there is no undo button
 #
-# Some steps cannot be rolled back by a database — a payout reserved with a partner, an email queued. The saga pattern
-# records a **compensating action** for every step that succeeded and, when a later step fails, runs them in **reverse
-# order**. Complete `Saga`:
+# A database cannot roll back some steps. Examples are a payout reserved with a partner, and an email put in a queue.
+# The saga pattern records a **compensating action** for every step that succeeded.
+# When a later step fails, it runs these actions in **reverse order**. Complete `Saga`:
 #
-# * `add(name, action, compensate)` registers a step (`action` and `compensate` are `async` no-argument callables);
-# * `await run()` executes the actions in order, appending each name to `self.completed` after it succeeds, and returns `self.completed`;
-# * if an action raises, run the compensations of the completed steps newest-first (appending names to `self.compensated`),
-#   then re-raise the original exception.
+# * `add(name, action, compensate)` registers a step (`action` and `compensate` are `async` no-argument callables).
+# * `await run()` executes the actions in order. It appends each name to `self.completed` after the action succeeds, and returns `self.completed`.
+# * If an action raises, run the compensations of the completed steps, newest first. Append their names to `self.compensated`.
+#   Then raise the original exception again.
 
 # %% exercise
 class Saga:
@@ -495,9 +519,12 @@ print("✅ saga trail on failure:", " → ".join(failure_trail))
 # %% [markdown]
 # ### Exercise 6.4 — serialise turns per session, not globally
 #
-# Optimistic concurrency is the safety net; the everyday fix is to never let two turns of the **same** session run at once,
-# while turns on **different** sessions overlap freely. Implement `SessionLock` with `for_session(session_id) -> asyncio.Lock`
-# returning the same lock object for the same id (created on first use). Usage: `async with locks.for_session(sid): ...`.
+# Optimistic concurrency is the safety net. The usual solution is different: never let two turns of the **same** session run at the same time.
+# Turns on **different** sessions can overlap freely.
+#
+# Write `SessionLock` with `for_session(session_id) -> asyncio.Lock`.
+# It returns the same lock object for the same id. It creates the lock on first use.
+# Use it like this: `async with locks.for_session(sid): ...`.
 
 # %% exercise
 class SessionLock:
@@ -536,15 +563,15 @@ print(f"✅ same session: {same * 1000:.0f} ms (serialised) | different sessions
 # %% [markdown]
 # ### Exercise 6.5 — what does the model see each turn?
 #
-# Re-derive the model's view from the log by hand. Implement `derive_messages(events)`:
+# Derive the view of the model from the log again, by hand. Write `derive_messages(events)`:
 #
-# * `user` → `{"role": "user", "content": ...}`;
-# * `model` → `{"role": "assistant", "content": ...}` plus `"tool_calls"` **only** when the payload has them;
-# * `tool_result` → `{"role": "tool", "name": ..., "tool_call_id": <payload id>, "content": ...}`;
-# * every other kind (`state`, `approval_required`, `approval`, `delegation`, `note`, `error`, `final`) is skipped.
+# * `user` becomes `{"role": "user", "content": ...}`.
+# * `model` becomes `{"role": "assistant", "content": ...}`. Add `"tool_calls"` **only** when the payload has them.
+# * `tool_result` becomes `{"role": "tool", "name": ..., "tool_call_id": <payload id>, "content": ...}`.
+# * Skip every other kind (`state`, `approval_required`, `approval`, `delegation`, `note`, `error`, `final`).
 #
-# The check builds a six-turn session with approvals, state changes and notes mixed in and compares your output with
-# `session.messages()`.
+# The check builds a six-turn session that has approvals, state changes and notes in it.
+# Then it compares your output with `session.messages()`.
 
 # %% exercise
 def derive_messages(events: list) -> list[dict]:
@@ -590,9 +617,12 @@ print(f"✅ {len(six.events)} events → {len(mine)} messages; state, approvals 
 # %% [markdown]
 # ### Exercise 6.6 — the three questions
 #
-# Put in `long_running_design_questions` the three questions you would ask about *any* long-running agent design: where it
-# checkpoints, what the idempotency key on each external write is, and what happens if the worker dies between the payment
-# call and the record update. Phrase them as questions you could ask a candidate — or be asked.
+# In `long_running_design_questions`, put the three questions to ask about *any* long-running agent design:
+# - Where does it write checkpoints?
+# - What is the idempotency key on each external write?
+# - What occurs if the worker stops between the payment call and the record update?
+#
+# Write them as questions that you can ask a candidate, or that a person can ask you.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -616,14 +646,17 @@ print("✅ questions:", *qs, sep="\n   ")
 # %% [markdown]
 # ## The one-minute version
 #
-# When the design has a "workflow" box in it, say what is underneath: *"Each session is an append-only event log with a
-# small state dict; the model's context is derived from the log, so approvals, state and notes never leak into prompts.
-# Writes go through compare-and-set on a version, and a turn holds a per-session lock so retries cannot interleave.*
+# When the design has a "workflow" box in it, say what is under it:
 #
-# *"Anything irreversible pauses the loop with `awaiting_approval` and a pending payload; approval is a state transition
-# that can arrive from another process after a restart. Long-running jobs are a task record with `completed_steps` saved
-# after every step, and every external write carries an idempotency key derived from the task and the step — because one
-# day the worker will die between the payment call and the checkpoint — with a saga of compensations for the steps that
-# cannot be undone."*
+# *"Each session is an append-only event log with a small state dict. The runtime derives the context of the model from the log. Thus approvals, state and notes never leak into prompts.
+# Writes go through compare-and-set on a version. A turn holds a per-session lock, thus retries cannot interleave.*
 #
-# Then ask the question that matters — *what happens if the worker dies right here?* — and point at the line.
+# *"Anything irreversible pauses the loop with `awaiting_approval` and a pending payload.
+# Approval is a state transition that can arrive from another process after a restart.
+# A long-running job is a task record. The worker saves its `completed_steps` after every step.*
+#
+# *"Every external write has an idempotency key made from the task and the step. The key is necessary
+# because one day the worker will stop between the payment call and the checkpoint. A saga of compensations covers the steps that
+# nobody can undo."*
+#
+# Then ask the important question: *what happens if the worker dies right here?* Then point at the line.

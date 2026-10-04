@@ -75,7 +75,8 @@ drills.
 - The product facts are about ADK 2, the Gemini and Mistral model names, and the limits of Cloud Run, Cloud Tasks,
   Workflows and Pub/Sub. These facts have the date September 2026 and the tag (verify). At its end, the primer gives a
   list of facts to examine again.
-- The prose of this topic is in ASD-STE100 (Simplified Technical English), as an experiment. The style has short
-  sentences, the active voice, the imperative for instructions and one meaning for each word. The brief is
+- The prose of this topic is in ASD-STE100 (Simplified Technical English). This topic was the first to use the
+  style, as an experiment. The other layers followed. The style has short sentences, the active voice, the
+  imperative for instructions and one meaning for each word. The brief is
   [STE100-STYLE.md](../../tools/orchestration/STE100-STYLE.md) and the linter is
-  [ste_lint.py](../../tools/orchestration/ste_lint.py). The rest of the repository keeps its usual style.
+  [ste_lint.py](../../tools/orchestration/ste_lint.py). The root documents keep their usual style.

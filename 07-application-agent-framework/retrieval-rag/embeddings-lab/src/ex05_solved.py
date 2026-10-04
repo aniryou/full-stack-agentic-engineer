@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 05 · Evaluation & fusion
-# The three functions every retrieval system owner ends up writing.
-# Solutions: `../solutions/ex05.ipynb`.
+# These are the three functions that every owner of a retrieval system writes
+# eventually. The solutions are in `../solutions/ex05.ipynb`.
 
 # %%
 import numpy as np
@@ -9,8 +9,8 @@ from collections import Counter
 
 # %% [markdown]
 # ## Task 1 — graded nDCG@k
-# `ndcg_at_k(gains, ideal_gains, k)` with $\mathrm{DCG} = \sum_i \mathrm{gain}_i / \log_2(i + 2)$.
-# Check: ranking with gains [3,2,0,1] vs ideal [3,2,1,0] → 0.98544.
+# Implement `ndcg_at_k(gains, ideal_gains, k)` with $\mathrm{DCG} = \sum_i \mathrm{gain}_i / \log_2(i + 2)$.
+# Check: a ranked list with gains [3,2,0,1] against the ideal [3,2,1,0] gives 0.98544.
 
 # %%
 def dcg(gains, k):
@@ -30,21 +30,22 @@ print("ndcg_at_k ✓")
 
 # %% [markdown]
 # ## Task 2 — Reciprocal Rank Fusion
-# `rrf(rankings, k)`:
+# `rrf(rankings, k)` uses this score:
 #
 # $$
 # \mathrm{score}(d) = \sum_{\text{rankings}} \frac{1}{k + \mathrm{rank}(d) + 1},
 # $$
 #
-# rank 0-based; return doc ids sorted by score.
+# The rank is 0-based. Return the doc ids, sorted by score.
 #
 # Checks with $k = 1$:
-# [a,b,c] + [c,a,b] → a: 1/2+1/3, c: 1/4+1/2, b: 1/3+1/4 → order a, c, b.
-# [a,b,c,d] + [b,c,d] → b: 1/3+1/2 = 5/6, c: 1/4+1/3 = 7/12, a: 1/2,
-#   d: 1/5+1/4 = 9/20 → order b, c, a, d. No two scores tie, so the order
-#   does not depend on how you break ties, and the constant shows:
-#   $1/(k + \mathrm{rank})$ scores b 3/2, a 1, c 5/6, d 7/12 → b, a, c, d;
-#   $1/(k + \mathrm{rank} + 2)$ scores b 7/12, c 9/20, d 11/30, a 1/3 → b, c, d, a.
+#
+# - [a,b,c] + [c,a,b] gives a: 1/2+1/3, c: 1/4+1/2, b: 1/3+1/4. The order is a, c, b.
+# - [a,b,c,d] + [b,c,d] gives b: 1/3+1/2 = 5/6, c: 1/4+1/3 = 7/12, a: 1/2,
+#   d: 1/5+1/4 = 9/20. The order is b, c, a, d. No two scores are equal. Thus the
+#   order does not depend on how you break ties, and the constant has an effect:
+#   - $1/(k + \mathrm{rank})$ gives the scores b 3/2, a 1, c 5/6, d 7/12, and the order b, a, c, d.
+#   - $1/(k + \mathrm{rank} + 2)$ gives the scores b 7/12, c 9/20, d 11/30, a 1/3, and the order b, c, d, a.
 
 # %%
 def rrf(rankings, k=60):
@@ -71,8 +72,8 @@ print("rrf ✓")
 # \end{aligned}
 # $$
 #
-# The second is the part worth internalizing: term-frequency **saturates** and
-# long documents are **penalized**.
+# The second function is the part to learn well: term-frequency
+# **saturates**, and BM25 **penalizes** long documents.
 
 # %%
 def bm25_idf(N, df):
@@ -93,6 +94,7 @@ print("bm25 components ✓")
 
 # %% [markdown]
 # ## Task 4 (open) — break the hybrid
-# In notebook 05, replace RRF with a weighted score sum
-# $\alpha \cdot z(\text{bm25}) + (1 - \alpha) \cdot z(\text{dense})$ ($z$ = standardize scores per query). Sweep $\alpha$.
-# Why does RRF usually win without tuning? (Hint: score scales vs rank scales.)
+# In notebook 05, replace RRF with a weighted sum of scores,
+# $\alpha \cdot z(\text{bm25}) + (1 - \alpha) \cdot z(\text{dense})$ ($z$ standardizes the scores for each query). Sweep $\alpha$.
+# Why does RRF usually give the better result with no adjustment? (Hint: compare
+# score scales against rank scales.)
