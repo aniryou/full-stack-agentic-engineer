@@ -1,16 +1,19 @@
 # %% [markdown]
 # # 04 · A mini support agent (capstone)
 #
-# Put the three ideas together into a small but honest support agent for a bank:
+# Put the three ideas together. Make a small but honest support agent for a bank:
 #
-# * it answers **only** from tool results (never invents a balance);
-# * reads are free; a **card block** is irreversible, so it needs human approval;
-# * anything it can't do becomes a **case** for a human.
+# * It answers **only** from tool results. It never invents a balance.
+# * Reads are free. A **card block** is irreversible, thus it needs the approval of a
+#   person.
+# * Anything that it cannot do becomes a **case** for a person.
 #
-# This is the same shape as the bank agent in gcp-agent-platform-lab's capstone (notebook
-# 14), shrunk to what fits on one screen. The production version (identity, MCP, evals,
-# tracing) is `gcp-agent-platform-lab`, next to this lab in
-# 07-application-agent-framework/agent-fundamentals/ — this is the concept underneath it.
+# This agent has the same shape as the bank agent in the capstone of
+# gcp-agent-platform-lab (notebook 14). Here it is smaller, so that it fits on one
+# screen. The production version (identity, MCP, evals, tracing) is
+# `gcp-agent-platform-lab`, next to this lab in
+# 07-application-agent-framework/agent-fundamentals/. This notebook is the concept under
+# it.
 
 # %%
 from agentcore import Agent, FakeLLM, ToolError, call, calls, text, tool
@@ -36,8 +39,8 @@ def block_card(card_id: str) -> dict:
 # %% [markdown]
 # ## Exercise 4.1 — the escalation tool
 #
-# Write `raise_case(summary: str, queue: str)` that appends `{"summary","queue"}` to the
-# `CASES` list and returns `{"case_id": ..., "queue": ...}` where `case_id` is
+# Write `raise_case(summary: str, queue: str)`. It appends `{"summary","queue"}` to the
+# `CASES` list. It returns `{"case_id": ..., "queue": ...}`, where `case_id` is
 # `"CASE-" + <new length of CASES>`. This is the "hand to a human" path for anything out
 # of scope.
 
@@ -58,7 +61,7 @@ print("✅ raise_case works:", out["data"])
 
 # %% [markdown]
 # ## The agent
-# A scripted model walks three intents. Read the transcript for each.
+# A scripted model goes through three intents. Read the transcript for each intent.
 
 # %%
 support = Agent(
@@ -81,13 +84,14 @@ run_once([call("get_balance", account_id="a1"), "Your balance is SGD 1,234.50."]
 # %% [markdown]
 # ## Exercise 4.2 — the approval gate
 #
-# Run a "block my card" conversation twice with the same script
-# `[call("block_card", card_id="card-1"), "Your card is now blocked."]`, keeping the two
+# Run a "block my card" conversation two times with the same script,
+# `[call("block_card", card_id="card-1"), "Your card is now blocked."]`. Keep the two
 # results as `declined` and `approved`:
 #
-# * once with `on_confirm` returning **False** — assert the card is still `"active"`
-#   and the tool result the model saw contains `"declined"`;
-# * once with `on_confirm` returning **True** — assert the card becomes `"blocked"`.
+# * Run it one time with an `on_confirm` that returns **False**. Assert that the card is
+#   still `"active"`, and that the tool result that the model saw contains `"declined"`.
+# * Run it one time with an `on_confirm` that returns **True**. Assert that the card
+#   becomes `"blocked"`.
 
 # %% exercise
 script = [call("block_card", card_id="card-1"), "Your card is now blocked."]
@@ -115,11 +119,13 @@ print("✅ irreversible action gated on human approval")
 # %% [markdown]
 # ## Exercise 4.3 — never act without a tool
 #
-# The one property that makes this agent trustworthy: every factual claim comes from a
-# tool result, and every state change comes from a tool call. Write `used_a_tool(result)`
-# that returns True if the transcript contains at least one `tool` message. Then confirm
-# the balance answer used one. (In real evals this is a *trajectory* check — did the
-# agent look before it spoke — and it is graded as an absolute gate.)
+# Only one property makes this agent trustworthy. Every factual claim comes from a tool
+# result, and every state change comes from a tool call.
+#
+# Write `used_a_tool(result)`. It returns True if the transcript contains one or more
+# `tool` messages. Then make sure that the balance answer used a tool. In evals in
+# production, this is a *trajectory* check: did the agent look before it spoke? The eval
+# grades this check as an absolute gate.
 
 # %% exercise
 def used_a_tool(result) -> bool:
@@ -139,12 +145,17 @@ print("✅ the agent acts only through tools")
 # %% [markdown]
 # ## Where to go next
 # You now have the whole core: a model, tools, the loop, state, budgets, and a human in
-# the loop for irreversible actions. The step-up — async and parallel tool calls, MCP
-# servers and a policy gateway, OAuth identity propagation, evaluation gates, and
-# tracing — is `gcp-agent-platform-lab`, next to this lab in this repo. Same concepts;
-# more machinery.
+# the loop for irreversible actions. The step up is `gcp-agent-platform-lab`, next to
+# this lab in this repo. It adds async and parallel tool calls, MCP servers and a policy
+# gateway, OAuth identity propagation, evaluation gates, and tracing. It has the same
+# concepts and more machinery.
 #
 # ## The one-minute version
-# Walk this design as: unit of work (a support interaction), every fact from a tool,
-# irreversible actions gated by a human, out-of-scope work escalated as a case, and the
-# trustworthiness property ("never acts without a tool") checked as an absolute eval gate.
+# Walk through this design with these points:
+#
+# * The unit of work is a support interaction.
+# * Every fact comes from a tool.
+# * A human gate holds each irreversible action until a person approves it.
+# * The agent escalates out-of-scope work as a case.
+# * An absolute eval gate examines the trustworthiness property ("never acts without a
+#   tool").

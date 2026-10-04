@@ -1,13 +1,18 @@
 # Deploy runbook — the reference implementation on Google Cloud
 
-This runbook takes the lab from an empty project to a support agent that runs as its **own
-identity**, calls an MCP server that only it may invoke, borrows **user-delegated** credentials
-through Auth Manager, is screened by **Model Armor**, and leaves a **dual-identity audit
-trail** in BigQuery — then adds the governance opt-ins (Agent Gateway, VPC-SC, org policy).
-Concept references point at `docs/primer.md`; product facts come from `docs/sources.md`.
+This runbook takes the lab from an empty project to a support agent. The agent has these properties:
 
-Everything runs offline by default (`AGENTSEC_PROFILE=local`). Nothing here is needed for the
-notebooks; this is the `gcp` profile.
+- It runs as its **own identity**.
+- It calls an MCP server that only it can call.
+- It uses **user-delegated** credentials that it gets through Auth Manager.
+- **Model Armor** screens it.
+- It leaves a **dual-identity audit trail** in BigQuery.
+
+Then the runbook adds the governance opt-ins (Agent Gateway, VPC-SC, org policy).
+The concept references point at `docs/primer.md`. The product facts come from `docs/sources.md`.
+
+By default, everything runs offline (`AGENTSEC_PROFILE=local`). The notebooks do not need
+anything in this runbook. This runbook is the `gcp` profile.
 
 ---
 
@@ -15,12 +20,12 @@ notebooks; this is the `gcp` profile.
 
 | Need | Why |
 |---|---|
-| A project with billing, ideally inside an organisation (`org_id`) | Org-scoped trust domain `agents.global.org-<ORG>.system.id.goog`; org-level opt-ins |
-| `gcloud` (recent, with the `beta` component) and ADC (`gcloud auth application-default login`) | Beta Cloud Run flags, Agent Identity / Registry / IAP commands |
-| Terraform >= 1.11, google provider >= 8.0 | Write-only secret arguments |
-| Python 3.11 with `pip install -e ".[gcp]"` and `google-cloud-aiplatform[agent_engines,adk]` | SDK deployment path |
-| Roles: Owner on the project (or the admin roles listed in `infra/terraform/README.md`); for opt-ins the org-level Access Context Manager / Org Policy / PAB admin roles | |
-| Model Armor availability in your region; the Vertex floor-setting integration is limited to a few regions (see `docs/sources.md`) | `model_armor_location` |
+| A project with billing. The best place for the project is inside an organisation (`org_id`). | The org-scoped trust domain `agents.global.org-<ORG>.system.id.goog`, and the org-level opt-ins |
+| A recent `gcloud` with the `beta` component, and ADC (`gcloud auth application-default login`) | The beta Cloud Run flags, and the commands for Agent Identity, Agent Registry and IAP |
+| Terraform >= 1.11, google provider >= 8.0 | The write-only secret arguments |
+| Python 3.11 with `pip install -e ".[gcp]"` and `google-cloud-aiplatform[agent_engines,adk]` | The SDK deployment path |
+| Roles: Owner on the project, or the admin roles that `infra/terraform/README.md` lists. For the opt-ins, the org-level admin roles for Access Context Manager, Org Policy and PAB. | |
+| Model Armor that is available in your region. The Vertex floor-setting integration is available in a few regions only (see `docs/sources.md`). | `model_armor_location` |
 
 ```bash
 export PROJECT_ID=my-agentsec-lab
@@ -44,13 +49,20 @@ terraform plan
 terraform apply
 ```
 
-What this creates, in dependency order: APIs → CI deployer + WIF + fallback SA + image repo +
-staging bucket → demo secret (write-only) → Auth Manager 3LO provider (PKCE, allowed scopes)
-→ Model Armor template + project floor (INSPECT_ONLY) → Cloud Run MCP service (fallback SA,
-internal ingress) → Agent Registry entry → audit sink. Agent-specific IAM is skipped until an
-engine ID is known (step 4).
+Terraform creates these resources, in dependency order:
 
-Register the provider's callback URL at the CRM identity provider:
+1. The APIs.
+2. The CI deployer, WIF, the fallback SA, the image repo and the staging bucket.
+3. The demo secret (write-only).
+4. The Auth Manager 3LO provider (PKCE, allowed scopes).
+5. The Model Armor template and the project floor (INSPECT_ONLY).
+6. The Cloud Run MCP service (fallback SA, internal ingress).
+7. The Agent Registry entry.
+8. The audit sink.
+
+Terraform does not create the agent-specific IAM until it knows an engine ID (step 4).
+
+Register the callback URL of the provider at the CRM identity provider:
 
 ```bash
 terraform output auth_provider_redirect_url
@@ -63,8 +75,8 @@ cd ../..   # repo root
 PROJECT_ID=$PROJECT_ID REGION=$REGION BUILD=1 infra/scripts/deploy_mcp_cloud_run.sh
 ```
 
-The script builds `infra/scripts/Dockerfile.mcp` with Cloud Build and runs the documented
-command shape:
+The script builds `infra/scripts/Dockerfile.mcp` with Cloud Build. Then it runs the command in
+the shape that the documentation gives:
 
 ```
 gcloud beta run deploy agentsec-mcp-tickets --image=... \
@@ -72,12 +84,15 @@ gcloud beta run deploy agentsec-mcp-tickets --image=... \
   --no-allow-unauthenticated --ingress=internal --region=$REGION
 ```
 
-Consequences (primer §3.3, §7.1): the service now has principal
-`principal://<trust domain>/resources/run/projects/$PROJECT_NUMBER/locations/$REGION/services/agentsec-mcp-tickets`
-(Terraform output `mcp_server_principal`), it is auto-registered under `/mcpServers`, and the
-fallback SA's permissions do **not** carry over — that is the point.
+The results (primer §3.3, §7.1):
 
-Verify the identity on the revision:
+- The service now has the principal
+  `principal://<trust domain>/resources/run/projects/$PROJECT_NUMBER/locations/$REGION/services/agentsec-mcp-tickets`
+  (Terraform output `mcp_server_principal`).
+- The platform registers the service automatically under `/mcpServers`.
+- The new principal does **not** get the permissions of the fallback SA. This is the purpose of this step.
+
+Examine the identity on the revision:
 
 ```bash
 REV=$(gcloud run services describe agentsec-mcp-tickets --region=$REGION --format='value(status.latestReadyRevisionName)')
@@ -96,9 +111,9 @@ python infra/scripts/deploy_agent_engine.py \
 ```
 
 The script calls
-`vertexai.Client(project, location, http_options=dict(api_version="v1beta1")).agent_engines.create(agent=AdkApp(...), config={"identity_type": types.IdentityType.AGENT_IDENTITY, ...})`
-and prints the engine ID and `effective_identity`. The ADK app (`infra/deploy/agent_engine_app.py`)
-registers `GcpAuthProvider` with ADK's `CredentialManager` and attaches the `SecurityPlugin`.
+`vertexai.Client(project, location, http_options=dict(api_version="v1beta1")).agent_engines.create(agent=AdkApp(...), config={"identity_type": types.IdentityType.AGENT_IDENTITY, ...})`.
+Then it prints the engine ID and `effective_identity`. The ADK app (`infra/deploy/agent_engine_app.py`)
+registers `GcpAuthProvider` with the `CredentialManager` of ADK. It also attaches the `SecurityPlugin`.
 
 ### Path B — Terraform source-based deployment
 
@@ -107,13 +122,17 @@ infra/scripts/build_agent_source.sh
 cd infra/terraform && terraform apply -var deploy_agent_with_terraform=true
 ```
 
-Terraform inlines the archive (`filebase64`), sets `spec.identity_type = "AGENT_IDENTITY"`,
-declares the ADK `class_methods`, injects the demo secret via `secret_env`, and — when the
-gateway is on — `agent_gateway_config.agent_to_anywhere_config`.
+Terraform does these steps:
+
+- It puts the archive inline (`filebase64`).
+- It sets `spec.identity_type = "AGENT_IDENTITY"`.
+- It declares the ADK `class_methods`.
+- It adds the demo secret through `secret_env`.
+- When the gateway is on, it also sets `agent_gateway_config.agent_to_anywhere_config`.
 
 ## 4. IAM for the agent principal
 
-Path A: tell Terraform the engine ID so it can compute the principal and create the bindings.
+Path A: give the engine ID to Terraform. Terraform then calculates the principal and creates the bindings.
 
 ```bash
 cd infra/terraform
@@ -121,10 +140,10 @@ terraform apply -var agent_engine_id=<ID printed by the deploy script>
 terraform output agent_principal      # principal://agents.global.org-.../reasoningEngines/<ID>
 ```
 
-Path B: the bindings were created in step 3.
+Path B: Terraform created the bindings in step 3.
 
-Then the one binding Terraform cannot express (no IAM resource for auth providers in the
-provider), plus an idempotent re-grant of the rest:
+Then run this script. It adds the one binding that Terraform cannot express, because the
+provider has no IAM resource for auth providers. It also grants the other bindings again (idempotent):
 
 ```bash
 PROJECT_ID=$PROJECT_ID REGION=$REGION \
@@ -132,11 +151,14 @@ MCP_SERVER_ID=$(terraform output -raw mcp_server_registry_id) \
 ../scripts/grant_agent_iam.sh "$(terraform output -raw agent_principal)"
 ```
 
-What the agent ends up with (primer §4.5): project-level `aiplatform.expressUser`,
-`serviceusage.serviceUsageConsumer`, `browser`, `logging.logWriter`; `secretmanager.secretAccessor`
-on **one** secret; `run.invoker` on **one** service; `agentidentity.user` on **one** auth
-provider; `iap.egressor` on **one** registry entry; and a deny policy on the whole agents
-principalSet that forbids `storage.objects.delete` and `iam.serviceAccountKeys.create`.
+At the end, the agent has these roles and this policy (primer §4.5):
+
+- At the project level: `aiplatform.expressUser`, `serviceusage.serviceUsageConsumer`, `browser`, `logging.logWriter`.
+- `secretmanager.secretAccessor` on **one** secret.
+- `run.invoker` on **one** service.
+- `agentidentity.user` on **one** auth provider.
+- `iap.egressor` on **one** registry entry.
+- A deny policy on the complete agents principalSet. It denies `storage.objects.delete` and `iam.serviceAccountKeys.create`.
 
 ## 5. Smoke test
 
@@ -165,9 +187,9 @@ curl -si "$MCP" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,
 # (with mcp_ingress = INGRESS_TRAFFIC_INTERNAL_ONLY this must be run from inside the VPC / gateway)
 ```
 
-A denied tool call (e.g. `run_sql`, not in `policies/support-agent.yaml`) appears in the
-`agentsec-audit` log with `decision=deny`; a prompt that trips Model Armor appears in the
-Model Armor sanitize logs (`log_sanitize_operations = true`).
+The `agentsec-audit` log records a denied tool call with `decision=deny`. An example of a denied tool call is
+`run_sql`, which is not in `policies/support-agent.yaml`. The Model Armor sanitize logs record a
+prompt that matches a Model Armor filter (`log_sanitize_operations = true`).
 
 ---
 
@@ -180,11 +202,17 @@ terraform apply -var enable_agent_gateway=true
 # Path A agents: re-deploy with --agent-gateway "$(terraform output -raw agent_gateway_name)"
 ```
 
-Creates the gateway (`AGENT_TO_ANYWHERE`, registry-scoped), an IAP `REQUEST_AUTHZ` authorization
-extension + policy (set `agent_gateway_iap_dry_run = true` to audit first), and a Model Armor
-`CONTENT_AUTHZ` extension + policy using the strict template. Check
-`terraform output agent_gateway_mtls_endpoint`. Remember the limits: registered destinations
-only (≤ 5,000), publicly trusted certificates, no VPC-SC for the gateway itself.
+This command creates these resources:
+
+- The gateway (`AGENT_TO_ANYWHERE`, registry-scoped).
+- An IAP `REQUEST_AUTHZ` authorization extension and its policy. To audit first, set `agent_gateway_iap_dry_run = true`.
+- A Model Armor `CONTENT_AUTHZ` extension and its policy, which use the strict template.
+
+Examine `terraform output agent_gateway_mtls_endpoint`. Remember the limits of the gateway:
+
+- Registered destinations only (≤ 5,000).
+- Publicly trusted certificates.
+- No VPC-SC for the gateway itself.
 
 ### 6b. VPC Service Controls
 
@@ -195,8 +223,8 @@ gcloud access-context-manager perimeters dry-run update agentsec_$PROJECT_NUMBER
   --policy=<id> --set-egress-policies=infra/scripts/vpc_sc_mcp_rule.yaml
 ```
 
-The perimeter restricts `aiplatform`, `secretmanager`, `run`, both Agent Identity APIs,
-`storage` and `bigquery`; the egress rule uses the agents principalSet. Use the restricted
+The perimeter restricts `aiplatform`, `secretmanager`, `run`, the two Agent Identity APIs,
+`storage` and `bigquery`. The egress rule uses the agents principalSet. Use the restricted
 VIP (`restricted.googleapis.com`) for Agent Identity traffic (docs/sources.md).
 
 ### 6c. Org policy custom constraints / PAB
@@ -212,14 +240,14 @@ terraform apply -var enable_pab=true             # principals of this project co
 
 | Check | Command |
 |---|---|
-| Engine runs as Agent Identity | `gcloud ai reasoning-engines describe <ID> --region=$REGION` → `spec.effectiveIdentity` (or the Deployments page, *Identity* column) |
+| Engine runs as Agent Identity | Run `gcloud ai reasoning-engines describe <ID> --region=$REGION`, then read `spec.effectiveIdentity`. You can also read the *Identity* column of the Deployments page. |
 | MCP revision identity | `gcloud beta run revisions describe <REV> --region=$REGION` |
 | Agent's effective roles | `gcloud projects get-iam-policy $PROJECT_ID --flatten=bindings[].members --filter="bindings.members:agents.global"` |
 | Deny policy | `gcloud iam policies list --attachment-point=cloudresourcemanager.googleapis.com/projects/$PROJECT_ID --kind=denypolicies` |
 | Auth provider binding | `gcloud agent-identity auth-providers get-iam-policy tickets-3lo --location=$REGION` |
 | Registry + IAP | `gcloud iap web get-iam-policy --resource-type=agent-registry --mcp-server=<ID> --region=$REGION` |
 | Model Armor floor | `gcloud model-armor floorsettings describe --full-uri=projects/$PROJECT_ID/locations/global/floorSetting` |
-| Token binding | Replay a captured agent token from another host — it is rejected (Context-Aware Access default policy; keep `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES` unset) |
+| Token binding | Replay a captured agent token from a different host. The platform rejects it (the default Context-Aware Access policy). Keep `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES` unset. |
 
 ---
 
@@ -240,5 +268,5 @@ gcloud agent-registry mcp-servers list --location=$REGION                     # 
 gcloud artifacts docker images list $REGION-docker.pkg.dev/$PROJECT_ID/agentsec  # images are removed with the repo
 ```
 
-The Model Armor floor setting is a singleton: `destroy` resets it rather than deleting it.
-Data-access audit-log configuration is removed with the project IAM audit config resource.
+The Model Armor floor setting is a singleton. Thus `destroy` resets it and does not delete it.
+Terraform removes the data-access audit-log configuration together with the project IAM audit config resource.

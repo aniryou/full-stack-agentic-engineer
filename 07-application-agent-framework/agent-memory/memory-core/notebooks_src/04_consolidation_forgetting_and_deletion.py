@@ -1,26 +1,35 @@
 # %% [markdown]
 # # 04 · Consolidation, forgetting and deletion
 #
-# **Tier:** T0 — CPU only, no network, a few seconds. The same job with a lease row and checkpoints on SQLite, a
-# crash and a resume, and the GCP schedule printed (Cloud Run job on Cloud Scheduler) is `memory-lab` notebook
-# `04_consolidation_as_a_scheduled_job`; a deletion checked on the bytes of the database file is its notebook
-# `05_evaluate_forget_and_audit`.
+# **Tier:** T0. It uses only a CPU, it needs no network, and it takes a few seconds. The same job is in `memory-lab`
+# notebook `04_consolidation_as_a_scheduled_job`. That notebook keeps a lease row and checkpoints on SQLite. It shows
+# a crash and a resume, and it prints the GCP schedule (Cloud Run job on Cloud Scheduler). Its notebook
+# `05_evaluate_forget_and_audit` does a check of a deletion on the bytes of the database file.
 #
 # ## The one-minute version
-# Raw episodes are cheap to write and expensive to read: long, repetitive, full of values that have since changed.
-# **Consolidation** turns a window of episodes into facts, on a schedule, with rules rather than a summary: the
-# highest-precedence source wins (human > user > tool > inferred), newer supersedes older **and the older fact is
-# kept, closed** (`valid_to`, bi-temporal, as Graphiti closes an edge with `invalid_at`), and a weaker contradiction
-# is flagged for review. "Newer" means valid time, not arrival order, so a backfilled window never lets an old value
-# win.
+# Raw episodes are low-cost to write and high-cost to read. They are long and repetitive, and they are full of values
+# that changed since then.
 #
-# It runs as a durable job: a deterministic run id, a lease renewed before every slot and checked before every write,
-# a checkpoint per slot, ids that make a re-applied slot overwrite rather than duplicate.
+# **Consolidation** changes a window of episodes into facts. It runs on a schedule, and it uses rules, not a summary:
 #
-# **Forgetting** is four mechanisms — decay, TTL, the per-turn budget, a cap per scope — and none of them is
-# **deletion**. Deleting a fact means finding every copy: the record, its vector and full-text postings, facts derived
-# from it, anything that quotes it, cached prompt prefixes, logs, eval sets and backups. You prove a deletion by
-# searching for the data afterwards.
+# - The source with the highest precedence wins (human > user > tool > inferred).
+# - A newer fact replaces an older fact, **and the job keeps the older fact, closed** (`valid_to`, bi-temporal, as
+#   Graphiti closes an edge with `invalid_at`).
+# - The job flags a weaker contradiction for review.
+#
+# Here, "newer" means valid time, not arrival order. Thus a backfilled window never lets an old value win.
+#
+# The job runs as a durable job, with these parts:
+#
+# - a deterministic run id.
+# - a lease that the job renews before every slot and examines before every write.
+# - a checkpoint for each slot.
+# - ids that make a re-applied slot overwrite the facts, not duplicate them.
+#
+# **Forgetting** is four mechanisms: decay, TTL, the per-turn budget and a cap for each scope. None of them is
+# **deletion**. To delete a fact, you must find every copy of it. The copies are the record, its vector and full-text
+# postings, and the facts derived from it. They are also anything that quotes it, cached prompt prefixes, logs, eval
+# sets and backups. The proof of a deletion is a search for the data after the deletion.
 #
 # Primer: §7 *Consolidation, forgetting and deletion* (`../PRIMER.md`).
 
@@ -33,8 +42,9 @@ ALICE = Scope("acme", "alice")
 
 # %% [markdown]
 # ## Worked example 1 — the rules for one slot
-# `plan_key` takes the statements about one slot in the window — `(time, value, source, evidence id)` — and an
-# existing fact, and returns the facts to write (value, valid from, valid to, source, evidence) and the flags.
+# `plan_key` takes two inputs: the statements about one slot in the window, as `(time, value, source, evidence id)`,
+# and a fact that is already on file. It returns the facts to write (value, valid from, valid to, source, evidence)
+# and the flags.
 
 # %%
 statements = [(1 * DAY, "Lisbon", "user", "e1"), (4 * DAY, "Porto", "user", "e2"), (5 * DAY, "porto", "user", "e3"),
@@ -47,10 +57,11 @@ human = MemoryRecord("The user's home city is Oslo.", "semantic", ALICE, "human"
 print("with a human-entered fact on file:", plan_key(statements, human))
 
 # %% [markdown]
-# Porto twice is one fact with two pieces of evidence; Lisbon is closed at day 4, not deleted; the inferred Madrid
-# is weaker than the user's statements and only flagged. With a human-entered Oslo on file, none of the user's
-# statements is applied — they are all flagged for a person to look at. Precedence is a product decision; making it
-# explicit is what lets you test it.
+# The two Porto statements are one fact with two pieces of evidence. The job closes Lisbon at day 4, and it does not
+# delete it. The inferred Madrid is weaker than the statements of the user, thus the job only flags it.
+#
+# With a human-entered Oslo on file, the job applies none of the statements of the user. It flags all of them for a
+# person to look at. Precedence is a product decision. When you make it explicit, you can test it.
 #
 # ## Worked example 2 — a consolidation run
 
@@ -74,13 +85,14 @@ for r in store.records(ALICE, status=None):
         print(f"  {r.status:10} {r.render()}   evidence {r.provenance}")
 
 # %% [markdown]
-# The tool's Evilcorp episode was quarantined on write, so consolidation never read it: nothing a tool said is
-# promoted without review. The run id is deterministic per (user, window) — `consolidate:acme:alice:day0-7` — the
-# way lra-gcp primer §3.13 names a scheduled run (`weekly-review-2026-W37`), so a double fire of the schedule is one
-# run.
+# The write path put the Evilcorp episode of the tool in quarantine, thus consolidation never read it. The job
+# promotes nothing that a tool said without a review. The run id is deterministic for each (user, window):
+# `consolidate:acme:alice:day0-7`. This is the same way that lra-gcp primer §3.13 names a scheduled run
+# (`weekly-review-2026-W37`). Thus, when the schedule starts the job two times, the result is one run.
 #
-# Windows do not always run in order: a backfill, a re-run after an outage. The fact already on file joins the
-# window's statements at its own `valid_from`, so an older statement becomes closed history in front of it:
+# Windows do not always run in order. Two examples are a backfill and a re-run after an outage. The fact that is
+# already on file joins the statements of the window at its own `valid_from`. Thus an older statement becomes closed
+# history in front of it:
 
 # %%
 store = MemoryStore()
@@ -94,8 +106,8 @@ for r in store.records(ALICE, status=None, kind="semantic"):
     print(f"  {r.status:10} {r.render()}")
 
 # %% [markdown]
-# Porto stays current; Lisbon is kept, valid from day 1 until day 5. Applying statements in the order they reached
-# the job would have made Lisbon current again and closed Porto *before* it began.
+# Porto stays current. The job keeps Lisbon, valid from day 1 until day 5. If the job applies the statements in the
+# order that they get to the job, Lisbon becomes current again. Also, the job closes Porto *before* Porto starts.
 #
 # ## Worked example 3 — a crash, a lease, a resume
 
@@ -124,16 +136,19 @@ print("the same crash with random fact ids:", len(random_ids.store.records(ALICE
       "semantic records")
 
 # %% [markdown]
-# w1 died in `home_city` **after writing its facts and before checkpointing it** — the worst place. The dead worker
-# held the lease; nobody else could run the job until it expired (lra-gcp primer §3.3: leases, not locks — the
-# reaper's job). The resumed run skipped the one checkpointed slot and re-applied `home_city`; because each fact's
-# id is derived from (run id, slot, position), the re-applied facts overwrote the half-applied ones — five facts, as
-# in a clean run. With random ids the same crash leaves seven. On GCP this is a Cloud Run job fired by Cloud
-# Scheduler (the lab's `deploy/gcp/`).
+# w1 stopped in `home_city` **after it wrote its facts and before it wrote the checkpoint for the slot**. This is the
+# worst place for a crash. The stopped worker held the lease. Nobody else was able to run the job until the lease
+# expired (lra-gcp primer §3.3: leases, not locks, and the job of the reaper).
 #
-# A lease covers a dead worker. A **slow** one — a long GC pause, a model call that hangs for minutes — is worse: it
-# is still running when its lease expires and another worker takes over. So the job renews its lease before every
-# slot (a heartbeat) and checks it still holds it before writing (a fence), and stops if it does not:
+# The resumed run skipped the one slot with a checkpoint, and it applied `home_city` again. The job derives the id of
+# each fact from (run id, slot, position). Thus the re-applied facts overwrote the half-applied facts. The result was
+# five facts, as in a clean run. With random ids, the same crash leaves seven. On GCP, this is a Cloud Run job that
+# Cloud Scheduler starts (the lab's `deploy/gcp/`).
+#
+# A lease covers a worker that stopped. A **slow** worker is worse, for example a worker with a long GC pause or a
+# model call that hangs for minutes. It still runs when its lease expires and another worker takes over. Thus the job
+# renews its lease before every slot (a heartbeat). Before it writes, it makes sure that it still holds the lease (a
+# fence). If it does not hold the lease, it stops:
 
 # %%
 job = Consolidator(seeded_store(), lease_ttl=60)
@@ -159,9 +174,9 @@ for mode, pairs in runs.items():
 
 # %% [markdown]
 # ## Worked example 5 — reflection, in brief
-# Generative agents write *insights* when the importance of recent events sums past a trigger (150 in the reference
-# code), each citing its evidence. The job has explicit exits, like lra-gcp primer §3.8's reflection loop: below the
-# trigger, done, a maximum number of insights, budget exhausted.
+# Generative agents write *insights* when the sum of the importance of recent events goes past a trigger (150 in the
+# reference code). Each insight cites its evidence. The job has explicit exits, like the reflection loop of lra-gcp
+# primer §3.8: below the trigger, done, a maximum number of insights, and budget exhausted.
 
 # %%
 store = MemoryStore()
@@ -191,8 +206,8 @@ print("TTL expired:", len(expire(store, ALICE, now=10 * DAY)), "| over the cap o
       "| left:", [r.text for r in store.records(ALICE)])
 
 # %% [markdown]
-# Decay and the per-turn budget make a memory *unlikely to be seen*; TTL and caps remove records on a schedule. None
-# of them answers "forget my address": that needs deletion with propagation.
+# Decay and the per-turn budget make a memory *unlikely to appear*. TTL and caps remove records on a schedule. None of
+# them answers "forget my address". That request needs deletion with propagation.
 #
 # ## Worked example 7 — a deletion, followed to every copy
 
@@ -217,20 +232,29 @@ rep = propagate(s, ALICE, key="home_city")
 print(rep.checklist())
 
 # %% [markdown]
-# Three records went, not one: the fact, the episode it came from (it says "Lisbon" too) and an inferred insight that
-# quotes it. The employer fact extracted from the same episode is not deleted — it does not contain the data — but it
-# is listed for **review**: it derives from a deleted record. The log line is redacted, the eval case dropped.
+# The deletion removed three records, not one:
 #
-# Two surfaces are *pending*, not done. The backup still holds three copies: backups are not rewritten; they expire on
-# their retention schedule, or their encryption key is shredded. And the prompt cache: a cached prefix cannot be
-# edited, and vLLM cannot evict one tenant's blocks (its only tool, the dev-mode `/reset_prefix_cache`, clears every
-# tenant's). So the tenant's `cache_salt` was **rotated**: the two blocks can never be hit again, and they leave GPU
-# memory as LRU eviction reuses them. Say how long each pending surface takes, with a date, when you answer a
-# deletion request.
+# - the fact.
+# - the episode that the fact came from (the episode also says "Lisbon").
+# - an inferred insight that quotes the fact.
 #
-# Values are matched on word boundaries (`memcore.forget.mentions`), so forgetting a pet "cat" never deletes a record
-# about "education" or "Catalyst". And content matching finds only verbatim copies: a paraphrase slips past it. That
-# is what the review list is for.
+# The deletion does not delete the employer fact, extracted from the same episode, because that fact does not contain
+# the data. But the report lists it for **review**, because it derives from a deleted record. The deletion redacts the
+# log line and drops the eval case.
+#
+# Two surfaces are *pending*, not done. The backup still holds three copies. The job does not write backups again.
+# Backups expire on their retention schedule, or the operator shreds their encryption key.
+#
+# The prompt cache is the second pending surface. Nobody can edit a cached prefix. Also, vLLM cannot evict the blocks
+# of one tenant. Its only tool, the dev-mode `/reset_prefix_cache`, clears the blocks of every tenant. Thus the
+# deletion **rotated** the `cache_salt` of the tenant. No request can hit the two blocks again, and they leave GPU
+# memory when LRU eviction uses them again.
+#
+# When you answer a deletion request, say how long each pending surface takes, with a date.
+#
+# The deletion matches values on word boundaries (`memcore.forget.mentions`). Thus, when you forget a pet "cat", the
+# deletion never deletes a record about "education" or "Catalyst". Also, a content match finds only verbatim copies. A
+# paraphrase goes past it. The review list is for that case.
 
 # %%
 store = MemoryStore()
@@ -243,14 +267,19 @@ rep2 = propagate(Surfaces(store), ALICE, key="home_city")
 print("deleted:", len(rep2.ids), "records | review:", [store.get(ALICE, i).text for i in rep2.review])
 
 # %% [markdown]
-# The insight paraphrases the fact and cites the deleted episode. No search for "Porto" finds it; provenance does.
+# The insight paraphrases the fact and cites the deleted episode. No search for "Porto" finds it, but provenance finds
+# it.
 #
 # ## Exercise 4.1 — the consolidation rules
-# Implement `plan(statements)` for statements `(time, value, source)` about one slot: keep only the statements from
-# the highest-precedence source present; walk them in time order; a value equal (ignoring case) to the previous one
-# extends it; a different one closes the previous fact at its own time and opens a new one. Return
-# `[(value, valid_from, valid_to_or_None)]`, and the list of weaker statements whose value differs from the value
-# that held at their time.
+# Implement `plan(statements)` for statements `(time, value, source)` about one slot. Use these rules:
+#
+# 1. Keep only the statements from the source with the highest precedence that is present.
+# 2. Go through these statements in time order.
+# 3. A value that is equal to the previous value (case-insensitive) extends the previous fact.
+# 4. A different value closes the previous fact at its own time, and it opens a new fact.
+#
+# Return `[(value, valid_from, valid_to_or_None)]`. Also return the list of weaker statements whose value is different
+# from the value that was valid at their time.
 
 # %% exercise
 TRUST = {"human": 3, "user": 2, "tool": 1, "inferred": 0}
@@ -285,11 +314,17 @@ print("✅ precedence first, then time; the old fact is closed, not dropped; wea
 
 # %% [markdown]
 # ## Exercise 4.2 — the lease rules
-# `holder` is `None` or `(worker_id, expires_at)`. Write `can_acquire(holder, worker, now)`: a worker may take the
-# lease if nobody holds it, if it already holds it (a heartbeat renews), or if the holder's lease has expired. Then
-# write `may_continue(holder, worker)`, the fence a running worker checks before each slot's writes: it may go on
-# only if the lease is still recorded as its own — even if it has expired, as long as nobody took it — and must stop
-# if nobody holds it (the run was finished and released by another worker) or another worker does.
+# `holder` is `None` or `(worker_id, expires_at)`. Write `can_acquire(holder, worker, now)`. A worker can take the
+# lease in three cases:
+#
+# - Nobody holds the lease.
+# - The worker already holds the lease (a heartbeat renews it).
+# - The lease of the holder is expired.
+#
+# Then write `may_continue(holder, worker)`. This is the fence that a worker examines before the writes of each slot,
+# while it runs. The worker can continue only if the store still records the lease as its own. This is also true when
+# the lease is expired, if nobody took it. The worker must stop if nobody holds the lease, because another worker
+# finished the run and released it. It must also stop if another worker holds the lease.
 
 # %% exercise
 def can_acquire(holder, worker, now):
@@ -334,8 +369,8 @@ print("✅ a lease expires - that lets a dead worker's job be picked up; the fen
 # \text{retention} = \frac{\text{importance}}{10} \times 0.5^{\text{days since last use} / 30}.
 # $$
 #
-# Predict, to three decimals, the retention of an importance-8 memory last used 45 days ago, and how many days an
-# importance-4 memory takes to fall below 0.1.
+# Predict the retention of an importance-8 memory that the agent last used 45 days ago, to three decimals. Then
+# predict how many days an importance-4 memory takes to decrease below 0.1.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -352,8 +387,8 @@ print(f"✅ {retention(m8, 45 * DAY):.3f}; an importance-4 memory drops below 0.
 
 # %% [markdown]
 # ## Exercise 4.4 — what is derived from what
-# Implement `derived(records, targets)`: the ids of `targets` plus every record whose `provenance` cites any id
-# already in the set, repeated until nothing changes (facts derived from facts derived from the target).
+# Implement `derived(records, targets)`. It returns the ids of `targets` and every record whose `provenance` cites an
+# id already in the set. Do this again until nothing changes (facts derived from facts derived from the target).
 
 # %% exercise
 def derived(records, targets):
@@ -376,9 +411,9 @@ print("✅ provenance is what makes 'delete what was derived from it' computable
 
 # %% [markdown]
 # ## Exercise 4.5 — the naive deletion
-# Delete the home-city fact the naive way — `store.delete` on the records whose `key` is `home_city`, nothing
-# else — on a fresh `world()`. Then fill `left` with the number of copies of "Lisbon" each surface still holds, as
-# `residue` would report it (predict first, then check with `residue`).
+# Delete the home-city fact in the simple way, on a new `world()`. Use `store.delete` on the records whose `key` is
+# `home_city`, and do nothing else. Then fill `left` with the number of copies of "Lisbon" that each surface still
+# holds. Use the count that `residue` reports. Predict the numbers first. Then do a check with `residue`.
 
 # %% exercise
 s = world()
@@ -395,29 +430,35 @@ print(f"✅ the naive delete left {sum(left.values())} copies on {sum(v > 0 for 
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We write raw episodes cheaply on the hot path and consolidate them per user and window
-# on a schedule. The job is rules, not a summary: the highest-precedence source wins, newer supersedes older — in
-# valid time, so a backfill never undoes a later change — and the older fact is kept with a `valid_to`, and weaker
-# contradictions are flagged for review — tool output is never read because it is quarantined on write.
+# **The two-minute version.** "We write raw episodes at low cost on the hot path. We run consolidation on them for each
+# user and window, on a schedule.
 #
-# "It runs as a durable job: a deterministic run id per window so a double fire is one run, a lease so a dead worker's
-# run is picked up after the TTL, a heartbeat and a fence so a slow worker that lost its lease stops, a checkpoint per
-# slot, ids that make a re-applied slot overwrite. At a 60-token budget consolidated facts give 91% recall against 18%
-# for raw episodes.
+# "The job is rules, not a summary. The source with the highest precedence wins. A newer fact replaces an older fact in
+# valid time, thus a backfill never undoes a later change. The job keeps the older fact with a `valid_to`, and it flags
+# weaker contradictions for review. The job never reads tool output, because the write path puts it in quarantine.
 #
-# "Forgetting is decay, TTL, the per-turn budget and a cap per scope — and deletion is separate: a deletion key and
-# provenance let us delete the record, its vector and full-text postings, everything derived from it and everything
-# quoting it on word boundaries, list for review what derives from a deleted record without quoting it, rotate the
-# tenant's cache salt, redact logs and drop eval cases; backups and unreachable cache blocks age out on a stated
-# schedule, and we test deletion by searching every surface for the data."
+# "It runs as a durable job. A deterministic run id for each window makes two starts of the same window one run. A
+# lease lets another worker take the run of a stopped worker after the TTL. A heartbeat and a fence stop a slow worker
+# that lost its lease. The job writes a checkpoint for each slot, and its ids make a re-applied slot overwrite. At a
+# 60-token budget, consolidated facts give 91% recall against 18% for raw episodes.
+#
+# "Forgetting is decay, TTL, the per-turn budget and a cap for each scope. Deletion is separate. With a deletion key
+# and provenance, we delete the record, its vector and its full-text postings. We also delete everything derived from
+# it, and everything that quotes it on word boundaries. We list for review what derives from a deleted record but does
+# not quote it. We rotate the cache salt of the tenant, redact logs and drop eval cases.
+#
+# "Backups and unreachable cache blocks expire on a stated schedule. Our test of a deletion is a search of every
+# surface for the data."
 #
 # **Drill questions**
-# 1. *A user asked to forget their address; a week later the agent quoted it. Where was it?* — In a copy the deletion
-#    did not reach: a consolidated fact or insight derived from it, the raw episode, a full-text index, a WAL file, a
-#    cached prompt prefix, a log, an eval set — or a paraphrase no content search finds. Propagate by provenance and by
-#    content, rotate the cache salt, and test by searching the bytes.
-# 2. *Why keep the superseded fact instead of deleting it?* — As-of questions ("where did they live in March?"), audit
-#    ("what did the agent believe when it acted?"), and undoing a wrong update. Deletion is for data the user asked
-#    you to remove, not for facts that changed.
-# 3. *The consolidation job crashed halfway. What must be true for a rerun to be safe?* — Same run id, a lease that
-#    expires, checkpoints per slot, and deterministic ids so a re-applied slot overwrites rather than duplicates.
+# 1. *A user asked the agent to forget their address. A week later, the agent quoted it. Where was it?* It was in a
+#    copy that the deletion did not reach. That copy was a consolidated fact or insight derived from it, or the raw
+#    episode. Or the copy was in a full-text index, a WAL file or a cached prompt prefix. Or it was in a log or an
+#    eval set. Or it was a paraphrase that no content search finds. Propagate the deletion by provenance and by
+#    content, and rotate the cache salt. Then do a test that searches the bytes.
+# 2. *Why keep the superseded fact, and not delete it?* There are three reasons. The first is as-of questions ("where
+#    did they live in March?"). The second is audit ("what did the agent believe when it acted?"). The third is the
+#    undo of an incorrect update. Deletion is for data that the user asked you to remove, not for facts that changed.
+# 3. *The consolidation job crashed halfway. What must be true for a rerun to be safe?* The rerun must have the same
+#    run id, a lease that expires, checkpoints for each slot, and deterministic ids. With these ids, a re-applied slot
+#    overwrites the facts and does not duplicate them.

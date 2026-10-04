@@ -1,9 +1,9 @@
 # %% [markdown]
 # # 01 · From counts to vectors
 # **One idea:** an embedding is a low-rank factorization of a co-occurrence matrix.
-# We build PPMI + SVD vectors, then skip-gram with negative sampling (SGNS) from
-# scratch in NumPy, and verify Levy & Goldberg (2014): SGNS implicitly factorizes
-# $\mathrm{PMI} - \log k$. *Primer §1–2.*
+# We build PPMI + SVD vectors. Then we write skip-gram with negative sampling (SGNS)
+# ourselves in NumPy, from scratch. After that, we do a check of the result of
+# Levy and Goldberg (2014): SGNS implicitly factorizes $\mathrm{PMI} - \log k$. *Primer §1–2.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt
@@ -33,8 +33,9 @@ print("co-occurrence matrix:", C.shape, "| nonzero:", int((C > 0).sum()))
 
 # %% [markdown]
 # ## PPMI: association beyond chance
-# Raw counts are dominated by frequency; PMI normalizes it away. Unseen pairs and
-# negative PMI are clipped to zero — a sparse matrix of "surprising" associations.
+# Frequency is the largest factor in the raw counts. PMI normalizes frequency away.
+# We clip unseen pairs and negative PMI to zero. The result is a sparse matrix of
+# "unexpected" associations.
 
 # %%
 def ppmi(C):
@@ -50,8 +51,8 @@ P = ppmi(C)
 
 # %% [markdown]
 # ## Low-rank factorization = embeddings (this is LSA's trick)
-# Truncated SVD of PPMI. Rows of $U_d \cdot \sqrt{S_d}$ are word vectors. By
-# Eckart–Young this is the best rank-$d$ least-squares approximation.
+# We apply a truncated SVD to PPMI. The rows of $U_d \cdot \sqrt{S_d}$ are the word vectors.
+# The Eckart–Young theorem shows that this is the best rank-$d$ least-squares approximation.
 
 # %%
 U, S, _ = np.linalg.svd(P)
@@ -72,13 +73,15 @@ for w in ["king", "dog", "coffee", "hammer", "snow"]:
 
 # %% [markdown]
 # ## SGNS from scratch (~35 lines)
-# For each observed (center, context) pair, push their vectors together; push the
-# center away from $K$ sampled negatives ($\text{unigram}^{0.75}$). The gradients are just
-# sigmoid residuals times the other vector. One engineering wrinkle: our vocab is
-# tiny, so a 1024-pair batch hits the same rows dozens of times — summed scatter
-# updates explode. We accumulate a *dense mean gradient* and let Adam's
-# per-parameter scaling absorb the frequency imbalance (the reason sparse-Adam
-# exists).
+# For each observed (center, context) pair, move the two vectors nearer to each other.
+# Move the center away from $K$ sampled negatives ($\text{unigram}^{0.75}$). The gradients
+# are sigmoid residuals times the other vector.
+#
+# There is one practical problem. Our vocab is small, thus a 1024-pair batch uses
+# the same rows dozens of times. The summed scatter updates then become too large.
+# Thus we accumulate a *dense mean gradient*. Adam scales the step of each parameter
+# separately, and this absorbs the frequency imbalance. This is the reason that
+# sparse-Adam exists.
 
 # %%
 freq = np.array([counts[w] for w in vocab], float)
@@ -134,7 +137,8 @@ for w in ["king", "dog", "coffee"]:
 
 # %% [markdown]
 # ## The Levy–Goldberg check
-# At the SGNS optimum, $w \cdot c = \mathrm{PMI}(w,c) - \log K$. Let's see how close 6 epochs got.
+# At the SGNS optimum, $w \cdot c = \mathrm{PMI}(w,c) - \log K$. We now measure how near
+# to this optimum 6 epochs of training came.
 
 # %%
 total = C.sum()
@@ -155,11 +159,12 @@ print(f"correlation r = {r:.3f}")
 
 # %% [markdown]
 # ## Linear structure: the analogy test
-# The corpus has a gender × royalty grid, so `king − man + woman` should land on
-# `queen` (inputs excluded, as is standard — see Linzen 2016 for why that
-# matters). SVD-PPMI factorizes clean full-corpus statistics and nails both;
-# 10 epochs of stochastic SGNS is noisier — a reminder that analogy accuracy
-# was always a fragile metric.
+# The corpus has a gender × royalty grid. Thus we expect the nearest word to
+# `king − man + woman` to be `queen`. We exclude the inputs, as is standard
+# (Linzen 2016 shows why this is important). SVD-PPMI factorizes clean full-corpus
+# statistics and gets both analogies correct. 10 epochs of stochastic SGNS give a
+# result with more noise. This is a reminder that analogy accuracy was always a
+# fragile metric.
 
 # %%
 def analogy(a, b, c, W):
@@ -182,8 +187,8 @@ np.savez("../artifacts/word_vectors.npz", W_svd=W_svd, W_sgns=Win,
 print("saved → artifacts/word_vectors.npz")
 
 # %% [markdown]
-# **Takeaways.** (1) Count → PPMI → SVD already gives usable embeddings; word2vec
-# is the same factorization with a better loss. (2) Similarity and analogies are
-# properties of the *co-occurrence statistics*, not of neural magic. (3) Everything
-# downstream — sentence encoders, CLIP, recommenders — repeats this pattern with
-# richer context definitions. → Exercises: `ex01.ipynb`.
+# **Takeaways.** (1) The sequence of counts, PPMI and SVD already gives usable
+# embeddings. word2vec is the same factorization with a better loss. (2) Similarity
+# and analogies are properties of the *co-occurrence statistics*, not of neural magic.
+# (3) Everything downstream repeats this pattern with richer context definitions:
+# sentence encoders, CLIP and recommenders. Next, do the exercises in `ex01.ipynb`.

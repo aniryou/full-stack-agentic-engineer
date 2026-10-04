@@ -1,9 +1,9 @@
 # %% [markdown]
 # # 04 · Vector search from scratch: IVF + PQ
-# **One idea:** ANN search trades a little recall for a lot of speed and memory,
-# via two moves — *scan less* (inverted file) and *store less* (product
-# quantization). We build both in NumPy and finish with the filtered-search
-# trap. *Primer §13.*
+# **One idea:** ANN search gives up a small quantity of recall for a large gain in
+# speed and memory. It uses two moves: *scan less* (inverted file) and *store less*
+# (product quantization). We build both in NumPy. At the end, we look at the
+# filtered-search trap. *Primer §13.*
 
 # %%
 import numpy as np, matplotlib.pyplot as plt
@@ -44,8 +44,8 @@ def kmeans(X, k, iters=15, seed=0):
 
 # %% [markdown]
 # ## IVF: scan less
-# Cluster the DB into `n_list` cells; at query time scan only the `n_probe`
-# nearest cells. Recall vs work is the whole game.
+# Cluster the DB into `n_list` cells. At query time, scan only the `n_probe`
+# nearest cells. The balance of recall against work is the full problem.
 
 # %%
 NLIST = 64
@@ -74,9 +74,9 @@ plt.title("IVF: recall vs work"); plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ## PQ: store less
-# Split each vector into $m$ sub-vectors; k-means each subspace to 256 centroids;
-# store one **byte** per sub-vector. Query-time distances come from an $m \times 256$
-# lookup table (*asymmetric distance computation*) — no decompression.
+# Divide each vector into $m$ sub-vectors. Run k-means on each subspace to get 256 centroids.
+# Store one **byte** for each sub-vector. At query time, the distances come from an $m \times 256$
+# lookup table (*asymmetric distance computation*). There is no decompression.
 
 # %%
 M, KS = 8, 256
@@ -134,10 +134,10 @@ for name, r, dq, mb in rows:
 
 # %% [markdown]
 # ## The filtered-search trap
-# Real queries carry predicates (tenant, ACL, date). **Post-filtering** — search
-# first, drop non-matching — collapses when the filter is selective, because the
-# top-k may contain zero matches. **Pre-filtering** searches only the matching
-# set and is exact.
+# Queries in production carry predicates (tenant, ACL, date). **Post-filtering** searches
+# first and then removes the items that do not match. It collapses when the filter is
+# selective, because the top-k can contain zero matches. **Pre-filtering** searches only
+# the set of items that match, and is exact.
 
 # %%
 TAGS = 100
@@ -163,8 +163,12 @@ print("pre-filter  (exact over the ~1% matching set): recall@10 = 1.000, "
       f"~{N // TAGS} dists/query — cheaper than the unfiltered search!")
 
 # %% [markdown]
-# **Takeaways.** (1) Recall-vs-work curves, not single numbers. (2) Compression
-# (PQ/int8/binary) pairs with cheap **re-ranking** by full vectors. (3) Selective
-# filters break post-filtering — use pre-filtering, filter-aware traversal, or
-# partitioning. HNSW/DiskANN change the "scan less" step to graph walks; the
-# trade-offs are the same shape. → `ex04.ipynb`.
+# **Takeaways.**
+#
+# 1. Use recall-vs-work curves, not single numbers.
+# 2. Compression (PQ/int8/binary) goes together with low-cost **re-ranking** by full vectors.
+# 3. Selective filters break post-filtering. Use pre-filtering, filter-aware traversal,
+#    or partitioning.
+#
+# HNSW and DiskANN change the "scan less" step to graph walks. The trade-offs have the
+# same shape. Next, do the exercises in `ex04.ipynb`.

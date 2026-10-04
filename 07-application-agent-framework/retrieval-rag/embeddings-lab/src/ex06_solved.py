@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 06 · Superposition mechanics
-# Build the toy model yourself: forward pass, gradients (checked numerically),
-# then run the sparsity sweep with *your* code. Solutions:
+# Build the toy model yourself: the forward pass and the gradients (with a numerical
+# check). Then run the sparsity sweep with *your* code. The solutions are in
 # `../solutions/ex06.ipynb`.
 
 # %%
@@ -10,8 +10,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Task 1 — forward pass
-# $\hat{x} = \operatorname{ReLU}(X W W^\top + b)$ with `X` (B,n), `W` (n,d), `b` (n,).
-# Check: with $W = I$ ($n = d$) and non-negative `X`, $b = 0$, the model is the
+# Implement $\hat{x} = \operatorname{ReLU}(X W W^\top + b)$ with `X` (B,n), `W` (n,d), `b` (n,).
+# Check: with $W = I$ ($n = d$), non-negative `X` and $b = 0$, the model is the
 # identity.
 
 # %%
@@ -29,9 +29,10 @@ print("forward ✓")
 
 # %% [markdown]
 # ## Task 2 — gradients (W appears twice!)
-# Loss: $\operatorname{mean}_B \sum_i I_i \, (\hat{x}_i - x_i)^2$. Derive `dW` and `db`. Hints:
-# $dZ = (2/B) \cdot I \cdot (\hat{x} - x) \cdot \mathbf{1}[Z > 0]$; then $dW = dZ^\top H + X^\top (dZ \cdot W)$ — one term per
-# appearance of `W`. The finite-difference harness below is the judge.
+# The loss is $\operatorname{mean}_B \sum_i I_i \, (\hat{x}_i - x_i)^2$. Derive `dW` and `db`. Hints:
+# $dZ = (2/B) \cdot I \cdot (\hat{x} - x) \cdot \mathbf{1}[Z > 0]$. Then $dW = dZ^\top H + X^\top (dZ \cdot W)$, with one term for each
+# appearance of `W`. The finite-difference harness after your function decides if
+# your gradients are correct.
 
 # %%
 def loss_and_grads(X, W, b, I):
@@ -69,8 +70,8 @@ print("loss_and_grads ✓ (matches finite differences)")
 
 # %% [markdown]
 # ## Task 3 — run the phase change with your gradients
-# Provided training loop. Train at $p = 1.0$ and $p = 0.05$ and plot the feature
-# directions. You should see ~2 surviving features (dense) vs all 5 packed in
+# The cell gives the training loop. Train at $p = 1.0$ and at $p = 0.05$. Then plot the
+# feature directions. Expect ~2 features that survive (dense) against all 5 packed in
 # (sparse).
 
 # %%
@@ -105,6 +106,7 @@ print("phase change ✓ — sparse inputs buy superposition")
 
 # %% [markdown]
 # ## Task 4 (open) — capacity allocation
-# Rerun with importances `0.75**i` for 8 features at $p = 0.15$. Which features get
-# a (near-)dedicated direction and which share? Relate to why frequent concepts
-# in real embedding models interfere less than rare ones.
+# Run again with importances `0.75**i` for 8 features at $p = 0.15$. Which features get
+# a (near-)dedicated direction, and which features share a direction? Relate this
+# result to the reason that frequent concepts in real embedding models interfere less
+# than rare concepts.

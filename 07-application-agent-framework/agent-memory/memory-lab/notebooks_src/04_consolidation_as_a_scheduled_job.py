@@ -1,30 +1,37 @@
 # %% [markdown]
 # # 04 · Consolidation as a scheduled job: episodes become facts, and the job survives being killed halfway
 #
-# **Tier:** T0 — the job runs in this process on SQLite with a virtual clock; a crash is simulated at a chosen
-# step and a second worker resumes it. **T3 (printed):** the same job as a Cloud Run job started by Cloud
-# Scheduler — the commands are printed, never run from here (`python -m memlab gcp-commands`).
+# **Tier:** T0. The job runs in this process on SQLite with a virtual clock. The notebook simulates a crash at a
+# selected step, and a second worker resumes the job. **T3 (printed):** the same job as a Cloud Run job that
+# Cloud Scheduler starts. The notebook prints the commands and never runs them from here
+# (`python -m memlab gcp-commands`).
 #
 # ## The one-minute version
 #
-# Consolidation turns a user's window of raw episodes ("On 2026-09-18 the user said: I moved to Porto") into
-# facts ("Home city: the user lives in Porto", superseding Lisbon, kept with a closed validity) — PRIMER §7
-# "Consolidation, forgetting and deletion". It is a batch job that calls a model, so it must be a **durable
-# run** (lra-gcp primer §3.3 "Leases and the reaper", §3.13 "Scheduled and event-triggered runs"):
+# Consolidation takes the raw episodes of a user in one window, for example "On 2026-09-18 the user said: I
+# moved to Porto". It changes them into facts, for example "Home city: the user lives in Porto". The new fact supersedes Lisbon, and the store keeps Lisbon
+# with a closed validity (PRIMER §7 "Consolidation, forgetting and deletion"). Consolidation is a batch job
+# that calls a model. Thus it must be a **durable run** (lra-gcp primer §3.3 "Leases and the reaper", §3.13
+# "Scheduled and event-triggered runs"):
 #
-# * a **deterministic run id** — `consolidate/<tenant>/<user>/<ISO week>` — so a duplicated or retried
-#   trigger is the same run, and a finished run is a no-op; the schedule is weekly to match (a daily trigger with a
-#   weekly id would do its work on one day in seven and do nothing on the other six);
-# * a **lease** row so two workers never run it at once; a crashed worker's lease expires and the next takes
-#   over;
-# * a **checkpoint** per step, so a resume skips finished work — above all the model calls;
-# * **idempotent effects**, so the step that died after writing and before checkpointing writes once when it
-#   runs again (durable primer §3.2).
+# * a **deterministic run id**, `consolidate/<tenant>/<user>/<ISO week>`. Thus a duplicated or retried trigger
+#   is the same run, and a finished run is a no-op. The schedule is weekly to match the id. With a daily
+#   trigger and a weekly id, the job does its work on one day in seven and does nothing on the other six.
+# * a **lease** row, so that two workers never run the job at the same time. The lease of a crashed worker
+#   expires, and the next worker takes over.
+# * a **checkpoint** per step, so that a resume skips finished work, above all the model calls.
+# * **idempotent effects**. When the step that crashed after its write and before its checkpoint runs again,
+#   the write still occurs only once (durable primer §3.2).
 #
-# Then the facts are resolved (newer supersedes older; precedence human > user > tool > inferred; a weaker
-# contradiction is flagged), consolidated episodes get a TTL (forgetting by decay), and — when the window's
-# importance sum crosses a threshold (150 in the generative-agents code) — one insight citing its evidence.
-# Primer: [`../../PRIMER.md`](../../PRIMER.md).
+# Then the job resolves the facts:
+#
+# * A newer fact supersedes an older fact.
+# * The precedence is human > user > tool > inferred.
+# * The job marks a weaker contradiction with a flag.
+#
+# After that, consolidated episodes get a TTL (forgetting by decay). When the importance sum of the window
+# crosses a threshold (150 in the generative-agents code), the job also writes one insight that cites its
+# evidence. Primer: [`../../PRIMER.md`](../../PRIMER.md).
 
 # %%
 import datetime as dt, os, sqlite3, tempfile
@@ -61,7 +68,8 @@ START, END = ts_of("2026-09-14"), ts_of("2026-09-21")
 # %% [markdown]
 # ## Worked example: a clean run
 #
-# Eight episodes, two chunks of four (one model call each), a plan of actions, one step per action.
+# This run has eight episodes, in two chunks of four (one model call each). Then it has a plan of actions, with
+# one step per action.
 
 # %%
 clean, clean_clock = week_store(os.path.join(WORK, "clean.db"))
@@ -72,15 +80,16 @@ for r in clean.records("acme", "u1", kind="semantic"):
     print(f"  {r.status:10s} {r.text:78s} valid_to={'-' if r.valid_to is None else dt.date.fromtimestamp(r.valid_to)}")
 
 # %% [markdown]
-# Lisbon and Globex are **superseded, not deleted**: their validity closes when Porto and Initech begin
-# (Graphiti keeps the same pair as `invalid_at` / `expired_at`), so "where did the user live on 15
-# September?" still has an answer (`store.search(..., as_of=...)`). The hedged allergy ("I think…", confidence
-# 0.6) was skipped: below the write policy's floor.
+# Lisbon and Globex are **superseded, not deleted**. Their validity closes when Porto and Initech begin
+# (Graphiti keeps the same pair as `invalid_at` / `expired_at`). Thus the question "where did the user live on
+# 15 September?" still has an answer (`store.search(..., as_of=...)`). The job skipped the hedged allergy ("I
+# think…", confidence 0.6), because it is below the floor of the write policy.
 #
 # ## Worked example: kill it at the worst moment, then resume
 #
-# Worker A dies in `apply:2` — *after* the step's write, *before* its checkpoint. Worker B is scheduled
-# right away and finds the lease held; a minute later the lease has expired and B takes over.
+# Worker A crashes in `apply:2`, *after* the write of the step and *before* its checkpoint. The notebook
+# schedules worker B immediately, and B finds that A still holds the lease. One minute later, the lease has
+# expired, and B takes over.
 
 # %%
 store, clock = week_store(os.path.join(WORK, "crash.db"))
@@ -104,9 +113,9 @@ print("same facts as the clean run:", snap(store) == snap(clean), "| a third tri
 # %% [markdown]
 # ## Exercise 4.1 — one run per user and week
 #
-# Write `my_run_id(tenant, user, window_end)`: `consolidate/<tenant>/<user>/<YYYY>-W<ww>` from the ISO calendar
-# week of `window_end` (a unix time, UTC), the week zero-padded to two digits. A trigger that fires twice, or
-# a retry an hour later, must produce the same id.
+# Write `my_run_id(tenant, user, window_end)`. It returns `consolidate/<tenant>/<user>/<YYYY>-W<ww>` from the
+# ISO calendar week of `window_end` (a unix time, UTC). Pad the week with zeros to two digits. A trigger that
+# occurs two times, or a retry one hour later, must give the same id.
 
 # %% exercise
 def my_run_id(tenant, user, window_end):
@@ -122,9 +131,9 @@ assert my_run_id("acme", "u1", ts_of("2027-01-01")) == "consolidate/acme/u1/2026
 print("✅ the run id is a function of the work, not of the trigger:", my_run_id("acme", "u1", END))
 
 # %% [markdown]
-# The trigger has to fire as often as the id changes. `week_window(now)` gives the window a trigger at `now`
-# consolidates — the previous ISO week, Monday 00:00 to Monday 00:00 UTC — so every firing in one week names the
-# same run. If the schedule were daily, six of seven firings would find that run `done` and return:
+# The trigger must occur as often as the id changes. `week_window(now)` gives the window that a trigger at
+# `now` works on: the previous ISO week, Monday 00:00 to Monday 00:00 UTC. Thus every trigger in one week names
+# the same run. With a daily schedule, six of seven triggers find that run `done` and return:
 
 # %%
 fires = [ts_of("2026-09-21") + d * 86400 + 3 * 3600 + 17 * 60 for d in range(7)]       # 03:17 each day
@@ -135,8 +144,8 @@ print("so the schedule is weekly:", next(c for c in C.gcp_commands() if "schedul
 # %% [markdown]
 # ## Exercise 4.2 — resolve a new fact against what memory holds
 #
-# Write `my_resolve(existing, new)` returning `(action, other)` for a new semantic fact against the
-# partition's records (only `active` ones of the same `slot` count):
+# Write `my_resolve(existing, new)`. It compares a new semantic fact with the records of the partition and
+# returns `(action, other)`. Only the `active` records of the same `slot` count:
 #
 # | case | action | `other` |
 # |---|---|---|
@@ -144,7 +153,7 @@ print("so the schedule is weekly:", next(c for c in C.gcp_commands() if "schedul
 # | nothing for the slot, or a multi-valued slot (`trip`) | `"ADD"` | `None` |
 # | the current value's trust outranks the new one's (human > user > tool > inferred) | `"FLAG"` | the current record |
 # | the new fact is *older* than the current one (a late episode) | `"ADD_HISTORY"` | the current record |
-# | otherwise | `"UPDATE"` (the current record will be superseded) | the current record |
+# | all other cases | `"UPDATE"` (the new fact will supersede the current record) | the current record |
 #
 # "Current" is the active record of the slot with the latest `valid_from`. Use `records.outranks(a, b)` and
 # `extract.SLOTS[slot].multi`.
@@ -188,10 +197,16 @@ print("✅ my_resolve agrees with memory.resolve on", len(cases), "cases, includ
 # ## Exercise 4.3 — take the lease in one statement
 #
 # Write `acquire(con, run, holder, now, ttl)` for a table `job_leases(run_id PRIMARY KEY, holder, expires_at,
-# attempts)`: in **one** SQL statement, insert the lease, or take it over if it has expired, or renew it if
-# `holder` already has it — and do nothing if another holder's lease is still live. Return True when `holder`
-# holds it afterwards. (SQLite's `INSERT … ON CONFLICT … DO UPDATE … WHERE`; Postgres has the same, see
-# `store/pgvector.py` `ACQUIRE_LEASE`.) Two statements — a SELECT then an UPDATE — would race.
+# attempts)`. In **one** SQL statement, do one of these:
+#
+# * Insert the lease.
+# * Take it over if it has expired.
+# * Renew it if `holder` already has it.
+# * Do nothing if the lease of another holder is still live.
+#
+# Return True when `holder` holds the lease after the statement. (SQLite has
+# `INSERT … ON CONFLICT … DO UPDATE … WHERE`. Postgres has the same, see `store/pgvector.py` `ACQUIRE_LEASE`.)
+# With two statements (a SELECT, then an UPDATE), a race condition is possible.
 
 # %% exercise
 def acquire(con, run, holder, now, ttl):
@@ -220,9 +235,9 @@ print("✅ one statement: take, renew, refuse, take over — attempts counts the
 # ## Exercise 4.4 — what a resume costs
 #
 # The job makes one model call per chunk of episodes (`extract:0`, `extract:1`, …). Write
-# `calls_on_resume(n_chunks, crash_at)`: how many model calls the *resumed* run makes when the first worker
-# died in step `crash_at` (after its effect, before its checkpoint). Steps before the crash are checkpointed;
-# the crashed step runs again.
+# `calls_on_resume(n_chunks, crash_at)`. The first worker crashed in step `crash_at` (after its effect, before its
+# checkpoint). The function returns the number of model calls that the *resumed* run makes. The steps before the
+# crash have checkpoints. The crashed step runs again.
 
 # %% exercise
 def calls_on_resume(n_chunks, crash_at):
@@ -250,11 +265,14 @@ print("✅ checkpoints make a resume pay only for the step that died; every resu
 # %% [markdown]
 # ## Worked example: does consolidation help recall at a fixed budget?
 #
-# The planted-facts harness (notebook 05) with memory written as raw episodes, then consolidated, at a
-# budget of 64 memory tokens per turn. Reading the four rows: facts beat raw episodes because a fact is
-# shorter and names its slot; raw episodes in the user's own words sometimes match a first-person question
-# better (the paraphrase column); and keeping raw episodes retrievable next to the facts lets an **old
-# episode** resurface a superseded value — the `stale` column.
+# This example runs the planted-facts harness (notebook 05) at a budget of 64 memory tokens per turn. First the
+# harness writes memory as raw episodes, and then it runs consolidation on them. The four rows show this:
+#
+# * Facts are better than raw episodes, because a fact is shorter and names its slot.
+# * Raw episodes in the user's own words sometimes match a first-person question better (the paraphrase
+#   column).
+# * If raw episodes stay retrievable next to the facts, an **old episode** can bring back a superseded value
+#   (the `stale` column).
 
 # %%
 ds = H.generate(7)
@@ -270,8 +288,9 @@ print("the stale answer:", f"{stale[0].qid} said {stale[0].answer!r}" if stale e
 # %% [markdown]
 # ## Worked example: forgetting by decay
 #
-# The job gave every consolidated episode a TTL of 30 days from consolidation. Thirty-one days later the
-# episodes expire and are purged; the facts they produced remain, each citing its (now deleted) evidence id.
+# The job gave every consolidated episode a TTL of 30 days from consolidation. Thirty-one days later, the
+# episodes expire, and the store purges them. The facts that they produced stay. Each fact cites the id of its
+# evidence, which is now deleted.
 
 # %%
 clean_clock.t = END + 31 * 86400
@@ -282,14 +301,19 @@ print(f"expired {n} episodes; left:", {k: sum(1 for r in clean.records('acme', '
 # %% [markdown]
 # ## T3, printed: a Cloud Run job on Cloud Scheduler
 #
-# The job is `python -m memlab consolidate` in the lab's image — by default over the previous ISO week — started
-# every Monday at 03:17 UTC; Cloud Run jobs start `--tasks N` copies and each takes the partitions whose hash lands
-# on its `CLOUD_RUN_TASK_INDEX` (verify). Cloud Scheduler calls the Cloud Run Admin API's `jobs/<job>:run` with an
-# **OAuth** token (the target is a `googleapis.com` API; OIDC is for your own `run.app` service, like the lra-gcp
-# reaper). On GCP the store is Postgres + pgvector (Cloud SQL, verify), never a SQLite file on an instance's
-# ephemeral disk. The printed path is complete enough to work: the image is built and pushed, the job runs as its
-# own service account that may read the DSN secret and connect to Cloud SQL (`--set-cloudsql-instances`), and the
-# cleanup deletes everything the setup created (`deploy/gcp/README.md`).
+# The job is `python -m memlab consolidate` in the image of the lab. By default, it works on the previous ISO
+# week. It starts every Monday at 03:17 UTC. Cloud Run jobs start `--tasks N` copies. Each copy takes the
+# partitions whose hash maps to its `CLOUD_RUN_TASK_INDEX` (verify). Cloud Scheduler calls `jobs/<job>:run` of
+# the Cloud Run Admin API with an **OAuth** token.
+#
+# The target is a `googleapis.com` API. OIDC is for your own `run.app` service, like the lra-gcp reaper. On GCP
+# the store is Postgres + pgvector (Cloud SQL, verify), never a SQLite file on the ephemeral disk of an
+# instance. The printed path is sufficiently complete to work:
+#
+# * The commands build and push the image.
+# * The job runs as its own service account. That account has permission to read the DSN secret and to
+#   connect to Cloud SQL (`--set-cloudsql-instances`).
+# * The cleanup deletes everything that the setup created (`deploy/gcp/README.md`).
 
 # %%
 for c in C.gcp_commands("my-project", "us-central1", tasks=4):
@@ -304,29 +328,36 @@ shutil.rmtree(WORK, ignore_errors=True)    # this notebook's databases: gone
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "Consolidation runs weekly as a Cloud Run job per shard of users. Each (tenant, user, ISO week)
-# is one durable run with a deterministic id, and the schedule fires once a week to match, so a double-fired
-# schedule is a no-op and no firing is wasted; facts a user states mid-week reach memory at once through
-# extraction after the turn, the job only distils the week's episodes. A lease row keeps two workers apart and
-# expires when one dies; every step checkpoints, so a resume skips the model calls it already paid for; writes
-# carry idempotency keys derived from the run, so the step that died after writing does not write twice.
+# **Two minutes.** "Consolidation runs weekly as a Cloud Run job per shard of users. Each (tenant, user, ISO
+# week) is one durable run with a deterministic id. The schedule starts the job once a week to match. Thus a
+# schedule that sends the trigger two times is a no-op, and every trigger has a run to do.
 #
-# "Resolution is deterministic: newer supersedes older with the old validity closed, a weaker source never
-# overwrites a stronger one — it is flagged — and low-confidence extractions are skipped. Consolidated episodes
-# get a 30-day TTL. We measured recall at a fixed budget before and after, and chose to answer from facts once an
-# episode is consolidated, because a raw episode can resurface a superseded value."
+# "Facts that a user states during the week reach memory immediately, through extraction after the turn. The
+# job only distils the episodes of the week.
 #
-# **Drill 1.** *The scheduler fired twice at 03:17. What happens?* — Both triggers compute the same run id;
-# one takes the lease, the other gets `LeaseHeld` (or, if the first finished, sees the run `done`) and exits.
+# "A lease row keeps two workers apart, and it expires when one worker stops. Every step writes a checkpoint,
+# thus a resume skips the model calls that it already paid for. Writes carry idempotency keys derived from the
+# run. Thus the step that crashed after its write does not write two times.
 #
-# **Drill 1b.** *Someone changed the schedule to daily. What breaks?* — Nothing visibly: the first firing of the
-# week does the work and the other six find the run `done`. That is the bug — a "daily" job that runs weekly. The
-# run id and the window must change with the schedule (a per-day id and a one-day window).
+# "Resolution is deterministic. A newer fact supersedes an older fact, and the old validity closes. A weaker
+# source never overwrites a stronger one, and the job marks the weaker fact with a flag. The job skips
+# extractions with low confidence. Consolidated episodes get a 30-day TTL.
 #
-# **Drill 2.** *A worker died after writing a fact but before checkpointing. Duplicate?* — No: the resumed step
-# writes with the same idempotency key (run, slot, value, evidence) and the planned record id, so the store
-# returns the existing row; the supersede is applied only if the old fact is still active.
+# "We measured recall at a fixed budget before and after. We decided to answer from facts after an episode is
+# consolidated, because a raw episode can bring back a superseded value."
 #
-# **Drill 3.** *Why OAuth, not OIDC, for Cloud Scheduler here?* — The target is the Cloud Run Admin API
-# (`run.googleapis.com`), which takes OAuth access tokens; OIDC identity tokens are for invoking your own
-# service's URL.
+# **Drill 1.** *The scheduler sent the trigger two times at 03:17. What occurs?* Both triggers calculate the
+# same run id. One takes the lease, and the other gets `LeaseHeld` (or, if the first finished, sees the run
+# `done`) and exits.
+#
+# **Drill 1b.** *Someone changed the schedule to daily. What breaks?* Nothing breaks visibly: the first trigger
+# of the week does the work, and the other six find the run `done`. That is the bug: a "daily" job that runs
+# weekly. The run id and the window must change with the schedule (a per-day id and a one-day window).
+#
+# **Drill 2.** *A worker crashed after it wrote a fact but before its checkpoint. Is there a duplicate?* No:
+# the resumed step writes with the same idempotency key (run, slot, value, evidence) and the planned record id.
+# Thus the store returns the row that already exists. The job applies the supersede only if the old fact is still active.
+#
+# **Drill 3.** *Why OAuth, not OIDC, for Cloud Scheduler here?* The target is the Cloud Run Admin API
+# (`run.googleapis.com`), and that API takes OAuth access tokens. OIDC identity tokens are for calls to the URL
+# of your own service.

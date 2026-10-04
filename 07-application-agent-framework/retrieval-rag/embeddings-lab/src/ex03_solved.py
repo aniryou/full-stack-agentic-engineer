@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 03 · Geometry diagnostics
-# Implement three diagnostics you can run on any embedding matrix at work.
-# Solutions: `../solutions/ex03.ipynb`.
+# Implement three diagnostics that you can run on any embedding matrix at work.
+# The solutions are in `../solutions/ex03.ipynb`.
 
 # %%
 import numpy as np
@@ -9,8 +9,8 @@ rng = np.random.default_rng(0)
 
 # %% [markdown]
 # ## Task 1 — participation ratio (effective dimensionality)
-# $\mathrm{PR} = \left(\sum_i \lambda_i\right)^2 / \sum_i \lambda_i^2$ over eigenvalues of the covariance of `X`.
-# Isotropic $d$-dim data → $\approx d$; rank-1 data → $\approx 1$.
+# Calculate $\mathrm{PR} = \left(\sum_i \lambda_i\right)^2 / \sum_i \lambda_i^2$ over the eigenvalues of the covariance of `X`.
+# Isotropic $d$-dim data gives $\approx d$. Rank-1 data gives $\approx 1$.
 
 # %%
 def participation_ratio(X):
@@ -28,9 +28,9 @@ print(f"participation_ratio ✓  (isotropic≈{participation_ratio(iso):.1f}, ra
 
 # %% [markdown]
 # ## Task 2 — CSLS rescoring (the hubness fix)
-# $\operatorname{csls}(S, k) = 2 \cdot S - r(\text{row}) - r(\text{col})$, where ${r(x)}$ is the mean of $x$'s top-$k$
-# similarities (diagonal excluded). Penalizes points that are close to
-# *everything*.
+# $\operatorname{csls}(S, k) = 2 \cdot S - r(\text{row}) - r(\text{col})$, where ${r(x)}$ is the mean of the top-$k$
+# similarities of $x$ (diagonal excluded). CSLS gives a lower score to points that are
+# near *everything*.
 
 # %%
 def csls(S, k=10):
@@ -49,8 +49,8 @@ print("csls ✓")
 
 # %% [markdown]
 # ## Task 3 — All-but-the-Top (Mu & Viswanath 2018)
-# Center `X`, then remove its projection onto the top `n_pc` principal
-# components. Returns the corrected matrix.
+# Center `X`. Then remove its projection onto the top `n_pc` principal components.
+# The function returns the corrected matrix.
 
 # %%
 def all_but_the_top(X, n_pc=2):
@@ -69,6 +69,10 @@ print("all_but_the_top ✓")
 
 # %% [markdown]
 # ## Task 4 (open) — apply them
-# Load `../artifacts/word_vectors.npz` and report: PR of the SGNS vectors, the
-# five biggest hubs before/after CSLS, and whether all-but-the-top changes the
-# related-vs-unrelated AUC from notebook 03. Two or three sentences of findings.
+# Load `../artifacts/word_vectors.npz` and report these items:
+#
+# - the PR of the SGNS vectors,
+# - the five largest hubs before and after CSLS,
+# - if all-but-the-top changes the related-vs-unrelated AUC from notebook 03.
+#
+# Write two or three sentences about the results.
