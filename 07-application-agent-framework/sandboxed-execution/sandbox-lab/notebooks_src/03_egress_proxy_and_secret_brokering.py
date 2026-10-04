@@ -27,7 +27,7 @@
 #   lab (`event_type: "egress"`).
 #
 # The sandbox holds no key, and the proxy holds no code. Neither of them removes the credential risk. They
-# move it from the sandbox into one well-defended box. (Say that aloud. It is the honest framing.)
+# move it from the sandbox into one well-defended box. Say that aloud, because it is the honest description.
 
 # %%
 import json, os, tempfile
@@ -139,7 +139,7 @@ print("   the sandbox reaches the API authenticated, and still holds no credenti
 # %% [markdown]
 # ## Exercise 3.3 — deny by default, and SSRF
 #
-# The proxy must refuse these three requests:
+# The proxy must refuse a request to each of these three destinations:
 #
 # - a route that does not exist,
 # - a forward-proxy host that is not on the allowlist,
@@ -204,9 +204,9 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # becomes an alert.
 #
 # "There are two honest caveats. First, this pattern moves the credential risk into one box, and it does not
-# remove the risk. Second, it works only if the network in fact forces the sandbox through the proxy. That
-# is a Unix socket with no other route on a laptop, and a default-deny NetworkPolicy to the proxy on
-# Kubernetes. `HTTP_PROXY` environment variables only give advice. The network is the enforcement."
+# remove the risk. Second, it works only if the network in fact forces the sandbox through the proxy. On a
+# laptop, a Unix socket with no other route does this, and on Kubernetes, a default-deny NetworkPolicy to
+# the proxy does it. `HTTP_PROXY` environment variables only give advice. The network is the enforcement."
 #
 # **Drill 1.** *Why not give the sandbox the API key as an environment variable, with a tight scope?* Then a
 # prompt injection that runs `print(os.environ)` exfiltrates it. Also, the key is in every core dump and

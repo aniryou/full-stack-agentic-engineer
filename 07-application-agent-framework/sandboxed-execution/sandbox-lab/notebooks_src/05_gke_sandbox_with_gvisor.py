@@ -3,8 +3,8 @@
 #
 # **Tier:** T3 to run (a GKE cluster from `deploy/gcp/terraform`), but everything here is **T0**. The
 # notebook reads the Terraform as text and validates the manifests against Kubernetes 1.34. It answers the
-# design-review checklist offline, and it calculates the cost and the size of the pool. To deploy it, use
-# `deploy/gcp/terraform` + `deploy/gke/apply.sh`.
+# design-review checklist offline, and it calculates the cost and the size of the pool. To deploy the lab on
+# GKE, use `deploy/gcp/terraform` + `deploy/gke/apply.sh`.
 #
 # ## The one-minute version
 #
@@ -13,7 +13,7 @@
 # run under the user-space kernel of gVisor, on nodes that no other workload goes to. The design decisions
 # are:
 #
-# * **A second, dedicated pool**: GKE Sandbox needs it (GKE Sandbox cannot use the first pool). GKE itself
+# * **A second, dedicated pool**: GKE Sandbox needs it, because GKE Sandbox cannot use the first pool. GKE itself
 #   puts the taints and labels on the sandbox nodes, and it creates the `gvisor` RuntimeClass.
 # * **No route to the internet**: private nodes and no Cloud NAT. The only destinations are Google APIs over
 #   Private Google Access. Thus images come from Artifact Registry.
@@ -64,8 +64,8 @@ for row in bench.ladder(bench.measure(["fork_exec", "process"], n=5)):
 # ## Exercise 5.1 — the Terraform keeps the sandbox contract
 #
 # `gke.review()` reads `deploy/gcp/terraform/*.tf` and answers the review questions. Return the set of check
-# names that pass. Assert that the load-bearing checks are in the set: gVisor, no NAT by default, Dataplane
-# V2 (NetworkPolicy enforced) and the GKE metadata server.
+# names that pass. The design depends on these checks: gVisor, no NAT by default, Dataplane V2
+# (NetworkPolicy enforced) and the GKE metadata server. Assert that the set contains them.
 
 # %% exercise
 def passing_checks() -> set:
@@ -216,16 +216,16 @@ print("   and one snapshot must never be restored into two tenants (PRIMER §2, 
 # creates the RuntimeClass. Thus a pod needs only the class name.
 #
 # "I make the cluster private with no Cloud NAT. Thus nothing has a route to the internet, and images come
-# from Artifact Registry over Private Google Access. That is still a path to Google APIs, thus the
-# default-deny NetworkPolicy of the sandbox closes it too. The egress proxy reaches only in-cluster
+# from Artifact Registry over Private Google Access. Private Google Access is still a path to Google APIs,
+# thus the default-deny NetworkPolicy of the sandbox closes that path too. The egress proxy reaches only in-cluster
 # upstreams, unless I turn NAT on intentionally. Even then, NetworkPolicy on Dataplane V2 keeps the
 # sandboxes off the internet. gVisor is a kernel boundary, not a network boundary.
 #
 # "The one thing that a NetworkPolicy cannot do is to block the node-local metadata server. Thus the
 # cloud-credential defence is `GKE_METADATA` mode, no mounted token and a KSA with no IAM binding.
 #
-# "The pool is Spot and scales from zero, thus it costs nothing when it is idle. The cost of this is a
-# 40-to-50-second cold start on the first execution. That is why interactive traffic gets a warm pool. The
+# "The pool is Spot and scales from zero, thus it costs nothing when it is idle. But the first execution
+# has a 40-to-50-second cold start. That is why interactive traffic gets a warm pool. The
 # manifests are the ones that I validated on kind, with one field changed."
 #
 # **Drill 1.** *`terraform validate` fails on the sandbox pool. The value looks correct.* The provider

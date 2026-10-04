@@ -147,7 +147,7 @@ print("   the poisoned instruction reached the model, but the harness — not th
 # Some hosts cannot supply an empty network namespace:
 #
 # - macOS,
-# - the inside of the default seccomp profile of Docker,
+# - a Docker container under the default seccomp profile of Docker,
 # - Ubuntu with its AppArmor restriction on unprivileged user namespaces.
 #
 # On these hosts, `run_code` has the host network and this **leaks**. The cell says which case this machine
@@ -242,8 +242,8 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "The agent is the 07.1 loop. I assume that a prompt injection hijacked the model, for
-# example an injection in a document that the model fetched. Thus none of the safety is in the model.
+# **Two minutes.** "The agent is the 07.1 loop. I assume that the model is hijacked, for example by a
+# prompt injection in a document that the model fetched. Thus none of the safety is in the model.
 # `run_code` is destructive-tier and goes through the sandbox with constant budgets. `fetch_url` is
 # external-tier and goes through the egress proxy, which holds the allowlist and the credentials.
 #
@@ -271,11 +271,11 @@ import shutil; shutil.rmtree(STATE, ignore_errors=True)
 #
 # **Drill 2.** *The model called `run_code` in a loop: what stopped it?* The per-turn `run_code` budget
 # stopped it after two executions, and the sandbox had already stopped each of them at the CPU limit.
-# Arithmetic in the loop stopped it, not the restraint of the model. Cascading failures (ASI08) occur
-# through loops with no limit and with valid credentials. The budget is the circuit breaker.
+# Arithmetic in the loop stopped it, not the restraint of the model. Loops with no limit and with valid
+# credentials cause cascading failures (ASI08). The budget is the circuit breaker.
 #
 # **Drill 3.** *Where is the API credential, so that the sandboxed code can call the weather API?* It is in
 # the egress proxy, as a Secret mounted into the proxy only. The `fetch_url` tool sends the request to the
 # proxy, and the proxy injects the key and redacts it from the response. The API authenticates the sandbox,
-# and the sandbox still holds nothing of value to steal. This makes an injection a small problem, not a
-# breach.
+# and the sandbox still holds nothing of value to steal. Because the sandbox holds nothing of value, an
+# injection is a small problem, not a breach.

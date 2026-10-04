@@ -9,8 +9,8 @@
 # ## The one-minute version
 #
 # Model-generated code is untrusted input (PRIMER §1). The invariant is **no ambient authority**: no
-# credentials, no network by default and no persistent filesystem. Thus a hijacked model can do nothing
-# outside the model, except the things that you told the sandbox to permit. You get to this invariant when
+# credentials, no network by default and no persistent filesystem. The purpose is that a hijacked model can
+# do nothing outside the model, except the things that you told the sandbox to permit. You get to this invariant when
 # you climb the isolation ladder (PRIMER §2) and turn on one control at a time:
 #
 # | Rung | What it adds | An attack it stops |
@@ -77,8 +77,8 @@ print("\n" + ProcessSandbox(BUDGETS).describe())
 #
 # Each probe in this exercise uses too much of one resource. For each probe, return the `exit_reason` that
 # the process sandbox reports. These reasons are the words of the execution contract (PRIMER §3). Run the
-# code of the probe through a sandbox. Then read `result.exit_reason`. (`infinite_loop` uses CPU time,
-# `sleep_forever` blocks, `memory_hog` allocates memory and `huge_output` prints.)
+# code of the probe through a sandbox. Then read `result.exit_reason`. The probe `infinite_loop` uses CPU
+# time, `sleep_forever` blocks, `memory_hog` allocates memory and `huge_output` prints.
 
 # %% exercise
 def exit_reason_for(probe_name: str) -> str:
@@ -101,8 +101,8 @@ print("✅ each abuse hits its own budget: CPU seconds, the wall clock, address 
 # ## Exercise 1.2 — why the wall clock is not enough, and why CPU seconds are not either
 #
 # A CPU-seconds limit (`RLIMIT_CPU`) never stops code that sleeps. A wall-clock timeout never stops code
-# that is really fast but loops forever on one CPU, only if you have no CPU limit. You must have both. Use a
-# budget of 1 s CPU / 5 s wall. For `while True: pass` and for `time.sleep(60)`, predict the exit reason.
+# that is really fast but loops forever on one CPU, only if you have no CPU limit. You must have both. The
+# budget is 1 s CPU / 5 s wall. For `while True: pass` and for `time.sleep(60)`, predict the exit reason.
 # Also predict which budget runs out, and after how many seconds.
 #
 # Why 5 s of wall for 1 s of CPU: a busy loop adds CPU seconds only while the kernel schedules it. On a
@@ -165,7 +165,7 @@ print("  ", DockerSandbox.hardened().shell("print('hello')")[:200], "...")
 # `sandboxlab.probes.load_sample_runs()`. They are sample output in the documented format, not measurements.
 # Assert these three things:
 #
-# - the Docker rows have that label,
+# - the Docker rungs have that label,
 # - a **hardened** container leaks nothing,
 # - the **default** container still leaks the network and resources.
 #
@@ -193,20 +193,20 @@ print("   Docker row says it is illustrative, because it was not measured on thi
 # ## In a design review
 #
 # **Two minutes.** "The code that the model writes is untrusted input. Thus I design for a fully hijacked
-# model, and I ask what it can reach. The answer must be: nothing with ambient authority. That is, no
+# model, and I ask what it can reach. The answer must be: nothing with ambient authority, that is, no
 # credentials, no network and no durable filesystem.
 #
 # "On a laptop, a process sandbox gets me most of the way. It has a clean environment, a temporary workspace
 # and `RLIMIT_CPU`/`AS`/`FSIZE`/`NOFILE`. It also has a wall timeout that stops the whole process group, and
 # output truncation. When it runs as a dedicated unprivileged UID, the code cannot read the files of the
-# agent or other processes. Also, a fork bomb hits `RLIMIT_NPROC`. A process sandbox cannot isolate the
-# kernel and, without a network namespace, it cannot touch the network.
+# agent or other processes. With that UID, a fork bomb also hits `RLIMIT_NPROC`. A process sandbox cannot
+# isolate the kernel and, without a network namespace, it cannot touch the network.
 #
 # "For untrusted code from the open internet, I run a hardened container. It has `--network none`,
 # `--read-only`, `--cap-drop ALL`, `no-new-privileges`, a tight seccomp profile, `--pids-limit`, `--memory`
-# and a non-root user. For the highest blast radius, I add gVisor. Then the syscalls go to a user-space
+# and a non-root user. For the highest blast radius, I add gVisor, thus the syscalls go to a user-space
 # kernel written in Go, not to the host kernel. I prove each layer with the probe suite. The verdict is
-# `CONTAINED` or `LEAKED`, and I measure it, I do not assert it."
+# `CONTAINED` or `LEAKED`. I measure the verdict, and I do not assert it."
 #
 # **Drill 1.** *We run the executor as root in a container. Is that not fine, because it is "contained"?*
 # Root in the container is root against the kernel surface of the container. A kernel bug or a permissive
@@ -223,5 +223,5 @@ print("   Docker row says it is illustrative, because it was not measured on thi
 #
 # **Drill 3.** *Why do we give the Docker numbers the label "illustrative", when we are sure that they are
 # correct?* Because the machine that printed them did not measure them. A sandbox claim is only as good as
-# its evidence. When you mix a measured verdict with a remembered one, a regression ships. The suite
+# its evidence. A mix of a measured verdict and a remembered one is how a regression ships. The suite
 # measures what it can and marks the rest, thus the reader always knows which is which.

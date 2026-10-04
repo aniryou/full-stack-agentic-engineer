@@ -118,8 +118,8 @@ print("✅ the hardened pod passes restricted PSS; the naive one fails four cont
 # %% [markdown]
 # ## Exercise 2.2 — why `backoffLimit` matters for code that is not idempotent
 #
-# The default `backoffLimit` of a Job is **6**. Thus the Job controller retries a pod that fails up to 6
-# times. That is 7 runs of code that the model wrote, and this code can have side effects. The sandbox
+# The default `backoffLimit` of a Job is **6**. Thus, when a pod fails, the Job controller retries it up
+# to 6 times. That is 7 runs of code that the model wrote, and this code can have side effects. The sandbox
 # policy accepts only `backoffLimit: 0`. You get a Job spec as the API server sees it, that is, with the
 # defaults filled in. Return the maximum number of times that the code can run.
 
@@ -144,8 +144,8 @@ print("✅ default retries mean up to 7 runs of non-idempotent code; the policy 
 #
 # Every core-kind object that the lab renders must pass strict schema validation for 1.34. In CI,
 # `kubernetes-validate --strict -k 1.34.0` does this check. Count the core-kind objects that validate for
-# the kind target. (The validation treats CRD pod templates as Pods. The test suite examines the
-# agent-sandbox CRDs against their pinned schemas.)
+# the kind target. The validation treats CRD pod templates as Pods. The test suite examines the
+# agent-sandbox CRDs against their pinned schemas.
 
 # %% exercise
 def count_valid_core_objects() -> int:
@@ -250,9 +250,10 @@ print("its NetworkPolicy dataplane (kindnetd) fails open, and there is no VM or 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "On Kubernetes, a sandbox is a pod, and I make its controls mandatory, not only a hope.
+# **Two minutes.** "On Kubernetes, a sandbox is a pod. I make its controls mandatory, and I do not only
+# hope for them.
 # The namespace is Pod Security `restricted`, which gives me non-root, drop-all, no privilege escalation and
-# a seccomp profile. But PSS enforces on Pods. Thus the API server accepts a bad *Job* and rejects only its
+# a seccomp profile. But PSS enforces on Pods, thus the API server accepts a bad *Job* and rejects only its
 # Pods. You see that in the events of the Job, not at `kubectl apply`.
 #
 # "Thus I add a ValidatingAdmissionPolicy for the rules that are specific to sandboxes. It asks for a
@@ -262,7 +263,7 @@ print("its NetworkPolicy dataplane (kindnetd) fails open, and there is no VM or 
 # "One execution is one Job: a new pod and a cold start, and Kubernetes deletes it after its TTL. When
 # latency is important, I keep a warm pool and use `kubectl exec` into an idle pod. I delete that pod after
 # one use, thus no state goes to the next execution. Egress is a default-deny NetworkPolicy with a single
-# rule to the proxy, and not even DNS. The credential is in the Secret of the proxy, never in the sandbox.
+# rule to the proxy. It does not even permit DNS. The credential is in the Secret of the proxy, never in the sandbox.
 #
 # "I generate every object from one policy. Thus the securityContext, the NetworkPolicy and the admission
 # policy cannot become different over time. I also validate the YAML against the target Kubernetes version
