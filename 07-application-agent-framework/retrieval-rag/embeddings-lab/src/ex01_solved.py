@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 01 · Counts to vectors
-# Fill in each `YOUR CODE HERE` block. Every task has a self-check cell — run it
-# to verify. Solutions: `../solutions/ex01.ipynb`.
+# Fill in each `YOUR CODE HERE` block. Each task has a self-check cell. Run it to
+# do a check of your code. The solutions are in `../solutions/ex01.ipynb`.
 
 # %%
 import numpy as np
@@ -14,7 +14,7 @@ rng = np.random.default_rng(0)
 # \operatorname{ppmi}(C)[i,j] = \max\left(0, \log \frac{p(i,j)}{p(i)\,p(j)}\right),
 # $$
 #
-# with unseen pairs → 0.
+# with the value 0 for unseen pairs.
 
 # %%
 def ppmi(C):
@@ -35,7 +35,7 @@ print("ppmi ✓")
 
 # %% [markdown]
 # ## Task 2 — the SGNS gradient
-# For one (center $v$, positive $u^+$, negatives $U^-$ of shape (K,d)) example:
+# For one example (center $v$, positive $u^+$, negatives $U^-$ of shape (K,d)), the loss is:
 #
 # $$
 # L = -\log \sigma(v \cdot u^+) - \sum_k \log \sigma(-v \cdot u^-_k).
@@ -81,8 +81,8 @@ print("sgns_grads ✓ (matches finite differences)")
 
 # %% [markdown]
 # ## Task 3 — the analogy function
-# `analogy(a, b, c)`: nearest word to $a - b + c$ by cosine, **excluding** a, b,
-# c. Uses the vectors saved by notebook 01 (run it first).
+# `analogy(a, b, c)` returns the nearest word to $a - b + c$ by cosine. It **excludes**
+# a, b and c. It uses the vectors that notebook 01 saved. Run notebook 01 first.
 
 # %%
 art = np.load("../artifacts/word_vectors.npz", allow_pickle=True)
@@ -104,7 +104,7 @@ print("analogy ✓ :", "king − man + woman =", analogy("king", "man", "woman")
 
 # %% [markdown]
 # ## Task 4 (open) — window size changes what "similar" means
-# Rebuild notebook 01's co-occurrence with `WINDOW = 1` and `WINDOW = 8` and
-# compare neighbours of `king`. Small windows → substitutable words (other
-# people); large windows → topical associates (palace, throne). No assert —
-# write two sentences on what you observe.
+# Build the co-occurrence matrix of notebook 01 again with `WINDOW = 1` and `WINDOW = 8`.
+# Compare the neighbours of `king`. Small windows give substitutable words (other
+# people). Large windows give topical associates (palace, throne). There is no
+# assert. Write two sentences about what you see.

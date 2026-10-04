@@ -1,17 +1,22 @@
 # %% [markdown]
 # # 01 · The agent loop and tool contracts
 #
-# An "agent" is a loop: build context → call the model → validate and execute the tool calls it asked for →
-# append structured results → repeat until a final answer or a budget stops it. The model supplies judgement;
-# **the harness supplies every guarantee** — schemas, side-effect classes, idempotency, timeouts, budgets.
-# This notebook takes that loop apart with the lab's own `LlmAgent`, one guarantee at a time.
+# An "agent" is a loop. The loop does these steps:
+# 1. It builds the context.
+# 2. It calls the model.
+# 3. It validates and executes the tool calls that the model asked for.
+# 4. It appends structured results.
+# 5. It repeats, until a final answer or a budget stops it.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: the [sandbox primer](../../../sandboxed-execution/PRIMER.md) §3 (the execution contract).
+# The model supplies the judgement. **The harness supplies every guarantee**: schemas, side-effect classes, idempotency, timeouts and budgets.
+# This notebook divides that loop into its parts with the lab's own `LlmAgent`. It examines one guarantee at a time.
 #
-# In this notebook you will:
-# 1. write tools whose schema, validation and error contract come from a typed Python signature;
-# 2. watch the loop run — parallel tool execution, unknown and duplicate calls, budgets, timeouts — through its event log;
-# 3. design a tool contract, a self-correcting model policy and a tool wrapper you could sketch in a design review.
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see the [sandbox primer](../../../sandboxed-execution/PRIMER.md) §3 (the execution contract).
+#
+# In this notebook, you will:
+# 1. Write tools that get their schema, validation and error contract from a typed Python signature.
+# 2. Watch the loop run through its event log: parallel tool execution, unknown and duplicate calls, budgets and timeouts.
+# 3. Design a tool contract, a model policy that corrects its own errors, and a tool wrapper. You can draw each of them in a design review.
 
 # %%
 import asyncio
@@ -36,9 +41,10 @@ def kinds(events) -> list[str]:
 # %% [markdown]
 # ## 1. A tool is a contract, and the contract comes from the signature
 #
-# `@tool` turns a typed function into a `FunctionTool`: the JSON schema is derived from the parameters (pydantic
-# underneath), the description from the docstring, and a `ctx: ToolContext` parameter — if you declare one — is injected
-# by the runtime, never shown to the model. The model sees exactly `spec.to_model_schema()`, and pays for it on every turn.
+# `@tool` changes a typed function into a `FunctionTool`.
+# It makes the JSON schema from the parameters (with pydantic inside). It takes the description from the docstring.
+# If you declare a `ctx: ToolContext` parameter, the runtime injects it, and the model never sees it.
+# The model sees exactly `spec.to_model_schema()`. The model pays for this schema on every turn.
 
 # %%
 ORDERS = {"ORD-1": {"order_id": "ORD-1", "status": "shipped", "eta": "2026-09-08"}}
@@ -55,8 +61,9 @@ def lookup_order(order_id: str) -> dict:
 print(json.dumps(lookup_order.spec.to_model_schema(), indent=1))
 
 # %% [markdown]
-# Arguments are validated **before** the function runs. A malformed call does not raise — it returns a structured result
-# the model can act on: an error `type`, a message that names the field, and a `hint` saying what to do next.
+# The runtime validates the arguments **before** the function runs. A malformed call does not raise an exception.
+# It returns a structured result that the model can act on.
+# The result has an error `type`, a message that names the field, and a `hint` that tells the model what to do next.
 
 # %%
 ctx = ToolContext()
@@ -69,10 +76,10 @@ print("what the model reads:", good.to_content())
 # %% [markdown]
 # ### Side-effect classes
 #
-# Every tool declares what it does to the world: `READ`, `REVERSIBLE` (undoable, or idempotent by key) or `IRREVERSIBLE`
-# (money moved, email sent). Irreversible tools **require confirmation by default** — the loop pauses for a human
-# (Notebook 03 shows the pause/resume machinery). `required_scope` ties a tool to the caller's identity, so a model cannot
-# talk its way into an action the user is not allowed to take.
+# Every tool declares its effect on the world. The three classes are `READ`, `REVERSIBLE` (you can undo it, or it is idempotent by key)
+# and `IRREVERSIBLE` (money moved, email sent). By default, an irreversible tool **must get a confirmation**. The loop pauses for a person
+# (Notebook 03 shows the machinery for the pause and the resume). `required_scope` connects a tool to the identity of the caller.
+# Thus, whatever text the model writes, it cannot get an action that the user has no permission to do.
 
 # %%
 @tool(side_effect=SideEffect.REVERSIBLE)
@@ -97,13 +104,13 @@ print("without the scope →", denied.to_content())
 # %% [markdown]
 # ### Errors are part of the contract
 #
-# A tool function raises one of two exceptions and the runtime maps it to a result the model can reason about:
+# A tool function raises one of two exceptions. The runtime maps the exception to a result that the model can reason about:
 #
 # | raised inside the tool | `error.type` | `retryable` | who acts |
 # |---|---|---|---|
-# | `ToolPermanentError(msg, type=..., hint=...)` | your type (`not_found`, …) | `False` | the model follows the hint |
-# | `ToolTransientError(msg)` | `transient` | `True` | the runtime may retry; the model may tell the user |
-# | anything else | `tool_failure` | `False` | the model explains — and **no stack trace leaks** |
+# | `ToolPermanentError(msg, type=..., hint=...)` | your type (`not_found`, …) | `False` | the model does what the hint says |
+# | `ToolTransientError(msg)` | `transient` | `True` | the runtime can retry. The model can tell the user. |
+# | anything else | `tool_failure` | `False` | the model explains. **No stack trace leaks.** |
 
 # %%
 @tool
@@ -125,9 +132,11 @@ for t, args in ((lookup_order, {"order_id": "ORD-404"}), (flaky_inventory, {"sku
 # %% [markdown]
 # ### Idempotent writes
 #
-# A retried write must not double-post. Give a non-read tool an `IdempotencyStore`; when the caller supplies an
-# `idempotency_key` — the loop derives one from session, agent, step and the call signature — a second execution under
-# the same key is served from the store and marked `from_idempotency_cache`. The function body runs once.
+# When the runtime retries a write, the write must not post two times. Give a non-read tool an `IdempotencyStore`.
+# When the caller supplies an `idempotency_key`, a second execution with the same key gets its result from the store.
+# The tool marks that result `from_idempotency_cache`.
+# The agent loop is a caller that supplies a key, which it makes from the session, the agent, the step and the call signature.
+# The function body runs once.
 
 # %%
 idem = IdempotencyStore()
@@ -149,9 +158,13 @@ print("executions:", len(payouts), "| second served from cache:", second.from_id
 # %% [markdown]
 # ## 2. The loop, observed through its event log
 #
-# `LlmAgent.run` yields an `Event` for everything it does and appends the same events to the session. With a scripted
-# model you can predict the whole trajectory before running it: model asks for a tool → the call is recorded → the result
-# is recorded → the model answers → a `final` marker.
+# `LlmAgent.run` yields an `Event` for each thing that it does. It also appends the same events to the session.
+# With a scripted model, you can predict all of the trajectory before you run it:
+# 1. The model asks for a tool.
+# 2. The loop records the call.
+# 3. The loop records the result.
+# 4. The model answers.
+# 5. A `final` marker comes last.
 
 # %%
 llm = scripted(call("lookup_order", order_id="ORD-1"), "ORD-1 has shipped and arrives on 8 September.")
@@ -162,8 +175,8 @@ for e in events:
     print(f"step {e.step}  {e.kind:12s} {json.dumps(e.payload)[:95]}")
 
 # %% [markdown]
-# The second model call must contain the tool result — otherwise the model is answering blind. `FakeLLM.calls` records
-# every request it received, so you can prove the result went back:
+# The second model call must contain the tool result. If not, the model answers without the tool result.
+# `FakeLLM.calls` records every request that it received. Thus you can prove that the result went back:
 
 # %%
 for m in llm.calls[1]["messages"]:
@@ -173,9 +186,9 @@ for m in llm.calls[1]["messages"]:
 # %% [markdown]
 # ### Independent tool calls run in parallel
 #
-# When the model asks for several tools in one turn, the loop runs them concurrently (under a semaphore, each with its own
-# timeout). Three 50 ms tools cost about 50 ms, not 150 — which is why a model that batches independent calls is worth
-# prompting for.
+# When the model asks for several tools in one turn, the loop runs them at the same time.
+# It uses a semaphore, and each tool has its own timeout. Three 50 ms tools cost about 50 ms, not 150.
+# This is why it is worth the effort to prompt the model to batch independent calls.
 
 # %%
 @tool
@@ -196,9 +209,9 @@ assert elapsed < 0.15, "tool calls ran sequentially?"
 # %% [markdown]
 # ### Unknown and repeated calls are answered, not crashed
 #
-# A hallucinated tool name comes back as `unknown_tool` with the real names in the hint. The same call repeated more than
-# `max_repeated_calls` times comes back as `duplicate_call` — the cheapest possible brake on a "call, ignore the result,
-# call again" spiral.
+# When the model calls a tool that does not exist, the result is `unknown_tool`, with the real names in the hint.
+# If the model repeats the same call more than `max_repeated_calls` times, the result is `duplicate_call`.
+# This is the lowest-cost possible brake on a "call, ignore the result, call again" spiral.
 
 # %%
 dup_llm = scripted(call("track_parcel", id="ORD-1"),            # no such tool
@@ -216,10 +229,12 @@ for e in dup_session.events:
 # %% [markdown]
 # ### Budgets stop a runaway loop
 #
-# A model that keeps calling tools forever is a cost incident. `Budget` bounds every invocation in three units — model
-# calls (`max_steps`), tokens and wall-clock seconds — and is shared with every delegated sub-agent (Notebook 02), so
-# delegation cannot escape it. Here a policy that *always* calls a tool, with fresh arguments each time so duplicate
-# detection cannot save us, is stopped after three model calls.
+# A model that calls tools forever is a cost incident.
+# `Budget` sets limits on every invocation in three units: model calls (`max_steps`), tokens and wall-clock seconds.
+# Every delegated sub-agent shares the same `Budget` (Notebook 02). Thus a delegation cannot escape it.
+#
+# Here, a policy *always* calls a tool, with new arguments each time. Thus the duplicate detection cannot help us.
+# The budget stops the policy after three model calls.
 
 # %%
 runaway = FakeLLM(policy=lambda messages, tools: calls(call("lookup_order", order_id=f"ORD-{len(messages)}")))
@@ -234,9 +249,9 @@ except BudgetExceeded as e:
 # %% [markdown]
 # ### The model call has a deadline too
 #
-# `model_timeout_s` (further clipped by the budget's remaining seconds) bounds each model call. The raw loop raises
-# `asyncio.TimeoutError`; the `Runner` — the boundary that owns persistence — records an `error` event and marks the
-# session failed instead of leaking the exception to the caller.
+# `model_timeout_s` sets a limit on each model call. The seconds that the budget has left can make this limit shorter.
+# The raw loop raises `asyncio.TimeoutError`. The `Runner` is the boundary that owns persistence.
+# The `Runner` records an `error` event and marks the session failed. It does not leak the exception to the caller.
 
 # %%
 class HangingLLM(FakeLLM):
@@ -258,10 +273,12 @@ print("via Runner: error =", repr(r.error), "| session status =", r.session.stat
 #
 # ### Exercise 3.1 — design a tool contract
 #
-# Define `get_order_status(order_id: str, include_items: bool = False)` with `@tool`. The docstring is the model's only
-# guidance on **when** to use the tool, so say so explicitly — and say what it is *not* for (refunds belong elsewhere).
-# Return a dict with `order_id`, `status` and, only when asked, an `items` list. Keep the description under 400 characters:
-# it is re-sent on every model call.
+# Define `get_order_status(order_id: str, include_items: bool = False)` with `@tool`.
+# The docstring is the only guidance that the model has about **when** to use the tool. Thus, say clearly in the docstring when to use the tool.
+# Also say what the tool is *not* for (refunds go to a different tool).
+#
+# Return a dict with `order_id` and `status`. Add an `items` list only when the caller asks for it.
+# Keep the description under 400 characters. The runtime sends it again on every model call.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -301,9 +318,10 @@ print("✅ contract the model sees:", json.dumps(spec.to_model_schema())[:110], 
 # %% [markdown]
 # ### Exercise 3.2 — a not-found the model can act on
 #
-# Implement `find_customer(email: str)` over the `CUSTOMERS` table. For an unknown email raise `ToolPermanentError` with
-# `type="not_found"` and a `hint` telling the model what to do next (ask the user to confirm the address, or offer to
-# create a profile). Never return `None` for "not found": a silent empty result is how models invent customers.
+# Write `find_customer(email: str)` over the `CUSTOMERS` table.
+# For an unknown email, raise `ToolPermanentError` with `type="not_found"` and a `hint`.
+# The hint tells the model what to do next: ask the user to confirm the address, or offer to create a profile.
+# Do not return `None` for "not found". A silent empty result causes models to invent customers.
 
 # %% exercise
 CUSTOMERS = {"anil@example.com": {"id": "C-1", "name": "Anil", "tier": "gold"}}
@@ -334,15 +352,16 @@ print("✅ the model reads:", nf.to_content())
 # %% [markdown]
 # ### Exercise 3.3 — a model that reads its own error
 #
-# Real models make malformed calls; good harnesses hand back a structured error and good models recover. Write
-# `self_correcting_policy(messages, tools)` — you are playing the model — so that, for the tool `lookup_order`:
+# Real models make malformed calls. A good harness gives back a structured error, and a good model recovers.
+# Write `self_correcting_policy(messages, tools)`. In this exercise, you play the part of the model.
+# For the tool `lookup_order`, the policy does these steps:
 #
-# 1. on its first step it (deliberately, sloppily) calls `lookup_order` with the wrong argument name: `order="ORD-1"`;
-# 2. when the latest tool result is an `invalid_arguments` error, it reads the tool schema from `tools`
-#    (`input_schema["required"]`) and re-issues the call with the right argument name and the same value;
-# 3. when the latest tool result is `ok`, it answers `"Order ORD-1 is <status>."`.
+# 1. On its first step, it calls `lookup_order` with the incorrect argument name: `order="ORD-1"`. It does this intentionally and carelessly.
+# 2. When the latest tool result is an `invalid_arguments` error, it reads the tool schema from `tools`
+#    (`input_schema["required"]`). Then it sends the call again, with the correct argument name and the same value.
+# 3. When the latest tool result is `ok`, it answers `"Order ORD-1 is <status>."`.
 #
-# Tool results arrive as `{"role": "tool", "content": <json>}` messages after the last user turn — `json.loads` the content.
+# Tool results come as `{"role": "tool", "content": <json>}` messages after the last user turn. Use `json.loads` on the content.
 
 # %% exercise
 def self_correcting_policy(messages, tools):
@@ -379,10 +398,13 @@ print("✅ trajectory: bad call → structured error → corrected call → answ
 # %% [markdown]
 # ### Exercise 3.4 — bound the loop, then fail gracefully
 #
-# `looping_policy` below never answers. Write `guard_budget()` — a `Budget` under which such a run makes **exactly four**
-# model calls — and `run_bounded(agent, session, budget)`, which runs the agent and returns the `BudgetExceeded.reason`
-# string (e.g. `"max_steps=4"`) instead of raising, or `None` if the run finished normally. This is what the `Runner` does
-# at its boundary: a budget stop is an expected outcome to record, not a crash.
+# `looping_policy` in the next cell never answers. Write `guard_budget()`.
+# It gives a `Budget` under which such a run makes **exactly four** model calls.
+#
+# Then write `run_bounded(agent, session, budget)`. It runs the agent and returns the `BudgetExceeded.reason` string
+# (for example `"max_steps=4"`). It does not raise. If the run finished normally, it returns `None`.
+#
+# This is what the `Runner` does at its boundary. A budget stop is an expected result to record, not a crash.
 
 # %% exercise
 looping_policy = lambda messages, tools: calls(call("lookup_order", order_id=f"ORD-{len(messages)}"))
@@ -418,16 +440,16 @@ print(f"✅ stopped after {model_calls} model calls with reason {reason!r}; a no
 # %% [markdown]
 # ### Exercise 3.5 — compose tools: a result-size guard
 #
-# Tool output is the largest uncontrolled input to your context window. Write `with_result_limit(tool, max_chars)`
-# returning an object that satisfies the `Tool` protocol (a `spec` attribute and `async run(args, ctx)`):
+# Tool output is the largest uncontrolled input to your context window. Write `with_result_limit(tool, max_chars)`.
+# It returns an object that satisfies the `Tool` protocol (a `spec` attribute and `async run(args, ctx)`):
 #
-# * `spec` is the wrapped tool's **same** `ToolSpec` object — the model's contract does not change;
-# * `run` delegates to the wrapped tool; if the result is `ok` and its compact JSON (`json.dumps(result.data, default=str)`)
-#   is longer than `max_chars`, replace `data` with the first `max_chars` characters followed by the marker
-#   `…[truncated N chars; call again with a narrower request]`, where `N` is the number of characters cut;
-# * errors, small results and latency pass through untouched.
+# * `spec` is the **same** `ToolSpec` object as the spec of the wrapped tool. The contract that the model sees does not change.
+# * `run` delegates to the wrapped tool. If the result is `ok` and its compact JSON (`json.dumps(result.data, default=str)`)
+#   is longer than `max_chars`, replace `data`. The new `data` is the first `max_chars` characters, followed by the marker
+#   `…[truncated N chars; call again with a narrower request]`. `N` is the number of characters that you cut.
+# * Errors, small results and latency pass through with no change.
 #
-# Wrappers like this are how you add caching, redaction or rate limits without touching the tool — or the model.
+# With wrappers like this, you can add caching, redaction or rate limits. You do not touch the tool, and you do not touch the model.
 
 # %% exercise
 @tool
@@ -482,9 +504,9 @@ print(f"✅ {len(full)} chars of tool output became {len(sent)} chars in the mod
 # %% [markdown]
 # ### Exercise 3.6 — say it in one paragraph
 #
-# In `why_structured_errors`, explain in two to four sentences why a tool error must reach the model as a **structured
-# result** (`type`, `message`, `retryable`, `hint`) and never as a stack trace. Say what each field lets the model or the
-# runtime do.
+# In `why_structured_errors`, write two to four sentences. Explain why a tool error must reach the model as a **structured
+# result** (`type`, `message`, `retryable`, `hint`). Explain why it must never reach the model as a stack trace.
+# Say what each field lets the model or the runtime do.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -508,10 +530,13 @@ print("✅", why_structured_errors[:100], "…")
 # %% [markdown]
 # ## The one-minute version
 #
-# When someone asks *"walk me through what happens when the agent calls a tool"*, narrate the loop you just
-# watched: the model returns a typed call → the runtime **validates it against the schema** (a bad call becomes an
-# `invalid_arguments` result, not an exception) → checks **scope** and **side-effect class** (irreversible → pause for
-# approval) → executes **in parallel, with a timeout and an idempotency key** → appends a **structured result** the model
-# can act on → repeats under a **budget of steps, tokens and seconds**. Then make the design point: the model is
-# probabilistic, so every guarantee the customer cares about — no double refunds, no runaway spend, no leaked stack
-# traces — lives in the harness, and you can point to the exact line where each one is enforced.
+# When a person asks *"walk me through what happens when the agent calls a tool"*, describe the loop that you watched:
+# 1. The model returns a typed call.
+# 2. The runtime **validates it against the schema**. A bad call becomes an `invalid_arguments` result, not an exception.
+# 3. The runtime examines the **scope** and the **side-effect class**. An irreversible tool causes a pause for approval.
+# 4. The runtime executes the calls **in parallel, with a timeout and an idempotency key**.
+# 5. It appends a **structured result** that the model can act on.
+# 6. It repeats under a **budget of steps, tokens and seconds**.
+#
+# Then make the design point. The model is probabilistic. Thus every guarantee that the customer cares about is in the harness:
+# no double refunds, no runaway spend, no leaked stack traces. You can point to the exact line that enforces each guarantee.

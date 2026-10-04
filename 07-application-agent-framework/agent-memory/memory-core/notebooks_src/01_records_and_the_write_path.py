@@ -1,23 +1,33 @@
 # %% [markdown]
 # # 01 · Records and the write path
 #
-# **Tier:** T0 — CPU only, standard library + numpy, no model, no network, a few seconds. The same write path on
-# SQLite with FTS5 and vectors is `memory-lab` notebook `01_a_memory_store_on_sqlite` (T0; pgvector with Docker).
+# **Tier:** T0. It uses only a CPU, the standard library and numpy. It needs no model and no network, and it takes a
+# few seconds. The same write path on SQLite with FTS5 and vectors is in `memory-lab` notebook
+# `01_a_memory_store_on_sqlite` (T0, and pgvector with Docker).
 #
 # ## The one-minute version
-# An agent's first memory is its **context window**: the transcript it is handed every turn (agent-core's `history`,
-# 07.1 notebook 03). That grows every turn and ends with the session.
+# The first memory of an agent is its **context window**. The context window is the transcript that the agent gets at each turn
+# (agent-core's `history`, 07.1 notebook 03). The transcript grows at each turn, and it ends with the session.
 #
-# Long-term memory is what survives: **episodic** (what happened, timestamped), **semantic** (a distilled fact) and
-# **procedural** (how to do something for this user). They are one **typed record**: scope (tenant, user, session,
-# agent), source (a user turn, a tool result, a human, a consolidation job), provenance, confidence, importance,
-# validity, a TTL and a deletion key.
+# Long-term memory is the part that stays after the session. It has three kinds: **episodic** (what occurred, with a
+# timestamp), **semantic** (a distilled fact) and **procedural** (how to do something for this user). All three kinds
+# are one **typed record**. The record has these fields:
 #
-# What gets written is decided **in code**: extract candidates after the turn, check a **write policy** (which kinds
-# each source may write, a confidence floor, screening before persistence), then **merge** against what is known — the
-# same value is a no-op, a new value closes the old fact instead of deleting it, a weaker source that contradicts is
-# quarantined, an older value arriving late becomes history — and give every write an **idempotency key** that names
-# the step (never its content) so a retried turn writes once.
+# - scope (tenant, user, session, agent).
+# - source (a user turn, a tool result, a person, a consolidation job).
+# - provenance, confidence, importance and validity.
+# - a TTL and a deletion key.
+#
+# Code, not the model, decides what the agent writes. The steps are:
+#
+# 1. Extract candidates after the turn.
+# 2. Do a check against a **write policy**. The policy sets the kinds that each source can write, a confidence floor,
+#    and a screen before persistence.
+# 3. **Merge** each candidate against the known facts. The same value is a no-op. A new value closes the old fact and
+#    does not delete it. If a weaker source contradicts the fact, the store puts the candidate in quarantine. An older
+#    value that arrives late becomes history.
+# 4. Give every write an **idempotency key** that names the step (never its content). Thus a retried turn writes one
+#    time.
 #
 # Primer: §1 *What an agent remembers*, §2 *The write path* (`../PRIMER.md`).
 
@@ -31,9 +41,11 @@ ALICE = Scope("acme", "alice", session="s1")
 
 # %% [markdown]
 # ## Worked example 1 — the baseline: the whole transcript is the memory
-# agent-core passes the transcript back as `history` (07.1 notebook 03). That is working memory, and it is
-# honest — nothing is lost within a session — but its cost grows with every turn, and it ends with the session.
-# Here is a 20-turn session where each exchange (user message + reply) is about 160 tokens, on top of a
+# agent-core sends the transcript back as `history` (07.1 notebook 03). That is working memory. The transcript is
+# honest, because the agent loses nothing during a session. But the cost of the transcript increases with each turn,
+# and the transcript ends with the session.
+#
+# This is a 20-turn session. Each exchange (user message + reply) is approximately 160 tokens. The session also has a
 # 2,000-token system prompt.
 
 # %%
@@ -45,9 +57,9 @@ print("the same session with a 60-token memory and only the last 4 exchanges kep
       sum(SYSTEM + 60 + EXCHANGE * min(t - 1, 4) + 40 for t in range(1, 21)))
 
 # %% [markdown]
-# The transcript is also *where facts go to die*: a preference stated in session 1 is gone in session 2, and a
-# summary of it paraphrases (durable primer §3.5: "summaries paraphrase"; "stale context is worse than missing
-# context"). Long-term memory is the part you decide to keep, as records.
+# The transcript is also *the place where the agent loses facts*. A preference that the user stated in session 1 is
+# gone in session 2. A summary of the preference paraphrases it (durable primer §3.5: "summaries paraphrase" and "stale
+# context is worse than missing context"). Long-term memory is the part that you decide to keep, as records.
 #
 # ## Worked example 2 — one record type for every kind of memory
 
@@ -63,14 +75,19 @@ for r in (event, howto):
     print(r.render(), "| expires:", "never" if r.ttl_s is None else f"day {(r.created_at + r.ttl_s) / DAY:.0f}")
 
 # %% [markdown]
-# Every field has a job later in the topic: `scope.partition` keys the store (§3, §8); `source` and `confidence`
-# drive the write policy (§2) and consolidation's precedence (§7); `importance` feeds retrieval (§3);
-# `valid_from` / `valid_to` answer "as of" questions and let an update close a fact instead of erasing it (§7);
-# `ttl_s` and `deletion_key` are how it is forgotten (§7). A memory without them can only be appended to a prompt.
+# Every field has a job later in the topic:
+#
+# - `scope.partition` is the key of the store (§3, §8).
+# - `source` and `confidence` control the write policy (§2) and the precedence in consolidation (§7).
+# - `importance` is an input to retrieval (§3).
+# - `valid_from` / `valid_to` answer "as of" questions. They let an update close a fact and not erase it (§7).
+# - `ttl_s` and `deletion_key` are how the system forgets the record (§7).
+#
+# Without these fields, you can only add a memory to the end of a prompt.
 #
 # ## Worked example 3 — extraction after the turn
-# A template extractor stands in for the extraction LLM call: one episodic record for the turn, plus one candidate
-# per statement it recognises. The facts cite the episode in their provenance.
+# A template extractor takes the place of the extraction LLM call. It gives one episodic record for the turn, and one
+# candidate for each statement that it recognises. The facts cite the episode in their provenance.
 
 # %%
 recs = extract("Long week. I live in Lisbon and I'm allergic to peanuts. Please always use metric units.",
@@ -80,8 +97,8 @@ for r in recs:
 
 # %% [markdown]
 # ## Worked example 4 — the write policy and the merge
-# Six writes in a row through one `Writer`: the same fact again, a new value, a tool's claim, a secret, and a
-# tool trying to write a rule.
+# Six writes go through one `Writer`, one after the other. They contain the same fact again, a new value, a tool's
+# claim, a secret, and a tool that tries to write a rule.
 
 # %%
 store = MemoryStore()
@@ -105,13 +122,18 @@ for r in store.records(ALICE, status=None):
     print(f"{r.status:11} valid from day {r.valid_from / DAY:g} to {until:6} {r.text}")
 
 # %% [markdown]
-# Read the last table: Lisbon is **kept**, closed at day 3 (`valid_to`), so "where did the user live on day 2?"
-# still has an answer; Madrid is stored but **quarantined** — retrieval never returns it until a human promotes it;
-# the secret and the tool's rule never reached the store. This is extract → compare → ADD / UPDATE / NOOP, the
-# shape mem0 used before 2.0.0 (its events were ADD / UPDATE / DELETE / NONE; mem0 2.x is ADD-only, verify).
+# Read the last table:
 #
-# One more branch, because background extraction delivers statements **out of order**: the user said "I live in
-# Lisbon" on day 0 and "I moved to Porto" on day 3, but the day-0 extraction arrives second.
+# - Lisbon is **kept**. It is closed at day 3 (`valid_to`). Thus "where did the user live on day 2?" still has an
+#   answer.
+# - Madrid is in the store, but it is **quarantined**. Retrieval never returns it until a person promotes it.
+# - The secret and the tool's rule never got to the store.
+#
+# This is the sequence extract, compare, then ADD / UPDATE / NOOP. Before 2.0.0, mem0 used this shape, and its events
+# were ADD / UPDATE / DELETE / NONE. mem0 2.x is ADD-only (verify).
+#
+# There is one more branch, because background extraction delivers statements **out of order**. The user said "I live
+# in Lisbon" on day 0 and "I moved to Porto" on day 3. But the day-0 extraction arrives second.
 
 # %%
 store = MemoryStore()
@@ -124,14 +146,15 @@ for r in store.records(ALICE, status=None):
           f"{'now' if r.valid_to is None else f'day {r.valid_to / DAY:g}'}")
 
 # %% [markdown]
-# An older value never supersedes a newer one: Lisbon is stored as closed history (`ADD_HISTORY`, valid until Porto
-# begins) and Porto stays the current fact. Updating by arrival order would have undone the move.
+# An older value never supersedes a newer value. The store keeps Lisbon as closed history (`ADD_HISTORY`, valid until
+# Porto begins), and Porto stays the current fact. If the writer updates by the order of arrival, the update undoes the
+# move.
 #
 # ## Worked example 5 — a retried turn writes once
-# Agent turns run on at-least-once machinery (queues, retries). The write carries a key that names the **step** —
-# `session:turn:index`, stable across a retry and unique across turns (durable primer §3.2). Not the content: a
-# retry re-asks the extraction model, which may phrase the fact differently, and a key with a content hash would then
-# be new — a second, different write.
+# Agent turns run on at-least-once infrastructure (queues, retries). The write has a key that names the **step**:
+# `session:turn:index`. This key stays the same across a retry, and it is unique across turns (durable primer §3.2).
+# The key does not name the content. A retry asks the extraction model again, and the model can write the fact in
+# different words. Then a key with a content hash is new, and the result is a second, different write.
 
 # %%
 store = MemoryStore()
@@ -151,7 +174,7 @@ print("records:", len(store.records(ALICE)))
 
 # %% [markdown]
 # ## Exercise 1.1 — which kind is it?
-# Label each memory `episodic`, `semantic` or `procedural`.
+# Give each memory one of these labels: `episodic`, `semantic` or `procedural`.
 
 # %% exercise
 MEMORIES = ["On 3 March the user's refund for order 4411 was approved.",
@@ -169,9 +192,14 @@ print("✅ what happened (with a time) / what is true / how to act for this user
 
 # %% [markdown]
 # ## Exercise 1.2 — write the policy check
-# Implement `check(rec)` returning `("REJECT" | "QUARANTINE" | None, reason)`, in this order: a tool may not write
-# procedural memory (REJECT); confidence below 0.6 is REJECTed; a password or API-key-looking string is REJECTed
-# (use `"password" in text.lower()` or `"sk-" in text` - memcore.screen uses stricter regexes); any other tool-sourced record is QUARANTINEd; else `None`.
+# Write `check(rec)`. It returns `("REJECT" | "QUARANTINE" | None, reason)`. Apply these rules in this order:
+#
+# 1. If a record from a tool source is procedural, the result is REJECT.
+# 2. If the confidence is below 0.6, the result is REJECT.
+# 3. If the text of the record looks like a password or an API key, the result is REJECT. Use
+#    `"password" in text.lower()` or `"sk-" in text`. memcore.screen uses stricter regexes.
+# 4. If any other record comes from a tool source, the result is QUARANTINE.
+# 5. For all other records, the result is `None`.
 
 # %% exercise
 def check(rec):
@@ -201,11 +229,15 @@ print("✅ your policy agrees with memcore.WritePolicy on all", len(cases), "cas
 
 # %% [markdown]
 # ## Exercise 1.3 — the merge decision
-# `existing` is the active fact for a slot (or `None`), `new` a candidate for the same slot that passed the policy.
-# Return `"ADD"` (nothing known), `"NOOP"` (same value, ignoring case), `"QUARANTINE"` (a different value from a
-# weaker source: `new.trust < existing.trust`), `"ADD_HISTORY"` (a different value from a source at least as trusted,
-# but *older*: `new.valid_from < existing.valid_from`) or `"UPDATE"` (a different, newer value from a source at least
-# as trusted).
+# `existing` is the active fact for a slot (or `None`). `new` is a candidate for the same slot, and it passed the
+# policy. Return one of these values:
+#
+# - `"ADD"`: the store knows nothing for the slot.
+# - `"NOOP"`: the value is the same, if you ignore case.
+# - `"QUARANTINE"`: a different value from a weaker source (`new.trust < existing.trust`).
+# - `"ADD_HISTORY"`: a different value from a source with at least the same trust, but *older*
+#   (`new.valid_from < existing.valid_from`).
+# - `"UPDATE"`: a different, newer value from a source with at least the same trust.
 
 # %% exercise
 def merge_action(existing, new):
@@ -234,7 +266,7 @@ print("✅ same value: merge; weaker source: quarantine; older: history; newer f
 
 # %% [markdown]
 # ## Exercise 1.4 — predict the actions
-# A fresh `Writer` and five writes to the same slot. Predict the action of each, then run the check.
+# A new `Writer` gets five writes to the same slot. Predict the action of each write. Then run the check.
 
 # %% exercise
 SEQUENCE = [fact_rec("Oslo", "user", 0), fact_rec("Oslo", "human", 1), fact_rec("Bergen", "user", 2),
@@ -250,17 +282,21 @@ assert predicted == actual, "not what the code does - trace the policy first, th
 print("✅", actual, "| sources on file:", [(r.value, r.source, r.status) for r in w.store.records(ALICE, status=None)])
 
 # %% [markdown]
-# Step 2 is the interesting one. A human confirmed the user's fact, and the merge kept the record's `source` as
-# `user` — it only added provenance. So in step 3 the user could overwrite it. Had the merge promoted the source
-# to `human`, step 3 would have been quarantined instead. Neither is wrong; they are different products ("a
-# confirmed fact needs a human to change it" vs "the user can always correct their own data"). Write the rule down
-# and test it, because precedence rules that look obvious disagree in exactly these edge cases.
+# Step 2 is the one to examine. A person confirmed the user's fact. The merge kept the `source` of the record as
+# `user`, and it only added provenance. Thus in step 3 the user was able to overwrite the fact. If the merge promotes
+# the source to `human`, step 3 goes to quarantine.
+#
+# Neither choice is incorrect. They are different products ("a
+# confirmed fact needs a human to change it" against "the user can always correct their own data"). Write the rule
+# down. Then write a test for the rule, because precedence rules that look obvious disagree in these exact edge
+# cases.
 #
 # ## Exercise 1.5 — an idempotency key
-# Write `write_key(session, turn, index, text)`: the key of the write at position `index` of turn `turn`. It must
-# be equal for every retry of that step — **including a retry whose extraction came back worded differently**
-# (`text` is what the extractor returned this time) — and different for a different turn, a different call in the
-# same turn, or another session. (memcore's `idempotency_key` is one answer; any stable construction passes.)
+# Write `write_key(session, turn, index, text)`. It returns the key of the write at position `index` of turn `turn`.
+# The key must be the same for every retry of that step. **This includes a retry whose extraction came back in
+# different words** (`text` is what the extractor returned this time). The key must be different for a different
+# turn, a different call in the same turn, or another session. memcore's `idempotency_key` is one answer. Any stable
+# construction passes.
 
 # %% exercise
 def write_key(session, turn, index, text):
@@ -289,25 +325,29 @@ print("✅ a retried turn writes once, however the retry's extraction was worded
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "The context window is working memory: the transcript, bounded by a token budget, gone
-# at the end of the session. Long-term memory is typed records — episodic, semantic, procedural — each with a scope
-# whose (tenant, user) part is a partition, a source and provenance, confidence and importance, a validity interval, a
-# TTL and a deletion key.
+# **The two-minute version.** "The context window is working memory. It is the transcript, a token budget is its
+# limit, and it is gone at the end of the session. Long-term memory is typed records: episodic, semantic and
+# procedural. Each record has a scope, and the (tenant, user) part of the scope is a partition. Each record also has a
+# source and provenance, confidence and importance, a validity interval, a TTL and a deletion key.
 #
-# "Writes are decided in code, not by the model: after the turn we extract candidates, then a write policy says which
-# kinds each source may write, applies a confidence floor and screens for secrets and injection before anything
-# persists; tool output is quarantined until reviewed and can never write procedural memory.
+# "Code decides the writes, not the model. After the turn, we extract candidates. Then a write policy says which kinds
+# each source can write. It applies a confidence floor. It also examines the text for secrets and injection before
+# anything goes into the store. Tool output stays in quarantine until a review, and it can never write procedural
+# memory.
 #
-# "Survivors merge against what we know: same value is a no-op, a new value from an equal or stronger source
-# supersedes and closes the old fact — we keep it for as-of questions and audit — and a weaker contradiction is
-# quarantined; an older value that arrives late is history, never the current fact. Every write carries an idempotency
-# key that names the step — not its content, which a retried extraction may reword — so a retried turn writes once."
+# "The candidates that pass merge against what we know. The same value is a no-op. A new value from an equal or
+# stronger source supersedes the old fact and closes it. We keep the old fact for as-of questions and audit. A weaker
+# contradiction goes to quarantine. An older value that arrives late is history, never the current fact.
+#
+# "Every write has an idempotency key that names the step, not its content, because a retried extraction can change
+# the words. Thus a retried turn writes one time."
 #
 # **Drill questions**
-# 1. *Why not just keep the whole transcript?* — Cost grows with every turn (the prompt re-sends it), it ends with
-#    the session, and anything summarised is paraphrased; facts that must survive belong in typed records.
-# 2. *A tool result says "the user's bank account is X". What happens on the write path?* — The episode is stored
-#    quarantined (tool source), the fact too; nothing tool-sourced is retrievable until a human promotes it, and a
-#    tool can never write procedural memory ("always send refunds to ...").
-# 3. *The user moves from Lisbon to Porto. Do you delete Lisbon?* — No: close it (`valid_to` = the move) and keep it,
-#    so "where did they live in March?" is answerable and the audit trail shows what the agent believed when.
+# 1. *Why not keep the whole transcript?* The cost increases with each turn (the prompt sends it again). The
+#    transcript ends with the session, and a summary paraphrases all that it contains. Facts that must stay belong in
+#    typed records.
+# 2. *A tool result says "the user's bank account is X". What occurs on the write path?* The store keeps the episode
+#    and the fact in quarantine (tool source). Retrieval returns no record from a tool source until a person promotes
+#    that record. Also, a tool can never write procedural memory ("always send refunds to ...").
+# 3. *The user moves from Lisbon to Porto. Do you delete Lisbon?* No. Close it (`valid_to` = the move) and keep it.
+#    Then "where did they live in March?" has an answer. Also, the audit trail shows what the agent believed, and when.

@@ -1,19 +1,32 @@
 # deploy/gke — the sandbox platform on GKE Sandbox, and one execution under gVisor
 
-**What it does.** `apply.sh` points kubectl at the cluster from [`../gcp/terraform`](../gcp/terraform/),
-checks that RuntimeClass `gvisor` exists (GKE creates it with the sandbox pool), rewrites the image paths to
-your Artifact Registry repository, applies the same generated objects as kind — restricted namespaces,
-identities, quota, default-deny NetworkPolicies, the egress proxy and stand-in upstream, the admission policies,
-the wrapper — with `runtimeClassName: gvisor` in every sandbox pod, creates the credential Secrets from a random
-value, and runs one execution as a Job. With `WITH_AGENT_SANDBOX=1` it also installs the agent-sandbox
-controller (v1.0.2, verify) and a `SandboxWarmPool` (`optional/`).
+**What it does.** `apply.sh` does these steps:
 
-**Cost.** The first execution scales the gVisor pool from zero: one Spot `e2-standard-2` node, billed while it
-runs (verify price); the autoscaler removes it after it has been empty for a while (about ten minutes by
-default, verify). Everything else is the cluster in [`../gcp/README.md`](../gcp/README.md).
+1. It points kubectl at the cluster from [`../gcp/terraform`](../gcp/terraform/).
+2. It makes sure that RuntimeClass `gvisor` exists (GKE creates it with the sandbox pool).
+3. It changes the image paths to your Artifact Registry repository.
+4. It applies the same generated objects as kind, with `runtimeClassName: gvisor` in each sandbox pod.
+   These objects are:
+   - the restricted namespaces,
+   - the identities,
+   - the quota,
+   - the default-deny NetworkPolicies,
+   - the egress proxy and stand-in upstream,
+   - the admission policies,
+   - the wrapper.
+5. It creates the credential Secrets from a random value.
+6. It runs one execution as a Job.
+
+With `WITH_AGENT_SANDBOX=1`, it also installs the agent-sandbox controller (v1.0.2, verify) and a
+`SandboxWarmPool` (`optional/`).
+
+**Cost.** The first execution scales the gVisor pool from zero to one Spot `e2-standard-2` node. You pay
+for that node while it runs (verify price). The autoscaler removes the node after it stays empty for
+some time (about ten minutes by default, verify). The other costs are those of the cluster in
+[`../gcp/README.md`](../gcp/README.md).
 
 **Clean up.** `kubectl delete ns sandbox sandbox-egress sandbox-upstream sandbox-control` removes the
-platform; `terraform -chdir=deploy/gcp/terraform destroy` removes the cluster.
+platform. `terraform -chdir=deploy/gcp/terraform destroy` removes the cluster.
 
 ## Run it
 
@@ -28,9 +41,10 @@ kubectl get runtimeclass gvisor -o yaml                 # what GKE created (comp
 | Path | What it is |
 |---|---|
 | `00`-`60-*.yaml` | generated from `sandboxlab/k8s/policy.py` (GKE target), applied in order |
-| `workloads/` | the example Job, the warm pool, and the two must-fail objects |
-| `reference/runtimeclass-gvisor.yaml` | what GKE's RuntimeClass is expected to contain (verify); applied only if it is missing |
+| `workloads/` | the example Job, the warm pool, and the two objects that must fail |
+| `reference/runtimeclass-gvisor.yaml` | the expected content of the RuntimeClass of GKE (verify). `apply.sh` applies this file only if the RuntimeClass `gvisor` does not exist |
 | `optional/agent-sandbox.yaml` | SandboxTemplate + SandboxWarmPool + SandboxClaim (kubernetes-sigs/agent-sandbox `v1beta1`) |
 
-`kubectl apply -f deploy/gke/` (not recursive) applies only the numbered files. The images read
-`LOCATION-docker.pkg.dev/PROJECT_ID/sandbox/python:3.12-slim`; `apply.sh` substitutes the repository.
+`kubectl apply -f deploy/gke/` (not recursive) applies only the numbered files. The image fields contain
+`LOCATION-docker.pkg.dev/PROJECT_ID/sandbox/python:3.12-slim`. `apply.sh` replaces the repository part of this
+path with your repository.

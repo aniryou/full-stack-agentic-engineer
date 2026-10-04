@@ -1,23 +1,30 @@
 # %% [markdown]
 # # 05 · MCP: server, client, gateway
 #
-# The Model Context Protocol is how agents reach tools. This notebook builds a small MCP server over the
-# **same agentlab tools you used locally**, calls it in-process and over real HTTP, and then puts an egress
-# gateway in front of it that enforces per-agent policy and screens traffic. Everything follows the
-# 2026-07-28 revision's shape (stateless per-request `_meta`, mirrored headers, embedded server→client
-# interactions, the Tasks extension) as a *teaching subset* — enough to explain every hop in a design review,
-# not a conformant implementation.
+# The Model Context Protocol is the protocol that agents use to reach tools.
+# This notebook builds a small MCP server over the **same agentlab tools that you used locally**.
+# It calls the server in-process and over real HTTP.
+# Then it puts an egress gateway in front of the server.
+# The gateway enforces a policy for each agent and screens the traffic.
 #
-# Checked against the spec repository on 2026-09-26 (verify). What differs from the 2025-03-26, 2025-06-18 and
-# 2025-11-25 revisions, and where this subset departs from the spec:
-# [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md).
+# Everything has the shape of the 2026-07-28 revision, as a *teaching subset*:
+# stateless per-request `_meta`, mirrored headers, embedded server-to-client interactions and the Tasks extension.
+# The subset is sufficient to explain every hop in a design review.
+# It is not a conformant implementation.
 #
-# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md); deeper in this repo: [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) and the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 (MCP and A2A security).
+# The check against the spec repository was on 2026-09-26 (verify).
+# The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you two things:
 #
-# In this notebook you will:
-# 1. serve three tools — a read, a write that asks the user to confirm (MRTR elicitation), a long-running one that returns a Task;
-# 2. see the bytes: JSON-RPC bodies, `_meta`, the mirrored `Mcp-*` headers, and a rejected mismatch;
-# 3. front the server with a `Gateway` (deny-by-default policy, CEL-like conditions, screening, token hygiene, audit).
+# - What is different from the 2025-03-26, 2025-06-18 and 2025-11-25 revisions.
+# - Where this subset is different from the spec.
+#
+# **Concept map:** see [docs/PRIMER_MAP.md](../docs/PRIMER_MAP.md). For more depth in this repo, see [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) and the [identity primer](../../../../06-gateway/identity-security/agentic-identity-gcp-lab/docs/primer.md) §7 (MCP and A2A security).
+#
+# In this notebook, you will:
+# 1. Serve three tools: a read, a write that asks the user to confirm (MRTR elicitation), and a long-running tool.
+#    The long-running tool returns a Task.
+# 2. See the bytes: the JSON-RPC bodies, `_meta`, the mirrored `Mcp-*` headers and a rejected mismatch.
+# 3. Put a `Gateway` in front of the server. The gateway has a deny-by-default policy, CEL-like conditions, screens, token hygiene and audit.
 
 # %%
 import asyncio
@@ -32,19 +39,20 @@ from agentlab.mcp import (Forbidden, Gateway, HttpTransport, InProcessTransport,
 # %% [markdown]
 # ## 1. Three tools, one server
 #
-# An MCP server is an *anti-corruption layer* for one bounded context: it speaks the business
-# vocabulary and hides the backend. Here the backend is a dict. The three tools cover the three shapes a
-# tool call can take on the wire:
+# An MCP server is an *anti-corruption layer* for one bounded context.
+# It speaks the business vocabulary and hides the backend. Here, the backend is a dict.
+# The three tools cover the three shapes that a tool call can have on the wire:
 #
 # | tool | side effect | wire shape |
 # |---|---|---|
 # | `get_order` | read | plain `CallToolResult` |
 # | `cancel_order` | irreversible | `input_required` first (the server asks the user), then the result |
-# | `reconcile_batch` | reversible, long | `task` handle; the client polls `tasks/get` |
+# | `reconcile_batch` | reversible, long | `task` handle. The client polls `tasks/get`. |
 #
-# `NeedsInput` is how a tool asks the user something: the server turns it into an **embedded** elicitation
-# request instead of sending its own request to the client (the revision removed server-initiated requests),
-# and the client re-sends the *same* `tools/call` with `inputResponses`. `confirmed(ctx)` reads that answer.
+# A tool uses `NeedsInput` to ask the user a question.
+# The server changes the `NeedsInput` into an **embedded** elicitation request.
+# The server does not send its own request to the client, because the revision removed server-initiated requests.
+# Then the client sends the *same* `tools/call` again, with `inputResponses`. `confirmed(ctx)` reads that answer.
 
 # %%
 ORDERS = {
@@ -94,9 +102,10 @@ print("canonical resource URL (the token audience):", orders_server.resource_url
 # %% [markdown]
 # ## 2. The bytes: discover, list, call — in-process
 #
-# `InProcessTransport` runs the exact same code path as HTTP (routing, headers, JSON) without sockets.
-# Look at what the client sends: **no handshake**. Every request carries the protocol version and the
-# client's capabilities in `params._meta`, and the same version, method and tool name again as HTTP headers.
+# `InProcessTransport` runs the exact same code path as HTTP (routing, headers, JSON), but with no sockets.
+# Look at what the client sends: there is **no handshake**.
+# Every request has the protocol version and the client's capabilities in `params._meta`.
+# It also has the same version, method and tool name again, as HTTP headers.
 
 # %%
 client = McpClient(InProcessTransport(orders_server), agent_identity="reader")
@@ -116,10 +125,11 @@ print(json.dumps(json.loads(body), indent=1))
 print("\nresult:", await client.send(headers, body))
 
 # %% [markdown]
-# The `Mcp-Method` / `Mcp-Name` headers exist for **intermediaries**: a gateway can rate-limit or authorise
-# `cancel_order` without parsing JSON. That only works if header and body cannot disagree, so the server
-# MUST reject a mismatch (`-32020 HeaderMismatch`, HTTP 400). Watch what happens when the header says one
-# tool and the body another:
+# The `Mcp-Method` and `Mcp-Name` headers exist for **intermediaries**.
+# A gateway can rate-limit or authorise `cancel_order`, and it is not necessary for the gateway to parse the JSON.
+# This method works only if the header and the body cannot disagree.
+# Thus the server MUST reject a mismatch (`-32020 HeaderMismatch`, HTTP 400).
+# Look at what occurs when the header names one tool and the body names a different tool:
 
 # %%
 tampered = {**headers, "Mcp-Name": "cancel_order"}
@@ -129,9 +139,10 @@ print(status, json.loads(raw)["error"])
 # %% [markdown]
 # ## 3. Elicitation without a server-initiated request (MRTR)
 #
-# The first `tools/call` for `cancel_order` does not run the tool: it returns `resultType: input_required`
-# with the question. The client asks the user, then sends the **same call again** with `inputResponses`.
-# `McpClient.call_tool` does the loop for you; `on_input_required` is where your UI plugs in.
+# The first `tools/call` for `cancel_order` does not run the tool.
+# It returns `resultType: input_required` with the question. The client asks the user.
+# Then the client sends the **same call again** with `inputResponses`.
+# `McpClient.call_tool` does the loop for you. Your UI connects to the client through `on_input_required`.
 
 # %%
 first = await client.request("tools/call", {"name": "cancel_order", "arguments": {"order_id": "ORD-1002"}})
@@ -148,11 +159,12 @@ print("after the round trip:", final["structuredContent"])
 # %% [markdown]
 # ## 4. Long-running work: the Tasks extension
 #
-# `reconcile_batch` is declared long-running. Because this client advertised the tasks extension in
-# `_meta`, the server answers `tools/call` immediately with a **task handle** and runs the work in the
-# background; the client polls `tasks/get` at the server's suggested interval and answers mid-flight
-# questions with `tasks/update`. This is the protocol-level answer to approvals and to backends that
-# already think in job ids.
+# The declaration of `reconcile_batch` marks it as long-running.
+# This client advertised the tasks extension in `_meta`.
+# Thus the server answers `tools/call` immediately with a **task handle**, and it does the work in the background.
+# The client polls `tasks/get` at the interval that the server suggests.
+# The client uses `tasks/update` to answer the questions that come while the work runs.
+# This is the answer at the protocol level to approvals, and to backends that already think in job ids.
 
 # %%
 raw = await client.request("tools/call", {"name": "reconcile_batch", "arguments": {"batch_id": "B-77"}})
@@ -171,8 +183,9 @@ while (snapshot := await client.get_task(task_id))["status"] == "working":
 print("final:", snapshot["status"], snapshot["result"]["structuredContent"])
 
 # %% [markdown]
-# A client that did **not** declare the extension must never receive a task — the server runs the same
-# tool inline and answers when it is done. Same tool, two clients, two wire shapes:
+# A client that did **not** declare the extension must never receive a task.
+# The server runs the same tool inline and answers when the tool completes.
+# The same tool has two wire shapes for two clients:
 
 # %%
 legacy = McpClient(InProcessTransport(orders_server), capabilities=client_capabilities(tasks=False))
@@ -183,9 +196,10 @@ print("resultType:", inline["resultType"], "| result:", inline["structuredConten
 # %% [markdown]
 # ## 5. The same server over real HTTP
 #
-# `LocalHttpServer` binds 127.0.0.1 on a random port from daemon threads (the kernel stays responsive) and
-# validates the `Origin` header when a browser sends one — the DNS-rebinding defence the spec requires of
-# local servers. The client is byte-for-byte the same; only the transport changes.
+# `LocalHttpServer` binds 127.0.0.1 on a random port from daemon threads, so the kernel continues to respond.
+# It does a check of the `Origin` header when a browser sends one.
+# This is the DNS-rebinding defence that the spec makes necessary for local servers.
+# The client is the same, byte for byte. Only the transport changes.
 
 # %%
 http = LocalHttpServer(orders_server)
@@ -203,16 +217,23 @@ http.stop()
 # %% [markdown]
 # ## 6. The gateway: identity, policy, screening, audit
 #
-# In production the agent never talks to a server directly. Its traffic leaves through a gateway that knows
-# **which agent** is calling (here the `X-Agent-Identity` header stands in for the SPIFFE identity an mTLS
-# gateway extracts), decides **whether that agent may call that tool** (deny by default, IAM-style rules
-# with CEL-like conditions), **screens** arguments and results, refuses to forward tokens minted for other
-# audiences, and writes an **audit record** per call. Prompts reduce how often the agent tries the wrong
-# thing; the gateway is what stops it from succeeding.
+# In production, the agent never talks to a server directly. Its traffic goes out through a gateway.
+# The gateway does these things:
 #
-# The rules below name tools by glob (`get_*`). A production gateway keys on the *registry's* pinned,
-# reviewed tool metadata rather than on whatever the server says at runtime — annotations from a server
-# are hints, and a compromised server can lie about them.
+# - It knows **which agent** calls. Here, the `X-Agent-Identity` header takes the place of the SPIFFE identity
+#   that an mTLS gateway extracts.
+# - It decides **if that agent has permission to call that tool**.
+#   The policy is deny by default, with IAM-style rules and CEL-like conditions.
+# - It **screens** the arguments and the results.
+# - It refuses to forward tokens minted for other audiences.
+# - It writes an **audit record** for each call.
+#
+# Prompts decrease how often the agent tries the incorrect thing. The gateway is what makes those tries fail.
+#
+# The rules in the next cell name tools by glob (`get_*`).
+# A production gateway uses the pinned, reviewed tool metadata of the *registry* as its key.
+# It does not use what the server says at runtime.
+# Annotations from a server are hints, and a compromised server can lie about them.
 
 # %%
 def screen(text: str) -> list[str]:
@@ -244,10 +265,12 @@ except Forbidden as e:
 print("ops cancel        →", (await ops.call_tool("cancel_order", {"order_id": "ORD-1001"}, on_input_required=ask_user))["structuredContent"]["status"])
 
 # %% [markdown]
-# **Screening a poisoned result.** Order `ORD-1003` carries an injection in a free-text field — the classic
-# indirect prompt injection (Notebook 11). Without the gateway the text would land in the model's context as
-# a tool result. With it, the call is blocked and the audit says why. Note that screening a *result* cannot
-# undo a side effect; it keeps the poison out of the next model call.
+# **The gateway screens a poisoned result.** Order `ORD-1003` has an injection in a free-text field.
+# This is the classic indirect prompt injection (Notebook 11).
+# Without the gateway, the text goes into the model's context as a tool result.
+# With the gateway, the gateway blocks the call, and the audit says why.
+#
+# Note that the screen of a *result* cannot undo a side effect. It keeps the poison out of the next model call.
 
 # %%
 print("what the server would have returned:", ORDERS["ORD-1003"]["memo"])
@@ -257,9 +280,10 @@ except Forbidden as e:
     print("gateway →", e.http_status, e.message)
 
 # %% [markdown]
-# **Token hygiene.** MCP forbids token passthrough. The gateway forwards `Authorization` only when it can
-# verify the token *and* its audience is the destination server; anything else is stripped and audited —
-# a token for the ledger server must never reach the orders server, whatever the agent intended.
+# **Token hygiene.** MCP forbids token passthrough.
+# The gateway forwards `Authorization` only when it can verify the token, *and* the token's audience is the destination server.
+# The gateway removes all other tokens and records each removal in the audit.
+# A token for the ledger server must never get to the orders server, whatever the intention of the agent was.
 
 # %%
 ops.bearer_token = authz.issue_access_token("alice", "https://ledger.mcp.example/mcp", "orders:read")
@@ -271,9 +295,10 @@ print("token for this server     →", gateway.audit[-1].token)
 ops.bearer_token = None
 
 # %% [markdown]
-# **The audit log** is what security operations and anomaly detection key on: agent, server, tool, decision,
-# latency, token handling. Notice the two `ops cancel_order` rows — MRTR means the elicitation round trip is
-# two `tools/call` requests, and the gateway authorises and records both legs.
+# **The audit log** is the data that security operations and anomaly detection use.
+# It has the agent, the server, the tool, the decision, the latency and what the gateway did with the token.
+# Look at the two `ops cancel_order` rows. Because of MRTR, the elicitation round trip is two `tools/call` requests.
+# The gateway authorises and records both legs.
 
 # %%
 print(f"{'agent':7s} {'tool':14s} {'decision':15s} {'status':6s} {'ms':>6s}  token")
@@ -284,13 +309,14 @@ print("\nper-tool counters:", {k: dict(v) for k, v in gateway.counters.items()})
 # %% [markdown]
 # ### Exercise 6.1 — write a long-running tool
 #
-# Implement `export_statements(account_id, months)` as a tool that becomes a **task** when the client supports
-# tasks and runs inline otherwise. Two ways to do it; use the marker so the tool decides at runtime:
+# Write `export_statements(account_id, months)` as a tool. When the client supports tasks, the tool becomes a **task**.
+# When the client does not support tasks, the tool runs inline.
+# There are two ways to do it. Use the marker, so that the tool decides at runtime:
 #
-# * return `LongRunning(work, status_message="exporting")` where `work(ctx)` is an `async` function that
-#   calls `progress(ctx, f"month {i}/{months}")` for each month (with a tiny `await asyncio.sleep(0.01)`),
-#   and returns `{"account_id": ..., "months": months, "pages": months * 3}`.
-# * `ctx` is only needed inside `work`; the tool itself does not need a `ctx` parameter.
+# * Return `LongRunning(work, status_message="exporting")`. Here, `work(ctx)` is an `async` function.
+#   For each month, it calls `progress(ctx, f"month {i}/{months}")` (with a small `await asyncio.sleep(0.01)`).
+#   Then it returns `{"account_id": ..., "months": months, "pages": months * 3}`.
+# * `ctx` is necessary only inside `work`. A `ctx` parameter on the tool itself is not necessary.
 
 # %% exercise
 @tool
@@ -324,8 +350,9 @@ print("✅ task for capable clients, inline for legacy ones; progress seen:", so
 # %% [markdown]
 # ### Exercise 6.2 — a policy rule with a condition on the arguments
 #
-# Agent `support` may call `refund_order` **only when `amount <= 100`** (a CEL condition like
-# `request.args.amount <= 100` on Agent Gateway). Nothing else is allowed for `support`. Write the rule.
+# Agent `support` can call `refund_order` **only when `amount <= 100`**.
+# On Agent Gateway, this is a CEL condition such as `request.args.amount <= 100`.
+# The policy permits nothing else for `support`. Write the rule.
 
 # %%
 @tool(side_effect=SideEffect.REVERSIBLE)
@@ -361,14 +388,15 @@ print("✅ condition enforced deny-by-default:", [a.decision for a in refunds_ga
 # %% [markdown]
 # ### Exercise 6.3 — implement the task polling loop yourself
 #
-# `McpClient.call_tool` hides the loop. Re-implement it against the raw JSON-RPC methods (`client.request`).
-# `poll_task(client, task, answer)` receives the `task` object from a `tools/call` response and must:
+# `McpClient.call_tool` hides the loop. Write the loop again against the raw JSON-RPC methods (`client.request`).
+# `poll_task(client, task, answer)` receives the `task` object from a `tools/call` response. It must do these steps:
 #
-# 1. return `task["result"]` when `status == "completed"`;
-# 2. raise `RuntimeError` when the status is `failed` or `cancelled`;
-# 3. on `input_required`, build `inputResponses` by awaiting `answer(key, request["params"])` for every entry
-#    of `task["inputRequests"]`, send them with `tasks/update`, and continue with the task object it returns;
-# 4. otherwise sleep `task["pollIntervalMs"] / 1000` seconds and fetch the task again with `tasks/get`.
+# 1. When `status == "completed"`, return `task["result"]`.
+# 2. When the status is `failed` or `cancelled`, raise `RuntimeError`.
+# 3. On `input_required`, make `inputResponses`. For every entry of `task["inputRequests"]`, await
+#    `answer(key, request["params"])`. Send the responses with `tasks/update`.
+#    Then continue with the task object that `tasks/update` returns.
+# 4. Otherwise, sleep for `task["pollIntervalMs"] / 1000` seconds. Then get the task again with `tasks/get`.
 
 # %% exercise
 async def poll_task(client: McpClient, task: dict, answer) -> dict:
@@ -405,9 +433,10 @@ print("✅ your polling loop handles working → input_required → completed, a
 # %% [markdown]
 # ### Exercise 6.4 — add a screening rule
 #
-# Extend the screen with a sensitive-data rule for Singapore NRIC numbers (a letter in `STFG`, seven digits,
-# a letter, e.g. `S1234567D`). `screen_v2(text)` must return everything `screen` returns **plus**
-# `"sensitive-data: NRIC"` when one is present. Then the gateway below must block `ORD-1004`.
+# Add a sensitive-data rule for Singapore NRIC numbers to the screen.
+# An NRIC number is a letter in `STFG`, seven digits and a letter, for example `S1234567D`.
+# `screen_v2(text)` must return everything that `screen` returns, **plus** `"sensitive-data: NRIC"` when an NRIC number is present.
+# Then the gateway in the check cell must block `ORD-1004`.
 
 # %%
 ORDERS["ORD-1004"] = {"id": "ORD-1004", "customer": "dan", "status": "shipped", "total": 10.0, "memo": "ID on file: S1234567D"}
@@ -438,9 +467,10 @@ print("✅ screening extended:", gateway.audit[-2].decision, "→", blocked_mess
 # %% [markdown]
 # ### Exercise 6.5 — say why the gateway strips that token
 #
-# In one or two sentences (`why_strip`), explain why the gateway removed the `Authorization` header when the
-# token's audience was the ledger server, even though the agent was allowed to call the orders server.
-# Mention the audience and what could otherwise happen to the token.
+# In one or two sentences (`why_strip`), explain why the gateway removed the `Authorization` header.
+# The audience of the token was the ledger server.
+# The gateway removed the header although the agent had permission to call the orders server.
+# Include the audience in your answer. Also say what can otherwise occur to the token.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -459,16 +489,27 @@ print("✅", why_strip)
 # %% [markdown]
 # ## The one-minute version
 #
-# When MCP comes up, say what changed in the 2026-07-28 revision and why it matters for the design: stateless
-# per-request calls (no session affinity, easy to load-balance), embedded server→client interactions (a server
-# never needs a channel back to the client, so a plain HTTP gateway can sit in between), mirrored headers (the
-# gateway enforces per-tool policy without parsing bodies — and the server rejects mismatches so that policy
-# and execution agree), and Tasks (approvals and job ids become a protocol shape instead of a bespoke API).
-# Many servers still speak a 2025 revision, so say which one the design assumes; what differs, and where this
-# lab's subset departs from the spec (checked 2026-09-26, verify), is in
-# [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md).
+# When the discussion is about MCP, say what changed in the 2026-07-28 revision.
+# Also say why each change is important for the design. Talk about these four changes:
 #
-# Then draw the gateway: agent identity in, deny-by-default policy keyed on agent × server × tool with
-# conditions, screening on both directions, tokens forwarded only to their audience, an audit record per
-# call. One server per bounded context behind it. The sentence that lands: *the prompt is not a security
-# boundary; the gateway and the systems of record are.*
+# - **Stateless per-request calls.** There is no session affinity, and it is easy to load-balance the calls.
+# - **Embedded server-to-client interactions.** A server never needs a channel back to the client.
+#   Thus a plain HTTP gateway can stand between the server and the client.
+# - **Mirrored headers.** The gateway enforces a policy for each tool, and it does not parse the bodies.
+#   The server rejects mismatches, so that the policy and the execution agree.
+# - **Tasks.** Approvals and job ids become a protocol shape, not a custom API.
+#
+# Many servers still speak a 2025 revision. Thus, say which revision the design assumes.
+# The file [docs/MCP_REVISIONS.md](../docs/MCP_REVISIONS.md) tells you what is different.
+# It also tells you where the subset of this lab is different from the spec (the check was on 2026-09-26, verify).
+#
+# Then draw the gateway:
+#
+# - The agent identity comes in.
+# - A deny-by-default policy uses agent × server × tool as its key, with conditions.
+# - The gateway screens both directions.
+# - It forwards tokens only to their audience.
+# - It writes an audit record for each call.
+#
+# Behind the gateway, there is one server for each bounded context.
+# The sentence that has the most effect: *the prompt is not a security boundary; the gateway and the systems of record are.*

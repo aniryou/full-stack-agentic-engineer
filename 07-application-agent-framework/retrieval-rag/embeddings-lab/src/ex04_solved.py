@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exercises 04 · ANN internals
-# Implement the two core moves of IVF-PQ, then demonstrate the filtered-search
-# trap yourself. Solutions: `../solutions/ex04.ipynb`.
+# Implement the two core moves of IVF-PQ. Then show the filtered-search trap
+# yourself. The solutions are in `../solutions/ex04.ipynb`.
 
 # %%
 import numpy as np
@@ -27,9 +27,9 @@ gold = np.argsort(l2sq(Q, X), axis=1)[:, :10]
 
 # %% [markdown]
 # ## Task 1 — asymmetric distance computation (ADC)
-# Given per-subspace `codebooks` (M, 256, sub) and `codes` (N, M), return the
-# PQ distance from query `q` to every database item. It must equal the exact
-# squared distance to each item's *reconstruction* — that's the check.
+# You get per-subspace `codebooks` (M, 256, sub) and `codes` (N, M). Return the
+# PQ distance from query `q` to every database item. It must be equal to the exact
+# squared distance to the *reconstruction* of each item. This is the check.
 
 # %%
 M = 4
@@ -55,10 +55,16 @@ print("adc_dists ✓ (equals distance to reconstructions)")
 
 # %% [markdown]
 # ## Task 2 — IVF search
-# `ivf_search(q, n_probe)`: find the `n_probe` nearest coarse centroids, gather
-# their inverted lists, score exactly, return top-10 ids. With
-# `n_probe = n_list` it must match brute force; with fewer probes every result
-# must come from the probed cells (brute force would pass the first check only).
+# Implement `ivf_search(q, n_probe)`:
+#
+# 1. Find the `n_probe` nearest coarse centroids.
+# 2. Gather their inverted lists.
+# 3. Calculate the exact distances of the candidates.
+# 4. Return the top-10 ids.
+#
+# With `n_probe = n_list`, the result must match brute force. With fewer probes,
+# every result must come from the probed cells. A brute-force search passes only
+# the first check.
 
 # %%
 NLIST = 32
@@ -88,9 +94,9 @@ print(f"ivf_search ✓   recall@10 with n_probe=1: {rec1:.2f}, n_probe=4: {rec4:
 
 # %% [markdown]
 # ## Task 3 — post-filtering collapses on selective filters
-# Give every vector a random tag (1% selectivity). Implement `post_filter`:
-# search top-`k_search` *ignoring* tags, then keep matches. Measure recall
-# against exact filtered search and watch it collapse.
+# Give every vector a random tag (1% selectivity). Implement `post_filter`. It
+# searches the top-`k_search` *without* the tags, and then keeps the matches.
+# Measure the recall against an exact filtered search. Look at how the recall collapses.
 
 # %%
 tag = rng.integers(0, 100, N)
@@ -115,6 +121,6 @@ print("filtered-search trap ✓ demonstrated")
 
 # %% [markdown]
 # ## Task 4 (open) — the knee of the curve
-# For your `ivf_search`, sweep $n_{\text{probe}} \in \lbrace 1, \ldots, 32 \rbrace$ and find the smallest value
-# reaching ≥ 0.95 recall@10. How does it change if you double `NLIST`? (Rule of
-# thumb: $n_{\text{list}} \approx \sqrt{N}$, then tune $n_{\text{probe}}$ on *your* recall target.)
+# For your `ivf_search`, sweep $n_{\text{probe}} \in \lbrace 1, \ldots, 32 \rbrace$. Find the smallest value
+# that gets ≥ 0.95 recall@10. How does it change if you double `NLIST`? The general
+# rule is $n_{\text{list}} \approx \sqrt{N}$. Then adjust $n_{\text{probe}}$ to *your* recall target.

@@ -1,13 +1,13 @@
 # %% [markdown]
 # # 02 · Tools are contracts
 #
-# A tool is a function the model may call — but the model is a reader that cannot ask
-# follow-up questions and will happily guess. So a good tool removes the need to guess:
-# a clear schema, arguments validated **before** running, and errors the model can act
-# on instead of stack traces.
+# A tool is a function that the model can call. But the model is a reader that cannot
+# ask follow-up questions, and it is always ready to guess. Thus a good tool removes
+# the need to guess. It has a clear schema. It validates the arguments **before** it
+# runs. It returns errors that the model can act on, not stack traces.
 #
-# In this notebook you write tools the right way and see how the loop reacts to each
-# kind of result.
+# In this notebook, you write tools in the correct way. You also see how the loop reacts
+# to each kind of result.
 
 # %%
 from agentcore import Agent, FakeLLM, ToolError, call, tool
@@ -27,18 +27,19 @@ print("not found  :", get_order.run({"order_id": "ORD-9"}))
 print("bad args   :", get_order.run({}))                      # missing required argument
 
 # %% [markdown]
-# Notice the three result shapes the model can receive:
+# Look at the three result shapes that the model can receive:
 # `{"ok": True, "data": ...}`, a **structured error** with a `hint`, and an
-# `invalid_arguments` error. None of them is a crash. That is what lets the model
-# recover — ask for the missing id, apologise for the not-found — instead of the whole
-# turn failing.
+# `invalid_arguments` error. None of them is a crash. Because of this, the model can
+# recover. It can ask for the id that it does not have, or it can apologise for the
+# not-found result. The whole turn does not fail.
 
 # %% [markdown]
 # ## Exercise 2.1 — a tool with an enum-like check
 #
-# Write `set_priority(ticket_id: str, level: str)` that accepts only `"low"`, `"medium"`
-# or `"high"`. On a bad level, raise `ToolError(..., kind="invalid_value", hint=...)`.
-# On success return `{"ticket_id": ..., "level": ...}`.
+# Write `set_priority(ticket_id: str, level: str)`. It accepts only `"low"`, `"medium"`
+# or `"high"`. For an incorrect level, raise
+# `ToolError(..., kind="invalid_value", hint=...)`. If the level is correct, return
+# `{"ticket_id": ..., "level": ...}`.
 
 # %% exercise
 @tool
@@ -61,12 +62,14 @@ print("✅ set_priority validates its input")
 # %% [markdown]
 # ## Exercise 2.2 — make a write idempotent
 #
-# Writes get retried (a timeout, a dropped connection). A retried "refund" must not
-# refund twice. Implement `make_refund_tool()` returning a `@tool`-decorated function
-# `refund(order_id, amount)` that records each `order_id` it has refunded, with its
-# result, in the closure dict `done`; a second call for the same order returns the
-# **first** result with `{"already_done": True}` added and does **not** refund or record
-# again — even if the retry carries a different amount.
+# A write can run again as a retry, after a timeout or a dropped connection. A retried
+# "refund" must not refund two times. Implement `make_refund_tool()`. It returns a
+# `@tool`-decorated function `refund(order_id, amount)`. This function records each
+# `order_id` that it refunded, with its result, in the closure dict `done`.
+#
+# A second call for the same order returns the **first** result, with
+# `{"already_done": True}` added. It does **not** refund or record again. This is also
+# true when the retry has a different refund value.
 
 # %% exercise
 def make_refund_tool():
@@ -101,10 +104,14 @@ print("✅ refund is idempotent:", first["data"], "→", again["data"])
 # %% [markdown]
 # ## Exercise 2.3 — see the loop recover from a tool error
 #
-# Give an `Agent` the `get_order` tool and a **scripted model** that: (1) calls
-# `get_order` for a missing order `ORD-9`, then (2) after seeing the `not_found` error,
-# answers with the text `"I couldn't find order ORD-9 — can you confirm the number?"`.
-# Build the `FakeLLM` script in `script` so the assertion passes.
+# Give an `Agent` the `get_order` tool and a **scripted model**. The model must do these
+# steps:
+#
+# 1. Call `get_order` for an order that does not exist, `ORD-9`.
+# 2. After it sees the `not_found` error, answer with the text
+#    `"I couldn't find order ORD-9 — can you confirm the number?"`.
+#
+# Make the `FakeLLM` script in `script` so that the assertion passes.
 
 # %% exercise
 ### BEGIN SOLUTION
@@ -123,6 +130,7 @@ print("✅ the agent recovered from a not-found error instead of crashing")
 # %% [markdown]
 # ## The one-minute version
 # In a design review, when you "design the interface", write one full tool contract on
-# the board: name, description, arguments with an enum, the success shape, the error
-# cases, and an idempotency key for writes. One concrete contract beats a list of tool
-# names — it shows you have thought about what the model will do wrong.
+# the board. Give its name, its description, its arguments with an enum, the success
+# shape, the error cases, and an idempotency key for writes. One concrete contract is
+# better than a list of tool names. It shows that you thought about what the model will
+# do incorrectly.
