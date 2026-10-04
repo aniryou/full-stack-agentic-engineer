@@ -361,7 +361,16 @@ find . -maxdepth 5 -name '*.ipynb' ! -path '*/.ipynb_checkpoints/*' | wc -l
   51, paged-attention 3, quant-core 85, quant-lab 89, mini-engine-core 74 and vllm-serving-lab 73 tests pass; the 30
   linter errors left are quoted source comments and messages, pinned fragments (the kv-cache primer's dashes, the
   quantization primer's arrows and crest-factor sentence, the FlashAttention primer's "that's 32 GB") and the arrows in
-  two formula cells.
+  two formula cells. **Layer 06** (23 groups, about 118k words: the identity primer and docs, the LLM-gateway primer,
+  the four scaling documents, READMEs and deploy notes, 10 notebook sources, 43 hand-written notebooks, the layer
+  README; the generated capacity plan was left alone, since its test compares it with the generators' output): 116
+  agents in 3.8 hours; 11,340 sentences compared, 12 blocking, 93 major and 259 minor findings, 479 applied, 3
+  rejected; the nine left open (two parenthetical sentences, an eight-sentence drill answer, "the incorrect traffic"
+  read the wrong way, an exercise statement whose definition of `ratio` had gone implicit, a weakened "win or lose",
+  an unclear "Its", "That" and "it") applied by hand; agentic-identity-core 31, agentic-identity-gcp-lab 41,
+  agentic-scaling-lab 37, gateway-core 109 and gateway-lab 166 tests pass; the 30 linter errors left are quoted drill
+  questions and turns, the RFC keywords SHOULD and MAY in the MCP authorization references, pinned fragments of the
+  LLM-gateway primer, the glossary label "Reserve → stream → reconcile" and the generated capacity plan.
   **Baseline unchanged: 385 notebooks.**
 
 ## Housekeeping
