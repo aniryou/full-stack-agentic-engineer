@@ -1,6 +1,6 @@
 # Identity & Security for Agentic Systems — A Primer with a GCP Reference Implementation
 
-*The author wrote this primer on 5 September 2026, for the agent platform of Google Cloud. The sections have numbers, thus you can do the drills of one section at a time. Every section ends with "In one sentence" (the 30-second version). Most sections map to a module in `src/agentsec/` and a notebook in `notebooks/`. On the date above, the author compared the facts about Google Cloud products with the documentation. Before you rely on the items in the Verify list (§13), examine them again.*
+*The author wrote this primer on 5 September 2026, for the agent platform of Google Cloud. The sections have numbers, thus you can study one section at a time. Every section ends with "In one sentence" (the 30-second version). Most sections map to a module in `src/agentsec/` and a notebook in `notebooks/`. On the date above, the author made sure that the facts about Google Cloud products agree with the documentation. Before you rely on the items in the Verify list (§13), examine them again.*
 
 ---
 
@@ -10,13 +10,13 @@ An agent is a **workload that turns untrusted text into privileged actions**. Ev
 
 - *Untrusted text*: the model reads prompts, tool results, web pages, documents, and messages from other agents. The model cannot reliably tell instructions from data. Anything that the agent reads is an attack surface.
 - *Privileged actions*: the agent holds credentials and calls tools. Its blast radius is the union of everything that those credentials can do.
-- *Workload*: it runs in some location, under some identity. You must be able to govern it like any other production system. It has a name and permissions, you can observe it, and you can revoke it.
+- *Workload*: it runs in some location, under some identity. You must be able to govern it like any other production system. It must have a name and permissions, you must be able to observe it, and you must be able to revoke it.
 
 Five ideas do most of the work. If you remember nothing else, remember these five:
 
 1. **Every agent is a first-class principal.** It is not a shared service account, and it is not "the app". Each agent has one cryptographic identity, its own IAM bindings and its own audit trail. On Google Cloud, this is **Agent Identity** (SPIFFE-based, certificate-bound).
-2. **Two authorities, always distinguished.** An agent acts under its *own authority* (its identity, its permissions). Or it acts *on behalf of a user* (delegated authority, the user's consent and permissions). Tokens, policy and logs must all show which authority applies. When the agent acts under delegated authority, they must show both identities.
-3. **Least privilege per action, not per agent.** The credential for a tool call must have the scope of that call only. It has the narrowest audience, the narrowest scope and the shortest lifetime, and it is bound to the caller. Brokers and token exchange make this low-cost.
+2. **Two authorities, always distinguished.** An agent acts either under its *own authority* (its identity and permissions) or *on behalf of a user* (delegated authority, the user's consent and permissions). Tokens, policy and logs must all show which authority applies. When the agent acts under delegated authority, they must show both identities.
+3. **Least privilege per action, not per agent.** The credential for a tool call must have the scope of that call only. It must have the narrowest audience, the narrowest scope and the shortest lifetime. It must also be bound to the caller. Brokers and token exchange make this low-cost.
 4. **Deterministic controls outrank probabilistic ones.** Prompt-level defenses (Model Armor, instructions, classifiers) decrease the risk. IAM, network perimeters, allowlists and confirmation gates *bound* the risk. Make the design so that a fully hijacked model still cannot go outside the deterministic envelope.
 5. **Observable by construction.** The system logs every tool call with the user, the agent, the decision and the trace ID. You can attribute every use of a credential. You can detect anomalies. A revocation needs only one policy change.
 
@@ -41,11 +41,11 @@ Classical IAM has two kinds of principals. The first kind is **humans** (interac
 | One identity per deployment is sufficient | Dozens of agents can share a runtime. An agent can spawn sub-agents. One agent serves many users. | Shared identities make attribution and revocation impossible. You need per-agent identity plus per-user delegation. |
 | Instructions come from the developer. Data comes from users. | Instructions and data arrive in the same channel (the context window). The model cannot cryptographically tell them apart. | Prompt injection is not a bug that a patch can repair. It is a property of the medium. Treat every input as untrusted, and enforce policy outside the model. |
 | The caller of an API is the entity that decided to call it | The *model* decided. The *agent runtime* did the call. The *user* asked for a fully different thing. | The "confused deputy" problem is the default state of an agent, not an edge case. |
-| Long-lived secrets with an occasional rotation are acceptable for workloads | Agents do arbitrary reasoning on content. An attacker can write that content so that it exfiltrates secrets from the context or the environment of the agent. | Assume that a long-lived credential in the reach of an agent can leak. Use short-lived, sender-constrained tokens that the issuer gives just in time. |
+| Long-lived secrets with an occasional rotation are acceptable for workloads | Agents do arbitrary reasoning on content. An attacker can write some of that content so that it exfiltrates secrets from the context or the environment of the agent. | Assume that a long-lived credential in the reach of an agent can leak. Use short-lived, sender-constrained tokens that the issuer gives just in time. |
 
 Two well-known framings are useful here:
 
-- **The lethal trifecta** (Simon Willison): an agent has (a) access to private data, (b) exposure to untrusted content, and (c) a way to communicate externally. An attacker can make such an agent exfiltrate data. Remove one leg, or put a deterministic gate on it.
+- **The lethal trifecta** (Simon Willison) has three legs. They are (a) access to private data, (b) exposure to untrusted content, and (c) a way to communicate externally. If an agent has all three, an attacker can make it exfiltrate data. Remove one leg, or put a deterministic gate on it.
 - **Google's three principles for secure agents** (2025) are these. Agents must have *well-defined human controllers*. Agent *powers must be limited*. Agent *actions and planning must be observable*. Google uses these principles together with a hybrid defense: deterministic runtime policy enforcement plus reasoning-based defenses (model hardening, classifiers).
 
 **In one sentence:** "An agent is a workload. At runtime, a model that reads untrusted input selects its behavior. Thus I do not try to predict what it needs. I bound what it can do: I give it its own identity, and I limit the credential of each action to that action. I enforce policy outside the model, and I log everything with the identity of the user and the identity of the agent."
@@ -71,16 +71,18 @@ Use the **OWASP Top 10 for Agentic Applications (2026)** as the shared vocabular
 
 Two habits make a threat model credible when you draw it on a whiteboard:
 
-- **Draw the trust boundaries, then the data flows crossing them.** For a typical customer-support agent, data crosses these boundaries:
-  - user and front-end,
-  - front-end and agent runtime,
-  - agent and model endpoint,
-  - agent and MCP servers/tools,
-  - agent and peer agents,
-  - agent and memory/session store,
-  - agent and the open internet (if any).
+- **Draw the trust boundaries, then the data flows that cross them.** For a typical customer-support agent, data crosses these boundaries:
 
-  Each flow across a boundary gets an identity, a policy and a log.
+    - user and front-end,
+    - front-end and agent runtime,
+    - agent and model endpoint,
+    - agent and MCP servers/tools,
+    - agent and peer agents,
+    - agent and memory/session store,
+    - agent and the open internet (if any).
+
+    Each flow across a boundary gets an identity, a policy and a log.
+
 - **Ask "what if the model is fully adversarial?"** for each tool. If the answer is "it can do X, and nothing outside the model stops it", then X is your risk. Then add the deterministic control.
 
 **In one sentence:** "I use the agentic top ten of OWASP as the checklist. But the design question is always the same. Assume that an attacker hijacked the model. What is the worst thing that it can do with the credentials and tools that it holds? Which control outside the model stops it?"
@@ -107,11 +109,11 @@ Every action of the agent is under one of two authorities. Make this explicit in
 - **Own authority**: the agent uses *its* identity and *its* IAM grants. Example: the agent writes traces to Cloud Logging or reads a shared knowledge base. Or it calls a 2-legged-OAuth SaaS API with credentials that the organization gave *the agent*. Audit logs show only the identity of the agent.
 - **Delegated authority (on behalf of a user)**: the agent acts with credentials that *the user consented to*, typically 3-legged OAuth. Example: the agent reads the user's calendar, creates a ticket as the user, or sends a query to BigQuery with the user's own dataset permissions. Audit logs must show **both** the agent and the user. Google's Agent Identity does exactly this when it acts through Auth Manager.
 
-You cannot use one authority in place of the other. One of the most common design errors is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
+You cannot use one authority in place of the other. A common design error is to give broad permissions to the agent's own identity ("it needs to read everyone's tickets"). The correct design uses delegation: the agent reads *this user's* tickets with *this user's* token. Delegation keeps the agent's own blast radius small. It also makes authorization decisions the problem of the resource, which already knows how to authorize users.
 
 ### 3.3 What "agent identity" should mean (and how GCP implements it)
 
-A good agent identity has the properties in the table below. Google Cloud's Agent Identity became generally available in 2026: Agent Identity from April, Auth Manager and its APIs from August (per the IAM release notes). Google designed it against this list, thus the list also gives you the product knowledge:
+A good agent identity has the properties in this table. Google Cloud's Agent Identity became generally available in 2026: Agent Identity from April, Auth Manager and its APIs from August (per the IAM release notes). Google designed it against this list, thus the list also gives you the product knowledge:
 
 | Property | Why it matters | Google Cloud implementation |
 |---|---|---|
@@ -127,7 +129,7 @@ The runtimes that support it today are **Agent Runtime** (Agent Engine, resource
 
 Know these two things:
 
-- **Migration from a service account to an agent identity creates a new principal with no inherited permissions.** Grant the roles in advance (Policy Analyzer helps) before you change `--identity-type`. You cannot grant legacy bucket roles to agent identities.
+- **Migration from a service account to an agent identity creates a new principal with no inherited permissions.** Grant the roles (Policy Analyzer helps) before you change `--identity-type`. You cannot grant legacy bucket roles to agent identities.
 - **The opt-out exists and is a red flag.** `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=False` disables token binding. The documentation strongly discourages it. If you see it in the config of a deployment, that is a finding.
 
 ### 3.4 Where the older primitives still fit
@@ -136,7 +138,7 @@ Agent Identity does not replace the rest of Google Cloud IAM. You use them toget
 
 - **Service accounts** stay the identity for non-agent infrastructure (build pipelines, the front-end, a Cloud SQL proxy). They are also the identity for Cloud Run MCP servers that select `--identity-type=service-account`.
 - **Workload Identity Federation** brings external identities (GitHub Actions OIDC, AWS/Azure workloads, on-prem SPIFFE) into IAM through STS token exchange, without keys. This is the correct way for CI to deploy agents.
-- **Short-lived impersonation** (`generateAccessToken`, `generateIdToken`) and **Credential Access Boundaries** (downscoped tokens, Cloud Storage only). With them, a broker can issue narrowly scoped, short-lived credentials for one specific tool call.
+- **Short-lived impersonation** (`generateAccessToken`, `generateIdToken`) and **Credential Access Boundaries** (downscoped tokens, Cloud Storage only) let a broker issue narrowly scoped, short-lived credentials for one tool call.
 - **IAM Conditions** (CEL on resource name, time, request attributes), **deny policies**, **Principal Access Boundary policies**, and **Org Policy custom constraints** set the "cannot exceed" envelope. The allow grants do not change that envelope.
 
 ### 3.5 Delegation mechanics (standards you should be able to draw)
@@ -178,7 +180,7 @@ As the agent developer, you control the runtime layer most. The resource and net
 Classify every tool one time, in policy, not in prose:
 
 - **READ**: no side effects (`get_ticket`, `search_docs`). The policy permits these tools by default for the agents bound to it. It still does a scope check on them.
-- **WRITE**: reversible side effects (`add_comment`, `create_draft`). These tools must be on an explicit allowlist. When the agent acts for a user, they also need the user's scope.
+- **WRITE**: reversible side effects (`add_comment`, `create_draft`). These tools must be on an explicit allowlist. When the agent acts for a user, these tools also need the user's scope.
 - **DESTRUCTIVE / EXTERNAL**: irreversible, financial, or the action goes outside the trust boundary (`issue_refund`, `send_email`, `fetch_url`). These tools need human confirmation, unless the arguments are in a narrow, pre-approved argument envelope (for example, refund ≤ $50 on the caller's own order). A tool that takes a URL also needs an egress allowlist.
 
 If the tool is unknown, the decision is **deny**. The policy engine evaluates the policy against a `ToolCallRequest`. That request carries the agent principal, the user, the authority mode, the tool, the arguments and the scopes. MCP tool annotations (`readOnlyHint`, `destructiveHint`) and VPC-SC's `mcp.tool.isReadOnly` express the same tiers at the protocol and network layers. Keep them consistent.
@@ -205,7 +207,7 @@ Confirmation is a control only if the person sees **what will execute**, not wha
 - **Principal Access Boundary policies**: they limit which *resources* a set of principals can access at all. For example, agents in the sandbox folder can only reach resources in that folder.
 - **Org Policy custom constraints**: for example, make `identity_type = AGENT_IDENTITY` mandatory on `reasoningEngines`, or make Cloud Run agent services use agent identity. (Custom constraints for Agent Identity became GA in August 2026. The exact resource fields belong on your Verify list.)
 
-**In one sentence:** "I put policy at four layers. IAM is on the resource. A callback in the runtime sees the actual tool call. The gateway/perimeter is on the network, and Model Armor is on the model boundary. I classify tools into read, write and destructive, thus the runtime can deny by default and ask for confirmation where it is important. Each tool call gets a credential scoped to that call from a broker, never a permanent wide token."
+**In one sentence:** "I put policy at four layers. IAM is on the resource. A callback in the runtime sees the actual tool call. The gateway/perimeter is on the network, and Model Armor is on the model boundary. I classify tools into read, write and destructive, thus the runtime can deny by default and make confirmation necessary where it is important. Each tool call gets a credential scoped to that call from a broker, never a wide token that the agent holds all the time."
 
 ---
 
@@ -215,11 +217,11 @@ Confirmation is a control only if the person sees **what will execute**, not wha
 
 1. **No secrets in prompts, instructions, tool descriptions, or session state.** The model can read the context window. Thus anyone who can inject into the context window can also read it. ADK's `tool_context.state` is session state. Treat it as semi-trusted. In production, never put raw refresh tokens there.
 2. **Prefer no secret at all.** Agent Identity and Workload Identity Federation give you keyless auth to Google APIs and external providers. Where you can replace a stored secret with a runtime-attested identity, replace it.
-3. **When a secret is unavoidable, vault it and broker it.** API keys and OAuth client secrets live in **Auth Manager** (agent-facing) or **Secret Manager** (infrastructure-facing). Each secret has IAM on it, a log of each access and a scheduled rotation. The agent's own principal gets `roles/secretmanager.secretAccessor` on exactly the secrets that it needs.
+3. **When a secret is unavoidable, keep it in a vault and let a broker issue it.** API keys and OAuth client secrets live in **Auth Manager** (agent-facing) or **Secret Manager** (infrastructure-facing). Each secret has IAM on it, a log of each access and a scheduled rotation. The agent's own principal gets `roles/secretmanager.secretAccessor` on exactly the secrets that it needs.
 4. **Short-lived, audience-bound, sender-constrained.** The lifetime is minutes, not days. The token has one audience. Where the ecosystem supports it, the token is bound to the caller's certificate or DPoP key.
 5. **Redact by default.** Structured logs go through a redactor. The code wraps secret values in types whose `repr` never prints them.
 
-**The two secret-handling paths (know this distinction cold):**
+**The two paths for secrets (know this distinction well):**
 
 - **Direct path**: ADK intercepts the tool call and asks Auth Manager for the credential. Then the agent process attaches the credential to the outbound request. This path is simple. But a compromised runtime or a successful injection can read the token from memory for its lifetime.
 - **Gateway path**: Auth Manager encrypts the end-user credentials. Only **Agent Gateway** decrypts them, and it injects them into the egress request. The agent code never sees the raw credential. The blast-radius story is stronger. This path needs the gateway in the path, and registered destinations.
@@ -236,7 +238,7 @@ Neither path removes credential risk. They move it from a thousand config files 
 
 Everything that enters the context window from outside the developer's own instructions is data, not instructions. In operation, this means:
 
-- **Screen on the way in and on the way out.** Use Model Armor (or an equivalent) on user prompts (injection/jailbreak, sensitive data, malicious URIs, RAI). Also use it on model responses (data leakage, malicious URIs). Set project **floor settings**, thus Model Armor screens every Gemini call in the project, even if a developer forgets. Use per-request templates for stricter surfaces. Start in `INSPECT_ONLY` and review the findings. Then move sensitive surfaces to `INSPECT_AND_BLOCK`.
+- **Screen on the way in and on the way out.** Use Model Armor (or an equivalent) on user prompts (injection/jailbreak, sensitive data, malicious URIs, RAI). Also use it on model responses (data leakage, malicious URIs). Set project **floor settings**. With them, Model Armor screens every Gemini call in the project, even if a developer forgets. Use per-request templates for stricter surfaces. Start in `INSPECT_ONLY` and review the findings. Then move sensitive surfaces to `INSPECT_AND_BLOCK`.
 - **Tag provenance.** Wrap tool results before they reach the model, with the source, the trust level and a timestamp. Keep the tag in the audit record. Then you can trace a later bad decision to the content that caused it.
 - **Sanitize tool output.** Remove control characters and known instruction patterns from untrusted sources. Never let the model interpret a tool result as a new system instruction.
 - **Validate arguments structurally.** Use tool input schemas with tight types and enums. Refuse free-form URLs/SQL where a constrained form is sufficient. Enforce an **egress allowlist** for any tool that takes a URL (SSRF and exfiltration are the same bug in an agent).
@@ -245,7 +247,7 @@ Everything that enters the context window from outside the developer's own instr
 
 Model-generated code runs with *no ambient credentials*. Google's Agent Sandbox (and Workspaces) exist for this purpose. If you must run code in a different location, run it under a separate, unprivileged identity. Do not give it the agent's metadata-server access, and set network egress to off by default. An "execute code" tool is DESTRUCTIVE-tier by definition.
 
-The full build of this control is in [07-application-agent-framework/sandboxed-execution](../../../../07-application-agent-framework/sandboxed-execution/README.md). It has these parts:
+The full build of this control is in [07-application-agent-framework/sandboxed-execution](../../../../07-application-agent-framework/sandboxed-execution/README.md). That topic has these parts:
 
 - the isolation ladder from a process to gVisor and a microVM,
 - the execution contract,
@@ -254,7 +256,7 @@ The full build of this control is in [07-application-agent-framework/sandboxed-e
 
 ### 6.3 Plan → check → act
 
-For multi-step tasks, make the agent produce a plan (the list of tool calls that it intends to make). Send the plan through the same policy engine as a dry run. Only after that, execute the plan step by step, with enforcement at each step. Budgets (tokens, tool calls, spend) and loop detection are part of this layer. Cascading failures (ASI08) are usually unbounded loops with valid credentials.
+For multi-step tasks, make the agent produce a plan (the list of tool calls that it intends to make). Send the plan through the same policy engine as a dry run. Only after that, execute the plan step by step, with enforcement at each step. Budgets (tokens, tool calls, spend) and loop detection are part of this layer, because cascading failures (ASI08) are usually unbounded loops with valid credentials.
 
 **In one sentence:** "Prompt injection is a property of the medium, thus I do not rely on the model to resist it. I screen inputs and outputs with Model Armor floor settings. I tag and sanitize everything that comes back from tools, and I constrain arguments structurally. I put egress on an allowlist, and I keep destructive actions behind confirmation. If a hijacked model can only call read-only tools and a confirmation-gated refund, the injection is contained."
 
@@ -375,38 +377,38 @@ Treat instructions, tool lists and policies as versioned artifacts with review.
 ### 11.1 System-design prompts (talk through, 20 minutes each)
 
 1. *"A bank wants a support agent that can read a customer's transactions and issue refunds up to $200. Design the identity and authorization model."* A strong design covers:
-   - user authentication and delegated authority for reads,
-   - agent identity with minimal own roles,
-   - refund as DESTRUCTIVE, with an argument envelope and confirmation above a threshold,
-   - audit with both identities,
-   - kill switch,
-   - Model Armor floor.
+    - user authentication and delegated authority for reads,
+    - agent identity with minimal own roles,
+    - refund as DESTRUCTIVE, with an argument envelope and confirmation above a threshold,
+    - audit with both identities,
+    - kill switch,
+    - Model Armor floor.
 2. *"We have 40 agents built by different teams calling 15 MCP servers. How do we govern this?"* A strong design covers:
-   - Agent Registry as inventory,
-   - principalSet-level policies,
-   - Agent Gateway as the chokepoint, with IAP/IAM per SPIFFE ID,
-   - VPC-SC `mcp.*` conditions,
-   - per-server scopes,
-   - deny policies for the never-list,
-   - SCC dashboard.
+    - Agent Registry as inventory,
+    - principalSet-level policies,
+    - Agent Gateway as the chokepoint, with IAP/IAM per SPIFFE ID,
+    - VPC-SC `mcp.*` conditions,
+    - per-server scopes,
+    - deny policies for the never-list,
+    - SCC dashboard.
 3. *"An agent needs to call Jira and GitHub on behalf of employees."* A strong design covers:
-   - Auth Manager 3LO providers per SaaS,
-   - consent flow (`adk_request_credential`),
-   - scopes minimized,
-   - the choice between the direct path and the gateway path for secrets,
-   - revocation when an employee leaves.
+    - Auth Manager 3LO providers per SaaS,
+    - consent flow (`adk_request_credential`),
+    - scopes minimized,
+    - the choice between the direct path and the gateway path for secrets,
+    - revocation when an employee leaves.
 4. *"Our RAG agent leaked another tenant's document."* A strong design covers:
-   - ACL-aware retrieval under the user's identity,
-   - tenant-partitioned indexes and memory,
-   - provenance,
-   - tests.
+    - ACL-aware retrieval under the user's identity,
+    - tenant-partitioned indexes and memory,
+    - provenance,
+    - tests.
 5. *"How would you migrate a service-account-based agent to Agent Identity?"* A strong design covers:
-   - new principal, no inherited permissions,
-   - Policy Analyzer,
-   - grant the roles in advance,
-   - `--no-traffic` revision,
-   - make sure that the tokens are cert-bound,
-   - remove SA keys.
+    - new principal, no inherited permissions,
+    - Policy Analyzer,
+    - roles granted in advance,
+    - `--no-traffic` revision,
+    - a check that the tokens are cert-bound,
+    - removal of SA keys.
 
 ### 11.2 Code-evaluation drills (spot the bug)
 

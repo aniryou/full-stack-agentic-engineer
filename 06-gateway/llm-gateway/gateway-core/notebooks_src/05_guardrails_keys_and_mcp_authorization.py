@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 05 · Guardrails, keys and MCP authorization
 #
-# **Tier:** T0. It uses only the CPU, no network and a few seconds. The authorization server, the MCP server and the
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. The authorization server, the MCP server and the
 # Workload API are in-process fakes. The DPoP signer is an HMAC **stand-in**. The reason is that RFC 9449 says that the key
 # must be asymmetric, and the standard library cannot make an asymmetric key. The same flows over HTTP, with real DPoP keys
 # if your environment has `cryptography`, are `gateway-lab` notebook `05_guardrails_and_mcp_authorization_over_http`.
@@ -39,9 +39,9 @@
 # - detect refresh-token reuse.
 #
 # Primer: §6 *Keys, tenants and isolation*, §7 *Guardrails and what they cost*, §8 *The gateway as an MCP client*
-# (`../PRIMER.md`). See also the identity primer §3.3–3.5, §5, §6.1, §7.1. (§9, where to run it and what to adopt, is
+# (`../PRIMER.md`). See also the identity primer §3.3–3.5, §5, §6.1, §7.1. §9, where to run it and what to adopt, is
 # a section to read. Its product table is the checklist of §1–§8, and these five notebooks have exercised that
-# checklist.)
+# checklist.
 
 # %%
 from gwcore import guardrails, keys
@@ -138,7 +138,7 @@ print(f"✅ {s} -- 256 bits in 43 characters, unguessable without the gateway's 
 
 # %% [markdown]
 # ## Exercise 5.2 — a held-back window under a TTFT budget
-# The gateway releases the output in windows of $W$ tokens, and it checks each window (150 ms) before the release.
+# The gateway releases the output in windows of $W$ tokens, and it does a check of each window (150 ms) before the release.
 # Write `held_back_ttft_added(W, itl, t_check)`. Then set `W_max`: the largest window that adds at most **1.0 s** to
 # TTFT at ITL 20 ms.
 
@@ -218,7 +218,7 @@ print("✅ RFC 7636 Appendix B reproduced; the same construction gives DPoP's at
 
 # %% [markdown]
 # ## Exercise 5.6 — refresh rotation with reuse detection
-# Make the side of the authorization server for rotation, as `RotatingGrants`:
+# Write the part of rotation that the authorization server does, as `RotatingGrants`:
 #
 # * `issue(grant)` returns a new refresh token for that grant.
 # * `refresh(token)`: if the token is current, make it invalid and return a new one (rotation). If the token is
@@ -309,7 +309,7 @@ print("✅ rotation works, a replayed token revokes alice's whole grant (current
 # 2. *An MCP server returns 403 insufficient_scope. What does the gateway do?* Authorize that principal again for that
 #    resource, with the union of the held scopes and the demanded scopes (PKCE, `resource`). Store the token under
 #    (principal, resource). Retry a limited number of times. Never pass the token of the agent through. Never drop
-#    scopes that it already had.
+#    scopes that the principal already had.
 # 3. *Our authorization server rotates refresh tokens. Why does a replayed old token revoke the current one too?* The
 #    server cannot tell which party is legitimate. If it revokes the whole grant, it forces a new authorization with the
 #    user present. It also cuts off the copy (OAuth 2.1 §4.3.1).

@@ -3,7 +3,7 @@
 This is the production shape that the core concepts of the lab (`scalelab/`) scale up to. It shows what runs where,
 how each part scales, what its limits are, and why the design does not use the alternatives. The scaling reasoning
 is in `01-scaling-primer.md`. The numbers are in `03-capacity-plan.md`. The mapping from each core concept to a
-Google Cloud service is in `04-gcp-mapping.md`. The last check of the product facts was on 5 September 2026.
+Google Cloud service is in `04-gcp-mapping.md`. The authors examined the product facts on 5 September 2026.
 
 ## 1. Context and requirements
 
@@ -17,7 +17,7 @@ operations and the help centre. It can also open tickets or change plans.
 - Tool use, with reads and a small number of writes.
 - Escalation to a person by ticket.
 - A bounded transcript per session, which you can audit.
-- One tenant in v1, with the design points for more tenants.
+- One tenant in v1, with the extension points for more tenants.
 
 **Non-functional requirements (targets, per turn unless stated).**
 
@@ -74,7 +74,7 @@ flowchart TB
   OT -.- OR
 ```
 
-The system has three Cloud Run services, one queue, two stores and one model endpoint. Every arrow is authenticated:
+The system has three Cloud Run services, one queue, two stores and one model endpoint. Every arrow has authentication:
 
 - From the load balancer to the gateway: IAP (or the dev bearer scheme locally).
 - From Pub/Sub to the orchestrator: an OIDC token from a dedicated service account with `run.invoker`.
@@ -98,7 +98,7 @@ Responsibilities:
 |---|---|
 | API | `POST /v1/sessions`, `POST /v1/sessions/{id}/messages` (submit and stream), `POST /v1/sessions/{id}/turns` (202), `GET /v1/sessions/{id}/turns/{tid}/events` (SSE), `GET /v1/sessions/{id}`, `/healthz`, `/readyz`, `/metrics` |
 | Admission | Three stages, in this sequence: a token bucket per tenant (429 + `Retry-After`), then the degrade level from shared signals, then an in-flight cap (503 + `Retry-After`). The cap does not apply to priority 1–2. |
-| Degrade level | The level comes from the in-flight turns, the age of the oldest queued turn, the model 429 ratio and the breaker state. Redis holds it with a 30 s TTL. Hysteresis holds levels 1–2 for 15 s. Level 3 follows the instantaneous value of the cap. |
+| Degrade level | The level comes from the in-flight turns, the age of the oldest queued turn, the model 429 ratio and the breaker state. Redis holds it with a 30 s TTL. Hysteresis holds levels 1–2 for 15 s. Level 3 uses the instantaneous value of the cap. |
 | Scaling | request-based billing, concurrency 250, 1 vCPU / 512 MiB, min 2, max 100, timeout 600 s, ingress internal and load balancer |
 | Limits it lives under | 1,000 concurrent requests and 800 req/s per instance, a 60-minute request ceiling, 32 MiB for non-chunked responses (not for streams) |
 | State it touches | Firestore (session and turn documents), Redis (buckets, gauge, level, streams), Pub/Sub (publish) |
@@ -120,7 +120,7 @@ Responsibilities:
 |---|---|
 | Entry points | `POST /pubsub/turns` (push envelope in, 200 ack or 503 nack out), `POST /internal/turns/run` (direct, for tests and the sync path) |
 | Loop | A plan call, then zero or more rounds of tool calls in parallel and an answer call, until a final answer. Budgets: 6 steps, 6 model calls, 40 k tokens, $0.25, 45 s. |
-| Checkpoints | One `StepRecord` per model call (the response, with the provider parts) and per tool step (the compacted results). The orchestrator adds it to the turn document before the next action. |
+| Checkpoints | One `StepRecord` per model call (the response, with the provider parts) and per tool step (the compacted results). The orchestrator adds each record to the turn document before the next action. |
 | Idempotency | The key of each write is `{turn}:{step}:{i}:{tool}:{hash(args)}`. Redis keeps the results for 24 h. A replay returns the stored result. |
 | Concurrency control | A session lock in Redis (`SET NX`, TTL = budget + 15 s). The Pub/Sub ordering key is the session id. |
 | Scaling | instance-based billing, concurrency 80, 2 vCPU / 2 GiB, min 2, max 50, startup CPU boost, timeout 600 s (= ack deadline), ingress internal |
@@ -151,7 +151,7 @@ The model gateway is a library in the orchestrator process. For each call, it do
 4. It takes tokens from a token bucket. The size of the bucket is the share of the model's TPM for this deployment.
 5. It does an attempt with a timeout.
 6. On a 429, a 503 or a timeout, it retries with full-jitter backoff, within the deadline. It moves to a sibling
-   model after two 429s in sequence, or when the breaker is open.
+   model after two 429s, one directly after the other, or when the breaker is open.
 7. It records the usage, cost, latency, TTFT and traffic type.
 
 For small non-streaming calls, hedged requests are an option.
@@ -339,9 +339,9 @@ Armor rate-limits each caller before the system spends any compute.
 
 Cloud Build builds the images. Terraform provisions everything else: VPC, Memorystore, Firestore, Pub/Sub, IAM, the
 three Cloud Run services, the load balancer with Cloud Armor, monitoring and a budget. Cloud Deploy deploys new
-revisions of the gateway and the orchestrator as canaries (10 %, then 50 %, then 100 %). A verify job runs a smoke
-test. A rollback sends the traffic back to the previous revision. The tasks that Terraform cannot do stay manual:
-the Provisioned Throughput purchase, the PayGo tier, the IAP consent screen and DNS.
+revisions of the gateway and the orchestrator as canaries (10 %, then 50 %, then 100 %). Each canary rollout has a
+verify job that runs a smoke test. A rollback sends the traffic back to the previous revision. The tasks that
+Terraform cannot do stay manual: the Provisioned Throughput purchase, the PayGo tier, the IAP consent screen and DNS.
 
 ## 9. Alternatives considered (decisions)
 
@@ -353,7 +353,7 @@ the Provisioned Throughput purchase, the PayGo tier, the IAP consent screen and 
 | Hot state and relay | Redis Streams | Pub/Sub per session, Firestore listeners | resume by sequence, sub-ms, low-cost |
 | Model capacity | PT for the base, PayGo spill-over | all PayGo, PT for peak | break-even arithmetic |
 | Model tiers | 3.5 Flash + 3.5 Flash-Lite + 3.1 Pro (rare) | one model everywhere | 2× cost, latency |
-| Overload | degrade levels and shed at the edge | put everything in a queue, scale instances | feedback loop |
+| Overload | degrade levels and shed turns at the edge | put everything in a queue, scale instances | feedback loop |
 | Transport | SSE | WebSockets | resume, plain requests, no affinity |
 
 ## 10. What this design does not do (v1)
@@ -385,7 +385,7 @@ The worked case is the anchor of the Mistral provider: a Singapore telco at 100,
   `scalelab/serving.py` estimates the fleet throughput from first principles.
 - The load test is notebook `05_hosted_or_own_gpus` (simulated).
 
-The last check of the product facts was on 19 September 2026 (verify).
+The authors examined the product facts on 19 September 2026 (verify).
 
 ### 11.1 The model layer
 
@@ -393,9 +393,9 @@ The last check of the product facts was on 19 September 2026 (verify).
 location. `api.eu.` and `api.us.` are regional at +10 %, GA since 11 August 2026. On them, function calling is the
 only regional tool, and they have no Agents, Batch or Files.
 
-Priority Tier is +75 %. A request selects it with `service_tier="auto"`. When traffic goes above its limits, it
-changes back to standard. It reports `service_tier` in the response. The docs state a 99.5 % SLA (the AI Cloud page
-says 99.9 %, verify).
+Priority Tier is +75 %. A request selects it with `service_tier="auto"`. Above the limits of Priority Tier, a
+request changes back to the standard tier. The response reports `service_tier`. The docs state a 99.5 % SLA (the
+AI Cloud page says 99.9 %, verify).
 
 Each call sends the 2,700-token prefix first, with a `prompt_cache_key` per prompt version. Mistral bills 64-token
 cached blocks at 10 % and reports them in `usage.prompt_tokens_details.cached_tokens`. Mistral does not publish the
@@ -430,10 +430,10 @@ All of these values are estimates until `vllm bench serve` replaces them.
 
 The alternative primary model is Small 4 (MoE 119B / 6.5B active, MLA KV of 22.5 KiB per token, 121 GB FP8). It
 runs with `--tensor-parallel-size 2` on H100, with `--attention-backend FLASH_ATTN_MLA`. Mistral's stated minimum is 4× H100,
-2× H200 or 1× B200. Examine if these counts are GPUs or systems.
+2× H200 or 1× B200 (verify if these counts are GPUs or systems).
 
-The replicas are a Deployment. Or, when you want prefill/decode disaggregation and node-local weight caching as a
-package, they are a KServe 0.17 `LLMInferenceService` on llm-d. An inference gateway is in front of them. It
+The replicas are a Deployment. When you want prefill/decode disaggregation and node-local weight caching as a
+package, the replicas can also be a KServe 0.17 `LLMInferenceService` on llm-d. An inference gateway is in front of them. It
 implements the Gateway API Inference Extension (v1.5.0, in Envoy Gateway, kgateway or GKE Inference Gateway). It has
 these parts:
 
@@ -449,13 +449,13 @@ Small 4 NIM profiles cover H200 and Blackwell only (verify H100).
 The weights load from a node-local NVMe cache (or KServe `LocalModelCache`). The node has pre-pulled images, and
 `--kv-cache-memory-bytes` lets vLLM start without the profile run. The Run:ai streamer (about 2 GiB/s from object
 storage) is itself a `--load-format` value. Thus, you cannot use it with `--load_format mistral` (verify the
-trade-off). Cold start is 3–8 minutes end to end. This is the reason that the fleet is static for peak.
+trade-off). Cold start is 3–8 minutes end to end. The long cold start is the reason that the fleet is static for peak.
 
 ### 11.2 Capacity and scaling design
 
 | Setting | Value | Derivation |
 |---|---|---|
-| in-flight cap, hosted / fleet | 175 / 293 | Hosted: 20 M TPM ÷ 60 ÷ (11,440 tokens per turn ÷ 6 s), 29.1 turns/s sustainable. Fleet: 11 replicas × batch 24 × (10.0 s turn ÷ 2.2 × 4.1 s call), which follows the live replica count. |
+| in-flight cap, hosted / fleet | 175 / 293 | Hosted: 20 M TPM ÷ 60 ÷ (11,440 tokens per turn ÷ 6 s), 29.1 turns/s sustainable. Fleet: 11 replicas × batch 24 × (10.0 s turn ÷ 2.2 × 4.1 s call). The fleet cap changes with the live replica count. |
 | in-flight cap, hybrid | 293 on the fleet plus 175 on the API for spill-eligible turns only | Two caps, because the data policy limits the spill. |
 | admission thresholds | soft ratio 0.8, pushback 0.05 (0.15 for level 2), saturation 0.8, queue age 10 s / 30 s, dwell 15 s | The saturation thresholds of the inference gateway itself. Degrade first, then shed. |
 | bucket for `mistral-small-2603` | 20 M TPM, burst 6 s | The negotiated limit. Make sure that the console shows it. |
@@ -468,16 +468,16 @@ trade-off). Cold start is 3–8 minutes end to end. This is the reason that the 
 
 The fleet is static for peak for two reasons. A replica takes 3–8 minutes to appear. Also, it is possible that no
 Singapore H100 is available on demand at all. Autoscaling adds headroom from warm nodes. Degrade levels, spill-over
-and shed answer the incident. The design does not keep 34 GPUs ($171 k a month on AWS on-demand) idle for an outage
-that comes twice a year.
+and shed turns answer the incident. The answer is not 34 GPUs ($171 k a month on AWS on-demand) that stay idle for
+an outage that comes twice a year.
 
-To match the 6-second hosted turn, the fleet has three options:
+The fleet has three answers to the 6-second hosted turn:
 
 - Get a TPOT of about 10 ms. This means batch about 4 and roughly four times the GPUs.
 - Use EAGLE speculative decoding. Drafts exist for Small 4, Medium 3.5 and Large 3, not Ministral.
 - Use streaming, and accept 10 s.
 
-| GPU price | $/GPU-h | Peak fleet, $/month | $/conversation | vs the hosted mix ($0.0131) | Floor to amortise two replicas, conversations/day |
+| GPU price | $/GPU-h | Peak fleet, $/month | $/conversation | against the hosted mix ($0.0131) | Floor to amortise two replicas, conversations/day |
 |---|---:|---:|---:|---:|---:|
 | AWS on-demand | 6.88 | 55.2 k | 0.0182 | 1.39× | ≈ 25 k |
 | AWS capacity block (priced in Tokyo, Sydney and Mumbai, verify Singapore) | 4.72 | 37.9 k | 0.0125 | 0.95× | ≈ 17 k |
@@ -497,8 +497,8 @@ Volume is important only at the bottom. There, the volume must be above these va
 floor:
 
 - about 14 k conversations a day at $3.75
-- 17 k at $4.72–4.86
-- 25 k at $6.88
+- about 17 k at $4.72–4.86
+- about 25 k at $6.88
 
 Residency, latency control and customisation decide the path. The arithmetic gives the price of the decision: about
 $15.5 k a month more on on-demand H100s, about level on committed ones and about $9.6 k a month less on neocloud
@@ -507,7 +507,7 @@ GPUs.
 Each component scales on its own signal:
 
 - The gateway scales on open streams.
-- The orchestrator scales on queue depth. The model's token budget limits it, never CPU.
+- The orchestrator scales on queue depth. Its limit is the model's token budget, never CPU.
 - The hosted model scales on tokens per minute.
 - The fleet scales on batch per replica, and then on replica count.
 - The tools scale on downstream QPS.

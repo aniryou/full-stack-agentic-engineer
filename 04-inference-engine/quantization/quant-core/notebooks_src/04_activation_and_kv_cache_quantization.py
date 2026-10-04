@@ -2,8 +2,8 @@
 # # 04 · Activation and KV-cache quantization
 #
 # **Tier:** T0. It needs numpy and runs in a few seconds. The lab's notebook 04 (T1, Ada or newer) serves an FP8 KV
-# cache in vLLM (`--kv-cache-dtype fp8`). The size calculation here is the same arithmetic. Where it prints times,
-# it labels them SIMULATED.
+# cache in vLLM (`--kv-cache-dtype fp8`). The size calculation here is the same arithmetic. Where the notebook prints
+# times, it labels them SIMULATED.
 #
 # ## The one-minute version
 # When you quantize the **activations**, a GEMM can run on INT8 or FP8 tensor cores. Both operands become 8-bit
@@ -163,8 +163,8 @@ for label, logits in (("NVFP4 weight-only (W4A16)", nvfp4_model(m, acts=False)),
 # %% [markdown]
 # Per-16 blocks help the blocks with no outlier (10% error there). They cannot help the blocks that hold an outlier.
 # About half of all ordinary activations become zero. The model loses 4 points more than with the 4-bit weights
-# alone. If you move the range into the weights first (SmoothQuant), you get most of that loss back. AWQ-style
-# scales work the same way.
+# alone. If you move the range into the weights first (SmoothQuant), you get most of that loss back. The
+# AWQ-style scale method works the same way.
 #
 # The mitigations in production are these:
 # - that same move of the range into the weights,
@@ -187,7 +187,7 @@ r = E.compare(ref, quantize_model(m, "rtn", 4, None).forward(X), y)
 print(f"all four hidden linears, INT4 per channel: KL {r['kl']:.4f}, acc {r['acc']:.1%}")
 
 # %% [markdown]
-# One INT4 layer at the output costs 4.0 points. All four hidden linears together cost 6.0. Thus the head is the
+# One INT4 layer at the output costs 4.0 points. All four hidden linears together cost 6.0 points. Thus the head is the
 # most sensitive single layer. Its errors go directly to the logits, and no later layer averages them. In an LLM, the
 # head is also one large GEMM per sampled token (the vocabulary is 128K–152K rows). That is why a 16-bit head costs
 # bytes at decode (serving-engine §8: 1.05 GB of Llama-3.1-8B's 5.70 GB INT4 weights).
@@ -220,7 +220,8 @@ for f in (1e-3, 1e-2, 1.0, 1e2, 1e3):
 #
 # The `kv_cache_scheme` calibration of llm-compressor writes a scale that fits the data into the checkpoint, as
 # `k_scale`/`v_scale`.
-# This is also why the FlashAttention deep dive's §9.4 lists "scale choice" as an error source.
+# Because the scale is important at the edges, the FlashAttention deep dive's §9.4 lists "scale choice" as an error
+# source.
 #
 # ## Worked example 7 — below 8 bits: KIVI
 # A 2–4-bit KV cache needs finer scales. Keys have one scale and one minimum per **channel** per group of 32 tokens
@@ -248,7 +249,7 @@ for label, b in (("bf16 KV", 16), ("FP8 KV", 8), ("4-bit KIVI (5 bits/elem)", 5)
 # **Prefix caching with a quantized cache.** The engine uses a cached block again, in its stored form. The engine hashes
 # the tokens of the block as usual (serving-engine §5), and the block holds FP8 values. This works because the scales are static
 # per layer (or, for per-token scales, the engine stores them with the block). Thus a later request that reads the
-# block dequantizes it exactly as the request that wrote it. If the scales of a scheme depend on the request that
+# block dequantizes it exactly as the request that wrote it did. If the scales of a scheme depend on the request that
 # *reads* the block, two requests cannot share the block.
 #
 # ## Exercise 4.1 — the epilogue
@@ -326,7 +327,7 @@ print(f"✅ per-channel keys: attention error {K.attention_error(Q, Kc[:480], V[
 # ## Exercise 4.4 — size the cache
 # The model is Llama-3.1-8B (32 layers, 8 KV heads, head_dim 128). Fill `bytes_per_token` for bf16, FP8, 4-bit KIVI
 # (5 bits per element) and 2-bit KIVI (3 bits). Then fill `sessions_fp8_weights` for each format, with
-# `cost.sessions`. This is the number of 2,000-token sessions on an L4 with FP8 weights.
+# `cost.sessions`. `sessions_fp8_weights` is the number of 2,000-token sessions on an L4 with FP8 weights.
 
 # %% exercise
 bytes_per_token, sessions_fp8_weights = {}, {}
@@ -381,5 +382,5 @@ print(f"✅ v_scale {v_scale:.2e}: error {err_calibrated:.4f} vs {err_default:.4
 #    most values are E4M3 subnormals or zero. The attention output error increases from ~0.3% to ~5% (worked
 #    example 6).
 # 3. *Keys per channel, values per token: why the asymmetry?* Keys have outlier channels that stay the same, thus
-#    these channels set a per-token scale. Values have no such channels, and the attention uses them per token (a
+#    these channels set a per-token scale. Values have no such channels, and the attention uses the values per token (a
 #    weighted sum over tokens).

@@ -12,7 +12,7 @@ until vLLM stops.
 Here, the numbers of the gateway are no longer simulated. `vllm/vllm-openai:v0.30.0` serves
 `Qwen/Qwen2.5-0.5B-Instruct` (494 M parameters, ~1 GB in fp16) under the name `lab/llm`. The `vllm` config of the
 gateway ([`gwlab/configs/vllm.yaml`](../../gwlab/configs/vllm.yaml)) puts it first in the `chat` alias, and a fake
-OpenAI-dialect provider second. This lets notebook 02 stop vLLM during the run and watch the fallback and the
+OpenAI-dialect provider second. This order lets notebook 02 stop vLLM during the run and watch the fallback and the
 breaker.
 
 | File | What it does |
@@ -52,8 +52,8 @@ and they measure the real engine. The rest stays as it was.
 
 ## A rented box (RunPod, Vast.ai, Lambda, a GCP VM)
 
-- **Container hosts (RunPod, Vast.ai):** Use an image with CUDA and Python. Install this lab with `pip install -e .`,
-  and install `vllm==0.30.0`. Then run `./serve.sh`. Keep port 8000 private.
+- **Container hosts (RunPod, Vast.ai):** Use an image with CUDA and Python. Install this lab with `pip install -e .`.
+  Then install `vllm==0.30.0`. Then run `./serve.sh`. Keep port 8000 private.
 - **VMs (Lambda, GCP Compute Engine):** Install Docker and the NVIDIA Container Toolkit (layer 02). Then run
   `docker compose -f docker-compose.yaml up -d --build`.
 

@@ -132,7 +132,7 @@ for rate in [6, math.inf]:
 #   the weight read, the KV reads of the decodes and the 2 ms overhead. The prompt gets small chunks, which spread
 #   the constant costs over few tokens. TTFT doubles at 6/s, and capacity decreases by about a quarter.
 # * **Goodput** is the honest summary. Saturated, each row produces ~1,700–2,300 tokens/s, but almost no request
-#   meets the SLO. The defaults of vLLM lie between the extremes (2,048 on an L4/A100-class GPU, 8,192 on H100-class for
+#   meets the SLO. The defaults of vLLM are between the extremes (2,048 on an L4/A100-class GPU, 8,192 on H100-class for
 #   the API server, as of Sep 2026, verify).
 #
 # ## Worked example 4 — when blocks run out: preemption by recompute

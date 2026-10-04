@@ -2,7 +2,7 @@
 
 **Identity and security for agentic systems: a primer and a reference implementation on Google Cloud.**
 
-The text and the code of this lab are from September 2026, and they match Google Cloud's agent platform at that
+The text and the code of this lab are from September 2026. They are for Google Cloud's agent platform at that
 date. By default, everything runs **offline**, with local fakes for the identity plane. The same code connects to
 Google Cloud (**Agent Identity**, **Auth Manager**, **Agent Engine**, **Model Armor**, **Secret Manager**) when you
 set `AGENTSEC_PROFILE=gcp` and apply the Terraform.
@@ -30,11 +30,11 @@ in `docs/deploy.md`). You pay for the T3 path per use.
 | **Own authority against delegated authority**, RFC 8693 token exchange with `act` chains, DPoP (RFC 9449), Credential Access Boundaries. | `identity/delegation.py`, `identity/tokens.py`, `identity/downscope.py` |
 | A **credential broker** with Auth Manager semantics (3LO consent, 2LO, API key, IAM on providers, dual-identity access log). The ADK adapter lets tools use `GcpAuthProviderScheme` unchanged. | `identity/auth_manager.py`, `agents/root_agent.py::make_crm_lookup_tool` |
 | **Runtime policy enforcement point**: a deny-by-default tool policy with tiers, principals, scopes, constraints, an egress allowlist, budgets and human confirmation. It is an ADK plugin on every tool call. | `policy/*.py`, `policies/support-agent.yaml` |
-| **Model-side screening** (Model Armor shape) and the **untrusted-content boundary** (provenance fencing, sanitisation, SSRF-safe egress) | `guardrails/*.py` |
+| **Model-side screening** (Model Armor shape) and the **untrusted-content boundary** (provenance fencing, sanitisation, SSRF-safe egress). | `guardrails/*.py` |
 | **MCP server as an OAuth 2.1 resource server**: RFC 9728 metadata, audience validation, a map from scope to tool, annotations, no token passthrough, optional DPoP. | `mcp/server.py`, `mcp/client.py` |
 | **A2A**: Agent Card security schemes, detached-JWS signatures, per-hop re-authorization. | `a2a/*.py` |
 | **Audit by construction**: one structured event for each decision, with the user, the agent, the authority, the reasons and the approver. | `audit/log.py` |
-| The connections to Google Cloud: Agent Engine with `identity_type = AGENT_IDENTITY`, an Auth Manager provider, and a Cloud Run MCP server registered in Agent Registry. Also Agent Gateway, a Model Armor template and floor settings, a deny policy, an audit sink, and opt-in VPC-SC and org policy. | `infra/terraform/*.tf`, `infra/scripts/*`, `docs/deploy.md` |
+| The connections to Google Cloud: Agent Engine with `identity_type = AGENT_IDENTITY`, an Auth Manager provider, and a Cloud Run MCP server registered in Agent Registry. It also has Agent Gateway, a Model Armor template and floor settings, a deny policy, an audit sink, and opt-in VPC-SC and org policy. | `infra/terraform/*.tf`, `infra/scripts/*`, `docs/deploy.md` |
 
 ## Quick start (offline)
 
@@ -73,8 +73,8 @@ rely on them.
 2. Do `notebooks/01…09` in sequence. Then do the practice notebooks, and do not look at the solutions.
 3. Do the drills in §11. Answer the five system-design prompts on a whiteboard. Measure your time on the
    code-evaluation snippets in `notebooks/09_code_evaluation_drills.ipynb`.
-4. Examine the Verify list (§13) again before you rely on it. Several products here went GA in 2026, and their
-   details change.
+4. Examine the Verify list (§13) again before you rely on it, because several products here went GA in 2026.
+   Their details change.
 
 ## Layout of the identity plane (local profile)
 

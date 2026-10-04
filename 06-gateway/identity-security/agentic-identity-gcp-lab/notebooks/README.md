@@ -5,9 +5,9 @@ beside it. Each also has a completed **solution** in [`../solutions/`](../soluti
 of the practice notebook.
 
 Everything runs offline against the local twins in `src/agentsec/`. These twins are `LocalRuntimeCA`,
-`TokenIssuer`, `LocalAuthManager` and `LocalScreener`. They also include the tickets MCP server in a
-background thread and the ADK loop that `ScriptedLlm` drives. A Google Cloud project and an API key are
-not necessary. Every notebook ends with a "In one sentence" line. This line is the 30-second version of
+`TokenIssuer`, `LocalAuthManager`, `LocalScreener`, the tickets MCP server in a background thread and
+the ADK loop that `ScriptedLlm` drives. A Google Cloud project is not necessary, and an API key is not
+necessary. Every notebook ends with a "In one sentence" line. This line is the 30-second version of
 the idea that the notebook shows.
 
 ## Map: notebook → primer section
@@ -15,7 +15,7 @@ the idea that the notebook shows.
 | Notebook | Primer | What you demonstrate |
 |---|---|---|
 | `01_agent_identity_and_principals` | §3.1–§3.3 | SPIFFE IDs and `principal://` members. A `principalSet` match on **exact** segments. A runtime CA certificate with the SPIFFE SAN. A certificate-bound token (`cnf.x5t#S256`). A replay from another certificate that fails with `BindingMismatch`. Own against delegated `AuthorityContext`, and `audit_identities()`. |
-| `02_delegation_and_token_exchange` | §3.5, §4.3 | RFC 8693 exchange with the `act` claim. Narrower scopes. Nested `act.act` chains for sub-agents. Audience, expiry and scope failures. DPoP proofs, `ath` binding and `jti` replay. Credential Access Boundary JSON and its local evaluation. |
+| `02_delegation_and_token_exchange` | §3.5, §4.3 | RFC 8693 exchange with the `act` claim. The exchange makes the scopes narrower. Nested `act.act` chains for sub-agents. Audience, expiry and scope failures. DPoP proofs, `ath` binding and `jti` replay. Credential Access Boundary JSON and its local evaluation. |
 | `03_auth_manager_broker` | §4.3, §5 | 3LO, 2LO and API-key providers. The IAM binding on the provider. The `retrieveCredentials` outcomes. Consent and `finalize`. An access log that identifies the agent **and** the user. The ADK path: `crm_lookup`, then `adk_request_credential`, then finalize, then `resume_after_auth`. |
 | `04_policy_enforcement_point` | §4.1, §4.2, §4.4 | `policies/support-agent.yaml`, evaluated request by request. The evaluation covers unknown tool, principal, authority, scopes, constraints, egress, budgets, confirmation and the `unless` envelope. A `dry_run` of a plan. The ADK loop with `LocalStack`: default deny, auto-allow inside the envelope, confirmation approve/reject, `audit.timeline()`. |
 | `05_prompt_injection_and_guardrails` | §6 | `LocalScreener` (Model Armor shape) on injection, SDP and malicious URIs. The poisoned KB article. A hijacked model that deterministic controls contain. A blocked prompt that never reaches the model (`stack.llm.requests == []`). `EgressPolicy` SSRF cases. What Model Armor floor settings and templates do on GCP. |
@@ -26,8 +26,8 @@ the idea that the notebook shows.
 
 ## The practice / solution workflow
 
-1. **Read the worked notebook** (`NN_*.ipynb`) from top to bottom. Then run it. Each cell states the
-   security idea, runs it, and asserts the property that it claims.
+1. **Read the worked notebook** (`NN_*.ipynb`) from top to bottom, and run each cell as you read it.
+   Each cell states the security idea, runs it, and asserts the property that it claims.
 2. **Do the practice notebook** (`NN_*_practice.ipynb`, in this folder). It keeps the narrative but
    replaces the key lines with `____` blanks (an argument, a method name, an expected value). Or it
    puts a `raise NotImplementedError("fill me")` in a function body. Every exercise ends with `assert` checks.
@@ -36,8 +36,8 @@ the idea that the notebook shows.
 3. **Compare with the solution** (`../solutions/NN_*_practice.ipynb`, the same file name). The solution
    is the completed practice notebook. Every solution runs from end to end with no error.
 4. **Say it out loud.** The last cell of every notebook is the one-minute version. The notebooks exist
-   so that you can *show* each claim, instead of a description of it. For example, the replay fails,
-   the check rejects the audience mismatch, and the controls contain the hijacked model.
+   so that you can *show* each claim, and not only describe it. For example, the replay fails,
+   the server rejects the audience mismatch, and the controls contain the hijacked model.
 
 ## Running
 

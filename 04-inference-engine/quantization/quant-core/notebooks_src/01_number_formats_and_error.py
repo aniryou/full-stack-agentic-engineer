@@ -10,7 +10,7 @@
 # grid over the data: $x \approx \text{code} \times \text{scale}$.
 #
 # - Integer grids (INT8, INT4) have equal spaces between their values. Thus the absolute error is at most half a
-#   step everywhere, and each extra bit makes it half as large. This is approximately **6 dB of signal-to-noise per bit**.
+#   step everywhere, and each extra bit makes it half as large. This factor of two is approximately **6 dB of signal-to-noise per bit**.
 # - Float grids (FP8 E4M3 and E5M2, FP4 E2M1) have spaces that are powers of two. Thus the *relative* error is
 #   the same at every magnitude, and the exponent bits buy **range** instead of precision. E4M3 has 3 mantissa bits
 #   (≤ 6.25% rounding error) over $2^{14.8}$ of normal range. E5M2 has 2 bits (≤ 12.5%) over $2^{29.8}$.

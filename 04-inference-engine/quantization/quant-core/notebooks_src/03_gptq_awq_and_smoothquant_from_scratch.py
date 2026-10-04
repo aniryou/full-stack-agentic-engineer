@@ -161,7 +161,7 @@ for label, logits in (("INT8 W8A8", w8a8_logits(m)), ("INT8 W8A8 + SmoothQuant 0
 
 # %% [markdown]
 # SmoothQuant cuts the output error of the up-projection 2.7× and the KL of the model 2.7×, at no cost at run
-# time. Accuracy almost does not change either way (W8A8 is gentle on this model). That is exactly why the eval
+# time. Accuracy changes only by a small quantity either way (W8A8 is gentle on this model). That is exactly why the eval
 # must look at KL too (notebook 04 and primer §8). FP8 without SmoothQuant keeps accuracy, but here it has 6× the
 # INT8 KL. Its per-token scale handles the outliers. But for well-scaled values, 3 mantissa bits are coarser than
 # the 7 of INT8.
@@ -305,7 +305,7 @@ print("✅ AWQ helps exactly the layers whose inputs have outlier channels: it r
 # "Enough" means this: more samples make no difference that this eval can see. Find the smallest calibration size
 # among 32, 64, 128, 256, 512 (drawn with `m.sample(n, "calib")`) that meets one condition. The condition is about
 # the accuracy of GPTQ at INT3 g32. That accuracy must be below the 1,024-sample result by less than two standard
-# errors of the *difference* between two such runs. That bar is `2 * E.diff_stderr(p, p, n)`, with `p` the 1,024-sample accuracy and `n` the number of test
+# errors of the *difference* between two such runs. That limit is `2 * E.diff_stderr(p, p, n)`, with `p` the 1,024-sample accuracy and `n` the number of test
 # points. Set `n_enough`.
 
 # %% exercise
@@ -326,7 +326,7 @@ print(f"✅ {n_enough} samples ({res[n_enough]:.1%} vs {res[1024]:.1%} at 1,024,
 
 # %% [markdown]
 # ## In a design review
-# **The two-minute version.** "We ship INT4 weights with GPTQ or AWQ, never plain round-to-nearest. Both use a
+# **The two-minute version.** "We deploy INT4 weights with GPTQ or AWQ, never plain round-to-nearest. Both use a
 # few hundred calibration samples. They produce the same checkpoint format and kernels as RTN, and only select
 # better codes.
 #

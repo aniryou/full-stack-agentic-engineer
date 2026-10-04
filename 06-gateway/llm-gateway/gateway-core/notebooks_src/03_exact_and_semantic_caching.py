@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 03 · Exact and semantic caching
 #
-# **Tier:** T0. It uses only the CPU, no network and a few seconds. The embedder is lexical (a hashing embedder, as in
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. The embedder is lexical (a hashing embedder, as in
 # the `ragkit` of 07.4). It is the floor that a real embedder must beat, and the notebook labels it so. The semantic
 # cache next to the prefix cache of vLLM, over HTTP, is `gateway-lab` notebook `03_semantic_cache_vs_the_prefix_cache`
 # (T0 emulated, T1 with `cached_tokens` measured).
@@ -89,9 +89,11 @@ for a, b in zip(rows[False], rows[True]):
 # against "Team".
 #
 # This is not an artefact that you can adjust away. A real embedder increases the paraphrase scores, but "the Team plan"
-# and "the Business plan" stay near in any embedding. Thus the answer has three parts. Use narrow cacheable
-# classes and a threshold that you select on *your* labelled traffic. Add a guard or a verifier where a false hit is
-# high-cost.
+# and "the Business plan" stay near in any embedding. Thus the answer has three parts:
+#
+# - narrow cacheable classes,
+# - a threshold that you select on *your* labelled traffic,
+# - a guard or a verifier where a false hit is high-cost.
 #
 # ## Exercise 3.1 — an exact key that is safe
 # Write `my_exact_key(namespace, request)`. It returns a SHA-256 hex digest over the namespace and **only** the fields
@@ -227,7 +229,7 @@ print("✅ faq: one namespace per tenant; account: one per (tenant, user); no tw
 
 # %% [markdown]
 # ## Exercise 3.6 — what the provider's prompt cache saves instead
-# The prompt cache of the provider is never incorrect. It bills cached input at ~10 % of the input price. Do this for
+# The prompt cache of the provider is never incorrect. It bills cached input at ~10 % of the input price. Take
 # the §5.3 call on **gpt-5.4-mini** (5,000 input tokens, 350 output). Use `metering.price_call` to set `uncached`,
 # `cached` (2,700 of the input cached) and `saved_share` (the fraction of the uncached cost that the cache saves).
 

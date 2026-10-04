@@ -22,8 +22,8 @@
 # Side effects mean at-least-once delivery. Thus an **idempotency key** (turn, step, call index, args hash: the recipe
 # of the scaling primer) lets a redelivered step return the stored result. The step does not run two times.
 #
-# Primer: `../PRIMER.md` §3 (the execution contract), §5 (sandboxes on Kubernetes). This notebook uses again the
-# idempotency recipe of the scaling primer
+# Primer: `../PRIMER.md` §3 (the execution contract), §5 (sandboxes on Kubernetes). This notebook uses two things
+# again: the idempotency recipe of the scaling primer
 # (`../../../06-gateway/scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md` §5.4) and the tool tiers
 # of the identity primer (§4.2).
 

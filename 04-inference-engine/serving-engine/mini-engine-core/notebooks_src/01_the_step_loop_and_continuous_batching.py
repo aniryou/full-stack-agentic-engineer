@@ -42,8 +42,8 @@ print("greedy continuation of 'The engine ':", repr(decode(model.generate_dense(
 
 # %% [markdown]
 # The weights of the model are random, except its embedding. The embedding encodes English letter-pair statistics.
-# Thus the model produces meaningless text that looks like English. Greedy decoding falls into a loop (`tofofof`),
-# and Notebook 04 repairs that with penalties. **The engine does not care what the model says.** All of the rest of
+# Thus the model produces meaningless text that looks like English. Greedy decoding goes into a loop (`tofofof`),
+# and Notebook 04 repairs that loop with penalties. **The engine does not care what the model says.** All of the rest of
 # this notebook is about the machinery.
 #
 # ## Worked example 1 — three requests through the engine
@@ -123,8 +123,9 @@ print("continuous: ", 9, "steps, slot utilisation", f"{sum(lens) / (2 * 9):.0%} 
 
 # %% [markdown]
 # ## Exercise 1.1 — how many tokens does a request get this step?
-# In vLLM V1's unified scheduler, a request is only two numbers. `num_tokens` is the prompt tokens plus the tokens
-# generated until now. `num_computed_tokens` is the tokens whose K/V are already in the cache. Write
+# In vLLM V1's unified scheduler, a request is only two numbers. `num_tokens` is the number of prompt tokens plus
+# the number of tokens generated until now. `num_computed_tokens` is the number of tokens whose K/V are already in
+# the cache. Write
 # `num_new_tokens(num_tokens, num_computed, budget_left)`. It returns the tokens that the scheduler gives to the
 # request in this step, with chunked prefill on.
 
@@ -300,7 +301,7 @@ print("   a 70B model at 64 decodes:", perf.tp_allreduces(80, 8192, 64), "= (all
 # gives about 1.6× the throughput of static batching on a mix of 10–400-token outputs (more with longer tails or
 # more slots).
 #
-# "KV blocks cap concurrency, not compute. For an 8B model on an L4, the cap is about 28 chat requests. When a model
+# "The cap on concurrency comes from KV blocks, not from compute. For an 8B model on an L4, the cap is about 28 chat requests. When a model
 # needs more than one GPU, tensor parallelism divides each layer and pays two all-reduces per layer per step."
 #
 # **Drill questions**

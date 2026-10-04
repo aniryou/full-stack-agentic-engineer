@@ -6,8 +6,8 @@
 # `vllm:prefix_cache_queries` / `vllm:prefix_cache_hits` counters of that server.
 #
 # ## The one-minute version
-# Two requests whose prompts start with the same tokens compute the same K/V for that prefix. Thus compute it one
-# time. The engine gives each **full** KV block a name: `hash(parent block's name, the block's tokens, extra keys)`.
+# Two requests whose prompts start with the same tokens compute the same K/V for that prefix. Thus the engine
+# computes that K/V one time. The engine gives each **full** KV block a name: `hash(parent block's name, the block's tokens, extra keys)`.
 # The parent is part of the name. Thus a name identifies the *entire* prefix, not only the 16 tokens inside the
 # block.
 #
@@ -88,8 +88,9 @@ print("from cache:", [eng.requests[r].num_cached_tokens for r in ["r0", "r1", "r
 # safe, because the forward pass writes the K/V of each layer for the *whole* step before any request attends at that
 # layer. The model code does `cache.write(...)` for all tokens, then the per-request attention.
 #
-# The same write order also explains a rule of the scheduler. The scheduler publishes the blocks of a request that
-# runs only when it can no longer preempt a request in that step. A request that the scheduler removes from the batch
+# The same write order also explains a rule of the scheduler. In each step, the scheduler first makes sure that no
+# more preemption is possible in that step. Only after that does the scheduler publish the blocks of the requests
+# that run. A request that the scheduler removes from the batch
 # must not publish blocks that it will never compute. If an engine publishes blocks only after the step, a burst
 # computes the shared prefix one time per request. That engine also holds one copy per request.
 #
@@ -144,12 +145,12 @@ for label, fn in [("chained   ", hash_block), ("parentless", parentless)]:
 
 # %% [markdown]
 # The chained cache uses again only the block whose whole prefix is the same. Its result agrees with the reference
-# to rounding error. The parentless cache uses more blocks again, and it computes different probabilities. There is
-# no error and no crash, only outputs that are subtly incorrect (with a real model, text that is clearly incorrect).
+# to rounding error. The parentless cache uses more blocks from the cache, and it computes different probabilities.
+# There is no error and no crash, only outputs that are subtly incorrect (with a real model, text that is clearly incorrect).
 #
-# That is why engines use a chained, collision-resistant hash (vLLM defaults to SHA-256 as of Sep 2026, verify). It
-# is also why tenant isolation adds a salt to the root of the chain (`cache_salt` in vLLM). Without the salt, a
-# timing side channel can show if someone else sent a prefix.
+# Silent errors of this kind are the reason that engines use a chained, collision-resistant hash (vLLM defaults to
+# SHA-256 as of Sep 2026, verify). They are also the reason that tenant isolation adds a salt to the root of the
+# chain (`cache_salt` in vLLM). Without the salt, a timing side channel can show if someone else sent a prefix.
 #
 # ## Worked example 6 — what it buys on a real GPU (SIMULATED)
 # The workload is 60 requests on H100 + Llama-3.1-8B. Their 2,000–2,200-token prompts share their first 1,800

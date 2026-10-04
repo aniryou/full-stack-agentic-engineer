@@ -69,7 +69,7 @@ Read the modules in this order. Each module starts with a docstring that states 
 | File | Lines | What it teaches |
 |------|------:|-----------------|
 | [`minengine/model.py`](minengine/model.py) | ~230 | A small Llama-style decoder (byte vocabulary, RMSNorm, RoPE, GQA, SwiGLU). Its attention reads K/V **through block tables** from a flat batch of tokens from many requests. `forward_dense` is the textbook reference. |
-| [`minengine/kv.py`](minengine/kv.py) | ~200 | The KV cache manager. It has a block pool, refcounts, and a prefix cache with the key `hash(parent, tokens, extra)`. Its LRU free queue frees blocks tail first. It counts hits in tokens and keeps re-admissions after preemption apart. It also has an invariant checker. |
+| [`minengine/kv.py`](minengine/kv.py) | ~200 | The KV cache manager. It has a block pool, refcounts, and a prefix cache with the key `hash(parent, tokens, extra)`. It frees blocks tail first into its LRU free queue. It counts hits in tokens and keeps re-admissions after preemption apart. It also has an invariant checker. |
 | [`minengine/scheduler.py`](minengine/scheduler.py) | ~210 | Continuous batching. It has one token budget per step, running requests first, chunked prefill, and FCFS admission with a whole-prompt check and watermark. It also has preemption by recompute, publication of full blocks at scheduling time, and stop conditions. |
 | [`minengine/sampler.py`](minengine/sampler.py) | ~130 | The sampler order: penalties, then greedy/temperature, then min-p, then top-k, then top-p, then a seeded draw. Also raw logprobs and `ChoiceFSM`, a structured-output token mask. |
 | [`minengine/engine.py`](minengine/engine.py) | ~170 | The loop. It schedules, then builds the flat batch (tokens, positions, slot mapping, block tables). Then it does one forward pass, samples and updates. Also `add_request`, `step`, `generate` and traces. |
@@ -113,7 +113,7 @@ Read the modules in this order. Each module starts with a docstring that states 
   - Expected tokens `(1 − α^(k+1)) / (1 − α)`.
   - Bits per weight.
   - The FP8 grid.
-  - Hit counts with preempted re-lookups kept apart.
+  - The method that counts hits, with preempted re-lookups kept apart.
 
   These tests are in `test_perf.py`, `test_spec.py`, `test_quant.py` and `test_kv.py`.
 

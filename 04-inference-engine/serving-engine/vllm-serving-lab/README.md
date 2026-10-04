@@ -4,7 +4,7 @@ After this lab, you can do these things:
 
 - Tell how many sessions of a model fit on a GPU before you pay for the GPU.
 - Measure TTFT, ITL and goodput with the definitions of `vllm bench serve`.
-- Read the `/metrics` endpoint of vLLM.
+- Read the `/metrics` endpoint that vLLM itself supplies.
 - Select the flags of vLLM against an SLO.
 
 You do these things first against a bundled fake vLLM on a laptop. Then you do them against a real `vllm serve` on a
@@ -36,7 +36,7 @@ the repository).
 | 01 | [`size_before_you_serve`](notebooks/01_size_before_you_serve.ipynb) | T0 (+T1 log) | KV bytes per token from `config.json`. Blocks and "Maximum concurrency". The ~18 concurrent 2K-token sessions of an 8B model on an L4, and each assumption behind that number. Why the model does not start with its 128K context. What FP8 gives. How to calibrate from the startup log. | §4 | ~1.5 h |
 | 02 | [`serve_and_measure`](notebooks/02_serve_and_measure.ipynb) | T0 / T1 / T3 | TTFT, ITL, TPOT, E2E, throughput and goodput as `vllm bench serve` defines them (with one stated difference). Histogram quantiles. Open loop against closed loop, and the backlog that an open loop builds. Little's law against the gauges of the engine. Warm-up, burstiness and long-tailed lengths. | §11 | ~1.5 h |
 | 03 | [`knobs_and_tradeoffs`](notebooks/03_knobs_and_tradeoffs.ipynb) | T0 / T1 (+T2) | Why batching is almost free. The latency-throughput knee. `max-num-batched-tokens` as a trade between TTFT and the ITL tail. How to select `max-num-seqs` by goodput. Capacity at an SLO. KV blocks and preemption. Tensor parallelism on two T4s. | §2, §3, §9, §11 | ~3 h |
-| 04 | [`prefix_caching_for_agents`](notebooks/04_prefix_caching_for_agents.ipynb) | T0 / T1 | Block-hash chains. The rules for the count of hits. The hit rate from `/metrics`, predicted from the prompt layout before you measure it. Prompt layouts for agents that keep the cache useful, or make it useless. The value of a hit in TTFT. | §5 | ~2 h |
+| 04 | [`prefix_caching_for_agents`](notebooks/04_prefix_caching_for_agents.ipynb) | T0 / T1 | Block-hash chains. The rules that tell how vLLM counts hits. The hit rate from `/metrics`, predicted from the prompt layout before you measure it. Prompt layouts that keep the cache useful for agents, or make it useless. The value of a hit in TTFT. | §5 | ~2 h |
 | 05 | [`speculation_and_quantization_in_vllm`](notebooks/05_speculation_and_quantization_in_vllm.ipynb) | T0 (+T1 flags) | Tokens per verify step, `(1-a^(k+1))/(1-a)`. Acceptance from the counters of vLLM. Why the gain of speculation decreases at a high batch and a short context. What INT4 gives against FP8, for prefill and for decode. | §7, §8 | ~2 h |
 | 06 | [`deploy_on_cloud_run_gpu`](notebooks/06_deploy_on_cloud_run_gpu.ipynb) | T3 (plannable at T0) | The anatomy of a cold start, and the startup-probe budget. How to set the Cloud Run `concurrency` from a measurement, and what occurs above `max-num-seqs`. Cost per million tokens. Scale-to-zero against a warm instance. | §12 | ~2 h |
 
@@ -92,7 +92,7 @@ the sweeps of notebook 03 restart a real `vllm serve` for each configuration.
 
 The metric names and the histogram buckets are the same as in `vllm/v1/metrics/loggers.py`, `buckets.py` and
 `vllm/v1/spec_decode/metrics.py` in
-vLLM v0.30.0 and main (Sep 2026). They are `vllm:num_requests_running`, `vllm:num_requests_waiting`,
+vLLM v0.30.0 and main (Sep 2026). The metric names are `vllm:num_requests_running`, `vllm:num_requests_waiting`,
 `vllm:kv_cache_usage_perc`, `vllm:prefix_cache_queries`/`_hits`, `vllm:num_preemptions`,
 `vllm:prompt_tokens`, `vllm:generation_tokens`, `vllm:time_to_first_token_seconds`,
 `vllm:inter_token_latency_seconds`, `vllm:request_time_per_output_token_seconds`,
@@ -107,7 +107,7 @@ vLLM v0.30.0 and main (Sep 2026). They are `vllm:num_requests_running`, `vllm:nu
   of the run. Goodput is the number of requests per second that meet every SLO.
 
   There is one deliberate difference. Just before the first token, vLLM sends a chat chunk with only the role, and
-  this code skips that chunk. `vllm bench serve` counts it as a chunk. That chunk sets TTFT and adds one ~0 ms ITL gap
+  this code skips that chunk. `vllm bench serve` counts it as a chunk. In `vllm bench serve`, that chunk sets TTFT and adds one ~0 ms ITL gap
   for each chat request. Here, TTFT is the same, and each chat ITL list has one entry less, the near-zero entry.
   Completions are identical.
 * **Open loop for capacity**, closed loop only for "N users" questions. Start the closed-loop users at different
@@ -169,7 +169,7 @@ make check                                              # all of the above + tes
 
 ## Verify list (facts dated Sep 2026 that move)
 
-The source of these facts is the vLLM **v0.30.0** source and Docker Hub, checked on 2026-09-26. Do the check again
+A check on 2026-09-26 against the vLLM **v0.30.0** source and Docker Hub found these facts. Do the check again
 when you move the pin:
 
 * vLLM **0.30.0** is the latest release (PyPI, 2026-09-22). The image `vllm/vllm-openai:v0.30.0` exists (amd64 and

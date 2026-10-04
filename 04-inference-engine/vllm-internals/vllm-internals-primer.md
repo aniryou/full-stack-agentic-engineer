@@ -16,7 +16,7 @@ concepts themselves: continuous batching, chunked prefill, prefix caching and sp
 
 **State of the source.** The source is vLLM `main` at commit `5840d95` (2026-09-25). The fetch from
 `raw.githubusercontent.com/vllm-project/vllm/main` occurred on 2026-09-26. The version string comes from git tags
-through `setuptools_scm` (`vllm/version.py`, `pyproject.toml`). Thus the version number of `main` is not constant.
+through `setuptools_scm` (`vllm/version.py`, `pyproject.toml`). Thus `main` has no set version number.
 
 At fetch time, the latest PyPI release was **0.30.0** (2026-09-22), and `pyproject.toml` pins `torch == 2.13.0`
 for the build. The author examined the paths at that commit and marked with `(verify)` each item that the source
@@ -138,7 +138,7 @@ There are three exceptions to "default":
 - On ROCm, the architectures in `ROCM_DEFAULT_MRV1_ARCHITECTURES` (DeepSeek-V3.2, DeepSeek-V4, GLM-MoE-DSA)
   default to MRV1 ("Defaulting to V1 model runner on ROCm"). They do so if MRV1 can serve the configuration.
 - HiSparse attention must have MRV2, and it rejects `VLLM_USE_V2_MODEL_RUNNER=0`.
-- Watermarking forces MRV2 and overrides that setting.
+- The watermark feature forces MRV2, also when `VLLM_USE_V2_MODEL_RUNNER=0` is set.
 
 In all other cases, `VLLM_USE_V2_MODEL_RUNNER=0|1` forces the choice. The worker logs "Using V2 Model Runner"
 (`vllm/v1/worker/gpu_worker.py`), or the config logs the reason for the fallback.
@@ -439,9 +439,11 @@ preemption". There are 299 usable blocks, because block 0 is the null block. Two
 and long `max_tokens`, with FCFS. The counts use synchronous accounting. Under the default async scheduling, the
 one in-flight token changes some counts by one.
 
-Also, until the engine processes the in-flight output of R2 (a step), the WAITING pass moves R2 into
-`skipped_waiting` with `continue` (the `num_stale_output_tokens` check). This can let the admissions of that step go
-past R2. The outcome is the same. "Free" is `get_num_free_blocks()`, which counts cached, unreferenced blocks.
+Async scheduling has a second effect. Until the engine processes the in-flight output of R2 (a step), the WAITING
+pass moves R2 into `skipped_waiting` with `continue` (the `num_stale_output_tokens` check). This can let the
+admissions of that step go past R2. The outcome is the same.
+
+"Free" is `get_num_free_blocks()`, which counts cached, unreferenced blocks.
 
 | Moment | R1 | R2 | Free |
 |---|---|---|---|
@@ -488,7 +490,7 @@ step N+1: schedule(N+1) while GPU runs N ─▶ enqueue ─▶ block on N's resu
 ```
 
 The scheduler must schedule a decode for a token that it has not seen. `AsyncScheduler._update_after_schedule` adds
-`num_output_placeholders` and `-1` placeholder draft ids. The runner puts the real ids in on the GPU. In MRV2,
+`num_output_placeholders` and `-1` placeholder draft ids. The runner writes the real ids on the GPU. In MRV2,
 `postprocess_sampled` writes the sampled token of each request into `RequestState.last_sampled_tokens`. In the next
 step, the `combine_sampled_and_draft_tokens` kernel (`vllm/v1/worker/gpu/input_batch.py`) copies that token and all
 drafts into `input_ids`. Thus the token never goes to the host (MRV1: `GPUModelRunner._prepare_input_ids` with
@@ -496,8 +498,8 @@ drafts into `input_ids`. Thus the token never goes to the host (MRV1: `GPUModelR
 
 When the outputs arrive, `AsyncScheduler._update_request_with_output` removes the placeholders and calls
 `cache_blocks`. The cost: it is possible that a request that stops on EOS already has one more scheduled step. The
-engine discards the output of that step. The RUNNING pass prevents this when `max_tokens` makes the stop
-predictable. The benefit: the CPU scheduling time is no longer part of the step time.
+engine discards the output of that step. The RUNNING pass does not schedule that extra step when
+`max_tokens` makes the stop predictable. The benefit: the CPU scheduling time is no longer part of the step time.
 
 ### 3.9 `update_from_output`
 
@@ -533,7 +535,7 @@ Scheduler
              └─ cached_block_hash_to_block: BlockHashToBlockMap (hash+group_id → block)
 ```
 
-The cache on the scheduler side only keeps records on the CPU. The KV tensors live on the workers. The scheduler gives
+The cache on the scheduler side is only a set of records on the CPU. The KV tensors live on the workers. The scheduler gives
 the workers block ids, and the runner changes those ids into a block table and a slot mapping (Section 5.3).
 
 The mini engine of this repository builds the same structure from zero
@@ -651,7 +653,8 @@ The docstring of `KVCacheManager.allocate_slots` shows the layout:
 It then **caches immediately**. `coordinator.cache_blocks(request, min(computed + new, request.num_tokens))` hashes
 each block that will be full after this step runs. It does this before the forward pass. The cap at `num_tokens`
 keeps unverified drafts out. A consequence `(verify)`: a later request in the same `schedule()` call can already hit
-those blocks. This depends on one condition: in each layer, the forward pass writes the KV before it reads it.
+those blocks. This consequence depends on one condition: in each layer, the forward pass writes the KV before it
+reads it.
 
 ### 4.6 Free and eviction order
 
@@ -756,8 +759,8 @@ it, use one of these:
 
 `update_kv_cache_capacity` logs the result as "GPU KV cache size: N tokens, Maximum concurrency for M tokens per
 request: X.XXx". That concurrency is `num_blocks / ceil(max_model_len / block_size)`
-(`get_max_concurrency_for_kv_cache_config`). It is a worst case. Real requests are shorter, and a shared prefix
-increases it more.
+(`get_max_concurrency_for_kv_cache_config`). It is a worst case, because real requests are shorter, and a shared
+prefix increases it more.
 
 ### 4.8 Hybrid models: several KV cache groups
 
@@ -772,9 +775,10 @@ out-of-window blocks with the null block (`remove_skipped_blocks`). The window p
 limit for admission (`SlidingWindowSpec.max_admission_blocks_per_request`).
 
 `MambaManager` stores the recurrent state. With `mamba_cache_mode = "align"` (`CacheConfig`), it writes a checkpoint
-of that state at block boundaries for prefix caching. `HybridKVCacheCoordinator.find_longest_cache_hit` iterates to a
-fixed point where every group accepts the hit length. `--disable-hybrid-kv-cache-manager` allocates every layer as
-full attention (simpler, more memory).
+of that state at block boundaries for prefix caching.
+
+`HybridKVCacheCoordinator.find_longest_cache_hit` iterates to a fixed point where every group accepts the hit length.
+`--disable-hybrid-kv-cache-manager` allocates every layer as full attention (simpler, more memory).
 
 ---
 
@@ -822,8 +826,8 @@ monitors the worker processes:
 
 Select `mp` for one node. Also select `mp` for multi-node when an orchestrator already places the pods. Select Ray
 when a Ray cluster is already the unit of scheduling (Ray Serve, RL frameworks that place engines themselves). Both
-now share the `MessageQueue` control plane. With the shared control plane, the extra latency per step of Ray over
-`mp`, if any, is `(verify: measure)`.
+now share the `MessageQueue` control plane. Thus the extra latency per step of Ray over `mp`, if any, is
+`(verify: measure)`.
 
 ### 5.2 A worker's life
 
@@ -898,8 +902,8 @@ logits_indices = last row of each request = [1, 6, 9]   (one per request without
    `slot = block_table[row, pos // block_size] × block_size + pos % block_size`. It pads the tail with
    `PAD_SLOT_ID`, so that the CUDA-graph shapes stay constant. If request 2 has the block table `[7, 3, 12]`,
    position 42 goes in block 12 (42 // 16 = 2) at offset 10. That is slot `12 × 16 + 10 = 202`. Then
-   `model_state.prepare_attn` makes the attention metadata of each layer group from `query_start_loc`, `seq_lens`,
-   the block tables and the slot mappings (Section 6.1).
+   `model_state.prepare_attn` makes the attention metadata of each layer group (Section 6.1). Its inputs are
+   `query_start_loc`, `seq_lens`, the block tables and the slot mappings.
 5. **Forward.** A FULL batch replays its graph with `cudagraph_manager.run_fullgraph`. The inputs are already in the
    static buffers of the graph. PIECEWISE runs `run_pw_graph`, and NONE (eager, `--enforce-eager`) calls
    `self.model(...)`. The last two run under `set_forward_context(attn_metadata, ..., slot_mapping=...)`

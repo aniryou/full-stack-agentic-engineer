@@ -67,18 +67,17 @@ arithmetic intensity of an LLM step is approximately the number of tokens in it
 |---|---|---|---|
 | weight bytes | decode at small batch | bytes per weight | W4A16, W8A16, FP8/INT8 W8A8, NVFP4 |
 | KV bytes | decode at long context × large batch | bytes per KV element | FP8 KV, INT4/INT2 KV |
-| FLOPs | prefill, decode past the ridge | the precision that the tensor cores multiply in | FP8/INT8 W8A8, FP4 W4A4, **not** weight-only |
+| FLOPs | prefill, decode past the ridge | the precision that the tensor cores multiply in | FP8/INT8 W8A8 and FP4 W4A4 (**not** weight-only) |
 | memory capacity | always, for concurrency | weight + KV bytes | all of them |
 
 Layer 01 §3.5 calculates this for Llama-3.1-8B on an H100. FP8 is exactly 2.00× in both regimes, because it halves
-every byte and doubles the peak. W4A16 is 3.80× at batch 1 but 1.54× at batch 64. At batch 64, half of the bytes
-are KV cache, and W4A16 does not change them.
+every byte and doubles the peak. W4A16 is 3.80× at batch 1 but 1.54× at batch 64. The
+reason is that at batch 64, half of the bytes are KV cache, and W4A16 does not change them.
 
 The same arithmetic for one linear layer shows where weight-only no longer gives a gain. Take the `down_proj` of
 Llama-3.1-8B ($K$ = 14,336, $N$ = 4,096) with $M$ tokens in the step. Its FLOPs are $2\,MKN$, and its bytes are
 $K \cdot N \cdot w + M \cdot (K \cdot a + 2N)$. The layer becomes compute-bound above this value
 (`cost.crossover_tokens()`):
-
 
 $$
 M^* = \frac{K \cdot N \cdot w \,/\, \mathrm{BW}}{2 \cdot K \cdot N \,/\, \text{peak} - (K \cdot a + 2N) \,/\, \mathrm{BW}}
@@ -101,9 +100,9 @@ beyond (the two are equal at 2,048).
 Thus decode batches of a few hundred still get a gain from INT4, but long prefill chunks do not. Real kernels lose
 the gain sooner, because the dequantization is not free (§4).
 
-**Tensor-core throughput by precision** is the other half. From BF16 to FP8, an L4 goes from 121 to 242.5 TFLOP/s,
-and an H100 from 989.4 to 1,978.9. A B200 goes from 2,250 to 4,500, and to 9,000 at FP4 (dense, `roofline.specs`,
-verify). Each time the precision halves, the rate doubles. But this is true only on parts that have that datapath
+**Tensor-core throughput by precision** is the other half (dense, `roofline.specs`, verify). From BF16 to FP8, an L4
+goes from 121 to 242.5 TFLOP/s, and an H100 from 989.4 to 1,978.9. A B200 goes from 2,250 to 4,500, and to 9,000 at
+FP4. Each time the precision halves, the rate doubles. But the rate doubles only on parts that have that datapath
 ([gpu-primer §4](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md#4-tensor-cores-the-biggest-change-since-you-last-looked)).
 
 **What it cannot speed up.** Attention over the KV cache is not a weight GEMM. Weight quantization does not change
@@ -202,7 +201,8 @@ attention, see FlashAttention deep dive §9.1: bf16 has range, and fp16 has prec
 - **NVFP4**. It has E2M1 elements, one **FP8 E4M3** scale per **16**, and one FP32 scale per tensor. The tensor
   scale is a multiplier $g = 448 \times 6 / \operatorname{amax}(\text{tensor})$. The scale of each block is
   $\operatorname{E4M3}(g \times \text{block_amax} / 6)$, and $\hat{x} = \text{element} \times \text{block_scale} / g$
-  (`formats.nvfp4()`). This is the same as `generate_gparam` in compressed-tensors and `ref_nvfp4_quant` in vLLM.
+  (`formats.nvfp4()`). `formats.nvfp4()` does the same calculation as `generate_gparam` in compressed-tensors and
+  `ref_nvfp4_quant` in vLLM.
 
 The grid that wins depends on the data (`granularity.error()`, relative error, seed 0, 256×512 weights):
 
@@ -366,7 +366,7 @@ inputs actually use. These details are important in practice:
 - The "lazy batch" of the reference implementation delays the updates beyond a 128-column block, for GPU
   efficiency. Its OBS updates are the same. Its result is also the same per channel, or when groups start on block
   boundaries. A group that starts mid-block takes its scale from weights that do not have the in-flight
-  updates of the block yet. That is a slightly different choice. `tests/test_gptq.py` compares
+  updates of the block yet. Thus the scale of that group is a slightly different choice. `tests/test_gptq.py` compares
   `gptq.gptq()` with a transcription of the reference in both cases.
 - With uncorrelated inputs, H is diagonal, and U has no off-diagonal terms. Then GPTQ *is* RTN (a test examines
   this).
@@ -456,7 +456,8 @@ $$
 y[t, j] = s_x[t] \cdot s_w[j] \cdot \sum_k \mathit{qx}[t, k] \cdot \mathit{qw}[j, k]
 $$
 
-INT8 uses an INT32 accumulator. FP8 uses FP32 (but see the last item of the list in this section, about the FP8 tensor core).
+INT8 uses an INT32 accumulator. FP8 uses FP32 (but see the last item of the next list, about the FP8 tensor
+core).
 
 An emulation with integer codes and integer accumulation gives the fake-quantized product to within 10⁻¹⁴
 (notebook 04). This has three consequences:
@@ -485,7 +486,7 @@ $$
 
 The default is $\alpha = 0.5$. The adjusted values are 0.85 for Llama-3-8B and 0.8 for Mistral/Mixtral (verify).
 
-On the up-projection of the tiny model, INT8 W8A8 output error falls from 1.52% to **0.57%** at α = 0.5. The sweep
+On the up-projection of the tiny model, the output error of INT8 W8A8 falls from 1.52% to **0.57%** at α = 0.5. The sweep
 is U-shaped between α = 0 and 1. Over the full model, KL falls 2.7× (0.00296 → 0.00110), at no cost at run time.
 `tests/test_repo_numbers.py` calculates the serving-engine example again: one activation channel 60× larger, and
 6.6× less output error. The INT8 recipe of llm-compressor is `SmoothQuantModifier(smoothing_strength=0.8)`, and
@@ -590,8 +591,8 @@ attention-output error is:
 | FP8, scale 1.0, values ×10⁻³ | 4.9% (subnormals and zeros), but calibrated: 0.28% |
 | FP8, scale 1.0, values ×10³ | 76% (saturation at 448), but calibrated: 0.28% |
 
-Key errors cost more than value errors, because they go through the exponential of the softmax. The attention
-averages the value errors. An uncalibrated scale causes no damage for values of order 1, but it is incorrect far
+Key errors cost more than value errors, because they go through the exponential of the softmax, while the
+attention averages the value errors. An uncalibrated scale causes no damage for values of order 1, but it is incorrect far
 from 1. The `kv_cache_scheme` of llm-compressor writes calibrated scales. Per-head scales need its per-head recipe.
 
 **Below 8 bits: KIVI.** Keys have outlier channels that stay the same, but values do not. Thus KIVI quantizes **keys per
@@ -611,9 +612,10 @@ At this snapshot, vLLM has these sub-8-bit KV types:
 None of them is the per-channel-key scheme of KIVI (verify). Before you trust the keys of a system at 4 bits, find
 out which scheme it implements.
 
-**Kernel conditions** decide if you can use a quantized KV cache at all. They are in
-[vllm-internals §6.3](../vllm-internals/vllm-internals-primer.md#63-how-a-backend-is-chosen) and in the checks of
-each attention backend (`vllm/v1/attention/backends/`):
+**Kernel conditions** decide if you can use a quantized KV cache at all. The checks of each attention backend
+(`vllm/v1/attention/backends/`) and
+[vllm-internals §6.3](../vllm-internals/vllm-internals-primer.md#63-how-a-backend-is-chosen) give these conditions in
+detail:
 
 - **T4.** No backend has an FP8 KV cache. The FP8 path of Triton needs SM89, FlashInfer needs SM80, and
   FlashAttention needs SM80.
@@ -648,8 +650,8 @@ format whose 16 levels are normal-distribution quantiles, with a scale per block
 adapters in BF16 on top. NF4 with an FP32 scale per 64 costs 4.5 bits per weight. With "double quantization"
 (8-bit block scales with one FP32 per 256 blocks), it costs 4.127 (`formats.bits_per_weight(4, 64, scale_bits=…)`).
 
-The transformers library loads it with `BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-bnb_4bit_use_double_quant=True)`. To serve the result, merge the adapter into BF16 weights. Then quantize them with
+The transformers library loads the base model in NF4 with
+`BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)`. To serve the result, merge the adapter into BF16 weights. Then quantize them with
 a serving scheme (§9). vLLM serves bitsandbytes checkpoints only through the out-of-tree `vllm-bnb-plugin` at this
 snapshot (verify).
 
@@ -712,7 +714,7 @@ score `acc`.
   ([mixture-of-experts §6.7](../../00-foundations/mixture-of-experts/PRIMER.md#67-quantized-experts)).
 - **Long context.** KV errors accumulate over thousands of positions, and outlier tokens set per-tensor scales.
 - **Long generations and thinking models.** A flipped near-tie changes everything after it. A reasoning trace of
-  thousands of tokens gives it thousands of chances. Evaluate with the full generation length.
+  thousands of tokens gives such a flip thousands of chances to occur. Evaluate with the full generation length.
 - **Multilingual inputs.** Calibration in one language does not fully represent the activation statistics of
   other languages.
 - **Tool calling and structured output.** An argument that is incorrect by one token is incorrect. Do an

@@ -25,7 +25,7 @@ anything in this runbook. This runbook is the `gcp` profile.
 | Terraform >= 1.11, google provider >= 8.0 | The write-only secret arguments |
 | Python 3.11 with `pip install -e ".[gcp]"` and `google-cloud-aiplatform[agent_engines,adk]` | The SDK deployment path |
 | Roles: Owner on the project, or the admin roles that `infra/terraform/README.md` lists. For the opt-ins, the org-level admin roles for Access Context Manager, Org Policy and PAB. | |
-| Model Armor in your region. The Vertex floor-setting integration is available in a few regions only (see `docs/sources.md`). | `model_armor_location` |
+| Model Armor that is available in your region. The Vertex floor-setting integration is available in a few regions only (see `docs/sources.md`). | `model_armor_location` |
 
 ```bash
 export PROJECT_ID=my-agentsec-lab
@@ -90,7 +90,7 @@ The results (primer §3.3, §7.1):
   `principal://<trust domain>/resources/run/projects/$PROJECT_NUMBER/locations/$REGION/services/agentsec-mcp-tickets`
   (Terraform output `mcp_server_principal`).
 - The platform registers the service automatically under `/mcpServers`.
-- The new principal does **not** get the permissions of the fallback SA. This is the purpose of the change.
+- The new principal does **not** get the permissions of the fallback SA. This is the purpose of this step.
 
 Examine the identity on the revision:
 
@@ -158,7 +158,7 @@ At the end, the agent has these roles and this policy (primer §4.5):
 - `run.invoker` on **one** service.
 - `agentidentity.user` on **one** auth provider.
 - `iap.egressor` on **one** registry entry.
-- A deny policy on the full agents principalSet. It denies `storage.objects.delete` and `iam.serviceAccountKeys.create`.
+- A deny policy on the complete agents principalSet. It denies `storage.objects.delete` and `iam.serviceAccountKeys.create`.
 
 ## 5. Smoke test
 
@@ -187,7 +187,7 @@ curl -si "$MCP" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,
 # (with mcp_ingress = INGRESS_TRAFFIC_INTERNAL_ONLY this must be run from inside the VPC / gateway)
 ```
 
-The `agentsec-audit` log records a denied tool call with `decision=deny`. An example is
+The `agentsec-audit` log records a denied tool call with `decision=deny`. An example of a denied tool call is
 `run_sql`, which is not in `policies/support-agent.yaml`. The Model Armor sanitize logs record a
 prompt that matches a Model Armor filter (`log_sanitize_operations = true`).
 

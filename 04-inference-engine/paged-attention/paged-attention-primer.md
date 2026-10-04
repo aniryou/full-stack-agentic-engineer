@@ -15,7 +15,7 @@ On a 40 GB A100, the FP16 weights already take 26 GB, leaving room for only a ha
 Before vLLM, production systems (FasterTransformer, Orca) kept the KV cache of each request as a single contiguous tensor. They reserved this tensor at the start, at the maximum possible sequence length. Contiguity and unknown lengths together cause three different kinds of waste.
 
 - Internal fragmentation: reserved slots for output that the model never generates, because most requests stop at a length much less than the maximum.
-- Reservation waste: slots that the request will use later, but that are empty now. During that time, no other request can use them.
+- Reservation waste: slots that the request will use later, but that are empty now. Until the request uses them, no other request can use them.
 - External fragmentation: gaps between contiguous allocations of variable size. Each gap is too small for a new request.
 
 The PagedAttention paper measured that only about 20–40% of KV cache memory in these systems held actual token state. This memory is the most limited resource on the GPU, and most of it held only reservations and no data.
@@ -40,7 +40,7 @@ This design has two results. First, waste collapses to at most one partially fil
 
 ## The kernel
 
-Without contiguity, there is a cost: the attention kernel cannot read K and V as one strided tensor. The PagedAttention kernel does these steps:
+Without contiguity, there is a cost: the attention kernel can no longer read K and V as one strided tensor. The PagedAttention kernel does these steps:
 
 - It takes the block table as an input.
 - It goes through the logical blocks of each sequence.
@@ -48,25 +48,25 @@ Without contiguity, there is a cost: the attention kernel cannot read K and V as
 - It calculates the attention scores block by block.
 - It combines the partial results with an online-softmax accumulation.
 
-This accumulation is the same numerically stable method that FlashAttention uses for tiling: it keeps the maximum so far and rescales. Here, the kernel applies it to an access pattern that gathers from blocks. In the paper's microbenchmarks, the paged kernel costs approximately 20–26% more latency on the attention kernel alone, relative to a contiguous layout. But attention is only a fraction of the end-to-end step time. The batching gains that paged attention makes possible are larger than this cost by a wide margin.
+This accumulation is the same numerically stable method that FlashAttention uses for tiling: it keeps the maximum so far and rescales. Here, the kernel applies it to an access pattern that gathers from blocks. In the paper's microbenchmarks, the paged layout costs approximately 20–26% more latency on the attention kernel alone, relative to a contiguous layout. But attention is only a fraction of the end-to-end step time. The batching gains that paging makes possible are larger than this cost by a wide margin.
 
-It is useful to be precise about the relation to FlashAttention, because people often confuse the two. FlashAttention is about how to *calculate* attention with efficient IO: it never puts the full score matrix in HBM. PagedAttention is about how to *store* the KV cache flexibly. The two are orthogonal, and you can use them together. Modern kernels (FlashAttention-2/3, FlashInfer) accept paged KV layouts natively. "Paged KV" is now the standard interface contract for attention kernels in the software stacks that serve LLMs.
+It is useful to be precise about the relation to FlashAttention, because people often confuse the two. FlashAttention is about how to *calculate* attention with efficient IO: it never puts the full score matrix in HBM. PagedAttention is about how to *store* the KV cache flexibly. The two are orthogonal, and you can use them together. Modern kernels (FlashAttention-2/3, FlashInfer) accept paged KV layouts natively. Also, "paged KV" is now the standard interface contract for attention kernels in the software stacks that serve LLMs.
 
 ## Sharing and copy-on-write
 
-The indirection of the block table makes it almost free to share the KV cache. Each physical block has a reference count. The block tables of many sequences can point to the same physical block. Sometimes a sequence must write into a block whose refcount is more than one. Then the engine does a copy-on-write at block granularity. It allocates a new block, copies the contents, decreases the old refcount and points the block table to the new block.
+The indirection of the block table makes it almost free to share the KV cache. Each physical block has a reference count. The block tables of two or more sequences can point to the same physical block. If a sequence must write into a block whose refcount is more than one, the engine does a copy-on-write at block granularity. It allocates a new block, copies the contents, decreases the old refcount and points the block table to the new block.
 
 Three workloads get a benefit.
 
 - In parallel sampling ($n$ completions from one prompt), all samples share the blocks of the prompt. The samples are different only in their generated suffixes. Thus the engine copies, at most, the last block of the prompt. The savings are small, because the samples share only the prompt. The paper gives approximately 6–10%.
 - In beam search, beams fork from shared ancestors all the time. Thus the beams share large fractions of the cache, and these fractions change dynamically. The paper measured up to ~55% memory savings at wide beam widths. With contiguous allocation, it is almost impossible to implement this pattern of shared blocks.
-- Across requests, identical prefixes (system prompts, few-shot exemplars) can map to the same physical blocks. This is the mechanism under prefix caching. Later, SGLang's RadixAttention made it more general: it keeps cached prefixes in a radix tree over the paged pool. The prompt-caching products that frontier-lab APIs now supply are the commercial form of the same block-reuse idea.
+- Across requests, identical prefixes (system prompts, few-shot exemplars) can map to the same physical blocks. This is the mechanism under prefix caching. Later, SGLang's RadixAttention made this mechanism more general. RadixAttention keeps cached prefixes in a radix tree over the paged pool. The prompt-caching products that frontier-lab APIs now supply are the commercial form of the same block-reuse idea.
 
 ## Scheduling: continuous batching and preemption
 
-The engine allocates memory block by block as sequences grow. Thus the scheduler does not need to know the output lengths to admit requests. It admits requests until few free blocks stay in the physical pool.
+The engine allocates memory block by block as sequences grow. Thus the scheduler no longer needs to know the output lengths to admit requests. It admits requests until few free blocks stay in the physical pool.
 
-Paged attention combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
+Paging combines with continuous (iteration-level) batching from Orca. In continuous batching, finished sequences leave the batch immediately, and sequences that wait can join at any step. Together, the two increase the effective batch size by a large factor. For example, vLLM reported 2–4× throughput over FasterTransformer and Orca at equivalent latency. The gains were larger for long sequences, large models and complex decoding.
 
 A design question of interest is this: what occurs when no free blocks stay in the pool while requests are in progress? The engine promised the blocks optimistically, so this can occur. vLLM preempts victim sequences with one of two mechanisms.
 
@@ -76,20 +76,20 @@ Eviction is all-or-nothing per sequence. Each step uses every block of a sequenc
 
 ## Design trade-offs worth knowing
 
-Block size is the central parameter to adjust. With smaller blocks, sequences can share memory at a finer granularity, and each sequence has less internal waste. But smaller blocks also give larger block tables, more gather overhead and worse memory coalescing in the kernel. Larger blocks give the opposite of all of these. Sixteen tokens is the empirical middle point. It is still the default, and it has stayed the default for a remarkably long time.
+Block size is the central parameter to adjust. With smaller blocks, sequences can share memory at a finer granularity, and each sequence has less internal waste. But smaller blocks also give larger block tables, more gather overhead and worse memory coalescing in the kernel. Larger blocks give the opposite of all of these. Sixteen tokens is the empirical middle point. It has stayed the default for a long time, and it is still the default.
 
-Paged attention is also orthogonal to all the methods that make the cache itself smaller, and the effects multiply. GQA and MQA decrease `n_kv_heads`. DeepSeek-style MLA compresses K and V into a low-rank latent. FP8/INT8 KV quantization divides the bytes per element by two or by four. All of these methods decrease the size of the contents of each block. Paged attention controls how the engine places, shares and evicts the blocks.
+Paging is also orthogonal to all the methods that make the cache itself smaller, and the effects multiply. GQA and MQA decrease `n_kv_heads`. DeepSeek-style MLA compresses K and V into a low-rank latent. FP8/INT8 KV quantization divides the bytes per element by two or by four. All of these methods decrease the size of the contents of each block. But paging controls how the engine places, shares and evicts the blocks.
 
-The strongest critique came from vAttention (2024). vAttention says that PagedAttention implements virtual memory again in user space, with software block tables and rewritten kernels. But CUDA's virtual memory management APIs can keep the cache virtually contiguous, with physical pages under it. With those APIs, unmodified kernels can run.
+The strongest critique came from vAttention (2024). vAttention says that PagedAttention implements virtual memory again in user space, with software block tables and rewritten kernels. Also, vAttention says that CUDA's virtual memory management APIs can keep the cache virtually contiguous, with physical pages under it. With those APIs, unmodified kernels can run.
 
-The critique of vAttention is a fair architectural point, but in practice the paged model won. TensorRT-LLM, HF TGI, SGLang, and LMDeploy all started to use paged KV caches. Newer KV-centric architectures also build directly on block-managed caches as the unit of transfer. Disaggregated prefill/decode systems like Mooncake and DistServe are examples. These systems send KV blocks between prefill and decode workers.
+The critique from vAttention is a fair architectural point, but in practice the paged model won. TensorRT-LLM, HF TGI, SGLang, and LMDeploy all started to use paged KV caches. Newer KV-centric architectures also build directly on block-managed caches as the unit of transfer. Disaggregated prefill/decode systems like Mooncake and DistServe are examples. These systems send KV blocks between prefill and decode workers.
 
 ## Numbers to keep in your pocket
 
 Remember these numbers:
 
 - A 13B FP16 model costs 800 KiB of KV cache per token, so ~1.56 GiB (1.68 GB) per 2K-token sequence.
-- Systems before paged attention got only 20–40% KV memory utilization, against >96% with paged attention.
+- Systems before paging got only 20–40% KV memory utilization, against >96% with paging.
 - The default block holds 16 tokens.
 - The kernel pays ~20–26% overhead on attention in isolation.
 - The headline result is 2–4× the throughput of FasterTransformer and Orca at matched latency.

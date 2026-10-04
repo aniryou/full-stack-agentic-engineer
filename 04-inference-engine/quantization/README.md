@@ -8,7 +8,7 @@ serve and evaluate a real quantized checkpoint.
 ## Start here
 
 1. Read "The one-minute version" in [PRIMER.md](PRIMER.md). Then read §1 *Why quantize, and what it can and
-   cannot speed up*. This takes 15 min. The primer goes deeper than
+   cannot speed up*. This takes 15 min. The primer goes deeper into the survey in
    [serving-engine PRIMER §8](../serving-engine/PRIMER.md#8-quantization). If you have not read that section, read
    it first.
 2. Run `cd quant-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`. The 86 tests run in

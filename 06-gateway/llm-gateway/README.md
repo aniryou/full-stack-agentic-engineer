@@ -1,7 +1,7 @@
 # llm-gateway — one front door for many models: routing, fallbacks, caching, metering and tenant isolation
 
-After this topic, you can design the service that every app and agent calls in place of the model providers. You can
-also defend each decision in it with a number:
+After this topic, you can design the service that every app and agent calls in place of a direct call to the model
+providers. You can also defend each decision in it with a number:
 
 - Which failures go to a fallback, and when a failure must not go to one.
 - What the gateway can cache, and at what false-hit rate.
@@ -17,9 +17,9 @@ also defend each decision in it with a number:
    fallback chains.
 2. Run `cd gateway-core && python3 -m pip install -r requirements.txt && python3 -m pytest -q`. The 109 tests run in
    approximately 16 s, at no cost, on any laptop. Then open
-   [`gateway-core/notebooks/01_one_front_door.ipynb`](gateway-core/notebooks/01_one_front_door.ipynb). Watch how a
+   [`gateway-core/notebooks/01_one_front_door.ipynb`](gateway-core/notebooks/01_one_front_door.ipynb). See how a
    request goes to the next target during a provider outage, before its first byte.
-3. When you want real HTTP, continue in [`gateway-lab/`](gateway-lab/). It is still at no cost. Also continue there
+3. When you want real HTTP, still at no cost, continue in [`gateway-lab/`](gateway-lab/). Also continue there
    for one real vLLM on a Colab or Kaggle T4 at no cost.
 
 ## What you get
@@ -92,6 +92,6 @@ output tails that break per-request limits. The learning path is in [`CURRICULUM
 - The DPoP signer of the core is an HMAC stand-in that RFC 9449 forbids. The core uses it because the standard library
   has no asymmetric keys. The core labels it. When you install `cryptography`, the lab signs with real keys.
 - Prices, context windows, product features and spec revisions have the date 2026-09-26. The Verify list of the primer
-  marks them `(verify)`. [`COMPUTE.md`](../../COMPUTE.md) gives GPU prices and the availability of GPUs. The T1 paths
+  marks them `(verify)`. [`COMPUTE.md`](../../COMPUTE.md) gives GPU prices and tells how easy it is to get each GPU. The T1 paths
   cost nothing on Colab or Kaggle, or approximately $0.3–0.7 an hour on a rented 24 GB GPU (verify). The T3 path uses the GCP
   deploys of the 04 and 05 labs again, and it bills what they bill.

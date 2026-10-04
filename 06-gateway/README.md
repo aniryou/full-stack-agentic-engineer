@@ -9,8 +9,8 @@ Decide, outside the model, who can run what, and how much of it. After this laye
 - Change conversations per day into tokens per minute and dollars.
 - Find the provisioned-throughput (or own-GPU) break-even.
 - Keep a service available during a 429 storm with rate limits, breakers and admission control.
-- Put one front door in front of every model. The front door routes across providers and uses a fallback chain. It
-  caches what is safe, meters tokens while they stream and keeps tenants apart.
+- Put one front door in front of every model. The front door routes requests across providers, and its fallback
+  chain also crosses providers. It caches what is safe, meters tokens while they stream and keeps tenants apart.
 
 ## Where this layer sits
 
@@ -37,9 +37,9 @@ approximate. They come from the curriculum of the repo ([`CURRICULUM.md`](../CUR
 
 | Topic | You will be able to… | Time | Tier |
 |---|---|---|---|
-| [`identity-security/`](identity-security/README.md) | give an agent its own principal. Keep the authority of the agent separate from the authority that a user delegates to it. Enforce policy before each tool call. Make an MCP server verify the audience and the scope itself. Screen untrusted content. Record each decision in the audit trail with the two identities. The topic has a one-file [core](identity-security/agentic-identity-core/README.md), the full [Google Cloud lab](identity-security/agentic-identity-gcp-lab/README.md) with its [primer](identity-security/agentic-identity-gcp-lab/docs/primer.md), and the core on Mistral's platform. The Mistral version is beside the core, as an optional provider path. | ~12 h (core + lab), +1 h for the Mistral path | T0 (T3 optional) |
-| [`scaling-admission-cost/`](scaling-admission-cost/README.md) | calculate the size of an agent service from conversations per day (tokens per minute, turns in flight, cost per conversation). Find the provisioned-throughput break-even. Set a limit on a turn, and continue after a crash in the middle of a turn. Make traffic smooth, retry, open circuit breakers and shed load with `Retry-After`. Decide between a hosted API and your own vLLM fleet. The topic has the [lab](scaling-admission-cost/agentic-scaling-lab/README.md) with its [primer](scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md). The lab also has a Mistral provider path: a [primer](scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md), a vLLM fleet backend and notebook 05. | ~6 h, +2 h for the hosted-vs-own-GPUs path | T0 |
-| [`llm-gateway/`](llm-gateway/README.md) | put one front door in front of many models, and support each decision in it with a number. Find which failures go to the fallback chain, and why a fallback never occurs after the first byte. Find what the gateway can cache, and at what false-hit rate. Set token limits that continue to work during a thinking-model rollout (reserve, then stream, then reconcile). Calculate the prices in a ledger from `usage`, and a chargeback for a shared GPU pool. Get the tenant from the verified key, never from a header. Measure what a guardrail adds to TTFT. Use the gateway as the OAuth client of MCP servers. The topic has a [PRIMER](llm-gateway/PRIMER.md), [`gateway-core`](llm-gateway/gateway-core/README.md) (standard library + numpy, 5 notebooks) and [`gateway-lab`](llm-gateway/gateway-lab/README.md) (5 notebooks). The lab runs the same gateway over HTTP in front of fake providers or one vLLM. It also has a compose stack and MCP authorization over HTTP. | ~16.5 h: ~2.5 h primer, ~8 h core, ~6 h lab | T0, T0 + Docker, T1 (T3 reuses the 04 and 05 deploys) |
+| [`identity-security/`](identity-security/README.md) | give an agent its own principal. Keep the authority of the agent separate from the authority that a user delegates to it. Enforce policy before each tool call. Make an MCP server verify the audience and the scope itself. Screen untrusted content. Record each decision in the audit trail with the two identities. The topic has a one-file [core](identity-security/agentic-identity-core/README.md), the full [Google Cloud lab](identity-security/agentic-identity-gcp-lab/README.md) with its [primer](identity-security/agentic-identity-gcp-lab/docs/primer.md), and the core on Mistral's platform. The Mistral core is beside the one-file core, as an optional provider path. | ~12 h (core + lab), +1 h for the Mistral path | T0 (T3 optional) |
+| [`scaling-admission-cost/`](scaling-admission-cost/README.md) | calculate the size of an agent service from conversations per day (tokens per minute, turns in flight, cost per conversation). Find the provisioned-throughput break-even. Set a limit on a turn, and continue after a crash in the middle of a turn. Make traffic smooth, retry, open circuit breakers and shed load with `Retry-After`. Decide between a hosted API and your own vLLM fleet. The topic has the [lab](scaling-admission-cost/agentic-scaling-lab/README.md) with its [primer](scaling-admission-cost/agentic-scaling-lab/docs/01-scaling-primer.md) and its Mistral provider path: a [primer](scaling-admission-cost/agentic-scaling-lab/docs/mistral/01-scaling-primer.md), a vLLM fleet backend and notebook 05. | ~6 h, +2 h for the hosted-vs-own-GPUs path | T0 |
+| [`llm-gateway/`](llm-gateway/README.md) | put one front door in front of many models, and support each decision in it with a number. Find which failures go to the fallback chain, and why a fallback never occurs after the first byte. Find what the gateway can cache, and at what false-hit rate. Set token limits that continue to work during a thinking-model rollout (reserve, then stream, then reconcile). Calculate the prices in a ledger from `usage`, and calculate a chargeback for a shared GPU pool. Get the tenant from the verified key, never from a header. Measure what a guardrail adds to TTFT. Use the gateway as the OAuth client of MCP servers. The topic has a [PRIMER](llm-gateway/PRIMER.md), [`gateway-core`](llm-gateway/gateway-core/README.md) (standard library + numpy, 5 notebooks) and [`gateway-lab`](llm-gateway/gateway-lab/README.md) (5 notebooks). The lab runs the same gateway over HTTP in front of fake providers or one vLLM. It also has a compose stack and MCP authorization over HTTP. | ~16.5 h: ~2.5 h primer, ~8 h core, ~6 h lab | T0, T0 + Docker, T1 (T3 reuses the 04 and 05 deploys) |
 
 ## Start here
 
@@ -83,9 +83,11 @@ scaling lab has a hosted-vs-own-GPUs path (its Mistral primer and notebook 05). 
 The llm-gateway topic applies the token bucket and the breakers of the scaling topic to tokens and providers. It
 applies the token discipline of the identity topic to provider keys and MCP servers. It also goes down to the prefix
 cache of layer 04 (the per-tenant `cache_salt` that it sends) and to the router of layer 05. A self-hosted target is
-a pool, and the endpoint picker of that pool selects the pod. In the
-[curriculum's spiral](../CURRICULUM.md#31-why-this-order), this layer comes after the orchestrator (05) and before
-the agents (07). If you already build agents, the curriculum suggests a fast read of 06.1 first, for motivation.
+a pool, and the endpoint picker of that pool selects the pod.
+
+In the [curriculum's spiral](../CURRICULUM.md#31-why-this-order), this layer comes after the orchestrator (05) and
+before the agents (07). If you already build agents, the curriculum suggests a fast read of 06.1 first, for
+motivation.
 
 **Leads to** layer 07 ([`07-application-agent-framework`](../07-application-agent-framework/README.md)). Layer 07
 has the agent loop, and this layer sets the limits of its turns. Layer 07 also has
@@ -97,15 +99,15 @@ model routing are in this layer, and replica routing and autoscaling are in laye
 
 - The latencies and 429s of the scaling lab come from simulations on a virtual clock. The simulation uses a fake
   model with a shared tokens-per-minute pool, or a simulated vLLM fleet. Prices, quotas and model ids are snapshots
-  with a date, and each primer marks them (verify).
+  with a date. Each primer marks them with the (verify) tag.
 - The identity plane runs on local fakes at T0. The Terraform of the GCP lab (T3, optional) connects the same code to
-  Google Cloud's agent identity, credential broker and screening products. These product facts are from
-  September 2026 (verify).
+  Google Cloud products. These are the agent identity, the credential broker and the products that screen content.
+  These product facts are from September 2026 (verify).
 - A model API key (Gemini or Mistral) is optional everywhere. It replaces a scripted model with a real one.
 - The providers, the authorization server and the MCP server of the LLM gateway are fakes at T0. The lab simulates their
   latencies and token counts, and labels them. One real vLLM (T1) changes TTFT, `cached_tokens` and the reconciliation of
   the ledger into measurements. The semantic cache of the gateway uses a lexical hashing embedder. A labelled HMAC
-  stand-in signs its DPoP proofs, unless you install `cryptography` (the `dpop` extra of the lab).
+  stand-in signs the DPoP proofs of the gateway, unless you install `cryptography` (the `dpop` extra of the lab).
 - This layer does not cover these items yet (see [`CURRICULUM.md`](../CURRICULUM.md) §2):
   - A distributed limiter measured under real concurrency.
   - Multi-region gateway failover.

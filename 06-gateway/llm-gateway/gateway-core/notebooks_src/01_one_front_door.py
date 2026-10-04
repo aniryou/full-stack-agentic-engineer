@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 01 · One front door
 #
-# **Tier:** T0. It uses only the CPU, no network and a few seconds. Everything runs in process on a virtual clock. The
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. Everything runs in process on a virtual clock. The
 # same gateway over real HTTP, in front of fake providers or one vLLM (T1), is `gateway-lab` notebook
 # `01_a_gateway_over_http`.
 #
@@ -112,7 +112,7 @@ print("anthropic, cut before message_delta: usage", acc.usage, "| estimate from 
 # 8. record.
 #
 # The primary provider has a scripted outage. Thus the request falls through to the next target. This occurs before
-# the first byte, so the client does not see it.
+# the first byte, so the client never sees the outage.
 
 # %%
 clock = Clock()
@@ -140,7 +140,7 @@ print("ledger row:", r.row)
 # - `prompt_tokens` (with the cached tokens and the cache-written tokens),
 # - `completion_tokens` (with the reasoning tokens),
 # - `cached_tokens`,
-# - `cache_write_tokens` (the prompt tokens that the provider writes to its cache, at their own price),
+# - `cache_write_tokens` (the prompt tokens that the provider writes to its cache and bills at their own price),
 # - `reasoning_tokens`,
 # - `total_tokens`.
 #
@@ -323,7 +323,7 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 # failure in the middle of a stream inside an HTTP 200, with an integer error code.
 #
 # "On streams, we always ask upstream for usage, and we remove it for clients that did not ask. Thus the gateway meters
-# every stream. If a stream stops before its usage chunk, we bill it on the tokens that the gateway relayed. We mark the row as an
+# every stream. If a stream is cut before its usage chunk, we bill it on the tokens that the gateway relayed. We mark the row as an
 # estimate.
 #
 # "Every request leaves a server span and one client span for each target that the gateway tried, with pinned GenAI
@@ -334,13 +334,13 @@ print("✅ from the file alone:", attempts, "| names pinned to", otel.PINNED)
 # 1. *Why does the gateway inject `stream_options.include_usage` itself?* Because the usage chunk is the bill, and it
 #    arrives only if the request asks for it. It is possible that the client does not ask. Inject it only on streamed
 #    requests (if not, vLLM rejects it). Remove the chunk from the clients that did not ask for it.
-# 2. *A stream dies after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
+# 2. *A stream stops after 200 tokens and no usage arrives. What does the ledger say?* The ledger has an estimated row,
 #    with status `cut`, for the tokens that the gateway counted from the relayed deltas. Later, the gateway reconciles
 #    the row against the export of the provider. The row is never zero and never the output cap.
 # 3. *What does not normalise across providers?* Three things. First, the stream shapes (named events against chunks,
 #    whole function calls against argument fragments, no `[DONE]` from Anthropic). Second, the location of the
 #    reasoning text. Third, the time when the counts arrive.
 #
-#    The thinking tokens of Anthropic come only in the final `message_delta`. Thus a stream that stops
-#    before it has no usage to trust. The adapter reports what is not there. The ledger estimates it and says so. It does
-#    not invent it.
+#    The thinking tokens of Anthropic come only in the final `message_delta`. Thus, if the stream is cut before
+#    that `message_delta`, the gateway has no usage that it can trust. The adapter reports the count that is not there.
+#    The ledger estimates that count and says so. The ledger does not invent the count.

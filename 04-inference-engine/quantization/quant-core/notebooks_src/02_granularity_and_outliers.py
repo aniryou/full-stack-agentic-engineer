@@ -35,8 +35,8 @@ from quantcore import TinyModel, formats as F, granularity as G, w8a8
 # %% [markdown]
 # ## Worked example 1 — the survey table, reproduced
 # serving-engine PRIMER §8 quotes six schemes on one 256×128 Gaussian weight from `minengine.quant`. The same seed
-# through the code of quantcore itself gives the same numbers (pinned in `tests/test_repo_numbers.py`). This is the
-# start point, and this notebook goes beyond it.
+# through the code of quantcore itself gives the same numbers (pinned in `tests/test_repo_numbers.py`). These numbers are
+# the start point, and this notebook goes beyond them.
 
 # %%
 w = np.random.default_rng(0).standard_normal((256, 128)) * 0.02      # minengine's (d_in, d_out) weight
@@ -77,7 +77,7 @@ for gran, g in (("tensor", 0), ("channel", 0), ("group", 128), ("group", 64), ("
 # %% [markdown]
 # The outlier dominates the aggregate metrics. Thus these metrics look good, but the ordinary values get large
 # errors. Per-channel scales correct an outlier row completely. They do not correct an outlier column at all,
-# because the column sets the scale of every row. Groups decrease the damage to one group of each row. The error
+# because the column sets the scale of every row. With groups, the damage stays in one group of each row. The error
 # on the other columns is 61% per channel, 32% with groups of 128 and 18% with groups of 32.
 #
 # For a weight outlier, the remedies work on `W`:
@@ -89,7 +89,7 @@ for gran, g in (("tensor", 0), ("channel", 0), ("group", 128), ("group", 64), ("
 # AWQ does not apply. Its scales come from activation magnitudes, and the inputs of this column are ordinary.
 #
 # ## Worked example 3 — activations: the outlier channels are in every token
-# The first up-projection of the tiny model reads $\operatorname{RMSNorm}(x) \times \mathrm{gain}$, and four gains
+# The first up-projection of the small model reads $\operatorname{RMSNorm}(x) \times \mathrm{gain}$, and four gains
 # are 25–40×. That is how real LLMs get "massive activations": a few channels, always the same, that are large in
 # every token.
 
@@ -251,10 +251,10 @@ print(f"✅ predicted {predicted:.3f}, measured {measured:.3f}: one channel at 6
 
 # %% [markdown]
 # ## Exercise 2.4 — choose a static scale on calibration data only
-# Select `static_amax` for the INT8 static per-tensor input scale of the up-projection. Select it from the four
-# candidates of worked example 4. Give each candidate a score: the output error on the **calibration**
-# activations `A`. Never use the test set, because that is what calibration means. The check measures your choice
-# on the held-out `At`. Your choice must be within 10% of the best candidate there.
+# Select `static_amax` for the INT8 static per-tensor input scale of the up-projection from the four candidates
+# of worked example 4. Give each candidate a score: the output error on the **calibration** activations `A`.
+# Never use the test set. Calibration means that you select the scale on calibration data only. The check
+# measures your choice on the held-out `At`. Your choice must be within 10% of the best candidate there.
 
 # %% exercise
 ### BEGIN SOLUTION

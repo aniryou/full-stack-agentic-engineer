@@ -11,7 +11,7 @@ Three containers come from one image, built from this lab:
 | `acme` | 8101 (internal) | an OpenAI-dialect fake provider that answers 30 % of requests with 503 before the first byte (`--fail-rate 0.3`) |
 | `bolt` | 8102 (internal) | an Anthropic-dialect fake provider: the fallback in the `chat` alias |
 
-Compose publishes only the port of the gateway. Clients never reach a provider, and they never hold a provider key.
+Compose publishes only the port of the gateway. Thus, clients never reach a provider, and they never hold a provider key.
 
 ```bash
 ./up.sh           # DRY_RUN=1 ./up.sh prints the steps; builds gwlab:local, starts the stack, waits for /health

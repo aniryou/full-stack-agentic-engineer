@@ -34,7 +34,7 @@ simulations run 50× faster than real time.* The times are approximate. The lab 
 | [`docs/mistral/01-scaling-primer.md`](docs/mistral/01-scaling-primer.md) | This is the same method on Mistral's API and on your own GPUs. It covers the two ways to pay for tokens, the replica, the fleet, the break-even and sovereignty. | 1–2 h | — |
 | [`docs/02-reference-architecture.md`](docs/02-reference-architecture.md) | This is the Cloud Run + Gemini reference architecture. Its §11 is the self-hosted model layer on Kubernetes. | 45 min | — |
 | [`docs/03-capacity-plan.md`](docs/03-capacity-plan.md) | These are the numbers for both providers. The code generates them. | 10 min | — |
-| [`docs/04-gcp-mapping.md`](docs/04-gcp-mapping.md) | This maps each concept to its Google Cloud service, and each service to the setting that matters. Then it gives the vLLM and Kubernetes settings and notes for each cloud, for a fleet. | 20 min | — |
+| [`docs/04-gcp-mapping.md`](docs/04-gcp-mapping.md) | This document connects each concept to its Google Cloud service, and each service to the setting that matters. Then it gives the vLLM and Kubernetes settings and notes for each cloud, for a fleet. | 20 min | — |
 | [`docs/scaling-agentic-solutions-on-google-cloud.md`](docs/scaling-agentic-solutions-on-google-cloud.md) | This is the long-form companion, worked on a fictional insurer. Its Part 3 is `scalelab.capacity`, and a test pins it. | 2 h | — |
 
 **The provider path.** Everything runs on the Google Cloud anchor (a hosted Gemini pool) if you do not switch it. The
@@ -65,7 +65,7 @@ The code generates `docs/03-capacity-plan.md`, and a test checks it. This comman
 
 | Module | The idea |
 |---|---|
-| `capacity.py` | It goes from conversations to turns, calls and tokens/min. It also has Little's law, Provisioned Throughput units and the break-even, the cost per conversation, and what breaks first (Gemini). |
+| `capacity.py` | It goes from conversations to turns, from turns to calls, and from calls to tokens/min. It also has Little's law, Provisioned Throughput units and the break-even, the cost per conversation, and what breaks first (Gemini). |
 | `mistral.py` | It does the same on Mistral's API: the rate-limit request and the cost per conversation. It also has the fleet sized for peak, the break-even GPU price and the two-replica floor. |
 | `serving.py` | It describes one vLLM replica with first-principles estimates. KV bytes per token (GQA against MLA) give the resident sequences. HBM bandwidth gives the time per token. It shows the relation between batch and throughput. It calculates TTFT from prefill FLOPs. |
 | `model.py` | It is a fake model with prefix caching, on three backends. The backends are a hosted API, a fleet and the hybrid. The hosted API is a shared pool that answers 429. The fleet puts requests in a queue and becomes slower. The module also has `fake_model(provider)` and the real Gemini and vLLM calls. |
@@ -84,15 +84,15 @@ check passes.
 ## The anchor numbers (verify before quoting — prices, limits and GPU rates move)
 
 **Gemini, 5 September 2026.** 100 k conversations/day give 15 model calls/s on average, 46 at peak and 153 in an
-incident. These calls are 4.6 / 13.75 / 45.8 M input tokens per minute, against a 10 M TPM Flash tier baseline. That
-is 42 / 125 / 417 turns in flight. The cost is $0.068 per conversation with routing and caching ($0.14 without). The
+incident. These calls send 4.6 / 13.75 / 45.8 M input tokens per minute, against a baseline of 10 M TPM for the Flash
+tier. The same load gives 42 / 125 / 417 turns in flight. The cost is $0.068 per conversation with routing and caching ($0.14 without). The
 base load needs 69 GSUs of Provisioned Throughput, with the break-even at 75 % utilisation on a 1-year term.
 
 The first thing that breaks is the token budget. The billing mainframe is next. Cloud Run is about 0.1 % of the bill.
 
 **Mistral and a fleet, 19 September 2026.** The same demand is 4.8 / 14.3 / 47.7 M total tokens per minute. This
-needs a rate-limit request of 60 RPS and 19 M TPM. On the planning mix, the cost is $0.0131 per conversation (90 %
-Small 4 + 10 % Medium 3.5, cached). That is $39.7 k/month.
+demand needs a rate-limit request of 60 RPS and 19 M TPM. On the planning mix, the cost is $0.0131 per conversation (90 %
+Small 4 + 10 % Medium 3.5, cached). On this mix, the total cost is $39.7 k/month.
 
 The other path is Ministral 3 14B on H100s: batch 24 at 20 ms per token (estimate), 4 / 11 / 34 replicas, and
 $55 k/month on on-demand GPUs. The fleet costs less than the API when an H100-hour costs less than about $4.95. Thus
@@ -102,7 +102,7 @@ residency decides the path, and the arithmetic puts a price on the decision.
 
 This lab comes after layer 05's [serving orchestration](../../../05-orchestrator/serving-orchestration/README.md)
 (routing and replica autoscaling) and layer 04's [serving engine](../../../04-inference-engine/serving-engine/README.md).
-The simpler estimate in `serving.py` uses `minengine.perf` of the serving engine as its reference step-time model.
+The `minengine.perf` model of the serving engine is the reference step-time model for the simpler estimate in `serving.py`.
 Beside this lab is [identity and security](../../identity-security/README.md). That topic says what an agent can
 do. This lab says how much it can run. After this lab comes the durable turn in layer 07.
 

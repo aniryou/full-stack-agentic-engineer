@@ -20,7 +20,7 @@
       and `principalSet://TRUST_DOMAIN/attribute.platform/aiplatform` (all agents on the platform in the org).
     - The supported runtimes are Agent Runtime, Gemini Enterprise and Cloud Run. The policy types are allow, deny, Principal Access Boundary and VPC-SC ingress/egress rules.
     - VPC-SC: add `agentidentity.googleapis.com` and `agentidentitycredentials.googleapis.com` to the perimeters. Use the restricted VIP.
-    - A limitation: you cannot grant legacy bucket roles. The recommended default roles are `roles/aiplatform.expressUser`, `roles/serviceusage.serviceUsageConsumer` and `roles/browser`.
+    - A limitation: you cannot grant legacy bucket roles to an agent identity. The recommended default roles are `roles/aiplatform.expressUser`, `roles/serviceusage.serviceUsageConsumer` and `roles/browser`.
     - Sources: https://docs.cloud.google.com/iam/docs/agent-identity-overview, https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/agent-identity,
       https://arnav.au/2026/08/26/gcp-agent-identity-auth-manager-and-apis-what-ga-changes/
 - The credential acquisition table:
@@ -75,7 +75,7 @@
     - It supports all HTTP traffic, MCP and A2A included. It parses MCP attributes.
     - You must register the resources in Agent Registry (≤5,000 per gateway).
     - The commands are `gcloud network-services agent-gateways`. The API resource is Network Services v1 `agentGateways`.
-    - The limitations: the gateway itself has no VPC-SC support. It needs publicly trusted CA certs. Gemini Enterprise is egress-only.
+    - The limitations: the gateway itself has no VPC-SC support. It needs publicly trusted CA certs. For Gemini Enterprise, the gateway supports egress only.
     - Source: https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview
 - **VPC Service Controls** (27 Jun 2026 blog):
     - Ingress and egress rules can contain agent identities (a single principal or a principalSet).
@@ -96,11 +96,11 @@
 ## Standards
 - **MCP authorization** (spec rev 2025-11-25, with the changes of the 2026-07-28 revision noted):
     - It uses OAuth 2.1 (draft-ietf-oauth-v2-1-13). The MCP server is the resource server.
-    - The server MUST implement Protected Resource Metadata (RFC 9728). It advertises it through `WWW-Authenticate: Bearer resource_metadata="..."` on 401 and/or `/.well-known/oauth-protected-resource[/path]`.
+    - The server MUST implement Protected Resource Metadata (RFC 9728). The server MUST advertise the metadata through `WWW-Authenticate: Bearer resource_metadata="..."` on 401 and/or `/.well-known/oauth-protected-resource[/path]`.
     - Clients MUST use PRM for AS discovery. AS metadata discovery uses RFC 8414 or OIDC discovery.
     - Clients MUST implement PKCE S256. They MUST refuse if `code_challenge_methods_supported` is absent.
     - The `resource` param of Resource Indicators (RFC 8707) MUST be in the authorization and token requests (the canonical server URI). Servers MUST validate the audience.
-    - Servers MUST NOT accept or transit other tokens (token passthrough is forbidden).
+    - Servers MUST NOT accept or transit other tokens (the specification forbids token passthrough).
     - Confused deputy: proxies with static client IDs MUST get user consent for each dynamically registered client.
     - Client registration: Client ID Metadata Documents (SHOULD, `client_id_metadata_document_supported`), pre-registration, and DCR (MAY).
       The 2026-07-28 revision deprecates DCR in favor of CIMD.
@@ -163,7 +163,7 @@
 
 ## Versions available (PyPI, 5 Sep 2026)
 - google-adk 2.8.0 (extras: agent-identity, mcp).
-- mcp 1.27.0: compatible with ADK 2.8. The mcp 2.x versions conflict.
+- mcp 1.27.0: compatible with ADK 2.8. The mcp 2.x versions conflict with ADK 2.8.
 - a2a-sdk 1.1.2.
 - google-cloud-aiplatform 2.1.0.
 - The Terraform 1.13.3 binary works in the sandbox.

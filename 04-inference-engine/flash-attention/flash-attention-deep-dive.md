@@ -40,7 +40,7 @@ For tile sizes, $B_r$ is the rows of Q per thread block (the kernels call it `kB
 - Naive attention is memory-bound on every current GPU, and a larger problem cannot repair this. Its arithmetic intensity goes toward ${d/b}$ (64 FLOP/byte for $d$ = 128 in bf16). This is far below the ridge of an H100 (≈ 295) or an L4 (≈ 403). The solution is a schedule, not an approximation.
 - The schedule depends on one algebraic fact. You can keep a partial softmax-weighted sum as a triple ${(m, l, o)}$, and any two triples merge exactly. That one operator gives you tiling (FA1/FA2), split-KV decode (Flash-Decoding), cascade attention over shared prefixes, and ring attention across GPUs.
 - FA1 tiled the computation. FA2 changed the order of the loops, so each CTA owns a Q block. This keeps the output in registers, adds parallelism over the sequence, and removes inter-warp traffic. FA3 made the kernel asynchronous on Hopper (TMA, WGMMA, producer/consumer warpgroups, ping-pong), because the exponential unit was then a bottleneck. FA4 goes further on Blackwell, where the exponential unit now takes as long as the matrix multiplies.
-- Decode is a different problem. One query row against a long KV cache has no reuse, thus it is fully bandwidth-bound. The kernel must divide the KV sequence across CTAs. It must also put the query heads of a GQA group together in one tile. Decode attention time increases with batch × context × KV bytes per token.
+- Decode is a different problem. One query row against a long KV cache has no reuse. Thus it is fully bandwidth-bound. The kernel must divide the KV sequence across CTAs. It must also put the query heads of a GQA group together in one tile. Decode attention time increases with batch × context × KV bytes per token.
 - A server adds paging (block tables into the kernel), ragged batches, and a scheduler that selects a backend for each GPU generation. In vLLM on CUDA, that backend is FlashAttention (FA2 on Ampere, Ada and SM 12.x Blackwell, FA3 on Hopper), with two exceptions. If the GPU is SM 10.x datacenter Blackwell (B200, GB200), FlashInfer goes first for causal attention. If the KV cache is FP8 on a GPU without FA3 or FA4, vLLM uses FlashInfer instead.
 
 ---
@@ -89,9 +89,9 @@ Each kernel in the schedule is below the ridge, not only the softmax:
 
 | Kernel | Intensity (bf16, large N) | Why |
 |---|---|---|
-| $QK^{\top}$ | $2N^2 d / \big((2Nd + N^2) \cdot b\big)$ → ${2d/b}$ = 128 | an outer-product-shaped GEMM. The reduction dimension is only $d$, and the write of the $N \times N$ output is the largest cost |
+| $QK^{\top}$ | $2N^2 d / \big((2Nd + N^2) \cdot b\big)$ → ${2d/b}$ = 128 | an outer-product-shaped GEMM. The reduction dimension is only $d$, and the write of the $N \times N$ output is most of the traffic |
 | softmax | ≈ 5 FLOPs / 4 bytes ≈ 1.25 | streaming only |
-| ${PV}$ | $2N^2 d / \big((N^2 + 2Nd) \cdot b\big)$ → ${2d/b}$ = 128 | the read of the $N \times N$ input is the largest cost |
+| ${PV}$ | $2N^2 d / \big((N^2 + 2Nd) \cdot b\big)$ → ${2d/b}$ = 128 | the read of the $N \times N$ input is most of the traffic |
 
 Ridge points are the dense bf16 peak ÷ HBM bandwidth (datasheet values, **(verify)**):
 
@@ -200,7 +200,7 @@ $$
 
 $\operatorname{merge}$ is associative and commutative, and $(-\infty, 0, 0)$ is its identity. Thus the states form a commutative monoid. Everything that follows depends on this fact. You can divide the keys in any way, and calculate the pieces anywhere. Then you can combine them in any order and any tree shape:
 
-| Where the split happens | What it is called | Section |
+| Where the split occurs | Its name | Section |
 |---|---|---|
 | K/V tiles inside one CTA | FlashAttention's inner loop | 3, 4 |
 | K/V ranges across CTAs, which a second kernel combines | split-KV, Flash-Decoding | 6.3 |
@@ -242,8 +242,8 @@ A kernel can keep the log-sum-exp in either base. A mix of conventions is a real
 - **Underflow is harmless.** Terms below fp32's range flush to zero. Relative to the `1` from the max, they were too small to change the result.
 - **Fully masked tiles and rows need a guard.** If every score in a row of a tile is $-\infty$ (a causal or sliding-window mask), then $m' = -\infty$, and $(-\infty) - (-\infty)$ is NaN. In that case, FA2 uses 0 as the max ("If max is -inf, then all elements must have been -inf (possibly due to masking). We don't want (-inf - (-inf)) since that would give NaN."). A row with no permitted key at all ends with $l$ = 0. FA2 then writes $O$ = 0 and $\mathrm{LSE} = +\infty$ ($-\infty$ in its split-KV path). FA3 writes $-\infty$, and vLLM's merge code maps both to $-\infty$ before the merge.
 - **Accumulate in fp32.** $m$, $l$ and $o$ are in fp32 registers. $l$ can reach $N$ (when all scores are equal). bf16 cannot even represent every integer above 256.
-- **Defer what can be deferred.** FA2 divides by $l$ one time at the end, not at every block. It also moves the cross-thread reduction of $l$ to the end. The comment in the source is: "We don't do the reduce across threads here since we don't need to use the row_sum".
-- **The reference need not be the true max.** The invariant needs only one thing: all terms of $l$ and $o$ must be relative to the same reference. FA4 uses this on Blackwell with *conditional rescaling*. It keeps the old max, unless the new max is larger by more than a threshold (`rescale_threshold = 8.0` log2 units for 16-bit inputs in `flash_attn/cute/flash_fwd_sm100.py`). Thus most of the time, it does not do the rescale multiply. The cost is that $p$ can now reach $2^8$, so the kernel asserts that `max_offset + rescale_threshold` stays below $\log_2$ of the input dtype's largest value. (The $P$ that goes into the second matrix multiply is in that dtype.)
+- **Defer what you can defer.** FA2 divides by $l$ one time at the end, not at every block. It also moves the cross-thread reduction of $l$ to the end. The comment in the source is: "We don't do the reduce across threads here since we don't need to use the row_sum".
+- **The reference need not be the true max.** The invariant needs only one thing: all terms of $l$ and $o$ must be relative to the same reference. FA4 uses this on Blackwell with *conditional rescaling*. It keeps the old max, unless the new max is larger by more than a threshold (`rescale_threshold = 8.0` log2 units for 16-bit inputs in `flash_attn/cute/flash_fwd_sm100.py`). Thus most of the time, it does not do the rescale multiply. The cost is that $p$ can now reach $2^8$, so the kernel asserts that `max_offset + rescale_threshold` stays below $\log_2$ of the input dtype's largest value. This limit is necessary because the $P$ that goes into the second matrix multiply is in that dtype.
 
 ### 2.6 A hand-worked two-block example
 
@@ -272,7 +272,7 @@ o' = 0.135335 × [0.135335, 1] + 0.049787·[1, 1] + 1·[2, −1]
 
 **The same, as a split-KV merge in LSE form.** Treat the two blocks as two independent splits. Split 1 alone gives `Ô₁ = [0.119203, 0.880797]` and `L₁ = 0.5·8 + ln 1.135335 = 4.126928`. Split 2 alone gives `Ô₂ = [1.952574, −0.905148]` and `L₂ = 0.5·12 + ln 1.049787 = 6.048587`. Then `L = ln(e^4.126928 + e^6.048587) = 6.185182`. The weights are `e^(L₁−L) = 0.127677` and `e^(L₂−L) = 0.872323`, and `O = 0.127677·Ô₁ + 0.872323·Ô₂ = [1.718495, −0.677125]`.
 
-**The same, with a lagging max (FA4-style).** Use a threshold of 3 log2 units as an example (FA4 uses 8). The max increased by `(12 − 8)·c = 2.885 < 3`, so keep `m = 8`. Then block 2 gives `p = exp2([6, 12]·c − 8c) = [e^−1, e^2] = [0.367879, 7.389056]` and `l = 1.135335 + 7.756935 = 8.892271`. It also gives `o = [15.281327, −6.021177]` and `o/l = [1.718495, −0.677125]`. The kernel did no rescale, but the cost is a `p` of 7.39, which is above 1.
+**The same, with a max that lags (FA4-style).** Use a threshold of 3 log2 units as an example (FA4 uses 8). The max increased by `(12 − 8)·c = 2.885 < 3`, so keep `m = 8`. Then block 2 gives `p = exp2([6, 12]·c − 8c) = [e^−1, e^2] = [0.367879, 7.389056]` and `l = 1.135335 + 7.756935 = 8.892271`. It also gives `o = [15.281327, −6.021177]` and `o/l = [1.718495, −0.677125]`. The kernel did no rescale, but the cost is a `p` of 7.39, which is above 1.
 
 (`fa_calculators.online_trace()` and `merge_lse()`. The notebook runs all four variants again.)
 
@@ -325,7 +325,7 @@ Proof sketch for the FlashAttention side:
 3. Each outer iteration moves all of $Q$ and $O$ through SRAM: $\Theta(Nd)$. It reads $Q$, and it reads and writes $O$.
 4. Total: $\Theta(Nd) + \Theta(Nd/M) \cdot \Theta(Nd) = \Theta(N^2 d^2/M)$.
 
-Against the naive $\Theta(N^2)$ (for $N \gg d$), the ratio is of order $M/d^2$. That is an order-of-magnitude statement. The $\Theta$ hides a factor of about 3, and if you put numbers into $M/d^2$, the saving is three times too large. Keep the constants instead. The naive schedule moves about $4N^2$ elements (section 1.2).
+Against the naive $\Theta(N^2)$ (for $N \gg d$), the ratio is of order $M/d^2$. That is an order-of-magnitude statement. The $\Theta$ hides a factor of about 3, and if you put numbers into $M/d^2$, the reduction is three times too large. Keep the constants instead. The naive schedule moves about $4N^2$ elements (section 1.2).
 
 In the FA1 order, each of the $T_c = N/B_c$ outer iterations reads $Q$, reads $O$ and writes $O$ back (${3Nd}$). With the paper's $B_c = M/(4d)$, this gives:
 
@@ -343,17 +343,17 @@ $$
 \end{aligned}
 $$
 
-With the H100's $M$ = 116,736 elements, the FA1 saving is $M/(3d^2)$ ≈ **2.4× at $d$ = 128** and **9.5× at $d$ = 64**. At $N$ = 4,096, a count of bytes with the paper's block sizes gives 59.9 MB against 138.4 MB (2.3×) for $d$ = 128. For $d$ = 64, it gives 15.8 MB against 136.3 MB (8.6×). The difference comes from the fp32 $m$ and $l$ round trips and from the rounded value of $N/B_c$. The FA2 order with $B_r$ = 128 saves $2B_r/d$ = 2× at $d$ = 128 (the table in section 3.4). (`fa_calculators.io_saving()`, `flash_traffic()`.)
+With the H100's $M$ = 116,736 elements, the FA1 reduction is $M/(3d^2)$ ≈ **2.4× at $d$ = 128** and **9.5× at $d$ = 64**. At $N$ = 4,096, a count of bytes with the paper's block sizes gives 59.9 MB against 138.4 MB (2.3×) for $d$ = 128. For $d$ = 64, it gives 15.8 MB against 136.3 MB (8.6×). The difference comes from the fp32 $m$ and $l$ round trips and from the rounded value of $N/B_c$. The FA2 order with $B_r$ = 128 saves $2B_r/d$ = 2× at $d$ = 128 (the table in section 3.4). (`fa_calculators.io_saving()`, `flash_traffic()`.)
 
 Thus FlashAttention does not always move less data. The FA1 order wins only when $M > 3d^2$. At $d$ = 128, that is 49,152 bf16 elements, or 96 KB of SRAM. A100, H100 and L4 have that (164, 228 and 100 KB per SM). A T4, with 64 KB, does not, and on it the FA1-order traffic model at $d$ = 128 is 1.5× *worse* than naive. Because of the L2, real kernels actually move less than any of these values (section 3.4).
 
-The paper measured the HBM reads and writes for GPT-2-sized attention ($N$ = 1,024, $d$ = 64, forward plus backward on an A100). They were 40.3 GB against 4.4 GB **(verify)**. That is a 9.2× saving. It is of the same order as the constant-aware estimate for $d$ = 64, not the 28× that $M/d^2$ suggests. The naive baseline in that measurement also pays for the extra elementwise passes of section 1.2. Thus the two agree only in order of magnitude.
+The paper measured the HBM reads and writes for GPT-2-sized attention ($N$ = 1,024, $d$ = 64, forward plus backward on an A100). They were 40.3 GB against 4.4 GB **(verify)**. That is a 9.2× reduction. It is of the same order as the constant-aware estimate for $d$ = 64, not the 28× that $M/d^2$ suggests. The naive baseline in that measurement also pays for the extra elementwise passes of section 1.2. Thus the two agree only in order of magnitude.
 
 The lower bound is Proposition 3 (**(verify)**): no exact attention algorithm can use $o(N^2 d^2/M)$ HBM accesses for all $M$ in ${[d, Nd]}$. This is the argument. At $M = \Theta(Nd)$, such an algorithm makes ${o(Nd)}$ accesses. But ${Q, K, V}$ and $O$ have $\Theta(Nd)$ elements that start in HBM (or must end in HBM). This is a contradiction.
 
 ### 3.4 The model against a real GPU: count it
 
-The IO-complexity model assumes that there is no cache between SRAM and HBM. This table counts bytes under that model, with the actual block sizes (`fa_calculators.flash_traffic()`, one head, bf16, $d$ = 128):
+The IO-complexity model assumes that no data stays in a cache between SRAM and HBM. This table counts bytes under that model, with the actual block sizes (`fa_calculators.flash_traffic()`, one head, bf16, $d$ = 128):
 
 | Schedule | N = 4,096: bytes / intensity | N = 32,768: bytes / intensity |
 |---|---|---|
@@ -416,7 +416,7 @@ The wall-clock time is usually worse than 2.5×, for three reasons:
 
 The FA2 paper reports that the backward reaches a lower fraction of peak than the forward **(verify)**.
 
-Because of section 1, recomputation is a good exchange. To derive $P$ again costs one extra GEMM ($2N^2 d$ = 4.3 GFLOP per head at $N$ = 4,096, 4.3 µs on an H100 at peak). In return, the forward does not write $P$, and the backward does not read it back. That traffic is 2 × 33.6 MB = 67 MB, 20 µs at 3.35 TB/s. Also, no memory must hold $P$ between the two passes.
+Because of section 1, recomputation is a good exchange. To derive $P$ again costs one extra GEMM ($2N^2 d$ = 4.3 GFLOP per head at $N$ = 4,096, 4.3 µs on an H100 at peak). In return, the forward does not write $P$, and the backward does not read it back. That traffic is 2 × 33.6 MB = 67 MB, 20 µs at 3.35 TB/s. Also, recomputation needs no memory to hold $P$ between the two passes.
 
 ---
 
@@ -438,7 +438,7 @@ for j (K/V block):                         grid over (Q block i, batch, head)   
 
 The launch in `flash_fwd_launch_template.h` is `dim3 grid(num_m_block, params.b, params.h)`. Thus the grid covers the Q blocks, and also batch and heads. This has three results.
 
-1. **The accumulator never leaves the chip.** $O_i$, $m_i$ and $l_i$ stay in registers for the whole inner loop, and the kernel writes them one time. The largest term of the FA1 row in section 3.4, the round trip of $O$ through HBM, goes away. Only the repeated reads of $K$ and $V$ stay. These are read-only, and the L2 caches them well.
+1. **The accumulator never leaves the chip.** $O_i$, $m_i$ and $l_i$ stay in registers for the whole inner loop, and the kernel writes them one time. The largest term of the FA1 row in section 3.4, the round trip of $O$ through HBM, goes away. Only the repeated reads of $K$ and $V$ stay. $K$ and $V$ are read-only, and the L2 caches them well.
 2. **Parallelism over the sequence.** FA1's kernel had parallelism over batch and heads only **(verify)**. With batch 1 and 16 heads (for example, a tensor-parallel shard), that is 16 CTAs for 108 or 132 SMs. FA2 at $N$ = 16,384, $B_r$ = 128 launches `16 × 128 = 2,048` CTAs.
 3. **Causal work is easy to skip.** Each CTA knows its row range, so it stops at the diagonal (section 4.4).
 
@@ -460,13 +460,13 @@ FA1, "split-K": warps share Q_i, split K_j/V_j       FA2, "split-Q": warps split
                                                             registers as the A operand of P·V
 ```
 
-In FA2's kernel, each warp owns interleaved 16-row slices of the Q tile. (The kernel applies the mask at row `m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4` with a stride of `kNWarps * 16`.) In a warp, 4 threads share one row of the MMA accumulator. Thus the row max and row sum are 4-thread shuffles (`Allreduce<4>` in `softmax.h`), not SMEM traffic. The kernel converts the probabilities to fp16/bf16 in registers (`convert_type<Element>(acc_s)`) and sends them directly into the second MMA as a register operand (`gemm_rs`). No part of $P$ or of the partial $O$ goes into shared memory.
+In FA2's kernel, each warp owns interleaved 16-row slices of the Q tile. The kernel applies the mask at row `m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4` with a stride of `kNWarps * 16`. In a warp, 4 threads share one row of the MMA accumulator. Thus the row max and row sum are 4-thread shuffles (`Allreduce<4>` in `softmax.h`), not SMEM traffic. The kernel converts the probabilities to fp16/bf16 in registers (`convert_type<Element>(acc_s)`) and sends them directly into the second MMA as a register operand (`gemm_rs`). No part of $P$ or of the partial $O$ goes into shared memory.
 
 ### 4.3 Fewer non-matmul FLOPs, and why they cost so much
 
 FA2 changes the arithmetic itself in these ways:
 
-- It keeps $O$ unnormalized and divides by $l$ one time at the end. (FA1 rescaled by $\operatorname{diag}(l)^{-1}$ at every block.)
+- It keeps $O$ unnormalized and divides by $l$ one time at the end. FA1 rescaled by $\operatorname{diag}(l)^{-1}$ at every block.
 - It saves only the LSE for the backward, not $m$ and $l$ separately.
 - It reduces $l$ across threads one time at the end, not at every block.
 - It moves the scale into `exp2`, so each score costs one FFMA and one EX2 (section 2.4).
@@ -540,7 +540,7 @@ The main loop overlaps loads with computation through Ampere's asynchronous copi
 
 ### 4.6 What FA2 achieved, and where it stopped
 
-FA2 is about 2× faster than FA1 (FA2 paper **(verify)**). In the forward pass, it reaches 50–73% of the A100's peak, against 25–40% for FA1 (FA2 paper **(verify)**). The primer's "~70% of A100 peak" is the top of this range. In end-to-end training of GPT-style models, FA2 gives 225 TFLOP/s per A100 (72% model FLOPs utilization, from the repository README). On an H100, the same kernel reaches only about 35% of peak (FA3 paper **(verify)**). The reason is that it uses Ampere's synchronous warp-level `mma.sync` and `cp.async`, but Hopper's full throughput needs asynchronous warpgroup MMAs and the TMA.
+FA2 is about 2× faster than FA1 (FA2 paper **(verify)**). In the forward pass, it reaches 50–73% of the A100's peak, against 25–40% for FA1 (FA2 paper **(verify)**). The primer's "~70% of A100 peak" is the top of this range. In end-to-end training of GPT-style models, FA2 gives 225 TFLOP/s per A100, at 72% model FLOPs utilization (the repository README). On an H100, the same kernel reaches only about 35% of peak (FA3 paper **(verify)**). The reason is that it uses Ampere's synchronous warp-level `mma.sync` and `cp.async`, but Hopper's full throughput needs asynchronous warpgroup MMAs and the TMA.
 
 ---
 
@@ -569,7 +569,7 @@ WG2  consumer    warpgroup_reg_alloc<240>      rows 64..127: the same
          consumer_wait(...) before using a stage, consumer_release(...) after
 ```
 
-The register numbers come from the source (`LoadRegisterRequirement` 24 and `MmaRegisterRequirement` 240 for two consumer warpgroups with TMA loads). They are the full reason for the design. A consumer thread holds its share of three tiles:
+The register numbers come from the source (`LoadRegisterRequirement` 24 and `MmaRegisterRequirement` 240 for two consumer warpgroups with TMA loads). Everything in the design depends on them. A consumer thread holds its share of three tiles:
 
 - the fp32 score tile (`64 × 176 / 128` = 88 registers)
 - the fp32 output accumulator (`64 × 128 / 128` = 64)
@@ -620,7 +620,7 @@ $B_c$ = 176 is not a power of two, because `tile_size_fwd_sm90` sets the tile si
 
 - **Layout constraints.** Hopper's FP8 WGMMA needs both operands K-major in SMEM. For $P \cdot V$, $V$ is not K-major. FA3 transposes $V$ tiles in SMEM in the producer warpgroup (`Transpose_V = Is_FP8 && !V_colmajor`, a separate `pipeline_vt`). It also permutes the score registers, so that the fp32 accumulator layout matches the FP8 operand layout (`permute_Cregs_fp8`).
 - **Scales.** The interface takes `q_descale`, `k_descale`, `v_descale`. The main loop indexes them per (batch, KV head). It combines `q_descale · k_descale` with the base-2 softmax scale, and applies `v_descale` to the output. vLLM gives them with shape `(num_sequences, num_kv_heads)`.
-- **Use of the FP8 range for P.** Probabilities are at most 1. The e4m3 format has only 3 mantissa bits, and its smallest subnormal is $2^{-9}$. FA3's FP8 softmax multiplies the probabilities by $2^8$ (`Max_offset = 8`). The source comment is: "For FP8, we might have scaled the output of exp by 2**8 so we need to divide sum by that amount". This keeps small probabilities out of the flush-to-zero range. Section 9 gives the numbers for this effect.
+- **Use of the FP8 range for P.** Probabilities are at most 1. The e4m3 format has only 3 mantissa bits, and its smallest subnormal is $2^{-9}$. FA3's FP8 softmax multiplies the probabilities by $2^8$ (`Max_offset = 8`). The source comment is: "For FP8, we might have scaled the output of exp by 2**8 so we need to divide sum by that amount". The multiplication by $2^8$ keeps small probabilities out of the flush-to-zero range. Section 9 gives the numbers for this effect.
 - **Block quantization and incoherent processing (paper, (verify)).** Block quantization uses one scale per tile, not per tensor. Incoherent processing applies a random orthogonal rotation $M$ (a Hadamard transform with random signs) to $Q$ and $K$. Then $(QM)(KM)^{\top} = QMM^{\top}K^{\top} = QK^{\top}$, but the rotation spreads an outlier channel across all $d$ channels. With the fast Walsh-Hadamard transform, the rotation costs $O(d \log d)$ per row, and you can fuse it with the rotary embedding. The paper reports 2.6× lower numerical error than a baseline FP8 attention on inputs with outliers **(verify)**.
 
   Section 9.4 shows when each half helps. For e4m3, the rotation is worth its cost when an outlier channel is large in both $Q$ and $K$. Block scales are worth their cost when a few tokens are much larger than the rest. Block scales are much more important for integer formats than for e4m3.
@@ -644,7 +644,7 @@ This is what FA4 does about it, as `flash_attn/cute/flash_fwd_sm100.py` and `fla
 - The second MMA gets $P$ from TMEM (`OperandSource.TMEM`). FA4 also uses 2-CTA MMA instructions (`use_2cta_instrs`).
 - The authors wrote FA4 in CuTe-DSL (Python). The package is `flash-attn-4` (`from flash_attn.cute import flash_attn_func`, as the README shows).
 
-The reported FA4 numbers are up to 1,605 TFLOP/s bf16 on B200 (71% utilization), 1.3× cuDNN 9.13 and 2.7× Triton ([the primer's section 8](flash-attention-primer.md#8-the-lineage), **(verify)**). The primer also gives a reminder. For decode, FA4 was initially slower than FA2, until the developers ported split-KV to it. On SM100, vLLM selects FA4 when FA4 is installed (`get_flash_attn_version` in `vllm/v1/attention/backends/fa_utils.py`). But for causal decoder attention on SM100, its backend priority list puts FlashInfer first (section 7.4).
+The reported FA4 numbers are up to 1,605 TFLOP/s bf16 on B200 (71% utilization), 1.3× cuDNN 9.13 and 2.7× Triton ([the primer's section 8](flash-attention-primer.md#8-the-lineage), **(verify)**). The primer also says that FA4 was initially slower than FA2 for decode, until the developers ported split-KV to it. On SM100, vLLM selects FA4 when FA4 is installed (`get_flash_attn_version` in `vllm/v1/attention/backends/fa_utils.py`). But for causal decoder attention on SM100, its backend priority list puts FlashInfer first (section 7.4).
 
 ---
 

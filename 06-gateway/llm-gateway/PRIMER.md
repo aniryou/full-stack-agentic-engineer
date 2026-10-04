@@ -138,7 +138,7 @@ does its metering correctly:
   the usage. It removes that chunk from the stream to a client that did not ask (`Gateway.handle()`, stage 6), with
   the same design as LiteLLM's proxy. It must ask only on streamed requests: vLLM rejects `stream_options` without
   `stream: true` with a 400.
-- **A stream is accumulated, not read.** The gateway concatenates the content. Tool calls arrive as deltas with
+- **The gateway accumulates a stream and does not read it.** It concatenates the content. Tool calls arrive as deltas with
   `index` as their key. Only the first delta carries the call's `id` and `function.name`. The `arguments` string
   arrives in fragments, and the fragments are not valid JSON until the last one arrives (`api.StreamAccumulator`). A
   cut stream leaves half a JSON object: report it, and never guess the rest (`tool_calls()` returns
@@ -160,7 +160,7 @@ Most of a provider adapter is a table (`providers.ADAPTERS`). The table gives th
 tells which usage fields add up to the canonical ones, and how the finish reasons map. The bundled samples
 (`providers.PAYLOADS`, sample output in the documented format, illustrative) show one call, written in four ways. The
 call has 5,000 prompt tokens (2,700 of them cached), 350 visible output tokens and 1,200 reasoning tokens.
-`providers.normalize_usage()` maps every one of them to 5,000 prompt and 1,550 completion tokens:
+For the four forms, `providers.normalize_usage()` maps every one of them to 5,000 prompt and 1,550 completion tokens:
 
 | Canonical | OpenAI / vLLM | Anthropic Messages | Gemini |
 |---|---|---|---|
@@ -206,7 +206,7 @@ gateway like the most critical service that you have:
 
 - Run several replicas across zones.
 - Keep no state in the process. The limits and caches are in a shared store (§4.4).
-- Keep the path fast. Measure its added latency and give it a budget. The lab runs the gateway over HTTP on
+- Keep the path fast. Measure its added latency. Give that latency a budget. The lab runs the gateway over HTTP on
   localhost, where you can measure the time of the hop.
 - Keep the keys in a secret manager, which logs each access (§6).
 
@@ -249,7 +249,7 @@ Then the router **orders** the targets that pass by a policy:
 
 Routing by effort puts the RL primer's point into practice ([00.5 PRIMER §7](../../00-foundations/rl-and-thinking-models/PRIMER.md#7-what-thinking-does-to-serving)).
 The bill counts a thinking token as output. Thus the lowest-cost way to buy accuracy is to send only the hard
-requests to a thinking model. This needs a classifier, or a low-cost first pass, that knows which requests are
+requests to a thinking model. This routing needs a classifier, or a low-cost first pass, that knows which requests are
 hard.
 
 ### 2.3 What falls through, and what must not
@@ -266,7 +266,7 @@ Fall through only when another target has a real chance to succeed where this on
 | 400 `context_length_exceeded` | a longer-context target can take it | | |
 
 Sometimes a design falls through on a content-policy refusal on purpose (LiteLLM has `content_policy_fallbacks`). If
-you select it, make it a named policy per route with an owner, not a default.
+you select this behaviour, make it a named policy per route with an owner, not a default.
 
 **Fall back only before the first byte.** When a chunk has reached the client, the gateway cannot join the output of
 a second model to the first. Such a join makes the client read two answers as one. After the first byte, the gateway
@@ -287,8 +287,8 @@ teaches the full state machine of the breaker
 
 The gateway applies one breaker **per target** (`routing.Breaker`), with the rule of 07.2. The breaker opens after
 `threshold` consecutive failures, and it fails fast for `cooldown` seconds. Then it lets exactly one probe decide.
-(The breaker of `scalelab` opens on a failure *ratio* in a window instead. Each of the two works per target. Name the
-one that you run.)
+The breaker of `scalelab` opens on a failure *ratio* in a window instead. Each of the two works per target. Name the
+one that you run.
 
 Some statuses say nothing about the provider's health, for example a 400 for this request or our own 401. A probe
 that ends in such a status decides nothing. The breaker gives the probe back (`Breaker.release()`), so that the next
@@ -316,7 +316,7 @@ primary 99.5 %, fallback 99.0 %, independent:        1 − 0.005 × 0.01 = 99.99
 the same, with a 0.1 % common-mode failure:          0.999 × 0.99995  = 99.895 %  (0.99895005)
 ```
 
-The common-mode term controls the result. A third independent target moves the independent part to 99.99995 %, but
+The common-mode term has the largest effect on the result. A third independent target moves the independent part to 99.99995 %, but
 the chain stays at 99.9 %. Put fallbacks in *different* failure domains. Give them a quota that is sufficient for the
 traffic that they will take.
 
@@ -374,7 +374,7 @@ Provisioned Throughput commitment is a target too, with its own quota and spill-
 | Exact response | SHA-256 of tenant + every field that changes the answer (`cache.exact_key()`) | the whole call | stale answers, and personal data if the class is incorrect | gateway |
 | Semantic response | nearest cached query ≥ threshold $\tau$ in the tenant's namespace, entities equal (`cache.SemanticCache`) | the whole call, on paraphrases too | a near miss that gets someone else's answer | gateway |
 | Provider prompt cache | the prompt's prefix, provider-side | ~90 % of the cached input's price, some TTFT | none to correctness. The provider controls placement and TTL. | provider |
-| Engine prefix cache | chained block hashes, first block salted per tenant | prefill compute, TTFT | a timing side channel between tenants without a salt | engine |
+| Engine prefix cache | chained block hashes, a salt per tenant on the first block | prefill compute, TTFT | a timing side channel between tenants without a salt | engine |
 
 The last two caches are never incorrect, because they reuse computation, not answers. Other primers teach them.
 Provider prompt caching is the §3.4 lever of the scaling primer. The anchor call costs $0.01065 uncached and $0.007005
@@ -402,7 +402,7 @@ The lab's [notebook 03](gateway-lab/notebooks/03_semantic_cache_vs_the_prefix_ca
 regex can only *veto* a declared shared class. It never makes a request cacheable.
 
 The **verified tenant** sets the namespace of the key, and the user also sets it for per-user classes. OSS Portkey's
-exact-cache key has no tenant in it (§9). LiteLLM's semantic cache uses the key as its scope by default. Find out
+exact-cache key has no tenant in it (§9). LiteLLM's semantic cache uses the virtual key of the caller as its scope by default. Find out
 what your product does.
 
 The exact key is a hash of the fields that change the answer: the model alias, messages, tools, `response_format`,
@@ -447,7 +447,7 @@ five codes. At $\tau$ = 0.95, only case and punctuation variants hit. A *normali
 safely.
 
 A real embedder increases the paraphrase scores (at T1, for example a small model on vLLM's pooling runner or
-all-MiniLM-L6-v2 on CPU, verify). But near misses that differ in one word stay close in any embedding. Thus:
+all-MiniLM-L6-v2 on CPU, verify). But near misses that differ in one word stay near the cached query in any embedding. Thus:
 
 - Cache narrow, declared classes.
 - Measure the hit and false-hit rates on your own labelled traffic before you select $\tau$.
@@ -473,12 +473,13 @@ more than any number of hits save (drill 2).
 ### 4.1 Why per-request charges fail
 
 The scaling primer builds the token bucket (§5.1). There, the rate is your share of the tier, and the capacity is the
-burst that you accept. The default is a six-second burst, and the bucket uses Redis + Lua when there are two
+burst that you accept. The default is a six-second burst, and the bucket uses Redis + Lua when there are two or more
 instances. The scaling primer also builds admission with degrade levels (§5.3,
 `scalelab.admission.AdmissionController`). CURRICULUM §3.4 names 06.3 as its home.
 
 `gwcore.ratelimit.TokenBucket` uses exactly the rule of `scalelab.resilience.TokenBucket`, and a test drives both
-over the same arrivals. It has an explicit clock and a `try_acquire()` that refuses and does not wait.
+over the same arrivals. `gwcore.ratelimit.TokenBucket` has an explicit clock and a `try_acquire()` that refuses and
+does not wait.
 
 The problem is what the bucket charges. At admission, the tokens of a request are unknown, because most of them are
 output that the model has not generated yet. Also, the output length is heavy-tailed. The thinking workload of the RL
@@ -518,8 +519,8 @@ smallest configured TPM limit when that is smaller. In that case, it also writes
 The experiment in §4.3 also assumes something about the provider: it counts tokens when the model processes them. It
 is possible that a hosted API does its own reserve and reconcile instead, and charges the requested output bound at
 admission. OpenAI's rate-limit guide counts the larger of `max_tokens` and an estimate against TPM. Anthropic
-estimates output tokens per minute from `max_tokens` when a request starts, and corrects the estimate at the end
-(verify both). These two facts are from memory, because the docs sites were not available to this check.
+estimates output tokens per minute from `max_tokens` when a request starts. It corrects the estimate at the end
+(verify both: these facts are from memory, because the docs sites were not available for this primer).
 
 Against such a provider, the reservation of the gateway must obey the rule of the provider. Reserve the `max_tokens`
 that the gateway actually sends upstream, or send upstream the bound that it reserved. Take a gateway that reserves
@@ -529,8 +530,8 @@ for providers and self-hosted pools that count the processed tokens.
 ### 4.3 The experiment
 
 `ratelimit.compare_buckets()` sends 12 requests a second for ten minutes to a provider key with a 1,000,000
-tokens-per-minute limit. The prompts have 1,500 tokens, and each stream gives 50 output tokens a second. The model of
-the provider is a sliding 60-second window over processed tokens (simulated). Each run continues past t = 600 s until
+tokens-per-minute limit. The prompts have 1,500 tokens, and each stream gives 50 output tokens a second. In this
+simulation, the provider is a sliding 60-second window over processed tokens (simulated). Each run continues past t = 600 s until
 its admitted streams drain:
 
 | Limiter | Admitted | Peak window ÷ limit | Seconds over the limit (whole run) | Tokens served ÷ limit |
@@ -541,9 +542,9 @@ its admitted streams drain:
 | reserve prompt + the 16,384 cap, debit, reconcile | 725 | 0.31 | 0 | 0.265 |
 
 The per-request bucket cannot see the rollout. It admits exactly as many requests, and it pushes 1.97× the limit at
-the peak. The provider's window stays over the limit from the moment it binds (t = 45 s), with no break. It stays
-there until the admitted thinking streams have drained (t = 648 s). With the correct size for the mean, the bucket
-still stays over the limit for 116 of 600 seconds. The reason is that the tail is not the mean.
+the peak. Then, from the moment it binds (t = 45 s), the provider's window stays over the limit with no break. The
+window stays over the limit until the admitted thinking streams have drained (t = 648 s). The per-request bucket for
+yesterday's outputs has the correct size for the mean, but it still stays over the limit for 116 of 600 seconds. The reason is that the tail is not the mean.
 
 A reservation of the full cap is exact and wasteful. A 16K reservation held for a minute-long stream leaves most of
 the budget unused (26.5 % served).
@@ -567,8 +568,8 @@ and then commits all of them. Thus a refusal at the provider level leaves nothin
 
 With several gateway replicas, that check-and-commit must be one atomic step on shared state. It is one Lua script on
 one Redis node, and on a cluster the keys of one script are in one hash slot. The refund at reconcile is a second
-script (verify: this check did not read the Redis semantics from a source. LiteLLM's v3 limiter is an example that
-works, with fixed-window counters.)
+script (verify: the fact check of this primer did not read the Redis semantics from a source). LiteLLM's v3 limiter
+is an example that works, with fixed-window counters (verify).
 
 ### 4.5 The noisy neighbour
 
@@ -609,7 +610,7 @@ counted from the deltas that it relayed, never on zero (`StreamAccumulator.outpu
 ### 5.3 Dollars per million tokens
 
 The price table in `providers.CATALOGUE` has the date 2026-09-26 (verify). The Gemini rows are equal to
-`scalelab.capacity.PRICES` (checked 5 September, unchanged). A test proves that `metering.price_call()` is equal to
+`scalelab.capacity.PRICES` (examined 5 September, unchanged). A test proves that `metering.price_call()` is equal to
 `scalelab.capacity.cost_per_call` on every one of those rows. Cache reads, cache writes and the rest of the prompt
 have three different prices. On claude-haiku-4-5, 10,000 tokens written to the prompt cache cost $0.0125 at the 1.25
 write rate, not the $0.0100 of an input-rate ledger (`price_call(..., cache_write_tokens=)`).
@@ -767,18 +768,18 @@ The gateway is itself a workload that calls providers, MCP servers and its own s
 identity (identity primer §3.3–3.5). On SPIFFE, this identity is an X.509-SVID from the **Workload API**. The Workload
 API is gRPC over a Unix socket that `SPIFFE_ENDPOINT_SOCKET` names, and every call carries the
 `workload.spiffe.io: true` metadata. `FetchX509SVID` is a server stream, and every message in it holds the full state.
-When an SVID is not in a message, the server revoked it.
+When an SVID is not in a message, that SVID is revoked.
 
 SPIRE issues one-hour X.509-SVIDs by default. It rotates an SVID when the rest of its lifetime decreases to
 half-life ± 10 % of the half-life. This gives a window between 1,620 and 1,980 seconds before expiry, 27–33 minutes
-(`keys.svid_rotation_window(3600)`). The agent draws that jittered half-life again on every check
+(`keys.svid_rotation_window(3600)`). The SPIRE agent draws that jittered half-life again on every check
 (`rotationutil.shouldRotateByHalf`). Thus, with a check every few seconds, the rotation occurs near the top of the
 window, not uniformly across it. `keys.FakeWorkloadAPI` models a check every 5 s (verify), and it rotates with a mean
 of 32.1 minutes left.
 
 A gateway keeps a pool of long-lived TLS connections. An established session keeps the certificate of its handshake.
-Thus the gateway must build its TLS configuration again from the stream. It must also replace its connections before
-the old SVID expires (verify: this is operational practice, not in the standards).
+Thus the gateway must do two things (verify: this is operational practice, not in the standards). It must build its
+TLS configuration again from the stream. It must also replace its connections before the old SVID expires.
 
 ---
 
@@ -792,7 +793,7 @@ input, a tool call, a tool result, the streamed output and the final output (`gu
 The core's checker is a regex screener (`guardrails.RegexScreener`). It is a labelled stand-in, and its patterns
 have bounds. An unbounded `[\w]+@` is quadratic on a long prompt, and a check on every request must not become the
 lowest-cost DoS. Real checkers are classifiers such as Llama Prompt Guard 2 (22M and 86M parameters, a 512-token
-window, input-side). Another such classifier is Llama Guard (1B, 8B, 12B, for prompts and responses). A managed
+window, input-side). Another such classifier is Llama Guard (1B, 8B and 12B), which examines prompts and responses. A managed
 service such as Model Armor is also a real checker (identity primer §4.1, §6.1: `INSPECT_ONLY` first).
 
 | Placement | How | TTFT added | Exposure |
@@ -800,7 +801,7 @@ service such as Model Armor is also a real checker (identity primer §4.1, §6.1
 | inline input | do the check, then call the model | the check | none |
 | parallel input | call the model at once, and hold its first token until the verdict | $\max(0, \text{check} - \text{model TTFT})$ | none |
 | parallel with cancel | start the stream at once, and cancel on a bad verdict | 0 | tokens before the verdict |
-| held-back window | release output in windows of $W$ tokens, each checked first | $(W - 1) \times \text{ITL} + \text{check}$ | none, per window |
+| held-back window | release output in windows of $W$ tokens, each with a check first | $(W - 1) \times \text{ITL} + \text{check}$ | none, per window |
 | final | do a check of the whole answer, then send it | the whole generation + check | none, and no streaming |
 | shadow | do the check off the path, and log only | 0 | everything (measurement only) |
 
@@ -830,7 +831,7 @@ of 16 finishes in about the same 92.4 ms. The model card does not say this (its 
 classification). Measure the batch latency before you rely on it (`guardrails.cost_per_1k_checks()` divides by the
 concurrency that you give it).
 
-False positives add up. The scaling primer has 13 model calls per conversation, and a check of the input and the
+The chance of a false block increases with each check, because the pass rates of the checks multiply. The scaling primer has 13 model calls per conversation, and a check of the input and the
 output of each call gives 26 checks. At a 1 % false-positive rate, 23.0 % of conversations hit at least one false
 block, and at 0.1 %, 2.57 % (`guardrails.false_block_rate()` = $1 - (1 - \text{fpr})^{\text{checks}}$). That cost,
 not the dollars, is usually the binding cost. It is why screens start in inspect-only mode, and why you measure the
@@ -897,7 +898,7 @@ Each step is a function in `mcp_authz` and a rule that the spec sets (verify eac
   8414 path insertion (`/.well-known/oauth-authorization-server/tenant1`), then OIDC path insertion
   (`/.well-known/openid-configuration/tenant1`), then OIDC path appending (`/tenant1/.well-known/openid-configuration`).
   The `issuer` of the document must be equal to the issuer that the client used to build the URL.
-- **Registration**: the client is pre-registered. If it is not, it uses a **Client ID Metadata Document** when the AS
+- **Registration**: the first choice is pre-registration. If the client is not pre-registered, it uses a **Client ID Metadata Document** when the AS
   advertises `client_id_metadata_document_supported` (SHOULD). Otherwise, it uses Dynamic Client Registration (MAY,
   deprecated). The `client_id` is an HTTPS URL with a path. Its document holds at least `client_id` (equal to the
   URL), `client_name` and `redirect_uris`, and no shared secret (`validate_cimd()`). The AS fetches the document with
@@ -947,7 +948,7 @@ DPoP comes from RFC 9449, **not** from the MCP spec. The MCP spec does not menti
 `agentsec.identity.tokens.DPoP.proof()` accepts a `nonce`, but its `verify()` never issues a nonce or examines one.
 `mcp_authz` closes that gap.
 
-Its signer is pluggable, and the signer in the package is an HMAC stand-in (`mcp_authz.HMACSigner`) with the label
+The signer of `mcp_authz` is pluggable, and the signer in the package is an HMAC stand-in (`mcp_authz.HMACSigner`) with the label
 non-conformant. RFC 9449 makes an asymmetric algorithm necessary, and the standard library has none. The lab signs
 with `cryptography` when that package is available.
 
@@ -980,19 +981,19 @@ verify). On other platforms, the same pieces map one to one:
 
 ### 9.2 Build or adopt
 
-Most teams adopt a gateway, and keep this primer as the checklist to examine it. The table gives what the upstream
+Most teams adopt a gateway. They keep this primer as the checklist to examine it. The table gives what the upstream
 code shows at the pinned versions (all verify, because products change monthly):
 
 | Concern | LiteLLM proxy 1.104.0 | Envoy AI Gateway v1.1.0 | Kong OSS 3.10.0 | Portkey gateway 1.15.2 |
 |---|---|---|---|---|
 | §1 adapters | many providers, OpenAI API | `AIServiceBackend` schemas (OpenAI, Anthropic, Bedrock, Vertex, …) | `ai-proxy`: `route_type` `llm/v1/chat`, providers such as openai, anthropic, gemini | 78 provider directories |
 | §2 fallbacks | `fallbacks`, `context_window_fallbacks`, `content_policy_fallbacks`, cooldowns | `backendRefs[].priority` + retry policy. An `InferencePool` backend leaves fallback to the EPP. | load balancing and fallback in Enterprise `ai-proxy-advanced` | `strategy.mode` `fallback`, `on_status_codes` |
-| §3 caching | exact and semantic (Redis, Qdrant) types. The scope of the semantic cache is per key by default. | not checked | semantic cache is Enterprise | `cache.mode` simple / semantic. OSS is exact only, and its key has no tenant. |
-| §4 token limits | `tpm_limit`/`rpm_limit` per key. The v3 limiter reserves an estimate. | `llmRequestCosts` feed a global rate limit, and the debit occurs after the response | token rate limiting is Enterprise | not checked (retries obey `Retry-After`) |
-| §5 metering | spend log per request, keys hashed | GenAI metrics (`gen_ai.client.token.usage`) | logs prompt/completion tokens and cost | not checked |
+| §3 caching | exact and semantic (Redis, Qdrant) types. The scope of the semantic cache is per key by default. | not examined | semantic cache is Enterprise | `cache.mode` simple / semantic. OSS is exact only, and its key has no tenant. |
+| §4 token limits | `tpm_limit`/`rpm_limit` per key. The v3 limiter reserves an estimate. | `llmRequestCosts` feed a global rate limit, and the debit occurs after the response | token rate limiting is Enterprise | not examined (retries obey `Retry-After`) |
+| §5 metering | spend log per request, keys hashed | GenAI metrics (`gen_ai.client.token.usage`) | logs prompt/completion tokens and cost | not examined |
 | §6 keys | virtual keys: models, budget, TPM/RPM | `BackendSecurityPolicy` holds upstream credentials | `auth` per plugin | virtual keys |
-| §7 guardrails | `pre_call`, `during_call`, `post_call` and MCP-call hooks | not checked | `ai-prompt-guard` | input and output guardrail hooks |
-| §8 MCP | MCP-call guardrail hooks, MCP gateway (verify) | `MCPRoute` | not in the OSS plugins read | not checked |
+| §7 guardrails | `pre_call`, `during_call`, `post_call` and MCP-call hooks | not examined | `ai-prompt-guard` | input and output guardrail hooks |
+| §8 MCP | MCP-call guardrail hooks, MCP gateway (verify) | `MCPRoute` | not in the OSS plugins read | not examined |
 
 When you adopt a gateway, the design decisions stay. You still decide which failures fall through, what is cacheable
 per route, and what a reservation is. You also decide who owns chargeback, where the tenant comes from, and where each
@@ -1026,11 +1027,11 @@ on counted deltas. The chargeback of the self-hosted pool is by GPU-seconds. Tra
 ledger is the bill. Provider keys live only in the gateway and rotate with an overlap.
 
 "We place guardrails by their cost. Inline input checks are low-cost, and held-back output windows cost a window of
-generation in TTFT. False positives add up per conversation. Policy outside the model bounds what the guardrails
+generation in TTFT. The chance of a false block increases with each check in a conversation. Policy outside the model bounds what the guardrails
 miss.
 
 "For MCP, the gateway is the OAuth client. It does discovery, and it uses a metadata-document client id and PKCE with
-resource. It has refresh tokens that rotate, step-up with the union of scopes, and DPoP nonces. The tokens are per
+resource. It uses refresh tokens that rotate, a step-up with the union of scopes, and DPoP nonces. The tokens are per
 principal and resource, never in the agent."
 
 **Drill questions**
@@ -1038,7 +1039,7 @@ principal and resource, never in the agent."
 1. *A provider outage lasted five minutes. Our incident lasted forty, and the bill doubled.*
 
     Clients retried without a budget, so the retry wave lasted longer than the outage. Streams that failed in the
-    middle ran again from the start, and they paid two times for output that the model had already generated. Also,
+    middle ran again from the start, and the bill counted two times the output that the model had already generated. Also,
     the whole chain fell through to a higher-cost model at full traffic until the quota of that model ran out. Use
     retry budgets with jitter and a breaker per target. Fall back only before the first byte. Set the size and the
     price of the fallback capacity in advance, in an independent failure domain, and add a cost alert per tenant (§2).
@@ -1092,14 +1093,14 @@ principal and resource, never in the agent."
 | Common-mode failure | One failure that stops every target (the gateway, a shared region). |
 | Exact / semantic cache | Reuse a stored answer on an identical key / on a query whose similarity is above a threshold. |
 | Entity guard | Refuse a semantic hit unless numbers, dates and codes match exactly. |
-| `cache_salt` | A vLLM request field that salts the first KV block, so that tenants never share prefix-cache entries. |
+| `cache_salt` | A vLLM request field that adds a salt to the first KV block, so that tenants never share prefix-cache entries. |
 | Reserve → stream → reconcile | Token metering: hold an upper bound at admission, debit the tokens as the stream sends them, and release the rest. |
 | Over-admission | Tokens let through beyond a provider's limit because the charge at admission was too small. |
 | Ledger row | The billing record of one request, priced from the provider's `usage`. |
 | Chargeback | The division of a shared cost (a GPU pool) among tenants, by tokens or by GPU time. |
 | Virtual key | A gateway-issued key: hashed at rest, scoped, budgeted, revocable. It maps to a tenant. |
 | SVID | A SPIFFE verifiable identity document (here X.509) issued to a workload through the Workload API. |
-| Held-back window | Output released in windows of $W$ tokens, each checked before release. |
+| Held-back window | Output released in windows of $W$ tokens, each with a check before release. |
 | CIMD | Client ID Metadata Document: an HTTPS URL that is the OAuth client id and serves the client's metadata. |
 | PKCE S256 | Proof Key for Code Exchange: the token request proves possession of the verifier behind the challenge. |
 | Refresh rotation | Each refresh returns a new refresh token. Reuse of an old one revokes the grant. |

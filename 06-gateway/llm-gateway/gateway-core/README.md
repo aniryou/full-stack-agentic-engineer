@@ -39,7 +39,7 @@ curriculum of the repository). The notebooks of the core take approximately 8 ho
 | [`02_routing_and_fallback_chains`](notebooks/02_routing_and_fallback_chains.ipynb) | Filter and order a chain. Say which failures go to the next target (408 and 529 included). Calculate the availability, the expected latency and the expected cost of a chain. Predict how many concurrent requests get to a dead target before its breaker opens. Apply the first-byte rule. Select a first-byte deadline from a budget. Show why a timeout for the whole response cannot be that deadline. | §2 | ~1.5 h | T0 |
 | [`03_exact_and_semantic_caching`](notebooks/03_exact_and_semantic_caching.ipynb) | Build a safe exact key. Extract what an entity guard compares. Select a threshold under a false-hit budget on labelled traffic. Give the cost of a false hit. Decide what a namespace must hold for shared classes and for per-user classes. Compare with the prompt cache of the provider. | §3, §6.4 | ~1.5 h | T0 |
 | [`04_token_limits_metering_and_chargeback`](notebooks/04_token_limits_metering_and_chargeback.ipynb) | Predict how much a per-request bucket over-admits. Build the sequence reserve, then stream, then reconcile. Calculate the size of a reservation by simulation. Bill a thinking call from raw usage. Charge back a pool by GPU-seconds. Find ledger drift, and predict it from the cut streams. | §4, §5 | ~2 h | T0 |
-| [`05_guardrails_keys_and_mcp_authorization`](notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | Calculate the `cache_salt` of a tenant. Put a held-back window under a TTFT budget. Set a false-positive budget. Build the MCP discovery URLs. Calculate PKCE. Find refresh-token reuse. | §6, §7, §8 (§9 is only to read) | ~1.5 h | T0 |
+| [`05_guardrails_keys_and_mcp_authorization`](notebooks/05_guardrails_keys_and_mcp_authorization.ipynb) | Calculate the `cache_salt` of a tenant. Put a held-back window under a TTFT budget. Set a false-positive budget. Build the MCP discovery URLs. Calculate PKCE. Find refresh-token reuse. | §6, §7, §8 (you only read §9) | ~1.5 h | T0 |
 
 ## Run it
 
@@ -79,7 +79,7 @@ Read the modules in this order. Each module starts with a docstring that states 
 | [`gwcore/ratelimit.py`](gwcore/ratelimit.py) | ~210 | The token-bucket rule of `scalelab` on an explicit clock. A sliding window meter. The sequence reserve, then stream, then reconcile, with refunds that decrease only the debits of the same request. Hierarchical all-or-nothing admission. The closed form of the over-admission. The §4 simulation. |
 | [`gwcore/metering.py`](gwcore/metering.py) | ~110 | Usage priced into ledger rows. Cache reads, cache writes and reasoning output each have their own price. Blended and self-hosted $ per 1M tokens. Reconciliation against the counts of the provider. Chargeback by tokens or by GPU-seconds. |
 | [`gwcore/otel.py`](gwcore/otel.py) | ~95 | One server span, and one client span for each target. GenAI attribute names pinned to v1.41.0, with the map to the names that continue to change. OTLP/JSON lines, written out and read back. |
-| [`gwcore/keys.py`](gwcore/keys.py) | ~140 | Virtual keys (hashed, scoped, budgeted, revocable). Provider keys rotated with an overlap. The per-tenant `cache_salt`. SVID rotation at half-life ± 10 %, drawn again on every check (as SPIRE does). A fake Workload API stream. |
+| [`gwcore/keys.py`](gwcore/keys.py) | ~140 | Virtual keys (hashed, scoped, budgeted, revocable). Provider keys rotated with an overlap. The per-tenant `cache_salt`. SVID rotation at half-life ± 10 %, with a new random value on every check (as SPIRE does). A fake Workload API stream. |
 | [`gwcore/guardrails.py`](gwcore/guardrails.py) | ~80 | Hooks and placements. The TTFT and the end-to-end latency that each placement adds. Exposure. Dollars per 1,000 checks. False blocks that compound over a conversation. A labelled regex stand-in. |
 | [`gwcore/mcp_authz.py`](gwcore/mcp_authz.py) | ~335 | The MCP client flow against a fake authorization server and MCP server. It covers discovery URLs, CIMD validation, PKCE S256 and `resource` (another server refuses a token for one server). It also covers `iss`, refresh rotation with reuse detection and step-up. It also covers DPoP proofs, examined for `htm`, `htu`, `iat` and `jti` replay, and nonces. All of it goes through a pluggable signer (an HMAC stand-in). |
 | [`gwcore/gateway.py`](gwcore/gateway.py) | ~185 | The §1 pipeline that connects them: key, then screen, then cache, then reserve, then chain, then relay and meter, then reconcile, then record. Only the health of a provider trips its breaker. A 401 from a provider is our 502. Residency comes from the key. |
@@ -92,9 +92,9 @@ the documented format (illustrative). The second is the labelled cache sample: 1
 ## What the tests prove
 
 `tests/` has one focused test for each concept. There are 102 of them, plus 8 checks on the notebook tools. One of these
-checks skips for percent-source labs. The tests run offline in ~16 s. These tests carry the claims:
+checks skips for percent-source labs. The tests run offline in ~16 s. The tests that carry the claims are these:
 
-- **Existing repo numbers, reproduced** (`test_repo_numbers.py`). The test loads the other labs by path, and skips when
+- **Numbers from other labs of the repo, reproduced** (`test_repo_numbers.py`). The test loads the other labs by path, and skips when
   a lab is absent:
   - `metering.price_call` equals `scalelab.capacity.cost_per_call` on every price row and four call shapes. For the
     call of the scaling primer, the result is $0.007005.
@@ -124,7 +124,7 @@ checks skips for percent-source labs. The tests run offline in ~16 s. These test
     resource.
   - DPoP nonces from the authorization server (400) and the resource server (401). The servers refuse proofs for
     another method or URL, a stale `iat` or a replayed `jti`.
-- **The breaker cannot wedge**: when a 400 answers a half-open probe, the breaker gives the probe back. When the
+- **The breaker cannot become stuck**: when a 400 answers a half-open probe, the breaker gives the probe back. When the
   provider is healthy again, the gateway sends it a probe and serves from it again (`test_gateway_otel.py`). A refund
   never lets the window read below the quantity already processed (`test_ratelimit.py`).
 - **Formulas pinned to hand-computed values**:
@@ -179,5 +179,5 @@ installs this package (see [`../../../COLAB.md`](../../../COLAB.md)).
 Go to [`../gateway-lab/`](../gateway-lab/) for the same gateway over real HTTP (aiohttp, sqlite3 keys, cache and
 ledger). The lab also has fake providers with their own limits and outages, and a compose stack. It also has one real
 vLLM as a provider on a T4 at no cost. Its GCP deploy points to the Cloud Run or GKE vLLM of the 04 lab, and to the GKE
-Inference Gateway of the 05 lab. [`COMPUTE.md`](../../../COMPUTE.md) tells where each tier runs and what it costs. It
-is MIT licensed.
+Inference Gateway of the 05 lab. [`COMPUTE.md`](../../../COMPUTE.md) tells where each tier runs and what it costs. The
+`gateway-core` package is MIT licensed.

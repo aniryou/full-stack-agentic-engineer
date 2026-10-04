@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 04 · Token limits, metering and chargeback
 #
-# **Tier:** T0. It uses only the CPU, no network and a few seconds. The notebook simulates the tokens-per-minute meter
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. The notebook simulates the tokens-per-minute meter
 # of the provider and every stream. The same limits over HTTP, and a ledger reconciled against the `usage` and the
 # `/metrics` of a real vLLM (T1), are `gateway-lab` notebook `04_streaming_limits_metering_and_chargeback`.
 #
@@ -292,12 +292,12 @@ print(f"✅ ledger {d['ledger']:,} vs provider {d['provider']:,} completion toke
 # **The two-minute version.** "Limits are in tokens, because the cost of a request is unknown at admission and
 # heavy-tailed. We reserve the prompt plus an output bound, debit tokens as the stream delivers them, and reconcile with
 # usage at the end. Used plus reserved never passes the limit, so the provider never sees more. On the day that thinking
-# went into service, a per-request bucket let through 1.97× the tokens per minute of the provider. And it did not
-# even see the change.
+# went into service, a per-request bucket let through 1.97× the tokens per minute of the provider. And the bucket
+# cannot even see the change.
 #
 # "The reservation is a setting, and we find its size by simulation. The cap is exact and strands budget. An estimate
-# serves more, with small overruns. Limits nest: key, tenant, org, provider key. One Lua script checks and commits them
-# atomically.
+# serves more, with small overruns. Limits nest: key, tenant, org, provider key. One Lua script does a check of all of them
+# and commits them atomically.
 #
 # "Every request writes a ledger row with a price from usage. We bill thinking as output. If you bill Gemini on
 # candidates alone, you under-bill a thinking call 2.5×. We bill cut streams on the relayed deltas and mark them

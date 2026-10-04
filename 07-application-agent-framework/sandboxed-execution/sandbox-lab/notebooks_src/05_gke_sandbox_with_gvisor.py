@@ -1,28 +1,29 @@
 # %% [markdown]
 # # 05 · GKE Sandbox with gVisor: the same pods, on a real kernel boundary
 #
-# **Tier:** T3 to run (a GKE cluster from `deploy/gcp/terraform`), but everything here is **T0**: the
-# Terraform is read as text, the manifests are validated against Kubernetes 1.34, the design-review
-# checklist is answered offline, and the cost and pool sizing are computed. Deploying it is
+# **Tier:** T3 to run (a GKE cluster from `deploy/gcp/terraform`), but everything here is **T0**. The
+# notebook reads the Terraform as text and validates the manifests against Kubernetes 1.34. It answers the
+# design-review checklist offline, and it calculates the cost and the size of the pool. To deploy it, use
 # `deploy/gcp/terraform` + `deploy/gke/apply.sh`.
 #
 # ## The one-minute version
 #
-# On GKE the top of the isolation ladder is a *node-pool setting*, not code (PRIMER §5, §9). A node
-# pool with `sandbox_config { type = "GVISOR" }` runs every pod that names `runtimeClassName: gvisor`
-# under gVisor's user-space kernel, on nodes that nothing else lands on. The design decisions:
+# On GKE, the top of the isolation ladder is a *node-pool setting*, not code (PRIMER §5, §9). A node pool
+# with `sandbox_config { type = "GVISOR" }` runs every pod that names `runtimeClassName: gvisor`. These pods
+# run under the user-space kernel of gVisor, on nodes that no other workload goes to. The design decisions
+# are:
 #
-# * **A second, dedicated pool** — GKE Sandbox needs it (the first pool can't be sandboxed); GKE
-#   taints and labels the sandbox nodes itself and creates the `gvisor` RuntimeClass.
-# * **No route to the internet** — private nodes and no Cloud NAT; the only destinations are Google
-#   APIs over Private Google Access, so images come from Artifact Registry.
-# * **The credential defence is not NetworkPolicy** — a NetworkPolicy cannot block the node-local
-#   metadata server; `GKE_METADATA` mode plus `automountServiceAccountToken: false` and a KSA with
-#   no IAM binding is what keeps cloud credentials away from the sandbox.
-# * **Spot, autoscaling from zero** — the pool costs nothing idle; the first execution scales it up
-#   (minutes, not seconds).
+# * **A second, dedicated pool**: GKE Sandbox needs it (GKE Sandbox cannot use the first pool). GKE itself
+#   puts the taints and labels on the sandbox nodes, and it creates the `gvisor` RuntimeClass.
+# * **No route to the internet**: private nodes and no Cloud NAT. The only destinations are Google APIs over
+#   Private Google Access. Thus images come from Artifact Registry.
+# * **The credential defence is not NetworkPolicy**: a NetworkPolicy cannot block the node-local metadata
+#   server. `GKE_METADATA` mode, `automountServiceAccountToken: false` and a KSA with no IAM binding keep
+#   cloud credentials away from the sandbox.
+# * **Spot, autoscaling from zero**: the pool costs nothing when it is idle. The first execution scales it
+#   up (minutes, not seconds).
 #
-# The same manifests you validated on kind (notebook 02) run here, with `runtimeClassName: gvisor`.
+# The same manifests that you validated on kind (notebook 02) run here, with `runtimeClassName: gvisor`.
 
 # %%
 import json
@@ -35,9 +36,9 @@ for c in gke.review():
 # %% [markdown]
 # ## Worked example: the GKE sandbox pod differs from the kind one in one field
 #
-# The policy renders the same objects for both targets; the sandbox pod's `runtimeClassName` is
-# `gvisor` on GKE and `sandbox-runc` on kind, and the image comes from Artifact Registry. Everything
-# else — the securityContext, no token, DNS off, sized volumes — is identical.
+# The policy renders the same objects for the two targets. The `runtimeClassName` of the sandbox pod is
+# `gvisor` on GKE and `sandbox-runc` on kind, and the image comes from Artifact Registry. Everything else is
+# identical: the securityContext, no token, DNS off and sized volumes.
 
 # %%
 gke_pol, kind_pol = P.SandboxPolicy.gke(), P.SandboxPolicy.kind()
@@ -51,9 +52,9 @@ print("identical on both:", json.dumps(same, default=str))
 # %% [markdown]
 # ## Worked example: cold start by isolation level
 #
-# gVisor adds to a container's start time; a Kubernetes cold start adds the API, scheduling and node
-# scale-up on top. A warm pool trades that away for idle capacity. The rows this machine can measure
-# say "measured"; the rest are sample output in the documented format (illustrative).
+# gVisor adds to the start time of a container. A Kubernetes cold start also adds the API, the scheduler and
+# the node scale-up. A warm pool removes that time, at the cost of idle capacity. The rows that this machine
+# can measure say "measured". The other rows are sample output in the documented format (illustrative).
 
 # %%
 for row in bench.ladder(bench.measure(["fork_exec", "process"], n=5)):
@@ -62,9 +63,9 @@ for row in bench.ladder(bench.measure(["fork_exec", "process"], n=5)):
 # %% [markdown]
 # ## Exercise 5.1 — the Terraform keeps the sandbox contract
 #
-# `gke.review()` reads `deploy/gcp/terraform/*.tf` and answers the review questions. Return the set
-# of check names that pass, and assert the load-bearing ones are among them: gVisor, no NAT by
-# default, Dataplane V2 (NetworkPolicy enforced), and the GKE metadata server.
+# `gke.review()` reads `deploy/gcp/terraform/*.tf` and answers the review questions. Return the set of check
+# names that pass. Assert that the load-bearing checks are in the set: gVisor, no NAT by default, Dataplane
+# V2 (NetworkPolicy enforced) and the GKE metadata server.
 
 # %% exercise
 def passing_checks() -> set:
@@ -84,12 +85,17 @@ for n in sorted(ok):
 # %% [markdown]
 # ## Exercise 5.2 — predict what `terraform validate` says (a case-sensitive pitfall)
 #
-# One product, three spellings: `gcloud container node-pools create --sandbox type=gvisor`, a pod's
-# `runtimeClassName: gvisor`, and the Terraform field `node_config.sandbox_config.type`, which the google
-# provider (8.4.0) checks with `validation.StringInSlice([]string{"GVISOR"}, false)` — the `false` is
-# `ignoreCase`. **Predict**, for each candidate value, whether `terraform validate` accepts it. Then write
-# `sandbox_types_in(tf_text)`, returning every value assigned to `type` inside a `sandbox_config { … }`
-# block, so a review can check the real file rather than trust a comment.
+# One product has three spellings:
+#
+# - `gcloud container node-pools create --sandbox type=gvisor`,
+# - `runtimeClassName: gvisor` in a pod,
+# - the Terraform field `node_config.sandbox_config.type`.
+#
+# The google provider (8.4.0) examines that field with
+# `validation.StringInSlice([]string{"GVISOR"}, false)`. The `false` is `ignoreCase`. **Predict** for each
+# candidate value if `terraform validate` accepts it. Then write `sandbox_types_in(tf_text)`. It returns
+# every value that a `sandbox_config { … }` block sets for `type`. Thus a review can examine the real file,
+# and not trust a comment.
 
 # %% exercise
 import re
@@ -120,10 +126,13 @@ print("   (gcloud's --sandbox type=gvisor and the pod's runtimeClassName: gvisor
 # %% [markdown]
 # ## Exercise 5.3 — the metadata server is not a NetworkPolicy problem
 #
-# A common mistake is to "block the metadata server with a NetworkPolicy". You cannot: traffic to the
-# node is always allowed. The defence is the GKE metadata server (`GKE_METADATA`), no mounted token,
-# and a service account with no roles. Confirm the sandbox pod sets `automountServiceAccountToken:
-# false` and uses the `sandbox-exec` service account, and that the node pools set `GKE_METADATA`.
+# A frequent error is to "block the metadata server with a NetworkPolicy". You cannot do this, because a
+# NetworkPolicy always permits traffic to the node. The defence is the GKE metadata server (`GKE_METADATA`),
+# no mounted token and a service account with no roles. Make sure of these three things:
+#
+# - the sandbox pod sets `automountServiceAccountToken: false`,
+# - the sandbox pod uses the `sandbox-exec` service account,
+# - the node pools set `GKE_METADATA`.
 
 # %% exercise
 def metadata_defences() -> dict:
@@ -147,13 +156,19 @@ print("✅ no token, an unbound service account, and GKE_METADATA mode — not a
 # %% [markdown]
 # ## Exercise 5.4 — size the pool and the cost per execution
 #
-# With a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start, the lab's warm pool
-# is **replace-after-use**: the runner deletes each pod after one execution and the Deployment warms a
-# replacement, so every execution holds a slot for 2 s of work *and* 45 s of warm-up. Return the
-# Little's-law mean occupancy (the floor), the Erlang C slot count that keeps at most 20% of requests
-# waiting for a warm pod (`bench.replace_after_use_slots`), and the cost of one execution: a sandbox
-# pod's share of an `e2-standard-2` held for the run plus its replacement's warm-up, at a Spot price
-# you look up (mark it verify). See `COMPUTE.md` for prices.
+# Use a peak of 5 `run_code`/s, 2 s executions and a 45 s gVisor-pod cold start. The warm pool of the lab is
+# **replace-after-use**. The runner deletes each pod after one execution, and the Deployment starts a
+# replacement and makes it warm. Thus every execution holds a slot for 2 s of work *and* 45 s of warm-up.
+#
+# Return these three values:
+#
+# - the Little's-law mean occupancy (the floor),
+# - the Erlang C slot count that keeps at most 20% of requests in a wait for a warm pod
+#   (`bench.replace_after_use_slots`),
+# - the cost of one execution.
+#
+# The cost is the share of a sandbox pod in an `e2-standard-2`, held for the run and for the warm-up of its
+# replacement. Use a Spot price that you look up (mark it verify). See `COMPUTE.md` for prices.
 
 # %% exercise
 def pool_and_cost(rate: float, exec_s: float, cold_s: float, node_usd_per_hour: float) -> tuple:
@@ -189,41 +204,41 @@ print("   and one snapshot must never be restored into two tenants (PRIMER §2, 
 # python3 -m sandboxlab gke-review                   # this checklist, on your .tf files
 # ```
 #
-# Clean up with `terraform -chdir=deploy/gcp/terraform destroy`. Cost and cleanup:
+# To clean up, run `terraform -chdir=deploy/gcp/terraform destroy`. For the cost and the cleanup, see
 # [`deploy/gcp/README.md`](../deploy/gcp/README.md).
 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "On GKE the strongest isolation is a node-pool setting: a second pool with
-# `sandbox_config { type = \"GVISOR\" }`, and every pod with `runtimeClassName: gvisor` runs on it under a
-# user-space kernel, on nodes nothing else touches. GKE taints and labels those nodes and creates the
-# RuntimeClass, so a pod needs only the class name.
+# **Two minutes.** "On GKE, the strongest isolation is a node-pool setting: a second pool with
+# `sandbox_config { type = \"GVISOR\" }`. Every pod with `runtimeClassName: gvisor` runs on that pool under
+# a user-space kernel, on nodes that nothing else touches. GKE puts the taints and labels on those nodes and
+# creates the RuntimeClass. Thus a pod needs only the class name.
 #
-# "I make the cluster private with no Cloud NAT, so nothing has a route to the internet and images come from
-# Artifact Registry over Private Google Access — which is still a path to Google APIs, so the sandbox's
-# default-deny NetworkPolicy closes it too. The egress proxy reaches only in-cluster upstreams unless I
-# deliberately turn NAT on, and even then NetworkPolicy on Dataplane V2 keeps the sandboxes off the internet —
-# gVisor is a kernel boundary, not a network one.
+# "I make the cluster private with no Cloud NAT. Thus nothing has a route to the internet, and images come
+# from Artifact Registry over Private Google Access. That is still a path to Google APIs, thus the
+# default-deny NetworkPolicy of the sandbox closes it too. The egress proxy reaches only in-cluster
+# upstreams, unless I turn NAT on intentionally. Even then, NetworkPolicy on Dataplane V2 keeps the
+# sandboxes off the internet. gVisor is a kernel boundary, not a network boundary.
 #
-# "The one thing a NetworkPolicy cannot do is block the node-local metadata server, so the cloud-credential
-# defence is `GKE_METADATA` mode, no mounted token, and a KSA with no IAM binding.
+# "The one thing that a NetworkPolicy cannot do is to block the node-local metadata server. Thus the
+# cloud-credential defence is `GKE_METADATA` mode, no mounted token and a KSA with no IAM binding.
 #
-# "The pool is Spot and scales from zero, so it costs nothing idle; the trade is a 40-to-50-second cold start
-# on the first execution, which is why interactive traffic gets a warm pool. The manifests are the ones I
-# validated on kind, with one field changed."
+# "The pool is Spot and scales from zero, thus it costs nothing when it is idle. The cost of this is a
+# 40-to-50-second cold start on the first execution. That is why interactive traffic gets a warm pool. The
+# manifests are the ones that I validated on kind, with one field changed."
 #
-# **Drill 1.** *`terraform validate` fails on the sandbox pool — the value looks right.* — The
-# provider validates `sandbox_config.type` against `"GVISOR"` exactly; `"gvisor"` (what `gcloud`
-# takes) fails. It is the most common typo in a GKE Sandbox module.
+# **Drill 1.** *`terraform validate` fails on the sandbox pool. The value looks correct.* The provider
+# validates `sandbox_config.type` against exactly `"GVISOR"`. `"gvisor"` (the value that `gcloud` accepts)
+# fails. It is the most frequent typo in a GKE Sandbox module.
 #
-# **Drill 2.** *We added a NetworkPolicy to block 169.254.169.254 and the pod still reached it.* —
-# NetworkPolicy never blocks traffic to the pod's own node, and the metadata server is node-local.
-# Use Workload Identity: `GKE_METADATA` on the pool serves pods their KSA's identity, and if that KSA
-# has no IAM roles there is nothing to steal. Belt and braces: `automountServiceAccountToken: false`
-# so there is no Kubernetes token either.
+# **Drill 2.** *We added a NetworkPolicy to block 169.254.169.254, and the pod still reached it.*
+# NetworkPolicy never blocks traffic to the node of the pod itself, and the metadata server is node-local.
+# Use Workload Identity: with `GKE_METADATA` on the pool, the pods get the identity of their KSA. If that
+# KSA has no IAM roles, there is nothing to steal. As a second layer, set
+# `automountServiceAccountToken: false`, thus there is also no Kubernetes token.
 #
-# **Drill 3.** *The first execution took 45 seconds; is gVisor that slow?* — No: gVisor adds tens to
-# hundreds of milliseconds. The 45 seconds is Kubernetes scaling the Spot pool from zero — VM boot,
-# image pull, node registration. Keep a warm pool (or snapshot/restore) for interactive work, and let
-# the pool scale to zero only for bursty or batch traffic where a cold start is acceptable.
+# **Drill 3.** *The first execution took 45 seconds: is gVisor that slow?* No, gVisor adds tens to hundreds
+# of milliseconds. The 45 seconds is the time that Kubernetes takes to scale the Spot pool from zero: VM
+# boot, image pull and node registration. Keep a warm pool (or snapshot/restore) for interactive work. Let
+# the pool scale to zero only for bursty or batch traffic, where a cold start is acceptable.

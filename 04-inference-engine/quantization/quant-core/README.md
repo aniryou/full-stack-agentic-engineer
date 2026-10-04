@@ -61,7 +61,7 @@ print(cost.supported(cost.GPUS["A100-80GB"], "w8a8-fp8"))     # an FP8 checkpoin
 ```
 
 The first code cell of every notebook pins BLAS to one thread (`OPENBLAS_NUM_THREADS=1`), and
-`tests/conftest.py` does the same. The matrices here are small. On a busy shared machine, a multi-threaded OpenBLAS
+`tests/conftest.py` does the same. The matrices here are small. Also, on a busy shared machine, a multi-threaded OpenBLAS
 can make one 256×256 inverse a hundred times slower.
 
 ## The whole library
@@ -72,13 +72,13 @@ Read the modules in this order. Each module opens with a docstring that states t
 |------|------:|-----------------|
 | [`quantcore/formats.py`](quantcore/formats.py) | ~195 | A format is a grid plus a scale. The module has INT conventions (restricted, full, asymmetric), and FP8 E4M3/E5M2 and FP4 E2M1 grids from their bit patterns. It has rounding (bit-identical to torch's FP8 casts), MXFP4 and NVFP4 block formats, bits per weight and the SQNR rule. It also packs INT4/FP4 codes as compressed-tensors lays them out. |
 | [`quantcore/granularity.py`](quantcore/granularity.py) | ~130 | Who shares a scale: tensor, channel, group, token, 2-D block, with scales in the checkpoint's shapes. Static and dynamic activation scales. Error metrics that hide per-channel damage, and error metrics that do not. |
-| [`quantcore/gptq.py`](quantcore/gptq.py) | ~85 | the Hessian from calibration inputs, damping, the Optimal Brain Surgeon column update, act-order with static groups, RTN |
-| [`quantcore/awq.py`](quantcore/awq.py) | ~55 | activation-aware scaling: the α grid search and why α = 0 is RTN |
-| [`quantcore/smoothquant.py`](quantcore/smoothquant.py) | ~45 | how to move activation outliers into weights for W8A8, and the α sweep |
-| [`quantcore/w8a8.py`](quantcore/w8a8.py) | ~60 | the W8A8 GEMM with integer accumulation and the scale epilogue, static-scale saturation, and DeepSeek-V3-style block FP8 |
+| [`quantcore/gptq.py`](quantcore/gptq.py) | ~85 | The Hessian from calibration inputs, damping, the Optimal Brain Surgeon column update, act-order with static groups, RTN. |
+| [`quantcore/awq.py`](quantcore/awq.py) | ~55 | Activation-aware scaling: the α grid search and why α = 0 is RTN. |
+| [`quantcore/smoothquant.py`](quantcore/smoothquant.py) | ~45 | How to move activation outliers into weights for W8A8, and the α sweep. |
+| [`quantcore/w8a8.py`](quantcore/w8a8.py) | ~60 | The W8A8 GEMM with integer accumulation and the scale epilogue, static-scale saturation, and DeepSeek-V3-style block FP8. |
 | [`quantcore/kvquant.py`](quantcore/kvquant.py) | ~85 | FP8 KV with default, calibrated and per-token scales. KIVI (keys per channel, values per token, residual window). Attention-output error. |
 | [`quantcore/tinymodel.py`](quantcore/tinymodel.py) | ~140 | A residual MLP stack whose norm gains make LLM-like outlier channels. A closed-form head, calibration capture and exact folds of the scales. `quantize_model` (RTN, GPTQ, AWQ, AWQ then GPTQ). |
-| [`quantcore/eval.py`](quantcore/eval.py) | ~55 | KL, top-1 agreement, perplexity, task accuracy with flips both ways, lm-eval's standard error, the unpaired difference's error bar and McNemar's paired z, a budget check |
+| [`quantcore/eval.py`](quantcore/eval.py) | ~55 | KL, top-1 agreement, perplexity, task accuracy with flips both ways, lm-eval's standard error, the unpaired difference's error bar and McNemar's paired z, a budget check. |
 | [`quantcore/cost.py`](quantcore/cost.py) | ~210 | What a scheme runs as per GPU generation (vLLM's rules). One GEMM on the roofline and the W4A16 crossover. The step-time model of `minengine.perf`, KV blocks and sessions, the decision table and $/M tokens. |
 
 ## What the tests prove
@@ -107,10 +107,10 @@ about 30 s. The tests that carry the correctness claims are these:
 - **The W8A8 epilogue is exact.** Integer-accumulated INT8 GEMMs and per-block FP8 GEMMs equal the fake-quantized
   products (`test_w8a8_kv.py`).
 - **The primer says what the code computes.** The test calculates again every number that `../PRIMER.md`
-  attributes to `quantcore`. Each number must appear in the primer verbatim (`test_primer_numbers.py`). The numbers
-  do not depend on the numpy or BLAS build. INT4's full convention puts −amax exactly on the tie −7.5, and
-  floating-point arithmetic can land an ulp to either side of it. Thus `formats.quantize_int` first moves near-ties
-  onto the tie. The suite gives the same digits on numpy 1.26, 2.0 and 2.4.
+  attributes to `quantcore`, and each number must appear in the primer verbatim (`test_primer_numbers.py`). The
+  numbers do not depend on the numpy or BLAS build because of a precaution in the code. INT4's full convention
+  puts −amax exactly on the tie −7.5, and floating-point arithmetic can land an ulp to either side of it. Thus
+  `formats.quantize_int` first moves near-ties onto the tie. The suite gives the same digits on numpy 1.26, 2.0 and 2.4.
 
 ## Caveats: what is faithful, and what is simplified
 
@@ -128,7 +128,7 @@ These parts are simpler than the sources:
 - Everything runs in float64 "fake quantization". Thus the errors are visible. The code emulates no kernel beyond
   its arithmetic.
 - The small model is an MLP stack on a synthetic task, not a transformer. Its down-projections are more redundant
-  than real ones. This makes GPTQ look better than in a real model.
+  than real ones. The extra redundancy makes GPTQ look better than it does on a real model.
 - The primer describes AWQ's clipping search, but the code does not implement it.
 - `cost.supported` is a table of rules, not a probe of your GPU.
 

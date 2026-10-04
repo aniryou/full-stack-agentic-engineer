@@ -7,7 +7,7 @@
 # from datasheets, verify). It also shows the accuracy of FP4 weights and activations on the bundled
 # tiny model.
 #
-# **Tier T1:** T1 needs one Blackwell GPU with CUDA 12.8+. Rent the GPU, and do not use a small one
+# **Tier T1:** This tier needs one Blackwell GPU with CUDA 12.8+. Rent the GPU. Do not use a small one
 # (for example, use a B200 or an RTX PRO 6000). Cloud Run offers the RTX PRO 6000 (verify). Everything
 # product-specific here is `(verify)`.
 #
@@ -24,8 +24,8 @@
 #
 # On Blackwell, NVFP4 **W4A4** runs FP4 tensor cores at 2x the FP8 rate. The weights *and* the
 # activations are in four bits. On all other GPUs, vLLM serves NVFP4 weights **weight-only** (Marlin:
-# dequantize, then multiply in 16-bit). This saves memory and decode bandwidth, but not FLOPs. Also, a
-# kernel that dequantizes and runs below the efficiency of the BF16 GEMM is *slower* than BF16 at
+# dequantize, then multiply in 16-bit). Weight-only serving saves memory and decode bandwidth, but not
+# FLOPs. Also, a kernel that dequantizes and runs below the efficiency of the BF16 GEMM is *slower* than BF16 at
 # prefill sizes. FP4 *activations* are the accuracy risk: one outlier channel sets the scale of its
 # whole 16-block.
 #
@@ -49,10 +49,10 @@ for fmt in ("bf16", "fp8", "int4-g128", "mxfp4", "nvfp4"):
 # %% [markdown]
 # ## Exercise 5.1 — round to E2M1
 #
-# The step of the E2M1 grid is 0.5 below 2, 1 between 2 and 4, and 2 between 4 and 6. Values above 6
-# saturate. Write `e2m1(x)`. The function rounds to the nearest grid value, with **ties to the even
-# mantissa**, and keeps the sign. vLLM's `cast_to_fp4` uses the same rule. It rounds 0.25 to 0, 0.75 to 1, 1.25 to 1
-# and 1.75 to 2. It rounds 2.5 to 2, 3.5 to 4 and 5 to 4.
+# The interval between E2M1 grid values is 0.5 below 2, 1 between 2 and 4, and 2 between 4 and 6.
+# Values above 6 saturate. Write `e2m1(x)`. The function rounds to the nearest grid value, with **ties
+# to the even mantissa**, and keeps the sign. The vLLM function `cast_to_fp4` uses the same rule. It
+# rounds 0.25 to 0, 0.75 to 1, 1.25 to 1, 1.75 to 2, 2.5 to 2, 3.5 to 4 and 5 to 4.
 
 # %% exercise
 def e2m1(x):
@@ -78,9 +78,9 @@ print("✅ E2M1 rounding matches vLLM's reference thresholds")
 # byte (E8M0). The `2` puts the block max in the top binade of E2M1. Write `mx_code(amax)` for an array
 # of block maxima.
 #
-# An llm-compressor MXFP4 checkpoint stores this code. The reference rule of the OCP MX spec is only
-# $\lfloor \log_2(\mathrm{amax}) \rfloor - 2$. This rule puts the block max in [4, 8). Under this rule, a block with a max of 7.5
-# clips to 6. But the rounding of compressed-tensors gives that block the next exponent (PRIMER §2).
+# An llm-compressor MXFP4 checkpoint stores this code. The reference rule of the OCP MX spec has no
+# round-up: it is $\lfloor \log_2(\mathrm{amax}) \rfloor - 2$. This rule puts the block max in [4, 8).
+# Under this rule, a block with a max of 7.5 clips to 6. But the rounding of compressed-tensors gives that block the next exponent (PRIMER §2).
 # `quantcore.formats.mxfp4` implements both rules, `rule="ocp"` and `rule="compressed-tensors"`.
 
 # %% exercise
@@ -203,8 +203,8 @@ print(f"B200 BF16 ridge: {serve.gpu('B200').peak('bf16') / 8e12:.0f} FLOP/byte; 
 # %% [markdown]
 # At 100% efficiency, every kernel is at least as fast as BF16. Real kernels that dequantize are not.
 # The Model Optimizer team of NVIDIA reported NVFP4 weight-only (W4A16) as *slower* than BF16 in 10 of
-# 12 GEMM shapes on Blackwell. The same team reported W4A4 as faster in 9 of 12 (announcement dated
-# 2026-09-16, verify). One term is not in the calculation at 100% efficiency: the efficiency of the
+# 12 GEMM shapes on Blackwell. In the same announcement (dated 2026-09-16, verify), the team reported
+# W4A4 as faster in 9 of 12. One term is not in the calculation at 100% efficiency: the efficiency of the
 # mixed-input kernel relative to the BF16 GEMM.
 #
 # ## Exercise 5.5 — from which step size is weight-only FP4 slower than BF16?
@@ -256,13 +256,13 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 # ## In a design review
 #
 # **Two minutes:** "FP4 is a Blackwell feature, not a checkpoint format. NVFP4 stores E2M1 values with
-# an FP8 scale per 16 and one FP32 scale per tensor. That is 4.5 bits per weight, slightly more than
-# INT4 g128. On B200s, it runs W4A4 on FP4 tensor cores at twice the FP8 rate.
+# an FP8 scale per 16 and one FP32 scale per tensor. This format uses 4.5 bits per weight, slightly
+# more than INT4 g128. On B200s, NVFP4 runs W4A4 on FP4 tensor cores at twice the FP8 rate.
 #
 # "On our H100s and L4s, the same checkpoint runs weight-only through Marlin. The weight-only path gives
 # a memory win only. Also, a kernel that dequantizes can run below the efficiency of the BF16 GEMM.
-# Then it is slower than BF16 from a couple of hundred tokens per step. Every prefill is in that range
-# of step sizes.
+# In that case, the kernel is slower than BF16 from a couple of hundred tokens per step. Every prefill
+# is in that range of step sizes.
 #
 # "The accuracy risk is the activations. In the lab's model, FP4 activations decrease task accuracy
 # from 100% to approximately half, until SmoothQuant moves the outlier channels into the weights. Thus,
@@ -270,8 +270,8 @@ print("NVFP4 KV cache (--kv-cache-dtype nvfp4):", {g: kv.attention_backend(g, "n
 # other GPUs."
 #
 # **Drill 1.** *Why does NVFP4 use 16-element blocks and an E4M3 scale when MXFP4 uses 32 and E8M0?*
-# Finer blocks isolate outliers better. Also, an E4M3 scale has mantissa bits. MX scales are powers of
-# two, and they are up to ~2x too coarse. The cost is 0.25 more bits per weight and a per-tensor FP32
+# Finer blocks isolate outliers better. Also, an E4M3 scale has mantissa bits. But MX scales are powers
+# of two, and they are up to ~2x too coarse. The cost is 0.25 more bits per weight and a per-tensor FP32
 # scale.
 #
 # **Drill 2.** *We serve an NVFP4 checkpoint on H100s and prefill got slower than BF16. Bug?* No. Below

@@ -2,7 +2,7 @@
 # # 05 · Choosing a scheme
 #
 # **Tier:** T0. It does arithmetic on a model config and a GPU spec, and runs in a few seconds. Every latency that
-# this notebook prints is **SIMULATED**. It comes from a roofline model,
+# this notebook prints is **SIMULATED**. Each latency comes from a roofline model,
 # $\max(\text{bytes}/\text{bandwidth}, \text{FLOPs}/\text{peak})$, with assumed efficiencies. The GPU figures are
 # dense datasheet values as of September 2026 `(verify)`. The lab's notebook 02 (T1) measures the same schemes on a
 # real GPU.
@@ -56,7 +56,7 @@ def show(rows, session=2000):
 show(C.table(L4, m8, schemes=["bf16", "w8a16-fp8", "w4a16", "w8a8-fp8"]))
 
 # %% [markdown]
-# Read the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
+# Read each row of the table by its bound. Decode at batch 1 is the weight read. Weights of 16.1, 9.1 and 5.7 GB give 65, 36 and
 # 22 ms. The decrease is not 3.9×, because the 16-bit LM head, the KV read and the step overhead do not decrease.
 # Prefill is compute: only FP8 W8A8 halves it. The number of sessions depends on the bytes that stay for KV: FP8 KV
 # doubles it at any weight format.
@@ -78,7 +78,7 @@ for g in (L4, H100):
 # %% [markdown]
 # A weight-only kernel does BF16 math on dequantized weights. Up to ~120 tokens per step on an L4 (~85 on an H100),
 # it is byte-bound and keeps the full byte ratio, ~3.8×. At that point, it hits the BF16 compute ceiling, but BF16
-# itself is still byte-bound. From there, its speedup decreases (1.7× at 256 tokens). The speedup is gone where BF16
+# itself is still byte-bound. Thus, from there, its speedup decreases (1.7× at 256 tokens). The speedup is gone where BF16
 # also becomes compute-bound: ~460 tokens on an L4 (~330 on an H100).
 #
 # Thus decode batches of a few hundred still gain from INT4. Long prefill chunks (512 and up) do not gain. Real
@@ -100,9 +100,9 @@ for g in C.GPUS.values():
 # (SM100/SM120, CUDA ≥ 12.8). On other GPUs, it runs as weight-only 4-bit.
 #
 # INT8 W8A8 is the Turing/Ampere way to make prefill faster. From compute capability 10.0, vLLM does not support INT8
-# W8A8. A T4 has no FP8 KV cache in any vLLM backend. These rules are for vLLM 0.30.0 and main, from the capability
-# checks of the kernels. Make sure of them on your version: the log line `Selected <kernel> for <module>` is the
-# truth.
+# W8A8. A T4 has no FP8 KV cache in any vLLM backend. All the rules in worked example 3 are for vLLM 0.30.0 and main,
+# from the capability checks of the kernels. Make sure that they apply to your version: the log line
+# `Selected <kernel> for <module>` is the truth.
 #
 # ## Worked example 4 — three deployments
 
@@ -143,7 +143,7 @@ for g, price in ((L4, 0.70), (H100, 11.0)):
 # %% [markdown]
 # Quantization decreases cost in two ways. It gives fewer bytes per step. It also gives more sessions, thus a larger
 # batch shares each step. On the L4, KV memory sets the maximum batch (17 sessions in bf16). That is why FP8 weights
-# and FP8 KV together cut the cost per token ~6× there, not 2×. The batch is 5× larger, in a step that is not longer.
+# and FP8 KV together cut the cost per token ~6× there, not 2×. The reason is that the batch is 5× larger, in a step that is not longer.
 #
 # On the H100, BF16 fits 209 sessions, and FP8 gets to the 256 cap that this notebook uses. There, FP8 cuts the cost
 # to approximately half.

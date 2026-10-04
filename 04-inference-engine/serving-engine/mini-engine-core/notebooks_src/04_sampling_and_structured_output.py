@@ -93,7 +93,7 @@ print("seed 8    :", repr(other.text))
 # %% [markdown]
 # (On a GPU, bitwise batch invariance is more difficult than this. The batch size changes the kernel choices and the
 # reduction order, so the logits are different in the last bits. For that, vLLM has a batch-invariant mode, at
-# some cost in speed, verify.)
+# some cost in speed (verify).)
 #
 # ## Worked example 4 — logprobs are the model's, not the sampler's
 # vLLM V1 returns logprobs of the **raw** logits by default (`logprobs_mode="raw_logprobs"`). These are the logprobs
@@ -313,9 +313,9 @@ print("✅ only argmax-equivalent settings are seed-independent for every distri
 # %% [markdown]
 # ## Exercise 4.6 — compile the token mask table
 # Use `char_step`, `STATES` and `VOCAB_TXT` from worked example 6. For each automaton state `s` and each token `t`,
-# precompute the state after you feed **all** of `t`'s characters from `s`. If a character is illegal, the result is
-# `None`. Return `table[s]`, a list aligned with the vocabulary. The engine's mask in state `s` then becomes
-# `table[s][t] is not None`, and the advance after a sampled token is one lookup.
+# precompute the state after you feed **all** of `t`'s characters from `s`. If any character of `t` is illegal, the
+# result is `None`. Return `table[s]`, a list aligned with the vocabulary. The engine's mask in state `s` then
+# becomes `table[s][t] is not None`, and the advance after a sampled token is one lookup.
 #
 # The purpose of xgrammar and llguidance is to do this ahead of time for ~100k tokens and thousands of states. For
 # the rest, they do it sufficiently fast to overlap the GPU's forward pass.

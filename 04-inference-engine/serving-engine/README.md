@@ -78,7 +78,7 @@ Prices, free tiers and how to get GPUs on GCP and in other places: [`COMPUTE.md`
 | before | the kernel topics beside this one: [`kv-cache`](../kv-cache/kv-cache-primer.md), [`paged-attention`](../paged-attention/paged-attention-primer.md), [`flash-attention`](../flash-attention/flash-attention-primer.md) | Block tables and copy-on-write. Block-hash prefix caching never needs copy-on-write (primer §5). Tiling and online softmax. |
 | beside | layer 02's [cuda-and-nccl primer](../../02-cuda-nccl-runtime/cuda-and-nccl/PRIMER.md) §4–5 and layer 03's [gpu-scheduling](../../03-kubernetes-gpu/gpu-scheduling/README.md) topic | CUDA Graphs and the all-reduces that tensor parallelism runs on. How the pod of the engine gets its GPUs. |
 | after | [`vllm-internals`](../vllm-internals/README.md) | The same mechanisms, read in the source of vLLM, with line numbers |
-| after | [`quantization`](../quantization/README.md) | The deep dive behind primer §8. It covers formats to the bit, GPTQ/AWQ/SmoothQuant, what each scheme runs as per GPU and FP8 KV. It also serves a real quantized checkpoint and runs an eval on it. |
+| after | [`quantization`](../quantization/README.md) | The deep dive behind primer §8. It covers formats to the bit, GPTQ/AWQ/SmoothQuant, what each scheme runs as per GPU, and FP8 KV. It also serves a real quantized checkpoint and runs an eval on it. |
 | after | [`00 distillation`](../../00-foundations/distillation/README.md) (primer §7) | That topic trains the draft model of primer §7 as a student of its target. Then it measures the acceptance of the draft under `--speculative-config`. |
 | after | [`05-orchestrator`](../../05-orchestrator/README.md) | Many replicas. That layer routes them by prefix-cache affinity and load, and autoscales them on queue depth and KV usage. It also divides them into prefill and decode pools. |
 | after | [`06 agentic-scaling-lab`](../../06-gateway/scaling-admission-cost/agentic-scaling-lab/) and [`07-application-agent-framework`](../../07-application-agent-framework/) | Admission, rate limits and cost in front of the fleet. Also the agent workloads that shape all of it: long stable prefixes and append-only histories. |
@@ -92,7 +92,7 @@ Prices, free tiers and how to get GPUs on GCP and in other places: [`COMPUTE.md`
   models the defaults of vLLM v0.30.0 (0.92 of the driver-reported total minus profiled overheads). PRIMER §4 sets
   them side by side: 2,164 against 2,363 blocks for Llama-3.1-8B on an L4. The value `Available KV cache memory` in
   the startup log is the measurement.
-- **Checked by construction.** The repository examines the GPU, Cloud Run and GKE paths with `bash -n`, `DRY_RUN=1`,
+- **Examined, not run.** The repository examines the GPU, Cloud Run and GKE paths with `bash -n`, `DRY_RUN=1`,
   Terraform `validate` and Kubernetes schema checks. It does not run them on real infrastructure. Expect to adjust
   quotas and regions when you use them for the first time.
 - **Dated facts.** The defaults of vLLM v0.30.0, the GPU prices and the Cloud Run details are as of September 2026.

@@ -1,7 +1,7 @@
 # %% [markdown]
 # # 02 · Routing and fallback chains
 #
-# **Tier:** T0. It uses only the CPU, no network and a few seconds. A virtual clock simulates every latency. The same
+# **Tier:** T0. It uses only the CPU and no network, and it runs in a few seconds. A virtual clock simulates every latency. The same
 # outages over HTTP, and a real vLLM that we stop in the middle of a run (T1), are `gateway-lab` notebook
 # `02_outages_fallbacks_and_breakers`.
 #
@@ -13,7 +13,7 @@
 # A request **falls through** only on a failure that another target can solve: 429, 5xx, a timeout, a context that is
 # too long. It never falls through on a bad request, bad credentials or a policy refusal, and **never after the first
 # byte** reached the client. A **breaker per target** changes a dead provider into an instant skip, not into one
-# timeout for each request. What its targets share puts a cap on the availability of a chain. A slow failure (a
+# timeout for each request. What the targets of a chain share puts a cap on the availability of the chain. A slow failure (a
 # timeout) costs time for every request behind it.
 #
 # By the end, you can do these things:
@@ -67,7 +67,7 @@ print("policy cheapest (800 in/500) :", show(router.candidates("chat", {"max_com
 #
 # The in-process gateway handles one request at a time on the virtual clock. Thus the gap is longer than a timeout on
 # purpose: no request waits behind another. Also, the measurement of each time to first token starts at the arrival of
-# its request (the loop checks it). Exercise 2.4 has requests that overlap, which is the production case.
+# its request (the loop makes sure of this). Exercise 2.4 has requests that overlap, which is the production case.
 
 # %%
 def outage_run(threshold, n=40, gap=12.0):

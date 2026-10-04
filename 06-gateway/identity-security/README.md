@@ -31,7 +31,7 @@ deployment, and it is optional.* The times are approximate. The core and the GCP
 | Path | You will be able to… | Time | Tier |
 |---|---|---|---|
 | [`agentic-identity-core/`](agentic-identity-core/README.md) | Show the five moves in one file. The file has an agent principal and a delegated token that names the user and the agent (RFC 8693 token exchange with `may_act`). It also has a deny-by-default policy with human confirmation, a tool server that authorizes by the verified subject, and one audit event for each decision. There are walkthrough, practice and solution notebooks. | 1–2 h | T0 |
-| The same core on Mistral's platform: `agentic-identity-core/agentsec_core_mistral.py` and its `core_mistral_*` notebooks | Put the five moves, imported unchanged, behind a real model that does function calling (with an offline scripted twin). Use Mistral's moderation classifier as the screener, and per-agent keys. Show where each control lives when the platform gives you the model and connectors but not the identity plane. | +1 h | T0 (the notebooks use the optional client in `requirements-mistral.txt`, and a `MISTRAL_API_KEY` adds the live model) |
+| The same core on Mistral's platform: `agentic-identity-core/agentsec_core_mistral.py` and its `core_mistral_*` notebooks | Put the five moves, imported unchanged, behind a real model that does function calling (with an offline scripted twin). Use Mistral's moderation classifier as the screener, and use per-agent keys. Show where each control lives when the platform gives you the model and connectors but not the identity plane. | +1 h | T0 (the notebooks use the optional client in `requirements-mistral.txt`, and a `MISTRAL_API_KEY` adds the live model) |
 | [`agentic-identity-gcp-lab/`](agentic-identity-gcp-lab/README.md) | Build each move in production shape. The lab has SPIFFE principals and certificate-bound tokens, DPoP, and a credential broker with a consent round-trip. It also has the policy as a plugin on a real agent runner. It has prompt-injection screening and provenance fencing, an MCP server as an OAuth 2.1 resource server, signed A2A agent cards, audit and governance. It has the [primer](agentic-identity-gcp-lab/docs/primer.md) (13 sections, design drills), 9 notebooks with practice and solutions, and 41 tests. It has Terraform for Google Cloud. | ~10 h at T0 (+ optional T3) | T0 (T3 optional) |
 
 ## Run it
@@ -56,16 +56,15 @@ agent can run, and this topic says what the agent can do.
 This topic leads to layer 07. There, the policy permits or stops each tool call of the agent loop
 ([`agent-fundamentals`](../../07-application-agent-framework/README.md)). It also leads to
 [sandboxed execution](../../07-application-agent-framework/sandboxed-execution/README.md). That topic starts from
-§6.2 of the primer (code execution). It keeps secrets out of the sandbox with the same token discipline. In the
-[curriculum's spiral](../../CURRICULUM.md#31-why-this-order), this topic is step 25, after the scaling lab.
+§6.2 of the primer (code execution). Sandboxed execution keeps secrets out of the sandbox with the same token
+discipline. In the [curriculum's spiral](../../CURRICULUM.md#31-why-this-order), this topic is step 25, after the scaling lab.
 
 ## Caveats
 
 - At T0, the identity plane is local fakes with the same semantics: a local CA, token issuer and credential broker.
-  The GCP lab connects to the Google Cloud products only when you set `AGENTSEC_PROFILE=gcp` and apply its
-  Terraform. These products are the agent identity, credential broker, agent runtime and screening products of
-  Google Cloud. The facts about these products are a September 2026 snapshot. Several of the products went GA in
-  2026. The Verify list in §13 of the primer says what to examine again (verify).
+  The GCP lab connects to the agent identity, credential broker, agent runtime and screening products of Google
+  Cloud. It does this only when you set `AGENTSEC_PROFILE=gcp` and apply its Terraform. The facts about these
+  products are a September 2026 snapshot. Several of the products went GA in 2026. The Verify list in §13 of the primer says what to examine again (verify).
 - The connector scopes, guardrail fields and model names of the Mistral path are from a check in September 2026
   (verify).
 - [`llm-gateway`](../llm-gateway/README.md) (module 06.7) covers the MCP client-side authorization flow (discovery,

@@ -43,7 +43,7 @@ path is a follow-up, and the lab does not implement it.
 Keep `first_byte_timeout_s` above the cold start. The cold start is the image pull plus the weights plus the engine
 start, and the 04 lab's
 [notebook 06](../../../../../04-inference-engine/serving-engine/vllm-serving-lab/notebooks/06_deploy_on_cloud_run_gpu.ipynb)
-calculates it. As an alternative, set `min_instances = 1` there.
+calculates it. As an alternative, set `min_instances = 1` in the 04 lab's Cloud Run deploy.
 
 ## Running the gateway itself on Cloud Run (CPU)
 
@@ -52,7 +52,8 @@ three things that the local stack does not need:
 
 - A config that is in the image.
 - A listener on `0.0.0.0`. By default, the CLI binds `127.0.0.1`, and Cloud Run cannot reach that address.
-- An image. The lab root has no Dockerfile. If you use `--source .`, it falls back to buildpacks with no entrypoint.
+- An image. The lab root has no Dockerfile. Thus, if you use `--source .`, the deploy falls back to buildpacks with
+  no entrypoint.
   Build [`deploy/local/Dockerfile`](../local/Dockerfile) instead.
 
 ```bash
@@ -72,8 +73,8 @@ gcloud run deploy gwlab-gateway --image "${IMAGE}" --region us-central1 --no-all
 
 Know three things before you do this:
 
-- The ledger and keys are **sqlite in one process**. On Cloud Run, they are lost with the instance, and the
-  instances do not share them. Thus a real deployment moves them to a database, and the buckets to Redis (scaling
+- The ledger and keys are **sqlite in one process**. On Cloud Run, they go away when the instance stops, and
+  the instances do not share them. Thus a real deployment moves them to a database, and the buckets to Redis (scaling
   primer §5.1, §5.9).
 - A streamed request counts against the request timeout (default 5 minutes, maximum 60, scaling primer §5.7).
 - Spans go to Cloud Trace over OTLP (`telemetry.googleapis.com`, scaling primer §9) when

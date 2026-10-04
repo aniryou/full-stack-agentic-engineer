@@ -26,7 +26,7 @@ Each file has one row in the table in `docs/primer.md` §10.
 | `logging.tf` | Audit (§9) | Data-access audit logs, BigQuery sink for agent principals and `agentsec-audit` |
 | `vpc_sc.tf` | Perimeter (§8), opt-in | Regular perimeter, and an egress rule for the agents principalSet |
 | `org_policy.tf` | Control-plane guardrails (§4.5), opt-in | Custom constraints: PKCE on auth providers, and Agent Identity on engines (illustrative) |
-| `locals.tf` / `outputs.tf` | Principal identifiers (§3.3) | `principal://…`, `principalSet://…`, URLs and names that other tools use |
+| `locals.tf` / `outputs.tf` | Principal identifiers (§3.3) | `principal://…`, `principalSet://…`, URLs and names that other tools must have |
 
 ## Prerequisites
 
@@ -44,35 +44,35 @@ Each file has one row in the table in `docs/primer.md` §10.
 
 Terraform finds the correct order for most resources itself. But the agent's identity exists only
 after you deploy the agent, and Terraform cannot express every binding. The runbook in
-`docs/deploy.md` gives all the steps in detail. This is the short version:
+`docs/deploy.md` gives the steps in detail. This is the short version:
 
-1. Run `terraform init && terraform apply`. This step applies the APIs, the identities, the secret
-   and the auth provider. It also applies Model Armor, the Cloud Run service (fallback SA), the
-   registry entry and the audit sink. Terraform does not apply the agent-specific IAM until it
+1. Run `terraform init && terraform apply`. This step turns on the APIs and creates the identities, the
+   secret and the auth provider. It also creates Model Armor, the Cloud Run service (fallback SA),
+   the registry entry and the audit sink. Terraform does not create the agent-specific IAM until it
    knows an engine ID.
 2. Build and push the MCP image. Then run `../scripts/deploy_mcp_cloud_run.sh`. This script changes
    the service to `--functional-type=mcp-server --identity-type=agent-identity`.
 3. Deploy the agent:
    * **Path A (default):** run `python ../scripts/deploy_agent_engine.py`. This path uses the SDK,
-     and it does the same steps as the Google docs and `adk deploy`. Put the returned engine ID in
+     and it does the steps that the Google docs give and that `adk deploy` does. Put the returned engine ID in
      `agent_engine_id`. Then run `terraform apply` again. Terraform now creates the agent's IAM bindings.
    * **Path B:** run `../scripts/build_agent_source.sh`. Set `deploy_agent_with_terraform = true`.
      Then run `terraform apply`. You get one plan and one graph.
 4. Run `../scripts/grant_agent_iam.sh "$(terraform output -raw agent_principal)"`. This script
    gives the binding that Terraform has no resource for (`roles/agentidentity.user` on the auth
    provider). It also gives everything else again, and this second grant is idempotent.
-5. Turn on the opt-ins one at a time. First `enable_agent_gateway`, then `enable_vpc_sc` (with
+5. Turn on the opt-ins one at a time. Turn on `enable_agent_gateway` first, then `enable_vpc_sc` (with
    `access_policy_id`), then `enable_org_policy` / `enable_pab`. Each opt-in is independent.
 
 ## Why the opt-ins are opt-in
 
-* **Agent Gateway** must have a network attachment for private destinations. It must also have
-  publicly trusted certificates on every destination, and you must register every destination.
+* **Agent Gateway** must have a network attachment for private destinations. Every destination must
+  also have a publicly trusted certificate, and you must register every destination.
   VPC-SC itself does not cover the gateway. Turn it on when the direct path works and you want
   mTLS, DPoP, IAP per SPIFFE ID and Model Armor on egress. `agent_gateway.tf` configures all of
   these.
 * **VPC Service Controls** must have an organisation access policy. If the perimeter is incorrect,
-  it can lock *you* out of the project. Start with the gcloud dry-run YAML in
+  VPC Service Controls can lock *you* out of the project. Start with the gcloud dry-run YAML in
   `../scripts/vpc_sc_mcp_rule.yaml` for the MCP-attribute rule.
 * **Org policy custom constraints / PAB** are organisation-scoped. One of the constraints
   (`aiplatform.googleapis.com/ReasoningEngine`) is illustrative, and it has the mark `# VERIFY:`.
@@ -85,16 +85,16 @@ Search the tree for `VERIFY:`. Each mark is on a fact that the provider schema a
 snapshot in `docs/sources.md` (5 Sep 2026) did not confirm. These facts are:
 
 * the deny-policy principalSet form for agents,
-* if the Reasoning Engine service agent must still have secret access under Agent Identity,
+* the question if the Reasoning Engine service agent must still have secret access under Agent Identity,
 * the PAB binding target for agent identities,
 * the TOOL_SPEC JSON shape,
-* the registry URI version segment,
+* the version segment of the registry URI,
 * the illustrative custom constraint.
 
 ## Cost and cleanup
 
-The idle cost is small. The Cloud Run service scales to zero, and the engine has `min_instances = 0`.
-BigQuery is pay-per-query, with a 90-day table expiry. The data-access audit logs for `allServices`
+The idle cost is small, because the Cloud Run service scales to zero and the engine has
+`min_instances = 0`. Also, BigQuery is pay-per-query, with a 90-day table expiry. The data-access audit logs for `allServices`
 are the main variable. To switch them off, set `enable_data_access_audit_logs = false`. The gateway
 and a min-instance engine are the two things that bill while idle.
 

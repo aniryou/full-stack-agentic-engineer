@@ -24,8 +24,8 @@
 #    with jitter are in §5.2 of the scaling primer. Here, the retry is the next target.
 #
 # Chain arithmetic: with independent failures, $A = 1 - \prod_i (1 - a_i)$. A common-mode event multiplies it by
-# $(1 - c)$. Examples of a common-mode event are the region of the gateway itself and a shared upstream. Thus a
-# fallback in the same failure domain adds only a small gain.
+# $(1 - c)$. Examples of a common-mode event are an outage of the region of the gateway itself and an outage of a
+# shared upstream. Thus a fallback in the same failure domain adds only a small gain.
 #
 # The fallback also has costs. One cost is latency: the failed attempt, plus a target that is possibly slower. The other
 # cost is money: a model with a higher price at full traffic, until that model reaches the end of its own quota.
@@ -63,7 +63,7 @@ print("chain for alias chat:", stack.cfg.aliases["chat"].targets, "| bolt is slo
 #
 # - the HTTP status that the client receives,
 # - the `x-gwlab-target` that served the request (`None` if no target did),
-# - if the stream has an `error` event or not.
+# - a flag that shows if the stream has an `error` event.
 #
 # The faults:
 #
@@ -123,7 +123,7 @@ print("✅ before the first byte a fault is invisible (another target answers); 
 # The chain formula comes from the core (`routing.chain_availability`, given). The lab adds the source of its inputs in
 # production: the decisions of the gateway itself.
 #
-# In this run, `acme` fails 25 % of the requests and `bolt` fails 20 %. The failures are seeded and occur before the
+# In this run, `acme` fails 25 % of the requests and `bolt` fails 20 %. The failures use a seed and occur before the
 # first byte. The breaker settings are so high that the breakers never open. Thus every request goes through the whole
 # chain. 240 requests go through.
 #
@@ -164,8 +164,9 @@ print("✅ two lossy targets in independent failure domains; put both behind one
 # %% [markdown]
 # ## Exercise 2.3 — what a fallback costs in latency
 #
-# In the same run, a request got `acme` immediately (TTFT ≈ acme's). Or it paid for a failed attempt and then got
-# `bolt`. Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`. Return the mean TTFT of
+# In the same run, each request that succeeded had one of two paths. It got `acme` immediately (TTFT ≈ acme's), or it
+# paid for a failed attempt and then got `bolt`.
+# Write `expected_ttft(p_fail, fail_s, ttft_primary, ttft_fallback, p_fail_fallback)`. Return the mean TTFT of
 # the requests that succeeded: $(1 - p)\,t_1 + p\,(1 - p_2)\,(f + t_2)$, divided by the probability of success.
 #
 # The check uses the components *measured* in the run. The TTFT of each target comes from the requests that this target

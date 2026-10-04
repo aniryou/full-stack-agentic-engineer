@@ -61,8 +61,8 @@ print("cacheable classes:", stack.cfg.cache.classes, "| per user:", stack.cfg.ca
 # as soon as real users type.
 #
 # An FAQ that says "my" looks personal to the regex. The result is a missed hit, which does no harm. A personal
-# question with nothing that a regex can see looks general. If the gateway caches it in a tenant-wide namespace, it
-# serves the plan limit of one user to the next user.
+# question with nothing that a regex can see looks general. If the gateway caches that question in a tenant-wide
+# namespace, the gateway serves the plan limit of one user to the next user.
 
 # %%
 for q in ("How do I cancel my subscription?", "What is my plan limit?", "Which plan am I on?"):
@@ -104,7 +104,7 @@ for a, b in zip(rows[False], rows[True]):
 # - At 0.9, almost no incorrect answer gets through, and the cache serves only paraphrases that are almost verbatim.
 #
 # The gap between the correct rate at a safe threshold and `reachable` is what a better embedder can win. A better
-# embedder can also lose, because it also brings new false hits.
+# embedder can also lose some of that gap, because it brings new false hits too.
 
 # %% [markdown]
 # ## Exercise 3.1 — the cache key, from the declared class
@@ -207,8 +207,8 @@ print(f"✅ the gateway's cacheability and keys, {same} matching pairs among the
 # - An undeclared question.
 # - Another tenant (a separate namespace).
 #
-# A hit costs nothing in the ledger and returns in a few milliseconds. (0.85 is low on purpose, to show the guard. The
-# sweep supports 0.9 or more on this sample.)
+# A hit costs nothing in the ledger and returns in a few milliseconds. The threshold 0.85 is low on purpose, to show the
+# guard. The sweep supports 0.9 or more on this sample.
 
 # %%
 def ask(key, q, meta, **kw):
@@ -277,7 +277,7 @@ print(f"✅ live: {got['served']} served from the cache, {got['false']} of them 
 # Its TTFT decreases by the prefill that it skipped (0.5 ms per token here, simulated).
 #
 # The gateway sends the `cache_salt` of each tenant. The salt is an HMAC of the *verified* tenant under the secret of
-# the gateway, with 43 characters. The gateway never takes it from the request. Thus another tenant with the same
+# the gateway. The salt has 43 characters. The gateway never takes it from the request. Thus another tenant with the same
 # prompt starts cold.
 
 # %%
@@ -307,7 +307,7 @@ print("salts:", {t: C.cache_salt(t, stack.cfg.salt_secret)[:12] + "..." for t in
 #
 # The check does the attack directly against the engine (the vLLM-shaped fake). A victim sends a prompt, and the
 # attacker measures the time of the same prompt. The attacker does this first with no salt at all (a gateway that forgot
-# it). Then the attacker does it under the own salt of each tenant (what this gateway sends).
+# it). Then the attacker does it under the salt that belongs to each tenant (what this gateway sends).
 
 # %% exercise
 def looks_cached(ttft_s: float, prompt_tokens: int, base_s: float, prefill_s_per_token: float) -> bool:
@@ -340,13 +340,13 @@ print(f"✅ unsalted: the attacker's TTFT {r1.ttft_s * 1e3:.0f} ms gives the vic
 # ## Exercise 3.4 — predict `cached_tokens`
 #
 # vLLM caches **full** blocks only (16 tokens). It goes along the block-hash chain of the prompt until the first miss.
-# It always computes the last prompt token, because it needs its logits. Thus a hit has a limit of
+# It always computes the last prompt token, because it needs the logits of that token. Thus a hit has a limit of
 # $\lfloor (n - 1)/16 \rfloor$ blocks. Write `expected_cached_tokens(prompt_tokens, shared_prefix_tokens, block=16)` for
 # a prompt whose first `shared_prefix_tokens` tokens the engine already processed (under the same salt).
 #
 # The check builds prompts that share a prefix of different lengths with a warmed prompt. The tokenizer of the fake
-# counts the lengths. The check compares your result with what the fake reports. (The same rule is
-# `expected_cached_tokens` in 04's `servelab`. At T1, vLLM reports the real value.)
+# counts the lengths. The check compares your result with what the fake reports. The same rule is
+# `expected_cached_tokens` in 04's `servelab`. At T1, vLLM reports the real value.
 
 # %% exercise
 def expected_cached_tokens(prompt_tokens: int, shared_prefix_tokens: int, block: int = 16) -> int:

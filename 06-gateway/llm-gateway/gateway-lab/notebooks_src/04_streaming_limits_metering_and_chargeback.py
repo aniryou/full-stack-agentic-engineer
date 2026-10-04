@@ -15,8 +15,8 @@
 #
 # A bucket that charges each request a constant guess at the start **over-admits** by
 # $(\text{prompt} + \text{actual output}) \:/$ $(\text{prompt} + \text{guess})$. Then the provider refuses the
-# excess with its own TPM limit, and the tenant cannot explain these 429s (PRIMER §4). The solution is to meter the
-# tokens where they flow:
+# excess with its own TPM limit, and the tenant cannot explain these 429s (PRIMER §4). The solution is the metering
+# of the tokens where they flow:
 #
 #     admit      reserve prompt estimate + min(requested cap or a default, a hard cap) from the tenant's TPM
 #     stream     debit anything beyond the reservation as chunks arrive
@@ -75,8 +75,8 @@ print(f"a rate-limit minute here lasts {MINUTE} s; acme allows 3,000 tokens per 
 # admits up to $\text{capacity} + \text{rate} \times \text{window}$.
 #
 # A bucket of 1,500 tokens per minute for the tenant keeps that inside the limit of the provider:
-# $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. (A bucket set to the full 3,000 of the provider can admit
-# up to 6,000 in the first window. The burst is part of the budget.)
+# $1{,}500 + 750/\text{s} \times 2\,\text{s} = 3{,}000$. A bucket set to the full 3,000 of the provider can admit
+# up to 6,000 in the first window. This occurs because the burst is part of the budget.
 #
 # The `ReserveLimiter` of the core counts a sliding window instead. It admits a request only if
 # $\text{used} + \text{reserved} + \text{reserve} \le \text{limit}$ (PRIMER §4.2). By construction, this window
@@ -98,11 +98,11 @@ for mode in ("per_request", "reserve"):
 # The demand is the same, and the provider is the same. The per-request bucket admits almost everything. Then the
 # provider refuses the load that its TPM cannot carry. These 429s arrive after a round trip, and three of them in a
 # row open the breaker of acme. After that, the gateway refuses *every* request with a 503 until a probe gets
-# through. This includes requests well inside the budget of the tenant.
+# through. The refused requests include requests well inside the budget of the tenant.
 #
-# With a fallback chain, these requests go instead to a higher-cost provider at full traffic. The bucket in
-# `reserve` mode refuses at the door of the gateway. It sends a `Retry-After` header and `x-ratelimit-*` headers,
-# which tell which limit applies and when. The provider gets a load that it can carry.
+# If the alias has a fallback chain, these requests go to a higher-cost provider at full traffic instead. The
+# bucket in `reserve` mode refuses at the door of the gateway. It sends a `Retry-After` header and `x-ratelimit-*`
+# headers, which tell which limit applies and when. The provider gets a load that it can carry.
 
 # %% [markdown]
 # ## Exercise 4.1 — the reservation
@@ -161,8 +161,8 @@ print("✅ the bucket admits", f"{pred:.1f}x", "the tokens it thinks it admits -
 # %% [markdown]
 # ## Worked example: the noisy neighbour
 #
-# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size to
-# match it: 3,000 per minute. Then the burst plus the refill over one window equals 6,000.
+# Two tenants share a provider that permits 6,000 tokens per minute. The global bucket of the gateway has a size that
+# matches it: 3,000 per minute. Thus the burst plus the refill over one window equals 6,000.
 #
 # `team-a` sends a flood at several times its share. `team-b` sends a small, steady flow. With only the global
 # bucket, team-a empties it, and the gateway refuses the requests of team-b too. With a bucket for each tenant
@@ -341,11 +341,11 @@ else:
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes:** "We limit tokens, not only requests, because we know the cost of a request only during its
+# **Two minutes:** "We limit tokens, not only requests, because the model sets the cost of a request during its
 # stream. At admission, we reserve the prompt estimate plus the output cap of the caller, or a default, from the
-# tokens-per-minute bucket of the tenant. This bucket is next to its requests-per-minute bucket, under a
-# gateway-wide share of the quota of the provider. We debit anything that the stream sends past the reservation. At
-# the end, we reconcile to the `usage` of the provider, and a hard cap sets the limit for any one response.
+# tokens-per-minute bucket of the tenant. This bucket is next to the requests-per-minute bucket of the tenant,
+# under a gateway-wide share of the quota of the provider. We debit anything that the stream sends past the
+# reservation. At the end, we reconcile to the `usage` of the provider, and a hard cap sets the limit for any one response.
 #
 # "Refusals occur at our door with a Retry-After, not at the door of the provider after a round trip. Every request
 # writes a ledger row. We price the row from `usage`, and thinking tokens bill as output. When the stream stopped
@@ -356,9 +356,8 @@ else:
 # never refused a request. Why?* The bucket charged per request, but the outputs grew ten-fold with a heavy tail.
 # Thus the same request rate carried many times the tokens.
 #
-# Reserve, stream and reconcile. Put TPM beside RPM for each tenant.
-#
-# Give the thinking a budget, and do not cut it with `max_tokens` (CURRICULUM cross-layer drill 20).
+# Reserve, stream and reconcile. Put TPM beside RPM for each tenant. Give the thinking a budget, and do not cut it
+# with `max_tokens` (CURRICULUM cross-layer drill 20).
 #
 # **Drill 2.** *Two gateway replicas each permit the tenant 3,000 tokens per minute. What does the tenant get?* The
 # tenant gets up to 6,000.
@@ -376,5 +375,5 @@ else:
 # they gave it, and they get more throughput.
 #
 # Reserve the full cap only where a provider 429 is unacceptable, or where the provider itself charges `max_tokens`
-# at admission (PRIMER §4.2). Then reserve what you send upstream. This gateway does that: it forwards the reserved
-# bound as `max_completion_tokens`. Or send what you reserved.
+# at admission (PRIMER §4.2). Then reserve what you send upstream, or send what you
+# reserved. This gateway forwards the reserved bound as `max_completion_tokens`.

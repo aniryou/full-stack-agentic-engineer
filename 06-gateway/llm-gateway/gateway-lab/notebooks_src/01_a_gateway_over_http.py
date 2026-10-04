@@ -8,7 +8,7 @@
 #
 # ## The one-minute version
 #
-# A gateway is the one place that every model call goes through. Thus it owns the things that no single app must own:
+# A gateway is the one place that every model call goes through. Thus it owns the things that a single app must not own:
 #
 # - The **provider keys**. Callers get *virtual* keys. The gateway stores only a hash of each key, and each key has a
 #   scope of aliases. An operator can revoke a key.
@@ -18,16 +18,19 @@
 # - The **trace**: GenAI spans.
 #
 # The common language of the gateway is chat completions over SSE. An adapter table translates the other dialects. The
-# bugs are in the data that does not go into the common form. This data is Anthropic's `input_tokens`, which does not
-# include the cache, the fragments of tool-call arguments, and the `reasoning` text (PRIMER §1).
+# bugs are in the data that does not go into the common form (PRIMER §1). This data is:
+#
+# - Anthropic's `input_tokens`, which does not include the cache.
+# - The fragments of tool-call arguments.
+# - The `reasoning` text.
 #
 # Two details make metering work on streams:
 #
 # 1. The gateway sets `stream_options.include_usage` on every streamed upstream request. Thus it always gets the count
 #    of the provider. It never sets it on a non-streamed request, because vLLM answers 400. The gateway also removes
 #    that usage chunk from the response to a client that did not ask for it.
-# 2. The gateway parses every chunk. But the 05 router sends the bytes on with no change. The gateway owns the bill, thus it
-#    must read it.
+# 2. The gateway parses every chunk. But the 05 router sends the bytes on with no change. The gateway owns the bill.
+#    Thus the gateway must read the bill.
 #
 # After this notebook, you can do these tasks:
 #
@@ -71,8 +74,8 @@ print("secret stored anywhere?", any(key_a in json.dumps(r) for r in rows),
 #
 # The client gives an **alias** (`chat`), not a model. The gateway resolves the alias to a chain (`acme/fast`, then
 # `bolt/haiku`). It calls the first target with the provider key of *that* target. It answers with headers that tell
-# which target served the request. The `model` in the body is the upstream model that really answered (OpenAI does the
-# same for an alias).
+# which target served the request. The `model` in the body is the upstream model that answered the request (OpenAI does
+# the same for an alias).
 
 # %%
 r = stack.chat(key_a, "What does a gateway own?")
@@ -102,8 +105,8 @@ print("with include_usage, last chunk before [DONE]:", json.dumps(asked.chunks[-
 #
 # `team-eu` can use only providers in the `eu` region (residency). Thus its `chat` goes to `bolt`, an
 # Anthropic-dialect provider. The next cell shows what bolt itself sends: named events, a cumulative `output_tokens`,
-# and no `[DONE]`. It also shows what the gateway changes this into: the same chat chunks as in the previous worked
-# example.
+# and no `[DONE]`. It also shows what the gateway changes those events into: the same chat chunks as in the previous
+# worked example.
 
 # %%
 key_eu = stack.issue_key("team-eu")
@@ -209,7 +212,7 @@ print(f"✅ warm: {usage_from_events(warm)} | cut after 3 chunks: None, so the g
 #
 # The first delta of a tool call has its `id` and `function.name`. Later deltas have only `index` and a fragment of
 # `function.arguments`. An error in a 200 stream is how the gateway tells you that the answer is not complete. After the
-# first byte, the gateway cannot fall back any more, thus it tells you in the stream.
+# first byte, the gateway cannot fall back any more. Thus it tells you in the stream.
 #
 # The check replays three streams:
 #
@@ -402,11 +405,11 @@ else:
 # %% [markdown]
 # ## T1: a real vLLM as one provider
 #
-# When you set `GWLAB_VLLM_URL`, a second gateway starts with the `vllm` config. The URL is for deploy/any-gpu, which
-# serves `Qwen/Qwen2.5-0.5B-Instruct` as `lab/llm` with `--enable-prompt-tokens-details`. In the `vllm` config, vLLM is
-# first in `chat`, and a fake is the fallback. The same request now returns measured usage from a real engine. It gets
-# the label `MEASURED` only when vLLM really served it (`gwlab.t1.label`). A fallback to the fake gets the label
-# `SIMULATED`, whatever the cell expected.
+# When you set `GWLAB_VLLM_URL`, a second gateway starts with the `vllm` config. The URL points to the vLLM server of
+# deploy/any-gpu, which serves `Qwen/Qwen2.5-0.5B-Instruct` as `lab/llm` with `--enable-prompt-tokens-details`. In
+# the `vllm` config, vLLM is first in `chat`, and a fake is the fallback. The same request now returns measured usage
+# from a real engine. It gets the label `MEASURED` only when vLLM itself served it (`gwlab.t1.label`). A fallback to
+# the fake gets the label `SIMULATED`, whatever the cell expected.
 
 # %%
 if tiers["vllm_url"]:
@@ -429,7 +432,7 @@ stack.stop()
 #
 # "A request gives an alias. The gateway decides if the request runs (budget, limits) and which provider, model, region
 # or pool serves it. In a self-hosted pool, the endpoint picker selects the replica. Everything uses chat completions
-# over SSE. Adapters translate the other dialects, also the usage fields that do not align.
+# over SSE. Adapters translate the other dialects. They also translate the usage fields that do not align.
 #
 # "The gateway parses each stream. It asks the provider for usage on every stream, and it removes the usage for clients
 # that did not ask for it. It writes one ledger row with a price for each request, and also spans with the GenAI names.

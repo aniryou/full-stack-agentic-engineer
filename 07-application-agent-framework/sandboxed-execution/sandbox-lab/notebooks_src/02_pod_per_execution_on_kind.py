@@ -1,28 +1,29 @@
 # %% [markdown]
 # # 02 · Pod per execution on Kubernetes: what makes a sandbox pod safe, and who enforces it
 #
-# **Tier:** T0 — every manifest is built, validated against Kubernetes 1.34 and run through an
-# offline admission predictor here; a simulated cluster runs the code for real (in the process
-# sandbox) and times the lifecycle. With Docker + kind (T0 + Docker) the same objects run on a real
-# cluster: `deploy/kind/up.sh`, then set `SANDBOXLAB_KUBE_CONTEXT`.
+# **Tier:** T0. Here, the notebook builds every manifest, validates it against Kubernetes 1.34 and runs it
+# through an offline admission predictor. A simulated cluster really runs the code (in the process sandbox)
+# and measures the times of the lifecycle. With Docker + kind (T0 + Docker), the same objects run on a real
+# cluster. Run `deploy/kind/up.sh`, then set `SANDBOXLAB_KUBE_CONTEXT`.
 #
 # ## The one-minute version
 #
-# On Kubernetes a sandbox is a pod, and the controls that make it safe are only real if the API
-# server *refuses* pods without them (PRIMER §5). Three admission steps, in order:
+# On Kubernetes, a sandbox is a pod. The controls that make it safe are real only if the API server
+# *refuses* pods without them (PRIMER §5). There are three admission steps, in this order:
 #
-# 1. **RuntimeClass** — `runtimeClassName: gvisor` (or `sandbox-runc` on kind) selects the runtime
-#    and merges the class's node selector and tolerations, so the pod lands on the sandbox pool.
-# 2. **Pod Security Admission `restricted`** — the upstream baseline: non-root, drop `ALL`,
-#    `allowPrivilegeEscalation: false`, a seccomp profile, no host namespaces. *It rejects Pods,
-#    not Jobs* — a bad Job is accepted and its Pods are rejected later.
-# 3. **A ValidatingAdmissionPolicy** for what PSS does not know about sandboxes: the runtime class,
-#    `automountServiceAccountToken: false`, a read-only root, sized volumes only, no Secrets in the
-#    environment, and — on Jobs — a deadline, `backoffLimit: 0` and a TTL.
+# 1. **RuntimeClass**: `runtimeClassName: gvisor` (or `sandbox-runc` on kind) selects the runtime. It also
+#    merges the node selector and tolerations of the class. Thus the pod goes to the sandbox pool.
+# 2. **Pod Security Admission `restricted`**: the upstream baseline. Its rules are non-root, drop `ALL`,
+#    `allowPrivilegeEscalation: false`, a seccomp profile and no host namespaces. *It rejects Pods, not
+#    Jobs.* The API server accepts a bad Job and rejects its Pods later.
+# 3. **A ValidatingAdmissionPolicy** for the rules about sandboxes that PSS does not know. It asks for the
+#    runtime class, `automountServiceAccountToken: false`, a read-only root and sized volumes only. It
+#    permits no Secrets in the environment. On Jobs, it also asks for a deadline, `backoffLimit: 0` and a
+#    TTL.
 #
-# One execution is one Job (fresh pod, cold start) or one `kubectl exec` into a warm pod. This
-# notebook builds the objects from a policy, predicts admission, validates the YAML, and runs the
-# lifecycle on a simulated cluster — and shows the one thing kind cannot do: gVisor.
+# One execution is one Job (a new pod and a cold start) or one `kubectl exec` into a warm pod. This notebook
+# builds the objects from a policy, predicts admission and validates the YAML. Then it runs the lifecycle on
+# a simulated cluster. It also shows the one thing that kind cannot do: gVisor.
 
 # %%
 from sandboxlab.k8s import admission as A, manifests as m, policy as P, render
@@ -36,9 +37,14 @@ print("Job deadline", pol.job_deadline_s, "s | backoffLimit 0 | TTL", pol.job_tt
 # %% [markdown]
 # ## Worked example: one execution as a Job, and its pod's securityContext
 #
-# `run_code_job` builds the Job the runner creates. Read the pod: no service-account token, DNS
-# off (only `hostAliases` resolve, so the sandbox reaches the proxy by name and nothing else),
-# non-root by number, a read-only root, `ALL` capabilities dropped, sized `emptyDir` volumes.
+# `run_code_job` builds the Job that the runner creates. Read the pod. It has these properties:
+#
+# - no service-account token,
+# - DNS off (only `hostAliases` resolve, thus the sandbox reaches the proxy by name and nothing else),
+# - non-root by number,
+# - a read-only root,
+# - `ALL` capabilities dropped,
+# - sized `emptyDir` volumes.
 
 # %%
 job = P.run_code_job(pol, "print(sum(range(10)))", "demo-0001", "turn1:step1:call0:9f2c")
@@ -54,8 +60,8 @@ print("volumes:", [(v["name"], v.get("emptyDir", {}).get("sizeLimit", "configMap
 # %% [markdown]
 # ## Worked example: the admission chain, predicted offline
 #
-# `admission.admit()` runs the same three steps the API server does and returns every violation.
-# The well-formed Job is admitted; the two "must fail" examples are rejected, at different steps.
+# `admission.admit()` runs the same three steps as the API server and returns every violation. The predictor
+# admits the well-formed Job. It rejects the two "must fail" examples, at different steps.
 
 # %%
 rcs = {pol.runtime_class: P.runtime_class(pol)}
@@ -70,11 +76,16 @@ for name in ("10-run-code-job.yaml", "90-rejected-pod.yaml", "91-rejected-job.ya
 # %% [markdown]
 # ## Exercise 2.1 — Pod Security `restricted`, by hand
 #
-# Implement the checks restricted PSS makes on a container's `securityContext`: return the list of
-# reasons it would reject the pod, empty if it passes. Check, for each container: `runAsNonRoot`
-# true (pod-level counts), `allowPrivilegeEscalation` false, `capabilities.drop` contains `ALL`,
-# and a `seccompProfile.type` of `RuntimeDefault` or `Localhost` (pod-level counts). Compare with
-# the library's `A.pss_restricted`.
+# Write the checks that restricted PSS does on the `securityContext` of a container. Return the list of
+# reasons for which it rejects the pod. If the pod passes, the list is empty. For each container, examine
+# these four items:
+#
+# - `runAsNonRoot` is true (the pod-level value counts),
+# - `allowPrivilegeEscalation` is false,
+# - `capabilities.drop` contains `ALL`,
+# - `seccompProfile.type` is `RuntimeDefault` or `Localhost` (the pod-level value counts).
+#
+# Compare your result with `A.pss_restricted` of the library.
 
 # %% exercise
 def restricted_violations(spec: dict) -> int:
@@ -107,10 +118,10 @@ print("✅ the hardened pod passes restricted PSS; the naive one fails four cont
 # %% [markdown]
 # ## Exercise 2.2 — why `backoffLimit` matters for code that is not idempotent
 #
-# A Job's `backoffLimit` defaults to **6**, so a failing pod is retried up to 6 times — 7 runs of
-# code the model wrote, which may have side effects. The sandbox policy requires `backoffLimit: 0`.
-# Given a Job spec (as the API server sees it, i.e. with defaults filled), return how many times the
-# code could run.
+# The default `backoffLimit` of a Job is **6**. Thus the Job controller retries a pod that fails up to 6
+# times. That is 7 runs of code that the model wrote, and this code can have side effects. The sandbox
+# policy accepts only `backoffLimit: 0`. You get a Job spec as the API server sees it, that is, with the
+# defaults filled in. Return the maximum number of times that the code can run.
 
 # %% exercise
 def max_runs(job_spec: dict) -> int:
@@ -131,10 +142,10 @@ print("✅ default retries mean up to 7 runs of non-idempotent code; the policy 
 # %% [markdown]
 # ## Exercise 2.3 — the manifests validate against Kubernetes 1.34
 #
-# Every core-kind object the lab renders must pass strict schema validation for 1.34 (that is what
-# `kubernetes-validate --strict -k 1.34.0` checks in CI). Count how many core-kind objects validate
-# for the kind target. (CRD pod templates are validated as Pods; the agent-sandbox CRDs are checked
-# against their pinned schemas in the test suite.)
+# Every core-kind object that the lab renders must pass strict schema validation for 1.34. In CI,
+# `kubernetes-validate --strict -k 1.34.0` does this check. Count the core-kind objects that validate for
+# the kind target. (The validation treats CRD pod templates as Pods. The test suite examines the
+# agent-sandbox CRDs against their pinned schemas.)
 
 # %% exercise
 def count_valid_core_objects() -> int:
@@ -160,9 +171,10 @@ except ModuleNotFoundError:
 # %% [markdown]
 # ## Exercise 2.4 — one way out: read the default-deny NetworkPolicies
 #
-# The sandbox namespace has a default-deny policy (both directions) plus one egress rule: to the
-# egress-proxy pods on port 8080, and nothing else — not even DNS (the pod uses `hostAliases`).
-# Given the rendered NetworkPolicies, return the set of `(namespace, port)` a sandbox pod may reach.
+# The sandbox namespace has a default-deny policy (both directions) and one egress rule. This rule permits
+# traffic to the egress-proxy pods on port 8080, and to nothing else. It does not permit DNS (the pod uses
+# `hostAliases`). You get the rendered NetworkPolicies. Return the set of `(namespace, port)` that a sandbox
+# pod can reach.
 
 # %% exercise
 def sandbox_egress_targets() -> set:
@@ -191,10 +203,13 @@ print("   not even DNS — so the pod cannot resolve, let alone reach, an attack
 # %% [markdown]
 # ## Exercise 2.5 — one execution, on a simulated cluster
 #
-# The `SimulatedBackend` admits the Job (the real predictor), runs the code (the real process
-# sandbox), and simulates the Kubernetes lifecycle timing. Run one execution and confirm the result
-# is labelled simulated, that it carries a cold-start cost, and that a redelivered request with the
-# same idempotency key does **not** run the code twice.
+# The `SimulatedBackend` admits the Job (with the real predictor) and runs the code (in the real process
+# sandbox). It also simulates the times of the Kubernetes lifecycle. Run one execution. Then make sure of
+# these three things:
+#
+# - the result has the label simulated,
+# - the result has a cold-start cost,
+# - a second delivery of the request with the same idempotency key does **not** run the code two times.
 
 # %% exercise
 def run_two_with_same_key():
@@ -218,11 +233,11 @@ print("   the second delivery of the same key replayed the result instead of run
 # %% [markdown]
 # ## The one thing kind cannot do: gVisor
 #
-# kind's nodes run containerd with the `runc` handler only. A RuntimeClass whose handler is `runsc`
-# is *accepted* — but every pod that uses it ends in phase `Failed`, because no node can create its
-# sandbox. On kind the lab uses `sandbox-runc` (a real RuntimeClass, handler `runc`) so the pods
-# run, and keeps a `gvisor` example precisely to show the failure. On GKE (notebook 05) the same
-# pods run under gVisor for real.
+# The nodes of kind run containerd with only the `runc` handler. The API server *accepts* a RuntimeClass
+# whose handler is `runsc`. But every pod that uses it ends in phase `Failed`, because no node can create
+# its sandbox. On kind, the lab uses `sandbox-runc` (a real RuntimeClass, handler `runc`), thus the pods
+# run. The lab keeps a `gvisor` example for one purpose: to show the failure. On GKE (notebook 05), the same
+# pods really run under gVisor.
 
 # %%
 rc, gpod = P.gvisor_in_kind()[1:]
@@ -235,33 +250,38 @@ print("its NetworkPolicy dataplane (kindnetd) fails open, and there is no VM or 
 # %% [markdown]
 # ## In a design review
 #
-# **Two minutes.** "On Kubernetes a sandbox is a pod, and I make its controls mandatory rather than hoped-for.
-# The namespace is Pod Security `restricted`, which gives me non-root, drop-all, no privilege escalation and a
-# seccomp profile — but PSS enforces on Pods, so a bad *Job* is accepted and only its Pods are rejected, which
-# you catch in the Job's events, not at `kubectl apply`. So I add a ValidatingAdmissionPolicy for the
-# sandbox-specific rules: a required RuntimeClass, `automountServiceAccountToken: false`, a read-only root,
-# only sized `emptyDir` volumes, no Secrets in the environment, and on Jobs a deadline, `backoffLimit: 0` and
-# a TTL.
+# **Two minutes.** "On Kubernetes, a sandbox is a pod, and I make its controls mandatory, not only a hope.
+# The namespace is Pod Security `restricted`, which gives me non-root, drop-all, no privilege escalation and
+# a seccomp profile. But PSS enforces on Pods. Thus the API server accepts a bad *Job* and rejects only its
+# Pods. You see that in the events of the Job, not at `kubectl apply`.
 #
-# "One execution is one Job: a fresh pod, cold start, deleted after its TTL; when latency matters I keep a
-# warm pool and `kubectl exec` into an idle pod, deleting it after one use so no state carries over. Egress is
-# a default-deny NetworkPolicy with a single rule to the proxy — no DNS even — and the credential lives in the
-# proxy's Secret, never in the sandbox.
+# "Thus I add a ValidatingAdmissionPolicy for the rules that are specific to sandboxes. It asks for a
+# RuntimeClass, `automountServiceAccountToken: false`, a read-only root and only sized `emptyDir` volumes.
+# It permits no Secrets in the environment. On Jobs, it asks for a deadline, `backoffLimit: 0` and a TTL.
 #
-# "I generate every object from one policy, so the securityContext, the NetworkPolicy and the admission policy
-# cannot drift apart, and I validate the YAML against the target Kubernetes version in CI."
+# "One execution is one Job: a new pod and a cold start, and Kubernetes deletes it after its TTL. When
+# latency is important, I keep a warm pool and use `kubectl exec` into an idle pod. I delete that pod after
+# one use, thus no state goes to the next execution. Egress is a default-deny NetworkPolicy with a single
+# rule to the proxy, and not even DNS. The credential is in the Secret of the proxy, never in the sandbox.
 #
-# **Drill 1.** *We applied a restricted-PSS label and a Job with a privileged pod template went
-# through. Bug?* — No: `enforce` applies to Pods. The Job object is created; its Pods are rejected
-# when the controller tries to make them, and the Job just never makes progress. Use `warn`/`audit`
-# too (they evaluate templates) and watch the Job's conditions, or add a VAP that matches Jobs.
+# "I generate every object from one policy. Thus the securityContext, the NetworkPolicy and the admission
+# policy cannot become different over time. I also validate the YAML against the target Kubernetes version
+# in CI."
 #
-# **Drill 2.** *Default-deny egress broke the sandbox — it can't resolve DNS.* — That is the point:
-# a default-deny egress policy also blocks DNS, and allowing DNS re-opens a DNS-exfiltration channel.
-# The sandbox reaches the proxy by a `hostAliases` entry (a fixed ClusterIP), so it needs no DNS at
-# all; the proxy resolves the upstream names.
+# **Drill 1.** *We applied a restricted-PSS label, and a Job with a privileged pod template went through. Is
+# this a bug?* No. `enforce` applies to Pods. The API server creates the Job object. It rejects the Pods
+# when the controller tries to make them, and the Job never makes progress.
 #
-# **Drill 3.** *Can we just run this on kind in production, it's cheaper?* — kind teaches the
-# objects, but it is not a boundary: no gVisor (its `runsc` example ends `Failed`), and its
-# NetworkPolicy dataplane fails open. Production wants a real runtime class — gVisor or a microVM —
-# on dedicated, tainted nodes, with the same manifests you validated on kind.
+# Also use `warn`/`audit` (they evaluate templates). Then monitor the conditions of the Job. Or add a VAP
+# that matches Jobs.
+#
+# **Drill 2.** *Default-deny egress broke the sandbox. It cannot resolve DNS.* That is the purpose. A
+# default-deny egress policy also blocks DNS. If you permit DNS, you open a DNS-exfiltration channel again.
+#
+# The sandbox reaches the proxy through a `hostAliases` entry (a ClusterIP that does not change). Thus it
+# needs no DNS at all. The proxy resolves the upstream names.
+#
+# **Drill 3.** *Can we run this on kind in production? It costs less.* kind teaches the objects, but it is
+# not a boundary. It has no gVisor (its `runsc` example ends `Failed`), and its NetworkPolicy dataplane
+# fails open. Production needs a real runtime class (gVisor or a microVM) on dedicated, tainted nodes, with
+# the same manifests that you validated on kind.

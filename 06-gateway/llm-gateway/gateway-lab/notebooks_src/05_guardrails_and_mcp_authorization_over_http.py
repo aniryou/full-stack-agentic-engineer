@@ -24,10 +24,10 @@
 # **Keys** (PRIMER §6). Provider keys live only in the gateway, and they rotate with an overlap. One call revokes a
 # virtual key.
 #
-# (PRIMER §6.5 and the identity primer §3.3–3.5 cover the workload identity of the gateway itself. This identity is
+# PRIMER §6.5 and the identity primer §3.3–3.5 cover the workload identity of the gateway itself. This identity is
 # a SPIFFE SVID from the Workload API. The SVID rotates at half its lifetime, ±10 % of the half-life. That is 27–33
 # minutes left on a 1-hour SVID, and about 32 in practice, because each check draws the jitter again. The fake
-# Workload API for this identity lives in the core.)
+# Workload API for this identity lives in the core.
 #
 # **MCP** (PRIMER §8). When agents reach MCP servers through the gateway, the gateway is the OAuth client. The
 # gateway does these things:
@@ -73,7 +73,7 @@ def measure(inp, out, prompt="Tell me about gateways.", n=5):
 # %% [markdown]
 # ## Worked example: every placement, measured
 #
-# The cell measures the same forty-token answer under each placement. The last columns show what occurred to two
+# The cell measures the same forty-token answer under each placement. The last columns show the result for two
 # prompts. The first prompt makes the (scripted) model print a stand-in secret. The second prompt is a prompt
 # injection, sent to an inline input check.
 
@@ -91,9 +91,9 @@ for (inp, out), r in results.items():
 # ## Exercise 5.1 — when does each window reach the client?
 #
 # The model generates the tokens at $\text{ttft} + (i - 1) \cdot \text{itl}$ for $i = 1 \ldots n$. With windowed
-# output checks, the gateway examines window $k$ (its last token is token $\min(k \cdot W, n)$) when two conditions
-# are true. The window is complete, **and** the previous check is complete. Each check takes `check_s`. The gateway
-# releases the window when its check ends.
+# output checks, the last token of window $k$ is token $\min(k \cdot W, n)$. The gateway examines window $k$ when
+# two conditions are true: the window is complete, **and** the previous check is complete. Each check takes
+# `check_s`. The gateway releases the window when its check ends.
 #
 # Write `window_release(ttft, itl, n, window, check_s)`. It returns the list of release times. The TTFT of the
 # client is the first time, and its E2E is the last time. The check compares your list with
@@ -125,8 +125,8 @@ for out, w in (("window", W), ("full", N)):
 print("✅ a held-back window costs about (W − 1)·ITL + one check before the first token; holding everything costs the whole answer")
 
 # %% [markdown]
-# (Exercise 5.2 of the core finds the largest window that a TTFT budget permits,
-# $(\text{budget} - \text{check})/\text{ITL} + 1$. The drill at the end uses it.)
+# Exercise 5.2 of the core finds the largest window that a TTFT budget permits,
+# $(\text{budget} - \text{check})/\text{ITL} + 1$. The drill at the end uses this formula.
 #
 # ## Worked example: revoke a virtual key
 #
@@ -156,9 +156,9 @@ with LocalStack(fakes=fakes) as s:
 # the add, overlap and retire sequence of PRIMER §6.2, and `keys.ProviderKeys.rotate()` in the core.
 #
 # The check sends 20 requests a second through the gateway while it does your plan, one action every 0.4 s. It
-# counts the requests that failed. Then it runs every other order to show the cost of each order. (A request that
-# reaches acme with a key that acme no longer accepts is a credential problem of the gateway. It gets a 502, never a
-# fall-through.)
+# counts the requests that failed. Then it runs every other order to show the cost of each order. A request that
+# reaches acme with a key that acme no longer accepts is a credential problem of the gateway. This request gets a
+# 502, never a fall-through.
 
 # %% exercise
 def rotation_plan() -> list:
@@ -226,8 +226,9 @@ print("the gateway's CIMD (its client_id is this URL):", client.get_json(mcp.url
 print("DPoP signer:", mcp.call(lambda: mcp.gateway.mcp.signer.label))
 
 # %% [markdown]
-# The discovery order comes from the spec (MCP 2026-07-28, verify), and it is exercise 5.4 of the core. This is the
-# order that the gateway actually walked: two misses, then the OIDC path-appended document:
+# The discovery order comes from the spec (MCP 2026-07-28, verify), and exercise 5.4 of the core calculates it.
+# The next cell shows the order that the gateway actually walked. It found two misses, then the OIDC path-appended
+# document.
 
 # %%
 tried = [x[1] for x in log if x[0] == "as_metadata_try"]
@@ -238,8 +239,9 @@ assert tried == ref_as_urls(mcp.mcp.issuer)
 # ## Exercise 5.3 — one token, one resource
 #
 # `resource` goes in both the authorization request and the token request (RFC 8707). Thus a token names the one MCP
-# server that it is for, in its `aud` claim. Another server refuses a token stolen from one server. The fake
-# authorization server issues JWT access tokens (`header.claims.signature`, base64url without padding).
+# server that it is for, in its `aud` claim. Because of this claim, another server refuses a token stolen from
+# the first server. The fake authorization server issues JWT access tokens (`header.claims.signature`, base64url
+# without padding).
 #
 # Write `accepts(token, resource, now)`. It is the audience and expiry half of the checks of the resource server.
 # Decode the claims, but do not examine the signature, because the server does that. Return `True` only if `aud`
@@ -398,12 +400,12 @@ mcp.stop()
 #
 # **Two minutes:** "Guardrails sit at four hooks: input, tool call, tool result and output. Their placement is a
 # latency-versus-leakage decision that we make for each policy. An inline input screen costs its check time before
-# the first token. For secrets in the output, we hold back windows, and our TTFT budget gives their size,
-# $(W - 1) \times \text{ITL} + \text{check}$.
+# the first token. For secrets in the output, we hold back windows. We find their size from our TTFT
+# budget, $(W - 1) \times \text{ITL} + \text{check}$.
 #
 # "For lower-stakes categories, we send the stream and cut it in parallel, and we accept a window of leakage. New
 # rules start in shadow. Guardrails decrease how often something bad gets through. Authorization is what puts a
-# limit on it.
+# limit on the risk.
 #
 # "Provider keys never leave the gateway, and they rotate with an overlap. One call revokes a virtual key.
 #
@@ -418,7 +420,7 @@ mcp.stop()
 # the input only. Keep a fast screen (a small classifier or rules) to hold back the short windows where leakage is
 # unacceptable.
 #
-# **Drill 2.** *Why does the gateway keep MCP tokens per user, and not one per server as the Python SDK does?* A
+# **Drill 2.** *Why must the gateway keep MCP tokens per user, and not one per server as the Python SDK does?* A
 # multi-tenant gateway acts for many principals. With one token per server, every user can act with the identity of
 # the first user who authorized. The cache key is (principal, resource, scopes), and the principal comes from the
 # verified key and user, never from the request body.

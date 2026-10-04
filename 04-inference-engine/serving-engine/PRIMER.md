@@ -92,8 +92,8 @@ wait. SGLang and TensorRT-LLM have a similar shape. The diagram shows the proces
 5. **Update.** Advance `num_computed_tokens` and append the tokens. Finish each request that gets to EOS, a stop
    token or `max_tokens`, and free its blocks.
 
-**What a step costs.** Llama-3.1-8B in bf16 on an H100 streams 15.0 GB of weights per step, and this takes
-4.5 ms at 3.35 TB/s. The untied input embedding is a gather, not a stream. The 4.5 ms is the floor for *any* step,
+**What a step costs.** Llama-3.1-8B in bf16 on an H100 reads 15.0 GB of weights as a stream in each step,
+and this takes 4.5 ms at 3.35 TB/s. The untied input embedding is a gather, not a stream. The 4.5 ms is the floor for *any* step,
 and the number of tokens in the step does not change it. The [GPU primer](../../01-hardware-gpu-fabric/gpu-primer/gpu-primer.md),
 §3, explains why HBM bandwidth, not FLOPs, sets this floor. Sixty-four requests that decode at 2,048 tokens of
 context add 17.2 GB of KV reads (5.1 ms), for a 9.6 ms step.
@@ -148,7 +148,7 @@ That is `minengine.scheduler.Scheduler.schedule()`. A worked example: the budget
 and `r1` has a 20-token prompt. Step 1 runs `r0` 11 + `r1` 5 (a chunk, with no sampled token). Step 2 runs `r0` 1
 (decode) + `r1` 15 (the rest, which samples its first token). The same rule applies to the prompt tokens and the
 generated tokens of a request. For a preempted request, the scheduler only sets `num_computed_tokens` back to 0, and
-its outputs count as prompt.
+the outputs of the request count as prompt.
 
 **The knobs.** There are two: `max_num_batched_tokens` (tokens per step, §3) and `max_num_seqs` (requests per step).
 `max_num_seqs` sets the size of the per-request buffers and the CUDA-graph batch sizes. These are vLLM's API-server
@@ -161,7 +161,7 @@ defaults as of Sep 2026 (verify):
 The policy is `fcfs` (default) or `priority`. With `priority`, a lower value goes first. In that case, the victim
 of a preemption is the least important, newest request.
 
-**What really caps concurrency is KV memory.** A request with a $P$-token prompt that generates $O$ tokens holds at
+**What really sets the limit on concurrency is KV memory.** A request with a $P$-token prompt that generates $O$ tokens holds at
 most $\lceil (P + O - 1) / B \rceil$ blocks. The engine never feeds the last sampled token back, so that token never
 gets a slot (`KVCacheManager.blocks_needed(P + O − 1)`, notebook 01). Llama-3.1-8B on a 24 GB L4 at 90% utilisation
 leaves 2,164 blocks of 16 tokens (`perf.kv_cache_blocks()`). Chat requests of 1,000 + 200 tokens need 75 blocks each.
@@ -191,8 +191,8 @@ $$
 - H100 bf16: 989e12 × 2 / (2 × 3.35e12) = 295 tokens
 - L4 bf16: 121e12 × 2 / (2 × 300e9) = 403 tokens
 
-For Llama-3.1-8B, the exact change occurs between 310 and 320 tokens. The engine streams the LM head of the model in
-each step, but multiplies the LM head only for the rows that it samples.
+For Llama-3.1-8B, the exact change occurs between 310 and 320 tokens, because of the LM head. The engine reads the LM
+head as a stream in each step, but multiplies it only for the rows that it samples.
 
 Take 80% of datasheet bandwidth, 60% of datasheet FLOP/s and 2 ms of per-step overhead. These are assumptions, and
 you must replace them with measurements. With these assumptions, an H100 step for Llama-3.1-8B costs this time
@@ -250,7 +250,7 @@ saturation, the three larger settings admit prompts faster than decodes finish. 
 and preempt 3–8 requests, and the engine then computes the work of those requests again. At 512, the pool peaks at
 38%, and the scheduler preempts no request.
 
-At 256, a step is just above the knee (~221 tokens with these efficiencies). Most of its time is the weight read,
+At 256, a step is only a small distance above the knee (~221 tokens with these efficiencies). Most of its time is the weight read,
 the KV reads of the decodes and the 2 ms overhead. After the decodes take their share, the prompt gets small, poorly
 amortised chunks. Thus TTFT doubles at 6/s, goodput decreases by ~10%, and capacity decreases by a quarter.
 
@@ -299,7 +299,7 @@ vLLM v0.30.0 starts from different inputs. The lab's `sizing.size()` models them
 
 | Input | The core (`perf.kv_cache_blocks()`) | vLLM v0.30.0 defaults (the lab's `sizing.size()`) |
 |---|---|---|
-| total memory | 24 GB, the datasheet figure | 22.49 GiB = 24.15 GB, the L4's total as `nvidia-smi` reports it. The total that vLLM multiplies is the total that CUDA reports (`torch.cuda.mem_get_info()[1]`), which can be slightly below it. If CUDA's *free* figure is below that share, vLLM does not start. The free figure is lower by the CUDA context (a few hundred MiB) and by any other process (verify on your card) |
+| total memory | 24 GB, the datasheet figure | 22.49 GiB = 24.15 GB, the L4's total as `nvidia-smi` reports it. The total that vLLM multiplies is the total that CUDA reports (`torch.cuda.mem_get_info()[1]`), which can be slightly below the `nvidia-smi` figure. If CUDA's *free* figure is below the share of that total that vLLM uses, vLLM does not start. The free figure is lower than the total by the CUDA context (a few hundred MiB) and by any other process. Make sure of these three figures (verify on your card) |
 | `gpu_memory_utilization` | 0.9, vLLM's default for a long time | 0.92 (`vllm/config/cache.py`) |
 | overhead | a flat 1 GB | profiled at start-up: the activation peak of a 2,048-token pass, CUDA graphs and non-torch buffers. The lab estimates ~1.2 GB |
 | KV budget and blocks | 4.54 GB gives 2,164 | 4.96 GB gives 2,363 |
@@ -339,8 +339,8 @@ The core's version is `KVCacheManager.allocate_slots(..., admit_whole_prompt=Tru
 
 **Growth and preemption.** Decodes take a new block every 16 tokens. When a request that runs needs a block and the
 free queue is empty, the scheduler **preempts** the lowest-priority request that runs. Under FCFS, that is the most
-recently admitted request. The scheduler frees its blocks, sets it back to zero computed tokens, and puts it at the
-*front* of the queue of requests that wait. The scheduler admits no new request in that step.
+recently admitted request. The scheduler frees the blocks of that request and sets the request back to zero computed tokens.
+The scheduler puts the request at the *front* of the queue of requests that wait, and it admits no new request in that step.
 
 The engine keeps the generated tokens of the request. When the scheduler admits it again, the engine prefills its
 whole sequence again ("recompute"), and generation continues where it stopped.
@@ -412,11 +412,11 @@ tokens, not 20 (vLLM: `max_cache_hit_length = num_tokens − 1`).
 
 The scheduler **publishes** a block as soon as it schedules the tokens that fill the block, not after the step. In
 vLLM, this occurs inside `allocate_slots`, and in the core, inside `Scheduler.schedule()` (`cache_blocks()`). This
-is safe, because each layer writes the K/V of the whole step before any request attends at that layer. It also
-matters for agents. Requests that the scheduler admits in the same step share a prefix that one of them computes at that time.
+is safe, because each layer writes the K/V of the whole step before any request attends at that layer.
 
-Thus a burst of N parallel calls behind one system prompt prefills that prompt once and holds one copy. Notebook 03,
-worked example 3, shows this: three requests, one step, `[0, 176, 176]` tokens from cache.
+The early publication also matters for agents. Requests that the scheduler admits in the same step share a prefix
+that one of them computes at that time. Thus a burst of N parallel calls behind one system prompt prefills that
+prompt once and holds one copy. Notebook 03, worked example 3, shows this: three requests, one step, `[0, 176, 176]` tokens from cache.
 
 The core does not publish the blocks of a request in the `RUNNING` state at once. The core publishes them only when
 the scheduler can preempt no more requests in that step. Thus a request that the scheduler takes out of the batch
@@ -643,7 +643,7 @@ When the verify pass crosses the knee, the extra positions cost real FLOPs:
 
 The robust conclusion is the shape of the table. At short contexts, speculation becomes a slow-down past ~100–250
 concurrent requests. Here that is 128, and 256 if a draft forward costs only its roofline time. At long contexts,
-decode stays bound by KV reads, which verification amortises. Thus speculation still pays, and memory caps the batch
+decode stays bound by KV reads, which verification amortises. Thus speculation still pays, and memory sets the limit on the batch
 first.
 
 The batch-1 figure depends on the overhead assumption. Here the draft costs $c$ ≈ 0.19 of a target step (its weights
@@ -709,7 +709,7 @@ Marlin-style kernels. Weight-only formats decrease the **bytes**, not the FLOPs.
 
 *W8A8* formats also quantize activations (per token, at run time). They use the native low-precision math of the
 tensor cores: FP8 on Ada (sm_89), Hopper and Blackwell, and INT8 more widely. Activations have outlier channels that
-make per-token scales coarse. SmoothQuant divides them by
+make per-token scales coarse. SmoothQuant divides the activation channels by
 $s_j = \max \lvert X_j \rvert^{\alpha} / \max \lvert W_j \rvert^{1-\alpha}$ and folds $s$ into the weights. Then
 ${XW}$ does not change (`quant.smoothquant_scales()`: 6.6× less output error in notebook 06).
 
@@ -857,14 +857,14 @@ The engine manages these things:
 
 Report percentiles (p50, p90, p99), never averages. Users feel the tail, and SLOs bind the tail. Goodput is the honest
 summary. A throughput that you measure at a TTFT of ten seconds is not capacity (`SimResult.goodput()`). In
-notebook 02 (SIMULATED), a saturated engine streams 1,700–2,300 tok/s. But it serves at most 0.5 requests/s within a
+notebook 02 (SIMULATED), a saturated engine produces 1,700–2,300 tok/s. But it serves at most 0.5 requests/s within a
 1 s TTFT and 50 ms TPOT SLO.
 
 **How to load an engine.**
 
 - **Open loop** (Poisson arrivals at a fixed rate, whatever the server does) shows the growth of the queue and
   overload. As the rate approaches capacity, queue time and TTFT increase without bound. **Closed loop** (N users,
-  each of whom sends the next request when the last one finishes) caps concurrency at N and hides overload. The
+  each of whom sends the next request when the last one finishes) sets a limit of N on concurrency. It also hides overload. The
   server slows down, and the load slows down with it.
 
     Use closed loop to find the throughput at a concurrency. Use open loop to find the rate at which SLOs break.
@@ -948,15 +948,15 @@ are not complete. Then the scheduler admits the requests that wait, while there 
 reads the history of each request through its block table.
 
 "A step is memory-bound up to ~300 tokens on an H100. Thus decodes batch at almost no cost, and a long prompt is the
-high-cost item. Chunked prefill caps the step, so an 8K-token prompt cannot make the streams of all other requests wait. I
+high-cost item. Chunked prefill sets a limit on the step, so an 8K-token prompt cannot make the streams of all other requests wait. I
 set the budget as large as the ITL SLO permits.
 
-"KV memory caps concurrency, at about 30 chat sessions for an 8B model on an L4. When the KV memory runs out, the
+"KV memory sets the limit on concurrency, at about 30 chat sessions for an 8B model on an L4. When the KV memory runs out, the
 scheduler preempts the newest request, and the engine computes that request again. The preemption shows up as TTFT,
 so we alert on preemptions.
 
 "Prefix caching gives each full block a name: a hash chained through its parent. Thus the engine computes the shared
-system prompt and the append-only histories of our agents only once. That decides our prompt layout. Sampling and
+system prompt and the append-only histories of our agents only once. Prefix caching decides our prompt layout. Sampling and
 structured output change the shape of one distribution per step. Grammar masks guarantee syntax, not correctness.
 
 "Speculative decoding and quantization are per-workload levers. Speculation keeps the target distribution exactly,
@@ -1013,7 +1013,7 @@ We measure with open-loop load at realistic lengths, and we report goodput again
 | Knee | the tokens per step where a step changes from memory-bound to compute-bound: $\text{peak} \times \text{bytes/param} \div (2 \times \text{bandwidth})$ |
 | Block / block table | the K/V of a fixed number of tokens (16 by default) / the map of a request from logical to physical blocks |
 | Slot mapping | the place where the engine writes the K/V of each new token: $\text{block id} \times \text{block size} + \text{offset}$ |
-| Preemption (recompute) | when memory runs out, the scheduler frees the blocks of a request that runs, and the engine prefills it again later |
+| Preemption (recompute) | the release of the blocks of a request that runs when memory runs out, and a new prefill of that request later |
 | Watermark | blocks that the scheduler keeps free when it admits requests, so that the requests that run can grow |
 | Prefix caching | the reuse of the K/V of full blocks whose chained hash matches the prefix of a new prompt |
 | Block hash chain | $\operatorname{name}(\text{block } i) = H(\operatorname{name}(\text{block } i-1), \text{tokens}, \text{extra keys})$: commits to the whole prefix |

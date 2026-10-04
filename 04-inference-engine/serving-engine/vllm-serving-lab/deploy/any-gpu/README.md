@@ -55,7 +55,7 @@ Prefix caching and chunked prefill are on by default in v0.30.0.
 
 ## Colab or Kaggle (free T4)
 
-On Colab, select Runtime, then "change runtime type", then "T4 GPU". On Kaggle, select Settings, then Accelerator,
+On Colab, select "Runtime", then "change runtime type", then "T4 GPU". On Kaggle, select "Settings", then "Accelerator",
 then **GPU T4 x2**. Do not select "GPU P100", because vLLM cannot run on a GPU with compute capability 6.0. One of the two T4s
 is sufficient here. The T2 recipe in "Two GPUs: tensor parallelism on Kaggle's T4 x2 (T2)" uses both. Then, in a
 notebook cell, examine the GPU and the driver first:
@@ -99,7 +99,7 @@ The bandwidth and the latency of the collectives themselves are the subject of l
 ## Rented GPUs (RunPod, Vast.ai, Lambda)
 
 * **RunPod / Vast.ai** give you a *container*. Select the `vllm/vllm-openai` image as the template image. Put the
-  model and the flags in the container arguments. Expose port 8000, and set `--api-key`, because the endpoint is
+  model and the flags in the container arguments. Expose port 8000. Set `--api-key`, because the endpoint is
   public. An RTX 4090 (24 GB) costs approximately $0.3-0.4/hr (verify in
   [`COMPUTE.md`](../../../../../COMPUTE.md)). With per-second billing, a 30-minute session costs a few cents.
 * **Lambda** (and GCP Compute Engine) give you a *VM*. Install Docker and the NVIDIA Container Toolkit (layer 02), or
